@@ -24,8 +24,8 @@ class ResourceThrottle;
 }
 
 namespace net {
-class BoundNetLog;
 class NetLog;
+class NetLogWithSource;
 }
 
 namespace extensions {
@@ -168,7 +168,7 @@ class ExtensionThrottleManager
   bool logged_for_localhost_disabled_;
 
   // net::NetLog to use, if configured.
-  net::BoundNetLog net_log_;
+  net::NetLogWithSource net_log_;
 
   // Valid once we've registered for network notifications.
   base::PlatformThreadId registered_from_thread_;

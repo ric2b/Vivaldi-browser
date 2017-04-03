@@ -214,6 +214,10 @@ cr.define('options', function() {
       // Sync (Sign in) section.
       this.updateSyncState_(/** @type {options.SyncStatus} */(
           loadTimeData.getValue('syncData')));
+      if (!$('sync-overview').hidden) {
+        chrome.send('metricsHandler:recordAction',
+                    ['Signin_Impression_FromSettings']);
+      }
 
       $('start-stop-sync').onclick = function(event) {
         if (self.signedIn_) {
@@ -798,7 +802,11 @@ cr.define('options', function() {
 
       // Reset profile settings section.
       $('reset-profile-settings').onclick = function(event) {
-        PageManager.showPageByName('resetProfileSettings');
+        // We use the hash to indicate the source of the reset request. The hash
+        // is removed by the reset profile settings overlay once it has been
+        // consumed.
+        PageManager.showPageByName('resetProfileSettings', true,
+                                   {hash: '#userclick'});
       };
 
       // Extension controlled UI.
@@ -849,7 +857,10 @@ cr.define('options', function() {
         });
 
         $('android-apps-settings-link').addEventListener('click', function(e) {
-            chrome.send('showAndroidAppsSettings');
+            // MouseEvent.detail indicates the current click count (or tap
+            // count, in the case of touch events) in the 'click' event.
+            var activatedFromKeyboard = e.detail == 0;
+            chrome.send('showAndroidAppsSettings', [activatedFromKeyboard]);
         });
       }
     },

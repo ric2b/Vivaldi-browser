@@ -2,39 +2,65 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//third_party/WebKit/Source/bindings/core/v8/generated.gni")
-import("//third_party/WebKit/Source/bindings/modules/idl.gni")
-import("//third_party/WebKit/Source/bindings/modules/modules.gni")
+import("//third_party/WebKit/Source/core/core_idl_files.gni")
+import("//third_party/WebKit/Source/modules/modules_idl_files.gni")
 
 bindings_scripts_dir = get_path_info(".", "abspath")
 bindings_scripts_output_dir = "$root_gen_dir/blink/bindings/scripts"
 
-# Replacing <(DEPTH) with "/" makes paths like "<(DEPTH)/foo" absolute.
-_gypi = exec_script("//build/gypi_to_gn.py",
-                    [
-                      rebase_path("scripts.gypi"),
-                      "--replace=<(DEPTH)=/",
-                    ],
-                    "scope",
-                    [ "scripts.gypi" ])
+jinja_module_files = [
+  "//third_party/jinja2/__init__.py",
+  "//third_party/markupsafe/__init__.py",  # jinja2 dep
+]
 
-jinja_module_files = get_path_info(_gypi.jinja_module_files, "abspath")
-idl_lexer_parser_files = get_path_info(_gypi.idl_lexer_parser_files, "abspath")
-idl_compiler_files = get_path_info(_gypi.idl_compiler_files, "abspath")
+idl_lexer_parser_files = get_path_info([
+                                         # PLY (Python Lex-Yacc)
+                                         "//third_party/ply/lex.py",
+                                         "//third_party/ply/yacc.py",
+
+                                         # Web IDL lexer/parser (base parser)
+                                         "//tools/idl_parser/idl_lexer.py",
+                                         "//tools/idl_parser/idl_node.py",
+                                         "//tools/idl_parser/idl_parser.py",
+
+                                         # Blink IDL lexer/parser/constructor
+                                         "blink_idl_lexer.py",
+                                         "blink_idl_parser.py",
+                                       ],
+                                       "abspath")
+idl_compiler_files = get_path_info([
+                                     "idl_compiler.py",
+
+                                     # Blink IDL front end (ex-lexer/parser)
+                                     "idl_definitions.py",
+                                     "idl_reader.py",
+                                     "idl_types.py",
+                                     "idl_validator.py",
+                                     "interface_dependency_resolver.py",
+
+                                     # V8 code generator
+                                     "code_generator.py",
+                                     "code_generator_v8.py",
+                                     "v8_attributes.py",
+                                     "v8_callback_function.py",
+                                     "v8_callback_interface.py",
+                                     "v8_dictionary.py",
+                                     "v8_globals.py",
+                                     "v8_interface.py",
+                                     "v8_methods.py",
+                                     "v8_types.py",
+                                     "v8_union.py",
+                                     "v8_utilities.py",
+                                   ],
+                                   "abspath")
 
 # Calls the compute_interfaces_info_individual script.
 #
 # Parameters:
-#   sources_static = list of IDL files to pass as inputs
-#   sources_generated = list of generated IDL files to pass as inputs
-#   component_dir = name if subdirectory (one word, no slashes) of component.
+#   sources = list of IDL files to pass as inputs
 #   interfaces_info_file = output pickle file for interfaces info.
 #   component_info_file = output pickle file for component wide info.
 #   deps = dependencies
-#
-# FIXME: Note the static/generated split is for consistency with GYP. This
-# split is not necessary in the GN build and could be combined into a single
-# "sources".
 template("compute_interfaces_info_individual") {
   action(target_name) {
     script = "$bindings_scripts_dir/compute_interfaces_info_individual.py"
@@ -42,33 +68,23 @@ template("compute_interfaces_info_individual") {
       visibility = invoker.visibility
     }
 
-    # Save static list to temp file to avoid blowing out command-line length
-    # limit.
-    file_list = "$target_gen_dir/${target_name}_file_list.txt"
-    write_file(file_list, rebase_path(invoker.sources_static, root_build_dir))
-
-    inputs = [
-               "$bindings_scripts_dir/utilities.py",
-               file_list,
-             ] + invoker.sources_static + invoker.sources_generated
-
+    inputs = [ "$bindings_scripts_dir/utilities.py" ] + invoker.sources
     outputs = [
       invoker.interfaces_info_file,
       invoker.component_info_file,
     ]
 
+    response_file_contents = rebase_path(invoker.sources, root_build_dir)
     args = [
-             "--cache-directory",
-             rebase_path(bindings_scripts_output_dir, root_build_dir),
-             "--idl-files-list",
-             rebase_path(file_list, root_build_dir),
-             "--interfaces-info-file",
-             rebase_path(invoker.interfaces_info_file, root_build_dir),
-             "--component-info-file",
-             rebase_path(invoker.component_info_file, root_build_dir),
-             "--write-file-only-if-changed=1",
-             "--",
-           ] + rebase_path(invoker.sources_generated, root_build_dir)
+      "--cache-directory",
+      rebase_path(bindings_scripts_output_dir, root_build_dir),
+      "--idl-files-list",
+      "{{response_file_name}}",
+      "--interfaces-info-file",
+      rebase_path(invoker.interfaces_info_file, root_build_dir),
+      "--component-info-file",
+      rebase_path(invoker.component_info_file, root_build_dir),
+    ]
 
     deps = [ "//third_party/WebKit/Source/bindings/scripts:cached_lex_yacc_tables" ] + invoker.deps
   }
@@ -103,7 +119,6 @@ template("generate_event_interfaces") {
       rebase_path(idl_files_list, root_build_dir),
       "--event-interfaces-file",
       rebase_path(output_file, root_build_dir),
-      "--write-file-only-if-changed=1",  # Always true for Ninja.
     ]
 
     if (defined(invoker.suffix)) {
@@ -153,7 +168,7 @@ template("idl_compiler") {
     # FIXME: This is too conservative, and causes excess rebuilds:
     # compute this file-by-file.  http://crbug.com/341748
     # This should theoretically just be the IDL files passed in.
-    inputs += all_dependency_idl_files
+    inputs += core_all_dependency_idl_files + modules_all_dependency_idl_files
 
     sources = invoker.sources
     outputs = [
@@ -168,7 +183,6 @@ template("idl_compiler") {
       rebase_path(output_dir, root_build_dir),
       "--info-dir",
       rebase_path("$bindings_output_dir", root_build_dir),
-      "--write-file-only-if-changed=1",  # Always true for Ninja.
       "--target-component",
       invoker.target_component,
       "{{source}}",
@@ -225,7 +239,6 @@ template("idl_impl") {
       rebase_path("$bindings_output_dir", root_build_dir),
       "--target-component",
       invoker.target_component,
-      "--write-file-only-if-changed=1",
       "--generate-impl",
       rebase_path(idl_files_list, root_build_dir),
     ]
@@ -246,30 +259,24 @@ template("idl_impl") {
 #
 # Parameters:
 #   sources = a list of source IDL files.
-#   component_dir = Name of directory for these files (one word, no slashes).
-#   outputs = a list of files to write to.
+#   component = a name of directory for these files (one word, no slashes).
+#   outputs = a name of file to write to.
 template("aggregate_generated_bindings") {
   action(target_name) {
     script = "//third_party/WebKit/Source/bindings/scripts/aggregate_generated_bindings.py"
 
-    # Write lists of main IDL files to a file, so that the command lines don't
-    # exceed OS length limits.
-    idl_files_list = "$target_gen_dir/${target_name}_file_list.tmp"
-    write_file(idl_files_list, rebase_path(invoker.sources, root_build_dir))
-
-    inputs = [ idl_files_list ] + invoker.sources
+    inputs = invoker.sources
     outputs = invoker.outputs
 
+    response_file_contents = rebase_path(inputs, root_build_dir)
     args = [
-      "--component-directory",
-      invoker.component_dir,
-      "--input-file",
-      rebase_path(idl_files_list, root_build_dir),
+      "--component",
+      invoker.component,
+      "{{response_file_name}}",
     ]
-    if (invoker.is_partial) {
-      args += [ "--partial" ]
-    }
-    args += rebase_path(invoker.outputs, root_build_dir)
+    args += rebase_path(outputs, root_build_dir)
+
+    public_deps = invoker.public_deps
   }
 }
 
@@ -302,7 +309,6 @@ template("compute_global_objects") {
     args = [
       "--idl-files-list",
       rebase_path(idl_files_list, root_build_dir),
-      "--write-file-only-if-changed=1",  # Always true for Ninja.
       "--",
     ]
     args += rebase_path(invoker.sources_generated, root_build_dir)
@@ -342,7 +348,6 @@ template("generate_global_constructors") {
       rebase_path(idl_files_list, root_build_dir),
       "--global-objects-file",
       rebase_path(invoker.global_objects_file, root_build_dir),
-      "--write-file-only-if-changed=1",  # Always true for Ninja.
       "--",
     ]
 

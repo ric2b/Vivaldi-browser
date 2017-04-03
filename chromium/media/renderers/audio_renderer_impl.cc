@@ -57,6 +57,7 @@ AudioRendererImpl::AudioRendererImpl(
       received_end_of_stream_(false),
       rendered_end_of_stream_(false),
       is_suspending_(false),
+      last_reported_media_time_(kNoTimestamp),
       weak_factory_(this) {
   audio_buffer_stream_->set_splice_observer(base::Bind(
       &AudioRendererImpl::OnNewSpliceBuffer, weak_factory_.GetWeakPtr()));
@@ -174,7 +175,6 @@ void AudioRendererImpl::SetMediaTime(base::TimeDelta time) {
   ended_timestamp_ = kInfiniteDuration;
   last_render_time_ = stop_rendering_time_ = base::TimeTicks();
   first_packet_timestamp_ = kNoTimestamp;
-  last_media_timestamp_ = base::TimeDelta();
   audio_clock_.reset(new AudioClock(time, audio_parameters_.sample_rate()));
   last_reported_media_time_ = kNoTimestamp;
 }
@@ -207,20 +207,6 @@ base::TimeDelta AudioRendererImpl::CurrentMediaTime() {
       current_media_time = audio_clock_->back_timestamp();
   }
 
-  // Clamp current media time to the last reported value, this prevents higher
-  // level clients from seeing time go backwards based on inaccurate or spurious
-  // delay values reported to the AudioClock.
-  //
-  // It is expected that such events are transient and will be recovered as
-  // rendering continues over time.
-  if (current_media_time < last_media_timestamp_) {
-    DVLOG(2) << __func__ << ": " << last_media_timestamp_
-             << " (clamped), actual: " << current_media_time;
-    return last_media_timestamp_;
-  }
-
-  DVLOG(2) << __func__ << ": " << current_media_time;
-  last_media_timestamp_ = current_media_time;
   last_reported_media_time_ = current_media_time;
   return current_media_time;
 }
@@ -671,6 +657,7 @@ bool AudioRendererImpl::HandleSplicerBuffer_Locked(
         buffer->TrimStart(buffer->frame_count() *
                           (static_cast<double>(trim_time.InMicroseconds()) /
                            buffer->duration().InMicroseconds()));
+        buffer->set_timestamp(start_timestamp_);
       }
       // If the entire buffer was trimmed, request a new one.
       if (!buffer->frame_count())

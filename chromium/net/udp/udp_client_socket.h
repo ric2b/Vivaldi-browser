@@ -8,14 +8,15 @@
 #include <stdint.h>
 
 #include "base/macros.h"
+#include "net/base/net_export.h"
 #include "net/base/rand_callback.h"
-#include "net/log/net_log.h"
 #include "net/udp/datagram_client_socket.h"
 #include "net/udp/udp_socket.h"
 
 namespace net {
 
-class BoundNetLog;
+class NetLog;
+struct NetLogSource;
 
 // A client socket that uses UDP as the transport layer.
 class NET_EXPORT_PRIVATE UDPClientSocket : public DatagramClientSocket {
@@ -23,7 +24,7 @@ class NET_EXPORT_PRIVATE UDPClientSocket : public DatagramClientSocket {
   UDPClientSocket(DatagramSocket::BindType bind_type,
                   const RandIntCallback& rand_int_cb,
                   net::NetLog* net_log,
-                  const net::NetLog::Source& source);
+                  const net::NetLogSource& source);
   ~UDPClientSocket() override;
 
   // DatagramClientSocket implementation.
@@ -45,7 +46,7 @@ class NET_EXPORT_PRIVATE UDPClientSocket : public DatagramClientSocket {
   int SetReceiveBufferSize(int32_t size) override;
   int SetSendBufferSize(int32_t size) override;
   int SetDoNotFragment() override;
-  const BoundNetLog& NetLog() const override;
+  const NetLogWithSource& NetLog() const override;
 
   // Switch to use non-blocking IO. Must be called right after construction and
   // before other calls.

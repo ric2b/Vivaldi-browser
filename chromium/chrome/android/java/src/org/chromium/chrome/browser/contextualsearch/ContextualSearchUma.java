@@ -146,6 +146,14 @@ public class ContextualSearchUma {
     private static final int RESULTS_NOT_SEEN_FROM_LONG_PRESS = 3;
     private static final int RESULTS_BY_GESTURE_BOUNDARY = 4;
 
+    // Constants used to log UMA "enum" histograms with details about whether search results
+    // were seen, and whether any existing tap suppression heuristics were satisfied.
+    private static final int RESULTS_SEEN_SUPPRESSION_HEURSTIC_SATISFIED = 0;
+    private static final int RESULTS_NOT_SEEN_SUPPRESSION_HEURSTIC_SATISFIED = 1;
+    private static final int RESULTS_SEEN_SUPPRESSION_HEURSTIC_NOT_SATISFIED = 2;
+    private static final int RESULTS_NOT_SEEN_SUPPRESSION_HEURSTIC_NOT_SATISFIED = 3;
+    private static final int RESULTS_SEEN_SUPPRESSION_BOUNDARY = 4;
+
     // Constants used to log UMA "enum" histograms with details about the Peek Promo Outcome.
     private static final int PEEK_PROMO_OUTCOME_SEEN_OPENED = 0;
     private static final int PEEK_PROMO_OUTCOME_SEEN_NOT_OPENED = 1;
@@ -898,6 +906,51 @@ public class ContextualSearchUma {
     }
 
     /**
+     * Logs whether results were seen when the selected text consisted of all capital letters.
+     * @param wasSearchContentViewSeen If the panel was opened.
+     */
+    public static void logAllCapsResultsSeen(boolean wasSearchContentViewSeen) {
+        RecordHistogram.recordEnumeratedHistogram("Search.ContextualSearchAllCapsResultsSeen",
+                wasSearchContentViewSeen ? RESULTS_SEEN : RESULTS_NOT_SEEN,
+                RESULTS_SEEN_BOUNDARY);
+    }
+
+    /**
+     * Logs whether results were seen when the selected text started with a capital letter but was
+     * not all capital letters.
+     * @param wasSearchContentViewSeen If the panel was opened.
+     */
+    public static void logStartedWithCapitalResultsSeen(boolean wasSearchContentViewSeen) {
+        RecordHistogram.recordEnumeratedHistogram(
+                "Search.ContextualSearchStartedWithCapitalResultsSeen",
+                wasSearchContentViewSeen ? RESULTS_SEEN : RESULTS_NOT_SEEN,
+                RESULTS_SEEN_BOUNDARY);
+    }
+
+    /**
+     * Logs whether results were seen and whether any tap suppression heuristics were satisfied.
+     * @param wasSearchContentViewSeen If the panel was opened.
+     * @param wasAnySuppressionHeuristicSatisfied Whether any of the implemented suppression
+     *                                            heuristics were satisfied.
+     */
+    public static void logAnyTapSuppressionHeuristicSatisfied(boolean wasSearchContentViewSeen,
+            boolean wasAnySuppressionHeuristicSatisfied) {
+        int code;
+        if (wasAnySuppressionHeuristicSatisfied) {
+            code = wasSearchContentViewSeen ? RESULTS_SEEN_SUPPRESSION_HEURSTIC_SATISFIED
+                    : RESULTS_NOT_SEEN_SUPPRESSION_HEURSTIC_SATISFIED;
+        } else {
+            code = wasSearchContentViewSeen ? RESULTS_SEEN_SUPPRESSION_HEURSTIC_NOT_SATISFIED
+                    : RESULTS_NOT_SEEN_SUPPRESSION_HEURSTIC_NOT_SATISFIED;
+        }
+
+        RecordHistogram.recordEnumeratedHistogram(
+                "Search.ContextualSearchTapSuppressionSeen.AnyHeuristicSatisfied",
+                code,
+                RESULTS_SEEN_SUPPRESSION_BOUNDARY);
+    }
+
+    /**
      * Logs whether search results were seen, whether the search provider icon sprite was animated
      * when the panel first appeared, and the triggering gesture.
      * @param wasIconSpriteAnimated Whether the search provider icon sprite was animated when the
@@ -982,6 +1035,24 @@ public class ContextualSearchUma {
     public static void logRecentScrollSuppression(boolean wasSuppressed) {
         RecordHistogram.recordEnumeratedHistogram("Search.ContextualSearchRecentScrollSuppression",
                 wasSuppressed ? TAP_SUPPRESSED : NOT_TAP_SUPPRESSED, TAP_SUPPRESSED_BOUNDARY);
+    }
+
+    /**
+     * Logs the duration between the panel being triggered due to a tap or long-press and the
+     * panel being dismissed due to a scroll.
+     * @param durationSincePanelTriggerMs The amount of time between the panel getting triggered and
+     *                                    the panel being dismissed due to a scroll.
+     * @param wasSearchContentViewSeen If the panel was opened.
+     */
+    public static void logDurationBetweenTriggerAndScroll(
+            long durationSincePanelTriggerMs, boolean wasSearchContentViewSeen) {
+        String histogram = wasSearchContentViewSeen
+                ? "Search.ContextualSearchDurationBetweenTriggerAndScrollSeen"
+                : "Search.ContextualSearchDurationBetweenTriggerAndScrollNotSeen";
+        if (durationSincePanelTriggerMs < 2000) {
+            RecordHistogram.recordCustomCountHistogram(
+                    histogram, (int) durationSincePanelTriggerMs, 1, 2000, 200);
+        }
     }
 
     /**
@@ -1140,6 +1211,30 @@ public class ContextualSearchUma {
     }
 
     /**
+     * Logs the number of impressions and CTR for the previous week for the current user.
+     * @param previousWeekImpressions The number of times the user saw the Contextual Search Bar.
+     * @param previousWeekCtr The CTR expressed as a percentage.
+     */
+    public static void logPreviousWeekCtr(int previousWeekImpressions, int previousWeekCtr) {
+        RecordHistogram.recordCountHistogram(
+                "Search.ContextualSearchPreviousWeekImpressions", previousWeekImpressions);
+        RecordHistogram.recordPercentageHistogram(
+                "Search.ContextualSearchPreviousWeekCtr", previousWeekCtr);
+    }
+
+    /**
+     * Logs the number of impressions and CTR for previous 28-day period for the current user.
+     * @param previous28DayImpressions The number of times the user saw the Contextual Search Bar.
+     * @param previous28DayCtr The CTR expressed as a percentage.
+     */
+    public static void logPrevious28DayCtr(int previous28DayImpressions, int previous28DayCtr) {
+        RecordHistogram.recordCountHistogram(
+                "Search.ContextualSearchPrevious28DayImpressions", previous28DayImpressions);
+        RecordHistogram.recordPercentageHistogram(
+                "Search.ContextualSearchPrevious28DayCtr", previous28DayCtr);
+    }
+
+    /**
      * Get the encoded value to use for the Bar Overlap histogram by encoding all the input
      * parameters.
      * @param didBarOverlap Whether the selection overlapped the Bar position.
@@ -1202,7 +1297,26 @@ public class ContextualSearchUma {
         int code = ContextualSearchBlacklist.getBlacklistMetricsCode(reason, wasSeen);
         RecordHistogram.recordEnumeratedHistogram("Search.ContextualSearchBlacklistSeen",
                 code, ContextualSearchBlacklist.BLACKLIST_BOUNDARY);
+    }
 
+    /**
+     * Logs whether Contextual Cards data was shown. Should be logged on tap if Contextual
+     * Cards integration is enabled.
+     * @param shown Whether Contextual Cards data was shown in the Bar.
+     */
+    public static void logContextualCardsDataShown(boolean shown) {
+        RecordHistogram.recordBooleanHistogram(
+                "Search.ContextualSearchContextualCardsIntegration.DataShown", shown);
+    }
+
+    /**
+     * Logs whether results were seen when Contextual Cards data was shown.
+     * @param wasSeen Whether the search results were seen.
+     */
+    public static void logContextualCardsResultsSeen(boolean wasSeen) {
+        RecordHistogram.recordEnumeratedHistogram(
+                "Search.ContextualSearchContextualCardsIntegration.ResultsSeen",
+                wasSeen ? RESULTS_SEEN : RESULTS_NOT_SEEN, RESULTS_SEEN_BOUNDARY);
     }
 
     /**

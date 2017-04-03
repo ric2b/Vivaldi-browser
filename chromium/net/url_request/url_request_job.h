@@ -13,14 +13,12 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/message_loop/message_loop.h"
 #include "base/power_monitor/power_observer.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/load_states.h"
 #include "net/base/net_error_details.h"
 #include "net/base/net_export.h"
 #include "net/base/request_priority.h"
-#include "net/base/upload_progress.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/socket/connection_attempts.h"
 #include "net/url_request/redirect_info.h"
@@ -38,6 +36,7 @@ class HttpResponseInfo;
 class IOBuffer;
 struct LoadTimingInfo;
 class NetworkDelegate;
+class ProxyServer;
 class SSLCertRequestInfo;
 class SSLInfo;
 class SSLPrivateKey;
@@ -96,10 +95,10 @@ class NET_EXPORT URLRequestJob : public base::PowerObserver {
   virtual void Kill();
 
   // Called to read post-filtered data from this Job, returning the number of
-  // bytes read, 0 when there is no more data, or -1 if there was an error.
-  // This is just the backend for URLRequest::Read, see that function for
+  // bytes read, 0 when there is no more data, or net error if there was an
+  // error. This is just the backend for URLRequest::Read, see that function for
   // more info.
-  bool Read(IOBuffer* buf, int buf_size, int* bytes_read);
+  int Read(IOBuffer* buf, int buf_size);
 
   // Stops further caching of this request, if any. For more info, see
   // URLRequest::StopCaching().
@@ -117,9 +116,6 @@ class NET_EXPORT URLRequestJob : public base::PowerObserver {
 
   // Called to fetch the current load state for the job.
   virtual LoadState GetLoadState() const;
-
-  // Called to get the upload progress in bytes.
-  virtual UploadProgress GetUploadProgress() const;
 
   // Called to fetch the charset for this request.  Only makes sense for some
   // types of requests. Returns true on success.  Calling this on a type that
@@ -197,9 +193,6 @@ class NET_EXPORT URLRequestJob : public base::PowerObserver {
 
   // Continue processing the request ignoring the last error.
   virtual void ContinueDespiteLastError();
-
-  // Continue with the network request.
-  virtual void ResumeNetworkStart();
 
   void FollowDeferredRedirect();
 
@@ -333,7 +326,7 @@ class NET_EXPORT URLRequestJob : public base::PowerObserver {
   const URLRequestStatus GetStatus();
 
   // Set the proxy server that was used, if any.
-  void SetProxyServer(const HostPortPair& proxy_server);
+  void SetProxyServer(const ProxyServer& proxy_server);
 
   // The number of bytes read after passing through the filter. This value
   // reflects bytes read even when there is no filter.
@@ -348,6 +341,7 @@ class NET_EXPORT URLRequestJob : public base::PowerObserver {
   // Completion callback for raw reads. See |ReadRawData| for details.
   // |bytes_read| is either >= 0 to indicate a successful read and count of
   // bytes read, or < 0 to indicate an error.
+  // On return, |this| may be deleted.
   void ReadRawDataComplete(int bytes_read);
 
   // The request that initiated this job. This value will never be nullptr.

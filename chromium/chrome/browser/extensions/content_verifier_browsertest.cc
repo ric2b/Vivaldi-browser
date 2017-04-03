@@ -616,7 +616,8 @@ IN_PROC_BROWSER_TEST_F(ContentVerifierTest, PolicyCorrupted) {
   DownloaderTestDelegate downloader;
   system->management_policy()->RegisterProvider(&policy);
   ExtensionDownloader::set_test_delegate(&downloader);
-  service->AddProviderForTesting(new TestExternalProvider(service, id));
+  service->AddProviderForTesting(
+      base::MakeUnique<TestExternalProvider>(service, id));
 
   base::FilePath crx_path =
       test_data_dir_.AppendASCII("content_verifier/v1.crx");

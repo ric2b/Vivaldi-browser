@@ -3,6 +3,18 @@
 // found in the LICENSE file.
 
 /**
+ * Enumeration mapping all possible controlled-by values for exceptions to
+ * icons.
+ * @enum {string}
+ */
+var iconControlledBy = {
+  'extension': 'cr:extension',
+  'HostedApp': 'cr:extension',
+  'platform_app': 'cr:extension',
+  'policy' : 'cr:domain',
+};
+
+/**
  * @fileoverview
  * 'site-list' shows a list of Allowed and Blocked sites for a given
  * category.
@@ -77,6 +89,15 @@ Polymer({
     showSessionOnlyAction_: Boolean,
 
     /**
+     * Keeps track of the incognito status of the current profile (whether one
+     * exists).
+     */
+    incognitoProfileActive_: {
+      type: Boolean,
+      value: false,
+    },
+
+    /**
      * All possible actions in the action menu.
      */
     actions_: {
@@ -98,6 +119,8 @@ Polymer({
   ready: function() {
     this.addWebUIListener('contentSettingSitePermissionChanged',
         this.siteWithinCategoryChanged_.bind(this));
+    this.addWebUIListener('onIncognitoStatusChanged',
+        this.onIncognitoStatusChanged_.bind(this));
   },
 
   /**
@@ -107,8 +130,22 @@ Polymer({
    * @private
    */
   siteWithinCategoryChanged_: function(category, site) {
-    if (category == this.category)
+    if (category == this.category || this.allSites)
       this.configureWidget_();
+  },
+
+  onIncognitoStatusChanged_: function(incognitoEnabled) {
+    // A change notification is not sent for each site that is deleted during
+    // incognito profile destruction. Therefore, we reconfigure the list when
+    // the incognito profile is destroyed, except for SESSION_ONLY, which won't
+    // have any incognito exceptions.
+    if (this.categorySubtype == settings.PermissionValues.SESSION_ONLY)
+      return;
+
+    if (this.incognitoProfileActive_)
+      this.configureWidget_();  // The incognito profile is being destroyed.
+
+    this.incognitoProfileActive_ = incognitoEnabled;
   },
 
   /**
@@ -161,12 +198,16 @@ Polymer({
   },
 
   /**
-   * @param {string} source Where the setting came from.
-   * @return {boolean}
-   * @private
+   * Returns which icon, if any, should represent the fact that this exception
+   * is controlled.
+   * @param {!SiteException} item The item from the list we're computing the
+   *    icon for.
+   * @return {string} The icon to show (or blank, if none).
    */
-  isPolicyControlled_: function(source) {
-    return source == 'policy';
+  computeIconControlledBy_: function(item) {
+    if (this.allSites)
+      return '';
+    return iconControlledBy[item.source] || '';
   },
 
   /**
@@ -175,7 +216,7 @@ Polymer({
    * @private
    */
   shouldShowMenu_: function(source) {
-    return !(this.isPolicyControlled_(source) || this.allSites);
+    return !(this.isExceptionControlled_(source) || this.allSites);
   },
 
   /**
@@ -256,9 +297,10 @@ Polymer({
       if (settings.ContentSettingsTypes[type] ==
           settings.ContentSettingsTypes.PROTOCOL_HANDLERS ||
           settings.ContentSettingsTypes[type] ==
-          settings.ContentSettingsTypes.USB_DEVICES) {
-        // Protocol handlers and USB devices don't have data stored the way all
-        // the other categories do.
+          settings.ContentSettingsTypes.USB_DEVICES ||
+          settings.ContentSettingsTypes[type] ==
+          settings.ContentSettingsTypes.ZOOM_LEVELS) {
+        // Some categories store their data in a custom way.
         continue;
       }
 
@@ -280,7 +322,7 @@ Polymer({
    */
   appendSiteList_: function(sites, exceptionList) {
     for (var i = 0; i < exceptionList.length; ++i) {
-      if (this.category != settings.ALL_SITES) {
+      if (!this.allSites) {
         if (exceptionList[i].setting == settings.PermissionValues.DEFAULT)
           continue;
 
@@ -294,25 +336,6 @@ Polymer({
   },
 
   /**
-   * Converts a string origin/pattern to a URL.
-   * @param {string} originOrPattern The origin/pattern to convert to URL.
-   * @return {URL} The URL to return (or null if origin is not a valid URL).
-   * @private
-   */
-  toUrl_: function(originOrPattern) {
-    if (originOrPattern.length == 0)
-      return null;
-    // TODO(finnur): Hmm, it would probably be better to ensure scheme on the
-    //     JS/C++ boundary.
-    // TODO(dschuyler): I agree. This filtering should be done in one go, rather
-    // that during the sort. The URL generation should be wrapped in a try/catch
-    // as well.
-    originOrPattern = originOrPattern.replace('*://', '');
-    originOrPattern = originOrPattern.replace('[*.]', '');
-    return new URL(this.ensureUrlHasScheme(originOrPattern));
-  },
-
-  /**
    * Converts an unordered site list to an ordered array, sorted by site name
    * then protocol and de-duped (by origin).
    * @param {!Array<SiteException>} sites A list of sites to sort and de-dupe.
@@ -322,8 +345,8 @@ Polymer({
   toSiteArray_: function(sites) {
     var self = this;
     sites.sort(function(a, b) {
-      var url1 = self.toUrl_(a.origin);
-      var url2 = self.toUrl_(b.origin);
+      var url1 = self.toUrl(a.origin);
+      var url2 = self.toUrl(b.origin);
       var comparison = url1.host.localeCompare(url2.host);
       if (comparison == 0) {
         comparison = url1.protocol.localeCompare(url2.protocol);
@@ -331,8 +354,8 @@ Polymer({
           comparison = url1.port.localeCompare(url2.port);
           if (comparison == 0) {
             // Compare hosts for the embedding origins.
-            var host1 = self.toUrl_(a.embeddingOrigin);
-            var host2 = self.toUrl_(b.embeddingOrigin);
+            var host1 = self.toUrl(a.embeddingOrigin);
+            var host2 = self.toUrl(b.embeddingOrigin);
             host1 = (host1 == null) ? '' : host1.host;
             host2 = (host2 == null) ? '' : host2.host;
             return host1.localeCompare(host2);
@@ -341,40 +364,22 @@ Polymer({
       }
       return comparison;
     });
-    var results = [];
+    var results = /** @type {!Array<SiteException>} */([]);
     var lastOrigin = '';
     var lastEmbeddingOrigin = '';
     for (var i = 0; i < sites.length; ++i) {
-      var origin = sites[i].origin;
-      var originForDisplay = this.sanitizePort(origin.replace('[*.]', ''));
-
-      var embeddingOrigin = sites[i].embeddingOrigin;
-      if (this.category == settings.ContentSettingsTypes.GEOLOCATION) {
-        if (embeddingOrigin == '')
-          embeddingOrigin = '*';
-      }
-      var embeddingOriginForDisplay = '';
-      if (embeddingOrigin != '' && origin != embeddingOrigin) {
-        embeddingOriginForDisplay = loadTimeData.getStringF(
-            'embeddedOnHost', this.sanitizePort(embeddingOrigin));
-      }
+      /** @type {!SiteException} */
+      var siteException = this.expandSiteException(sites[i]);
 
       // The All Sites category can contain duplicates (from other categories).
-      if (originForDisplay == lastOrigin &&
-          embeddingOriginForDisplay == lastEmbeddingOrigin) {
+      if (siteException.originForDisplay == lastOrigin &&
+          siteException.embeddingOriginForDisplay == lastEmbeddingOrigin) {
         continue;
       }
 
-      results.push({
-         origin: origin,
-         originForDisplay: originForDisplay,
-         embeddingOrigin: embeddingOrigin,
-         embeddingOriginForDisplay: embeddingOriginForDisplay,
-         source: sites[i].source,
-      });
-
-      lastOrigin = originForDisplay;
-      lastEmbeddingOrigin = embeddingOriginForDisplay;
+      results.push(siteException);
+      lastOrigin = siteException.originForDisplay;
+      lastEmbeddingOrigin = siteException.embeddingOriginForDisplay;
     }
     return results;
   },
@@ -394,34 +399,68 @@ Polymer({
   },
 
   /**
+   * Whether to show the Session Only menu item for a given site.
+   * @param {SiteException} site The site in question.
+   * @return {boolean} Whether to show the menu item.
+   */
+  showSessionOnlyActionForSite_: function(site) {
+    // It makes no sense to show "clear on exit" for exceptions that only apply
+    // to incognito. It gives the impression that they might under some
+    // circumstances not be cleared on exit, which isn't true.
+    if (site.incognito)
+      return false;
+
+    return this.showSessionOnlyAction_;
+  },
+
+  /**
    * A handler for selecting a site (by clicking on the origin).
    * @private
    */
   onOriginTap_: function(event) {
     this.selectedSite = event.model.item;
-    if (this.isPolicyControlled_(this.selectedSite.source))
-      return;
-
-    settings.navigateTo(settings.Route.SITE_SETTINGS_SITE_DETAILS);
+    settings.navigateTo(settings.Route.SITE_SETTINGS_SITE_DETAILS,
+        new URLSearchParams('site=' + this.selectedSite.origin));
   },
 
   /**
    * A handler for activating one of the menu action items.
-   * @param {!{model: !{item: !{origin: string}},
-   *           detail: !{selected: string}}} event
+   * @param {!{model: !{item: !{origin: string}}}} event
+   * @param {string} action The permission to set (Allow, Block, SessionOnly,
+   *     etc).
    * @private
    */
-  onActionMenuIronActivate_: function(event) {
+  onActionMenuActivate_: function(event, action) {
     var origin = event.model.item.origin;
+    var incognito = event.model.item.incognito;
     var embeddingOrigin = event.model.item.embeddingOrigin;
-    var action = event.detail.selected;
     if (action == settings.PermissionValues.DEFAULT) {
-      this.resetCategoryPermissionForOrigin(
-          origin, embeddingOrigin, this.category);
+      this.browserProxy.resetCategoryPermissionForOrigin(
+          origin, embeddingOrigin, this.category, incognito);
     } else {
-      this.setCategoryPermissionForOrigin(
-          origin, embeddingOrigin, this.category, action);
+      this.browserProxy.setCategoryPermissionForOrigin(
+          origin, embeddingOrigin, this.category, action, incognito);
     }
+  },
+
+  /** @private */
+  onAllowTap_: function(event) {
+    this.onActionMenuActivate_(event, settings.PermissionValues.ALLOW);
+  },
+
+  /** @private */
+  onBlockTap_: function(event) {
+    this.onActionMenuActivate_(event, settings.PermissionValues.BLOCK);
+  },
+
+  /** @private */
+  onSessionOnlyTap_: function(event) {
+    this.onActionMenuActivate_(event, settings.PermissionValues.SESSION_ONLY);
+  },
+
+  /** @private */
+  onResetTap_: function(event) {
+    this.onActionMenuActivate_(event, settings.PermissionValues.DEFAULT);
   },
 
   /**
@@ -445,6 +484,24 @@ Polymer({
       return title;
     }
     return loadTimeData.getStringF('titleAndCount', title, siteList.length);
+  },
+
+  /**
+   * Returns the appropriate site description to display. This can, for example,
+   * be blank, an 'embedded on <site>' or 'Current incognito session' (or a
+   * mix of the last two).
+   * @param {SiteException} item The site exception entry.
+   * @return {string} The site description.
+   */
+  computeSiteDescription_: function(item) {
+    if (item.incognito && item.embeddingOriginForDisplay.length > 0) {
+      return loadTimeData.getStringF('embeddedIncognitoSite',
+          item.embeddingOriginForDisplay);
+    }
+
+    if (item.incognito)
+      return loadTimeData.getString('incognitoSite');
+    return item.embeddingOriginForDisplay;
   },
 
   /**

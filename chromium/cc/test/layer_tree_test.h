@@ -12,25 +12,25 @@
 #include "cc/test/test_gpu_memory_buffer_manager.h"
 #include "cc/test/test_hooks.h"
 #include "cc/test/test_task_graph_runner.h"
-#include "cc/trees/layer_tree_host.h"
+#include "cc/trees/compositor_mode.h"
 #include "cc/trees/layer_tree_host_impl.h"
+#include "cc/trees/layer_tree_host_in_process.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace cc {
 class AnimationPlayer;
 class FakeLayerTreeHostClient;
-class FakeOutputSurface;
 class LayerImpl;
 class LayerTreeHost;
 class LayerTreeHostForTesting;
 class LayerTreeHostClient;
 class LayerTreeHostImpl;
-class LayerTreeTestDelegatingOutputSurfaceClient;
+class LayerTreeTestCompositorFrameSinkClient;
+class Proxy;
 class ProxyImpl;
 class ProxyMain;
-class RemoteChannelImplForTest;
 class TestContextProvider;
-class TestDelegatingOutputSurface;
+class TestCompositorFrameSink;
 class TestGpuMemoryBufferManager;
 class TestTaskGraphRunner;
 class TestWebGraphicsContext3D;
@@ -116,7 +116,8 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   void DispatchCompositeImmediately();
   void DispatchNextCommitWaitsForActivation();
 
-  std::unique_ptr<OutputSurface> ReleaseOutputSurfaceOnLayerTreeHost();
+  std::unique_ptr<CompositorFrameSink>
+  ReleaseCompositorFrameSinkOnLayerTreeHost();
   void SetVisibleOnLayerTreeHost(bool visible);
 
   virtual void AfterTest() = 0;
@@ -136,7 +137,6 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   Proxy* proxy() const {
     return layer_tree_host_ ? layer_tree_host_->proxy() : NULL;
   }
-  Proxy* remote_client_proxy() const;
   TaskRunnerProvider* task_runner_provider() const;
   TaskGraphRunner* task_graph_runner() const {
     return task_graph_runner_.get();
@@ -144,8 +144,8 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   bool TestEnded() const { return ended_; }
 
   LayerTreeHost* layer_tree_host();
+  LayerTreeHostInProcess* layer_tree_host_in_process();
   LayerTree* layer_tree() { return layer_tree_host()->GetLayerTree(); }
-  LayerTreeHost* remote_client_layer_tree_host();
   SharedBitmapManager* shared_bitmap_manager() const {
     return shared_bitmap_manager_.get();
   }
@@ -154,25 +154,20 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   }
 
   void DestroyLayerTreeHost();
-  void DestroyRemoteClientHost() override;
-
-  void CreateRemoteClientHost(
-      const proto::CompositorMessageToImpl& proto) override;
 
   // By default, output surface recreation is synchronous.
-  void RequestNewOutputSurface() override;
+  void RequestNewCompositorFrameSink() override;
   // Override this and call the base class to change what ContextProviders will
   // be used (such as for pixel tests). Or override it and create your own
-  // TestDelegatingOutputSurface to control how it is created.
-  virtual std::unique_ptr<TestDelegatingOutputSurface>
-  CreateDelegatingOutputSurface(
+  // TestCompositorFrameSink to control how it is created.
+  virtual std::unique_ptr<TestCompositorFrameSink> CreateCompositorFrameSink(
       scoped_refptr<ContextProvider> compositor_context_provider,
       scoped_refptr<ContextProvider> worker_context_provider);
   // Override this and call the base class to change what ContextProvider will
-  // be used, such as to prevent sharing the context with the delegating
-  // OutputSurface. Or override it and create your own OutputSurface to change
-  // what type of OutputSurface is used, such as a real OutputSurface for pixel
-  // tests or a software-compositing OutputSurface.
+  // be used, such as to prevent sharing the context with the
+  // CompositorFrameSink. Or override it and create your own OutputSurface to
+  // change what type of OutputSurface is used, such as a real OutputSurface for
+  // pixel tests or a software-compositing OutputSurface.
   virtual std::unique_ptr<OutputSurface> CreateDisplayOutputSurface(
       scoped_refptr<ContextProvider> compositor_context_provider);
 
@@ -186,14 +181,7 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   CompositorMode mode_;
 
   std::unique_ptr<LayerTreeHostClientForTesting> client_;
-  std::unique_ptr<LayerTreeHost> layer_tree_host_;
-
-  // The LayerTreeHost created by the cc embedder on the client in remote mode.
-  std::unique_ptr<LayerTreeHostForTesting> remote_client_layer_tree_host_;
-
-  RemoteProtoChannelBridge remote_proto_channel_bridge_;
-
-  std::unique_ptr<ImageSerializationProcessor> image_serialization_processor_;
+  std::unique_ptr<LayerTreeHostInProcess> layer_tree_host_;
 
   bool beginning_ = false;
   bool end_when_begin_returns_ = false;
@@ -204,8 +192,8 @@ class LayerTreeTest : public testing::Test, public TestHooks {
 
   int timeout_seconds_ = false;
 
-  std::unique_ptr<LayerTreeTestDelegatingOutputSurfaceClient>
-      delegating_output_surface_client_;
+  std::unique_ptr<LayerTreeTestCompositorFrameSinkClient>
+      compositor_frame_sink_client_;
   scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> impl_task_runner_;
   std::unique_ptr<base::Thread> impl_thread_;

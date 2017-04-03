@@ -320,14 +320,9 @@ chromium_strings.grd. -->
           Welcome to Google Chrome
         </message>
       </if>
-      <if expr="not chromeos">
-        <message name="IDS_EXTERNAL_PROTOCOL_INFORMATION" desc="General information about what Chrome is trying to do when opening this external protocol">
-          Google Chrome needs to launch an external application to handle <ph name="SCHEME">$1<ex>acrobat:</ex></ph> links. The link requested is <ph name="PROTOLINK">$2<ex>acrobat:yourpdf</ex></ph>.
-        </message>
-      </if>
       <if expr="chromeos">
-        <message name="IDS_EXTERNAL_PROTOCOL_INFORMATION" desc="General information about what Chrome is trying to do when opening this external protocol">
-          Google Chrome OS does not support launching an external application to handle <ph name="SCHEME">$1<ex>acrobat:</ex></ph> links. The link requested is <ph name="PROTOLINK">$2<ex>acrobat:yourpdf</ex></ph>.
+        <message name="IDS_EXTERNAL_PROTOCOL_TITLE" desc="External Protocol Dialog Title">
+          Google Chrome OS cannot open this page.
         </message>
       </if>
       <!-- Strings used to warn that an OS is not supported -->
@@ -438,6 +433,9 @@ Google Chrome is unable to recover your settings.
         </message>
         <message name="IDS_INSTALL_OS_ERROR" desc="Error displayed when any Windows API call fails and we do not have more specific information.">
           An operating system error occurred during installation. Please download Google Chrome again.
+        </message>
+        <message name="IDS_INSTALL_SINGLETON_ACQUISITION_FAILED" desc="Error displayed when the installer cannot run because another installer is already running.">
+          Another operation on Google Chrome is in progress. Please try again later.
         </message>
         <message name="IDS_INSTALL_TEMP_DIR_FAILED" desc="Error displayed when we fail to create temporary directory during installation.">
           The installer couldn't create a temporary directory. Please check for free disk space and permission to install software.
@@ -556,6 +554,14 @@ Google Chrome is unable to recover your settings.
       <message name="IDS_PROMPT_MALICIOUS_DOWNLOAD_CONTENT"
          desc="Message shown to the user to validate the download when the download content is classified to lead to malware by safebrowsing.">
         <ph name="FILE_NAME">$1<ex>malware.exe</ex></ph> is malicious, and Chrome has blocked it.
+      </message>
+      <message name="IDS_BLOCK_REASON_DANGEROUS_DOWNLOAD"
+         desc="Message shown to the user on chrome://downloads page to explain that this download is blocked because it is malware.">
+        This file is dangerous, so Chrome has blocked it.
+      </message>
+      <message name="IDS_BLOCK_REASON_UNWANTED_DOWNLOAD"
+         desc="Message shown to the user on chrome://downloads page to explain that this download is blocked because it is unwanted sofware.">
+        This file may be dangerous, so Chrome has blocked it.
       </message>
 
       <!-- Remove in-progress downloads confirmation dialog -->
@@ -893,14 +899,6 @@ Signing in anyway will merge Chrome information like bookmarks, history, and oth
         <if expr="use_titlecase">
           <message name="IDS_APP_LIST_EXTENSIONS_UNINSTALL" desc="In Title Case: Title text for the context menu item of a non-platform-app app list item that removes the app.">
             Remove From Chrome...
-          </message>
-        </if>
-        <if expr="not chromeos">
-          <message name="IDS_APP_LIST_MESSAGE_TITLE" desc="Title given to the message displayed in the app launcher to say it is going away">
-            The Chrome App Launcher is going away.
-          </message>
-          <message name="IDS_APP_LIST_MESSAGE_TEXT" desc="The message body text displayed in the app launcher to say it is going away">
-            Use the <ph name="APPS_ICON_IMAGE">$1<ex>Apps</ex></ph> shortcut in the Chrome bookmarks bar to continue accessing your apps.
           </message>
         </if>
       </if>
@@ -1259,6 +1257,35 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@example.com</
         <message name="IDS_METRO_FLOW_LOGO_STRING_ALT"
                  desc="Alt text for the faded Chrome logo image.">
           Chrome logo
+        </message>
+      </if>
+
+      <!-- Welcome page (chrome://welcome) strings -->
+      <if expr="not chromeos">
+        <message name="IDS_WELCOME_HEADER" desc="A message which will appear as the header on the Welcome UI if the user has never run Chrome before.">
+          Welcome to Chrome
+        </message>
+        <message name="IDS_WELCOME_HEADER_AFTER_FIRST_RUN" desc="A message which will appear as the header on the Welcome UI if the user has run Chrome before.">
+          Take Chrome everywhere
+        </message>
+      </if>
+
+      <!-- Windows 10 Welcome page strings -->
+      <if expr="is_win">
+        <message name="IDS_WIN10_WELCOME_HEADER" desc="A header on the Windows 10 Welcome UI if the user has never run Chrome before.">
+          Welcome to Chrome
+        </message>
+        <message name="IDS_WIN10_WELCOME_HEADER_AFTER_FIRST_RUN" desc="A header on the Windows 10 Welcome UI if the user has run Chrome before.">
+          Get to Chrome faster
+        </message>
+        <message name="IDS_WIN10_WELCOME_MAKE_DEFAULT_SUBHEADING" desc="A subheading on a section which gives instructions on how to make Chrome the default browser.">
+          Make Chrome your default browser
+        </message>
+        <message name="IDS_WIN10_WELCOME_PIN_SUBHEADING" desc="A subheading on a section which gives instructions on how to pin Chrome to the Windows 10 taskbar.">
+          Pin Chrome to your taskbar
+        </message>
+        <message name="IDS_WIN10_WELCOME_SELECT" desc="An instruction asking the user to select Chrome from an external list of apps.">
+          Select <ph name="SMALL_PRODUCT_LOGO">&lt;div class="logo-small"&gt;&lt;/div&gt;</ph> <ph name="BEGIN_BOLD">&lt;strong&gt;</ph>Google Chrome<ph name="END_BOLD">&lt;/strong&gt;</ph>
         </message>
       </if>
 

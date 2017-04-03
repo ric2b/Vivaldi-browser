@@ -9,10 +9,15 @@
 #include "base/auto_reset.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics_action.h"
+#include "base/sys_info.h"
 #include "content/common/media/media_player_delegate_messages.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayer.h"
+
+#if defined(OS_ANDROID)
+#include "base/android/build_info.h"
+#endif
 
 namespace {
 
@@ -27,10 +32,21 @@ namespace media {
 RendererWebMediaPlayerDelegate::RendererWebMediaPlayerDelegate(
     content::RenderFrame* render_frame)
     : RenderFrameObserver(render_frame),
+      idle_cleanup_timer_(true, true),
       default_tick_clock_(new base::DefaultTickClock()),
       tick_clock_(default_tick_clock_.get()) {
   idle_cleanup_interval_ = base::TimeDelta::FromSeconds(5);
   idle_timeout_ = base::TimeDelta::FromSeconds(15);
+
+  // To conserve resources, cleanup idle players more often on low end devices.
+  is_low_end_device_ = base::SysInfo::IsLowEndDevice();
+
+#if defined(OS_ANDROID)
+  // On Android, due to the instability of the OS level media components, we
+  // consider all pre-KitKat devices to be low end.
+  is_low_end_device_ |=
+      base::android::BuildInfo::GetInstance()->sdk_int() <= 18;
+#endif
 }
 
 RendererWebMediaPlayerDelegate::~RendererWebMediaPlayerDelegate() {}
@@ -50,11 +66,12 @@ void RendererWebMediaPlayerDelegate::RemoveObserver(int delegate_id) {
   playing_videos_.erase(delegate_id);
 }
 
-void RendererWebMediaPlayerDelegate::DidPlay(int delegate_id,
-                                             bool has_video,
-                                             bool has_audio,
-                                             bool is_remote,
-                                             base::TimeDelta duration) {
+void RendererWebMediaPlayerDelegate::DidPlay(
+    int delegate_id,
+    bool has_video,
+    bool has_audio,
+    bool is_remote,
+    MediaContentType media_content_type) {
   DCHECK(id_map_.Lookup(delegate_id));
   has_played_media_ = true;
   if (has_video && !is_remote)
@@ -62,8 +79,14 @@ void RendererWebMediaPlayerDelegate::DidPlay(int delegate_id,
   else
     playing_videos_.erase(delegate_id);
   RemoveIdleDelegate(delegate_id);
+
+  // Upon receipt of a playback request, suspend everything that's not used.
+  if (is_low_end_device_)
+    CleanupIdleDelegates(base::TimeDelta());
+
   Send(new MediaPlayerDelegateHostMsg_OnMediaPlaying(
-      routing_id(), delegate_id, has_video, has_audio, is_remote, duration));
+      routing_id(), delegate_id, has_video, has_audio, is_remote,
+      media_content_type));
 }
 
 void RendererWebMediaPlayerDelegate::DidPause(int delegate_id,
@@ -78,7 +101,6 @@ void RendererWebMediaPlayerDelegate::DidPause(int delegate_id,
 
 void RendererWebMediaPlayerDelegate::PlayerGone(int delegate_id) {
   DCHECK(id_map_.Lookup(delegate_id));
-  RemoveIdleDelegate(delegate_id);
   playing_videos_.erase(delegate_id);
   Send(new MediaPlayerDelegateHostMsg_OnMediaDestroyed(routing_id(),
                                                        delegate_id));
@@ -124,10 +146,12 @@ bool RendererWebMediaPlayerDelegate::OnMessageReceived(
 
 void RendererWebMediaPlayerDelegate::SetIdleCleanupParamsForTesting(
     base::TimeDelta idle_timeout,
-    base::TickClock* tick_clock) {
+    base::TickClock* tick_clock,
+    bool is_low_end_device) {
   idle_cleanup_interval_ = base::TimeDelta();
   idle_timeout_ = idle_timeout;
   tick_clock_ = tick_clock;
+  is_low_end_device_ = is_low_end_device;
 }
 
 void RendererWebMediaPlayerDelegate::OnMediaDelegatePause(int delegate_id) {
@@ -169,9 +193,16 @@ void RendererWebMediaPlayerDelegate::AddIdleDelegate(int delegate_id) {
   idle_delegate_map_[delegate_id] = tick_clock_->NowTicks();
   if (!idle_cleanup_timer_.IsRunning()) {
     idle_cleanup_timer_.Start(
-        FROM_HERE, idle_cleanup_interval_, this,
-        &RendererWebMediaPlayerDelegate::CleanupIdleDelegates);
+        FROM_HERE, idle_cleanup_interval_,
+        base::Bind(&RendererWebMediaPlayerDelegate::CleanupIdleDelegates,
+                   base::Unretained(this), idle_timeout_));
   }
+
+  // When we reach the maximum number of idle players, aggressively suspend idle
+  // delegates to try and remain under the limit. Values chosen after testing on
+  // a Galaxy Nexus device for http://crbug.com/612909.
+  if (idle_delegate_map_.size() > (is_low_end_device_ ? 2u : 8u))
+    CleanupIdleDelegates(base::TimeDelta());
 }
 
 void RendererWebMediaPlayerDelegate::RemoveIdleDelegate(int delegate_id) {
@@ -187,19 +218,28 @@ void RendererWebMediaPlayerDelegate::RemoveIdleDelegate(int delegate_id) {
     idle_cleanup_timer_.Stop();
 }
 
-void RendererWebMediaPlayerDelegate::CleanupIdleDelegates() {
+void RendererWebMediaPlayerDelegate::CleanupIdleDelegates(
+    base::TimeDelta timeout) {
+  // Drop reentrant cleanups which can occur during forced suspension when the
+  // number of idle delegates is too high for a given device.
+  if (idle_cleanup_running_)
+    return;
+
   // Iterate over the delegates and suspend the idle ones. Note: The call to
-  // OnHidden() can trigger calls into RemoveIdleDelegate(), so for iterator
-  // validity we set |idle_cleanup_running_| to true and defer deletions.
+  // OnSuspendRequested() can trigger calls into RemoveIdleDelegate(), so for
+  // iterator validity we set |idle_cleanup_running_| to true and defer
+  // deletions.
+  DCHECK(!idle_cleanup_running_);
   base::AutoReset<bool> scoper(&idle_cleanup_running_, true);
   const base::TimeTicks now = tick_clock_->NowTicks();
   for (auto& idle_delegate_entry : idle_delegate_map_) {
-    if (now - idle_delegate_entry.second > idle_timeout_) {
-      id_map_.Lookup(idle_delegate_entry.first)->OnSuspendRequested(false);
-
-      // Whether or not the player accepted the suspension, mark it for removal
-      // from future polls to avoid running the timer forever.
-      idle_delegate_entry.second = base::TimeTicks();
+    if (now - idle_delegate_entry.second > timeout) {
+      if (id_map_.Lookup(idle_delegate_entry.first)
+              ->OnSuspendRequested(false)) {
+        // If the player accepted the suspension, mark it for removal
+        // from future polls to avoid running the timer forever.
+        idle_delegate_entry.second = base::TimeTicks();
+      }
     }
   }
 

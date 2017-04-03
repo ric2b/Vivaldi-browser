@@ -19,6 +19,20 @@ class PointerEvent;
 namespace views {
 class Widget;
 
+// When a PointerWatcher is added the types of events desired is specified by
+// way of PointerWatcherEventTypes.
+enum class PointerWatcherEventTypes {
+  // The PointerWatcher is interested in press, release, capture and mouse
+  // wheel.
+  BASIC,
+  // The PointerWatcher is interested in BASIC events, as well as move
+  // events.
+  MOVES,
+  // The PointerWatcher is interested in MOVE events, as well as drag
+  // events.
+  DRAGS
+};
+
 // An interface for read-only observation of pointer events (in particular, the
 // events cannot be marked as handled). Only certain event types are supported.
 // The |target| is the top-level widget that will receive the event, if any.
@@ -27,6 +41,8 @@ class Widget;
 // NOTE: On mus this allows observation of events outside of windows owned
 // by the current process, in which case the |target| will be null. On mus
 // event.target() is always null.
+// NOTE: Mouse capture change events are sent through OnPointerEventObserved and
+// its |target| is always null.
 class VIEWS_EXPORT PointerWatcher {
  public:
   PointerWatcher() {}
@@ -34,10 +50,6 @@ class VIEWS_EXPORT PointerWatcher {
   virtual void OnPointerEventObserved(const ui::PointerEvent& event,
                                       const gfx::Point& location_in_screen,
                                       Widget* target) = 0;
-
-  // PointerWatcher is informed of capture changes as it's common to create a
-  // MouseEvent of type ui::ET_MOUSE_CAPTURE_CHANGED on capture change.
-  virtual void OnMouseCaptureChanged() {}
 
  protected:
   virtual ~PointerWatcher() {}

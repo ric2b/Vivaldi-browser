@@ -14,7 +14,6 @@
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/memory/linked_ptr.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
 #include "base/single_thread_task_runner.h"
@@ -683,12 +682,15 @@ bool ManagementCreateAppShortcutFunction::RunAsync() {
     return true;
   }
 
+  std::string error;
   if (ManagementAPI::GetFactoryInstance()
           ->Get(browser_context())
           ->GetDelegate()
-          ->CreateAppShortcutFunctionDelegate(this, extension)) {
+          ->CreateAppShortcutFunctionDelegate(this, extension, &error)) {
     // Matched with a Release() in OnCloseShortcutPrompt().
     AddRef();
+  } else {
+    SetError(error);
   }
 
   // Response is sent async in OnCloseShortcutPrompt().

@@ -48,7 +48,6 @@ class DownloadController : public DownloadControllerBase {
   void AcquireFileAccessPermission(
       content::WebContents* web_contents,
       const AcquireFileAccessPermissionCallback& callback) override;
-  void SetDefaultDownloadFileName(const std::string& file_name) override;
 
   // UMA histogram enum for download cancellation reasons. Keep this
   // in sync with MobileDownloadCancelReason in histograms.xml. This should be
@@ -62,6 +61,7 @@ class DownloadController : public DownloadControllerBase {
     CANCEL_REASON_DANGEROUS_DOWNLOAD_INFOBAR_DISMISSED,
     CANCEL_REASON_NO_EXTERNAL_STORAGE,
     CANCEL_REASON_CANNOT_DETERMINE_DOWNLOAD_TARGET,
+    CANCEL_REASON_OTHER_NATIVE_RESONS,
     CANCEL_REASON_MAX
   };
   static void RecordDownloadCancelReason(DownloadCancelReason reason);
@@ -76,31 +76,14 @@ class DownloadController : public DownloadControllerBase {
   bool HasFileAccessPermission(ui::WindowAndroid* window_android);
 
   // DownloadControllerBase implementation.
-  void CreateGETDownload(int render_process_id,
-                         int render_view_id,
-                         bool must_download,
-                         const DownloadInfo& info) override;
   void OnDownloadStarted(content::DownloadItem* download_item) override;
   void StartContextMenuDownload(const content::ContextMenuParams& params,
                                 content::WebContents* web_contents,
                                 bool is_link,
                                 const std::string& extra_headers) override;
-  void DangerousDownloadValidated(content::WebContents* web_contents,
-                                  const std::string& download_guid,
-                                  bool accept) override;
 
   // DownloadItem::Observer interface.
   void OnDownloadUpdated(content::DownloadItem* item) override;
-
-  void StartAndroidDownload(int render_process_id,
-                            int render_view_id,
-                            bool must_download,
-                            const DownloadInfo& info);
-  void StartAndroidDownloadInternal(int render_process_id,
-                                    int render_view_id,
-                                    bool must_download,
-                                    const DownloadInfo& info,
-                                    bool allowed);
 
   // The download item contains dangerous file types.
   void OnDangerousDownload(content::DownloadItem *item);

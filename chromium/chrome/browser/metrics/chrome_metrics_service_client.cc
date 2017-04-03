@@ -15,7 +15,7 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/persistent_histogram_allocator.h"
 #include "base/path_service.h"
 #include "base/rand_util.h"
@@ -36,9 +36,11 @@
 #include "chrome/browser/ui/browser_otr_state.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_paths.h"
+#include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/crash_keys.h"
 #include "chrome/common/features.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/installer/util/util_constants.h"
 #include "components/metrics/call_stack_profile_metrics_provider.h"
 #include "components/metrics/drive_metrics_provider.h"
@@ -62,6 +64,7 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/device_info/device_count_metrics_provider.h"
+#include "components/translate/core/browser/translate_ranker_metrics_provider.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/histogram_fetcher.h"
@@ -95,6 +98,7 @@
 #include "chrome/browser/metrics/antivirus_metrics_provider_win.h"
 #include "chrome/browser/metrics/google_update_metrics_provider_win.h"
 #include "chrome/common/metrics_constants_util_win.h"
+#include "chrome/install_static/install_util.h"
 #include "chrome/installer/util/browser_distribution.h"
 #include "components/browser_watcher/watcher_metrics_provider_win.h"
 #endif
@@ -110,23 +114,16 @@ namespace {
 // data.
 const int kMaxHistogramGatheringWaitDuration = 60000;  // 60 seconds.
 
-// Checks whether it is the first time that cellular uploads logic should be
-// enabled based on whether the the preference for that logic is initialized.
-// This should happen only once as the used preference will be initialized
-// afterwards in |UmaSessionStats.java|.
-bool ShouldClearSavedMetrics() {
-#if BUILDFLAG(ANDROID_JAVA_UI)
-  PrefService* local_state = g_browser_process->local_state();
-  return !local_state->HasPrefPath(metrics::prefs::kMetricsReportingEnabled) &&
-         metrics::IsCellularLogicEnabled();
-#else
-  return false;
-#endif
-}
+// Needs to be kept in sync with the writer in
+// third_party/crashpad/crashpad/handler/handler_main.cc.
+const char kCrashpadHistogramAllocatorName[] = "CrashpadMetrics";
 
-void RegisterInstallerFileMetricsPreferences(PrefRegistrySimple* registry) {
+void RegisterFileMetricsPreferences(PrefRegistrySimple* registry) {
   metrics::FileMetricsProvider::RegisterPrefs(
       registry, ChromeMetricsServiceClient::kBrowserMetricsName);
+
+  metrics::FileMetricsProvider::RegisterPrefs(registry,
+                                              kCrashpadHistogramAllocatorName);
 
 #if defined(OS_WIN)
   metrics::FileMetricsProvider::RegisterPrefs(
@@ -134,8 +131,36 @@ void RegisterInstallerFileMetricsPreferences(PrefRegistrySimple* registry) {
 #endif
 }
 
-std::unique_ptr<metrics::FileMetricsProvider>
-CreateInstallerFileMetricsProvider(bool metrics_reporting_enabled) {
+// Constructs the name of a persistent metrics file from a directory and metrics
+// name, and either registers that file as associated with a previous run if
+// metrics reporting is enabled, or deletes it if not.
+void RegisterOrRemovePreviousRunMetricsFile(
+    bool metrics_reporting_enabled,
+    const base::FilePath& dir,
+    base::StringPiece metrics_name,
+    scoped_refptr<base::TaskRunner> task_runner,
+    metrics::FileMetricsProvider* file_metrics_provider) {
+  base::FilePath metrics_file;
+  base::GlobalHistogramAllocator::ConstructFilePaths(dir, metrics_name,
+                                                     &metrics_file, nullptr);
+
+  if (metrics_reporting_enabled) {
+    // Enable reading any existing saved metrics.
+    file_metrics_provider->RegisterSource(
+        metrics_file,
+        metrics::FileMetricsProvider::SOURCE_HISTOGRAMS_ATOMIC_FILE,
+        metrics::FileMetricsProvider::ASSOCIATE_PREVIOUS_RUN, metrics_name);
+  } else {
+    // When metrics reporting is not enabled, any existing file should be
+    // deleted in order to preserve user privacy.
+    task_runner->PostTask(FROM_HERE,
+                          base::Bind(base::IgnoreResult(&base::DeleteFile),
+                                     metrics_file, /*recursive=*/false));
+  }
+}
+
+std::unique_ptr<metrics::FileMetricsProvider> CreateFileMetricsProvider(
+    bool metrics_reporting_enabled) {
   // Fetch a worker-pool for performing I/O tasks that are not allowed on
   // the main UI thread.
   scoped_refptr<base::TaskRunner> task_runner =
@@ -148,27 +173,35 @@ CreateInstallerFileMetricsProvider(bool metrics_reporting_enabled) {
       new metrics::FileMetricsProvider(task_runner,
                                        g_browser_process->local_state()));
 
-  // Create the full pathname of the file holding browser metrics.
-  base::FilePath metrics_file;
-  if (base::PathService::Get(chrome::DIR_USER_DATA, &metrics_file)) {
-    metrics_file =
-        metrics_file
-            .AppendASCII(ChromeMetricsServiceClient::kBrowserMetricsName)
-            .AddExtension(base::PersistentMemoryAllocator::kFileExtension);
+  // Register the file holding browser metrics.
+  base::FilePath user_data_dir;
+  if (base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir)) {
+    RegisterOrRemovePreviousRunMetricsFile(
+        metrics_reporting_enabled, user_data_dir,
+        ChromeMetricsServiceClient::kBrowserMetricsName, task_runner,
+        file_metrics_provider.get());
+  }
 
+  // Read the Crashpad metrics files.
+  base::FilePath default_user_data_dir;
+  if (chrome::GetDefaultUserDataDirectory(&default_user_data_dir)) {
+    // Register the data from the previous run if crashpad_handler didn't exit
+    // cleanly.
+    RegisterOrRemovePreviousRunMetricsFile(
+        metrics_reporting_enabled, default_user_data_dir,
+        kCrashpadHistogramAllocatorName, task_runner,
+        file_metrics_provider.get());
     if (metrics_reporting_enabled) {
-      // Enable reading any existing saved metrics.
+      base::FilePath active_path;
+      base::GlobalHistogramAllocator::ConstructFilePaths(
+          default_user_data_dir, kCrashpadHistogramAllocatorName, nullptr,
+          &active_path);
+      // Register data that will be populated for the current run.
       file_metrics_provider->RegisterSource(
-          metrics_file,
+          active_path,
           metrics::FileMetricsProvider::SOURCE_HISTOGRAMS_ATOMIC_FILE,
-          metrics::FileMetricsProvider::ASSOCIATE_PREVIOUS_RUN,
-          ChromeMetricsServiceClient::kBrowserMetricsName);
-    } else {
-      // When metrics reporting is not enabled, any existing file should be
-      // deleted in order to preserve user privacy.
-      task_runner->PostTask(FROM_HERE,
-                            base::Bind(base::IgnoreResult(&base::DeleteFile),
-                                       metrics_file, /*recursive=*/false));
+          metrics::FileMetricsProvider::ASSOCIATE_CURRENT_RUN,
+          kCrashpadHistogramAllocatorName);
     }
   }
 
@@ -186,29 +219,23 @@ CreateInstallerFileMetricsProvider(bool metrics_reporting_enabled) {
   return file_metrics_provider;
 }
 
-// If there is a global metrics file being updated on disk, mark it to be
-// deleted when the process exits. A normal shutdown is almost complete
-// so there is no benefit in keeping a file with no new data to be processed
-// during the next startup sequence. Deleting the file during shutdown adds
-// an extra disk-access or two to shutdown but eliminates the unnecessary
-// processing of the contents during startup only to find nothing.
-void CleanUpGlobalPersistentHistogramStorage() {
-  base::GlobalHistogramAllocator* allocator =
-      base::GlobalHistogramAllocator::Get();
-  if (!allocator)
-    return;
+#if defined(OS_WIN)
+void GetExecutableVersionDetails(base::string16* product_name,
+                                 base::string16* version_number,
+                                 base::string16* channel_name) {
+  DCHECK_NE(nullptr, product_name);
+  DCHECK_NE(nullptr, version_number);
+  DCHECK_NE(nullptr, channel_name);
 
-  const base::FilePath& path = allocator->GetPersistentLocation();
-  if (path.empty())
-    return;
+  wchar_t exe_file[MAX_PATH] = {};
+  CHECK(::GetModuleFileName(nullptr, exe_file, arraysize(exe_file)));
 
-  // Open (with delete) and then immediately close the file by going out of
-  // scope. This is the only cross-platform safe way to delete a file that may
-  // be open elsewhere. Open handles will continue to operate normally but
-  // new opens will not be possible.
-  base::File file(path, base::File::FLAG_OPEN | base::File::FLAG_READ |
-                        base::File::FLAG_DELETE_ON_CLOSE);
+  base::string16 unused_special_build;
+  install_static::GetExecutableVersionDetails(
+      exe_file, product_name, version_number, &unused_special_build,
+      channel_name);
 }
+#endif  // OS_WIN
 
 }  // namespace
 
@@ -229,6 +256,8 @@ ChromeMetricsServiceClient::ChromeMetricsServiceClient(
 #endif
 #if defined(OS_WIN)
       google_update_metrics_provider_(nullptr),
+      watcher_metrics_provider_(nullptr),
+      antivirus_metrics_provider_(nullptr),
 #endif
       drive_metrics_provider_(nullptr),
       start_time_(base::TimeTicks::Now()),
@@ -241,7 +270,16 @@ ChromeMetricsServiceClient::ChromeMetricsServiceClient(
 
 ChromeMetricsServiceClient::~ChromeMetricsServiceClient() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  CleanUpGlobalPersistentHistogramStorage();
+  base::GlobalHistogramAllocator* allocator =
+      base::GlobalHistogramAllocator::Get();
+  if (allocator) {
+    // A normal shutdown is almost complete so there is no benefit in keeping a
+    // file with no new data to be processed during the next startup sequence.
+    // Deleting the file during shutdown adds an extra disk-access or two to
+    // shutdown but eliminates the unnecessary processing of the contents during
+    // startup only to find nothing.
+    allocator->DeletePersistentLocation();
+  }
 }
 
 // static
@@ -261,7 +299,7 @@ void ChromeMetricsServiceClient::RegisterPrefs(PrefRegistrySimple* registry) {
   metrics::MetricsService::RegisterPrefs(registry);
   metrics::StabilityMetricsHelper::RegisterPrefs(registry);
 
-  RegisterInstallerFileMetricsPreferences(registry);
+  RegisterFileMetricsPreferences(registry);
 
   metrics::RegisterMetricsReportingStatePrefs(registry);
 
@@ -281,10 +319,6 @@ metrics::MetricsService* ChromeMetricsServiceClient::GetMetricsService() {
 void ChromeMetricsServiceClient::SetMetricsClientId(
     const std::string& client_id) {
   crash_keys::SetMetricsClientIdFromGUID(client_id);
-}
-
-bool ChromeMetricsServiceClient::IsOffTheRecordSessionActive() {
-  return chrome::IsIncognitoSessionActive();
 }
 
 int32_t ChromeMetricsServiceClient::GetProduct() {
@@ -387,17 +421,17 @@ ChromeMetricsServiceClient::GetMetricsReportingDefaultState() {
 }
 
 void ChromeMetricsServiceClient::Initialize() {
-  // Clear metrics reports if it is the first time cellular upload logic should
-  // apply to avoid sudden bulk uploads. It needs to be done before initializing
-  // metrics service so that metrics log manager is initialized correctly.
-  if (ShouldClearSavedMetrics()) {
-    PrefService* local_state = g_browser_process->local_state();
-    local_state->ClearPref(metrics::prefs::kMetricsInitialLogs);
-    local_state->ClearPref(metrics::prefs::kMetricsOngoingLogs);
-  }
+  PrefService* local_state = g_browser_process->local_state();
 
-  metrics_service_.reset(new metrics::MetricsService(
-      metrics_state_manager_, this, g_browser_process->local_state()));
+  // Clear deprecated metrics preference for Android.
+  // TODO(gayane): Cleanup this code after M60 when the pref would be cleared
+  // from clients.
+#if BUILDFLAG(ANDROID_JAVA_UI)
+  local_state->ClearPref(prefs::kCrashReportingEnabled);
+#endif
+
+  metrics_service_.reset(
+      new metrics::MetricsService(metrics_state_manager_, this, local_state));
 
   // Gets access to persistent metrics shared by sub-processes.
   metrics_service_->RegisterMetricsProvider(
@@ -423,8 +457,7 @@ void ChromeMetricsServiceClient::Initialize() {
           base::Bind(&chrome::IsIncognitoSessionActive))));
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider>(
-          new ChromeStabilityMetricsProvider(
-              g_browser_process->local_state())));
+          new ChromeStabilityMetricsProvider(local_state)));
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider>(
           new metrics::GPUMetricsProvider));
@@ -432,7 +465,7 @@ void ChromeMetricsServiceClient::Initialize() {
       std::unique_ptr<metrics::MetricsProvider>(
           new metrics::ScreenInfoMetricsProvider));
 
-  metrics_service_->RegisterMetricsProvider(CreateInstallerFileMetricsProvider(
+  metrics_service_->RegisterMetricsProvider(CreateFileMetricsProvider(
       ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled()));
 
   drive_metrics_provider_ = new metrics::DriveMetricsProvider(
@@ -442,8 +475,7 @@ void ChromeMetricsServiceClient::Initialize() {
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider>(drive_metrics_provider_));
 
-  profiler_metrics_provider_ = new metrics::ProfilerMetricsProvider(
-      base::Bind(&metrics::IsCellularLogicEnabled));
+  profiler_metrics_provider_ = new metrics::ProfilerMetricsProvider();
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider>(profiler_metrics_provider_));
 
@@ -455,10 +487,14 @@ void ChromeMetricsServiceClient::Initialize() {
       std::unique_ptr<metrics::MetricsProvider>(
           new metrics::SamplingMetricsProvider));
 
+  metrics_service_->RegisterMetricsProvider(
+      std::unique_ptr<metrics::MetricsProvider>(
+          new translate::TranslateRankerMetricsProvider()));
+
 #if BUILDFLAG(ANDROID_JAVA_UI)
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider>(
-          new AndroidMetricsProvider(g_browser_process->local_state())));
+          new AndroidMetricsProvider(local_state)));
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider>(new PageLoadMetricsProvider()));
 #endif  // BUILDFLAG(ANDROID_JAVA_UI)
@@ -469,11 +505,20 @@ void ChromeMetricsServiceClient::Initialize() {
       std::unique_ptr<metrics::MetricsProvider>(
           google_update_metrics_provider_));
 
+  base::FilePath user_data_dir;
+  base::FilePath crash_dir;
+  if (!base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir) ||
+      !base::PathService::Get(chrome::DIR_CRASH_DUMPS, &crash_dir)) {
+    // If either call fails, then clear both.
+    user_data_dir = base::FilePath();
+    crash_dir = base::FilePath();
+  }
+  watcher_metrics_provider_ = new browser_watcher::WatcherMetricsProviderWin(
+      chrome::GetBrowserExitCodesRegistryPath(), user_data_dir, crash_dir,
+      base::Bind(&GetExecutableVersionDetails),
+      content::BrowserThread::GetBlockingPool());
   metrics_service_->RegisterMetricsProvider(
-      std::unique_ptr<metrics::MetricsProvider>(
-          new browser_watcher::WatcherMetricsProviderWin(
-              chrome::GetBrowserExitCodesRegistryPath(),
-              content::BrowserThread::GetBlockingPool())));
+      std::unique_ptr<metrics::MetricsProvider>(watcher_metrics_provider_));
 
   antivirus_metrics_provider_ = new AntiVirusMetricsProvider(
       content::BrowserThread::GetBlockingPool()
@@ -485,8 +530,7 @@ void ChromeMetricsServiceClient::Initialize() {
 #endif  // defined(OS_WIN)
 
 #if defined(ENABLE_PLUGINS)
-  plugin_metrics_provider_ =
-      new PluginMetricsProvider(g_browser_process->local_state());
+  plugin_metrics_provider_ = new PluginMetricsProvider(local_state);
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider>(plugin_metrics_provider_));
 #endif  // defined(ENABLE_PLUGINS)
@@ -505,7 +549,6 @@ void ChromeMetricsServiceClient::Initialize() {
 
   // Record default UMA state as opt-out for all Chrome OS users, if not
   // recorded yet.
-  PrefService* local_state = g_browser_process->local_state();
   if (metrics::GetMetricsReportingDefaultState(local_state) ==
       metrics::EnableMetricsDefault::DEFAULT_UNKNOWN) {
     metrics::RecordMetricsReportingDefaultState(
@@ -522,18 +565,12 @@ void ChromeMetricsServiceClient::Initialize() {
 
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider>(
-          new sync_driver::DeviceCountMetricsProvider(base::Bind(
+          new syncer::DeviceCountMetricsProvider(base::Bind(
               &browser_sync::ChromeSyncClient::GetDeviceInfoTrackers))));
 
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider>(
           new HttpsEngagementMetricsProvider()));
-
-  // Clear stability metrics if it is the first time cellular upload logic
-  // should apply to avoid sudden bulk uploads. It needs to be done after all
-  // providers are registered.
-  if (ShouldClearSavedMetrics())
-    metrics_service_->ClearSavedStabilityMetrics();
 }
 
 void ChromeMetricsServiceClient::OnInitTaskGotHardwareClass() {
@@ -591,6 +628,16 @@ void ChromeMetricsServiceClient::OnInitTaskGotAntiVirusData() {
 }
 
 void ChromeMetricsServiceClient::OnInitTaskGotDriveMetrics() {
+#if defined(OS_WIN)
+  watcher_metrics_provider_->CollectPostmortemReports(base::Bind(
+      &ChromeMetricsServiceClient::OnInitTaskCollectedPostmortemReports,
+      weak_ptr_factory_.GetWeakPtr()));
+#else
+  OnInitTaskCollectedPostmortemReports();
+#endif  // defined(OS_WIN)
+}
+
+void ChromeMetricsServiceClient::OnInitTaskCollectedPostmortemReports() {
   finished_init_task_callback_.Run();
 }
 

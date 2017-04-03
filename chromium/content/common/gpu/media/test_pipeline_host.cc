@@ -29,6 +29,10 @@ void TestPipelineHost::DataSourceAdapter::Stop() {
   data_source_->Stop();
 }
 
+void TestPipelineHost::DataSourceAdapter::Abort() {
+  data_source_->Abort();
+}
+
 bool TestPipelineHost::DataSourceAdapter::GetSize(int64_t* size_out) {
   return data_source_->GetSize(size_out);
 }

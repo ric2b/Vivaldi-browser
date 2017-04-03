@@ -71,7 +71,8 @@ class ConnectTestingEventInterface : public WebSocketEventInterface {
 
   ChannelState OnDataFrame(bool fin,
                            WebSocketMessageType type,
-                           const std::vector<char>& data) override;
+                           scoped_refptr<IOBuffer> data,
+                           size_t data_size) override;
 
   ChannelState OnFlowControl(int64_t quota) override;
 
@@ -142,7 +143,8 @@ ChannelState ConnectTestingEventInterface::OnAddChannelResponse(
 ChannelState ConnectTestingEventInterface::OnDataFrame(
     bool fin,
     WebSocketMessageType type,
-    const std::vector<char>& data) {
+    scoped_refptr<IOBuffer> data,
+    size_t data_size) {
   return CHANNEL_ALIVE;
 }
 
@@ -231,6 +233,15 @@ class TestProxyDelegateWithProxyInfo : public ProxyDelegate {
       const HttpResponseHeaders& response_headers) override {}
   bool IsTrustedSpdyProxy(const net::ProxyServer& proxy_server) override {
     return true;
+  }
+  void GetAlternativeProxy(
+      const GURL& url,
+      const ProxyServer& resolved_proxy_server,
+      ProxyServer* alternative_proxy_server) const override {}
+  void OnAlternativeProxyBroken(
+      const ProxyServer& alternative_proxy_server) override {}
+  ProxyServer GetDefaultAlternativeProxy() const override {
+    return ProxyServer();
   }
 
  private:
@@ -429,7 +440,7 @@ TEST_F(WebSocketEndToEndTest, DISABLED_ON_ANDROID(HstsHttpsToWebSocket)) {
   request->Start();
   // TestDelegate exits the message loop when the request completes.
   base::RunLoop().Run();
-  EXPECT_TRUE(request->status().is_success());
+  EXPECT_EQ(OK, delegate.request_status());
 
   // Check HSTS with ws:
   // Change the scheme from wss: to ws: to verify that it is switched back.
@@ -463,7 +474,7 @@ TEST_F(WebSocketEndToEndTest, DISABLED_ON_ANDROID(HstsWebSocketToHttps)) {
   request->Start();
   // TestDelegate exits the message loop when the request completes.
   base::RunLoop().Run();
-  EXPECT_TRUE(request->status().is_success());
+  EXPECT_EQ(OK, delegate.request_status());
   EXPECT_TRUE(request->url().SchemeIs("https"));
 }
 

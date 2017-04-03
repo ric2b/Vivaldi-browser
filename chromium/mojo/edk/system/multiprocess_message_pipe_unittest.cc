@@ -428,7 +428,7 @@ TEST_P(MultiprocessMessagePipeTestWithPipeCount, PlatformHandlePassing) {
     for (size_t i = 0; i < pipe_count; ++i) {
       base::FilePath unused;
       base::ScopedFILE fp(
-          CreateAndOpenTemporaryFileInDir(temp_dir.path(), &unused));
+          CreateAndOpenTemporaryFileInDir(temp_dir.GetPath(), &unused));
       const std::string world("world");
       CHECK_EQ(fwrite(&world[0], 1, world.size(), fp.get()), world.size());
       fflush(fp.get());
@@ -1419,10 +1419,13 @@ TEST_F(MultiprocessMessagePipeTest, NotifyBadMessage) {
   EXPECT_NE(std::string::npos, first_process_error.find(kFirstErrorMessage));
   EXPECT_NE(std::string::npos, second_process_error.find(kSecondErrorMessage));
 }
-INSTANTIATE_TEST_CASE_P(,
-                        MultiprocessMessagePipeTestWithPeerSupport,
-                        testing::Values(test::MojoTestBase::LaunchType::CHILD,
-                                        test::MojoTestBase::LaunchType::PEER));
+INSTANTIATE_TEST_CASE_P(
+    ,
+    MultiprocessMessagePipeTestWithPeerSupport,
+    testing::Values(test::MojoTestBase::LaunchType::CHILD,
+                    test::MojoTestBase::LaunchType::PEER,
+                    test::MojoTestBase::LaunchType::NAMED_CHILD,
+                    test::MojoTestBase::LaunchType::NAMED_PEER));
 }  // namespace
 }  // namespace edk
 }  // namespace mojo

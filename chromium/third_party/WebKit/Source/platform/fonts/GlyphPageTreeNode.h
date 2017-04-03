@@ -43,15 +43,16 @@ namespace blink {
 class FontData;
 class SimpleFontData;
 
-// The glyph page tree is a data structure that maps (FontData, glyph page number)
-// to a GlyphPage.  Level 0 (the "root") is special. There is one root
+// The glyph page tree is a data structure that maps (FontData, glyph page
+// number) to a GlyphPage.  Level 0 (the "root") is special. There is one root
 // GlyphPageTreeNode for each glyph page number.  The roots do not have a
 // GlyphPage associated with them, and their initializePage() function is never
 // called to fill the glyphs.
 //
 // Each root node maps a FontData pointer to another GlyphPageTreeNode at
-// level 1 (the "root child") that stores the actual glyphs for a specific font data.
-// These nodes will only have a GlyphPage if they have glyphs for that range.
+// level 1 (the "root child") that stores the actual glyphs for a specific font
+// data.  These nodes will only have a GlyphPage if they have glyphs for that
+// range.
 //
 // Levels greater than one correspond to subsequent levels of the fallback list
 // for that font. These levels override their parent's page of glyphs by
@@ -61,135 +62,158 @@ class SimpleFontData;
 // which is for tracking the glyph page for a system fallback font.
 // The glyph page is tracked separately from the regular pages and overrides
 // so that the glyph pages do not get polluted with these last-resort glyphs.
-// The system fallback page is not populated at construction like the other pages,
-// but on demand for each glyph, because the system may need to use different
-// fallback fonts for each. This lazy population is done by the Font.
+// The system fallback page is not populated at construction like the other
+// pages, but on demand for each glyph, because the system may need to use
+// different fallback fonts for each. This lazy population is done by the Font.
 
 class GlyphPageTreeNode;
 class SystemFallbackGlyphPageTreeNode;
 
 class PLATFORM_EXPORT GlyphPageTreeNodeBase {
-    USING_FAST_MALLOC(GlyphPageTreeNodeBase); WTF_MAKE_NONCOPYABLE(GlyphPageTreeNodeBase);
-public:
-    GlyphPageTreeNode* parent() const { return m_parent; }
+  USING_FAST_MALLOC(GlyphPageTreeNodeBase);
+  WTF_MAKE_NONCOPYABLE(GlyphPageTreeNodeBase);
 
-    // Returns the level of this node. See class-level comment.
-    unsigned level() const { return m_level; }
+ public:
+  GlyphPageTreeNode* parent() const { return m_parent; }
 
-    // The system fallback font has special rules (see above).
-    bool isSystemFallback() const { return m_isSystemFallback; }
+  // Returns the level of this node. See class-level comment.
+  unsigned level() const { return m_level; }
 
-    // Returns a page of glyphs (or null if there are no glyphs in this page's character range).
-    virtual GlyphPage* page(UScriptCode = USCRIPT_COMMON) = 0;
+  // The system fallback font has special rules (see above).
+  bool isSystemFallback() const { return m_isSystemFallback; }
 
-protected:
-    GlyphPageTreeNodeBase(GlyphPageTreeNode* parent, bool isSystemFallback);
-    virtual ~GlyphPageTreeNodeBase() { }
+  // Returns a page of glyphs (or null if there are no glyphs in this page's
+  // character range).
+  virtual GlyphPage* page(UScriptCode = USCRIPT_COMMON) = 0;
 
-    GlyphPageTreeNode* m_parent;
-    unsigned m_level : 31;
-    unsigned m_isSystemFallback : 1;
-    unsigned m_customFontCount;
+ protected:
+  GlyphPageTreeNodeBase(GlyphPageTreeNode* parent, bool isSystemFallback);
+  virtual ~GlyphPageTreeNodeBase() {}
+
+  GlyphPageTreeNode* m_parent;
+  unsigned m_level : 31;
+  unsigned m_isSystemFallback : 1;
+  unsigned m_customFontCount;
 
 #if ENABLE(ASSERT)
-    unsigned m_pageNumber;
+  unsigned m_pageNumber;
 #endif
 };
 
 class PLATFORM_EXPORT GlyphPageTreeNode : public GlyphPageTreeNodeBase {
-public:
-    static GlyphPageTreeNodeBase* getRootChild(const FontData* fontData, unsigned pageNumber) { return getRoot(pageNumber)->getChild(fontData, pageNumber); }
-    static GlyphPageTreeNode* getNormalRootChild(const FontData* fontData, unsigned pageNumber) { return getRoot(pageNumber)->getNormalChild(fontData, pageNumber); }
+ public:
+  static GlyphPageTreeNodeBase* getRootChild(const FontData* fontData,
+                                             unsigned pageNumber) {
+    return getRoot(pageNumber)->getChild(fontData, pageNumber);
+  }
+  static GlyphPageTreeNode* getNormalRootChild(const FontData* fontData,
+                                               unsigned pageNumber) {
+    return getRoot(pageNumber)->getNormalChild(fontData, pageNumber);
+  }
 
-    static void pruneTreeCustomFontData(const FontData*);
-    static void pruneTreeFontData(const SimpleFontData*);
+  static void pruneTreeCustomFontData(const FontData*);
+  static void pruneTreeFontData(const SimpleFontData*);
 
-    void pruneCustomFontData(const FontData*);
-    void pruneFontData(const SimpleFontData*, unsigned level = 0);
+  void pruneCustomFontData(const FontData*);
+  void pruneFontData(const SimpleFontData*, unsigned level = 0);
 
-    GlyphPage* page(UScriptCode = USCRIPT_COMMON) final { return m_page.get(); }
+  GlyphPage* page(UScriptCode = USCRIPT_COMMON) final { return m_page.get(); }
 
-    GlyphPageTreeNodeBase* getChild(const FontData*, unsigned pageNumber);
-    GlyphPageTreeNode* getNormalChild(const FontData*, unsigned pageNumber);
-    SystemFallbackGlyphPageTreeNode* getSystemFallbackChild(unsigned pageNumber);
+  GlyphPageTreeNodeBase* getChild(const FontData*, unsigned pageNumber);
+  GlyphPageTreeNode* getNormalChild(const FontData*, unsigned pageNumber);
+  SystemFallbackGlyphPageTreeNode* getSystemFallbackChild(unsigned pageNumber);
 
-    static size_t treeGlyphPageCount();
-    size_t pageCount() const;
+  static size_t treeGlyphPageCount();
+  size_t pageCount() const;
 
-private:
-    GlyphPageTreeNode(GlyphPageTreeNode* parent = nullptr) : GlyphPageTreeNodeBase(parent, false) { }
+ private:
+  GlyphPageTreeNode(GlyphPageTreeNode* parent = nullptr)
+      : GlyphPageTreeNodeBase(parent, false) {}
 
-    static GlyphPageTreeNode* getRoot(unsigned pageNumber);
+  static GlyphPageTreeNode* getRoot(unsigned pageNumber);
 
-    void initializePage(const FontData*, unsigned pageNumber);
-    void initializePurePage(const FontData*, unsigned pageNumber);
-    void initializeOverridePage(const FontData*, unsigned pageNumber);
+  void initializePage(const FontData*, unsigned pageNumber);
+  void initializePurePage(const FontData*, unsigned pageNumber);
+  void initializeOverridePage(const FontData*, unsigned pageNumber);
 
 #ifndef NDEBUG
-    void showSubtree();
+  void showSubtree();
 #endif
 
-    static HashMap<int, GlyphPageTreeNode*>* roots;
-    static GlyphPageTreeNode* pageZeroRoot;
+  static HashMap<int, GlyphPageTreeNode*>* roots;
+  static GlyphPageTreeNode* pageZeroRoot;
 
-    RefPtr<GlyphPage> m_page;
-    typedef HashMap<const FontData*, std::unique_ptr<GlyphPageTreeNode>> GlyphPageTreeNodeMap;
-    GlyphPageTreeNodeMap m_children;
-    std::unique_ptr<SystemFallbackGlyphPageTreeNode> m_systemFallbackChild;
+  RefPtr<GlyphPage> m_page;
+  typedef HashMap<const FontData*, std::unique_ptr<GlyphPageTreeNode>>
+      GlyphPageTreeNodeMap;
+  GlyphPageTreeNodeMap m_children;
+  std::unique_ptr<SystemFallbackGlyphPageTreeNode> m_systemFallbackChild;
 };
 
-class PLATFORM_EXPORT SystemFallbackGlyphPageTreeNode : public GlyphPageTreeNodeBase {
-public:
-    GlyphPage* page(UScriptCode = USCRIPT_COMMON) final;
+class PLATFORM_EXPORT SystemFallbackGlyphPageTreeNode
+    : public GlyphPageTreeNodeBase {
+ public:
+  GlyphPage* page(UScriptCode = USCRIPT_COMMON) final;
 
-private:
-    friend class GlyphPageTreeNode;
+ private:
+  friend class GlyphPageTreeNode;
 
-    SystemFallbackGlyphPageTreeNode(GlyphPageTreeNode* parent) : GlyphPageTreeNodeBase(parent, true) { }
+  SystemFallbackGlyphPageTreeNode(GlyphPageTreeNode* parent)
+      : GlyphPageTreeNodeBase(parent, true) {}
 
-    void pruneFontData(const SimpleFontData*);
-    PassRefPtr<GlyphPage> initializePage();
+  void pruneFontData(const SimpleFontData*);
+  PassRefPtr<GlyphPage> initializePage();
 
-    struct UScriptCodeHashTraits : WTF::GenericHashTraits<UScriptCode> {
-        STATIC_ONLY(UScriptCodeHashTraits);
-        static UScriptCode emptyValue() { return USCRIPT_CODE_LIMIT; }
-        static void constructDeletedValue(UScriptCode& slot, bool) { slot = USCRIPT_INVALID_CODE; }
-        static bool isDeletedValue(UScriptCode value) { return value == USCRIPT_INVALID_CODE; }
-    };
-    typedef HashMap<UScriptCode, RefPtr<GlyphPage>, WTF::IntHash<UScriptCode>, UScriptCodeHashTraits> PageByScriptMap;
-    PageByScriptMap m_pagesByScript;
+  struct UScriptCodeHashTraits : WTF::GenericHashTraits<UScriptCode> {
+    STATIC_ONLY(UScriptCodeHashTraits);
+    static UScriptCode emptyValue() { return USCRIPT_CODE_LIMIT; }
+    static void constructDeletedValue(UScriptCode& slot, bool) {
+      slot = USCRIPT_INVALID_CODE;
+    }
+    static bool isDeletedValue(UScriptCode value) {
+      return value == USCRIPT_INVALID_CODE;
+    }
+  };
+  typedef HashMap<UScriptCode,
+                  RefPtr<GlyphPage>,
+                  WTF::IntHash<UScriptCode>,
+                  UScriptCodeHashTraits>
+      PageByScriptMap;
+  PageByScriptMap m_pagesByScript;
 };
 
-inline GlyphPageTreeNodeBase::GlyphPageTreeNodeBase(GlyphPageTreeNode* parent, bool isSystemFallback)
-    : m_parent(parent)
-    , m_level(parent ? parent->m_level + 1 : 0)
-    , m_isSystemFallback(isSystemFallback)
-    , m_customFontCount(0)
+inline GlyphPageTreeNodeBase::GlyphPageTreeNodeBase(GlyphPageTreeNode* parent,
+                                                    bool isSystemFallback)
+    : m_parent(parent),
+      m_level(parent ? parent->m_level + 1 : 0),
+      m_isSystemFallback(isSystemFallback),
+      m_customFontCount(0)
 #if ENABLE(ASSERT)
-    , m_pageNumber(parent ? parent->m_pageNumber : 0)
+      ,
+      m_pageNumber(parent ? parent->m_pageNumber : 0)
 #endif
 {
 }
 
-inline GlyphPageTreeNode* toGlyphPageTreeNode(GlyphPageTreeNodeBase* node)
-{
-    ASSERT(!node->isSystemFallback());
-    return static_cast<GlyphPageTreeNode*>(node);
+inline GlyphPageTreeNode* toGlyphPageTreeNode(GlyphPageTreeNodeBase* node) {
+  ASSERT(!node->isSystemFallback());
+  return static_cast<GlyphPageTreeNode*>(node);
 }
 
-inline SystemFallbackGlyphPageTreeNode* toSystemFallbackGlyphPageTreeNode(GlyphPageTreeNodeBase* node)
-{
-    ASSERT(node->isSystemFallback());
-    return static_cast<SystemFallbackGlyphPageTreeNode*>(node);
+inline SystemFallbackGlyphPageTreeNode* toSystemFallbackGlyphPageTreeNode(
+    GlyphPageTreeNodeBase* node) {
+  ASSERT(node->isSystemFallback());
+  return static_cast<SystemFallbackGlyphPageTreeNode*>(node);
 }
 
-inline GlyphPageTreeNodeBase* GlyphPageTreeNode::getChild(const FontData* fontData, unsigned pageNumber)
-{
-    if (fontData)
-        return getNormalChild(fontData, pageNumber);
-    return getSystemFallbackChild(pageNumber);
+inline GlyphPageTreeNodeBase* GlyphPageTreeNode::getChild(
+    const FontData* fontData,
+    unsigned pageNumber) {
+  if (fontData)
+    return getNormalChild(fontData, pageNumber);
+  return getSystemFallbackChild(pageNumber);
 }
 
-} // namespace blink
+}  // namespace blink
 
-#endif // GlyphPageTreeNode_h
+#endif  // GlyphPageTreeNode_h

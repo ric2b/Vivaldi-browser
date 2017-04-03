@@ -5,86 +5,56 @@
 package org.chromium.chromoting;
 
 import android.content.Context;
-import android.graphics.PointF;
 import android.text.InputType;
+import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.SurfaceView;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
-import android.view.inputmethod.InputMethodManager;
 
 import org.chromium.chromoting.jni.Client;
 
 /**
- * The abstract class for viewing and interacting with a specific remote host. Handles logic
- * for touch input and render data.
+ * The class for viewing and interacting with a specific remote host.
  */
-public abstract class DesktopView extends SurfaceView {
-    /** Used to define the animation feedback shown when a user touches the screen. */
-    public enum InputFeedbackType {
-        NONE,
-        SHORT_TOUCH_ANIMATION,
-        LONG_TOUCH_ANIMATION,
-        LONG_TRACKPAD_ANIMATION
-    }
-
-    protected final RenderData mRenderData;
-    protected final TouchInputHandler mInputHandler;
-
-    /**
-     * Subclass should trigger this event when the client view size is changed.
-     */
-    protected final Event.Raisable<SizeChangedEventParameter> mOnClientSizeChanged =
-            new Event.Raisable<>();
-
-    /**
-     * Subclass should trigger this event when the host (desktop frame) size is changed.
-     */
-    protected final Event.Raisable<SizeChangedEventParameter> mOnHostSizeChanged =
-            new Event.Raisable<>();
-
-    private final int mTinyFeedbackPixelRadius;
-    private final int mSmallFeedbackPixelRadius;
-    private final int mLargeFeedbackPixelRadius;
-
-    /** The parent Desktop activity. */
-    private final Desktop mDesktop;
+public final class DesktopView extends SurfaceView {
 
     private final Event.Raisable<TouchEventParameter> mOnTouch = new Event.Raisable<>();
 
-    public DesktopView(Desktop desktop, Client client) {
-        super(desktop);
-        Preconditions.notNull(desktop);
-        Preconditions.notNull(client);
-        mDesktop = desktop;
-        mRenderData = new RenderData();
-        mInputHandler = new TouchInputHandler(this, desktop, mRenderData);
-        mInputHandler.init(desktop, new InputEventSender(client));
+    /** The parent Desktop activity. */
+    private Desktop mDesktop;
 
+    private TouchInputHandler mInputHandler;
+
+    private InputEventSender mInputEventSender;
+
+    public DesktopView(Context context, AttributeSet attributeSet) {
+        super(context, attributeSet);
         // Give this view keyboard focus, allowing us to customize the soft keyboard's settings.
         setFocusableInTouchMode(true);
-
-        mTinyFeedbackPixelRadius =
-                getResources().getDimensionPixelSize(R.dimen.feedback_animation_radius_tiny);
-
-        mSmallFeedbackPixelRadius =
-                getResources().getDimensionPixelSize(R.dimen.feedback_animation_radius_small);
-
-        mLargeFeedbackPixelRadius =
-                getResources().getDimensionPixelSize(R.dimen.feedback_animation_radius_large);
     }
 
-    // TODO(yuweih): move showActionBar and showKeyboard out of this abstract class.
-    /** Shows the action bar. */
-    public final void showActionBar() {
-        mDesktop.showSystemUi();
+    /**
+     * Initializes the view.
+     */
+    public void init(Client client, Desktop desktop, RenderStub renderStub) {
+        Preconditions.isNull(mDesktop);
+        Preconditions.isNull(mInputHandler);
+        Preconditions.isNull(mInputEventSender);
+        Preconditions.notNull(desktop);
+        Preconditions.notNull(renderStub);
+
+        mDesktop = desktop;
+        mInputEventSender = new InputEventSender(client);
+        renderStub.setDesktopView(this);
+        mInputHandler = new TouchInputHandler(this, mDesktop, renderStub, mInputEventSender);
     }
 
-    /** Shows the software keyboard. */
-    public final void showKeyboard() {
-        InputMethodManager inputManager =
-                (InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
-        inputManager.showSoftInput(this, 0);
+    /**
+     * Destroys the view. Should be called in {@link android.app.Activity#onDestroy()}.
+     */
+    public void destroy() {
+        mInputHandler.detachEventListeners();
     }
 
     /** An {@link Event} which is triggered when user touches the screen. */
@@ -92,17 +62,6 @@ public abstract class DesktopView extends SurfaceView {
         return mOnTouch;
     }
 
-    /** An {@link Event} which is triggered when the client size is changed. */
-    public final Event<SizeChangedEventParameter> onClientSizeChanged() {
-        return mOnClientSizeChanged;
-    }
-
-    /** An {@link Event} which is triggered when the host size is changed. */
-    public final Event<SizeChangedEventParameter> onHostSizeChanged() {
-        return mOnHostSizeChanged;
-    }
-
-    // View overrides.
     /** Called when a software keyboard is requested, and specifies its options. */
     @Override
     public final InputConnection onCreateInputConnection(EditorInfo outAttrs) {
@@ -128,55 +87,4 @@ public abstract class DesktopView extends SurfaceView {
         mOnTouch.raise(parameter);
         return parameter.handled;
     }
-
-    /**
-     * Returns the radius of the given feedback type.
-     * 0.0f will be returned if no feedback should be shown.
-     */
-    protected final float getFeedbackRadius(InputFeedbackType feedbackToShow, float scaleFactor) {
-        switch (feedbackToShow) {
-            case NONE:
-                return 0.0f;
-            case SHORT_TOUCH_ANIMATION:
-                return mSmallFeedbackPixelRadius / scaleFactor;
-            case LONG_TOUCH_ANIMATION:
-                return mLargeFeedbackPixelRadius / scaleFactor;
-            case LONG_TRACKPAD_ANIMATION:
-                // The size of the longpress trackpad animation is supposed to be close to the size
-                // of the cursor so it doesn't need to be normalized and should be scaled with the
-                // canvas.
-                return mTinyFeedbackPixelRadius;
-            default:
-                // Unreachable, but required by Google Java style and findbugs.
-                assert false : "Unreached";
-                return 0.0f;
-        }
-    }
-
-    /** Triggers a brief animation to indicate the existence and location of an input event. */
-    public abstract void showInputFeedback(InputFeedbackType feedbackToShow, PointF pos);
-
-    /**
-     * Informs the view that its transformation matrix (for rendering the remote desktop bitmap)
-     * has been changed by the TouchInputHandler, which requires repainting.
-     */
-    public abstract void transformationChanged();
-
-    /**
-     * Informs the view that the cursor has been moved by the TouchInputHandler, which requires
-     * repainting.
-     */
-    public abstract void cursorMoved();
-
-    /**
-     * Informs the view that the cursor visibility has been changed (for different input mode) by
-     * the TouchInputHandler, which requires repainting.
-     */
-    public abstract void cursorVisibilityChanged();
-
-    /**
-     * Starts or stops an animation. Whilst the animation is running, the DesktopView will
-     * periodically call TouchInputHandler.processAnimation() and repaint itself.
-     */
-    public abstract void setAnimationEnabled(boolean enabled);
 }

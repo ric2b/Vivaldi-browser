@@ -55,6 +55,12 @@
 #include "net/dns/dns_util.h"
 #include "net/dns/host_resolver_proc.h"
 #include "net/log/net_log.h"
+#include "net/log/net_log_capture_mode.h"
+#include "net/log/net_log_event_type.h"
+#include "net/log/net_log_parameters_callback.h"
+#include "net/log/net_log_source.h"
+#include "net/log/net_log_source_type.h"
+#include "net/log/net_log_with_source.h"
 #include "net/socket/client_socket_factory.h"
 #include "net/udp/datagram_client_socket.h"
 #include "url/url_canon_ip.h"
@@ -202,7 +208,8 @@ bool ResemblesMulticastDNSName(const std::string& hostname) {
 }
 
 // Attempts to connect a UDP socket to |dest|:53.
-bool IsGloballyReachable(const IPAddress& dest, const BoundNetLog& net_log) {
+bool IsGloballyReachable(const IPAddress& dest,
+                         const NetLogWithSource& net_log) {
   // TODO(eroman): Remove ScopedTracker below once crbug.com/455942 is fixed.
   tracked_objects::ScopedTracker tracking_profile_1(
       FROM_HERE_WITH_EXPLICIT_FUNCTION("455942 IsGloballyReachable"));
@@ -367,7 +374,7 @@ std::unique_ptr<base::Value> NetLogDnsTaskFailedCallback(
 }
 
 // Creates NetLog parameters containing the information in a RequestInfo object,
-// along with the associated NetLog::Source.
+// along with the associated NetLogSource.
 std::unique_ptr<base::Value> NetLogRequestInfoCallback(
     const HostResolver::RequestInfo* info,
     NetLogCaptureMode /* capture_mode */) {
@@ -383,7 +390,7 @@ std::unique_ptr<base::Value> NetLogRequestInfoCallback(
 
 // Creates NetLog parameters for the creation of a HostResolverImpl::Job.
 std::unique_ptr<base::Value> NetLogJobCreationCallback(
-    const NetLog::Source& source,
+    const NetLogSource& source,
     const std::string* host,
     NetLogCaptureMode /* capture_mode */) {
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
@@ -394,7 +401,7 @@ std::unique_ptr<base::Value> NetLogJobCreationCallback(
 
 // Creates NetLog parameters for HOST_RESOLVER_IMPL_JOB_ATTACH/DETACH events.
 std::unique_ptr<base::Value> NetLogJobAttachCallback(
-    const NetLog::Source& source,
+    const NetLogSource& source,
     RequestPriority priority,
     NetLogCaptureMode /* capture_mode */) {
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
@@ -424,26 +431,25 @@ std::unique_ptr<base::Value> NetLogIPv6AvailableCallback(
 // without a Request object.
 
 // Logs when a request has just been started.
-void LogStartRequest(const BoundNetLog& source_net_log,
+void LogStartRequest(const NetLogWithSource& source_net_log,
                      const HostResolver::RequestInfo& info) {
-  source_net_log.BeginEvent(
-      NetLog::TYPE_HOST_RESOLVER_IMPL_REQUEST,
-      base::Bind(&NetLogRequestInfoCallback, &info));
+  source_net_log.BeginEvent(NetLogEventType::HOST_RESOLVER_IMPL_REQUEST,
+                            base::Bind(&NetLogRequestInfoCallback, &info));
 }
 
 // Logs when a request has just completed (before its callback is run).
-void LogFinishRequest(const BoundNetLog& source_net_log,
+void LogFinishRequest(const NetLogWithSource& source_net_log,
                       const HostResolver::RequestInfo& info,
                       int net_error) {
   source_net_log.EndEventWithNetErrorCode(
-      NetLog::TYPE_HOST_RESOLVER_IMPL_REQUEST, net_error);
+      NetLogEventType::HOST_RESOLVER_IMPL_REQUEST, net_error);
 }
 
 // Logs when a request has been cancelled.
-void LogCancelRequest(const BoundNetLog& source_net_log,
+void LogCancelRequest(const NetLogWithSource& source_net_log,
                       const HostResolverImpl::RequestInfo& info) {
-  source_net_log.AddEvent(NetLog::TYPE_CANCELLED);
-  source_net_log.EndEvent(NetLog::TYPE_HOST_RESOLVER_IMPL_REQUEST);
+  source_net_log.AddEvent(NetLogEventType::CANCELLED);
+  source_net_log.EndEvent(NetLogEventType::HOST_RESOLVER_IMPL_REQUEST);
 }
 
 //-----------------------------------------------------------------------------
@@ -531,7 +537,7 @@ const unsigned HostResolverImpl::kMaximumDnsFailures = 16;
 // than removed from the Job's |requests_| list.
 class HostResolverImpl::RequestImpl : public HostResolver::Request {
  public:
-  RequestImpl(const BoundNetLog& source_net_log,
+  RequestImpl(const NetLogWithSource& source_net_log,
               const RequestInfo& info,
               RequestPriority priority,
               const CompletionCallback& callback,
@@ -571,9 +577,7 @@ class HostResolverImpl::RequestImpl : public HostResolver::Request {
   }
 
   // NetLog for the source, passed in HostResolver::Resolve.
-  const BoundNetLog& source_net_log() {
-    return source_net_log_;
-  }
+  const NetLogWithSource& source_net_log() { return source_net_log_; }
 
   const RequestInfo& info() const {
     return info_;
@@ -585,7 +589,7 @@ class HostResolverImpl::RequestImpl : public HostResolver::Request {
   base::TimeTicks request_time() const { return request_time_; }
 
  private:
-  const BoundNetLog source_net_log_;
+  const NetLogWithSource source_net_log_;
 
   // The request info that started the request.
   const RequestInfo info_;
@@ -629,7 +633,7 @@ class HostResolverImpl::ProcTask
            const ProcTaskParams& params,
            const Callback& callback,
            scoped_refptr<base::TaskRunner> worker_task_runner,
-           const BoundNetLog& job_net_log)
+           const NetLogWithSource& job_net_log)
       : key_(key),
         params_(params),
         callback_(callback),
@@ -649,7 +653,7 @@ class HostResolverImpl::ProcTask
 
   void Start() {
     DCHECK(network_task_runner_->BelongsToCurrentThread());
-    net_log_.BeginEvent(NetLog::TYPE_HOST_RESOLVER_IMPL_PROC_TASK);
+    net_log_.BeginEvent(NetLogEventType::HOST_RESOLVER_IMPL_PROC_TASK);
     StartLookupAttempt();
   }
 
@@ -663,7 +667,7 @@ class HostResolverImpl::ProcTask
       return;
 
     callback_.Reset();
-    net_log_.EndEvent(NetLog::TYPE_HOST_RESOLVER_IMPL_PROC_TASK);
+    net_log_.EndEvent(NetLogEventType::HOST_RESOLVER_IMPL_PROC_TASK);
   }
 
   void set_had_non_speculative_request() {
@@ -705,7 +709,7 @@ class HostResolverImpl::ProcTask
       return;
     }
 
-    net_log_.AddEvent(NetLog::TYPE_HOST_RESOLVER_IMPL_ATTEMPT_STARTED,
+    net_log_.AddEvent(NetLogEventType::HOST_RESOLVER_IMPL_ATTEMPT_STARTED,
                       NetLog::IntCallback("attempt_number", attempt_number_));
 
     // If the results aren't received within a given time, RetryIfNotComplete
@@ -792,7 +796,7 @@ class HostResolverImpl::ProcTask
     if (was_canceled())
       return;
 
-    NetLog::ParametersCallback net_log_callback;
+    NetLogParametersCallback net_log_callback;
     if (error != OK) {
       net_log_callback = base::Bind(&NetLogProcTaskFailedCallback,
                                     attempt_number,
@@ -801,7 +805,7 @@ class HostResolverImpl::ProcTask
     } else {
       net_log_callback = NetLog::IntCallback("attempt_number", attempt_number);
     }
-    net_log_.AddEvent(NetLog::TYPE_HOST_RESOLVER_IMPL_ATTEMPT_FINISHED,
+    net_log_.AddEvent(NetLogEventType::HOST_RESOLVER_IMPL_ATTEMPT_FINISHED,
                       net_log_callback);
 
     if (was_completed())
@@ -824,7 +828,7 @@ class HostResolverImpl::ProcTask
     } else {
       net_log_callback = results_.CreateNetLogCallback();
     }
-    net_log_.EndEvent(NetLog::TYPE_HOST_RESOLVER_IMPL_PROC_TASK,
+    net_log_.EndEvent(NetLogEventType::HOST_RESOLVER_IMPL_PROC_TASK,
                       net_log_callback);
 
     callback_.Run(error, results_);
@@ -988,7 +992,7 @@ class HostResolverImpl::ProcTask
 
   AddressList results_;
 
-  BoundNetLog net_log_;
+  NetLogWithSource net_log_;
 
   DISALLOW_COPY_AND_ASSIGN(ProcTask);
 };
@@ -1066,7 +1070,7 @@ class HostResolverImpl::DnsTask : public base::SupportsWeakPtr<DnsTask> {
   DnsTask(DnsClient* client,
           const Key& key,
           Delegate* delegate,
-          const BoundNetLog& job_net_log)
+          const NetLogWithSource& job_net_log)
       : client_(client),
         key_(key),
         delegate_(delegate),
@@ -1087,7 +1091,7 @@ class HostResolverImpl::DnsTask : public base::SupportsWeakPtr<DnsTask> {
 
   void StartFirstTransaction() {
     DCHECK_EQ(0u, num_completed_transactions_);
-    net_log_.BeginEvent(NetLog::TYPE_HOST_RESOLVER_IMPL_DNS_TASK);
+    net_log_.BeginEvent(NetLogEventType::HOST_RESOLVER_IMPL_DNS_TASK);
     if (key_.address_family == ADDRESS_FAMILY_IPV6) {
       StartAAAA();
     } else {
@@ -1232,14 +1236,14 @@ class HostResolverImpl::DnsTask : public base::SupportsWeakPtr<DnsTask> {
   void OnFailure(int net_error, DnsResponse::Result result) {
     DCHECK_NE(OK, net_error);
     net_log_.EndEvent(
-        NetLog::TYPE_HOST_RESOLVER_IMPL_DNS_TASK,
+        NetLogEventType::HOST_RESOLVER_IMPL_DNS_TASK,
         base::Bind(&NetLogDnsTaskFailedCallback, net_error, result));
     delegate_->OnDnsTaskComplete(task_start_time_, net_error, AddressList(),
                                  base::TimeDelta());
   }
 
   void OnSuccess(const AddressList& addr_list) {
-    net_log_.EndEvent(NetLog::TYPE_HOST_RESOLVER_IMPL_DNS_TASK,
+    net_log_.EndEvent(NetLogEventType::HOST_RESOLVER_IMPL_DNS_TASK,
                       addr_list.CreateNetLogCallback());
     delegate_->OnDnsTaskComplete(task_start_time_, OK, addr_list, ttl_);
   }
@@ -1249,7 +1253,7 @@ class HostResolverImpl::DnsTask : public base::SupportsWeakPtr<DnsTask> {
 
   // The listener to the results of this DnsTask.
   Delegate* delegate_;
-  const BoundNetLog net_log_;
+  const NetLogWithSource net_log_;
 
   std::unique_ptr<DnsTransaction> transaction_a_;
   std::unique_ptr<DnsTransaction> transaction_aaaa_;
@@ -1278,7 +1282,7 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
       const Key& key,
       RequestPriority priority,
       scoped_refptr<base::TaskRunner> worker_task_runner,
-      const BoundNetLog& source_net_log)
+      const NetLogWithSource& source_net_log)
       : resolver_(resolver),
         key_(key),
         priority_tracker_(priority),
@@ -1289,15 +1293,14 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
         dns_task_error_(OK),
         creation_time_(base::TimeTicks::Now()),
         priority_change_time_(creation_time_),
-        net_log_(BoundNetLog::Make(source_net_log.net_log(),
-                                   NetLog::SOURCE_HOST_RESOLVER_IMPL_JOB)) {
-    source_net_log.AddEvent(NetLog::TYPE_HOST_RESOLVER_IMPL_CREATE_JOB);
+        net_log_(
+            NetLogWithSource::Make(source_net_log.net_log(),
+                                   NetLogSourceType::HOST_RESOLVER_IMPL_JOB)) {
+    source_net_log.AddEvent(NetLogEventType::HOST_RESOLVER_IMPL_CREATE_JOB);
 
-    net_log_.BeginEvent(
-        NetLog::TYPE_HOST_RESOLVER_IMPL_JOB,
-        base::Bind(&NetLogJobCreationCallback,
-                   source_net_log.source(),
-                   &key_.hostname));
+    net_log_.BeginEvent(NetLogEventType::HOST_RESOLVER_IMPL_JOB,
+                        base::Bind(&NetLogJobCreationCallback,
+                                   source_net_log.source(), &key_.hostname));
   }
 
   ~Job() override {
@@ -1310,13 +1313,13 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
       }
       // Clean up now for nice NetLog.
       KillDnsTask();
-      net_log_.EndEventWithNetErrorCode(NetLog::TYPE_HOST_RESOLVER_IMPL_JOB,
+      net_log_.EndEventWithNetErrorCode(NetLogEventType::HOST_RESOLVER_IMPL_JOB,
                                         ERR_ABORTED);
     } else if (is_queued()) {
       // |resolver_| was destroyed without running this Job.
       // TODO(szym): is there any benefit in having this distinction?
-      net_log_.AddEvent(NetLog::TYPE_CANCELLED);
-      net_log_.EndEvent(NetLog::TYPE_HOST_RESOLVER_IMPL_JOB);
+      net_log_.AddEvent(NetLogEventType::CANCELLED);
+      net_log_.EndEvent(NetLogEventType::HOST_RESOLVER_IMPL_JOB);
     }
     // else CompleteRequests logged EndEvent.
     if (!requests_.empty()) {
@@ -1355,11 +1358,11 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
     priority_tracker_.Add(request->priority());
 
     request->source_net_log().AddEvent(
-        NetLog::TYPE_HOST_RESOLVER_IMPL_JOB_ATTACH,
+        NetLogEventType::HOST_RESOLVER_IMPL_JOB_ATTACH,
         net_log_.source().ToEventParametersCallback());
 
     net_log_.AddEvent(
-        NetLog::TYPE_HOST_RESOLVER_IMPL_JOB_REQUEST_ATTACH,
+        NetLogEventType::HOST_RESOLVER_IMPL_JOB_REQUEST_ATTACH,
         base::Bind(&NetLogJobAttachCallback, request->source_net_log().source(),
                    priority()));
 
@@ -1394,7 +1397,7 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
 
     priority_tracker_.Remove(request->priority());
     net_log_.AddEvent(
-        NetLog::TYPE_HOST_RESOLVER_IMPL_JOB_REQUEST_DETACH,
+        NetLogEventType::HOST_RESOLVER_IMPL_JOB_REQUEST_DETACH,
         base::Bind(&NetLogJobAttachCallback, request->source_net_log().source(),
                    priority()));
 
@@ -1439,7 +1442,7 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
     DCHECK(is_queued());
     handle_.Reset();
 
-    net_log_.AddEvent(NetLog::TYPE_HOST_RESOLVER_IMPL_JOB_EVICTED);
+    net_log_.AddEvent(NetLogEventType::HOST_RESOLVER_IMPL_JOB_EVICTED);
 
     // This signals to CompleteRequests that this job never ran.
     CompleteRequestsWithError(ERR_HOST_RESOLVER_QUEUE_TOO_LARGE);
@@ -1524,7 +1527,7 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
 
     DCHECK(!is_running());
 
-    net_log_.AddEvent(NetLog::TYPE_HOST_RESOLVER_IMPL_JOB_STARTED);
+    net_log_.AddEvent(NetLogEventType::HOST_RESOLVER_IMPL_JOB_STARTED);
 
     had_dns_config_ = resolver_->HaveDnsConfig();
 
@@ -1752,13 +1755,13 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
     }
 
     if (num_active_requests() == 0) {
-      net_log_.AddEvent(NetLog::TYPE_CANCELLED);
-      net_log_.EndEventWithNetErrorCode(NetLog::TYPE_HOST_RESOLVER_IMPL_JOB,
+      net_log_.AddEvent(NetLogEventType::CANCELLED);
+      net_log_.EndEventWithNetErrorCode(NetLogEventType::HOST_RESOLVER_IMPL_JOB,
                                         OK);
       return;
     }
 
-    net_log_.EndEventWithNetErrorCode(NetLog::TYPE_HOST_RESOLVER_IMPL_JOB,
+    net_log_.EndEventWithNetErrorCode(NetLogEventType::HOST_RESOLVER_IMPL_JOB,
                                       entry.error());
 
     resolver_->SchedulePersist();
@@ -1847,7 +1850,7 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
   const base::TimeTicks creation_time_;
   base::TimeTicks priority_change_time_;
 
-  BoundNetLog net_log_;
+  NetLogWithSource net_log_;
 
   // Resolves the host using a HostResolverProc.
   scoped_refptr<ProcTask> proc_task_;
@@ -1912,15 +1915,14 @@ int HostResolverImpl::Resolve(const RequestInfo& info,
                               AddressList* addresses,
                               const CompletionCallback& callback,
                               std::unique_ptr<Request>* out_req,
-                              const BoundNetLog& source_net_log) {
+                              const NetLogWithSource& source_net_log) {
   DCHECK(addresses);
   DCHECK(CalledOnValidThread());
   DCHECK_EQ(false, callback.is_null());
   DCHECK(out_req);
 
   // Check that the caller supplied a valid hostname to resolve.
-  std::string labeled_hostname;
-  if (!DNSDomainFromDot(info.hostname(), &labeled_hostname))
+  if (!IsValidDNSDomain(info.hostname()))
     return ERR_NAME_NOT_RESOLVED;
 
   LogStartRequest(source_net_log, info);
@@ -2047,7 +2049,7 @@ int HostResolverImpl::ResolveHelper(const Key& key,
                                     AddressList* addresses,
                                     bool allow_stale,
                                     HostCache::EntryStaleness* stale_info,
-                                    const BoundNetLog& source_net_log) {
+                                    const NetLogWithSource& source_net_log) {
   DCHECK(allow_stale == !!stale_info);
   // The result of |getaddrinfo| for empty hosts is inconsistent across systems.
   // On Windows it gives the default interface's address, whereas on Linux it
@@ -2064,7 +2066,7 @@ int HostResolverImpl::ResolveHelper(const Key& key,
   }
   if (ServeFromCache(key, info, &net_error, addresses, allow_stale,
                      stale_info)) {
-    source_net_log.AddEvent(NetLog::TYPE_HOST_RESOLVER_IMPL_CACHE_HIT);
+    source_net_log.AddEvent(NetLogEventType::HOST_RESOLVER_IMPL_CACHE_HIT);
     // |ServeFromCache()| will set |*stale_info| as needed.
     RunCacheHitCallbacks(key, info);
     return net_error;
@@ -2072,7 +2074,7 @@ int HostResolverImpl::ResolveHelper(const Key& key,
   // TODO(szym): Do not do this if nsswitch.conf instructs not to.
   // http://crbug.com/117655
   if (ServeFromHosts(key, info, addresses)) {
-    source_net_log.AddEvent(NetLog::TYPE_HOST_RESOLVER_IMPL_HOSTS_HIT);
+    source_net_log.AddEvent(NetLogEventType::HOST_RESOLVER_IMPL_HOSTS_HIT);
     MakeNotStale(stale_info);
     return OK;
   }
@@ -2087,7 +2089,7 @@ int HostResolverImpl::ResolveHelper(const Key& key,
 
 int HostResolverImpl::ResolveFromCache(const RequestInfo& info,
                                        AddressList* addresses,
-                                       const BoundNetLog& source_net_log) {
+                                       const NetLogWithSource& source_net_log) {
   DCHECK(CalledOnValidThread());
   DCHECK(addresses);
 
@@ -2131,7 +2133,7 @@ std::unique_ptr<base::Value> HostResolverImpl::GetDnsConfigAsValue() const {
   // for it.
   const DnsConfig* dns_config = dns_client_->GetConfig();
   if (!dns_config)
-    return base::WrapUnique(new base::DictionaryValue());
+    return base::MakeUnique<base::DictionaryValue>();
 
   return dns_config->ToValue();
 }
@@ -2140,7 +2142,7 @@ int HostResolverImpl::ResolveStaleFromCache(
     const RequestInfo& info,
     AddressList* addresses,
     HostCache::EntryStaleness* stale_info,
-    const BoundNetLog& source_net_log) {
+    const NetLogWithSource& source_net_log) {
   DCHECK(CalledOnValidThread());
   DCHECK(addresses);
   DCHECK(stale_info);
@@ -2308,7 +2310,7 @@ void HostResolverImpl::RemoveJob(Job* job) {
 HostResolverImpl::Key HostResolverImpl::GetEffectiveKeyForRequest(
     const RequestInfo& info,
     const IPAddress* ip_address,
-    const BoundNetLog& net_log) {
+    const NetLogWithSource& net_log) {
   HostResolverFlags effective_flags =
       info.host_resolver_flags() | additional_resolver_flags_;
   AddressFamily effective_address_family = info.address_family();
@@ -2332,7 +2334,7 @@ HostResolverImpl::Key HostResolverImpl::GetEffectiveKeyForRequest(
   return Key(info.hostname(), effective_address_family, effective_flags);
 }
 
-bool HostResolverImpl::IsIPv6Reachable(const BoundNetLog& net_log) {
+bool HostResolverImpl::IsIPv6Reachable(const NetLogWithSource& net_log) {
   base::TimeTicks now = base::TimeTicks::Now();
   bool cached = true;
   if ((now - last_ipv6_probe_time_).InMilliseconds() > kIPv6ProbePeriodMs) {
@@ -2341,7 +2343,7 @@ bool HostResolverImpl::IsIPv6Reachable(const BoundNetLog& net_log) {
     last_ipv6_probe_time_ = now;
     cached = false;
   }
-  net_log.AddEvent(NetLog::TYPE_HOST_RESOLVER_IMPL_IPV6_REACHABILITY_CHECK,
+  net_log.AddEvent(NetLogEventType::HOST_RESOLVER_IMPL_IPV6_REACHABILITY_CHECK,
                    base::Bind(&NetLogIPv6AvailableCallback,
                               last_ipv6_probe_result_, cached));
   return last_ipv6_probe_result_;
@@ -2457,9 +2459,8 @@ void HostResolverImpl::UpdateDNSConfig(bool config_changed) {
   NetworkChangeNotifier::GetDnsConfig(&dns_config);
 
   if (net_log_) {
-    net_log_->AddGlobalEntry(
-        NetLog::TYPE_DNS_CONFIG_CHANGED,
-        base::Bind(&NetLogDnsConfigCallback, &dns_config));
+    net_log_->AddGlobalEntry(NetLogEventType::DNS_CONFIG_CHANGED,
+                             base::Bind(&NetLogDnsConfigCallback, &dns_config));
   }
 
   // TODO(szym): Remove once http://crbug.com/137914 is resolved.

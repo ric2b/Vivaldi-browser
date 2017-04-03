@@ -26,10 +26,23 @@ class PhotoCapabilities {
     public final int currentZoom;
     public final int focusMode;
     public final int exposureMode;
+    public final int maxExposureCompensation;
+    public final int minExposureCompensation;
+    public final int currentExposureCompensation;
+    public final int whiteBalanceMode;
+    public final int fillLightMode;
+    public final boolean redEyeReduction;
+    public final int maxColorTemperature;
+    public final int minColorTemperature;
+    public final int currentColorTemperature;
 
     PhotoCapabilities(int maxIso, int minIso, int currentIso, int maxHeight, int minHeight,
             int currentHeight, int maxWidth, int minWidth, int currentWidth, int maxZoom,
-            int minZoom, int currentZoom, int focusMode, int exposureMode) {
+            int minZoom, int currentZoom, int focusMode, int exposureMode,
+            int maxExposureCompensation, int minExposureCompensation,
+            int currentExposureCompensation, int whiteBalanceMode, int fillLightMode,
+            boolean redEyeReduction, int maxColorTemperature, int minColorTemperature,
+            int currentColorTemperature) {
         this.maxIso = maxIso;
         this.minIso = minIso;
         this.currentIso = currentIso;
@@ -44,6 +57,15 @@ class PhotoCapabilities {
         this.currentZoom = currentZoom;
         this.focusMode = focusMode;
         this.exposureMode = exposureMode;
+        this.maxExposureCompensation = maxExposureCompensation;
+        this.minExposureCompensation = minExposureCompensation;
+        this.currentExposureCompensation = currentExposureCompensation;
+        this.whiteBalanceMode = whiteBalanceMode;
+        this.fillLightMode = fillLightMode;
+        this.redEyeReduction = redEyeReduction;
+        this.maxColorTemperature = maxColorTemperature;
+        this.minColorTemperature = minColorTemperature;
+        this.currentColorTemperature = currentColorTemperature;
     }
 
     @CalledByNative
@@ -116,6 +138,51 @@ class PhotoCapabilities {
         return exposureMode;
     }
 
+    @CalledByNative
+    public int getMinExposureCompensation() {
+        return minExposureCompensation;
+    }
+
+    @CalledByNative
+    public int getMaxExposureCompensation() {
+        return maxExposureCompensation;
+    }
+
+    @CalledByNative
+    public int getCurrentExposureCompensation() {
+        return currentExposureCompensation;
+    }
+
+    @CalledByNative
+    public int getWhiteBalanceMode() {
+        return whiteBalanceMode;
+    }
+
+    @CalledByNative
+    public int getFillLightMode() {
+        return fillLightMode;
+    }
+
+    @CalledByNative
+    public boolean getRedEyeReduction() {
+        return redEyeReduction;
+    }
+
+    @CalledByNative
+    public int getMinColorTemperature() {
+        return minColorTemperature;
+    }
+
+    @CalledByNative
+    public int getMaxColorTemperature() {
+        return maxColorTemperature;
+    }
+
+    @CalledByNative
+    public int getCurrentColorTemperature() {
+        return currentColorTemperature;
+    }
+
     public static class Builder {
         public int maxIso;
         public int minIso;
@@ -131,6 +198,15 @@ class PhotoCapabilities {
         public int currentZoom;
         public int focusMode;
         public int exposureMode;
+        public int maxExposureCompensation;
+        public int minExposureCompensation;
+        public int currentExposureCompensation;
+        public int whiteBalanceMode;
+        public int fillLightMode;
+        public boolean redEyeReduction;
+        public int maxColorTemperature;
+        public int minColorTemperature;
+        public int currentColorTemperature;
 
         public Builder() {}
 
@@ -204,10 +280,57 @@ class PhotoCapabilities {
             return this;
         }
 
+        public Builder setMaxExposureCompensation(int maxExposureCompensation) {
+            this.maxExposureCompensation = maxExposureCompensation;
+            return this;
+        }
+
+        public Builder setMinExposureCompensation(int minExposureCompensation) {
+            this.minExposureCompensation = minExposureCompensation;
+            return this;
+        }
+
+        public Builder setCurrentExposureCompensation(int currentExposureCompensation) {
+            this.currentExposureCompensation = currentExposureCompensation;
+            return this;
+        }
+
+        public Builder setWhiteBalanceMode(int whiteBalanceMode) {
+            this.whiteBalanceMode = whiteBalanceMode;
+            return this;
+        }
+
+        public Builder setFillLightMode(int fillLightMode) {
+            this.fillLightMode = fillLightMode;
+            return this;
+        }
+
+        public Builder setRedEyeReduction(boolean redEyeReduction) {
+            this.redEyeReduction = redEyeReduction;
+            return this;
+        }
+
+        public Builder setMaxColorTemperature(int maxColorTemperature) {
+            this.maxColorTemperature = maxColorTemperature;
+            return this;
+        }
+
+        public Builder setMinColorTemperature(int minColorTemperature) {
+            this.minColorTemperature = minColorTemperature;
+            return this;
+        }
+
+        public Builder setCurrentColorTemperature(int currentColorTemperature) {
+            this.currentColorTemperature = currentColorTemperature;
+            return this;
+        }
+
         public PhotoCapabilities build() {
             return new PhotoCapabilities(maxIso, minIso, currentIso, maxHeight, minHeight,
                     currentHeight, maxWidth, minWidth, currentWidth, maxZoom, minZoom, currentZoom,
-                    focusMode, exposureMode);
+                    focusMode, exposureMode, maxExposureCompensation, minExposureCompensation,
+                    currentExposureCompensation, whiteBalanceMode, fillLightMode, redEyeReduction,
+                    maxColorTemperature, minColorTemperature, currentColorTemperature);
         }
     }
 }

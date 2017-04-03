@@ -4,14 +4,25 @@
 
 #include "net/http/http_stream_factory_impl_job_controller.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "net/base/host_mapping_rules.h"
+#include "net/base/proxy_delegate.h"
 #include "net/http/bidirectional_stream_impl.h"
 #include "net/http/transport_security_state.h"
+#include "net/log/net_log_capture_mode.h"
+#include "net/log/net_log_event_type.h"
+#include "net/log/net_log_source.h"
+#include "net/log/net_log_with_source.h"
+#include "net/proxy/proxy_server.h"
 #include "net/spdy/spdy_session.h"
+#include "url/url_constants.h"
 
 namespace net {
 
@@ -35,9 +46,11 @@ HttpStreamFactoryImpl::JobController::JobController(
       request_(nullptr),
       delegate_(delegate),
       is_preconnect_(false),
+      alternative_job_failed_(false),
       job_bound_(false),
       main_job_is_blocked_(false),
       bound_job_(nullptr),
+      can_start_alternative_proxy_job_(false),
       ptr_factory_(this) {
   DCHECK(factory);
 }
@@ -57,7 +70,7 @@ HttpStreamFactoryImpl::Request* HttpStreamFactoryImpl::JobController::Start(
     HttpStreamRequest::Delegate* delegate,
     WebSocketHandshakeStreamBase::CreateHelper*
         websocket_handshake_stream_create_helper,
-    const BoundNetLog& net_log,
+    const NetLogWithSource& net_log,
     HttpStreamRequest::StreamType stream_type,
     RequestPriority priority,
     const SSLConfig& server_ssl_config,
@@ -170,7 +183,7 @@ void HttpStreamFactoryImpl::JobController::OnStreamReady(
   std::unique_ptr<HttpStream> stream = job->ReleaseStream();
   DCHECK(stream);
 
-  MarkRequestComplete(job->was_npn_negotiated(), job->negotiated_protocol(),
+  MarkRequestComplete(job->was_alpn_negotiated(), job->negotiated_protocol(),
                       job->using_spdy());
 
   if (!request_)
@@ -193,7 +206,7 @@ void HttpStreamFactoryImpl::JobController::OnBidirectionalStreamImplReady(
     return;
   }
 
-  MarkRequestComplete(job->was_npn_negotiated(), job->negotiated_protocol(),
+  MarkRequestComplete(job->was_alpn_negotiated(), job->negotiated_protocol(),
                       job->using_spdy());
 
   if (!request_)
@@ -215,8 +228,7 @@ void HttpStreamFactoryImpl::JobController::OnWebSocketHandshakeStreamReady(
     const ProxyInfo& used_proxy_info,
     WebSocketHandshakeStreamBase* stream) {
   DCHECK(job);
-
-  MarkRequestComplete(job->was_npn_negotiated(), job->negotiated_protocol(),
+  MarkRequestComplete(job->was_alpn_negotiated(), job->negotiated_protocol(),
                       job->using_spdy());
 
   if (!request_)
@@ -234,6 +246,9 @@ void HttpStreamFactoryImpl::JobController::OnStreamFailed(
     Job* job,
     int status,
     const SSLConfig& used_ssl_config) {
+  if (job->job_type() == ALTERNATIVE)
+    OnAlternativeJobFailed(job);
+
   MaybeResumeMainJob(job, base::TimeDelta());
 
   if (job_bound_ && bound_job_ != job) {
@@ -252,13 +267,10 @@ void HttpStreamFactoryImpl::JobController::OnStreamFailed(
       // Hey, we've got other jobs! Maybe one of them will succeed, let's just
       // ignore this failure.
       factory_->request_map_.erase(job);
-      // Notify all the other jobs that this one failed.
       if (job->job_type() == MAIN) {
-        alternative_job_->MarkOtherJobComplete(*job);
         main_job_.reset();
       } else {
         DCHECK(job->job_type() == ALTERNATIVE);
-        main_job_->MarkOtherJobComplete(*job);
         alternative_job_.reset();
       }
       return;
@@ -355,6 +367,46 @@ void HttpStreamFactoryImpl::JobController::OnNeedsProxyAuth(
                              auth_controller);
 }
 
+void HttpStreamFactoryImpl::JobController::OnResolveProxyComplete(
+    Job* job,
+    const HttpRequestInfo& request_info,
+    RequestPriority priority,
+    const SSLConfig& server_ssl_config,
+    const SSLConfig& proxy_ssl_config,
+    HttpStreamRequest::StreamType stream_type) {
+  DCHECK(job);
+
+  ProxyServer alternative_proxy_server;
+  if (!ShouldCreateAlternativeProxyServerJob(job, job->proxy_info(),
+                                             request_info.url,
+                                             &alternative_proxy_server)) {
+    return;
+  }
+
+  DCHECK(main_job_);
+  DCHECK_EQ(MAIN, job->job_type());
+  DCHECK(!alternative_job_);
+  DCHECK(!main_job_is_blocked_);
+
+  HostPortPair destination(HostPortPair::FromURL(request_info.url));
+  GURL origin_url = ApplyHostMappingRules(request_info.url, &destination);
+
+  alternative_job_.reset(job_factory_->CreateJob(
+      this, ALTERNATIVE, session_, request_info, priority, server_ssl_config,
+      proxy_ssl_config, destination, origin_url, alternative_proxy_server,
+      job->net_log().net_log()));
+  AttachJob(alternative_job_.get());
+
+  can_start_alternative_proxy_job_ = false;
+  main_job_is_blocked_ = true;
+
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::Bind(
+          &HttpStreamFactoryImpl::JobController::StartAlternativeProxyServerJob,
+          ptr_factory_.GetWeakPtr()));
+}
+
 void HttpStreamFactoryImpl::JobController::OnNewSpdySessionReady(
     Job* job,
     const base::WeakPtr<SpdySession>& spdy_session,
@@ -367,16 +419,19 @@ void HttpStreamFactoryImpl::JobController::OnNewSpdySessionReady(
   // Cache these values in case the job gets deleted.
   const SSLConfig used_ssl_config = job->server_ssl_config();
   const ProxyInfo used_proxy_info = job->proxy_info();
-  const bool was_npn_negotiated = job->was_npn_negotiated();
+  const bool was_alpn_negotiated = job->was_alpn_negotiated();
   const NextProto negotiated_protocol = job->negotiated_protocol();
   const bool using_spdy = job->using_spdy();
-  const BoundNetLog net_log = job->net_log();
+  const NetLogWithSource net_log = job->net_log();
 
   // Cache this so we can still use it if the JobController is deleted.
   HttpStreamFactoryImpl* factory = factory_;
 
   // Notify |request_|.
   if (!is_preconnect_ && !is_job_orphaned) {
+    if (job->job_type() == MAIN && alternative_job_failed_)
+      ReportBrokenAlternativeService();
+
     DCHECK(request_);
 
     // The first case is the usual case.
@@ -384,7 +439,7 @@ void HttpStreamFactoryImpl::JobController::OnNewSpdySessionReady(
       BindJob(job);
     }
 
-    MarkRequestComplete(was_npn_negotiated, negotiated_protocol, using_spdy);
+    MarkRequestComplete(was_alpn_negotiated, negotiated_protocol, using_spdy);
 
     std::unique_ptr<HttpStream> stream;
     std::unique_ptr<BidirectionalStreamImpl> bidirectional_stream_impl;
@@ -410,7 +465,7 @@ void HttpStreamFactoryImpl::JobController::OnNewSpdySessionReady(
   // Notify |factory_|. |request_| and |bounded_job_| might be deleted already.
   if (spdy_session && spdy_session->IsAvailable()) {
     factory->OnNewSpdySessionReady(spdy_session, direct, used_ssl_config,
-                                   used_proxy_info, was_npn_negotiated,
+                                   used_proxy_info, was_alpn_negotiated,
                                    negotiated_protocol, using_spdy, net_log);
   }
   if (is_job_orphaned) {
@@ -450,7 +505,7 @@ void HttpStreamFactoryImpl::JobController::AddConnectionAttemptsToRequest(
 
 void HttpStreamFactoryImpl::JobController::ResumeMainJob() {
   main_job_->net_log().AddEvent(
-      NetLog::TYPE_HTTP_STREAM_JOB_DELAYED,
+      NetLogEventType::HTTP_STREAM_JOB_DELAYED,
       base::Bind(&NetLogHttpStreamJobDelayCallback, main_job_wait_time_));
 
   main_job_->Resume();
@@ -461,6 +516,7 @@ void HttpStreamFactoryImpl::JobController::MaybeResumeMainJob(
     Job* job,
     const base::TimeDelta& delay) {
   DCHECK(job == main_job_.get() || job == alternative_job_.get());
+
   if (!main_job_is_blocked_ || job != alternative_job_.get() || !main_job_)
     return;
 
@@ -546,7 +602,7 @@ void HttpStreamFactoryImpl::JobController::
   }
 }
 
-const BoundNetLog* HttpStreamFactoryImpl::JobController::GetNetLog(
+const NetLogWithSource* HttpStreamFactoryImpl::JobController::GetNetLog(
     Job* job) const {
   if (is_preconnect_ || (job_bound_ && bound_job_ != job))
     return nullptr;
@@ -573,7 +629,7 @@ void HttpStreamFactoryImpl::JobController::CreateJobs(
     const SSLConfig& proxy_ssl_config,
     HttpStreamRequest::Delegate* delegate,
     HttpStreamRequest::StreamType stream_type,
-    const BoundNetLog& net_log) {
+    const NetLogWithSource& net_log) {
   DCHECK(!main_job_);
   DCHECK(!alternative_job_);
   HostPortPair destination(HostPortPair::FromURL(request_info.url));
@@ -594,7 +650,7 @@ void HttpStreamFactoryImpl::JobController::CreateJobs(
              << alternative_service.host_port_pair().host()
              << " port: " << alternative_service.host_port_pair().port() << ")";
 
-    DCHECK(!request_info.url.SchemeIs("ftp"));
+    DCHECK(!request_info.url.SchemeIs(url::kFtpScheme));
     HostPortPair alternative_destination(alternative_service.host_port_pair());
     ignore_result(
         ApplyHostMappingRules(request_info.url, &alternative_destination));
@@ -607,6 +663,8 @@ void HttpStreamFactoryImpl::JobController::CreateJobs(
 
     main_job_is_blocked_ = true;
     alternative_job_->Start(request_->stream_type());
+  } else {
+    can_start_alternative_proxy_job_ = true;
   }
   // Even if |alternative_job| has already finished, it will not have notified
   // the request yet, since we defer that to the next iteration of the
@@ -631,10 +689,10 @@ void HttpStreamFactoryImpl::JobController::BindJob(Job* job) {
   factory_->request_map_.erase(job);
 
   request_->net_log().AddEvent(
-      NetLog::TYPE_HTTP_STREAM_REQUEST_BOUND_TO_JOB,
+      NetLogEventType::HTTP_STREAM_REQUEST_BOUND_TO_JOB,
       job->net_log().source().ToEventParametersCallback());
   job->net_log().AddEvent(
-      NetLog::TYPE_HTTP_STREAM_JOB_BOUND_TO_REQUEST,
+      NetLogEventType::HTTP_STREAM_JOB_BOUND_TO_REQUEST,
       request_->net_log().source().ToEventParametersCallback());
 
   OrphanUnboundJob();
@@ -686,17 +744,13 @@ void HttpStreamFactoryImpl::JobController::OnJobSucceeded(Job* job) {
     CancelJobs();
     return;
   }
+
+  if (job->job_type() == MAIN && alternative_job_failed_)
+    ReportBrokenAlternativeService();
+
   if (!bound_job_) {
-    if (main_job_ && alternative_job_) {
-      job->ReportJobSucceededForRequest();
-      // Notify all the other jobs that this one succeeded.
-      if (job->job_type() == MAIN) {
-        alternative_job_->MarkOtherJobComplete(*job);
-      } else {
-        DCHECK(job->job_type() == ALTERNATIVE);
-        main_job_->MarkOtherJobComplete(*job);
-      }
-    }
+    if (main_job_ && alternative_job_)
+      ReportAlternateProtocolUsage(job);
     BindJob(job);
     return;
   }
@@ -704,11 +758,51 @@ void HttpStreamFactoryImpl::JobController::OnJobSucceeded(Job* job) {
 }
 
 void HttpStreamFactoryImpl::JobController::MarkRequestComplete(
-    bool was_npn_negotiated,
+    bool was_alpn_negotiated,
     NextProto negotiated_protocol,
     bool using_spdy) {
   if (request_)
-    request_->Complete(was_npn_negotiated, negotiated_protocol, using_spdy);
+    request_->Complete(was_alpn_negotiated, negotiated_protocol, using_spdy);
+}
+
+void HttpStreamFactoryImpl::JobController::OnAlternativeJobFailed(Job* job) {
+  DCHECK_EQ(job->job_type(), ALTERNATIVE);
+
+  alternative_job_failed_ = true;
+
+  if (job->alternative_proxy_server().is_valid()) {
+    failed_alternative_proxy_server_ = job->alternative_proxy_server();
+  } else {
+    DCHECK(!failed_alternative_proxy_server_.is_valid());
+    failed_alternative_service_ = job->alternative_service();
+  }
+
+  if (!request_ || (job_bound_ && bound_job_ != job)) {
+    // If |request_| is gone then it must have been successfully served by
+    // |main_job_|.
+    // If |request_| is bound to a different job, then it is being
+    // successfully serverd by the main job.
+    ReportBrokenAlternativeService();
+  }
+}
+
+void HttpStreamFactoryImpl::JobController::ReportBrokenAlternativeService() {
+  DCHECK(failed_alternative_service_.protocol !=
+             UNINITIALIZED_ALTERNATE_PROTOCOL ||
+         failed_alternative_proxy_server_.is_valid());
+
+  if (failed_alternative_proxy_server_.is_valid()) {
+    ProxyDelegate* proxy_delegate = session_->params().proxy_delegate;
+    if (proxy_delegate)
+      proxy_delegate->OnAlternativeProxyBroken(
+          failed_alternative_proxy_server_);
+  } else {
+    HistogramBrokenAlternateProtocolLocation(
+        BROKEN_ALTERNATE_PROTOCOL_LOCATION_HTTP_STREAM_FACTORY_IMPL_JOB_ALT);
+    session_->http_server_properties()->MarkAlternativeServiceBroken(
+        failed_alternative_service_);
+  }
+  session_->quic_stream_factory()->OnTcpJobCompleted(true);
 }
 
 void HttpStreamFactoryImpl::JobController::MaybeNotifyFactoryOfCompletion() {
@@ -789,7 +883,7 @@ HttpStreamFactoryImpl::JobController::GetAlternativeServiceForInternal(
     HttpStreamRequest::StreamType stream_type) {
   GURL original_url = request_info.url;
 
-  if (!original_url.SchemeIs("https"))
+  if (!original_url.SchemeIs(url::kHttpsScheme))
     return AlternativeService();
 
   url::SchemeHostPort origin(original_url);
@@ -813,7 +907,7 @@ HttpStreamFactoryImpl::JobController::GetAlternativeServiceForInternal(
       quic_advertised = true;
     if (http_server_properties.IsAlternativeServiceBroken(
             alternative_service)) {
-      HistogramAlternateProtocolUsage(ALTERNATE_PROTOCOL_USAGE_BROKEN);
+      HistogramAlternateProtocolUsage(ALTERNATE_PROTOCOL_USAGE_BROKEN, false);
       continue;
     }
 
@@ -830,8 +924,7 @@ HttpStreamFactoryImpl::JobController::GetAlternativeServiceForInternal(
          origin.port() < kUnrestrictedPort))
       continue;
 
-    if (alternative_service.protocol >= NPN_SPDY_MINIMUM_VERSION &&
-        alternative_service.protocol <= NPN_SPDY_MAXIMUM_VERSION) {
+    if (alternative_service.protocol == NPN_HTTP_2) {
       if (origin.host() != alternative_service.host &&
           !session_->params()
                .enable_http2_alternative_service_with_different_host) {
@@ -864,11 +957,10 @@ HttpStreamFactoryImpl::JobController::GetAlternativeServiceForInternal(
       continue;
     }
 
-    if (session_->quic_stream_factory()->IsQuicDisabled(
-            alternative_service.port))
+    if (session_->quic_stream_factory()->IsQuicDisabled())
       continue;
 
-    if (!original_url.SchemeIs("https"))
+    if (!original_url.SchemeIs(url::kHttpsScheme))
       continue;
 
     // Check whether there is an existing QUIC session to use for this origin.
@@ -895,4 +987,103 @@ HttpStreamFactoryImpl::JobController::GetAlternativeServiceForInternal(
 
   return first_alternative_service;
 }
+
+bool HttpStreamFactoryImpl::JobController::
+    ShouldCreateAlternativeProxyServerJob(
+        Job* job,
+        const ProxyInfo& proxy_info,
+        const GURL& url,
+        ProxyServer* alternative_proxy_server) const {
+  DCHECK(!alternative_proxy_server->is_valid());
+  if (!can_start_alternative_proxy_job_) {
+    // Either an alternative service job or an alternative proxy server job has
+    // already been started.
+    return false;
+  }
+
+  if (job->job_type() == ALTERNATIVE) {
+    // If |job| is using alternative service, then alternative proxy server
+    // should not be used.
+    return false;
+  }
+
+  if (is_preconnect_ || job->job_type() == PRECONNECT) {
+    // Preconnects should be fetched using only the main job to keep the
+    // resource utilization down.
+    return false;
+  }
+
+  if (proxy_info.is_empty() || proxy_info.is_direct() || proxy_info.is_quic()) {
+    // Alternative proxy server job can be created only if |job| fetches the
+    // |request_| through a non-QUIC proxy.
+    return false;
+  }
+
+  if (!url.SchemeIs(url::kHttpScheme)) {
+    // Only HTTP URLs can be fetched through alternative proxy server, since the
+    // alternative proxy server may not support fetching of URLs with other
+    // schemes.
+    return false;
+  }
+
+  ProxyDelegate* proxy_delegate = session_->params().proxy_delegate;
+  if (!proxy_delegate)
+    return false;
+
+  proxy_delegate->GetAlternativeProxy(url, proxy_info.proxy_server(),
+                                      alternative_proxy_server);
+
+  if (!alternative_proxy_server->is_valid())
+    return false;
+
+  DCHECK(!(*alternative_proxy_server == proxy_info.proxy_server()));
+
+  if (!alternative_proxy_server->is_https() &&
+      !alternative_proxy_server->is_quic()) {
+    // Alternative proxy server should be a secure server.
+    return false;
+  }
+
+  if (alternative_proxy_server->is_quic()) {
+    // Check that QUIC is enabled globally, and it is not disabled.
+    if (!session_->params().enable_quic ||
+        session_->quic_stream_factory()->IsQuicDisabled()) {
+      return false;
+    }
+  }
+
+  return true;
 }
+
+void HttpStreamFactoryImpl::JobController::ReportAlternateProtocolUsage(
+    Job* job) const {
+  DCHECK(main_job_ && alternative_job_);
+
+  bool proxy_server_used =
+      alternative_job_->alternative_proxy_server().is_quic();
+
+  if (job == main_job_.get()) {
+    HistogramAlternateProtocolUsage(ALTERNATE_PROTOCOL_USAGE_LOST_RACE,
+                                    proxy_server_used);
+    return;
+  }
+
+  DCHECK_EQ(alternative_job_.get(), job);
+  if (job->using_existing_quic_session()) {
+    HistogramAlternateProtocolUsage(ALTERNATE_PROTOCOL_USAGE_NO_RACE,
+                                    proxy_server_used);
+    return;
+  }
+
+  HistogramAlternateProtocolUsage(ALTERNATE_PROTOCOL_USAGE_WON_RACE,
+                                  proxy_server_used);
+}
+
+void HttpStreamFactoryImpl::JobController::StartAlternativeProxyServerJob() {
+  if (!alternative_job_ || !request_)
+    return;
+  DCHECK(alternative_job_->alternative_proxy_server().is_valid());
+  alternative_job_->Start(request_->stream_type());
+}
+
+}  // namespace net

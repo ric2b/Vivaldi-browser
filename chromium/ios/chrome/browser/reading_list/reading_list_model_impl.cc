@@ -67,6 +67,25 @@ const ReadingListEntry& ReadingListModelImpl::GetReadEntryAtIndex(
   return read_[index];
 }
 
+bool ReadingListModelImpl::CallbackEntryURL(
+    const GURL& url,
+    base::Callback<void(const ReadingListEntry&)> callback) const {
+  DCHECK(loaded());
+  ReadingListEntry entry(url, std::string());
+  auto resultUnread = std::find(unread_.begin(), unread_.end(), entry);
+  if (resultUnread != unread_.end()) {
+    callback.Run(*resultUnread);
+    return true;
+  }
+
+  auto resultRead = std::find(read_.begin(), read_.end(), entry);
+  if (resultRead != read_.end()) {
+    callback.Run(*resultRead);
+    return true;
+  }
+  return false;
+}
+
 void ReadingListModelImpl::RemoveEntryByUrl(const GURL& url) {
   DCHECK(loaded());
   const ReadingListEntry entry(url, std::string());
@@ -103,10 +122,10 @@ const ReadingListEntry& ReadingListModelImpl::AddEntry(
     const std::string& title) {
   DCHECK(loaded());
   RemoveEntryByUrl(url);
-  const ReadingListEntry entry(url, title);
+  ReadingListEntry entry(url, title);
   FOR_EACH_OBSERVER(ReadingListModelObserver, observers_,
                     ReadingListWillAddUnreadEntry(this, entry));
-  unread_.insert(unread_.begin(), entry);
+  unread_.insert(unread_.begin(), std::move(entry));
   hasUnseen_ = true;
   if (storageLayer_ && !IsPerformingBatchUpdates()) {
     storageLayer_->SavePersistentUnreadList(unread_);
@@ -119,8 +138,7 @@ const ReadingListEntry& ReadingListModelImpl::AddEntry(
 
 void ReadingListModelImpl::MarkReadByURL(const GURL& url) {
   DCHECK(loaded());
-  const ReadingListEntry entry(url, std::string());
-
+  ReadingListEntry entry(url, std::string());
   auto result = std::find(unread_.begin(), unread_.end(), entry);
   if (result == unread_.end())
     return;
@@ -129,8 +147,9 @@ void ReadingListModelImpl::MarkReadByURL(const GURL& url) {
       ReadingListModelObserver, observers_,
       ReadingListWillMoveEntry(this, std::distance(unread_.begin(), result)));
 
-  read_.insert(read_.begin(), *result);
+  read_.insert(read_.begin(), std::move(*result));
   unread_.erase(result);
+
   if (storageLayer_ && !IsPerformingBatchUpdates()) {
     storageLayer_->SavePersistentUnreadList(unread_);
     storageLayer_->SavePersistentReadList(read_);

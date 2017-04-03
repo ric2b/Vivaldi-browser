@@ -132,22 +132,6 @@ class UtilitiesClearAllRecentlyClosedSessionsFunction
   DISALLOW_COPY_AND_ASSIGN(UtilitiesClearAllRecentlyClosedSessionsFunction);
 };
 
-class UtilitiesGetAvailablePageEncodingsFunction
-    : public ChromeSyncExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("utilities.getAvailablePageEncodings",
-                             UTILITIES_GETAVAILABLEPAGEENCODINGS)
-  UtilitiesGetAvailablePageEncodingsFunction() = default;
-
- protected:
-  ~UtilitiesGetAvailablePageEncodingsFunction() override;
-
-  bool RunSync() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetAvailablePageEncodingsFunction);
-};
-
 class UtilitiesMapFocusAppWindowToWindowIdFunction
     : public ChromeSyncExtensionFunction {
  public:

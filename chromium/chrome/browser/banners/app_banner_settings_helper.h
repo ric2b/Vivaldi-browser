@@ -40,6 +40,8 @@ class Profile;
 // what we count as a day matches what the user perceives to be days.
 class AppBannerSettingsHelper {
  public:
+  // TODO(mariakhomenko): Rename events to reflect that they are used in more
+  // contexts now.
   enum AppBannerEvent {
     APP_BANNER_EVENT_COULD_SHOW,
     APP_BANNER_EVENT_DID_SHOW,
@@ -53,11 +55,13 @@ class AppBannerSettingsHelper {
     NATIVE,
   };
 
+  static const char kInstantAppsKey[];
+
   // BannerEvents record the time that a site was accessed, along with an
   // engagement weight representing the importance of the access.
   struct BannerEvent {
-   base::Time time;
-   double engagement;
+    base::Time time;
+    double engagement;
   };
 
   // The content setting basically records a simplified subset of history.
@@ -137,9 +141,14 @@ class AppBannerSettingsHelper {
   // last ten days. This allows services outside app banners to utilise the
   // content setting that ensures app banners are not shown for sites which ave
   // already been added to homescreen.
-  static bool WasLaunchedRecently(content::WebContents* web_contents,
+  static bool WasLaunchedRecently(Profile* profile,
                                   const GURL& origin_url,
                                   base::Time now);
+
+  // Set the number of days which dismissing/ignoring the banner should prevent
+  // a banner from showing.
+  static void SetDaysAfterDismissAndIgnoreToTrigger(unsigned int dismiss_days,
+                                                    unsigned int ignore_days);
 
   // Set the engagement weights assigned to direct and indirect navigations.
   static void SetEngagementWeights(double direct_engagement,

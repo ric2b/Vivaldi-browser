@@ -827,7 +827,7 @@ public abstract class CronetEngine {
     public final UrlRequest createRequest(String url, UrlRequest.Callback callback,
             Executor executor, @UrlRequest.Builder.RequestPriority int priority) {
         return createRequest(
-                url, callback, executor, priority, Collections.emptyList(), false, false);
+                url, callback, executor, priority, Collections.emptyList(), false, false, false);
     }
 
     /**
@@ -847,6 +847,8 @@ public abstract class CronetEngine {
      *         If context is not set up to use cache this param has no effect.
      * @param disableConnectionMigration disables connection migration for this
      *         request if it is enabled for the session.
+     * @param allowDirectExecutor whether executors used by this request are permitted
+     *         to execute submitted tasks inline.
      * @return new request.
      * @deprecated Use {@link UrlRequest.Builder#build}.
      * @hide as it references hidden RequestFinishedInfo.Listener
@@ -854,7 +856,7 @@ public abstract class CronetEngine {
     @Deprecated
     protected abstract UrlRequest createRequest(String url, UrlRequest.Callback callback,
             Executor executor, int priority, Collection<Object> requestAnnotations,
-            boolean disableCache, boolean disableConnectionMigration);
+            boolean disableCache, boolean disableConnectionMigration, boolean allowDirectExecutor);
 
     /**
      * Creates a {@link BidirectionalStream} object. {@code callback} methods will
@@ -873,6 +875,7 @@ public abstract class CronetEngine {
      * @param delayRequestHeadersUntilFirstFlush whether to delay sending request
      *         headers until flush() is called, and try to combine them
      *         with the next data frame.
+     * @param requestAnnotations Objects to pass on to {@link RequestFinishedInfo.Listener}.
      * @return a new stream.
      * @hide only used by internal implementation.
      */
@@ -880,7 +883,7 @@ public abstract class CronetEngine {
             BidirectionalStream.Callback callback, Executor executor, String httpMethod,
             List<Map.Entry<String, String>> requestHeaders,
             @BidirectionalStream.Builder.StreamPriority int priority,
-            boolean delayRequestHeadersUntilFirstFlush);
+            boolean delayRequestHeadersUntilFirstFlush, Collection<Object> requestAnnotations);
 
     /**
      * @return {@code true} if the engine is enabled.
@@ -1151,4 +1154,20 @@ public abstract class CronetEngine {
      * @hide it's a prototype.
      */
     public abstract void removeRequestFinishedListener(RequestFinishedInfo.Listener listener);
+
+    /**
+     * Creates a builder for {@link UrlRequest}. All callbacks formatted
+     * generated {@link UrlRequest} objects will be invoked on
+     * {@code executor}'s threads. {@code executor} must not run tasks on the
+     * thread calling {@link Executor#execute} to prevent blocking networking
+     * operations and causing exceptions during shutdown.
+     *
+     * @param url URL for the generated requests.
+     * @param callback callback object that gets invoked on different events.
+     * @param executor {@link Executor} on which all callbacks will be invoked.
+     */
+    public UrlRequest.Builder newUrlRequestBuilder(
+            String url, UrlRequest.Callback callback, Executor executor) {
+        return new UrlRequest.Builder(url, callback, executor, this);
+    }
 }

@@ -33,6 +33,8 @@
 #include "chrome/test/chromedriver/chrome/status.h"
 #include "chrome/test/chromedriver/chrome/ui_events.h"
 #include "chrome/test/chromedriver/net/timeout.h"
+#include "ui/events/keycodes/dom/keycode_converter.h"
+#include "ui/events/keycodes/keyboard_code_conversion.h"
 
 namespace {
 
@@ -399,6 +401,10 @@ Status WebViewImpl::DispatchKeyEvents(const std::list<KeyEvent>& events) {
     params.SetString("unmodifiedText", it->unmodified_text);
     params.SetInteger("nativeVirtualKeyCode", it->key_code);
     params.SetInteger("windowsVirtualKeyCode", it->key_code);
+    ui::DomCode dom_code = ui::UsLayoutKeyboardCodeToDomCode(it->key_code);
+    std::string key = ui::KeycodeConverter::DomCodeToCodeString(dom_code);
+    if (!key.empty())
+      params.SetString("key", key);
     Status status = client_->SendCommand("Input.dispatchKeyEvent", params);
     if (status.IsError())
       return status;
@@ -513,7 +519,7 @@ Status WebViewImpl::SetFileInputFiles(
   if (status.IsError())
     return status;
   base::ListValue args;
-  args.Append(element.DeepCopy());
+  args.Append(element.CreateDeepCopy());
   bool found_node;
   int node_id;
   status = internal::GetNodeIdFromFunction(
@@ -675,7 +681,7 @@ Status WebViewImpl::CallAsyncFunctionInternal(
     std::unique_ptr<base::Value>* result) {
   base::ListValue async_args;
   async_args.AppendString("return (" + function + ").apply(null, arguments);");
-  async_args.Append(args.DeepCopy());
+  async_args.Append(args.CreateDeepCopy());
   async_args.AppendBoolean(is_user_supplied);
   async_args.AppendInteger(timeout.InMilliseconds());
   std::unique_ptr<base::Value> tmp;

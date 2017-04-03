@@ -2,12 +2,13 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# GYP version: components/sync_sessions.gypi:sync_sessions
 static_library("sync_sessions") {
   sources = [
     "favicon_cache.cc",
     "favicon_cache.h",
     "local_session_event_router.h",
+    "lost_navigations_recorder.cc",
+    "lost_navigations_recorder.h",
     "open_tabs_ui_delegate.cc",
     "open_tabs_ui_delegate.h",
     "revisit/bookmarks_by_url_provider_impl.cc",
@@ -49,14 +50,17 @@ static_library("sync_sessions") {
     "tab_node_pool.h",
   ]
 
+  public_deps = [
+    "//components/sessions",
+    "//components/sync",
+  ]
+
   deps = [
     "//base",
     "//components/bookmarks/browser",
     "//components/favicon/core",
     "//components/history/core/browser",
     "//components/prefs",
-    "//components/sessions",
-    "//components/sync",
     "//components/variations",
     "//ui/base:base",
     "//ui/gfx",
@@ -69,11 +73,15 @@ static_library("test_support") {
   sources = [
     "fake_sync_sessions_client.cc",
     "fake_sync_sessions_client.h",
+    "session_sync_test_helper.cc",
+    "session_sync_test_helper.h",
   ]
 
   public_deps = [
     ":sync_sessions",
     "//base",
+    "//components/sync",
+    "//testing/gtest",
     "//url",
   ]
 
@@ -84,6 +92,7 @@ source_set("unit_tests") {
   testonly = true
   sources = [
     "favicon_cache_unittest.cc",
+    "lost_navigations_recorder_unittest.cc",
     "revisit/bookmarks_page_revisit_observer_unittest.cc",
     "revisit/current_tab_matcher_unittest.cc",
     "revisit/offset_tab_matcher_unittest.cc",
@@ -106,6 +115,7 @@ source_set("unit_tests") {
     "//components/sessions:test_support",
     "//components/sync",
     "//components/sync:test_support_sync_api",
+    "//components/sync:test_support_sync_core",
     "//components/sync:test_support_sync_driver",
     "//testing/gmock",
     "//testing/gtest",

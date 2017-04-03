@@ -135,59 +135,30 @@ void LayerAnimator::SetDelegate(LayerAnimationDelegate* delegate) {
 }
 
 void LayerAnimator::SwitchToLayer(scoped_refptr<cc::Layer> new_layer) {
-  // Release ElementAnimations state for old layer.
-  element_animations_state_ = nullptr;
-
   if (delegate_)
     DetachLayerFromAnimationPlayer();
   if (new_layer)
     AttachLayerToAnimationPlayer(new_layer->id());
 }
 
-void LayerAnimator::SetCompositor(Compositor* compositor) {
+void LayerAnimator::AttachLayerAndTimeline(Compositor* compositor) {
   DCHECK(compositor);
 
   cc::AnimationTimeline* timeline = compositor->GetAnimationTimeline();
   DCHECK(timeline);
-
-  DCHECK(delegate_->GetCcLayer());
-
-  // Register ElementAnimations so it will be picked up by
-  // AnimationHost::RegisterPlayerForLayer via
-  // AnimationHost::GetElementAnimationsForLayerId.
-  if (element_animations_state_) {
-    DCHECK_EQ(element_animations_state_->element_id().primaryId,
-              delegate_->GetCcLayer()->id());
-    timeline->animation_host()->RegisterElementAnimations(
-        element_animations_state_.get());
-  }
-
   timeline->AttachPlayer(animation_player_);
 
+  DCHECK(delegate_->GetCcLayer());
   AttachLayerToAnimationPlayer(delegate_->GetCcLayer()->id());
-
-  // Release ElementAnimations state.
-  element_animations_state_ = nullptr;
 }
 
-void LayerAnimator::ResetCompositor(Compositor* compositor) {
+void LayerAnimator::DetachLayerAndTimeline(Compositor* compositor) {
   DCHECK(compositor);
 
   cc::AnimationTimeline* timeline = compositor->GetAnimationTimeline();
   DCHECK(timeline);
 
-  cc::ElementId element_id(animation_player_->element_id());
-
-  // Store a reference to ElementAnimations (if any)
-  // so it may be picked up in LayerAnimator::SetCompositor.
-  if (element_id) {
-    element_animations_state_ =
-        timeline->animation_host()->GetElementAnimationsForElementId(
-            element_id);
-  }
-
   DetachLayerFromAnimationPlayer();
-
   timeline->DetachPlayer(animation_player_);
 }
 
@@ -216,10 +187,6 @@ void LayerAnimator::AddThreadedAnimation(
 
 void LayerAnimator::RemoveThreadedAnimation(int animation_id) {
   animation_player_->RemoveAnimation(animation_id);
-}
-
-bool LayerAnimator::HasPendingThreadedAnimationsForTesting() const {
-  return animation_player_->has_pending_animations_for_testing();
 }
 
 cc::AnimationPlayer* LayerAnimator::GetAnimationPlayerForTesting() const {

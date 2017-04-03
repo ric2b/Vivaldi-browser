@@ -126,6 +126,8 @@ struct MapKeyTypes {
   map<float, float> f9;
   map<double, double> f10;
   map<string, string> f11;
+  // TODO(tibell): JS/Java don't support struct as key.
+  // map<Rect, Rect> f12;
 };
 
 // Used to verify that various map value types can be encoded and decoded
@@ -379,4 +381,24 @@ struct ContainsOther {
 
 struct ContainsInterfaceRequest {
   SomeInterface& request;
+};
+
+// Used to verify that boolean fields are correctly serialized/deserialized.
+
+struct SingleBoolStruct {
+  bool value;
+};
+
+// Used to verify that structs containing typemapped types can be hashed (if the
+// typemapped type itself is hashable).
+
+struct ContainsHashable {
+  TypemappedRect rect;
+};
+
+// Used to test that nested structs can be hashed. The nested struct mustn't be
+// nullable.
+
+struct SimpleNestedStruct {
+  ContainsOther nested;
 };

@@ -1,12 +1,12 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fi">
-<translation id="1014825444426747588">tyhjä</translation>
 <translation id="1018939186200882850">valikkokohde</translation>
 <translation id="1020833440720551630">mykistä ääniraita</translation>
 <translation id="10623998915015855">vaihtopainike</translation>
 <translation id="1088086359088493902">Sekuntia</translation>
 <translation id="1171774979989969504">Anna sähköpostiosoite.</translation>
+<translation id="1178581264944972037">Tauko</translation>
 <translation id="1188858454923323853">täydentävä</translation>
 <translation id="1206619573307042055">marquee</translation>
 <translation id="1206693055195146388">liukusäädin</translation>
@@ -25,6 +25,7 @@
 <translation id="1822429046913737220">AP/IP</translation>
 <translation id="1832974991323546415">toista etälaitteella</translation>
 <translation id="1842960171412779397">Valitse</translation>
+<translation id="1854180393107901205">Lopeta suoratoisto</translation>
 <translation id="1880518467580572141">hahmotelma</translation>
 <translation id="1921819250265091946">pp</translation>
 <translation id="1930711995431081526">tila</translation>
@@ -39,6 +40,7 @@
 <translation id="2507943997699731163">Täytä tämä kenttä.</translation>
 <translation id="2508569020611168319">välilehtiluettelo</translation>
 <translation id="2548326553472216322">Ei viimeisimpiä hakuja</translation>
+<translation id="2561842179657104141">näytä lisää mediaohjaimia</translation>
 <translation id="2572483411312390101">toista</translation>
 <translation id="2613802280814924224">Syötä kelvollinen arvo. Lähin kelvollinen arvo on <ph name="VALID_VALUE" />.</translation>
 <translation id="2653659639078652383">Lähetä</translation>
@@ -71,6 +73,7 @@
 <translation id="3808586225841795776">termi</translation>
 <translation id="3822383571486410024">Pidennä tämä teksti yli <ph name="MIN_CHARACTERS" /> merkkiin (tällä hetkellä käytössä <ph name="CURRENT_LENGTH" /> merkkiä).</translation>
 <translation id="383465348367842624"><ph name="ATSIGN" />-osaa ennen tulevassa osassa ei pitäisi olla merkkiä <ph name="INVALIDCHARACTER" />.</translation>
+<translation id="3846214748874656680">Sulje koko näytön tila.</translation>
 <translation id="3924558731517983934">sovellus</translation>
 <translation id="3960700977367013758">vierityspalkki</translation>
 <translation id="4103419683916926126">Millisekuntia</translation>
@@ -91,6 +94,7 @@
 <translation id="479989351350248267">haku</translation>
 <translation id="4812940957355064477">Anna numero.</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> valittu</translation>
+<translation id="4992066212339426712">Poista mykistys</translation>
 <translation id="49969490063480558">Lisää <ph name="ATSIGN" />-osaa seuraava osa. <ph name="INVALIDADDRESS" /> on puutteellinen.</translation>
 <translation id="5034860022980953847">etenemisen osoitin</translation>
 <translation id="5048533449481078685">luettelon merkitsijä</translation>
@@ -105,13 +109,17 @@
 <translation id="5468998798572797635">poistu koko näytön tilasta</translation>
 <translation id="5476505524087279545">poista valinta</translation>
 <translation id="5516424706154626233">päivämäärän valitsin</translation>
+<translation id="5537725057119320332">Lähetä</translation>
 <translation id="5546461542133609677">peruuta mykistys</translation>
 <translation id="561939826962581046">time</translation>
 <translation id="5641012560118721995">keskeytä toisto</translation>
 <translation id="5643186887447432888">painike</translation>
+<translation id="5677946354068040947">lisäasetukset</translation>
+<translation id="57838592816432529">Mykistä</translation>
 <translation id="583281660410589416">Tuntematon</translation>
 <translation id="5843503607508392247">Muu...</translation>
 <translation id="5860033963881614850">Pois käytöstä</translation>
+<translation id="588258955323874662">Koko ruutu</translation>
 <translation id="5939518447894949180">Tyhjennä</translation>
 <translation id="5944544982112848342">2048 (korkea taso)</translation>
 <translation id="5966707198760109579">Viikko</translation>
@@ -134,12 +142,14 @@
 <translation id="6692633176391053278">askellin</translation>
 <translation id="6739588121953935928">viivoitin</translation>
 <translation id="6755330956360078551">työkaluvinkki</translation>
+<translation id="6790428901817661496">Toista</translation>
 <translation id="6820355525329141109">Laajennuksen lataaminen epäonnistui.</translation>
 <translation id="6843725295806269523">äänetön</translation>
 <translation id="6845533974506654842">paina</translation>
 <translation id="6853785296079745596">piilota tekstitykset</translation>
 <translation id="6885760532393684712">hakemisto</translation>
 <translation id="6934078000481955284">muotoiltu lainaus</translation>
+<translation id="6941933287844615239">lataa media</translation>
 <translation id="7057186640035488495">elokuvan aikajana</translation>
 <translation id="709897737746224366">Käytä pyydettyä muotoilua.</translation>
 <translation id="7223624360433298498">kulunut aika</translation>
@@ -148,6 +158,7 @@
 <translation id="7364796246159120393">Valitse tiedosto</translation>
 <translation id="739024184232394898">Muu...</translation>
 <translation id="7491962110804786152">sarkain</translation>
+<translation id="7514365320538308">Lataa</translation>
 <translation id="7673697353781729403">Tuntia</translation>
 <translation id="7720026100085573005">jäljellä oleva aika</translation>
 <translation id="7740016676195725605">älä näytä tekstityksiä</translation>
@@ -164,6 +175,7 @@
 <translation id="819205353528511139">toista elokuva koko näytön tilassa</translation>
 <translation id="8199524924445686405">vvvv</translation>
 <translation id="8244226242650769279">kuvakartta</translation>
+<translation id="8284326494547611709">Tekstitykset</translation>
 <translation id="835897206747267392">Virheellinen arvo.</translation>
 <translation id="838869780401515933">valitse</translation>
 <translation id="8433900881053900389">työkalupalkki</translation>

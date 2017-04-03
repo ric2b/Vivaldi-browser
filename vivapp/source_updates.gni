@@ -1,0 +1,10 @@
+
+if (is_mac) {
+  post_process_target("//chrome:chrome_framework_resources") {
+    sources += [ "$root_out_dir/resources/vivaldi" ]
+  }
+
+  post_process_target("//chrome:chrome_versioned_bundle_data") {
+    sources += [ "$root_out_dir/features.json" ]
+  }
+}

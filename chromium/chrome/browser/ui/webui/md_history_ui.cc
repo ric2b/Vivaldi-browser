@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/md_history_ui.h"
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
@@ -16,33 +18,37 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/browser_resources.h"
+#include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
+#include "chrome/grit/theme_resources.h"
+#include "components/grit/components_scaled_resources.h"
+#include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/search/search.h"
 #include "components/signin/core/browser/signin_manager.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
-#include "grit/browser_resources.h"
-#include "grit/components_scaled_resources.h"
-#include "grit/components_strings.h"
-#include "grit/generated_resources.h"
-#include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 
 namespace {
 
-content::WebUIDataSource* CreateMdHistoryUIHTMLSource(Profile* profile) {
-  PrefService* prefs = profile->GetPrefs();
+constexpr char kShowMenuPromoKey[] = "showMenuPromo";
 
+content::WebUIDataSource* CreateMdHistoryUIHTMLSource(Profile* profile,
+                                                      bool use_test_title) {
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUIHistoryHost);
 
   // Localized strings (alphabetical order).
+  source->AddLocalizedString("bookmarked", IDS_HISTORY_ENTRY_BOOKMARKED);
   source->AddLocalizedString("cancel", IDS_CANCEL);
   source->AddLocalizedString("clearBrowsingData",
                              IDS_CLEAR_BROWSING_DATA_TITLE);
   source->AddLocalizedString("clearSearch", IDS_MD_HISTORY_CLEAR_SEARCH);
+  source->AddLocalizedString("closeMenuPromo", IDS_MD_HISTORY_CLOSE_MENU_PROMO);
   source->AddLocalizedString("collapseSessionButton",
                              IDS_HISTORY_OTHER_SESSIONS_COLLAPSE_SESSION);
   source->AddLocalizedString("delete", IDS_MD_HISTORY_DELETE);
@@ -52,10 +58,15 @@ content::WebUIDataSource* CreateMdHistoryUIHTMLSource(Profile* profile) {
                              IDS_HISTORY_OTHER_SESSIONS_HIDE_FOR_NOW);
   source->AddLocalizedString(
       "deleteWarning", IDS_HISTORY_DELETE_PRIOR_VISITS_WARNING_NO_INCOGNITO);
+  source->AddLocalizedString("entrySummary", IDS_HISTORY_ENTRY_SUMMARY);
   source->AddLocalizedString("expandSessionButton",
                              IDS_HISTORY_OTHER_SESSIONS_EXPAND_SESSION);
   source->AddLocalizedString("foundSearchResults",
                              IDS_HISTORY_FOUND_SEARCH_RESULTS);
+  source->AddLocalizedString("hasSyncedResults",
+                             IDS_MD_HISTORY_HAS_SYNCED_RESULTS);
+  source->AddLocalizedString("hasSyncedResultsDescription",
+                             IDS_MD_HISTORY_HAS_SYNCED_RESULTS_DESCRIPTION);
   source->AddLocalizedString("historyInterval", IDS_HISTORY_INTERVAL);
   source->AddLocalizedString("historyMenuButton",
                              IDS_MD_HISTORY_HISTORY_MENU_DESCRIPTION);
@@ -63,6 +74,7 @@ content::WebUIDataSource* CreateMdHistoryUIHTMLSource(Profile* profile) {
                              IDS_MD_HISTORY_HISTORY_MENU_ITEM);
   source->AddLocalizedString("itemsSelected", IDS_MD_HISTORY_ITEMS_SELECTED);
   source->AddLocalizedString("loading", IDS_HISTORY_LOADING);
+  source->AddLocalizedString("menuPromo", IDS_MD_HISTORY_MENU_PROMO);
   source->AddLocalizedString("moreActionsButton",
                              IDS_HISTORY_ACTION_MENU_DESCRIPTION);
   source->AddLocalizedString("moreFromSite", IDS_HISTORY_MORE_FROM_SITE);
@@ -90,7 +102,10 @@ content::WebUIDataSource* CreateMdHistoryUIHTMLSource(Profile* profile) {
   source->AddLocalizedString("signInPromo", IDS_MD_HISTORY_SIGN_IN_PROMO);
   source->AddLocalizedString("signInPromoDesc",
                              IDS_MD_HISTORY_SIGN_IN_PROMO_DESC);
-  source->AddLocalizedString("title", IDS_HISTORY_TITLE);
+  if (use_test_title)
+    source->AddString("title", "MD History");
+  else
+    source->AddLocalizedString("title", IDS_HISTORY_TITLE);
 
   source->AddString(
       "sidebarFooter",
@@ -99,9 +114,13 @@ content::WebUIDataSource* CreateMdHistoryUIHTMLSource(Profile* profile) {
           l10n_util::GetStringUTF16(
               IDS_SETTINGS_CLEAR_DATA_WEB_HISTORY_URL_IN_HISTORY)));
 
+  PrefService* prefs = profile->GetPrefs();
   bool allow_deleting_history =
       prefs->GetBoolean(prefs::kAllowDeletingBrowserHistory);
   source->AddBoolean("allowDeletingHistory", allow_deleting_history);
+
+  source->AddBoolean(kShowMenuPromoKey,
+      !prefs->GetBoolean(prefs::kMdHistoryMenuPromoShown));
 
   bool group_by_domain = base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kHistoryEnableGroupByDomain) || profile->IsSupervised();
@@ -128,6 +147,10 @@ content::WebUIDataSource* CreateMdHistoryUIHTMLSource(Profile* profile) {
                           IDR_MD_HISTORY_APP_VULCANIZED_HTML);
   source->AddResourcePath("app.crisper.js",
                           IDR_MD_HISTORY_APP_CRISPER_JS);
+  source->AddResourcePath("lazy_load.html",
+                          IDR_MD_HISTORY_LAZY_LOAD_VULCANIZED_HTML);
+  source->AddResourcePath("lazy_load.crisper.js",
+                          IDR_MD_HISTORY_LAZY_LOAD_CRISPER_JS);
 #else
   source->AddResourcePath("app.html", IDR_MD_HISTORY_APP_HTML);
   source->AddResourcePath("app.js", IDR_MD_HISTORY_APP_JS);
@@ -153,14 +176,15 @@ content::WebUIDataSource* CreateMdHistoryUIHTMLSource(Profile* profile) {
   source->AddResourcePath("history_toolbar.js",
                           IDR_MD_HISTORY_HISTORY_TOOLBAR_JS);
   source->AddResourcePath("icons.html", IDR_MD_HISTORY_ICONS_HTML);
-  source->AddResourcePath("lazy_render.html",
-                          IDR_MD_HISTORY_LAZY_RENDER_HTML);
-  source->AddResourcePath("lazy_render.js",
-                          IDR_MD_HISTORY_LAZY_RENDER_JS);
+  source->AddResourcePath("lazy_load.html", IDR_MD_HISTORY_LAZY_LOAD_HTML);
   source->AddResourcePath("list_container.html",
                           IDR_MD_HISTORY_LIST_CONTAINER_HTML);
   source->AddResourcePath("list_container.js",
                           IDR_MD_HISTORY_LIST_CONTAINER_JS);
+  source->AddResourcePath("router.html",
+                          IDR_MD_HISTORY_ROUTER_HTML);
+  source->AddResourcePath("router.js",
+                          IDR_MD_HISTORY_ROUTER_JS);
   source->AddResourcePath("searched_label.html",
                           IDR_MD_HISTORY_SEARCHED_LABEL_HTML);
   source->AddResourcePath("searched_label.js",
@@ -189,17 +213,22 @@ content::WebUIDataSource* CreateMdHistoryUIHTMLSource(Profile* profile) {
 
 }  // namespace
 
+bool MdHistoryUI::use_test_title_ = false;
+
 MdHistoryUI::MdHistoryUI(content::WebUI* web_ui) : WebUIController(web_ui) {
-  Profile* profile = Profile::FromWebUI(web_ui);
   web_ui->AddMessageHandler(new BrowsingHistoryHandler());
   web_ui->AddMessageHandler(new MetricsHandler());
 
   if (search::IsInstantExtendedAPIEnabled()) {
     web_ui->AddMessageHandler(new browser_sync::ForeignSessionHandler());
-    web_ui->AddMessageHandler(new HistoryLoginHandler());
+    web_ui->AddMessageHandler(new HistoryLoginHandler(
+        base::Bind(&MdHistoryUI::CreateDataSource, base::Unretained(this))));
   }
 
-  content::WebUIDataSource::Add(profile, CreateMdHistoryUIHTMLSource(profile));
+  CreateDataSource();
+
+  web_ui->RegisterMessageCallback("menuPromoShown",
+      base::Bind(&MdHistoryUI::HandleMenuPromoShown, base::Unretained(this)));
 }
 
 MdHistoryUI::~MdHistoryUI() {}
@@ -213,10 +242,12 @@ bool MdHistoryUI::IsEnabled(Profile* profile) {
 }
 
 // static
-void MdHistoryUI::DisableForTesting() {
+void MdHistoryUI::SetEnabledForTesting(bool enabled) {
   std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
-  feature_list->InitializeFromCommandLine(
-      std::string(), features::kMaterialDesignHistory.name);
+
+  const std::string& name = features::kMaterialDesignHistory.name;
+  feature_list->InitializeFromCommandLine(enabled ? name : "",
+                                          enabled ? "" : name);
   base::FeatureList::ClearInstanceForTesting();
   base::FeatureList::SetInstance(std::move(feature_list));
 }
@@ -226,4 +257,25 @@ base::RefCountedMemory* MdHistoryUI::GetFaviconResourceBytes(
     ui::ScaleFactor scale_factor) {
   return ResourceBundle::GetSharedInstance().LoadDataResourceBytesForScale(
       IDR_HISTORY_FAVICON, scale_factor);
+}
+
+void MdHistoryUI::RegisterProfilePrefs(
+    user_prefs::PrefRegistrySyncable* registry) {
+  registry->RegisterBooleanPref(prefs::kMdHistoryMenuPromoShown, false,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+}
+
+// TODO(lshang): Change to not re-create data source every time after we use
+// unique_ptr instead of raw pointers for data source.
+void MdHistoryUI::CreateDataSource() {
+  Profile* profile = Profile::FromWebUI(web_ui());
+  content::WebUIDataSource* data_source =
+      CreateMdHistoryUIHTMLSource(profile, use_test_title_);
+  content::WebUIDataSource::Add(profile, data_source);
+}
+
+void MdHistoryUI::HandleMenuPromoShown(const base::ListValue* args) {
+  Profile::FromWebUI(web_ui())->GetPrefs()->SetBoolean(
+      prefs::kMdHistoryMenuPromoShown, true);
+  CreateDataSource();
 }

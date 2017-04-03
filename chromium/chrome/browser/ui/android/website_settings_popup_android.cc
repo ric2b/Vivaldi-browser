@@ -16,13 +16,10 @@
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/cert_store.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
-#include "grit/generated_resources.h"
 #include "jni/WebsiteSettingsPopup_jni.h"
-#include "ui/base/l10n/l10n_util.h"
 
 using base::android::ConvertUTF16ToJavaString;
 using base::android::ConvertUTF8ToJavaString;
@@ -57,12 +54,13 @@ WebsiteSettingsPopupAndroid::WebsiteSettingsPopupAndroid(
   ChromeSecurityStateModelClient* security_model_client =
       ChromeSecurityStateModelClient::FromWebContents(web_contents);
   DCHECK(security_model_client);
+  security_state::SecurityStateModel::SecurityInfo security_info;
+  security_model_client->GetSecurityInfo(&security_info);
 
   presenter_.reset(new WebsiteSettings(
       this, Profile::FromBrowserContext(web_contents->GetBrowserContext()),
       TabSpecificContentSettings::FromWebContents(web_contents), web_contents,
-      nav_entry->GetURL(), security_model_client->GetSecurityInfo(),
-      content::CertStore::GetInstance()));
+      nav_entry->GetURL(), security_info));
 }
 
 WebsiteSettingsPopupAndroid::~WebsiteSettingsPopupAndroid() {}
@@ -107,6 +105,7 @@ void WebsiteSettingsPopupAndroid::SetPermissionInfo(
   permissions_to_display.push_back(CONTENT_SETTINGS_TYPE_JAVASCRIPT);
   permissions_to_display.push_back(CONTENT_SETTINGS_TYPE_POPUPS);
   permissions_to_display.push_back(CONTENT_SETTINGS_TYPE_KEYGEN);
+  permissions_to_display.push_back(CONTENT_SETTINGS_TYPE_AUTOPLAY);
 
   std::map<ContentSettingsType, ContentSetting>
       user_specified_settings_to_display;

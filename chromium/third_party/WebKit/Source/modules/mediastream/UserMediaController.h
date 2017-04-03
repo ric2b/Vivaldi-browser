@@ -10,16 +10,16 @@
  *     notice, this list of conditions and the following disclaimer in the
  *     documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
- * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #ifndef UserMediaController_h
@@ -34,64 +34,60 @@ class MediaDevices;
 class MediaDevicesRequest;
 class UserMediaRequest;
 
-class UserMediaController final : public GarbageCollectedFinalized<UserMediaController>, public Supplement<LocalFrame> {
-    USING_GARBAGE_COLLECTED_MIXIN(UserMediaController);
-public:
-    static UserMediaController* create(std::unique_ptr<UserMediaClient>);
+class UserMediaController final
+    : public GarbageCollectedFinalized<UserMediaController>,
+      public Supplement<LocalFrame> {
+  USING_GARBAGE_COLLECTED_MIXIN(UserMediaController);
 
-    DECLARE_VIRTUAL_TRACE();
+ public:
+  static UserMediaController* create(std::unique_ptr<UserMediaClient>);
 
-    UserMediaClient* client() const { return m_client.get(); }
+  DECLARE_VIRTUAL_TRACE();
 
-    void requestUserMedia(UserMediaRequest*);
-    void cancelUserMediaRequest(UserMediaRequest*);
+  UserMediaClient* client() const { return m_client.get(); }
 
-    void requestMediaDevices(MediaDevicesRequest*);
-    void cancelMediaDevicesRequest(MediaDevicesRequest*);
+  void requestUserMedia(UserMediaRequest*);
+  void cancelUserMediaRequest(UserMediaRequest*);
+  void requestMediaDevices(MediaDevicesRequest*);
+  void requestSources(MediaStreamTrackSourcesRequest*);
+  void setMediaDeviceChangeObserver(MediaDevices*);
 
-    void requestSources(MediaStreamTrackSourcesRequest*);
+  static const char* supplementName();
+  static UserMediaController* from(LocalFrame* frame) {
+    return static_cast<UserMediaController*>(
+        Supplement<LocalFrame>::from(frame, supplementName()));
+  }
 
-    void setMediaDeviceChangeObserver(MediaDevices*);
+ private:
+  explicit UserMediaController(std::unique_ptr<UserMediaClient>);
 
-    static const char* supplementName();
-    static UserMediaController* from(LocalFrame* frame) { return static_cast<UserMediaController*>(Supplement<LocalFrame>::from(frame, supplementName())); }
-
-private:
-    explicit UserMediaController(std::unique_ptr<UserMediaClient>);
-
-    std::unique_ptr<UserMediaClient> m_client;
+  std::unique_ptr<UserMediaClient> m_client;
 };
 
-inline void UserMediaController::requestUserMedia(UserMediaRequest* request)
-{
-    m_client->requestUserMedia(request);
+inline void UserMediaController::requestUserMedia(UserMediaRequest* request) {
+  m_client->requestUserMedia(request);
 }
 
-inline void UserMediaController::cancelUserMediaRequest(UserMediaRequest* request)
-{
-    m_client->cancelUserMediaRequest(request);
+inline void UserMediaController::cancelUserMediaRequest(
+    UserMediaRequest* request) {
+  m_client->cancelUserMediaRequest(request);
 }
 
-inline void UserMediaController::requestMediaDevices(MediaDevicesRequest* request)
-{
-    m_client->requestMediaDevices(request);
+inline void UserMediaController::requestMediaDevices(
+    MediaDevicesRequest* request) {
+  m_client->requestMediaDevices(request);
 }
 
-inline void UserMediaController::cancelMediaDevicesRequest(MediaDevicesRequest* request)
-{
-    m_client->cancelMediaDevicesRequest(request);
+inline void UserMediaController::requestSources(
+    MediaStreamTrackSourcesRequest* request) {
+  m_client->requestSources(request);
 }
 
-inline void UserMediaController::requestSources(MediaStreamTrackSourcesRequest* request)
-{
-    m_client->requestSources(request);
+inline void UserMediaController::setMediaDeviceChangeObserver(
+    MediaDevices* observer) {
+  m_client->setMediaDeviceChangeObserver(observer);
 }
 
-inline void UserMediaController::setMediaDeviceChangeObserver(MediaDevices* observer)
-{
-    m_client->setMediaDeviceChangeObserver(observer);
-}
+}  // namespace blink
 
-} // namespace blink
-
-#endif // UserMediaController_h
+#endif  // UserMediaController_h

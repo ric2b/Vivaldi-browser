@@ -12,7 +12,7 @@
 #include "base/build_time.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/strings/string_util.h"
 #include "base/sys_info.h"
@@ -502,8 +502,8 @@ std::unique_ptr<VariationsService> VariationsService::Create(
 #endif
   result.reset(new VariationsService(
       std::move(client),
-      base::WrapUnique(new web_resource::ResourceRequestAllowedNotifier(
-          local_state, disable_network_switch)),
+      base::MakeUnique<web_resource::ResourceRequestAllowedNotifier>(
+          local_state, disable_network_switch),
       local_state, state_manager, ui_string_overrider));
   return result;
 }
@@ -514,8 +514,8 @@ std::unique_ptr<VariationsService> VariationsService::CreateForTesting(
     PrefService* local_state) {
   return base::WrapUnique(new VariationsService(
       std::move(client),
-      base::WrapUnique(new web_resource::ResourceRequestAllowedNotifier(
-          local_state, nullptr)),
+      base::MakeUnique<web_resource::ResourceRequestAllowedNotifier>(
+          local_state, nullptr),
       local_state, nullptr, UIStringOverrider()));
 }
 
@@ -644,13 +644,15 @@ void VariationsService::OnURLFetchComplete(const net::URLFetcher* source) {
   // The fetcher will be deleted when the request is handled.
   std::unique_ptr<const net::URLFetcher> request(
       pending_seed_request_.release());
-  const net::URLRequestStatus& request_status = request->GetStatus();
-  if (request_status.status() != net::URLRequestStatus::SUCCESS) {
-    UMA_HISTOGRAM_SPARSE_SLOWLY("Variations.FailedRequestErrorCode",
-                                -request_status.error());
+  const net::URLRequestStatus& status = request->GetStatus();
+  const int response_code = request->GetResponseCode();
+  UMA_HISTOGRAM_SPARSE_SLOWLY(
+      "Variations.SeedFetchResponseOrErrorCode",
+      status.is_success() ? response_code : status.error());
+
+  if (status.status() != net::URLRequestStatus::SUCCESS) {
     DVLOG(1) << "Variations server request failed with error: "
-             << request_status.error() << ": "
-             << net::ErrorToString(request_status.error());
+             << status.error() << ": " << net::ErrorToString(status.error());
     // It's common for the very first fetch attempt to fail (e.g. the network
     // may not yet be available). In such a case, try again soon, rather than
     // waiting the full time interval.
@@ -658,11 +660,6 @@ void VariationsService::OnURLFetchComplete(const net::URLFetcher* source) {
       request_scheduler_->ScheduleFetchShortly();
     return;
   }
-
-  // Log the response code.
-  const int response_code = request->GetResponseCode();
-  UMA_HISTOGRAM_SPARSE_SLOWLY("Variations.SeedFetchResponseCode",
-                              response_code);
 
   const base::TimeDelta latency =
       base::TimeTicks::Now() - last_request_started_time_;

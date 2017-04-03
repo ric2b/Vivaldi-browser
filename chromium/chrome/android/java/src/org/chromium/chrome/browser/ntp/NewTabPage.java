@@ -13,6 +13,8 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.SystemClock;
 import android.support.v4.view.ViewCompat;
+import android.support.v7.widget.RecyclerView;
+import android.text.TextUtils;
 import android.view.ContextMenu;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -22,6 +24,7 @@ import android.view.View;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.base.CommandLine;
+import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
@@ -49,6 +52,7 @@ import org.chromium.chrome.browser.ntp.snippets.KnownCategories;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsConfig;
+import org.chromium.chrome.browser.ntp.snippets.SuggestionsSource;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.profiles.MostVisitedSites;
@@ -56,6 +60,8 @@ import org.chromium.chrome.browser.profiles.MostVisitedSites.MostVisitedURLsObse
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService.TemplateUrlServiceObserver;
+import org.chromium.chrome.browser.signin.SigninManager;
+import org.chromium.chrome.browser.signin.SigninManager.SignInStateObserver;
 import org.chromium.chrome.browser.snackbar.Snackbar;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
 import org.chromium.chrome.browser.sync.SyncSessionsMetrics;
@@ -69,11 +75,13 @@ import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
 import org.chromium.chrome.browser.util.UrlUtilities;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.content_public.browser.NavigationController;
+import org.chromium.content_public.browser.NavigationEntry;
 import org.chromium.content_public.common.Referrer;
 import org.chromium.net.NetworkChangeNotifier;
-import org.chromium.ui.WindowOpenDisposition;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.PageTransition;
+import org.chromium.ui.mojom.WindowOpenDisposition;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -86,16 +94,13 @@ import jp.tomorrowkey.android.gifplayer.BaseGifImage;
  */
 public class NewTabPage
         implements NativePage, InvalidationAwareThumbnailProvider, TemplateUrlServiceObserver {
+    private static final String TAG = "NewTabPage";
 
     // MostVisitedItem Context menu item IDs.
     static final int ID_OPEN_IN_NEW_WINDOW = 0;
     static final int ID_OPEN_IN_NEW_TAB = 1;
     static final int ID_OPEN_IN_INCOGNITO_TAB = 2;
     static final int ID_REMOVE = 3;
-
-    // The name of the trial for obtaining variation parameters for the ntp snippets feature. Also
-    // defined in ntp_snippets_constants.cc.
-    public static final String FIELD_TRIAL_NAME = "NTPSnippets";
 
     // UMA enum constants. CTA means the "click-to-action" icon.
     private static final String LOGO_SHOWN_UMA_NAME = "NewTabPage.LogoShown";
@@ -106,6 +111,9 @@ public class NewTabPage
     private static final int STATIC_LOGO_CLICKED = 0;
     private static final int CTA_IMAGE_CLICKED = 1;
     private static final int ANIMATED_LOGO_CLICKED = 2;
+
+    // Key for the scroll position data that may be stored in a navigation entry.
+    private static final String NAVIGATION_ENTRY_SCROLL_POSITION_KEY = "NewTabPageScrollPosition";
 
     private static final String CHROME_CONTENT_SUGGESTIONS_REFERRER =
             "https://www.googleapis.com/auth/chrome-content-suggestions";
@@ -144,6 +152,9 @@ public class NewTabPage
 
     // Whether destroy() has been called.
     private boolean mIsDestroyed;
+
+    /** Used by {@link #mNewTabPageManager}. Observer tracked for de-registration purposes. */
+    private SignInStateObserver mSignInStateObserver;
 
     /**
      * Allows clients to listen for updates to the scroll changes of the search box on the
@@ -188,6 +199,11 @@ public class NewTabPage
          *                   just tapped the fakebox.
          */
         void requestUrlFocusFromFakebox(String pastedText);
+
+        /**
+         * @return whether the provided native page is the one currently displayed to the user.
+         */
+        boolean isCurrentPage(NativePage nativePage);
     }
 
     /**
@@ -210,9 +226,7 @@ public class NewTabPage
         private static final String NTP_OFFLINE_PAGES_FEATURE_NAME = "NTPOfflinePages";
 
         private boolean isNtpOfflinePagesEnabled() {
-            // TODO(treib): Figure out correct offline feature to check.
-            return OfflinePageBridge.isOfflinePagesEnabled()
-                    && ChromeFeatureList.isEnabled(NTP_OFFLINE_PAGES_FEATURE_NAME);
+            return ChromeFeatureList.isEnabled(NTP_OFFLINE_PAGES_FEATURE_NAME);
         }
 
         @Override
@@ -257,7 +271,7 @@ public class NewTabPage
         @Override
         public void onLearnMoreClicked() {
             if (mIsDestroyed) return;
-            // TODO(mvanouwerkerk): UMA logging.
+            NewTabPageUma.recordAction(NewTabPageUma.ACTION_CLICKED_LEARN_MORE);
             String url = "https://support.google.com/chrome/?p=new_tab";
             // TODO(mastiz): Change this to LINK?
             openUrl(WindowOpenDisposition.CURRENT_TAB,
@@ -299,14 +313,12 @@ public class NewTabPage
 
         @Override
         public void trackSnippetImpression(SnippetArticle article) {
-            mSnippetsBridge.onSuggestionShown(article.mGlobalPosition, article.mCategory,
-                    article.mPosition, article.mPublishTimestampMilliseconds, article.mScore);
+            mSnippetsBridge.onSuggestionShown(article);
         }
 
         @Override
         public void trackSnippetMenuOpened(SnippetArticle article) {
-            mSnippetsBridge.onSuggestionMenuOpened(article.mGlobalPosition, article.mCategory,
-                    article.mPosition, article.mPublishTimestampMilliseconds, article.mScore);
+            mSnippetsBridge.onSuggestionMenuOpened(article);
         }
 
         @Override
@@ -321,9 +333,7 @@ public class NewTabPage
 
         @Override
         public void openSnippet(int windowOpenDisposition, SnippetArticle article) {
-            mSnippetsBridge.onSuggestionOpened(article.mGlobalPosition, article.mCategory,
-                    article.mPosition, article.mPublishTimestampMilliseconds, article.mScore,
-                    windowOpenDisposition);
+            mSnippetsBridge.onSuggestionOpened(article, windowOpenDisposition);
             NewTabPageUma.monitorContentSuggestionVisit(mTab, article.mCategory);
             LoadUrlParams loadUrlParams =
                     new LoadUrlParams(article.mUrl, PageTransition.AUTO_BOOKMARK);
@@ -432,8 +442,8 @@ public class NewTabPage
         }
 
         private void saveUrlForOffline(String url) {
-            OfflinePageBridge bridge = OfflinePageBridge.getForProfile(mProfile);
-            bridge.savePageLaterForDownload(url, "ntp_suggestions");
+            OfflinePageBridge.getForProfile(mProfile)
+                    .savePageLater(url, "ntp_suggestions", true /* userRequested */);
         }
 
         @Override
@@ -643,6 +653,26 @@ public class NewTabPage
         public void closeContextMenu() {
             mActivity.closeContextMenu();
         }
+
+        @Override
+        public SuggestionsSource getSuggestionsSource() {
+            return mSnippetsBridge;
+        }
+
+        @Override
+        public void registerSignInStateObserver(SignInStateObserver signInStateObserver) {
+            if (mIsDestroyed) return;
+            assert mSignInStateObserver == null;
+            mSignInStateObserver = signInStateObserver;
+            SigninManager.get(mActivity).addSignInStateObserver(mSignInStateObserver);
+        }
+
+        @Override
+        public boolean isCurrentPage() {
+            if (mIsDestroyed) return false;
+            if (mFakeboxDelegate == null) return false;
+            return mFakeboxDelegate.isCurrentPage(NewTabPage.this);
+        }
     };
 
     /**
@@ -660,7 +690,7 @@ public class NewTabPage
         mProfile = tab.getProfile();
 
         mTitle = activity.getResources().getString(R.string.button_new_tab);
-        mBackgroundColor = NtpColorUtils.getBackgroundColorResource(activity.getResources(), false);
+        mBackgroundColor = NtpStyleUtils.getBackgroundColorResource(activity.getResources(), false);
         mThemeColor = ApiCompatibilityUtils.getColor(
                 activity.getResources(), R.color.default_primary_color);
         TemplateUrlService.getInstance().addObserver(this);
@@ -676,6 +706,29 @@ public class NewTabPage
             public void onHidden(Tab tab) {
                 if (mIsLoaded) recordNTPInteractionTime();
             }
+
+            @Override
+            public void onPageLoadStarted(Tab tab, String url) {
+                int scrollPosition = mNewTabPageView.getScrollPosition();
+                if (scrollPosition == RecyclerView.NO_POSITION) return;
+
+                if (mTab.getWebContents() == null) return;
+
+                NavigationController controller = mTab.getWebContents().getNavigationController();
+                int index = controller.getLastCommittedEntryIndex();
+                NavigationEntry entry = controller.getEntryAtIndex(index);
+                if (entry == null) return;
+
+                // At least under test conditions this method may be called initially for the load
+                // of the NTP itself, at which point the last committed entry is not for the NTP
+                // yet. This method will then be called a second time when the user navigates away,
+                // at which point the last committed entry is for the NTP. The extra data must only
+                // be set in the latter case.
+                if (!isNTPUrl(entry.getUrl())) return;
+
+                controller.setEntryExtraData(index, NAVIGATION_ENTRY_SCROLL_POSITION_KEY,
+                        Integer.toString(scrollPosition));
+            }
         };
         mTab.addObserver(mTabObserver);
         mMostVisitedSites = buildMostVisitedSites(mProfile);
@@ -688,7 +741,8 @@ public class NewTabPage
 
         LayoutInflater inflater = LayoutInflater.from(activity);
         mNewTabPageView = (NewTabPageView) inflater.inflate(R.layout.new_tab_page_view, null);
-        mNewTabPageView.initialize(mNewTabPageManager, mSearchProviderHasLogo, mSnippetsBridge);
+        mNewTabPageView.initialize(
+                mNewTabPageManager, mSearchProviderHasLogo, getScrollPositionFromNavigationEntry());
 
         RecordHistogram.recordBooleanHistogram(
                 "NewTabPage.MobileIsUserOnline", NetworkChangeNotifier.isOnline());
@@ -848,6 +902,29 @@ public class NewTabPage
     }
 
     /**
+     * Returns the value of the adapter scroll position that was stored in the last committed
+     * navigation entry. Returns {@code RecyclerView.NO_POSITION} if there is no last committed
+     * navigation entry, or if no data is found.
+     * @return The adapter scroll position.
+     */
+    private int getScrollPositionFromNavigationEntry() {
+        if (mTab.getWebContents() == null) return RecyclerView.NO_POSITION;
+
+        NavigationController controller = mTab.getWebContents().getNavigationController();
+        int index = controller.getLastCommittedEntryIndex();
+        String scrollPositionData =
+                controller.getEntryExtraData(index, NAVIGATION_ENTRY_SCROLL_POSITION_KEY);
+        if (TextUtils.isEmpty(scrollPositionData)) return RecyclerView.NO_POSITION;
+
+        try {
+            return Integer.parseInt(scrollPositionData);
+        } catch (NumberFormatException e) {
+            Log.w(TAG, "Bad data found for scroll position: %s", scrollPositionData, e);
+            return RecyclerView.NO_POSITION;
+        }
+    }
+
+    /**
      * @return Whether the NTP has finished loaded.
      */
     @VisibleForTesting
@@ -894,6 +971,9 @@ public class NewTabPage
         if (mMostVisitedItemRemovedController != null) {
             mTab.getSnackbarManager().dismissSnackbars(mMostVisitedItemRemovedController);
         }
+        if (mSignInStateObserver != null) {
+            SigninManager.get(mActivity).removeSignInStateObserver(mSignInStateObserver);
+        }
         TemplateUrlService.getInstance().removeObserver(this);
         mTab.removeObserver(mTabObserver);
         mTabObserver = null;
@@ -918,7 +998,7 @@ public class NewTabPage
     @Override
     public int getThemeColor() {
         return isLocationBarShownInNTP()
-                ? NtpColorUtils.getBackgroundColorResource(mActivity.getResources(), false)
+                ? NtpStyleUtils.getBackgroundColorResource(mActivity.getResources(), false)
                 : mThemeColor;
     }
 

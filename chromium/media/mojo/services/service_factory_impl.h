@@ -10,7 +10,6 @@
 #include "base/macros.h"
 #include "media/mojo/interfaces/service_factory.mojom.h"
 #include "media/mojo/services/mojo_cdm_service_context.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/shell/public/cpp/connector.h"
 #include "services/shell/public/cpp/service_context_ref.h"
 
@@ -29,8 +28,7 @@ class RendererFactory;
 
 class ServiceFactoryImpl : public mojom::ServiceFactory {
  public:
-  ServiceFactoryImpl(mojo::InterfaceRequest<mojom::ServiceFactory> request,
-                     shell::mojom::InterfaceProviderPtr interfaces,
+  ServiceFactoryImpl(shell::mojom::InterfaceProviderPtr interfaces,
                      scoped_refptr<MediaLog> media_log,
                      std::unique_ptr<shell::ServiceContextRef> connection_ref,
                      MojoMediaClient* mojo_media_client);
@@ -44,17 +42,24 @@ class ServiceFactoryImpl : public mojom::ServiceFactory {
   void CreateCdm(mojom::ContentDecryptionModuleRequest request) final;
 
  private:
+#if defined(ENABLE_MOJO_RENDERER)
+  RendererFactory* GetRendererFactory();
+#endif  // defined(ENABLE_MOJO_RENDERER)
+
 #if defined(ENABLE_MOJO_CDM)
   CdmFactory* GetCdmFactory();
-
-  std::unique_ptr<CdmFactory> cdm_factory_;
 #endif  // defined(ENABLE_MOJO_CDM)
 
   MojoCdmServiceContext cdm_service_context_;
-  mojo::StrongBinding<mojom::ServiceFactory> binding_;
+
+#if defined(ENABLE_MOJO_RENDERER)
+  std::unique_ptr<RendererFactory> renderer_factory_;
+#endif  // defined(ENABLE_MOJO_RENDERER)
+
 #if defined(ENABLE_MOJO_CDM)
+  std::unique_ptr<CdmFactory> cdm_factory_;
   shell::mojom::InterfaceProviderPtr interfaces_;
-#endif
+#endif  // defined(ENABLE_MOJO_CDM)
 
   scoped_refptr<MediaLog> media_log_;
   std::unique_ptr<shell::ServiceContextRef> connection_ref_;

@@ -5,7 +5,6 @@
 #include "core/layout/ng/layout_ng_block_flow.h"
 #include "core/layout/ng/ng_constraint_space.h"
 #include "core/layout/ng/ng_block_layout_algorithm.h"
-#include "core/layout/ng/ng_box_iterator.h"
 #include "core/layout/ng/ng_fragment.h"
 #include "core/layout/LayoutAnalyzer.h"
 
@@ -21,9 +20,12 @@ bool LayoutNGBlockFlow::isOfType(LayoutObjectType type) const {
 void LayoutNGBlockFlow::layoutBlock(bool relayoutChildren) {
   LayoutAnalyzer::BlockScope analyzer(*this);
 
-  const auto& constraintSpace = NGConstraintSpace::fromLayoutObject(*this);
-  NGBox box(this);
-  box.layout(constraintSpace);
+  const auto* constraint_space =
+      NGConstraintSpace::CreateFromLayoutObject(*this);
+  NGBox* box = new NGBox(this);
+  NGFragment* fragment;
+  while (!box->Layout(constraint_space, &fragment))
+    ;
   clearNeedsLayout();
 }
 

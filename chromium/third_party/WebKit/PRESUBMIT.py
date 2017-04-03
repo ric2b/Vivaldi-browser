@@ -13,7 +13,11 @@ import re
 import sys
 
 
-_EXCLUDED_PATHS = ()
+_EXCLUDED_PATHS = (
+    # LayoutTests/imported is excluded because these files are automatically
+    # imported, so we do not have direct control over their content.
+    r'^third_party[\\\/]WebKit[\\\/]LayoutTests[\\\/]imported[\\\/].*',
+)
 
 
 def _CheckForNonBlinkVariantMojomIncludes(input_api, output_api):
@@ -22,7 +26,7 @@ def _CheckForNonBlinkVariantMojomIncludes(input_api, output_api):
     for f in input_api.AffectedFiles():
         for line_num, line in f.ChangedContents():
             m = pattern.match(line)
-            if m and m.group(1) != '-blink':
+            if m and m.group(1) != '-blink' and m.group(1) != '-shared':
                 errors.append('    %s:%d %s' % (
                     f.LocalPath(), line_num, line))
 
@@ -94,6 +98,7 @@ def _CommonChecks(input_api, output_api):
     results.extend(input_api.canned_checks.PanProjectChecks(
         input_api, output_api, excluded_paths=_EXCLUDED_PATHS,
         maxlen=800, license_header=license_header))
+    results.extend(input_api.canned_checks.CheckPatchFormatted(input_api, output_api))
     results.extend(_CheckForNonBlinkVariantMojomIncludes(input_api, output_api))
     results.extend(_CheckForVersionControlConflicts(input_api, output_api))
     results.extend(_CheckPatchFiles(input_api, output_api))

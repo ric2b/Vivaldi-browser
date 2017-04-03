@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "cc/ipc/compositor_frame.mojom.h"
+#include "cc/surfaces/frame_sink_id.h"
 #include "cc/surfaces/surface_factory.h"
 #include "cc/surfaces/surface_factory_client.h"
 #include "cc/surfaces/surface_id.h"
@@ -20,7 +21,7 @@
 
 namespace ui {
 
-class SurfacesState;
+class DisplayCompositor;
 
 namespace ws {
 
@@ -32,6 +33,7 @@ class ServerWindowSurface : public mojom::Surface,
                             public cc::SurfaceFactoryClient {
  public:
   ServerWindowSurface(ServerWindowSurfaceManager* manager,
+                      const cc::FrameSinkId& frame_sink_id,
                       mojo::InterfaceRequest<mojom::Surface> request,
                       mojom::SurfaceClientPtr client);
 
@@ -48,7 +50,9 @@ class ServerWindowSurface : public mojom::Surface,
       cc::CompositorFrame frame,
       const SubmitCompositorFrameCallback& callback) override;
 
-  const cc::SurfaceId& id() const { return surface_id_; }
+  const cc::LocalFrameId& local_frame_id() const { return local_frame_id_; }
+
+  cc::SurfaceId GetSurfaceId() const;
 
   // Destroys old surfaces that have been outdated by a new surface.
   void DestroySurfacesScheduledForDestruction();
@@ -60,11 +64,13 @@ class ServerWindowSurface : public mojom::Surface,
   void ReturnResources(const cc::ReturnedResourceArray& resources) override;
   void SetBeginFrameSource(cc::BeginFrameSource* begin_frame_source) override;
 
+  const cc::FrameSinkId frame_sink_id_;
+
   ServerWindowSurfaceManager* manager_;  // Owns this.
 
   gfx::Size last_submitted_frame_size_;
 
-  cc::SurfaceId surface_id_;
+  cc::LocalFrameId local_frame_id_;
   cc::SurfaceIdAllocator surface_id_allocator_;
   cc::SurfaceFactory surface_factory_;
 
@@ -72,7 +78,7 @@ class ServerWindowSurface : public mojom::Surface,
   mojo::Binding<Surface> binding_;
 
   // Set of surface ids that need to be destroyed.
-  std::set<cc::SurfaceId> surfaces_scheduled_for_destruction_;
+  std::set<cc::LocalFrameId> surfaces_scheduled_for_destruction_;
 
   bool may_contain_video_ = false;
 

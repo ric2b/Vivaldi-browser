@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_SYNC_TEST_INTEGRATION_PROFILE_SYNC_SERVICE_HARNESS_H_
 #define CHROME_BROWSER_SYNC_TEST_INTEGRATION_PROFILE_SYNC_SERVICE_HARNESS_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -14,11 +15,14 @@
 #include "components/sync/engine/cycle/sync_cycle_snapshot.h"
 
 class Profile;
-class ProfileSyncService;
 
-namespace sync_driver {
+namespace browser_sync {
+class ProfileSyncService;
+}  // namespace browser_sync
+
+namespace syncer {
 class SyncSetupInProgressHandle;
-}
+}  // namespace syncer
 
 // An instance of this class is basically our notion of a "sync client" for
 // automation purposes. It harnesses the ProfileSyncService member of the
@@ -69,14 +73,14 @@ class ProfileSyncServiceHarness {
   // Note: Use this method when exactly one client makes local change(s),
   // and more than one client is waiting to receive those changes.
   bool AwaitGroupSyncCycleCompletion(
-      std::vector<ProfileSyncServiceHarness*>& partners);
+      const std::vector<ProfileSyncServiceHarness*>& partners);
 
   // Blocks the caller until every client in |clients| completes its ongoing
   // sync cycle and all the clients' progress markers match.  Note: Use this
   // method when more than one client makes local change(s), and more than one
   // client is waiting to receive those changes.
   static bool AwaitQuiescence(
-      std::vector<ProfileSyncServiceHarness*>& clients);
+      const std::vector<ProfileSyncServiceHarness*>& clients);
 
   // Blocks the caller until the sync backend is initialized or some end state
   // (e.g., auth error) is reached. Returns true if and only if the backend
@@ -85,12 +89,12 @@ class ProfileSyncServiceHarness {
   bool AwaitBackendInitialization();
 
   // Blocks the caller until sync setup is complete. Returns true if and only
-  // if sync setup completed successfully. See sync_driver::SyncService's
+  // if sync setup completed successfully. See syncer::SyncService's
   // IsSyncActive() method for the definition of what successful means here.
   bool AwaitSyncSetupCompletion();
 
   // Returns the ProfileSyncService member of the sync client.
-  ProfileSyncService* service() const { return service_; }
+  browser_sync::ProfileSyncService* service() const { return service_; }
 
   // Returns the debug name for this profile. Used for logging.
   const std::string& profile_debug_name() const { return profile_debug_name_; }
@@ -142,10 +146,10 @@ class ProfileSyncServiceHarness {
   Profile* profile_;
 
   // ProfileSyncService object associated with |profile_|.
-  ProfileSyncService* service_;
+  browser_sync::ProfileSyncService* service_;
 
   // Prevents Sync from running until configuration is complete.
-  std::unique_ptr<sync_driver::SyncSetupInProgressHandle> sync_blocker_;
+  std::unique_ptr<syncer::SyncSetupInProgressHandle> sync_blocker_;
 
   // Credentials used for GAIA authentication.
   std::string username_;

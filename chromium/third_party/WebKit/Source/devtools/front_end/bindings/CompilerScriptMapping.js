@@ -41,8 +41,6 @@ WebInspector.CompilerScriptMapping = function(debuggerModel, workspace, networkM
 {
     this._target = debuggerModel.target();
     this._debuggerModel = debuggerModel;
-    this._workspace = workspace;
-    this._workspace.addEventListener(WebInspector.Workspace.Events.UISourceCodeAdded, this._uiSourceCodeAddedToWorkspace, this);
     this._networkMapping = networkMapping;
     this._networkProject = networkProject;
     this._debuggerWorkspaceBinding = debuggerWorkspaceBinding;
@@ -58,12 +56,13 @@ WebInspector.CompilerScriptMapping = function(debuggerModel, workspace, networkM
     /** @type {!Map.<string, !WebInspector.UISourceCode>} */
     this._stubUISourceCodes = new Map();
 
-    this._stubProjectID = "compiler-script-project";
-    this._stubProject = new WebInspector.ContentProviderBasedProject(this._workspace, this._stubProjectID, WebInspector.projectTypes.Service, "");
-    debuggerModel.addEventListener(WebInspector.DebuggerModel.Events.GlobalObjectCleared, this._debuggerReset, this);
+    var projectId = WebInspector.CompilerScriptMapping.projectIdForTarget(this._target);
+    this._stubProject = new WebInspector.ContentProviderBasedProject(workspace, projectId, WebInspector.projectTypes.Service, "");
+    this._eventListeners = [
+        workspace.addEventListener(WebInspector.Workspace.Events.UISourceCodeAdded, this._uiSourceCodeAddedToWorkspace, this),
+        debuggerModel.addEventListener(WebInspector.DebuggerModel.Events.GlobalObjectCleared, this._debuggerReset, this)
+    ];
 }
-
-WebInspector.CompilerScriptMapping.StubProjectID = "compiler-script-project";
 
 WebInspector.CompilerScriptMapping._originSymbol = Symbol("origin");
 
@@ -130,15 +129,12 @@ WebInspector.CompilerScriptMapping.prototype = {
     {
         if (uiSourceCode.project().type() === WebInspector.projectTypes.Service)
             return null;
-        var networkURL = this._networkMapping.networkURL(uiSourceCode);
-        if (!networkURL)
-            return null;
-        var sourceMap = this._sourceMapForURL.get(networkURL);
+        var sourceMap = this._sourceMapForURL.get(uiSourceCode.url());
         if (!sourceMap)
             return null;
         var script = /** @type {!WebInspector.Script} */ (this._scriptForSourceMap.get(sourceMap));
         console.assert(script);
-        var entry = sourceMap.firstSourceLineMapping(networkURL, lineNumber);
+        var entry = sourceMap.firstSourceLineMapping(uiSourceCode.url(), lineNumber);
         if (!entry)
             return null;
         return this._debuggerModel.createRawLocation(script, entry.lineNumber, entry.columnNumber);
@@ -233,15 +229,13 @@ WebInspector.CompilerScriptMapping.prototype = {
         this._scriptForSourceMap.set(sourceMap, script);
 
         // Report sources.
-        var sourceURLs = sourceMap.sourceURLs();
         var missingSources = [];
-        for (var i = 0; i < sourceURLs.length; ++i) {
-            var sourceURL = sourceURLs[i];
+        for (var sourceURL of sourceMap.sourceURLs()) {
             if (this._sourceMapForURL.get(sourceURL))
                 continue;
             this._sourceMapForURL.set(sourceURL, sourceMap);
             var uiSourceCode = this._networkMapping.uiSourceCodeForScriptURL(sourceURL, script);
-            if (!uiSourceCode && !this._networkMapping.hasMappingForNetworkURL(sourceURL)) {
+            if (!uiSourceCode) {
                 var contentProvider = sourceMap.sourceContentProvider(sourceURL, WebInspector.resourceTypes.SourceMapScript);
                 uiSourceCode = this._networkProject.addFile(contentProvider, WebInspector.ResourceTreeFrame.fromScript(script), script.isContentScript());
                 uiSourceCode[WebInspector.CompilerScriptMapping._originSymbol] = script.sourceURL;
@@ -281,13 +275,10 @@ WebInspector.CompilerScriptMapping.prototype = {
      */
     uiLineHasMapping: function(uiSourceCode, lineNumber)
     {
-        var networkURL = this._networkMapping.networkURL(uiSourceCode);
-        if (!networkURL)
-            return true;
-        var sourceMap = this._sourceMapForURL.get(networkURL);
+        var sourceMap = this._sourceMapForURL.get(uiSourceCode.url());
         if (!sourceMap)
             return true;
-        return !!sourceMap.firstSourceLineMapping(networkURL, lineNumber);
+        return !!sourceMap.firstSourceLineMapping(uiSourceCode.url(), lineNumber);
     },
 
     /**
@@ -312,8 +303,7 @@ WebInspector.CompilerScriptMapping.prototype = {
     _uiSourceCodeAddedToWorkspace: function(event)
     {
         var uiSourceCode = /** @type {!WebInspector.UISourceCode} */ (event.data);
-        var networkURL = this._networkMapping.networkURL(uiSourceCode);
-        if (!networkURL || !this._sourceMapForURL.get(networkURL))
+        if (!this._sourceMapForURL.get(uiSourceCode.url()))
             return;
         this._bindUISourceCode(uiSourceCode);
     },
@@ -371,9 +361,8 @@ WebInspector.CompilerScriptMapping.prototype = {
             var script = this._scriptForSourceMap.get(sourceMap);
             if (!script)
                 return;
-            var sourceURLs = sourceMap.sourceURLs();
-            for (var i = 0; i < sourceURLs.length; ++i) {
-                var uiSourceCode = this._networkMapping.uiSourceCodeForScriptURL(sourceURLs[i], script);
+            for (var sourceURL of sourceMap.sourceURLs()) {
+                var uiSourceCode = this._networkMapping.uiSourceCodeForScriptURL(sourceURL, script);
                 if (uiSourceCode)
                     this._unbindUISourceCode(uiSourceCode);
             }
@@ -389,6 +378,17 @@ WebInspector.CompilerScriptMapping.prototype = {
 
     dispose: function()
     {
-        this._workspace.removeEventListener(WebInspector.Workspace.Events.UISourceCodeAdded, this._uiSourceCodeAddedToWorkspace, this);
+        WebInspector.EventTarget.removeEventListeners(this._eventListeners);
+        this._debuggerReset();
+        this._stubProject.dispose();
     }
+}
+
+/**
+ * @param {!WebInspector.Target} target
+ * @return {string}
+ */
+WebInspector.CompilerScriptMapping.projectIdForTarget = function(target)
+{
+    return "compiler-script-project:" + target.id();
 }

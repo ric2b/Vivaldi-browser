@@ -30,8 +30,8 @@ extern "C" {
  * the interface version number is reset.
  *
  * @section page_ifaces_vsync_feedback_unstable_v1 Interfaces
- * - @subpage page_iface_zwp_vsync_feedback_v1 - Protocol for providing vertical synchronization timing
- * - @subpage page_iface_zwp_vsync_timing_v1 - 
+ * - @subpage page_iface_zcr_vsync_feedback_v1 - Protocol for providing vertical synchronization timing
+ * - @subpage page_iface_zcr_vsync_timing_v1 - 
  * @section page_copyright_vsync_feedback_unstable_v1 Copyright
  * <pre>
  *
@@ -58,84 +58,84 @@ extern "C" {
  * </pre>
  */
 struct wl_output;
-struct zwp_vsync_feedback_v1;
-struct zwp_vsync_timing_v1;
+struct zcr_vsync_feedback_v1;
+struct zcr_vsync_timing_v1;
 
 /**
- * @page page_iface_zwp_vsync_feedback_v1 zwp_vsync_feedback_v1
- * @section page_iface_zwp_vsync_feedback_v1_desc Description
+ * @page page_iface_zcr_vsync_feedback_v1 zcr_vsync_feedback_v1
+ * @section page_iface_zcr_vsync_feedback_v1_desc Description
  *
  * The global interface that allows clients to subscribe for vertical
  * synchronization timing data for given wl_output.
- * @section page_iface_zwp_vsync_feedback_v1_api API
- * See @ref iface_zwp_vsync_feedback_v1.
+ * @section page_iface_zcr_vsync_feedback_v1_api API
+ * See @ref iface_zcr_vsync_feedback_v1.
  */
 /**
- * @defgroup iface_zwp_vsync_feedback_v1 The zwp_vsync_feedback_v1 interface
+ * @defgroup iface_zcr_vsync_feedback_v1 The zcr_vsync_feedback_v1 interface
  *
  * The global interface that allows clients to subscribe for vertical
  * synchronization timing data for given wl_output.
  */
-extern const struct wl_interface zwp_vsync_feedback_v1_interface;
+extern const struct wl_interface zcr_vsync_feedback_v1_interface;
 /**
- * @page page_iface_zwp_vsync_timing_v1 zwp_vsync_timing_v1
- * @section page_iface_zwp_vsync_timing_v1_api API
- * See @ref iface_zwp_vsync_timing_v1.
+ * @page page_iface_zcr_vsync_timing_v1 zcr_vsync_timing_v1
+ * @section page_iface_zcr_vsync_timing_v1_api API
+ * See @ref iface_zcr_vsync_timing_v1.
  */
 /**
- * @defgroup iface_zwp_vsync_timing_v1 The zwp_vsync_timing_v1 interface
+ * @defgroup iface_zcr_vsync_timing_v1 The zcr_vsync_timing_v1 interface
  */
-extern const struct wl_interface zwp_vsync_timing_v1_interface;
+extern const struct wl_interface zcr_vsync_timing_v1_interface;
 
-#define ZWP_VSYNC_FEEDBACK_V1_DESTROY	0
-#define ZWP_VSYNC_FEEDBACK_V1_GET_VSYNC_TIMING	1
+#define ZCR_VSYNC_FEEDBACK_V1_DESTROY	0
+#define ZCR_VSYNC_FEEDBACK_V1_GET_VSYNC_TIMING	1
 
 /**
- * @ingroup iface_zwp_vsync_feedback_v1
+ * @ingroup iface_zcr_vsync_feedback_v1
  */
-#define ZWP_VSYNC_FEEDBACK_V1_DESTROY_SINCE_VERSION	1
+#define ZCR_VSYNC_FEEDBACK_V1_DESTROY_SINCE_VERSION	1
 /**
- * @ingroup iface_zwp_vsync_feedback_v1
+ * @ingroup iface_zcr_vsync_feedback_v1
  */
-#define ZWP_VSYNC_FEEDBACK_V1_GET_VSYNC_TIMING_SINCE_VERSION	1
+#define ZCR_VSYNC_FEEDBACK_V1_GET_VSYNC_TIMING_SINCE_VERSION	1
 
-/** @ingroup iface_zwp_vsync_feedback_v1 */
+/** @ingroup iface_zcr_vsync_feedback_v1 */
 static inline void
-zwp_vsync_feedback_v1_set_user_data(struct zwp_vsync_feedback_v1 *zwp_vsync_feedback_v1, void *user_data)
+zcr_vsync_feedback_v1_set_user_data(struct zcr_vsync_feedback_v1 *zcr_vsync_feedback_v1, void *user_data)
 {
-	wl_proxy_set_user_data((struct wl_proxy *) zwp_vsync_feedback_v1, user_data);
+	wl_proxy_set_user_data((struct wl_proxy *) zcr_vsync_feedback_v1, user_data);
 }
 
-/** @ingroup iface_zwp_vsync_feedback_v1 */
+/** @ingroup iface_zcr_vsync_feedback_v1 */
 static inline void *
-zwp_vsync_feedback_v1_get_user_data(struct zwp_vsync_feedback_v1 *zwp_vsync_feedback_v1)
+zcr_vsync_feedback_v1_get_user_data(struct zcr_vsync_feedback_v1 *zcr_vsync_feedback_v1)
 {
-	return wl_proxy_get_user_data((struct wl_proxy *) zwp_vsync_feedback_v1);
+	return wl_proxy_get_user_data((struct wl_proxy *) zcr_vsync_feedback_v1);
 }
 
 static inline uint32_t
-zwp_vsync_feedback_v1_get_version(struct zwp_vsync_feedback_v1 *zwp_vsync_feedback_v1)
+zcr_vsync_feedback_v1_get_version(struct zcr_vsync_feedback_v1 *zcr_vsync_feedback_v1)
 {
-	return wl_proxy_get_version((struct wl_proxy *) zwp_vsync_feedback_v1);
+	return wl_proxy_get_version((struct wl_proxy *) zcr_vsync_feedback_v1);
 }
 
 /**
- * @ingroup iface_zwp_vsync_feedback_v1
+ * @ingroup iface_zcr_vsync_feedback_v1
  *
  * Destroy this vsync feedback object. Existing vsync timing objects shall
  * not be affected by this request.
  */
 static inline void
-zwp_vsync_feedback_v1_destroy(struct zwp_vsync_feedback_v1 *zwp_vsync_feedback_v1)
+zcr_vsync_feedback_v1_destroy(struct zcr_vsync_feedback_v1 *zcr_vsync_feedback_v1)
 {
-	wl_proxy_marshal((struct wl_proxy *) zwp_vsync_feedback_v1,
-			 ZWP_VSYNC_FEEDBACK_V1_DESTROY);
+	wl_proxy_marshal((struct wl_proxy *) zcr_vsync_feedback_v1,
+			 ZCR_VSYNC_FEEDBACK_V1_DESTROY);
 
-	wl_proxy_destroy((struct wl_proxy *) zwp_vsync_feedback_v1);
+	wl_proxy_destroy((struct wl_proxy *) zcr_vsync_feedback_v1);
 }
 
 /**
- * @ingroup iface_zwp_vsync_feedback_v1
+ * @ingroup iface_zcr_vsync_feedback_v1
  *
  * Create a new vsync timing object that represents a subscription to
  * vertical synchronization timing updates of given wl_output object.
@@ -143,22 +143,22 @@ zwp_vsync_feedback_v1_destroy(struct zwp_vsync_feedback_v1 *zwp_vsync_feedback_v
  * The newly created object will immediately signal an update to notify
  * the subscriber of initial timing parameters.
  */
-static inline struct zwp_vsync_timing_v1 *
-zwp_vsync_feedback_v1_get_vsync_timing(struct zwp_vsync_feedback_v1 *zwp_vsync_feedback_v1, struct wl_output *output)
+static inline struct zcr_vsync_timing_v1 *
+zcr_vsync_feedback_v1_get_vsync_timing(struct zcr_vsync_feedback_v1 *zcr_vsync_feedback_v1, struct wl_output *output)
 {
 	struct wl_proxy *id;
 
-	id = wl_proxy_marshal_constructor((struct wl_proxy *) zwp_vsync_feedback_v1,
-			 ZWP_VSYNC_FEEDBACK_V1_GET_VSYNC_TIMING, &zwp_vsync_timing_v1_interface, NULL, output);
+	id = wl_proxy_marshal_constructor((struct wl_proxy *) zcr_vsync_feedback_v1,
+			 ZCR_VSYNC_FEEDBACK_V1_GET_VSYNC_TIMING, &zcr_vsync_timing_v1_interface, NULL, output);
 
-	return (struct zwp_vsync_timing_v1 *) id;
+	return (struct zcr_vsync_timing_v1 *) id;
 }
 
 /**
- * @ingroup iface_zwp_vsync_timing_v1
- * @struct zwp_vsync_timing_v1_listener
+ * @ingroup iface_zcr_vsync_timing_v1
+ * @struct zcr_vsync_timing_v1_listener
  */
-struct zwp_vsync_timing_v1_listener {
+struct zcr_vsync_timing_v1_listener {
 	/**
 	 * vsync timing updated
 	 *
@@ -185,7 +185,7 @@ struct zwp_vsync_timing_v1_listener {
 	 * @param interval_h new vsync interval (upper 32 bits)
 	 */
 	void (*update)(void *data,
-		       struct zwp_vsync_timing_v1 *zwp_vsync_timing_v1,
+		       struct zcr_vsync_timing_v1 *zcr_vsync_timing_v1,
 		       uint32_t timebase_l,
 		       uint32_t timebase_h,
 		       uint32_t interval_l,
@@ -193,55 +193,55 @@ struct zwp_vsync_timing_v1_listener {
 };
 
 /**
- * @ingroup zwp_vsync_timing_v1_iface
+ * @ingroup zcr_vsync_timing_v1_iface
  */
 static inline int
-zwp_vsync_timing_v1_add_listener(struct zwp_vsync_timing_v1 *zwp_vsync_timing_v1,
-				 const struct zwp_vsync_timing_v1_listener *listener, void *data)
+zcr_vsync_timing_v1_add_listener(struct zcr_vsync_timing_v1 *zcr_vsync_timing_v1,
+				 const struct zcr_vsync_timing_v1_listener *listener, void *data)
 {
-	return wl_proxy_add_listener((struct wl_proxy *) zwp_vsync_timing_v1,
+	return wl_proxy_add_listener((struct wl_proxy *) zcr_vsync_timing_v1,
 				     (void (**)(void)) listener, data);
 }
 
-#define ZWP_VSYNC_TIMING_V1_DESTROY	0
+#define ZCR_VSYNC_TIMING_V1_DESTROY	0
 
 /**
- * @ingroup iface_zwp_vsync_timing_v1
+ * @ingroup iface_zcr_vsync_timing_v1
  */
-#define ZWP_VSYNC_TIMING_V1_DESTROY_SINCE_VERSION	1
+#define ZCR_VSYNC_TIMING_V1_DESTROY_SINCE_VERSION	1
 
-/** @ingroup iface_zwp_vsync_timing_v1 */
+/** @ingroup iface_zcr_vsync_timing_v1 */
 static inline void
-zwp_vsync_timing_v1_set_user_data(struct zwp_vsync_timing_v1 *zwp_vsync_timing_v1, void *user_data)
+zcr_vsync_timing_v1_set_user_data(struct zcr_vsync_timing_v1 *zcr_vsync_timing_v1, void *user_data)
 {
-	wl_proxy_set_user_data((struct wl_proxy *) zwp_vsync_timing_v1, user_data);
+	wl_proxy_set_user_data((struct wl_proxy *) zcr_vsync_timing_v1, user_data);
 }
 
-/** @ingroup iface_zwp_vsync_timing_v1 */
+/** @ingroup iface_zcr_vsync_timing_v1 */
 static inline void *
-zwp_vsync_timing_v1_get_user_data(struct zwp_vsync_timing_v1 *zwp_vsync_timing_v1)
+zcr_vsync_timing_v1_get_user_data(struct zcr_vsync_timing_v1 *zcr_vsync_timing_v1)
 {
-	return wl_proxy_get_user_data((struct wl_proxy *) zwp_vsync_timing_v1);
+	return wl_proxy_get_user_data((struct wl_proxy *) zcr_vsync_timing_v1);
 }
 
 static inline uint32_t
-zwp_vsync_timing_v1_get_version(struct zwp_vsync_timing_v1 *zwp_vsync_timing_v1)
+zcr_vsync_timing_v1_get_version(struct zcr_vsync_timing_v1 *zcr_vsync_timing_v1)
 {
-	return wl_proxy_get_version((struct wl_proxy *) zwp_vsync_timing_v1);
+	return wl_proxy_get_version((struct wl_proxy *) zcr_vsync_timing_v1);
 }
 
 /**
- * @ingroup iface_zwp_vsync_timing_v1
+ * @ingroup iface_zcr_vsync_timing_v1
  *
  * Destroy this vsync timing object.
  */
 static inline void
-zwp_vsync_timing_v1_destroy(struct zwp_vsync_timing_v1 *zwp_vsync_timing_v1)
+zcr_vsync_timing_v1_destroy(struct zcr_vsync_timing_v1 *zcr_vsync_timing_v1)
 {
-	wl_proxy_marshal((struct wl_proxy *) zwp_vsync_timing_v1,
-			 ZWP_VSYNC_TIMING_V1_DESTROY);
+	wl_proxy_marshal((struct wl_proxy *) zcr_vsync_timing_v1,
+			 ZCR_VSYNC_TIMING_V1_DESTROY);
 
-	wl_proxy_destroy((struct wl_proxy *) zwp_vsync_timing_v1);
+	wl_proxy_destroy((struct wl_proxy *) zcr_vsync_timing_v1);
 }
 
 #ifdef  __cplusplus

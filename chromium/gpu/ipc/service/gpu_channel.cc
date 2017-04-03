@@ -449,24 +449,24 @@ void GpuChannelMessageQueue::TransitionToWouldPreemptDescheduled() {
 }
 
 GpuChannelMessageFilter::GpuChannelMessageFilter()
-    : sender_(nullptr), peer_pid_(base::kNullProcessId) {}
+    : channel_(nullptr), peer_pid_(base::kNullProcessId) {}
 
 GpuChannelMessageFilter::~GpuChannelMessageFilter() {}
 
-void GpuChannelMessageFilter::OnFilterAdded(IPC::Sender* sender) {
-  DCHECK(!sender_);
-  sender_ = sender;
+void GpuChannelMessageFilter::OnFilterAdded(IPC::Channel* channel) {
+  DCHECK(!channel_);
+  channel_ = channel;
   for (scoped_refptr<IPC::MessageFilter>& filter : channel_filters_) {
-    filter->OnFilterAdded(sender_);
+    filter->OnFilterAdded(channel_);
   }
 }
 
 void GpuChannelMessageFilter::OnFilterRemoved() {
-  DCHECK(sender_);
+  DCHECK(channel_);
   for (scoped_refptr<IPC::MessageFilter>& filter : channel_filters_) {
     filter->OnFilterRemoved();
   }
-  sender_ = nullptr;
+  channel_ = nullptr;
   peer_pid_ = base::kNullProcessId;
 }
 
@@ -493,15 +493,15 @@ void GpuChannelMessageFilter::OnChannelClosing() {
 void GpuChannelMessageFilter::AddChannelFilter(
     scoped_refptr<IPC::MessageFilter> filter) {
   channel_filters_.push_back(filter);
-  if (sender_)
-    filter->OnFilterAdded(sender_);
+  if (channel_)
+    filter->OnFilterAdded(channel_);
   if (peer_pid_ != base::kNullProcessId)
     filter->OnChannelConnected(peer_pid_);
 }
 
 void GpuChannelMessageFilter::RemoveChannelFilter(
     scoped_refptr<IPC::MessageFilter> filter) {
-  if (sender_)
+  if (channel_)
     filter->OnFilterRemoved();
   channel_filters_.erase(
       std::find(channel_filters_.begin(), channel_filters_.end(), filter));
@@ -524,7 +524,7 @@ void GpuChannelMessageFilter::RemoveRoute(int32_t route_id) {
 }
 
 bool GpuChannelMessageFilter::OnMessageReceived(const IPC::Message& message) {
-  DCHECK(sender_);
+  DCHECK(channel_);
 
   if (message.should_unblock() || message.is_reply())
     return MessageErrorHandler(message, "Unexpected message type");
@@ -553,7 +553,7 @@ bool GpuChannelMessageFilter::OnMessageReceived(const IPC::Message& message) {
 }
 
 bool GpuChannelMessageFilter::Send(IPC::Message* message) {
-  return sender_->Send(message);
+  return channel_->Send(message);
 }
 
 scoped_refptr<GpuChannelMessageQueue>
@@ -578,7 +578,7 @@ bool GpuChannelMessageFilter::MessageErrorHandler(const IPC::Message& message,
 
 GpuChannel::GpuChannel(GpuChannelManager* gpu_channel_manager,
                        SyncPointManager* sync_point_manager,
-                       GpuWatchdog* watchdog,
+                       GpuWatchdogThread* watchdog,
                        gl::GLShareGroup* share_group,
                        gles2::MailboxManager* mailbox,
                        PreemptionFlag* preempting_flag,

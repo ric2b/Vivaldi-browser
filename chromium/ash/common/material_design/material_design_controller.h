@@ -37,11 +37,12 @@ class ASH_EXPORT MaterialDesignController {
   // Chrome OS system UI.
   static Mode GetMode();
 
-  // Returns true if overview mode is using Material Design.
-  static bool IsOverviewMaterial();
-
   // Returns true if Material Design features are enabled for Chrome OS shelf.
   static bool IsShelfMaterial();
+
+  // Returns true if Material Design features are enabled for Chrome OS
+  // immersive mode.
+  static bool IsImmersiveModeMaterial();
 
   // Returns true if Material Design features are enabled for Chrome OS system
   // tray menu.

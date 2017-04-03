@@ -14,7 +14,6 @@
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_vector.h"
 #include "base/task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "components/sync/base/invalidation_interface.h"
@@ -321,8 +320,8 @@ class SyncManager {
 
   // Inform the syncer that its cached information about a type is obsolete.
   virtual void OnIncomingInvalidation(
-      syncer::ModelType type,
-      std::unique_ptr<syncer::InvalidationInterface> invalidation) = 0;
+      ModelType type,
+      std::unique_ptr<InvalidationInterface> invalidation) = 0;
 
   // Adds a listener to be notified of sync events.
   // NOTE: It is OK (in fact, it's probably a good idea) to call this before
@@ -348,8 +347,7 @@ class SyncManager {
   virtual UserShare* GetUserShare() = 0;
 
   // Returns an instance of the main interface for non-blocking sync types.
-  virtual std::unique_ptr<syncer_v2::ModelTypeConnector>
-  GetModelTypeConnectorProxy() = 0;
+  virtual std::unique_ptr<ModelTypeConnector> GetModelTypeConnectorProxy() = 0;
 
   // Returns the cache_guid of the currently open database.
   // Requires that the SyncManager be initialized.
@@ -367,22 +365,20 @@ class SyncManager {
   // Returns the SyncManager's encryption handler.
   virtual SyncEncryptionHandler* GetEncryptionHandler() = 0;
 
-  virtual std::unique_ptr<base::ListValue> GetAllNodesForType(
-      syncer::ModelType type) = 0;
-
   // Ask the SyncManager to fetch updates for the given types.
   virtual void RefreshTypes(ModelTypeSet types) = 0;
 
   // Returns any buffered protocol events.  Does not clear the buffer.
-  virtual ScopedVector<syncer::ProtocolEvent> GetBufferedProtocolEvents() = 0;
+  virtual std::vector<std::unique_ptr<ProtocolEvent>>
+  GetBufferedProtocolEvents() = 0;
 
   // Functions to manage registrations of DebugInfoObservers.
   virtual void RegisterDirectoryTypeDebugInfoObserver(
-      syncer::TypeDebugInfoObserver* observer) = 0;
+      TypeDebugInfoObserver* observer) = 0;
   virtual void UnregisterDirectoryTypeDebugInfoObserver(
-      syncer::TypeDebugInfoObserver* observer) = 0;
+      TypeDebugInfoObserver* observer) = 0;
   virtual bool HasDirectoryTypeDebugInfoObserver(
-      syncer::TypeDebugInfoObserver* observer) = 0;
+      TypeDebugInfoObserver* observer) = 0;
 
   // Request that all current counter values be emitted as though they had just
   // been updated.  Useful for initializing new observers' state.

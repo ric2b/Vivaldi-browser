@@ -6,11 +6,14 @@ found in the LICENSE file.
 
 <!--
 This file is a comprehensive list of Chrome user actions along with the owner
-and description for each user action. A user action should be tied to an actual
-action taken by a user. It should be logged immediately after a user takes the
-action, and should only be logged once per actual event. If an action is not
-user triggered, specify it using not_user_triggered="true" as an attribute to
-the <action> tag.
+and description for each user action.
+
+For best practices on writing user action descriptions, see
+https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/actions/README.md
+For details on how to modify this file to add your description, keep reading.
+
+If an action is not user triggered, specify it using not_user_triggered="true"
+as an attribute to the <action> tag.
 
 Please run extract_actions.py to add new actions and pretty-print this file.
 
@@ -38,36 +41,43 @@ should be able to be added at any place in this file.
 <action name="AboutFlags_StartupTick" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_background-webapps">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_click-to-play">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_cloud-print">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_cloud-print-proxy">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_confirm-to-quit">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_conflicting-modules-check">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_data-reduction-proxy-lo-fi@1">
@@ -78,6 +88,7 @@ should be able to be added at any place in this file.
     chrome://flags. The action is emitted once per startup when the flag is
     active.
   </description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_data-reduction-proxy-lo-fi@2">
@@ -88,6 +99,7 @@ should be able to be added at any place in this file.
     cellular connection via chrome://flags. The action is emitted once per
     startup when the flag is active.
   </description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_data-reduction-proxy-lo-fi@3">
@@ -98,6 +110,7 @@ should be able to be added at any place in this file.
     chrome://flags. The action is emitted once per startup when the flag is
     active.
   </description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_data-reduction-proxy-lo-fi@4">
@@ -108,16 +121,19 @@ should be able to be added at any place in this file.
     slow connections via chrome://flags. The action is emitted once per startup
     when the flag is active.
   </description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_disable-chrome-to-mobile">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_disable-outdated-plugins">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_disable-pnacl">
@@ -129,6 +145,7 @@ should be able to be added at any place in this file.
 <action name="AboutFlags_disable-print-preview">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_disable-smooth-scrolling">
@@ -142,16 +159,19 @@ should be able to be added at any place in this file.
 <action name="AboutFlags_disable-views-rect-based-targeting">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_disable-website-settings">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_dns-server">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_document-passive-event-listeners">
@@ -159,16 +179,19 @@ should be able to be added at any place in this file.
   <description>
     User enabled the PassiveDocumentEventListeners via chrome://flags.
   </description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_downloads-new-ui">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_enable-chrome-to-mobile">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_enable-experimental-web-platform-features">
@@ -177,21 +200,25 @@ should be able to be added at any place in this file.
     User flag to enable web APIs marked as status=experimental
     RuntimeEnabledFeatures.
   </description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_enable-nacl">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_enable-nacl-debug">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_enable-nacl-exception-handling">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_enable-native-cups">
@@ -199,11 +226,13 @@ should be able to be added at any place in this file.
   <description>
     Records if native cups printing is enabled in chrome://flags
   </description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_enable-pnacl">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_enable-pointer-events">
@@ -211,11 +240,13 @@ should be able to be added at any place in this file.
   <description>
     User enabled the &quot;PointerEvent&quot; blink feature via chrome://flags.
   </description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_enable-smooth-scrolling">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_enable-web-bluetooth">
@@ -223,11 +254,13 @@ should be able to be added at any place in this file.
   <owner>ortuno@chromium.org</owner>
   <owner>scheib@chromium.org</owner>
   <description>User enabled Web Bluetooth via chrome://flags.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_enable-website-settings">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_enable-wifi-credential-sync">
@@ -235,46 +268,55 @@ should be able to be added at any place in this file.
   <description>
     User enabled WiFi credential sync via chrome://flags.
   </description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_experimental-location-features">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_expose-for-tabs">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_extension-apis">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_focus-existing-tab-on-open">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_gpu-canvas-2d">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_indexeddb-use-leveldb">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_instant-autocomplete-immediately">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_instant-type">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_mark-non-secure-as">
@@ -284,31 +326,37 @@ should be able to be added at any place in this file.
     This flag lets users opt into or out of marking HTTP as Dubious or as
     Non-Secure. The action is emitted once per startup when the flag is active.
   </description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_match-preview">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_my-special-feature">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_nacl-debug-mask">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_nacl-gdb">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_nacl-gdb-script">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_new-audio-rendering-mixing-strategy">
@@ -317,11 +365,13 @@ should be able to be added at any place in this file.
   <description>
     User enabled flag to control new audio rendering mixing strategy.
   </description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_page-prerender">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_passive-event-listeners-due-to-fling">
@@ -329,6 +379,7 @@ should be able to be added at any place in this file.
   <description>
     User enabled the PassiveEventListenersDueToFling via chrome://flags.
   </description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_passive-listener-default">
@@ -337,26 +388,31 @@ should be able to be added at any place in this file.
     User enabled flag to adjust the default value of 'passive' field in
     AddEventListenerOptions dictionary when a javascript event handler is added.
   </description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_prerender-from-omnibox">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_print-preview">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_remoting">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_save-page-as-mhtml">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_smooth-scrolling">
@@ -364,36 +420,73 @@ should be able to be added at any place in this file.
   <description>
     User flag to disable smooth scroll animations on wheel and keyboard input.
   </description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_snap-start">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_tabbed-options">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
+</action>
+
+<action name="AboutFlags_top-chrome-md@1">
+  <owner>tbuckley@chromium.org</owner>
+  <owner>tdanderson@chromium.org</owner>
+  <description>
+    User enabled flag that sets Chrome's style to be non-material design. The
+    action is emitted once per startup when the flag is active.
+  </description>
+  <obsolete>Deprecated in favor of  Launch.FlagsAtStartup histogram.</obsolete>
+</action>
+
+<action name="AboutFlags_top-chrome-md@2">
+  <owner>tbuckley@chromium.org</owner>
+  <owner>tdanderson@chromium.org</owner>
+  <description>
+    User enabled flag that sets Chrome's style to be material design. The action
+    is emitted once per startup when the flag is active.
+  </description>
+  <obsolete>Deprecated in favor of  Launch.FlagsAtStartup histogram.</obsolete>
+</action>
+
+<action name="AboutFlags_top-chrome-md@3">
+  <owner>tbuckley@chromium.org</owner>
+  <owner>tdanderson@chromium.org</owner>
+  <description>
+    User enabled flag that sets Chrome's style to be hybrid material design. The
+    action is emitted once per startup when the flag is active.
+  </description>
+  <obsolete>Deprecated in favor of  Launch.FlagsAtStartup histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_verbatim-instant">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_vertical-tabs">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_views-use-rect-based-targeting">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="AboutFlags_xss-auditor">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="Accel_Accessible_Focus_Next">
@@ -799,6 +892,14 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="Accel_Toggle_High_Contrast">
+  <owner>dmazzoni@chromium.org</owner>
+  <description>
+    Metric recorded when the user toggles Chrome OS High Contrast mode with the
+    keyboard accelerator (Ctrl+Alt+H).
+  </description>
+</action>
+
 <action name="Accel_Toggle_Maximized">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -825,8 +926,8 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Accel_Toggle_Spoken_Feedback">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <owner>dmazzoni@chromium.org</owner>
+  <description>Toggles Spoken Feedback (ChromeVox)</description>
 </action>
 
 <action name="Accel_Toggle_Touchpad">
@@ -936,6 +1037,14 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Android.ContentDetectorActivated">
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User tapped on a phone number, address or email address, activating a
+    content detector and causing a content intent to be sent.
+  </description>
+</action>
+
 <action name="Android.DownloadManager.CheckForExternallyRemovedItems">
   <owner>dfalcantara@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
@@ -950,7 +1059,11 @@ should be able to be added at any place in this file.
   <owner>dfalcantara@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <owner>ianwen@chromium.org</owner>
-  <description>User deleted one or more download items.</description>
+  <description>
+    User deleted one or more download items. This is recorded when the snackbar
+    allowing the user to &quot;undo&quot; deletion is dismissed and the
+    downloads are deleted.
+  </description>
 </action>
 
 <action name="Android.DownloadManager.Item.ExternallyDeleted">
@@ -978,6 +1091,47 @@ should be able to be added at any place in this file.
   <owner>ianwen@chromium.org</owner>
   <description>
     User established a long-press selection in Chrome's download manager.
+  </description>
+</action>
+
+<action name="Android.DownloadManager.UndoDelete">
+  <owner>dfalcantara@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <owner>ianwen@chromium.org</owner>
+  <description>
+    User chose to &quot;undo&quot; the deletion of one or more download items.
+  </description>
+</action>
+
+<action name="Android.InstantApps.BannerDismissed">
+  <owner>mariakhomenko@chromium.org</owner>
+  <description>Promo banner for an instant app has been dismissed.</description>
+</action>
+
+<action name="Android.InstantApps.BannerOpen">
+  <owner>mariakhomenko@chromium.org</owner>
+  <description>
+    User clicked &quot;Open App&quot; button on the instant apps banner.
+  </description>
+</action>
+
+<action name="Android.InstantApps.BannerShown" not_user_triggered="true">
+  <owner>mariakhomenko@chromium.org</owner>
+  <description>Promo banner for an instant app has been displayed.</description>
+</action>
+
+<action name="Android.InstantApps.LaunchedByDefault" not_user_triggered="true">
+  <owner>mariakhomenko@chromium.org</owner>
+  <description>
+    An instant app was launched without any user prompting.
+  </description>
+</action>
+
+<action name="Android.InstantApps.LaunchedFromWebsiteSettingsPopup">
+  <owner>mariakhomenko@chromium.org</owner>
+  <owner>tedchoc@chromium.org</owner>
+  <description>
+    An instant app was launched from the website settings popup.
   </description>
 </action>
 
@@ -3163,6 +3317,7 @@ should be able to be added at any place in this file.
 <action name="CustomTabsMenuReadItLater">
   <owner>ianwen@chromium.org</owner>
   <description>User hit &quot;read it later&quot; menu item.</description>
+  <obsolete>Deprecated as of 10/2016, this feature was removed.</obsolete>
 </action>
 
 <action name="CustomTabsRemoteViewsShown">
@@ -3616,6 +3771,8 @@ should be able to be added at any place in this file.
 
 <action name="DownloadNotification.Button_Annotate">
   <owner>derat@chromium.org</owner>
+  <owner>jdufault@chromium.org</owner>
+  <owner>tbuckley@chromium.org</owner>
   <description>
     User pushes &quot;Annotate&quot; button on download notification.
   </description>
@@ -8516,6 +8673,11 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Media.Controls.Download">
+  <owner>mlamouri@chromium.org</owner>
+  <description>The user clicked on the controls' download button.</description>
+</action>
+
 <action name="Media.Controls.EnterFullscreen">
   <owner>mlamouri@chromium.org</owner>
   <description>The user entered fullscreen mode from the controls.</description>
@@ -8529,6 +8691,16 @@ should be able to be added at any place in this file.
 <action name="Media.Controls.Mute">
   <owner>mlamouri@chromium.org</owner>
   <description>The user muted a media element from the controls.</description>
+</action>
+
+<action name="Media.Controls.OverflowClose">
+  <owner>mlamouri@chromium.org</owner>
+  <description>The user closed the overflow menu via the controls.</description>
+</action>
+
+<action name="Media.Controls.OverflowOpen">
+  <owner>mlamouri@chromium.org</owner>
+  <description>The user opened the overflow menu via the controls.</description>
 </action>
 
 <action name="Media.Controls.Pause">
@@ -9279,9 +9451,12 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="MobileMenuReload">
-  <owner>aurimas@chromium.org</owner>
-  <description>User pressed 'Reload' in the app menu.</description>
-  <obsolete>This menu item was never added to the app menu.</obsolete>
+  <owner>tedchoc@chromium.org</owner>
+  <description>
+    User pressed the reload option in the app menu.  This was added in M55.
+    Prior to M55, the menu reload counts were combined with the toolbar counts,
+    which were all reported as MobileToolbarReload.
+  </description>
 </action>
 
 <action name="MobileMenuRequestDesktopSite">
@@ -9304,6 +9479,11 @@ should be able to be added at any place in this file.
 <action name="MobileMenuShow">
   <owner>aurimas@chromium.org</owner>
   <description>User opened the app menu.</description>
+</action>
+
+<action name="MobileMenuStop">
+  <owner>tedchoc@chromium.org</owner>
+  <description>User pressed the stop option in the app menu.</description>
 </action>
 
 <action name="MobileNTP.Interests.Click">
@@ -9483,8 +9663,26 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="MobileOmniboxSearch">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <owner>mpearson@chromium.org</owner>
+  <owner>tedchoc@chromium.org</owner>
+  <description>
+    User used the omnibox to go somewhere.  The action doesn't have to lead to a
+    search page (except on iOS, where this is only recorded for search-type
+    navigations).
+  </description>
+  <obsolete>
+    Removed Sep 2016 because the name kept misleading people.  Replaced with
+    MobileOmniboxUse, which has the same semantics.
+  </obsolete>
+</action>
+
+<action name="MobileOmniboxUse">
+  <owner>mpearson@chromium.org</owner>
+  <owner>tedchoc@chromium.org</owner>
+  <description>
+    User used the omnibox to go somewhere.  The action doesn't have to lead to a
+    search page.
+  </description>
 </action>
 
 <action name="MobileOmniboxVoiceSearch">
@@ -9545,6 +9743,26 @@ should be able to be added at any place in this file.
     reload. This fires only after the triggering touch is released while the
     refresh effect has been pulled beyond the activation threshold.
   </description>
+</action>
+
+<action name="MobileQRScannerClose">
+  <owner>jif@chromium.org</owner>
+  <description>User closed the QR Scanner without scanning a code.</description>
+</action>
+
+<action name="MobileQRScannerError">
+  <owner>jif@chromium.org</owner>
+  <description>User closed the QR Scanner from an error dialog.</description>
+</action>
+
+<action name="MobileQRScannerScannedCode">
+  <owner>jif@chromium.org</owner>
+  <description>User scanned a code using the QR Scanner.</description>
+</action>
+
+<action name="MobileQRScannerTorchOn">
+  <owner>jif@chromium.org</owner>
+  <description>User switched on torch in the QR Scanner.</description>
 </action>
 
 <action name="MobileReceivedExternalIntent">
@@ -9661,8 +9879,12 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="MobileToolbarReload">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <owner>tedchoc@chromium.org</owner>
+  <description>
+    User pressed the reload icon in the toolbar.  Pre-M55, MobileToolbarReload
+    accounted for all reload actions.  M55+, this metric only refers to reloads
+    that occurred from the toolbar.
+  </description>
 </action>
 
 <action name="MobileToolbarShowMenu">
@@ -9678,6 +9900,11 @@ should be able to be added at any place in this file.
 <action name="MobileToolbarStackViewNewTab">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="MobileToolbarStop">
+  <owner>tedchoc@chromium.org</owner>
+  <description>User pressed the stop icon in the toolbar.</description>
 </action>
 
 <action name="MobileToolbarToggleBookmark">
@@ -10384,6 +10611,7 @@ should be able to be added at any place in this file.
 <action name="OpenChangeProfilePictureDialog">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated 09/2016</obsolete>
 </action>
 
 <action name="OpenFile">
@@ -12250,6 +12478,7 @@ should be able to be added at any place in this file.
 <action name="OverrideEncoding">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Obsolete as of 08/2016</obsolete>
 </action>
 
 <action name="PDF.FitToHeightButton">
@@ -12776,6 +13005,13 @@ should be able to be added at any place in this file.
   <description>A Physical Web URL was selected.</description>
 </action>
 
+<action name="PhysicalWeb.WebUI.Open">
+  <owner>cco3@chromium.org</owner>
+  <owner>mattreynolds@chromium.org</owner>
+  <owner>mmocny@chromium.org</owner>
+  <description>The Physical Web WebUI was opened or refreshed.</description>
+</action>
+
 <action name="PlatformVerificationAccepted">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -13290,6 +13526,16 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="Screenshot_Annotate">
+  <owner>derat@chromium.org</owner>
+  <owner>jdufault@chromium.org</owner>
+  <owner>tbuckley@chromium.org</owner>
+  <description>
+    User clicks the &quot;Annotate&quot; button in the notification displayed
+    after taking a screenshot.
+  </description>
+</action>
+
 <action name="Screenshot_CopyClipboard">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -13310,6 +13556,16 @@ should be able to be added at any place in this file.
   <description>
     User initiates an active window screenshot, a window selection per
     kuscher@'s request.
+  </description>
+</action>
+
+<action name="SearchEngine_ManualChange">
+  <owner>ianwen@chromium.org</owner>
+  <description>
+    Recorded when the user has manually switched default search engine, which
+    disables search engine auto switch feature in special locale. This is
+    recorded on Android for every locale, but is currently only meaningful for
+    studying special locales.
   </description>
 </action>
 
@@ -13832,7 +14088,6 @@ should be able to be added at any place in this file.
   <description>
     Recorded when showing sign in entry in the first run experience.
   </description>
-  <obsolete>Removed from codebase.</obsolete>
 </action>
 
 <action name="Signin_Impression_FromTabSwitcher">
@@ -14181,6 +14436,7 @@ should be able to be added at any place in this file.
 <action name="StartupTick" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
 </action>
 
 <action name="StatusArea_Accessability_DetailedView">
@@ -14835,6 +15091,7 @@ should be able to be added at any place in this file.
     tab closing buttons because those doesn't send the user back to the previous
     app.
   </description>
+  <obsolete>The button option was removed and code deleted.</obsolete>
 </action>
 
 <action name="TaskManager">
@@ -15005,6 +15262,14 @@ should be able to be added at any place in this file.
     Records when the user presses the overview mode button in the Ash system
     tray. Overview mode is a feature of Ash that shows thumbnails of all
     currently-open windows.
+  </description>
+</action>
+
+<action name="Tray_Settings">
+  <owner>bruthig@chromium.org</owner>
+  <owner>tdanderson@chromium.org</owner>
+  <description>
+    Records when the Settings button on the Ash system menu is clicked.
   </description>
 </action>
 

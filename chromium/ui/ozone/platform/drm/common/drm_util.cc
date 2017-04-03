@@ -30,6 +30,10 @@
 // TODO(dshwang): after most linux and libdrm has this definition, remove it.
 #define DRM_FORMAT_R8 fourcc_code('R', '8', ' ', ' ')
 #endif
+#if !defined(DRM_FORMAT_GR88)
+// TODO(dshwang): after most linux and libdrm has this definition, remove it.
+#define DRM_FORMAT_GR88 fourcc_code('G', 'R', '8', '8')
+#endif
 #if !defined(DRM_FORMAT_YV12)
 // TODO(dcastagna): after libdrm has this definition, remove it.
 #define DRM_FORMAT_YV12 fourcc_code('Y', 'V', '1', '2')
@@ -196,11 +200,11 @@ bool HasColorCorrectionMatrix(int fd, drmModeCrtc* crtc) {
 gfx::Size GetMaximumCursorSize(int fd) {
   uint64_t width = 0, height = 0;
   if (drmGetCap(fd, DRM_CAP_CURSOR_WIDTH, &width)) {
-    PLOG(WARNING) << "Unable to get cursor width capability";
+    VPLOG(1) << "Unable to get cursor width capability";
     return gfx::Size(kDefaultCursorWidth, kDefaultCursorHeight);
   }
   if (drmGetCap(fd, DRM_CAP_CURSOR_HEIGHT, &height)) {
-    PLOG(WARNING) << "Unable to get cursor height capability";
+    VPLOG(1) << "Unable to get cursor height capability";
     return gfx::Size(kDefaultCursorWidth, kDefaultCursorHeight);
   }
 
@@ -289,12 +293,12 @@ DisplaySnapshot_Params CreateDisplaySnapshotParams(
         static_cast<uint8_t*>(edid_blob->data),
         static_cast<uint8_t*>(edid_blob->data) + edid_blob->length);
 
-    GetDisplayIdFromEDID(params.edid, connector_index, &params.display_id,
-                         &params.product_id);
+    display::GetDisplayIdFromEDID(params.edid, connector_index,
+                                  &params.display_id, &params.product_id);
 
-    ParseOutputDeviceData(params.edid, nullptr, nullptr, &params.display_name,
-                          nullptr, nullptr);
-    ParseOutputOverscanFlag(params.edid, &params.has_overscan);
+    display::ParseOutputDeviceData(params.edid, nullptr, nullptr,
+                                   &params.display_name, nullptr, nullptr);
+    display::ParseOutputOverscanFlag(params.edid, &params.has_overscan);
   } else {
     VLOG(1) << "Failed to get EDID blob for connector "
             << info->connector()->connector_id;
@@ -329,6 +333,8 @@ int GetFourCCFormatFromBufferFormat(gfx::BufferFormat format) {
   switch (format) {
     case gfx::BufferFormat::R_8:
       return DRM_FORMAT_R8;
+    case gfx::BufferFormat::RG_88:
+      return DRM_FORMAT_GR88;
     case gfx::BufferFormat::RGBA_8888:
       return DRM_FORMAT_ABGR8888;
     case gfx::BufferFormat::RGBX_8888:
@@ -353,6 +359,8 @@ gfx::BufferFormat GetBufferFormatFromFourCCFormat(int format) {
   switch (format) {
     case DRM_FORMAT_R8:
       return gfx::BufferFormat::R_8;
+    case DRM_FORMAT_GR88:
+      return gfx::BufferFormat::RG_88;
     case DRM_FORMAT_ABGR8888:
       return gfx::BufferFormat::RGBA_8888;
     case DRM_FORMAT_XBGR8888:

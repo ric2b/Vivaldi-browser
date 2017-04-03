@@ -28,18 +28,19 @@ namespace {
 
 class FakeCompositorFrameSink : public cc::SurfaceFactoryClient {
  public:
-  FakeCompositorFrameSink(uint32_t client_id, cc::SurfaceManager* manager)
-      : client_id_(client_id),
+  FakeCompositorFrameSink(const cc::FrameSinkId& frame_sink_id,
+                          cc::SurfaceManager* manager)
+      : frame_sink_id_(frame_sink_id),
         manager_(manager),
         source_(nullptr),
-        factory_(manager, this) {
-    manager_->RegisterSurfaceClientId(client_id_);
-    manager_->RegisterSurfaceFactoryClient(client_id_, this);
+        factory_(frame_sink_id, manager, this) {
+    manager_->RegisterFrameSinkId(frame_sink_id_);
+    manager_->RegisterSurfaceFactoryClient(frame_sink_id_, this);
   }
 
   ~FakeCompositorFrameSink() override {
-    manager_->UnregisterSurfaceFactoryClient(client_id_);
-    manager_->InvalidateSurfaceClientId(client_id_);
+    manager_->UnregisterSurfaceFactoryClient(frame_sink_id_);
+    manager_->InvalidateFrameSinkId(frame_sink_id_);
   }
 
   void ReturnResources(const cc::ReturnedResourceArray& resources) override {}
@@ -49,7 +50,7 @@ class FakeCompositorFrameSink : public cc::SurfaceFactoryClient {
   };
 
  private:
-  const uint32_t client_id_;
+  const cc::FrameSinkId frame_sink_id_;
   cc::SurfaceManager* const manager_;
   cc::BeginFrameSource* source_;
   cc::SurfaceFactory factory_;
@@ -127,71 +128,6 @@ TEST_F(CompositorTest, ReleaseWidgetWithOutputSurfaceNeverCreated) {
             compositor()->ReleaseAcceleratedWidget());
   compositor()->SetAcceleratedWidget(gfx::kNullAcceleratedWidget);
   compositor()->SetVisible(true);
-}
-
-TEST_F(CompositorTest, SurfaceClients) {
-  const uint32_t kClientId1 =
-      compositor()->surface_id_allocator()->client_id() + 1;
-  const uint32_t kClientId2 =
-      compositor()->surface_id_allocator()->client_id() + 2;
-  const uint32_t kClientId3 =
-      compositor()->surface_id_allocator()->client_id() + 3;
-  cc::SurfaceManager* manager =
-      compositor()->context_factory()->GetSurfaceManager();
-  FakeCompositorFrameSink client1(kClientId1, manager);
-  FakeCompositorFrameSink client2(kClientId2, manager);
-  FakeCompositorFrameSink client3(kClientId3, manager);
-  const uint32_t kNoClient = 0;
-
-  compositor()->AddSurfaceClient(kClientId1);
-  compositor()->AddSurfaceClient(kClientId2);
-  compositor()->AddSurfaceClient(kClientId3);
-
-  const std::unordered_map<uint32_t, uint32_t>& surface_clients =
-      compositor()->SurfaceClientsForTesting();
-  EXPECT_EQ(3u, surface_clients.size());
-  EXPECT_NE(surface_clients.end(), surface_clients.find(kClientId1));
-  EXPECT_NE(surface_clients.end(), surface_clients.find(kClientId2));
-  EXPECT_NE(surface_clients.end(), surface_clients.find(kClientId3));
-
-  // Verify that the clients haven't been assigned a parent compositor yet.
-  EXPECT_EQ(kNoClient, surface_clients.find(kClientId1)->second);
-  EXPECT_EQ(kNoClient, surface_clients.find(kClientId2)->second);
-  EXPECT_EQ(kNoClient, surface_clients.find(kClientId3)->second);
-
-  // This will trigger the creation of an OutputSurface and then
-  // assignment of a surface hierarchy.
-  std::unique_ptr<Layer> root_layer(new Layer(ui::LAYER_SOLID_COLOR));
-  root_layer->SetBounds(gfx::Rect(10, 10));
-  compositor()->SetRootLayer(root_layer.get());
-  compositor()->SetScaleAndSize(1.0f, gfx::Size(10, 10));
-  compositor()->SetVisible(true);
-  compositor()->ScheduleDraw();
-  DrawWaiterForTest::WaitForCompositingEnded(compositor());
-
-  // Verify that the clients have been assigned a parent compositor.
-  EXPECT_EQ(compositor()->surface_id_allocator()->client_id(),
-            surface_clients.find(kClientId1)->second);
-  EXPECT_EQ(compositor()->surface_id_allocator()->client_id(),
-            surface_clients.find(kClientId2)->second);
-  EXPECT_EQ(compositor()->surface_id_allocator()->client_id(),
-            surface_clients.find(kClientId3)->second);
-
-  // Remove a client while the parent compositor has an OutputSurface.
-  compositor()->RemoveSurfaceClient(kClientId3);
-  EXPECT_EQ(surface_clients.end(), surface_clients.find(kClientId3));
-
-  // This will remove parent compositor from the surface hierarchy.
-  compositor()->SetVisible(false);
-  compositor()->ReleaseAcceleratedWidget();
-  EXPECT_EQ(kNoClient, surface_clients.find(kClientId1)->second);
-  EXPECT_EQ(kNoClient, surface_clients.find(kClientId2)->second);
-
-  // Remove a client after the OutputSurface has been dropped.
-  compositor()->RemoveSurfaceClient(kClientId2);
-  EXPECT_EQ(surface_clients.end(), surface_clients.find(kClientId2));
-
-  // The remaining client will be cleared during destruction.
 }
 
 #if defined(OS_WIN)

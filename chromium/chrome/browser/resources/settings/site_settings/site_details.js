@@ -10,7 +10,7 @@
 Polymer({
   is: 'site-details',
 
-  behaviors: [SiteSettingsBehavior],
+  behaviors: [SiteSettingsBehavior, settings.RouteObserverBehavior],
 
   properties: {
     /**
@@ -45,26 +45,45 @@ Polymer({
   },
 
   /**
+   * settings.RouteObserverBehavior
+   * @param {!settings.Route} route
+   * @protected
+   */
+  currentRouteChanged: function(route) {
+    var site = settings.getQueryParameters().get('site');
+    if (!site)
+      return;
+    this.browserProxy.getSiteDetails(site).then(function(siteInfo) {
+      this.site = this.expandSiteException(siteInfo);
+    }.bind(this));
+  },
+
+  /**
    * Handler for when the origin changes.
    */
   onSiteChanged_: function() {
-    // Using originForDisplay avoids the [*.] prefix that some exceptions use.
-    var url = new URL(this.ensureUrlHasScheme(this.site.originForDisplay));
-    this.$.usageApi.fetchUsageTotal(url.hostname);
+    // originForDisplay may be initially undefined if the user follows a direct
+    // link (URL) to this page.
+    if (this.site.originForDisplay !== undefined) {
+      // Using originForDisplay avoids the [*.] prefix that some exceptions use.
+      var url = new URL(this.ensureUrlHasScheme(this.site.originForDisplay));
+      this.$.usageApi.fetchUsageTotal(url.hostname);
+    }
   },
 
   /**
    * Clears all data stored for the current origin.
    */
   onClearStorage_: function() {
-    this.$.usageApi.clearUsage(this.site.origin, this.storageType_);
+    this.$.usageApi.clearUsage(
+        this.toUrl(this.site.origin).href, this.storageType_);
   },
 
   /**
    * Called when usage has been deleted for an origin.
    */
   onUsageDeleted: function(event) {
-    if (event.detail.origin == this.site.origin) {
+    if (event.detail.origin == this.toUrl(this.site.origin).href) {
       this.storedData_ = '';
       this.navigateBackIfNoData_();
     }
@@ -89,7 +108,7 @@ Polymer({
    */
   navigateBackIfNoData_: function() {
     if (this.storedData_ == '' && !this.permissionShowing_())
-      settings.navigateTo(settings.Route.SITE_SETTINGS_ALL);
+      settings.navigateToPreviousRoute();
   },
 
   /**

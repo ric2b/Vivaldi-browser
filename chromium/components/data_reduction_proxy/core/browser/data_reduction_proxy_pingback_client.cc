@@ -4,7 +4,7 @@
 
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_pingback_client.h"
 
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
 #include "base/rand_util.h"
 #include "base/time/time.h"
@@ -13,6 +13,7 @@
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_util.h"
 #include "components/data_reduction_proxy/proto/client_config.pb.h"
+#include "components/data_use_measurement/core/data_use_user_data.h"
 #include "net/base/load_flags.h"
 #include "net/nqe/effective_connection_type.h"
 #include "net/url_request/url_fetcher.h"
@@ -40,12 +41,18 @@ void AddDataToPageloadMetrics(const DataReductionProxyData& request_data,
   request->set_allocated_first_request_time(
       protobuf_parser::CreateTimestampFromTime(timing.navigation_start)
           .release());
-  if (request_data.original_request_url().is_valid())
-    request->set_first_request_url(request_data.original_request_url().spec());
+  if (request_data.request_url().is_valid())
+    request->set_first_request_url(request_data.request_url().spec());
   if (timing.first_contentful_paint) {
     request->set_allocated_time_to_first_contentful_paint(
         protobuf_parser::CreateDurationFromTimeDelta(
             timing.first_contentful_paint.value())
+            .release());
+  }
+  if (timing.experimental_first_meaningful_paint) {
+    request->set_allocated_experimental_time_to_first_meaningful_paint(
+        protobuf_parser::CreateDurationFromTimeDelta(
+            timing.experimental_first_meaningful_paint.value())
             .release());
   }
   if (timing.first_image_paint) {
@@ -64,6 +71,17 @@ void AddDataToPageloadMetrics(const DataReductionProxyData& request_data,
     request->set_allocated_page_load_time(
         protobuf_parser::CreateDurationFromTimeDelta(
             timing.load_event_start.value())
+            .release());
+  }
+  if (timing.parse_blocked_on_script_load_duration) {
+    request->set_allocated_parse_blocked_on_script_load_duration(
+        protobuf_parser::CreateDurationFromTimeDelta(
+            timing.parse_blocked_on_script_load_duration.value())
+            .release());
+  }
+  if (timing.parse_stop) {
+    request->set_allocated_parse_stop(
+        protobuf_parser::CreateDurationFromTimeDelta(timing.parse_stop.value())
             .release());
   }
 
@@ -131,12 +149,15 @@ void DataReductionProxyPingbackClient::CreateFetcherForDataAndStart() {
   metrics_request_.Clear();
   current_fetcher_ =
       net::URLFetcher::Create(pingback_url_, net::URLFetcher::POST, this);
+  data_use_measurement::DataUseUserData::AttachToFetcher(
+      current_fetcher_.get(),
+      data_use_measurement::DataUseUserData::DATA_REDUCTION_PROXY);
   current_fetcher_->SetLoadFlags(net::LOAD_BYPASS_PROXY);
   current_fetcher_->SetUploadData("application/x-protobuf", serialized_request);
   current_fetcher_->SetRequestContext(url_request_context_);
-  // Configure max retries to be at most kMaxRetries times for 5xx errors.
+  // |current_fetcher_| should not retry on 5xx errors since the server may
+  // already be overloaded.
   static const int kMaxRetries = 5;
-  current_fetcher_->SetMaxRetriesOn5xx(kMaxRetries);
   current_fetcher_->SetAutomaticallyRetryOnNetworkChanges(kMaxRetries);
   current_fetcher_->Start();
 }

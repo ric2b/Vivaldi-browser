@@ -1,15 +1,17 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
+<link rel="import" href="chrome://resources/html/cr/ui/focus_grid.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-list/iron-list.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-item/paper-item.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_shared_menu/cr_shared_menu.html">
-<link rel="import" href="chrome://history/lazy_render.html">
+<link rel="import" href="chrome://resources/cr_elements/shared_style_css.html">
 <link rel="import" href="chrome://history/shared_style.html">
 <link rel="import" href="chrome://history/synced_device_card.html">
 
 <dom-module id="history-synced-device-manager">
   <template>
-    <style include="shared-style">
+    <style include="shared-style cr-shared-style">
       :host {
         display: block;
         overflow: auto;
@@ -51,10 +53,7 @@
       }
 
       #sign-in-button {
-        background-color: var(--google-blue-500);
-        color: white;
-        font-weight: 500;
-        margin-top: 24px;
+        margin: 24px 0;
         padding-left: 12px;
         padding-right: 12px;
       }
@@ -78,19 +77,20 @@
     <div id="no-synced-tabs" class="centered-message"
         hidden="[[!showNoSyncedMessage(signInState, syncedDevices_.length,
                                        guestSession_)]]">
-      [[noSyncedTabsMessage(fetchingSyncedTabs_)]]
+      [[noSyncedTabsMessage(fetchingSyncedTabs_, searchTerm)]]
     </div>
     <div id="sign-in-guide"
         hidden="[[!showSignInGuide(signInState, guestSession_)]]">
       <div id="illustration"></div>
       <div id="sign-in-promo">$i18n{signInPromo}</div>
       <div id="sign-in-promo-desc">$i18n{signInPromoDesc}</div>
-      <paper-button id="sign-in-button" on-tap="onSignInTap_">
+      <paper-button id="sign-in-button" class="action-button"
+          on-tap="onSignInTap_">
         $i18n{signInButton}
       </paper-button>
     </div>
 
-    <template is="history-lazy-render" id="menu">
+    <template is="cr-lazy-render" id="menu">
       <cr-shared-menu>
         <paper-item id="menuOpenButton" class="menu-item"
             on-tap="onOpenAllTap_">

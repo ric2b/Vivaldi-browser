@@ -55,7 +55,7 @@
 #include "net/cert/mock_client_cert_verifier.h"
 #include "net/cert/x509_certificate.h"
 #include "net/http/transport_security_state.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 #include "net/socket/client_socket_factory.h"
 #include "net/socket/socket_test_util.h"
 #include "net/socket/ssl_client_socket.h"
@@ -97,7 +97,7 @@ class MockCTVerifier : public CTVerifier {
              const std::string& stapled_ocsp_response,
              const std::string& sct_list_from_tls_extension,
              ct::CTVerifyResult* result,
-             const BoundNetLog& net_log) override {
+             const NetLogWithSource& net_log) override {
     return net::OK;
   }
 
@@ -111,7 +111,7 @@ class MockCTPolicyEnforcer : public CTPolicyEnforcer {
   ct::CertPolicyCompliance DoesConformToCertPolicy(
       X509Certificate* cert,
       const SCTList& verified_scts,
-      const BoundNetLog& net_log) override {
+      const NetLogWithSource& net_log) override {
     return ct::CertPolicyCompliance::CERT_POLICY_COMPLIES_VIA_SCTS;
   }
 
@@ -119,7 +119,7 @@ class MockCTPolicyEnforcer : public CTPolicyEnforcer {
       X509Certificate* cert,
       const ct::EVCertsWhitelist* ev_whitelist,
       const SCTList& verified_scts,
-      const BoundNetLog& net_log) override {
+      const NetLogWithSource& net_log) override {
     return ct::EVPolicyCompliance::EV_POLICY_COMPLIES_VIA_SCTS;
   }
 };
@@ -293,7 +293,7 @@ class FakeSocket : public StreamSocket {
     return OK;
   }
 
-  const BoundNetLog& NetLog() const override { return net_log_; }
+  const NetLogWithSource& NetLog() const override { return net_log_; }
 
   void SetSubresourceSpeculation() override {}
   void SetOmniboxSpeculation() override {}
@@ -320,7 +320,7 @@ class FakeSocket : public StreamSocket {
   }
 
  private:
-  BoundNetLog net_log_;
+  NetLogWithSource net_log_;
   FakeDataChannel* incoming_;
   FakeDataChannel* outgoing_;
 
@@ -395,13 +395,8 @@ class SSLServerSocketTest : public PlatformTest {
     client_ssl_config_.channel_id_enabled = false;
 
     // Certificate provided by the host doesn't need authority.
-    SSLConfig::CertAndStatus cert_and_status;
-    cert_and_status.cert_status = CERT_STATUS_AUTHORITY_INVALID;
-    std::string server_cert_der;
-    ASSERT_TRUE(X509Certificate::GetDEREncoded(server_cert_->os_cert_handle(),
-                                               &server_cert_der));
-    cert_and_status.der_cert = server_cert_der;
-    client_ssl_config_.allowed_bad_certs.push_back(cert_and_status);
+    client_ssl_config_.allowed_bad_certs.emplace_back(
+        server_cert_, CERT_STATUS_AUTHORITY_INVALID);
   }
 
  protected:

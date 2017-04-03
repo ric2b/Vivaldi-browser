@@ -73,5 +73,24 @@ const QuicDispatcher::SessionMap& QuicDispatcherPeer::session_map(
   return dispatcher->session_map();
 }
 
+// static
+void QuicDispatcherPeer::set_new_sessions_allowed_per_event_loop(
+    QuicDispatcher* dispatcher,
+    size_t num_session_allowed) {
+  return dispatcher->set_new_sessions_allowed_per_event_loop(
+      num_session_allowed);
+}
+
+// static
+void QuicDispatcherPeer::SendPublicReset(
+    QuicDispatcher* dispatcher,
+    const IPEndPoint& server_address,
+    const IPEndPoint& client_address,
+    QuicConnectionId connection_id,
+    QuicPacketNumber rejected_packet_number) {
+  dispatcher->time_wait_list_manager()->SendPublicReset(
+      server_address, client_address, connection_id, rejected_packet_number);
+}
+
 }  // namespace test
 }  // namespace net

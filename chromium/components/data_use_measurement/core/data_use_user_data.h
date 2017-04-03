@@ -40,9 +40,17 @@ class DataUseUserData : public base::SupportsUserData::Data {
     POLICY,
     SPELL_CHECKER,
     NTP_SNIPPETS,
+    SAFE_BROWSING,
+    DATA_REDUCTION_PROXY,
+    PRECACHE,
+    NTP_TILES,
   };
 
-  explicit DataUseUserData(ServiceName service_name);
+  // The state of the application. Only available on Android and on other
+  // platforms it is always FOREGROUND.
+  enum AppState { UNKNOWN, BACKGROUND, FOREGROUND };
+
+  DataUseUserData(ServiceName service_name, AppState app_state);
   ~DataUseUserData() override;
 
   // Helper function to create DataUseUserData. The caller takes the ownership
@@ -60,11 +68,18 @@ class DataUseUserData : public base::SupportsUserData::Data {
 
   ServiceName service_name() const { return service_name_; }
 
+  AppState app_state() const { return app_state_; }
+
+  void set_app_state(AppState app_state) { app_state_ = app_state; }
+
   // The key for retrieving back this type of user data.
   static const void* const kUserDataKey;
 
  private:
   const ServiceName service_name_;
+
+  // App state when network access was performed for the request previously.
+  AppState app_state_;
 
   DISALLOW_COPY_AND_ASSIGN(DataUseUserData);
 };

@@ -12,6 +12,7 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/android/ntp/popular_sites.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/history/top_sites_factory.h"
@@ -42,6 +43,7 @@ using base::android::ToJavaIntArray;
 using content::BrowserThread;
 using ntp_tiles::MostVisitedSites;
 using ntp_tiles::MostVisitedSitesSupervisor;
+using ntp_tiles::NTPTileSource;
 using suggestions::SuggestionsServiceFactory;
 
 MostVisitedSitesBridge::SupervisorBridge::SupervisorBridge(Profile* profile)
@@ -158,17 +160,17 @@ void MostVisitedSitesBridge::JavaObserver::OnPopularURLsAvailable(
 
 MostVisitedSitesBridge::MostVisitedSitesBridge(Profile* profile)
     : supervisor_(profile),
-      popular_sites_(BrowserThread::GetBlockingPool(),
-                     profile->GetPrefs(),
-                     TemplateURLServiceFactory::GetForProfile(profile),
-                     g_browser_process->variations_service(),
-                     profile->GetRequestContext(),
-                     ChromePopularSites::GetDirectory(),
-                     base::Bind(safe_json::SafeJsonParser::Parse)),
       most_visited_(profile->GetPrefs(),
                     TopSitesFactory::GetForProfile(profile),
                     SuggestionsServiceFactory::GetForProfile(profile),
-                    &popular_sites_,
+                    base::MakeUnique<ntp_tiles::PopularSites>(
+                        BrowserThread::GetBlockingPool(),
+                        profile->GetPrefs(),
+                        TemplateURLServiceFactory::GetForProfile(profile),
+                        g_browser_process->variations_service(),
+                        profile->GetRequestContext(),
+                        ChromePopularSites::GetDirectory(),
+                        base::Bind(safe_json::SafeJsonParser::Parse)),
                     &supervisor_) {
   // Register the thumbnails debugging page.
   // TODO(sfiera): find thumbnails a home. They don't belong here.
@@ -205,11 +207,20 @@ void MostVisitedSitesBridge::RecordTileTypeMetrics(
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jintArray>& jtile_types,
     const JavaParamRef<jintArray>& jsources) {
-  std::vector<int> tile_types;
-  std::vector<int> sources;
+  std::vector<int> int_tile_types;
+  base::android::JavaIntArrayToIntVector(env, jtile_types, &int_tile_types);
+  std::vector<MostVisitedSites::MostVisitedTileType> tile_types;
+  for (int source : int_tile_types) {
+    tile_types.push_back(
+        static_cast<MostVisitedSites::MostVisitedTileType>(source));
+  }
 
-  base::android::JavaIntArrayToIntVector(env, jtile_types, &tile_types);
-  base::android::JavaIntArrayToIntVector(env, jsources, &sources);
+  std::vector<int> int_sources;
+  base::android::JavaIntArrayToIntVector(env, jsources, &int_sources);
+  std::vector<NTPTileSource> sources;
+  for (int source : int_sources) {
+    sources.push_back(static_cast<NTPTileSource>(source));
+  }
 
   most_visited_.RecordTileTypeMetrics(tile_types, sources);
 }
@@ -220,7 +231,9 @@ void MostVisitedSitesBridge::RecordOpenedMostVisitedItem(
     jint index,
     jint tile_type,
     jint source) {
-  most_visited_.RecordOpenedMostVisitedItem(index, tile_type, source);
+  most_visited_.RecordOpenedMostVisitedItem(
+      index, static_cast<MostVisitedSites::MostVisitedTileType>(tile_type),
+      static_cast<NTPTileSource>(source));
 }
 
 // static

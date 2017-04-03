@@ -12,8 +12,9 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
+#include "chrome/browser/page_load_metrics/browser_page_track_decider.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_util.h"
 #include "chrome/common/page_load_metrics/page_load_metrics_messages.h"
 #include "chrome/common/page_load_metrics/page_load_timing.h"
@@ -31,6 +32,19 @@
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(
     page_load_metrics::MetricsWebContentsObserver);
+
+// This macro invokes the specified method on each observer, passing the
+// variable length arguments as the method's arguments, and removes the observer
+// from the list of observers if the given method returns STOP_OBSERVING.
+#define INVOKE_AND_PRUNE_OBSERVERS(observers, Method, ...)    \
+  for (auto it = observers.begin(); it != observers.end();) { \
+    if ((*it)->Method(__VA_ARGS__) ==                         \
+        PageLoadMetricsObserver::STOP_OBSERVING) {            \
+      it = observers.erase(it);                               \
+    } else {                                                  \
+      ++it;                                                   \
+    }                                                         \
+  }
 
 namespace page_load_metrics {
 
@@ -115,6 +129,12 @@ bool IsValidPageLoadTiming(const PageLoadTiming& timing) {
                    << " for parse duration " << parse_duration;
       return false;
     }
+    if (timing.parse_blocked_on_script_execution_duration > parse_duration) {
+      NOTREACHED() << "Invalid parse_blocked_on_script_execution_duration "
+                   << timing.parse_blocked_on_script_execution_duration
+                   << " for parse duration " << parse_duration;
+      return false;
+    }
   }
 
   if (timing.parse_blocked_on_script_load_from_document_write_duration >
@@ -124,6 +144,17 @@ bool IsValidPageLoadTiming(const PageLoadTiming& timing) {
         << timing.parse_blocked_on_script_load_from_document_write_duration
         << " for parse_blocked_on_script_load_duration "
         << timing.parse_blocked_on_script_load_duration;
+    return false;
+  }
+
+  if (timing.parse_blocked_on_script_execution_from_document_write_duration >
+      timing.parse_blocked_on_script_execution_duration) {
+    NOTREACHED()
+        << "Invalid "
+           "parse_blocked_on_script_execution_from_document_write_duration "
+        << timing.parse_blocked_on_script_execution_from_document_write_duration
+        << " for parse_blocked_on_script_execution_duration "
+        << timing.parse_blocked_on_script_execution_duration;
     return false;
   }
 
@@ -272,6 +303,7 @@ PageLoadTracker::PageLoadTracker(
       app_entered_background_(false),
       navigation_start_(navigation_handle->NavigationStart()),
       url_(navigation_handle->GetURL()),
+      start_url_(url_),
       abort_type_(ABORT_NONE),
       abort_user_initiated_(false),
       started_in_foreground_(in_foreground),
@@ -283,11 +315,18 @@ PageLoadTracker::PageLoadTracker(
       aborted_chain_size_same_url_(aborted_chain_size_same_url),
       embedder_interface_(embedder_interface) {
   DCHECK(!navigation_handle->HasCommitted());
-  embedder_interface_->RegisterObservers(this);
-  for (const auto& observer : observers_) {
-    observer->OnStart(navigation_handle, currently_committed_url,
-                      started_in_foreground_);
+  if (embedder_interface_->IsPrerendering(
+          navigation_handle->GetWebContents())) {
+    DCHECK(!started_in_foreground_);
+    // For the time being, we do not track prerenders. See crbug.com/648338 for
+    // details.
+    StopTracking();
+    return;
   }
+
+  embedder_interface_->RegisterObservers(this);
+  INVOKE_AND_PRUNE_OBSERVERS(observers_, OnStart, navigation_handle,
+                             currently_committed_url, started_in_foreground_);
 }
 
 PageLoadTracker::~PageLoadTracker() {
@@ -414,9 +453,8 @@ void PageLoadTracker::Commit(content::NavigationHandle* navigation_handle) {
   // Some transitions (like CLIENT_REDIRECT) are only known at commit time.
   page_transition_ = navigation_handle->GetPageTransition();
   user_gesture_ = navigation_handle->HasUserGesture();
-  for (const auto& observer : observers_) {
-    observer->OnCommit(navigation_handle);
-  }
+
+  INVOKE_AND_PRUNE_OBSERVERS(observers_, OnCommit, navigation_handle);
   LogAbortChainHistograms(navigation_handle);
 }
 
@@ -445,6 +483,10 @@ void PageLoadTracker::FlushMetricsOnAppEnterBackground() {
     RecordAppBackgroundPageLoadCompleted(false);
     app_entered_background_ = true;
   }
+
+  const PageLoadExtraInfo info = ComputePageLoadExtraInfo();
+  INVOKE_AND_PRUNE_OBSERVERS(observers_, FlushMetricsOnAppEnterBackground,
+                             timing_, info);
 }
 
 void PageLoadTracker::NotifyClientRedirectTo(
@@ -478,6 +520,7 @@ bool PageLoadTracker::UpdateTiming(const PageLoadTiming& new_timing,
       metadata_.behavior_flags;
   if (IsValidPageLoadTiming(new_timing) && valid_timing_descendent &&
       valid_behavior_descendent) {
+    DCHECK(!commit_time_.is_null());  // OnCommit() must be called first.
     // There are some subtle ordering constraints here. GetPageLoadMetricsInfo()
     // must be called before DispatchObserverTimingCallbacks, but its
     // implementation depends on the state of metadata_, so we need to update
@@ -509,6 +552,7 @@ void PageLoadTracker::OnLoadedSubresource(bool was_cached) {
 
 void PageLoadTracker::StopTracking() {
   did_stop_tracking_ = true;
+  observers_.clear();
 }
 
 void PageLoadTracker::AddObserver(
@@ -575,9 +619,9 @@ PageLoadExtraInfo PageLoadTracker::ComputePageLoadExtraInfo() {
   DCHECK(abort_type_ != ABORT_NONE || !abort_user_initiated_);
   return PageLoadExtraInfo(
       first_background_time, first_foreground_time, started_in_foreground_,
-      user_gesture_, commit_time_.is_null() ? GURL() : url_, time_to_commit,
-      abort_type_, abort_user_initiated_, time_to_abort, num_cache_requests_,
-      num_network_requests_, metadata_);
+      user_gesture_, commit_time_.is_null() ? GURL() : url_, start_url_,
+      time_to_commit, abort_type_, abort_user_initiated_, time_to_abort,
+      num_cache_requests_, num_network_requests_, metadata_);
 }
 
 void PageLoadTracker::NotifyAbort(UserAbortType abort_type,
@@ -737,11 +781,6 @@ void MetricsWebContentsObserver::WillStartNavigationRequest(
   if (!ShouldTrackNavigation(navigation_handle))
     return;
 
-  // TODO(bmcquade): add support for tracking prerendered pages when they become
-  // visible.
-  if (embedder_interface_->IsPrerendering(web_contents()))
-    return;
-
   // Pass in the last committed url to the PageLoadTracker. If the MWCO has
   // never observed a committed load, use the last committed url from this
   // WebContent's opener. This is more accurate than using referrers due to
@@ -766,9 +805,9 @@ void MetricsWebContentsObserver::WillStartNavigationRequest(
   // committed_load_ or navigation_handle beyond the scope of the constructor.
   provisional_loads_.insert(std::make_pair(
       navigation_handle,
-      base::WrapUnique(new PageLoadTracker(
+      base::MakeUnique<PageLoadTracker>(
           in_foreground_, embedder_interface_.get(), currently_committed_url,
-          navigation_handle, chain_size, chain_size_same_url))));
+          navigation_handle, chain_size, chain_size_same_url)));
 }
 
 void MetricsWebContentsObserver::OnRequestComplete(
@@ -802,6 +841,23 @@ void MetricsWebContentsObserver::DidFinishNavigation(
       std::move(provisional_loads_[navigation_handle]));
   provisional_loads_.erase(navigation_handle);
 
+  // Ignore same-page navigations.
+  if (navigation_handle->HasCommitted() && navigation_handle->IsSamePage()) {
+    if (finished_nav)
+      finished_nav->StopTracking();
+    return;
+  }
+
+  // Ignore internally generated aborts for navigations with HTTP responses that
+  // don't commit, such as HTTP 204 responses and downloads.
+  if (!navigation_handle->HasCommitted() &&
+      navigation_handle->GetNetErrorCode() == net::ERR_ABORTED &&
+      navigation_handle->GetResponseHeaders()) {
+    if (finished_nav)
+      finished_nav->StopTracking();
+    return;
+  }
+
   const bool should_track =
       finished_nav && ShouldTrackNavigation(navigation_handle);
 
@@ -809,10 +865,6 @@ void MetricsWebContentsObserver::DidFinishNavigation(
     finished_nav->StopTracking();
 
   if (navigation_handle->HasCommitted()) {
-    // Ignore same-page navigations.
-    if (navigation_handle->IsSamePage())
-      return;
-
     // Notify other loads that they may have been aborted by this committed
     // load. is_certainly_browser_timestamp is set to false because
     // NavigationStart() could be set in either the renderer or browser process.
@@ -834,10 +886,7 @@ void MetricsWebContentsObserver::DidFinishNavigation(
 }
 
 // Handle a pre-commit error. Navigations that result in an error page will be
-// ignored. Note that downloads/204s will result in HasCommitted() returning
-// false.
-// TODO(csharrison): Track changes to NavigationHandle for signals when this is
-// the case (HTTP response headers).
+// ignored.
 void MetricsWebContentsObserver::HandleFailedNavigationForTrackedLoad(
     content::NavigationHandle* navigation_handle,
     std::unique_ptr<PageLoadTracker> tracker) {
@@ -850,8 +899,7 @@ void MetricsWebContentsObserver::HandleFailedNavigationForTrackedLoad(
   // pre-PlzNavigate, but afterwards it should represent the navigation stopped
   // by the user before it was ready to commit.
   // net::ERR_ABORTED: An aborted provisional load has error
-  // net::ERR_ABORTED. Note that this can come from some non user-initiated
-  // errors, such as downloads, or 204 responses. See crbug.com/542369.
+  // net::ERR_ABORTED.
   if ((error == net::OK) || (error == net::ERR_ABORTED)) {
     tracker->NotifyAbort(ABORT_OTHER, false, base::TimeTicks::Now(), true);
     aborted_provisional_loads_.push_back(std::move(tracker));
@@ -887,6 +935,11 @@ void MetricsWebContentsObserver::OnInputEvent(
 }
 
 void MetricsWebContentsObserver::FlushMetricsOnAppEnterBackground() {
+  // Signal to observers that we've been backgrounded, in cases where the
+  // FlushMetricsOnAppEnterBackground callback gets invoked before the
+  // associated WasHidden callback.
+  WasHidden();
+
   if (committed_load_)
     committed_load_->FlushMetricsOnAppEnterBackground();
   for (const auto& kv : provisional_loads_) {
@@ -1044,18 +1097,11 @@ void MetricsWebContentsObserver::OnTimingUpdated(
 bool MetricsWebContentsObserver::ShouldTrackNavigation(
     content::NavigationHandle* navigation_handle) const {
   DCHECK(navigation_handle->IsInMainFrame());
-  if (!navigation_handle->GetURL().SchemeIsHTTPOrHTTPS())
-    return false;
-  if (embedder_interface_->IsNewTabPageUrl(navigation_handle->GetURL()))
-    return false;
-  if (navigation_handle->HasCommitted()) {
-    if (navigation_handle->IsSamePage() || navigation_handle->IsErrorPage())
-      return false;
-    const std::string& mime_type = web_contents()->GetContentsMimeType();
-    if (mime_type != "text/html" && mime_type != "application/xhtml+xml")
-      return false;
-  }
-  return true;
+  DCHECK(!navigation_handle->HasCommitted() ||
+         !navigation_handle->IsSamePage());
+
+  return BrowserPageTrackDecider(embedder_interface_.get(), web_contents(),
+                                 navigation_handle).ShouldTrack();
 }
 
 }  // namespace page_load_metrics

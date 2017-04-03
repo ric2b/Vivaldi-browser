@@ -61,7 +61,7 @@ class ManagementSetEnabledFunctionInstallPromptDelegate
                        OnInstallPromptDone,
                    weak_factory_.GetWeakPtr()),
         extension, nullptr,
-        base::WrapUnique(new ExtensionInstallPrompt::Prompt(type)),
+        base::MakeUnique<ExtensionInstallPrompt::Prompt>(type),
         ExtensionInstallPrompt::GetDefaultShowDialogCallback());
   }
   ~ManagementSetEnabledFunctionInstallPromptDelegate() override {}
@@ -179,9 +179,10 @@ void ChromeManagementAPIDelegate::LaunchAppFunctionDelegate(
   // returned.
   extensions::LaunchContainer launch_container =
       GetLaunchContainer(extensions::ExtensionPrefs::Get(context), extension);
-  OpenApplication(AppLaunchParams(
-      Profile::FromBrowserContext(context), extension, launch_container,
-      NEW_FOREGROUND_TAB, extensions::SOURCE_MANAGEMENT_API));
+  OpenApplication(AppLaunchParams(Profile::FromBrowserContext(context),
+                                  extension, launch_container,
+                                  WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                                  extensions::SOURCE_MANAGEMENT_API));
   extensions::RecordAppLaunchType(extension_misc::APP_LAUNCH_EXTENSION_API,
                                   extension->GetType());
 }
@@ -226,7 +227,7 @@ ChromeManagementAPIDelegate::SetEnabledFunctionDelegate(
 
 std::unique_ptr<extensions::RequirementsChecker>
 ChromeManagementAPIDelegate::CreateRequirementsChecker() const {
-  return base::WrapUnique(new extensions::ChromeRequirementsChecker());
+  return base::MakeUnique<extensions::ChromeRequirementsChecker>();
 }
 
 std::unique_ptr<extensions::UninstallDialogDelegate>
@@ -241,13 +242,13 @@ ChromeManagementAPIDelegate::UninstallFunctionDelegate(
 
 bool ChromeManagementAPIDelegate::CreateAppShortcutFunctionDelegate(
     extensions::ManagementCreateAppShortcutFunction* function,
-    const extensions::Extension* extension) const {
+    const extensions::Extension* extension,
+    std::string* error) const {
   Browser* browser = chrome::FindBrowserWithProfile(
       Profile::FromBrowserContext(function->browser_context()));
   if (!browser) {
     // Shouldn't happen if we have user gesture.
-    function->SetError(
-        extension_management_api_constants::kNoBrowserToCreateShortcut);
+    *error = extension_management_api_constants::kNoBrowserToCreateShortcut;
     return false;
   }
 

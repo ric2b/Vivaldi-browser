@@ -20,9 +20,6 @@ import android.view.WindowManager;
 import android.widget.Toast;
 
 import org.chromium.base.Log;
-import org.chromium.content.browser.ActivityContentVideoViewEmbedder;
-import org.chromium.content.browser.ContentVideoViewEmbedder;
-import org.chromium.content.browser.ContentViewClient;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.ui.base.WindowAndroid;
 
@@ -114,13 +111,6 @@ public class CastShellActivity extends Activity {
         String url = getIntent().getDataString();
         Log.d(TAG, "onCreate startupUrl: %s", url);
         mNativeCastWindow = mCastWindowManager.launchCastWindow(url);
-
-        getActiveContentViewCore().setContentViewClient(new ContentViewClient() {
-            @Override
-            public ContentVideoViewEmbedder getContentVideoViewEmbedder() {
-                return new ActivityContentVideoViewEmbedder(CastShellActivity.this);
-            }
-        });
     }
 
     @Override
@@ -171,19 +161,7 @@ public class CastShellActivity extends Activity {
             // On pre-M devices, the device should be "unmuted" at the end of a Cast application
             // session, signaled by the activity exiting. See b/19964892.
             if (Build.VERSION.SDK_INT < 23) {
-                AudioManager audioManager = CastAudioManager.getAudioManager(this);
-                boolean isMuted = false;
-                try {
-                    isMuted = (Boolean) audioManager.getClass().getMethod("isStreamMute", int.class)
-                            .invoke(audioManager, AudioManager.STREAM_MUSIC);
-                } catch (Exception e) {
-                    Log.e(TAG, "Cannot call AudioManager.isStreamMute().", e);
-                }
-
-                if (isMuted) {
-                    // Note: this is a no-op on fixed-volume devices.
-                    audioManager.setStreamMute(AudioManager.STREAM_MUSIC, false);
-                }
+                releaseStreamMuteIfNecessary();
             }
         }
 
@@ -233,6 +211,23 @@ public class CastShellActivity extends Activity {
         if (mNativeCastWindow != 0) {
             mCastWindowManager.stopCastWindow(mNativeCastWindow, true /* gracefully */);
             mNativeCastWindow = 0;
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private void releaseStreamMuteIfNecessary() {
+        AudioManager audioManager = CastAudioManager.getAudioManager(this);
+        boolean isMuted = false;
+        try {
+            isMuted = (Boolean) audioManager.getClass().getMethod("isStreamMute", int.class)
+                    .invoke(audioManager, AudioManager.STREAM_MUSIC);
+        } catch (Exception e) {
+            Log.e(TAG, "Cannot call AudioManager.isStreamMute().", e);
+        }
+
+        if (isMuted) {
+            // Note: this is a no-op on fixed-volume devices.
+            audioManager.setStreamMute(AudioManager.STREAM_MUSIC, false);
         }
     }
 

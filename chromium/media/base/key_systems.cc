@@ -86,16 +86,6 @@ class ClearKeyProperties : public KeySystemProperties {
     // VP9 support is device dependent.
     SupportedCodecs codecs = EME_CODEC_WEBM_ALL;
 
-#if defined(OS_ANDROID)
-    // Temporarily disable VP9 support for Android.
-    // TODO(xhwang): Use mime_util.h to query VP9 support on Android.
-    codecs &= ~EME_CODEC_WEBM_VP9;
-
-    // Opus is not supported on Android yet. http://crbug.com/318436.
-    // TODO(sandersd): Check for platform support to set this bit.
-    codecs &= ~EME_CODEC_WEBM_OPUS;
-#endif  // defined(OS_ANDROID)
-
 #if defined(USE_PROPRIETARY_CODECS)
     codecs |= EME_CODEC_MP4_ALL;
 #endif  // defined(USE_PROPRIETARY_CODECS)
@@ -410,13 +400,18 @@ void KeySystemsImpl::AddSupportedKeySystems(
 
     // Distinctive identifiers and persistent state can only be reliably blocked
     // (and therefore be safely configurable) for Pepper-hosted key systems. For
-    // other platforms, (except for the AES decryptor) assume that the CDM can
-    // and will do anything.
+    // other platforms assume the CDM can and will do anything, except for the
+    // following two cases:
+    // 1) AES decryptor, and
+    // 2) External Clear Key key system on Android, only enabled for testing.
     bool can_block = properties->UseAesDecryptor();
 #if defined(ENABLE_PEPPER_CDMS)
     DCHECK_EQ(properties->UseAesDecryptor(),
               properties->GetPepperType().empty());
     if (!properties->GetPepperType().empty())
+      can_block = true;
+#elif defined(OS_ANDROID)
+    if (IsExternalClearKey(properties->GetKeySystemName()))
       can_block = true;
 #endif
     if (!can_block) {

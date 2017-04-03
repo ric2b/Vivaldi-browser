@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -17,6 +18,7 @@
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
+#include "components/autofill/core/common/signatures_util.h"
 #include "components/variations/entropy_provider.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -50,7 +52,7 @@ std::ostream& operator<<(std::ostream& os, const FormData& form) {
 class FormStructureTest : public testing::Test {
  public:
   static std::string Hash64Bit(const std::string& str) {
-    return base::Uint64ToString(FormStructure::Hash64Bit(str));
+    return base::Uint64ToString(StrToHash64Bit(str));
   }
 
   void SetUp() override {
@@ -67,7 +69,8 @@ class FormStructureTest : public testing::Test {
   void EnableAutofillMetadataFieldTrial() {
     field_trial_list_.reset();
     field_trial_list_.reset(
-        new base::FieldTrialList(new metrics::SHA1EntropyProvider("foo")));
+        new base::FieldTrialList(
+            base::MakeUnique<metrics::SHA1EntropyProvider>("foo")));
     field_trial_ = base::FieldTrialList::CreateFieldTrial(
         "AutofillFieldMetadata", "Enabled");
     field_trial_->group();
@@ -3308,27 +3311,26 @@ TEST_F(FormStructureTest, CheckFormSignature) {
 
   form_structure.reset(new FormStructure(form));
 
-  EXPECT_EQ(FormStructureTest::Hash64Bit(
-      std::string("://&&email&first")),
-      form_structure->FormSignature());
+  EXPECT_EQ(FormStructureTest::Hash64Bit(std::string("://&&email&first")),
+            form_structure->FormSignatureAsStr());
 
   form.origin = GURL(std::string("http://www.facebook.com"));
   form_structure.reset(new FormStructure(form));
   EXPECT_EQ(FormStructureTest::Hash64Bit(
-      std::string("http://www.facebook.com&&email&first")),
-      form_structure->FormSignature());
+                std::string("http://www.facebook.com&&email&first")),
+            form_structure->FormSignatureAsStr());
 
   form.action = GURL(std::string("https://login.facebook.com/path"));
   form_structure.reset(new FormStructure(form));
   EXPECT_EQ(FormStructureTest::Hash64Bit(
-      std::string("https://login.facebook.com&&email&first")),
-      form_structure->FormSignature());
+                std::string("https://login.facebook.com&&email&first")),
+            form_structure->FormSignatureAsStr());
 
   form.name = ASCIIToUTF16("login_form");
   form_structure.reset(new FormStructure(form));
-  EXPECT_EQ(FormStructureTest::Hash64Bit(
-      std::string("https://login.facebook.com&login_form&email&first")),
-      form_structure->FormSignature());
+  EXPECT_EQ(FormStructureTest::Hash64Bit(std::string(
+                "https://login.facebook.com&login_form&email&first")),
+            form_structure->FormSignatureAsStr());
 
   field.check_status = FormFieldData::NOT_CHECKABLE;
   field.label = ASCIIToUTF16("Random Field label");
@@ -3346,9 +3348,9 @@ TEST_F(FormStructureTest, CheckFormSignature) {
   form.fields.push_back(field);
   form_structure.reset(new FormStructure(form));
   EXPECT_EQ(FormStructureTest::Hash64Bit(
-      std::string("https://login.facebook.com&login_form&email&first&"
-                  "random1234&random&1random&random")),
-      form_structure->FormSignature());
+                std::string("https://login.facebook.com&login_form&email&first&"
+                            "random1234&random&1random&random")),
+            form_structure->FormSignatureAsStr());
 }
 
 TEST_F(FormStructureTest, ToFormData) {

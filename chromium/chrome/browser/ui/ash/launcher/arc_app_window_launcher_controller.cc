@@ -5,14 +5,16 @@
 
 #include <string>
 
+#include "ash/aura/wm_window_aura.h"
 #include "ash/common/shelf/shelf_delegate.h"
 #include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_lookup.h"
 #include "ash/common/wm_shell.h"
+#include "ash/common/wm_window_property.h"
 #include "ash/display/display_manager.h"
 #include "ash/display/screen_orientation_controller_chromeos.h"
-#include "ash/shelf/shelf_util.h"
+#include "ash/shared/app_types.h"
 #include "ash/shell.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
@@ -321,8 +323,12 @@ void ArcAppWindowLauncherController::AdditionalUserAddedToSession(
 }
 
 void ArcAppWindowLauncherController::OnWindowInitialized(aura::Window* window) {
-  // Arc windows has type WINDOW_TYPE_NORMAL.
-  if (window->type() != ui::wm::WINDOW_TYPE_NORMAL)
+  // An arc window has type WINDOW_TYPE_NORMAL, a WindowDelegate and
+  // is a top level views widget.
+  if (window->type() != ui::wm::WINDOW_TYPE_NORMAL || !window->delegate())
+    return;
+  views::Widget* widget = views::Widget::GetWidgetForNativeWindow(window);
+  if (!widget || !widget->is_top_level())
     return;
   observed_windows_.push_back(window);
   window->AddObserver(this);
@@ -404,6 +410,9 @@ void ArcAppWindowLauncherController::AttachControllerToWindowIfNeeded(
   if (GetAppWindowForTask(task_id))
     return;
 
+  window->SetProperty(aura::client::kAppType,
+                      static_cast<int>(ash::AppType::ARC_APP));
+
   // Create controller if we have task info.
   AppWindowInfo* info = GetAppWindowInfoForTask(task_id);
   if (!info) {
@@ -417,7 +426,8 @@ void ArcAppWindowLauncherController::AttachControllerToWindowIfNeeded(
   info->set_app_window(base::MakeUnique<AppWindow>(task_id, widget, this));
   RegisterApp(info);
   DCHECK(info->app_window()->controller());
-  ash::SetShelfIDForWindow(info->app_window()->shelf_id(), window);
+  ash::WmWindowAura::Get(window)->SetIntProperty(
+      ash::WmWindowProperty::SHELF_ID, info->app_window()->shelf_id());
   if (ash::WmShell::Get()
           ->maximize_mode_controller()
           ->IsMaximizeModeWindowManagerEnabled()) {

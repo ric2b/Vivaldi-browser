@@ -380,7 +380,7 @@ class DownloadExtensionTest : public ExtensionApiTest {
 
   std::string GetFilename(const char* path) {
     std::string result =
-      downloads_directory_.path().AppendASCII(path).AsUTF8Unsafe();
+        downloads_directory_.GetPath().AppendASCII(path).AsUTF8Unsafe();
 #if defined(OS_WIN)
     for (std::string::size_type next = result.find("\\");
          next != std::string::npos;
@@ -497,7 +497,8 @@ class DownloadExtensionTest : public ExtensionApiTest {
         CreateDownloadObserver(1));
     GURL finish_url(net::URLRequestSlowDownloadJob::kFinishDownloadUrl);
     ui_test_utils::NavigateToURLWithDisposition(
-        current_browser(), finish_url, NEW_FOREGROUND_TAB,
+        current_browser(), finish_url,
+        WindowOpenDisposition::NEW_FOREGROUND_TAB,
         ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
     observer->WaitForFinished();
     EXPECT_EQ(1u, observer->NumDownloadsSeenInState(DownloadItem::COMPLETE));
@@ -569,7 +570,7 @@ class DownloadExtensionTest : public ExtensionApiTest {
   }
 
   const base::FilePath& downloads_directory() {
-    return downloads_directory_.path();
+    return downloads_directory_.GetPath();
   }
 
   DownloadsEventsListener* events_listener() { return events_listener_.get(); }
@@ -590,8 +591,7 @@ class DownloadExtensionTest : public ExtensionApiTest {
   void CreateAndSetDownloadsDirectory() {
     ASSERT_TRUE(downloads_directory_.CreateUniqueTempDir());
     current_browser()->profile()->GetPrefs()->SetFilePath(
-        prefs::kDownloadDefaultDirectory,
-        downloads_directory_.path());
+        prefs::kDownloadDefaultDirectory, downloads_directory_.GetPath());
   }
 
   base::ScopedTempDir downloads_directory_;
@@ -4035,8 +4035,7 @@ IN_PROC_BROWSER_TEST_F(
     ui_test_utils::NavigateToURLWithDisposition(
         current_browser(),
         GURL(net::URLRequestSlowDownloadJob::kUnknownSizeUrl),
-        CURRENT_TAB,
-        ui_test_utils::BROWSER_TEST_NONE);
+        WindowOpenDisposition::CURRENT_TAB, ui_test_utils::BROWSER_TEST_NONE);
     observer->WaitForFinished();
     EXPECT_EQ(1u, observer->NumDownloadsSeenInState(DownloadItem::IN_PROGRESS));
     DownloadManager::DownloadVector items;
@@ -4075,7 +4074,7 @@ IN_PROC_BROWSER_TEST_F(
   ui_test_utils::NavigateToURLWithDisposition(
       current_browser(),
       GURL(net::URLRequestSlowDownloadJob::kErrorDownloadUrl),
-      NEW_BACKGROUND_TAB,
+      WindowOpenDisposition::NEW_BACKGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
 
   // Errors caught before filename determination are delayed until after

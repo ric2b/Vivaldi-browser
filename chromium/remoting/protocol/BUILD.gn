@@ -6,6 +6,10 @@ import("//build/config/features.gni")
 
 static_library("protocol") {
   sources = [
+    "audio_decode_scheduler.cc",
+    "audio_decode_scheduler.h",
+    "audio_pump.cc",
+    "audio_pump.h",
     "audio_reader.cc",
     "audio_reader.h",
     "audio_stub.h",
@@ -159,6 +163,8 @@ static_library("protocol") {
     "transport_context.h",
     "v2_authenticator.cc",
     "v2_authenticator.h",
+    "validating_authenticator.cc",
+    "validating_authenticator.h",
     "video_renderer.h",
     "video_stats_stub.h",
     "video_stub.h",
@@ -198,6 +204,8 @@ static_library("protocol") {
       "ice_connection_to_client.h",
       "video_frame_pump.cc",
       "video_frame_pump.h",
+      "webrtc_audio_module.cc",
+      "webrtc_audio_module.h",
       "webrtc_connection_to_client.cc",
       "webrtc_connection_to_client.h",
       "webrtc_connection_to_host.cc",
@@ -206,10 +214,13 @@ static_library("protocol") {
       "webrtc_data_stream_adapter.h",
       "webrtc_dummy_video_capturer.cc",
       "webrtc_dummy_video_capturer.h",
+      "webrtc_dummy_video_encoder.cc",
+      "webrtc_dummy_video_encoder.h",
+      "webrtc_frame_scheduler.h",
+      "webrtc_frame_scheduler_simple.cc",
+      "webrtc_frame_scheduler_simple.h",
       "webrtc_transport.cc",
       "webrtc_transport.h",
-      "webrtc_video_encoder_factory.cc",
-      "webrtc_video_encoder_factory.h",
       "webrtc_video_renderer_adapter.cc",
       "webrtc_video_renderer_adapter.h",
       "webrtc_video_stream.cc",
@@ -266,6 +277,8 @@ source_set("unit_tests") {
   testonly = true
 
   sources = [
+    "audio_decode_scheduler_unittest.cc",
+    "audio_pump_unittest.cc",
     "authenticator_test_base.cc",
     "authenticator_test_base.h",
     "capture_scheduler_unittest.cc",
@@ -299,6 +312,7 @@ source_set("unit_tests") {
     "ssl_hmac_channel_authenticator_unittest.cc",
     "third_party_authenticator_unittest.cc",
     "v2_authenticator_unittest.cc",
+    "validating_authenticator_unittest.cc",
     "video_frame_pump_unittest.cc",
     "webrtc_transport_unittest.cc",
   ]

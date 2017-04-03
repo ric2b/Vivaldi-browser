@@ -18,6 +18,14 @@
 
 #include "components/content_settings/core/common/content_settings_types.h"
 
+#ifdef USE_AURA
+#include "ui/aura/client/cursor_client.h"
+#include "ui/aura/client/cursor_client_observer.h"
+#include "ui/aura/window.h"
+#include "base/timer/timer.h"
+#endif // USE_AURA
+
+
 namespace extensions {
 
 class ExtensionHostForWebContents : public ExtensionHost {

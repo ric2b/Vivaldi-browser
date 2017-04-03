@@ -35,6 +35,9 @@ class CC_EXPORT ScrollbarAnimationControllerThinning
   bool mouse_is_near_scrollbar() const { return mouse_is_near_scrollbar_; }
 
   void DidScrollUpdate(bool on_resize) override;
+
+  void DidCaptureScrollbarBegin() override;
+  void DidCaptureScrollbarEnd() override;
   void DidMouseMoveOffScrollbar() override;
   void DidMouseMoveNear(float distance) override;
 
@@ -56,10 +59,13 @@ class CC_EXPORT ScrollbarAnimationControllerThinning
   float ThumbThicknessScaleAtAnimationProgress(float progress);
   float AdjustScale(float new_value,
                     float current_value,
-                    AnimationChange animation_change);
+                    AnimationChange animation_change,
+                    float min_value,
+                    float max_value);
   void ApplyOpacityAndThumbThicknessScale(float opacity,
                                           float thumb_thickness_scale);
 
+  bool captured_;
   bool mouse_is_over_scrollbar_;
   bool mouse_is_near_scrollbar_;
   // Are we narrowing or thickening the bars.

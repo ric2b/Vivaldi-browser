@@ -20,8 +20,8 @@
 #include "base/values.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
-#include "components/browsing_data_ui/history_notice_utils.h"
+#include "components/browser_sync/profile_sync_service.h"
+#include "components/browsing_data/core/history_notice_utils.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/history/core/browser/top_sites.h"
@@ -101,7 +101,7 @@ bool IsLocalOnlyResult(const BrowsingHistoryHandler::HistoryEntry& entry) {
 
 // Gets the name and type of a device for the given sync client ID.
 // |name| and |type| are out parameters.
-void GetDeviceNameAndType(const ProfileSyncService* sync_service,
+void GetDeviceNameAndType(const browser_sync::ProfileSyncService* sync_service,
                           const std::string& client_id,
                           std::string* name,
                           std::string* type) {
@@ -111,7 +111,7 @@ void GetDeviceNameAndType(const ProfileSyncService* sync_service,
   DCHECK(sync_service->GetDeviceInfoTracker());
   DCHECK(sync_service->GetDeviceInfoTracker()->IsSyncing());
 
-  std::unique_ptr<sync_driver::DeviceInfo> device_info =
+  std::unique_ptr<syncer::DeviceInfo> device_info =
       sync_service->GetDeviceInfoTracker()->GetDeviceInfo(client_id);
   if (device_info.get()) {
     *name = device_info->client_name();
@@ -195,7 +195,7 @@ std::unique_ptr<base::DictionaryValue>
 BrowsingHistoryHandler::HistoryEntry::ToValue(
     BookmarkModel* bookmark_model,
     SupervisedUserService* supervised_user_service,
-    const ProfileSyncService* sync_service) const {
+    const browser_sync::ProfileSyncService* sync_service) const {
   std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue());
   SetUrlAndTitle(result.get());
 
@@ -282,7 +282,7 @@ void BrowsingHistoryHandler::RegisterMessages() {
           original_browser_state, ServiceAccessType::EXPLICIT_ACCESS);
   scoped_refptr<history::TopSites> top_sites =
       ios::TopSitesFactory::GetForBrowserState(original_browser_state);
-  sync_driver::SyncService* sync_service =
+  syncer::SyncService* sync_service =
       IOSChromeProfileSyncServiceFactory::GetForBrowserState(
           original_browser_state);
   web::URLDataSourceIOS::Add(
@@ -370,11 +370,11 @@ void BrowsingHistoryHandler::QueryHistory(
         FROM_HERE, base::TimeDelta::FromSeconds(kWebHistoryTimeoutSeconds),
         this, &BrowsingHistoryHandler::WebHistoryTimeout);
 
-    ProfileSyncService* sync_service =
+    browser_sync::ProfileSyncService* sync_service =
         IOSChromeProfileSyncServiceFactory::GetInstance()->GetForBrowserState(
             browser_state);
     // Test the existence of other forms of browsing history.
-    browsing_data_ui::ShouldShowNoticeAboutOtherFormsOfBrowsingHistory(
+    browsing_data::ShouldShowNoticeAboutOtherFormsOfBrowsingHistory(
         sync_service, web_history,
         base::Bind(
             &BrowsingHistoryHandler::OtherFormsOfBrowsingHistoryQueryComplete,
@@ -591,7 +591,7 @@ void BrowsingHistoryHandler::ReturnResultsToFrontEnd() {
       ios::ChromeBrowserState::FromWebUIIOS(web_ui());
   BookmarkModel* bookmark_model =
       ios::BookmarkModelFactory::GetForBrowserState(browser_state);
-  ProfileSyncService* sync_service =
+  browser_sync::ProfileSyncService* sync_service =
       IOSChromeProfileSyncServiceFactory::GetForBrowserState(browser_state);
 
   // Combine the local and remote results into |query_results_|, and remove

@@ -30,39 +30,39 @@
 
 #include "core/svg/SVGTransformListTearOff.h"
 
-#include "bindings/core/v8/ExceptionState.h"
-#include "core/dom/ExceptionCode.h"
-#include "core/svg/SVGSVGElement.h"
+#include "core/svg/SVGTransformTearOff.h"
 
 namespace blink {
 
-SVGTransformListTearOff::SVGTransformListTearOff(SVGTransformList* target, SVGElement* contextElement, PropertyIsAnimValType propertyIsAnimVal, const QualifiedName& attributeName = QualifiedName::null())
-    : SVGListPropertyTearOffHelper<SVGTransformListTearOff, SVGTransformList>(target, contextElement, propertyIsAnimVal, attributeName)
-{
+SVGTransformListTearOff::SVGTransformListTearOff(
+    SVGTransformList* target,
+    SVGElement* contextElement,
+    PropertyIsAnimValType propertyIsAnimVal,
+    const QualifiedName& attributeName = QualifiedName::null())
+    : SVGListPropertyTearOffHelper<SVGTransformListTearOff, SVGTransformList>(
+          target,
+          contextElement,
+          propertyIsAnimVal,
+          attributeName) {}
+
+SVGTransformListTearOff::~SVGTransformListTearOff() {}
+
+SVGTransformTearOff* SVGTransformListTearOff::createSVGTransformFromMatrix(
+    SVGMatrixTearOff* matrix) const {
+  return SVGTransformTearOff::create(matrix);
 }
 
-SVGTransformListTearOff::~SVGTransformListTearOff()
-{
+SVGTransformTearOff* SVGTransformListTearOff::consolidate(
+    ExceptionState& exceptionState) {
+  if (isImmutable()) {
+    throwReadOnly(exceptionState);
+    return nullptr;
+  }
+  return createItemTearOff(target()->consolidate());
 }
 
-SVGTransformTearOff* SVGTransformListTearOff::createSVGTransformFromMatrix(SVGMatrixTearOff* matrix) const
-{
-    return SVGSVGElement::createSVGTransformFromMatrix(matrix);
+DEFINE_TRACE_WRAPPERS(SVGTransformListTearOff) {
+  visitor->traceWrappers(contextElement());
 }
 
-SVGTransformTearOff* SVGTransformListTearOff::consolidate(ExceptionState& exceptionState)
-{
-    if (isImmutable()) {
-        exceptionState.throwDOMException(NoModificationAllowedError, "The attribute is read-only.");
-        return nullptr;
-    }
-
-    return createItemTearOff(target()->consolidate());
-}
-
-DEFINE_TRACE_WRAPPERS(SVGTransformListTearOff)
-{
-    visitor->traceWrappers(contextElement());
-}
-
-} // namespace blink
+}  // namespace blink

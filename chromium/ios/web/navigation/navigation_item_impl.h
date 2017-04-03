@@ -79,6 +79,18 @@ class NavigationItemImpl : public web::NavigationItem {
   void SetIsCreatedFromPushState(bool push_state);
   bool IsCreatedFromPushState() const;
 
+  // Whether the state for this navigation has been changed by
+  // history.replaceState().
+  // TODO(crbug.com/659816): This state is only tracked because of flaky early
+  // page script injection.  Once the root cause of this flake is found, this
+  // can be removed.
+  void SetHasStateBeenReplaced(bool replace_state);
+  bool HasStateBeenReplaced() const;
+
+  // Whether this navigation is the result of a hash change.
+  void SetIsCreatedFromHashChange(bool hash_change);
+  bool IsCreatedFromHashChange() const;
+
   // Whether or not to bypass showing the resubmit data confirmation when
   // loading a POST request. Set to YES for browser-generated POST requests.
   void SetShouldSkipResubmitDataConfirmation(bool skip);
@@ -121,6 +133,8 @@ class NavigationItemImpl : public web::NavigationItem {
 
   base::scoped_nsobject<NSString> serialized_state_object_;
   bool is_created_from_push_state_;
+  bool has_state_been_replaced_;
+  bool is_created_from_hash_change_;
   bool should_skip_resubmit_data_confirmation_;
   base::scoped_nsobject<NSData> post_data_;
 

@@ -30,12 +30,10 @@ void ResourceDispatcherHostDelegate::RequestBeginning(
 void ResourceDispatcherHostDelegate::DownloadStarting(
     net::URLRequest* request,
     ResourceContext* resource_context,
-    int child_id,
-    int route_id,
     bool is_content_initiated,
     bool must_download,
-    ScopedVector<ResourceThrottle>* throttles) {
-}
+    bool is_new_request,
+    ScopedVector<ResourceThrottle>* throttles) {}
 
 ResourceDispatcherHostLoginDelegate*
     ResourceDispatcherHostDelegate::CreateLoginDelegate(
@@ -87,8 +85,12 @@ void ResourceDispatcherHostDelegate::OnRequestRedirected(
 }
 
 void ResourceDispatcherHostDelegate::RequestComplete(
-    net::URLRequest* url_request) {
-}
+    net::URLRequest* url_request,
+    int net_error) {}
+
+// Deprecated.
+void ResourceDispatcherHostDelegate::RequestComplete(
+    net::URLRequest* url_request) {}
 
 bool ResourceDispatcherHostDelegate::ShouldEnableLoFiMode(
     const net::URLRequest& url_request,

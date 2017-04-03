@@ -14,7 +14,6 @@
 #include "chromecast/public/cast_egl_platform.h"
 #include "chromecast/public/cast_egl_platform_shlib.h"
 #include "ui/ozone/common/native_display_delegate_ozone.h"
-#include "ui/ozone/platform/cast/gpu_platform_support_cast.h"
 #include "ui/ozone/platform/cast/overlay_manager_cast.h"
 #include "ui/ozone/platform/cast/platform_window_cast.h"
 #include "ui/ozone/platform/cast/surface_factory_cast.h"
@@ -28,9 +27,6 @@ using chromecast::CastEglPlatform;
 
 namespace ui {
 namespace {
-
-base::LazyInstance<std::unique_ptr<GpuPlatformSupport>> g_gpu_platform_support =
-    LAZY_INSTANCE_INITIALIZER;
 
 // Ozone platform implementation for Cast.  Implements functionality
 // common to all Cast implementations:
@@ -57,9 +53,6 @@ class OzonePlatformCast : public OzonePlatform {
   }
   InputController* GetInputController() override {
     return input_controller_.get();
-  }
-  GpuPlatformSupport* GetGpuPlatformSupport() override {
-    return g_gpu_platform_support.Get().get();
   }
   GpuPlatformSupportHost* GetGpuPlatformSupportHost() override {
     return gpu_platform_support_host_.get();
@@ -88,18 +81,16 @@ class OzonePlatformCast : public OzonePlatform {
     // or if we're an audio-only build.
     // Note: switch is kDisableGpu from content/public/common/content_switches.h
     bool enable_dummy_software_rendering = true;
-#if !BUILDFLAG(DISABLE_DISPLAY)
+#if !BUILDFLAG(IS_CAST_AUDIO_ONLY)
     enable_dummy_software_rendering =
         base::CommandLine::ForCurrentProcess()->HasSwitch("disable-gpu");
-#endif  // BUILDFLAG(DISABLE_DISPLAY)
+#endif  // BUILDFLAG(IS_CAST_AUDIO_ONLY)
 
     if (enable_dummy_software_rendering)
       surface_factory_.reset(new SurfaceFactoryCast());
   }
   void InitializeGPU() override {
     surface_factory_.reset(new SurfaceFactoryCast(std::move(egl_platform_)));
-    g_gpu_platform_support.Get() =
-        base::MakeUnique<GpuPlatformSupportCast>(surface_factory_.get());
   }
 
  private:

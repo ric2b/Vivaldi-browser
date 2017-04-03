@@ -55,6 +55,8 @@ vs-chromium-project.txt
 /.externalToolBuilders/
 /.settings/
 /.vs/
+# Visual Studio Code
+/.vscode/
 /_out
 /android_emulator_sdk
 /ash/ash_unittests_run.xml
@@ -184,7 +186,6 @@ vs-chromium-project.txt
 /google_apis/internal
 /googleurl
 /gpu/gles2_conform_test
-/gyp-mac-tool
 /infra/.recipe_deps
 /internal_gyp
 /ios/third_party/earl_grey/src
@@ -292,6 +293,7 @@ vs-chromium-project.txt
 /third_party/adobe/flash/symbols
 /third_party/amd/
 /third_party/android_protobuf/src
+/third_party/android_support_test_runner/lib/*.aar
 /third_party/android_support_test_runner/lib/*.jar
 /third_party/android_tools/
 /third_party/android_tools_internal/
@@ -306,7 +308,6 @@ vs-chromium-project.txt
 /third_party/apache-win32/bin/iconv/*.so
 /third_party/apache-win32/modules/*.so
 /third_party/apache-win32/modules/*.dll
-/third_party/appurify-python/src
 /third_party/asan
 /third_party/bidichecker
 /third_party/bison
@@ -320,7 +321,6 @@ vs-chromium-project.txt
 /third_party/chromeos_login_manager
 /third_party/chromeos_text_input
 /third_party/chromite
-/third_party/class-dump/src
 /third_party/cld_2/src
 /third_party/cld_3/src
 /third_party/colorama/src

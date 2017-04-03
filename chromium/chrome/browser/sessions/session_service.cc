@@ -16,7 +16,7 @@
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/message_loop/message_loop.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/pickle.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
@@ -35,6 +35,7 @@
 #include "chrome/browser/sessions/session_restore.h"
 #include "chrome/browser/sessions/session_service_utils.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
+#include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -45,6 +46,7 @@
 #include "components/sessions/core/session_command.h"
 #include "components/sessions/core/session_constants.h"
 #include "components/sessions/core/session_types.h"
+#include "components/sessions/core/tab_restore_service.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_details.h"
@@ -592,14 +594,13 @@ bool SessionService::ShouldRestoreWindowOfType(
 }
 
 void SessionService::RemoveUnusedRestoreWindows(
-    std::vector<sessions::SessionWindow*>* window_list) {
-  std::vector<sessions::SessionWindow*>::iterator i = window_list->begin();
+    std::vector<std::unique_ptr<sessions::SessionWindow>>* window_list) {
+  auto i = window_list->begin();
   while (i != window_list->end()) {
-    sessions::SessionWindow* window = *i;
+    sessions::SessionWindow* window = i->get();
     if (!ShouldRestoreWindowOfType(window->type,
                                    window->app_name.empty() ? TYPE_NORMAL :
                                                               TYPE_APP)) {
-      delete window;
       i = window_list->erase(i);
     } else {
       ++i;
@@ -619,10 +620,13 @@ bool SessionService::RestoreIfNecessary(const std::vector<GURL>& urls_to_open,
     }
     SessionStartupPref pref = StartupBrowserCreator::GetSessionStartupPref(
         *base::CommandLine::ForCurrentProcess(), profile());
+    sessions::TabRestoreService* tab_restore_service =
+        TabRestoreServiceFactory::GetForProfileIfExisting(profile());
     if (pref.type == SessionStartupPref::LAST &&
-      // NOTE(pettern@vivaldi.com): We don't restore old session when opening
-      // a new window.
-      !vivaldi::IsVivaldiRunning()) {
+        // NOTE(pettern@vivaldi.com): We don't restore old session when opening
+        // a new window.
+        !vivaldi::IsVivaldiRunning() &&
+        (!tab_restore_service || !tab_restore_service->IsRestoring())) {
       SessionRestore::RestoreSession(
           profile(), browser,
           browser ? 0 : SessionRestore::ALWAYS_CREATE_TABBED_BROWSER,
@@ -758,12 +762,12 @@ void SessionService::OnBrowserSetLastActive(Browser* browser) {
 void SessionService::OnGotSessionCommands(
     const sessions::GetLastSessionCallback& callback,
     ScopedVector<sessions::SessionCommand> commands) {
-  ScopedVector<sessions::SessionWindow> valid_windows;
+  std::vector<std::unique_ptr<sessions::SessionWindow>> valid_windows;
   SessionID::id_type active_window_id = 0;
 
-  sessions::RestoreSessionFromCommands(
-      commands, &valid_windows.get(), &active_window_id);
-  RemoveUnusedRestoreWindows(&valid_windows.get());
+  sessions::RestoreSessionFromCommands(commands, &valid_windows,
+                                       &active_window_id);
+  RemoveUnusedRestoreWindows(&valid_windows);
 
   callback.Run(std::move(valid_windows), active_window_id);
 }

@@ -13,7 +13,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/message_loop/message_loop.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/sys_info.h"
 #include "base/trace_event/trace_event.h"
@@ -30,7 +30,8 @@
 #include "cc/scheduler/begin_frame_source.h"
 #include "cc/surfaces/surface_id_allocator.h"
 #include "cc/surfaces/surface_manager.h"
-#include "cc/trees/layer_tree_host.h"
+#include "cc/trees/layer_tree_host_in_process.h"
+#include "cc/trees/layer_tree_settings.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/compositor/compositor_observer.h"
 #include "ui/compositor/compositor_switches.h"
@@ -79,9 +80,8 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
       window_(nullptr),
 #endif
       widget_valid_(false),
-      output_surface_requested_(false),
-      surface_id_allocator_(new cc::SurfaceIdAllocator(
-          context_factory->AllocateSurfaceClientId())),
+      compositor_frame_sink_requested_(false),
+      frame_sink_id_(context_factory->AllocateFrameSinkId()),
       task_runner_(task_runner),
       vsync_manager_(new CompositorVSyncManager()),
       device_scale_factor_(0.0f),
@@ -89,10 +89,7 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
       compositor_lock_(NULL),
       layer_animator_collection_(this),
       weak_ptr_factory_(this) {
-  if (context_factory->GetSurfaceManager()) {
-    context_factory->GetSurfaceManager()->RegisterSurfaceClientId(
-        surface_id_allocator_->client_id());
-  }
+  context_factory->GetSurfaceManager()->RegisterFrameSinkId(frame_sink_id_);
   root_web_layer_ = cc::Layer::Create();
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -112,13 +109,11 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
   if (command_line->HasSwitch(switches::kDisableGpuVsync)) {
     std::string display_vsync_string =
         command_line->GetSwitchValueASCII(switches::kDisableGpuVsync);
-    if (display_vsync_string == "gpu") {
+    // See comments in gl_switches about this flag.  The browser compositor
+    // is only unthrottled when "gpu" or no switch value is passed, as it
+    // is driven directly by the display compositor.
+    if (display_vsync_string != "beginframe") {
       settings.renderer_settings.disable_display_vsync = true;
-    } else if (display_vsync_string == "beginframe") {
-      settings.wait_for_beginframe_interval = false;
-    } else {
-      settings.renderer_settings.disable_display_vsync = true;
-      settings.wait_for_beginframe_interval = false;
     }
   }
   settings.renderer_settings.partial_swap_enabled =
@@ -146,8 +141,6 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
       command_line->HasSwitch(cc::switches::kUIShowSurfaceDamageRects);
   settings.initial_debug_state.show_screen_space_rects =
       command_line->HasSwitch(cc::switches::kUIShowScreenSpaceRects);
-  settings.initial_debug_state.show_replica_screen_space_rects =
-      command_line->HasSwitch(cc::switches::kUIShowReplicaScreenSpaceRects);
 
   settings.initial_debug_state.SetRecordRenderingStats(
       command_line->HasSwitch(cc::switches::kEnableGpuBenchmarking));
@@ -159,6 +152,9 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
 
   settings.use_layer_lists =
       command_line->HasSwitch(cc::switches::kUIEnableLayerLists);
+
+  settings.enable_color_correct_rendering =
+      command_line->HasSwitch(cc::switches::kEnableColorCorrectRendering);
 
   // UI compositor always uses partial raster if not using zero-copy. Zero copy
   // doesn't currently support partial raster.
@@ -183,19 +179,13 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
   // thread.
   settings.image_decode_tasks_enabled = false;
 
-  settings.use_output_surface_begin_frame_source = true;
-
-#if !defined(OS_ANDROID)
-  // TODO(sohanjg): Revisit this memory usage in tile manager.
-  cc::ManagedMemoryPolicy policy(
-      512 * 1024 * 1024, gpu::MemoryAllocation::CUTOFF_ALLOW_NICE_TO_HAVE,
-      settings.memory_policy_.num_resources_limit);
-  settings.memory_policy_ = policy;
-#endif
+  settings.gpu_memory_policy.bytes_limit_when_visible = 512 * 1024 * 1024;
+  settings.gpu_memory_policy.priority_cutoff_when_visible =
+      gpu::MemoryAllocation::CUTOFF_ALLOW_NICE_TO_HAVE;
 
   base::TimeTicks before_create = base::TimeTicks::Now();
 
-  cc::LayerTreeHost::InitParams params;
+  cc::LayerTreeHostInProcess::InitParams params;
   params.client = this;
   params.shared_bitmap_manager = context_factory_->GetSharedBitmapManager();
   params.gpu_memory_buffer_manager =
@@ -204,7 +194,7 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
   params.settings = &settings;
   params.main_task_runner = task_runner_;
   params.animation_host = cc::AnimationHost::CreateMainInstance();
-  host_ = cc::LayerTreeHost::CreateSingleThreaded(this, &params);
+  host_ = cc::LayerTreeHostInProcess::CreateSingleThreaded(this, &params);
   UMA_HISTOGRAM_TIMES("GPU.CreateBrowserCompositor",
                       base::TimeTicks::Now() - before_create);
 
@@ -214,7 +204,7 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
       animation_timeline_.get());
 
   host_->GetLayerTree()->SetRootLayer(root_web_layer_);
-  host_->set_surface_client_id(surface_id_allocator_->client_id());
+  host_->SetFrameSinkId(frame_sink_id_);
   host_->SetVisible(true);
 }
 
@@ -242,62 +232,37 @@ Compositor::~Compositor() {
   host_.reset();
 
   context_factory_->RemoveCompositor(this);
-  if (context_factory_->GetSurfaceManager()) {
-    for (auto& client : surface_clients_) {
-      if (client.second) {
-        context_factory_->GetSurfaceManager()
-            ->UnregisterSurfaceNamespaceHierarchy(client.second, client.first);
-      }
-    }
-    context_factory_->GetSurfaceManager()->InvalidateSurfaceClientId(
-        surface_id_allocator_->client_id());
+  auto* manager = context_factory_->GetSurfaceManager();
+  for (auto& client : child_frame_sinks_) {
+    DCHECK(!client.is_null());
+    manager->UnregisterFrameSinkHierarchy(frame_sink_id_, client);
   }
+  manager->InvalidateFrameSinkId(frame_sink_id_);
 }
 
-void Compositor::AddSurfaceClient(uint32_t client_id) {
-  // We don't give the client a parent until the ui::Compositor has an
-  // OutputSurface.
-  uint32_t parent_client_id = 0;
-  if (host_->has_output_surface()) {
-    parent_client_id = surface_id_allocator_->client_id();
-    context_factory_->GetSurfaceManager()->RegisterSurfaceNamespaceHierarchy(
-        parent_client_id, client_id);
-  }
-  surface_clients_[client_id] = parent_client_id;
+void Compositor::AddFrameSink(const cc::FrameSinkId& frame_sink_id) {
+  context_factory_->GetSurfaceManager()->RegisterFrameSinkHierarchy(
+      frame_sink_id_, frame_sink_id);
+  child_frame_sinks_.insert(frame_sink_id);
 }
 
-void Compositor::RemoveSurfaceClient(uint32_t client_id) {
-  auto it = surface_clients_.find(client_id);
-  DCHECK(it != surface_clients_.end());
-  if (host_->has_output_surface()) {
-    context_factory_->GetSurfaceManager()->UnregisterSurfaceNamespaceHierarchy(
-        it->second, client_id);
-  }
-  surface_clients_.erase(it);
+void Compositor::RemoveFrameSink(const cc::FrameSinkId& frame_sink_id) {
+  auto it = child_frame_sinks_.find(frame_sink_id);
+  DCHECK(it != child_frame_sinks_.end());
+  DCHECK(!it->is_null());
+  context_factory_->GetSurfaceManager()->UnregisterFrameSinkHierarchy(
+      frame_sink_id_, *it);
+  child_frame_sinks_.erase(it);
 }
 
-void Compositor::SetOutputSurface(
-    std::unique_ptr<cc::OutputSurface> output_surface) {
-  output_surface_requested_ = false;
-  host_->SetOutputSurface(std::move(output_surface));
-  // ui::Compositor uses a SingleThreadProxy and so BindToClient will be called
-  // above and SurfaceManager will be made aware of the OutputSurface's client
-  // ID.
-  for (auto& client : surface_clients_) {
-    if (client.second == surface_id_allocator_->client_id())
-      continue;
-    // If a client already has a parent, then we unregister the existing parent.
-    if (client.second) {
-      context_factory_->GetSurfaceManager()
-          ->UnregisterSurfaceNamespaceHierarchy(client.second, client.first);
-    }
-    context_factory_->GetSurfaceManager()->RegisterSurfaceNamespaceHierarchy(
-        surface_id_allocator_->client_id(), client.first);
-    client.second = surface_id_allocator_->client_id();
-  }
-  // Visibility is reset when the output surface is lost, so update it to match
-  // the Compositor's.
-  context_factory_->SetDisplayVisible(this, host_->visible());
+void Compositor::SetCompositorFrameSink(
+    std::unique_ptr<cc::CompositorFrameSink> compositor_frame_sink) {
+  compositor_frame_sink_requested_ = false;
+  host_->SetCompositorFrameSink(std::move(compositor_frame_sink));
+  // Display properties are reset when the output surface is lost, so update it
+  // to match the Compositor's.
+  context_factory_->SetDisplayVisible(this, host_->IsVisible());
+  context_factory_->SetDisplayColorSpace(this, color_space_);
 }
 
 void Compositor::ScheduleDraw() {
@@ -367,7 +332,11 @@ void Compositor::SetScaleAndSize(float scale, const gfx::Size& size_in_pixel) {
 }
 
 void Compositor::SetDisplayColorSpace(const gfx::ColorSpace& color_space) {
-  context_factory_->SetDisplayColorSpace(this, color_space);
+  host_->GetLayerTree()->SetDeviceColorSpace(color_space);
+  color_space_ = color_space;
+  // Color space is reset when the output surface is lost, so this must also be
+  // updated then.
+  context_factory_->SetDisplayColorSpace(this, color_space_);
 }
 
 void Compositor::SetBackgroundColor(SkColor color) {
@@ -383,7 +352,7 @@ void Compositor::SetVisible(bool visible) {
 }
 
 bool Compositor::IsVisible() {
-  return host_->visible();
+  return host_->IsVisible();
 }
 
 bool Compositor::ScrollLayerTo(int layer_id, const gfx::ScrollOffset& offset) {
@@ -412,20 +381,13 @@ void Compositor::SetAcceleratedWidget(gfx::AcceleratedWidget widget) {
   DCHECK(!widget_valid_);
   widget_ = widget;
   widget_valid_ = true;
-  if (output_surface_requested_)
-    context_factory_->CreateOutputSurface(weak_ptr_factory_.GetWeakPtr());
+  if (compositor_frame_sink_requested_)
+    context_factory_->CreateCompositorFrameSink(weak_ptr_factory_.GetWeakPtr());
 }
 
 gfx::AcceleratedWidget Compositor::ReleaseAcceleratedWidget() {
   DCHECK(!IsVisible());
-  if (!host_->output_surface_lost()) {
-    host_->ReleaseOutputSurface();
-    for (auto& client : surface_clients_) {
-      context_factory_->GetSurfaceManager()
-          ->UnregisterSurfaceNamespaceHierarchy(client.second, client.first);
-      client.second = 0;
-    }
-  }
+  host_->ReleaseCompositorFrameSink();
   context_factory_->RemoveCompositor(this);
   widget_valid_ = false;
   gfx::AcceleratedWidget widget = widget_;
@@ -503,19 +465,18 @@ void Compositor::UpdateLayerTreeHost() {
   SendDamagedRectsRecursive(root_layer());
 }
 
-void Compositor::RequestNewOutputSurface() {
-  DCHECK(!output_surface_requested_);
-  output_surface_requested_ = true;
-  if (widget_valid_) {
-    context_factory_->CreateOutputSurface(weak_ptr_factory_.GetWeakPtr());
-  }
+void Compositor::RequestNewCompositorFrameSink() {
+  DCHECK(!compositor_frame_sink_requested_);
+  compositor_frame_sink_requested_ = true;
+  if (widget_valid_)
+    context_factory_->CreateCompositorFrameSink(weak_ptr_factory_.GetWeakPtr());
 }
 
-void Compositor::DidInitializeOutputSurface() {
-}
+void Compositor::DidInitializeCompositorFrameSink() {}
 
-void Compositor::DidFailToInitializeOutputSurface() {
-  // The OutputSurface should already be bound/initialized before being given to
+void Compositor::DidFailToInitializeCompositorFrameSink() {
+  // The CompositorFrameSink should already be bound/initialized before being
+  // given to
   // the Compositor.
   NOTREACHED();
 }
@@ -552,7 +513,7 @@ void Compositor::SetOutputIsSecure(bool output_is_secure) {
 }
 
 const cc::LayerTreeDebugState& Compositor::GetLayerTreeDebugState() const {
-  return host_->debug_state();
+  return host_->GetDebugState();
 }
 
 void Compositor::SetLayerTreeDebugState(
@@ -561,7 +522,7 @@ void Compositor::SetLayerTreeDebugState(
 }
 
 const cc::RendererSettings& Compositor::GetRendererSettings() const {
-  return host_->settings().renderer_settings;
+  return host_->GetSettings().renderer_settings;
 }
 
 scoped_refptr<CompositorLock> Compositor::GetCompositorLock() {

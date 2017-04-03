@@ -11,8 +11,8 @@
 #include "ash/common/focus_cycler.h"
 #include "ash/common/scoped_root_window_for_new_windows.h"
 #include "ash/common/session/session_state_delegate.h"
-#include "ash/common/shelf/shelf.h"
 #include "ash/common/shelf/shelf_widget.h"
+#include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/window_cycle_list.h"
 #include "ash/common/wm/window_state.h"
@@ -20,7 +20,6 @@
 #include "ash/common/wm_shell.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/test/shelf_test_api.h"
 #include "ash/test/shelf_view_test_api.h"
 #include "ash/test/test_shelf_delegate.h"
 #include "ash/test/test_shell_delegate.h"
@@ -90,7 +89,7 @@ class WindowCycleControllerTest : public test::AshTestBase {
     WindowCycleList::DisableInitialDelayForTesting();
 
     shelf_view_test_.reset(new test::ShelfViewTestAPI(
-        test::ShelfTestAPI(Shelf::ForPrimaryDisplay()).shelf_view()));
+        GetPrimaryShelf()->GetShelfViewForTesting()));
     shelf_view_test_->SetAnimationDuration(1);
   }
 
@@ -294,6 +293,35 @@ TEST_F(WindowCycleControllerTest, Minimized) {
   controller->HandleCycleWindow(WindowCycleController::FORWARD);
   controller->StopCycling();
   EXPECT_TRUE(window0_state->IsActive());
+}
+
+// Tests that when all windows are minimized, cycling starts with the first one
+// rather than the second.
+TEST_F(WindowCycleControllerTest, AllAreMinimized) {
+  // Create a couple of test windows.
+  std::unique_ptr<Window> window0(CreateTestWindowInShellWithId(0));
+  std::unique_ptr<Window> window1(CreateTestWindowInShellWithId(1));
+  wm::WindowState* window0_state = wm::GetWindowState(window0.get());
+  wm::WindowState* window1_state = wm::GetWindowState(window1.get());
+
+  window0_state->Minimize();
+  window1_state->Minimize();
+
+  WindowCycleController* controller = WmShell::Get()->window_cycle_controller();
+  controller->HandleCycleWindow(WindowCycleController::FORWARD);
+  controller->StopCycling();
+  EXPECT_TRUE(window0_state->IsActive());
+  EXPECT_FALSE(window0_state->IsMinimized());
+  EXPECT_TRUE(window1_state->IsMinimized());
+
+  // But it's business as usual when cycling backwards.
+  window0_state->Minimize();
+  window1_state->Minimize();
+  controller->HandleCycleWindow(WindowCycleController::BACKWARD);
+  controller->StopCycling();
+  EXPECT_TRUE(window0_state->IsMinimized());
+  EXPECT_TRUE(window1_state->IsActive());
+  EXPECT_FALSE(window1_state->IsMinimized());
 }
 
 TEST_F(WindowCycleControllerTest, AlwaysOnTopWindow) {

@@ -18,7 +18,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -146,6 +146,13 @@ bool IsRemoraRequisition() {
       ->IsRemoraRequisition();
 }
 
+bool IsSharkRequisition() {
+  return g_browser_process->platform_part()
+      ->browser_policy_connector_chromeos()
+      ->GetDeviceCloudPolicyManager()
+      ->IsSharkRequisition();
+}
+
 // Checks if a controller device ("Master") is detected during the bootstrapping
 // or shark/remora setup process.
 bool IsControllerDetected() {
@@ -157,6 +164,12 @@ void SetControllerDetectedPref(bool value) {
   PrefService* prefs = g_browser_process->local_state();
   prefs->SetBoolean(prefs::kOobeControllerDetected, value);
   prefs->CommitPendingWrite();
+}
+
+// Checks if the device is a "slave" device in the bootstrapping process.
+bool IsBootstrappingSlave() {
+  return g_browser_process->local_state()->GetBoolean(
+      prefs::kIsBootstrappingSlave);
 }
 
 // Checks if the device is a "Master" device in the bootstrapping process.
@@ -314,6 +327,23 @@ void WizardController::Init(const std::string& first_screen_name) {
   // an eligible controller is detected later.
   SetControllerDetectedPref(false);
 
+  // Show Material Design unless explicitly disabled or for an untested UX,
+  // or when resuming an OOBE that had it disabled or unset. We use an if/else
+  // here to try and not set state when it is the default value so it can
+  // change and affect the OOBE again.
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          chromeos::switches::kEnableMdOobe))
+    SetShowMdOobe(false);
+  else if ((screen_pref.empty() ||
+            GetLocalState()->HasPrefPath(prefs::kOobeMdMode)) ||
+           GetLocalState()->GetBoolean(prefs::kOobeMdMode))
+    SetShowMdOobe(true);
+
+  // TODO(drcrash): Remove this after testing (http://crbug.com/647411).
+  if (IsRemoraPairingOobe() || IsSharkRequisition() || IsRemoraRequisition()) {
+    SetShowMdOobe(false);
+  }
+
   AdvanceToScreen(first_screen_name_);
   if (!IsMachineHWIDCorrect() && !StartupUtils::IsDeviceRegistered() &&
       first_screen_name_.empty())
@@ -406,10 +436,23 @@ void WizardController::ShowNetworkScreen() {
   SetStatusAreaVisible(HasScreen(kNetworkScreenName));
   SetCurrentScreen(GetScreen(kNetworkScreenName));
 
-  MaybeStartListeningForSharkConnection();
+  // There are two possible screens where we listen to the incoming Bluetooth
+  // connection request: the first one is the HID detection screen, which will
+  // show up when there is no sufficient input devices. In this case, we just
+  // keep the logic as it is today: always put the Bluetooth is discoverable
+  // mode. The other place is the Network screen (here), which will show up when
+  // there are input devices detected. In this case, we disable the Bluetooth by
+  // default until the user explicitly enable it by pressing a key combo (Ctrl+
+  // Alt+Shift+S).
+  if (IsBootstrappingSlave())
+    MaybeStartListeningForSharkConnection();
 }
 
 void WizardController::ShowLoginScreen(const LoginScreenContext& context) {
+  // This may be triggered by multiply asynchronous events from the JS side.
+  if (login_screen_started_)
+    return;
+
   if (!time_eula_accepted_.is_null()) {
     base::TimeDelta delta = base::Time::Now() - time_eula_accepted_;
     UMA_HISTOGRAM_MEDIUM_TIMES("OOBE.EULAToSignInTime", delta);
@@ -418,7 +461,6 @@ void WizardController::ShowLoginScreen(const LoginScreenContext& context) {
   SetStatusAreaVisible(true);
   host_->StartSignInScreen(context);
   smooth_show_timer_.Stop();
-  oobe_ui_ = nullptr;
   login_screen_started_ = true;
 }
 
@@ -528,8 +570,13 @@ void WizardController::ShowSupervisedUserCreationScreen() {
 
 void WizardController::ShowHIDDetectionScreen() {
   VLOG(1) << "Showing HID discovery screen.";
+  // TODO(drcrash): Remove this after testing (http://crbug.com/647411).
+  SetShowMdOobe(false);  // Disable the MD OOBE from there on.
   SetStatusAreaVisible(true);
   SetCurrentScreen(GetScreen(kHIDDetectionScreenName));
+  // In HID detection screen, puts the Bluetooth in discoverable mode and waits
+  // for the incoming Bluetooth connection request. See the comments in
+  // WizardController::ShowNetworkScreen() for more details.
   MaybeStartListeningForSharkConnection();
 }
 
@@ -616,11 +663,7 @@ void WizardController::OnConnectionFailed() {
 }
 
 void WizardController::OnUpdateCompleted() {
-  const bool is_shark = g_browser_process->platform_part()
-                            ->browser_policy_connector_chromeos()
-                            ->GetDeviceCloudPolicyManager()
-                            ->IsSharkRequisition();
-  if (is_shark || IsBootstrappingMaster()) {
+  if (IsSharkRequisition() || IsBootstrappingMaster()) {
     ShowControllerPairingScreen();
   } else if (IsControllerDetected()) {
     ShowHostPairingScreen();
@@ -913,13 +956,19 @@ void WizardController::SetStatusAreaVisible(bool visible) {
   host_->SetStatusAreaVisible(visible);
 }
 
+void WizardController::SetShowMdOobe(bool show) {
+  GetLocalState()->SetBoolean(prefs::kOobeMdMode, show);
+}
+
 void WizardController::OnHIDScreenNecessityCheck(bool screen_needed) {
   if (!oobe_ui_)
     return;
-  if (screen_needed)
+
+  if (screen_needed) {
     ShowHIDDetectionScreen();
-  else
+  } else {
     ShowNetworkScreen();
+  }
 }
 
 void WizardController::AdvanceToScreen(const std::string& screen_name) {

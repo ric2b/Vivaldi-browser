@@ -15,6 +15,7 @@
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
+#include "base/sequence_token.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
@@ -30,8 +31,12 @@ namespace internal {
 
 namespace {
 
+constexpr char kPoolNameSuffix[] = "Pool";
 constexpr char kDetachDurationHistogramPrefix[] =
     "TaskScheduler.DetachDuration.";
+constexpr char kNumTasksBetweenWaitsHistogramPrefix[] =
+    "TaskScheduler.NumTasksBetweenWaits.";
+constexpr char kTaskLatencyHistogramPrefix[] = "TaskScheduler.TaskLatency.";
 
 // SchedulerWorker that owns the current thread, if any.
 LazyInstance<ThreadLocalPointer<const SchedulerWorker>>::Leaky
@@ -59,7 +64,7 @@ class SchedulerParallelTaskRunner : public TaskRunner {
                        TimeDelta delay) override {
     // Post the task as part of a one-off single-task Sequence.
     return worker_pool_->PostTaskWithSequence(
-        WrapUnique(new Task(from_here, closure, traits_, delay)),
+        MakeUnique<Task>(from_here, closure, traits_, delay),
         make_scoped_refptr(new Sequence), nullptr);
   }
 
@@ -108,7 +113,9 @@ class SchedulerSequencedTaskRunner : public SequencedTaskRunner {
   }
 
   bool RunsTasksOnCurrentThread() const override {
-    return tls_current_worker_pool.Get().Get() == worker_pool_;
+    // TODO(fdoray): Rename TaskRunner::RunsTaskOnCurrentThread() to something
+    // that reflects this behavior more accurately. crbug.com/646905
+    return sequence_->token() == SequenceToken::GetForCurrentThread();
   }
 
  private:
@@ -122,6 +129,29 @@ class SchedulerSequencedTaskRunner : public SequencedTaskRunner {
 
   DISALLOW_COPY_AND_ASSIGN(SchedulerSequencedTaskRunner);
 };
+
+HistogramBase* GetTaskLatencyHistogram(const std::string& pool_name,
+                                       TaskPriority task_priority) {
+  const char* task_priority_suffix = nullptr;
+  switch (task_priority) {
+    case TaskPriority::BACKGROUND:
+      task_priority_suffix = ".BackgroundTaskPriority";
+      break;
+    case TaskPriority::USER_VISIBLE:
+      task_priority_suffix = ".UserVisibleTaskPriority";
+      break;
+    case TaskPriority::USER_BLOCKING:
+      task_priority_suffix = ".UserBlockingTaskPriority";
+      break;
+  }
+
+  // Mimics the UMA_HISTOGRAM_TIMES macro.
+  return Histogram::FactoryTimeGet(kTaskLatencyHistogramPrefix + pool_name +
+                                       kPoolNameSuffix + task_priority_suffix,
+                                   TimeDelta::FromMilliseconds(1),
+                                   TimeDelta::FromSeconds(10), 50,
+                                   HistogramBase::kUmaTargetedHistogramFlag);
+}
 
 // Only used in DCHECKs.
 bool ContainsWorker(
@@ -208,6 +238,7 @@ class SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl
   void OnMainEntry(SchedulerWorker* worker,
                    const TimeDelta& detach_duration) override;
   scoped_refptr<Sequence> GetWork(SchedulerWorker* worker) override;
+  void DidRunTask(const Task* task, const TimeDelta& task_latency) override;
   void ReEnqueueSequence(scoped_refptr<Sequence> sequence) override;
   TimeDelta GetSleepTimeout() override;
   bool CanDetach(SchedulerWorker* worker) override;
@@ -236,6 +267,17 @@ class SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl
 
   // Time when GetWork() first returned nullptr.
   TimeTicks idle_start_time_;
+
+  // Indicates whether the last call to GetWork() returned nullptr.
+  bool last_get_work_returned_nullptr_ = false;
+
+  // Indicates whether the SchedulerWorker was detached since the last call to
+  // GetWork().
+  bool did_detach_since_last_get_work_ = false;
+
+  // Number of tasks executed since the last time the
+  // TaskScheduler.NumTasksBetweenWaits histogram was recorded.
+  size_t num_tasks_since_last_wait_ = 0;
 
   subtle::Atomic32 num_single_threaded_runners_ = 0;
 
@@ -441,8 +483,12 @@ void SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::OnMainEntry(
   DCHECK(ContainsWorker(outer_->workers_, worker));
 #endif
 
-  if (!detach_duration.is_max())
+  DCHECK_EQ(num_tasks_since_last_wait_, 0U);
+
+  if (!detach_duration.is_max()) {
     outer_->detach_duration_histogram_->AddTime(detach_duration);
+    did_detach_since_last_get_work_ = true;
+  }
 
   PlatformThread::SetName(
       StringPrintf("TaskScheduler%sWorker%d", outer_->name_.c_str(), index_));
@@ -452,7 +498,7 @@ void SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::OnMainEntry(
   tls_current_worker.Get().Set(worker);
   tls_current_worker_pool.Get().Set(outer_);
 
-  // New threads haven't run GetWork() yet, so reset the idle_start_time_.
+  // New threads haven't run GetWork() yet, so reset the |idle_start_time_|.
   idle_start_time_ = TimeTicks();
 
   ThreadRestrictions::SetIOAllowed(
@@ -464,6 +510,24 @@ scoped_refptr<Sequence>
 SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::GetWork(
     SchedulerWorker* worker) {
   DCHECK(ContainsWorker(outer_->workers_, worker));
+
+  // Record the TaskScheduler.NumTasksBetweenWaits histogram if the
+  // SchedulerWorker waited on its WaitableEvent since the last GetWork().
+  //
+  // Note: When GetWork() returns nullptr for the first time after returning a
+  // Sequence, SchedulerWorker waits on its WaitableEvent. When the wait stops
+  // (either because WakeUp() was called or because the sleep timeout expired),
+  // GetWork() is called and the histogram is recorded. If GetWork() returns
+  // nullptr again, the SchedulerWorker may detach.
+  // |did_detach_since_last_get_work_| is set to true from OnMainEntry() if the
+  // SchedulerWorker detaches and wakes up again. The next call to GetWork()
+  // won't record the histogram (which is correct since the SchedulerWorker
+  // didn't wait on its WaitableEvent since the last time the histogram was
+  // recorded).
+  if (last_get_work_returned_nullptr_ && !did_detach_since_last_get_work_) {
+    outer_->num_tasks_between_waits_histogram_->Add(num_tasks_since_last_wait_);
+    num_tasks_since_last_wait_ = 0;
+  }
 
   scoped_refptr<Sequence> sequence;
   {
@@ -491,6 +555,8 @@ SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::GetWork(
       outer_->AddToIdleWorkersStack(worker);
       if (idle_start_time_.is_null())
         idle_start_time_ = TimeTicks::Now();
+      did_detach_since_last_get_work_ = false;
+      last_get_work_returned_nullptr_ = true;
       return nullptr;
     }
 
@@ -514,10 +580,36 @@ SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::GetWork(
   }
   DCHECK(sequence);
 
-  idle_start_time_ = TimeTicks();
-
   outer_->RemoveFromIdleWorkersStack(worker);
+  idle_start_time_ = TimeTicks();
+  did_detach_since_last_get_work_ = false;
+  last_get_work_returned_nullptr_ = false;
+
   return sequence;
+}
+
+void SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::DidRunTask(
+    const Task* task,
+    const TimeDelta& task_latency) {
+  ++num_tasks_since_last_wait_;
+
+  const int priority_index = static_cast<int>(task->traits.priority());
+
+  // As explained in the header file, histograms are allocated on demand. It
+  // doesn't matter if an element of |task_latency_histograms_| is set multiple
+  // times since GetTaskLatencyHistogram() is idempotent. As explained in the
+  // comment at the top of histogram_macros.h, barriers are required.
+  HistogramBase* task_latency_histogram = reinterpret_cast<HistogramBase*>(
+      subtle::Acquire_Load(&outer_->task_latency_histograms_[priority_index]));
+  if (!task_latency_histogram) {
+    task_latency_histogram =
+        GetTaskLatencyHistogram(outer_->name_, task->traits.priority());
+    subtle::Release_Store(
+        &outer_->task_latency_histograms_[priority_index],
+        reinterpret_cast<subtle::AtomicWord>(task_latency_histogram));
+  }
+
+  task_latency_histogram->AddTime(task_latency);
 }
 
 void SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::
@@ -573,12 +665,23 @@ SchedulerWorkerPoolImpl::SchedulerWorkerPoolImpl(
       workers_created_(WaitableEvent::ResetPolicy::MANUAL,
                        WaitableEvent::InitialState::NOT_SIGNALED),
 #endif
-      detach_duration_histogram_(
-          Histogram::FactoryTimeGet(kDetachDurationHistogramPrefix + name_,
-                                    TimeDelta::FromMilliseconds(1),
-                                    TimeDelta::FromHours(1),
-                                    50,
-                                    HistogramBase::kUmaTargetedHistogramFlag)),
+      // Mimics the UMA_HISTOGRAM_LONG_TIMES macro.
+      detach_duration_histogram_(Histogram::FactoryTimeGet(
+          kDetachDurationHistogramPrefix + name_ + kPoolNameSuffix,
+          TimeDelta::FromMilliseconds(1),
+          TimeDelta::FromHours(1),
+          50,
+          HistogramBase::kUmaTargetedHistogramFlag)),
+      // Mimics the UMA_HISTOGRAM_COUNTS_100 macro. A SchedulerWorker is
+      // expected to run between zero and a few tens of tasks between waits.
+      // When it runs more than 100 tasks, there is no need to know the exact
+      // number of tasks that ran.
+      num_tasks_between_waits_histogram_(Histogram::FactoryGet(
+          kNumTasksBetweenWaitsHistogramPrefix + name_ + kPoolNameSuffix,
+          1,
+          100,
+          50,
+          HistogramBase::kUmaTargetedHistogramFlag)),
       task_tracker_(task_tracker),
       delayed_task_manager_(delayed_task_manager) {
   DCHECK(task_tracker_);
@@ -595,9 +698,9 @@ bool SchedulerWorkerPoolImpl::Initialize(
 
   for (size_t i = 0; i < max_threads; ++i) {
     std::unique_ptr<SchedulerWorker> worker = SchedulerWorker::Create(
-        priority_hint, WrapUnique(new SchedulerWorkerDelegateImpl(
+        priority_hint, MakeUnique<SchedulerWorkerDelegateImpl>(
                            this, re_enqueue_sequence_callback,
-                           &shared_priority_queue_, static_cast<int>(i))),
+                           &shared_priority_queue_, static_cast<int>(i)),
         task_tracker_, i == 0 ? SchedulerWorker::InitialState::ALIVE
                               : SchedulerWorker::InitialState::DETACHED);
     if (!worker)

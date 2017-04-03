@@ -39,15 +39,9 @@ class WebViewInternalThumbnailFunction
  protected:
   ~WebViewInternalThumbnailFunction() override;
   virtual void SendResultFromBitmap(const SkBitmap& screen_capture);
-  bool EncodeBitmap(const SkBitmap& screen_capture,
-                    std::vector<unsigned char>* data,
-                    std::string& mime_type);
   bool InternalRunAsyncSafe(
       WebViewGuest* guest,
       std::unique_ptr<web_view_private::ThumbnailParams>& params);
-
-  // The default quality setting used when encoding jpegs.
-  static const int kDefaultQuality;
 
   // Quality setting to use when encoding jpegs.  Set in RunImpl().
   int image_quality_;
@@ -198,30 +192,12 @@ class WebViewPrivateSetExtensionHostFunction
   DISALLOW_COPY_AND_ASSIGN(WebViewPrivateSetExtensionHostFunction);
 };
 
-class WebViewPrivateIsFocusedElementEditableFunction
-    : public LegacyWebViewInternalExtensionFunction {
- public:
-    DECLARE_EXTENSION_FUNCTION("webViewPrivate.isFocusedElementEditable",
-                               WEBVIEWINTERNAL_ISFOCUSEDELEMENTEDITABLE)
-    WebViewPrivateIsFocusedElementEditableFunction();
-
- protected:
-    ~WebViewPrivateIsFocusedElementEditableFunction() override;
-
- private:
-  // ExtensionFunction:
-  bool RunAsyncSafe(WebViewGuest* guest) override;
-
-  DISALLOW_COPY_AND_ASSIGN(WebViewPrivateIsFocusedElementEditableFunction);
-};
-
 class WebViewPrivateAllowBlockedInsecureContentFunction
     : public LegacyWebViewInternalExtensionFunction {
 public:
     DECLARE_EXTENSION_FUNCTION("webViewPrivate.allowBlockedInsecureContent",
                                WEBVIEWINTERNAL_ALLOWBLOCKEDINSECURECONTENT)
-
-        WebViewPrivateAllowBlockedInsecureContentFunction();
+    WebViewPrivateAllowBlockedInsecureContentFunction();
 
 protected:
     ~WebViewPrivateAllowBlockedInsecureContentFunction() override;
@@ -230,6 +206,22 @@ private:
     bool RunAsyncSafe(WebViewGuest* guest) override;
 
     DISALLOW_COPY_AND_ASSIGN(WebViewPrivateAllowBlockedInsecureContentFunction);
+};
+
+class WebViewPrivateGetFocusedElementInfoFunction
+    : public LegacyWebViewInternalExtensionFunction {
+  public:
+   DECLARE_EXTENSION_FUNCTION("webViewPrivate.getFocusedElementInfo",
+                              WEBVIEWINTERNAL_GETFOCUSEDELEMENTINFO)
+   WebViewPrivateGetFocusedElementInfoFunction();
+
+  protected:
+   ~WebViewPrivateGetFocusedElementInfoFunction() override;
+
+  private:
+   bool RunAsyncSafe(WebViewGuest* guest) override;
+
+   DISALLOW_COPY_AND_ASSIGN(WebViewPrivateGetFocusedElementInfoFunction);
 };
 
 }  // namespace vivaldi

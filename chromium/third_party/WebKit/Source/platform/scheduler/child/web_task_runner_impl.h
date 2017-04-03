@@ -29,11 +29,14 @@ class BLINK_PLATFORM_EXPORT WebTaskRunnerImpl : public WebTaskRunner {
   void postDelayedTask(const WebTraceLocation& web_location,
                        WebTaskRunner::Task* task,
                        double delayMs) override;
+  void postDelayedTask(const WebTraceLocation&,
+                       const base::Closure&,
+                       double delayMs) override;
   bool runsTasksOnCurrentThread() override;
   double virtualTimeSeconds() const override;
   double monotonicallyIncreasingVirtualTimeSeconds() const override;
   std::unique_ptr<WebTaskRunner> clone() override;
-  base::SingleThreadTaskRunner* taskRunner() override;
+  base::SingleThreadTaskRunner* toSingleThreadTaskRunner() override;
 
   // WebTaskRunner::Task should be wrapped by base::Passed() when
   // used with base::Bind(). See https://crbug.com/551356.

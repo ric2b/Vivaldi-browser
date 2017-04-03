@@ -205,8 +205,8 @@ void KeyboardAccessTest::TestMenuKeyboardAccess(bool alternate_key_sequence,
 
   BrowserView* browser_view = reinterpret_cast<BrowserView*>(
       browser()->window());
-  SendKeysMenuListener menu_listener(
-    browser_view->GetToolbarView()->app_menu_button(), browser(), false);
+  SendKeysMenuListener menu_listener(browser_view->toolbar()->app_menu_button(),
+                                     browser(), false);
 
   if (focus_omnibox)
     browser()->window()->GetLocationBar()->FocusLocation(false);
@@ -317,8 +317,8 @@ void KeyboardAccessTest::TestMenuKeyboardAccessAndDismiss() {
 
   BrowserView* browser_view = reinterpret_cast<BrowserView*>(
       browser()->window());
-  SendKeysMenuListener menu_listener(
-    browser_view->GetToolbarView()->app_menu_button(), browser(), true);
+  SendKeysMenuListener menu_listener(browser_view->toolbar()->app_menu_button(),
+                                     browser(), true);
 
   browser()->window()->GetLocationBar()->FocusLocation(false);
 
@@ -399,7 +399,7 @@ IN_PROC_BROWSER_TEST_F(KeyboardAccessTest, ReserveKeyboardAccelerators) {
       "</script></html>";
   GURL url("data:text/html," + kBadPage);
   ui_test_utils::NavigateToURLWithDisposition(
-      browser(), url, NEW_FOREGROUND_TAB,
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
 
   ASSERT_TRUE(ui_test_utils::SendKeyPressSync(
@@ -407,7 +407,7 @@ IN_PROC_BROWSER_TEST_F(KeyboardAccessTest, ReserveKeyboardAccelerators) {
   ASSERT_EQ(0, browser()->tab_strip_model()->active_index());
 
   ui_test_utils::NavigateToURLWithDisposition(
-      browser(), url, NEW_FOREGROUND_TAB,
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
   ASSERT_EQ(2, browser()->tab_strip_model()->active_index());
 

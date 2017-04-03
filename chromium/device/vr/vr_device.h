@@ -23,17 +23,23 @@ class VRDeviceProvider;
 
 const unsigned int VR_DEVICE_LAST_ID = 0xFFFFFFFF;
 
-class VRDevice {
+class DEVICE_VR_EXPORT VRDevice {
  public:
-  DEVICE_VR_EXPORT explicit VRDevice(VRDeviceProvider* provider);
-  DEVICE_VR_EXPORT virtual ~VRDevice();
+  explicit VRDevice(VRDeviceProvider* provider);
+  virtual ~VRDevice();
 
-  DEVICE_VR_EXPORT VRDeviceProvider* provider() const { return provider_; }
-  DEVICE_VR_EXPORT unsigned int id() const { return id_; }
+  VRDeviceProvider* provider() const { return provider_; }
+  unsigned int id() const { return id_; }
 
   virtual VRDisplayPtr GetVRDevice() = 0;
   virtual VRPosePtr GetPose() = 0;
   virtual void ResetPose() = 0;
+
+  virtual bool RequestPresent(bool secure_origin);
+  virtual void ExitPresent(){};
+  virtual void SubmitFrame(VRPosePtr pose){};
+  virtual void UpdateLayerBounds(VRLayerBoundsPtr leftBounds,
+                                 VRLayerBoundsPtr rightBounds){};
 
  private:
   VRDeviceProvider* provider_;

@@ -19,6 +19,7 @@
 #include "net/proxy/mock_proxy_resolver.h"
 #include "net/proxy/proxy_config_service.h"
 #include "net/proxy/proxy_config_service_fixed.h"
+#include "net/proxy/proxy_server.h"
 #include "net/socket/socket_test_util.h"
 #include "net/test/gtest_util.h"
 #include "net/url_request/ftp_protocol_handler.h"
@@ -252,10 +253,10 @@ class URLRequestFtpJobTest : public testing::Test {
  public:
   URLRequestFtpJobTest()
       : request_context_(&socket_factory_,
-                         base::WrapUnique(new ProxyService(
+                         base::MakeUnique<ProxyService>(
                              base::WrapUnique(new SimpleProxyConfigService),
-                             NULL,
-                             NULL)),
+                             nullptr,
+                             nullptr),
                          &network_delegate_,
                          &ftp_transaction_factory_) {}
 
@@ -266,8 +267,9 @@ class URLRequestFtpJobTest : public testing::Test {
 
   void AddSocket(MockRead* reads, size_t reads_size,
                  MockWrite* writes, size_t writes_size) {
-    std::unique_ptr<SequencedSocketData> socket_data(base::WrapUnique(
-        new SequencedSocketData(reads, reads_size, writes, writes_size)));
+    std::unique_ptr<SequencedSocketData> socket_data(
+        base::MakeUnique<SequencedSocketData>(reads, reads_size, writes,
+                                              writes_size));
     socket_data->set_connect_data(MockConnect(SYNCHRONOUS, OK));
     socket_factory_.AddSocketDataProvider(socket_data.get());
 
@@ -309,9 +311,10 @@ TEST_F(URLRequestFtpJobTest, FtpProxyRequest) {
   // The TestDelegate will by default quit the message loop on completion.
   base::RunLoop().Run();
 
-  EXPECT_TRUE(url_request->status().is_success());
-  EXPECT_TRUE(url_request->proxy_server().Equals(
-      HostPortPair::FromString("localhost:80")));
+  EXPECT_THAT(request_delegate.request_status(), IsOk());
+  EXPECT_EQ(ProxyServer(ProxyServer::SCHEME_HTTP,
+                        HostPortPair::FromString("localhost:80")),
+            url_request->proxy_server());
   EXPECT_EQ(1, network_delegate()->completed_requests());
   EXPECT_EQ(0, network_delegate()->error_count());
   EXPECT_FALSE(request_delegate.auth_required_called());
@@ -405,9 +408,10 @@ TEST_F(URLRequestFtpJobTest, FtpProxyRequestNeedProxyAuthNoCredentials) {
   // The TestDelegate will by default quit the message loop on completion.
   base::RunLoop().Run();
 
-  EXPECT_TRUE(url_request->status().is_success());
-  EXPECT_TRUE(url_request->proxy_server().Equals(
-      HostPortPair::FromString("localhost:80")));
+  EXPECT_THAT(request_delegate.request_status(), IsOk());
+  EXPECT_EQ(ProxyServer(ProxyServer::SCHEME_HTTP,
+                        HostPortPair::FromString("localhost:80")),
+            url_request->proxy_server());
   EXPECT_EQ(1, network_delegate()->completed_requests());
   EXPECT_EQ(0, network_delegate()->error_count());
   EXPECT_TRUE(request_delegate.auth_required_called());
@@ -451,7 +455,7 @@ TEST_F(URLRequestFtpJobTest, FtpProxyRequestNeedProxyAuthWithCredentials) {
   // The TestDelegate will by default quit the message loop on completion.
   base::RunLoop().Run();
 
-  EXPECT_TRUE(url_request->status().is_success());
+  EXPECT_THAT(request_delegate.request_status(), IsOk());
   EXPECT_EQ(1, network_delegate()->completed_requests());
   EXPECT_EQ(0, network_delegate()->error_count());
   EXPECT_TRUE(request_delegate.auth_required_called());
@@ -484,7 +488,7 @@ TEST_F(URLRequestFtpJobTest, FtpProxyRequestNeedServerAuthNoCredentials) {
   // The TestDelegate will by default quit the message loop on completion.
   base::RunLoop().Run();
 
-  EXPECT_TRUE(url_request->status().is_success());
+  EXPECT_THAT(request_delegate.request_status(), IsOk());
   EXPECT_EQ(1, network_delegate()->completed_requests());
   EXPECT_EQ(0, network_delegate()->error_count());
   EXPECT_TRUE(request_delegate.auth_required_called());
@@ -528,7 +532,7 @@ TEST_F(URLRequestFtpJobTest, FtpProxyRequestNeedServerAuthWithCredentials) {
   // The TestDelegate will by default quit the message loop on completion.
   base::RunLoop().Run();
 
-  EXPECT_TRUE(url_request->status().is_success());
+  EXPECT_THAT(request_delegate.request_status(), IsOk());
   EXPECT_EQ(1, network_delegate()->completed_requests());
   EXPECT_EQ(0, network_delegate()->error_count());
   EXPECT_TRUE(request_delegate.auth_required_called());
@@ -602,7 +606,6 @@ TEST_F(URLRequestFtpJobTest, FtpProxyRequestNeedProxyAndServerAuth) {
   // Run until server auth is requested.
   base::RunLoop().Run();
 
-  EXPECT_TRUE(url_request->status().is_success());
   EXPECT_EQ(0, network_delegate()->completed_requests());
   EXPECT_EQ(0, network_delegate()->error_count());
   url_request->SetAuth(
@@ -611,7 +614,7 @@ TEST_F(URLRequestFtpJobTest, FtpProxyRequestNeedProxyAndServerAuth) {
   // The TestDelegate will by default quit the message loop on completion.
   base::RunLoop().Run();
 
-  EXPECT_TRUE(url_request->status().is_success());
+  EXPECT_THAT(request_delegate.request_status(), IsOk());
   EXPECT_EQ(1, network_delegate()->completed_requests());
   EXPECT_EQ(0, network_delegate()->error_count());
   EXPECT_TRUE(request_delegate.auth_required_called());
@@ -642,7 +645,7 @@ TEST_F(URLRequestFtpJobTest, FtpProxyRequestDoNotSaveCookies) {
   // The TestDelegate will by default quit the message loop on completion.
   base::RunLoop().Run();
 
-  EXPECT_TRUE(url_request->status().is_success());
+  EXPECT_THAT(request_delegate.request_status(), IsOk());
   EXPECT_EQ(1, network_delegate()->completed_requests());
   EXPECT_EQ(0, network_delegate()->error_count());
 
@@ -714,8 +717,9 @@ TEST_F(URLRequestFtpJobTest, FtpProxyRequestReuseSocket) {
   base::RunLoop().Run();
 
   EXPECT_TRUE(url_request1->status().is_success());
-  EXPECT_TRUE(url_request1->proxy_server().Equals(
-      HostPortPair::FromString("localhost:80")));
+  EXPECT_EQ(ProxyServer(ProxyServer::SCHEME_HTTP,
+                        HostPortPair::FromString("localhost:80")),
+            url_request1->proxy_server());
   EXPECT_EQ(1, network_delegate()->completed_requests());
   EXPECT_EQ(0, network_delegate()->error_count());
   EXPECT_FALSE(request_delegate1.auth_required_called());

@@ -11,7 +11,9 @@
 #include "components/flags_ui/pref_service_flags_storage.h"
 #include "components/gcm_driver/gcm_channel_status_syncer.h"
 #include "components/network_time/network_time_tracker.h"
-#include "components/ntp_snippets/ntp_snippets_service.h"
+#include "components/ntp_snippets/remote/ntp_snippets_service.h"
+#include "components/ntp_tiles/most_visited_sites.h"
+#include "components/ntp_tiles/popular_sites.h"
 #include "components/omnibox/browser/zero_suggest_provider.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
@@ -27,7 +29,6 @@
 #include "components/translate/core/common/translate_pref_names.h"
 #include "components/update_client/update_client.h"
 #include "components/variations/service/variations_service.h"
-#include "components/web_resource/promo_resource_service.h"
 #include "ios/chrome/browser/application_context_impl.h"
 #include "ios/chrome/browser/browser_state/browser_state_info_cache.h"
 #include "ios/chrome/browser/first_run/first_run.h"
@@ -64,7 +65,6 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   ssl_config::SSLConfigServiceManager::RegisterPrefs(registry);
   update_client::RegisterPrefs(registry);
   variations::VariationsService::RegisterPrefs(registry);
-  web_resource::PromoResourceService::RegisterPrefs(registry);
 
   // Preferences related to the browser state manager.
   registry->RegisterStringPref(prefs::kBrowserStateLastUsed, std::string());
@@ -88,10 +88,12 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   HostContentSettingsMap::RegisterProfilePrefs(registry);
   HttpServerPropertiesManagerFactory::RegisterProfilePrefs(registry);
   ntp_snippets::NTPSnippetsService::RegisterProfilePrefs(registry);
+  ntp_tiles::MostVisitedSites::RegisterProfilePrefs(registry);
+  ntp_tiles::PopularSites::RegisterProfilePrefs(registry);
   ios::NotificationPromo::RegisterProfilePrefs(registry);
   password_manager::PasswordManager::RegisterProfilePrefs(registry);
   PrefProxyConfigTrackerImpl::RegisterProfilePrefs(registry);
-  sync_driver::SyncPrefs::RegisterProfilePrefs(registry);
+  syncer::SyncPrefs::RegisterProfilePrefs(registry);
   TemplateURLPrepopulateData::RegisterProfilePrefs(registry);
   translate::TranslatePrefs::RegisterProfilePrefs(registry);
   variations::VariationsService::RegisterProfilePrefs(registry);
@@ -137,19 +139,13 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterListPref(kURLsToRestoreOnStartupOld);
 
   // Register prefs used by Clear Browsing Data UI.
-  registry->RegisterIntegerPref(
-      prefs::kClearBrowsingDataHistoryNoticeShownTimes, 0);
-  registry->RegisterIntegerPref(
-      browsing_data::prefs::kDeleteTimePeriod, 0,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  browsing_data::prefs::RegisterBrowserUserPrefs(registry);
 
   ios::GetChromeBrowserProvider()->RegisterProfilePrefs(registry);
 }
 
 // This method should be periodically pruned of year+ old migrations.
 void MigrateObsoleteLocalStatePrefs(PrefService* prefs) {
-  // Added 05/2016.
-  web_resource::PromoResourceService::ClearLocalState(prefs);
 }
 
 // This method should be periodically pruned of year+ old migrations.

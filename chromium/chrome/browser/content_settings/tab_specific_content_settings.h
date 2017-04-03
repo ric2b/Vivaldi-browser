@@ -16,7 +16,6 @@
 #include "base/observer_list.h"
 #include "base/scoped_observer.h"
 #include "build/build_config.h"
-#include "chrome/browser/browsing_data/cookies_tree_model.h"
 #include "chrome/browser/content_settings/local_shared_objects_container.h"
 #include "chrome/common/custom_handlers/protocol_handler.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
@@ -102,24 +101,24 @@ class TabSpecificContentSettings
   // current page or while loading it. |blocked_by_policy| should be true, if
   // reading cookies was blocked due to the user's content settings. In that
   // case, this function should invoke OnContentBlocked.
-  static void CookiesRead(int render_process_id,
-                          int render_frame_id,
-                          const GURL& url,
-                          const GURL& first_party_url,
-                          const net::CookieList& cookie_list,
-                          bool blocked_by_policy);
+  static void CookiesRead(
+      const base::Callback<content::WebContents*(void)>& wc_getter,
+      const GURL& url,
+      const GURL& first_party_url,
+      const net::CookieList& cookie_list,
+      bool blocked_by_policy);
 
   // Called when a specific cookie in the current page was changed.
   // |blocked_by_policy| should be true, if the cookie was blocked due to the
   // user's content settings. In that case, this function should invoke
   // OnContentBlocked.
-  static void CookieChanged(int render_process_id,
-                            int render_frame_id,
-                            const GURL& url,
-                            const GURL& first_party_url,
-                            const std::string& cookie_line,
-                            const net::CookieOptions& options,
-                            bool blocked_by_policy);
+  static void CookieChanged(
+      const base::Callback<content::WebContents*(void)>& wc_getter,
+      const GURL& url,
+      const GURL& first_party_url,
+      const std::string& cookie_line,
+      const net::CookieOptions& options,
+      bool blocked_by_policy);
 
   // Called when a specific Web database in the current page was accessed. If
   // access was blocked due to the user's content settings,
@@ -163,21 +162,29 @@ class TabSpecificContentSettings
 
   // Called when a specific Service Worker scope was accessed.
   // If access was blocked due to the user's content settings,
-  // |blocked_by_policy| should be true, and this function should invoke
-  // OnContentBlocked.
+  // |blocked_by_policy_javascript| or/and |blocked_by_policy_cookie| should be
+  // true, and this function should invoke OnContentBlocked for JavaScript
+  // or/and cookies respectively.
   static void ServiceWorkerAccessed(int render_process_id,
                                     int render_frame_id,
                                     const GURL& scope,
-                                    bool blocked_by_policy);
+                                    bool blocked_by_policy_javascript,
+                                    bool blocked_by_policy_cookie);
 
-  // Resets the |content_blocked_| and |content_allowed_| arrays, except for
-  // CONTENT_SETTINGS_TYPE_COOKIES related information.
+  // Resets the |content_settings_status_|, except for
+  // information which are needed for navigation: CONTENT_SETTINGS_TYPE_COOKIES
+  // for cookies and service workers, and CONTENT_SETTINGS_TYPE_JAVASCRIPT for
+  // service workers.
   // TODO(vabr): Only public for tests. Move to a test client.
-  void ClearBlockedContentSettingsExceptForCookies();
+  void ClearContentSettingsExceptForNavigationRelatedSettings();
 
-  // Resets all cookies related information.
+  // Resets navigation related information (CONTENT_SETTINGS_TYPE_COOKIES and
+  // CONTENT_SETTINGS_TYPE_JAVASCRIPT).
   // TODO(vabr): Only public for tests. Move to a test client.
-  void ClearCookieSpecificContentSettings();
+  void ClearNavigationRelatedContentSettings();
+
+  // Notifies that a Flash download has been blocked.
+  void FlashDownloadBlocked();
 
   // Changes the |content_blocked_| entry for popups.
   void SetPopupsBlocked(bool blocked);
@@ -295,25 +302,15 @@ class TabSpecificContentSettings
     return pending_protocol_handler_setting_;
   }
 
-  // Returns the |LocalSharedObjectsCounter| instances corresponding to all
+  // Returns the |LocalSharedObjectsContainer| instances corresponding to all
   // allowed, and blocked, respectively, local shared objects like cookies,
   // local storage, ... .
-  const LocalSharedObjectsCounter& allowed_local_shared_objects() const {
+  const LocalSharedObjectsContainer& allowed_local_shared_objects() const {
     return allowed_local_shared_objects_;
   }
 
-  const LocalSharedObjectsCounter& blocked_local_shared_objects() const {
+  const LocalSharedObjectsContainer& blocked_local_shared_objects() const {
     return blocked_local_shared_objects_;
-  }
-
-  // Creates a new copy of a CookiesTreeModel for all allowed, and blocked,
-  // respectively, local shared objects.
-  std::unique_ptr<CookiesTreeModel> CreateAllowedCookiesTreeModel() const {
-    return allowed_local_shared_objects_.CreateCookiesTreeModel();
-  }
-
-  std::unique_ptr<CookiesTreeModel> CreateBlockedCookiesTreeModel() const {
-    return blocked_local_shared_objects_.CreateCookiesTreeModel();
   }
 
   bool load_plugins_link_enabled() { return load_plugins_link_enabled_; }
@@ -351,7 +348,9 @@ class TabSpecificContentSettings
   void OnLocalStorageAccessed(const GURL& url,
                               bool local,
                               bool blocked_by_policy);
-  void OnServiceWorkerAccessed(const GURL& scope, bool blocked_by_policy);
+  void OnServiceWorkerAccessed(const GURL& scope,
+                               bool blocked_by_policy_javascript,
+                               bool blocked_by_policy_cookie);
   void OnWebDatabaseAccessed(const GURL& url,
                              const base::string16& name,
                              const base::string16& display_name,
@@ -398,14 +397,10 @@ class TabSpecificContentSettings
       content::RenderFrameHost* render_frame_host) override;
   bool OnMessageReceived(const IPC::Message& message,
                          content::RenderFrameHost* render_frame_host) override;
-  void DidNavigateMainFrame(
-      const content::LoadCommittedDetails& details,
-      const content::FrameNavigateParams& params) override;
-  void DidStartProvisionalLoadForFrame(
-      content::RenderFrameHost* render_frame_host,
-      const GURL& validated_url,
-      bool is_error_page,
-      bool is_iframe_srcdoc) override;
+  void DidStartNavigation(
+      content::NavigationHandle* navigation_handle) override;
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
   void AppCacheAccessed(const GURL& manifest_url,
                         bool blocked_by_policy) override;
 
@@ -425,11 +420,10 @@ class TabSpecificContentSettings
   void ClearMidiContentSettings();
 
   // Updates Geolocation settings on navigation.
-  void GeolocationDidNavigate(
-      const content::LoadCommittedDetails& details);
+  void GeolocationDidNavigate(content::NavigationHandle* navigation_handle);
 
   // Updates MIDI settings on navigation.
-  void MidiDidNavigate(const content::LoadCommittedDetails& details);
+  void MidiDidNavigate(content::NavigationHandle* navigation_handle);
 
   // All currently registered |SiteDataObserver|s.
   base::ObserverList<SiteDataObserver> observer_list_;
@@ -492,6 +486,9 @@ class TabSpecificContentSettings
   // Manages information about Subresource filtering activation.
   bool subresource_filter_enabled_;
   bool subresource_filter_blockage_indicated_;
+
+  // Holds the previous committed url during a navigation.
+  GURL previous_url_;
 
   // Observer to watch for content settings changed.
   ScopedObserver<HostContentSettingsMap, content_settings::Observer> observer_;

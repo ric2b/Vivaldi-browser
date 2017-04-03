@@ -10,7 +10,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
-#include "chrome/browser/thumbnails/simple_thumbnail_crop.h"
 #include "chrome/browser/thumbnails/thumbnail_service.h"
 #include "chrome/browser/thumbnails/thumbnail_service_factory.h"
 #include "chrome/browser/thumbnails/thumbnailing_context.h"
@@ -23,59 +22,26 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/api/tabs/tabs_private_api.h"
+#include "extensions/helper/vivaldi_frame_observer.h"
 #include "extensions/schema/web_view_private.h"
 #include "skia/ext/image_operations.h"
 #include "skia/ext/platform_canvas.h"
+#include "renderer/vivaldi_render_messages.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/scrollbar_size.h"
 #include "ui/gfx/skbitmap_operations.h"
-
+#include "ui/vivaldi_ui_utils.h"
 
 using content::WebContents;
 using content::RenderViewHost;
 using content::WebContentsImpl;
 using content::RenderViewHostImpl;
 using content::BrowserPluginGuest;
-
-namespace {
-SkBitmap SmartCropAndSize(const SkBitmap& capture,
-                          int target_width,
-                          int target_height) {
-  thumbnails::ClipResult clip_result = thumbnails::CLIP_RESULT_NOT_CLIPPED;
-  // Clip it to a more reasonable position.
-  SkBitmap clipped_bitmap = thumbnails::SimpleThumbnailCrop::GetClippedBitmap(
-      capture, target_width, target_height, &clip_result);
-  // Resize the result to the target size.
-  SkBitmap result = skia::ImageOperations::Resize(
-      clipped_bitmap, skia::ImageOperations::RESIZE_BEST, target_width,
-      target_height);
-
-  // NOTE(pettern): Copied from SimpleThumbnailCrop::CreateThumbnail():
-#if !defined(USE_AURA)
-  // This is a bit subtle. SkBitmaps are refcounted, but the magic
-  // ones in PlatformCanvas can't be assigned to SkBitmap with proper
-  // refcounting.  If the bitmap doesn't change, then the downsampler
-  // will return the input bitmap, which will be the reference to the
-  // weird PlatformCanvas one insetad of a regular one. To get a
-  // regular refcounted bitmap, we need to copy it.
-  //
-  // On Aura, the PlatformCanvas is platform-independent and does not have
-  // any native platform resources that can't be refounted, so this issue does
-  // not occur.
-  //
-  // Note that GetClippedBitmap() does extractSubset() but it won't copy
-  // the pixels, hence we check result size == clipped_bitmap size here.
-  if (clipped_bitmap.width() == result.width() &&
-      clipped_bitmap.height() == result.height())
-    clipped_bitmap.copyTo(&result, kN32_SkColorType);
-#endif
-  return result;
-}
-
-}  // namespace
+using vivaldi::ui_tools::SmartCropAndSize;
+using vivaldi::ui_tools::EncodeBitmap;
 
 namespace extensions {
 namespace vivaldi {
@@ -134,7 +100,9 @@ void WebViewInternalThumbnailFunction::SendResultFromBitmap(
   } else {
     bitmap = screen_capture;
   }
-  bool encoded = EncodeBitmap(bitmap, &data, mime_type);
+  gfx::Size size(width_, height_);
+  bool encoded = EncodeBitmap(bitmap, &data, mime_type, image_format_, size,
+                              scale_, image_quality_);
   if (!encoded) {
     error_ = "Internal Thumbnail error";
     SendResponse(false);
@@ -149,56 +117,6 @@ void WebViewInternalThumbnailFunction::SendResultFromBitmap(
     mime_type.c_str()));
   SetResult(base::MakeUnique<base::StringValue>(base64_result));
   SendResponse(true);
-}
-
-bool WebViewInternalThumbnailFunction::EncodeBitmap(
-    const SkBitmap& screen_capture, std::vector<unsigned char>* data,
-    std::string& mime_type) {
-  SkAutoLockPixels screen_capture_lock(screen_capture);
-  gfx::Size dst_size_pixels;
-  if (width_ && height_) {
-    dst_size_pixels.SetSize(width_, height_);
-  } else {
-    dst_size_pixels = gfx::ScaleToRoundedSize(
-        gfx::Size(screen_capture.width(), screen_capture.height()), scale_);
-  }
-
-  SkBitmap bitmap = skia::ImageOperations::Resize(
-    screen_capture,
-    skia::ImageOperations::RESIZE_BEST,
-    dst_size_pixels.width(),
-    dst_size_pixels.height());
-
-  bool encoded = false;
-
-  SkAutoLockPixels lock(bitmap);
-
-  switch (image_format_) {
-  case api::extension_types::IMAGE_FORMAT_JPEG:
-    if (bitmap.getPixels()) {
-      encoded = gfx::JPEGCodec::Encode(
-        reinterpret_cast<unsigned char*>(bitmap.getAddr32(0, 0)),
-        gfx::JPEGCodec::FORMAT_SkBitmap,
-        bitmap.width(),
-        bitmap.height(),
-        static_cast<int>(bitmap.rowBytes()),
-        image_quality_,
-        data);
-      mime_type = "image/jpeg";  // kMimeTypeJpeg;
-    }
-    break;
-  case api::extension_types::IMAGE_FORMAT_PNG:
-    encoded = gfx::PNGCodec::EncodeBGRASkBitmap(
-      bitmap,
-      true,  // Discard transparency.
-      data);
-    mime_type = "image/png";  // kMimeTypePng;
-    break;
-  default:
-    NOTREACHED() << "Invalid image format.";
-  }
-
-  return encoded;
 }
 
 bool WebViewInternalThumbnailFunction::InternalRunAsyncSafe(
@@ -302,8 +220,9 @@ WebViewPrivateGetThumbnailFromServiceFunction::
 
 bool WebViewPrivateGetThumbnailFromServiceFunction::RunAsyncSafe(
     WebViewGuest* guest) {
-  std::unique_ptr<vivaldi::web_view_private::AddToThumbnailService::Params> params(
-      vivaldi::web_view_private::AddToThumbnailService::Params::Create(*args_));
+  std::unique_ptr<vivaldi::web_view_private::AddToThumbnailService::Params>
+      params(vivaldi::web_view_private::AddToThumbnailService::Params::Create(
+          *args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   url_ = guest->web_contents()->GetURL();
 
@@ -367,8 +286,9 @@ WebViewPrivateAddToThumbnailServiceFunction::
 
 bool WebViewPrivateAddToThumbnailServiceFunction::RunAsyncSafe(
     WebViewGuest* guest) {
-  std::unique_ptr<vivaldi::web_view_private::AddToThumbnailService::Params> params(
-      vivaldi::web_view_private::AddToThumbnailService::Params::Create(*args_));
+  std::unique_ptr<vivaldi::web_view_private::AddToThumbnailService::Params>
+      params(vivaldi::web_view_private::AddToThumbnailService::Params::Create(
+          *args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   if (!params->key.empty())
@@ -540,28 +460,6 @@ bool WebViewPrivateSetExtensionHostFunction::RunAsyncSafe(
   return true;
 }
 
-bool WebViewPrivateIsFocusedElementEditableFunction::RunAsyncSafe(
-    WebViewGuest *guest) {
-  std::unique_ptr<vivaldi::web_view_private::IsFocusedElementEditable::Params>
-      params(
-          vivaldi::web_view_private::IsFocusedElementEditable::Params::Create(
-              *args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-  bool editable =
-      guest->web_contents()->GetRenderViewHost()->IsFocusedElementEditable();
-  results_ =
-      vivaldi::web_view_private::IsFocusedElementEditable::Results::Create(
-          editable);
-  SendResponse(true);
-  return true;
-}
-
-WebViewPrivateIsFocusedElementEditableFunction::
-    WebViewPrivateIsFocusedElementEditableFunction() {}
-
-WebViewPrivateIsFocusedElementEditableFunction::
-    ~WebViewPrivateIsFocusedElementEditableFunction() {}
-
 WebViewPrivateAllowBlockedInsecureContentFunction::
 WebViewPrivateAllowBlockedInsecureContentFunction() {}
 
@@ -573,6 +471,38 @@ bool WebViewPrivateAllowBlockedInsecureContentFunction::RunAsyncSafe(
     guest->AllowRunningInsecureContent();
     SendResponse(true);
     return true;
+}
+
+WebViewPrivateGetFocusedElementInfoFunction::
+    WebViewPrivateGetFocusedElementInfoFunction() {}
+
+WebViewPrivateGetFocusedElementInfoFunction::
+    ~WebViewPrivateGetFocusedElementInfoFunction() {}
+
+bool WebViewPrivateGetFocusedElementInfoFunction::RunAsyncSafe(
+    WebViewGuest *guest) {
+  std::unique_ptr<vivaldi::web_view_private::GetFocusedElementInfo::Params>
+      params(
+          vivaldi::web_view_private::GetFocusedElementInfo::Params::Create(
+              *args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  ::vivaldi::VivaldiFrameObserver *frame_observer = NULL;
+  if (guest->web_contents()) {
+    frame_observer =
+      ::vivaldi::VivaldiFrameObserver::FromWebContents(guest->web_contents());
+  }
+  std::string tagname = "";
+  std::string type = "";
+  bool editable = false;
+  if(frame_observer != NULL) {
+    frame_observer->GetFocusedElementInfo(&tagname, &type, &editable);
+  }
+  results_ =
+      vivaldi::web_view_private::GetFocusedElementInfo
+             ::Results::Create(tagname, type, editable);
+  SendResponse(true);
+  return true;
 }
 
 }  // namespace vivaldi

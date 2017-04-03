@@ -25,6 +25,7 @@
 #include "chrome/browser/plugins/plugin_prefs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_content_client.h"
 #include "chrome/common/chrome_paths.h"
@@ -463,6 +464,24 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, EnsureSameOriginRepliesAllowed) {
                            true);
 }
 
+// Ensure that the PDF component extension cannot be loaded directly.
+IN_PROC_BROWSER_TEST_F(PDFExtensionTest, BlockDirectAccess) {
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  std::unique_ptr<content::ConsoleObserverDelegate> console_delegate(
+      new content::ConsoleObserverDelegate(
+          web_contents,
+          "*Streams are only available from a mime handler view guest.*"));
+  web_contents->SetDelegate(console_delegate.get());
+  GURL forbiddenUrl(
+      "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html?"
+      "https://example.com/notrequested.pdf");
+  ui_test_utils::NavigateToURL(browser(), forbiddenUrl);
+
+  console_delegate->Wait();
+}
+
 // This test ensures that PDF can be loaded from local file
 IN_PROC_BROWSER_TEST_F(PDFExtensionTest, EnsurePDFFromLocalFileLoads) {
   base::FilePath test_data_dir;
@@ -852,6 +871,39 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, LinkShiftMiddleClick) {
 
   content::WebContents* active_web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_NE(web_contents, active_web_contents);
+
+  const GURL& url = active_web_contents->GetURL();
+  ASSERT_EQ(std::string("http://www.example.com/"), url.spec());
+}
+
+IN_PROC_BROWSER_TEST_F(PDFExtensionTest, LinkShiftLeftClick) {
+  host_resolver()->AddRule("www.example.com", "127.0.0.1");
+  GURL test_pdf_url(embedded_test_server()->GetURL("/pdf/test-link.pdf"));
+  content::WebContents* guest_contents = LoadPdfGetGuestContents(test_pdf_url);
+  ASSERT_TRUE(guest_contents);
+  ASSERT_EQ(1U, chrome::GetTotalBrowserCount());
+
+  // The link position of the test-link.pdf in page coordinates is (110, 110).
+  // Convert the link position from page coordinates to screen coordinates.
+  gfx::Point link_position(110, 110);
+  ConvertPageCoordToScreenCoord(guest_contents, &link_position);
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  content::WindowedNotificationObserver observer(
+      chrome::NOTIFICATION_BROWSER_WINDOW_READY,
+      content::NotificationService::AllSources());
+  content::SimulateMouseClickAt(web_contents, blink::WebInputEvent::ShiftKey,
+                                blink::WebMouseEvent::Button::Left,
+                                link_position);
+  observer.Wait();
+
+  ASSERT_EQ(2U, chrome::GetTotalBrowserCount());
+
+  content::WebContents* active_web_contents =
+      chrome::FindLastActive()->tab_strip_model()->GetActiveWebContents();
   ASSERT_NE(web_contents, active_web_contents);
 
   const GURL& url = active_web_contents->GetURL();

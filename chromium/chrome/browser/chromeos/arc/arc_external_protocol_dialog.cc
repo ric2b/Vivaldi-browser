@@ -32,7 +32,8 @@ namespace arc {
 
 namespace {
 
-constexpr uint32_t kMinInstanceVersion = 3;  // RequestActivityIcons' MinVersion
+constexpr uint32_t kMinVersionForHandleUrl = 2;
+constexpr uint32_t kMinVersionForRequestUrlHandlerList = 2;
 
 // Shows the Chrome OS' original external protocol dialog as a fallback.
 void ShowFallbackExternalProtocolDialog(int render_process_host_id,
@@ -41,10 +42,6 @@ void ShowFallbackExternalProtocolDialog(int render_process_host_id,
   WebContents* web_contents =
       tab_util::GetWebContentsByID(render_process_host_id, routing_id);
   new ExternalProtocolDialog(web_contents, url);
-}
-
-mojom::IntentHelperInstance* GetIntentHelper() {
-  return ArcIntentHelperBridge::GetIntentHelperInstance(kMinInstanceVersion);
 }
 
 scoped_refptr<ActivityIconLoader> GetIconLoader() {
@@ -64,27 +61,48 @@ void CloseTabIfNeeded(int render_process_host_id, int routing_id) {
 void OnIntentPickerClosed(int render_process_host_id,
                           int routing_id,
                           const GURL& url,
-                          mojo::Array<mojom::UrlHandlerInfoPtr> handlers,
-                          size_t selected_app_index,
+                          mojo::Array<mojom::IntentHandlerInfoPtr> handlers,
+                          std::string selected_app_package,
                           ArcNavigationThrottle::CloseReason close_reason) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  mojom::IntentHelperInstance* intent_helper = GetIntentHelper();
-  if (!intent_helper || selected_app_index >= handlers.size())
+  size_t selected_app_index = handlers.size();
+  // Make sure that the instance at least supports HandleUrl.
+  auto* instance = ArcIntentHelperBridge::GetIntentHelperInstance(
+      "HandleUrl", kMinVersionForHandleUrl);
+  if (!instance) {
     close_reason = ArcNavigationThrottle::CloseReason::ERROR;
+  } else if (close_reason ==
+                 ArcNavigationThrottle::CloseReason::JUST_ONCE_PRESSED ||
+             close_reason ==
+                 ArcNavigationThrottle::CloseReason::ALWAYS_PRESSED) {
+    // If the user selected an app to continue the navigation, confirm that the
+    // |package_name| matches a valid option and return the index.
+    for (size_t i = 0; i < handlers.size(); ++i) {
+      if (handlers[i]->package_name == selected_app_package) {
+        selected_app_index = i;
+        break;
+      }
+    }
+
+    if (selected_app_index == handlers.size())
+      close_reason = ArcNavigationThrottle::CloseReason::ERROR;
+  }
 
   switch (close_reason) {
     case ArcNavigationThrottle::CloseReason::ALWAYS_PRESSED: {
-      intent_helper->AddPreferredPackage(
-          handlers[selected_app_index]->package_name);
+      instance->AddPreferredPackage(handlers[selected_app_index]->package_name);
       // fall through.
     }
-    case ArcNavigationThrottle::CloseReason::JUST_ONCE_PRESSED:
-    case ArcNavigationThrottle::CloseReason::PREFERRED_ACTIVITY_FOUND: {
+    case ArcNavigationThrottle::CloseReason::JUST_ONCE_PRESSED: {
       // Launch the selected app.
-      intent_helper->HandleUrl(url.spec(),
-                               handlers[selected_app_index]->package_name);
+      instance->HandleUrl(url.spec(),
+                          handlers[selected_app_index]->package_name);
       CloseTabIfNeeded(render_process_host_id, routing_id);
+      break;
+    }
+    case ArcNavigationThrottle::CloseReason::PREFERRED_ACTIVITY_FOUND: {
+      NOTREACHED();
       break;
     }
     case ArcNavigationThrottle::CloseReason::ERROR:
@@ -107,19 +125,20 @@ void OnAppIconsReceived(
     int render_process_host_id,
     int routing_id,
     const GURL& url,
-    mojo::Array<mojom::UrlHandlerInfoPtr> handlers,
+    mojo::Array<mojom::IntentHandlerInfoPtr> handlers,
     std::unique_ptr<ActivityIconLoader::ActivityToIconsMap> icons) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  using NameAndIcon = std::pair<std::string, gfx::Image>;
-  std::vector<NameAndIcon> app_info;
+  using AppInfo = arc::ArcNavigationThrottle::AppInfo;
+  std::vector<AppInfo> app_info;
 
   for (const auto& handler : handlers) {
     const ActivityIconLoader::ActivityName activity(handler->package_name,
                                                     handler->activity_name);
     const auto it = icons->find(activity);
     app_info.emplace_back(
-        handler->name, it != icons->end() ? it->second.icon20 : gfx::Image());
+        AppInfo(it != icons->end() ? it->second.icon20 : gfx::Image(),
+                handler->package_name, handler->name));
   }
 
   auto show_bubble_cb = base::Bind(ShowIntentPickerBubble());
@@ -134,15 +153,27 @@ void OnAppIconsReceived(
 void OnUrlHandlerList(int render_process_host_id,
                       int routing_id,
                       const GURL& url,
-                      mojo::Array<mojom::UrlHandlerInfoPtr> handlers) {
+                      mojo::Array<mojom::IntentHandlerInfoPtr> handlers) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  mojom::IntentHelperInstance* intent_helper = GetIntentHelper();
+  auto* instance = ArcIntentHelperBridge::GetIntentHelperInstance(
+      "HandleUrl", kMinVersionForHandleUrl);
   scoped_refptr<ActivityIconLoader> icon_loader = GetIconLoader();
 
-  if (!intent_helper || !icon_loader || !handlers.size()) {
+  if (!instance || !icon_loader || !handlers.size()) {
     // No handler is available on ARC side. Show the Chrome OS dialog.
     ShowFallbackExternalProtocolDialog(render_process_host_id, routing_id, url);
+    return;
+  }
+
+  // If one of the apps is marked as preferred, use it right away without
+  // showing the UI. |is_preferred| will never be true unless the user
+  // explicitly makes it the default with the "always" button.
+  for (size_t i = 0; i < handlers.size(); ++i) {
+    if (!handlers[i]->is_preferred)
+      continue;
+    instance->HandleUrl(url.spec(), handlers[i]->package_name);
+    CloseTabIfNeeded(render_process_host_id, routing_id);
     return;
   }
 
@@ -163,13 +194,21 @@ bool RunArcExternalProtocolDialog(const GURL& url,
                                   int routing_id,
                                   ui::PageTransition page_transition,
                                   bool has_user_gesture) {
+  // Handle client-side redirections. Forwarding such navigations to ARC is
+  // better than just showing the "can't open" dialog.
+  // TODO(djacobo): Check if doing this in arc::ShouldIgnoreNavigation is safe,
+  // and move it to the function if it is. (b/32442730#comment3)
+  page_transition = ui::PageTransitionFromInt(
+      page_transition & ~ui::PAGE_TRANSITION_CLIENT_REDIRECT);
+
   // Try to forward <form> submissions to ARC when possible.
   constexpr bool kAllowFormSubmit = true;
   if (ShouldIgnoreNavigation(page_transition, kAllowFormSubmit))
     return false;
 
-  mojom::IntentHelperInstance* intent_helper = GetIntentHelper();
-  if (!intent_helper)
+  auto* instance = ArcIntentHelperBridge::GetIntentHelperInstance(
+      "RequestUrlHandlerList", kMinVersionForRequestUrlHandlerList);
+  if (!instance)
     return false;  // ARC is either not supported or not yet ready.
 
   WebContents* web_contents =
@@ -181,7 +220,7 @@ bool RunArcExternalProtocolDialog(const GURL& url,
 
   // Show ARC version of the dialog, which is IntentPickerBubbleView. To show
   // the bubble view, we need to ask ARC for a handler list first.
-  intent_helper->RequestUrlHandlerList(
+  instance->RequestUrlHandlerList(
       url.spec(),
       base::Bind(OnUrlHandlerList, render_process_host_id, routing_id, url));
   return true;

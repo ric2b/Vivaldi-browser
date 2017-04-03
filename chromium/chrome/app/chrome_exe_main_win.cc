@@ -33,8 +33,6 @@
 #include "components/crash/content/app/crash_switches.h"
 #include "components/crash/content/app/crashpad.h"
 #include "components/crash/content/app/run_as_crashpad_handler_win.h"
-#include "components/startup_metric_utils/browser/startup_metric_utils.h"
-#include "components/startup_metric_utils/common/pre_read_field_trial_utils_win.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/result_codes.h"
 
@@ -216,9 +214,6 @@ int main() {
   const std::string process_type =
       command_line->GetSwitchValueASCII(switches::kProcessType);
 
-  startup_metric_utils::InitializePreReadOptions(
-      BrowserDistribution::GetDistribution()->GetRegistryPath());
-
   // Confirm that an explicit prefetch profile is used for all process types
   // except for the browser process. Any new process type will have to assign
   // itself a prefetch id. See kPrefetchArgument* constants in
@@ -231,7 +226,7 @@ int main() {
         *base::CommandLine::ForCurrentProcess());
   }
 
-  startup_metric_utils::RecordExeMainEntryPointTime(base::Time::Now());
+  const base::TimeTicks exe_entry_point_ticks = base::TimeTicks::Now();
 
   // Signal Chrome Elf that Chrome has begun to start.
   SignalChromeElf();
@@ -249,7 +244,7 @@ int main() {
   // Load and launch the chrome dll. *Everything* happens inside.
   VLOG(1) << "About to load main DLL.";
   MainDllLoader* loader = MakeMainDllLoader();
-  int rc = loader->Launch(instance);
+  int rc = loader->Launch(instance, exe_entry_point_ticks);
   loader->RelaunchChromeBrowserWithNewCommandLineIfNeeded();
   delete loader;
   return rc;

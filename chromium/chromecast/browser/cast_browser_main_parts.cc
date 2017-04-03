@@ -16,6 +16,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -60,7 +61,6 @@
 #include "media/base/media.h"
 #include "media/base/media_switches.h"
 #include "ui/compositor/compositor_switches.h"
-#include "ui/native_theme/native_theme_switches.h"
 
 #if !defined(OS_ANDROID)
 #include <signal.h>
@@ -222,7 +222,7 @@ DefaultCommandLineSwitch g_default_switches[] = {
   // Enable media sessions by default (even on non-Android platforms).
   { switches::kEnableDefaultMediaSession, "" },
 #endif
-#if BUILDFLAG(DISABLE_DISPLAY)
+#if BUILDFLAG(IS_CAST_AUDIO_ONLY)
   { switches::kDisableGpu, "" },
 #endif
 #if defined(OS_LINUX)
@@ -231,9 +231,7 @@ DefaultCommandLineSwitch g_default_switches[] = {
   // current Linux/NVidia OpenGL drivers.
   { switches::kIgnoreGpuBlacklist, ""},
 #elif defined(ARCH_CPU_ARM_FAMILY)
-  // On Linux arm, enable CMA pipeline by default.
-  { switches::kEnableCmaMediaPipeline, "" },
-#if !BUILDFLAG(DISABLE_DISPLAY)
+#if !BUILDFLAG(IS_CAST_AUDIO_ONLY)
   { switches::kEnableHardwareOverlays, "" },
 #endif
 #endif
@@ -246,7 +244,6 @@ DefaultCommandLineSwitch g_default_switches[] = {
   // Enable navigator.connection API.
   // TODO(derekjchow): Remove this switch when enabled by default.
   { switches::kEnableNetworkInformation, "" },
-  { switches::kHideScrollbars, "" },
   { NULL, NULL },  // Termination
 };
 
@@ -456,9 +453,9 @@ void CastBrowserMainParts::PreMainMessageLoopRun() {
           cast_browser_process_->browser_client()
               ->EnableRemoteDebuggingImmediately()));
 
-#if defined(USE_AURA) && !BUILDFLAG(DISABLE_DISPLAY)
+#if defined(USE_AURA) && !BUILDFLAG(IS_CAST_AUDIO_ONLY)
   // TODO(halliwell) move audio builds to use ozone_platform_cast, then can
-  // simplify this by removing DISABLE_DISPLAY condition.  Should then also
+  // simplify this by removing IS_CAST_AUDIO_ONLY condition.  Should then also
   // assert(ozone_platform_cast) in BUILD.gn where it depends on //ui/ozone.
   gfx::Size display_size =
       display::Screen::GetScreen()->GetPrimaryDisplay().GetSizeInPixel();
@@ -508,8 +505,8 @@ bool CastBrowserMainParts::MainMessageLoopRun(int* result_code) {
   // If parameters_.ui_task is not NULL, we are running browser tests.
   if (parameters_.ui_task) {
     base::MessageLoop* message_loop = base::MessageLoopForUI::current();
-    message_loop->PostTask(FROM_HERE, *parameters_.ui_task);
-    message_loop->PostTask(FROM_HERE, quit_closure);
+    message_loop->task_runner()->PostTask(FROM_HERE, *parameters_.ui_task);
+    message_loop->task_runner()->PostTask(FROM_HERE, quit_closure);
   }
 
   run_loop.Run();

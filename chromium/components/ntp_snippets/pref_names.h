@@ -8,9 +8,23 @@
 namespace ntp_snippets {
 namespace prefs {
 
+// If set to false, remote suggestions are completely disabled. This is set by
+// an enterprise policy.
 extern const char kEnableSnippets[];
 
+// TODO(treib): Remove this after M56.
 extern const char kSnippetHosts[];
+
+// The pref name under which remote suggestion categories (including their ID
+// and title) are stored.
+extern const char kRemoteSuggestionCategories[];
+
+// The pref name for the currently-scheduled background fetching interval when
+// there is WiFi connectivity.
+extern const char kSnippetBackgroundFetchingIntervalWifi[];
+// The pref name for the currently-scheduled background fetching interval when
+// there is no WiFi connectivity.
+extern const char kSnippetBackgroundFetchingIntervalFallback[];
 
 // The pref name for today's count of NTPSnippetsFetcher requests, so far.
 extern const char kSnippetFetcherRequestCount[];
@@ -31,6 +45,7 @@ extern const char kSnippetThumbnailsRequestsDay[];
 
 extern const char kDismissedRecentOfflineTabSuggestions[];
 extern const char kDismissedDownloadSuggestions[];
+extern const char kDismissedForeignSessionsSuggestions[];
 
 // The pref name for the time when M54 was first started on the device.
 extern const char kBookmarksFirstM54Start[];

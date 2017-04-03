@@ -7,7 +7,6 @@
 
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -29,7 +28,7 @@ class KeywordTableTest : public testing::Test {
  protected:
   void SetUp() override {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
-    file_ = temp_dir_.path().AppendASCII("TestWebDatabase");
+    file_ = temp_dir_.GetPath().AppendASCII("TestWebDatabase");
 
     table_.reset(new KeywordTable);
     db_.reset(new WebDatabase);

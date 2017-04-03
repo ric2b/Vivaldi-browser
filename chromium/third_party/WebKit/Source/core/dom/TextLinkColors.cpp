@@ -3,8 +3,10 @@
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
  *           (C) 2001 Dirk Mueller (mueller@kde.org)
  *           (C) 2006 Alexey Proskuryakov (ap@webkit.org)
- * Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2011, 2012 Apple Inc. All rights reserved.
- * Copyright (C) 2008, 2009 Torch Mobile Inc. All rights reserved. (http://www.torchmobile.com/)
+ * Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2011, 2012 Apple Inc. All
+ * rights reserved.
+ * Copyright (C) 2008, 2009 Torch Mobile Inc. All rights reserved.
+ * (http://www.torchmobile.com/)
  * Copyright (C) 2010 Nokia Corporation and/or its subsidiary(-ies)
  * Copyright (C) Research In Motion Limited 2010-2011. All rights reserved.
  * Copyright (C) 2013 Google Inc. All rights reserved.
@@ -28,59 +30,55 @@
 #include "core/dom/TextLinkColors.h"
 
 #include "core/css/CSSColorValue.h"
-#include "core/css/CSSPrimitiveValue.h"
+#include "core/css/CSSIdentifierValue.h"
 #include "core/css/StyleColor.h"
 #include "core/layout/LayoutTheme.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
 
-TextLinkColors::TextLinkColors()
-    : m_textColor(Color::black)
-{
-    resetLinkColor();
-    resetVisitedLinkColor();
-    resetActiveLinkColor();
+TextLinkColors::TextLinkColors() : m_textColor(Color::black) {
+  resetLinkColor();
+  resetVisitedLinkColor();
+  resetActiveLinkColor();
 }
 
-void TextLinkColors::resetLinkColor()
-{
-    m_linkColor = Color(0, 0, 238);
+void TextLinkColors::resetLinkColor() {
+  m_linkColor = Color(0, 0, 238);
 }
 
-void TextLinkColors::resetVisitedLinkColor()
-{
-    m_visitedLinkColor = Color(85, 26, 139);
+void TextLinkColors::resetVisitedLinkColor() {
+  m_visitedLinkColor = Color(85, 26, 139);
 }
 
-void TextLinkColors::resetActiveLinkColor()
-{
-    m_activeLinkColor = Color(255, 0, 0);
+void TextLinkColors::resetActiveLinkColor() {
+  m_activeLinkColor = Color(255, 0, 0);
 }
 
-Color TextLinkColors::colorFromCSSValue(const CSSValue& value, Color currentColor, bool forVisitedLink) const
-{
-    if (value.isColorValue())
-        return toCSSColorValue(value).value();
+Color TextLinkColors::colorFromCSSValue(const CSSValue& value,
+                                        Color currentColor,
+                                        bool forVisitedLink) const {
+  if (value.isColorValue())
+    return toCSSColorValue(value).value();
 
-    CSSValueID valueID = toCSSPrimitiveValue(value).getValueID();
-    switch (valueID) {
+  CSSValueID valueID = toCSSIdentifierValue(value).getValueID();
+  switch (valueID) {
     case CSSValueInvalid:
-        NOTREACHED();
-        return Color();
+      NOTREACHED();
+      return Color();
     case CSSValueInternalQuirkInherit:
-        return textColor();
+      return textColor();
     case CSSValueWebkitLink:
-        return forVisitedLink ? visitedLinkColor() : linkColor();
+      return forVisitedLink ? visitedLinkColor() : linkColor();
     case CSSValueWebkitActivelink:
-        return activeLinkColor();
+      return activeLinkColor();
     case CSSValueWebkitFocusRingColor:
-        return LayoutTheme::theme().focusRingColor();
+      return LayoutTheme::theme().focusRingColor();
     case CSSValueCurrentcolor:
-        return currentColor;
+      return currentColor;
     default:
-        return StyleColor::colorFromKeyword(valueID);
-    }
+      return StyleColor::colorFromKeyword(valueID);
+  }
 }
 
-} // namespace blink
+}  // namespace blink

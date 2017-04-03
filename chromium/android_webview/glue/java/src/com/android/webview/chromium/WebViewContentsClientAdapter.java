@@ -4,6 +4,7 @@
 
 package com.android.webview.chromium;
 
+import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.content.Context;
 import android.graphics.Bitmap;
@@ -99,6 +100,8 @@ public class WebViewContentsClientAdapter extends AwContentsClient {
     private WebView.FindListener mFindListener;
     // The listener receiving notifications of screen updates.
     private WebView.PictureListener mPictureListener;
+    // Whether the picture listener is invalidate only (i.e. receives a null Picture)
+    private boolean mPictureListenerInvalidateOnly;
 
     private WebViewDelegate mWebViewDelegate;
 
@@ -110,11 +113,13 @@ public class WebViewContentsClientAdapter extends AwContentsClient {
 
     private WeakHashMap<AwPermissionRequest, WeakReference<PermissionRequestAdapter>>
             mOngoingPermissionRequests;
+
     /**
      * Adapter constructor.
      *
      * @param webView the {@link WebView} instance that this adapter is serving.
      */
+    @SuppressLint("HandlerLeak")
     WebViewContentsClientAdapter(WebView webView, Context context,
             WebViewDelegate webViewDelegate) {
         if (webView == null || webViewDelegate == null) {
@@ -166,8 +171,16 @@ public class WebViewContentsClientAdapter extends AwContentsClient {
         }
     }
 
+    WebViewClient getWebViewClient() {
+        return mWebViewClient;
+    }
+
     void setWebChromeClient(WebChromeClient client) {
         mWebChromeClient = client;
+    }
+
+    WebChromeClient getWebChromeClient() {
+        return mWebChromeClient;
     }
 
     void setDownloadListener(DownloadListener listener) {
@@ -178,8 +191,9 @@ public class WebViewContentsClientAdapter extends AwContentsClient {
         mFindListener = listener;
     }
 
-    void setPictureListener(WebView.PictureListener listener) {
+    void setPictureListener(WebView.PictureListener listener, boolean invalidateOnly) {
         mPictureListener = listener;
+        mPictureListenerInvalidateOnly = invalidateOnly;
     }
 
     //--------------------------------------------------------------------------------------------
@@ -327,13 +341,20 @@ public class WebViewContentsClientAdapter extends AwContentsClient {
     /**
      * @see AwContentsClient#shouldOverrideUrlLoading(AwContentsClient.AwWebResourceRequest)
      */
+    @TargetApi(Build.VERSION_CODES.N)
     @Override
     public boolean shouldOverrideUrlLoading(AwContentsClient.AwWebResourceRequest request) {
         try {
             TraceEvent.begin("WebViewContentsClientAdapter.shouldOverrideUrlLoading");
             if (TRACE) Log.d(TAG, "shouldOverrideUrlLoading=" + request.url);
             boolean result;
-            result = mWebViewClient.shouldOverrideUrlLoading(mWebView, request.url);
+            if (Build.VERSION.CODENAME.equals("N")
+                    || Build.VERSION.SDK_INT > Build.VERSION_CODES.M) {
+                result = mWebViewClient.shouldOverrideUrlLoading(
+                        mWebView, new WebResourceRequestImpl(request));
+            } else {
+                result = mWebViewClient.shouldOverrideUrlLoading(mWebView, request.url);
+            }
             return result;
         } finally {
             TraceEvent.end("WebViewContentsClientAdapter.shouldOverrideUrlLoading");
@@ -539,7 +560,8 @@ public class WebViewContentsClientAdapter extends AwContentsClient {
                     public void run() {
                         if (mPictureListener != null) {
                             if (TRACE) Log.d(TAG, "onPageFinished-fake");
-                            mPictureListener.onNewPicture(mWebView, new Picture());
+                            mPictureListener.onNewPicture(mWebView,
+                                    mPictureListenerInvalidateOnly ? null : new Picture());
                         }
                     }
                 }, 100);

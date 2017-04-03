@@ -6,7 +6,6 @@
 
 #include "ash/accelerators/accelerator_commands_aura.h"
 #include "ash/aura/wm_window_aura.h"
-#include "ash/common/ash_switches.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/shell.h"
 #include "ash/wm/window_state_aura.h"
@@ -52,8 +51,7 @@ class MaximizableWidgetDelegate : public views::WidgetDelegateView {
 // fullscreen.)
 bool IsInImmersiveFullscreen(ash::wm::WindowState* window_state) {
   return window_state->IsFullscreen() &&
-         (window_state->shelf_mode_in_fullscreen() !=
-          ash::wm::WindowState::SHELF_HIDDEN);
+         !window_state->hide_shelf_when_fullscreen();
 }
 
 }  // namespace

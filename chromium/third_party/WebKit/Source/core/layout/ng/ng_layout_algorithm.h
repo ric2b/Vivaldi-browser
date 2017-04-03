@@ -12,22 +12,30 @@
 namespace blink {
 
 class NGConstraintSpace;
-class NGFragment;
+class NGPhysicalFragment;
 
 // Base class for all LayoutNG algorithms.
-class CORE_EXPORT NGLayoutAlgorithm {
+class CORE_EXPORT NGLayoutAlgorithm
+    : public GarbageCollectedFinalized<NGLayoutAlgorithm> {
   WTF_MAKE_NONCOPYABLE(NGLayoutAlgorithm);
-  USING_FAST_MALLOC(NGLayoutAlgorithm);
 
  public:
   NGLayoutAlgorithm() {}
+  virtual ~NGLayoutAlgorithm() {}
 
   // Actual layout function. Lays out the children and descendents within the
   // constraints given by the NGConstraintSpace. Returns a fragment with the
   // resulting layout information.
   // This function can not be const because for interruptible layout, we have
   // to be able to store state information.
-  virtual NGFragment* layout(const NGConstraintSpace&) = 0;
+  // Returns true when done; when this function returns false, it has to be
+  // called again. The out parameter will only be set when this function
+  // returns true. The same constraint space has to be passed each time.
+  // TODO(layout-ng): Should we have a StartLayout function to avoid passing
+  // the same space for each Layout iteration?
+  virtual bool Layout(const NGConstraintSpace*, NGPhysicalFragment**) = 0;
+
+  DEFINE_INLINE_VIRTUAL_TRACE() {}
 };
 
 }  // namespace blink

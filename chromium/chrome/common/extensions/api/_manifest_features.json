@@ -50,7 +50,7 @@
     "extension_types": ["extension"],
     "platforms": ["win"]
   }, {
-    "channel": "trunk",
+    "channel": "canary",
     "extension_types": ["extension"],
     "platforms": ["mac"]
   }],
@@ -190,12 +190,6 @@
   "page_action": {
     "channel": "stable",
     "extension_types": ["extension"]
-  },
-  "permissions": {
-    "channel": "stable",
-    "extension_types": [
-      "extension", "legacy_packaged_app", "hosted_app", "platform_app"
-    ]
   },
   "platforms": {
     "channel": "stable",

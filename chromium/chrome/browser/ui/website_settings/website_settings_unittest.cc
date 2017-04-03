@@ -18,18 +18,17 @@
 #include "chrome/browser/ui/website_settings/website_settings_ui.h"
 #include "chrome/browser/usb/usb_chooser_context.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
+#include "chrome/grit/theme_resources.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/infobars/core/infobar.h"
-#include "content/public/browser/cert_store.h"
-#include "content/public/common/ssl_status.h"
+#include "content/public/browser/ssl_status.h"
 #include "device/core/mock_device_client.h"
 #include "device/usb/mock_usb_device.h"
 #include "device/usb/mock_usb_service.h"
-#include "grit/theme_resources.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/x509_certificate.h"
 #include "net/ssl/ssl_connection_status_flags.h"
@@ -67,13 +66,6 @@ int SetSSLCipherSuite(int connection_status, int cipher_suite) {
   return cipher_suite | connection_status;
 }
 
-class MockCertStore : public content::CertStore {
- public:
-  virtual ~MockCertStore() {}
-  MOCK_METHOD2(StoreCert, int(net::X509Certificate*, int));
-  MOCK_METHOD2(RetrieveCert, bool(int, scoped_refptr<net::X509Certificate>*));
-};
-
 class MockWebsiteSettingsUI : public WebsiteSettingsUI {
  public:
   virtual ~MockWebsiteSettingsUI() {}
@@ -87,7 +79,7 @@ class MockWebsiteSettingsUI : public WebsiteSettingsUI {
 
 class WebsiteSettingsTest : public ChromeRenderViewHostTestHarness {
  public:
-  WebsiteSettingsTest() : cert_id_(0), url_("http://www.example.com") {}
+  WebsiteSettingsTest() : url_("http://www.example.com") {}
 
   ~WebsiteSettingsTest() override {}
 
@@ -98,18 +90,12 @@ class WebsiteSettingsTest : public ChromeRenderViewHostTestHarness {
     security_info_.security_level = SecurityStateModel::NONE;
 
     // Create the certificate.
-    cert_id_ = 1;
     cert_ =
         net::ImportCertFromFile(net::GetTestCertsDirectory(), "ok_cert.pem");
     ASSERT_TRUE(cert_);
 
     TabSpecificContentSettings::CreateForWebContents(web_contents());
     InfoBarService::CreateForWebContents(web_contents());
-
-    // Setup the mock cert store.
-    EXPECT_CALL(cert_store_, RetrieveCert(cert_id_, _) )
-        .Times(AnyNumber())
-        .WillRepeatedly(DoAll(SetArgPointee<1>(cert_), Return(true)));
 
     // Setup mock ui.
     mock_ui_.reset(new MockWebsiteSettingsUI());
@@ -146,8 +132,7 @@ class WebsiteSettingsTest : public ChromeRenderViewHostTestHarness {
   void ClearWebsiteSettings() { website_settings_.reset(nullptr); }
 
   const GURL& url() const { return url_; }
-  MockCertStore* cert_store() { return &cert_store_; }
-  int cert_id() { return cert_id_; }
+  scoped_refptr<net::X509Certificate> cert() { return cert_; }
   MockWebsiteSettingsUI* mock_ui() { return mock_ui_.get(); }
   const SecurityStateModel::SecurityInfo& security_info() {
     return security_info_;
@@ -167,7 +152,7 @@ class WebsiteSettingsTest : public ChromeRenderViewHostTestHarness {
     if (!website_settings_.get()) {
       website_settings_.reset(new WebsiteSettings(
           mock_ui(), profile(), tab_specific_content_settings(), web_contents(),
-          url(), security_info(), cert_store()));
+          url(), security_info()));
     }
     return website_settings_.get();
   }
@@ -182,9 +167,7 @@ class WebsiteSettingsTest : public ChromeRenderViewHostTestHarness {
   device::MockDeviceClient device_client_;
   std::unique_ptr<WebsiteSettings> website_settings_;
   std::unique_ptr<MockWebsiteSettingsUI> mock_ui_;
-  int cert_id_;
   scoped_refptr<net::X509Certificate> cert_;
-  MockCertStore cert_store_;
   GURL url_;
   std::vector<std::unique_ptr<WebsiteSettingsUI::ChosenObjectInfo>>
       last_chosen_object_info_;
@@ -363,7 +346,7 @@ TEST_F(WebsiteSettingsTest, HTTPConnection) {
 TEST_F(WebsiteSettingsTest, HTTPSConnection) {
   security_info_.security_level = SecurityStateModel::SECURE;
   security_info_.scheme_is_cryptographic = true;
-  security_info_.cert_id = cert_id();
+  security_info_.certificate = cert();
   security_info_.cert_status = 0;
   security_info_.security_bits = 81;  // No error if > 80.
   int status = 0;
@@ -401,32 +384,31 @@ TEST_F(WebsiteSettingsTest, InsecureContent) {
        WebsiteSettings::SITE_CONNECTION_STATUS_INSECURE_PASSIVE_SUBRESOURCE,
        WebsiteSettings::SITE_IDENTITY_STATUS_CERT, IDR_PAGEINFO_WARNING_MINOR},
       // Passive mixed content with a cert error on the main resource.
-      {SecurityStateModel::SECURITY_ERROR, net::CERT_STATUS_DATE_INVALID,
+      {SecurityStateModel::DANGEROUS, net::CERT_STATUS_DATE_INVALID,
        SecurityStateModel::CONTENT_STATUS_DISPLAYED,
        SecurityStateModel::CONTENT_STATUS_NONE,
        WebsiteSettings::SITE_CONNECTION_STATUS_INSECURE_PASSIVE_SUBRESOURCE,
        WebsiteSettings::SITE_IDENTITY_STATUS_ERROR, IDR_PAGEINFO_WARNING_MINOR},
       // Active and passive mixed content.
-      {SecurityStateModel::SECURITY_ERROR, 0,
+      {SecurityStateModel::DANGEROUS, 0,
        SecurityStateModel::CONTENT_STATUS_DISPLAYED_AND_RAN,
        SecurityStateModel::CONTENT_STATUS_NONE,
        WebsiteSettings::SITE_CONNECTION_STATUS_INSECURE_ACTIVE_SUBRESOURCE,
        WebsiteSettings::SITE_IDENTITY_STATUS_CERT, IDR_PAGEINFO_BAD},
       // Active and passive mixed content with a cert error on the main
       // resource.
-      {SecurityStateModel::SECURITY_ERROR, net::CERT_STATUS_DATE_INVALID,
+      {SecurityStateModel::DANGEROUS, net::CERT_STATUS_DATE_INVALID,
        SecurityStateModel::CONTENT_STATUS_DISPLAYED_AND_RAN,
        SecurityStateModel::CONTENT_STATUS_NONE,
        WebsiteSettings::SITE_CONNECTION_STATUS_INSECURE_ACTIVE_SUBRESOURCE,
        WebsiteSettings::SITE_IDENTITY_STATUS_ERROR, IDR_PAGEINFO_BAD},
       // Active mixed content.
-      {SecurityStateModel::SECURITY_ERROR, 0,
-       SecurityStateModel::CONTENT_STATUS_RAN,
+      {SecurityStateModel::DANGEROUS, 0, SecurityStateModel::CONTENT_STATUS_RAN,
        SecurityStateModel::CONTENT_STATUS_NONE,
        WebsiteSettings::SITE_CONNECTION_STATUS_INSECURE_ACTIVE_SUBRESOURCE,
        WebsiteSettings::SITE_IDENTITY_STATUS_CERT, IDR_PAGEINFO_BAD},
       // Active mixed content with a cert error on the main resource.
-      {SecurityStateModel::SECURITY_ERROR, net::CERT_STATUS_DATE_INVALID,
+      {SecurityStateModel::DANGEROUS, net::CERT_STATUS_DATE_INVALID,
        SecurityStateModel::CONTENT_STATUS_RAN,
        SecurityStateModel::CONTENT_STATUS_NONE,
        WebsiteSettings::SITE_CONNECTION_STATUS_INSECURE_ACTIVE_SUBRESOURCE,
@@ -442,33 +424,33 @@ TEST_F(WebsiteSettingsTest, InsecureContent) {
       // certificate errors are ignored: if the main resource had a cert
       // error, it's not that useful to warn about subresources with cert
       // errors as well.
-      {SecurityStateModel::SECURITY_ERROR, net::CERT_STATUS_DATE_INVALID,
+      {SecurityStateModel::DANGEROUS, net::CERT_STATUS_DATE_INVALID,
        SecurityStateModel::CONTENT_STATUS_NONE,
        SecurityStateModel::CONTENT_STATUS_DISPLAYED,
        WebsiteSettings::SITE_CONNECTION_STATUS_ENCRYPTED,
        WebsiteSettings::SITE_IDENTITY_STATUS_ERROR, IDR_PAGEINFO_GOOD},
       // Passive and active subresources with cert errors.
-      {SecurityStateModel::SECURITY_ERROR, 0,
+      {SecurityStateModel::DANGEROUS, 0,
        SecurityStateModel::CONTENT_STATUS_NONE,
        SecurityStateModel::CONTENT_STATUS_DISPLAYED_AND_RAN,
        WebsiteSettings::SITE_CONNECTION_STATUS_INSECURE_ACTIVE_SUBRESOURCE,
        WebsiteSettings::SITE_IDENTITY_STATUS_CERT, IDR_PAGEINFO_BAD},
       // Passive and active subresources with cert errors, with a cert
       // error on the main resource also.
-      {SecurityStateModel::SECURITY_ERROR, net::CERT_STATUS_DATE_INVALID,
+      {SecurityStateModel::DANGEROUS, net::CERT_STATUS_DATE_INVALID,
        SecurityStateModel::CONTENT_STATUS_NONE,
        SecurityStateModel::CONTENT_STATUS_DISPLAYED_AND_RAN,
        WebsiteSettings::SITE_CONNECTION_STATUS_ENCRYPTED,
        WebsiteSettings::SITE_IDENTITY_STATUS_ERROR, IDR_PAGEINFO_GOOD},
       // Active subresources with cert errors.
-      {SecurityStateModel::SECURITY_ERROR, 0,
+      {SecurityStateModel::DANGEROUS, 0,
        SecurityStateModel::CONTENT_STATUS_NONE,
        SecurityStateModel::CONTENT_STATUS_RAN,
        WebsiteSettings::SITE_CONNECTION_STATUS_INSECURE_ACTIVE_SUBRESOURCE,
        WebsiteSettings::SITE_IDENTITY_STATUS_CERT, IDR_PAGEINFO_BAD},
       // Active subresources with cert errors, with a cert error on the main
       // resource also.
-      {SecurityStateModel::SECURITY_ERROR, net::CERT_STATUS_DATE_INVALID,
+      {SecurityStateModel::DANGEROUS, net::CERT_STATUS_DATE_INVALID,
        SecurityStateModel::CONTENT_STATUS_NONE,
        SecurityStateModel::CONTENT_STATUS_RAN,
        WebsiteSettings::SITE_CONNECTION_STATUS_ENCRYPTED,
@@ -481,20 +463,19 @@ TEST_F(WebsiteSettingsTest, InsecureContent) {
        WebsiteSettings::SITE_CONNECTION_STATUS_INSECURE_PASSIVE_SUBRESOURCE,
        WebsiteSettings::SITE_IDENTITY_STATUS_CERT, IDR_PAGEINFO_WARNING_MINOR},
       // Passive mixed content and active subresources with cert errors.
-      {SecurityStateModel::SECURITY_ERROR, 0,
+      {SecurityStateModel::DANGEROUS, 0,
        SecurityStateModel::CONTENT_STATUS_DISPLAYED,
        SecurityStateModel::CONTENT_STATUS_RAN,
        WebsiteSettings::SITE_CONNECTION_STATUS_INSECURE_ACTIVE_SUBRESOURCE,
        WebsiteSettings::SITE_IDENTITY_STATUS_CERT, IDR_PAGEINFO_BAD},
       // Active mixed content and passive subresources with cert errors.
-      {SecurityStateModel::SECURITY_ERROR, 0,
-       SecurityStateModel::CONTENT_STATUS_RAN,
+      {SecurityStateModel::DANGEROUS, 0, SecurityStateModel::CONTENT_STATUS_RAN,
        SecurityStateModel::CONTENT_STATUS_DISPLAYED,
        WebsiteSettings::SITE_CONNECTION_STATUS_INSECURE_ACTIVE_SUBRESOURCE,
        WebsiteSettings::SITE_IDENTITY_STATUS_CERT, IDR_PAGEINFO_BAD},
       // Passive mixed content, active subresources with cert errors, and a cert
       // error on the main resource.
-      {SecurityStateModel::SECURITY_ERROR, net::CERT_STATUS_DATE_INVALID,
+      {SecurityStateModel::DANGEROUS, net::CERT_STATUS_DATE_INVALID,
        SecurityStateModel::CONTENT_STATUS_DISPLAYED,
        SecurityStateModel::CONTENT_STATUS_RAN,
        WebsiteSettings::SITE_CONNECTION_STATUS_INSECURE_PASSIVE_SUBRESOURCE,
@@ -507,7 +488,7 @@ TEST_F(WebsiteSettingsTest, InsecureContent) {
     security_info_ = SecurityStateModel::SecurityInfo();
     security_info_.security_level = test.security_level;
     security_info_.scheme_is_cryptographic = true;
-    security_info_.cert_id = cert_id();
+    security_info_.certificate = cert();
     security_info_.cert_status = test.cert_status;
     security_info_.security_bits = 81;  // No error if > 80.
     security_info_.mixed_content_status = test.mixed_content_status;
@@ -538,13 +519,10 @@ TEST_F(WebsiteSettingsTest, HTTPSEVCert) {
       net::X509Certificate::CreateFromBytes(
           reinterpret_cast<const char*>(google_der),
           sizeof(google_der));
-  int ev_cert_id = 1;
-  EXPECT_CALL(*cert_store(), RetrieveCert(ev_cert_id, _)).WillRepeatedly(
-      DoAll(SetArgPointee<1>(ev_cert), Return(true)));
 
   security_info_.security_level = SecurityStateModel::NONE;
   security_info_.scheme_is_cryptographic = true;
-  security_info_.cert_id = ev_cert_id;
+  security_info_.certificate = ev_cert;
   security_info_.cert_status = net::CERT_STATUS_IS_EV;
   security_info_.security_bits = 81;  // No error if > 80.
   security_info_.mixed_content_status =
@@ -569,7 +547,7 @@ TEST_F(WebsiteSettingsTest, HTTPSEVCert) {
 TEST_F(WebsiteSettingsTest, HTTPSRevocationError) {
   security_info_.security_level = SecurityStateModel::SECURE;
   security_info_.scheme_is_cryptographic = true;
-  security_info_.cert_id = cert_id();
+  security_info_.certificate = cert();
   security_info_.cert_status = net::CERT_STATUS_UNABLE_TO_CHECK_REVOCATION;
   security_info_.security_bits = 81;  // No error if > 80.
   int status = 0;
@@ -590,7 +568,7 @@ TEST_F(WebsiteSettingsTest, HTTPSRevocationError) {
 TEST_F(WebsiteSettingsTest, HTTPSConnectionError) {
   security_info_.security_level = SecurityStateModel::SECURE;
   security_info_.scheme_is_cryptographic = true;
-  security_info_.cert_id = cert_id();
+  security_info_.certificate = cert();
   security_info_.cert_status = 0;
   security_info_.security_bits = -1;
   int status = 0;
@@ -609,9 +587,10 @@ TEST_F(WebsiteSettingsTest, HTTPSConnectionError) {
 }
 
 TEST_F(WebsiteSettingsTest, HTTPSPolicyCertConnection) {
-  security_info_.security_level = SecurityStateModel::SECURITY_POLICY_WARNING;
+  security_info_.security_level =
+      SecurityStateModel::SECURE_WITH_POLICY_INSTALLED_CERT;
   security_info_.scheme_is_cryptographic = true;
-  security_info_.cert_id = cert_id();
+  security_info_.certificate = cert();
   security_info_.cert_status = 0;
   security_info_.security_bits = 81;  // No error if > 80.
   int status = 0;
@@ -632,7 +611,7 @@ TEST_F(WebsiteSettingsTest, HTTPSPolicyCertConnection) {
 TEST_F(WebsiteSettingsTest, HTTPSSHA1Minor) {
   security_info_.security_level = SecurityStateModel::NONE;
   security_info_.scheme_is_cryptographic = true;
-  security_info_.cert_id = cert_id();
+  security_info_.certificate = cert();
   security_info_.cert_status = 0;
   security_info_.security_bits = 81;  // No error if > 80.
   int status = 0;
@@ -659,7 +638,7 @@ TEST_F(WebsiteSettingsTest, HTTPSSHA1Minor) {
 TEST_F(WebsiteSettingsTest, HTTPSSHA1Major) {
   security_info_.security_level = SecurityStateModel::NONE;
   security_info_.scheme_is_cryptographic = true;
-  security_info_.cert_id = cert_id();
+  security_info_.certificate = cert();
   security_info_.cert_status = 0;
   security_info_.security_bits = 81;  // No error if > 80.
   int status = 0;
@@ -687,7 +666,7 @@ TEST_F(WebsiteSettingsTest, HTTPSSHA1Major) {
 TEST_F(WebsiteSettingsTest, UnknownSCTs) {
   security_info_.security_level = SecurityStateModel::SECURE;
   security_info_.scheme_is_cryptographic = true;
-  security_info_.cert_id = cert_id();
+  security_info_.certificate = cert();
   security_info_.cert_status = 0;
   security_info_.security_bits = 81;  // No error if > 80.
   int status = 0;
@@ -713,7 +692,7 @@ TEST_F(WebsiteSettingsTest, UnknownSCTs) {
 TEST_F(WebsiteSettingsTest, InvalidSCTs) {
   security_info_.security_level = SecurityStateModel::SECURE;
   security_info_.scheme_is_cryptographic = true;
-  security_info_.cert_id = cert_id();
+  security_info_.certificate = cert();
   security_info_.cert_status = 0;
   security_info_.security_bits = 81;  // No error if > 80.
   int status = 0;
@@ -741,7 +720,7 @@ TEST_F(WebsiteSettingsTest, InvalidSCTs) {
 TEST_F(WebsiteSettingsTest, ValidSCTs) {
   security_info_.security_level = SecurityStateModel::SECURE;
   security_info_.scheme_is_cryptographic = true;
-  security_info_.cert_id = cert_id();
+  security_info_.certificate = cert();
   security_info_.cert_status = 0;
   security_info_.security_bits = 81;  // No error if > 80.
   int status = 0;
@@ -769,13 +748,10 @@ TEST_F(WebsiteSettingsTest, ValidSCTsEV) {
   scoped_refptr<net::X509Certificate> ev_cert =
       net::X509Certificate::CreateFromBytes(
           reinterpret_cast<const char*>(google_der), sizeof(google_der));
-  int ev_cert_id = 1;
-  EXPECT_CALL(*cert_store(), RetrieveCert(ev_cert_id, _))
-      .WillRepeatedly(DoAll(SetArgPointee<1>(ev_cert), Return(true)));
 
   security_info_.security_level = SecurityStateModel::SECURE;
   security_info_.scheme_is_cryptographic = true;
-  security_info_.cert_id = ev_cert_id;
+  security_info_.certificate = ev_cert;
   security_info_.cert_status = net::CERT_STATUS_IS_EV;
   security_info_.security_bits = 81;  // No error if > 80.
   int status = 0;
@@ -802,7 +778,7 @@ TEST_F(WebsiteSettingsTest, ValidSCTsEV) {
 TEST_F(WebsiteSettingsTest, UnknownAndInvalidSCTs) {
   security_info_.security_level = SecurityStateModel::SECURE;
   security_info_.scheme_is_cryptographic = true;
-  security_info_.cert_id = cert_id();
+  security_info_.certificate = cert();
   security_info_.cert_status = 0;
   security_info_.security_bits = 81;  // No error if > 80.
   int status = 0;
@@ -829,7 +805,7 @@ TEST_F(WebsiteSettingsTest, UnknownAndInvalidSCTs) {
 TEST_F(WebsiteSettingsTest, ValidAndUnknownSCTs) {
   security_info_.security_level = SecurityStateModel::SECURE;
   security_info_.scheme_is_cryptographic = true;
-  security_info_.cert_id = cert_id();
+  security_info_.certificate = cert();
   security_info_.cert_status = 0;
   security_info_.security_bits = 81;  // No error if > 80.
   int status = 0;

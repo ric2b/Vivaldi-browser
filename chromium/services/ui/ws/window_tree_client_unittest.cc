@@ -151,7 +151,7 @@ class TestWindowTreeClient : public mojom::WindowTreeClient,
       return;
 
     ASSERT_TRUE(wait_state_.get() == nullptr);
-    wait_state_.reset(new WaitState);
+    wait_state_ = base::MakeUnique<WaitState>();
     wait_state_->change_count = count;
     wait_state_->run_loop.Run();
     wait_state_.reset();
@@ -163,14 +163,14 @@ class TestWindowTreeClient : public mojom::WindowTreeClient,
   void WaitForOnEmbed() {
     if (tree_)
       return;
-    embed_run_loop_.reset(new base::RunLoop);
+    embed_run_loop_ = base::MakeUnique<base::RunLoop>();
     embed_run_loop_->Run();
     embed_run_loop_.reset();
   }
 
   bool WaitForChangeCompleted(uint32_t id) {
     waiting_change_id_ = id;
-    change_completed_run_loop_.reset(new base::RunLoop);
+    change_completed_run_loop_ = base::MakeUnique<base::RunLoop>();
     change_completed_run_loop_->Run();
     return on_change_completed_result_;
   }
@@ -371,6 +371,43 @@ class TestWindowTreeClient : public mojom::WindowTreeClient,
                                        mojom::Cursor cursor_id) override {
     tracker_.OnWindowPredefinedCursorChanged(window_id, cursor_id);
   }
+
+  void OnDragDropStart(
+      mojo::Map<mojo::String, mojo::Array<uint8_t>> drag_data) override {
+    NOTIMPLEMENTED();
+  }
+
+  void OnDragEnter(uint32_t window,
+                   uint32_t key_state,
+                   const gfx::Point& position,
+                   uint32_t effect_bitmask,
+                   const OnDragEnterCallback& callback) override {
+    NOTIMPLEMENTED();
+  }
+  void OnDragOver(uint32_t window,
+                  uint32_t key_state,
+                  const gfx::Point& position,
+                  uint32_t effect_bitmask,
+                  const OnDragOverCallback& callback) override {
+    NOTIMPLEMENTED();
+  }
+  void OnDragLeave(uint32_t window) override { NOTIMPLEMENTED(); }
+  void OnCompleteDrop(uint32_t window,
+                      uint32_t key_state,
+                      const gfx::Point& position,
+                      uint32_t effect_bitmask,
+                      const OnCompleteDropCallback& callback) override {
+    NOTIMPLEMENTED();
+  }
+
+  void OnPerformDragDropCompleted(uint32_t window,
+                                  bool success,
+                                  uint32_t action_taken) override {
+    NOTIMPLEMENTED();
+  }
+
+  void OnDragDropDone() override { NOTIMPLEMENTED(); }
+
   void OnChangeCompleted(uint32_t change_id, bool success) override {
     if (waiting_change_id_ == change_id && change_completed_run_loop_) {
       on_change_completed_result_ = success;
@@ -380,9 +417,9 @@ class TestWindowTreeClient : public mojom::WindowTreeClient,
   void RequestClose(uint32_t window_id) override {}
   void GetWindowManager(mojo::AssociatedInterfaceRequest<mojom::WindowManager>
                             internal) override {
-    window_manager_binding_.reset(
-        new mojo::AssociatedBinding<mojom::WindowManager>(this,
-                                                          std::move(internal)));
+    window_manager_binding_ =
+        base::MakeUnique<mojo::AssociatedBinding<mojom::WindowManager>>(
+            this, std::move(internal));
     tree_->GetWindowManagerClient(
         GetProxy(&window_manager_client_, tree_.associated_group()));
   }
@@ -394,6 +431,7 @@ class TestWindowTreeClient : public mojom::WindowTreeClient,
                          bool drawn) override {
     NOTIMPLEMENTED();
   }
+  void WmDisplayRemoved(int64_t display_id) override { NOTIMPLEMENTED(); }
   void WmSetBounds(uint32_t change_id,
                    uint32_t window_id,
                    const gfx::Rect& bounds) override {
@@ -468,7 +506,7 @@ class WindowTreeClientFactory
   std::unique_ptr<TestWindowTreeClient> WaitForInstance() {
     if (!client_impl_.get()) {
       DCHECK(!run_loop_);
-      run_loop_.reset(new base::RunLoop);
+      run_loop_ = base::MakeUnique<base::RunLoop>();
       run_loop_->Run();
       run_loop_.reset();
     }
@@ -479,7 +517,7 @@ class WindowTreeClientFactory
   // InterfaceFactory<WindowTreeClient>:
   void Create(const shell::Identity& remote_identity,
               InterfaceRequest<WindowTreeClient> request) override {
-    client_impl_.reset(new TestWindowTreeClient());
+    client_impl_ = base::MakeUnique<TestWindowTreeClient>();
     client_impl_->Bind(std::move(request));
     if (run_loop_.get())
       run_loop_->Quit();
@@ -593,15 +631,15 @@ class WindowTreeClientTest : public WindowServerServiceTestBase {
   }
 
   void SetUp() override {
-    client_factory_.reset(new WindowTreeClientFactory());
+    client_factory_ = base::MakeUnique<WindowTreeClientFactory>();
 
     WindowServerServiceTestBase::SetUp();
 
     mojom::WindowTreeHostFactoryPtr factory;
-    connector()->ConnectToInterface("mojo:ui", &factory);
+    connector()->ConnectToInterface("service:ui", &factory);
 
     mojom::WindowTreeClientPtr tree_client_ptr;
-    wt_client1_.reset(new TestWindowTreeClient());
+    wt_client1_ = base::MakeUnique<TestWindowTreeClient>();
     wt_client1_->Bind(GetProxy(&tree_client_ptr));
 
     factory->CreateWindowTreeHost(GetProxy(&host_),
@@ -1100,10 +1138,46 @@ TEST_F(WindowTreeClientTest, DeleteWindow) {
   }
 }
 
+// Verifies DeleteWindow() on the root suceeds.
+TEST_F(WindowTreeClientTest, DeleteRoot) {
+  ASSERT_NO_FATAL_FAILURE(EstablishSecondClient(true));
+  Id window_1_1 = BuildWindowId(client_id_1(), 1);
+  EXPECT_TRUE(wt_client2()->DeleteWindow(window_1_1));
+  // Client1 should get OnEmbeddedAppDisconnected().
+  wt_client1_->WaitForChangeCount(1);
+  EXPECT_EQ("OnEmbeddedAppDisconnected window=" + IdToString(window_1_1),
+            SingleChangeToDescription(*changes1()));
+
+  // Create a new window and try adding to |window_1_1| from client 2, should
+  // fail as client 2 no longer knows about |window_1_1|.
+  Id window_2_1 = wt_client2()->NewWindow(1);
+  ASSERT_TRUE(window_2_1);
+  EXPECT_FALSE(wt_client2()->AddWindow(window_1_1, window_2_1));
+}
+
+// Verifies DeleteWindow() on the root suceeds.
+TEST_F(WindowTreeClientTest, DeleteRootWithChildren) {
+  ASSERT_NO_FATAL_FAILURE(EstablishSecondClient(true));
+  Id window_1_1 = BuildWindowId(client_id_1(), 1);
+  Id window_2_1 = wt_client2()->NewWindow(1);
+  ASSERT_TRUE(window_2_1);
+  ASSERT_TRUE(wt_client2()->AddWindow(window_1_1, window_2_1));
+  changes2()->clear();
+  EXPECT_TRUE(wt_client2()->DeleteWindow(window_1_1));
+  // DeleteWindow() should not result in any calls to client 2.
+  EXPECT_TRUE(changes2()->empty());
+
+  // Create a new window parented to 2_1. Should work as 2_1 is still valid.
+  Id window_2_2 = wt_client2()->NewWindow(2);
+  ASSERT_TRUE(window_2_2);
+  ASSERT_TRUE(wt_client2()->AddWindow(window_2_1, window_2_2));
+}
+
 // Verifies DeleteWindow isn't allowed from a separate client.
 TEST_F(WindowTreeClientTest, DeleteWindowFromAnotherClientDisallowed) {
   ASSERT_NO_FATAL_FAILURE(EstablishSecondClient(true));
-  EXPECT_FALSE(wt_client2()->DeleteWindow(BuildWindowId(client_id_1(), 1)));
+  // This id is unknown, so deletion should fail.
+  EXPECT_FALSE(wt_client2()->DeleteWindow(BuildWindowId(client_id_1(), 2)));
 }
 
 // Verifies if a window was deleted and then reused that other clients are

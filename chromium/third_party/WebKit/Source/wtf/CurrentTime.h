@@ -42,29 +42,29 @@ namespace WTF {
 WTF_EXPORT double currentTime();
 
 // Same thing, in milliseconds.
-inline double currentTimeMS()
-{
-    return currentTime() * 1000.0;
+inline double currentTimeMS() {
+  return currentTime() * 1000.0;
 }
 
-// Provides a monotonically increasing time in seconds since an arbitrary point in the past.
-// On unsupported platforms, this function only guarantees the result will be non-decreasing.
+// Provides a monotonically increasing time in seconds since an arbitrary point
+// in the past.  On unsupported platforms, this function only guarantees the
+// result will be non-decreasing.
 WTF_EXPORT double monotonicallyIncreasingTime();
 
 // Same thing, in milliseconds.
-inline double monotonicallyIncreasingTimeMS()
-{
-    return monotonicallyIncreasingTime() * 1000.0;
+inline double monotonicallyIncreasingTimeMS() {
+  return monotonicallyIncreasingTime() * 1000.0;
 }
 
 using TimeFunction = double (*)();
 
-// Make all the time functions (currentTime(), monotonicallyIncreasingTime(), systemTraceTime()) return the result
-// of the supplied function. Returns the pointer to the old time function. For both setting and getting, nullptr means
-// using the default timing function returning the actual time.
+// Make all the time functions (currentTime(), monotonicallyIncreasingTime(),
+// systemTraceTime()) return the result of the supplied function. Returns the
+// pointer to the old time function. For both setting and getting, nullptr
+// means using the default timing function returning the actual time.
 WTF_EXPORT TimeFunction setTimeFunctionsForTesting(TimeFunction);
 
-} // namespace WTF
+}  // namespace WTF
 
 using WTF::currentTime;
 using WTF::currentTimeMS;
@@ -73,4 +73,4 @@ using WTF::monotonicallyIncreasingTimeMS;
 using WTF::TimeFunction;
 using WTF::setTimeFunctionsForTesting;
 
-#endif // CurrentTime_h
+#endif  // CurrentTime_h

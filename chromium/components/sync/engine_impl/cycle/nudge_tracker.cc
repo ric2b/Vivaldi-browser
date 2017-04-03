@@ -4,13 +4,10 @@
 
 #include "components/sync/engine_impl/cycle/nudge_tracker.h"
 
-#include <stddef.h>
-
 #include <utility>
 
 #include "base/memory/ptr_util.h"
 #include "components/sync/engine/polling_constants.h"
-#include "components/sync/protocol/sync.pb.h"
 
 namespace syncer {
 
@@ -19,7 +16,6 @@ namespace {
 // Delays for syncer nudges.
 const int kDefaultNudgeDelayMilliseconds = 200;
 const int kSlowNudgeDelayMilliseconds = 2000;
-const int kDefaultSessionsCommitDelaySeconds = 10;
 const int kSyncRefreshDelayMilliseconds = 500;
 const int kSyncSchedulerDelayMilliseconds = 250;
 
@@ -32,15 +28,12 @@ base::TimeDelta GetDefaultDelayForType(ModelType model_type,
       return base::TimeDelta::FromSeconds(kDefaultShortPollIntervalSeconds);
     case BOOKMARKS:
     case PREFERENCES:
-      // Types with sometimes automatic changes get longer delays to allow more
-      // coalescing.
-      return base::TimeDelta::FromMilliseconds(kSlowNudgeDelayMilliseconds);
     case SESSIONS:
     case FAVICON_IMAGES:
     case FAVICON_TRACKING:
-      // Types with navigation triggered changes get longer delays to allow more
+      // Types with sometimes automatic changes get longer delays to allow more
       // coalescing.
-      return base::TimeDelta::FromSeconds(kDefaultSessionsCommitDelaySeconds);
+      return base::TimeDelta::FromMilliseconds(kSlowNudgeDelayMilliseconds);
     default:
       return minimum_delay;
   }
@@ -157,7 +150,7 @@ base::TimeDelta NudgeTracker::RecordLocalRefreshRequest(ModelTypeSet types) {
 }
 
 base::TimeDelta NudgeTracker::RecordRemoteInvalidation(
-    syncer::ModelType type,
+    ModelType type,
     std::unique_ptr<InvalidationInterface> invalidation) {
   // Forward the invalidations to the proper recipient.
   TypeTrackerMap::const_iterator tracker_it = type_trackers_.find(type);
@@ -166,13 +159,13 @@ base::TimeDelta NudgeTracker::RecordRemoteInvalidation(
   return remote_invalidation_nudge_delay_;
 }
 
-void NudgeTracker::RecordInitialSyncRequired(syncer::ModelType type) {
+void NudgeTracker::RecordInitialSyncRequired(ModelType type) {
   TypeTrackerMap::const_iterator tracker_it = type_trackers_.find(type);
   DCHECK(tracker_it != type_trackers_.end());
   tracker_it->second->RecordInitialSyncRequired();
 }
 
-void NudgeTracker::RecordCommitConflict(syncer::ModelType type) {
+void NudgeTracker::RecordCommitConflict(ModelType type) {
   TypeTrackerMap::const_iterator tracker_it = type_trackers_.find(type);
   DCHECK(tracker_it != type_trackers_.end());
   tracker_it->second->RecordCommitConflict();
@@ -387,7 +380,7 @@ void NudgeTracker::OnReceivedCustomNudgeDelays(
            delay_map.begin();
        iter != delay_map.end(); ++iter) {
     ModelType type = iter->first;
-    DCHECK(syncer::ProtocolTypes().Has(type));
+    DCHECK(ProtocolTypes().Has(type));
     TypeTrackerMap::const_iterator type_iter = type_trackers_.find(type);
     if (type_iter == type_trackers_.end())
       continue;

@@ -18,8 +18,8 @@
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/pref_names.h"
+#include "components/browsing_data/core/history_notice_utils.h"
 #include "components/browsing_data/core/pref_names.h"
-#include "components/browsing_data_ui/history_notice_utils.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_ui.h"
 
@@ -216,8 +216,8 @@ void ClearBrowsingDataHandler::HandleClearBrowsingData(
 void ClearBrowsingDataHandler::OnClearingTaskFinished(
     const std::string& webui_callback_id) {
   PrefService* prefs = profile_->GetPrefs();
-  int notice_shown_times =
-      prefs->GetInteger(prefs::kClearBrowsingDataHistoryNoticeShownTimes);
+  int notice_shown_times = prefs->GetInteger(
+      browsing_data::prefs::kClearBrowsingDataHistoryNoticeShownTimes);
 
   // When the deletion is complete, we might show an additional dialog with
   // a notice about other forms of browsing history. This is the case if
@@ -231,8 +231,9 @@ void ClearBrowsingDataHandler::OnClearingTaskFinished(
 
   if (show_notice) {
     // Increment the preference.
-    prefs->SetInteger(prefs::kClearBrowsingDataHistoryNoticeShownTimes,
-                      notice_shown_times + 1);
+    prefs->SetInteger(
+        browsing_data::prefs::kClearBrowsingDataHistoryNoticeShownTimes,
+        notice_shown_times + 1);
   }
 
   UMA_HISTOGRAM_BOOLEAN(
@@ -283,7 +284,7 @@ void ClearBrowsingDataHandler::OnStateChanged() {
 }
 
 void ClearBrowsingDataHandler::RefreshHistoryNotice() {
-  browsing_data_ui::ShouldShowNoticeAboutOtherFormsOfBrowsingHistory(
+  browsing_data::ShouldShowNoticeAboutOtherFormsOfBrowsingHistory(
       sync_service_,
       WebHistoryServiceFactory::GetForProfile(profile_),
       base::Bind(&ClearBrowsingDataHandler::UpdateHistoryNotice,
@@ -292,11 +293,11 @@ void ClearBrowsingDataHandler::RefreshHistoryNotice() {
   // If the dialog with history notice has been shown less than
   // |kMaxTimesHistoryNoticeShown| times, we might have to show it when the
   // user deletes history. Find out if the conditions are met.
-  int notice_shown_times = profile_->GetPrefs()->
-      GetInteger(prefs::kClearBrowsingDataHistoryNoticeShownTimes);
+  int notice_shown_times = profile_->GetPrefs()->GetInteger(
+      browsing_data::prefs::kClearBrowsingDataHistoryNoticeShownTimes);
 
   if (notice_shown_times < kMaxTimesHistoryNoticeShown) {
-    browsing_data_ui::ShouldPopupDialogAboutOtherFormsOfBrowsingHistory(
+    browsing_data::ShouldPopupDialogAboutOtherFormsOfBrowsingHistory(
         sync_service_,
         WebHistoryServiceFactory::GetForProfile(profile_),
         chrome::GetChannel(),

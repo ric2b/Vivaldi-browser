@@ -36,6 +36,8 @@ enum EventType {
   ET_POINTER_CANCELLED,
   ET_POINTER_ENTERED,
   ET_POINTER_EXITED,
+  ET_POINTER_WHEEL_CHANGED,
+  ET_POINTER_CAPTURE_CHANGED,
 
   // GestureEvent types
   ET_GESTURE_SCROLL_BEGIN,
@@ -160,6 +162,25 @@ enum EventPhase {
   EP_TARGET,
   EP_POSTTARGET,
   EP_POSTDISPATCH
+};
+
+// Momentum phase information used for a ScrollEvent.
+enum class EventMomentumPhase {
+  // Event is a non-momentum update to an event stream already begun.
+  NONE,
+
+  // Event is the beginning of an event stream that may result in momentum.
+  MAY_BEGIN,
+
+  // Event is an update while in a momentum phase. A "begin" event for the
+  // momentum phase portion of an event stream uses this also, but the scroll
+  // offsets will be zero.
+  INERTIAL_UPDATE,
+
+  // Event marks the end of the current event stream. Note that this is also set
+  // for events that are not a "stream", but indicate both the start and end of
+  // the event (e.g. a mouse wheel tick).
+  END,
 };
 
 // Device ID for Touch and Key Events.

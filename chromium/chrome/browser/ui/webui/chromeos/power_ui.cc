@@ -6,6 +6,8 @@
 
 #include <stddef.h>
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/compiler_specific.h"
@@ -15,11 +17,11 @@
 #include "chrome/browser/chromeos/power/power_data_collector.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/browser/web_ui_message_handler.h"
-#include "grit/browser_resources.h"
 
 namespace chromeos {
 
@@ -91,7 +93,7 @@ void PowerMessageHandler::OnGetBatteryChargeData(const base::ListValue* value) {
     element->SetBoolean("externalPower", sample.external_power);
     element->SetDouble("time", sample.time.ToJsTime());
 
-    js_power_supply_data.Append(element.release());
+    js_power_supply_data.Append(std::move(element));
   }
 
   base::ListValue js_system_resumed_data;
@@ -150,7 +152,7 @@ void PowerMessageHandler::GetJsSystemResumedData(base::ListValue *data) {
                        sample.sleep_duration.InMillisecondsF());
     element->SetDouble("time", sample.time.ToJsTime());
 
-    data->Append(element.release());
+    data->Append(std::move(element));
   }
 }
 
@@ -176,9 +178,9 @@ void PowerMessageHandler::GetJsStateOccupancyData(
       }
       js_sample->Set("timeInState", state_dict.release());
 
-      js_sample_list->Append(js_sample.release());
+      js_sample_list->Append(std::move(js_sample));
     }
-    js_data->Append(js_sample_list.release());
+    js_data->Append(std::move(js_sample_list));
   }
 }
 

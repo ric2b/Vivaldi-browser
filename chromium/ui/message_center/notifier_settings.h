@@ -42,11 +42,14 @@ MESSAGE_CENTER_EXPORT NotifierSettingsDelegate* ShowSettings(
 
 // The struct to distinguish the notifiers.
 struct MESSAGE_CENTER_EXPORT NotifierId {
-  enum NotifierType {
-    APPLICATION,
-    ARC_APPLICATION,
-    WEB_PAGE,
-    SYSTEM_COMPONENT,
+  // This enum is being used for histogram reporting and the elements should not
+  // be re-ordered.
+  enum NotifierType : int {
+    APPLICATION = 0,
+    ARC_APPLICATION = 1,
+    WEB_PAGE = 2,
+    SYSTEM_COMPONENT = 3,
+    SIZE,
   };
 
   // Constructor for non WEB_PAGE type.
@@ -116,13 +119,8 @@ struct MESSAGE_CENTER_EXPORT Notifier {
 };
 
 struct MESSAGE_CENTER_EXPORT NotifierGroup {
-  NotifierGroup(const gfx::Image& icon,
-                const base::string16& name,
-                const base::string16& login_info);
+  NotifierGroup(const base::string16& name, const base::string16& login_info);
   ~NotifierGroup();
-
-  // Icon of a notifier group.
-  const gfx::Image icon;
 
   // Display name of a notifier group.
   const base::string16 name;

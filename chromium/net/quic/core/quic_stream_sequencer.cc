@@ -9,8 +9,10 @@
 #include <string>
 #include <utility>
 
+#include "base/format_macros.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "net/quic/core/quic_bug_tracker.h"
 #include "net/quic/core/quic_clock.h"
 #include "net/quic/core/quic_flags.h"
@@ -21,6 +23,7 @@
 
 using base::IntToString;
 using base::StringPiece;
+using base::StringPrintf;
 using std::min;
 using std::numeric_limits;
 using std::string;
@@ -35,7 +38,6 @@ QuicStreamSequencer::QuicStreamSequencer(ReliableQuicStream* quic_stream,
       blocked_(false),
       num_frames_received_(0),
       num_duplicate_frames_received_(0),
-      num_early_frames_received_(0),
       clock_(clock),
       ignore_read_data_(false) {}
 
@@ -72,10 +74,6 @@ void QuicStreamSequencer::OnStreamFrame(const QuicStreamFrame& frame) {
     ++num_duplicate_frames_received_;
     // Silently ignore duplicates.
     return;
-  }
-
-  if (byte_offset > buffered_frames_.BytesConsumed()) {
-    ++num_early_frames_received_;
   }
 
   if (blocked_) {
@@ -140,7 +138,17 @@ bool QuicStreamSequencer::GetReadableRegion(iovec* iov,
 
 int QuicStreamSequencer::Readv(const struct iovec* iov, size_t iov_len) {
   DCHECK(!blocked_);
-  size_t bytes_read = buffered_frames_.Readv(iov, iov_len);
+  string error_details;
+  size_t bytes_read;
+  QuicErrorCode read_error =
+      buffered_frames_.Readv(iov, iov_len, &bytes_read, &error_details);
+  if (FLAGS_quic_stream_sequencer_buffer_debug && read_error != QUIC_NO_ERROR) {
+    string details = StringPrintf("Stream %" PRIu32 ": %s", stream_->id(),
+                                  error_details.c_str());
+    stream_->CloseConnectionWithDetails(read_error, details);
+    return static_cast<int>(bytes_read);
+  }
+
   stream_->AddBytesConsumed(bytes_read);
   return static_cast<int>(bytes_read);
 }
@@ -183,6 +191,16 @@ void QuicStreamSequencer::StopReading() {
   }
   ignore_read_data_ = true;
   FlushBufferedFrames();
+}
+
+void QuicStreamSequencer::ReleaseBuffer() {
+  buffered_frames_.ReleaseWholeBuffer();
+}
+
+void QuicStreamSequencer::ReleaseBufferIfEmpty() {
+  if (FLAGS_quic_release_crypto_stream_buffer && buffered_frames_.Empty()) {
+    buffered_frames_.ReleaseWholeBuffer();
+  }
 }
 
 void QuicStreamSequencer::FlushBufferedFrames() {

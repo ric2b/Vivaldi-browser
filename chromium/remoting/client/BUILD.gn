@@ -9,8 +9,6 @@ static_library("client") {
 
   sources = [
     "audio_consumer.h",
-    "audio_decode_scheduler.cc",
-    "audio_decode_scheduler.h",
     "audio_player.cc",
     "audio_player.h",
     "chromoting_client.cc",
@@ -49,8 +47,8 @@ static_library("client") {
 
   configs += [
     "//build/config/compiler:wexit_time_destructors",
-    "//remoting:version",
-    "//remoting:enable_webrtc_remoting_client",
+    "//remoting/build/config:version",
+    "//remoting/build/config:enable_webrtc_remoting_client",
   ]
 
   deps = [
@@ -118,21 +116,6 @@ source_set("opengl_renderer") {
   }
 }
 
-static_library("test_support") {
-  testonly = true
-
-  sources = [
-    "fake_audio_consumer.cc",
-    "fake_audio_consumer.h",
-  ]
-
-  public_deps = [
-    "//remoting/protocol:test_support",
-    "//testing/gmock",
-    "//third_party/protobuf:protobuf_lite",
-  ]
-}
-
 source_set("unit_tests") {
   testonly = true
 
@@ -140,14 +123,12 @@ source_set("unit_tests") {
   # be compiled on all platforms.
   set_sources_assignment_filter([])
   sources = [
-    "audio_decode_scheduler_unittest.cc",
     "audio_player_unittest.cc",
     "chromoting_client_runtime_unittest.cc",
     "client_status_logger_unittest.cc",
     "client_telemetry_logger_unittest.cc",
     "dual_buffer_frame_consumer_unittest.cc",
     "empty_cursor_filter_unittest.cc",
-    "gl_renderer_unittest.cc",
     "key_event_mapper_unittest.cc",
     "normalizing_input_filter_cros_unittest.cc",
     "normalizing_input_filter_mac_unittest.cc",
@@ -160,17 +141,22 @@ source_set("unit_tests") {
   set_sources_assignment_filter(sources_assignment_filter)
 
   configs += [
-    "//remoting:version",
-    "//remoting:enable_webrtc_remoting_client",
+    "//remoting/build/config:version",
+    "//remoting/build/config:enable_webrtc_remoting_client",
   ]
 
   deps = [
     ":client",
-    ":opengl_renderer",
-    ":test_support",
     "//remoting/proto",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/webrtc",
   ]
+
+  if (!is_win) {
+    # Windows clang builder fails to link the test binary with ANGLE GLESv2.
+    # crbug.com/642027
+    sources += [ "gl_renderer_unittest.cc" ]
+    deps += [ ":opengl_renderer" ]
+  }
 }

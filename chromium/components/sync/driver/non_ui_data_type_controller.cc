@@ -5,8 +5,8 @@
 #include "components/sync/driver/non_ui_data_type_controller.h"
 
 #include "base/logging.h"
-#include "base/memory/weak_ptr.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/sync/api/data_type_error_handler_impl.h"
 #include "components/sync/api/sync_error.h"
 #include "components/sync/api/sync_merge_result.h"
 #include "components/sync/api/syncable_service.h"
@@ -18,29 +18,27 @@
 #include "components/sync/driver/sync_client.h"
 #include "components/sync/driver/sync_service.h"
 
-namespace sync_driver {
+namespace syncer {
 
 SharedChangeProcessor* NonUIDataTypeController::CreateSharedChangeProcessor() {
   return new SharedChangeProcessor(type());
 }
 
 NonUIDataTypeController::NonUIDataTypeController(
-    const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
-    const base::Closure& error_callback,
+    ModelType type,
+    const base::Closure& dump_stack,
     SyncClient* sync_client)
-    : DirectoryDataTypeController(ui_thread, error_callback),
-      sync_client_(sync_client),
-      state_(NOT_RUNNING),
-      ui_thread_(ui_thread) {}
+    : DirectoryDataTypeController(type, dump_stack, sync_client),
+      state_(NOT_RUNNING) {}
 
 void NonUIDataTypeController::LoadModels(
     const ModelLoadCallback& model_load_callback) {
-  DCHECK(ui_thread_->BelongsToCurrentThread());
+  DCHECK(CalledOnValidThread());
   model_load_callback_ = model_load_callback;
   if (state() != NOT_RUNNING) {
-    model_load_callback.Run(
-        type(), syncer::SyncError(FROM_HERE, syncer::SyncError::DATATYPE_ERROR,
-                                  "Model already running", type()));
+    model_load_callback.Run(type(),
+                            SyncError(FROM_HERE, SyncError::DATATYPE_ERROR,
+                                      "Model already running", type()));
     return;
   }
 
@@ -61,12 +59,14 @@ void NonUIDataTypeController::LoadModels(
 }
 
 void NonUIDataTypeController::OnModelLoaded() {
+  DCHECK(CalledOnValidThread());
   DCHECK_EQ(state_, MODEL_STARTING);
   state_ = MODEL_LOADED;
-  model_load_callback_.Run(type(), syncer::SyncError());
+  model_load_callback_.Run(type(), SyncError());
 }
 
 bool NonUIDataTypeController::StartModels() {
+  DCHECK(CalledOnValidThread());
   DCHECK_EQ(state_, MODEL_STARTING);
   // By default, no additional services need to be started before we can proceed
   // with model association.
@@ -74,12 +74,12 @@ bool NonUIDataTypeController::StartModels() {
 }
 
 void NonUIDataTypeController::StopModels() {
-  DCHECK(ui_thread_->BelongsToCurrentThread());
+  DCHECK(CalledOnValidThread());
 }
 
 void NonUIDataTypeController::StartAssociating(
     const StartCallback& start_callback) {
-  DCHECK(ui_thread_->BelongsToCurrentThread());
+  DCHECK(CalledOnValidThread());
   DCHECK(!start_callback.is_null());
   DCHECK_EQ(state_, MODEL_LOADED);
   state_ = ASSOCIATING;
@@ -91,12 +91,11 @@ void NonUIDataTypeController::StartAssociating(
 
   start_callback_ = start_callback;
   if (!StartAssociationAsync()) {
-    syncer::SyncError error(FROM_HERE, syncer::SyncError::DATATYPE_ERROR,
-                            "Failed to post StartAssociation", type());
-    syncer::SyncMergeResult local_merge_result(type());
+    SyncError error(FROM_HERE, SyncError::DATATYPE_ERROR,
+                    "Failed to post StartAssociation", type());
+    SyncMergeResult local_merge_result(type());
     local_merge_result.set_error(error);
-    StartDone(ASSOCIATION_FAILED, local_merge_result,
-              syncer::SyncMergeResult(type()));
+    StartDone(ASSOCIATION_FAILED, local_merge_result, SyncMergeResult(type()));
     // StartDone should have cleared the SharedChangeProcessor.
     DCHECK(!shared_change_processor_.get());
     return;
@@ -104,13 +103,13 @@ void NonUIDataTypeController::StartAssociating(
 }
 
 void NonUIDataTypeController::Stop() {
-  DCHECK(ui_thread_->BelongsToCurrentThread());
+  DCHECK(CalledOnValidThread());
 
   if (state() == NOT_RUNNING)
     return;
 
   // Disconnect the change processor. At this point, the
-  // syncer::SyncableService can no longer interact with the Syncer, even if
+  // SyncableService can no longer interact with the Syncer, even if
   // it hasn't finished MergeDataAndStartSyncing.
   DisconnectSharedChangeProcessor();
 
@@ -128,36 +127,23 @@ void NonUIDataTypeController::Stop() {
 
 std::string NonUIDataTypeController::name() const {
   // For logging only.
-  return syncer::ModelTypeToString(type());
+  return ModelTypeToString(type());
 }
 
 DataTypeController::State NonUIDataTypeController::state() const {
   return state_;
 }
 
-void NonUIDataTypeController::OnSingleDataTypeUnrecoverableError(
-    const syncer::SyncError& error) {
-  DCHECK(!ui_thread_->BelongsToCurrentThread());
-  // TODO(tim): We double-upload some errors.  See bug 383480.
-  if (!error_callback_.is_null())
-    error_callback_.Run();
-  ui_thread_->PostTask(
-      error.location(),
-      base::Bind(&NonUIDataTypeController::DisableImpl, this, error));
-}
-
 NonUIDataTypeController::NonUIDataTypeController()
-    : DirectoryDataTypeController(base::ThreadTaskRunnerHandle::Get(),
-                                  base::Closure()),
-      sync_client_(NULL) {}
+    : DirectoryDataTypeController(UNSPECIFIED, base::Closure(), nullptr) {}
 
 NonUIDataTypeController::~NonUIDataTypeController() {}
 
 void NonUIDataTypeController::StartDone(
     DataTypeController::ConfigureResult start_result,
-    const syncer::SyncMergeResult& local_merge_result,
-    const syncer::SyncMergeResult& syncer_merge_result) {
-  DCHECK(ui_thread_->BelongsToCurrentThread());
+    const SyncMergeResult& local_merge_result,
+    const SyncMergeResult& syncer_merge_result) {
+  DCHECK(CalledOnValidThread());
 
   DataTypeController::State new_state;
   if (IsSuccessfulResult(start_result)) {
@@ -192,10 +178,9 @@ void NonUIDataTypeController::StartDone(
 }
 
 void NonUIDataTypeController::RecordStartFailure(ConfigureResult result) {
-  DCHECK(ui_thread_->BelongsToCurrentThread());
+  DCHECK(CalledOnValidThread());
   UMA_HISTOGRAM_ENUMERATION("Sync.DataTypeStartFailures",
-                            ModelTypeToHistogramInt(type()),
-                            syncer::MODEL_TYPE_COUNT);
+                            ModelTypeToHistogramInt(type()), MODEL_TYPE_COUNT);
 #define PER_DATA_TYPE_MACRO(type_str)                                    \
   UMA_HISTOGRAM_ENUMERATION("Sync." type_str "ConfigureFailure", result, \
                             MAX_CONFIGURE_RESULT);
@@ -203,36 +188,33 @@ void NonUIDataTypeController::RecordStartFailure(ConfigureResult result) {
 #undef PER_DATA_TYPE_MACRO
 }
 
-void NonUIDataTypeController::DisableImpl(const syncer::SyncError& error) {
-  DCHECK(ui_thread_->BelongsToCurrentThread());
-  UMA_HISTOGRAM_ENUMERATION("Sync.DataTypeRunFailures",
-                            ModelTypeToHistogramInt(type()),
-                            syncer::MODEL_TYPE_COUNT);
+void NonUIDataTypeController::DisableImpl(const SyncError& error) {
+  DCHECK(CalledOnValidThread());
   if (!model_load_callback_.is_null()) {
     model_load_callback_.Run(type(), error);
   }
 }
 
 bool NonUIDataTypeController::StartAssociationAsync() {
-  DCHECK(ui_thread_->BelongsToCurrentThread());
+  DCHECK(CalledOnValidThread());
   DCHECK_EQ(state(), ASSOCIATING);
   return PostTaskOnBackendThread(
       FROM_HERE,
-      base::Bind(&SharedChangeProcessor::StartAssociation,
-                 shared_change_processor_,
-                 syncer::BindToTaskRunner(
-                     ui_thread_,
-                     base::Bind(&NonUIDataTypeController::StartDone, this)),
-                 sync_client_, user_share_, base::Unretained(this)));
+      base::Bind(
+          &SharedChangeProcessor::StartAssociation, shared_change_processor_,
+          BindToCurrentThread(base::Bind(&NonUIDataTypeController::StartDone,
+                                         base::AsWeakPtr(this))),
+          sync_client_, user_share_, base::Passed(CreateErrorHandler())));
 }
 
 ChangeProcessor* NonUIDataTypeController::GetChangeProcessor() const {
+  DCHECK(CalledOnValidThread());
   DCHECK_EQ(state_, RUNNING);
   return shared_change_processor_->generic_change_processor();
 }
 
 void NonUIDataTypeController::DisconnectSharedChangeProcessor() {
-  DCHECK(ui_thread_->BelongsToCurrentThread());
+  DCHECK(CalledOnValidThread());
   // |shared_change_processor_| can already be NULL if Stop() is
   // called after StartDone(_, DISABLED, _).
   if (shared_change_processor_.get()) {
@@ -241,7 +223,7 @@ void NonUIDataTypeController::DisconnectSharedChangeProcessor() {
 }
 
 void NonUIDataTypeController::StopSyncableService() {
-  DCHECK(ui_thread_->BelongsToCurrentThread());
+  DCHECK(CalledOnValidThread());
   if (shared_change_processor_.get()) {
     PostTaskOnBackendThread(FROM_HERE,
                             base::Bind(&SharedChangeProcessor::StopLocalService,
@@ -249,4 +231,12 @@ void NonUIDataTypeController::StopSyncableService() {
   }
 }
 
-}  // namespace sync_driver
+std::unique_ptr<DataTypeErrorHandler>
+NonUIDataTypeController::CreateErrorHandler() {
+  DCHECK(CalledOnValidThread());
+  return base::MakeUnique<DataTypeErrorHandlerImpl>(
+      base::ThreadTaskRunnerHandle::Get(), dump_stack_,
+      base::Bind(&NonUIDataTypeController::DisableImpl, base::AsWeakPtr(this)));
+}
+
+}  // namespace syncer

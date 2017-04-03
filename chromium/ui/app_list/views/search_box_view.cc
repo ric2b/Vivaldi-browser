@@ -16,7 +16,6 @@
 #include "ui/app_list/resources/grit/app_list_resources.h"
 #include "ui/app_list/search_box_model.h"
 #include "ui/app_list/speech_ui_model.h"
-#include "ui/app_list/views/app_list_menu_views.h"
 #include "ui/app_list/views/contents_view.h"
 #include "ui/app_list/views/search_box_view_delegate.h"
 #include "ui/base/ime/text_input_flags.h"
@@ -26,9 +25,9 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/shadow_value.h"
 #include "ui/strings/grit/ui_strings.h"
+#include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/image_button.h"
-#include "ui/views/controls/button/menu_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/box_layout.h"
@@ -46,17 +45,13 @@ const int kPreferredHeight = 48;
 
 const SkColor kHintTextColor = SkColorSetRGB(0xA0, 0xA0, 0xA0);
 
-// Menu offset relative to the bottom-right corner of the menu button.
-const int kMenuYOffsetFromButton = -4;
-const int kMenuXOffsetFromButton = -7;
-
 const int kBackgroundBorderCornerRadius = 2;
 
 // A background that paints a solid white rounded rect with a thin grey border.
-class ExperimentalSearchBoxBackground : public views::Background {
+class SearchBoxBackground : public views::Background {
  public:
-  ExperimentalSearchBoxBackground() {}
-  ~ExperimentalSearchBoxBackground() override {}
+  SearchBoxBackground() {}
+  ~SearchBoxBackground() override {}
 
  private:
   // views::Background overrides:
@@ -69,7 +64,7 @@ class ExperimentalSearchBoxBackground : public views::Background {
     canvas->DrawRoundRect(bounds, kBackgroundBorderCornerRadius, paint);
   }
 
-  DISALLOW_COPY_AND_ASSIGN(ExperimentalSearchBoxBackground);
+  DISALLOW_COPY_AND_ASSIGN(SearchBoxBackground);
 };
 
 }  // namespace
@@ -121,37 +116,24 @@ SearchBoxView::SearchBoxView(SearchBoxViewDelegate* delegate,
       view_delegate_(view_delegate),
       model_(NULL),
       content_container_(new views::View),
-      icon_view_(NULL),
       back_button_(NULL),
       speech_button_(NULL),
-      menu_button_(NULL),
       search_box_(new views::Textfield),
       contents_view_(NULL),
       focused_view_(FOCUS_SEARCH_BOX) {
   SetLayoutManager(new views::FillLayout);
   AddChildView(content_container_);
 
-  if (switches::IsExperimentalAppListEnabled()) {
-    SetShadow(GetShadowForZHeight(2));
-    back_button_ = new SearchBoxImageButton(this);
-    ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-    back_button_->SetImage(
-        views::ImageButton::STATE_NORMAL,
-        rb.GetImageSkiaNamed(IDR_APP_LIST_FOLDER_BACK_NORMAL));
-    back_button_->SetImageAlignment(views::ImageButton::ALIGN_CENTER,
-                                    views::ImageButton::ALIGN_MIDDLE);
-    SetBackButtonLabel(false);
-    content_container_->AddChildView(back_button_);
-
-    content_container_->set_background(new ExperimentalSearchBoxBackground());
-  } else {
-    set_background(
-        views::Background::CreateSolidBackground(kSearchBoxBackground));
-    SetBorder(
-        views::Border::CreateSolidSidedBorder(0, 0, 1, 0, kTopSeparatorColor));
-    icon_view_ = new views::ImageView;
-    content_container_->AddChildView(icon_view_);
-  }
+  SetShadow(GetShadowForZHeight(2));
+  back_button_ = new SearchBoxImageButton(this);
+  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
+  back_button_->SetImage(views::ImageButton::STATE_NORMAL,
+                         rb.GetImageSkiaNamed(IDR_APP_LIST_FOLDER_BACK_NORMAL));
+  back_button_->SetImageAlignment(views::ImageButton::ALIGN_CENTER,
+                                  views::ImageButton::ALIGN_MIDDLE);
+  SetBackButtonLabel(false);
+  content_container_->AddChildView(back_button_);
+  content_container_->set_background(new SearchBoxBackground());
 
   views::BoxLayout* layout =
       new views::BoxLayout(views::BoxLayout::kHorizontal, kPadding, 0,
@@ -171,19 +153,6 @@ SearchBoxView::SearchBoxView(SearchBoxViewDelegate* delegate,
   content_container_->AddChildView(search_box_);
   layout->SetFlexForView(search_box_, 1);
 
-#if !defined(OS_CHROMEOS)
-  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-  menu_button_ = new views::MenuButton(base::string16(), this, false);
-  menu_button_->SetBorder(views::Border::NullBorder());
-  menu_button_->SetImage(views::Button::STATE_NORMAL,
-                         *rb.GetImageSkiaNamed(IDR_APP_LIST_TOOLS_NORMAL));
-  menu_button_->SetImage(views::Button::STATE_HOVERED,
-                         *rb.GetImageSkiaNamed(IDR_APP_LIST_TOOLS_HOVER));
-  menu_button_->SetImage(views::Button::STATE_PRESSED,
-                         *rb.GetImageSkiaNamed(IDR_APP_LIST_TOOLS_PRESSED));
-  content_container_->AddChildView(menu_button_);
-#endif
-
   view_delegate_->GetSpeechUI()->AddObserver(this);
   ModelChanged();
 }
@@ -200,7 +169,6 @@ void SearchBoxView::ModelChanged() {
   model_ = view_delegate_->GetModel();
   DCHECK(model_);
   model_->search_box()->AddObserver(this);
-  IconChanged();
   SpeechRecognitionButtonPropChanged();
   HintTextChanged();
 }
@@ -216,10 +184,6 @@ void SearchBoxView::ClearSearch() {
   // does not generate ContentsChanged() notification.
   UpdateModel();
   NotifyQueryChanged();
-}
-
-void SearchBoxView::InvalidateMenu() {
-  menu_.reset();
 }
 
 void SearchBoxView::SetShadow(const gfx::ShadowValue& shadow) {
@@ -333,8 +297,6 @@ bool SearchBoxView::OnMouseWheel(const ui::MouseWheelEvent& event) {
 
 void SearchBoxView::OnEnabledChanged() {
   search_box_->SetEnabled(enabled());
-  if (menu_button_)
-    menu_button_->SetEnabled(enabled());
   if (speech_button_)
     speech_button_->SetEnabled(enabled());
 }
@@ -418,23 +380,6 @@ void SearchBoxView::ButtonPressed(views::Button* sender,
     view_delegate_->StartSpeechRecognition();
   else
     NOTREACHED();
-}
-
-void SearchBoxView::OnMenuButtonClicked(views::MenuButton* source,
-                                        const gfx::Point& point,
-                                        const ui::Event* event) {
-  if (!menu_)
-    menu_.reset(new AppListMenuViews(view_delegate_));
-
-  const gfx::Point menu_location =
-      menu_button_->GetBoundsInScreen().bottom_right() +
-      gfx::Vector2d(kMenuXOffsetFromButton, kMenuYOffsetFromButton);
-  menu_->RunMenuAt(menu_button_, menu_location);
-}
-
-void SearchBoxView::IconChanged() {
-  if (icon_view_)
-    icon_view_->SetImage(model_->search_box()->icon());
 }
 
 void SearchBoxView::SpeechRecognitionButtonPropChanged() {

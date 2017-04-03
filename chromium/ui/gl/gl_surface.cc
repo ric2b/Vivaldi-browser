@@ -51,6 +51,10 @@ bool GLSurface::DeferDraws() {
   return false;
 }
 
+bool GLSurface::SupportsSwapBuffersWithDamage() {
+  return false;
+}
+
 bool GLSurface::SupportsPostSubBuffer() {
   return false;
 }
@@ -69,6 +73,13 @@ unsigned int GLSurface::GetBackingFramebufferObject() {
 
 void GLSurface::SwapBuffersAsync(const SwapCompletionCallback& callback) {
   NOTREACHED();
+}
+
+gfx::SwapResult GLSurface::SwapBuffersWithDamage(int x,
+                                                 int y,
+                                                 int width,
+                                                 int height) {
+  return gfx::SwapResult::SWAP_FAILED;
 }
 
 gfx::SwapResult GLSurface::PostSubBuffer(int x, int y, int width, int height) {
@@ -117,6 +128,10 @@ void* GLSurface::GetDisplay() {
 void* GLSurface::GetConfig() {
   NOTIMPLEMENTED();
   return NULL;
+}
+
+unsigned long GLSurface::GetCompatibilityKey() {
+  return 0;
 }
 
 GLSurface::Format GLSurface::GetFormat() {
@@ -225,6 +240,13 @@ void GLSurfaceAdapter::SwapBuffersAsync(
   surface_->SwapBuffersAsync(callback);
 }
 
+gfx::SwapResult GLSurfaceAdapter::SwapBuffersWithDamage(int x,
+                                                        int y,
+                                                        int width,
+                                                        int height) {
+  return surface_->SwapBuffersWithDamage(x, y, width, height);
+}
+
 gfx::SwapResult GLSurfaceAdapter::PostSubBuffer(int x,
                                                 int y,
                                                 int width,
@@ -248,6 +270,10 @@ gfx::SwapResult GLSurfaceAdapter::CommitOverlayPlanes() {
 void GLSurfaceAdapter::CommitOverlayPlanesAsync(
     const SwapCompletionCallback& callback) {
   surface_->CommitOverlayPlanesAsync(callback);
+}
+
+bool GLSurfaceAdapter::SupportsSwapBuffersWithDamage() {
+  return surface_->SupportsSwapBuffersWithDamage();
 }
 
 bool GLSurfaceAdapter::SupportsPostSubBuffer() {
@@ -296,6 +322,10 @@ void* GLSurfaceAdapter::GetDisplay() {
 
 void* GLSurfaceAdapter::GetConfig() {
   return surface_->GetConfig();
+}
+
+unsigned long GLSurfaceAdapter::GetCompatibilityKey() {
+  return surface_->GetCompatibilityKey();
 }
 
 GLSurface::Format GLSurfaceAdapter::GetFormat() {

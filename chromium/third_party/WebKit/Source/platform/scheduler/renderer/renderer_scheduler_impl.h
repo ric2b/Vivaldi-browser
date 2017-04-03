@@ -8,10 +8,8 @@
 #include "base/atomicops.h"
 #include "base/macros.h"
 #include "base/synchronization/lock.h"
-#include "platform/scheduler/base/long_task_tracker.h"
 #include "platform/scheduler/base/pollable_thread_safe_flag.h"
 #include "platform/scheduler/base/queueing_time_estimator.h"
-#include "platform/scheduler/base/task_time_tracker.h"
 #include "platform/scheduler/base/thread_load_tracker.h"
 #include "platform/scheduler/child/idle_helper.h"
 #include "platform/scheduler/child/scheduler_helper.h"
@@ -19,10 +17,10 @@
 #include "platform/scheduler/renderer/idle_time_estimator.h"
 #include "platform/scheduler/renderer/render_widget_signals.h"
 #include "platform/scheduler/renderer/task_cost_estimator.h"
-#include "platform/scheduler/renderer/throttling_helper.h"
 #include "platform/scheduler/renderer/user_model.h"
 #include "platform/scheduler/renderer/web_view_scheduler_impl.h"
 #include "public/platform/scheduler/renderer/renderer_scheduler.h"
+#include "public/platform/scheduler/base/task_time_observer.h"
 
 namespace base {
 namespace trace_event {
@@ -35,14 +33,14 @@ namespace scheduler {
 class AutoAdvancingVirtualTimeDomain;
 class RenderWidgetSchedulingState;
 class WebViewSchedulerImpl;
-class ThrottlingHelper;
+class TaskQueueThrottler;
 
 class BLINK_PLATFORM_EXPORT RendererSchedulerImpl
     : public RendererScheduler,
       public IdleHelper::Delegate,
       public SchedulerHelper::Observer,
       public RenderWidgetSignals::Observer,
-      public TaskTimeTracker,
+      public TaskTimeObserver,
       public QueueingTimeEstimator::Client {
  public:
   // Keep RendererScheduler::UseCaseToString in sync with this enum.
@@ -131,9 +129,10 @@ class BLINK_PLATFORM_EXPORT RendererSchedulerImpl
   void OnTriedToExecuteBlockedTask(const TaskQueue& queue,
                                    const base::PendingTask& task) override;
 
-  // TaskTimeTracker implementation:
-  void ReportTaskTime(base::TimeTicks start_time,
-                      base::TimeTicks end_time) override;
+  // TaskTimeObserver implementation:
+  void ReportTaskTime(TaskQueue* task_queue,
+                      double start_time,
+                      double end_time) override;
 
   // QueueingTimeEstimator::Client implementation:
   void OnQueueingTimeForWindowEstimated(base::TimeDelta queueing_time) override;
@@ -150,7 +149,11 @@ class BLINK_PLATFORM_EXPORT RendererSchedulerImpl
   void AddWebViewScheduler(WebViewSchedulerImpl* web_view_scheduler);
   void RemoveWebViewScheduler(WebViewSchedulerImpl* web_view_scheduler);
 
-  LongTaskTracker::LongTaskTiming GetLongTaskTiming();
+  void AddTaskTimeObserver(TaskTimeObserver* task_time_observer);
+  void RemoveTaskTimeObserver(TaskTimeObserver* task_time_observer);
+
+  // Snapshots this RendererScheduler for tracing.
+  void CreateTraceEventObjectSnapshot() const;
 
   // Test helpers.
   SchedulerHelper* GetSchedulerHelperForTesting();
@@ -171,7 +174,9 @@ class BLINK_PLATFORM_EXPORT RendererSchedulerImpl
 
   AutoAdvancingVirtualTimeDomain* GetVirtualTimeDomain();
 
-  ThrottlingHelper* throttling_helper() { return throttling_helper_.get(); }
+  TaskQueueThrottler* task_queue_throttler() const {
+    return task_queue_throttler_.get();
+  }
 
  private:
   friend class RendererSchedulerImplTest;
@@ -251,6 +256,7 @@ class BLINK_PLATFORM_EXPORT RendererSchedulerImpl
       base::TimeTicks optional_now) const;
   std::unique_ptr<base::trace_event::ConvertableToTraceFormat> AsValueLocked(
       base::TimeTicks optional_now) const;
+  void CreateTraceEventObjectSnapshotLocked() const;
 
   static bool ShouldPrioritizeInputEvent(const WebInputEvent& web_input_event);
 
@@ -339,7 +345,7 @@ class BLINK_PLATFORM_EXPORT RendererSchedulerImpl
 
   SchedulerHelper helper_;
   IdleHelper idle_helper_;
-  std::unique_ptr<ThrottlingHelper> throttling_helper_;
+  std::unique_ptr<TaskQueueThrottler> task_queue_throttler_;
   RenderWidgetSignals render_widget_scheduler_signals_;
 
   const scoped_refptr<TaskQueue> control_task_runner_;
@@ -371,7 +377,6 @@ class BLINK_PLATFORM_EXPORT RendererSchedulerImpl
     TaskCostEstimator loading_task_cost_estimator;
     TaskCostEstimator timer_task_cost_estimator;
     QueueingTimeEstimator queueing_time_estimator;
-    LongTaskTracker long_task_tracker;
     IdleTimeEstimator idle_time_estimator;
     ThreadLoadTracker background_main_thread_load_tracker;
     ThreadLoadTracker foreground_main_thread_load_tracker;

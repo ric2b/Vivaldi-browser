@@ -66,14 +66,20 @@ class TestWebApkInstaller : public WebApkInstaller {
       JNIEnv* env,
       const base::android::ScopedJavaLocalRef<jstring>& file_path,
       const base::android::ScopedJavaLocalRef<jstring>& package_name) override {
+    PostTaskToRunSuccessCallback();
     return true;
   }
 
   bool StartUpdateUsingDownloadedWebApk(
       JNIEnv* env,
-      const base::android::ScopedJavaLocalRef<jstring>& file_path,
-      const base::android::ScopedJavaLocalRef<jstring>& package_name) override {
+      const base::android::ScopedJavaLocalRef<jstring>& file_path) override {
     return true;
+  }
+
+  void PostTaskToRunSuccessCallback() {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE,
+        base::Bind(&TestWebApkInstaller::OnSuccess, base::Unretained(this)));
   }
 
  private:
@@ -100,15 +106,17 @@ class WebApkInstallerRunner {
   }
 
   void RunUpdateWebApk() {
-    const int webapk_version = 1;
+    const std::string kIconMurmur2Hash = "0";
+    const int kWebApkVersion = 1;
 
     WebApkInstaller* installer = CreateWebApkInstaller();
 
     installer->UpdateAsyncWithURLRequestContextGetter(
         url_request_context_getter_.get(),
         base::Bind(&WebApkInstallerRunner::OnCompleted, base::Unretained(this)),
+        kIconMurmur2Hash,
         kDownloadedWebApkPackageName,
-        webapk_version);
+        kWebApkVersion);
 
     Run();
   }
@@ -132,7 +140,7 @@ class WebApkInstallerRunner {
   bool success() { return success_; }
 
  private:
-  void OnCompleted(bool success) {
+  void OnCompleted(bool success, const std::string& webapk_package) {
     success_ = success;
     on_completed_callback_.Run();
   }

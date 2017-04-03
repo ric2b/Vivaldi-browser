@@ -18,6 +18,8 @@
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "mojo/edk/embedder/embedder_internal.h"
+#include "mojo/edk/embedder/named_platform_channel_pair.h"
+#include "mojo/edk/embedder/named_platform_handle.h"
 #include "mojo/edk/embedder/platform_channel_pair.h"
 #include "mojo/edk/system/broker.h"
 #include "mojo/edk/system/broker_host.h"
@@ -228,10 +230,9 @@ void NodeController::CloseChildPorts(const std::string& child_token) {
 }
 
 void NodeController::ConnectToParent(ScopedPlatformHandle platform_handle) {
-// TODO(amistry): Consider the need for a broker on Windows.
-#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_NACL_SFI)
-  // On posix, use the bootstrap channel for the broker and receive the node's
-  // channel synchronously as the first message from the broker.
+#if !defined(OS_MACOSX) && !defined(OS_NACL_SFI)
+  // Use the bootstrap channel for the broker and receive the node's channel
+  // synchronously as the first message from the broker.
   base::ElapsedTimer timer;
   broker_.reset(new Broker(std::move(platform_handle)));
   platform_handle = broker_->GetParentPlatformHandle();
@@ -356,7 +357,7 @@ int NodeController::MergeLocalPorts(const ports::PortRef& port0,
 
 scoped_refptr<PlatformSharedBuffer> NodeController::CreateSharedBuffer(
     size_t num_bytes) {
-#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_NACL_SFI)
+#if !defined(OS_MACOSX) && !defined(OS_NACL_SFI)
   // Shared buffer creation failure is fatal, so always use the broker when we
   // have one. This does mean that a non-root process that has children will use
   // the broker for shared buffer creation even though that process is
@@ -392,19 +393,34 @@ void NodeController::ConnectToChildOnIOThread(
     const ProcessErrorCallback& process_error_callback) {
   DCHECK(io_task_runner_->RunsTasksOnCurrentThread());
 
-#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_NACL)
+#if !defined(OS_MACOSX) && !defined(OS_NACL)
   PlatformChannelPair node_channel;
+  ScopedPlatformHandle server_handle = node_channel.PassServerHandle();
   // BrokerHost owns itself.
-  BrokerHost* broker_host = new BrokerHost(std::move(platform_handle));
-  broker_host->SendChannel(node_channel.PassClientHandle());
-  scoped_refptr<NodeChannel> channel = NodeChannel::Create(
-      this, node_channel.PassServerHandle(), io_task_runner_,
-      process_error_callback);
+  BrokerHost* broker_host =
+      new BrokerHost(process_handle, std::move(platform_handle));
+  bool channel_ok = broker_host->SendChannel(node_channel.PassClientHandle());
+
+#if defined(OS_WIN)
+  if (!channel_ok) {
+    // On Windows the above operation may fail if the channel is crossing a
+    // session boundary. In that case we fall back to a named pipe.
+    NamedPlatformChannelPair named_channel;
+    server_handle = named_channel.PassServerHandle();
+    broker_host->SendNamedChannel(named_channel.handle().name);
+  }
 #else
+  CHECK(channel_ok);
+#endif  // defined(OS_WIN)
+
+  scoped_refptr<NodeChannel> channel = NodeChannel::Create(
+      this, std::move(server_handle), io_task_runner_, process_error_callback);
+
+#else  // !defined(OS_MACOSX) && !defined(OS_NACL)
   scoped_refptr<NodeChannel> channel =
       NodeChannel::Create(this, std::move(platform_handle), io_task_runner_,
                           process_error_callback);
-#endif
+#endif  // !defined(OS_MACOSX) && !defined(OS_NACL)
 
   // We set up the child channel with a temporary name so it can be identified
   // as a pending child if it writes any messages to the channel. We may start
@@ -1269,9 +1285,13 @@ void NodeController::OnAcceptPeer(const ports::NodeName& from_node,
   pending_peers_.erase(it);
   DCHECK(channel);
 
-  DVLOG(1) << "Node " << name_ << " accepted peer " << peer_name;
+  // If the peer connection is a self connection (which is used in tests),
+  // drop the channel to it and skip straight to merging the ports.
+  if (name_ != peer_name) {
+    DVLOG(1) << "Node " << name_ << " accepted peer " << peer_name;
 
-  AddPeer(peer_name, channel, false /* start_channel */);
+    AddPeer(peer_name, channel, false /* start_channel */);
+  }
 
   // We need to choose one side to initiate the port merge. It doesn't matter
   // who does it as long as they don't both try. Simple solution: pick the one

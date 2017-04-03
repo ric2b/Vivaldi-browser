@@ -29,6 +29,8 @@
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
 
+namespace ntp_snippets {
+
 namespace {
 
 const int kMaxBookmarks = 10;
@@ -43,53 +45,37 @@ const char* kUseCreationDateFallbackForDaysParamName =
     "bookmarks_creation_date_fallback_days";
 const char* kShowIfEmptyParamName = "bookmarks_show_if_empty";
 
+// Any bookmark created or visited after this time will be considered recent.
+// Note that bookmarks can be shown that do not meet this threshold.
 base::Time GetThresholdTime() {
-  std::string age_in_days_string = variations::GetVariationParamValueByFeature(
-    ntp_snippets::kBookmarkSuggestionsFeature, kMaxBookmarkAgeInDaysParamName);
-  int age_in_days = 0;
-  if (!base::StringToInt(age_in_days_string, &age_in_days)) {
-    if (!age_in_days_string.empty())
-      LOG(WARNING) << "Failed to parse bookmark age " << age_in_days_string;
-    age_in_days = kMaxBookmarkAgeInDays;
-  }
-  return base::Time::Now() - base::TimeDelta::FromDays(age_in_days);
+  return base::Time::Now() -
+         base::TimeDelta::FromDays(GetParamAsInt(
+             ntp_snippets::kBookmarkSuggestionsFeature,
+             kMaxBookmarkAgeInDaysParamName, kMaxBookmarkAgeInDays));
 }
 
+// The number of days used as a threshold where if this is larger than the time
+// since M54 started, then the creation timestamp of a bookmark be used as a
+// fallback if no last visited timestamp is present.
 int UseCreationDateFallbackForDays() {
-  std::string days_string = variations::GetVariationParamValueByFeature(
-      ntp_snippets::kBookmarkSuggestionsFeature,
-      kUseCreationDateFallbackForDaysParamName);
-  int days = 0;
-  if (!base::StringToInt(days_string, &days)) {
-    if (!days_string.empty())
-      LOG(WARNING) << "Failed to parse bookmark fallback days " << days_string;
-    days = kUseCreationDateFallbackForDays;
-  }
-  return days;
+  return GetParamAsInt(ntp_snippets::kBookmarkSuggestionsFeature,
+                       kUseCreationDateFallbackForDaysParamName,
+                       kUseCreationDateFallbackForDays);
 }
 
+// The maximum number of suggestions ever provided.
 int GetMaxCount() {
-  std::string max_count_string = variations::GetVariationParamValueByFeature(
-      ntp_snippets::kBookmarkSuggestionsFeature, kMaxBookmarksParamName);
-  int max_count = 0;
-  if (base::StringToInt(max_count_string, &max_count))
-    return max_count;
-  if (!max_count_string.empty())
-    LOG(WARNING) << "Failed to parse max bookmarks count " << max_count_string;
-
-  return kMaxBookmarks;
+  return GetParamAsInt(ntp_snippets::kBookmarkSuggestionsFeature,
+                       kMaxBookmarksParamName, kMaxBookmarks);
 }
 
+// The minimum number of suggestions to try to provide. Depending on other
+// parameters this may or not be respected. Currently creation date fallback
+// must be active in order for older bookmarks to be incorporated to meet this
+// min.
 int GetMinCount() {
-  std::string min_count_string = variations::GetVariationParamValueByFeature(
-      ntp_snippets::kBookmarkSuggestionsFeature, kMinBookmarksParamName);
-  int min_count = 0;
-  if (base::StringToInt(min_count_string, &min_count))
-    return min_count;
-  if (!min_count_string.empty())
-    LOG(WARNING) << "Failed to parse min bookmarks count " << min_count_string;
-
-  return kMinBookmarks;
+  return GetParamAsInt(ntp_snippets::kBookmarkSuggestionsFeature,
+                       kMinBookmarksParamName, kMinBookmarks);
 }
 
 bool ShouldShowIfEmpty() {
@@ -105,8 +91,6 @@ bool ShouldShowIfEmpty() {
 }
 
 }  // namespace
-
-namespace ntp_snippets {
 
 BookmarkSuggestionsProvider::BookmarkSuggestionsProvider(
     ContentSuggestionsProvider::Observer* observer,
@@ -163,25 +147,24 @@ CategoryInfo BookmarkSuggestionsProvider::GetCategoryInfo(Category category) {
   return CategoryInfo(
       l10n_util::GetStringUTF16(IDS_NTP_BOOKMARK_SUGGESTIONS_SECTION_HEADER),
       ContentSuggestionsCardLayout::MINIMAL_CARD,
-      /* has_more_button */ true,
-      /* show_if_empty */ ShouldShowIfEmpty() &&
-          bookmark_model_->HasBookmarks());
+      /*has_more_button=*/true,
+      /*show_if_empty=*/ShouldShowIfEmpty() && bookmark_model_->HasBookmarks());
   // TODO(treib): Setting show_if_empty to true is a temporary hack, see
   // crbug.com/640568.
 }
 
 void BookmarkSuggestionsProvider::DismissSuggestion(
-    const std::string& suggestion_id) {
+    const ContentSuggestion::ID& suggestion_id) {
   DCHECK(bookmark_model_->loaded());
-  GURL url(GetWithinCategoryIDFromUniqueID(suggestion_id));
+  GURL url(suggestion_id.id_within_category());
   MarkBookmarksDismissed(bookmark_model_, url);
 }
 
 void BookmarkSuggestionsProvider::FetchSuggestionImage(
-    const std::string& suggestion_id,
+    const ContentSuggestion::ID& suggestion_id,
     const ImageFetchedCallback& callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(callback, suggestion_id, gfx::Image()));
+      FROM_HERE, base::Bind(callback, gfx::Image()));
 }
 
 void BookmarkSuggestionsProvider::ClearHistory(
@@ -193,6 +176,13 @@ void BookmarkSuggestionsProvider::ClearHistory(
   RemoveAllLastVisitDates(bookmark_model_);
   ClearDismissedSuggestionsForDebugging(provided_category_);
   FetchBookmarks();
+  // Temporarily enter an "explicitly disabled" state, so that any open UIs
+  // will clear the suggestions too.
+  if (category_status_ != CategoryStatus::CATEGORY_EXPLICITLY_DISABLED) {
+    CategoryStatus old_category_status = category_status_;
+    NotifyStatusChanged(CategoryStatus::CATEGORY_EXPLICITLY_DISABLED);
+    NotifyStatusChanged(old_category_status);
+  }
 }
 
 void BookmarkSuggestionsProvider::ClearCachedSuggestions(Category category) {
@@ -268,11 +258,25 @@ void BookmarkSuggestionsProvider::BookmarkNodeRemoved(
   FetchBookmarks();
 }
 
+void BookmarkSuggestionsProvider::BookmarkNodeAdded(
+    bookmarks::BookmarkModel* model,
+    const bookmarks::BookmarkNode* parent,
+    int index) {
+  if (GetLastVisitDateForBookmarkIfNotDismissed(parent->GetChild(index),
+                                                creation_date_fallback_) <
+      end_of_list_last_visit_date_) {
+    return;
+  }
+
+  // Some node with last_visit info that is relevant for our list got created
+  // (e.g. by sync), we should update the suggestions.
+  FetchBookmarks();
+}
+
 ContentSuggestion BookmarkSuggestionsProvider::ConvertBookmark(
     const BookmarkNode* bookmark) {
-  ContentSuggestion suggestion(
-      MakeUniqueID(provided_category_, bookmark->url().spec()),
-      bookmark->url());
+  ContentSuggestion suggestion(provided_category_, bookmark->url().spec(),
+                               bookmark->url());
 
   suggestion.set_title(bookmark->GetTitle());
   suggestion.set_snippet_text(base::string16());

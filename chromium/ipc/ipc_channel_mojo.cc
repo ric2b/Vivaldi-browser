@@ -253,16 +253,16 @@ std::unique_ptr<ChannelMojo> ChannelMojo::Create(
 std::unique_ptr<ChannelFactory> ChannelMojo::CreateServerFactory(
     mojo::ScopedMessagePipeHandle handle,
     const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner) {
-  return base::WrapUnique(new MojoChannelFactory(
-      std::move(handle), Channel::MODE_SERVER, ipc_task_runner));
+  return base::MakeUnique<MojoChannelFactory>(
+      std::move(handle), Channel::MODE_SERVER, ipc_task_runner);
 }
 
 // static
 std::unique_ptr<ChannelFactory> ChannelMojo::CreateClientFactory(
     mojo::ScopedMessagePipeHandle handle,
     const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner) {
-  return base::WrapUnique(new MojoChannelFactory(
-      std::move(handle), Channel::MODE_CLIENT, ipc_task_runner));
+  return base::MakeUnique<MojoChannelFactory>(
+      std::move(handle), Channel::MODE_CLIENT, ipc_task_runner);
 }
 
 ChannelMojo::ChannelMojo(
@@ -290,6 +290,20 @@ bool ChannelMojo::Connect() {
 
   bootstrap_->Connect();
   return true;
+}
+
+void ChannelMojo::Pause() {
+  bootstrap_->Pause();
+}
+
+void ChannelMojo::Unpause(bool flush) {
+  bootstrap_->Unpause();
+  if (flush)
+    Flush();
+}
+
+void ChannelMojo::Flush() {
+  bootstrap_->Flush();
 }
 
 void ChannelMojo::Close() {
@@ -335,6 +349,8 @@ void ChannelMojo::OnAssociatedInterfaceRequest(
 
   if (!factory.is_null())
     factory.Run(std::move(handle));
+  else
+    listener_->OnAssociatedInterfaceRequest(name, std::move(handle));
 }
 
 bool ChannelMojo::Send(Message* message) {
@@ -352,10 +368,6 @@ bool ChannelMojo::Send(Message* message) {
   // With Mojo, there's no OnFileCanReadWithoutBlocking, but we expect the
   // pipe's connection error handler will be invoked in its place.
   return message_reader_->Send(std::move(scoped_message));
-}
-
-bool ChannelMojo::IsSendThreadSafe() const {
-  return false;
 }
 
 base::ProcessId ChannelMojo::GetPeerPID() const {

@@ -5,57 +5,78 @@
 #ifndef CSSStyleImageValue_h
 #define CSSStyleImageValue_h
 
+#include "core/CoreExport.h"
+#include "core/css/CSSImageValue.h"
 #include "core/css/CSSImageValue.h"
 #include "core/css/cssom/CSSResourceValue.h"
+#include "core/css/cssom/CSSStyleValue.h"
 #include "core/fetch/ImageResource.h"
+#include "core/html/canvas/CanvasImageSource.h"
+#include "core/imagebitmap/ImageBitmapSource.h"
 #include "core/style/StyleImage.h"
-
 
 namespace blink {
 
-class CORE_EXPORT CSSStyleImageValue : public CSSResourceValue {
-    WTF_MAKE_NONCOPYABLE(CSSStyleImageValue);
-    DEFINE_WRAPPERTYPEINFO();
-public:
-    virtual ~CSSStyleImageValue() { }
+class CORE_EXPORT CSSStyleImageValue : public CSSResourceValue,
+                                       public CanvasImageSource {
+  WTF_MAKE_NONCOPYABLE(CSSStyleImageValue);
+  DEFINE_WRAPPERTYPEINFO();
 
-    StyleValueType type() const override { return ImageType; }
+ public:
+  virtual ~CSSStyleImageValue() {}
 
-    double intrinsicWidth(bool& isNull);
-    double intrinsicHeight(bool& isNull);
-    double intrinsicRatio(bool& isNull);
+  StyleValueType type() const override { return ImageType; }
 
-    DEFINE_INLINE_VIRTUAL_TRACE()
-    {
-        visitor->trace(m_imageValue);
-        CSSStyleValue::trace(visitor);
-        CSSResourceValue::trace(visitor);
-    }
+  double intrinsicWidth(bool& isNull) const;
+  double intrinsicHeight(bool& isNull) const;
+  double intrinsicRatio(bool& isNull);
 
-protected:
-    CSSStyleImageValue(const CSSImageValue* imageValue)
-        : m_imageValue(imageValue)
-    {
-    }
+  // CanvasImageSource
+  bool isCSSImageValue() const final { return true; }
+  int sourceWidth() final;
+  int sourceHeight() final;
+  bool wouldTaintOrigin(SecurityOrigin* destinationSecurityOrigin) const final {
+    return true;
+  }
+  FloatSize elementSize(const FloatSize& defaultObjectSize) const final;
+  PassRefPtr<Image> getSourceImageForCanvas(SourceImageStatus*,
+                                            AccelerationHint,
+                                            SnapshotReason,
+                                            const FloatSize&) const final {
+    return image();
+  }
+  bool isAccelerated() const override;
 
-    Member<const CSSImageValue> m_imageValue;
+  DEFINE_INLINE_VIRTUAL_TRACE() {
+    visitor->trace(m_imageValue);
+    CSSStyleValue::trace(visitor);
+    CSSResourceValue::trace(visitor);
+  }
 
-    virtual LayoutSize imageLayoutSize() const
-    {
-        DCHECK(!m_imageValue->isCachePending());
-        return m_imageValue->cachedImage()->cachedImage()->imageSize(DoNotRespectImageOrientation, 1, ImageResource::IntrinsicSize);
-    }
+ protected:
+  CSSStyleImageValue(const CSSImageValue* imageValue)
+      : m_imageValue(imageValue) {}
 
-    virtual bool isCachePending() const { return m_imageValue->isCachePending(); }
+  Member<const CSSImageValue> m_imageValue;
 
-    Resource::Status status() const override
-    {
-        if (isCachePending())
-            return Resource::Status::NotStarted;
-        return m_imageValue->cachedImage()->cachedImage()->getStatus();
-    }
+  virtual LayoutSize imageLayoutSize() const {
+    DCHECK(!m_imageValue->isCachePending());
+    return m_imageValue->cachedImage()->cachedImage()->imageSize(
+        DoNotRespectImageOrientation, 1, ImageResource::IntrinsicSize);
+  }
+
+  virtual bool isCachePending() const { return m_imageValue->isCachePending(); }
+
+  Resource::Status status() const override {
+    if (isCachePending())
+      return Resource::Status::NotStarted;
+    return m_imageValue->cachedImage()->cachedImage()->getStatus();
+  }
+
+ private:
+  PassRefPtr<Image> image() const;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // CSSResourceValue_h
+#endif  // CSSResourceValue_h

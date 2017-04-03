@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "ash/common/ash_constants.h"
-#include "ash/common/ash_switches.h"
 #include "ash/common/drag_drop/drag_image_view.h"
 #include "ash/common/scoped_root_window_for_new_windows.h"
 #include "ash/common/shelf/app_list_button.h"
@@ -1857,7 +1856,7 @@ void ShelfView::OnMenuClosed(views::InkDrop* ink_drop) {
 
   // Hide the hide overflow bubble after showing a context menu for its items.
   if (owner_overflow_bubble_)
-    owner_overflow_bubble_->HideBubbleAndRefreshButton();
+    owner_overflow_bubble_->Hide();
 
   closing_event_time_ = launcher_menu_runner_->closing_event_time();
 

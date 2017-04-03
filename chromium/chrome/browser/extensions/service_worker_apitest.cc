@@ -19,6 +19,7 @@
 #include "chrome/browser/services/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/gcm_driver/instance_id/fake_gcm_driver_for_instance_id.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -51,7 +52,7 @@ void DoNothingWithBool(bool b) {}
 content::WebContents* AddTab(Browser* browser, const GURL& url) {
   int starting_tab_count = browser->tab_strip_model()->count();
   ui_test_utils::NavigateToURLWithDisposition(
-      browser, url, NEW_FOREGROUND_TAB,
+      browser, url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
   int tab_count = browser->tab_strip_model()->count();
   EXPECT_EQ(starting_tab_count + 1, tab_count);
@@ -129,7 +130,7 @@ class ServiceWorkerTest : public ExtensionApiTest {
   // returns it.
   content::WebContents* Navigate(const GURL& url) {
     ui_test_utils::NavigateToURLWithDisposition(
-        browser(), url, NEW_FOREGROUND_TAB,
+        browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
         ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
     content::WebContents* web_contents =
         browser()->tab_strip_model()->GetActiveWebContents();
@@ -196,7 +197,7 @@ class ServiceWorkerBackgroundSyncTest : public ServiceWorkerTest {
 class ServiceWorkerPushMessagingTest : public ServiceWorkerTest {
  public:
   ServiceWorkerPushMessagingTest()
-      : gcm_service_(nullptr), push_service_(nullptr) {}
+      : gcm_driver_(nullptr), push_service_(nullptr) {}
   ~ServiceWorkerPushMessagingTest() override {}
 
   void GrantNotificationPermissionForTest(const GURL& url) {
@@ -225,20 +226,25 @@ class ServiceWorkerPushMessagingTest : public ServiceWorkerTest {
     ServiceWorkerTest::SetUpCommandLine(command_line);
   }
   void SetUpOnMainThread() override {
-    gcm_service_ = static_cast<gcm::FakeGCMProfileService*>(
-        gcm::GCMProfileServiceFactory::GetInstance()->SetTestingFactoryAndUse(
-            profile(), &gcm::FakeGCMProfileService::Build));
-    gcm_service_->set_collect(true);
+    gcm::FakeGCMProfileService* gcm_service =
+        static_cast<gcm::FakeGCMProfileService*>(
+            gcm::GCMProfileServiceFactory::GetInstance()
+                ->SetTestingFactoryAndUse(profile(),
+                                          &gcm::FakeGCMProfileService::Build));
+    gcm_driver_ = static_cast<instance_id::FakeGCMDriverForInstanceID*>(
+        gcm_service->driver());
     push_service_ = PushMessagingServiceFactory::GetForProfile(profile());
 
     ServiceWorkerTest::SetUpOnMainThread();
   }
 
-  gcm::FakeGCMProfileService* gcm_service() const { return gcm_service_; }
+  instance_id::FakeGCMDriverForInstanceID* gcm_driver() const {
+    return gcm_driver_;
+  }
   PushMessagingServiceImpl* push_service() const { return push_service_; }
 
  private:
-  gcm::FakeGCMProfileService* gcm_service_;
+  instance_id::FakeGCMDriverForInstanceID* gcm_driver_;
   PushMessagingServiceImpl* push_service_;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerPushMessagingTest);
@@ -254,16 +260,18 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, UpdateRefreshesServiceWorker) {
   base::FilePath pem_path = test_data_dir_.AppendASCII("service_worker")
                                 .AppendASCII("update")
                                 .AppendASCII("service_worker.pem");
-  base::FilePath path_v1 = PackExtensionWithOptions(
-      test_data_dir_.AppendASCII("service_worker")
-          .AppendASCII("update")
-          .AppendASCII("v1"),
-      scoped_temp_dir.path().AppendASCII("v1.crx"), pem_path, base::FilePath());
-  base::FilePath path_v2 = PackExtensionWithOptions(
-      test_data_dir_.AppendASCII("service_worker")
-          .AppendASCII("update")
-          .AppendASCII("v2"),
-      scoped_temp_dir.path().AppendASCII("v2.crx"), pem_path, base::FilePath());
+  base::FilePath path_v1 =
+      PackExtensionWithOptions(test_data_dir_.AppendASCII("service_worker")
+                                   .AppendASCII("update")
+                                   .AppendASCII("v1"),
+                               scoped_temp_dir.GetPath().AppendASCII("v1.crx"),
+                               pem_path, base::FilePath());
+  base::FilePath path_v2 =
+      PackExtensionWithOptions(test_data_dir_.AppendASCII("service_worker")
+                                   .AppendASCII("update")
+                                   .AppendASCII("v2"),
+                               scoped_temp_dir.GetPath().AppendASCII("v2.crx"),
+                               pem_path, base::FilePath());
   const char* kId = "hfaanndiiilofhfokeanhddpkfffchdi";
 
   ExtensionTestMessageListener listener_v1("Pong from version 1", false);
@@ -292,16 +300,18 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, UpdateWithoutSkipWaiting) {
   base::FilePath pem_path = test_data_dir_.AppendASCII("service_worker")
                                 .AppendASCII("update_without_skip_waiting")
                                 .AppendASCII("update_without_skip_waiting.pem");
-  base::FilePath path_v1 = PackExtensionWithOptions(
-      test_data_dir_.AppendASCII("service_worker")
-          .AppendASCII("update_without_skip_waiting")
-          .AppendASCII("v1"),
-      scoped_temp_dir.path().AppendASCII("v1.crx"), pem_path, base::FilePath());
-  base::FilePath path_v2 = PackExtensionWithOptions(
-      test_data_dir_.AppendASCII("service_worker")
-          .AppendASCII("update_without_skip_waiting")
-          .AppendASCII("v2"),
-      scoped_temp_dir.path().AppendASCII("v2.crx"), pem_path, base::FilePath());
+  base::FilePath path_v1 =
+      PackExtensionWithOptions(test_data_dir_.AppendASCII("service_worker")
+                                   .AppendASCII("update_without_skip_waiting")
+                                   .AppendASCII("v1"),
+                               scoped_temp_dir.GetPath().AppendASCII("v1.crx"),
+                               pem_path, base::FilePath());
+  base::FilePath path_v2 =
+      PackExtensionWithOptions(test_data_dir_.AppendASCII("service_worker")
+                                   .AppendASCII("update_without_skip_waiting")
+                                   .AppendASCII("v2"),
+                               scoped_temp_dir.GetPath().AppendASCII("v2.crx"),
+                               pem_path, base::FilePath());
   const char* kId = "mhnnnflgagdakldgjpfcofkiocpdmogl";
 
   // Install version 1.0 of the extension.
@@ -762,8 +772,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerPushMessagingTest, OnPush) {
 
   PushMessagingAppIdentifier app_identifier =
       GetAppIdentifierForServiceWorkerRegistration(0LL, extension_url);
-  ASSERT_EQ(app_identifier.app_id(), gcm_service()->last_registered_app_id());
-  EXPECT_EQ("1234567890", gcm_service()->last_registered_sender_ids()[0]);
+  ASSERT_EQ(app_identifier.app_id(), gcm_driver()->last_gettoken_app_id());
+  EXPECT_EQ("1234567890", gcm_driver()->last_gettoken_authorized_entity());
 
   base::RunLoop run_loop;
   // Send a push message via gcm and expect the ServiceWorker to receive it.

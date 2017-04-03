@@ -38,8 +38,8 @@
 #include "content/common/frame_messages.h"
 #include "content/common/input/synthetic_tap_gesture_params.h"
 #include "content/common/input_messages.h"
+#include "content/common/renderer.mojom.h"
 #include "content/common/view_messages.h"
-#include "content/public/browser/cert_store.h"
 #include "content/public/browser/interstitial_page_delegate.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_service.h"
@@ -54,6 +54,7 @@
 #include "content/public/test/test_utils.h"
 #include "content/test/content_browser_test_utils_internal.h"
 #include "content/test/test_frame_navigation_observer.h"
+#include "ipc/ipc.mojom.h"
 #include "ipc/ipc_security_test_util.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -527,33 +528,6 @@ class RenderWidgetHostVisibilityObserver : public NotificationObserver {
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostVisibilityObserver);
 };
 
-// A mock CertStore that always assigns the render process host id as
-// the certificate id. Certificates are never removed.
-class MockCertStore : public CertStore {
- public:
-  MockCertStore() {}
-  ~MockCertStore() override {}
-
-  int StoreCert(net::X509Certificate* cert,
-                int render_process_host_id) override {
-    certs_[render_process_host_id] = cert;
-    return render_process_host_id;
-  }
-
-  bool RetrieveCert(int cert_id,
-                    scoped_refptr<net::X509Certificate>* cert) override {
-    if (certs_.find(cert_id) == certs_.end())
-      return false;
-    *cert = certs_[cert_id];
-    return true;
-  }
-
- private:
-  std::map<int, scoped_refptr<net::X509Certificate>> certs_;
-
-  DISALLOW_COPY_AND_ASSIGN(MockCertStore);
-};
-
 class TestInterstitialDelegate : public InterstitialPageDelegate {
  private:
   // InterstitialPageDelegate:
@@ -615,6 +589,23 @@ class SitePerProcessIgnoreCertErrorsBrowserTest
   void SetUpCommandLine(base::CommandLine* command_line) override {
     SitePerProcessBrowserTest::SetUpCommandLine(command_line);
     command_line->AppendSwitch(switches::kIgnoreCertificateErrors);
+  }
+};
+
+// SitePerProcessEmbedderCSPEnforcementBrowserTest
+
+class SitePerProcessEmbedderCSPEnforcementBrowserTest
+    : public SitePerProcessBrowserTest {
+ public:
+  SitePerProcessEmbedderCSPEnforcementBrowserTest() {}
+
+ protected:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    SitePerProcessBrowserTest::SetUpCommandLine(command_line);
+    // TODO(amalika): Remove this switch when the EmbedderCSPEnforcement becomes
+    // stable
+    command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
+                                    "EmbedderCSPEnforcement");
   }
 };
 
@@ -1323,6 +1314,248 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
   EXPECT_TRUE(main_frame_monitor.EventWasReceived());
   EXPECT_EQ(75, main_frame_monitor.event().x);
   EXPECT_EQ(75, main_frame_monitor.event().y);
+  EXPECT_FALSE(child_frame_monitor.EventWasReceived());
+}
+
+// This test verifies that MouseEnter and MouseLeave events fire correctly
+// when the mouse cursor moves between processes.
+#if defined(OS_ANDROID)
+// Browser process hit testing is not implemented on Android.
+// https://crbug.com/491334
+#define MAYBE_CrossProcessMouseEnterAndLeaveTest \
+  DISABLED_CrossProcessMouseEnterAndLeaveTest
+#else
+#define MAYBE_CrossProcessMouseEnterAndLeaveTest \
+  CrossProcessMouseEnterAndLeaveTest
+#endif
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
+                       MAYBE_CrossProcessMouseEnterAndLeaveTest) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b,c(d))"));
+  NavigateToURL(shell(), main_url);
+
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetFrameTree()
+                            ->root();
+
+  EXPECT_EQ(
+      " Site A ------------ proxies for B C D\n"
+      "   |--Site B ------- proxies for A C D\n"
+      "   +--Site C ------- proxies for A B D\n"
+      "        +--Site D -- proxies for A B C\n"
+      "Where A = http://a.com/\n"
+      "      B = http://b.com/\n"
+      "      C = http://c.com/\n"
+      "      D = http://d.com/",
+      DepictFrameTree(root));
+
+  FrameTreeNode* b_node = root->child_at(0);
+  FrameTreeNode* c_node = root->child_at(1);
+  FrameTreeNode* d_node = c_node->child_at(0);
+
+  RenderWidgetHostViewBase* rwhv_a = static_cast<RenderWidgetHostViewBase*>(
+      root->current_frame_host()->GetRenderWidgetHost()->GetView());
+  RenderWidgetHostViewBase* rwhv_b = static_cast<RenderWidgetHostViewBase*>(
+      b_node->current_frame_host()->GetRenderWidgetHost()->GetView());
+  RenderWidgetHostViewBase* rwhv_d = static_cast<RenderWidgetHostViewBase*>(
+      d_node->current_frame_host()->GetRenderWidgetHost()->GetView());
+
+  // Verifying surfaces are ready in B and D are sufficient, since other
+  // surfaces contain at least one of them.
+  SurfaceHitTestReadyNotifier notifier_b(
+      static_cast<RenderWidgetHostViewChildFrame*>(rwhv_b));
+  notifier_b.WaitForSurfaceReady();
+  SurfaceHitTestReadyNotifier notifier_d(
+      static_cast<RenderWidgetHostViewChildFrame*>(rwhv_d));
+  notifier_d.WaitForSurfaceReady();
+
+  // Create listeners for mouse events. These are used to verify that the
+  // RenderWidgetHostInputEventRouter is generating MouseLeave, etc for
+  // the right renderers.
+  RenderWidgetHostMouseEventMonitor root_frame_monitor(
+      root->current_frame_host()->GetRenderWidgetHost());
+  RenderWidgetHostMouseEventMonitor a_frame_monitor(
+      root->current_frame_host()->GetRenderWidgetHost());
+  RenderWidgetHostMouseEventMonitor b_frame_monitor(
+      b_node->current_frame_host()->GetRenderWidgetHost());
+  RenderWidgetHostMouseEventMonitor c_frame_monitor(
+      c_node->current_frame_host()->GetRenderWidgetHost());
+  RenderWidgetHostMouseEventMonitor d_frame_monitor(
+      d_node->current_frame_host()->GetRenderWidgetHost());
+
+  gfx::Point point_in_a_frame(2, 2);
+  gfx::Point point_in_b_frame(313, 147);
+  gfx::Point point_in_d_frame(471, 207);
+
+  blink::WebMouseEvent mouse_event;
+  mouse_event.type = blink::WebInputEvent::MouseMove;
+  mouse_event.x = point_in_a_frame.x();
+  mouse_event.y = point_in_a_frame.y();
+
+  // Send an initial MouseMove to the root view, which shouldn't affect the
+  // other renderers.
+  web_contents()->GetInputEventRouter()->RouteMouseEvent(rwhv_a, &mouse_event);
+  EXPECT_TRUE(a_frame_monitor.EventWasReceived());
+  a_frame_monitor.ResetEventReceived();
+  EXPECT_FALSE(b_frame_monitor.EventWasReceived());
+  EXPECT_FALSE(c_frame_monitor.EventWasReceived());
+  EXPECT_FALSE(d_frame_monitor.EventWasReceived());
+
+  // Next send a MouseMove to B frame, which shouldn't affect C or D but
+  // A should receive a MouseMove event.
+  mouse_event.x = point_in_b_frame.x();
+  mouse_event.y = point_in_b_frame.y();
+  web_contents()->GetInputEventRouter()->RouteMouseEvent(rwhv_a, &mouse_event);
+  EXPECT_TRUE(a_frame_monitor.EventWasReceived());
+  EXPECT_EQ(a_frame_monitor.event().type, blink::WebInputEvent::MouseMove);
+  a_frame_monitor.ResetEventReceived();
+  EXPECT_TRUE(b_frame_monitor.EventWasReceived());
+  b_frame_monitor.ResetEventReceived();
+  EXPECT_FALSE(c_frame_monitor.EventWasReceived());
+  EXPECT_FALSE(d_frame_monitor.EventWasReceived());
+
+  // Next send a MouseMove to D frame, which should have side effects in every
+  // other RenderWidgetHostView.
+  mouse_event.x = point_in_d_frame.x();
+  mouse_event.y = point_in_d_frame.y();
+  web_contents()->GetInputEventRouter()->RouteMouseEvent(rwhv_a, &mouse_event);
+  EXPECT_TRUE(a_frame_monitor.EventWasReceived());
+  EXPECT_EQ(a_frame_monitor.event().type, blink::WebInputEvent::MouseMove);
+  EXPECT_TRUE(b_frame_monitor.EventWasReceived());
+  EXPECT_EQ(b_frame_monitor.event().type, blink::WebInputEvent::MouseLeave);
+  EXPECT_TRUE(c_frame_monitor.EventWasReceived());
+  EXPECT_EQ(c_frame_monitor.event().type, blink::WebInputEvent::MouseMove);
+  EXPECT_TRUE(d_frame_monitor.EventWasReceived());
+}
+
+// Verify that mouse capture works on a RenderWidgetHostView level, so that
+// dragging scroll bars and selecting text continues even when the mouse
+// cursor crosses over cross-process frame boundaries.
+#if defined(OS_ANDROID)
+// Browser process hit testing is not implemented on Android.
+// https://crbug.com/491334
+#define MAYBE_CrossProcessMouseCapture DISABLED_CrossProcessMouseCapture
+#else
+#define MAYBE_CrossProcessMouseCapture CrossProcessMouseCapture
+#endif
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
+                       MAYBE_CrossProcessMouseCapture) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "/frame_tree/page_with_positioned_frame.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+
+  // It is safe to obtain the root frame tree node here, as it doesn't change.
+  FrameTreeNode* root = web_contents()->GetFrameTree()->root();
+  ASSERT_EQ(1U, root->child_count());
+
+  FrameTreeNode* child_node = root->child_at(0);
+  GURL site_url(embedded_test_server()->GetURL("baz.com", "/title1.html"));
+  EXPECT_EQ(site_url, child_node->current_url());
+  EXPECT_NE(shell()->web_contents()->GetSiteInstance(),
+            child_node->current_frame_host()->GetSiteInstance());
+
+  // Create listeners for mouse events.
+  RenderWidgetHostMouseEventMonitor main_frame_monitor(
+      root->current_frame_host()->GetRenderWidgetHost());
+  RenderWidgetHostMouseEventMonitor child_frame_monitor(
+      child_node->current_frame_host()->GetRenderWidgetHost());
+
+  RenderWidgetHostInputEventRouter* router =
+      web_contents()->GetInputEventRouter();
+
+  RenderWidgetHostViewBase* root_view = static_cast<RenderWidgetHostViewBase*>(
+      root->current_frame_host()->GetRenderWidgetHost()->GetView());
+  RenderWidgetHostViewBase* rwhv_child = static_cast<RenderWidgetHostViewBase*>(
+      child_node->current_frame_host()->GetRenderWidgetHost()->GetView());
+
+  SurfaceHitTestReadyNotifier notifier(
+      static_cast<RenderWidgetHostViewChildFrame*>(rwhv_child));
+  notifier.WaitForSurfaceReady();
+
+  // Target MouseDown to child frame.
+  blink::WebMouseEvent mouse_event;
+  mouse_event.type = blink::WebInputEvent::MouseDown;
+  mouse_event.button = blink::WebPointerProperties::Button::Left;
+  mouse_event.x = 75;
+  mouse_event.y = 75;
+  mouse_event.clickCount = 1;
+  main_frame_monitor.ResetEventReceived();
+  child_frame_monitor.ResetEventReceived();
+  router->RouteMouseEvent(root_view, &mouse_event);
+
+  EXPECT_FALSE(main_frame_monitor.EventWasReceived());
+  EXPECT_TRUE(child_frame_monitor.EventWasReceived());
+
+  // Target MouseMove to main frame. This should still be routed to the
+  // child frame because it is now capturing mouse input.
+  mouse_event.type = blink::WebInputEvent::MouseMove;
+  mouse_event.modifiers = blink::WebInputEvent::LeftButtonDown;
+  mouse_event.x = 1;
+  mouse_event.y = 1;
+  // Note that this event is sent twice, with the monitors cleared after
+  // the first time, because the first MouseMove to the child frame
+  // causes a MouseMove to be sent to the main frame also, which we
+  // need to ignore.
+  router->RouteMouseEvent(root_view, &mouse_event);
+  main_frame_monitor.ResetEventReceived();
+  child_frame_monitor.ResetEventReceived();
+  mouse_event.x = 1;
+  mouse_event.y = 2;
+  router->RouteMouseEvent(root_view, &mouse_event);
+
+  EXPECT_FALSE(main_frame_monitor.EventWasReceived());
+  EXPECT_TRUE(child_frame_monitor.EventWasReceived());
+
+  // A MouseUp to the child frame should cancel the mouse capture.
+  mouse_event.type = blink::WebInputEvent::MouseUp;
+  mouse_event.modifiers = 0;
+  mouse_event.x = 75;
+  mouse_event.y = 75;
+  main_frame_monitor.ResetEventReceived();
+  child_frame_monitor.ResetEventReceived();
+  router->RouteMouseEvent(root_view, &mouse_event);
+
+  EXPECT_FALSE(main_frame_monitor.EventWasReceived());
+  EXPECT_TRUE(child_frame_monitor.EventWasReceived());
+
+  // Subsequent MouseMove events targeted to the main frame should be routed
+  // to that frame.
+  mouse_event.type = blink::WebInputEvent::MouseMove;
+  mouse_event.x = 1;
+  mouse_event.y = 3;
+  // Sending the MouseMove twice for the same reason as above.
+  router->RouteMouseEvent(root_view, &mouse_event);
+  main_frame_monitor.ResetEventReceived();
+  child_frame_monitor.ResetEventReceived();
+  mouse_event.x = 1;
+  mouse_event.y = 4;
+  router->RouteMouseEvent(root_view, &mouse_event);
+
+  EXPECT_TRUE(main_frame_monitor.EventWasReceived());
+  EXPECT_FALSE(child_frame_monitor.EventWasReceived());
+
+  // Target MouseDown to the main frame to cause it to capture input.
+  mouse_event.type = blink::WebInputEvent::MouseDown;
+  mouse_event.x = 1;
+  mouse_event.y = 1;
+  main_frame_monitor.ResetEventReceived();
+  child_frame_monitor.ResetEventReceived();
+  router->RouteMouseEvent(root_view, &mouse_event);
+
+  EXPECT_TRUE(main_frame_monitor.EventWasReceived());
+  EXPECT_FALSE(child_frame_monitor.EventWasReceived());
+
+  // Sending a MouseMove to the child frame should still result in the main
+  // frame receiving the event.
+  mouse_event.type = blink::WebInputEvent::MouseMove;
+  mouse_event.modifiers = blink::WebInputEvent::LeftButtonDown;
+  mouse_event.x = 75;
+  mouse_event.y = 75;
+  main_frame_monitor.ResetEventReceived();
+  child_frame_monitor.ResetEventReceived();
+  router->RouteMouseEvent(root_view, &mouse_event);
+
+  EXPECT_TRUE(main_frame_monitor.EventWasReceived());
   EXPECT_FALSE(child_frame_monitor.EventWasReceived());
 }
 
@@ -2897,6 +3130,63 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
   }
 }
 
+// Verify that "csp" property on frame elements propagates to child frames
+// correctly. See  https://crbug.com/647588
+IN_PROC_BROWSER_TEST_F(SitePerProcessEmbedderCSPEnforcementBrowserTest,
+                       FrameOwnerPropertiesPropagationCSP) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/frame_owner_properties_csp.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+
+  // It is safe to obtain the root frame tree node here, as it doesn't change.
+  FrameTreeNode* root = web_contents()->GetFrameTree()->root();
+  ASSERT_EQ(1u, root->child_count());
+
+  EXPECT_EQ(
+      " Site A ------------ proxies for B\n"
+      "   +--Site B ------- proxies for A\n"
+      "Where A = http://a.com/\n"
+      "      B = http://b.com/",
+      DepictFrameTree(root));
+
+  FrameTreeNode* child = root->child_at(0);
+
+  std::string csp;
+  EXPECT_TRUE(ExecuteScriptAndExtractString(
+      root,
+      "window.domAutomationController.send("
+      "document.getElementById('child-1').getAttribute('csp'));",
+      &csp));
+  EXPECT_EQ("object-src \'none\'", csp);
+
+  // Run the test over variety of parent/child cases.
+  GURL urls[] = {// Remote to remote.
+                 embedded_test_server()->GetURL("c.com", "/title2.html"),
+                 // Remote to local.
+                 embedded_test_server()->GetURL("a.com", "/title1.html"),
+                 // Local to remote.
+                 embedded_test_server()->GetURL("b.com", "/title2.html")};
+
+  std::vector<std::string> csp_values = {"default-src a.com",
+                                         "default-src b.com", "img-src c.com"};
+
+  // Before each navigation, we change the csp property of the frame.
+  // We then check whether that property is applied
+  // correctly after the navigation has completed.
+  for (size_t i = 0; i < arraysize(urls); ++i) {
+    // Change csp before navigating.
+    EXPECT_TRUE(ExecuteScript(
+        root,
+        base::StringPrintf("document.getElementById('child-1').setAttribute("
+                           "    'csp', '%s');",
+                           csp_values[i].c_str())));
+
+    NavigateFrameToURL(child, urls[i]);
+    EXPECT_EQ(csp_values[i], child->frame_owner_properties().required_csp);
+    // TODO(amalika): add checks that the CSP replication takes effect
+  }
+}
+
 // Verify origin replication with an A-embed-B-embed-C-embed-A hierarchy.
 IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, OriginReplication) {
   GURL main_url(embedded_test_server()->GetURL(
@@ -2927,8 +3217,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, OriginReplication) {
 
   // Check that b.com frame's location.ancestorOrigins contains the correct
   // origin for the parent.  The origin should have been replicated as part of
-  // the ViewMsg_New message that created the parent's RenderFrameProxy in
-  // b.com's process.
+  // the mojom::Renderer::CreateView message that created the parent's
+  // RenderFrameProxy in b.com's process.
   int ancestor_origins_length = 0;
   EXPECT_TRUE(ExecuteScriptAndExtractInt(
       tiptop_child,
@@ -2944,9 +3234,10 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, OriginReplication) {
 
   // Check that c.com frame's location.ancestorOrigins contains the correct
   // origin for its two ancestors. The topmost parent origin should be
-  // replicated as part of ViewMsg_New, and the middle frame (b.com's) origin
-  // should be replicated as part of FrameMsg_NewFrameProxy sent for b.com's
-  // frame in c.com's process.
+  // replicated as part of mojom::Renderer::CreateView, and the middle frame
+  // (b.com's) origin should be replicated as part of
+  // mojom::Renderer::CreateFrameProxy sent for b.com's frame in c.com's
+  // process.
   EXPECT_TRUE(ExecuteScriptAndExtractInt(
       middle_child,
       "window.domAutomationController.send(location.ancestorOrigins.length);",
@@ -3551,9 +3842,9 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, OriginUpdatesReachProxies) {
 
   // frames[1] can't be used due to a bug where RemoteFrames are created out of
   // order (https://crbug.com/478792).  Instead, target second frame by name.
-  EXPECT_TRUE(ExecuteScript(
-      root->child_at(0),
-      "parent.frames['frame2'].location.href = 'data:text/html,foo'"));
+  EXPECT_TRUE(ExecuteScript(root->child_at(0),
+                            "try { parent.frames['frame2'].location.href = "
+                            "'data:text/html,foo'; } catch (e) {}"));
   console_delegate->Wait();
 
   std::string frame_origin = root->child_at(1)->current_origin().Serialize();
@@ -4414,8 +4705,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, NavigateSubframeWithOpener) {
 // Check that if a subframe has an opener, that opener is preserved when a new
 // RenderFrameProxy is created for that subframe in another renderer process.
 // Similar to NavigateSubframeWithOpener, but this test verifies the subframe
-// opener plumbing for FrameMsg_NewFrameProxy, whereas
-// NavigateSubframeWithOpener targets FrameMsg_NewFrame.
+// opener plumbing for mojom::Renderer::CreateFrameProxy(), whereas
+// NavigateSubframeWithOpener targets mojom::Renderer::CreateFrame().
 IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
                        NewRenderFrameProxyPreservesOpener) {
   GURL main_url(
@@ -5854,9 +6145,9 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
   // Send the message to create a proxy for B's new child frame in A.  This
   // used to crash, as parent_routing_id refers to a proxy that doesn't exist
   // anymore.
-  process_a->Send(new FrameMsg_NewFrameProxy(
+  RenderProcessHostImpl::GetRendererInterface(process_a)->CreateFrameProxy(
       new_routing_id, view_routing_id, MSG_ROUTING_NONE, parent_routing_id,
-      FrameReplicationState()));
+      FrameReplicationState());
 
   // Ensure the subframe is detached in the browser process.
   observer.Wait();
@@ -5918,19 +6209,20 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
   NavigateFrameToURL(node,
                      embedded_test_server()->GetURL("c.com", "/title2.html"));
   {
-    FrameMsg_NewFrame_Params params;
-    params.routing_id = frame_routing_id;
-    params.proxy_routing_id = proxy_routing_id;
-    params.opener_routing_id = MSG_ROUTING_NONE;
-    params.parent_routing_id =
+    mojom::CreateFrameParamsPtr params = mojom::CreateFrameParams::New();
+    params->routing_id = frame_routing_id;
+    params->proxy_routing_id = proxy_routing_id;
+    params->opener_routing_id = IPC::mojom::kRoutingIdNone;
+    params->parent_routing_id =
         shell()->web_contents()->GetMainFrame()->GetRoutingID();
-    params.previous_sibling_routing_id = MSG_ROUTING_NONE;
-    params.widget_params.routing_id = MSG_ROUTING_NONE;
-    params.widget_params.hidden = true;
-    params.replication_state.name = "name";
-    params.replication_state.unique_name = "name";
-
-    process->Send(new FrameMsg_NewFrame(params));
+    params->previous_sibling_routing_id = IPC::mojom::kRoutingIdNone;
+    params->widget_params = mojom::CreateFrameWidgetParams::New();
+    params->widget_params->routing_id = IPC::mojom::kRoutingIdNone;
+    params->widget_params->hidden = true;
+    params->replication_state.name = "name";
+    params->replication_state.unique_name = "name";
+    RenderProcessHostImpl::GetRendererInterface(process)->CreateFrame(
+        std::move(params));
   }
 
   // The test must wait for the process to exit, but if there is no leak, the
@@ -5984,18 +6276,19 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, ParentDetachRemoteChild) {
   EXPECT_EQ(1U, contents->GetFrameTree()->root()->child_count());
 
   {
-    FrameMsg_NewFrame_Params params;
-    params.routing_id = frame_routing_id;
-    params.proxy_routing_id = MSG_ROUTING_NONE;
-    params.opener_routing_id = MSG_ROUTING_NONE;
-    params.parent_routing_id = parent_routing_id;
-    params.previous_sibling_routing_id = MSG_ROUTING_NONE;
-    params.widget_params.routing_id = widget_routing_id;
-    params.widget_params.hidden = true;
-    params.replication_state.name = "name";
-    params.replication_state.unique_name = "name";
-
-    process->Send(new FrameMsg_NewFrame(params));
+    mojom::CreateFrameParamsPtr params = mojom::CreateFrameParams::New();
+    params->routing_id = frame_routing_id;
+    params->proxy_routing_id = IPC::mojom::kRoutingIdNone;
+    params->opener_routing_id = IPC::mojom::kRoutingIdNone;
+    params->parent_routing_id = parent_routing_id;
+    params->previous_sibling_routing_id = IPC::mojom::kRoutingIdNone;
+    params->widget_params = mojom::CreateFrameWidgetParams::New();
+    params->widget_params->routing_id = widget_routing_id;
+    params->widget_params->hidden = true;
+    params->replication_state.name = "name";
+    params->replication_state.unique_name = "name";
+    RenderProcessHostImpl::GetRendererInterface(process)->CreateFrame(
+        std::move(params));
   }
 
   // The test must wait for the process to exit, but if there is no leak, the
@@ -6786,59 +7079,6 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, ScreenCoordinates) {
   }
 }
 
-// Tests that the certificate store is updated during a cross-site
-// redirect navigation. (See https://crbug.com/561754.) Ignores
-// certificate errors so that it can use the cross-site redirector to
-// redirect from HTTPS to HTTPS.
-IN_PROC_BROWSER_TEST_F(SitePerProcessIgnoreCertErrorsBrowserTest,
-                       CrossSiteRedirectCertificateStore) {
-  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
-  https_server.ServeFilesFromSourceDirectory("content/test/data");
-  ASSERT_TRUE(https_server.Start());
-  SetupCrossSiteRedirector(&https_server);
-
-  ResourceDispatcherHostImpl* rdh = ResourceDispatcherHostImpl::Get();
-  ASSERT_TRUE(rdh);
-  MockCertStore mock_cert_store;
-  rdh->cert_store_for_testing_ = &mock_cert_store;
-
-  // First, navigate to an |https_server| URL to ensure that the site
-  // instance is assigned a site. This will force a renderer transfer to
-  // happen on the following navigation that redirects to a different
-  // site.
-  GURL url(https_server.GetURL("/title1.html"));
-  EXPECT_TRUE(NavigateToURL(shell(), url));
-  int original_process_id =
-      shell()->web_contents()->GetRenderProcessHost()->GetID();
-
-  url = https_server.GetURL("/cross-site/a.test/title1.html");
-  // NavigateToURL() returns false because the committed URL doesn't
-  // match |url| (because it redirected).
-  EXPECT_FALSE(NavigateToURL(shell(), url));
-  EXPECT_TRUE(IsLastCommittedEntryOfPageType(shell()->web_contents(),
-                                             PAGE_TYPE_NORMAL));
-  int new_process_id = shell()->web_contents()->GetRenderProcessHost()->GetID();
-
-  // Test that the mock certificate store saw the certificate associated with
-  // the new renderer process.
-  EXPECT_NE(original_process_id, new_process_id);
-  scoped_refptr<net::X509Certificate> original_cert;
-  scoped_refptr<net::X509Certificate> transfer_cert;
-  ASSERT_TRUE(
-      mock_cert_store.RetrieveCert(original_process_id, &original_cert));
-  ASSERT_TRUE(mock_cert_store.RetrieveCert(new_process_id, &transfer_cert));
-  EXPECT_TRUE(https_server.GetCertificate()->Equals(original_cert.get()));
-  EXPECT_TRUE(https_server.GetCertificate()->Equals(transfer_cert.get()));
-  // Test that the final cert id stored in the navigation entry is the
-  // cert id corresponding to the second renderer process.
-  EXPECT_EQ(new_process_id, shell()
-                                ->web_contents()
-                                ->GetController()
-                                .GetVisibleEntry()
-                                ->GetSSL()
-                                .cert_id);
-}
-
 // Tests that the swapped out state on RenderViewHost is properly reset when
 // the main frame is navigated to the same SiteInstance as one of its child
 // frames.
@@ -6938,7 +7178,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
   // termination.
   RenderProcessHost* subframe_process =
       root->child_at(0)->current_frame_host()->GetProcess();
-  subframe_process->IncrementWorkerRefCount();
+  subframe_process->IncrementSharedWorkerRefCount();
 
   // Navigate the subframe away from b.com.  Since this is the last active
   // frame in the b.com process, this causes the RenderWidget and RenderView to
@@ -6960,7 +7200,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
   // process hasn't heard the OnChannelError yet).  This race will need to be
   // fixed.
 
-  subframe_process->DecrementWorkerRefCount();
+  subframe_process->DecrementSharedWorkerRefCount();
 }
 
 // Tests that an input event targeted to a out-of-process iframe correctly
@@ -7253,9 +7493,11 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
   // Now, simulate that both ShowView messages arrive by showing both of the
   // pending WebContents.
   web_contents()->ShowCreatedWindow(process1->GetID(), filter1->routing_id(),
-                                    NEW_FOREGROUND_TAB, gfx::Rect(), true);
+                                    WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                                    gfx::Rect(), true);
   web_contents()->ShowCreatedWindow(process2->GetID(), filter2->routing_id(),
-                                    NEW_FOREGROUND_TAB, gfx::Rect(), true);
+                                    WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                                    gfx::Rect(), true);
 
   // Verify that both shells were properly created.
   EXPECT_EQ(3u, Shell::windows().size());
@@ -7920,6 +8162,147 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, SessionHistoryReplication) {
   EXPECT_EQ(main_url, root->current_url());
   EXPECT_EQ(child1_last_url, child1->current_url());
   EXPECT_EQ(child2_last_url, child2->current_url());
+}
+
+// A BrowserMessageFilter that drops FrameHostMsg_OnDispatchLoad messages.
+class DispatchLoadMessageFilter : public BrowserMessageFilter {
+ public:
+  DispatchLoadMessageFilter() : BrowserMessageFilter(FrameMsgStart) {}
+
+ protected:
+  ~DispatchLoadMessageFilter() override {}
+
+ private:
+  // BrowserMessageFilter:
+  bool OnMessageReceived(const IPC::Message& message) override {
+    return message.type() == FrameHostMsg_DispatchLoad::ID;
+  }
+
+  DISALLOW_COPY_AND_ASSIGN(DispatchLoadMessageFilter);
+};
+
+// Test that the renderer isn't killed when a frame generates a load event just
+// after becoming pending deletion.  See https://crbug.com/636513.
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
+                       LoadEventForwardingWhilePendingDeletion) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(a)"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+  FrameTreeNode* root = web_contents()->GetFrameTree()->root();
+  FrameTreeNode* child = root->child_at(0);
+
+  // Open a popup in the b.com process for later use.
+  GURL popup_url(embedded_test_server()->GetURL("b.com", "/title1.html"));
+  Shell* popup_shell = OpenPopup(root, popup_url, "foo");
+  EXPECT_TRUE(popup_shell);
+
+  // Install a filter to drop DispatchLoad messages from b.com.
+  scoped_refptr<DispatchLoadMessageFilter> filter =
+      new DispatchLoadMessageFilter();
+  RenderProcessHost* b_process =
+      popup_shell->web_contents()->GetMainFrame()->GetProcess();
+  b_process->AddFilter(filter.get());
+
+  // Navigate subframe to b.com.  Wait for commit but not full load.
+  GURL b_url(embedded_test_server()->GetURL("b.com", "/title2.html"));
+  {
+    TestFrameNavigationObserver commit_observer(child);
+    EXPECT_TRUE(
+        ExecuteScript(child, "location.href = '" + b_url.spec() + "';"));
+    commit_observer.WaitForCommit();
+  }
+  RenderFrameHostImpl* child_rfh = child->current_frame_host();
+  child_rfh->DisableSwapOutTimerForTesting();
+
+  // At this point, the subframe should have a proxy in its parent's
+  // SiteInstance, a.com.
+  EXPECT_TRUE(child->render_manager()->GetProxyToParent());
+
+  // Now, go back to a.com in the subframe and wait for commit.
+  {
+    TestFrameNavigationObserver commit_observer(child);
+    web_contents()->GetController().GoBack();
+    commit_observer.WaitForCommit();
+  }
+
+  // At this point, the subframe's old RFH for b.com should be pending
+  // deletion, and the subframe's proxy in a.com should've been cleared.
+  EXPECT_FALSE(child_rfh->is_active());
+  EXPECT_FALSE(child->render_manager()->GetProxyToParent());
+
+  // Simulate that the load event is dispatched from |child_rfh| just after
+  // it's become pending deletion.
+  child_rfh->OnDispatchLoad();
+
+  // In the bug, OnDispatchLoad killed the b.com renderer.  Ensure that this is
+  // not the case. Note that the process kill doesn't happen immediately, so
+  // IsRenderFrameLive() can't be checked here (yet).  Instead, check that
+  // JavaScript can still execute in b.com using the popup.
+  EXPECT_TRUE(ExecuteScript(popup_shell->web_contents(), "true"));
+}
+
+// Tests that trying to navigate in the unload handler doesn't crash the
+// browser.
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, NavigateInUnloadHandler) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b(b))"));
+  NavigateToURL(shell(), main_url);
+
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetFrameTree()
+                            ->root();
+
+  EXPECT_EQ(
+      " Site A ------------ proxies for B\n"
+      "   +--Site B ------- proxies for A\n"
+      "        +--Site B -- proxies for A\n"
+      "Where A = http://a.com/\n"
+      "      B = http://b.com/",
+      DepictFrameTree(root));
+
+  int child_count = 0;
+  EXPECT_TRUE(ExecuteScriptAndExtractInt(
+      root->child_at(0)->current_frame_host(),
+      "window.domAutomationController.send(frames.length);", &child_count));
+  EXPECT_EQ(1, child_count);
+
+  // Add an unload handler to B's subframe.
+  EXPECT_TRUE(
+      ExecuteScript(root->child_at(0)->child_at(0)->current_frame_host(),
+                    "window.onunload=function(e){\n"
+                    "    window.location = '#navigate';\n"
+                    "};\n"));
+
+  // Navigate B's subframe to a cross-site C.
+  std::string script =
+      std::string("window.document.getElementById('child-0').src = \"") +
+      embedded_test_server()
+          ->GetURL("c.com", "/cross_site_iframe_factory.html")
+          .spec() +
+      "\"";
+  EXPECT_TRUE(
+      ExecuteScript(root->child_at(0)->current_frame_host(), script.c_str()));
+
+  // Wait until B's subframe RenderFrameHost is destroyed.
+  RenderFrameDeletedObserver deleted_observer(
+      root->child_at(0)->child_at(0)->current_frame_host());
+  deleted_observer.WaitUntilDeleted();
+
+  // Check that C's subframe is alive and the navigation in the unload handler
+  // was ignored.
+  EXPECT_TRUE(ExecuteScriptAndExtractInt(
+      root->child_at(0)->child_at(0)->current_frame_host(),
+      "window.domAutomationController.send(frames.length);", &child_count));
+  EXPECT_EQ(0, child_count);
+
+  EXPECT_EQ(
+      " Site A ------------ proxies for B C\n"
+      "   +--Site B ------- proxies for A C\n"
+      "        +--Site C -- proxies for A B\n"
+      "Where A = http://a.com/\n"
+      "      B = http://b.com/\n"
+      "      C = http://c.com/",
+      DepictFrameTree(root));
 }
 
 }  // namespace content

@@ -5,7 +5,6 @@
 #include "chrome/browser/devtools/device/adb/adb_device_provider.h"
 #include "chrome/browser/devtools/device/adb/mock_adb_server.h"
 #include "chrome/browser/devtools/device/devtools_android_bridge.h"
-#include "chrome/browser/devtools/devtools_target_impl.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/browser/browser_thread.h"
@@ -108,14 +107,14 @@ class AdbClientSocketTest : public InProcessBrowserTest,
     ASSERT_EQ(1U, chrome_beta_pages.size());
     ASSERT_EQ(2U, webview_pages.size());
 
-    std::unique_ptr<DevToolsTargetImpl> chrome_target(
-        android_bridge_->CreatePageTarget(chrome_pages[0]));
-    std::unique_ptr<DevToolsTargetImpl> chrome_beta_target(
-        android_bridge_->CreatePageTarget(chrome_beta_pages[0]));
-    std::unique_ptr<DevToolsTargetImpl> webview_target_0(
-        android_bridge_->CreatePageTarget(webview_pages[0]));
-    std::unique_ptr<DevToolsTargetImpl> webview_target_1(
-        android_bridge_->CreatePageTarget(webview_pages[1]));
+    scoped_refptr<content::DevToolsAgentHost> chrome_target(
+        chrome_pages[0]->CreateTarget());
+    scoped_refptr<content::DevToolsAgentHost> chrome_beta_target(
+        chrome_beta_pages[0]->CreateTarget());
+    scoped_refptr<content::DevToolsAgentHost> webview_target_0(
+        webview_pages[0]->CreateTarget());
+    scoped_refptr<content::DevToolsAgentHost> webview_target_1(
+        webview_pages[1]->CreateTarget());
 
     // Check that we have non-empty description for webview pages.
     ASSERT_EQ(0U, chrome_target->GetDescription().size());

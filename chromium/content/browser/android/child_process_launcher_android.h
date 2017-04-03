@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 
+#include "base/android/scoped_java_ref.h"
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/files/memory_mapped_file.h"
@@ -31,10 +32,6 @@ void StartChildProcess(
     const std::map<int, base::MemoryMappedFile::Region>& regions,
     const StartChildProcessCallback& callback);
 
-// Starts the background download process if it hasn't been started.
-// TODO(qinmin): pass the download parameters here and pass it to java side.
-void StartDownloadProcessIfNecessary();
-
 // Stops a child process based on the handle returned form
 // StartChildProcess.
 void StopChildProcess(base::ProcessHandle handle);
@@ -44,7 +41,8 @@ bool IsChildProcessOomProtected(base::ProcessHandle handle);
 void SetChildProcessInForeground(base::ProcessHandle handle,
                                  bool in_foreground);
 
-void RegisterViewSurface(int surface_id, jobject j_surface);
+void RegisterViewSurface(int surface_id,
+                         const base::android::JavaRef<jobject>& j_surface);
 
 void UnregisterViewSurface(int surface_id);
 

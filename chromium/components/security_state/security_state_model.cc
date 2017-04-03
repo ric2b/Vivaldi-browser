@@ -18,34 +18,68 @@ namespace security_state {
 
 namespace {
 
-SecurityStateModel::SecurityLevel GetSecurityLevelForNonSecureFieldTrial() {
+// Do not change or reorder this enum, and add new values at the end. It is used
+// in the MarkHttpAs histogram.
+enum MarkHttpStatus { NEUTRAL, NON_SECURE, HTTP_SHOW_WARNING, LAST_STATUS };
+
+// If |switch_or_field_trial_group| corresponds to a valid
+// MarkHttpAs group, sets |*level| and |*histogram_status| to the
+// appropriate values and returns true. Otherwise, returns false.
+bool GetSecurityLevelAndHistogramValueForNonSecureFieldTrial(
+    std::string switch_or_field_trial_group,
+    bool displayed_sensitive_input_on_http,
+    SecurityStateModel::SecurityLevel* level,
+    MarkHttpStatus* histogram_status) {
+  if (switch_or_field_trial_group == switches::kMarkHttpAsNeutral) {
+    *level = SecurityStateModel::NONE;
+    *histogram_status = NEUTRAL;
+    return true;
+  }
+
+  if (switch_or_field_trial_group == switches::kMarkHttpAsDangerous) {
+    *level = SecurityStateModel::DANGEROUS;
+    *histogram_status = NON_SECURE;
+    return true;
+  }
+
+  if (switch_or_field_trial_group ==
+      switches::kMarkHttpWithPasswordsOrCcWithChip) {
+    if (displayed_sensitive_input_on_http) {
+      *level = SecurityStateModel::HTTP_SHOW_WARNING;
+      *histogram_status = HTTP_SHOW_WARNING;
+    } else {
+      *level = SecurityStateModel::NONE;
+      *histogram_status = NEUTRAL;
+    }
+    return true;
+  }
+
+  return false;
+}
+
+SecurityStateModel::SecurityLevel GetSecurityLevelForNonSecureFieldTrial(
+    bool displayed_sensitive_input_on_http) {
   std::string choice =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          switches::kMarkNonSecureAs);
+          switches::kMarkHttpAs);
   std::string group = base::FieldTrialList::FindFullName("MarkNonSecureAs");
 
-  // Do not change this enum. It is used in the histogram.
-  enum MarkNonSecureStatus { NEUTRAL, DUBIOUS, NON_SECURE, LAST_STATUS };
-  const char kEnumeration[] = "MarkNonSecureAs";
+  const char kEnumeration[] = "MarkHttpAs";
 
   SecurityStateModel::SecurityLevel level = SecurityStateModel::NONE;
-  MarkNonSecureStatus status;
+  MarkHttpStatus status;
 
-  if (choice == switches::kMarkNonSecureAsNeutral) {
-    status = NEUTRAL;
-    level = SecurityStateModel::NONE;
-  } else if (choice == switches::kMarkNonSecureAsNonSecure) {
-    status = NON_SECURE;
-    level = SecurityStateModel::SECURITY_ERROR;
-  } else if (group == switches::kMarkNonSecureAsNeutral) {
-    status = NEUTRAL;
-    level = SecurityStateModel::NONE;
-  } else if (group == switches::kMarkNonSecureAsNonSecure) {
-    status = NON_SECURE;
-    level = SecurityStateModel::SECURITY_ERROR;
-  } else {
-    status = NEUTRAL;
-    level = SecurityStateModel::NONE;
+  // If the command-line switch is set, then it takes precedence over
+  // the field trial group.
+  if (!GetSecurityLevelAndHistogramValueForNonSecureFieldTrial(
+          choice, displayed_sensitive_input_on_http, &level, &status)) {
+    if (!GetSecurityLevelAndHistogramValueForNonSecureFieldTrial(
+            group, displayed_sensitive_input_on_http, &level, &status)) {
+      // If neither the command-line switch nor field trial group is set, then
+      // nonsecure defaults to neutral.
+      status = NEUTRAL;
+      level = SecurityStateModel::NONE;
+    }
   }
 
   UMA_HISTOGRAM_ENUMERATION(kEnumeration, status, LAST_STATUS);
@@ -95,32 +129,36 @@ SecurityStateModel::SecurityLevel GetSecurityLevelForRequest(
   // Override the connection security information if the website failed the
   // browser's malware checks.
   if (visible_security_state.fails_malware_check)
-    return SecurityStateModel::SECURITY_ERROR;
+    return SecurityStateModel::DANGEROUS;
 
   GURL url = visible_security_state.url;
   switch (visible_security_state.initial_security_level) {
-    case SecurityStateModel::NONE: {
-      if (!client->IsOriginSecure(url) && url.IsStandard())
-        return GetSecurityLevelForNonSecureFieldTrial();
+    case SecurityStateModel::NONE:
+    case SecurityStateModel::HTTP_SHOW_WARNING: {
+      if (!client->IsOriginSecure(url) && url.IsStandard()) {
+        return GetSecurityLevelForNonSecureFieldTrial(
+            visible_security_state.displayed_password_field_on_http ||
+            visible_security_state.displayed_credit_card_field_on_http);
+      }
       return SecurityStateModel::NONE;
     }
 
-    case SecurityStateModel::SECURITY_ERROR:
-      return SecurityStateModel::SECURITY_ERROR;
+    case SecurityStateModel::DANGEROUS:
+      return SecurityStateModel::DANGEROUS;
 
     case SecurityStateModel::SECURITY_WARNING:
-    case SecurityStateModel::SECURITY_POLICY_WARNING:
+    case SecurityStateModel::SECURE_WITH_POLICY_INSTALLED_CERT:
       return visible_security_state.initial_security_level;
 
     case SecurityStateModel::SECURE:
     case SecurityStateModel::EV_SECURE: {
       // Major cert errors and active mixed content will generally be
-      // downgraded by the embedder to SECURITY_ERROR and handled above,
+      // downgraded by the embedder to DANGEROUS and handled above,
       // but downgrade here just in case.
       net::CertStatus cert_status = visible_security_state.cert_status;
       if (net::IsCertStatusError(cert_status) &&
           !net::IsCertStatusMinorError(cert_status)) {
-        return SecurityStateModel::SECURITY_ERROR;
+        return SecurityStateModel::DANGEROUS;
       }
       if (mixed_content_status == SecurityStateModel::CONTENT_STATUS_RAN ||
           mixed_content_status ==
@@ -138,10 +176,10 @@ SecurityStateModel::SecurityLevel GetSecurityLevelForRequest(
       // other authenticated-but-with-errors indicate something may
       // be wrong, or may be wrong in the future, but is unclear now.
       if (client->UsedPolicyInstalledCertificate())
-        return SecurityStateModel::SECURITY_POLICY_WARNING;
+        return SecurityStateModel::SECURE_WITH_POLICY_INSTALLED_CERT;
 
       if (sha1_status == SecurityStateModel::DEPRECATED_SHA1_MAJOR)
-        return SecurityStateModel::SECURITY_ERROR;
+        return SecurityStateModel::DANGEROUS;
       if (sha1_status == SecurityStateModel::DEPRECATED_SHA1_MINOR)
         return SecurityStateModel::NONE;
 
@@ -195,7 +233,7 @@ void SecurityInfoForRequest(
     }
     return;
   }
-  security_info->cert_id = visible_security_state.cert_id;
+  security_info->certificate = visible_security_state.certificate;
   security_info->sha1_deprecation_status =
       GetSHA1DeprecationStatus(cert, visible_security_state);
   security_info->mixed_content_status =
@@ -206,6 +244,7 @@ void SecurityInfoForRequest(
       visible_security_state.ran_content_with_cert_errors);
   security_info->security_bits = visible_security_state.security_bits;
   security_info->connection_status = visible_security_state.connection_status;
+  security_info->key_exchange_group = visible_security_state.key_exchange_group;
   security_info->cert_status = visible_security_state.cert_status;
   security_info->scheme_is_cryptographic =
       visible_security_state.url.SchemeIsCryptographic();
@@ -232,7 +271,7 @@ const SecurityStateModel::SecurityLevel
         SecurityStateModel::NONE;
 const SecurityStateModel::SecurityLevel
     SecurityStateModel::kRanInsecureContentLevel =
-        SecurityStateModel::SECURITY_ERROR;
+        SecurityStateModel::DANGEROUS;
 
 SecurityStateModel::SecurityInfo::SecurityInfo()
     : security_level(SecurityStateModel::NONE),
@@ -242,9 +281,9 @@ SecurityStateModel::SecurityInfo::SecurityInfo()
       content_with_cert_errors_status(SecurityStateModel::CONTENT_STATUS_NONE),
       scheme_is_cryptographic(false),
       cert_status(0),
-      cert_id(0),
       security_bits(-1),
       connection_status(0),
+      key_exchange_group(0),
       obsolete_ssl_status(net::OBSOLETE_SSL_NONE),
       pkp_bypassed(false) {}
 
@@ -254,30 +293,14 @@ SecurityStateModel::SecurityStateModel() {}
 
 SecurityStateModel::~SecurityStateModel() {}
 
-const SecurityStateModel::SecurityInfo& SecurityStateModel::GetSecurityInfo()
-    const {
+void SecurityStateModel::GetSecurityInfo(
+    SecurityStateModel::SecurityInfo* result) const {
   scoped_refptr<net::X509Certificate> cert = nullptr;
   client_->RetrieveCert(&cert);
 
-  // Check if the cached |security_info_| must be recomputed.
   VisibleSecurityState new_visible_state;
   client_->GetVisibleSecurityState(&new_visible_state);
-  bool visible_security_state_changed =
-      !(visible_security_state_ == new_visible_state);
-  if (!visible_security_state_changed) {
-    // A cert must be present in order for the site to be considered
-    // EV_SECURE, and the cert might have been removed since the
-    // security level was last computed.
-    if (security_info_.security_level == EV_SECURE && !cert) {
-      security_info_.security_level = SECURE;
-    }
-    return security_info_;
-  }
-
-  visible_security_state_ = new_visible_state;
-  SecurityInfoForRequest(client_, visible_security_state_, cert,
-                         &security_info_);
-  return security_info_;
+  SecurityInfoForRequest(client_, new_visible_state, cert, result);
 }
 
 void SecurityStateModel::SetClient(SecurityStateModelClient* client) {
@@ -288,15 +311,17 @@ SecurityStateModel::VisibleSecurityState::VisibleSecurityState()
     : initial_security_level(SecurityStateModel::NONE),
       fails_malware_check(false),
       connection_info_initialized(false),
-      cert_id(0),
       cert_status(0),
       connection_status(0),
+      key_exchange_group(0),
       security_bits(-1),
       displayed_mixed_content(false),
       ran_mixed_content(false),
       displayed_content_with_cert_errors(false),
       ran_content_with_cert_errors(false),
-      pkp_bypassed(false) {}
+      pkp_bypassed(false),
+      displayed_password_field_on_http(false),
+      displayed_credit_card_field_on_http(false) {}
 
 SecurityStateModel::VisibleSecurityState::~VisibleSecurityState() {}
 
@@ -305,8 +330,10 @@ bool SecurityStateModel::VisibleSecurityState::operator==(
   return (url == other.url &&
           initial_security_level == other.initial_security_level &&
           fails_malware_check == other.fails_malware_check &&
-          cert_id == other.cert_id && cert_status == other.cert_status &&
+          !!certificate == !!other.certificate &&
+          (certificate ? certificate->Equals(other.certificate.get()) : true) &&
           connection_status == other.connection_status &&
+          key_exchange_group == other.key_exchange_group &&
           security_bits == other.security_bits &&
           sct_verify_statuses == other.sct_verify_statuses &&
           displayed_mixed_content == other.displayed_mixed_content &&
@@ -314,7 +341,11 @@ bool SecurityStateModel::VisibleSecurityState::operator==(
           displayed_content_with_cert_errors ==
               other.displayed_content_with_cert_errors &&
           ran_content_with_cert_errors == other.ran_content_with_cert_errors &&
-          pkp_bypassed == other.pkp_bypassed);
+          pkp_bypassed == other.pkp_bypassed &&
+          displayed_password_field_on_http ==
+              other.displayed_password_field_on_http &&
+          displayed_credit_card_field_on_http ==
+              other.displayed_credit_card_field_on_http);
 }
 
 }  // namespace security_state

@@ -14,6 +14,7 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/http/http_request_info.h"
 #include "net/http/mock_allow_http_auth_preferences.h"
+#include "net/log/net_log_with_source.h"
 #include "net/ssl/ssl_info.h"
 #include "net/test/gtest_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -216,8 +217,8 @@ class HttpAuthHandlerNegotiateTest : public PlatformTest {
     std::unique_ptr<HttpAuthHandler> generic_handler;
     SSLInfo null_ssl_info;
     int rv = factory_->CreateAuthHandlerFromString(
-        "Negotiate", HttpAuth::AUTH_SERVER, null_ssl_info, gurl, BoundNetLog(),
-        &generic_handler);
+        "Negotiate", HttpAuth::AUTH_SERVER, null_ssl_info, gurl,
+        NetLogWithSource(), &generic_handler);
     if (rv != OK)
       return rv;
     HttpAuthHandlerNegotiate* negotiate_handler =
@@ -375,16 +376,13 @@ TEST_F(HttpAuthHandlerNegotiateTest, MissingGSSAPI) {
       new HttpAuthHandlerNegotiate::Factory());
   negotiate_factory->set_host_resolver(host_resolver);
   negotiate_factory->set_http_auth_preferences(&http_auth_preferences);
-  negotiate_factory->set_library(base::WrapUnique(
-      new GSSAPISharedLibrary("/this/library/does/not/exist")));
+  negotiate_factory->set_library(
+      base::MakeUnique<GSSAPISharedLibrary>("/this/library/does/not/exist"));
 
   GURL gurl("http://www.example.com");
   std::unique_ptr<HttpAuthHandler> generic_handler;
   int rv = negotiate_factory->CreateAuthHandlerFromString(
-      "Negotiate",
-      HttpAuth::AUTH_SERVER,
-      gurl,
-      BoundNetLog(),
+      "Negotiate", HttpAuth::AUTH_SERVER, gurl, NetLogWithSource(),
       &generic_handler);
   EXPECT_THAT(rv, IsError(ERR_UNSUPPORTED_AUTH_SCHEME));
   EXPECT_TRUE(generic_handler.get() == NULL);

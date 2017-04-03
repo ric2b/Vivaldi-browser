@@ -5,23 +5,28 @@
 #include "services/ui/ws/display_manager.h"
 
 #include "base/memory/ptr_util.h"
+#include "base/trace_event/trace_event.h"
+#include "services/ui/display/platform_screen.h"
 #include "services/ui/ws/display.h"
-#include "services/ui/ws/display_manager_delegate.h"
+#include "services/ui/ws/display_binding.h"
 #include "services/ui/ws/event_dispatcher.h"
+#include "services/ui/ws/platform_display_init_params.h"
 #include "services/ui/ws/server_window.h"
 #include "services/ui/ws/user_display_manager.h"
+#include "services/ui/ws/user_display_manager_delegate.h"
 #include "services/ui/ws/user_id_tracker.h"
 #include "services/ui/ws/window_manager_state.h"
+#include "services/ui/ws/window_server_delegate.h"
 
 namespace ui {
 namespace ws {
 
-DisplayManager::DisplayManager(DisplayManagerDelegate* delegate,
+DisplayManager::DisplayManager(WindowServer* window_server,
                                UserIdTracker* user_id_tracker)
     // |next_root_id_| is used as the lower bits, so that starting at 0 is
     // fine. |next_display_id_| is used by itself, so we start at 1 to reserve
     // 0 as invalid.
-    : delegate_(delegate),
+    : window_server_(window_server),
       user_id_tracker_(user_id_tracker),
       next_root_id_(0) {
   user_id_tracker_->AddObserver(this);
@@ -36,7 +41,7 @@ UserDisplayManager* DisplayManager::GetUserDisplayManager(
     const UserId& user_id) {
   if (!user_display_managers_.count(user_id)) {
     user_display_managers_[user_id] =
-        base::MakeUnique<UserDisplayManager>(this, delegate_, user_id);
+        base::MakeUnique<UserDisplayManager>(this, window_server_, user_id);
   }
   return user_display_managers_[user_id].get();
 }
@@ -61,7 +66,7 @@ void DisplayManager::DestroyDisplay(Display* display) {
   // If we have no more roots left, let the app know so it can terminate.
   // TODO(sky): move to delegate/observer.
   if (displays_.empty() && pending_displays_.empty())
-    delegate_->OnNoMoreDisplays();
+    window_server_->OnNoMoreDisplays();
 }
 
 void DisplayManager::DestroyAllDisplays() {
@@ -95,6 +100,14 @@ const Display* DisplayManager::GetDisplayContaining(
     window = window->parent();
   for (Display* display : displays_) {
     if (window == display->root_window())
+      return display;
+  }
+  return nullptr;
+}
+
+Display* DisplayManager::GetDisplayById(int64_t display_id) {
+  for (Display* display : displays_) {
+    if (display->GetId() == display_id)
       return display;
   }
   return nullptr;
@@ -134,14 +147,13 @@ void DisplayManager::OnDisplayAcceleratedWidgetAvailable(Display* display) {
   const bool is_first_display = displays_.empty();
   displays_.insert(display);
   pending_displays_.erase(display);
-  if (is_first_display)
-    delegate_->OnFirstDisplayReady();
+  window_server_->OnDisplayReady(display, is_first_display);
 }
 
 void DisplayManager::OnActiveUserIdChanged(const UserId& previously_active_id,
                                            const UserId& active_id) {
   WindowManagerState* previous_window_manager_state =
-      delegate_->GetWindowManagerStateForUser(previously_active_id);
+      window_server_->GetWindowManagerStateForUser(previously_active_id);
   gfx::Point mouse_location_on_screen;
   if (previous_window_manager_state) {
     mouse_location_on_screen = previous_window_manager_state->event_dispatcher()
@@ -150,9 +162,42 @@ void DisplayManager::OnActiveUserIdChanged(const UserId& previously_active_id,
   }
 
   WindowManagerState* current_window_manager_state =
-      delegate_->GetWindowManagerStateForUser(active_id);
+      window_server_->GetWindowManagerStateForUser(active_id);
   if (current_window_manager_state)
     current_window_manager_state->Activate(mouse_location_on_screen);
+}
+
+void DisplayManager::OnDisplayAdded(int64_t id,
+                                    const gfx::Rect& bounds,
+                                    const gfx::Size& pixel_size,
+                                    float scale_factor) {
+  TRACE_EVENT1("mus-ws", "OnDisplayAdded", "id", id);
+  PlatformDisplayInitParams params;
+  params.display_id = id;
+  params.metrics.bounds = bounds;
+  params.metrics.pixel_size = pixel_size;
+  params.metrics.device_scale_factor = scale_factor;
+  params.display_compositor = window_server_->GetDisplayCompositor();
+
+  ws::Display* display = new ws::Display(window_server_, params);
+  display->Init(nullptr);
+
+  window_server_->delegate()->UpdateTouchTransforms();
+}
+
+void DisplayManager::OnDisplayRemoved(int64_t id) {
+  TRACE_EVENT1("mus-ws", "OnDisplayRemoved", "id", id);
+  Display* display = GetDisplayById(id);
+  if (display)
+    DestroyDisplay(display);
+}
+
+void DisplayManager::OnDisplayModified(int64_t id,
+                                       const gfx::Rect& bounds,
+                                       const gfx::Size& pixel_size,
+                                       float scale_factor) {
+  // TODO(kylechar): Implement.
+  NOTREACHED();
 }
 
 }  // namespace ws

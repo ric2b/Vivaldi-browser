@@ -303,6 +303,8 @@ const char* QuicUtils::ErrorToString(QuicErrorCode error) {
     RETURN_STRING_LITERAL(QUIC_MULTIPATH_PATH_DOES_NOT_EXIST);
     RETURN_STRING_LITERAL(QUIC_MULTIPATH_PATH_NOT_ACTIVE);
     RETURN_STRING_LITERAL(QUIC_TOO_MANY_FRAME_GAPS);
+    RETURN_STRING_LITERAL(QUIC_STREAM_SEQUENCER_INVALID_STATE);
+    RETURN_STRING_LITERAL(QUIC_TOO_MANY_SESSIONS_ON_SERVER);
     RETURN_STRING_LITERAL(QUIC_LAST_ERROR);
     // Intentionally have no default case, so we'll break the build
     // if we add errors and don't put them here.
@@ -390,7 +392,7 @@ string QuicUtils::PeerAddressChangeTypeToString(PeerAddressChangeType type) {
     RETURN_STRING_LITERAL(IPV4_TO_IPV6_CHANGE);
     RETURN_STRING_LITERAL(IPV6_TO_IPV4_CHANGE);
     RETURN_STRING_LITERAL(IPV6_TO_IPV6_CHANGE);
-    RETURN_STRING_LITERAL(UNSPECIFIED_CHANGE);
+    RETURN_STRING_LITERAL(IPV4_TO_IPV4_CHANGE);
   }
   return "INVALID_PEER_ADDRESS_CHANGE_TYPE";
 }
@@ -513,7 +515,7 @@ PeerAddressChangeType QuicUtils::DetermineAddressChangeType(
     return IPV4_SUBNET_CHANGE;
   }
 
-  return UNSPECIFIED_CHANGE;
+  return IPV4_TO_IPV4_CHANGE;
 }
 
 string QuicUtils::HexEncode(const char* data, size_t length) {

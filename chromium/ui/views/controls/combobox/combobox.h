@@ -28,6 +28,7 @@ class ComboboxTestApi;
 
 class ComboboxListener;
 class CustomButton;
+class MenuModelAdapter;
 class MenuRunner;
 class Painter;
 class PrefixSelector;
@@ -41,7 +42,9 @@ class PrefixSelector;
 // * STYLE_ACTION: clicking on the text notifies the listener. The menu can be
 // shown only by clicking on the arrow. The selected index is always reverted to
 // 0 after the listener is notified.
-class VIEWS_EXPORT Combobox : public PrefixDelegate, public ButtonListener {
+class VIEWS_EXPORT Combobox : public View,
+                              public PrefixDelegate,
+                              public ButtonListener {
  public:
   // The style of the combobox.
   enum Style {
@@ -95,6 +98,7 @@ class VIEWS_EXPORT Combobox : public PrefixDelegate, public ButtonListener {
   void GetAccessibleState(ui::AXViewState* state) override;
   void Layout() override;
   void OnEnabledChanged() override;
+  void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
 
   // Overridden from PrefixDelegate:
   int GetRowCount() override;
@@ -113,7 +117,7 @@ class VIEWS_EXPORT Combobox : public PrefixDelegate, public ButtonListener {
  private:
   friend class test::ComboboxTestApi;
 
-  class ComboboxMenuModelAdapter;
+  class ComboboxMenuModel;
 
   // Updates the border according to the current state.
   void UpdateBorder();
@@ -129,6 +133,9 @@ class VIEWS_EXPORT Combobox : public PrefixDelegate, public ButtonListener {
 
   // Show the drop down list
   void ShowDropDownMenu(ui::MenuSourceType source_type);
+
+  // Cleans up after the menu as closed
+  void OnMenuClosed(Button::ButtonState original_button_state);
 
   // Called when the selection is changed by the user.
   void OnPerformAction();
@@ -172,8 +179,8 @@ class VIEWS_EXPORT Combobox : public PrefixDelegate, public ButtonListener {
   // A helper used to select entries by keyboard input.
   std::unique_ptr<PrefixSelector> selector_;
 
-  // Adapts a ComboboxModel for use by a views MenuRunner.
-  std::unique_ptr<ui::MenuModel> menu_model_adapter_;
+  // The ComboboxModel for use by |menu_runner_|.
+  std::unique_ptr<ui::MenuModel> menu_model_;
 
   // Like MenuButton, we use a time object in order to keep track of when the
   // combobox was closed. The time is used for simulating menu behavior; that
@@ -204,7 +211,8 @@ class VIEWS_EXPORT Combobox : public PrefixDelegate, public ButtonListener {
 
   // Set while the dropdown is showing. Ensures the menu is closed if |this| is
   // destroyed.
-  std::unique_ptr<views::MenuRunner> menu_runner_;
+  std::unique_ptr<MenuModelAdapter> menu_model_adapter_;
+  std::unique_ptr<MenuRunner> menu_runner_;
 
   // The image to be drawn for this combobox's arrow.
   gfx::ImageSkia arrow_image_;

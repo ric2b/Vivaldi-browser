@@ -5,9 +5,9 @@
 #ifndef EXTENSIONS_BROWSER_EXTERNAL_PROVIDER_INTERFACE_H_
 #define EXTENSIONS_BROWSER_EXTERNAL_PROVIDER_INTERFACE_H_
 
+#include <memory>
 #include <vector>
 
-#include "base/memory/linked_ptr.h"
 #include "extensions/common/manifest.h"
 
 class GURL;
@@ -61,8 +61,10 @@ class ExternalProviderInterface {
     // updated external extensions.
     virtual void OnExternalProviderUpdateComplete(
         const ExternalProviderInterface* provider,
-        const ScopedVector<ExternalInstallInfoUpdateUrl>& update_url_extensions,
-        const ScopedVector<ExternalInstallInfoFile>& file_extensions,
+        const std::vector<std::unique_ptr<ExternalInstallInfoUpdateUrl>>&
+            update_url_extensions,
+        const std::vector<std::unique_ptr<ExternalInstallInfoFile>>&
+            file_extensions,
         const std::set<std::string>& removed_extensions) = 0;
 
    protected:
@@ -96,8 +98,8 @@ class ExternalProviderInterface {
   virtual bool IsReady() const = 0;
 };
 
-typedef std::vector<linked_ptr<ExternalProviderInterface> >
-    ProviderCollection;
+using ProviderCollection =
+    std::vector<std::unique_ptr<ExternalProviderInterface>>;
 
 }  // namespace extensions
 

@@ -73,7 +73,6 @@ TestWebGraphicsContext3D::TestWebGraphicsContext3D()
       bound_buffer_(0),
       weak_ptr_factory_(this) {
   CreateNamespace();
-  set_support_image(true);
   set_have_extension_egl_image(true);  // For stream textures.
 }
 
@@ -646,6 +645,10 @@ GLuint64 TestWebGraphicsContext3D::insertFenceSync() {
 
 void TestWebGraphicsContext3D::genSyncToken(GLuint64 fence_sync,
                                             GLbyte* sync_token) {
+  // Don't return a valid sync token if context is lost. This matches behavior
+  // of CommandBufferProxyImpl.
+  if (context_lost_)
+    return;
   gpu::SyncToken sync_token_data(gpu::CommandBufferNamespace::GPU_IO, 0,
                                  gpu::CommandBufferId(), fence_sync);
   sync_token_data.SetVerifyFlush();

@@ -112,6 +112,7 @@ IPC_STRUCT_TRAITS_BEGIN(blink::WebFindOptions)
   IPC_STRUCT_TRAITS_MEMBER(forward)
   IPC_STRUCT_TRAITS_MEMBER(matchCase)
   IPC_STRUCT_TRAITS_MEMBER(findNext)
+  IPC_STRUCT_TRAITS_MEMBER(force)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::ColorSuggestion)
@@ -171,6 +172,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::FrameOwnerProperties)
   IPC_STRUCT_TRAITS_MEMBER(margin_width)
   IPC_STRUCT_TRAITS_MEMBER(margin_height)
   IPC_STRUCT_TRAITS_MEMBER(allow_fullscreen)
+  IPC_STRUCT_TRAITS_MEMBER(required_csp)
   IPC_STRUCT_TRAITS_MEMBER(delegated_permissions)
 IPC_STRUCT_TRAITS_END()
 
@@ -235,10 +237,6 @@ IPC_STRUCT_BEGIN_WITH_PARENT(FrameHostMsg_DidCommitProvisionalLoad_Params,
   // Whether this commit should replace the current entry.
   IPC_STRUCT_MEMBER(bool, should_replace_current_entry)
 
-  // Information regarding the security of the connection (empty if the
-  // connection was not secure).
-  IPC_STRUCT_MEMBER(std::string, security_info)
-
   // The gesture that initiated this navigation.
   IPC_STRUCT_MEMBER(content::NavigationGesture, gesture)
 
@@ -259,10 +257,6 @@ IPC_STRUCT_BEGIN_WITH_PARENT(FrameHostMsg_DidCommitProvisionalLoad_Params,
   // This flag is used to warn if the renderer is displaying an error page,
   // so that we can set the appropriate page type.
   IPC_STRUCT_MEMBER(bool, url_is_unreachable)
-
-  // True if the connection was proxied.  In this case, socket_address
-  // will represent the address of the proxy, rather than the remote host.
-  IPC_STRUCT_MEMBER(bool, was_fetched_via_proxy)
 
   // Serialized history item state to store in the navigation entry.
   IPC_STRUCT_MEMBER(content::PageState, page_state)
@@ -361,9 +355,6 @@ IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::StartNavigationParams)
   IPC_STRUCT_TRAITS_MEMBER(extra_headers)
-#if defined(OS_ANDROID)
-  IPC_STRUCT_TRAITS_MEMBER(has_user_gesture)
-#endif
   IPC_STRUCT_TRAITS_MEMBER(transferred_request_child_id)
   IPC_STRUCT_TRAITS_MEMBER(transferred_request_request_id)
 IPC_STRUCT_TRAITS_END()
@@ -377,6 +368,7 @@ IPC_STRUCT_TRAITS_END()
 IPC_STRUCT_TRAITS_BEGIN(content::RequestNavigationParams)
   IPC_STRUCT_TRAITS_MEMBER(is_overriding_user_agent)
   IPC_STRUCT_TRAITS_MEMBER(redirects)
+  IPC_STRUCT_TRAITS_MEMBER(redirect_response)
   IPC_STRUCT_TRAITS_MEMBER(can_load_local_resources)
   IPC_STRUCT_TRAITS_MEMBER(request_time)
   IPC_STRUCT_TRAITS_MEMBER(page_state)
@@ -394,6 +386,8 @@ IPC_STRUCT_TRAITS_BEGIN(content::RequestNavigationParams)
   IPC_STRUCT_TRAITS_MEMBER(should_clear_history_list)
   IPC_STRUCT_TRAITS_MEMBER(should_create_service_worker)
   IPC_STRUCT_TRAITS_MEMBER(navigation_timing)
+  IPC_STRUCT_TRAITS_MEMBER(service_worker_provider_id)
+  IPC_STRUCT_TRAITS_MEMBER(has_user_gesture)
 #if defined(OS_ANDROID)
   IPC_STRUCT_TRAITS_MEMBER(data_url_as_string)
 #endif
@@ -410,58 +404,9 @@ IPC_STRUCT_TRAITS_BEGIN(content::FrameReplicationState)
   IPC_STRUCT_TRAITS_MEMBER(has_potentially_trustworthy_unique_origin)
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_BEGIN(FrameMsg_NewFrame_WidgetParams)
-  // Gives the routing ID for the RenderWidget that will be attached to the
-  // new RenderFrame. If the RenderFrame does not need a RenderWidget, this
-  // is MSG_ROUTING_NONE and the other parameters are not read.
-  IPC_STRUCT_MEMBER(int, routing_id)
-
-  // Tells the new RenderWidget whether it is initially hidden.
-  IPC_STRUCT_MEMBER(bool, hidden)
-IPC_STRUCT_END()
-
-IPC_STRUCT_BEGIN(FrameMsg_NewFrame_Params)
-  // Specifies the routing ID of the new RenderFrame object.
-  IPC_STRUCT_MEMBER(int, routing_id)
-
-  // If a valid |proxy_routing_id| is provided, the new frame will be
-  // configured to replace the proxy on commit.
-  IPC_STRUCT_MEMBER(int, proxy_routing_id)
-
-  // Specifies the new frame's opener.  The opener will be null if this is
-  // MSG_ROUTING_NONE.
-  IPC_STRUCT_MEMBER(int, opener_routing_id)
-
-  // The new frame should be created as a child of the object
-  // identified by |parent_routing_id| or as top level if that is
-  // MSG_ROUTING_NONE.
-  IPC_STRUCT_MEMBER(int, parent_routing_id)
-
-  // Identifies the previous sibling of the new frame, so that the new frame is
-  // inserted into the correct place in the frame tree.  If this is
-  // MSG_ROUTING_NONE, the frame will be created as the leftmost child of its
-  // parent frame, in front of any other children.
-  IPC_STRUCT_MEMBER(int, previous_sibling_routing_id)
-
-  // When the new frame has a parent, |replication_state| holds the new frame's
-  // properties replicated from the process rendering the parent frame, such as
-  // the new frame's sandbox flags.
-  IPC_STRUCT_MEMBER(content::FrameReplicationState, replication_state)
-
-  // When the new frame has a parent, |frame_owner_properties| holds the
-  // properties of the HTMLFrameOwnerElement from the parent process.
-  // Note that unlike FrameReplicationState, this is not replicated for remote
-  // frames.
-  IPC_STRUCT_MEMBER(content::FrameOwnerProperties, frame_owner_properties)
-
-  // Specifies properties for a new RenderWidget that will be attached to the
-  // new RenderFrame (if one is needed).
-  IPC_STRUCT_MEMBER(FrameMsg_NewFrame_WidgetParams, widget_params)
-IPC_STRUCT_END()
-
-// Parameters included with an OpenURL request.  |frame_unique_name| is only
-// specified if |is_history_navigation_in_new_child| is true, for the case that
-// the browser process should look for an existing history item for the frame.
+// Parameters included with an OpenURL request.
+// |is_history_navigation_in_new_child| is true in the case that the browser
+// process should look for an existing history item for the frame.
 IPC_STRUCT_BEGIN(FrameHostMsg_OpenURL_Params)
   IPC_STRUCT_MEMBER(GURL, url)
   IPC_STRUCT_MEMBER(bool, uses_post)
@@ -472,7 +417,6 @@ IPC_STRUCT_BEGIN(FrameHostMsg_OpenURL_Params)
   IPC_STRUCT_MEMBER(bool, should_replace_current_entry)
   IPC_STRUCT_MEMBER(bool, user_gesture)
   IPC_STRUCT_MEMBER(bool, is_history_navigation_in_new_child)
-  IPC_STRUCT_MEMBER(std::string, frame_unique_name)
 IPC_STRUCT_END()
 
 IPC_STRUCT_BEGIN(FrameMsg_TextTrackSettings_Params)
@@ -680,25 +624,8 @@ IPC_MESSAGE_ROUTED1(FrameMsg_UpdateOpener, int /* opener_routing_id */)
 // commit, activation and frame swap of the current DOM tree in blink.
 IPC_MESSAGE_ROUTED1(FrameMsg_VisualStateRequest, uint64_t /* id */)
 
-// Instructs the renderer to create a new RenderFrame object.
-IPC_MESSAGE_CONTROL1(FrameMsg_NewFrame, FrameMsg_NewFrame_Params /* params */)
-
 // Instructs the renderer to delete the RenderFrame.
 IPC_MESSAGE_ROUTED0(FrameMsg_Delete)
-
-// Instructs the renderer to create a new RenderFrameProxy object with
-// |routing_id|.  |render_view_routing_id| identifies the
-// RenderView to be associated with this proxy.  The new proxy's opener should
-// be set to the object identified by |opener_routing_id|, or to null if that
-// is MSG_ROUTING_NONE.  The new proxy should be created as a child of the
-// object identified by |parent_routing_id| or as top level if that is
-// MSG_ROUTING_NONE.
-IPC_MESSAGE_CONTROL5(FrameMsg_NewFrameProxy,
-                     int /* routing_id */,
-                     int /* render_view_routing_id */,
-                     int /* opener_routing_id */,
-                     int /* parent_routing_id */,
-                     content::FrameReplicationState /* replication_state */)
 
 // Tells the renderer to perform the specified navigation, interrupting any
 // existing navigation.
@@ -918,7 +845,7 @@ IPC_MESSAGE_ROUTED4(FrameMsg_CommitNavigation,
                     content::ResourceResponseHead,    /* response */
                     GURL,                             /* stream_url */
                     content::CommonNavigationParams,  /* common_params */
-                    content::RequestNavigationParams) /* request_params */
+                    content::RequestNavigationParams  /* request_params */)
 
 // PlzNavigate
 // Tells the renderer that a navigation failed with the error code |error_code|
@@ -1247,10 +1174,12 @@ IPC_MESSAGE_ROUTED1(FrameHostMsg_PepperStartsPlayback,
 IPC_MESSAGE_ROUTED1(FrameHostMsg_PepperStopsPlayback,
                     int32_t /* pp_instance */)
 
-// Used to get the list of plugins
-IPC_SYNC_MESSAGE_CONTROL1_1(FrameHostMsg_GetPlugins,
-    bool /* refresh*/,
-    std::vector<content::WebPluginInfo> /* plugins */)
+// Used to get the list of plugins. |main_frame_origin| is used to handle
+// exceptions for plugin content settings.
+IPC_SYNC_MESSAGE_CONTROL2_1(FrameHostMsg_GetPlugins,
+                            bool /* refresh*/,
+                            url::Origin /* main_frame_origin */,
+                            std::vector<content::WebPluginInfo> /* plugins */)
 
 // Return information about a plugin for the given URL and MIME
 // type. If there is no matching plugin, |found| is false.
@@ -1259,7 +1188,7 @@ IPC_SYNC_MESSAGE_CONTROL1_1(FrameHostMsg_GetPlugins,
 IPC_SYNC_MESSAGE_CONTROL4_3(FrameHostMsg_GetPluginInfo,
                             int /* render_frame_id */,
                             GURL /* url */,
-                            GURL /* page_url */,
+                            url::Origin /* main_frame_origin */,
                             std::string /* mime_type */,
                             bool /* found */,
                             content::WebPluginInfo /* plugin info */,
@@ -1517,11 +1446,12 @@ IPC_MESSAGE_ROUTED2(FrameHostMsg_SerializedHtmlWithLocalLinksResponse,
                     bool /* end of data? */)
 
 // Response to FrameMsg_SerializeAsMHTML.
-IPC_MESSAGE_ROUTED3(
+IPC_MESSAGE_ROUTED4(
     FrameHostMsg_SerializeAsMHTMLResponse,
     int /* job_id (used to match responses to requests) */,
     bool /* true if success, false if error */,
-    std::set<std::string> /* digests of uris of serialized resources */)
+    std::set<std::string> /* digests of uris of serialized resources */,
+    base::TimeDelta /* how much time of the main render thread was used */)
 
 // Sent when the renderer updates hint for importance of a tab.
 IPC_MESSAGE_ROUTED1(FrameHostMsg_UpdatePageImportanceSignals,

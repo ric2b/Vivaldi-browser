@@ -38,6 +38,8 @@
 #include "sql/init_status.h"
 #include "ui/base/page_transition_types.h"
 
+#include "db/vivaldi_history_types.h"
+
 class GURL;
 class HistoryQuickProviderTest;
 class HistoryURLProvider;
@@ -83,9 +85,6 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
  public:
   // Callback for value asynchronously returned by TopHosts().
   typedef base::Callback<void(const TopHostsList&)> TopHostsCallback;
-
-  // Callback for value asynchronously returned by TopUrlsPerDay().
-  typedef base::Callback<void(const TopUrlsPerDayList&)> TopUrlsPerDayCallback;
 
   // Must call Init after construction. The empty constructor provided only for
   // unit tests. When using the full constructor, |history_client| may only be
@@ -165,8 +164,15 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
   // Computes the |num_hosts| most-visited hostnames. First version uses all
   // history.
   // Note: Virtual needed for mocking.
-  virtual void TopUrlsPerDay(size_t num_hosts,
-                             const TopUrlsPerDayCallback& callback) const;
+  virtual void TopUrlsPerDay(
+      size_t num_hosts,
+      const UrlVisitCount::TopUrlsPerDayCallback& callback) const;
+
+  // Searces visists
+  // Note: Virtual needed for mocking.
+  virtual void VisitSearch(const std::string& text_query,
+                           const QueryOptions& options,
+                           const Visit::VisitsCallback& callback) const;
 
   // Gets the counts and most recent visit date of URLs that belong to |origins|
   // in the history database.

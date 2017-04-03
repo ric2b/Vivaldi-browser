@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <map>
 #include <utility>
 #include <vector>
 
@@ -32,12 +33,15 @@
 #include "chrome/browser/permissions/chooser_context_base.h"
 #include "chrome/browser/permissions/permission_uma_util.h"
 #include "chrome/browser/permissions/permission_util.h"
+#include "chrome/browser/plugins/plugin_utils.h"
+#include "chrome/browser/plugins/plugins_field_trial.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/webui/site_settings_helper.h"
 #include "chrome/browser/usb/usb_chooser_context.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/common/features.h"
@@ -48,7 +52,6 @@
 #include "components/content_settings/core/browser/content_settings_details.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
-#include "components/content_settings/core/browser/plugins_field_trial.h"
 #include "components/content_settings/core/browser/website_settings_info.h"
 #include "components/content_settings/core/browser/website_settings_registry.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -372,7 +375,6 @@ void ContentSettingsHandler::GetLocalizedValues(
     {"allowException", IDS_EXCEPTIONS_ALLOW_BUTTON},
     {"blockException", IDS_EXCEPTIONS_BLOCK_BUTTON},
     {"sessionException", IDS_EXCEPTIONS_SESSION_ONLY_BUTTON},
-    {"detectException", IDS_EXCEPTIONS_DETECT_IMPORTANT_CONTENT_BUTTON},
     {"askException", IDS_EXCEPTIONS_ASK_BUTTON},
     {"otrExceptionsExplanation", IDS_EXCEPTIONS_OTR_LABEL},
     {"addNewExceptionInstructions", IDS_EXCEPTIONS_ADD_NEW_INSTRUCTIONS},
@@ -408,12 +410,10 @@ void ContentSettingsHandler::GetLocalizedValues(
     {"javascriptAllow", IDS_JS_ALLOW_RADIO},
     {"javascriptBlock", IDS_JS_DONOTALLOW_RADIO},
     // Plugins filter.
-    {"pluginsTabLabel", IDS_PLUGIN_TAB_LABEL},
-    {"pluginsHeader", IDS_PLUGIN_HEADER},
-    {"pluginsAllow", IDS_PLUGIN_ALLOW_RADIO},
-    {"pluginsBlock", IDS_PLUGIN_BLOCK_RADIO},
-    {"pluginsDetectImportantContent", IDS_PLUGIN_DETECT_RECOMMENDED_RADIO},
-    {"manageIndividualPlugins", IDS_PLUGIN_MANAGE_INDIVIDUAL},
+    {"pluginsTabLabel", IDS_FLASH_TAB_LABEL},
+    {"pluginsHeader", IDS_FLASH_HEADER},
+    {"pluginsAllow", IDS_FLASH_ALLOW_RADIO},
+    {"pluginsBlock", IDS_FLASH_BLOCK_RADIO},
     // Pop-ups filter.
     {"popupsTabLabel", IDS_POPUP_TAB_LABEL},
     {"popupsHeader", IDS_POPUP_HEADER},
@@ -506,9 +506,28 @@ void ContentSettingsHandler::GetLocalizedValues(
     {"keygenHeader", IDS_KEYGEN_HEADER},
     {"keygenAllow", IDS_KEYGEN_ALLOW_RADIO},
     {"keygenBlock", IDS_KEYGEN_DONOTALLOW_RADIO},
+    // PDF Plugin filter.
+    {"pdfTabLabel", IDS_PDF_TAB_LABEL},
+    {"pdfEnable", IDS_PDF_ENABLE_CHECKBOX},
   };
 
   RegisterStrings(localized_strings, resources, arraysize(resources));
+
+  // TODO(tommycli): When the HTML5 By Default feature flag is on, we want to
+  // display strings that begin with "Ask...", even though the setting remains
+  // DETECT. Once this feature is finalized, then we migrate the setting to ASK.
+  Profile* profile = Profile::FromWebUI(web_ui());
+  bool is_hbd = PluginUtils::ShouldPreferHtmlOverPlugins(
+      HostContentSettingsMapFactory::GetForProfile(profile));
+  static OptionsStringResource flash_strings[] = {
+      {"pluginsDetectImportantContent",
+       is_hbd ? IDS_FLASH_ASK_RECOMMENDED_RADIO
+              : IDS_FLASH_DETECT_RECOMMENDED_RADIO},
+      {"detectException",
+       is_hbd ? IDS_EXCEPTIONS_ASK_BUTTON
+              : IDS_EXCEPTIONS_DETECT_IMPORTANT_CONTENT_BUTTON},
+  };
+  RegisterStrings(localized_strings, flash_strings, arraysize(flash_strings));
 
   PrefService* prefs = Profile::FromWebUI(web_ui())->GetPrefs();
   const base::Value* default_pref = prefs->GetDefaultPrefValue(
@@ -532,8 +551,7 @@ void ContentSettingsHandler::GetLocalizedValues(
                 IDS_IMAGES_TAB_LABEL);
   RegisterTitle(localized_strings, "javascript",
                 IDS_JAVASCRIPT_TAB_LABEL);
-  RegisterTitle(localized_strings, "plugins",
-                IDS_PLUGIN_TAB_LABEL);
+  RegisterTitle(localized_strings, "plugins", IDS_FLASH_TAB_LABEL);
   RegisterTitle(localized_strings, "popups",
                 IDS_POPUP_TAB_LABEL);
   RegisterTitle(localized_strings, "location",
@@ -723,14 +741,14 @@ void ContentSettingsHandler::OnGetPermissionSettingsCompleted(
 void ContentSettingsHandler::UpdateSettingDefaultFromModel(
     ContentSettingsType type) {
   std::string provider_id;
+  HostContentSettingsMap* host_content_settings_map =
+      HostContentSettingsMapFactory::GetForProfile(GetProfile());
   ContentSetting default_setting =
-      HostContentSettingsMapFactory::GetForProfile(GetProfile())
-          ->GetDefaultContentSetting(type, &provider_id);
+      host_content_settings_map->GetDefaultContentSetting(type, &provider_id);
 
 #if defined(ENABLE_PLUGINS)
-  default_setting =
-      content_settings::PluginsFieldTrial::EffectiveContentSetting(
-          type, default_setting);
+  default_setting = PluginsFieldTrial::EffectiveContentSetting(
+      host_content_settings_map, type, default_setting);
 #endif
 
   // Camera and microphone default content settings cannot be set by the policy.
@@ -949,7 +967,7 @@ void ContentSettingsHandler::CompareMediaExceptionsWithFlash(
 
   base::ListValue exceptions;
   site_settings::GetExceptionsFromHostContentSettingsMap(settings_map, type,
-                                                         web_ui(), &exceptions);
+      web_ui(), /*incognito=*/false, /*filter=*/nullptr, &exceptions);
 
   settings.exceptions.clear();
   for (base::ListValue::const_iterator entry = exceptions.begin();
@@ -1094,11 +1112,10 @@ void ContentSettingsHandler::UpdateExceptionsViewFromHostContentSettingsMap(
   HostContentSettingsMap* settings_map =
       HostContentSettingsMapFactory::GetForProfile(GetProfile());
   site_settings::GetExceptionsFromHostContentSettingsMap(settings_map, type,
-                                                         web_ui(), &exceptions);
+      web_ui(), /*incognito=*/false, /*filter=*/nullptr, &exceptions);
   base::StringValue type_string(
       site_settings::ContentSettingsTypeToGroupName(type));
   web_ui()->CallJavascriptFunctionUnsafe("ContentSettings.setExceptions",
-
                                          type_string, exceptions);
 
   UpdateExceptionsViewFromOTRHostContentSettingsMap(type);
@@ -1129,8 +1146,8 @@ void ContentSettingsHandler::UpdateExceptionsViewFromOTRHostContentSettingsMap(
   if (!otr_settings_map)
     return;
   base::ListValue exceptions;
-  site_settings::GetExceptionsFromHostContentSettingsMap(
-      otr_settings_map, type, web_ui(), &exceptions);
+  site_settings::GetExceptionsFromHostContentSettingsMap(otr_settings_map, type,
+      web_ui(), /*incognito=*/true, /*filter=*/nullptr, &exceptions);
   base::StringValue type_string(
       site_settings::ContentSettingsTypeToGroupName(type));
   web_ui()->CallJavascriptFunctionUnsafe("ContentSettings.setOTRExceptions",

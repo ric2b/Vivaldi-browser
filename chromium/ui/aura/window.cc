@@ -171,7 +171,7 @@ Window::~Window() {
 }
 
 void Window::Init(ui::LayerType layer_type) {
-  SetLayer(new ui::Layer(layer_type));
+  SetLayer(base::MakeUnique<ui::Layer>(layer_type));
   layer()->SetVisible(false);
   layer()->set_delegate(this);
   UpdateLayerName();
@@ -192,6 +192,8 @@ void Window::SetName(const std::string& name) {
 }
 
 void Window::SetTitle(const base::string16& title) {
+  if (title == title_)
+    return;
   title_ = title;
   FOR_EACH_OBSERVER(WindowObserver,
                     observers_,

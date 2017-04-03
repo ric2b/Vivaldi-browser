@@ -57,13 +57,6 @@ enum class DeletePageResult {
   RESULT_COUNT,
 };
 
-// Result of loading all pages.
-enum class LoadResult {
-  SUCCESS,
-  CANCELLED,
-  STORE_FAILURE,
-};
-
 typedef std::set<GURL> CheckPagesExistOfflineResult;
 typedef std::vector<int64_t> MultipleOfflineIdResult;
 typedef std::vector<OfflinePageItem> MultipleOfflinePageItemResult;

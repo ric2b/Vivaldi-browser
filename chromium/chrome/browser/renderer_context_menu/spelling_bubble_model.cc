@@ -9,11 +9,11 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/prefs/pref_service.h"
 #include "components/spellcheck/browser/pref_names.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
-#include "grit/components_strings.h"
-#include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image.h"
@@ -60,7 +60,8 @@ GURL SpellingBubbleModel::GetLinkURL() const {
 }
 
 void SpellingBubbleModel::LinkClicked() {
-  OpenURLParams params(GetLinkURL(), Referrer(), NEW_FOREGROUND_TAB,
+  OpenURLParams params(GetLinkURL(), Referrer(),
+                       WindowOpenDisposition::NEW_FOREGROUND_TAB,
                        ui::PAGE_TRANSITION_LINK, false);
   web_contents_->OpenURL(params);
 }

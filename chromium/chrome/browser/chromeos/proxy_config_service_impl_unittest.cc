@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <utility>
 #include <vector>
 
 #include "base/format_macros.h"
@@ -13,6 +14,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/chromeos/net/proxy_config_handler.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
@@ -254,7 +256,7 @@ class ProxyConfigServiceImplTest : public testing::Test {
     // CreateTrackingProxyConfigService triggers update of initial prefs proxy
     // config by tracker to chrome proxy config service, so flush all pending
     // tasks so that tests start fresh.
-    loop_.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
   }
 
   void SetUpPrivateWiFi() {
@@ -264,7 +266,7 @@ class ProxyConfigServiceImplTest : public testing::Test {
         DBusThreadManager::Get()->GetShillServiceClient()->GetTestInterface();
 
     // Process any pending notifications before clearing services.
-    loop_.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
     service_test->ClearServices();
 
     // Sends a notification about the added profile.
@@ -277,7 +279,7 @@ class ProxyConfigServiceImplTest : public testing::Test {
                              true /* visible */);
     profile_test->AddService(kUserProfilePath, "/service/stub_wifi2");
 
-    loop_.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
   }
 
   void SetUpSharedEthernet() {
@@ -287,7 +289,7 @@ class ProxyConfigServiceImplTest : public testing::Test {
         DBusThreadManager::Get()->GetShillServiceClient()->GetTestInterface();
 
     // Process any pending notifications before clearing services.
-    loop_.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
     service_test->ClearServices();
 
     // Sends a notification about the added profile.
@@ -299,12 +301,12 @@ class ProxyConfigServiceImplTest : public testing::Test {
     profile_test->AddService(NetworkProfileHandler::GetSharedProfilePath(),
                              "/service/ethernet");
 
-    loop_.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
   }
 
   void TearDown() override {
     config_service_impl_->DetachFromPrefService();
-    loop_.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
     config_service_impl_.reset();
     proxy_config_service_.reset();
     NetworkHandler::Shutdown();
@@ -355,7 +357,7 @@ class ProxyConfigServiceImplTest : public testing::Test {
     // Let message loop process all messages. This will run
     // ChromeProxyConfigService::UpdateProxyConfig, which is posted on IO from
     // PrefProxyConfigTrackerImpl::OnProxyConfigChanged.
-    loop_.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
     net::ProxyConfigService::ConfigAvailability availability =
         proxy_config_service_->GetLatestProxyConfig(config);
 
@@ -512,7 +514,7 @@ TEST_F(ProxyConfigServiceImplTest, SharedEthernetAndUserPolicy) {
       chromeos::onc::ReadDictionaryFromJson(kEthernetPolicy));
 
   std::unique_ptr<base::ListValue> network_configs(new base::ListValue);
-  network_configs->Append(ethernet_policy.release());
+  network_configs->Append(std::move(ethernet_policy));
 
   profile_prefs_.SetUserPref(prefs::kUseSharedProxies,
                              new base::FundamentalValue(false));

@@ -1820,6 +1820,13 @@ GLboolean GLES2TraceImplementation::UnmapBuffer(GLenum target) {
   return gl_->UnmapBuffer(target);
 }
 
+void GLES2TraceImplementation::FlushMappedBufferRange(GLenum target,
+                                                      GLintptr offset,
+                                                      GLsizeiptr size) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::FlushMappedBufferRange");
+  gl_->FlushMappedBufferRange(target, offset, size);
+}
+
 void* GLES2TraceImplementation::MapTexSubImage2DCHROMIUM(GLenum target,
                                                          GLint level,
                                                          GLint xoffset,
@@ -2471,6 +2478,15 @@ void GLES2TraceImplementation::UniformMatrix4fvStreamTextureMatrixCHROMIUM(
       "gpu", "GLES2Trace::UniformMatrix4fvStreamTextureMatrixCHROMIUM");
   gl_->UniformMatrix4fvStreamTextureMatrixCHROMIUM(location, transpose,
                                                    transform);
+}
+
+void GLES2TraceImplementation::SwapBuffersWithDamageCHROMIUM(GLint x,
+                                                             GLint y,
+                                                             GLint width,
+                                                             GLint height) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu",
+                                "GLES2Trace::SwapBuffersWithDamageCHROMIUM");
+  gl_->SwapBuffersWithDamageCHROMIUM(x, y, width, height);
 }
 
 #endif  // GPU_COMMAND_BUFFER_CLIENT_GLES2_TRACE_IMPLEMENTATION_IMPL_AUTOGEN_H_

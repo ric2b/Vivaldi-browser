@@ -65,8 +65,6 @@ source_set("web_arc") {
     "net/cert_host_pair.cc",
     "net/cert_host_pair.h",
     "net/cert_policy.cc",
-    "net/cert_store_impl.cc",
-    "net/cert_store_impl.h",
     "net/certificate_policy_cache.cc",
     "net/clients/crw_js_injection_network_client.h",
     "net/clients/crw_js_injection_network_client.mm",
@@ -92,53 +90,12 @@ source_set("web_arc") {
     "net/request_tracker_impl.mm",
     "net/web_http_protocol_handler_delegate.h",
     "net/web_http_protocol_handler_delegate.mm",
-    "string_util.cc",
-    "url_scheme_util.mm",
-    "url_util.cc",
-    "web_kit_constants.cc",
-    "web_thread_impl.cc",
-    "web_thread_impl.h",
-    "web_view_creation_util.mm",
-  ]
-
-  libs = [ "WebKit.framework" ]
-
-  configs += [ "//build/config/compiler:enable_arc" ]
-}
-
-source_set("web") {
-  deps = [
-    ":core",
-    ":js_resources",
-    ":resources",
-    ":user_agent",
-    "//base",
-    "//components/url_formatter",
-    "//ios/net",
-    "//ios/third_party/blink:html_tokenizer",
-    "//mojo/public/cpp/system",
-    "//mojo/public/js",
-    "//net",
-    "//services/shell/public/cpp",
-    "//ui/base",
-    "//ui/gfx",
-    "//ui/gfx/geometry:geometry",
-    "//ui/resources",
-    "//url",
-  ]
-
-  public_deps = [
-    ":web_arc",
-  ]
-
-  sources = [
     "payments/payment_request.cc",
     "public/active_state_manager.h",
     "public/block_types.h",
     "public/browser_state.h",
     "public/browser_url_rewriter.h",
     "public/cert_policy.h",
-    "public/cert_store.h",
     "public/certificate_policy_cache.h",
     "public/favicon_status.cc",
     "public/favicon_status.h",
@@ -209,6 +166,10 @@ source_set("web") {
     "public/webui/web_ui_ios_controller_factory.h",
     "public/webui/web_ui_ios_message_handler.cc",
     "public/webui/web_ui_ios_message_handler.h",
+    "string_util.cc",
+    "url_scheme_util.mm",
+    "url_util.cc",
+    "web_kit_constants.cc",
     "web_state/blocked_popup_info.h",
     "web_state/blocked_popup_info.mm",
     "web_state/context_menu_params.mm",
@@ -230,6 +191,67 @@ source_set("web") {
     "web_state/js/crw_js_plugin_placeholder_manager.mm",
     "web_state/js/crw_js_post_request_loader.h",
     "web_state/js/crw_js_post_request_loader.mm",
+    "web_thread_impl.cc",
+    "web_thread_impl.h",
+    "web_view_creation_util.mm",
+    "webui/crw_web_ui_manager.h",
+    "webui/crw_web_ui_manager.mm",
+    "webui/crw_web_ui_page_builder.h",
+    "webui/crw_web_ui_page_builder.mm",
+    "webui/mojo_facade.h",
+    "webui/mojo_facade.mm",
+    "webui/mojo_js_constants.cc",
+    "webui/mojo_js_constants.h",
+    "webui/shared_resources_data_source_ios.h",
+    "webui/shared_resources_data_source_ios.mm",
+    "webui/url_data_manager_ios.cc",
+    "webui/url_data_manager_ios.h",
+    "webui/url_data_manager_ios_backend.h",
+    "webui/url_data_manager_ios_backend.mm",
+    "webui/url_data_source_ios.mm",
+    "webui/url_data_source_ios_impl.cc",
+    "webui/url_data_source_ios_impl.h",
+    "webui/url_fetcher_block_adapter.h",
+    "webui/url_fetcher_block_adapter.mm",
+    "webui/web_ui_ios_controller_factory_registry.cc",
+    "webui/web_ui_ios_controller_factory_registry.h",
+    "webui/web_ui_ios_data_source_impl.h",
+    "webui/web_ui_ios_data_source_impl.mm",
+    "webui/web_ui_ios_impl.h",
+    "webui/web_ui_ios_impl.mm",
+  ]
+
+  libs = [ "WebKit.framework" ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+source_set("web") {
+  deps = [
+    ":core",
+    ":js_resources",
+    ":resources",
+    ":user_agent",
+    "//base",
+    "//components/url_formatter",
+    "//ios/net",
+    "//ios/third_party/blink:html_tokenizer",
+    "//mojo/public/cpp/system",
+    "//mojo/public/js",
+    "//net",
+    "//services/shell/public/cpp",
+    "//ui/base",
+    "//ui/gfx",
+    "//ui/gfx/geometry:geometry",
+    "//ui/resources",
+    "//url",
+  ]
+
+  public_deps = [
+    ":web_arc",
+  ]
+
+  sources = [
     "web_state/js/crw_js_window_id_manager.h",
     "web_state/js/crw_js_window_id_manager.mm",
     "web_state/js/page_script_util.h",
@@ -270,31 +292,6 @@ source_set("web") {
     "web_state/web_view_internal_creation_util.mm",
     "web_state/wk_web_view_security_util.h",
     "web_state/wk_web_view_security_util.mm",
-    "webui/crw_web_ui_manager.h",
-    "webui/crw_web_ui_manager.mm",
-    "webui/crw_web_ui_page_builder.h",
-    "webui/crw_web_ui_page_builder.mm",
-    "webui/mojo_facade.h",
-    "webui/mojo_facade.mm",
-    "webui/mojo_js_constants.cc",
-    "webui/mojo_js_constants.h",
-    "webui/shared_resources_data_source_ios.h",
-    "webui/shared_resources_data_source_ios.mm",
-    "webui/url_data_manager_ios.cc",
-    "webui/url_data_manager_ios.h",
-    "webui/url_data_manager_ios_backend.h",
-    "webui/url_data_manager_ios_backend.mm",
-    "webui/url_data_source_ios.mm",
-    "webui/url_data_source_ios_impl.cc",
-    "webui/url_data_source_ios_impl.h",
-    "webui/url_fetcher_block_adapter.h",
-    "webui/url_fetcher_block_adapter.mm",
-    "webui/web_ui_ios_controller_factory_registry.cc",
-    "webui/web_ui_ios_controller_factory_registry.h",
-    "webui/web_ui_ios_data_source_impl.h",
-    "webui/web_ui_ios_data_source_impl.mm",
-    "webui/web_ui_ios_impl.h",
-    "webui/web_ui_ios_impl.mm",
   ]
 
   libs = [ "WebKit.framework" ]
@@ -340,6 +337,10 @@ source_set("earl_grey_test_support") {
   ]
 
   sources = [
+    "public/test/earl_grey/js_test_util.h",
+    "public/test/earl_grey/js_test_util.mm",
+    "public/test/earl_grey/web_view_actions.h",
+    "public/test/earl_grey/web_view_actions.mm",
     "public/test/earl_grey/web_view_matchers.h",
     "public/test/earl_grey/web_view_matchers.mm",
     "public/test/web_view_interaction_test_util.h",
@@ -373,10 +374,14 @@ source_set("test_support") {
     "public/test/http_server_util.mm",
     "public/test/js_test_util.h",
     "public/test/js_test_util.mm",
+    "public/test/native_controller_test_util.h",
+    "public/test/native_controller_test_util.mm",
     "public/test/navigation_test_util.h",
     "public/test/navigation_test_util.mm",
     "public/test/response_providers/data_response_provider.h",
     "public/test/response_providers/data_response_provider.mm",
+    "public/test/response_providers/delayed_response_provider.h",
+    "public/test/response_providers/delayed_response_provider.mm",
     "public/test/response_providers/error_page_response_provider.h",
     "public/test/response_providers/error_page_response_provider.mm",
     "public/test/response_providers/file_based_response_provider.h",

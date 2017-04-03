@@ -811,16 +811,6 @@ _NAMED_TYPE_INFO = {
     'valid': [
     ],
     'valid_es3': [
-      'GL_COMPRESSED_R11_EAC',
-      'GL_COMPRESSED_SIGNED_R11_EAC',
-      'GL_COMPRESSED_RG11_EAC',
-      'GL_COMPRESSED_SIGNED_RG11_EAC',
-      'GL_COMPRESSED_RGB8_ETC2',
-      'GL_COMPRESSED_SRGB8_ETC2',
-      'GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2',
-      'GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2',
-      'GL_COMPRESSED_RGBA8_ETC2_EAC',
-      'GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC',
     ],
   },
   'GLState': {
@@ -2121,16 +2111,6 @@ _NAMED_TYPE_INFO = {
       'GL_DEPTH_COMPONENT32F',
       'GL_DEPTH24_STENCIL8',
       'GL_DEPTH32F_STENCIL8',
-      'GL_COMPRESSED_R11_EAC',
-      'GL_COMPRESSED_SIGNED_R11_EAC',
-      'GL_COMPRESSED_RG11_EAC',
-      'GL_COMPRESSED_SIGNED_RG11_EAC',
-      'GL_COMPRESSED_RGB8_ETC2',
-      'GL_COMPRESSED_SRGB8_ETC2',
-      'GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2',
-      'GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2',
-      'GL_COMPRESSED_RGBA8_ETC2_EAC',
-      'GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC',
     ],
     'deprecated_es3': [
       'GL_ALPHA8_EXT',
@@ -2307,6 +2287,19 @@ _NAMED_TYPE_INFO = {
     ],
   },
 }
+
+_ES30_COMPRESSED_TEXTURE_FORMATS = [
+  'GL_COMPRESSED_R11_EAC',
+  'GL_COMPRESSED_SIGNED_R11_EAC',
+  'GL_COMPRESSED_RG11_EAC',
+  'GL_COMPRESSED_SIGNED_RG11_EAC',
+  'GL_COMPRESSED_RGB8_ETC2',
+  'GL_COMPRESSED_SRGB8_ETC2',
+  'GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2',
+  'GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2',
+  'GL_COMPRESSED_RGBA8_ETC2_EAC',
+  'GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC',
+]
 
 # This table specifies the different pepper interfaces that are supported for
 # GL commands. 'dev' is true if it's a dev interface.
@@ -2571,6 +2564,8 @@ _FUNCTION_INFO = {
     'trace_level': 2,
   },
   'CopyBufferSubData': {
+    'decoder_func': 'DoCopyBufferSubData',
+    'unit_test': False,
     'unsafe': True,
   },
   'CoverageModulationCHROMIUM': {
@@ -2874,6 +2869,12 @@ _FUNCTION_INFO = {
     'impl_func': False,
     'decoder_func': 'DoFlush',
     'trace_level': 1,
+  },
+  'FlushMappedBufferRange': {
+    'decoder_func': 'DoFlushMappedBufferRange',
+    'trace_level': 1,
+    'unit_test': False,
+    'unsafe': True,
   },
   'FramebufferRenderbuffer': {
     'decoder_func': 'DoFramebufferRenderbuffer',
@@ -3624,6 +3625,12 @@ _FUNCTION_INFO = {
     'expectation': False,
     'extension': True,
     'trace_level': 1,
+  },
+  'SwapBuffersWithDamageCHROMIUM': {
+    'type': 'Custom',
+    'impl_func': False,
+    'client_test': False,
+    'extension': True,
   },
   'SwapInterval': {
     'impl_func': False,
@@ -4877,16 +4884,16 @@ static_assert(offsetof(%(cmd_name)s::Result, %(field_name)s) == %(offset)d,
   def WriteServiceHandlerFunctionHeader(self, func, f):
     """Writes function header for service implementation handlers."""
     f.write("""error::Error GLES2DecoderImpl::Handle%(name)s(
-        uint32_t immediate_data_size, const void* cmd_data) {
+        uint32_t immediate_data_size, const volatile void* cmd_data) {
       """ % {'name': func.name})
     if func.IsUnsafe():
       f.write("""if (!unsafe_es3_apis_enabled())
           return error::kUnknownCommand;
         """)
-    f.write("""const gles2::cmds::%(name)s& c =
-          *static_cast<const gles2::cmds::%(name)s*>(cmd_data);
-      (void)c;
-      """ % {'name': func.name})
+    if func.GetCmdArgs():
+      f.write("""const volatile gles2::cmds::%(name)s& c =
+            *static_cast<const volatile gles2::cmds::%(name)s*>(cmd_data);
+        """ % {'name': func.name})
 
   def WriteServiceHandlerArgGetCode(self, func, f):
     """Writes the argument unpack code for service handlers."""
@@ -4953,12 +4960,12 @@ static_assert(offsetof(%(cmd_name)s::Result, %(field_name)s) == %(offset)d,
   def WritePassthroughServiceFunctionHeader(self, func, f):
     """Writes function header for service passthrough handlers."""
     f.write("""error::Error GLES2DecoderPassthroughImpl::Handle%(name)s(
-        uint32_t immediate_data_size, const void* cmd_data) {
+        uint32_t immediate_data_size, const volatile void* cmd_data) {
       """ % {'name': func.name})
-    f.write("""const gles2::cmds::%(name)s& c =
-          *static_cast<const gles2::cmds::%(name)s*>(cmd_data);
-      (void)c;
-      """ % {'name': func.name})
+    if func.GetCmdArgs():
+      f.write("""const volatile gles2::cmds::%(name)s& c =
+            *static_cast<const volatile gles2::cmds::%(name)s*>(cmd_data);
+        """ % {'name': func.name})
 
   def WritePassthroughServiceFunctionDoerCall(self, func, f):
     """Writes the function call to the passthrough service doer."""
@@ -8998,7 +9005,7 @@ class ImmediatePointerArgument(Argument):
 
   def WriteGetCode(self, f):
     """Overridden from Argument."""
-    f.write("  %s %s = GetImmediateDataAs<%s>(\n" %
+    f.write("  volatile %s %s = GetImmediateDataAs<volatile %s>(\n" %
             (self.type, self.name, self.type))
     f.write("      c, data_size, immediate_data_size);\n")
 
@@ -9283,7 +9290,7 @@ class Int64Argument(Argument):
 
   def WriteArgAccessor(self, f):
     """Writes specialized accessor for compound members."""
-    f.write("  %s %s() const {\n" % (self.type, self.name))
+    f.write("  %s %s() const volatile {\n" % (self.type, self.name))
     f.write("    return static_cast<%s>(\n" % self.type)
     f.write("        GLES2Util::MapTwoUint32ToUint64(\n")
     f.write("            %s_0,\n" % self.name)
@@ -10933,6 +10940,18 @@ extern const NameToFunc g_gles2_function_table[] = {
           f.write(code % {
             'name': ToUnderscore(name),
           })
+      f.write("UpdateES30CompressedTextureFormats();");
+      f.write("}\n\n");
+
+      f.write("void Validators::UpdateES30CompressedTextureFormats() {\n")
+      for name in ['CompressedTextureFormat', 'TextureInternalFormatStorage']:
+        for fmt in _ES30_COMPRESSED_TEXTURE_FORMATS:
+          code = """  %(name)s.AddValue(%(format)s);
+"""
+          f.write(code % {
+            'name': ToUnderscore(name),
+            'format': fmt,
+          })
       f.write("}\n\n");
     self.generated_cpp_filenames.append(filename)
 
@@ -10995,6 +11014,12 @@ const size_t GLES2Util::enum_to_string_table_len_ =
             for es3_enum in _NAMED_TYPE_INFO[enum]['valid_es3']:
               if not es3_enum in valid_list:
                 valid_list.append(es3_enum)
+          if enum in [
+              'CompressedTextureFormat',
+              'TextureInternalFormatStorage',
+            ]:
+            for es3_enum in _ES30_COMPRESSED_TEXTURE_FORMATS:
+              valid_list.append(es3_enum)
           assert len(valid_list) == len(set(valid_list))
           if len(valid_list) > 0:
             f.write("  static const EnumToString string_table[] = {\n")

@@ -12,7 +12,6 @@
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "components/login/localized_values_builder.h"
 #include "content/public/browser/web_ui.h"
-#include "ui/base/l10n/l10n_util.h"
 
 namespace chromeos {
 
@@ -44,7 +43,7 @@ void BaseScreenHandler::InitializeBase() {
 }
 
 void BaseScreenHandler::GetLocalizedStrings(base::DictionaryValue* dict) {
-  auto builder = base::WrapUnique(new ::login::LocalizedValuesBuilder(dict));
+  auto builder = base::MakeUnique<::login::LocalizedValuesBuilder>(dict);
   DeclareLocalizedValues(builder.get());
   GetAdditionalParameters(dict);
 }

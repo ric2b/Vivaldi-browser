@@ -18,6 +18,7 @@
 #include "net/base/request_priority.h"
 #include "net/dns/fuzzed_host_resolver.h"
 #include "net/dns/host_resolver.h"
+#include "net/log/net_log_with_source.h"
 #include "net/log/test_net_log.h"
 
 namespace {
@@ -146,14 +147,14 @@ class DnsRequest {
     // Decide if should be a cache-only resolution.
     if (data_provider_->ConsumeBool()) {
       return host_resolver_->ResolveFromCache(info, &address_list_,
-                                              net::BoundNetLog());
+                                              net::NetLogWithSource());
     }
 
     info.set_allow_cached_response(data_provider_->ConsumeBool());
     return host_resolver_->Resolve(
         info, priority, &address_list_,
         base::Bind(&DnsRequest::OnCallback, base::Unretained(this)), &request_,
-        net::BoundNetLog());
+        net::NetLogWithSource());
   }
 
   // Waits until the request is done, if it isn't done already.

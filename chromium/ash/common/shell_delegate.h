@@ -31,6 +31,10 @@ namespace ui {
 class MenuModel;
 }
 
+namespace shell {
+class Connector;
+}
+
 namespace views {
 class Widget;
 }
@@ -56,6 +60,9 @@ class ASH_EXPORT ShellDelegate {
  public:
   // The Shell owns the delegate.
   virtual ~ShellDelegate() {}
+
+  // Returns the connector for the mojo service manager. Returns null in tests.
+  virtual ::shell::Connector* GetShellConnector() const = 0;
 
   // Returns true if this is the first time that the shell has been run after
   // the system has booted.  false is returned after the shell has been
@@ -126,7 +133,7 @@ class ASH_EXPORT ShellDelegate {
   virtual std::unique_ptr<PaletteDelegate> CreatePaletteDelegate() = 0;
 
   // Creates a menu model for the |wm_shelf| and optional shelf |item|.
-  // If |item| is null, this creates a context menu for the desktop or shelf.
+  // If |item| is null, this creates a context menu for the wallpaper or shelf.
   virtual ui::MenuModel* CreateContextMenu(WmShelf* wm_shelf,
                                            const ShelfItem* item) = 0;
 

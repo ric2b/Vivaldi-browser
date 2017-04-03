@@ -14,309 +14,232 @@ namespace blink {
 
 class FrameView;
 class LayoutAPIShim;
+class LocalFrame;
 class LayoutViewItem;
 class Node;
 class ObjectPaintProperties;
 
 class LayoutItem {
-    DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
-public:
-    explicit LayoutItem(LayoutObject* layoutObject)
-        : m_layoutObject(layoutObject)
-    {
-    }
+  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
 
-    LayoutItem(std::nullptr_t)
-        : m_layoutObject(0)
-    {
-    }
+ public:
+  explicit LayoutItem(LayoutObject* layoutObject)
+      : m_layoutObject(layoutObject) {}
 
-    LayoutItem() : m_layoutObject(0) { }
+  LayoutItem(std::nullptr_t) : m_layoutObject(0) {}
 
-    // TODO(leviw): This should be "explicit operator bool", but
-    // using this operator allows the API to be landed in pieces.
-    // https://crbug.com/499321
-    operator LayoutObject*() const { return m_layoutObject; }
+  LayoutItem() : m_layoutObject(0) {}
 
-    // TODO(pilgrim): Remove this when we replace the operator above with
-    // operator bool.
-    bool isNull() const
-    {
-        return !m_layoutObject;
-    }
+  // TODO(leviw): This should be "explicit operator bool", but
+  // using this operator allows the API to be landed in pieces.
+  // https://crbug.com/499321
+  operator LayoutObject*() const { return m_layoutObject; }
 
-    String debugName() const
-    {
-        return m_layoutObject->debugName();
-    }
+  // TODO(pilgrim): Remove this when we replace the operator above with
+  // operator bool.
+  bool isNull() const { return !m_layoutObject; }
 
-    bool isDescendantOf(LayoutItem item) const
-    {
-        return m_layoutObject->isDescendantOf(item.layoutObject());
-    }
+  String debugName() const { return m_layoutObject->debugName(); }
 
-    bool isBoxModelObject() const
-    {
-        return m_layoutObject->isBoxModelObject();
-    }
+  bool isDescendantOf(LayoutItem item) const {
+    return m_layoutObject->isDescendantOf(item.layoutObject());
+  }
 
-    bool isBox() const
-    {
-        return m_layoutObject->isBox();
-    }
+  bool isBoxModelObject() const { return m_layoutObject->isBoxModelObject(); }
 
-    bool isBR() const
-    {
-        return m_layoutObject->isBR();
-    }
+  bool isBox() const { return m_layoutObject->isBox(); }
 
-    bool isLayoutBlock() const
-    {
-        return m_layoutObject->isLayoutBlock();
-    }
+  bool isBR() const { return m_layoutObject->isBR(); }
 
-    bool isText() const
-    {
-        return m_layoutObject->isText();
-    }
+  bool isLayoutBlock() const { return m_layoutObject->isLayoutBlock(); }
 
-    bool isTextControl() const
-    {
-        return m_layoutObject->isTextControl();
-    }
+  bool isText() const { return m_layoutObject->isText(); }
 
-    bool isLayoutPart() const
-    {
-        return m_layoutObject->isLayoutPart();
-    }
+  bool isTextControl() const { return m_layoutObject->isTextControl(); }
 
-    bool isEmbeddedObject() const
-    {
-        return m_layoutObject->isEmbeddedObject();
-    }
+  bool isLayoutPart() const { return m_layoutObject->isLayoutPart(); }
 
-    bool isImage() const
-    {
-        return m_layoutObject->isImage();
-    }
+  bool isEmbeddedObject() const { return m_layoutObject->isEmbeddedObject(); }
 
-    bool isLayoutFullScreen() const
-    {
-        return m_layoutObject->isLayoutFullScreen();
-    }
+  bool isImage() const { return m_layoutObject->isImage(); }
 
-    bool isListItem() const
-    {
-        return m_layoutObject->isListItem();
-    }
+  bool isLayoutFullScreen() const {
+    return m_layoutObject->isLayoutFullScreen();
+  }
 
-    bool isMedia() const
-    {
-        return m_layoutObject->isMedia();
-    }
+  bool isListItem() const { return m_layoutObject->isListItem(); }
 
-    bool isMenuList() const
-    {
-        return m_layoutObject->isMenuList();
-    }
+  bool isMedia() const { return m_layoutObject->isMedia(); }
 
-    bool isProgress() const
-    {
-        return m_layoutObject->isProgress();
-    }
+  bool isMenuList() const { return m_layoutObject->isMenuList(); }
 
-    bool isSlider() const
-    {
-        return m_layoutObject->isSlider();
-    }
+  bool isProgress() const { return m_layoutObject->isProgress(); }
 
-    bool isLayoutView() const
-    {
-        return m_layoutObject->isLayoutView();
-    }
+  bool isSlider() const { return m_layoutObject->isSlider(); }
 
-    bool needsLayout()
-    {
-        return m_layoutObject->needsLayout();
-    }
+  bool isLayoutView() const { return m_layoutObject->isLayoutView(); }
 
-    void setNeedsLayout(LayoutInvalidationReasonForTracing reason, MarkingBehavior marking = MarkContainerChain, SubtreeLayoutScope* scope = nullptr)
-    {
-        m_layoutObject->setNeedsLayout(reason, marking, scope);
-    }
+  bool needsLayout() { return m_layoutObject->needsLayout(); }
 
-    void layout()
-    {
-        m_layoutObject->layout();
-    }
+  void layout() { m_layoutObject->layout(); }
 
-    LayoutItem container() const
-    {
-        return LayoutItem(m_layoutObject->container());
-    }
+  LayoutItem container() const {
+    return LayoutItem(m_layoutObject->container());
+  }
 
-    Node* node() const
-    {
-        return m_layoutObject->node();
-    }
+  Node* node() const { return m_layoutObject->node(); }
 
-    Document& document() const
-    {
-        return m_layoutObject->document();
-    }
+  Document& document() const { return m_layoutObject->document(); }
 
-    LayoutItem nextInPreOrder() const
-    {
-        return LayoutItem(m_layoutObject->nextInPreOrder());
-    }
+  LocalFrame* frame() const { return m_layoutObject->frame(); }
 
-    void updateStyleAndLayout()
-    {
-        return m_layoutObject->document().updateStyleAndLayout();
-    }
+  LayoutItem nextInPreOrder() const {
+    return LayoutItem(m_layoutObject->nextInPreOrder());
+  }
 
-    const ComputedStyle& styleRef() const
-    {
-        return m_layoutObject->styleRef();
-    }
+  void updateStyleAndLayout() {
+    return m_layoutObject->document().updateStyleAndLayout();
+  }
 
-    ComputedStyle* mutableStyle() const
-    {
-        return m_layoutObject->mutableStyle();
-    }
+  const ComputedStyle& styleRef() const { return m_layoutObject->styleRef(); }
 
-    ComputedStyle& mutableStyleRef() const
-    {
-        return m_layoutObject->mutableStyleRef();
-    }
+  ComputedStyle* mutableStyle() const { return m_layoutObject->mutableStyle(); }
 
-    void setStyle(PassRefPtr<ComputedStyle> style)
-    {
-        m_layoutObject->setStyle(style);
-    }
+  ComputedStyle& mutableStyleRef() const {
+    return m_layoutObject->mutableStyleRef();
+  }
 
-    LayoutSize offsetFromContainer(const LayoutItem& item) const
-    {
-        return m_layoutObject->offsetFromContainer(item.layoutObject());
-    }
+  void setStyle(PassRefPtr<ComputedStyle> style) {
+    m_layoutObject->setStyle(std::move(style));
+  }
 
-    LayoutViewItem view() const;
+  LayoutSize offsetFromContainer(const LayoutItem& item) const {
+    return m_layoutObject->offsetFromContainer(item.layoutObject());
+  }
 
-    FrameView* frameView() const
-    {
-        return m_layoutObject->document().view();
-    }
+  LayoutViewItem view() const;
 
-    void setMayNeedPaintInvalidation()
-    {
-        m_layoutObject->setMayNeedPaintInvalidation();
-    }
+  FrameView* frameView() const { return m_layoutObject->document().view(); }
 
-    const ComputedStyle* style() const
-    {
-        return m_layoutObject->style();
-    }
+  const ComputedStyle* style() const { return m_layoutObject->style(); }
 
-    PaintLayer* enclosingLayer() const
-    {
-        return m_layoutObject->enclosingLayer();
-    }
+  PaintLayer* enclosingLayer() const {
+    return m_layoutObject->enclosingLayer();
+  }
 
-    bool hasLayer() const
-    {
-        return m_layoutObject->hasLayer();
-    }
+  bool hasLayer() const { return m_layoutObject->hasLayer(); }
 
-    void setShouldDoFullPaintInvalidation(PaintInvalidationReason reason = PaintInvalidationFull)
-    {
-        m_layoutObject->setShouldDoFullPaintInvalidation(reason);
-    }
+  void setNeedsLayout(LayoutInvalidationReasonForTracing reason,
+                      MarkingBehavior marking = MarkContainerChain,
+                      SubtreeLayoutScope* scope = nullptr) {
+    m_layoutObject->setNeedsLayout(reason, marking, scope);
+  }
 
-    void setShouldDoFullPaintInvalidationIncludingNonCompositingDescendants()
-    {
-        m_layoutObject->setShouldDoFullPaintInvalidationIncludingNonCompositingDescendants();
-    }
+  void setNeedsLayoutAndFullPaintInvalidation(
+      LayoutInvalidationReasonForTracing reason,
+      MarkingBehavior behavior = MarkContainerChain,
+      SubtreeLayoutScope* scope = nullptr) {
+    m_layoutObject->setNeedsLayoutAndFullPaintInvalidation(reason, behavior,
+                                                           scope);
+  }
 
-    void computeLayerHitTestRects(LayerHitTestRects& layerRects) const
-    {
-        m_layoutObject->computeLayerHitTestRects(layerRects);
-    }
+  void setNeedsLayoutAndPrefWidthsRecalc(
+      LayoutInvalidationReasonForTracing reason) {
+    m_layoutObject->setNeedsLayoutAndPrefWidthsRecalc(reason);
+  }
 
-    FloatQuad localToAbsoluteQuad(const FloatQuad& quad, MapCoordinatesFlags mode = 0) const
-    {
-        return m_layoutObject->localToAbsoluteQuad(quad, mode);
-    }
+  void setNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(
+      LayoutInvalidationReasonForTracing reason) {
+    m_layoutObject->setNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(
+        reason);
+  }
 
-    FloatPoint absoluteToLocal(const FloatPoint& point, MapCoordinatesFlags mode = 0) const
-    {
-        return m_layoutObject->absoluteToLocal(point, mode);
-    }
+  void setMayNeedPaintInvalidation() {
+    m_layoutObject->setMayNeedPaintInvalidation();
+  }
 
-    void setNeedsLayoutAndFullPaintInvalidation(LayoutInvalidationReasonForTracing reason, MarkingBehavior behavior = MarkContainerChain, SubtreeLayoutScope* scope = nullptr)
-    {
-        m_layoutObject->setNeedsLayoutAndFullPaintInvalidation(reason, behavior, scope);
-    }
+  void setShouldDoFullPaintInvalidation(
+      PaintInvalidationReason reason = PaintInvalidationFull) {
+    m_layoutObject->setShouldDoFullPaintInvalidation(reason);
+  }
 
-    void setNeedsLayoutAndPrefWidthsRecalc(LayoutInvalidationReasonForTracing reason)
-    {
-        m_layoutObject->setNeedsLayoutAndPrefWidthsRecalc(reason);
-    }
+  void setShouldDoFullPaintInvalidationIncludingNonCompositingDescendants() {
+    m_layoutObject
+        ->setShouldDoFullPaintInvalidationIncludingNonCompositingDescendants();
+  }
 
-    bool wasNotifiedOfSubtreeChange() const
-    {
-        return m_layoutObject->wasNotifiedOfSubtreeChange();
-    }
+  void computeLayerHitTestRects(LayerHitTestRects& layerRects) const {
+    m_layoutObject->computeLayerHitTestRects(layerRects);
+  }
 
-    void handleSubtreeModifications()
-    {
-        m_layoutObject->handleSubtreeModifications();
-    }
+  FloatQuad localToAbsoluteQuad(const FloatQuad& quad,
+                                MapCoordinatesFlags mode = 0) const {
+    return m_layoutObject->localToAbsoluteQuad(quad, mode);
+  }
 
-    bool needsOverflowRecalcAfterStyleChange() const
-    {
-        return m_layoutObject->needsOverflowRecalcAfterStyleChange();
-    }
+  FloatPoint absoluteToLocal(const FloatPoint& point,
+                             MapCoordinatesFlags mode = 0) const {
+    return m_layoutObject->absoluteToLocal(point, mode);
+  }
 
-    void invalidateTreeIfNeeded(const PaintInvalidationState& state)
-    {
-        m_layoutObject->invalidateTreeIfNeeded(state);
-    }
+  bool wasNotifiedOfSubtreeChange() const {
+    return m_layoutObject->wasNotifiedOfSubtreeChange();
+  }
 
-    CompositingState compositingState() const
-    {
-        return m_layoutObject->compositingState();
-    }
+  void handleSubtreeModifications() {
+    m_layoutObject->handleSubtreeModifications();
+  }
 
-    bool mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect& layoutRect, VisualRectFlags flags = DefaultVisualRectFlags) const
-    {
-        return m_layoutObject->mapToVisualRectInAncestorSpace(ancestor, layoutRect, flags);
-    }
+  bool needsOverflowRecalcAfterStyleChange() const {
+    return m_layoutObject->needsOverflowRecalcAfterStyleChange();
+  }
 
-    Color resolveColor(int colorProperty) const
-    {
-        return m_layoutObject->resolveColor(colorProperty);
-    }
+  void invalidateTreeIfNeeded(const PaintInvalidationState& state) {
+    m_layoutObject->invalidateTreeIfNeeded(state);
+  }
 
-    const ObjectPaintProperties* objectPaintProperties() const
-    {
-        return m_layoutObject->objectPaintProperties();
-    }
+  CompositingState compositingState() const {
+    return m_layoutObject->compositingState();
+  }
 
-    void invalidatePaintRectangle(const LayoutRect& dirtyRect) const
-    {
-        m_layoutObject->invalidatePaintRectangle(dirtyRect);
-    }
+  bool mapToVisualRectInAncestorSpace(
+      const LayoutBoxModelObject* ancestor,
+      LayoutRect& layoutRect,
+      VisualRectFlags flags = DefaultVisualRectFlags) const {
+    return m_layoutObject->mapToVisualRectInAncestorSpace(ancestor, layoutRect,
+                                                          flags);
+  }
 
-protected:
-    LayoutObject* layoutObject() { return m_layoutObject; }
-    const LayoutObject* layoutObject() const { return m_layoutObject; }
+  Color resolveColor(int colorProperty) const {
+    return m_layoutObject->resolveColor(colorProperty);
+  }
 
-private:
-    LayoutObject* m_layoutObject;
+  const ObjectPaintProperties* objectPaintProperties() const {
+    return m_layoutObject->objectPaintProperties();
+  }
 
-    friend class LayoutAPIShim;
+  void invalidatePaintRectangle(const LayoutRect& dirtyRect) const {
+    m_layoutObject->invalidatePaintRectangle(dirtyRect);
+  }
+
+  PassRefPtr<ComputedStyle> getUncachedPseudoStyle(
+      const PseudoStyleRequest& pseudoStyleRequest,
+      const ComputedStyle* parentStyle = nullptr,
+      const ComputedStyle* ownStyle = nullptr) const {
+    return m_layoutObject->getUncachedPseudoStyle(pseudoStyleRequest,
+                                                  parentStyle, ownStyle);
+  }
+
+ protected:
+  LayoutObject* layoutObject() { return m_layoutObject; }
+  const LayoutObject* layoutObject() const { return m_layoutObject; }
+
+ private:
+  LayoutObject* m_layoutObject;
+
+  friend class LayoutAPIShim;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // LayoutItem_h
+#endif  // LayoutItem_h

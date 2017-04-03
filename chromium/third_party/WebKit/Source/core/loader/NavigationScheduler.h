@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2006, 2007, 2008, 2009 Apple Inc. All rights reserved.
- * Copyright (C) 2008, 2009 Torch Mobile Inc. All rights reserved. (http://www.torchmobile.com/)
+ * Copyright (C) 2008, 2009 Torch Mobile Inc. All rights reserved.
+ * (http://www.torchmobile.com/)
  * Copyright (C) 2009 Adam Barth. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -49,66 +50,68 @@ class FormSubmission;
 class LocalFrame;
 class ScheduledNavigation;
 
-class CORE_EXPORT NavigationScheduler final : public GarbageCollectedFinalized<NavigationScheduler> {
-    WTF_MAKE_NONCOPYABLE(NavigationScheduler);
-public:
-    static NavigationScheduler* create(LocalFrame* frame)
-    {
-        return new NavigationScheduler(frame);
-    }
+class CORE_EXPORT NavigationScheduler final
+    : public GarbageCollectedFinalized<NavigationScheduler> {
+  WTF_MAKE_NONCOPYABLE(NavigationScheduler);
 
-    ~NavigationScheduler();
+ public:
+  static NavigationScheduler* create(LocalFrame* frame) {
+    return new NavigationScheduler(frame);
+  }
 
-    bool locationChangePending();
-    bool isNavigationScheduledWithin(double intervalInSeconds) const;
+  ~NavigationScheduler();
 
-    void scheduleRedirect(double delay, const String& url);
-    void scheduleLocationChange(Document*, const String& url, bool replacesCurrentItem = true);
-    void schedulePageBlock(Document*);
-    void scheduleFormSubmission(Document*, FormSubmission*);
-    void scheduleReload();
+  bool locationChangePending();
+  bool isNavigationScheduledWithin(double intervalInSeconds) const;
 
-    void startTimer();
-    void cancel();
+  void scheduleRedirect(double delay, const String& url);
+  void scheduleLocationChange(Document*,
+                              const String& url,
+                              bool replacesCurrentItem = true);
+  void schedulePageBlock(Document*);
+  void scheduleFormSubmission(Document*, FormSubmission*);
+  void scheduleReload();
 
-    DECLARE_TRACE();
+  void startTimer();
+  void cancel();
 
-private:
-    explicit NavigationScheduler(LocalFrame*);
+  DECLARE_TRACE();
 
-    bool shouldScheduleReload() const;
-    bool shouldScheduleNavigation(const String& url) const;
+ private:
+  explicit NavigationScheduler(LocalFrame*);
 
-    void navigateTask();
-    void schedule(ScheduledNavigation*);
+  bool shouldScheduleReload() const;
+  bool shouldScheduleNavigation(const String& url) const;
 
-    static bool mustReplaceCurrentItem(LocalFrame* targetFrame);
+  void navigateTask();
+  void schedule(ScheduledNavigation*);
 
-    Member<LocalFrame> m_frame;
-    std::unique_ptr<CancellableTaskFactory> m_navigateTaskFactory;
-    Member<ScheduledNavigation> m_redirect;
-    WebScheduler::NavigatingFrameType m_frameType; // Exists because we can't deref m_frame in destructor.
+  static bool mustReplaceCurrentItem(LocalFrame* targetFrame);
+
+  Member<LocalFrame> m_frame;
+  std::unique_ptr<CancellableTaskFactory> m_navigateTaskFactory;
+  Member<ScheduledNavigation> m_redirect;
+
+  // Exists because we can't deref m_frame in destructor.
+  WebScheduler::NavigatingFrameType m_frameType;
 };
 
 class NavigationDisablerForUnload {
-    WTF_MAKE_NONCOPYABLE(NavigationDisablerForUnload);
-    STACK_ALLOCATED();
-public:
-    NavigationDisablerForUnload()
-    {
-        s_navigationDisableCount++;
-    }
-    ~NavigationDisablerForUnload()
-    {
-        ASSERT(s_navigationDisableCount);
-        s_navigationDisableCount--;
-    }
-    static bool isNavigationAllowed() { return !s_navigationDisableCount; }
+  WTF_MAKE_NONCOPYABLE(NavigationDisablerForUnload);
+  STACK_ALLOCATED();
 
-private:
-    static unsigned s_navigationDisableCount;
+ public:
+  NavigationDisablerForUnload() { s_navigationDisableCount++; }
+  ~NavigationDisablerForUnload() {
+    DCHECK(s_navigationDisableCount);
+    s_navigationDisableCount--;
+  }
+  static bool isNavigationAllowed() { return !s_navigationDisableCount; }
+
+ private:
+  static unsigned s_navigationDisableCount;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // NavigationScheduler_h
+#endif  // NavigationScheduler_h

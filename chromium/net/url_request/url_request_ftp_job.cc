@@ -6,6 +6,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/location.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -23,6 +24,19 @@
 #include "net/url_request/url_request_error_job.h"
 
 namespace net {
+
+class URLRequestFtpJob::AuthData {
+ public:
+  AuthState state;  // Whether we need, have, or gave up on authentication.
+  AuthCredentials credentials;  // The credentials to use for auth.
+
+  AuthData();
+  ~AuthData();
+};
+
+URLRequestFtpJob::AuthData::AuthData() : state(AUTH_STATE_NEED_AUTH) {}
+
+URLRequestFtpJob::AuthData::~AuthData() {}
 
 URLRequestFtpJob::URLRequestFtpJob(
     URLRequest* request,
@@ -325,10 +339,6 @@ void URLRequestFtpJob::CancelAuth() {
   OnStartCompletedAsync(OK);
 }
 
-UploadProgress URLRequestFtpJob::GetUploadProgress() const {
-  return UploadProgress();
-}
-
 int URLRequestFtpJob::ReadRawData(IOBuffer* buf, int buf_size) {
   DCHECK_NE(buf_size, 0);
   DCHECK(!read_in_progress_);
@@ -362,7 +372,7 @@ void URLRequestFtpJob::HandleAuthNeededResponse() {
     if (ftp_transaction_ && auth_data_->state == AUTH_STATE_HAVE_AUTH)
       ftp_auth_cache_->Remove(origin, auth_data_->credentials);
   } else {
-    auth_data_ = new AuthData;
+    auth_data_ = base::MakeUnique<AuthData>();
   }
   auth_data_->state = AUTH_STATE_NEED_AUTH;
 

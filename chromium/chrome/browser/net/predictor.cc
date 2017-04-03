@@ -20,7 +20,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
@@ -43,7 +43,7 @@
 #include "net/base/host_port_pair.h"
 #include "net/base/net_errors.h"
 #include "net/http/transport_security_state.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 #include "net/proxy/proxy_info.h"
 #include "net/proxy/proxy_service.h"
 #include "net/ssl/ssl_config_service.h"
@@ -542,13 +542,10 @@ void Predictor::SerializeReferrers(base::ListValue* referral_list) {
   referral_list->AppendInteger(kPredictorReferrerVersion);
   for (Referrers::const_reverse_iterator it = referrers_.rbegin();
        it != referrers_.rend(); ++it) {
-    // Serialize the list of subresource names.
-    base::Value* subresource_list(it->second.Serialize());
-
     // Create a list for each referer.
     std::unique_ptr<base::ListValue> motivator(new base::ListValue);
     motivator->AppendString(it->first.spec());
-    motivator->Append(subresource_list);
+    motivator->Append(it->second.Serialize());
 
     referral_list->Append(std::move(motivator));
   }
@@ -935,7 +932,7 @@ bool Predictor::WouldLikelyProxyURL(const GURL& url) {
 
   net::ProxyInfo info;
   bool synchronous_success = proxy_service_->TryResolveProxySynchronously(
-      url, std::string(), &info, nullptr, net::BoundNetLog());
+      url, std::string(), &info, nullptr, net::NetLogWithSource());
 
   return synchronous_success && !info.is_direct();
 }

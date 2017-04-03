@@ -23,10 +23,8 @@
     background-color: rgba(56, 121, 217, 0.1);
 }
 
-.object-value-function::before {
-    content: "function";
+.object-value-function-prefix {
     color: rgb(170, 13, 145);
-    padding-right: 5px;
 }
 
 .object-value-function {
@@ -53,9 +51,11 @@
     display: inline-block;
 }
 
-.object-value-number,
-.object-value-boolean {
+.object-value-number {
     color: rgb(28, 0, 207);
+}
+.object-value-boolean {
+    color: rgb(170, 13, 145);
 }
 
 .object-value-string,

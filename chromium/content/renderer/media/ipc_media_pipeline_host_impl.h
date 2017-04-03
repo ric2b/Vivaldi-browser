@@ -13,6 +13,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/shared_memory.h"
 #include "base/memory/weak_ptr.h"
+#include "gpu/ipc/client/gpu_channel_host.h"
 #include "ipc/ipc_listener.h"
 #include "media/filters/ipc_media_pipeline_host.h"
 #include "media/filters/platform_media_pipeline_types.h"

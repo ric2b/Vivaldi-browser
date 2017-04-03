@@ -5,13 +5,13 @@
 #include "cc/test/layer_tree_pixel_resource_test.h"
 
 #include "cc/layers/layer.h"
+#include "cc/output/compositor_frame_sink.h"
 #include "cc/raster/bitmap_raster_buffer_provider.h"
 #include "cc/raster/gpu_raster_buffer_provider.h"
 #include "cc/raster/one_copy_raster_buffer_provider.h"
 #include "cc/raster/raster_buffer_provider.h"
 #include "cc/raster/zero_copy_raster_buffer_provider.h"
 #include "cc/resources/resource_pool.h"
-#include "cc/test/fake_output_surface.h"
 #include "gpu/GLES2/gl2extchromium.h"
 
 namespace cc {
@@ -116,9 +116,9 @@ void LayerTreeHostPixelResourceTest::CreateResourceAndRasterBufferProvider(
   DCHECK(initialized_);
 
   ContextProvider* compositor_context_provider =
-      host_impl->output_surface()->context_provider();
+      host_impl->compositor_frame_sink()->context_provider();
   ContextProvider* worker_context_provider =
-      host_impl->output_surface()->worker_context_provider();
+      host_impl->compositor_frame_sink()->worker_context_provider();
   ResourceProvider* resource_provider = host_impl->resource_provider();
   int max_bytes_per_copy_operation = 1024 * 1024;
   int max_staging_buffer_usage_in_bytes = 32 * 1024 * 1024;

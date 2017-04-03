@@ -8,7 +8,6 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "third_party/WebKit/public/platform/modules/wake_lock/wake_lock_service.mojom.h"
 
 namespace content {
@@ -17,11 +16,7 @@ class WakeLockServiceContext;
 
 class WakeLockServiceImpl : public blink::mojom::WakeLockService {
  public:
-  WakeLockServiceImpl(
-      base::WeakPtr<WakeLockServiceContext> context,
-      int render_process_id,
-      int render_frame_id,
-      mojo::InterfaceRequest<blink::mojom::WakeLockService> request);
+  explicit WakeLockServiceImpl(base::WeakPtr<WakeLockServiceContext> context);
   ~WakeLockServiceImpl() override;
 
   // WakeLockSevice implementation.
@@ -30,9 +25,7 @@ class WakeLockServiceImpl : public blink::mojom::WakeLockService {
 
  private:
   base::WeakPtr<WakeLockServiceContext> context_;
-  const int render_process_id_;
-  const int render_frame_id_;
-  mojo::StrongBinding<blink::mojom::WakeLockService> binding_;
+  bool wake_lock_request_outstanding_;
 
   DISALLOW_COPY_AND_ASSIGN(WakeLockServiceImpl);
 };

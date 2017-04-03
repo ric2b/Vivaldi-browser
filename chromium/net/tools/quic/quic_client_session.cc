@@ -5,6 +5,7 @@
 #include "net/tools/quic/quic_client_session.h"
 
 #include "base/logging.h"
+#include "net/log/net_log_with_source.h"
 #include "net/quic/chromium/crypto/proof_verifier_chromium.h"
 #include "net/quic/core/crypto/crypto_protocol.h"
 #include "net/quic/core/quic_bug_tracker.h"
@@ -122,7 +123,7 @@ QuicSpdyStream* QuicClientSession::CreateIncomingDynamicStream(
 
 QuicCryptoClientStreamBase* QuicClientSession::CreateQuicCryptoStream() {
   return new QuicCryptoClientStream(
-      server_id_, this, new ProofVerifyContextChromium(0, BoundNetLog()),
+      server_id_, this, new ProofVerifyContextChromium(0, NetLogWithSource()),
       crypto_config_, this);
 }
 

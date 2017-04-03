@@ -10,7 +10,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/simple_thread.h"
@@ -18,17 +18,15 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "cc/base/histograms.h"
-#include "cc/output/compositor_frame.h"
-#include "cc/output/output_surface.h"
 #include "cc/output/texture_mailbox_deleter.h"
 #include "cc/output/vulkan_in_process_context_provider.h"
 #include "cc/raster/single_thread_task_graph_runner.h"
 #include "cc/raster/task_graph_runner.h"
 #include "cc/scheduler/begin_frame_source.h"
 #include "cc/scheduler/delay_based_time_source.h"
+#include "cc/surfaces/direct_compositor_frame_sink.h"
 #include "cc/surfaces/display.h"
 #include "cc/surfaces/display_scheduler.h"
-#include "cc/surfaces/surface_display_output_surface.h"
 #include "cc/surfaces/surface_manager.h"
 #include "components/display_compositor/compositor_overlay_candidate_validator.h"
 #include "components/display_compositor/gl_helper.h"
@@ -60,7 +58,7 @@
 
 #if defined(USE_AURA)
 #include "content/browser/compositor/mus_browser_compositor_output_surface.h"
-#include "content/public/common/mojo_shell_connection.h"
+#include "content/public/common/service_manager_connection.h"
 #endif
 
 #if defined(OS_WIN)
@@ -169,12 +167,10 @@ struct GpuProcessTransportFactory::PerCompositorData {
   ReflectorImpl* reflector = nullptr;
   std::unique_ptr<cc::Display> display;
   bool output_is_secure = false;
-  gfx::ColorSpace color_space;
 };
 
 GpuProcessTransportFactory::GpuProcessTransportFactory()
-    : next_surface_client_id_(1u),
-      task_graph_runner_(new cc::SingleThreadTaskGraphRunner),
+    : task_graph_runner_(new cc::SingleThreadTaskGraphRunner),
       callback_factory_(this) {
   cc::SetClientNameForMetrics("Browser");
 
@@ -262,7 +258,7 @@ CreateOverlayCandidateValidator(gfx::AcceleratedWidget widget) {
   return validator;
 }
 
-static bool ShouldCreateGpuOutputSurface(ui::Compositor* compositor) {
+static bool ShouldCreateGpuCompositorFrameSink(ui::Compositor* compositor) {
 #if defined(OS_CHROMEOS)
   // Software fallback does not happen on Chrome OS.
   return true;
@@ -279,15 +275,15 @@ static bool ShouldCreateGpuOutputSurface(ui::Compositor* compositor) {
   return GpuDataManagerImpl::GetInstance()->CanUseGpuBrowserCompositor();
 }
 
-void GpuProcessTransportFactory::CreateOutputSurface(
+void GpuProcessTransportFactory::CreateCompositorFrameSink(
     base::WeakPtr<ui::Compositor> compositor) {
   DCHECK(!!compositor);
-  PerCompositorData* data = per_compositor_data_[compositor.get()];
+  PerCompositorData* data = per_compositor_data_[compositor.get()].get();
   if (!data) {
     data = CreatePerCompositorData(compositor.get());
   } else {
     // TODO(danakj): We can destroy the |data->display| here when the compositor
-    // destroys its OutputSurface before calling back here.
+    // destroys its CompositorFrameSink before calling back here.
     data->display_output_surface = nullptr;
     data->begin_frame_source = nullptr;
   }
@@ -299,7 +295,7 @@ void GpuProcessTransportFactory::CreateOutputSurface(
 
   const bool use_vulkan = static_cast<bool>(SharedVulkanContextProvider());
   const bool create_gpu_output_surface =
-      ShouldCreateGpuOutputSurface(compositor.get());
+      ShouldCreateGpuCompositorFrameSink(compositor.get());
   if (create_gpu_output_surface && !use_vulkan) {
     gpu::GpuChannelEstablishedCallback callback(
         base::Bind(&GpuProcessTransportFactory::EstablishedGpuChannel,
@@ -326,7 +322,7 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
   if (it == per_compositor_data_.end())
     return;
 
-  PerCompositorData* data = it->second;
+  PerCompositorData* data = it->second.get();
   DCHECK(data);
 
   if (num_attempts > kNumRetriesBeforeSoftwareFallback) {
@@ -469,34 +465,34 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
   if (!display_output_surface) {
     if (!create_gpu_output_surface) {
       display_output_surface =
-          base::WrapUnique(new SoftwareBrowserCompositorOutputSurface(
+          base::MakeUnique<SoftwareBrowserCompositorOutputSurface>(
               CreateSoftwareOutputDevice(compositor.get()),
-              compositor->vsync_manager(), begin_frame_source.get()));
+              compositor->vsync_manager(), begin_frame_source.get());
     } else {
       DCHECK(context_provider);
       const auto& capabilities = context_provider->ContextCapabilities();
       if (data->surface_handle == gpu::kNullSurfaceHandle) {
         display_output_surface =
-            base::WrapUnique(new OffscreenBrowserCompositorOutputSurface(
+            base::MakeUnique<OffscreenBrowserCompositorOutputSurface>(
                 context_provider, compositor->vsync_manager(),
                 begin_frame_source.get(),
-                std::unique_ptr<display_compositor::
-                                    CompositorOverlayCandidateValidator>()));
+                std::unique_ptr<
+                    display_compositor::CompositorOverlayCandidateValidator>());
       } else if (capabilities.surfaceless) {
 #if defined(OS_MACOSX)
-        display_output_surface = base::WrapUnique(new GpuOutputSurfaceMac(
-            context_provider, data->surface_handle, compositor->vsync_manager(),
-            begin_frame_source.get(),
+        display_output_surface = base::MakeUnique<GpuOutputSurfaceMac>(
+            compositor->widget(), context_provider, data->surface_handle,
+            compositor->vsync_manager(), begin_frame_source.get(),
             CreateOverlayCandidateValidator(compositor->widget()),
-            GetGpuMemoryBufferManager()));
+            GetGpuMemoryBufferManager());
 #else
         display_output_surface =
-            base::WrapUnique(new GpuSurfacelessBrowserCompositorOutputSurface(
+            base::MakeUnique<GpuSurfacelessBrowserCompositorOutputSurface>(
                 context_provider, data->surface_handle,
                 compositor->vsync_manager(), begin_frame_source.get(),
                 CreateOverlayCandidateValidator(compositor->widget()),
                 GL_TEXTURE_2D, GL_RGB, ui::DisplaySnapshot::PrimaryFormat(),
-                GetGpuMemoryBufferManager()));
+                GetGpuMemoryBufferManager());
 #endif
       } else {
         std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
@@ -509,16 +505,16 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
 #endif
         if (!use_mus) {
           display_output_surface =
-              base::WrapUnique(new GpuBrowserCompositorOutputSurface(
+              base::MakeUnique<GpuBrowserCompositorOutputSurface>(
                   context_provider, compositor->vsync_manager(),
-                  begin_frame_source.get(), std::move(validator)));
+                  begin_frame_source.get(), std::move(validator));
         } else {
 #if defined(USE_AURA)
           display_output_surface =
-              base::WrapUnique(new MusBrowserCompositorOutputSurface(
+              base::MakeUnique<MusBrowserCompositorOutputSurface>(
                   compositor->window(), context_provider,
                   compositor->vsync_manager(), begin_frame_source.get(),
-                  std::move(validator)));
+                  std::move(validator));
 #else
           NOTREACHED();
 #endif
@@ -553,27 +549,27 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
   // The |delegated_output_surface| is given back to the compositor, it
   // delegates to the Display as its root surface. Importantly, it shares the
   // same ContextProvider as the Display's output surface.
-  std::unique_ptr<cc::SurfaceDisplayOutputSurface> delegated_output_surface(
+  auto compositor_frame_sink =
       vulkan_context_provider
-          ? new cc::SurfaceDisplayOutputSurface(
-                surface_manager_.get(), compositor->surface_id_allocator(),
+          ? base::MakeUnique<cc::DirectCompositorFrameSink>(
+                compositor->frame_sink_id(), surface_manager_.get(),
                 data->display.get(),
                 static_cast<scoped_refptr<cc::VulkanContextProvider>>(
                     vulkan_context_provider))
-          : new cc::SurfaceDisplayOutputSurface(
-                surface_manager_.get(), compositor->surface_id_allocator(),
+          : base::MakeUnique<cc::DirectCompositorFrameSink>(
+                compositor->frame_sink_id(), surface_manager_.get(),
                 data->display.get(), context_provider,
-                shared_worker_context_provider_));
+                shared_worker_context_provider_);
   data->display->Resize(compositor->size());
   data->display->SetOutputIsSecure(data->output_is_secure);
-  data->display->SetColorSpace(data->color_space);
-  compositor->SetOutputSurface(std::move(delegated_output_surface));
+  compositor->SetCompositorFrameSink(std::move(compositor_frame_sink));
 }
 
 std::unique_ptr<ui::Reflector> GpuProcessTransportFactory::CreateReflector(
     ui::Compositor* source_compositor,
     ui::Layer* target_layer) {
-  PerCompositorData* source_data = per_compositor_data_[source_compositor];
+  PerCompositorData* source_data =
+      per_compositor_data_[source_compositor].get();
   DCHECK(source_data);
 
   std::unique_ptr<ReflectorImpl> reflector(
@@ -587,7 +583,7 @@ std::unique_ptr<ui::Reflector> GpuProcessTransportFactory::CreateReflector(
 void GpuProcessTransportFactory::RemoveReflector(ui::Reflector* reflector) {
   ReflectorImpl* reflector_impl = static_cast<ReflectorImpl*>(reflector);
   PerCompositorData* data =
-      per_compositor_data_[reflector_impl->mirrored_compositor()];
+      per_compositor_data_[reflector_impl->mirrored_compositor()].get();
   DCHECK(data);
   data->reflector->Shutdown();
   data->reflector = nullptr;
@@ -597,13 +593,12 @@ void GpuProcessTransportFactory::RemoveCompositor(ui::Compositor* compositor) {
   PerCompositorDataMap::iterator it = per_compositor_data_.find(compositor);
   if (it == per_compositor_data_.end())
     return;
-  PerCompositorData* data = it->second;
+  PerCompositorData* data = it->second.get();
   DCHECK(data);
 #if !defined(GPU_SURFACE_HANDLE_IS_ACCELERATED_WINDOW)
   if (data->surface_handle)
     GpuSurfaceTracker::Get()->RemoveSurface(data->surface_handle);
 #endif
-  delete data;
   per_compositor_data_.erase(it);
   if (per_compositor_data_.empty()) {
     // Destroying the GLHelper may cause some async actions to be cancelled,
@@ -654,8 +649,8 @@ ui::ContextFactory* GpuProcessTransportFactory::GetContextFactory() {
   return this;
 }
 
-uint32_t GpuProcessTransportFactory::AllocateSurfaceClientId() {
-  return next_surface_client_id_++;
+cc::FrameSinkId GpuProcessTransportFactory::AllocateFrameSinkId() {
+  return cc::FrameSinkId(0, next_sink_id_++);
 }
 
 void GpuProcessTransportFactory::SetDisplayVisible(ui::Compositor* compositor,
@@ -663,7 +658,7 @@ void GpuProcessTransportFactory::SetDisplayVisible(ui::Compositor* compositor,
   PerCompositorDataMap::iterator it = per_compositor_data_.find(compositor);
   if (it == per_compositor_data_.end())
     return;
-  PerCompositorData* data = it->second;
+  PerCompositorData* data = it->second.get();
   DCHECK(data);
   // The compositor will always SetVisible on the Display once it is set up, so
   // do nothing if |display| is null.
@@ -676,7 +671,7 @@ void GpuProcessTransportFactory::ResizeDisplay(ui::Compositor* compositor,
   PerCompositorDataMap::iterator it = per_compositor_data_.find(compositor);
   if (it == per_compositor_data_.end())
     return;
-  PerCompositorData* data = it->second;
+  PerCompositorData* data = it->second.get();
   DCHECK(data);
   if (data->display)
     data->display->Resize(size);
@@ -688,11 +683,12 @@ void GpuProcessTransportFactory::SetDisplayColorSpace(
   PerCompositorDataMap::iterator it = per_compositor_data_.find(compositor);
   if (it == per_compositor_data_.end())
     return;
-  PerCompositorData* data = it->second;
+  PerCompositorData* data = it->second.get();
   DCHECK(data);
-  data->color_space = color_space;
+  // The compositor will always SetColorSpace on the Display once it is set up,
+  // so do nothing if |display| is null.
   if (data->display)
-    data->display->SetColorSpace(data->color_space);
+    data->display->SetColorSpace(color_space);
 }
 
 void GpuProcessTransportFactory::SetAuthoritativeVSyncInterval(
@@ -701,7 +697,7 @@ void GpuProcessTransportFactory::SetAuthoritativeVSyncInterval(
   PerCompositorDataMap::iterator it = per_compositor_data_.find(compositor);
   if (it == per_compositor_data_.end())
     return;
-  PerCompositorData* data = it->second;
+  PerCompositorData* data = it->second.get();
   DCHECK(data);
   if (data->begin_frame_source)
     data->begin_frame_source->SetAuthoritativeVSyncInterval(interval);
@@ -714,7 +710,7 @@ void GpuProcessTransportFactory::SetDisplayVSyncParameters(
   PerCompositorDataMap::iterator it = per_compositor_data_.find(compositor);
   if (it == per_compositor_data_.end())
     return;
-  PerCompositorData* data = it->second;
+  PerCompositorData* data = it->second.get();
   DCHECK(data);
   if (data->begin_frame_source)
     data->begin_frame_source->OnUpdateVSyncParameters(timebase, interval);
@@ -725,7 +721,7 @@ void GpuProcessTransportFactory::SetOutputIsSecure(ui::Compositor* compositor,
   PerCompositorDataMap::iterator it = per_compositor_data_.find(compositor);
   if (it == per_compositor_data_.end())
     return;
-  PerCompositorData* data = it->second;
+  PerCompositorData* data = it->second.get();
   DCHECK(data);
   data->output_is_secure = secure;
   if (data->display)
@@ -770,7 +766,7 @@ void GpuProcessTransportFactory::SetCompositorSuspendedForRecycle(
   PerCompositorDataMap::iterator it = per_compositor_data_.find(compositor);
   if (it == per_compositor_data_.end())
     return;
-  PerCompositorData* data = it->second;
+  PerCompositorData* data = it->second.get();
   DCHECK(data);
   if (data->display_output_surface)
     data->display_output_surface->SetSurfaceSuspendedForRecycle(suspended);
@@ -820,7 +816,7 @@ GpuProcessTransportFactory::CreatePerCompositorData(
 
   gfx::AcceleratedWidget widget = compositor->widget();
 
-  PerCompositorData* data = new PerCompositorData;
+  auto data = base::MakeUnique<PerCompositorData>();
   if (widget == gfx::kNullAcceleratedWidget) {
     data->surface_handle = gpu::kNullSurfaceHandle;
   } else {
@@ -832,9 +828,9 @@ GpuProcessTransportFactory::CreatePerCompositorData(
 #endif
   }
 
-  per_compositor_data_[compositor] = data;
-
-  return data;
+  PerCompositorData* return_ptr = data.get();
+  per_compositor_data_[compositor] = std::move(data);
+  return return_ptr;
 }
 
 void GpuProcessTransportFactory::OnLostMainThreadSharedContextInsideCallback() {

@@ -11,22 +11,23 @@
 #include "components/sync/driver/data_type_controller.h"
 #include "components/sync/driver/ui_data_type_controller.h"
 
-namespace sync_driver {
+class Profile;
+
+namespace syncer {
 class SyncClient;
 }
 
-class Profile;
-
 // A UIDataTypeController for arc package sync datatypes, which enables or
 // disables these types based on whether ArcAppInstance is ready.
-class ArcPackageSyncDataTypeController
-    : public sync_driver::UIDataTypeController,
-      public ArcAppListPrefs::Observer {
+class ArcPackageSyncDataTypeController : public syncer::UIDataTypeController,
+                                         public ArcAppListPrefs::Observer {
  public:
+  // |dump_stack| is called when an unrecoverable error occurs.
   ArcPackageSyncDataTypeController(syncer::ModelType type,
-                                   const base::Closure& error_callback,
-                                   sync_driver::SyncClient* sync_client,
+                                   const base::Closure& dump_stack,
+                                   syncer::SyncClient* sync_client,
                                    Profile* profile);
+  ~ArcPackageSyncDataTypeController() override;
 
   // UIDataTypeController override:
   bool ReadyForStart() const override;
@@ -34,9 +35,7 @@ class ArcPackageSyncDataTypeController
   void StopModels() override;
 
  private:
-  // DataTypeController is RefCounted.
-  ~ArcPackageSyncDataTypeController() override;
-
+  // ArcAppListPrefs::Observer:
   void OnPackageListInitialRefreshed() override;
 
   void OnArcEnabledPrefChanged();
@@ -49,7 +48,7 @@ class ArcPackageSyncDataTypeController
 
   Profile* const profile_;
 
-  sync_driver::SyncClient* sync_client_;
+  syncer::SyncClient* sync_client_;
 
   PrefChangeRegistrar pref_registrar_;
 

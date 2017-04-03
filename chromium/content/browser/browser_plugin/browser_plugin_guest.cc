@@ -15,12 +15,10 @@
 #include "build/build_config.h"
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_manager.h"
-#include "components/guest_view/browser/guest_view_base.h"
 #include "content/browser/browser_plugin/browser_plugin_embedder.h"
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/compositor/surface_utils.h"
-#include "content/browser/frame_host/interstitial_page_impl.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/frame_host/render_frame_proxy_host.h"
 #include "content/browser/frame_host/render_widget_host_view_child_frame.h"
@@ -44,19 +42,22 @@
 #include "content/public/browser/browser_plugin_guest_manager.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/guest_host.h"
+#include "content/public/browser/guest_mode.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "content/public/common/browser_plugin_guest_mode.h"
 #include "content/public/common/drop_data.h"
-#include "extensions/browser/guest_view/web_view/web_view_permission_types.h"
 #include "ui/gfx/geometry/size_conversions.h"
 
 #if defined(OS_MACOSX)
 #include "content/browser/browser_plugin/browser_plugin_popup_menu_helper_mac.h"
 #include "content/common/frame_messages.h"
 #endif
+
+#include "components/guest_view/browser/guest_view_base.h"
+#include "content/browser/frame_host/interstitial_page_impl.h"
+#include "extensions/browser/guest_view/web_view/web_view_permission_types.h"
 
 namespace content {
 
@@ -109,6 +110,7 @@ BrowserPluginGuest::BrowserPluginGuest(bool has_render_view,
       ignore_dragged_url_(true),
       delegate_(delegate),
       guest_routing_id_(MSG_ROUTING_NONE),
+      can_use_cross_process_frames_(delegate->CanUseCrossProcessFrames()),
       weak_ptr_factory_(this) {
   DCHECK(web_contents);
   DCHECK(delegate);
@@ -118,7 +120,7 @@ BrowserPluginGuest::BrowserPluginGuest(bool has_render_view,
 }
 
 int BrowserPluginGuest::GetGuestProxyRoutingID() {
-  if (BrowserPluginGuestMode::UseCrossProcessFramesForGuests()) {
+  if (GuestMode::IsCrossProcessFrameGuest(GetWebContents())) {
     // We don't use the proxy to send postMessage in --site-per-process, since
     // we use the contentWindow directly from the frame element instead.
     return MSG_ROUTING_NONE;
@@ -268,8 +270,11 @@ bool BrowserPluginGuest::OnMessageReceivedFromEmbedder(
                         OnExecuteEditCommand)
     IPC_MESSAGE_HANDLER(BrowserPluginHostMsg_ExtendSelectionAndDelete,
                         OnExtendSelectionAndDelete)
-    IPC_MESSAGE_HANDLER(BrowserPluginHostMsg_ImeConfirmComposition,
-                        OnImeConfirmComposition)
+    IPC_MESSAGE_HANDLER(BrowserPluginHostMsg_ImeCommitText, OnImeCommitText)
+
+    IPC_MESSAGE_HANDLER(BrowserPluginHostMsg_ImeFinishComposingText,
+                        OnImeFinishComposingText)
+
     IPC_MESSAGE_HANDLER(BrowserPluginHostMsg_ImeSetComposition,
                         OnImeSetComposition)
     IPC_MESSAGE_HANDLER(BrowserPluginHostMsg_LockMouse_ACK, OnLockMouseAck)
@@ -302,7 +307,7 @@ void BrowserPluginGuest::InitInternal(
 
   if (owner_web_contents_ != owner_web_contents) {
     WebContentsViewGuest* new_view = nullptr;
-    if (!BrowserPluginGuestMode::UseCrossProcessFramesForGuests()) {
+    if (!GuestMode::IsCrossProcessFrameGuest(GetWebContents())) {
       new_view =
           static_cast<WebContentsViewGuest*>(GetWebContents()->GetView());
     }
@@ -422,7 +427,7 @@ void BrowserPluginGuest::OnSatisfySequence(
   std::vector<uint32_t> sequences;
   sequences.push_back(sequence.sequence);
   cc::SurfaceManager* manager = GetSurfaceManager();
-  manager->DidSatisfySequences(sequence.client_id, &sequences);
+  manager->DidSatisfySequences(sequence.frame_sink_id, &sequences);
 }
 
 void BrowserPluginGuest::OnRequireSequence(
@@ -514,7 +519,7 @@ void BrowserPluginGuest::SendMessageToEmbedder(IPC::Message* msg) {
 
 void BrowserPluginGuest::DragSourceEndedAt(int client_x, int client_y,
     int screen_x, int screen_y, blink::WebDragOperation operation) {
-  GetRenderViewHost()->DragSourceEndedAt(client_x, client_y,
+    web_contents()->GetRenderViewHost()->DragSourceEndedAt(client_x, client_y,
       screen_x, screen_y, operation);
   seen_embedder_drag_source_ended_at_ = true;
   EndSystemDragIfApplicable();
@@ -638,7 +643,7 @@ void BrowserPluginGuest::DidCommitProvisionalLoadForFrame(
 }
 
 void BrowserPluginGuest::RenderViewReady() {
-  RenderViewHost* rvh = GetRenderViewHost();
+  RenderViewHost* rvh = GetWebContents()->GetRenderViewHost();
   // TODO(fsamuel): Investigate whether it's possible to update state earlier
   // here (see http://crbug.com/158151).
   Send(new InputMsg_SetFocus(routing_id(), focused_));
@@ -694,9 +699,8 @@ bool BrowserPluginGuest::OnMessageReceived(const IPC::Message& message) {
   // TODO(lazyboy): Fix this as part of http://crbug.com/330264. The required
   // parts of code from this class should be extracted to a separate class for
   // --site-per-process.
-  if (BrowserPluginGuestMode::UseCrossProcessFramesForGuests()) {
+  if (GuestMode::IsCrossProcessFrameGuest(GetWebContents()))
     return false;
-  }
 
   IPC_BEGIN_MESSAGE_MAP(BrowserPluginGuest, message)
     IPC_MESSAGE_HANDLER(InputHostMsg_ImeCancelComposition,
@@ -791,7 +795,7 @@ void BrowserPluginGuest::OnWillAttachComplete(
   RenderWidgetHostViewGuest* rwhv = static_cast<RenderWidgetHostViewGuest*>(
       web_contents()->GetRenderWidgetHostView());
   if (rwhv)
-    rwhv->RegisterSurfaceNamespaceId();
+    rwhv->RegisterFrameSinkId();
   has_render_view_ = true;
 
   RecordAction(base::UserMetricsAction("BrowserPlugin.Guest.Attached"));
@@ -810,7 +814,7 @@ void BrowserPluginGuest::OnDetach(int browser_plugin_instance_id) {
           web_contents()->GetRenderWidgetHostView());
   // If the guest is terminated, our host may already be gone.
   if (rwhv)
-    rwhv->UnregisterSurfaceNamespaceId();
+    rwhv->UnregisterFrameSinkId();
 
   delegate_->DidDetach();
 }
@@ -880,14 +884,16 @@ void BrowserPluginGuest::OnImeSetComposition(
                                       selection_start, selection_end));
 }
 
-void BrowserPluginGuest::OnImeConfirmComposition(
-    int browser_plugin_instance_id,
-    const std::string& text,
-    bool keep_selection) {
-  Send(new InputMsg_ImeConfirmComposition(routing_id(),
-                                          base::UTF8ToUTF16(text),
-                                          gfx::Range::InvalidRange(),
-                                          keep_selection));
+void BrowserPluginGuest::OnImeCommitText(int browser_plugin_instance_id,
+                                         const std::string& text,
+                                         int relative_cursor_pos) {
+  Send(new InputMsg_ImeCommitText(routing_id(), base::UTF8ToUTF16(text),
+                                  gfx::Range::InvalidRange(),
+                                  relative_cursor_pos));
+}
+
+void BrowserPluginGuest::OnImeFinishComposingText(bool keep_selection) {
+  Send(new InputMsg_ImeFinishComposingText(routing_id(), keep_selection));
 }
 
 void BrowserPluginGuest::OnExtendSelectionAndDelete(
@@ -945,7 +951,7 @@ void BrowserPluginGuest::OnSetEditCommandsForNextKeyEvent(
 void BrowserPluginGuest::OnSetVisibility(int browser_plugin_instance_id,
                                          bool visible) {
   // For OOPIF-<webivew>, the remote frame will handle visibility state.
-  if (BrowserPluginGuestMode::UseCrossProcessFramesForGuests())
+  if (GuestMode::IsCrossProcessFrameGuest(GetWebContents()))
     return;
 
   guest_visible_ = visible;
@@ -1044,35 +1050,5 @@ void BrowserPluginGuest::SetContextMenuPosition(const gfx::Point& position) {
   if (delegate_)
     delegate_->SetContextMenuPosition(position);
 }
-
-RenderViewHost* BrowserPluginGuest::GetRenderViewHost() const {
-  WebContentsImpl* web_contents = GetWebContents();
-  if (web_contents->ShowingInterstitialPage()) {
-    // gisli@vivaldi.com:  If we are showing an interstitial page we must return its rvh here
-    // as otherwise the page will not interact correctly.  This is method used for example by
-    // BrowserPluginGuest to get the rvh.
-    return static_cast<InterstitialPageImpl *>(web_contents->GetInterstitialPage())->GetMainFrame()->GetRenderViewHost();
-  }
-
-  return web_contents->GetRenderViewHost();
-}
-
-RenderWidgetHostView* BrowserPluginGuest::GetRenderWidgetHostView() const {
-  WebContentsImpl* web_contents = GetWebContents();
-  if (web_contents->ShowingInterstitialPage()) {
-    // gisli@vivaldi.com:  If we are showing an interstitial page we must return its rvh here
-    // as otherwise the page will not interact correctly.  This is method used for example by
-    // BrowserPluginGuest to get the rvh.
-    return static_cast<InterstitialPageImpl *>(web_contents->GetInterstitialPage())->GetView();
-  }
-
-  return web_contents->GetRenderWidgetHostView();
-}
-
-WebContentsView* BrowserPluginGuest::GetView() const {
-  // gisli@vivaldi.com:  This is the same view for both normal and interstitial pages.
-  return GetWebContents()->GetView();
-}
-
 
 }  // namespace content

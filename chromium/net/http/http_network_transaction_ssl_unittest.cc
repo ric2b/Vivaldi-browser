@@ -19,6 +19,7 @@
 #include "net/http/http_request_info.h"
 #include "net/http/http_server_properties_impl.h"
 #include "net/http/transport_security_state.h"
+#include "net/log/net_log_with_source.h"
 #include "net/proxy/proxy_service.h"
 #include "net/socket/socket_test_util.h"
 #include "net/ssl/default_channel_id_store.h"
@@ -149,7 +150,7 @@ TEST_F(HttpNetworkTransactionSSLTest, TokenBinding) {
   TestCompletionCallback callback;
   int rv = callback.GetResult(
       trans1.Start(GetRequestInfo("https://www.example.com/"),
-                   callback.callback(), BoundNetLog()));
+                   callback.callback(), NetLogWithSource()));
   EXPECT_THAT(rv, IsOk());
 
   HttpRequestHeaders headers1;
@@ -167,7 +168,7 @@ TEST_F(HttpNetworkTransactionSSLTest, TokenBinding) {
 
   rv = callback.GetResult(
       trans2.Start(GetRequestInfo("https://www.example.com/"),
-                   callback.callback(), BoundNetLog()));
+                   callback.callback(), NetLogWithSource()));
   EXPECT_THAT(rv, IsOk());
 
   HttpRequestHeaders headers2;
@@ -201,7 +202,7 @@ TEST_F(HttpNetworkTransactionSSLTest, NoTokenBindingOverHttp) {
   TestCompletionCallback callback;
   int rv =
       callback.GetResult(trans.Start(GetRequestInfo("http://www.example.com/"),
-                                     callback.callback(), BoundNetLog()));
+                                     callback.callback(), NetLogWithSource()));
   EXPECT_THAT(rv, IsOk());
 
   HttpRequestHeaders headers;

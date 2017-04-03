@@ -13,11 +13,14 @@
 class RegistryHashStoreContentsWin : public HashStoreContents {
  public:
   // Constructs a RegistryHashStoreContents which acts on a registry entry
-  // defined by |registry_path| and |profile_name|.
+  // defined by |registry_path| and |store_key|.
   explicit RegistryHashStoreContentsWin(const base::string16& registry_path,
-                                        const base::string16& profile_name);
+                                        const base::string16& store_key);
 
   // HashStoreContents overrides:
+  bool IsCopyable() const override;
+  std::unique_ptr<HashStoreContents> MakeCopy() const override;
+  base::StringPiece GetUMASuffix() const override;
   void Reset() override;
   bool GetMac(const std::string& path, std::string* out_value) override;
   bool GetSplitMacs(const std::string& path,
@@ -36,9 +39,11 @@ class RegistryHashStoreContentsWin : public HashStoreContents {
   void SetSuperMac(const std::string& super_mac) override;
 
  private:
-  const base::string16 preference_key_name_;
+  // Helper constructor for |MakeCopy|.
+  explicit RegistryHashStoreContentsWin(
+      const RegistryHashStoreContentsWin& other);
 
-  DISALLOW_COPY_AND_ASSIGN(RegistryHashStoreContentsWin);
+  const base::string16 preference_key_name_;
 };
 
 #endif  // COMPONENTS_USER_PREFS_TRACKED_PREF_REGISTRY_HASH_STORE_CONTENTS_H_

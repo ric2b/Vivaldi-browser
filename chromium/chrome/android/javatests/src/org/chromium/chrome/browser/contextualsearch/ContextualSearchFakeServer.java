@@ -144,7 +144,8 @@ class ContextualSearchFakeServer
         private final int mStartAdjust;
         private final int mEndAdjust;
         private final String mContextLanguage;
-
+        private final String mThumbnailUrl;
+        private final String mCaption;
 
         boolean mDidStartResolution;
         boolean mDidFinishResolution;
@@ -161,10 +162,13 @@ class ContextualSearchFakeServer
          * @param startAdjust           The start adjustment of the selection.
          * @param endAdjust             The end adjustment of the selection.
          * @param contextLanguage       The language of the context determined by the server.
+         * @param thumbnailUrl          The URL of a thumbnail to display.
+         * @param caption               The caption to display.
          */
         FakeTapSearch(String nodeId, boolean isNetworkUnavailable, int responseCode,
                 String searchTerm, String displayText, String alternateTerm, String mid,
-                boolean doPreventPreload, int startAdjust, int endAdjust, String contextLanguage) {
+                boolean doPreventPreload, int startAdjust, int endAdjust, String contextLanguage,
+                String thumbnailUrl, String caption) {
             super(nodeId);
 
             mIsNetworkUnavailable = isNetworkUnavailable;
@@ -177,6 +181,8 @@ class ContextualSearchFakeServer
             mStartAdjust = startAdjust;
             mEndAdjust = endAdjust;
             mContextLanguage = contextLanguage;
+            mThumbnailUrl = thumbnailUrl;
+            mCaption = caption;
         }
 
         @Override
@@ -248,7 +254,8 @@ class ContextualSearchFakeServer
                     if (!mDidFinishResolution) {
                         handleSearchTermResolutionResponse(mIsNetworkUnavailable, mResponseCode,
                                 mSearchTerm, mDisplayText, mAlternateTerm, mMid, mDoPreventPreload,
-                                mStartAdjust, mEndAdjust, mContextLanguage);
+                                mStartAdjust, mEndAdjust, mContextLanguage, mThumbnailUrl,
+                                mCaption);
 
                         mActiveFakeTapSearch = null;
                         mDidFinishResolution = true;
@@ -278,12 +285,16 @@ class ContextualSearchFakeServer
          * @param startAdjust
          * @param endAdjust
          * @param contextLanguage
+         * @param thumbnailUrl
+         * @param caption
          */
         FakeSlowResolveSearch(String nodeId, boolean isNetworkUnavailable, int responseCode,
                 String searchTerm, String displayText, String alternateTerm, String mid,
-                boolean doPreventPreload, int startAdjust, int endAdjust, String contextLanguage) {
+                boolean doPreventPreload, int startAdjust, int endAdjust, String contextLanguage,
+                String thumbnailUrl, String caption) {
             super(nodeId, isNetworkUnavailable, responseCode, searchTerm, displayText,
-                    alternateTerm, mid, doPreventPreload, startAdjust, endAdjust, contextLanguage);
+                    alternateTerm, mid, doPreventPreload, startAdjust, endAdjust, contextLanguage,
+                    thumbnailUrl, caption);
         }
 
         @Override
@@ -364,7 +375,7 @@ class ContextualSearchFakeServer
         private boolean mIsVisible;
 
         ContentViewCoreWrapper(ChromeActivity activity) {
-            super(activity);
+            super(activity, "");
         }
 
         @Override
@@ -505,10 +516,10 @@ class ContextualSearchFakeServer
     public void handleSearchTermResolutionResponse(boolean isNetworkUnavailable, int responseCode,
             String searchTerm, String displayText, String alternateTerm, String mid,
             boolean doPreventPreload, int selectionStartAdjust, int selectionEndAdjust,
-            String contextLanguage) {
+            String contextLanguage, String thumbnailUrl, String caption) {
         mBaseManager.handleSearchTermResolutionResponse(isNetworkUnavailable, responseCode,
                 searchTerm, displayText, alternateTerm, mid, doPreventPreload, selectionStartAdjust,
-                selectionEndAdjust, contextLanguage);
+                selectionEndAdjust, contextLanguage, thumbnailUrl, caption);
     }
 
     @Override
@@ -541,16 +552,19 @@ class ContextualSearchFakeServer
         registerFakeLongPressSearch(new FakeLongPressSearch("resolution", "Resolution"));
 
         registerFakeTapSearch(new FakeTapSearch(
-                "search", false, 200, "Search", "Search", "alternate-term", "", false, 0, 0, ""));
+                "search", false, 200, "Search", "Search", "alternate-term", "", false, 0, 0, "",
+                "", ""));
         registerFakeTapSearch(new FakeTapSearch(
-                "term", false, 200, "Term", "Term", "alternate-term", "", false, 0, 0, ""));
+                "term", false, 200, "Term", "Term", "alternate-term", "", false, 0, 0, "",
+                "", ""));
         registerFakeTapSearch(new FakeTapSearch("resolution", false, 200, "Resolution",
-                "Resolution", "alternate-term", "", false, 0, 0, ""));
+                "Resolution", "alternate-term", "", false, 0, 0, "", "", ""));
         registerFakeTapSearch(new FakeTapSearch("german", false, 200, "Deutsche", "Deutsche",
-                "alternate-term", "", false, 0, 0, "de"));
+                "alternate-term", "", false, 0, 0, "de", "", ""));
 
         registerFakeSlowResolveSearch(new FakeSlowResolveSearch(
-                "search", false, 200, "Search", "Search", "alternate-term", "", false, 0, 0, ""));
+                "search", false, 200, "Search", "Search", "alternate-term", "", false, 0, 0, "",
+                "", ""));
     }
 
     /**

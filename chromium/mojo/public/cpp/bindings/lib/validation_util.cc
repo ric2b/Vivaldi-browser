@@ -46,20 +46,17 @@ bool ValidateStructHeaderAndClaimMemory(const void* data,
   return true;
 }
 
-bool ValidateUnionHeaderAndClaimMemory(const void* data,
-                                       bool inlined,
-                                       ValidationContext* validation_context) {
+bool ValidateNonInlinedUnionHeaderAndClaimMemory(
+    const void* data,
+    ValidationContext* validation_context) {
   if (!IsAligned(data)) {
     ReportValidationError(validation_context,
                           VALIDATION_ERROR_MISALIGNED_OBJECT);
     return false;
   }
 
-  // If the union is inlined in another structure its memory was already
-  // claimed.
-  // This ONLY applies to the union itself, NOT anything which the union points
-  // to.
-  if (!inlined && !validation_context->ClaimMemory(data, kUnionDataSize)) {
+  if (!validation_context->ClaimMemory(data, kUnionDataSize) ||
+      *static_cast<const uint32_t*>(data) != kUnionDataSize) {
     ReportValidationError(validation_context,
                           VALIDATION_ERROR_ILLEGAL_MEMORY_RANGE);
     return false;
@@ -101,35 +98,6 @@ bool ValidateMessageIsResponse(const Message* message,
     return false;
   }
   return true;
-}
-
-bool ValidateControlRequest(const Message* message,
-                            ValidationContext* validation_context) {
-  switch (message->header()->name) {
-    case kRunMessageId:
-      return ValidateMessageIsRequestExpectingResponse(message,
-                                                       validation_context) &&
-             ValidateMessagePayload<RunMessageParams_Data>(message,
-                                                           validation_context);
-    case kRunOrClosePipeMessageId:
-      return ValidateMessageIsRequestWithoutResponse(message,
-                                                     validation_context) &&
-          ValidateMessagePayload<RunOrClosePipeMessageParams_Data>(
-              message, validation_context);
-  }
-  return false;
-}
-
-bool ValidateControlResponse(const Message* message,
-                             ValidationContext* validation_context) {
-  if (!ValidateMessageIsResponse(message, validation_context))
-    return false;
-  switch (message->header()->name) {
-    case kRunMessageId:
-      return ValidateMessagePayload<RunResponseMessageParams_Data>(
-          message, validation_context);
-  }
-  return false;
 }
 
 bool IsHandleOrInterfaceValid(const AssociatedInterface_Data& input) {

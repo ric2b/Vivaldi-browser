@@ -10,6 +10,7 @@
 
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
+#include "base/logging.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/worker_pool.h"
@@ -153,11 +154,11 @@ void WallpaperSetWallpaperFunction::OnWallpaperDecoded(
       wallpaper::kThumbnailWallpaperSubDir, wallpaper_files_id_,
       params_->details.filename);
 
-  sequence_token_ = BrowserThread::GetBlockingPool()->GetNamedSequenceToken(
-      wallpaper::kWallpaperSequenceTokenName);
   scoped_refptr<base::SequencedTaskRunner> task_runner =
-      BrowserThread::GetBlockingPool()->
-          GetSequencedTaskRunnerWithShutdownBehavior(sequence_token_,
+      BrowserThread::GetBlockingPool()
+          ->GetSequencedTaskRunnerWithShutdownBehavior(
+              BrowserThread::GetBlockingPool()->GetNamedSequenceToken(
+                  wallpaper::kWallpaperSequenceTokenName),
               base::SequencedWorkerPool::BLOCK_SHUTDOWN);
   wallpaper::WallpaperLayout layout = wallpaper_api_util::GetLayoutEnum(
       extensions::api::wallpaper::ToString(params_->details.layout));
@@ -203,8 +204,7 @@ void WallpaperSetWallpaperFunction::OnWallpaperDecoded(
 void WallpaperSetWallpaperFunction::GenerateThumbnail(
     const base::FilePath& thumbnail_path,
     std::unique_ptr<gfx::ImageSkia> image) {
-  DCHECK(BrowserThread::GetBlockingPool()->IsRunningSequenceOnCurrentThread(
-      sequence_token_));
+  wallpaper::AssertCalledOnWallpaperSequence();
   if (!base::PathExists(thumbnail_path.DirName()))
     base::CreateDirectory(thumbnail_path.DirName());
 
@@ -250,8 +250,8 @@ void WallpaperSetWallpaperFunction::ThumbnailGenerated(
     std::unique_ptr<base::ListValue> event_args(new base::ListValue());
     event_args->Append(original_result->DeepCopy());
     event_args->Append(thumbnail_result->DeepCopy());
-    event_args->Append(new base::StringValue(
-        extensions::api::wallpaper::ToString(params_->details.layout)));
+    event_args->AppendString(
+        extensions::api::wallpaper::ToString(params_->details.layout));
     // Setting wallpaper from right click menu in 'Files' app is a feature that
     // was implemented in crbug.com/578935. Since 'Files' app is a built-in v1
     // app in ChromeOS, we should treat it slightly differently with other third
@@ -259,10 +259,10 @@ void WallpaperSetWallpaperFunction::ThumbnailGenerated(
     // and it should not appear in the wallpaper grid in the Wallpaper Picker.
     // But we should not display the 'wallpaper-set-by-mesage' since it might
     // introduce confusion as shown in crbug.com/599407.
-    event_args->Append(new base::StringValue(
+    event_args->AppendString(
         (extension()->id() == file_manager::kFileManagerAppId)
             ? std::string()
-            : extension()->name()));
+            : extension()->name());
     std::unique_ptr<extensions::Event> event(new extensions::Event(
         extensions::events::WALLPAPER_PRIVATE_ON_WALLPAPER_CHANGED_BY_3RD_PARTY,
         extensions::api::wallpaper_private::OnWallpaperChangedBy3rdParty::

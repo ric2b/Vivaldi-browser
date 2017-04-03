@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
+#include "net/base/net_export.h"
 #include "net/base/privacy_mode.h"
 #include "net/http/http_response_info.h"
 #include "net/socket/client_socket_pool.h"
@@ -207,12 +208,12 @@ class NET_EXPORT_PRIVATE SSLClientSocketPool
                     RespectLimits respect_limits,
                     ClientSocketHandle* handle,
                     const CompletionCallback& callback,
-                    const BoundNetLog& net_log) override;
+                    const NetLogWithSource& net_log) override;
 
   void RequestSockets(const std::string& group_name,
                       const void* params,
                       int num_sockets,
-                      const BoundNetLog& net_log) override;
+                      const NetLogWithSource& net_log) override;
 
   void CancelRequest(const std::string& group_name,
                      ClientSocketHandle* handle) override;

@@ -44,11 +44,6 @@ class OfflinePageBridge : public OfflinePageModel::Observer,
   void OfflinePageDeleted(int64_t offline_id,
                           const ClientId& client_id) override;
 
-  void HasPages(JNIEnv* env,
-                const base::android::JavaParamRef<jobject>& obj,
-                const base::android::JavaParamRef<jstring>& name_space,
-                const base::android::JavaParamRef<jobject>& j_callback_obj);
-
   void CheckPagesExistOffline(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
@@ -78,12 +73,6 @@ class OfflinePageBridge : public OfflinePageModel::Observer,
       int tab_id,
       const base::android::JavaParamRef<jobject>& j_callback_obj);
 
-  void GetPageByOfflineUrl(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
-      const base::android::JavaParamRef<jstring>& j_offline_url,
-      const base::android::JavaParamRef<jobject>& j_callback_obj);
-
   void SavePage(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
@@ -104,10 +93,6 @@ class OfflinePageBridge : public OfflinePageModel::Observer,
       const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jobject>& j_callback_obj,
       const base::android::JavaParamRef<jlongArray>& j_offline_ids_array);
-
-  void CheckMetadataConsistency(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj);
 
   base::android::ScopedJavaLocalRef<jstring> GetOfflinePageHeaderForReload(
       JNIEnv* env,

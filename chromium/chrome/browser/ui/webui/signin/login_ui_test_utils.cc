@@ -11,7 +11,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/signin_view_controller_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/webui/signin/get_auth_frame.h"
+#include "chrome/browser/ui/webui/signin/signin_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
@@ -232,10 +232,8 @@ bool SignInWithUI(Browser* browser,
   // we use NEW_FOREGROUND_TAB rather than the CURRENT_TAB used by default in
   // ui_test_utils::NavigateToURL().
   ui_test_utils::NavigateToURLWithDisposition(
-        browser,
-        signin_url,
-        NEW_FOREGROUND_TAB,
-        ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      browser, signin_url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
 
   DVLOG(1) << "Wait for login UI to be ready.";
   WaitUntilUIReady(browser);

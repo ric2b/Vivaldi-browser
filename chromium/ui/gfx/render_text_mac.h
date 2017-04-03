@@ -12,7 +12,6 @@
 #include <string>
 #include <vector>
 
-#include "base/gtest_prod_util.h"
 #include "base/mac/scoped_cftyperef.h"
 #include "base/macros.h"
 #include "ui/gfx/gfx_export.h"
@@ -60,7 +59,7 @@ class GFX_EXPORT RenderTextMac : public RenderText {
   void DrawVisualText(internal::SkiaTextRenderer* renderer) override;
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(RenderTextTest, Mac_ElidedText);
+  friend class RenderTextMacTest;
 
   struct TextRun {
     CTRunRef ct_run;
@@ -108,6 +107,10 @@ class GFX_EXPORT RenderTextMac : public RenderText {
 
   // Clears cached style. Doesn't update display text (e.g. eliding).
   void InvalidateStyle();
+
+  // RenderText:
+  bool GetDecoratedTextForRange(const Range& range,
+                                DecoratedText* decorated_text) override;
 
   // The Core Text line of text. Created by |EnsureLayout()|.
   base::ScopedCFTypeRef<CTLineRef> line_;

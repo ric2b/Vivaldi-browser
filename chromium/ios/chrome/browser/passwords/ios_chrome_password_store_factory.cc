@@ -9,7 +9,7 @@
 
 #include "base/command_line.h"
 #include "base/memory/singleton.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
 #include "components/password_manager/core/browser/affiliated_match_helper.h"
@@ -51,7 +51,7 @@ void IOSChromePasswordStoreFactory::OnPasswordsSyncedStatePotentiallyChanged(
     ios::ChromeBrowserState* browser_state) {
   scoped_refptr<password_manager::PasswordStore> password_store =
       GetForBrowserState(browser_state, ServiceAccessType::EXPLICIT_ACCESS);
-  sync_driver::SyncService* sync_service =
+  syncer::SyncService* sync_service =
       IOSChromeProfileSyncServiceFactory::GetForBrowserStateIfExists(
           browser_state);
   net::URLRequestContextGetter* request_context_getter =

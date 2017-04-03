@@ -22,7 +22,7 @@ class SerializationUtilsTest : public testing::Test {
   SerializationUtilsTest() {
     bool success = temporary_dir.CreateUniqueTempDir();
     if (success) {
-      base::FilePath dir_path = temporary_dir.path();
+      base::FilePath dir_path = temporary_dir.GetPath();
       filename = dir_path.value() + "chromeossampletest";
       filepath = base::FilePath(filename);
     }
@@ -154,8 +154,8 @@ TEST_F(SerializationUtilsTest, WriteReadTest) {
   ScopedVector<MetricSample> vect;
   SerializationUtils::ReadAndTruncateMetricsFromFile(filename, &vect);
   ASSERT_EQ(vect.size(), size_t(5));
-  for (int i = 0; i < 5; i++) {
-    ASSERT_TRUE(vect[0] != NULL);
+  for (MetricSample* sample : vect) {
+    ASSERT_NE(nullptr, sample);
   }
   EXPECT_TRUE(hist->IsEqual(*vect[0]));
   EXPECT_TRUE(crash->IsEqual(*vect[1]));

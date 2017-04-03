@@ -39,27 +39,33 @@
 namespace blink {
 
 WebRange::WebRange(int start, int length)
-    : m_start(start)
-    , m_end(start + length)
-{
-    DCHECK(start != -1 && length != 0) << "These values are reserved to indicate that the range is null";
+    : m_start(start), m_end(start + length) {
+  DCHECK(start != -1 || length != 0)
+      << "These values are reserved to indicate that the range is null";
 }
 
-WebRange::WebRange(const EphemeralRange& range)
-{
-    if (range.isNull())
-        return;
+WebRange::WebRange(const EphemeralRange& range) {
+  if (range.isNull())
+    return;
 
-    m_start = range.startPosition().computeOffsetInContainerNode();
-    m_end =range.endPosition().computeOffsetInContainerNode();
+  m_start = range.startPosition().computeOffsetInContainerNode();
+  m_end = range.endPosition().computeOffsetInContainerNode();
 }
 
-EphemeralRange WebRange::createEphemeralRange(LocalFrame* frame) const
-{
-    Element* selectionRoot = frame->selection().rootEditableElement();
-    ContainerNode* scope = selectionRoot ? selectionRoot : frame->document()->documentElement();
+WebRange::WebRange(const PlainTextRange& range) {
+  if (range.isNull())
+    return;
 
-    return PlainTextRange(m_start, m_end).createRange(*scope);
+  m_start = range.start();
+  m_end = range.end();
 }
 
-} // namespace blink
+EphemeralRange WebRange::createEphemeralRange(LocalFrame* frame) const {
+  Element* selectionRoot = frame->selection().rootEditableElement();
+  ContainerNode* scope =
+      selectionRoot ? selectionRoot : frame->document()->documentElement();
+
+  return PlainTextRange(m_start, m_end).createRange(*scope);
+}
+
+}  // namespace blink

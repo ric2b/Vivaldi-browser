@@ -20,6 +20,7 @@
 #include "chrome/browser/devtools/devtools_network_upload_data_stream.h"
 #include "net/base/chunked_upload_data_stream.h"
 #include "net/http/http_transaction_test_util.h"
+#include "net/log/net_log_with_source.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -94,8 +95,8 @@ class DevToolsNetworkControllerHelper {
       request_->upload_data_stream = upload_data_stream_.get();
     }
 
-    int rv = transaction_->Start(
-        request_.get(), completion_callback_, net::BoundNetLog());
+    int rv = transaction_->Start(request_.get(), completion_callback_,
+                                 net::NetLogWithSource());
     EXPECT_EQ(with_upload, !!transaction_->custom_upload_data_stream_);
     return rv;
   }
@@ -127,7 +128,7 @@ class DevToolsNetworkControllerHelper {
 
   int ReadUploadData() {
     EXPECT_EQ(net::OK, transaction_->custom_upload_data_stream_->Init(
-                           completion_callback_, net::BoundNetLog()));
+                           completion_callback_, net::NetLogWithSource()));
     return transaction_->custom_upload_data_stream_->Read(
         buffer_.get(), 64, completion_callback_);
   }

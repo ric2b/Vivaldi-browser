@@ -108,14 +108,14 @@ class MediaGalleriesPlatformAppBrowserTest : public PlatformAppBrowserTest {
     if (!temp_dir.CreateUniqueTempDir())
       return false;
 
-    if (!base::CopyDirectory(from_dir, temp_dir.path(), true))
+    if (!base::CopyDirectory(from_dir, temp_dir.GetPath(), true))
       return false;
 
     base::FilePath common_js_path(
         GetCommonDataDir().AppendASCII("common_injected.js"));
-    base::FilePath inject_js_path(
-        temp_dir.path().AppendASCII(extension_name)
-                       .AppendASCII("common_injected.js"));
+    base::FilePath inject_js_path(temp_dir.GetPath()
+                                      .AppendASCII(extension_name)
+                                      .AppendASCII("common_injected.js"));
     if (!base::CopyFile(common_js_path, inject_js_path))
       return false;
 
@@ -126,7 +126,7 @@ class MediaGalleriesPlatformAppBrowserTest : public PlatformAppBrowserTest {
       custom_arg = json_string.c_str();
     }
 
-    base::AutoReset<base::FilePath> reset(&test_data_dir_, temp_dir.path());
+    base::AutoReset<base::FilePath> reset(&test_data_dir_, temp_dir.GetPath());
     bool result = RunPlatformAppTestWithArg(extension_name, custom_arg);
     content::RunAllPendingInMessageLoop();  // avoid race on exit in registry.
     return result;
@@ -170,8 +170,8 @@ class MediaGalleriesPlatformAppBrowserTest : public PlatformAppBrowserTest {
     MediaGalleriesPreferences* preferences = GetAndInitializePreferences();
 
     MediaGalleryPrefInfo gallery_info;
-    ASSERT_FALSE(preferences->LookUpGalleryByPath(fake_gallery_temp_dir_.path(),
-                                                  &gallery_info));
+    ASSERT_FALSE(preferences->LookUpGalleryByPath(
+        fake_gallery_temp_dir_.GetPath(), &gallery_info));
     MediaGalleryPrefId id = preferences->AddGallery(
         gallery_info.device_id,
         gallery_info.path,
@@ -199,7 +199,7 @@ class MediaGalleriesPlatformAppBrowserTest : public PlatformAppBrowserTest {
 
     ASSERT_TRUE(base::CopyFile(
         source_path,
-        fake_gallery_temp_dir_.path().Append(source_path.BaseName())));
+        fake_gallery_temp_dir_.GetPath().Append(source_path.BaseName())));
   }
 
 #if defined(OS_WIN) || defined(OS_MACOSX)
@@ -304,9 +304,9 @@ IN_PROC_BROWSER_TEST_F(MediaGalleriesPlatformAppPpapiTest, SendFilesystem) {
   ASSERT_TRUE(extension);
 
   extensions::ResultCatcher catcher;
-  AppLaunchParams params(browser()->profile(), extension,
-                         extensions::LAUNCH_CONTAINER_NONE, NEW_WINDOW,
-                         extensions::SOURCE_TEST);
+  AppLaunchParams params(
+      browser()->profile(), extension, extensions::LAUNCH_CONTAINER_NONE,
+      WindowOpenDisposition::NEW_WINDOW, extensions::SOURCE_TEST);
   params.command_line = *base::CommandLine::ForCurrentProcess();
   OpenApplication(params);
 
@@ -426,8 +426,8 @@ IN_PROC_BROWSER_TEST_F(MediaGalleriesPlatformAppBrowserTest,
   base::ScopedTempDir custom_picasa_app_data_root;
   ASSERT_TRUE(custom_picasa_app_data_root.CreateUniqueTempDir());
   ensure_media_directories_exists()->SetCustomPicasaAppDataPath(
-      custom_picasa_app_data_root.path());
-  PopulatePicasaTestData(custom_picasa_app_data_root.path());
+      custom_picasa_app_data_root.GetPath());
+  PopulatePicasaTestData(custom_picasa_app_data_root.GetPath());
 
   base::ListValue custom_args;
   custom_args.AppendInteger(test_jpg_size());

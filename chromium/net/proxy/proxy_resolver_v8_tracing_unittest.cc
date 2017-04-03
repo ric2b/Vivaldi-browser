@@ -20,7 +20,7 @@
 #include "net/base/test_completion_callback.h"
 #include "net/dns/host_cache.h"
 #include "net/dns/mock_host_resolver.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 #include "net/proxy/proxy_info.h"
 #include "net/test/event_waiter.h"
 #include "net/test/gtest_util.h"
@@ -95,7 +95,7 @@ class MockBindings {
   }
 
   std::unique_ptr<ProxyResolverV8Tracing::Bindings> CreateBindings() {
-    return base::WrapUnique(new ForwardingBindings(this));
+    return base::MakeUnique<ForwardingBindings>(this);
   }
 
  private:
@@ -114,9 +114,9 @@ class MockBindings {
       bindings_->OnError(line_number, error);
     }
 
-    BoundNetLog GetBoundNetLog() override {
+    NetLogWithSource GetNetLogWithSource() override {
       DCHECK(thread_checker_.CalledOnValidThread());
-      return BoundNetLog();
+      return NetLogWithSource();
     }
 
     HostResolver* GetHostResolver() override {
@@ -686,7 +686,7 @@ class BlockableHostResolver : public HostResolver {
               AddressList* addresses,
               const CompletionCallback& callback,
               std::unique_ptr<Request>* out_req,
-              const BoundNetLog& net_log) override {
+              const NetLogWithSource& net_log) override {
     EXPECT_FALSE(callback.is_null());
     EXPECT_TRUE(out_req);
 
@@ -709,7 +709,7 @@ class BlockableHostResolver : public HostResolver {
 
   int ResolveFromCache(const RequestInfo& info,
                        AddressList* addresses,
-                       const BoundNetLog& net_log) override {
+                       const NetLogWithSource& net_log) override {
     NOTREACHED();
     return ERR_DNS_CACHE_MISS;
   }

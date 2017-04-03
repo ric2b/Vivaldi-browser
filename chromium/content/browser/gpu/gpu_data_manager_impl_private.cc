@@ -11,7 +11,7 @@
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/metrics/field_trial.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -37,6 +37,7 @@
 #include "gpu/config/gpu_switches.h"
 #include "gpu/config/gpu_util.h"
 #include "gpu/ipc/common/memory_stats.h"
+#include "gpu/ipc/service/switches.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_switches.h"
@@ -48,9 +49,6 @@
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
 #endif  // OS_WIN
-#if defined(OS_ANDROID)
-#include "media/base/media_switches.h"
-#endif
 
 namespace content {
 
@@ -210,9 +208,6 @@ void UpdateStats(const gpu::GPUInfo& gpu_info,
     histogram_pointer->Add(GetGpuBlacklistHistogramValueWin(value));
 #endif
   }
-
-  UMA_HISTOGRAM_SPARSE_SLOWLY("GPU.GLResetNotificationStrategy",
-      gpu_info.gl_reset_notification_strategy);
 }
 
 // Combine the integers into a string, seperated by ','.
@@ -452,12 +447,6 @@ void GpuDataManagerImplPrivate::UnblockDomainFrom3DAPIs(const GURL& url) {
 
   blocked_domains_.erase(domain);
   timestamps_of_gpu_resets_.clear();
-}
-
-void GpuDataManagerImplPrivate::DisableGpuWatchdog() {
-  GpuProcessHost::SendOnIO(GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED,
-                           false /* force_create */,
-                           new GpuMsg_DisableWatchdog);
 }
 
 void GpuDataManagerImplPrivate::SetGLStrings(const std::string& gl_vendor,
@@ -704,9 +693,14 @@ void GpuDataManagerImplPrivate::AppendGpuCommandLine(
           switches::kUseGL);
   if (gpu_driver_bugs_.find(gpu::DISABLE_D3D11) != gpu_driver_bugs_.end())
     command_line->AppendSwitch(switches::kDisableD3D11);
+  if (gpu_driver_bugs_.find(gpu::DISABLE_ES3_GL_CONTEXT) !=
+      gpu_driver_bugs_.end()) {
+    command_line->AppendSwitch(switches::kDisableES3GLContext);
+  }
   if (gpu_driver_bugs_.find(gpu::DISABLE_DIRECT_COMPOSITION) !=
-      gpu_driver_bugs_.end())
+      gpu_driver_bugs_.end()) {
     command_line->AppendSwitch(switches::kDisableDirectComposition);
+  }
   if (use_swiftshader_) {
     command_line->AppendSwitchASCII(switches::kUseGL, "swiftshader");
   } else if ((IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_WEBGL) ||
@@ -746,13 +740,6 @@ void GpuDataManagerImplPrivate::AppendGpuCommandLine(
       command_line->AppendSwitch(switches::kDisableAcceleratedVideoDecode);
     }
   }
-
-#if defined(OS_ANDROID)
-  if (command_line->HasSwitch(switches::kEnableThreadedTextureMailboxes) &&
-      IsDriverBugWorkaroundActive(gpu::AVDA_NO_EGLIMAGE_FOR_LUMINANCE_TEX)) {
-    command_line->AppendSwitch(switches::kDisableUnifiedMediaPipeline);
-  }
-#endif
 
   if (gpu_driver_bugs_.find(gpu::CREATE_DEFAULT_GL_CONTEXT) !=
       gpu_driver_bugs_.end()) {
@@ -1184,13 +1171,7 @@ void GpuDataManagerImplPrivate::UpdateGpuSwitchingManager(
     vendor_ids.push_back(device.vendor_id);
   }
   ui::GpuSwitchingManager::GetInstance()->SetGpuVendorIds(vendor_ids);
-
-  if (ui::GpuSwitchingManager::GetInstance()->SupportsDualGpus()) {
-    if (gpu_driver_bugs_.count(gpu::FORCE_DISCRETE_GPU) == 1)
-      ui::GpuSwitchingManager::GetInstance()->ForceUseOfDiscreteGpu();
-    else if (gpu_driver_bugs_.count(gpu::FORCE_INTEGRATED_GPU) == 1)
-      ui::GpuSwitchingManager::GetInstance()->ForceUseOfIntegratedGpu();
-  }
+  gpu::InitializeDualGpusIfSupported(gpu_driver_bugs_);
 }
 
 void GpuDataManagerImplPrivate::NotifyGpuInfoUpdate() {
@@ -1251,11 +1232,6 @@ GpuDataManagerImplPrivate::Are3DAPIsBlockedAtTime(
     // Err on the side of caution, and assume that if a particular
     // domain shows up in the block map, it's there for a good
     // reason and don't let its presence there automatically expire.
-
-    UMA_HISTOGRAM_ENUMERATION("GPU.BlockStatusForClient3DAPIs",
-                              BLOCK_STATUS_SPECIFIC_DOMAIN_BLOCKED,
-                              BLOCK_STATUS_MAX);
-
     return GpuDataManagerImpl::DOMAIN_BLOCK_STATUS_BLOCKED;
   }
 

@@ -29,10 +29,6 @@
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/storage_partition.h"
 
-#if defined(ENABLE_BROWSER_CDMS)
-#include "media/base/media_keys.h"
-#endif
-
 namespace content {
 
 MockRenderProcessHost::MockRenderProcessHost(BrowserContext* browser_context)
@@ -132,7 +128,8 @@ void MockRenderProcessHost::RemoveObserver(
   observers_.RemoveObserver(observer);
 }
 
-void MockRenderProcessHost::ShutdownForBadMessage() {
+void MockRenderProcessHost::ShutdownForBadMessage(
+    CrashReportMode crash_report_mode) {
   ++bad_msg_count_;
 }
 
@@ -259,9 +256,6 @@ base::TimeDelta MockRenderProcessHost::GetChildProcessIdleTime() const {
   return base::TimeDelta::FromMilliseconds(0);
 }
 
-void MockRenderProcessHost::NotifyTimezoneChange(const std::string& zone_id) {
-}
-
 shell::InterfaceProvider* MockRenderProcessHost::GetRemoteInterfaces() {
   return remote_interfaces_.get();
 }
@@ -277,24 +271,32 @@ const base::TimeTicks& MockRenderProcessHost::GetInitTimeForNavigationMetrics()
   return dummy_time;
 }
 
-#if defined(ENABLE_BROWSER_CDMS)
-scoped_refptr<media::MediaKeys> MockRenderProcessHost::GetCdm(
-    int render_frame_id,
-    int cdm_id) const {
-  return nullptr;
-}
-#endif
-
 bool MockRenderProcessHost::IsProcessBackgrounded() const {
   return is_process_backgrounded_;
 }
 
-void MockRenderProcessHost::IncrementWorkerRefCount() {
+void MockRenderProcessHost::IncrementServiceWorkerRefCount() {
   ++worker_ref_count_;
 }
 
-void MockRenderProcessHost::DecrementWorkerRefCount() {
+void MockRenderProcessHost::DecrementServiceWorkerRefCount() {
   --worker_ref_count_;
+}
+
+void MockRenderProcessHost::IncrementSharedWorkerRefCount() {
+  ++worker_ref_count_;
+}
+
+void MockRenderProcessHost::DecrementSharedWorkerRefCount() {
+  --worker_ref_count_;
+}
+
+void MockRenderProcessHost::ForceReleaseWorkerRefCounts() {
+  worker_ref_count_ = 0;
+}
+
+bool MockRenderProcessHost::IsWorkerRefCountDisabled() {
+  return false;
 }
 
 void MockRenderProcessHost::PurgeAndSuspend() {}

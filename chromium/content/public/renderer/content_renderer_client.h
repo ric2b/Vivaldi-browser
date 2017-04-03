@@ -60,6 +60,10 @@ namespace cc {
 class ImageSerializationProcessor;
 }
 
+namespace gfx {
+class ICCProfile;
+}
+
 namespace media {
 class GpuVideoAcceleratorFactories;
 class KeySystemProperties;
@@ -244,6 +248,11 @@ class CONTENT_EXPORT ContentRendererClient {
                                const GURL& first_party_for_cookies,
                                GURL* new_url);
 
+  // Returns true if the request is associated with a document that is in
+  // ""prefetch only" mode, and will not be rendered.
+  virtual bool IsPrefetchOnly(RenderFrame* render_frame,
+                              const blink::WebURLRequest& request);
+
   // See blink::Platform.
   virtual unsigned long long VisitedLinkHash(const char* canonical_url,
                                              size_t length);
@@ -260,18 +269,15 @@ class CONTENT_EXPORT ContentRendererClient {
   // Returns true if the page at |url| can use Pepper MediaStream APIs.
   virtual bool AllowPepperMediaStreamAPI(const GURL& url);
 
-  // Allows an embedder to provide a media::RendererFactory.
-  virtual std::unique_ptr<media::RendererFactory> CreateMediaRendererFactory(
-      RenderFrame* render_frame,
-      media::GpuVideoAcceleratorFactories* gpu_factories,
-      const scoped_refptr<media::MediaLog>& media_log);
-
   // Allows an embedder to provide a MediaStreamRendererFactory.
   virtual std::unique_ptr<MediaStreamRendererFactory>
   CreateMediaStreamRendererFactory();
 
-  // Allows an embedder to provde a cc::ImageSerializationProcessor.
+  // Allows an embedder to provide a cc::ImageSerializationProcessor.
   virtual cc::ImageSerializationProcessor* GetImageSerializationProcessor();
+
+  // Allows an embedder to provide a default image decode color space.
+  virtual std::unique_ptr<gfx::ICCProfile> GetImageDecodeColorProfile();
 
   // Gives the embedder a chance to register the key system(s) it supports by
   // populating |key_systems|.
@@ -331,6 +337,10 @@ class CONTENT_EXPORT ContentRendererClient {
   // Notifies that the DOM is ready in the frame's document.
   // This method may invalidate the frame.
   virtual void RunScriptsAtDocumentEnd(RenderFrame* render_frame) {}
+
+  // Allows subclasses to enable some runtime features before Blink has
+  // started.
+  virtual void SetRuntimeFeaturesDefaultsBeforeBlinkInitialization() {}
 
   // Notifies that a service worker context has been created. This function
   // is called from the worker thread.

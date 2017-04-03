@@ -9,6 +9,7 @@
 
 #include "base/bind.h"
 #include "base/files/file_path.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -62,7 +63,7 @@ class ManagedBookmarksTrackerTest : public testing::Test {
                       : IDS_BOOKMARK_BAR_MANAGED_FOLDER_DEFAULT_NAME));
 
     BookmarkPermanentNodeList extra_nodes;
-    extra_nodes.push_back(managed_node);
+    extra_nodes.push_back(base::WrapUnique(managed_node));
 
     std::unique_ptr<TestBookmarkClient> client(new TestBookmarkClient);
     client->SetExtraNodesToLoad(std::move(extra_nodes));
@@ -98,18 +99,20 @@ class ManagedBookmarksTrackerTest : public testing::Test {
     return node && node->HasAncestor(managed_node_);
   }
 
-  static base::DictionaryValue* CreateBookmark(const std::string& title,
-                                               const std::string& url) {
+  static std::unique_ptr<base::DictionaryValue> CreateBookmark(
+      const std::string& title,
+      const std::string& url) {
     EXPECT_TRUE(GURL(url).is_valid());
-    base::DictionaryValue* dict = new base::DictionaryValue();
+    std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
     dict->SetString("name", title);
     dict->SetString("url", GURL(url).spec());
     return dict;
   }
 
-  static base::DictionaryValue* CreateFolder(const std::string& title,
-                                             base::ListValue* children) {
-    base::DictionaryValue* dict = new base::DictionaryValue();
+  static std::unique_ptr<base::DictionaryValue> CreateFolder(
+      const std::string& title,
+      base::ListValue* children) {
+    std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
     dict->SetString("name", title);
     dict->Set("children", children);
     return dict;
@@ -137,7 +140,7 @@ class ManagedBookmarksTrackerTest : public testing::Test {
         IDS_BOOKMARK_BAR_MANAGED_FOLDER_DEFAULT_NAME);
   }
 
-  static base::DictionaryValue* CreateExpectedTree() {
+  static std::unique_ptr<base::DictionaryValue> CreateExpectedTree() {
     return CreateFolder(GetManagedFolderTitle(), CreateTestTree());
   }
 

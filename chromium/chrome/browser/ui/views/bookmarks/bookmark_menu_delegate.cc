@@ -21,7 +21,6 @@
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/user_metrics.h"
-#include "grit/theme_resources.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/window_open_disposition.h"
@@ -29,6 +28,7 @@
 #include "ui/views/controls/button/menu_button.h"
 #include "ui/views/controls/menu/menu_item_view.h"
 #include "ui/views/controls/menu/submenu_view.h"
+#include "ui/views/widget/tooltip_manager.h"
 #include "ui/views/widget/widget.h"
 
 using base::UserMetricsAction;
@@ -146,7 +146,7 @@ base::string16 BookmarkMenuDelegate::GetTooltipText(
 
   const BookmarkNode* node = i->second;
   if (node->is_url()) {
-    std::string temp;
+    const views::TooltipManager* tooltip_manager = parent_->GetTooltipManager();
     base::string16 nickname;
     base::string16 description;
 	base::Time created_time = node->date_added();
@@ -156,7 +156,8 @@ base::string16 BookmarkMenuDelegate::GetTooltipText(
     description = node->GetDescription();
 
     return BookmarkBarView::CreateToolTipForURLAndTitle(
-        parent_, screen_loc, node->url(), node->GetTitle(),
+        tooltip_manager->GetMaxWidth(screen_loc),
+        tooltip_manager->GetFontList(), node->url(), node->GetTitle(),
         &nickname, &description, &created_time, &visited_time);
   }
   return base::string16();
@@ -187,7 +188,8 @@ bool BookmarkMenuDelegate::ShouldExecuteCommandWithoutClosingMenu(
     int id,
     const ui::Event& event) {
   return (event.flags() & ui::EF_LEFT_MOUSE_BUTTON) &&
-         ui::DispositionFromEventFlags(event.flags()) == NEW_BACKGROUND_TAB;
+         ui::DispositionFromEventFlags(event.flags()) ==
+             WindowOpenDisposition::NEW_BACKGROUND_TAB;
 }
 
 bool BookmarkMenuDelegate::GetDropFormats(

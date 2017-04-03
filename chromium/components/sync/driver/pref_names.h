@@ -9,7 +9,7 @@
 
 #include "build/build_config.h"
 
-namespace sync_driver {
+namespace syncer {
 
 namespace prefs {
 
@@ -40,6 +40,8 @@ extern const char kSyncHistoryDeleteDirectives[];
 extern const char kSyncPasswords[];
 extern const char kSyncPreferences[];
 extern const char kSyncPriorityPreferences[];
+extern const char kSyncPrinters[];
+extern const char kSyncReadingList[];
 extern const char kSyncSearchEngines[];
 extern const char kSyncSessions[];
 extern const char kSyncSupervisedUserSettings[];
@@ -81,6 +83,6 @@ extern const char kSyncNigoriStateForPassphraseTransition[];
 
 }  // namespace prefs
 
-}  // namespace sync_driver
+}  // namespace syncer
 
 #endif  // COMPONENTS_SYNC_DRIVER_PREF_NAMES_H_

@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <string>
+
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "content/public/browser/browser_thread.h"
@@ -14,6 +16,7 @@
 #include "net/http/http_request_info.h"
 #include "net/http/http_stream_factory.h"
 #include "net/http/http_transaction_factory.h"
+#include "net/log/net_log_with_source.h"
 #include "net/url_request/http_user_agent_settings.h"
 #include "net/url_request/url_request_context.h"
 
@@ -94,11 +97,12 @@ int PreresolveUrl(content::ResourceContext* resource_context,
   net::AddressList* addresses = new net::AddressList;
   net::HostResolver* resolver = resource_context->GetHostResolver();
   net::HostResolver::RequestInfo resolve_info(net::HostPortPair::FromURL(url));
+  resolve_info.set_is_speculative(true);
   return resolver->Resolve(
       resolve_info, net::IDLE, addresses,
       base::Bind(&OnResolveComplete, base::Owned(request_holder),
                  base::Owned(addresses), callback),
-      request_holder->GetRequest(), net::BoundNetLog());
+      request_holder->GetRequest(), net::NetLogWithSource());
 }
 
 }  // namespace content

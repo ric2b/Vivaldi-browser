@@ -111,13 +111,28 @@ class IPC_EXPORT ChannelProxy : public Endpoint, public base::NonThreadSafe {
   ~ChannelProxy() override;
 
   // Initializes the channel proxy. Only call this once to initialize a channel
-  // proxy that was not initialized in its constructor. If create_pipe_now is
+  // proxy that was not initialized in its constructor. If |create_pipe_now| is
   // true, the pipe is created synchronously. Otherwise it's created on the IO
   // thread.
   void Init(const IPC::ChannelHandle& channel_handle,
             Channel::Mode mode,
             bool create_pipe_now);
-  void Init(std::unique_ptr<ChannelFactory> factory, bool create_pipe_now);
+  void Init(std::unique_ptr<ChannelFactory> factory,
+            bool create_pipe_now);
+
+  // Pause the channel. Subsequent calls to Send() will be internally queued
+  // until Unpause() is called. Queued messages will not be sent until the
+  // channel is flushed.
+  void Pause();
+
+  // Unpause the channel. If |flush| is true the channel will be flushed as soon
+  // as it's unpaused (see Flush() below.) Otherwise you must explicitly call
+  // Flush() to flush messages which were queued while the channel was paused.
+  void Unpause(bool flush);
+
+  // Flush the channel. This sends any messages which were queued before calling
+  // Connect. Only useful if Unpause(false) was called previously.
+  void Flush();
 
   // Close the IPC::Channel.  This operation completes asynchronously, once the
   // background thread processes the command to close the channel.  It is ok to
@@ -149,13 +164,17 @@ class IPC_EXPORT ChannelProxy : public Endpoint, public base::NonThreadSafe {
       base::Callback<void(mojo::ScopedInterfaceEndpointHandle)>;
 
   // Adds a generic associated interface factory to bind incoming interface
-  // requests directly on the IO thread. MUST be called before Init().
+  // requests directly on the IO thread. MUST be called either before Init() or
+  // before the remote end of the Channel is able to send messages (e.g. before
+  // its process is launched.)
   void AddGenericAssociatedInterfaceForIOThread(
       const std::string& name,
       const GenericAssociatedInterfaceFactory& factory);
 
   // Adds a generic associated interface factory to bind incoming interface
-  // requests on the ChannelProxy's thread. MUST be called before Init().
+  // requests on the ChannelProxy's thread. MUST be called before Init() or
+  // before the remote end of the Channel is able to send messages (e.g. before
+  // its process is launched.)
   void AddGenericAssociatedInterface(
       const std::string& name,
       const GenericAssociatedInterfaceFactory& factory);
@@ -250,9 +269,6 @@ class IPC_EXPORT ChannelProxy : public Endpoint, public base::NonThreadSafe {
     // Sends |message| from appropriate thread.
     void Send(Message* message);
 
-    // Indicates if the underlying channel's Send is thread-safe.
-    bool IsChannelSendThreadSafe() const;
-
     // Requests a remote associated interface on the IPC thread.
     void GetRemoteAssociatedInterface(
         const std::string& name,
@@ -266,6 +282,9 @@ class IPC_EXPORT ChannelProxy : public Endpoint, public base::NonThreadSafe {
     bool OnMessageReceived(const Message& message) override;
     void OnChannelConnected(int32_t peer_pid) override;
     void OnChannelError() override;
+    void OnAssociatedInterfaceRequest(
+        const std::string& interface_name,
+        mojo::ScopedInterfaceEndpointHandle handle) override;
 
     // Like OnMessageReceived but doesn't try the filters.
     bool OnMessageReceivedNoFilter(const Message& message);
@@ -273,6 +292,10 @@ class IPC_EXPORT ChannelProxy : public Endpoint, public base::NonThreadSafe {
     // Gives the filters a chance at processing |message|.
     // Returns true if the message was processed, false otherwise.
     bool TryFilters(const Message& message);
+
+    void PauseChannel();
+    void UnpauseChannel(bool flush);
+    void FlushChannel();
 
     // Like Open and Close, but called on the IPC thread.
     virtual void OnChannelOpened();
@@ -306,8 +329,10 @@ class IPC_EXPORT ChannelProxy : public Endpoint, public base::NonThreadSafe {
     void OnDispatchConnected();
     void OnDispatchError();
     void OnDispatchBadMessage(const Message& message);
+    void OnDispatchAssociatedInterfaceRequest(
+        const std::string& interface_name,
+        mojo::ScopedInterfaceEndpointHandle handle);
 
-    void SendFromThisThread(Message* message);
     void ClearChannel();
 
     mojo::AssociatedGroup* associated_group() { return &associated_group_; }
@@ -337,9 +362,6 @@ class IPC_EXPORT ChannelProxy : public Endpoint, public base::NonThreadSafe {
     // Lock for |channel_| value. This is only relevant in the context of
     // thread-safe send.
     base::Lock channel_lifetime_lock_;
-    // Indicates the thread-safe send availability. This is constant once
-    // |channel_| is set.
-    bool channel_send_thread_safe_;
 
     // Routes a given message to a proper subset of |filters_|, depending
     // on which message classes a filter might support.

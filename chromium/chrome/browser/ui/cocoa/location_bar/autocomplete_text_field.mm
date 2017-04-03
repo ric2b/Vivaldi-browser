@@ -52,7 +52,7 @@ const CGFloat kAnimationDuration = 0.2;
   // Also, because NSPressureConfiguration is not in the original 10.10 SDK,
   // use NSClassFromString() to instantiate it (otherwise there's a
   // linker error).
-  if (base::mac::IsOSYosemiteOrLater() &&
+  if (base::mac::IsAtLeastOS10_10() &&
       [self respondsToSelector:@selector(setPressureConfiguration:)]) {
     NSPressureConfiguration* pressureConfiguration =
         [[[NSClassFromString(@"NSPressureConfiguration") alloc]
@@ -400,13 +400,11 @@ const CGFloat kAnimationDuration = 0.2;
 
   // Allow the ToolbarController to take action upon the
   // AutocompleteTextField being added to the window.
-  if (ui::MaterialDesignController::IsModeMaterial()) {
-    BrowserWindowController* browserWindowController =
-        [BrowserWindowController browserWindowControllerForView:self];
-    [[browserWindowController toolbarController] locationBarWasAddedToWindow];
+  BrowserWindowController* browserWindowController =
+      [BrowserWindowController browserWindowControllerForView:self];
+  [[browserWindowController toolbarController] locationBarWasAddedToWindow];
 
-    [self updateColorsToMatchTheme];
-  }
+  [self updateColorsToMatchTheme];
 
   NSNotificationCenter* nc = [NSNotificationCenter defaultCenter];
   [nc addObserver:self
@@ -513,12 +511,21 @@ const CGFloat kAnimationDuration = 0.2;
   // TODO(viettrungluu): crbug.com/30809 -- this is a hack since it steals focus
   // and doesn't return it.
   [[self window] makeFirstResponder:self];
-  return [dropHandler_ draggingEntered:sender];
+
+  bool canDropAtLocation =
+      [[self cell] canDropAtLocationInWindow:[sender draggingLocation]
+                                      ofView:self];
+  return canDropAtLocation ? [dropHandler_ draggingEntered:sender]
+                           : NSDragOperationNone;
 }
 
 // (URLDropTarget protocol)
 - (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)sender {
-  return [dropHandler_ draggingUpdated:sender];
+  bool canDropAtLocation =
+      [[self cell] canDropAtLocationInWindow:[sender draggingLocation]
+                                      ofView:self];
+  return canDropAtLocation ? [dropHandler_ draggingUpdated:sender]
+                           : NSDragOperationNone;
 }
 
 // (URLDropTarget protocol)
@@ -543,10 +550,6 @@ const CGFloat kAnimationDuration = 0.2;
 // ThemedWindowDrawing implementation.
 
 - (void)windowDidChangeTheme {
-  if (!ui::MaterialDesignController::IsModeMaterial()) {
-    return;
-  }
-
   [self updateColorsToMatchTheme];
 }
 

@@ -17,17 +17,16 @@
 #include "build/build_config.h"
 #include "components/filesystem/directory_impl.h"
 #include "components/filesystem/lock_table.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/shell/public/cpp/identity.h"
 #include "url/gurl.h"
 
 namespace filesystem {
 
 FileSystemImpl::FileSystemImpl(const shell::Identity& remote_identity,
-                               mojom::FileSystemRequest request,
                                base::FilePath persistent_dir,
                                scoped_refptr<LockTable> lock_table)
     : remote_application_name_(remote_identity.name()),
-      binding_(this, std::move(request)),
       lock_table_(std::move(lock_table)),
       persistent_dir_(persistent_dir) {}
 
@@ -35,17 +34,18 @@ FileSystemImpl::~FileSystemImpl() {
 }
 
 void FileSystemImpl::OpenTempDirectory(
-    mojo::InterfaceRequest<mojom::Directory> directory,
+    mojom::DirectoryRequest directory,
     const OpenTempDirectoryCallback& callback) {
   // Set only if the |DirectoryImpl| will own a temporary directory.
   std::unique_ptr<base::ScopedTempDir> temp_dir(new base::ScopedTempDir);
   CHECK(temp_dir->CreateUniqueTempDir());
 
-  base::FilePath path = temp_dir->path();
+  base::FilePath path = temp_dir->GetPath();
   scoped_refptr<SharedTempDir> shared_temp_dir =
       new SharedTempDir(std::move(temp_dir));
-  new DirectoryImpl(
-      std::move(directory), path, std::move(shared_temp_dir), lock_table_);
+  mojo::MakeStrongBinding(base::MakeUnique<DirectoryImpl>(
+                              path, std::move(shared_temp_dir), lock_table_),
+                          std::move(directory));
   callback.Run(mojom::FileError::OK);
 }
 
@@ -60,8 +60,9 @@ void FileSystemImpl::OpenPersistentFileSystem(
   scoped_refptr<SharedTempDir> shared_temp_dir =
       new SharedTempDir(std::move(temp_dir));
 
-  new DirectoryImpl(
-      std::move(directory), path, std::move(shared_temp_dir), lock_table_);
+  mojo::MakeStrongBinding(base::MakeUnique<DirectoryImpl>(
+                              path, std::move(shared_temp_dir), lock_table_),
+                          std::move(directory));
   callback.Run(mojom::FileError::OK);
 }
 

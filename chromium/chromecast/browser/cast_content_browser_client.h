@@ -43,6 +43,7 @@ class MediaPipelineBackendManager;
 struct MediaPipelineDeviceParams;
 class MediaResourceTracker;
 class VideoPlaneController;
+class VideoResolutionPolicy;
 }
 
 namespace shell {
@@ -74,6 +75,9 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
       media::VideoPlaneController* video_plane_controller);
 
 #if !defined(OS_ANDROID)
+  // Gets object for enforcing video resolution policy restrictions.
+  virtual media::VideoResolutionPolicy* GetVideoResolutionPolicy();
+
   // Returns the task runner that must be used for media IO.
   scoped_refptr<base::SingleThreadTaskRunner> GetMediaTaskRunner();
 
@@ -147,8 +151,9 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
   void ExposeInterfacesToRenderer(
       ::shell::InterfaceRegistry* registry,
       content::RenderProcessHost* render_process_host) override;
-  void RegisterInProcessMojoApplications(
-      StaticMojoApplicationMap* apps) override;
+  void RegisterInProcessServices(StaticServiceMap* services) override;
+  std::unique_ptr<base::Value> GetServiceManifestOverlay(
+      const std::string& service_name) override;
 #if defined(OS_ANDROID)
   void GetAdditionalMappedFilesForChildProcess(
       const base::CommandLine& command_line,
@@ -166,11 +171,7 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
 #endif  // defined(OS_ANDROID)
   void GetAdditionalWebUISchemes(
       std::vector<std::string>* additional_schemes) override;
-#if defined(OS_ANDROID) && defined(VIDEO_HOLE)
-  content::ExternalVideoSurfaceContainer*
-  OverrideCreateExternalVideoSurfaceContainer(
-      content::WebContents* web_contents) override;
-#endif  // defined(OS_ANDROID) && defined(VIDEO_HOLE)
+  content::DevToolsManagerDelegate* GetDevToolsManagerDelegate() override;
 
  protected:
   CastContentBrowserClient();

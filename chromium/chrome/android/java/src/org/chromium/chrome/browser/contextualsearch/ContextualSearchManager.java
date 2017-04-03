@@ -480,8 +480,8 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
         // Note: whether the sprite should be animated or not needs to be set before the call to
         // peekPanel(). If the sprite should be animated, the animation will begin after the panel
         // finishes peeking. If it should not be animated, the icon will be drawn right away.
-        mSearchPanel.setShouldAnimateIconSprite(mPolicy.shouldAnimateSearchProviderIcon(),
-                ContextualSearchFieldTrial.areExtraSearchBarAnimationsDisabled());
+        mSearchPanel.getImageControl().setShouldAnimateIconSprite(
+                mPolicy.shouldAnimateSearchProviderIcon());
 
         // Note: now that the contextual search has properly started, set the promo involvement.
         if (mPolicy.isPromoAvailable()) {
@@ -615,10 +615,10 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
      */
     @CalledByNative
     private void onSurroundingTextAvailable(final String afterText) {
-        if (mSearchPanel.isShowing()) {
-            mSearchPanel.setSearchContext(
-                    mSelectionController.getSelectedText(), afterText);
-        }
+        // TODO(donnd): check if panel has been requested to show.
+        // We used to call mSearchPanel.isShowing() here, but that's unreliable (crbug.com/669600).
+        mSearchPanel.setSearchContext(
+                mSelectionController.getSelectedText(), afterText);
     }
 
     /**
@@ -653,22 +653,25 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
      * @param selectionEndAdjust A positive number of characters that the end of the existing
      *        selection should be expanded by.
      * @param contextLanguage The language of the original search term, or an empty string.
+     * @param thumbnailUrl The URL of the thumbnail to display in our UX.
+     * @param caption The caption to display.
      */
     @CalledByNative
     public void onSearchTermResolutionResponse(boolean isNetworkUnavailable, int responseCode,
             final String searchTerm, final String displayText, final String alternateTerm,
             final String mid, boolean doPreventPreload, int selectionStartAdjust,
-            int selectionEndAdjust, final String contextLanguage) {
+            int selectionEndAdjust, final String contextLanguage, final String thumbnailUrl,
+            final String caption) {
         mNetworkCommunicator.handleSearchTermResolutionResponse(isNetworkUnavailable, responseCode,
                 searchTerm, displayText, alternateTerm, mid, doPreventPreload, selectionStartAdjust,
-                selectionEndAdjust, contextLanguage);
+                selectionEndAdjust, contextLanguage, thumbnailUrl, caption);
     }
 
     @Override
     public void handleSearchTermResolutionResponse(boolean isNetworkUnavailable, int responseCode,
             String searchTerm, String displayText, String alternateTerm, String mid,
             boolean doPreventPreload, int selectionStartAdjust, int selectionEndAdjust,
-            String contextLanguage) {
+            String contextLanguage, String thumbnailUrl, String caption) {
         // Show an appropriate message for what to search for.
         String message;
         boolean doLiteralSearch = false;
@@ -686,7 +689,32 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
                     R.string.contextual_search_error, responseCode);
             doLiteralSearch = true;
         }
-        mSearchPanel.onSearchTermResolved(message);
+
+        boolean receivedContextualCardsData = !TextUtils.isEmpty(caption)
+                || !TextUtils.isEmpty(thumbnailUrl);
+        if (ContextualSearchFieldTrial.shouldHideContextualCardsData()) {
+            // Clear the thumbnail URL and caption so that they are not displayed in the bar. This
+            // is used to determine the CTR on contextual searches where we would have shown
+            // contextual cards data had it not been disabled via a field trial.
+            thumbnailUrl = "";
+            caption = "";
+        }
+
+        mSearchPanel.onSearchTermResolved(message, thumbnailUrl);
+
+        if (!TextUtils.isEmpty(caption)) {
+            // Call #onSetCaption() to set the caption. For entities, the caption should not be
+            // regarded as an answer. In the future, when quick actions are added, doesAnswer will
+            // need to be determined rather than always set to false.
+            boolean doesAnswer = false;
+            onSetCaption(caption, doesAnswer);
+        }
+
+        if (ContextualSearchFieldTrial.isContextualCardsBarIntegrationEnabled()) {
+            ContextualSearchUma.logContextualCardsDataShown(receivedContextualCardsData);
+            mSearchPanel.getPanelMetrics().setWasContextualCardsDataShown(
+                    receivedContextualCardsData);
+        }
 
         // If there was an error, fall back onto a literal search for the selection.
         // Since we're showing the panel, there must be a selection.
@@ -750,7 +778,8 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
     }
 
     /**
-     * Called by the page through the CS JavaScript API to notify CS that there is
+     * Called to set a caption. The caption may either be included with the search term resolution
+     * response or set by the page through the CS JavaScript API used to notify CS that there is
      * a caption available on the current overlay.
      * @param caption The caption to display.
      * @param doesAnswer Whether the caption should be regarded as an answer such
@@ -872,7 +901,12 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
 
         @Override
         public void onMainFrameNavigation(String url, boolean isExternalUrl, boolean isFailure) {
-            if (!isExternalUrl) {
+            if (isExternalUrl) {
+                if (ContextualSearchFieldTrial.isAmpAsSeparateTabEnabled() && mPolicy.isAmpUrl(url)
+                        && mSearchPanel.didTouchContent()) {
+                    onExternalNavigation(url);
+                }
+            } else {
                 // Could be just prefetching, check if that failed.
                 onContextualSearchRequestNavigation(isFailure);
 
@@ -1227,6 +1261,9 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
     public void handleMetricsForWouldSuppressTap(ContextualSearchHeuristics tapHeuristics) {
         mHeuristics = tapHeuristics;
         if (ContextualSearchFieldTrial.isQuickAnswersEnabled()) {
+            // TODO(donnd): QuickAnswersHeuristic is getting added to TapSuppressionHeuristics and
+            // and getting considered in TapSuppressionHeuristics#shouldSuppressTap(). It should
+            // be a part of ContextualSearchHeuristics for logging purposes but not for suppression.
             mQuickAnswersHeuristic = new QuickAnswersHeuristic();
             mHeuristics.add(mQuickAnswersHeuristic);
         }
@@ -1262,6 +1299,7 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
             ContextualSearchUma.logSelectionIsValid(selectionValid);
             if (selectionValid) {
                 mSearchPanel.updateBasePageSelectionYPx(y);
+                mSearchPanel.getPanelMetrics().onSelectionEstablished(selection);
                 showContextualSearch(stateChangeReason);
             } else {
                 hideContextualSearch(stateChangeReason);

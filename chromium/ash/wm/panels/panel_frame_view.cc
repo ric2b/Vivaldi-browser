@@ -7,7 +7,6 @@
 #include "ash/common/frame/caption_buttons/frame_caption_button_container_view.h"
 #include "ash/common/frame/default_header_painter.h"
 #include "ash/common/frame/frame_border_hit_test.h"
-#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/wm_lookup.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
@@ -41,6 +40,8 @@ PanelFrameView::~PanelFrameView() {
 void PanelFrameView::SetFrameColors(SkColor active_frame_color,
                                     SkColor inactive_frame_color) {
   header_painter_->SetFrameColors(active_frame_color, inactive_frame_color);
+  frame_->GetNativeWindow()->SetProperty(
+      aura::client::kTopViewColor, header_painter_->GetInactiveFrameColor());
 }
 
 const char* PanelFrameView::GetClassName() const {
@@ -49,6 +50,8 @@ const char* PanelFrameView::GetClassName() const {
 
 void PanelFrameView::InitHeaderPainter() {
   header_painter_.reset(new DefaultHeaderPainter);
+  frame_->GetNativeWindow()->SetProperty(
+      aura::client::kTopViewColor, header_painter_->GetInactiveFrameColor());
 
   caption_button_container_ = new FrameCaptionButtonContainerView(frame_);
   AddChildView(caption_button_container_);
@@ -145,13 +148,11 @@ void PanelFrameView::OnPaint(gfx::Canvas* canvas) {
 // PanelFrameView, ShellObserver overrides:
 
 void PanelFrameView::OnOverviewModeStarting() {
-  if (ash::MaterialDesignController::IsOverviewMaterial())
-    caption_button_container_->SetVisible(false);
+  caption_button_container_->SetVisible(false);
 }
 
 void PanelFrameView::OnOverviewModeEnded() {
-  if (ash::MaterialDesignController::IsOverviewMaterial())
-    caption_button_container_->SetVisible(true);
+  caption_button_container_->SetVisible(true);
 }
 
 }  // namespace ash

@@ -19,7 +19,7 @@
 #include "net/base/load_timing_info.h"
 #include "net/http/http_auth_controller.h"
 #include "net/http/proxy_client_socket.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 #include "net/socket/next_proto.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/socket/ssl_client_socket_pool.h"
@@ -69,7 +69,7 @@ class HttpProxyClientSocketWrapper : public ProxyClientSocket {
       SpdySessionPool* spdy_session_pool,
       bool tunnel,
       ProxyDelegate* proxy_delegate,
-      const BoundNetLog& net_log);
+      const NetLogWithSource& net_log);
 
   // On destruction Disconnect() is called.
   ~HttpProxyClientSocketWrapper() override;
@@ -93,7 +93,7 @@ class HttpProxyClientSocketWrapper : public ProxyClientSocket {
   void Disconnect() override;
   bool IsConnected() const override;
   bool IsConnectedAndIdle() const override;
-  const BoundNetLog& NetLog() const override;
+  const NetLogWithSource& NetLog() const override;
   void SetSubresourceSpeculation() override;
   void SetOmniboxSpeculation() override;
   bool WasEverUsed() const override;
@@ -201,7 +201,7 @@ class HttpProxyClientSocketWrapper : public ProxyClientSocket {
 
   scoped_refptr<HttpAuthController> http_auth_controller_;
 
-  BoundNetLog net_log_;
+  NetLogWithSource net_log_;
 
   base::OneShotTimer connect_timer_;
 

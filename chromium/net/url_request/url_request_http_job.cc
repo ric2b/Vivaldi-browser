@@ -41,6 +41,8 @@
 #include "net/http/http_transaction.h"
 #include "net/http/http_transaction_factory.h"
 #include "net/http/http_util.h"
+#include "net/log/net_log_event_type.h"
+#include "net/log/net_log_with_source.h"
 #include "net/nqe/network_quality_estimator.h"
 #include "net/proxy/proxy_info.h"
 #include "net/proxy/proxy_retry_info.h"
@@ -193,14 +195,14 @@ class URLRequestHttpJob::HttpFilterContext : public FilterContext {
   int GetResponseCode() const override;
   const URLRequestContext* GetURLRequestContext() const override;
   void RecordPacketStats(StatisticSelector statistic) const override;
-  const BoundNetLog& GetNetLog() const override;
+  const NetLogWithSource& GetNetLog() const override;
 
  private:
   URLRequestHttpJob* job_;
 
   // URLRequestHttpJob may be detached from URLRequest, but we still need to
   // return something.
-  BoundNetLog dummy_log_;
+  NetLogWithSource dummy_log_;
 
   DISALLOW_COPY_AND_ASSIGN(HttpFilterContext);
 };
@@ -256,7 +258,8 @@ void URLRequestHttpJob::HttpFilterContext::RecordPacketStats(
   job_->RecordPacketStats(statistic);
 }
 
-const BoundNetLog& URLRequestHttpJob::HttpFilterContext::GetNetLog() const {
+const NetLogWithSource& URLRequestHttpJob::HttpFilterContext::GetNetLog()
+    const {
   return job_->request() ? job_->request()->net_log() : dummy_log_;
 }
 
@@ -447,7 +450,7 @@ void URLRequestHttpJob::NotifyHeadersComplete() {
     if (rv != SDCH_OK) {
       SdchManager::SdchErrorRecovery(rv);
       request()->net_log().AddEvent(
-          NetLog::TYPE_SDCH_DECODING_ERROR,
+          NetLogEventType::SDCH_DECODING_ERROR,
           base::Bind(&NetLogSdchResourceProblemCallback, rv));
     } else {
       const std::string name = "Get-Dictionary";
@@ -472,7 +475,7 @@ void URLRequestHttpJob::NotifyHeadersComplete() {
           if (rv != SDCH_OK) {
             SdchManager::SdchErrorRecovery(rv);
             request_->net_log().AddEvent(
-                NetLog::TYPE_SDCH_DICTIONARY_ERROR,
+                NetLogEventType::SDCH_DICTIONARY_ERROR,
                 base::Bind(&NetLogSdchDictionaryFetchProblemCallback, rv,
                            sdch_dictionary_url, false));
           }
@@ -568,7 +571,7 @@ void URLRequestHttpJob::MaybeStartTransactionInternal(int result) {
     StartTransactionInternal();
   } else {
     std::string source("delegate");
-    request_->net_log().AddEvent(NetLog::TYPE_CANCELLED,
+    request_->net_log().AddEvent(NetLogEventType::CANCELLED,
                                  NetLog::StringCallback("source", &source));
     NotifyStartError(URLRequestStatus(URLRequestStatus::FAILED, result));
   }
@@ -666,7 +669,7 @@ void URLRequestHttpJob::AddExtraHeaders() {
         advertise_sdch = false;
         SdchManager::SdchErrorRecovery(rv);
         request()->net_log().AddEvent(
-            NetLog::TYPE_SDCH_DECODING_ERROR,
+            NetLogEventType::SDCH_DECODING_ERROR,
             base::Bind(&NetLogSdchResourceProblemCallback, rv));
       }
     }
@@ -819,7 +822,7 @@ void URLRequestHttpJob::SaveCookiesAndNotifyHeadersComplete(int result) {
 
   if (result != OK) {
     std::string source("delegate");
-    request_->net_log().AddEvent(NetLog::TYPE_CANCELLED,
+    request_->net_log().AddEvent(NetLogEventType::CANCELLED,
                                  NetLog::StringCallback("source", &source));
     NotifyStartError(URLRequestStatus(URLRequestStatus::FAILED, result));
     return;
@@ -993,9 +996,9 @@ void URLRequestHttpJob::OnStartCompleted(int result) {
           awaiting_callback_ = true;
         } else {
           std::string source("delegate");
-          request_->net_log().AddEvent(NetLog::TYPE_CANCELLED,
-                                       NetLog::StringCallback("source",
-                                                              &source));
+          request_->net_log().AddEvent(
+              NetLogEventType::CANCELLED,
+              NetLog::StringCallback("source", &source));
           OnCallToDelegateComplete();
           NotifyStartError(URLRequestStatus(URLRequestStatus::FAILED, error));
         }
@@ -1085,11 +1088,6 @@ void URLRequestHttpJob::SetExtraRequestHeaders(
 LoadState URLRequestHttpJob::GetLoadState() const {
   return transaction_.get() ?
       transaction_->GetLoadState() : LOAD_STATE_IDLE;
-}
-
-UploadProgress URLRequestHttpJob::GetUploadProgress() const {
-  return transaction_.get() ?
-      transaction_->GetUploadProgress() : UploadProgress();
 }
 
 bool URLRequestHttpJob::GetMimeType(std::string* mime_type) const {
@@ -1329,11 +1327,6 @@ void URLRequestHttpJob::ContinueDespiteLastError() {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(&URLRequestHttpJob::OnStartCompleted,
                             weak_factory_.GetWeakPtr(), rv));
-}
-
-void URLRequestHttpJob::ResumeNetworkStart() {
-  DCHECK(transaction_.get());
-  transaction_->ResumeNetworkStart();
 }
 
 bool URLRequestHttpJob::ShouldFixMismatchedContentLength(int rv) const {
@@ -1586,7 +1579,8 @@ void URLRequestHttpJob::DoneWithRequest(CompletionCause reason) {
     NetworkQualityEstimator* network_quality_estimator =
         request()->context()->network_quality_estimator();
     if (network_quality_estimator)
-      network_quality_estimator->NotifyRequestCompleted(*request());
+      network_quality_estimator->NotifyRequestCompleted(
+          *request(), request_->status().error());
   }
 
   RecordPerfHistograms(reason);

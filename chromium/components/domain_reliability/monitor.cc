@@ -171,10 +171,10 @@ void DomainReliabilityMonitor::AddBakedInConfigs() {
     context_manager_.AddContextForConfig(std::move(config));
   }
 
-  std::vector<DomainReliabilityConfig*> google_configs;
+  std::vector<std::unique_ptr<DomainReliabilityConfig>> google_configs;
   GetAllGoogleConfigs(&google_configs);
-  for (auto* google_config : google_configs)
-    context_manager_.AddContextForConfig(base::WrapUnique(google_config));
+  for (auto& google_config : google_configs)
+    context_manager_.AddContextForConfig(std::move(google_config));
 }
 
 void DomainReliabilityMonitor::SetDiscardUploads(bool discard_uploads) {
@@ -256,10 +256,10 @@ DomainReliabilityMonitor::CreateContextForConfig(
   DCHECK(config);
   DCHECK(config->IsValid());
 
-  return base::WrapUnique(new DomainReliabilityContext(
+  return base::MakeUnique<DomainReliabilityContext>(
       time_.get(), scheduler_params_, upload_reporter_string_,
       &last_network_change_time_, &dispatcher_, uploader_.get(),
-      std::move(config)));
+      std::move(config));
 }
 
 DomainReliabilityMonitor::RequestInfo::RequestInfo() {}

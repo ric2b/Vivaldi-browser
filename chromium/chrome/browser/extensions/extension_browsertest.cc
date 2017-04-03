@@ -318,7 +318,8 @@ const Extension* ExtensionBrowserTest::LoadAndLaunchApp(
       content::NOTIFICATION_LOAD_COMPLETED_MAIN_FRAME,
       content::NotificationService::AllSources());
   AppLaunchParams params(profile(), app, extensions::LAUNCH_CONTAINER_NONE,
-                         NEW_WINDOW, extensions::SOURCE_TEST);
+                         WindowOpenDisposition::NEW_WINDOW,
+                         extensions::SOURCE_TEST);
   params.command_line = *base::CommandLine::ForCurrentProcess();
   OpenApplication(params);
   app_loaded_observer.Wait();
@@ -328,7 +329,7 @@ const Extension* ExtensionBrowserTest::LoadAndLaunchApp(
 
 base::FilePath ExtensionBrowserTest::PackExtension(
     const base::FilePath& dir_path) {
-  base::FilePath crx_path = temp_dir_.path().AppendASCII("temp.crx");
+  base::FilePath crx_path = temp_dir_.GetPath().AppendASCII("temp.crx");
   if (!base::DeleteFile(crx_path, false)) {
     ADD_FAILURE() << "Failed to delete crx: " << crx_path.value();
     return base::FilePath();
@@ -388,14 +389,9 @@ const Extension* ExtensionBrowserTest::UpdateExtensionWaitForIdle(
     const std::string& id,
     const base::FilePath& path,
     int expected_change) {
-  return InstallOrUpdateExtension(id,
-                                  path,
-                                  INSTALL_UI_TYPE_NONE,
-                                  expected_change,
-                                  Manifest::INTERNAL,
-                                  browser(),
-                                  Extension::NO_FLAGS,
-                                  false);
+  return InstallOrUpdateExtension(id, path, INSTALL_UI_TYPE_NONE,
+                                  expected_change, Manifest::INTERNAL,
+                                  browser(), Extension::NO_FLAGS, false, false);
 }
 
 const Extension* ExtensionBrowserTest::InstallExtensionFromWebstore(
@@ -403,7 +399,7 @@ const Extension* ExtensionBrowserTest::InstallExtensionFromWebstore(
     int expected_change) {
   return InstallOrUpdateExtension(
       std::string(), path, INSTALL_UI_TYPE_AUTO_CONFIRM, expected_change,
-      Manifest::INTERNAL, browser(), Extension::FROM_WEBSTORE, true);
+      Manifest::INTERNAL, browser(), Extension::FROM_WEBSTORE, true, false);
 }
 
 const Extension* ExtensionBrowserTest::InstallOrUpdateExtension(
@@ -411,14 +407,9 @@ const Extension* ExtensionBrowserTest::InstallOrUpdateExtension(
     const base::FilePath& path,
     InstallUIType ui_type,
     int expected_change) {
-  return InstallOrUpdateExtension(id,
-                                  path,
-                                  ui_type,
-                                  expected_change,
-                                  Manifest::INTERNAL,
-                                  browser(),
-                                  Extension::NO_FLAGS,
-                                  true);
+  return InstallOrUpdateExtension(id, path, ui_type, expected_change,
+                                  Manifest::INTERNAL, browser(),
+                                  Extension::NO_FLAGS, true, false);
 }
 
 const Extension* ExtensionBrowserTest::InstallOrUpdateExtension(
@@ -428,14 +419,9 @@ const Extension* ExtensionBrowserTest::InstallOrUpdateExtension(
     int expected_change,
     Browser* browser,
     Extension::InitFromValueFlags creation_flags) {
-  return InstallOrUpdateExtension(id,
-                                  path,
-                                  ui_type,
-                                  expected_change,
-                                  Manifest::INTERNAL,
-                                  browser,
-                                  creation_flags,
-                                  true);
+  return InstallOrUpdateExtension(id, path, ui_type, expected_change,
+                                  Manifest::INTERNAL, browser, creation_flags,
+                                  true, false);
 }
 
 const Extension* ExtensionBrowserTest::InstallOrUpdateExtension(
@@ -444,14 +430,9 @@ const Extension* ExtensionBrowserTest::InstallOrUpdateExtension(
     InstallUIType ui_type,
     int expected_change,
     Manifest::Location install_source) {
-  return InstallOrUpdateExtension(id,
-                                  path,
-                                  ui_type,
-                                  expected_change,
-                                  install_source,
-                                  browser(),
-                                  Extension::NO_FLAGS,
-                                  true);
+  return InstallOrUpdateExtension(id, path, ui_type, expected_change,
+                                  install_source, browser(),
+                                  Extension::NO_FLAGS, true, false);
 }
 
 const Extension* ExtensionBrowserTest::InstallOrUpdateExtension(
@@ -462,7 +443,8 @@ const Extension* ExtensionBrowserTest::InstallOrUpdateExtension(
     Manifest::Location install_source,
     Browser* browser,
     Extension::InitFromValueFlags creation_flags,
-    bool install_immediately) {
+    bool install_immediately,
+    bool grant_permissions) {
   ExtensionService* service =
       extensions::ExtensionSystem::Get(profile())->extension_service();
   ExtensionRegistry* registry = ExtensionRegistry::Get(profile());
@@ -502,6 +484,7 @@ const Extension* ExtensionBrowserTest::InstallOrUpdateExtension(
     installer->set_creation_flags(creation_flags);
     installer->set_install_source(install_source);
     installer->set_install_immediately(install_immediately);
+    installer->set_allow_silent_install(grant_permissions);
     if (!installer->is_gallery_install()) {
       installer->set_off_store_install_allow_reason(
           extensions::CrxInstaller::OffStoreInstallAllowedInTest);

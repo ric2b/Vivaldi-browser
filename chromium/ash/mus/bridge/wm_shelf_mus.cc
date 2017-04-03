@@ -4,10 +4,7 @@
 
 #include "ash/mus/bridge/wm_shelf_mus.h"
 
-#include "ash/common/shelf/shelf.h"
-#include "ash/common/shelf/shelf_delegate.h"
 #include "ash/common/shelf/shelf_widget.h"
-#include "ash/common/shell_window_ids.h"
 #include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
@@ -15,31 +12,19 @@
 namespace ash {
 namespace mus {
 
-WmShelfMus::WmShelfMus(WmRootWindowController* root_window_controller) {
-  DCHECK(root_window_controller);
+WmShelfMus::WmShelfMus(WmWindow* root_window) {
+  DCHECK(root_window);
   WmShell::Get()->CreateShelfDelegate();
-  WmWindow* root = root_window_controller->GetWindow();
-  shelf_widget_.reset(new ShelfWidget(
-      root->GetChildByShellWindowId(kShellWindowId_ShelfContainer),
-      root->GetChildByShellWindowId(kShellWindowId_StatusContainer), this));
-  shelf_.reset(
-      new Shelf(this, shelf_widget_->CreateShelfView(), shelf_widget_.get()));
-  shelf_widget_->set_shelf(shelf_.get());
-  // Must be initialized before the delegate is notified because the delegate
-  // may try to access the WmShelf.
-  SetShelf(shelf_.get());
-  WmShell::Get()->shelf_delegate()->OnShelfCreated(this);
-  WmShell::Get()->NotifyShelfCreatedForRootWindow(root);
-  shelf_widget_->PostCreateShelf();
+  CreateShelfWidget(root_window);
+  InitializeShelf();
+  WmShell::Get()->NotifyShelfCreatedForRootWindow(root_window);
+  shelf_widget()->PostCreateShelf();
 }
 
-WmShelfMus::~WmShelfMus() {
-  shelf_widget_.reset();
-  WmShelf::ClearShelf();
-}
+WmShelfMus::~WmShelfMus() {}
 
 void WmShelfMus::WillDeleteShelfLayoutManager() {
-  shelf_widget_->Shutdown();
+  ShutdownShelfWidget();
   WmShelf::WillDeleteShelfLayoutManager();
 }
 

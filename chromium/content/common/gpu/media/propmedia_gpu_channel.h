@@ -21,7 +21,7 @@ class ProprietaryMediaGpuChannel : public GpuChannel
   // Takes ownership of the renderer process handle.
   ProprietaryMediaGpuChannel(GpuChannelManager* gpu_channel_manager,
              SyncPointManager* sync_point_manager,
-             GpuWatchdog* watchdog,
+             GpuWatchdogThread* watchdog,
              gl::GLShareGroup* share_group,
              gles2::MailboxManager* mailbox_manager,
              PreemptionFlag* preempting_flag,

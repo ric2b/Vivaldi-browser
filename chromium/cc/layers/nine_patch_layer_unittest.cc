@@ -50,7 +50,7 @@ TEST_F(NinePatchLayerTest, SetLayerProperties) {
 
   layer_tree_host_->SetRootLayer(test_layer);
   Mock::VerifyAndClearExpectations(layer_tree_host_.get());
-  EXPECT_EQ(test_layer->layer_tree_host(), layer_tree_host_.get());
+  EXPECT_EQ(test_layer->GetLayerTreeHostForTesting(), layer_tree_host_.get());
 
   gfx::Rect screen_space_clip_rect;
   test_layer->SavePaintProperties();
@@ -59,8 +59,9 @@ TEST_F(NinePatchLayerTest, SetLayerProperties) {
   EXPECT_FALSE(test_layer->DrawsContent());
 
   bool is_opaque = false;
-  std::unique_ptr<ScopedUIResource> resource = ScopedUIResource::Create(
-      layer_tree_host_.get(), UIResourceBitmap(gfx::Size(10, 10), is_opaque));
+  std::unique_ptr<ScopedUIResource> resource =
+      ScopedUIResource::Create(layer_tree_host_->GetUIResourceManager(),
+                               UIResourceBitmap(gfx::Size(10, 10), is_opaque));
   gfx::Rect aperture(5, 5, 1, 1);
   bool fill_center = true;
   test_layer->SetAperture(aperture);

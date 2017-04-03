@@ -18,7 +18,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -80,6 +80,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/proximity_auth/screenlock_bridge.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
@@ -87,7 +88,6 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "google_apis/gaia/gaia_auth_util.h"
-#include "grit/components_strings.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_descriptor.h"
@@ -469,6 +469,11 @@ void SigninScreenHandler::DeclareLocalizedValues(
   builder->Add("samlNoticeWithVideo", IDS_LOGIN_SAML_NOTICE_WITH_VIDEO);
   builder->AddF("confirmPasswordTitle", IDS_LOGIN_CONFIRM_PASSWORD_TITLE,
                 ash::GetChromeOSDeviceName());
+  builder->Add("manualPasswordTitle", IDS_LOGIN_MANUAL_PASSWORD_TITLE);
+  builder->Add("manualPasswordInputLabel",
+               IDS_LOGIN_MANUAL_PASSWORD_INPUT_LABEL);
+  builder->Add("manualPasswordMismatch",
+               IDS_LOGIN_MANUAL_PASSWORD_MISMATCH);
   builder->Add("confirmPasswordLabel", IDS_LOGIN_CONFIRM_PASSWORD_LABEL);
   builder->Add("confirmPasswordIncorrectPassword",
                IDS_LOGIN_CONFIRM_PASSWORD_INCORRECT_PASSWORD);

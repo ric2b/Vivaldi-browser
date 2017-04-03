@@ -67,6 +67,7 @@ struct PageLoadExtraInfo {
       bool started_in_foreground,
       bool user_gesture,
       const GURL& committed_url,
+      const GURL& start_url,
       const base::Optional<base::TimeDelta>& time_to_commit,
       UserAbortType abort_type,
       bool abort_user_initiated,
@@ -96,6 +97,9 @@ struct PageLoadExtraInfo {
   // empty.
   const GURL committed_url;
 
+  // The URL that started the navigation, before redirects.
+  const GURL start_url;
+
   // Time from navigation start until commit.
   const base::Optional<base::TimeDelta> time_to_commit;
 
@@ -124,6 +128,17 @@ struct PageLoadExtraInfo {
 // owned by the PageLoadTracker tracking a page load.
 class PageLoadMetricsObserver {
  public:
+  // ObservePolicy is used as a return value on some PageLoadMetricsObserver
+  // callbacks to indicate whether the observer would like to continue observing
+  // metric callbacks. Observers that wish to continue observing metric
+  // callbacks should return CONTINUE_OBSERVING; observers that wish to stop
+  // observing callbacks should return STOP_OBSERVING. Observers that return
+  // STOP_OBSERVING may be deleted.
+  enum ObservePolicy {
+    CONTINUE_OBSERVING,
+    STOP_OBSERVING,
+  };
+
   virtual ~PageLoadMetricsObserver() {}
 
   // The page load started, with the given navigation handle. Note that OnStart
@@ -134,9 +149,9 @@ class PageLoadMetricsObserver {
   // committed page load at the time the navigation for navigation_handle was
   // initiated, or the empty URL if there was no committed page load at the time
   // the navigation was initiated.
-  virtual void OnStart(content::NavigationHandle* navigation_handle,
-                       const GURL& currently_committed_url,
-                       bool started_in_foreground) {}
+  virtual ObservePolicy OnStart(content::NavigationHandle* navigation_handle,
+                                const GURL& currently_committed_url,
+                                bool started_in_foreground);
 
   // OnRedirect is triggered when a page load redirects to another URL.
   // The navigation handle holds relevant data for the navigation, but will
@@ -149,7 +164,9 @@ class PageLoadMetricsObserver {
   // the navigation, but will be destroyed soon after this call. Don't hold a
   // reference to it.
   // Note that this does not get called for same page navigations.
-  virtual void OnCommit(content::NavigationHandle* navigation_handle) {}
+  // Observers that return STOP_OBSERVING will not receive any additional
+  // callbacks, and will be deleted after invocation of this method returns.
+  virtual ObservePolicy OnCommit(content::NavigationHandle* navigation_handle);
 
   // OnHidden is triggered when a page leaves the foreground. It does not fire
   // when a foreground page is permanently closed; for that, listen to
@@ -201,10 +218,26 @@ class PageLoadMetricsObserver {
   virtual void OnParseStop(const PageLoadTiming& timing,
                            const PageLoadExtraInfo& extra_info) {}
 
-  // Observer method to be invoked when there is a change in PageLoadMetadata's
-  // behavior_flags.
+  // Invoked when there is a change in PageLoadMetadata's behavior_flags.
   virtual void OnLoadingBehaviorObserved(
       const page_load_metrics::PageLoadExtraInfo& extra_info) {}
+
+  // Invoked when the UMA metrics subsystem is persisting metrics as the
+  // application goes into the background, on platforms where the browser
+  // process may be killed after backgrounding (Android). Implementers should
+  // persist any metrics that have been buffered in memory in this callback, as
+  // the application may be killed at any time after this method is invoked
+  // without further notification. Note that this may be called both for
+  // provisional loads as well as committed loads. Implementations that only
+  // want to track committed loads should check extra_info.time_to_commit to
+  // determine if the load had committed. If the implementation returns
+  // CONTINUE_OBSERVING, this method may be called multiple times per observer,
+  // once for each time that the application enters the backround.
+  //
+  // The default implementation does nothing, and returns CONTINUE_OBSERVING.
+  virtual ObservePolicy FlushMetricsOnAppEnterBackground(
+      const PageLoadTiming& timing,
+      const PageLoadExtraInfo& extra_info);
 
   // One of OnComplete or OnFailedProvisionalLoad is invoked for tracked page
   // loads, immediately before the observer is deleted. These callbacks will not
@@ -221,9 +254,7 @@ class PageLoadMetricsObserver {
                           const PageLoadExtraInfo& extra_info) {}
 
   // OnFailedProvisionalLoad is invoked for tracked page loads that did not
-  // commit, immediately before the observer is deleted. Note that provisional
-  // loads that result in downloads or 204s are aborted by the system, and are
-  // also included as failed provisional loads.
+  // commit, immediately before the observer is deleted.
   virtual void OnFailedProvisionalLoad(
       const FailedProvisionalLoadInfo& failed_provisional_load_info,
       const PageLoadExtraInfo& extra_info) {}

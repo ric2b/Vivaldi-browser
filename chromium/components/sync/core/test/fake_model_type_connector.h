@@ -5,9 +5,11 @@
 #ifndef COMPONENTS_SYNC_CORE_TEST_FAKE_MODEL_TYPE_CONNECTOR_H_
 #define COMPONENTS_SYNC_CORE_TEST_FAKE_MODEL_TYPE_CONNECTOR_H_
 
+#include <memory>
+
 #include "components/sync/core/model_type_connector.h"
 
-namespace syncer_v2 {
+namespace syncer {
 
 // A no-op implementation of ModelTypeConnector for testing.
 class FakeModelTypeConnector : public ModelTypeConnector {
@@ -16,11 +18,11 @@ class FakeModelTypeConnector : public ModelTypeConnector {
   ~FakeModelTypeConnector() override;
 
   void ConnectType(
-      syncer::ModelType type,
+      ModelType type,
       std::unique_ptr<ActivationContext> activation_context) override;
-  void DisconnectType(syncer::ModelType type) override;
+  void DisconnectType(ModelType type) override;
 };
 
-}  // namespace syncer_v2
+}  // namespace syncer
 
 #endif  // COMPONENTS_SYNC_CORE_TEST_FAKE_MODEL_TYPE_CONNECTOR_H_

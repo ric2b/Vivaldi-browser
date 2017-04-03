@@ -18,6 +18,7 @@
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
+#include "chrome/browser/data_use_measurement/chrome_data_use_ascriber_service_factory.h"
 #include "chrome/browser/dom_distiller/dom_distiller_service_factory.h"
 #include "chrome/browser/domain_reliability/service_factory.h"
 #include "chrome/browser/download/download_service_factory.h"
@@ -138,6 +139,13 @@
 #include "chrome/browser/printing/cloud_print/privet_notifications_factory.h"
 #endif
 
+#if defined(ENABLE_MEDIA_ROUTER)
+#include "chrome/browser/media/router/media_router_factory.h"
+#if !defined(OS_ANDROID)
+#include "chrome/browser/media/router/media_router_ui_service_factory.h"
+#endif
+#endif
+
 namespace chrome {
 
 void AddProfilesExtraParts(ChromeBrowserMainParts* main_parts) {
@@ -208,6 +216,7 @@ EnsureBrowserContextKeyedServiceFactoriesBuilt() {
 #endif
   NotifierStateTrackerFactory::GetInstance();
 #endif  // defined(ENABLE_NOTIFICATIONS)
+  data_use_measurement::ChromeDataUseAscriberServiceFactory::GetInstance();
   dom_distiller::DomDistillerServiceFactory::GetInstance();
   domain_reliability::DomainReliabilityServiceFactory::GetInstance();
   DownloadServiceFactory::GetInstance();
@@ -263,6 +272,12 @@ EnsureBrowserContextKeyedServiceFactoriesBuilt() {
       ->SetUIDelegateFactory(std::move(networking_private_ui_delegate_factory));
 #endif
 #endif
+#if defined(ENABLE_MEDIA_ROUTER)
+  media_router::MediaRouterFactory::GetInstance();
+#if !defined(OS_ANDROID)
+  media_router::MediaRouterUIServiceFactory::GetInstance();
+#endif
+#endif  // defined(ENABLE_MEDIA_ROUTER)
 #if !defined(OS_ANDROID)
   MediaGalleriesPreferencesFactory::GetInstance();
   NTPResourceCacheFactory::GetInstance();

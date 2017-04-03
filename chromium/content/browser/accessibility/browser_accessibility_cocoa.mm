@@ -106,11 +106,6 @@ const int kAXResultsLimitNoLimit = -1;
 
 extern "C" {
 
-// See http://openradar.appspot.com/9896491. This SPI has been tested on 10.5,
-// 10.6, and 10.7. It allows accessibility clients to observe events posted on
-// this object.
-void NSAccessibilityUnregisterUniqueIdForUIElement(id element);
-
 // The following are private accessibility APIs required for cursor navigation
 // and text selection. VoiceOver started relying on them in Mac OS X 10.11.
 #if !defined(MAC_OS_X_VERSION_10_11) || \
@@ -617,8 +612,10 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
 }
 
 - (void)detach {
-  if (browserAccessibility_)
-    NSAccessibilityUnregisterUniqueIdForUIElement(self);
+  if (!browserAccessibility_)
+    return;
+  NSAccessibilityPostNotification(
+      self, NSAccessibilityUIElementDestroyedNotification);
   browserAccessibility_ = nullptr;
 }
 
@@ -779,24 +776,15 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
   if ([self shouldExposeNameInAXValue])
     return @"";
 
-  // If the name came from a single related element and it's present in the
-  // tree, it will be exposed in AXTitleUIElement.
-  std::vector<int32_t> labelledby_ids =
-      browserAccessibility_->GetIntListAttribute(ui::AX_ATTR_LABELLEDBY_IDS);
+  // If we're exposing the title in TitleUIElement, don't also redundantly
+  // expose it in AXDescription.
+  if ([self shouldExposeTitleUIElement])
+    return @"";
+
   ui::AXNameFrom nameFrom = static_cast<ui::AXNameFrom>(
       browserAccessibility_->GetIntAttribute(ui::AX_ATTR_NAME_FROM));
   std::string name = browserAccessibility_->GetStringAttribute(
       ui::AX_ATTR_NAME);
-
-  // VoiceOver ignores titleUIElement on non-control AX nodes, so this special
-  // case expressly returns a nonempty text name for these nodes.
-  if (nameFrom == ui::AX_NAME_FROM_RELATED_ELEMENT &&
-      labelledby_ids.size() == 1 &&
-      browserAccessibility_->manager()->GetFromID(labelledby_ids[0]) &&
-      !browserAccessibility_->IsControl()) {
-    return base::SysUTF8ToNSString(name);
-  }
-
   if (!name.empty()) {
     // On Mac OS X, the accessible name of an object is exposed as its
     // title if it comes from visible text, and as its description
@@ -1029,8 +1017,8 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
   if (selStart > selEnd)
     std::swap(selStart, selEnd);
 
-  const std::vector<int32_t>& line_breaks =
-      browserAccessibility_->GetIntListAttribute(ui::AX_ATTR_LINE_BREAKS);
+  const std::vector<int> line_breaks =
+      browserAccessibility_->GetLineStartOffsets();
   for (int i = 0; i < static_cast<int>(line_breaks.size()); ++i) {
     if (line_breaks[i] > selStart)
       return [NSNumber numberWithInt:i];
@@ -1242,6 +1230,35 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
     default:
       return false;
   }
+}
+
+// Returns true if this object should expose its accessible name using
+// AXTitleUIElement rather than AXTitle or AXDescription. We only do
+// this if it's a control, if there's a single label, and the label has
+// nonempty text.
+// internal
+- (BOOL)shouldExposeTitleUIElement {
+  // VoiceOver ignores TitleUIElement if the element isn't a control.
+  if (!browserAccessibility_->IsControl())
+    return false;
+
+  ui::AXNameFrom nameFrom = static_cast<ui::AXNameFrom>(
+      browserAccessibility_->GetIntAttribute(ui::AX_ATTR_NAME_FROM));
+  if (nameFrom != ui::AX_NAME_FROM_RELATED_ELEMENT)
+    return false;
+
+  std::vector<int32_t> labelledby_ids =
+  browserAccessibility_->GetIntListAttribute(ui::AX_ATTR_LABELLEDBY_IDS);
+  if (labelledby_ids.size() != 1)
+    return false;
+
+  BrowserAccessibility* label =
+      browserAccessibility_->manager()->GetFromID(labelledby_ids[0]);
+  if (!label)
+    return false;
+
+  std::string labelName = label->GetStringAttribute(ui::AX_ATTR_NAME);
+  return !labelName.empty();
 }
 
 // internal
@@ -1723,21 +1740,16 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
   if ([self shouldExposeNameInAXValue])
     return @"";
 
-  // If the name came from a single related element and it's present in the
-  // tree, it will be exposed in AXTitleUIElement.
-  std::vector<int32_t> labelledby_ids =
-      browserAccessibility_->GetIntListAttribute(ui::AX_ATTR_LABELLEDBY_IDS);
-  ui::AXNameFrom nameFrom = static_cast<ui::AXNameFrom>(
-      browserAccessibility_->GetIntAttribute(ui::AX_ATTR_NAME_FROM));
-  if (nameFrom == ui::AX_NAME_FROM_RELATED_ELEMENT &&
-      labelledby_ids.size() == 1 &&
-      browserAccessibility_->manager()->GetFromID(labelledby_ids[0])) {
+  // If we're exposing the title in TitleUIElement, don't also redundantly
+  // expose it in AXDescription.
+  if ([self shouldExposeTitleUIElement])
     return @"";
-  }
 
   // On Mac OS X, the accessible name of an object is exposed as its
   // title if it comes from visible text, and as its description
   // otherwise, but never both.
+  ui::AXNameFrom nameFrom = static_cast<ui::AXNameFrom>(
+      browserAccessibility_->GetIntAttribute(ui::AX_ATTR_NAME_FROM));
   if (nameFrom == ui::AX_NAME_FROM_CONTENTS ||
       nameFrom == ui::AX_NAME_FROM_RELATED_ELEMENT ||
       nameFrom == ui::AX_NAME_FROM_VALUE) {
@@ -1751,6 +1763,9 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
 - (id)titleUIElement {
   if (![self instanceActive])
     return nil;
+  if (![self shouldExposeTitleUIElement])
+    return nil;
+
   std::vector<int32_t> labelledby_ids =
       browserAccessibility_->GetIntListAttribute(ui::AX_ATTR_LABELLEDBY_IDS);
   ui::AXNameFrom nameFrom = static_cast<ui::AXNameFrom>(
@@ -1810,7 +1825,9 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
     return [NSNumber numberWithInt:value];
 
   } else if ([role isEqualToString:NSAccessibilityCheckBoxRole] ||
-             [role isEqualToString:NSAccessibilityRadioButtonRole]) {
+             [role isEqualToString:NSAccessibilityRadioButtonRole] ||
+             [self internalRole] == ui::AX_ROLE_MENU_ITEM_CHECK_BOX ||
+             [self internalRole] == ui::AX_ROLE_MENU_ITEM_RADIO) {
     int value = 0;
     value = GetState(
         browserAccessibility_, ui::AX_STATE_CHECKED) ? 1 : 0;
@@ -1979,8 +1996,8 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
   if (![self instanceActive])
     return nil;
 
-  const std::vector<int32_t>& line_breaks =
-      browserAccessibility_->GetIntListAttribute(ui::AX_ATTR_LINE_BREAKS);
+  const std::vector<int> line_breaks =
+      browserAccessibility_->GetLineStartOffsets();
   base::string16 value = browserAccessibility_->GetValue();
   int len = static_cast<int>(value.size());
 
@@ -2785,6 +2802,9 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
   } else if ([action isEqualToString:NSAccessibilityShowMenuAction]) {
     [self delegate]->AccessibilityShowContextMenu(
         browserAccessibility_->GetId());
+  } else if ([action isEqualToString:NSAccessibilityScrollToVisibleAction]) {
+    browserAccessibility_->manager()->ScrollToMakeVisible(
+        *browserAccessibility_, gfx::Rect());
   }
 }
 
@@ -2867,7 +2887,10 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
   return browserAccessibility_->GetId();
 }
 
-- (BOOL)accessibilityShouldUseUniqueId {
+- (BOOL)accessibilityNotifiesWhenDestroyed {
+  // Indicate that BrowserAccessibilityCocoa will post a notification when it's
+  // destroyed (see -detach). This allows VoiceOver to do some internal things
+  // more efficiently.
   return YES;
 }
 

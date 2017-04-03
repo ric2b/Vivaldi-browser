@@ -114,12 +114,10 @@ class ITunesDataProviderTest : public InProcessBrowserTest {
     return ImportedMediaGalleryRegistry::ITunesDataProvider();
   }
 
-  const base::FilePath& library_dir() const {
-    return library_dir_.path();
-  }
+  const base::FilePath& library_dir() const { return library_dir_.GetPath(); }
 
   base::FilePath XmlFile() const {
-    return library_dir_.path().AppendASCII("library.xml");
+    return library_dir_.GetPath().AppendASCII("library.xml");
   }
 
   void ExpectTrackLocation(const std::string& artist, const std::string& album,
@@ -149,7 +147,7 @@ class ITunesDataProviderTest : public InProcessBrowserTest {
   virtual void StartTest(bool parse_success) = 0;
 
   void TestDone() {
-    DCHECK(MediaFileSystemBackend::CurrentlyOnMediaTaskRunnerThread());
+    MediaFileSystemBackend::AssertCurrentlyOnMediaSequence();
     ImportedMediaGalleryRegistry* imported_registry =
         ImportedMediaGalleryRegistry::GetInstance();
     imported_registry->itunes_data_provider_.reset();
@@ -159,7 +157,7 @@ class ITunesDataProviderTest : public InProcessBrowserTest {
 
  private:
   void StartTestOnMediaTaskRunner() {
-    DCHECK(MediaFileSystemBackend::CurrentlyOnMediaTaskRunnerThread());
+    MediaFileSystemBackend::AssertCurrentlyOnMediaSequence();
     ImportedMediaGalleryRegistry* imported_registry =
         ImportedMediaGalleryRegistry::GetInstance();
     imported_registry->itunes_data_provider_.reset(
@@ -172,7 +170,7 @@ class ITunesDataProviderTest : public InProcessBrowserTest {
   }
 
   void OnLibraryChanged() {
-    DCHECK(MediaFileSystemBackend::CurrentlyOnMediaTaskRunnerThread());
+    MediaFileSystemBackend::AssertCurrentlyOnMediaSequence();
     if (!library_changed_callback_.is_null()) {
       library_changed_callback_.Run();
       library_changed_callback_.Reset();

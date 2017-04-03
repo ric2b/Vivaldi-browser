@@ -3,14 +3,20 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
+#include "build/build_config.h"
 #include "content/browser/webrtc/webrtc_webcam_browsertest.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/test_utils.h"
+#include "content/shell/browser/shell.h"
 #include "media/base/media_switches.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+
+#if defined(OS_ANDROID)
+#include "base/android/build_info.h"
+#endif
 
 namespace {
 
@@ -22,8 +28,14 @@ static const char kImageCaptureHtmlFile[] = "/media/image_capture_test.html";
 // capture resolution preventing the test from timeout https://crbug.com/634811.
 static struct TargetCamera {
   bool use_fake;
-}
-const kTestParameters[] = {{true}};
+} const kTestParameters[] = {
+#if defined(OS_ANDROID)
+    {true},
+    {false}
+#else
+    {true}
+#endif
+};
 
 }  // namespace
 
@@ -74,9 +86,22 @@ class WebRtcImageCaptureBrowserTest
 #endif
 IN_PROC_BROWSER_TEST_P(WebRtcImageCaptureBrowserTest,
                        MAYBE_CreateAndGetCapabilities) {
+#if defined(OS_ANDROID)
+  // TODO(mcasas): fails on Lollipop devices: https://crbug.com/634811
+  if (base::android::BuildInfo::GetInstance()->sdk_int() <
+      base::android::SDK_VERSION_MARSHMALLOW) {
+    return;
+  }
+#endif
+
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url(embedded_test_server()->GetURL(kImageCaptureHtmlFile));
   NavigateToURL(shell(), url);
+
+  if (!IsWebcamAvailableOnSystem(shell()->web_contents())) {
+    DVLOG(1) << "No video device; skipping test...";
+    return;
+  }
 
   std::string result;
   ASSERT_TRUE(ExecuteScriptAndExtractString(
@@ -94,9 +119,22 @@ IN_PROC_BROWSER_TEST_P(WebRtcImageCaptureBrowserTest,
 #endif
 IN_PROC_BROWSER_TEST_P(WebRtcImageCaptureBrowserTest,
                        MAYBE_CreateAndTakePhoto) {
+#if defined(OS_ANDROID)
+  // TODO(mcasas): fails on Lollipop devices: https://crbug.com/634811
+  if (base::android::BuildInfo::GetInstance()->sdk_int() <
+      base::android::SDK_VERSION_MARSHMALLOW) {
+    return;
+  }
+#endif
+
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url(embedded_test_server()->GetURL(kImageCaptureHtmlFile));
   NavigateToURL(shell(), url);
+
+  if (!IsWebcamAvailableOnSystem(shell()->web_contents())) {
+    DVLOG(1) << "No video device; skipping test...";
+    return;
+  }
 
   std::string result;
   ASSERT_TRUE(ExecuteScriptAndExtractString(shell(), "testCreateAndTakePhoto()",

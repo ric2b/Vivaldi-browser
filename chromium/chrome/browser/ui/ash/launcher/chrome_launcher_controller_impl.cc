@@ -8,14 +8,14 @@
 
 #include <vector>
 
-#include "ash/common/ash_switches.h"
 #include "ash/common/multi_profile_uma.h"
-#include "ash/common/shelf/shelf.h"
 #include "ash/common/shelf/shelf_model.h"
+#include "ash/common/shelf/shelf_widget.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
+#include "ash/resources/grit/ash_resources.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/wm/window_util.h"
@@ -75,6 +75,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/signin/core/account_id/account_id.h"
@@ -90,8 +91,6 @@
 #include "extensions/common/extension_resource.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/common/url_pattern.h"
-#include "grit/ash_resources.h"
-#include "grit/theme_resources.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -354,7 +353,9 @@ void ChromeLauncherControllerImpl::CloseLauncherItem(ash::ShelfID id) {
     CHECK(iter != id_to_item_controller_map_.end());
     SetItemStatus(id, ash::STATUS_CLOSED);
     std::string app_id = iter->second->app_id();
-    iter->second = AppShortcutLauncherItemController::Create(app_id, this);
+    std::string launch_id = iter->second->launch_id();
+    iter->second =
+        AppShortcutLauncherItemController::Create(app_id, launch_id, this);
     iter->second->set_shelf_id(id);
     // Existing controller is destroyed and replaced by registering again.
     SetShelfItemDelegate(id, iter->second);
@@ -506,7 +507,7 @@ void ChromeLauncherControllerImpl::ActivateApp(const std::string& app_id,
   // Create a temporary application launcher item and use it to see if there are
   // running instances.
   std::unique_ptr<AppShortcutLauncherItemController> app_controller(
-      AppShortcutLauncherItemController::Create(app_id, this));
+      AppShortcutLauncherItemController::Create(app_id, "", this));
   if (!app_controller->GetRunningApplications().empty())
     app_controller->Activate(source);
   else
@@ -829,7 +830,7 @@ LauncherItemController* ChromeLauncherControllerImpl::GetLauncherItemController(
 }
 
 bool ChromeLauncherControllerImpl::ShelfBoundsChangesProbablyWithUser(
-    ash::Shelf* shelf,
+    ash::WmShelf* shelf,
     const AccountId& account_id) const {
   Profile* other_profile = multi_user_util::GetProfileFromAccountId(account_id);
   if (!other_profile || other_profile == profile_)
@@ -840,7 +841,7 @@ bool ChromeLauncherControllerImpl::ShelfBoundsChangesProbablyWithUser(
   // no window on desktop, multi user, ..) the shelf could be shown - or not.
   PrefService* prefs = profile_->GetPrefs();
   PrefService* other_prefs = other_profile->GetPrefs();
-  const int64_t display = GetDisplayIDForShelf(shelf->wm_shelf());
+  const int64_t display = GetDisplayIDForShelf(shelf);
   const bool currently_shown =
       ash::SHELF_AUTO_HIDE_BEHAVIOR_NEVER ==
       ash::launcher::GetShelfAutoHideBehaviorPref(prefs, display);
@@ -901,15 +902,23 @@ void ChromeLauncherControllerImpl::OnShelfVisibilityStateChanged(
 
 ash::ShelfID ChromeLauncherControllerImpl::GetShelfIDForAppID(
     const std::string& app_id) {
+  // Get shelf id for app_id and empty launch_id.
+  return GetShelfIDForAppIDAndLaunchID(app_id, "");
+}
+
+ash::ShelfID ChromeLauncherControllerImpl::GetShelfIDForAppIDAndLaunchID(
+    const std::string& app_id,
+    const std::string& launch_id) {
   const std::string shelf_app_id =
       ArcAppWindowLauncherController::GetShelfAppIdFromArcAppId(app_id);
-  for (IDToItemControllerMap::const_iterator i =
-           id_to_item_controller_map_.begin();
-       i != id_to_item_controller_map_.end(); ++i) {
-    if (i->second->type() == LauncherItemController::TYPE_APP_PANEL)
+  for (const auto& id_to_item_controller_pair : id_to_item_controller_map_) {
+    if (id_to_item_controller_pair.second->type() ==
+        LauncherItemController::TYPE_APP_PANEL)
       continue;  // Don't include panels
-    if (i->second->app_id() == shelf_app_id)
-      return i->first;
+    if (id_to_item_controller_pair.second->app_id() == shelf_app_id &&
+        id_to_item_controller_pair.second->launch_id() == launch_id) {
+      return id_to_item_controller_pair.first;
+    }
   }
   return 0;
 }
@@ -1079,7 +1088,7 @@ ChromeLauncherControllerImpl::CreateAppShortcutLauncherItemWithType(
     int index,
     ash::ShelfItemType shelf_item_type) {
   AppShortcutLauncherItemController* controller =
-      AppShortcutLauncherItemController::Create(app_id, this);
+      AppShortcutLauncherItemController::Create(app_id, "", this);
   ash::ShelfID shelf_id = InsertAppLauncherItem(
       controller, app_id, ash::STATUS_CLOSED, index, shelf_item_type);
   return shelf_id;
@@ -1290,11 +1299,13 @@ void ChromeLauncherControllerImpl::UpdateAppLaunchersFromPref() {
 
 void ChromeLauncherControllerImpl::SetShelfAutoHideBehaviorFromPrefs() {
   for (ash::WmWindow* window : ash::WmShell::Get()->GetAllRootWindows()) {
-    ash::Shelf* shelf = ash::Shelf::ForWindow(window);
-    if (shelf) {
-      shelf->wm_shelf()->SetAutoHideBehavior(
-          ash::launcher::GetShelfAutoHideBehaviorPref(
-              profile_->GetPrefs(), GetDisplayIDForShelf(shelf->wm_shelf())));
+    ash::WmShelf* shelf = ash::WmShelf::ForWindow(window);
+    // TODO(jamescook): This check should not be necessary, but otherwise this
+    // tries to set autohide state on a secondary display during login before
+    // the ShelfView is created, which is not allowed.
+    if (shelf->IsShelfInitialized()) {
+      shelf->SetAutoHideBehavior(ash::launcher::GetShelfAutoHideBehaviorPref(
+          profile_->GetPrefs(), GetDisplayIDForShelf(shelf)));
     }
   }
 }
@@ -1304,10 +1315,13 @@ void ChromeLauncherControllerImpl::SetShelfAlignmentFromPrefs() {
     return;
 
   for (ash::WmWindow* window : ash::WmShell::Get()->GetAllRootWindows()) {
-    ash::Shelf* shelf = ash::Shelf::ForWindow(window);
-    if (shelf) {
-      shelf->wm_shelf()->SetAlignment(ash::launcher::GetShelfAlignmentPref(
-          profile_->GetPrefs(), GetDisplayIDForShelf(shelf->wm_shelf())));
+    ash::WmShelf* shelf = ash::WmShelf::ForWindow(window);
+    // TODO(jamescook): This check should not be necessary, but otherwise this
+    // tries to set the alignment on a secondary display during login before the
+    // ShelfLockingManager and ShelfView are created, which is not allowed.
+    if (shelf->IsShelfInitialized()) {
+      shelf->SetAlignment(ash::launcher::GetShelfAlignmentPref(
+          profile_->GetPrefs(), GetDisplayIDForShelf(shelf)));
     }
   }
 }
@@ -1630,9 +1644,9 @@ void ChromeLauncherControllerImpl::OnDisplayConfigurationChanged() {
   // In BOTTOM_LOCKED state, ignore the call of SetShelfBehaviorsFromPrefs.
   // Because it might be called by some operations, like crbug.com/627040
   // rotating screen.
-  ash::Shelf* shelf = ash::Shelf::ForPrimaryDisplay();
-  if (!shelf ||
-      shelf->wm_shelf()->alignment() != ash::SHELF_ALIGNMENT_BOTTOM_LOCKED)
+  ash::WmShelf* shelf =
+      ash::WmShelf::ForWindow(ash::WmShell::Get()->GetPrimaryRootWindow());
+  if (shelf->alignment() != ash::SHELF_ALIGNMENT_BOTTOM_LOCKED)
     SetShelfBehaviorsFromPrefs();
 }
 

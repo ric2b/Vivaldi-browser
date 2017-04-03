@@ -330,7 +330,8 @@ void TranslatePrefs::ResetTranslationIgnoredCount(const std::string& language) {
   update.Get()->SetInteger(language, 0);
 }
 
-int TranslatePrefs::GetTranslationAcceptedCount(const std::string& language) {
+int TranslatePrefs::GetTranslationAcceptedCount(
+    const std::string& language) const {
   const base::DictionaryValue* dict =
       prefs_->GetDictionary(kPrefTranslateAcceptedCount);
   int count = 0;
@@ -484,7 +485,8 @@ void TranslatePrefs::RegisterProfilePrefs(
       kPrefTranslateTooOftenDeniedForLanguage,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterDictionaryPref(
-      kPrefLanguageProfile, user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+      kPrefLanguageProfile,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
 }
 
 // static

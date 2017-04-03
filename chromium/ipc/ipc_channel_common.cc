@@ -80,9 +80,11 @@ Channel::AssociatedInterfaceSupport* Channel::GetAssociatedInterfaceSupport() {
   return nullptr;
 }
 
-bool Channel::IsSendThreadSafe() const {
-  return false;
-}
+void Channel::Pause() { NOTREACHED(); }
+
+void Channel::Unpause(bool flush) { NOTREACHED(); }
+
+void Channel::Flush() { NOTREACHED(); }
 
 void Channel::OnSetAttachmentBrokerEndpoint() {
   CHECK(!did_start_connect_);

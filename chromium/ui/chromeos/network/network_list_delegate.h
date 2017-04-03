@@ -45,7 +45,10 @@ class UI_CHROMEOS_EXPORT NetworkListDelegate {
   virtual views::Label* CreateInfoLabel() = 0;
 
   // Called when the user clicks on an entry representing a network in the list.
-  virtual void OnViewClicked(views::View* sender) = 0;
+  virtual void OnNetworkEntryClicked(views::View* sender) = 0;
+
+  // Called when the user clicks on a "Join Other" button.
+  virtual void OnOtherWifiClicked() = 0;
 
   virtual void RelayoutScrollList() = 0;
 };

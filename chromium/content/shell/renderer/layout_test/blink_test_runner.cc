@@ -62,6 +62,7 @@
 #include "skia/ext/platform_canvas.h"
 #include "third_party/WebKit/public/platform/FilePathConversion.h"
 #include "third_party/WebKit/public/platform/Platform.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/platform/WebPoint.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
@@ -91,6 +92,7 @@
 #include "third_party/WebKit/public/web/WebTestingSupport.h"
 #include "third_party/WebKit/public/web/WebView.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/icc_profile.h"
 
 using blink::Platform;
 using blink::WebArrayBufferView;
@@ -292,13 +294,15 @@ void BlinkTestRunner::PrintMessage(const std::string& message) {
   Send(new ShellViewHostMsg_PrintMessage(routing_id(), message));
 }
 
-void BlinkTestRunner::PostTask(blink::WebTaskRunner::Task* task) {
-  Platform::current()->currentThread()->getWebTaskRunner()->postTask(
-      BLINK_FROM_HERE, task);
+void BlinkTestRunner::PostTask(const base::Closure& task) {
+  Platform::current()
+      ->currentThread()
+      ->getWebTaskRunner()
+      ->toSingleThreadTaskRunner()
+      ->PostTask(BLINK_FROM_HERE, task);
 }
 
-void BlinkTestRunner::PostDelayedTask(blink::WebTaskRunner::Task* task,
-                                      long long ms) {
+void BlinkTestRunner::PostDelayedTask(const base::Closure& task, long long ms) {
   Platform::current()->currentThread()->getWebTaskRunner()->postDelayedTask(
       BLINK_FROM_HERE, task, ms);
 }
@@ -497,6 +501,19 @@ float BlinkTestRunner::GetWindowToViewportScale() {
   return content::GetWindowToViewportScale(render_view());
 }
 
+std::unique_ptr<blink::WebInputEvent>
+BlinkTestRunner::TransformScreenToWidgetCoordinates(
+    test_runner::WebWidgetTestProxyBase* web_widget_test_proxy_base,
+    const blink::WebInputEvent& event) {
+  return content::TransformScreenToWidgetCoordinates(web_widget_test_proxy_base,
+                                                     event);
+}
+
+test_runner::WebWidgetTestProxyBase* BlinkTestRunner::GetWebWidgetTestProxyBase(
+    blink::WebLocalFrame* frame) {
+  return content::GetWebWidgetTestProxyBase(frame);
+}
+
 void BlinkTestRunner::EnableUseZoomForDSF() {
   base::CommandLine::ForCurrentProcess()->
       AppendSwitch(switches::kEnableUseZoomForDSF);
@@ -507,7 +524,7 @@ bool BlinkTestRunner::IsUseZoomForDSFEnabled() {
 }
 
 void BlinkTestRunner::SetDeviceColorProfile(const std::string& name) {
-  content::SetDeviceColorProfile(render_view(), name);
+  content::SetDeviceColorProfile(render_view(), GetTestingICCProfile(name));
 }
 
 void BlinkTestRunner::SetBluetoothFakeAdapter(const std::string& adapter_name,
@@ -591,6 +608,10 @@ void BlinkTestRunner::TestFinished() {
     RenderView::ForEach(&visitor);
     Send(new ShellViewHostMsg_CaptureSessionHistory(routing_id()));
   } else {
+    // clean out the lifecycle if needed before capturing the layout tree
+    // dump and pixels from the compositor.
+    render_view()->GetWebView()->mainFrame()->toWebLocalFrame()
+        ->frameWidget()->updateAllLifecyclePhases();
     CaptureDump();
   }
 }
@@ -724,11 +745,10 @@ bool BlinkTestRunner::AddMediaStreamVideoSourceAndTrack(
     blink::WebMediaStream* stream) {
   DCHECK(stream);
 #if defined(ENABLE_WEBRTC)
-  return AddVideoTrackToMediaStream(
-      base::WrapUnique(new MockVideoCapturerSource()),
-      false,  // is_remote
-      false,  // is_readonly
-      stream);
+  return AddVideoTrackToMediaStream(base::MakeUnique<MockVideoCapturerSource>(),
+                                    false,  // is_remote
+                                    false,  // is_readonly
+                                    stream);
 #else
   return false;
 #endif
@@ -876,20 +896,7 @@ void BlinkTestRunner::CaptureDumpContinued() {
     return;
   }
 
-#ifndef NDEBUG
-  // Force a layout/paint by the end of the test to ensure test coverage of
-  // incremental painting.
-  test_runner::LayoutAndPaintAsyncThen(
-      render_view()
-          ->GetWebView()
-          ->mainFrame()
-          ->toWebLocalFrame()
-          ->frameWidget(),
-      base::Bind(&BlinkTestRunner::CaptureDumpComplete,
-                 base::Unretained(this)));
-#else
   CaptureDumpComplete();
-#endif
 }
 
 void BlinkTestRunner::OnPixelsDumpCompleted(const SkBitmap& snapshot) {

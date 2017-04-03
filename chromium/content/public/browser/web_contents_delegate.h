@@ -16,7 +16,6 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/bluetooth_chooser.h"
 #include "content/public/browser/invalidate_type.h"
-#include "content/public/browser/navigation_type.h"
 #include "content/public/common/media_stream_request.h"
 #include "content/public/common/security_style.h"
 #include "content/public/common/window_container_type.h"
@@ -26,6 +25,10 @@
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/native_widget_types.h"
+
+#if defined(OS_ANDROID)
+#include "base/android/scoped_java_ref.h"
+#endif
 
 class GURL;
 
@@ -59,6 +62,10 @@ namespace gfx {
 class Point;
 class Rect;
 class Size;
+}
+
+namespace net {
+class X509Certificate;
 }
 
 namespace url {
@@ -349,6 +356,7 @@ class CONTENT_EXPORT WebContentsDelegate {
   // Notifies the delegate about the creation of a new WebContents. This
   // typically happens when popups are created.
   virtual void WebContentsCreated(WebContents* source_contents,
+                                  int opener_render_process_id,
                                   int opener_render_frame_id,
                                   const std::string& frame_name,
                                   const GURL& target_url,
@@ -503,6 +511,13 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual void RequestMediaDecodePermission(
       WebContents* web_contents,
       const base::Callback<void(bool)>& callback);
+
+  // Creates a view embedding the video view.
+  virtual base::android::ScopedJavaLocalRef<jobject>
+      GetContentVideoViewEmbedder();
+
+  // Returns true if the given media should be blocked to load.
+  virtual bool ShouldBlockMediaRequest(const GURL& url);
 #endif
 
   // Requests permission to access the PPAPI broker. The delegate should return
@@ -566,7 +581,7 @@ class CONTENT_EXPORT WebContentsDelegate {
   // Displays platform-specific (OS) dialog with the certificate details.
   virtual void ShowCertificateViewerInDevTools(
       WebContents* web_contents,
-      int cert_id);
+      scoped_refptr<net::X509Certificate> certificate);
 
   // Called when the active render widget is forwarding a RemoteChannel
   // compositor proto.  This is used in Blimp mode.

@@ -4,8 +4,102 @@
 
 import("//third_party/WebKit/Source/bindings/bindings.gni")
 import("//third_party/WebKit/Source/core/core.gni")
+import(
+    "//third_party/WebKit/Source/platform/inspector_protocol/inspector_protocol.gni")
+
+blink_core_sources("inspector") {
+  sources = [
+    "ConsoleMessage.cpp",
+    "ConsoleMessage.h",
+    "ConsoleMessageStorage.cpp",
+    "ConsoleMessageStorage.h",
+    "ConsoleTypes.h",
+    "DOMEditor.cpp",
+    "DOMEditor.h",
+    "DOMPatchSupport.cpp",
+    "DOMPatchSupport.h",
+    "DevToolsHost.cpp",
+    "DevToolsHost.h",
+    "IdentifiersFactory.cpp",
+    "IdentifiersFactory.h",
+    "InspectedFrames.cpp",
+    "InspectedFrames.h",
+    "InspectorAnimationAgent.cpp",
+    "InspectorAnimationAgent.h",
+    "InspectorApplicationCacheAgent.cpp",
+    "InspectorApplicationCacheAgent.h",
+    "InspectorBaseAgent.h",
+    "InspectorCSSAgent.cpp",
+    "InspectorCSSAgent.h",
+    "InspectorDOMAgent.cpp",
+    "InspectorDOMDebuggerAgent.cpp",
+    "InspectorDOMDebuggerAgent.h",
+    "InspectorHighlight.cpp",
+    "InspectorHighlight.h",
+    "InspectorHistory.cpp",
+    "InspectorHistory.h",
+    "InspectorInputAgent.cpp",
+    "InspectorInputAgent.h",
+    "InspectorInstrumentation.cpp",
+    "InspectorInstrumentation.h",
+    "InspectorInstrumentationCustomInl.h",
+    "InspectorLayerTreeAgent.cpp",
+    "InspectorLayerTreeAgent.h",
+    "InspectorLogAgent.cpp",
+    "InspectorLogAgent.h",
+    "InspectorMemoryAgent.cpp",
+    "InspectorMemoryAgent.h",
+    "InspectorNetworkAgent.cpp",
+    "InspectorNetworkAgent.h",
+    "InspectorOverlayHost.cpp",
+    "InspectorOverlayHost.h",
+    "InspectorPageAgent.cpp",
+    "InspectorPageAgent.h",
+    "InspectorResourceContainer.cpp",
+    "InspectorResourceContainer.h",
+    "InspectorResourceContentLoader.cpp",
+    "InspectorResourceContentLoader.h",
+    "InspectorSession.cpp",
+    "InspectorSession.h",
+    "InspectorStyleSheet.cpp",
+    "InspectorStyleSheet.h",
+    "InspectorTaskRunner.cpp",
+    "InspectorTaskRunner.h",
+    "InspectorTraceEvents.cpp",
+    "InspectorTraceEvents.h",
+    "InspectorTracingAgent.cpp",
+    "InspectorTracingAgent.h",
+    "InspectorWebPerfAgent.cpp",
+    "InspectorWebPerfAgent.h",
+    "InspectorWorkerAgent.cpp",
+    "InspectorWorkerAgent.h",
+    "InstanceCounters.cpp",
+    "InstanceCounters.h",
+    "LayoutEditor.cpp",
+    "LayoutEditor.h",
+    "MainThreadDebugger.cpp",
+    "MainThreadDebugger.h",
+    "NetworkResourcesData.cpp",
+    "NetworkResourcesData.h",
+    "ProtocolPlatform.h",
+    "ThreadDebugger.cpp",
+    "ThreadDebugger.h",
+    "V8InspectorString.cpp",
+    "V8InspectorString.h",
+    "WorkerInspectorController.cpp",
+    "WorkerInspectorController.h",
+    "WorkerThreadDebugger.cpp",
+    "WorkerThreadDebugger.h",
+  ]
+
+  configs += [
+    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+    "//build/config/compiler:no_size_t_to_int_warning",
+  ]
+}
 
 action("instrumentation_sources") {
+  visibility = [ ":*" ]
   script = "CodeGeneratorInstrumentation.py"
 
   inputs = [
@@ -29,116 +123,138 @@ action("instrumentation_sources") {
 
 # inspector protocol -----------------------------------------------------------
 
-action("protocol_sources") {
-  script = "../../platform/inspector_protocol/CodeGenerator.py"
+inspector_protocol_generate("protocol_sources") {
+  out_dir = blink_core_output_dir
+
+  config_file = "inspector_protocol_config.json"
+
+  # TODO(dgozman): export js_protocol.json path from v8's build.
+  inputs = [
+    "browser_protocol.json",
+    "//v8/src/inspector/js_protocol.json",
+    "inspector_protocol_config.json",
+  ]
+
+  # These are relative to blink_core_output_dir.
+  outputs = [
+    "inspector/protocol/Accessibility.cpp",
+    "inspector/protocol/Accessibility.h",
+    "inspector/protocol/Animation.cpp",
+    "inspector/protocol/Animation.h",
+    "inspector/protocol/ApplicationCache.cpp",
+    "inspector/protocol/ApplicationCache.h",
+    "inspector/protocol/CacheStorage.cpp",
+    "inspector/protocol/CacheStorage.h",
+    "inspector/protocol/CSS.cpp",
+    "inspector/protocol/CSS.h",
+    "inspector/protocol/Database.cpp",
+    "inspector/protocol/Database.h",
+    "inspector/protocol/Debugger.h",
+    "inspector/protocol/DeviceOrientation.cpp",
+    "inspector/protocol/DeviceOrientation.h",
+    "inspector/protocol/DOM.cpp",
+    "inspector/protocol/DOMDebugger.cpp",
+    "inspector/protocol/DOMDebugger.h",
+    "inspector/protocol/DOM.h",
+    "inspector/protocol/DOMStorage.cpp",
+    "inspector/protocol/DOMStorage.h",
+    "inspector/protocol/Emulation.cpp",
+    "inspector/protocol/Emulation.h",
+    "inspector/protocol/Forward.h",
+    "inspector/protocol/IndexedDB.cpp",
+    "inspector/protocol/IndexedDB.h",
+    "inspector/protocol/Input.cpp",
+    "inspector/protocol/Input.h",
+    "inspector/protocol/Inspector.cpp",
+    "inspector/protocol/Inspector.h",
+    "inspector/protocol/IO.cpp",
+    "inspector/protocol/IO.h",
+    "inspector/protocol/LayerTree.cpp",
+    "inspector/protocol/LayerTree.h",
+    "inspector/protocol/Log.cpp",
+    "inspector/protocol/Log.h",
+    "inspector/protocol/Memory.cpp",
+    "inspector/protocol/Memory.h",
+    "inspector/protocol/Network.cpp",
+    "inspector/protocol/Network.h",
+    "inspector/protocol/Page.cpp",
+    "inspector/protocol/Page.h",
+    "inspector/protocol/Protocol.cpp",
+    "inspector/protocol/Protocol.h",
+    "inspector/protocol/Rendering.cpp",
+    "inspector/protocol/Rendering.h",
+    "inspector/protocol/Runtime.h",
+    "inspector/protocol/Security.cpp",
+    "inspector/protocol/Security.h",
+    "inspector/protocol/ServiceWorker.cpp",
+    "inspector/protocol/ServiceWorker.h",
+    "inspector/protocol/Storage.cpp",
+    "inspector/protocol/Storage.h",
+    "inspector/protocol/Tracing.cpp",
+    "inspector/protocol/Tracing.h",
+    "inspector/protocol/Worker.cpp",
+    "inspector/protocol/Worker.h",
+  ]
+
   deps = [
     ":protocol_version",
   ]
-  sources = [
-    "../../platform/inspector_protocol/Allocator_h.template",
-    "../../platform/inspector_protocol/Array_h.template",
-    "../../platform/inspector_protocol/BackendCallback_h.template",
-    "../../platform/inspector_protocol/CodeGenerator.py",
-    "../../platform/inspector_protocol/Collections_h.template",
-    "../../platform/inspector_protocol/DispatcherBase_cpp.template",
-    "../../platform/inspector_protocol/DispatcherBase_h.template",
-    "../../platform/inspector_protocol/ErrorSupport_cpp.template",
-    "../../platform/inspector_protocol/ErrorSupport_h.template",
-    "../../platform/inspector_protocol/Exported_h.template",
-    "../../platform/inspector_protocol/FrontendChannel_h.template",
-    "../../platform/inspector_protocol/Imported_h.template",
-    "../../platform/inspector_protocol/InspectorProtocol_cpp.template",
-    "../../platform/inspector_protocol/Maybe_h.template",
-    "../../platform/inspector_protocol/Object_cpp.template",
-    "../../platform/inspector_protocol/Object_h.template",
-    "../../platform/inspector_protocol/Parser_cpp.template",
-    "../../platform/inspector_protocol/Parser_h.template",
-    "../../platform/inspector_protocol/Platform_h.template",
-    "../../platform/inspector_protocol/String16_cpp.template",
-    "../../platform/inspector_protocol/String16_h.template",
-    "../../platform/inspector_protocol/TypeBuilder_cpp.template",
-    "../../platform/inspector_protocol/TypeBuilder_h.template",
-    "../../platform/inspector_protocol/ValueConversions_h.template",
-    "../../platform/inspector_protocol/Values_cpp.template",
-    "../../platform/inspector_protocol/Values_h.template",
+}
+
+# Compiles the sources generated above.
+source_set("generated") {
+  sources = get_target_outputs(":protocol_sources") +
+            get_target_outputs(":instrumentation_sources")
+
+  configs -= core_config_remove
+  configs += core_config_add + [
+               "../..:inside_blink",
+               "//third_party/WebKit/Source/core:core_include_dirs",
+             ]
+
+  if (is_win) {
+    cflags = [ "/wd4702" ]  # Unreachable code.
+  }
+
+  deps = [
+    ":instrumentation_sources",
+    ":protocol_sources",
+    "//skia",
+    "//third_party/WebKit/Source/bindings/core/v8:bindings_core_v8_generated",
+    "//third_party/WebKit/Source/wtf",
+    "//v8",
   ]
+}
+
+action("protocol_compatibility_check") {
+  script = "../../platform/inspector_protocol/CheckProtocolCompatibility.py"
+
   inputs = [
     "browser_protocol.json",
-    "../../platform/v8_inspector/js_protocol.json",
-    "inspector_protocol_config.json",
+    "//v8/src/inspector/js_protocol.json",
   ]
+  _stamp = "$blink_core_output_dir/inspector/browser_protocol.stamp"
   outputs = [
-    "$blink_core_output_dir/inspector/protocol/Accessibility.cpp",
-    "$blink_core_output_dir/inspector/protocol/Accessibility.h",
-    "$blink_core_output_dir/inspector/protocol/Animation.cpp",
-    "$blink_core_output_dir/inspector/protocol/Animation.h",
-    "$blink_core_output_dir/inspector/protocol/ApplicationCache.cpp",
-    "$blink_core_output_dir/inspector/protocol/ApplicationCache.h",
-    "$blink_core_output_dir/inspector/protocol/CacheStorage.cpp",
-    "$blink_core_output_dir/inspector/protocol/CacheStorage.h",
-    "$blink_core_output_dir/inspector/protocol/CSS.cpp",
-    "$blink_core_output_dir/inspector/protocol/CSS.h",
-    "$blink_core_output_dir/inspector/protocol/Database.cpp",
-    "$blink_core_output_dir/inspector/protocol/Database.h",
-    "$blink_core_output_dir/inspector/protocol/Debugger.h",
-    "$blink_core_output_dir/inspector/protocol/DeviceOrientation.cpp",
-    "$blink_core_output_dir/inspector/protocol/DeviceOrientation.h",
-    "$blink_core_output_dir/inspector/protocol/DOM.cpp",
-    "$blink_core_output_dir/inspector/protocol/DOMDebugger.cpp",
-    "$blink_core_output_dir/inspector/protocol/DOMDebugger.h",
-    "$blink_core_output_dir/inspector/protocol/DOM.h",
-    "$blink_core_output_dir/inspector/protocol/DOMStorage.cpp",
-    "$blink_core_output_dir/inspector/protocol/DOMStorage.h",
-    "$blink_core_output_dir/inspector/protocol/Emulation.cpp",
-    "$blink_core_output_dir/inspector/protocol/Emulation.h",
-    "$blink_core_output_dir/inspector/protocol/IndexedDB.cpp",
-    "$blink_core_output_dir/inspector/protocol/IndexedDB.h",
-    "$blink_core_output_dir/inspector/protocol/Input.cpp",
-    "$blink_core_output_dir/inspector/protocol/Input.h",
-    "$blink_core_output_dir/inspector/protocol/Inspector.cpp",
-    "$blink_core_output_dir/inspector/protocol/Inspector.h",
-    "$blink_core_output_dir/inspector/protocol/IO.cpp",
-    "$blink_core_output_dir/inspector/protocol/IO.h",
-    "$blink_core_output_dir/inspector/protocol/LayerTree.cpp",
-    "$blink_core_output_dir/inspector/protocol/LayerTree.h",
-    "$blink_core_output_dir/inspector/protocol/Log.cpp",
-    "$blink_core_output_dir/inspector/protocol/Log.h",
-    "$blink_core_output_dir/inspector/protocol/Memory.cpp",
-    "$blink_core_output_dir/inspector/protocol/Memory.h",
-    "$blink_core_output_dir/inspector/protocol/Network.cpp",
-    "$blink_core_output_dir/inspector/protocol/Network.h",
-    "$blink_core_output_dir/inspector/protocol/Page.cpp",
-    "$blink_core_output_dir/inspector/protocol/Page.h",
-    "$blink_core_output_dir/inspector/protocol/Rendering.cpp",
-    "$blink_core_output_dir/inspector/protocol/Rendering.h",
-    "$blink_core_output_dir/inspector/protocol/Runtime.h",
-    "$blink_core_output_dir/inspector/protocol/Security.cpp",
-    "$blink_core_output_dir/inspector/protocol/Security.h",
-    "$blink_core_output_dir/inspector/protocol/ServiceWorker.cpp",
-    "$blink_core_output_dir/inspector/protocol/ServiceWorker.h",
-    "$blink_core_output_dir/inspector/protocol/Storage.cpp",
-    "$blink_core_output_dir/inspector/protocol/Storage.h",
-    "$blink_core_output_dir/inspector/protocol/Tracing.cpp",
-    "$blink_core_output_dir/inspector/protocol/Tracing.h",
-    "$blink_core_output_dir/inspector/protocol/Worker.cpp",
-    "$blink_core_output_dir/inspector/protocol/Worker.h",
+    _stamp,
   ]
 
   args = [
-    "--output_base",
-    rebase_path(blink_core_output_dir, root_build_dir),
-    "--config",
-    rebase_path("inspector_protocol_config.json", root_build_dir),
+    "--stamp",
+    rebase_path(_stamp, root_build_dir),
+    rebase_path("browser_protocol.json", root_build_dir),
+    rebase_path("//v8/src/inspector/js_protocol.json", root_build_dir),
   ]
 }
 
 action("protocol_version") {
-  script =
-      "../../platform/inspector_protocol/generate-inspector-protocol-version"
+  deps = [
+    ":protocol_compatibility_check",
+  ]
+  script = "../../platform/inspector_protocol/ConcatenateProtocols.py"
 
   inputs = [
     "browser_protocol.json",
-    "../../platform/v8_inspector/js_protocol.json",
+    "//v8/src/inspector/js_protocol.json",
   ]
   output_file = "$blink_core_output_dir/inspector/protocol.json"
   outputs = [
@@ -146,9 +262,8 @@ action("protocol_version") {
   ]
 
   args = [
-    "--o",
-    rebase_path(output_file, root_build_dir),
     rebase_path("browser_protocol.json", root_build_dir),
-    rebase_path("../../platform/v8_inspector/js_protocol.json", root_build_dir),
+    rebase_path("//v8/src/inspector/js_protocol.json", root_build_dir),
+    rebase_path(output_file, root_build_dir),
   ]
 }

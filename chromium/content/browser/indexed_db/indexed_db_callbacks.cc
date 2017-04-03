@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <utility>
 
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "content/browser/child_process_security_policy_impl.h"
@@ -602,6 +602,12 @@ void IndexedDBCallbacks::OnSuccess() {
   dispatcher_host_->Send(new IndexedDBMsg_CallbacksSuccessUndefined(
       ipc_thread_id_, ipc_callbacks_id_));
   dispatcher_host_ = NULL;
+}
+
+bool IndexedDBCallbacks::IsValid() const {
+  DCHECK(dispatcher_host_.get());
+
+  return dispatcher_host_->IsOpen();
 }
 
 void IndexedDBCallbacks::SetConnectionOpenStartTime(

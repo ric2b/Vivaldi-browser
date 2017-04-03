@@ -53,10 +53,12 @@ class MockFetcher : public URLFetcher {
   ~MockFetcher() override {}
 
   void StartFetch(const GURL& url,
+                  const std::string& method,
                   const net::HttpRequestHeaders& request_headers,
                   ResultListener* result_listener) override {
     // Record the request.
     fetch_request_->SetString("url", url.spec());
+    fetch_request_->SetString("method", method);
     std::unique_ptr<base::DictionaryValue> headers(new base::DictionaryValue);
     for (net::HttpRequestHeaders::Iterator it(request_headers); it.GetNext();) {
       headers->SetString(it.name(), it.value());
@@ -146,7 +148,7 @@ class GenericURLRequestJobTest : public testing::Test {
     std::unique_ptr<net::URLRequest> request(url_request_context_.CreateRequest(
         url, net::DEFAULT_PRIORITY, &request_delegate_));
     request->Start();
-    message_loop_.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
     return request;
   }
 
@@ -179,10 +181,11 @@ TEST_F(GenericURLRequestJobTest, BasicRequestParams) {
   request->SetExtraRequestHeaderByName("User-Agent", "TestBrowser", true);
   request->SetExtraRequestHeaderByName("Accept", "text/plain", true);
   request->Start();
-  message_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   std::string expected_request_json =
       "{\"url\": \"https://example.com/\","
+      " \"method\": \"GET\","
       " \"headers\": {"
       "   \"Accept\": \"text/plain\","
       "   \"Cookie\": \"\","
@@ -334,6 +337,7 @@ TEST_F(GenericURLRequestJobTest, RequestWithCookies) {
 
   std::string expected_request_json =
       "{\"url\": \"https://example.com/\","
+      " \"method\": \"GET\","
       " \"headers\": {"
       "   \"Cookie\": \"basic_cookie=1; secure_cookie=2; http_only_cookie=3\","
       "   \"Referer\": \"\""

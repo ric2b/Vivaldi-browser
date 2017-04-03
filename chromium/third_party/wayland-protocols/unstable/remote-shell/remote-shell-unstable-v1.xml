@@ -38,7 +38,7 @@
     reset.
   </description>
 
-  <interface name="zwp_remote_shell_v1" version="11">
+  <interface name="zcr_remote_shell_v1" version="2">
     <description summary="remote_shell">
       The global interface that allows clients to turn a wl_surface into a
       "real window" which is remotely managed but can be stacked, activated
@@ -101,22 +101,10 @@
 	See the documentation of remote_surface for more details about what an
 	remote_surface is and how it is used.
       </description>
-      <arg name="id" type="new_id" interface="zwp_remote_surface_v1"/>
+      <arg name="id" type="new_id" interface="zcr_remote_surface_v1"/>
       <arg name="surface" type="object" interface="wl_surface"/>
       <arg name="container" type="uint"/>
     </request>
-
-    <event name="configure">
-      <description summary="suggests a re-layout of remote shell">
-	Obsolete: Suggests a re-layout of remote surface geometry.
-      </description>
-      <arg name="width" type="int"/>
-      <arg name="height" type="int"/>
-      <arg name="work_area_inset_left" type="int"/>
-      <arg name="work_area_inset_top" type="int"/>
-      <arg name="work_area_inset_right" type="int"/>
-      <arg name="work_area_inset_bottom" type="int"/>
-    </event>
 
     <event name="activated">
       <description summary="activated surface changed">
@@ -126,33 +114,17 @@
       <arg name="lost_active" type="object" interface="wl_surface" allow-null="true"/>
     </event>
 
-    <!-- Version 6 additions -->
-
-    <request name="get_notification_surface" since="6">
+    <request name="get_notification_surface">
       <description summary="create a notification surface from a surface">
 	Creates a notification_surface for the given surface, gives it the
 	notification_surface role and associated it with a notification id.
       </description>
-      <arg name="id" type="new_id" interface="zwp_notification_surface_v1"/>
+      <arg name="id" type="new_id" interface="zcr_notification_surface_v1"/>
       <arg name="surface" type="object" interface="wl_surface"/>
       <arg name="notification_id" type="string" />
     </request>
 
-    <!-- Version 8 additions -->
-
-    <event name="layout_mode_changed" since="8">
-      <description summary="layout mode changed">
-	The shell_mode_changed event is sent by the compositor when
-	the shell mode was changed.
-
-	This is an event to notify that the shell mode has switched.
-      </description>
-      <arg name="layout_mode" type="uint"/>
-    </event>
-
-    <!-- Version 9 additions -->
-
-    <event name="configuration_changed" since="9">
+    <event name="configuration_changed">
       <description summary="suggests a re-configuration of remote shell">
 	Suggests a re-configuration of remote shell.
       </description>
@@ -168,7 +140,7 @@
     </event>
   </interface>
 
-  <interface name="zwp_remote_surface_v1" version="11">
+  <interface name="zcr_remote_surface_v1" version="2">
     <description summary="A desktop window">
       An interface that may be implemented by a wl_surface, for
       implementations that provide a desktop-style user interface
@@ -233,190 +205,7 @@
       <arg name="scale" type="fixed"/>
     </request>
 
-    <event name="set_fullscreen">
-      <description summary="surface wants to be fullscreen">
-	The set_fullscreen event is sent by the compositor when the user
-	wants the surface to be made fullscreen.
-
-	This is only a request that the user intends to make your
-	window fullscreen. The client may choose to ignore this request.
-      </description>
-    </event>
-
-    <event name="unset_fullscreen">
-      <description summary="surface wants to be non-fullscreen">
-	The unset_fullscreen event is sent by the compositor when the user
-	wants the surface to be made non-fullscreen.
-
-	This is only a request that the user intends to make your
-	window non-fullscreen. The client may choose to ignore this request.
-      </description>
-    </event>
-
-    <event name="close">
-      <description summary="surface wants to be closed">
-	The close event is sent by the compositor when the user
-	wants the surface to be closed. This should be equivalent to
-	the user clicking the close button in client-side decorations,
-	if your application has any...
-
-	This is only a request that the user intends to close your
-	window. The client may choose to ignore this request, or show
-	a dialog to ask the user to save their data...
-      </description>
-    </event>
-
-    <!-- Version 2 additions -->
-
-    <request name="fullscreen" since="2">
-      <description summary="fullscreen">
-	Request that surface is made fullscreen.
-
-	This is only a request that the window should be made fullscreen.
-	The compositor may choose to ignore this request. The client should
-	listen to set_fullscreen events to determine if the window was
-	made fullscreen or not.
-      </description>
-    </request>
-
-    <request name="maximize" since="2">
-      <description summary="maximize">
-	Request that surface is maximized. The window geometry will be updated
-	to whatever the compositor finds appropriate for a maximized window.
-
-	This is only a request that the window should be maximized. The
-	compositor may choose to ignore this request. The client should
-	listen to set_maximized events to determine if the window was
-	maximized or not.
-      </description>
-    </request>
-
-    <request name="minimize" since="2">
-      <description summary="minimize">
-	Request that surface is minimized.
-
-	This is only a request that the window should be minimized. The
-	compositor may choose to ignore this request. The client should
-	listen to set_minimized events to determine if the window was
-	minimized or not.
-      </description>
-    </request>
-
-    <request name="restore" since="2">
-      <description summary="restore">
-	Request that surface is restored. This restores the window geometry
-	to what it was before the window was minimized, maximized or made
-	fullscreen.
-
-	This is only a request that the window should be restored. The
-	compositor may choose to ignore this request. The client should
-	listen to unset_maximized, unset_minimize and unset_fullscreen
-	events to determine if the window was restored or not.
-      </description>
-    </request>
-
-    <event name="set_maximized" since="2">
-      <description summary="surface wants to be maximized">
-	The set_maximized event is sent by the compositor when the user
-	wants the surface to be maximized.
-
-	This is only a request that the user intends to maximized the window.
-	The client may choose to ignore this request.
-      </description>
-    </event>
-
-    <event name="unset_maximized" since="2">
-      <description summary="surface wants to be restored">
-	The unset_maximized event is sent by the compositor when the user
-	wants the surface to be made visible.
-
-	This is only a request that the user intends to make your
-	window visible. The client may choose to ignore this request.
-      </description>
-    </event>
-
-    <event name="set_minimized" since="2">
-      <description summary="surface wants to be minimized">
-	The set_minimized event is sent by the compositor when the user
-	wants the surface to be minimized.
-
-	This is only a request that the user intends to minimize the window.
-	The client may choose to ignore this request.
-      </description>
-    </event>
-
-    <event name="unset_minimized" since="2">
-      <description summary="surface wants to be restored">
-	The unset_minimized event is sent by the compositor when the user
-	wants the surface to be made visible.
-
-	This is only a request that the user intends to make your
-	window visible. The client may choose to ignore this request.
-      </description>
-    </event>
-
-    <!-- Version 3 additions -->
-
-    <request name="pin" since="3">
-      <description summary="pin">
-	Request that surface is pinned.
-
-	This is only a request that the window should be pinned.
-	The compositor may choose to ignore this request. The client should
-	listen to set_pinned events to determine if the window was
-	pinned or not.
-      </description>
-    </request>
-
-    <request name="unpin" since="3">
-      <description summary="unpin">
-	Request that surface is unpinned.
-
-	This is only a request that the window should be unpinned.
-	The compositor may choose to ignore this request. The client should
-	listen to unset_pinned events to determine if the window was
-	unpinned or not.
-      </description>
-    </request>
-
-    <request name="unfullscreen" since="3">
-      <description summary="unfullscreen">
-	Request that surface is made unfullscreen.
-
-	This is only a request that the window should be made unfullscreen.
-	The compositor may choose to ignore this request. The client should
-	listen to unset_fullscreen events to determine if the window was
-	made unfullscreen or not.
-      </description>
-    </request>
-
-    <event name="set_pinned" since="3">
-      <description summary="surface was pinned">
-	The set_pinned event is sent by the compositor when the surface
-	was pinned.
-
-	This is an event to notify that the window is pinned in compositor.
-	The pin may be triggered by a client's request, or some user action
-	directly handled by the compositor.
-	The client may choose to ignore this event.
-      </description>
-    </event>
-
-    <event name="unset_pinned" since="3">
-      <description summary="surface was unpinned">
-	The unset_pinned event is sent by the compositor when the surface
-	was unpinned.
-
-	This is an event to notify that the window is unpinned in compositor.
-	The unpin may be triggered by a client's request, or some user action
-	directly handled by the compositor.
-	The client may choose to ignore this event.
-      </description>
-    </event>
-
-    <!-- Version 4 additions -->
-
-    <request name="set_rectangular_shadow" since="4">
+    <request name="set_rectangular_shadow">
       <description summary="set a rectangular shadow">
 	Request that surface needs a rectangular shadow.
 
@@ -435,9 +224,14 @@
       <arg name="height" type="int"/>
      </request>
 
-    <!-- Version 5 additions -->
+    <request name="set_rectangular_shadow_background_opacity">
+      <description summary="suggests the window's background opacity">
+	Suggests the window's background opacity when the shadow is requested.
+      </description>
+      <arg name="opacity" type="fixed"/>
+    </request>
 
-    <request name="set_title" since="5">
+    <request name="set_title">
       <description summary="set surface title">
 	Set a short title for the surface.
 
@@ -450,7 +244,7 @@
       <arg name="title" type="string"/>
     </request>
 
-    <request name="set_top_inset" since="5">
+    <request name="set_top_inset">
       <description summary="set top inset for surface">
 	Set distance from the top of the surface to the contents.
 
@@ -459,9 +253,121 @@
       <arg name="height" type="int"/>
     </request>
 
-    <!-- Version 7 additions -->
+    <request name="activate">
+      <description summary="make the surface active">
+	Make the surface active and bring it to the front.
+      </description>
+      <arg name="serial" type="uint" summary="the serial of the user event"/>
+    </request>
 
-    <event name="state_type_changed" since="7">
+    <request name="maximize">
+      <description summary="maximize">
+	Request that surface is maximized. The window geometry will be updated
+	to whatever the compositor finds appropriate for a maximized window.
+
+	This is only a request that the window should be maximized. The
+	compositor may choose to ignore this request. The client should
+	listen to set_maximized events to determine if the window was
+	maximized or not.
+      </description>
+    </request>
+
+    <request name="minimize">
+      <description summary="minimize">
+	Request that surface is minimized.
+
+	This is only a request that the window should be minimized. The
+	compositor may choose to ignore this request. The client should
+	listen to set_minimized events to determine if the window was
+	minimized or not.
+      </description>
+    </request>
+
+    <request name="restore">
+      <description summary="restore">
+	Request that surface is restored. This restores the window geometry
+	to what it was before the window was minimized, maximized or made
+	fullscreen.
+
+	This is only a request that the window should be restored. The
+	compositor may choose to ignore this request. The client should
+	listen to unset_maximized, unset_minimize and unset_fullscreen
+	events to determine if the window was restored or not.
+      </description>
+    </request>
+
+    <request name="fullscreen">
+      <description summary="fullscreen">
+	Request that surface is made fullscreen.
+
+	This is only a request that the window should be made fullscreen.
+	The compositor may choose to ignore this request. The client should
+	listen to set_fullscreen events to determine if the window was
+	made fullscreen or not.
+      </description>
+    </request>
+
+    <request name="unfullscreen">
+      <description summary="unfullscreen">
+	Request that surface is made unfullscreen.
+
+	This is only a request that the window should be made unfullscreen.
+	The compositor may choose to ignore this request. The client should
+	listen to unset_fullscreen events to determine if the window was
+	made unfullscreen or not.
+      </description>
+    </request>
+
+    <request name="pin">
+      <description summary="pin">
+	Request that surface is pinned.
+
+	This is only a request that the window should be pinned.
+	The compositor may choose to ignore this request. The client should
+	listen to state_changed events to determine if the window was
+	pinned or not. If trusted flag is non-zero, the app can prevent users
+	from exiting the pinned mode.
+      </description>
+      <arg name="trusted" type="int"/>
+    </request>
+
+    <request name="unpin">
+      <description summary="unpin">
+	Request that surface is unpinned.
+
+	This is only a request that the window should be unpinned.
+	The compositor may choose to ignore this request. The client should
+	listen to unset_pinned events to determine if the window was
+	unpinned or not.
+      </description>
+    </request>
+
+    <request name="set_system_modal">
+      <description summary="suggests a re-layout of remote shell input area">
+	Suggests a surface should become system modal.
+      </description>
+    </request>
+
+    <request name="unset_system_modal">
+      <description summary="suggests a re-layout of remote shell input area">
+	Suggests a surface should become non system modal.
+      </description>
+    </request>
+
+    <event name="close">
+      <description summary="surface wants to be closed">
+	The close event is sent by the compositor when the user
+	wants the surface to be closed. This should be equivalent to
+	the user clicking the close button in client-side decorations,
+	if your application has any...
+
+	This is only a request that the user intends to close your
+	window. The client may choose to ignore this request, or show
+	a dialog to ask the user to save their data...
+      </description>
+    </event>
+
+    <event name="state_type_changed">
       <description summary="surface state type changed">
 	The state_type_changed event is sent by the compositor when the surface
 	state changed.
@@ -474,58 +380,27 @@
       <arg name="state_type" type="uint"/>
     </event>
 
-    <!-- Version 8 additions -->
+    <!-- Version 2 additions -->
 
-    <request name="set_system_modal" since="8">
-      <description summary="suggests a re-layout of remote shell input area">
-	Suggests a surface should become system modal.
+    <request name="set_moving" since="2">
+      <description summary="interactive move started">
+	Notifies the compositor when an interactive, user-driven move of the
+	surface starts. The compositor may assume that subsequent
+	set_window_geometry requests are position updates until it receives a
+	unset_moving request.
       </description>
     </request>
 
-    <request name="unset_system_modal" since="8">
-      <description summary="suggests a re-layout of remote shell input area">
-	Suggests a surface should become non system modal.
+    <request name="unset_moving" since="2">
+      <description summary="interactive move stopped">
+	Notifies the compositor when an interactive, user-driven move of the
+	surface stops. The compositor may choose to stop the move regardless
+	of this request.
       </description>
-    </request>
-
-    <!-- Version 9 additions -->
-
-    <request name="set_rectangular_shadow_background_opacity" since="9">
-      <description summary="suggests the window's background opacity">
-	Suggests the window's background opacity when the shadow is requested.
-      </description>
-      <arg name="opacity" type="fixed"/>
-    </request>
-
-    <!-- Version 10 additions -->
-
-    <request name="activate" since="10">
-      <description summary="make the surface active">
-	Make the surface active and bring it to the front.
-      </description>
-      <arg name="serial" type="uint" summary="the serial of the user event"/>
-    </request>
-
-    <!-- Version 11 additions -->
-
-    <request name="pin_with_trusted_flag" since="11">
-      <description summary="set window mode as pinned with taking a trasted flag.">
-	Request that surface is pinned.
-
-	This is only a request that the window should be pinned.
-	The compositor may choose to ignore this request. The client should
-	listen to set_pinned events to determine if the window was
-	pinned or not. If trusted flag is non-zero, the app can prevent users
-	from exiting the pinned mode.
-      </description>
-      <arg name="trusted" type="int" summary="whether the app can enforce users
-          to stay in the pinned mode."/>
     </request>
   </interface>
 
-  <!-- Version 6 additions -->
-
-  <interface name="zwp_notification_surface_v1" version="6">
+  <interface name="zcr_notification_surface_v1" version="1">
     <description summary="A notification window">
       An interface that may be implemented by a wl_surface to host
       notification contents.

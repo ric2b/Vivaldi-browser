@@ -2,16 +2,40 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/features.gni")
-import("//build/config/ui.gni")
-import("//build/config/win/manifest.gni")
-import("//build/util/version.gni")
-import("//chrome/version.gni")
-import("//remoting/remoting_enable.gni")
-import("//remoting/remoting_locales.gni")
-import("//remoting/remoting_options.gni")
-import("//remoting/remoting_version.gni")
-import("//remoting/tools/build/remoting_localize.gni")
+import("//build/util/process_version.gni")
+import("//remoting/build/config/remoting_build.gni")
+
+group("all_tests") {
+  testonly = true
+
+  deps = [
+    ":unit_tests",
+  ]
+}
+
+group("all") {
+  testonly = true
+
+  deps = [
+    ":host",
+  ]
+  if (enable_me2me_host) {
+    deps += [ "//remoting/host:remoting_me2me_host" ]
+  }
+
+  if (is_chrome_branded) {
+    deps += [ ":remoting_host_branded" ]
+  }
+
+  if (!is_chromeos && !is_android && !is_ios) {
+    deps += [
+      "//remoting/host:remoting_native_messaging_host",
+      "//remoting/host:remoting_native_messaging_manifests",
+      "//remoting/host:remoting_start_host",
+      "//remoting/host/it2me:remote_assistance_host",
+    ]
+  }
+}
 
 process_version("remoting_version") {
   template_file = "//remoting/host/version.h.in"
@@ -19,68 +43,6 @@ process_version("remoting_version") {
     branding_path,
   ]
   output = "$target_gen_dir/version.h"
-}
-
-if (is_win) {
-  import("//remoting/host/predefines_win.gni")
-} else if (is_mac) {
-  import("//build/config/mac/rules.gni")
-  import("//third_party/icu/config.gni")
-}
-
-# Reference this manifest to indicate that a process is per-monitor DPI aware.
-dpi_aware_manifest = "//remoting/host/win/dpi_aware.manifest"
-
-# Depending on this target gives a default executable manifest with the addition
-# of the DPI aware tag.
-windows_manifest("dpi_aware_exe_manifest") {
-  sources = [
-    as_invoker_manifest,
-    common_controls_manifest,
-    default_compatibility_manifest,
-    dpi_aware_manifest,
-  ]
-  type = "exe"
-}
-
-# Depending on this target gives a default executable manifest with the addition
-# of the DPI aware tag and a requestedExecutionLevel of requireAdministrator.
-windows_manifest("dpi_aware_elevated_exe_manifest") {
-  sources = [
-    common_controls_manifest,
-    default_compatibility_manifest,
-    dpi_aware_manifest,
-    require_administrator_manifest,
-  ]
-  type = "exe"
-}
-
-# GYP version: remoting/remoting_host:remoting_host_credits
-action("credits") {
-  # We put this in $root_build_dir/gen/remoting instead of
-  # $root_build_dir/gen/remoting/host (target_gen_dir) for
-  # compatibility w/ GYP, since the installer needs the file to
-  # be at the same location.
-  about_credits_file = "$root_build_dir/gen/remoting/CREDITS.txt"
-  script = "//tools/licenses.py"
-
-  inputs = [
-    "installer/credits.tmpl",
-    "installer/credits_entry.tmpl",
-  ]
-
-  outputs = [
-    about_credits_file,
-  ]
-
-  args = [
-    "credits",
-    rebase_path(about_credits_file, root_build_dir),
-    "--file-template",
-    rebase_path("installer/credits.tmpl", root_build_dir),
-    "--entry-template",
-    rebase_path("installer/credits_entry.tmpl", root_build_dir),
-  ]
 }
 
 # This must be a static library instead of a source set because
@@ -94,14 +56,11 @@ static_library("host") {
   sources = [
     "audio_capturer.cc",
     "audio_capturer.h",
-    "audio_capturer_android.cc",
     "audio_capturer_linux.cc",
     "audio_capturer_linux.h",
     "audio_capturer_mac.cc",
     "audio_capturer_win.cc",
     "audio_capturer_win.h",
-    "audio_pump.cc",
-    "audio_pump.h",
     "audio_silence_detector.cc",
     "audio_silence_detector.h",
     "backoff_timer.cc",
@@ -145,13 +104,11 @@ static_library("host") {
     "constants_mac.h",
     "continue_window.cc",
     "continue_window.h",
-    "continue_window_android.cc",
     "continue_window_chromeos.cc",
     "continue_window_linux.cc",
     "continue_window_mac.mm",
     "continue_window_win.cc",
     "curtain_mode.h",
-    "curtain_mode_android.cc",
     "curtain_mode_linux.cc",
     "curtain_mode_mac.cc",
     "curtain_mode_win.cc",
@@ -164,7 +121,6 @@ static_library("host") {
     "desktop_process.cc",
     "desktop_process.h",
     "desktop_resizer.h",
-    "desktop_resizer_android.cc",
     "desktop_resizer_mac.cc",
     "desktop_resizer_ozone.cc",
     "desktop_resizer_win.cc",
@@ -178,7 +134,6 @@ static_library("host") {
     "desktop_session_proxy.h",
     "desktop_session_win.cc",
     "desktop_session_win.h",
-    "disconnect_window_android.cc",
     "disconnect_window_chromeos.cc",
     "disconnect_window_linux.cc",
     "disconnect_window_mac.h",
@@ -221,7 +176,6 @@ static_library("host") {
     "host_window_proxy.cc",
     "host_window_proxy.h",
     "input_injector.h",
-    "input_injector_android.cc",
     "input_injector_chromeos.cc",
     "input_injector_chromeos.h",
     "input_injector_mac.cc",
@@ -254,12 +208,15 @@ static_library("host") {
     "linux/certificate_watcher.h",
     "linux/unicode_to_keysym.cc",
     "linux/unicode_to_keysym.h",
+    "linux/x11_character_injector.cc",
+    "linux/x11_character_injector.h",
+    "linux/x11_keyboard_impl.cc",
+    "linux/x11_keyboard_impl.h",
     "linux/x11_util.cc",
     "linux/x11_util.h",
     "linux/x_server_clipboard.cc",
     "linux/x_server_clipboard.h",
     "local_input_monitor.h",
-    "local_input_monitor_android.cc",
     "local_input_monitor_chromeos.cc",
     "local_input_monitor_mac.mm",
     "local_input_monitor_win.cc",
@@ -280,7 +237,6 @@ static_library("host") {
     "oauth_token_getter_impl.h",
     "pairing_registry_delegate.cc",
     "pairing_registry_delegate.h",
-    "pairing_registry_delegate_android.cc",
     "pairing_registry_delegate_linux.cc",
     "pairing_registry_delegate_linux.h",
     "pairing_registry_delegate_mac.cc",
@@ -299,7 +255,6 @@ static_library("host") {
     "resizing_host_observer.cc",
     "resizing_host_observer.h",
     "resources.h",
-    "resources_android.cc",
     "resources_linux.cc",
     "resources_mac.cc",
     "resources_win.cc",
@@ -308,33 +263,6 @@ static_library("host") {
     "screen_controls.h",
     "screen_resolution.cc",
     "screen_resolution.h",
-    "security_key/security_key_auth_handler.h",
-    "security_key/security_key_auth_handler_posix.cc",
-    "security_key/security_key_auth_handler_win.cc",
-    "security_key/security_key_extension.cc",
-    "security_key/security_key_extension.h",
-    "security_key/security_key_extension_session.cc",
-    "security_key/security_key_extension_session.h",
-    "security_key/security_key_ipc_client.cc",
-    "security_key/security_key_ipc_client.h",
-    "security_key/security_key_ipc_constants.cc",
-    "security_key/security_key_ipc_constants.h",
-    "security_key/security_key_ipc_server.cc",
-    "security_key/security_key_ipc_server.h",
-    "security_key/security_key_ipc_server_impl.cc",
-    "security_key/security_key_ipc_server_impl.h",
-    "security_key/security_key_message.cc",
-    "security_key/security_key_message.h",
-    "security_key/security_key_message_handler.cc",
-    "security_key/security_key_message_handler.h",
-    "security_key/security_key_message_reader.h",
-    "security_key/security_key_message_reader_impl.cc",
-    "security_key/security_key_message_reader_impl.h",
-    "security_key/security_key_message_writer.h",
-    "security_key/security_key_message_writer_impl.cc",
-    "security_key/security_key_message_writer_impl.h",
-    "security_key/security_key_socket.cc",
-    "security_key/security_key_socket.h",
     "server_log_entry_host.cc",
     "server_log_entry_host.h",
     "service_urls.cc",
@@ -364,39 +292,13 @@ static_library("host") {
     "usage_stats_consent_win.cc",
     "username.cc",
     "username.h",
-    "win/com_imported_mstscax.tlh",
-    "win/com_security.cc",
-    "win/com_security.h",
-    "win/elevation_helpers.cc",
-    "win/elevation_helpers.h",
-    "win/launch_process_with_token.cc",
-    "win/launch_process_with_token.h",
-    "win/omaha.cc",
-    "win/omaha.h",
-    "win/rdp_client.cc",
-    "win/rdp_client.h",
-    "win/rdp_client_window.cc",
-    "win/rdp_client_window.h",
-    "win/security_descriptor.cc",
-    "win/security_descriptor.h",
-    "win/session_desktop_environment.cc",
-    "win/session_desktop_environment.h",
-    "win/session_input_injector.cc",
-    "win/session_input_injector.h",
-    "win/window_station_and_desktop.cc",
-    "win/window_station_and_desktop.h",
-    "win/worker_process_launcher.cc",
-    "win/worker_process_launcher.h",
-    "win/wts_terminal_monitor.cc",
-    "win/wts_terminal_monitor.h",
-    "win/wts_terminal_observer.h",
   ]
 
   libs = []
 
   configs += [
     "//build/config/compiler:wexit_time_destructors",
-    "//remoting:version",
+    "//remoting/build/config:version",
   ]
 
   defines = [ "WEBRTC_CHROMIUM_BUILD" ]
@@ -409,12 +311,15 @@ static_library("host") {
     "//google_apis",
     "//ipc",
     "//remoting/base",
+    "//remoting/host/security_key",
     "//remoting/protocol",
     "//remoting/resources",
     "//ui/base",
     "//ui/events:dom_keycode_converter",
     "//ui/events/platform",
   ]
+
+  public_deps = []
 
   if (enable_configuration_policy) {
     deps += [ "//components/policy:generated" ]
@@ -430,7 +335,11 @@ static_library("host") {
       "//build/config/linux:xrandr",
     ]
     if (is_desktop_linux) {
-      deps += [ "//build/config/linux/gtk2" ]
+      if (use_gtk3) {
+        deps += [ "//build/config/linux/gtk3" ]
+      } else {
+        deps += [ "//build/config/linux/gtk2" ]
+      }
     }
   } else {
     sources -= [
@@ -443,6 +352,8 @@ static_library("host") {
       # These will already be filtered out on non-Linux.
       sources -= [
         "linux/unicode_to_keysym.cc",
+        "linux/x11_keyboard_impl.cc",
+        "linux/x11_keyboard_impl.h",
         "linux/x11_util.cc",
         "linux/x_server_clipboard.cc",
         "linux/x_server_clipboard.h",
@@ -515,20 +426,16 @@ static_library("host") {
 
   if (is_win) {
     deps += [
-      ":messages",
-      ":remoting_lib_idl",
+      "//remoting/host/win",
+      "//remoting/host/win:messages",
+      "//remoting/host/win:remoting_lib_idl",
     ]
+
+    public_deps += [ "//remoting/host/win" ]
   }
 
   if (enable_webrtc) {
     deps += [ "//third_party/webrtc/modules/desktop_capture" ]
-  }
-
-  if (is_android) {
-    sources -= [
-      "single_window_desktop_environment.cc",
-      "single_window_desktop_environment.h",
-    ]
   }
 }
 
@@ -548,21 +455,11 @@ static_library("test_support") {
     "fake_oauth_token_getter.h",
     "host_mock_objects.cc",
     "host_mock_objects.h",
-    "security_key/fake_ipc_security_key_auth_handler.cc",
-    "security_key/fake_ipc_security_key_auth_handler.h",
-    "security_key/fake_security_key_ipc_client.cc",
-    "security_key/fake_security_key_ipc_client.h",
-    "security_key/fake_security_key_ipc_server.cc",
-    "security_key/fake_security_key_ipc_server.h",
-    "security_key/fake_security_key_message_reader.cc",
-    "security_key/fake_security_key_message_reader.h",
-    "security_key/fake_security_key_message_writer.cc",
-    "security_key/fake_security_key_message_writer.h",
     "setup/mock_oauth_client.cc",
     "setup/mock_oauth_client.h",
   ]
 
-  configs += [ "//remoting:version" ]
+  configs += [ "//remoting/build/config:version" ]
 
   deps = [
     "//remoting/proto",
@@ -589,7 +486,6 @@ source_set("unit_tests") {
   testonly = true
 
   sources = [
-    "audio_pump_unittest.cc",
     "audio_silence_detector_unittest.cc",
     "backoff_timer_unittest.cc",
     "chromeos/aura_desktop_capturer_unittest.cc",
@@ -610,10 +506,12 @@ source_set("unit_tests") {
     "host_status_logger_unittest.cc",
     "ipc_desktop_environment_unittest.cc",
     "it2me/it2me_confirmation_dialog_proxy_unittest.cc",
+    "it2me/it2me_host_unittest.cc",
     "it2me/it2me_native_messaging_host_unittest.cc",
     "linux/audio_pipe_reader_unittest.cc",
     "linux/certificate_watcher_unittest.cc",
     "linux/unicode_to_keysym_unittest.cc",
+    "linux/x11_character_injector_unittest.cc",
     "linux/x_server_clipboard_unittest.cc",
     "local_input_monitor_unittest.cc",
     "mouse_cursor_monitor_proxy_unittest.cc",
@@ -629,23 +527,14 @@ source_set("unit_tests") {
     "resizing_host_observer_unittest.cc",
     "resources_unittest.cc",
     "screen_resolution_unittest.cc",
-    "security_key/security_key_auth_handler_posix_unittest.cc",
-    "security_key/security_key_auth_handler_win_unittest.cc",
-    "security_key/security_key_extension_session_unittest.cc",
-    "security_key/security_key_ipc_client_unittest.cc",
-    "security_key/security_key_ipc_server_unittest.cc",
-    "security_key/security_key_message_handler_unittest.cc",
-    "security_key/security_key_message_reader_impl_unittest.cc",
-    "security_key/security_key_message_writer_impl_unittest.cc",
     "server_log_entry_host_unittest.cc",
     "setup/me2me_native_messaging_host_unittest.cc",
     "setup/oauth_helper_unittest.cc",
     "setup/pin_validator_unittest.cc",
     "third_party_auth_config_unittest.cc",
+    "token_validator_base_unittest.cc",
     "token_validator_factory_impl_unittest.cc",
     "touch_injector_win_unittest.cc",
-    "win/rdp_client_unittest.cc",
-    "win/worker_process_launcher_unittest.cc",
   ]
 
   if (!use_x11 && is_linux) {
@@ -657,395 +546,52 @@ source_set("unit_tests") {
   if (is_chromeos) {
     sources -= [ "linux/x_server_clipboard_unittest.cc" ]
   }
-  if (is_android) {
-    sources -= [ "it2me/it2me_native_messaging_host_unittest.cc" ]
-  }
-  if (is_win) {
-    sources += [
-      "win/elevated_native_messaging_host.cc",
-      "win/elevated_native_messaging_host.h",
-      "win/launch_native_messaging_host_process.cc",
-      "win/launch_native_messaging_host_process.h",
-    ]
-  }
 
-  configs += [ "//remoting:version" ]
+  configs += [ "//remoting/build/config:version" ]
 
   deps = [
     ":host",
     ":test_support",
     "//remoting/host/it2me:common",
     "//remoting/host/native_messaging",
+    "//remoting/host/security_key:unit_tests",
     "//remoting/host/setup",
     "//remoting/proto",
+    "//remoting/resources",
     "//skia",
     "//testing/gmock",
     "//testing/gtest",
   ]
+  if (is_win) {
+    deps += [ "//remoting/host/win:unit_tests" ]
+  }
 
   if (enable_configuration_policy) {
     deps += [ "//components/policy/core/browser:test_support" ]
   }
 }
 
-if (is_win) {
-  import("//build/toolchain/win/midl.gni")
-  import("//build/win/message_compiler.gni")
-
-  # TODO(brettw) these should not be generated via exec_script. This should be
-  # part of the build process rather than the metabuild. Instead, a script
-  # should generate a header containing the #defines for this as well as the
-  # IDL file with the values.
-  clsids = exec_script("win/get_clsids.py",
-                       [
-                         daemon_controller_guid,
-                         rdp_desktop_session_guid,
-                         chrome_version_full,
-                       ],
-                       "value")
-  daemon_controller_clsid = clsids[0]
-  rdp_desktop_session_clsid = clsids[1]
-
-  action("generate_idl") {
-    script = "//build/util/version.py"
-
-    inputs = [
-      "win/chromoting_lib_idl.templ",
-    ]
-    outputs = [
-      "$target_gen_dir/chromoting_lib.idl",
-    ]
-
-    args = [
-      "-e",
-      "DAEMON_CONTROLLER_CLSID='$daemon_controller_clsid'",
-      "-e",
-      "RDP_DESKTOP_SESSION_CLSID='$rdp_desktop_session_clsid'",
-      rebase_path(inputs[0], root_build_dir),
-      rebase_path(outputs[0], root_build_dir),
-    ]
+group("remoting_host_branded") {
+  testonly = true
+  deps = []
+  if (enable_remoting_host) {
+    deps += [ ":remoting_host_installation" ]
   }
-
-  midl("remoting_lib_idl") {
-    sources = get_target_outputs(":generate_idl")
-    deps = [
-      ":generate_idl",
-    ]
+  if (enable_me2me_host) {
+    deps += [ "//remoting/host:remoting_me2me_host_archive" ]
   }
-
-  config("MIDL_config") {
-    if (is_clang) {
-      cflags = [
-        # MIDL generated code has a habit of omitting optional braces.
-        "-Wno-missing-braces",
-
-        # Source files generated by the MIDL compiler trigger warnings with
-        # -Wincompatible-pointer-types enabled.
-        "-Wno-incompatible-pointer-types",
-
-        # Generated code contains unused variables.
-        "-Wno-unused-variable",
-
-        # PROXYFILE_LIST_START is an extern with initializer.
-        "-Wno-extern-initializer",
-      ]
-    }
-  }
-
-  # GYP version: remoting/remoting_host_win.gypi:remoting_lib_ps
-  static_library("remoting_lib_ps") {
-    configs += [ ":MIDL_config" ]
-
-    defines = [
-      "ENTRY_PREFIX=Ps",
-      "REGISTER_PROXY_DLL",
-    ]
-
-    deps = [
-      ":remoting_lib_idl",
-    ]
-
-    sources = [
-      "$root_gen_dir/remoting/host/chromoting_lib.dlldata.c",
-      "$root_gen_dir/remoting/host/chromoting_lib_p.c",
-    ]
-  }
-
-  # Makes the .mc file from the .mc.jinja file.
-  remoting_localize("messages_localizing") {
-    sources = [
-      "win/host_messages.mc.jinja2",
-    ]
-    locales = remoting_locales
-    locale_dir = webapp_locale_dir
-    encoding = "utf-16"
-
-    # This target is funny. It only produces one file and the output doesn't
-    # match the input. We want to generate remoting_host_messages.mc from
-    # host_messages.mg.jinja2. GN complains if it doesn't see a pattern in the
-    # output, so the following pattern produces the name we want with a template
-    # based on the input.
-    #
-    # TODO: This is for GYP compat. We should just make the names match instead.
-    output = "$target_gen_dir/remoting_{{source_name_part}}"
-  }
-
-  # Makes the .h/.rc files from the .mc file.
-  message_compiler("messages") {
-    compile_generated_code = false
-    sources = get_target_outputs(":messages_localizing")
-    deps = [
-      ":messages_localizing",
-    ]
-  }
-
-  # GYP version: remoting/remoting_host_win.gypi:remoting_console
-  executable("remoting_console") {
-    configs += [ "//build/config/compiler:wexit_time_destructors" ]
-
-    defines = host_predefines + [ "BINARY=BINARY_HOST_ME2ME" ]
-
-    deps = [
-      ":dpi_aware_exe_manifest",
-      ":remoting_core",
-      ":remoting_windows_resources",
-    ]
-
-    sources = [
-      "$root_gen_dir/remoting/version.rc",
-      "win/entry_point.cc",
-    ]
-
-    ldflags = [
-      "/ENTRY:HostEntryPoint",
-      # "/NODEFAULTLIB",
-    ]
-  }
-
-  # GYP version: //remoting/remoting_host_win.gypi:remoting_core
-  shared_library("remoting_core") {
-    configs += [ "//build/config/compiler:wexit_time_destructors" ]
-
-    defines = host_predefines + [
-                "_ATL_APARTMENT_THREADED",
-                "_ATL_CSTRING_EXPLICIT_CONSTRUCTORS",
-                "_ATL_NO_AUTOMATIC_NAMESPACE",
-                "_ATL_NO_EXCEPTIONS",
-                "BINARY=BINARY_CORE",
-                "DAEMON_CONTROLLER_CLSID=\"$daemon_controller_clsid\"",
-                "RDP_DESKTOP_SESSION_CLSID=\"$rdp_desktop_session_clsid\"",
-                "HOST_IMPLEMENTATION",
-                "ISOLATION_AWARE_ENABLED=1",
-                "STRICT",
-                "VERSION=$chrome_version_full",
-              ]
-
-    if (remoting_multi_process != 0 && remoting_rdp_session != 0) {
-      defines += [ "REMOTING_RDP_SESSION" ]
-    }
-
-    if (remoting_multi_process != 0) {
-      defines += [ "REMOTING_MULTI_PROCESS" ]
-    }
-
-    deps = [
-      ":host",
-      ":messages",
-      ":remoting_lib_idl",
-      ":remoting_lib_ps",
-      ":remoting_me2me_host_static",
-      ":remoting_windows_resources",
-      "//base",
-      "//base:base_static",
-      "//base/allocator",
-      "//base/third_party/dynamic_annotations",
-      "//build/win:default_exe_manifest",
-      "//ipc",
-      "//net",
-      "//remoting/base",
-      "//remoting/base:breakpad",
-      "//remoting/codec",
-      "//remoting/host/it2me:common",
-      "//remoting/host/native_messaging",
-      "//remoting/host/setup",
-      "//remoting/protocol",
-      "//sandbox/win:sandbox",  # Should always use Windows version
-      "//third_party/webrtc/modules/desktop_capture",
-    ]
-
-    sources = [
-      "$root_gen_dir/remoting/core.rc",
-      "$root_gen_dir/remoting/host/remoting_host_messages.rc",
-      "$root_gen_dir/remoting/version.rc",
-      "desktop_process_main.cc",
-      "host_main.cc",
-      "host_main.h",
-      "it2me/it2me_native_messaging_host_main.cc",
-      "it2me/it2me_native_messaging_host_main.h",
-      "security_key/remote_security_key_main.cc",
-      "security_key/remote_security_key_main.h",
-      "setup/host_starter.cc",
-      "setup/host_starter.h",
-      "setup/me2me_native_messaging_host_main.cc",
-      "setup/me2me_native_messaging_host_main.h",
-      "setup/start_host_main.cc",
-      "setup/start_host_main.h",
-      "win/chromoting_lib.rc",
-      "win/chromoting_module.cc",
-      "win/chromoting_module.h",
-      "win/core.cc",
-      "win/core_resource.h",
-      "win/elevated_native_messaging_host.cc",
-      "win/elevated_native_messaging_host.h",
-      "win/host_service.cc",
-      "win/host_service.h",
-      "win/launch_native_messaging_host_process.cc",
-      "win/launch_native_messaging_host_process.h",
-      "win/omaha.cc",
-      "win/omaha.h",
-      "win/rdp_desktop_session.cc",
-      "win/rdp_desktop_session.h",
-      "win/unprivileged_process_delegate.cc",
-      "win/unprivileged_process_delegate.h",
-      "win/wts_session_process_delegate.cc",
-      "win/wts_session_process_delegate.h",
-      "worker_process_ipc_delegate.h",
-    ]
-
-    ldflags = [
-      "/EXPORT:DllGetClassObject=PsDllGetClassObject,PRIVATE",
-      "/EXPORT:DllCanUnloadNow=PsDllCanUnloadNow,PRIVATE",
-      "/EXPORT:DllRegisterServer=PsDllRegisterServer,PRIVATE",
-      "/EXPORT:DllUnregisterServer=PsDllUnregisterServer,PRIVATE",
-    ]
-
-    libs = [
-      "comctl32.lib",
-      "rpcns4.lib",
-      "rpcrt4.lib",
-      "sas.lib",
-      "uuid.lib",
-      "wtsapi32.lib",
-    ]
-
-    if (is_clang) {
-      cflags = [ "-Wno-header-hygiene" ]
-    }
-  }
-
-  # GYP version: //remoting/remoting_host_win.gypi:remoting_desktop
-  executable("remoting_desktop") {
-    configs += [
-      "//build/config/compiler:wexit_time_destructors",
-      "//build/config/win:windowed",
-    ]
-
-    defines = host_predefines + [ "BINARY=BINARY_DESKTOP" ]
-
-    deps = [
-      ":remoting_core",
-      ":remoting_windows_resources",
-    ]
-
-    if (is_official_build) {
-      deps += [ ":dpi_aware_elevated_exe_manifest" ]
-    } else {
-      deps += [ ":dpi_aware_exe_manifest" ]
-    }
-
-    sources = [
-      "$root_gen_dir/remoting/version.rc",
-      "win/entry_point.cc",
-    ]
-
-    ldflags = [
-      "/ENTRY:HostEntryPoint",
-      # "/NODEFAULTLIB",
-    ]
-  }
-
-  # GYP version: //remoting/remoting_host_win.gypi:remote_security_key
-  executable("remote_security_key") {
-    configs += [ "//build/config/compiler:wexit_time_destructors" ]
-
-    defines = host_predefines + [ "BINARY=BINARY_REMOTE_SECURITY_KEY" ]
-
-    deps = [
-      ":remoting_core",
-      ":remoting_windows_resources",
-      "//build/win:default_exe_manifest",
-    ]
-
-    sources = [
-      "$root_gen_dir/remoting/version.rc",
-      "security_key/remote_security_key_entry_point.cc",
-    ]
-  }
-
-  # GYP version:
-  # //remoting/remoting_host_win.gypi:remoting_me2me_native_messaging_host
-  executable("remoting_native_messaging_host") {
-    configs += [ "//build/config/compiler:wexit_time_destructors" ]
-
-    defines = host_predefines + [ "BINARY=BINARY_NATIVE_MESSAGING_HOST" ]
-
-    deps = [
-      ":remoting_core",
-      ":remoting_windows_resources",
-      "//build/win:default_exe_manifest",
-    ]
-
-    if (is_mac) {
-      foreach(locale, remoting_locales_with_underscores) {
-        deps += [
-          ":native_messaging_host_strings_${locale}_bundle_data",
-          ":remoting_host_locale_${locale}_bundle_data",
-        ]
-      }
-      deps += [
-        ":remoting_infoplist_strings",
-        "//remoting/resources:copy_locales",
-      ]
-    }
-
-    sources = [
-      "$root_gen_dir/remoting/version.rc",
-      "setup/me2me_native_messaging_host_entry_point.cc",
-    ]
-  }
-
-  # GYP version: //remoting/remoting_host_win.gypi:remoting_windows_resources
-  remoting_localize("remoting_windows_resources") {
-    deps = [
-      "//remoting/resources",
-    ]
-
-    sources = [
-      "win/core.rc.jinja2",
-      "win/version.rc.jinja2",
-    ]
-
-    # TODO(zijiehe): Export lastchange_path from
-    # //chrome/version.gni:process_version
-    variables = [
-      rebase_path(chrome_version_file),
-      rebase_path(remoting_version_file),
-      rebase_path("//build/util/LASTCHANGE"),
-    ]
-
-    output = "$root_gen_dir/remoting/{{source_name_part}}"
-
-    locale_dir = webapp_locale_dir
-
-    encoding = "utf-16"
-
-    locales = remoting_locales
-  }
-
-  # TODO(GYP) More Windows remoting targets from remoting_host_win.gypi
 }
 
-if (enable_remoting_host && !is_android) {
+if (enable_remoting_host) {
+  group("remoting_host_installation") {
+    deps = []
+    if (is_win) {
+      deps += [ "//remoting/host/installer/win:remoting_host_installation" ]
+    }
+  }
+}
+
+if (enable_remoting_host) {
   executable("remoting_start_host") {
     sources = [
       "setup/start_host_entry_point.cc",
@@ -1061,9 +607,9 @@ if (enable_remoting_host && !is_android) {
       defines = host_predefines + [ "BINARY=BINARY_REMOTING_START_HOST" ]
 
       deps += [
-        ":remoting_core",
-        ":remoting_windows_resources",
         "//build/win:default_exe_manifest",
+        "//remoting/host/win:remoting_core",
+        "//remoting/host/win:remoting_windows_resources",
       ]
     } else {
       sources += [
@@ -1189,7 +735,10 @@ if (enable_me2me_host) {
     ]
     defines = []
 
-    configs += [ "//remoting:version" ]
+    configs += [
+      "//remoting/build/config:version",
+      "//remoting/build/config:remoting_me2me_host",
+    ]
 
     deps = [
       "//base",
@@ -1215,7 +764,11 @@ if (enable_me2me_host) {
     }
 
     if (is_desktop_linux) {
-      deps += [ "//build/config/linux/gtk2" ]
+      if (use_gtk3) {
+        deps += [ "//build/config/linux/gtk3" ]
+      } else {
+        deps += [ "//build/config/linux/gtk2" ]
+      }
     }
     if ((is_linux && !is_chromeos) || is_mac) {
       libs = [ "pam" ]
@@ -1223,44 +776,18 @@ if (enable_me2me_host) {
 
     if (is_mac && is_official_build) {
       sources += [ "internal/internal_mac-inl.h" ]
-      defines += [ "USE_REMOTING_MACOSX_INTERNAL" ]
-    }
-
-    if (is_win && remoting_multi_process != 0 && remoting_rdp_session != 0) {
-      defines += [ "REMOTING_RDP_SESSION" ]
-    }
-
-    if (remoting_multi_process != 0) {
-      defines += [ "REMOTING_MULTI_PROCESS" ]
     }
   }
 
   if (is_win) {
-    # GYP version: //remoting/remoting_host_win.gypi:remoting_me2me_host
-    executable("remoting_me2me_host") {
-      configs += [
-        "//build/config/compiler:wexit_time_destructors",
-        "//build/config/win:windowed",
-      ]
-
-      defines = host_predefines + [ "BINARY=BINARY_HOST_ME2ME" ]
-
+    group("remoting_me2me_host") {
       deps = [
-        ":dpi_aware_exe_manifest",
-        ":remoting_core",
-        ":remoting_windows_resources",
+        "//remoting/host/win:remoting_me2me_host",
       ]
-
-      sources = [
-        "$root_gen_dir/remoting/version.rc",
-        "win/entry_point.cc",
-      ]
-
-      output_name = "remoting_host"
-
-      ldflags = [
-        "/ENTRY:HostEntryPoint",
-        # "/NODEFAULTLIB",
+    }
+    group("remoting_native_messaging_host") {
+      deps = [
+        "//remoting/host/win:remoting_native_messaging_host",
       ]
     }
   } else {
@@ -1303,7 +830,7 @@ if (enable_me2me_host) {
         ]
 
         public_deps = [
-          ":credits",
+          "//remoting/host/installer:credits",
         ]
 
         if (icu_use_data_file) {
@@ -1315,7 +842,7 @@ if (enable_me2me_host) {
 
     target(app_target_type, "remoting_me2me_host") {
       if (is_mac) {
-        extra_configs = [ "//remoting:version" ]
+        extra_configs = [ "//remoting/build/config:version" ]
         info_plist = "remoting_me2me_host-Info.plist"
         extra_substitutions = [
           "BUNDLE_ID=$host_bundle_id",
@@ -1324,7 +851,7 @@ if (enable_me2me_host) {
           "MACOSX_DEPLOYMENT_TARGET=10.7",
         ]
       } else {
-        configs += [ "//remoting:version" ]
+        configs += [ "//remoting/build/config:version" ]
       }
 
       sources = [
@@ -1337,10 +864,10 @@ if (enable_me2me_host) {
       }
 
       deps = [
-        ":credits",
         ":remoting_me2me_host_static",
         "//build/config/sanitizers:deps",
         "//remoting/base:breakpad",
+        "//remoting/host/installer:credits",
         "//remoting/resources",
       ]
       if (is_mac) {
@@ -1403,6 +930,22 @@ if (enable_me2me_host) {
           ]
         }
       }
+    }
+
+    # The [remoting_]native_messaging_host target is called differently on
+    # Linux and Mac vs Windows.
+    # TODO(sergeyu): Rename it to remoting_native_messaging_host on all
+    # platforms.
+    # TODO(nicholss): To aid in the rename effort, I am adding a link to
+    # native_messaging_host from remoting_native_messaging_host so up stream
+    # build targets need to only know about remoting_native_messaging_host.
+    # The issue is changing the target changes the executable, we could force
+    # a name in the build target or we could update the install packages to use
+    # the new name. Holding off making that choice for now.
+    group("remoting_native_messaging_host") {
+      deps = [
+        ":native_messaging_host",
+      ]
     }
 
     target(app_target_type, "native_messaging_host") {
@@ -1534,8 +1077,8 @@ if (enable_me2me_host) {
       ]
 
       deps = [
-        ":native_messaging_host",
         ":remoting_me2me_host",
+        ":remoting_native_messaging_host",
         ":remoting_native_messaging_manifests",
         ":remoting_start_host",
         "//remoting/host/it2me:remote_assistance_host",
@@ -1544,105 +1087,10 @@ if (enable_me2me_host) {
       ]
     }
   } else if (is_win) {
-    # GYP version: //remoting/remoting_host_win.gypi:remoting_me2me_host_archive
-    action("remoting_me2me_host_archive") {
-      script = "//remoting/host/installer/build-installer-archive.py"
-
+    group("remoting_me2me_host_archive") {
       deps = [
-        ":credits",
-        ":remote_security_key",
-        ":remoting_core",
-        ":remoting_desktop",
-        ":remoting_me2me_host",
-        ":remoting_native_messaging_host",
-        ":remoting_native_messaging_manifests",
-        ":remoting_start_host",
-        "it2me:remote_assistance_host",
-        "//third_party/icu:icudata",
+        "//remoting/host/installer/win:remoting_me2me_host_archive",
       ]
-
-      _output = "$root_out_dir/remoting-me2me-host-$target_os.zip"
-
-      outputs = [
-        _output,
-      ]
-      if (is_chrome_branded) {
-        _branding = "Chrome"
-      } else {
-        _branding = "Chromium"
-      }
-
-      if (is_official_build) {
-        _official_build = "1"
-      } else {
-        _official_build = "0"
-      }
-
-      # Due to GN build issue http://crbug.com/633650, we need to actively set
-      # inputs parameter to tell GN to depend on these files. So change to each
-      # following files will trigger this target to be rebuilt.
-      # TODO(zijiehe): Remove inputs parameter once bug 633650 has been
-      # addressed.
-      inputs = [
-        "$root_out_dir/remote_assistance_host.exe",
-        "$root_out_dir/remote_security_key.exe",
-        "$root_out_dir/remoting_core.dll",
-        "$root_out_dir/remoting_desktop.exe",
-        "$root_out_dir/remoting_host.exe",
-        "$root_out_dir/remoting_native_messaging_host.exe",
-        "$root_out_dir/remoting_start_host.exe",
-        "$root_gen_dir/remoting/CREDITS.txt",
-        "$root_out_dir/remoting/com.google.chrome.remote_assistance.json",
-        "$root_out_dir/remoting/com.google.chrome.remote_desktop.json",
-        "$root_out_dir/icudtl.dat",
-      ]
-
-      _generated_files = rebase_path(inputs, root_build_dir)
-      _generated_files += [ rebase_path("//remoting/resources/chromoting.ico") ]
-
-      # _generated_dst_files must contain the same files in the same order as
-      # _generated_files, otherwise the Windows MSI will not be built correctly.
-      _generated_dst_files = [
-        "files/remote_assistance_host.exe",
-        "files/remote_security_key.exe",
-        "files/remoting_core.dll",
-        "files/remoting_desktop.exe",
-        "files/remoting_host.exe",
-        "files/remoting_native_messaging_host.exe",
-        "files/remoting_start_host.exe",
-        "files/CREDITS.txt",
-        "files/com.google.chrome.remote_assistance.json",
-        "files/com.google.chrome.remote_desktop.json",
-        "files/icudtl.dat",
-        "files/chromoting.ico",
-      ]
-
-      args =
-          [
-            rebase_path("$root_gen_dir/remoting_installation", root_build_dir),
-            rebase_path(_output, root_build_dir),
-            "--source-file-roots",
-            rebase_path("//remoting/host/installer/win"),
-            "--source-files",
-            rebase_path("//remoting/host/installer/win/chromoting.wxs"),
-            rebase_path("//remoting/host/installer/win/parameters.json"),
-
-            # Input files
-            "--generated-files",
-          ] + _generated_files +
-          [
-            # Position of files in zip file
-            "--generated-files-dst",
-          ] + _generated_dst_files +
-          [
-            # Defs
-            "--defs",
-            "BRANDING=$_branding",
-            "DAEMON_CONTROLLER_CLSID={$daemon_controller_clsid}",
-            "RDP_DESKTOP_SESSION_CLSID={$rdp_desktop_session_clsid}",
-            "VERSION=$chrome_version_full",
-            "OFFICIAL_BUILD=$_official_build",
-          ]
     }
   } else if (is_mac) {
     import("//build/config/zip.gni")
@@ -1730,10 +1178,10 @@ if (enable_me2me_host) {
              ]
 
       deps = [
-        ":native_messaging_host",
         ":remoting_host_prefpane.prefPane",
         ":remoting_host_uninstaller",
         ":remoting_me2me_host",
+        ":remoting_native_messaging_host",
         ":remoting_native_messaging_manifests",
         "//remoting/host/it2me:remote_assistance_host",
       ]
@@ -1932,40 +1380,6 @@ if (enable_me2me_host) {
     }
   } else {
     group("remoting_me2me_host_archive") {
-    }
-  }
-
-  if (is_win && is_chrome_branded) {
-    # We do not release a 64 bits binary. So to avoid any potential
-    # misunderstanding, we only build 32 bits MSI file.
-    if (!is_component_build && target_cpu == "x86") {
-      # The script uses "ia32" instead of "x86".
-      msi_script_arch = "ia32"
-
-      # GYP version: remoting/remoting_host_win.gyp:remoting_host_installation
-      action("remoting_host_installation") {
-        deps = [
-          "//remoting/host:remoting_me2me_host_archive",
-        ]
-        script = "../tools/zip2msi.py"
-        outputs = [
-          "$root_out_dir/chromoting.msi",
-        ]
-        args = [
-          "--wix_path",
-          rebase_path("//third_party/wix"),
-          "--intermediate_dir",
-          rebase_path("$root_gen_dir/remoting_installation", root_build_dir),
-          "--target_arch",
-          msi_script_arch,
-          rebase_path("$root_out_dir/remoting-me2me-host-$current_os.zip",
-                      root_build_dir),
-          rebase_path(outputs[0], root_build_dir),
-        ]
-      }
-    } else {
-      group("remoting_host_installation") {
-      }
     }
   }
 }

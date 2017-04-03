@@ -14,6 +14,7 @@
 namespace syncer {
 
 class Cryptographer;
+enum class PassphraseType;
 
 // Reasons due to which Cryptographer might require a passphrase.
 enum PassphraseRequiredReason {
@@ -25,18 +26,6 @@ enum PassphraseRequiredReason {
   REASON_DECRYPTION = 2,               // The cryptographer requires a
                                        // passphrase for its first attempt at
                                        // decryption.
-};
-
-// The different states for the encryption passphrase. These control if and how
-// the user should be prompted for a decryption passphrase.
-// Do not re-order or delete these entries; they are used in a UMA histogram.
-// Please edit SyncPassphraseType in histograms.xml if a value is added.
-enum PassphraseType {
-  IMPLICIT_PASSPHRASE = 0,         // GAIA-based passphrase (deprecated).
-  KEYSTORE_PASSPHRASE = 1,         // Keystore passphrase.
-  FROZEN_IMPLICIT_PASSPHRASE = 2,  // Frozen GAIA passphrase.
-  CUSTOM_PASSPHRASE = 3,           // User-provided passphrase.
-  PASSPHRASE_TYPE_SIZE,            // The size of this enum; keep last.
 };
 
 // Enum used to distinguish which bootstrap encryption token is being updated.
@@ -176,10 +165,6 @@ class SyncEncryptionHandler {
   // Whether encryption of all datatypes is enabled. If false, only sensitive
   // types are encrypted.
   virtual bool IsEncryptEverythingEnabled() const = 0;
-
-  // Returns the current state of the passphrase needed to decrypt the
-  // bag of encryption keys in the nigori node.
-  virtual PassphraseType GetPassphraseType() const = 0;
 
   // The set of types that are always encrypted.
   static ModelTypeSet SensitiveTypes();

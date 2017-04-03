@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_WEBUI_SETTINGS_PEOPLE_HANDLER_H_
 
 #include <memory>
+#include <string>
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -21,21 +22,24 @@
 #include "components/sync/driver/sync_service_observer.h"
 
 class LoginUIService;
-class ProfileSyncService;
 class SigninManagerBase;
+
+namespace browser_sync {
+class ProfileSyncService;
+}  // namespace browser_sync
 
 namespace content {
 class WebContents;
 class WebUI;
-}
+}  // namespace content
 
 namespace signin_metrics {
 enum class AccessPoint;
-}
+}  // namespace signin_metrics
 
-namespace sync_driver {
+namespace syncer {
 class SyncSetupInProgressHandle;
-}
+}  // namespace syncer
 
 namespace settings {
 
@@ -43,7 +47,7 @@ class PeopleHandler : public SettingsPageUIHandler,
                       public SigninManagerBase::Observer,
                       public SyncStartupTracker::Observer,
                       public LoginUIService::LoginUI,
-                      public sync_driver::SyncServiceObserver {
+                      public syncer::SyncServiceObserver {
  public:
   // TODO(tommycli): Remove these strings and instead use WebUIListener events.
   // These string constants are used from JavaScript (sync_browser_proxy.js).
@@ -115,7 +119,7 @@ class PeopleHandler : public SettingsPageUIHandler,
   void GoogleSignedOut(const std::string& account_id,
                        const std::string& username) override;
 
-  // sync_driver::SyncServiceObserver implementation.
+  // syncer::SyncServiceObserver implementation.
   void OnStateChanged() override;
 
   // Returns a newly created dictionary with a number of properties that
@@ -124,7 +128,7 @@ class PeopleHandler : public SettingsPageUIHandler,
 
   // Helper routine that gets the ProfileSyncService associated with the parent
   // profile.
-  ProfileSyncService* GetSyncService() const;
+  browser_sync::ProfileSyncService* GetSyncService() const;
 
   // Returns the LoginUIService for the parent profile.
   LoginUIService* GetLoginUIService() const;
@@ -179,7 +183,7 @@ class PeopleHandler : public SettingsPageUIHandler,
   std::unique_ptr<SyncStartupTracker> sync_startup_tracker_;
 
   // Prevents Sync from running until configuration is complete.
-  std::unique_ptr<sync_driver::SyncSetupInProgressHandle> sync_blocker_;
+  std::unique_ptr<syncer::SyncSetupInProgressHandle> sync_blocker_;
 
   // Set to true whenever the sync configure UI is visible. This is used to tell
   // what stage of the setup wizard the user was in and to update the UMA
@@ -195,7 +199,8 @@ class PeopleHandler : public SettingsPageUIHandler,
 
   // Manages observer lifetimes.
   ScopedObserver<SigninManagerBase, PeopleHandler> signin_observer_;
-  ScopedObserver<ProfileSyncService, PeopleHandler> sync_service_observer_;
+  ScopedObserver<browser_sync::ProfileSyncService, PeopleHandler>
+      sync_service_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(PeopleHandler);
 };

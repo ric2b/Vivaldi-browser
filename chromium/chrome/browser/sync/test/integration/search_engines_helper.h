@@ -6,9 +6,11 @@
 #define CHROME_BROWSER_SYNC_TEST_INTEGRATION_SEARCH_ENGINES_HELPER_H_
 
 #include <map>
+#include <memory>
 #include <string>
 
 #include "base/strings/string16.h"
+#include "chrome/browser/sync/test/integration/await_match_status_change_checker.h"
 
 class Profile;
 class TemplateURL;
@@ -28,24 +30,21 @@ TemplateURLService* GetVerifierService();
 // Retrns true iff their user-visible fields match.
 bool ServiceMatchesVerifier(int profile_index);
 
-// Blocks until either AllServicesMatch returns true or a timeout occurs.
-// Returns true if AllServicesMatch succeeded, false if timeout.
-bool AwaitAllServicesMatch();
-
 // Returns true iff all TemplateURLServices match with the verifier.
 bool AllServicesMatch();
 
-// Create a TemplateURL with some test values based on |seed|. The caller owns
-// the returned TemplateURL*.
-TemplateURL* CreateTestTemplateURL(Profile* profile,
-                                   int seed,
-                                   const base::string16& keyword,
-                                   const std::string& sync_guid);
-TemplateURL* CreateTestTemplateURL(Profile* profile,
-                                   int seed,
-                                   const base::string16& keyword,
-                                   const std::string& url,
-                                   const std::string& sync_guid);
+// Create a TemplateURL with some test values based on |seed|.
+std::unique_ptr<TemplateURL> CreateTestTemplateURL(
+    Profile* profile,
+    int seed,
+    const base::string16& keyword,
+    const std::string& sync_guid);
+std::unique_ptr<TemplateURL> CreateTestTemplateURL(
+    Profile* profile,
+    int seed,
+    const base::string16& keyword,
+    const std::string& url,
+    const std::string& sync_guid);
 
 // Add a search engine based on a seed to the service at index |profile_index|
 // and the verifier if it is used.
@@ -74,5 +73,11 @@ void ChangeDefaultSearchProvider(int profile_index, int seed);
 bool HasSearchEngine(int profile_index, int seed);
 
 }  // namespace search_engines_helper
+
+// Checker that blocks until all services have the same search engine data.
+class SearchEnginesMatchChecker : public AwaitMatchStatusChangeChecker {
+ public:
+  SearchEnginesMatchChecker();
+};
 
 #endif  // CHROME_BROWSER_SYNC_TEST_INTEGRATION_SEARCH_ENGINES_HELPER_H_

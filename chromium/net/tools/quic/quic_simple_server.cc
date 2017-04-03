@@ -11,6 +11,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
+#include "net/log/net_log_source.h"
 #include "net/quic/core/crypto/crypto_handshake.h"
 #include "net/quic/core/crypto/quic_random.h"
 #include "net/quic/core/quic_crypto_stream.h"
@@ -27,6 +28,7 @@ namespace net {
 namespace {
 
 const char kSourceAddressTokenSecret[] = "secret";
+const size_t kNumSessionsToCreatePerSocketEvent = 16;
 
 // Allocate some extra space so we can send an error if the client goes over
 // the limit.
@@ -34,9 +36,11 @@ const int kReadBufferSize = 2 * kMaxPacketSize;
 
 }  // namespace
 
-QuicSimpleServer::QuicSimpleServer(std::unique_ptr<ProofSource> proof_source,
-                                   const QuicConfig& config,
-                                   const QuicVersionVector& supported_versions)
+QuicSimpleServer::QuicSimpleServer(
+    std::unique_ptr<ProofSource> proof_source,
+    const QuicConfig& config,
+    const QuicCryptoServerConfig::ConfigOptions& crypto_config_options,
+    const QuicVersionVector& supported_versions)
     : version_manager_(supported_versions),
       helper_(
           new QuicChromiumConnectionHelper(&clock_, QuicRandom::GetInstance())),
@@ -44,6 +48,7 @@ QuicSimpleServer::QuicSimpleServer(std::unique_ptr<ProofSource> proof_source,
           base::ThreadTaskRunnerHandle::Get().get(),
           &clock_)),
       config_(config),
+      crypto_config_options_(crypto_config_options),
       crypto_config_(kSourceAddressTokenSecret,
                      QuicRandom::GetInstance(),
                      std::move(proof_source)),
@@ -76,14 +81,14 @@ void QuicSimpleServer::Initialize() {
 
   std::unique_ptr<CryptoHandshakeMessage> scfg(crypto_config_.AddDefaultConfig(
       helper_->GetRandomGenerator(), helper_->GetClock(),
-      QuicCryptoServerConfig::ConfigOptions()));
+      crypto_config_options_));
 }
 
 QuicSimpleServer::~QuicSimpleServer() {}
 
 int QuicSimpleServer::Listen(const IPEndPoint& address) {
   std::unique_ptr<UDPServerSocket> socket(
-      new UDPServerSocket(&net_log_, NetLog::Source()));
+      new UDPServerSocket(&net_log_, NetLogSource()));
 
   socket->AllowAddressReuse();
 
@@ -122,7 +127,7 @@ int QuicSimpleServer::Listen(const IPEndPoint& address) {
   dispatcher_.reset(new QuicSimpleDispatcher(
       config_, &crypto_config_, &version_manager_,
       std::unique_ptr<QuicConnectionHelperInterface>(helper_),
-      std::unique_ptr<QuicServerSessionBase::Helper>(
+      std::unique_ptr<QuicCryptoServerStream::Helper>(
           new QuicSimpleServerSessionHelper(QuicRandom::GetInstance())),
       std::unique_ptr<QuicAlarmFactory>(alarm_factory_)));
   QuicSimpleServerPacketWriter* writer =
@@ -144,6 +149,11 @@ void QuicSimpleServer::Shutdown() {
 }
 
 void QuicSimpleServer::StartReading() {
+  if (synchronous_read_count_ == 0) {
+    // Only process buffered packets once per message loop.
+    dispatcher_->ProcessBufferedChlos(kNumSessionsToCreatePerSocketEvent);
+  }
+
   if (read_pending_) {
     return;
   }
@@ -155,6 +165,12 @@ void QuicSimpleServer::StartReading() {
 
   if (result == ERR_IO_PENDING) {
     synchronous_read_count_ = 0;
+    if (dispatcher_->HasChlosBuffered()) {
+      // No more packets to read, so yield before processing buffered packets.
+      base::ThreadTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE, base::Bind(&QuicSimpleServer::StartReading,
+                                weak_factory_.GetWeakPtr()));
+    }
     return;
   }
 

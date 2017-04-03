@@ -11,7 +11,7 @@
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/bookmarks/browser/bookmark_model.h"
-#include "components/browser_sync/browser/signin_confirmation_helper.h"
+#include "components/browser_sync/signin_confirmation_helper.h"
 #include "components/history/core/browser/history_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "ui/gfx/color_utils.h"
@@ -96,8 +96,8 @@ void CheckShouldPromptForNewProfile(
   history::HistoryService* service =
       HistoryServiceFactory::GetForProfileWithoutCreating(profile);
   // Fire asynchronous queries for profile data.
-  sync_driver::SigninConfirmationHelper* helper =
-      new sync_driver::SigninConfirmationHelper(service, return_result);
+  browser_sync::SigninConfirmationHelper* helper =
+      new browser_sync::SigninConfirmationHelper(service, return_result);
   helper->CheckHasHistory(kHistoryEntriesBeforeNewProfilePrompt);
   helper->CheckHasTypedURLs();
 }

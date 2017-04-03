@@ -16,7 +16,6 @@
 #include "net/base/net_errors.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/dns/mojo_host_type_converters.h"
-#include "net/log/net_log.h"
 #include "net/test/gtest_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -106,7 +105,7 @@ class CallbackMockHostResolver : public MockHostResolver {
               AddressList* addresses,
               const CompletionCallback& callback,
               std::unique_ptr<Request>* request,
-              const BoundNetLog& net_log) override;
+              const NetLogWithSource& net_log) override;
 
  private:
   base::Closure resolve_callback_;
@@ -117,7 +116,7 @@ int CallbackMockHostResolver::Resolve(const RequestInfo& info,
                                       AddressList* addresses,
                                       const CompletionCallback& callback,
                                       std::unique_ptr<Request>* request,
-                                      const BoundNetLog& net_log) {
+                                      const NetLogWithSource& net_log) {
   int result = MockHostResolver::Resolve(info, priority, addresses, callback,
                                          request, net_log);
   if (!resolve_callback_.is_null()) {
@@ -137,7 +136,7 @@ class MojoHostResolverImplTest : public testing::Test {
     mock_host_resolver_.rules()->AddSimulatedFailure("failure.fail");
 
     resolver_service_.reset(
-        new MojoHostResolverImpl(&mock_host_resolver_, BoundNetLog()));
+        new MojoHostResolverImpl(&mock_host_resolver_, NetLogWithSource()));
   }
 
   interfaces::HostResolverRequestInfoPtr CreateRequest(const std::string& host,

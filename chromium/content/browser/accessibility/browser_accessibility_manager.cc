@@ -470,12 +470,7 @@ void BrowserAccessibilityManager::ActivateFindInPageResult(
     return;
 
   // If an ancestor of this node is a leaf node, fire the notification on that.
-  BrowserAccessibility* ancestor = node->GetParent();
-  while (ancestor && ancestor != GetRoot()) {
-    if (ancestor->PlatformIsLeaf())
-      node = ancestor;
-    ancestor = ancestor->GetParent();
-  }
+  node = node->GetClosestPlatformObject();
 
   // The "scrolled to anchor" notification is a great way to get a
   // screen reader to jump directly to a specific location in a document.
@@ -976,12 +971,39 @@ void BrowserAccessibilityManager::OnSubtreeWillBeDeleted(ui::AXTree* tree,
     obj->OnSubtreeWillBeDeleted();
 }
 
+void BrowserAccessibilityManager::OnNodeWillBeReparented(ui::AXTree* tree,
+                                                         ui::AXNode* node) {
+  // BrowserAccessibility should probably ask the tree source for the AXNode via
+  // an id rather than weakly holding a pointer to a AXNode that might have been
+  // destroyed under the hood and re-created later on. Treat this as a delete to
+  // make things work.
+  OnNodeWillBeDeleted(tree, node);
+}
+
+void BrowserAccessibilityManager::OnSubtreeWillBeReparented(ui::AXTree* tree,
+                                                            ui::AXNode* node) {
+  // BrowserAccessibility should probably ask the tree source for the AXNode via
+  // an id rather than weakly holding a pointer to a AXNode that might have been
+  // destroyed under the hood and re-created later on. Treat this as a delete to
+  // make things work.
+  OnSubtreeWillBeDeleted(tree, node);
+}
+
 void BrowserAccessibilityManager::OnNodeCreated(ui::AXTree* tree,
                                                 ui::AXNode* node) {
   BrowserAccessibility* wrapper = factory_->Create();
   wrapper->Init(this, node);
   id_wrapper_map_[node->id()] = wrapper;
   wrapper->OnDataChanged();
+}
+
+void BrowserAccessibilityManager::OnNodeReparented(ui::AXTree* tree,
+                                                   ui::AXNode* node) {
+  // BrowserAccessibility should probably ask the tree source for the AXNode via
+  // an id rather than weakly holding a pointer to a AXNode that might have been
+  // destroyed under the hood and re-created later on. Treat this as a create to
+  // make things work.
+  OnNodeCreated(tree, node);
 }
 
 void BrowserAccessibilityManager::OnNodeChanged(ui::AXTree* tree,
@@ -1013,6 +1035,25 @@ void BrowserAccessibilityManager::OnAtomicUpdateFinished(
   if (root_changed && last_focused_manager_ == this) {
     last_focused_node_ = nullptr;
     last_focused_manager_ = nullptr;
+  }
+
+  // Notify ATs if any live regions have been created.
+  for (auto& change : changes) {
+    if (change.type != NODE_CREATED && change.type != SUBTREE_CREATED)
+      continue;
+
+    const ui::AXNode* created_node = change.node;
+    DCHECK(created_node);
+    BrowserAccessibility* object = GetFromAXNode(created_node);
+    if (object && object->HasStringAttribute(ui::AX_ATTR_LIVE_STATUS)) {
+      if (object->GetRole() == ui::AX_ROLE_ALERT) {
+        NotifyAccessibilityEvent(BrowserAccessibilityEvent::FromTreeChange,
+                                 ui::AX_EVENT_ALERT, object);
+      } else {
+        NotifyAccessibilityEvent(BrowserAccessibilityEvent::FromTreeChange,
+                                 ui::AX_EVENT_LIVE_REGION_CREATED, object);
+      }
+    }
   }
 }
 

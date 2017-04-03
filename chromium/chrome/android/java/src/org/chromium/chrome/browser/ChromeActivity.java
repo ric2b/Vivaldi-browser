@@ -90,7 +90,6 @@ import org.chromium.chrome.browser.nfc.BeamController;
 import org.chromium.chrome.browser.nfc.BeamProvider;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
-import org.chromium.chrome.browser.offlinepages.downloads.OfflinePageDownloadBridge;
 import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper;
 import org.chromium.chrome.browser.pageinfo.WebsiteSettingsPopup;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
@@ -118,9 +117,10 @@ import org.chromium.chrome.browser.tabmodel.TabWindowManager;
 import org.chromium.chrome.browser.toolbar.Toolbar;
 import org.chromium.chrome.browser.toolbar.ToolbarControlContainer;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
+import org.chromium.chrome.browser.util.ChromeFileProvider;
 import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.browser.util.FeatureUtilities;
-import org.chromium.chrome.browser.webapps.AddToHomescreenDialog;
+import org.chromium.chrome.browser.webapps.AddToHomescreenManager;
 import org.chromium.chrome.browser.widget.ControlContainer;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.content.browser.ContentVideoView;
@@ -130,9 +130,11 @@ import org.chromium.content_public.browser.ContentBitmapCallback;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.readback_types.ReadbackResponse;
+import org.chromium.policy.CombinedPolicyProvider;
 import org.chromium.policy.CombinedPolicyProvider.PolicyChangeListener;
 import org.chromium.printing.PrintManagerDelegateImpl;
 import org.chromium.printing.PrintingController;
+import org.chromium.printing.PrintingControllerImpl;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.PageTransition;
@@ -239,6 +241,9 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     // Chrome delegate that includes functionalities needed by Blimp client.
     private ChromeBlimpClientContextDelegate mBlimpClientContextDelegate;
 
+    // Skips capturing screenshot for testing purpose.
+    private boolean mScreenshotCaptureSkippedForTesting;
+
     /**
      * @param The {@link AppMenuHandlerFactory} for creating {@link mAppMenuHandler}
      */
@@ -259,8 +264,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         ApplicationInitialization.enableFullscreenFlags(
                 getResources(), this, getControlContainerHeightResource());
         getWindow().setBackgroundDrawable(getBackgroundDrawable());
-        mWindowAndroid = ((ChromeApplication) getApplicationContext())
-                .createActivityWindowAndroid(this);
+        mWindowAndroid = new ChromeWindow(this);
         mWindowAndroid.restoreInstanceState(getSavedInstanceState());
     }
 
@@ -302,7 +306,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         }
 
         // Make the activity listen to policy change events
-        getChromeApplication().addPolicyChangeListener(this);
+        CombinedPolicyProvider.get().addPolicyChangeListener(this);
 
         // Set up the animation placeholder to be the SurfaceView. This disables the
         // SurfaceView's 'hole' clipping during animations that are notified to the window.
@@ -417,7 +421,8 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     /**
      * @return {@link ToolbarManager} that belongs to this activity.
      */
-    protected ToolbarManager getToolbarManager() {
+    @VisibleForTesting
+    public ToolbarManager getToolbarManager() {
         return mToolbarManager;
     }
 
@@ -576,8 +581,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     public void onStartWithNative() {
         super.onStartWithNative();
         UpdateMenuItemHelper.getInstance().onStart();
-        getChromeApplication().onStartWithNative();
-        FeatureUtilities.setDocumentModeEnabled(FeatureUtilities.isDocumentMode(this));
+        ChromeActivitySessionTracker.getInstance().onStartWithNative();
 
         if (GSAState.getInstance(this).isGsaAvailable()) {
             mGSAServiceClient = new GSAServiceClient(this);
@@ -670,6 +674,10 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     @Override
     public void onPauseWithNative() {
         RecordUserAction.record("MobileGoToBackground");
+        Tab tab = getActivityTab();
+        if (tab != null) {
+            getTabContentManager().cacheTabThumbnail(tab);
+        }
         markSessionEnd();
         super.onPauseWithNative();
     }
@@ -878,7 +886,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
             mWindowAndroid = null;
         }
 
-        getChromeApplication().removePolicyChangeListener(this);
+        CombinedPolicyProvider.get().removePolicyChangeListener(this);
 
         if (mTabContentManager != null) {
             mTabContentManager.destroy();
@@ -992,6 +1000,11 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         return super.onOptionsItemSelected(item);
     }
 
+    @VisibleForTesting
+    public void setScreenshotCaptureSkippedForTesting(boolean value) {
+        mScreenshotCaptureSkippedForTesting = value;
+    }
+
     /**
      * Triggered when the share menu item is selected.
      * This creates and shows a share intent picker dialog or starts a share intent directly.
@@ -999,11 +1012,12 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
      *                      recently used to share.
      * @param isIncognito Whether currentTab is incognito.
      */
+    @VisibleForTesting
     public void onShareMenuItemSelected(final boolean shareDirectly, final boolean isIncognito) {
         final Tab currentTab = getActivityTab();
         if (currentTab == null) return;
 
-        PrintingController printingController = getChromeApplication().getPrintingController();
+        PrintingController printingController = PrintingControllerImpl.getInstance();
         if (printingController != null && !currentTab.isNativePage() && !printingController.isBusy()
                 && PrefServiceBridge.getInstance().isPrintingEnabled()) {
             PrintShareActivity.enablePrintShareOption(this, new Runnable() {
@@ -1021,34 +1035,50 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     private void triggerShare(
             final Tab currentTab, final boolean shareDirectly, boolean isIncognito) {
         final Activity mainActivity = this;
+        WebContents webContents = currentTab.getWebContents();
+
+        RecordHistogram.recordBooleanHistogram(
+                "OfflinePages.SharedPageWasOffline", currentTab.isOfflinePage());
+        boolean canShareOfflinePage = OfflinePageBridge.isPageSharingEnabled();
+
+        // Share an empty blockingUri in place of screenshot file. The file ready notification is
+        // sent by onScreenshotReady call below when the file is written.
+        final Uri blockingUri = (isIncognito || webContents == null)
+                ? null
+                : ChromeFileProvider.generateUriAndBlockAccess(mainActivity);
+        if (canShareOfflinePage) {
+            OfflinePageUtils.shareOfflinePage(shareDirectly, true, mainActivity, null,
+                    blockingUri, null, currentTab);
+        } else {
+            ShareHelper.share(shareDirectly, true, mainActivity, currentTab.getTitle(), null,
+                    currentTab.getUrl(), null, blockingUri, null);
+            if (shareDirectly) {
+                RecordUserAction.record("MobileMenuDirectShare");
+            } else {
+                RecordUserAction.record("MobileMenuShare");
+            }
+        }
+
+        if (blockingUri == null) return;
+
+        // Start screenshot capture and notify the provider when it is ready.
         ContentBitmapCallback callback = new ContentBitmapCallback() {
             @Override
             public void onFinishGetBitmap(Bitmap bitmap, int response) {
-                boolean isOfflinePage = currentTab.isOfflinePage();
-                RecordHistogram.recordBooleanHistogram(
-                        "OfflinePages.SharedPageWasOffline", isOfflinePage);
-                boolean canShareOfflinePage = OfflinePageBridge.isPageSharingEnabled();
-
-                if (canShareOfflinePage) {
-                    // Share the offline page instead of the URL.
-                    OfflinePageUtils.shareOfflinePage(shareDirectly, true, mainActivity, null,
-                            currentTab.getUrl(), bitmap, null, currentTab, isOfflinePage);
-                } else {
-                    ShareHelper.share(shareDirectly, true, mainActivity, currentTab.getTitle(),
-                            null, currentTab.getUrl(), null, bitmap, null);
-                    if (shareDirectly) {
-                        RecordUserAction.record("MobileMenuDirectShare");
-                    } else {
-                        RecordUserAction.record("MobileMenuShare");
-                    }
-                }
+                ShareHelper.saveScreenshotToDisk(bitmap, mainActivity,
+                        new Callback<Uri>() {
+                            @Override
+                            public void onResult(Uri result) {
+                                // Unblock the file once it is saved to disk.
+                                ChromeFileProvider.notifyFileReady(blockingUri, result);
+                            }
+                        });
             }
         };
-        if (isIncognito || currentTab.getWebContents() == null) {
-            callback.onFinishGetBitmap(null, ReadbackResponse.SURFACE_UNAVAILABLE);
+        if (!mScreenshotCaptureSkippedForTesting) {
+            webContents.getContentBitmapAsync(Bitmap.Config.ARGB_8888, 1.f, EMPTY_RECT, callback);
         } else {
-            currentTab.getWebContents().getContentBitmapAsync(
-                    Bitmap.Config.ARGB_8888, 1.f, EMPTY_RECT, callback);
+            callback.onFinishGetBitmap(null, ReadbackResponse.SURFACE_UNAVAILABLE);
         }
     }
 
@@ -1564,19 +1594,15 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
             addOrEditBookmark(currentTab);
             RecordUserAction.record("MobileMenuAddToBookmarks");
         } else if (id == R.id.offline_page_id) {
-            final OfflinePageDownloadBridge bridge =
-                    new OfflinePageDownloadBridge(currentTab.getProfile());
-            bridge.startDownload(currentTab);
-            bridge.destroy();
+            DownloadUtils.downloadOfflinePage(this, currentTab);
             RecordUserAction.record("MobileMenuDownloadPage");
-            DownloadUtils.recordDownloadPageMetrics(currentTab);
-            DownloadUtils.showDownloadStartToast(this);
         } else if (id == R.id.reload_menu_id) {
             if (currentTab.isLoading()) {
                 currentTab.stopLoading();
+                RecordUserAction.record("MobileMenuStop");
             } else {
                 currentTab.reload();
-                RecordUserAction.record("MobileToolbarReload");
+                RecordUserAction.record("MobileMenuReload");
             }
         } else if (id == R.id.info_menu_id) {
             WebsiteSettingsPopup.show(
@@ -1590,7 +1616,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
             onShareMenuItemSelected(id == R.id.direct_share_menu_id,
                     getCurrentTabModel().isIncognito());
         } else if (id == R.id.print_id) {
-            PrintingController printingController = getChromeApplication().getPrintingController();
+            PrintingController printingController = PrintingControllerImpl.getInstance();
             if (printingController != null && !printingController.isBusy()
                     && PrefServiceBridge.getInstance().isPrintingEnabled()) {
                 printingController.startPrint(new TabPrinter(currentTab),
@@ -1598,7 +1624,9 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
                 RecordUserAction.record("MobileMenuPrint");
             }
         } else if (id == R.id.add_to_homescreen_id) {
-            AddToHomescreenDialog.show(this, currentTab);
+            AddToHomescreenManager addToHomescreenManager =
+                    new AddToHomescreenManager(this, currentTab);
+            addToHomescreenManager.start();
             RecordUserAction.record("MobileMenuAddToHomescreen");
         } else if (id == R.id.request_desktop_site_id) {
             final boolean reloadOnChange = !currentTab.isNativePage();
@@ -1625,6 +1653,14 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
             return false;
         }
         return true;
+    }
+
+    /**
+     * Tests if VR Shell (the mode displaying browser UI and tab contents in VR) is currently
+     * enabled.
+     */
+    public boolean isVrShellEnabled() {
+        return false;
     }
 
     /**
@@ -1752,6 +1788,13 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         mContextMenuCloseObservers.addObserver(callback);
     }
 
+    @Override
+    public void onContextMenuClosed(Menu menu) {
+        for (Callback<Menu> callback : mContextMenuCloseObservers) {
+            callback.onResult(menu);
+        }
+    }
+
     /**
      * Removes a {@link Callback} from the list of callbacks that will be triggered when a
      * ContextMenu is closed.
@@ -1760,31 +1803,19 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         mContextMenuCloseObservers.removeObserver(callback);
     }
 
-    /**
-     * @see Activity#onContextMenuClosed(Menu)
-     */
-    @Override
-    public void onContextMenuClosed(Menu menu) {
-        for (Callback<Menu> callback : mContextMenuCloseObservers) {
-            callback.onResult(menu);
-        }
-
-        // TODO(peconn): See if we can make WebContents use the ObserverList.
-
-        final Tab currentTab = getActivityTab();
-        if (currentTab == null) return;
-        WebContents webContents = currentTab.getWebContents();
-        if (webContents == null) return;
-        webContents.onContextMenuClosed();
-    }
-
     private boolean shouldDisableHardwareAcceleration() {
         // Low end devices should disable hardware acceleration for memory gains.
         if (SysUtils.isLowEndDevice()) return true;
-        // GT-S7580 on JDQ39 accounts for 42% of crashes in libPowerStretch.so. Speculative fix to
-        // see if turning off hardware acceleration fixes this. See http://crbug.com/651918.
+
+        // Turning off hardware acceleration reduces crash rates. See http://crbug.com/651918
+        // GT-S7580 on JDQ39 accounts for 42% of crashes in libPowerStretch.so on dev and beta.
         if (Build.VERSION.SDK_INT == Build.VERSION_CODES.JELLY_BEAN_MR1
                 && Build.MODEL.equals("GT-S7580")) {
+            return true;
+        }
+        // SM-N9005 on JSS15J accounts for 44% of crashes in libPowerStretch.so on stable channel.
+        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.JELLY_BEAN_MR2
+                && Build.MODEL.equals("SM-N9005")) {
             return true;
         }
         return false;

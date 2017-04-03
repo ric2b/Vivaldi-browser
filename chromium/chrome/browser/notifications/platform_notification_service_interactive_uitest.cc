@@ -10,18 +10,23 @@
 #include "base/files/file_path.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "chrome/browser/notifications/desktop_notification_profile_util.h"
 #include "chrome/browser/notifications/message_center_display_service.h"
 #include "chrome/browser/notifications/notification.h"
 #include "chrome/browser/notifications/notification_test_util.h"
 #include "chrome/browser/notifications/platform_notification_service_impl.h"
+#include "chrome/browser/notifications/web_notification_delegate.h"
 #include "chrome/browser/permissions/permission_manager.h"
 #include "chrome/browser/permissions/permission_request_manager.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/grit/generated_resources.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/permission_type.h"
 #include "content/public/common/content_switches.h"
@@ -30,11 +35,15 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h"
-#include "ui/base/l10n/l10n_util.h"
 
 #if BUILDFLAG(ENABLE_BACKGROUND)
 #include "chrome/browser/lifetime/keep_alive_registry.h"
 #include "chrome/browser/lifetime/keep_alive_types.h"
+#endif
+
+#if defined(OS_MACOSX)
+#include "base/mac/mac_util.h"
+#include "ui/base/test/scoped_fake_nswindow_fullscreen.h"
 #endif
 
 // -----------------------------------------------------------------------------
@@ -70,6 +79,9 @@ class PlatformNotificationServiceBrowserTest : public InProcessBrowserTest {
   bool RequestAndAcceptPermission();
   bool RequestAndDenyPermission();
 
+  void EnableFullscreenNotifications();
+  void DisableFullscreenNotifications();
+
   // Returns the UI Manager on which notifications will be displayed.
   StubNotificationUIManager* ui_manager() const { return ui_manager_.get(); }
 
@@ -98,6 +110,7 @@ class PlatformNotificationServiceBrowserTest : public InProcessBrowserTest {
   std::unique_ptr<StubNotificationUIManager> ui_manager_;
   std::unique_ptr<MessageCenterDisplayService> display_service_;
   std::unique_ptr<net::EmbeddedTestServer> https_server_;
+  base::test::ScopedFeatureList feature_list_;
 };
 
 // -----------------------------------------------------------------------------
@@ -194,6 +207,18 @@ bool PlatformNotificationServiceBrowserTest::RequestAndDenyPermission() {
   std::string result =
       RequestAndRespondToPermission(PermissionRequestManager::DENY_ALL);
   return "denied" == result;
+}
+
+void PlatformNotificationServiceBrowserTest::EnableFullscreenNotifications() {
+  feature_list_.InitWithFeatures({
+    features::kPreferHtmlOverPlugins,
+    features::kAllowFullscreenWebNotificationsFeature}, {});
+}
+
+void PlatformNotificationServiceBrowserTest::DisableFullscreenNotifications() {
+  feature_list_.InitWithFeatures(
+      {features::kPreferHtmlOverPlugins},
+      {features::kAllowFullscreenWebNotificationsFeature});
 }
 
 // -----------------------------------------------------------------------------
@@ -530,3 +555,132 @@ IN_PROC_BROWSER_TEST_F(PlatformNotificationServiceBrowserTest,
   ASSERT_TRUE(RunScript("GetMessageFromWorker()", &script_result));
   EXPECT_EQ("action_button_click actionId2", script_result);
 }
+
+IN_PROC_BROWSER_TEST_F(PlatformNotificationServiceBrowserTest,
+                       TestShouldDisplayNormal) {
+  ASSERT_NO_FATAL_FAILURE(GrantNotificationPermissionForTest());
+  EnableFullscreenNotifications();
+
+  std::string script_result;
+  ASSERT_TRUE(RunScript(
+      "DisplayPersistentNotification('display_normal')", &script_result));
+  EXPECT_EQ("ok", script_result);
+
+  ASSERT_EQ(1u, ui_manager()->GetNotificationCount());
+  const Notification& notification = ui_manager()->GetNotificationAt(0);
+  EXPECT_FALSE(notification.delegate()->ShouldDisplayOverFullscreen());
+}
+
+IN_PROC_BROWSER_TEST_F(PlatformNotificationServiceBrowserTest,
+                       TestShouldDisplayFullscreen) {
+#if defined(OS_MACOSX)
+  ui::test::ScopedFakeNSWindowFullscreen fake_fullscreen;
+#endif
+  ASSERT_NO_FATAL_FAILURE(GrantNotificationPermissionForTest());
+  EnableFullscreenNotifications();
+
+  std::string script_result;
+  ASSERT_TRUE(RunScript(
+      "DisplayPersistentNotification('display_normal')", &script_result));
+  EXPECT_EQ("ok", script_result);
+
+  // Set the page fullscreen
+  browser()->exclusive_access_manager()->fullscreen_controller()->
+      ToggleBrowserFullscreenMode();
+
+  {
+    FullscreenStateWaiter fs_state(browser(), true);
+    fs_state.Wait();
+  }
+
+  ASSERT_TRUE(ui_test_utils::ShowAndFocusNativeWindow(
+      browser()->window()->GetNativeWindow()));
+
+  ASSERT_TRUE(browser()->window()->IsActive())
+      << "Browser is active after going fullscreen";
+
+  ASSERT_EQ(1u, ui_manager()->GetNotificationCount());
+  const Notification& notification = ui_manager()->GetNotificationAt(0);
+  EXPECT_TRUE(notification.delegate()->ShouldDisplayOverFullscreen());
+}
+
+IN_PROC_BROWSER_TEST_F(PlatformNotificationServiceBrowserTest,
+                       TestShouldDisplayFullscreenOff) {
+#if defined(OS_MACOSX)
+  ui::test::ScopedFakeNSWindowFullscreen fake_fullscreen;
+#endif
+  ASSERT_NO_FATAL_FAILURE(GrantNotificationPermissionForTest());
+  DisableFullscreenNotifications();
+
+  std::string script_result;
+  ASSERT_TRUE(RunScript(
+      "DisplayPersistentNotification('display_normal')", &script_result));
+  EXPECT_EQ("ok", script_result);
+
+  // Set the page fullscreen
+  browser()->exclusive_access_manager()->fullscreen_controller()->
+      ToggleBrowserFullscreenMode();
+
+  {
+    FullscreenStateWaiter fs_state(browser(), true);
+    fs_state.Wait();
+  }
+
+  ASSERT_TRUE(ui_test_utils::ShowAndFocusNativeWindow(
+      browser()->window()->GetNativeWindow()));
+
+  ASSERT_TRUE(browser()->window()->IsActive())
+      << "Browser is active after going fullscreen";
+
+  ASSERT_EQ(1u, ui_manager()->GetNotificationCount());
+  const Notification& notification = ui_manager()->GetNotificationAt(0);
+  // When the experiment flag is off, then ShouldDisplayOverFullscreen should
+  // return false.
+  EXPECT_FALSE(notification.delegate()->ShouldDisplayOverFullscreen());
+}
+
+// The Fake OSX fullscreen window doesn't like drawing a second fullscreen
+// window when another is visible.
+#if !defined(OS_MACOSX)
+IN_PROC_BROWSER_TEST_F(PlatformNotificationServiceBrowserTest,
+                       TestShouldDisplayMultiFullscreen) {
+  ASSERT_NO_FATAL_FAILURE(GrantNotificationPermissionForTest());
+  EnableFullscreenNotifications();
+
+  Browser* other_browser = CreateBrowser(browser()->profile());
+  ui_test_utils::NavigateToURL(other_browser, GURL("about:blank"));
+
+  std::string script_result;
+  ASSERT_TRUE(RunScript(
+      "DisplayPersistentNotification('display_normal')", &script_result));
+  EXPECT_EQ("ok", script_result);
+
+  // Set the notifcation page fullscreen
+  browser()->exclusive_access_manager()->fullscreen_controller()->
+      ToggleBrowserFullscreenMode();
+  {
+    FullscreenStateWaiter fs_state(browser(), true);
+    fs_state.Wait();
+  }
+
+  // Set the other browser fullscreen
+  other_browser->exclusive_access_manager()->fullscreen_controller()->
+      ToggleBrowserFullscreenMode();
+  {
+    FullscreenStateWaiter fs_state(other_browser, true);
+    fs_state.Wait();
+  }
+
+  ASSERT_TRUE(browser()->exclusive_access_manager()->context()->IsFullscreen());
+  ASSERT_TRUE(
+      other_browser->exclusive_access_manager()->context()->IsFullscreen());
+
+  ASSERT_FALSE(browser()->window()->IsActive());
+  ASSERT_TRUE(other_browser->window()->IsActive());
+
+  ASSERT_EQ(1u, ui_manager()->GetNotificationCount());
+  const Notification& notification = ui_manager()->GetNotificationAt(0);
+  EXPECT_FALSE(notification.delegate()->ShouldDisplayOverFullscreen());
+}
+#endif
+

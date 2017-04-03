@@ -19,11 +19,11 @@
 #include "chrome/browser/ui/find_bar/find_bar_controller.h"
 #include "chrome/browser/ui/find_bar/find_tab_helper.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
-#include "grit/components_strings.h"
-#include "grit/theme_resources.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMNSAnimation+Duration.h"
 #import "ui/base/cocoa/find_pasteboard.h"
 #import "ui/base/cocoa/focus_tracker.h"
@@ -267,6 +267,10 @@ const float kRightEdgeOffset = 25;
           FindBarController::kClearResultsInFindBox);
     }
     return YES;
+  } else if (command == @selector(cancelOperation:)) {
+    // Pressing ESC.
+    [closeButton_ performClick:nil];
+    return YES;
   } else if (command == @selector(pageUp:) ||
              command == @selector(pageUpAndModifySelection:) ||
              command == @selector(scrollPageUp:) ||
@@ -452,6 +456,7 @@ const float kRightEdgeOffset = 25;
   }
 
   [findText_ resetFieldEditorFrameIfNeeded];
+  [findText_ setNeedsDisplay:YES];
 
   // If we found any results, reset the focus tracker, so we always
   // restore focus to the tab contents.

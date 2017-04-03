@@ -13,12 +13,12 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/threading/thread_checker.h"
+#include "base/sequence_checker.h"
 #include "base/time/time.h"
 
 namespace base {
 class SequencedTaskRunner;
-class SequencedWorkerPool;
+class TaskRunner;
 }
 
 // Loads and parses an upload list text file of the format
@@ -45,7 +45,13 @@ class UploadList : public base::RefCountedThreadSafe<UploadList> {
                const std::string& local_id,
                const base::Time& capture_time,
                State state);
+    // Constructor for locally stored data.
+    UploadInfo(const std::string& local_id,
+               const base::Time& capture_time,
+               State state,
+               const base::string16& file_size);
     UploadInfo(const std::string& upload_id, const base::Time& upload_time);
+    UploadInfo(const UploadInfo& upload_info);
     ~UploadInfo();
 
     // These fields are only valid when |state| == UploadInfo::State::Uploaded.
@@ -60,6 +66,9 @@ class UploadList : public base::RefCountedThreadSafe<UploadList> {
     base::Time capture_time;
 
     State state;
+
+    // Formatted file size for locally stored data.
+    base::string16 file_size;
   };
 
   class Delegate {
@@ -75,7 +84,7 @@ class UploadList : public base::RefCountedThreadSafe<UploadList> {
   // Creates a new upload list with the given callback delegate.
   UploadList(Delegate* delegate,
              const base::FilePath& upload_log_path,
-             const scoped_refptr<base::SequencedWorkerPool>& worker_pool);
+             scoped_refptr<base::TaskRunner> task_runner);
 
   // Starts loading the upload list. OnUploadListAvailable will be called when
   // loading is complete.
@@ -102,12 +111,14 @@ class UploadList : public base::RefCountedThreadSafe<UploadList> {
   // Requests a user triggered upload for a crash report with a given id.
   virtual void RequestSingleCrashUpload(const std::string& local_id);
 
+  const base::FilePath& upload_log_path() const;
+
  private:
   friend class base::RefCountedThreadSafe<UploadList>;
 
   // Manages the background thread work for LoadUploadListAsynchronously().
   void PerformLoadAndNotifyDelegate(
-      const scoped_refptr<base::SequencedTaskRunner>& task_runner);
+      scoped_refptr<base::SequencedTaskRunner> task_runner);
 
   // Calls the delegate's callback method, if there is a delegate. Stores
   // the newly loaded |uploads| into |uploads_| on the delegate's task runner.
@@ -117,15 +128,17 @@ class UploadList : public base::RefCountedThreadSafe<UploadList> {
   void ParseLogEntries(const std::vector<std::string>& log_entries,
                        std::vector<UploadInfo>* uploads);
 
-  // |thread_checker_| ensures that |uploads_| is only set from the task runner
-  // that created the UploadList.
-  base::ThreadChecker thread_checker_;
+  // Ensures that this class' thread unsafe state is only accessed from the
+  // sequence that owns this UploadList.
+  base::SequenceChecker sequence_checker_;
+
   std::vector<UploadInfo> uploads_;
+
   Delegate* delegate_;
 
   const base::FilePath upload_log_path_;
 
-  scoped_refptr<base::SequencedWorkerPool> worker_pool_;
+  const scoped_refptr<base::TaskRunner> task_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(UploadList);
 };

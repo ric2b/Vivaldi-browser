@@ -10,15 +10,14 @@
 
 namespace cc {
 
-SurfaceIdAllocator::SurfaceIdAllocator(uint32_t client_id)
-    : client_id_(client_id), next_id_(1u) {}
+SurfaceIdAllocator::SurfaceIdAllocator() : next_id_(1u) {}
 
 SurfaceIdAllocator::~SurfaceIdAllocator() {
 }
 
-SurfaceId SurfaceIdAllocator::GenerateId() {
+LocalFrameId SurfaceIdAllocator::GenerateId() {
   uint64_t nonce = base::RandUint64();
-  SurfaceId id(client_id_, next_id_, nonce);
+  LocalFrameId id(next_id_, nonce);
   next_id_++;
   return id;
 }

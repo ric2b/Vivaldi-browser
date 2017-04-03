@@ -129,6 +129,15 @@ DownloadResourceHandler::~DownloadResourceHandler() {
   }
 }
 
+// static
+std::unique_ptr<ResourceHandler> DownloadResourceHandler::Create(
+    net::URLRequest* request) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  std::unique_ptr<ResourceHandler> handler(
+      new DownloadResourceHandler(request));
+  return handler;
+}
+
 bool DownloadResourceHandler::OnRequestRedirected(
     const net::RedirectInfo& redirect_info,
     ResourceResponse* response,
@@ -167,7 +176,6 @@ bool DownloadResourceHandler::OnReadCompleted(int bytes_read, bool* defer) {
 
 void DownloadResourceHandler::OnResponseCompleted(
     const net::URLRequestStatus& status,
-    const std::string& security_info,
     bool* defer) {
   core_.OnResponseCompleted(status);
 }

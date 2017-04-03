@@ -752,7 +752,8 @@ class NET_EXPORT_PRIVATE SpdyDataIR
 
   ~SpdyDataIR() override;
 
-  base::StringPiece data() const { return data_; }
+  const char* data() const { return data_; }
+  size_t data_len() const { return data_len_; }
 
   bool padded() const { return padded_; }
 
@@ -768,14 +769,24 @@ class NET_EXPORT_PRIVATE SpdyDataIR
 
   // Deep-copy of data (keep private copy).
   void SetDataDeep(base::StringPiece data) {
-    data_store_.reset(new std::string(data.data(), data.length()));
-    data_ = *(data_store_.get());
+    data_store_.reset(new std::string(data.data(), data.size()));
+    data_ = data_store_->data();
+    data_len_ = data.size();
   }
 
   // Shallow-copy of data (do not keep private copy).
   void SetDataShallow(base::StringPiece data) {
     data_store_.reset();
-    data_ = data;
+    data_ = data.data();
+    data_len_ = data.size();
+  }
+
+  // Use this method if we don't have a contiguous buffer and only
+  // need a length.
+  void SetDataShallow(size_t len) {
+    data_store_.reset();
+    data_ = nullptr;
+    data_len_ = len;
   }
 
   void Visit(SpdyFrameVisitor* visitor) const override;
@@ -783,7 +794,8 @@ class NET_EXPORT_PRIVATE SpdyDataIR
  private:
   // Used to store data that this SpdyDataIR should own.
   std::unique_ptr<std::string> data_store_;
-  base::StringPiece data_;
+  const char* data_;
+  size_t data_len_;
 
   bool padded_;
   // padding_payload_len_ = desired padding length - len(padding length field).
@@ -992,6 +1004,8 @@ class NET_EXPORT_PRIVATE SpdyHeadersIR : public SpdyFrameWithHeaderBlockIR {
     // The pad field takes one octet on the wire.
     padding_payload_len_ = padding_len - 1;
   }
+  bool end_headers() const { return end_headers_; }
+  void set_end_headers(bool end_headers) { end_headers_ = end_headers; }
 
  private:
   bool has_priority_ = false;
@@ -1000,6 +1014,7 @@ class NET_EXPORT_PRIVATE SpdyHeadersIR : public SpdyFrameWithHeaderBlockIR {
   bool exclusive_ = false;
   bool padded_ = false;
   int padding_payload_len_ = 0;
+  bool end_headers_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(SpdyHeadersIR);
 };
@@ -1071,23 +1086,22 @@ class NET_EXPORT_PRIVATE SpdyPushPromiseIR : public SpdyFrameWithHeaderBlockIR {
   DISALLOW_COPY_AND_ASSIGN(SpdyPushPromiseIR);
 };
 
-// TODO(jgraettinger): This representation needs review. SpdyContinuationIR
-// needs to frame a portion of a single, arbitrarily-broken encoded buffer.
-class NET_EXPORT_PRIVATE SpdyContinuationIR
-    : public SpdyFrameWithHeaderBlockIR {
+class NET_EXPORT_PRIVATE SpdyContinuationIR : public SpdyFrameWithStreamIdIR {
  public:
-  explicit SpdyContinuationIR(SpdyStreamId stream_id)
-      : SpdyContinuationIR(stream_id, SpdyHeaderBlock()) {}
-  SpdyContinuationIR(SpdyStreamId stream_id, SpdyHeaderBlock header_block)
-      : SpdyFrameWithHeaderBlockIR(stream_id, std::move(header_block)),
-        end_headers_(false) {}
+  explicit SpdyContinuationIR(SpdyStreamId stream_id);
+  ~SpdyContinuationIR() override;
 
   void Visit(SpdyFrameVisitor* visitor) const override;
 
   bool end_headers() const { return end_headers_; }
   void set_end_headers(bool end_headers) {end_headers_ = end_headers;}
+  const std::string& encoding() const { return *encoding_; }
+  void take_encoding(std::unique_ptr<std::string> encoding) {
+    encoding_ = std::move(encoding);
+  }
 
  private:
+  std::unique_ptr<std::string> encoding_;
   bool end_headers_;
   DISALLOW_COPY_AND_ASSIGN(SpdyContinuationIR);
 };
@@ -1194,6 +1208,23 @@ class SpdySerializedFrame {
 
   // Returns the actual size of the underlying buffer.
   size_t size() const { return size_; }
+
+  // Returns a buffer containing the contents of the frame, of which the caller
+  // takes ownership, and clears this SpdySerializedFrame.
+  char* ReleaseBuffer() {
+    char* buffer;
+    if (owns_buffer_) {
+      // If the buffer is owned, relinquish ownership to the caller.
+      buffer = frame_;
+      owns_buffer_ = false;
+    } else {
+      // Otherwise, we need to make a copy to give to the caller.
+      buffer = new char[size_];
+      memcpy(buffer, frame_, size_);
+    }
+    *this = SpdySerializedFrame();
+    return buffer;
+  }
 
  protected:
   char* frame_;

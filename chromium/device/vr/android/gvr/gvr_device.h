@@ -14,9 +14,12 @@ class GvrApi;
 
 namespace device {
 
+class GvrDeviceProvider;
+class GvrDelegate;
+
 class GvrDevice : public VRDevice {
  public:
-  GvrDevice(VRDeviceProvider* provider, gvr::GvrApi* gvr_api);
+  GvrDevice(GvrDeviceProvider* provider, GvrDelegate* delegate);
   ~GvrDevice() override;
 
   // VRDevice
@@ -24,8 +27,22 @@ class GvrDevice : public VRDevice {
   VRPosePtr GetPose() override;
   void ResetPose() override;
 
+  bool RequestPresent(bool secure_origin) override;
+  void ExitPresent() override;
+
+  void SubmitFrame(VRPosePtr pose) override;
+  void UpdateLayerBounds(VRLayerBoundsPtr leftBounds,
+                         VRLayerBoundsPtr rightBounds) override;
+
+  void SetDelegate(GvrDelegate* delegate);
+
  private:
-  gvr::GvrApi* gvr_api_;
+  gvr::GvrApi* GetGvrApi();
+
+  GvrDelegate* delegate_;
+  GvrDeviceProvider* gvr_provider_;
+  bool secure_origin_;
+  uint32_t pose_index_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(GvrDevice);
 };

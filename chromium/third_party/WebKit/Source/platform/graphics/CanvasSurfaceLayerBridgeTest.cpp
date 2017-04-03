@@ -6,115 +6,74 @@
 
 #include "cc/surfaces/surface_id.h"
 #include "cc/surfaces/surface_sequence.h"
-#include "platform/graphics/CanvasSurfaceLayerBridgeClient.h"
+#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/interface_request.h"
+#include "public/platform/modules/offscreencanvas/offscreen_canvas_surface.mojom-blink.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "wtf/PtrUtil.h"
-#include "wtf/Vector.h"
 #include <memory>
 
 namespace blink {
 
-class FakeOffscreenCanvasSurfaceImpl {
-public:
-    FakeOffscreenCanvasSurfaceImpl() {}
-    ~FakeOffscreenCanvasSurfaceImpl();
-
-    bool GetSurfaceId(cc::SurfaceId*);
-    void RequestSurfaceCreation(const cc::SurfaceId&);
-
-    bool isSurfaceInSurfaceMap(const cc::SurfaceId&);
-
-private:
-    Vector<cc::SurfaceId> m_fakeSurfaceMap;
-};
-
 //-----------------------------------------------------------------------------
 
-class MockCanvasSurfaceLayerBridgeClient final : public CanvasSurfaceLayerBridgeClient {
-public:
-    explicit MockCanvasSurfaceLayerBridgeClient(FakeOffscreenCanvasSurfaceImpl*);
-    ~MockCanvasSurfaceLayerBridgeClient() override;
+class MockOffscreenCanvasSurface final
+    : public mojom::blink::OffscreenCanvasSurface {
+ public:
+  MockOffscreenCanvasSurface();
+  ~MockOffscreenCanvasSurface() override;
 
-    bool syncGetSurfaceId(cc::SurfaceId*) override;
-    void asyncRequestSurfaceCreation(const cc::SurfaceId&) override;
-    void asyncRequire(const cc::SurfaceId&, const cc::SurfaceSequence&) override {}
-    void asyncSatisfy(const cc::SurfaceSequence&) override {}
+  mojom::blink::OffscreenCanvasSurfacePtr GetProxy();
 
-private:
-    FakeOffscreenCanvasSurfaceImpl* m_service;
-    cc::SurfaceId m_surfaceId;
+  void GetSurfaceId(const GetSurfaceIdCallback&) override;
+  void Require(const cc::SurfaceId&, const cc::SurfaceSequence&) override {}
+  void Satisfy(const cc::SurfaceSequence&) override {}
+
+ private:
+  mojo::Binding<mojom::blink::OffscreenCanvasSurface> m_binding;
+  cc::SurfaceId m_surfaceId;
 };
 
 //-----------------------------------------------------------------------------
 
 class CanvasSurfaceLayerBridgeTest : public testing::Test {
-public:
-    CanvasSurfaceLayerBridge* surfaceLayerBridge() const { return m_surfaceLayerBridge.get(); }
-    FakeOffscreenCanvasSurfaceImpl* surfaceService() const { return m_surfaceService.get(); }
+ public:
+  CanvasSurfaceLayerBridge* surfaceLayerBridge() const {
+    return m_surfaceLayerBridge.get();
+  }
 
-protected:
-    void SetUp() override;
+ protected:
+  void SetUp() override;
 
-private:
-    std::unique_ptr<FakeOffscreenCanvasSurfaceImpl> m_surfaceService;
-    std::unique_ptr<CanvasSurfaceLayerBridge> m_surfaceLayerBridge;
+ private:
+  MockOffscreenCanvasSurface m_service;
+  std::unique_ptr<CanvasSurfaceLayerBridge> m_surfaceLayerBridge;
 };
 
 //-----------------------------------------------------------------------------
 
-MockCanvasSurfaceLayerBridgeClient::MockCanvasSurfaceLayerBridgeClient(FakeOffscreenCanvasSurfaceImpl* surfaceService)
-{
-    m_service = surfaceService;
+MockOffscreenCanvasSurface::MockOffscreenCanvasSurface() : m_binding(this) {}
+
+MockOffscreenCanvasSurface::~MockOffscreenCanvasSurface() {}
+
+mojom::blink::OffscreenCanvasSurfacePtr MockOffscreenCanvasSurface::GetProxy() {
+  return m_binding.CreateInterfacePtrAndBind();
 }
 
-MockCanvasSurfaceLayerBridgeClient::~MockCanvasSurfaceLayerBridgeClient()
-{
+void MockOffscreenCanvasSurface::GetSurfaceId(
+    const GetSurfaceIdCallback& callback) {
+  callback.Run(cc::SurfaceId(cc::FrameSinkId(10, 11), cc::LocalFrameId(15, 0)));
 }
 
-bool MockCanvasSurfaceLayerBridgeClient::syncGetSurfaceId(cc::SurfaceId* surfaceIdPtr)
-{
-    return m_service->GetSurfaceId(surfaceIdPtr);
+void CanvasSurfaceLayerBridgeTest::SetUp() {
+  m_surfaceLayerBridge =
+      wrapUnique(new CanvasSurfaceLayerBridge(m_service.GetProxy()));
 }
 
-void MockCanvasSurfaceLayerBridgeClient::asyncRequestSurfaceCreation(const cc::SurfaceId& surfaceId)
-{
-    m_service->RequestSurfaceCreation(surfaceId);
+TEST_F(CanvasSurfaceLayerBridgeTest, SurfaceLayerCreation) {
+  bool success = this->surfaceLayerBridge()->createSurfaceLayer(50, 50);
+  EXPECT_TRUE(success);
 }
 
-FakeOffscreenCanvasSurfaceImpl::~FakeOffscreenCanvasSurfaceImpl()
-{
-    m_fakeSurfaceMap.clear();
-}
-
-bool FakeOffscreenCanvasSurfaceImpl::GetSurfaceId(cc::SurfaceId* surfaceId)
-{
-    *surfaceId = cc::SurfaceId(10, 15, 0);
-    return true;
-}
-
-void FakeOffscreenCanvasSurfaceImpl::RequestSurfaceCreation(const cc::SurfaceId& surfaceId)
-{
-    m_fakeSurfaceMap.append(surfaceId);
-}
-
-bool FakeOffscreenCanvasSurfaceImpl::isSurfaceInSurfaceMap(const cc::SurfaceId& surfaceId)
-{
-    return m_fakeSurfaceMap.contains(surfaceId);
-}
-
-void CanvasSurfaceLayerBridgeTest::SetUp()
-{
-    m_surfaceService = wrapUnique(new FakeOffscreenCanvasSurfaceImpl());
-    std::unique_ptr<CanvasSurfaceLayerBridgeClient> bridgeClient = wrapUnique(new MockCanvasSurfaceLayerBridgeClient(m_surfaceService.get()));
-    m_surfaceLayerBridge = wrapUnique(new CanvasSurfaceLayerBridge(std::move(bridgeClient)));
-}
-
-TEST_F(CanvasSurfaceLayerBridgeTest, SurfaceLayerCreation)
-{
-    bool success = this->surfaceLayerBridge()->createSurfaceLayer(50, 50);
-    EXPECT_TRUE(this->surfaceService()->isSurfaceInSurfaceMap(this->surfaceLayerBridge()->getSurfaceId()));
-    EXPECT_TRUE(success);
-}
-
-} // namespace blink
+}  // namespace blink

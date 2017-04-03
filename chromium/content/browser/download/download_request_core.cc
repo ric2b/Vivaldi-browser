@@ -136,8 +136,8 @@ std::unique_ptr<net::URLRequest> DownloadRequestCore::CreateRequestOnIOThread(
     DCHECK(params->prefer_cache());
     DCHECK_EQ("POST", params->method());
     std::vector<std::unique_ptr<net::UploadElementReader>> element_readers;
-    request->set_upload(base::WrapUnique(new net::ElementsUploadDataStream(
-        std::move(element_readers), params->post_id())));
+    request->set_upload(base::MakeUnique<net::ElementsUploadDataStream>(
+        std::move(element_readers), params->post_id()));
   }
 
   int load_flags = request->load_flags();
@@ -431,26 +431,25 @@ void DownloadRequestCore::OnResponseCompleted(
 
   DownloadInterruptReason reason = HandleRequestStatus(status);
 
-  if (status.status() == net::URLRequestStatus::CANCELED) {
-    if (abort_reason_ != DOWNLOAD_INTERRUPT_REASON_NONE) {
-      // If a more specific interrupt reason was specified before the request
-      // was explicitly cancelled, then use it.
-      reason = abort_reason_;
-    } else if (status.error() == net::ERR_ABORTED) {
-      // CANCELED + ERR_ABORTED == something outside of the network
-      // stack cancelled the request.  There aren't that many things that
-      // could do this to a download request (whose lifetime is separated from
-      // the tab from which it came).  We map this to USER_CANCELLED as the
-      // case we know about (system suspend because of laptop close) corresponds
-      // to a user action.
-      // TODO(asanka): A lid close or other power event should result in an
-      // interruption that doesn't discard the partial state, unlike
-      // USER_CANCELLED. (https://crbug.com/166179)
-      if (net::IsCertStatusError(request()->ssl_info().cert_status))
-        reason = DOWNLOAD_INTERRUPT_REASON_SERVER_CERT_PROBLEM;
-      else
-        reason = DOWNLOAD_INTERRUPT_REASON_USER_CANCELED;
+  if (status.error() == net::ERR_ABORTED) {
+    // ERR_ABORTED == something outside of the network
+    // stack cancelled the request.  There aren't that many things that
+    // could do this to a download request (whose lifetime is separated from
+    // the tab from which it came).  We map this to USER_CANCELLED as the
+    // case we know about (system suspend because of laptop close) corresponds
+    // to a user action.
+    // TODO(asanka): A lid close or other power event should result in an
+    // interruption that doesn't discard the partial state, unlike
+    // USER_CANCELLED. (https://crbug.com/166179)
+    if (net::IsCertStatusError(request()->ssl_info().cert_status)) {
+      reason = DOWNLOAD_INTERRUPT_REASON_SERVER_CERT_PROBLEM;
+    } else {
+      reason = DOWNLOAD_INTERRUPT_REASON_USER_CANCELED;
     }
+  } else if (abort_reason_ != DOWNLOAD_INTERRUPT_REASON_NONE) {
+    // If a more specific interrupt reason was specified before the request
+    // was explicitly cancelled, then use it.
+    reason = abort_reason_;
   }
 
   std::string accept_ranges;

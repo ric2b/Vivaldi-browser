@@ -474,6 +474,7 @@ function SlideMode(container, content, topToolbar, bottomToolbar, prompt,
 SlideMode.EDITOR_MODES = [
   new ImageEditor.Mode.InstantAutofix(),
   new ImageEditor.Mode.Crop(),
+  new ImageEditor.Mode.Resize(),
   new ImageEditor.Mode.Exposure(),
   new ImageEditor.Mode.OneClick(
       'rotate_left', 'GALLERY_ROTATE_LEFT', new Command.Rotate(-1)),
@@ -1700,6 +1701,7 @@ SlideMode.prototype.setOverwriteBubbleCount_ = function(value) {
  * @private
  */
 SlideMode.prototype.print_ = function() {
+  this.stopEditing_();
   cr.dispatchSimpleEvent(this, 'useraction');
   window.print();
 };

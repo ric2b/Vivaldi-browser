@@ -11,6 +11,7 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "chrome/browser/prerender/prerender_contents.h"
 #include "chrome/browser/prerender/prerender_final_status.h"
@@ -105,7 +106,39 @@ class PrerenderHistograms {
   void RecordNetworkBytes(Origin origin,
                           bool used,
                           int64_t prerender_bytes,
-                          int64_t profile_bytes);
+                          int64_t profile_bytes) const;
+
+  // Called when a NoStatePrefetch request has received a response (including
+  // redirects). May be called several times per resource, in case of redirects.
+  void RecordPrefetchResponseReceived(Origin origin,
+                                      bool is_main_resource,
+                                      bool is_redirect,
+                                      bool is_no_store) const;
+
+  // Called when a NoStatePrefetch resource has been loaded. This is called only
+  // once per resource, when all redirects have been resolved.
+  void RecordPrefetchRedirectCount(Origin origin,
+                                   bool is_main_resource,
+                                   int redirect_count) const;
+
+  // Records the time to first contentful paint.
+  // Must not be called for prefetch loads (which are never rendered anyway).
+  // |is_no_store| must be true if the main resource has a "no-store" cache
+  // control HTTP header.
+  // |prefetch_age| must be zero if the page was not prefetched.
+  void RecordFirstContentfulPaint(Origin origin,
+                                  bool is_no_store,
+                                  base::TimeDelta time,
+                                  base::TimeDelta prefetch_age);
+
+  // Returns the name of the histogram used to record the time to first
+  // contentful paint.
+  // Exposed for testing.
+  static std::string GetFirstContentfulPaintHistogramName(
+      Origin origin,
+      bool is_wash,
+      bool is_no_store,
+      base::TimeDelta prefetch_age);
 
  private:
   base::TimeTicks GetCurrentTimeTicks() const;
@@ -138,6 +171,8 @@ class PrerenderHistograms {
   // start recording events before the first prerender occurs.
   bool seen_any_pageload_;
   bool seen_pageload_started_after_prerender_;
+
+  base::ThreadChecker thread_checker_;
 
   DISALLOW_COPY_AND_ASSIGN(PrerenderHistograms);
 };

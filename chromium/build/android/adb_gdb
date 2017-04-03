@@ -25,6 +25,7 @@ TMPDIR=
 GDBSERVER_PIDFILE=
 TARGET_GDBSERVER=
 COMMAND_PREFIX=
+COMMAND_SUFFIX=
 
 clean_exit () {
   if [ "$TMPDIR" ]; then
@@ -35,7 +36,7 @@ clean_exit () {
     fi
     if [ "$TARGET_GDBSERVER" ]; then
       log "Removing target gdbserver binary: $TARGET_GDBSERVER."
-      "$ADB" shell "$COMMAND_PREFIX" rm "$TARGET_GDBSERVER" >/dev/null 2>&1
+      "$ADB" shell "$COMMAND_PREFIX" rm "$TARGET_GDBSERVER" "$COMMAND_SUFFIX" >/dev/null 2>&1
     fi
     log "Cleaning up: $TMPDIR"
     rm -rf "$TMPDIR"
@@ -639,6 +640,16 @@ Please verify your NDK installation!"
 }
 
 # $1: NDK install path
+get_ndk_host_gdb_client() {
+  local NDK_DIR="$1"
+  local HOST_OS HOST_ARCH
+
+  HOST_OS=$(get_ndk_host_system)
+  HOST_ARCH=$(get_ndk_host_arch)
+  echo "$NDK_DIR/prebuilt/$HOST_OS-$HOST_ARCH/bin/gdb"
+}
+
+# $1: NDK install path
 # $2: target architecture.
 get_ndk_gdbserver () {
   local NDK_DIR="$1"
@@ -677,7 +688,7 @@ ANDROID_TOOLCHAIN=${ANDROID_TOOLCHAIN%/}
 
 # Find host GDB client binary
 if [ -z "$GDB" ]; then
-  GDB=$(which $ANDROID_TOOLCHAIN/*-$GDBEXEPOSTFIX 2>/dev/null | head -1)
+  GDB=$(get_ndk_host_gdb_client "$ANDROID_NDK_ROOT")
   if [ -z "$GDB" ]; then
     panic "Can't find Android gdb client in your path, check your \
 --toolchain or --gdb path."
@@ -920,7 +931,7 @@ SOLIB_DIRS=$(find $PULL_LIBS_DIR -mindepth 1 -maxdepth 4 -type d | \
 # Push gdbserver to the device
 log "Pushing gdbserver $GDBSERVER to $TARGET_GDBSERVER"
 adb push $GDBSERVER $TMP_TARGET_GDBSERVER &>/dev/null
-adb shell $COMMAND_PREFIX cp $TMP_TARGET_GDBSERVER $TARGET_GDBSERVER
+adb shell $COMMAND_PREFIX cp $TMP_TARGET_GDBSERVER $TARGET_GDBSERVER $COMMAND_SUFFIX
 adb shell rm $TMP_TARGET_GDBSERVER
 fail_panic "Could not copy gdbserver to the device!"
 

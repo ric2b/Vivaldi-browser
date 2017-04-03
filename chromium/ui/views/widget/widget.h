@@ -166,12 +166,15 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
 
     enum WindowOpacity {
       // Infer fully opaque or not. For WinAura, top-level windows that are not
-      // of TYPE_WINDOW are translucent so that they can be made to fade in. In
-      // all other cases, windows are fully opaque.
+      // of TYPE_WINDOW are translucent so that they can be made to fade in.
+      // For LinuxAura, only windows that are TYPE_DRAG are translucent.  In all
+      // other cases, windows are fully opaque.
       INFER_OPACITY,
       // Fully opaque.
       OPAQUE_WINDOW,
-      // Possibly translucent/transparent.
+      // Possibly translucent/transparent.  Widgets that fade in or out using
+      // SetOpacity() but do not make use of an alpha channel should use
+      // INFER_OPACITY.
       TRANSLUCENT_WINDOW,
     };
 
@@ -473,9 +476,6 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   void StackAboveWidget(Widget* widget);
   void StackAbove(gfx::NativeView native_view);
   void StackAtTop();
-
-  // Places the widget below the specified NativeView.
-  void StackBelow(gfx::NativeView native_view);
 
   // Sets a shape on the widget. Passing a NULL |shape| reverts the widget to
   // be rectangular.

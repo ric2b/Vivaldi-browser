@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "cc/resources/resource_provider.h"
 #include "cc/test/fake_output_surface.h"
@@ -93,23 +94,18 @@ class VideoResourceUpdaterTest : public testing::Test {
     context3d_ = context3d.get();
     context3d_->set_support_texture_storage(true);
 
-    output_surface3d_ = FakeOutputSurface::Create3d(std::move(context3d));
-    CHECK(output_surface3d_->BindToClient(&client_));
+    context_provider_ = TestContextProvider::Create(std::move(context3d));
+    context_provider_->BindToCurrentThread();
   }
 
   void SetUp() override {
     testing::Test::SetUp();
 
-    output_surface_software_ = FakeOutputSurface::CreateSoftware(
-        base::WrapUnique(new SoftwareOutputDevice));
-    CHECK(output_surface_software_->BindToClient(&client_));
-
     shared_bitmap_manager_.reset(new SharedBitmapManagerAllocationCounter());
     resource_provider3d_ = FakeResourceProvider::Create(
-        output_surface3d_.get(), shared_bitmap_manager_.get());
-
-    resource_provider_software_ = FakeResourceProvider::Create(
-        output_surface_software_.get(), shared_bitmap_manager_.get());
+        context_provider_.get(), shared_bitmap_manager_.get());
+    resource_provider_software_ =
+        FakeResourceProvider::Create(nullptr, shared_bitmap_manager_.get());
   }
 
   scoped_refptr<media::VideoFrame> CreateTestYUVVideoFrame() {
@@ -241,16 +237,14 @@ class VideoResourceUpdaterTest : public testing::Test {
   }
 
   WebGraphicsContext3DUploadCounter* context3d_;
-  FakeOutputSurfaceClient client_;
-  std::unique_ptr<FakeOutputSurface> output_surface3d_;
-  std::unique_ptr<FakeOutputSurface> output_surface_software_;
+  scoped_refptr<TestContextProvider> context_provider_;
   std::unique_ptr<SharedBitmapManagerAllocationCounter> shared_bitmap_manager_;
   std::unique_ptr<ResourceProvider> resource_provider3d_;
   std::unique_ptr<ResourceProvider> resource_provider_software_;
 };
 
 TEST_F(VideoResourceUpdaterTest, SoftwareFrame) {
-  VideoResourceUpdater updater(output_surface3d_->context_provider(),
+  VideoResourceUpdater updater(context_provider_.get(),
                                resource_provider3d_.get());
   scoped_refptr<media::VideoFrame> video_frame = CreateTestYUVVideoFrame();
 
@@ -260,7 +254,7 @@ TEST_F(VideoResourceUpdaterTest, SoftwareFrame) {
 }
 
 TEST_F(VideoResourceUpdaterTest, HighBitFrameNoF16) {
-  VideoResourceUpdater updater(output_surface3d_->context_provider(),
+  VideoResourceUpdater updater(context_provider_.get(),
                                resource_provider3d_.get());
   scoped_refptr<media::VideoFrame> video_frame = CreateTestHighBitFrame();
 
@@ -277,13 +271,23 @@ class VideoResourceUpdaterTestWithF16 : public VideoResourceUpdaterTest {
 };
 
 TEST_F(VideoResourceUpdaterTestWithF16, HighBitFrame) {
-  VideoResourceUpdater updater(output_surface3d_->context_provider(),
+  VideoResourceUpdater updater(context_provider_.get(),
                                resource_provider3d_.get());
   scoped_refptr<media::VideoFrame> video_frame = CreateTestHighBitFrame();
 
   VideoFrameExternalResources resources =
       updater.CreateExternalResourcesFromVideoFrame(video_frame);
   EXPECT_EQ(VideoFrameExternalResources::YUV_RESOURCE, resources.type);
+  EXPECT_NEAR(resources.multiplier, 2.0, 0.1);
+  EXPECT_NEAR(resources.offset, 0.5, 0.1);
+
+  // Create the resource again, to test the path where the
+  // resources are cached.
+  VideoFrameExternalResources resources2 =
+      updater.CreateExternalResourcesFromVideoFrame(video_frame);
+  EXPECT_EQ(VideoFrameExternalResources::YUV_RESOURCE, resources2.type);
+  EXPECT_NEAR(resources2.multiplier, 2.0, 0.1);
+  EXPECT_NEAR(resources2.offset, 0.5, 0.1);
 }
 
 TEST_F(VideoResourceUpdaterTest, HighBitFrameSoftwareCompositor) {
@@ -296,7 +300,7 @@ TEST_F(VideoResourceUpdaterTest, HighBitFrameSoftwareCompositor) {
 }
 
 TEST_F(VideoResourceUpdaterTest, WonkySoftwareFrame) {
-  VideoResourceUpdater updater(output_surface3d_->context_provider(),
+  VideoResourceUpdater updater(context_provider_.get(),
                                resource_provider3d_.get());
   scoped_refptr<media::VideoFrame> video_frame = CreateWonkyTestYUVVideoFrame();
 
@@ -315,7 +319,7 @@ TEST_F(VideoResourceUpdaterTest, WonkySoftwareFrameSoftwareCompositor) {
 }
 
 TEST_F(VideoResourceUpdaterTest, ReuseResource) {
-  VideoResourceUpdater updater(output_surface3d_->context_provider(),
+  VideoResourceUpdater updater(context_provider_.get(),
                                resource_provider3d_.get());
   scoped_refptr<media::VideoFrame> video_frame = CreateTestYUVVideoFrame();
   video_frame->set_timestamp(base::TimeDelta::FromSeconds(1234));
@@ -347,7 +351,7 @@ TEST_F(VideoResourceUpdaterTest, ReuseResource) {
 }
 
 TEST_F(VideoResourceUpdaterTest, ReuseResourceNoDelete) {
-  VideoResourceUpdater updater(output_surface3d_->context_provider(),
+  VideoResourceUpdater updater(context_provider_.get(),
                                resource_provider3d_.get());
   scoped_refptr<media::VideoFrame> video_frame = CreateTestYUVVideoFrame();
   video_frame->set_timestamp(base::TimeDelta::FromSeconds(1234));
@@ -441,7 +445,7 @@ TEST_F(VideoResourceUpdaterTest, ReuseResourceNoDeleteSoftwareCompositor) {
 }
 
 TEST_F(VideoResourceUpdaterTest, CreateForHardwarePlanes) {
-  VideoResourceUpdater updater(output_surface3d_->context_provider(),
+  VideoResourceUpdater updater(context_provider_.get(),
                                resource_provider3d_.get());
 
   scoped_refptr<media::VideoFrame> video_frame =
@@ -473,7 +477,7 @@ TEST_F(VideoResourceUpdaterTest, CreateForHardwarePlanes) {
 }
 
 TEST_F(VideoResourceUpdaterTest, CreateForHardwarePlanes_StreamTexture) {
-  VideoResourceUpdater updater(output_surface3d_->context_provider(),
+  VideoResourceUpdater updater(context_provider_.get(),
                                resource_provider3d_.get());
   context3d_->ResetTextureCreationCount();
   scoped_refptr<media::VideoFrame> video_frame =
@@ -508,6 +512,55 @@ TEST_F(VideoResourceUpdaterTest, CreateForHardwarePlanes_StreamTexture) {
   // that an immutable texture wasn't created by glTexStorage2DEXT, when
   // that extension is supported.
   EXPECT_FALSE(context3d_->WasImmutableTextureCreated());
+}
+
+namespace {
+
+// Convert an IEEE 754 half-float to a double value
+// that we can do math on.
+double FromHalfFloat(uint16_t half_float) {
+  if (!half_float)
+    return 0.0;
+  int sign = (half_float & 0x8000) ? -1 : 1;
+  int exponent = (half_float >> 10) & 0x1F;
+  int fraction = half_float & 0x3FF;
+  if (exponent == 0) {
+    return pow(2.0, -24.0) * fraction;
+  } else if (exponent == 0x1F) {
+    return sign * 1000000000000.0;
+  } else {
+    return pow(2.0, exponent - 25) * (0x400 + fraction);
+  }
+}
+
+}  // namespace
+
+TEST_F(VideoResourceUpdaterTest, MakeHalfFloatTest) {
+  unsigned short integers[1 << 12];
+  unsigned short half_floats[1 << 12];
+  for (int bits = 9; bits <= 12; bits++) {
+    int num_values = 1 << bits;
+    for (int i = 0; i < num_values; i++)
+      integers[i] = i;
+
+    VideoResourceUpdater::MakeHalfFloats(integers, bits, num_values,
+                                         half_floats);
+
+    // Multiplier to converting integers to 0.0..1.0 range.
+    double multiplier = 1.0 / (num_values - 1);
+
+    for (int i = 0; i < num_values; i++) {
+      // We expect the result to be within +/- one least-significant bit.
+      // Within the range we care about, half-floats values and
+      // their representation both sort in the same order, so we
+      // can just add one to get the next bigger half-float.
+      float expected_precision =
+          FromHalfFloat(half_floats[i] + 1) - FromHalfFloat(half_floats[i]);
+      EXPECT_NEAR(FromHalfFloat(half_floats[i]), integers[i] * multiplier,
+                  expected_precision)
+          << "i = " << i << " bits = " << bits;
+    }
+  }
 }
 
 }  // namespace

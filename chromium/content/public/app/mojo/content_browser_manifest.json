@@ -1,37 +1,63 @@
 {
   "manifest_version": 1,
-  "name": "exe:content_browser",
+  "name": "service:content_browser",
   "process-group": "browser",
-  "display_name": "Content Browser",
+  "display_name": "Content (browser process)",
   "capabilities": {
     // Remove this once http://crbug.com/632818 is fixed.
     "provided": {
-      "all_interfaces": [ "*" ]
+      "gpu": [ ],
+      "plugin":  [ ],
+      "renderer": [
+        "blink::mojom::BackgroundSyncService",
+        "blink::mojom::BroadcastChannelProvider",
+        "blink::mojom::BudgetService",
+        "blink::mojom::Hyphenation",
+        "blink::mojom::MimeRegistry",
+        "blink::mojom::NotificationService",
+        "blink::mojom::OffscreenCanvasCompositorFrameSinkProvider",
+        "blink::mojom::OffscreenCanvasSurface",
+        "blink::mojom::PermissionService",
+        "blink::mojom::ShapeDetection",
+        "blink::mojom::WebSocket",
+        "content::mojom::MemoryCoordinatorHandle",
+        "content::mojom::StoragePartitionService",
+        "content::mojom::URLLoaderFactory",
+        "content::mojom::VideoCaptureHost",
+        "device::BatteryMonitor",
+        "device::mojom::LightSensor",
+        "device::mojom::MotionSensor",
+        "device::mojom::OrientationAbsoluteSensor",
+        "device::mojom::OrientationSensor",
+        "device::mojom::TimeZoneMonitor",
+        "media::mojom::ImageCapture",
+        "memory_coordinator::mojom::MemoryCoordinatorHandle"
+      ]
     },
     "required": {
       "*": { "classes": [ "app" ] },
 
-      // We allow the browser to connect to any interfaces exposed by its child
-      // processes.
-      "exe:content_gpu": { "classes": [ "all_interfaces" ] },
-      "exe:content_plugin": { "classes": [ "all_interfaces" ] },
-      "exe:content_renderer": { "classes": [ "all_interfaces" ] },
-      "exe:content_utility": { "classes": [ "all_interfaces" ] },
+      // In classic ash, the browser supplies ash interfaces to itself.
+      "service:content_browser": { "classes": [ "ash" ] },
+      "service:content_gpu": { "classes": [ "browser" ] },
+      "service:content_plugin": { "classes": [ "browser" ] },
+      "service:content_renderer": { "classes": [ "browser" ] },
+      "service:content_utility": { "classes": [ "browser" ] },
 
-      "mojo:shell": {
+      "service:shell": {
         "classes": [
           "shell:client_process",
           "shell:instance_name",
           "shell:user_id"
         ]
       },
-      "mojo:file": {
+      "service:file": {
         "interfaces": [
-          "leveldb::mojom::LevelDBService",
-          "user_service::UserService"
+          "file::mojom::FileSystem",
+          "leveldb::mojom::LevelDBService"
         ]
       },
-      "mojo:media": { "classes": [ "all_interfaces" ] }
+      "service:media": { "interfaces": [ "media::mojom::MediaService" ] }
     }
   }
 }

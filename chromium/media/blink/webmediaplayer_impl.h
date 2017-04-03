@@ -18,6 +18,8 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread.h"
+#include "base/time/default_tick_clock.h"
+#include "base/timer/elapsed_timer.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "media/base/media_tracks.h"
@@ -74,6 +76,7 @@ class GLES2Interface;
 namespace media {
 class ChunkDemuxer;
 class GpuVideoAcceleratorFactories;
+class MediaKeys;
 class IPCDemuxer;
 class MediaLog;
 class UrlIndex;
@@ -129,8 +132,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // WebGL texImage2D, ImageBitmap, printing and capturing capabilities.
   void paint(blink::WebCanvas* canvas,
              const blink::WebRect& rect,
-             unsigned char alpha,
-             SkXfermode::Mode mode) override;
+             SkPaint& paint) override;
 
   // True if the loaded media has a playable video/audio track.
   bool hasVideo() const override;
@@ -191,7 +193,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // WebMediaPlayerDelegate::Observer implementation.
   void OnHidden() override;
   void OnShown() override;
-  void OnSuspendRequested(bool must_suspend) override;
+  bool OnSuspendRequested(bool must_suspend) override;
   void OnPlay() override;
   void OnPause() override;
   void OnVolumeMultiplierUpdate(double multiplier) override;
@@ -318,9 +320,9 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // tracks separately in WebSourceBufferImpl.
   void OnFFmpegMediaTracksUpdated(std::unique_ptr<MediaTracks> tracks);
 
-  // Sets |cdm_context| on the pipeline and fires |cdm_attached_cb| when done.
-  // Parameter order is reversed for easy binding.
-  void SetCdm(const CdmAttachedCB& cdm_attached_cb, CdmContext* cdm_context);
+  // Sets CdmContext from |cdm| on the pipeline and calls OnCdmAttached()
+  // when done.
+  void SetCdm(blink::WebContentDecryptionModule* cdm);
 
   // Called when a CDM has been attached to the |pipeline_|.
   void OnCdmAttached(bool success);
@@ -509,10 +511,14 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   std::unique_ptr<blink::WebContentDecryptionModuleResult> set_cdm_result_;
 
-  std::string content_type_;
+  // If a CDM is attached keep a reference to it, so that it is not destroyed
+  // until after the pipeline is done with it.
+  scoped_refptr<MediaKeys> cdm_;
 
-  // Whether a CDM has been successfully attached.
-  bool is_cdm_attached_;
+  // Keep track of the CDM while it is in the process of attaching to the
+  // pipeline.
+  scoped_refptr<MediaKeys> pending_cdm_;
+  std::string content_type_;
 
 #if defined(OS_ANDROID)  // WMPI_CAST
   WebMediaPlayerCast cast_impl_;
@@ -545,6 +551,10 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // Force to use SurfaceView instead of SurfaceTexture on Android.
   bool force_video_overlays_;
 
+  // Prevent use of SurfaceView on Android. (Ignored when
+  // |force_video_overlays_| is true.)
+  bool disable_fullscreen_video_overlays_;
+
   // Suppresses calls to OnPipelineError() after destruction / shutdown has been
   // started; prevents us from spuriously logging errors that are transient or
   // unimportant.
@@ -564,6 +574,18 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // Monitors the watch time of the played content.
   std::unique_ptr<WatchTimeReporter> watch_time_reporter_;
   bool is_encrypted_;
+
+  // Number of times we've reached BUFFERING_HAVE_NOTHING during playback.
+  int underflow_count_;
+  std::unique_ptr<base::ElapsedTimer> underflow_timer_;
+
+  // The last time didLoadingProgress() returned true.
+  base::TimeTicks last_time_loading_progressed_;
+
+  std::unique_ptr<base::TickClock> tick_clock_;
+
+  // Whether the player is currently in autoplay muted state.
+  bool autoplay_muted_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(WebMediaPlayerImpl);
 };

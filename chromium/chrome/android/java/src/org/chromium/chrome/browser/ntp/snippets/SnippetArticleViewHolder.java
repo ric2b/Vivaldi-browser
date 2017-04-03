@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.ntp.snippets;
 
+import android.annotation.SuppressLint;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
@@ -33,18 +34,16 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.favicon.FaviconHelper.FaviconImageCallback;
 import org.chromium.chrome.browser.favicon.FaviconHelper.IconAvailabilityCallback;
 import org.chromium.chrome.browser.ntp.DisplayStyleObserver;
-import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.ntp.NewTabPageUma;
 import org.chromium.chrome.browser.ntp.NewTabPageView.NewTabPageManager;
 import org.chromium.chrome.browser.ntp.UiConfig;
 import org.chromium.chrome.browser.ntp.cards.CardViewHolder;
+import org.chromium.chrome.browser.ntp.cards.CardsVariationParameters;
 import org.chromium.chrome.browser.ntp.cards.DisplayStyleObserverAdapter;
 import org.chromium.chrome.browser.ntp.cards.ImpressionTracker;
-import org.chromium.chrome.browser.ntp.cards.NewTabPageItem;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageRecyclerView;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
-import org.chromium.components.variations.VariationsAssociatedData;
-import org.chromium.ui.WindowOpenDisposition;
+import org.chromium.ui.mojom.WindowOpenDisposition;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -60,10 +59,6 @@ public class SnippetArticleViewHolder extends CardViewHolder implements Impressi
     private static final String FAVICON_SERVICE_FORMAT =
             "https://s2.googleusercontent.com/s2/favicons?domain=%s&src=chrome_newtab_mobile&sz=%d&alt=404";
 
-    // The variation parameter to fetch the value from the favicon service.
-    private static final String PARAMETER_FAVICON_SERVICE_NAME = "favicons_fetch_from_service";
-    private static final String PARAMETER_DISABLED_VALUE = "off";
-
     // ContextMenu item ids. These must be unique.
     private static final int ID_OPEN_IN_NEW_WINDOW = 0;
     private static final int ID_OPEN_IN_NEW_TAB = 1;
@@ -72,7 +67,6 @@ public class SnippetArticleViewHolder extends CardViewHolder implements Impressi
     private static final int ID_REMOVE = 4;
 
     private final NewTabPageManager mNewTabPageManager;
-    private final SuggestionsSource mSuggestionsSource;
     private final TextView mHeadlineTextView;
     private final TextView mPublisherTextView;
     private final TextView mArticleSnippetTextView;
@@ -160,11 +154,10 @@ public class SnippetArticleViewHolder extends CardViewHolder implements Impressi
      * @param uiConfig The NTP UI configuration object used to adjust the article UI.
      */
     public SnippetArticleViewHolder(NewTabPageRecyclerView parent, NewTabPageManager manager,
-            SuggestionsSource suggestionsSource, UiConfig uiConfig) {
+            UiConfig uiConfig) {
         super(R.layout.new_tab_page_snippets_card, parent, uiConfig);
 
         mNewTabPageManager = manager;
-        mSuggestionsSource = suggestionsSource;
         mThumbnailView = (ImageView) itemView.findViewById(R.id.article_thumbnail);
         mHeadlineTextView = (TextView) itemView.findViewById(R.id.article_headline);
         mPublisherTextView = (TextView) itemView.findViewById(R.id.article_publisher);
@@ -180,9 +173,7 @@ public class SnippetArticleViewHolder extends CardViewHolder implements Impressi
             }
         });
 
-        mUseFaviconService =
-                !PARAMETER_DISABLED_VALUE.equals(VariationsAssociatedData.getVariationParamValue(
-                        NewTabPage.FIELD_TRIAL_NAME, PARAMETER_FAVICON_SERVICE_NAME));
+        mUseFaviconService = CardsVariationParameters.isFaviconServiceEnabled();
     }
 
     @Override
@@ -225,7 +216,7 @@ public class SnippetArticleViewHolder extends CardViewHolder implements Impressi
         if (SnippetsConfig.isSaveToOfflineEnabled()
                 && OfflinePageBridge.canSavePage(mArticle.mUrl)) {
             addContextMenuItem(
-                    menu, ID_SAVE_FOR_OFFLINE, R.string.contextmenu_save_offline, listener);
+                    menu, ID_SAVE_FOR_OFFLINE, R.string.contextmenu_save_link, listener);
         }
 
         addContextMenuItem(menu, ID_REMOVE, R.string.remove, listener);
@@ -291,11 +282,10 @@ public class SnippetArticleViewHolder extends CardViewHolder implements Impressi
         mPublisherTextView.setLayoutParams(params);
     }
 
-    @Override
-    public void onBindViewHolder(NewTabPageItem article) {
-        super.onBindViewHolder(article);
+    public void onBindViewHolder(SnippetArticle article) {
+        super.onBindViewHolder();
 
-        mArticle = (SnippetArticle) article;
+        mArticle = article;
         updateLayout();
 
         mHeadlineTextView.setText(mArticle.mTitle);
@@ -341,7 +331,8 @@ public class SnippetArticleViewHolder extends CardViewHolder implements Impressi
             } else {
                 mThumbnailView.setImageResource(R.drawable.ic_snippet_thumbnail_placeholder);
                 mImageCallback = new FetchImageCallback(this, mArticle);
-                mSuggestionsSource.fetchSuggestionImage(mArticle, mImageCallback);
+                mNewTabPageManager.getSuggestionsSource()
+                        .fetchSuggestionImage(mArticle, mImageCallback);
             }
         }
 
@@ -419,6 +410,8 @@ public class SnippetArticleViewHolder extends CardViewHolder implements Impressi
                 });
     }
 
+    // TODO(crbug.com/635567): Fix this properly.
+    @SuppressLint("DefaultLocale")
     private void fetchFaviconFromService(final URI snippetUri) {
         // Show the default favicon immediately.
         setDefaultFaviconOnView();

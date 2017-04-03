@@ -312,7 +312,7 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, FindInPageFormsTextAreas) {
 IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, MAYBE_SearchWithinSpecialURL) {
   // TODO(tsergeant): Get this test working on MD History, which loads very
   // asynchronously and causes this test to fail.
-  MdHistoryUI::DisableForTesting();
+  MdHistoryUI::SetEnabledForTesting(false);
 
   WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
@@ -864,7 +864,7 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest,
       content::Source<NavigationController>(
           &browser()->tab_strip_model()->GetActiveWebContents()->
               GetController()));
-  chrome::Reload(browser(), CURRENT_TAB);
+  chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
   observer.Wait();
   EXPECT_TRUE(GetFindBarWindowInfo(&position, &fully_visible));
   EXPECT_FALSE(fully_visible);
@@ -1420,7 +1420,7 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest,
   // Open another tab.
   GURL url = GetURL(kSimple);
   ui_test_utils::NavigateToURLWithDisposition(
-      browser(), url, NEW_FOREGROUND_TAB,
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
 
   // Close it.
@@ -1438,7 +1438,7 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest,
   chrome::ToggleBookmarkBar(browser());
 
   ui_test_utils::NavigateToURLWithDisposition(
-      browser(), url, NEW_FOREGROUND_TAB,
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
 
   EnsureFindBoxOpen();
@@ -1446,7 +1446,7 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest,
   EXPECT_TRUE(GetFindBarWindowInfo(&position, NULL));
 
   ui_test_utils::NavigateToURLWithDisposition(
-      browser(), url, NEW_FOREGROUND_TAB,
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
   chrome::CloseTab(browser());
   EXPECT_TRUE(GetFindBarWindowInfo(&position2, NULL));

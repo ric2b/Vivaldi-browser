@@ -14,6 +14,7 @@ import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.View;
 
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.firstrun.FirstRunSignInProcessor;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -25,8 +26,8 @@ import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.signin.SigninManager.SignInAllowedObserver;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.chrome.browser.sync.ProfileSyncService.SyncStateChangedListener;
+import org.chromium.components.signin.ChromeSigninController;
 import org.chromium.components.sync.AndroidSyncSettings;
-import org.chromium.components.sync.signin.ChromeSigninController;
 
 /**
  * A preference that displays "Sign in to Chrome" when the user is not sign in, and displays
@@ -141,6 +142,10 @@ public class SignInPreference extends Preference
                 return true;
             }
         });
+
+        if (account == null && enabled) {
+            RecordUserAction.record("Signin_Impression_FromSettings");
+        }
     }
 
     private void updateSyncStatusIcon() {

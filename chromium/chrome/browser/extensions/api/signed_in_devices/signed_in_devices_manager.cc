@@ -10,21 +10,20 @@
 #include <vector>
 
 #include "base/lazy_instance.h"
-#include "base/memory/linked_ptr.h"
-#include "base/memory/scoped_vector.h"
+#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "chrome/browser/extensions/api/signed_in_devices/signed_in_devices_api.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/common/extensions/api/signed_in_devices.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/sync/device_info/device_info.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
 
-using sync_driver::DeviceInfo;
+using syncer::DeviceInfo;
 namespace extensions {
 
 namespace {
@@ -44,7 +43,8 @@ SignedInDevicesChangeObserver::SignedInDevicesChangeObserver(
     const std::string& extension_id,
     Profile* profile) : extension_id_(extension_id),
                         profile_(profile) {
-  ProfileSyncService* pss = ProfileSyncServiceFactory::GetForProfile(profile_);
+  browser_sync::ProfileSyncService* pss =
+      ProfileSyncServiceFactory::GetForProfile(profile_);
   if (pss) {
     DCHECK(pss->GetDeviceInfoTracker());
     pss->GetDeviceInfoTracker()->AddObserver(this);
@@ -52,7 +52,8 @@ SignedInDevicesChangeObserver::SignedInDevicesChangeObserver(
 }
 
 SignedInDevicesChangeObserver::~SignedInDevicesChangeObserver() {
-  ProfileSyncService* pss = ProfileSyncServiceFactory::GetForProfile(profile_);
+  browser_sync::ProfileSyncService* pss =
+      ProfileSyncServiceFactory::GetForProfile(profile_);
   if (pss) {
     DCHECK(pss->GetDeviceInfoTracker());
     pss->GetDeviceInfoTracker()->RemoveObserver(this);
@@ -62,11 +63,11 @@ SignedInDevicesChangeObserver::~SignedInDevicesChangeObserver() {
 void SignedInDevicesChangeObserver::OnDeviceInfoChange() {
   // There is a change in the list of devices. Get all devices and send them to
   // the listener.
-  ScopedVector<DeviceInfo> devices = GetAllSignedInDevices(extension_id_,
-                                                           profile_);
+  std::vector<std::unique_ptr<DeviceInfo>> devices =
+      GetAllSignedInDevices(extension_id_, profile_);
 
   std::vector<api::signed_in_devices::DeviceInfo> args;
-  for (const DeviceInfo* info : devices) {
+  for (const std::unique_ptr<DeviceInfo>& info : devices) {
     api::signed_in_devices::DeviceInfo api_device;
     FillDeviceInfo(*info, &api_device);
     args.push_back(std::move(api_device));
@@ -123,19 +124,16 @@ SignedInDevicesManager::~SignedInDevicesManager() {
 
 void SignedInDevicesManager::OnListenerAdded(
     const EventListenerInfo& details) {
-  for (ScopedVector<SignedInDevicesChangeObserver>::const_iterator it =
-           change_observers_.begin();
-           it != change_observers_.end();
-           ++it) {
-    if ((*it)->extension_id() == details.extension_id) {
+  for (const std::unique_ptr<SignedInDevicesChangeObserver>& observer :
+       change_observers_) {
+    if (observer->extension_id() == details.extension_id) {
       DCHECK(false) <<"OnListenerAded fired twice for same extension";
       return;
     }
   }
 
-  change_observers_.push_back(new SignedInDevicesChangeObserver(
-      details.extension_id,
-      profile_));
+  change_observers_.push_back(base::MakeUnique<SignedInDevicesChangeObserver>(
+      details.extension_id, profile_));
 }
 
 void SignedInDevicesManager::OnListenerRemoved(
@@ -145,10 +143,9 @@ void SignedInDevicesManager::OnListenerRemoved(
 
 void SignedInDevicesManager::RemoveChangeObserverForExtension(
     const std::string& extension_id) {
-  for (ScopedVector<SignedInDevicesChangeObserver>::iterator it =
-           change_observers_.begin();
-           it != change_observers_.end();
-           ++it) {
+  for (std::vector<std::unique_ptr<SignedInDevicesChangeObserver>>::iterator
+           it = change_observers_.begin();
+       it != change_observers_.end(); ++it) {
     if ((*it)->extension_id() == extension_id) {
       change_observers_.erase(it);
       return;

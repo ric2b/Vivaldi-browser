@@ -30,7 +30,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_live_tab_context.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/sessions/content/content_live_tab.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/sync_sessions/open_tabs_ui_delegate.h"
@@ -66,8 +66,8 @@ const char kRestoreInIncognitoError[] =
 
 // Comparator function for use with std::sort that will sort sessions by
 // descending modified_time (i.e., most recent first).
-bool SortSessionsByRecency(const sync_driver::SyncedSession* s1,
-                           const sync_driver::SyncedSession* s2) {
+bool SortSessionsByRecency(const sync_sessions::SyncedSession* s1,
+                           const sync_sessions::SyncedSession* s2) {
   return s1->modified_time > s2->modified_time;
 }
 
@@ -250,7 +250,7 @@ std::unique_ptr<windows::Window> SessionsGetDevicesFunction::CreateWindowModel(
   // from most recent to least recent.
   std::vector<const sessions::SessionTab*> tabs_in_window;
   for (size_t i = 0; i < window.tabs.size(); ++i) {
-    const sessions::SessionTab* tab = window.tabs[i];
+    const sessions::SessionTab* tab = window.tabs[i].get();
     if (tab->navigations.empty())
       continue;
     const sessions::SerializedNavigationEntry& current_navigation =
@@ -333,7 +333,7 @@ SessionsGetDevicesFunction::CreateSessionModel(
 }
 
 api::sessions::Device SessionsGetDevicesFunction::CreateDeviceModel(
-    const sync_driver::SyncedSession* session) {
+    const sync_sessions::SyncedSession* session) {
   int max_results = api::sessions::MAX_SESSION_RESULTS;
   // Already validated in RunAsync().
   std::unique_ptr<GetDevices::Params> params(
@@ -345,8 +345,7 @@ api::sessions::Device SessionsGetDevicesFunction::CreateDeviceModel(
   device_struct.info = session->session_name;
   device_struct.device_name = session->session_name;
 
-  for (sync_driver::SyncedSession::SyncedWindowMap::const_iterator it =
-           session->windows.begin();
+  for (auto it = session->windows.begin();
        it != session->windows.end() &&
        static_cast<int>(device_struct.sessions.size()) < max_results;
        ++it) {
@@ -359,7 +358,7 @@ api::sessions::Device SessionsGetDevicesFunction::CreateDeviceModel(
 }
 
 bool SessionsGetDevicesFunction::RunSync() {
-  ProfileSyncService* service =
+  browser_sync::ProfileSyncService* service =
       ProfileSyncServiceFactory::GetInstance()->GetForProfile(GetProfile());
   if (!(service && service->GetPreferredDataTypes().Has(syncer::SESSIONS))) {
     // Sync not enabled.
@@ -368,8 +367,9 @@ bool SessionsGetDevicesFunction::RunSync() {
     return true;
   }
 
-  sync_driver::OpenTabsUIDelegate* open_tabs = service->GetOpenTabsUIDelegate();
-  std::vector<const sync_driver::SyncedSession*> sessions;
+  sync_sessions::OpenTabsUIDelegate* open_tabs =
+      service->GetOpenTabsUIDelegate();
+  std::vector<const sync_sessions::SyncedSession*> sessions;
   if (!(open_tabs && open_tabs->GetAllForeignSessions(&sessions))) {
     results_ =
         GetDevices::Results::Create(std::vector<api::sessions::Device>());
@@ -411,8 +411,8 @@ void SessionsRestoreFunction::SetResultRestoredTab(
 
 bool SessionsRestoreFunction::SetResultRestoredWindow(int window_id) {
   WindowController* controller = NULL;
-  if (!windows_util::GetWindowFromWindowID(this, window_id, 0, &controller)) {
-    // error_ is set by GetWindowFromWindowId function call.
+  if (!windows_util::GetWindowFromWindowID(this, window_id, 0, &controller,
+                                           &error_)) {
     return false;
   }
   std::unique_ptr<base::DictionaryValue> window_value(
@@ -482,7 +482,8 @@ bool SessionsRestoreFunction::RestoreLocalSession(const SessionId& session_id,
       BrowserLiveTabContext::FindContextForWebContents(
           browser->tab_strip_model()->GetActiveWebContents());
   std::vector<sessions::LiveTab*> restored_tabs =
-      tab_restore_service->RestoreEntryById(context, session_id.id(), UNKNOWN);
+      tab_restore_service->RestoreEntryById(context, session_id.id(),
+                                            WindowOpenDisposition::UNKNOWN);
   // If the ID is invalid, restored_tabs will be empty.
   if (restored_tabs.empty()) {
     SetInvalidIdError(session_id.ToString());
@@ -504,13 +505,14 @@ bool SessionsRestoreFunction::RestoreLocalSession(const SessionId& session_id,
 
 bool SessionsRestoreFunction::RestoreForeignSession(const SessionId& session_id,
                                                     Browser* browser) {
-  ProfileSyncService* service =
+  browser_sync::ProfileSyncService* service =
       ProfileSyncServiceFactory::GetInstance()->GetForProfile(GetProfile());
   if (!(service && service->GetPreferredDataTypes().Has(syncer::SESSIONS))) {
     SetError(kSessionSyncError);
     return false;
   }
-  sync_driver::OpenTabsUIDelegate* open_tabs = service->GetOpenTabsUIDelegate();
+  sync_sessions::OpenTabsUIDelegate* open_tabs =
+      service->GetOpenTabsUIDelegate();
   if (!open_tabs) {
     SetError(kSessionSyncError);
     return false;
@@ -524,8 +526,8 @@ bool SessionsRestoreFunction::RestoreForeignSession(const SessionId& session_id,
     content::WebContents* contents = tab_strip->GetActiveWebContents();
 
     content::WebContents* tab_contents =
-        SessionRestore::RestoreForeignSessionTab(contents, *tab,
-                                                 NEW_FOREGROUND_TAB);
+        SessionRestore::RestoreForeignSessionTab(
+            contents, *tab, WindowOpenDisposition::NEW_FOREGROUND_TAB);
     SetResultRestoredTab(tab_contents);
     return true;
   }
@@ -612,9 +614,9 @@ SessionsEventRouter::~SessionsEventRouter() {
 void SessionsEventRouter::TabRestoreServiceChanged(
     sessions::TabRestoreService* service) {
   std::unique_ptr<base::ListValue> args(new base::ListValue());
-  EventRouter::Get(profile_)->BroadcastEvent(base::WrapUnique(
-      new Event(events::SESSIONS_ON_CHANGED,
-                api::sessions::OnChanged::kEventName, std::move(args))));
+  EventRouter::Get(profile_)->BroadcastEvent(base::MakeUnique<Event>(
+      events::SESSIONS_ON_CHANGED, api::sessions::OnChanged::kEventName,
+      std::move(args)));
 }
 
 void SessionsEventRouter::TabRestoreServiceDestroyed(

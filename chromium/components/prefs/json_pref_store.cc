@@ -22,6 +22,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/task_runner_util.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/time/default_clock.h"
 #include "base/values.h"
@@ -171,6 +172,7 @@ JsonPrefStore::JsonPrefStore(
       filtering_in_progress_(false),
       pending_lossy_write_(false),
       read_error_(PREF_READ_ERROR_NONE),
+      has_pending_write_reply_(false),
       write_count_histogram_(writer_.commit_interval(), path_) {
   DCHECK(!path_.empty());
 }
@@ -323,11 +325,72 @@ void JsonPrefStore::ReportValueChanged(const std::string& key, uint32_t flags) {
   ScheduleWrite(flags);
 }
 
-void JsonPrefStore::RegisterOnNextSuccessfulWriteCallback(
-    const base::Closure& on_next_successful_write) {
+void JsonPrefStore::RunOrScheduleNextSuccessfulWriteCallback(
+    bool write_success) {
   DCHECK(CalledOnValidThread());
 
-  writer_.RegisterOnNextSuccessfulWriteCallback(on_next_successful_write);
+  has_pending_write_reply_ = false;
+  if (!on_next_successful_write_reply_.is_null()) {
+    base::Closure on_successful_write =
+        std::move(on_next_successful_write_reply_);
+    if (write_success) {
+      on_successful_write.Run();
+    } else {
+      RegisterOnNextSuccessfulWriteReply(on_successful_write);
+    }
+  }
+}
+
+// static
+void JsonPrefStore::PostWriteCallback(
+    const base::Callback<void(bool success)>& on_next_write_callback,
+    const base::Callback<void(bool success)>& on_next_write_reply,
+    scoped_refptr<base::SequencedTaskRunner> reply_task_runner,
+    bool write_success) {
+  if (!on_next_write_callback.is_null())
+    on_next_write_callback.Run(write_success);
+
+  // We can't run |on_next_write_reply| on the current thread. Bounce back to
+  // the |reply_task_runner| which is the correct sequenced thread.
+  reply_task_runner->PostTask(FROM_HERE,
+                              base::Bind(on_next_write_reply, write_success));
+}
+
+void JsonPrefStore::RegisterOnNextSuccessfulWriteReply(
+    const base::Closure& on_next_successful_write_reply) {
+  DCHECK(CalledOnValidThread());
+  DCHECK(on_next_successful_write_reply_.is_null());
+
+  on_next_successful_write_reply_ = on_next_successful_write_reply;
+
+  // If there are pending callbacks, avoid erasing them; the reply will be used
+  // as we set |on_next_successful_write_reply_|. Otherwise, setup a reply with
+  // an empty callback.
+  if (!has_pending_write_reply_) {
+    has_pending_write_reply_ = true;
+    writer_.RegisterOnNextWriteCallbacks(
+        base::Closure(),
+        base::Bind(
+            &PostWriteCallback, base::Callback<void(bool success)>(),
+            base::Bind(&JsonPrefStore::RunOrScheduleNextSuccessfulWriteCallback,
+                       AsWeakPtr()),
+            base::SequencedTaskRunnerHandle::Get()));
+  }
+}
+
+void JsonPrefStore::RegisterOnNextWriteSynchronousCallbacks(
+    OnWriteCallbackPair callbacks) {
+  DCHECK(CalledOnValidThread());
+
+  has_pending_write_reply_ = true;
+
+  writer_.RegisterOnNextWriteCallbacks(
+      callbacks.first,
+      base::Bind(
+          &PostWriteCallback, callbacks.second,
+          base::Bind(&JsonPrefStore::RunOrScheduleNextSuccessfulWriteCallback,
+                     AsWeakPtr()),
+          base::SequencedTaskRunnerHandle::Get()));
 }
 
 void JsonPrefStore::ClearMutableValues() {
@@ -401,8 +464,12 @@ bool JsonPrefStore::SerializeData(std::string* output) {
 
   write_count_histogram_.RecordWriteOccured();
 
-  if (pref_filter_)
-    pref_filter_->FilterSerializeData(prefs_.get());
+  if (pref_filter_) {
+    OnWriteCallbackPair callbacks =
+        pref_filter_->FilterSerializeData(prefs_.get());
+    if (!callbacks.first.is_null() || !callbacks.second.is_null())
+      RegisterOnNextWriteSynchronousCallbacks(callbacks);
+  }
 
   JSONStringValueSerializer serializer(output);
   // Not pretty-printing prefs shrinks pref file size by ~30%. To obtain

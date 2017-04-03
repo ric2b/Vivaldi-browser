@@ -18,7 +18,8 @@ official_product_kind_string =
                   "-t",
                   "@VIVALDI_PRODUCT@",
                 ],
-                "trim string")
+                "trim string",
+                [_vivaldi_product_kind_file])
 
 if (release_kind == "final") {
   extra_grit_defines = [

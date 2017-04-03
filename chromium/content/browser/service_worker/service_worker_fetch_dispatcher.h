@@ -13,7 +13,7 @@
 #include "content/common/service_worker/service_worker_status_code.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/common/resource_type.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 
 namespace content {
 
@@ -32,7 +32,7 @@ class CONTENT_EXPORT ServiceWorkerFetchDispatcher {
       std::unique_ptr<ServiceWorkerFetchRequest> request,
       ServiceWorkerVersion* version,
       ResourceType resource_type,
-      const net::BoundNetLog& net_log,
+      const net::NetLogWithSource& net_log,
       const base::Closure& prepare_callback,
       const FetchCallback& fetch_callback);
   ~ServiceWorkerFetchDispatcher();
@@ -63,7 +63,7 @@ class CONTENT_EXPORT ServiceWorkerFetchDispatcher {
   ServiceWorkerMetrics::EventType GetEventType() const;
 
   scoped_refptr<ServiceWorkerVersion> version_;
-  net::BoundNetLog net_log_;
+  net::NetLogWithSource net_log_;
   base::Closure prepare_callback_;
   FetchCallback fetch_callback_;
   std::unique_ptr<ServiceWorkerFetchRequest> request_;

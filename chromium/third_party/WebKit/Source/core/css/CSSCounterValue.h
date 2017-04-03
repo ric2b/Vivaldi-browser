@@ -22,51 +22,49 @@
 #define CSSCounterValue_h
 
 #include "core/css/CSSCustomIdentValue.h"
-#include "core/css/CSSPrimitiveValue.h"
+#include "core/css/CSSIdentifierValue.h"
 #include "core/css/CSSStringValue.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
 
 class CSSCounterValue : public CSSValue {
-public:
-    static CSSCounterValue* create(CSSCustomIdentValue* identifier, CSSPrimitiveValue* listStyle, CSSStringValue* separator)
-    {
-        return new CSSCounterValue(identifier, listStyle, separator);
-    }
+ public:
+  static CSSCounterValue* create(CSSCustomIdentValue* identifier,
+                                 CSSIdentifierValue* listStyle,
+                                 CSSStringValue* separator) {
+    return new CSSCounterValue(identifier, listStyle, separator);
+  }
 
-    String identifier() const { return m_identifier->value(); }
-    CSSValueID listStyle() const { return m_listStyle->getValueID(); }
-    String separator() const { return m_separator->value(); }
+  String identifier() const { return m_identifier->value(); }
+  CSSValueID listStyle() const { return m_listStyle->getValueID(); }
+  String separator() const { return m_separator->value(); }
 
-    bool equals(const CSSCounterValue& other) const
-    {
-        return identifier() == other.identifier()
-            && listStyle() == other.listStyle()
-            && separator() == other.separator();
-    }
+  bool equals(const CSSCounterValue& other) const {
+    return identifier() == other.identifier() &&
+           listStyle() == other.listStyle() && separator() == other.separator();
+  }
 
-    String customCSSText() const;
+  String customCSSText() const;
 
-    DECLARE_TRACE_AFTER_DISPATCH();
+  DECLARE_TRACE_AFTER_DISPATCH();
 
-private:
-    CSSCounterValue(CSSCustomIdentValue* identifier, CSSPrimitiveValue* listStyle, CSSStringValue* separator)
-        : CSSValue(CounterClass)
-        , m_identifier(identifier)
-        , m_listStyle(listStyle)
-        , m_separator(separator)
-    {
-        ASSERT(m_listStyle->isValueID());
-    }
+ private:
+  CSSCounterValue(CSSCustomIdentValue* identifier,
+                  CSSIdentifierValue* listStyle,
+                  CSSStringValue* separator)
+      : CSSValue(CounterClass),
+        m_identifier(identifier),
+        m_listStyle(listStyle),
+        m_separator(separator) {}
 
-    Member<CSSCustomIdentValue> m_identifier; // string
-    Member<CSSPrimitiveValue> m_listStyle; // ident
-    Member<CSSStringValue> m_separator; // string
+  Member<CSSCustomIdentValue> m_identifier;  // string
+  Member<CSSIdentifierValue> m_listStyle;    // ident
+  Member<CSSStringValue> m_separator;        // string
 };
 
 DEFINE_CSS_VALUE_TYPE_CASTS(CSSCounterValue, isCounterValue());
 
-} // namespace blink
+}  // namespace blink
 
-#endif // CSSCounterValue_h
+#endif  // CSSCounterValue_h

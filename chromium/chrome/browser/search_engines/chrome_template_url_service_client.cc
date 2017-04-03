@@ -63,16 +63,9 @@ void ChromeTemplateURLServiceClient::AddKeywordGeneratedVisit(const GURL& url) {
                               history::SOURCE_BROWSED, false);
 }
 
-void ChromeTemplateURLServiceClient::RestoreExtensionInfoIfNecessary(
-    TemplateURL* template_url) {
-  const TemplateURLData& data = template_url->data();
-  GURL url(data.url());
-  if (url.SchemeIs(extensions::kExtensionScheme)) {
-    const std::string& extension_id = url.host();
-    template_url->set_extension_info(
-        base::WrapUnique(new TemplateURL::AssociatedExtensionInfo(
-            TemplateURL::OMNIBOX_API_EXTENSION, extension_id)));
-  }
+bool ChromeTemplateURLServiceClient::IsOmniboxExtensionURL(
+    const std::string& url) {
+  return GURL(url).SchemeIs(extensions::kExtensionScheme);
 }
 
 void ChromeTemplateURLServiceClient::OnURLVisited(

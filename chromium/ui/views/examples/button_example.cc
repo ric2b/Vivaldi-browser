@@ -59,15 +59,15 @@ void ButtonExample::CreateExampleView(View* container) {
 
   container->AddChildView(new BlueButton(this, ASCIIToUTF16("Blue Button")));
 
-  container->AddChildView(MdTextButton::CreateMdButton(
-      nullptr, base::ASCIIToUTF16("Material design")));
-  MdTextButton* md_button = MdTextButton::CreateMdButton(
-      nullptr, base::ASCIIToUTF16("Default"));
+  container->AddChildView(
+      MdTextButton::Create(nullptr, base::ASCIIToUTF16("Material design")));
+  MdTextButton* md_button =
+      MdTextButton::Create(nullptr, base::ASCIIToUTF16("Default"));
   md_button->SetIsDefault(true);
   container->AddChildView(md_button);
-  md_button = MdTextButton::CreateMdButton(
-      nullptr, base::ASCIIToUTF16("Call to action"));
-  md_button->SetCallToAction(true);
+  md_button =
+      MdTextButton::Create(nullptr, base::ASCIIToUTF16("Call to action"));
+  md_button->SetProminent(true);
   container->AddChildView(md_button);
 
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();

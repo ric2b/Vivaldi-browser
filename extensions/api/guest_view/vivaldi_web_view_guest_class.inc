@@ -44,9 +44,7 @@
 
   bool IsVisible();
 
-#ifdef VIVALDI_BUILD
   void UpdateMediaState(TabAlertState state);
-#endif // VIVALDI_BUILD
 
   void SetIsFullscreen(bool is_fullscreen);
   extensions::AppWindow* GetAppWindow();
@@ -70,6 +68,11 @@
   // and therefore navigation is not possible. We use this to navigate after
   // attaching is done.
   std::unique_ptr<std::string> delayed_open_url_;
+
+  // Called when the mouse cursor enters/leaves the appwindow the guest is
+  // inside.
+  void OnMouseEnter();
+  void OnMouseLeave();
 
  private:
   void VisibleSSLStateChanged(const content::WebContents* source) override;
@@ -136,6 +139,50 @@
   base::WeakPtr<ValidationMessageBubble> validation_message_bubble_;
 
   std::unique_ptr<ExtensionHostForWebContents> extension_host_;
+
+#if defined(USE_AURA)
+
+#define TIME_BEFORE_HIDING_MS 3000
+
+  // This is a object that will hide the cursor for the webviewguests window
+  // based on a timer. The cursor will be shown by the CompoundEventFilter on
+  // mouse events, but this class will hide the cursor on a beat in fullscreen.
+  class CursorHider {
+  public:
+    static std::unique_ptr<CursorHider> Create(aura::Window *window) {
+      return std::unique_ptr<CursorHider>(
+          base::WrapUnique(new CursorHider(window)));
+    }
+
+    void Hide() { cursor_client_->HideCursor(); }
+
+    CursorHider(aura::Window *window) {
+      cursor_client_ = aura::client::GetCursorClient(window);
+      hide_timer_.Start(
+          FROM_HERE, base::TimeDelta::FromMilliseconds(TIME_BEFORE_HIDING_MS),
+          this, &CursorHider::Hide);
+    }
+
+    ~CursorHider() { cursor_client_->ShowCursor(); }
+
+    // Reset and stop the hide timer.
+    void Reset() {
+      hide_timer_.Reset();
+    }
+    void Stop() { hide_timer_.Stop(); }
+
+  private:
+    aura::client::CursorClient *cursor_client_;
+
+    // A timer to delay hiding the mouse.
+    base::RepeatingTimer hide_timer_;
+
+    DISALLOW_COPY_AND_ASSIGN(CursorHider);
+  };
+
+  // The object to hide cursor when going into fullscreen mode.
+  std::unique_ptr<CursorHider> cursor_hider_;
+#endif // USE_AURA
 
 private:
 

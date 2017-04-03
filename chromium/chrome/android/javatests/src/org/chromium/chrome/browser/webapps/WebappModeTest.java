@@ -14,6 +14,7 @@ import android.view.View;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.blink_public.platform.WebDisplayMode;
 import org.chromium.chrome.browser.ChromeActivity;
@@ -41,6 +42,7 @@ import org.chromium.content_public.common.ScreenOrientationValues;
  * FLAG_ACTIVITY_NEW_DOCUMENT mechanism.  Moreover, we don't have access to the task list pre-L so
  * we have to assume that any non-running WebappActivities are not listed in Android's Overview.
  */
+@RetryOnFailure
 public class WebappModeTest extends MultiActivityTestBase {
     private static final String WEBAPP_1_ID = "webapp_id_1";
     private static final String WEBAPP_1_URL = UrlUtils.encodeHtmlDataUri(
@@ -95,24 +97,22 @@ public class WebappModeTest extends MultiActivityTestBase {
         // Register the webapps so when the data storage is opened, the test doesn't crash. There is
         // no race condition with the retrieval as AsyncTasks are run sequentially on the background
         // thread.
-        WebappRegistry.registerWebapp(getInstrumentation().getTargetContext(), WEBAPP_1_ID,
-                new WebappRegistry.FetchWebappDataStorageCallback() {
+        WebappRegistry.registerWebapp(
+                WEBAPP_1_ID, new WebappRegistry.FetchWebappDataStorageCallback() {
                     @Override
                     public void onWebappDataStorageRetrieved(WebappDataStorage storage) {
                         storage.updateFromShortcutIntent(createIntent(
                                 WEBAPP_1_ID, WEBAPP_1_URL, WEBAPP_1_TITLE, WEBAPP_ICON, true));
                     }
-                }
-        );
-        WebappRegistry.registerWebapp(getInstrumentation().getTargetContext(), WEBAPP_2_ID,
-                new WebappRegistry.FetchWebappDataStorageCallback() {
+                });
+        WebappRegistry.registerWebapp(
+                WEBAPP_2_ID, new WebappRegistry.FetchWebappDataStorageCallback() {
                     @Override
                     public void onWebappDataStorageRetrieved(WebappDataStorage storage) {
                         storage.updateFromShortcutIntent(createIntent(
                                 WEBAPP_1_ID, WEBAPP_1_URL, WEBAPP_1_TITLE, WEBAPP_ICON, true));
                     }
-                }
-        );
+                });
     }
 
     /**

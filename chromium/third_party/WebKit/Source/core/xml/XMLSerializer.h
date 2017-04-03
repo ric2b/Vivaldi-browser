@@ -14,7 +14,8 @@
  *
  *  You should have received a copy of the GNU Lesser General Public
  *  License along with this library; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301 USA
  */
 
 #ifndef XMLSerializer_h
@@ -27,22 +28,21 @@ namespace blink {
 
 class Node;
 
-class XMLSerializer final : public GarbageCollected<XMLSerializer>, public ScriptWrappable {
-    DEFINE_WRAPPERTYPEINFO();
-public:
-    static XMLSerializer* create()
-    {
-        return new XMLSerializer;
-    }
+class XMLSerializer final : public GarbageCollected<XMLSerializer>,
+                            public ScriptWrappable {
+  DEFINE_WRAPPERTYPEINFO();
 
-    String serializeToString(Node*);
+ public:
+  static XMLSerializer* create() { return new XMLSerializer; }
 
-    DEFINE_INLINE_TRACE() { }
+  String serializeToString(Node*);
 
-private:
-    XMLSerializer() { }
+  DEFINE_INLINE_TRACE() {}
+
+ private:
+  XMLSerializer() {}
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // XMLSerializer_h
+#endif  // XMLSerializer_h

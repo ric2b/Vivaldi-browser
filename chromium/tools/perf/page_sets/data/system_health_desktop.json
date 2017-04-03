@@ -95,6 +95,21 @@
         ],
         "system_health_desktop_026.wpr": [
             "browse:media:youtube"
+        ],
+        "system_health_desktop_028.wpr": [
+            "long_running:tools:gmail-foreground",
+            "long_running:tools:gmail-background"
+        ],
+        "system_health_desktop_030.wpr": [
+            "play:media:soundcloud",
+            "play:media:google_play_music"
+        ],
+        "system_health_desktop_032.wpr": [
+            "play:media:pandora"
+        ],
+        "system_health_desktop_033.wpr": [
+            "browse:media:pinterest",
+            "browse:media:tumblr"
         ]
     },
     "description": "Describes the Web Page Replay archives for a story set. Don't edit by hand! Use record_wpr for updating."

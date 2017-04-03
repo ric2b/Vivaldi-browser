@@ -12,7 +12,7 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/histogram_samples.h"
 #include "base/metrics/sample_map.h"
 #include "base/metrics/statistics_recorder.h"
@@ -411,9 +411,9 @@ bool CloudPolicyInvalidatorTest::CheckPolicyRefreshed(base::TimeDelta delay) {
   base::TimeDelta max_delay = delay + base::TimeDelta::FromMilliseconds(
       CloudPolicyInvalidator::kMaxFetchDelayMin);
 
-  if (task_runner_->GetPendingTasks().empty())
+  if (!task_runner_->HasPendingTask())
     return false;
-  base::TimeDelta actual_delay = task_runner_->GetPendingTasks().back().delay;
+  base::TimeDelta actual_delay = task_runner_->FinalPendingTaskDelay();
   EXPECT_GE(actual_delay, delay);
   EXPECT_LE(actual_delay, max_delay);
 

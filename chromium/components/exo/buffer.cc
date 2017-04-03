@@ -45,6 +45,7 @@ GLenum GLInternalFormat(gfx::BufferFormat format) {
       GL_COMPRESSED_RGBA_S3TC_DXT5_EXT,    // DXT5
       GL_ETC1_RGB8_OES,                    // ETC1
       GL_R8_EXT,                           // R_8
+      GL_RG8_EXT,                          // RG_88
       GL_RGB,                              // BGR_565
       GL_RGBA,                             // RGBA_4444
       GL_RGB,                              // RGBX_8888
@@ -52,7 +53,7 @@ GLenum GLInternalFormat(gfx::BufferFormat format) {
       GL_RGB,                              // BGRX_8888
       GL_BGRA_EXT,                         // BGRA_8888
       GL_RGB_YCRCB_420_CHROMIUM,           // YVU_420
-      GL_INVALID_ENUM,                     // YUV_420_BIPLANAR
+      GL_RGB_YCBCR_420V_CHROMIUM,          // YUV_420_BIPLANAR
       GL_RGB_YCBCR_422_CHROMIUM,           // UYVY_422
   };
   static_assert(arraysize(kGLInternalFormats) ==
@@ -439,9 +440,9 @@ std::unique_ptr<cc::SingleReleaseCallback> Buffer::ProduceTextureMailbox(
   // if one doesn't already exist. The contents of this buffer are copied to
   // |texture| using a call to CopyTexImage.
   if (!contents_texture_) {
-    contents_texture_ = base::WrapUnique(
-        new Texture(context_factory, context_provider.get(),
-                    gpu_memory_buffer_.get(), texture_target_, query_type_));
+    contents_texture_ = base::MakeUnique<Texture>(
+        context_factory, context_provider.get(), gpu_memory_buffer_.get(),
+        texture_target_, query_type_);
   }
 
   if (use_zero_copy_) {
@@ -466,7 +467,7 @@ std::unique_ptr<cc::SingleReleaseCallback> Buffer::ProduceTextureMailbox(
   // Create a mailbox texture that we copy the buffer contents to.
   if (!texture_) {
     texture_ =
-        base::WrapUnique(new Texture(context_factory, context_provider.get()));
+        base::MakeUnique<Texture>(context_factory, context_provider.get());
   }
 
   // Copy the contents of |contents_texture| to |texture| and produce a

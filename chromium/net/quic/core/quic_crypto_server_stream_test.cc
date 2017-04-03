@@ -58,9 +58,12 @@ const uint16_t kServerPort = 443;
 class QuicCryptoServerStreamTest : public ::testing::TestWithParam<bool> {
  public:
   QuicCryptoServerStreamTest()
+      : QuicCryptoServerStreamTest(CryptoTestUtils::ProofSourceForTesting()) {}
+
+  explicit QuicCryptoServerStreamTest(std::unique_ptr<ProofSource> proof_source)
       : server_crypto_config_(QuicCryptoServerConfig::TESTING,
                               QuicRandom::GetInstance(),
-                              CryptoTestUtils::ProofSourceForTesting()),
+                              std::move(proof_source)),
         server_compressed_certs_cache_(
             QuicCompressedCertsCache::kQuicCompressedCertsCacheSize),
         server_id_(kServerHostname, kServerPort, PRIVACY_MODE_DISABLED),
@@ -108,7 +111,7 @@ class QuicCryptoServerStreamTest : public ::testing::TestWithParam<bool> {
     CHECK(server_session);
     server_session_.reset(server_session);
     CryptoTestUtils::FakeServerOptions options;
-    options.token_binding_enabled = true;
+    options.token_binding_params = QuicTagVector{kTB10};
     CryptoTestUtils::SetupCryptoServerConfigForTest(
         server_connection_->clock(), server_connection_->random_generator(),
         server_session_->config(), &server_crypto_config_, options);
@@ -171,6 +174,8 @@ class QuicCryptoServerStreamTest : public ::testing::TestWithParam<bool> {
   }
 
  protected:
+  QuicFlagSaver flags_;  // Save/restore all QUIC flag values.
+
   // Every connection gets its own MockQuicConnectionHelper and
   // MockAlarmFactory,
   // tracked separately from
@@ -247,8 +252,8 @@ TEST_P(QuicCryptoServerStreamTest, ForwardSecureAfterCHLO) {
 }
 
 TEST_P(QuicCryptoServerStreamTest, StatelessRejectAfterCHLO) {
-  ValueRestore<bool> old_flag(&FLAGS_enable_quic_stateless_reject_support,
-                              true);
+  FLAGS_enable_quic_stateless_reject_support = true;
+
   Initialize();
 
   EXPECT_CALL(*server_connection_,
@@ -281,8 +286,8 @@ TEST_P(QuicCryptoServerStreamTest, StatelessRejectAfterCHLO) {
 }
 
 TEST_P(QuicCryptoServerStreamTest, ConnectedAfterStatelessHandshake) {
-  ValueRestore<bool> old_flag(&FLAGS_enable_quic_stateless_reject_support,
-                              true);
+  FLAGS_enable_quic_stateless_reject_support = true;
+
   Initialize();
 
   InitializeFakeClient(/* supports_stateless_rejects= */ true);
@@ -326,8 +331,8 @@ TEST_P(QuicCryptoServerStreamTest, ConnectedAfterStatelessHandshake) {
 }
 
 TEST_P(QuicCryptoServerStreamTest, NoStatelessRejectIfNoClientSupport) {
-  ValueRestore<bool> old_flag(&FLAGS_enable_quic_stateless_reject_support,
-                              true);
+  FLAGS_enable_quic_stateless_reject_support = true;
+
   Initialize();
 
   // The server is configured to use stateless rejects, but the client does not
@@ -400,7 +405,6 @@ TEST_P(QuicCryptoServerStreamTest, ZeroRTT) {
 }
 
 TEST_P(QuicCryptoServerStreamTest, FailByPolicy) {
-  FLAGS_quic_deprecate_kfixd = true;
   Initialize();
   InitializeFakeClient(/* supports_stateless_rejects= */ false);
 
@@ -413,7 +417,6 @@ TEST_P(QuicCryptoServerStreamTest, FailByPolicy) {
 }
 
 TEST_P(QuicCryptoServerStreamTest, MessageAfterHandshake) {
-  FLAGS_quic_deprecate_kfixd = true;
   Initialize();
   CompleteCryptoHandshake();
   EXPECT_CALL(
@@ -427,7 +430,6 @@ TEST_P(QuicCryptoServerStreamTest, MessageAfterHandshake) {
 }
 
 TEST_P(QuicCryptoServerStreamTest, BadMessageType) {
-  FLAGS_quic_deprecate_kfixd = true;
   Initialize();
 
   message_.set_tag(kSHLO);
@@ -514,10 +516,10 @@ TEST_P(QuicCryptoServerStreamTest, DoesPeerSupportStatelessRejects) {
 TEST_P(QuicCryptoServerStreamTest, TokenBindingNegotiated) {
   Initialize();
 
-  client_options_.token_binding_enabled = true;
+  client_options_.token_binding_params = QuicTagVector{kTB10, kP256};
   CompleteCryptoHandshake();
   EXPECT_EQ(
-      kP256,
+      kTB10,
       server_stream()->crypto_negotiated_params().token_binding_key_param);
   EXPECT_TRUE(server_stream()->encryption_established());
   EXPECT_TRUE(server_stream()->handshake_confirmed());
@@ -574,6 +576,51 @@ TEST_P(QuicCryptoServerStreamTest, CancelRPCBeforeVerificationCompletes) {
 
   // The outstanding nonce verification RPC now completes.
   strike_register_client_->RunPendingVerifications();
+}
+
+class FailingProofSource : public ProofSource {
+ public:
+  bool GetProof(const IPAddress& server_ip,
+                const string& hostname,
+                const string& server_config,
+                QuicVersion quic_version,
+                StringPiece chlo_hash,
+                scoped_refptr<ProofSource::Chain>* out_chain,
+                string* out_signature,
+                string* out_leaf_cert_sct) override {
+    return false;
+  }
+
+  void GetProof(const IPAddress& server_ip,
+                const string& hostname,
+                const string& server_config,
+                QuicVersion quic_version,
+                StringPiece chlo_hash,
+                std::unique_ptr<Callback> callback) override {
+    callback->Run(false, nullptr, "", "", nullptr);
+  }
+};
+
+class QuicCryptoServerStreamTestWithFailingProofSource
+    : public QuicCryptoServerStreamTest {
+ public:
+  QuicCryptoServerStreamTestWithFailingProofSource()
+      : QuicCryptoServerStreamTest(
+            std::unique_ptr<FailingProofSource>(new FailingProofSource)) {}
+};
+
+INSTANTIATE_TEST_CASE_P(MoreTests,
+                        QuicCryptoServerStreamTestWithFailingProofSource,
+                        testing::Bool());
+
+TEST_P(QuicCryptoServerStreamTestWithFailingProofSource, Test) {
+  Initialize();
+  InitializeFakeClient(/* supports_stateless_rejects= */ false);
+
+  // Regression test for b/31521252, in which a crash would happen here.
+  AdvanceHandshakeWithFakeClient();
+  EXPECT_FALSE(server_stream()->encryption_established());
+  EXPECT_FALSE(server_stream()->handshake_confirmed());
 }
 
 }  // namespace

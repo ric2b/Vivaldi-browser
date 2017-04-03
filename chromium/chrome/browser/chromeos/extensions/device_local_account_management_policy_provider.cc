@@ -17,6 +17,7 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_constants.h"
+#include "extensions/common/manifest_handlers/app_isolation_info.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace chromeos {
@@ -125,112 +126,213 @@ const char* const kPublicSessionWhitelist[] = {
 // List of manifest entries from https://developer.chrome.com/apps/manifest.
 // Unsafe entries are commented out and special cases too.
 const char* const kSafeManifestEntries[] = {
-    // Special-cased in IsPlatformAppSafeForPublicSession().
+    emk::kAboutPage,
+
+    // Special-cased in IsSafeForPublicSession().
     // emk::kApp,
-
-    // Special-cased in IsPlatformAppSafeForPublicSession().
-    // emk::kManifestVersion,
-
-    // Just a display string.
-    emk::kName,
-
-    // Just a display string.
-    emk::kShortName,
-
-    // Version string (for app updates).
-    emk::kVersion,
-
-    // Name of directory containg default strings.
-    emk::kDefaultLocale,
-
-    // An implementation detail (actually written by Chrome, not the app
-    // author).
-    emk::kCurrentLocale,
-
-    // Just a display string.
-    emk::kDescription,
-
-    // Just UX.
-    emk::kIcons,
 
     // Documented in https://developer.chrome.com/extensions/manifest but not
     // implemented anywhere.  Still, a lot of apps use it.
     "author",
 
-    // TBD
-    // emk::kBluetooth,
+    // Allows inspection of page contents, not enabled on stable anyways except
+    // for whitelist.
+    // emk::kAutomation,
 
-    // TBD
-    // emk::kCommands,
+    "background",
 
-    // TBD, looks unsafe
+    emk::kBackgroundPageLegacy,
+
+    emk::kBackgroundPersistent,
+
+    emk::kBluetooth,
+
+    emk::kBrowserAction,
+
+    // Allows to replace the search provider which is somewhat risky - need to
+    // double check how the search provider policy behaves in PS.
+    // emk::kSettingsOverride,
+
+    // Custom bookmark managers - I think this is fair game, bookmarks should be
+    // URLs only, and it's restricted to whitelist on stable.
+    emk::kUIOverride,
+
+    // Bookmark manager, history, new tab - should be safe.
+    emk::kChromeURLOverrides,
+
+    // General risk of capturing user input, but key combos must include Ctrl or
+    // Alt, so I think this is safe.
+    emk::kCommands,
+
+    // General risk of capturing user input, but key combos must include Ctrl or
+    // Alt, so I think this is safe.
+    emk::kContentCapabilities,
+
+    // Access to web content.
+    // emk::kContentScripts,
+
+    emk::kContentSecurityPolicy,
+
+    // Access to web content.
+    // emk::kConvertedFromUserScript,
+
+    // An implementation detail (actually written by Chrome, not the app
+    // author).
+    emk::kCurrentLocale,
+
+    // Name of directory containg default strings.
+    emk::kDefaultLocale,
+
+    // Just a display string.
+    emk::kDescription,
+
+    // Access to web content.
+    // emk::kDevToolsPage,
+
+    // Restricted to whitelist already.
+    emk::kDisplayInLauncher,
+
+    emk::kDisplayInNewTabPage,
+
+    // This allows to declaratively filter web requests and content, matching on
+    // content data. Doesn't allow direct access to request/content data. Can be
+    // used to brute-force e.g. cookies (reload with filter rules adjusted to
+    // match all possible cookie values) - but that's equivalent to an
+    // off-device brute-force attack.
+    // Looks safe in general with one exception: There's an action that allows
+    // to insert content scripts on matching content. We can't allow this, need
+    // to check whether there's also a host permission required for this case.
     // emk::kEventRules,
-
-    // TBD
-    // emk::kExternallyConnectable,
-
-    // TBD
-    // emk::kFileHandlers,
-
-    // TBD
-    // emk::kFileSystemProviderCapabilities,
-
-    // Shared Modules configuration: Import resources from another extension.
-    emk::kImport,
 
     // Shared Modules configuration: Allow other extensions to access resources.
     emk::kExport,
 
+    emk::kExternallyConnectable,
+
+    emk::kFileBrowserHandlers,
+
+    // Extension file handlers are restricted to whitelist which only contains
+    // quickoffice.
+    emk::kFileHandlers,
+
+    emk::kFileSystemProviderCapabilities,
+
+    emk::kHomepageURL,
+
+    // Just UX.
+    emk::kIcons,
+
+    // Shared Modules configuration: Import resources from another extension.
+    emk::kImport,
+
+    emk::kIncognito,
+
+    // Keylogging.
+    // emk::kInputComponents,
+
     // Shared Modules configuration: Specify extension id for development.
     emk::kKey,
 
-    // Descriptive statement about the app.
+    emk::kKiosk,
+
     emk::kKioskEnabled,
 
-    // Contradicts the purpose of running inside a Public Session.
-    // emk::kKioskOnly,
+    // Not useful since it will prevent app from running, but we don't care.
+    emk::kKioskOnly,
 
-    // Descriptive statement about the app.
+    emk::kKioskRequiredPlatformVersion,
+
+    // Not useful since it will prevent app from running, but we don't care.
+    emk::kKioskSecondaryApps,
+
+    // Whitelisted to only allow Google Now.
+    emk::kLauncherPage,
+
+    // Special-cased in IsSafeForPublicSession().
+    // emk::kManifestVersion,
+
+    emk::kMIMETypes,
+
+    // Whitelisted to only allow browser tests and PDF viewer.
+    emk::kMimeTypesHandler,
+
     emk::kMinimumChromeVersion,
 
     // NaCl modules are bound to app permissions just like the rest of the app
     // and thus should not pose a risk.
     emk::kNaClModules,
 
-    // TBD, doc missing
-    // emk::kOAuth2,
+    // Just a display string.
+    emk::kName,
 
-    // Descriptive statement about the app.
+    // Used in conjunction with the identity API - not really used when there's
+    // no GAIA user signed in.
+    emk::kOAuth2,
+
+    // Generally safe (i.e. only whitelist apps), except for the policy to
+    // whitelist apps for auto-approved token minting (we should just ignore
+    // this in public sessions). Risk is that admin mints OAuth tokens to access
+    // services on behalf of the user silently.
+    // emk::kOAuth2AutoApprove,
+
     emk::kOfflineEnabled,
 
-    // Special-cased in IsPlatformAppSafeForPublicSession().
+    // A bit risky as the extensions sees all keystrokes entered into the
+    // omnibox after the search key matches, but generally we deem URLs fair
+    // game.
+    emk::kOmnibox,
+
+    // Special-cased in IsSafeForPublicSession(). Subject to permission
+    // restrictions.
     // emk::kOptionalPermissions,
 
-    // Special-cased in IsPlatformAppSafeForPublicSession().
+    emk::kOptionsPage,
+
+    emk::kOptionsUI,
+
+    emk::kPageAction,
+
+    // Special-cased in IsSafeForPublicSession(). Subject to permission
+    // restrictions.
     // emk::kPermissions,
 
-    // No constant in manifest_constants.cc.
+    // No constant in manifest_constants.cc. Declared as a feature, but unused.
     // "platforms",
 
-    // Descriptive statement about the app.
+    // N/A on Chrome OS, so we don't care.
+    emk::kPlugins,
+
+    // Stated 3D/WebGL/plugin requirements of an app.
     emk::kRequirements,
 
     // Execute some pages in a separate sandbox.  (Note: Using string literal
     // since extensions::manifest_keys only has constants for sub-keys.)
     "sandbox",
 
-    // TBD, doc missing
+    // Just a display string.
+    emk::kShortName,
+
+    // Doc missing. Declared as a feature, but unused.
     // emk::kSignature,
 
     // Network access.
     emk::kSockets,
 
-    // TBD.  (Note: Using string literal since extensions::manifest_keys only
-    // has constants for sub-keys.)
-    // "storage",
+    // Just provides dictionaries, no access to content.
+    emk::kSpellcheck,
 
-    // TBD, doc missing
-    // emk::kSystemIndicator,
+    // (Note: Using string literal since extensions::manifest_keys only has
+    // constants for sub-keys.)
+    "storage",
+
+    // Only Hangouts is whitelisted.
+    emk::kSystemIndicator,
+
+    emk::kTheme,
+
+    // Might need this for accessibilty, but has content access. Manual
+    // whitelisting might be reasonable here?
+    // emk::kTtsEngine,
 
     // TODO(tnagel): Ensure that extension updates query UserMayLoad().
     // https://crbug.com/549720
@@ -240,14 +342,18 @@ const char* const kSafeManifestEntries[] = {
     // app author has proven ownership of to the Web Store.  (Chrome starts the
     // app instead of fulfilling the navigation.)  This is only safe for apps
     // that have been loaded from the Web Store and thus is special-cased in
-    // IsPlatformAppSafeForPublicSession().
+    // IsSafeForPublicSession().
     // emk::kUrlHandlers,
 
-    // TBD
-    // emk::kUsbPrinters,
+    emk::kUsbPrinters,
+
+    // Version string (for app updates).
+    emk::kVersion,
 
     // Just a display string.
     emk::kVersionName,
+
+    emk::kWebAccessibleResources,
 
     // Webview has no special privileges or capabilities.
     emk::kWebview,
@@ -263,136 +369,316 @@ const char* const kSafeManifestEntries[] = {
 // [1] https://developer.chrome.com/apps/declare_permissions
 // [2] https://developer.chrome.com/apps/api_other
 const char* const kSafePermissionStrings[] = {
-    // Risky: Reading accessibility settings could allow to infer health
-    // information.
-    // "accessibilityFeatures.read",
-
     // Modifying accessibility settings seems safe (at most a user could be
     // confused by it).
     "accessibilityFeatures.modify",
 
+    // Originally blocked due to concerns about leaking user health information,
+    // but it seems this does more harm than good as it would likely prevent the
+    // extension from enabling assistive features. If the concerns prevail, we
+    // should probably not block, but adjust the API to pretend accessibility is
+    // off, so we don't punish apps that try to be helpful.
+    "accessibilityFeatures.read",
+
+    // Allows access to web contents in response to user gesture. Note that this
+    // doesn't trigger a permission warning on install though, so blocking is
+    // somewhat at odds with the spirit of the API - however I presume the API
+    // design assumes user-installed extensions, which we don't have here.
+    // "activeTab",
+
     // Schedule code to run at future times.
     "alarms",
 
-    // Risk of listening attack.
-    // "audio",
+    // PS UX can always be seen, this one doesn't go over it so it's fine.
+    "app.window.alwaysOnTop",
 
-    // Risk of listening attack.
-    // "audioCapture",
-
-    // Just resource management, probably doesn't even apply to Chrome OS.
-    "background",
-
-    // Open a new tab with a given URL.
-    "browser",
-
-    // Risky: Reading from clipboard could expose private information.
-    // "clipboardRead",
-
-    // Writing to clipboard is safe.
-    "clipboardWrite",
-
-    // Potentially risky: Could be used to spoof system UI.
-    // "contextMenus",
-
-    // Placing a document on the scanner implies user consent.
-    "documentScan",
-
-    // Possibly risky due to its experimental nature: not vetted for security,
-    // potentially buggy, subject to change without notice.
-    // "experimental",
-
-    // Fullscreen is a no-op for Public Session.  Whitelisting nevertheless to
-    // broaden the range of supported apps.  (The recommended permission names
-    // are "app.window.*" but their unprefixed counterparts are still
-    // supported.)
+    // Fullscreen is crippled in Public Sessions, maximizes instead, so both
+    // fullscreen and overrideEsc are safe for use in PS. (The recommended
+    // permission names are "app.window.*" but their unprefixed counterparts are
+    // still supported.)
     "app.window.fullscreen",
     "app.window.fullscreen.overrideEsc",
     "fullscreen",
     "overrideEscFullscreen",
 
-    // TBD
-    // "fileSystemProvider",
+    "app.window.shape",
+
+    // The embedded app is subject to the restrictions as well obviously.
+    "appview",
+
+    // Risk of listening attack.
+    // "audio",
+
+    // Need to surface notification to the user. Check what existing UI we have
+    // and whether that's sufficient for PS.
+    // "audioCapture",
+
+    // Just resource management, probably doesn't even apply to Chrome OS.
+    "background",
+
+    // Access to URLs only, no content.
+    "bookmarks",
+
+    // Open a new tab with a given URL.
+    "browser",
+
+    // This allows to read the current browsing data removal dialog settings,
+    // but I don't see why this would be problematic.
+    "browsingData",
+
+    "certificateProvider",
+
+    // This is risky, but blocking extensions just because they declare
+    // clipboardRead is unfortunate. Options: (1) Make clipboardRead return
+    // empty string (2) confirmation dialog.
+    // "clipboardRead",
+
+    // Writing to clipboard is safe.
+    "clipboardWrite",
+
+    "contentSettings",
+
+    // Privacy sensitive URL access.
+    // "contextMenus",
+
+    // This would provie access to auth cookies, so needs to be blocked.
+    // "cookies",
+
+    // Provides access to the DOM, so block.
+    // "debugger",
+
+    // This is mostly fine, but has a RequestContentScript action that'd allow
+    // access to page content, which we can't allow.
+    // "declarativeContent",
+
+    // Allow, but either (1) ask user for confirmation or (2) return blank
+    // capture.
+    // "desktopCapture",
+
+    // Haven't checked in detail what this does, but messing with devtools
+    // usually comes with the ability to access page content.
+    // "devtools",
+
+    // I think it's fine to allow this as it should be obvious to users that
+    // scanning a document on the scanner will make it available to the
+    // organization (placing a document in the scanner implies user consent).
+    "documentScan",
+
+    // Doesn't allow access to file contents AFAICT, so should be fine.
+    "downloads",
+
+    // Triggers a file open for the download.
+    "downloads.open",
+
+    // Controls shelf visibility.
+    "downloads.shelf",
+
+    "enterprise.deviceAttributes",
+
+    "enterprise.platformKeys",
+
+    // Possibly risky due to its experimental nature: not vetted for security,
+    // potentially buggy, subject to change without notice (shouldn't
+    // blanket-allow experimental stuff).
+    // "experimental",
+
+    "fileBrowserHandler",
+
+    // Allow: (1) session state is ephemeral anyways, so no leaks across users.
+    // (2) a user that stores data on an org-owned machine won't be surprised if
+    // the org can see it.
+    "fileSystem",
+
+    "fileSystem.directory",
+
+    "fileSystem.requestFileSystem",
+
+    "fileSystem.retainEntries",
+
+    "fileSystem.write",
+
+    "fileSystemProvider",
+
+    "fontSettings",
 
     // Just another type of connectivity.  On the system side, no user data is
     // involved, implicitly or explicity.
     "gcm",
 
-    // Risky: Accessing location without explicit user consent.
-    // "geolocation",
+    // It's fair game for a kiosk device owner to locate their device. Could
+    // just as well do this via IP-geolocation mechanism, so little difference.
+    "geolocation",
 
-    // Risky: Potentially allows keylogging.
-    // "hid",
+    // Somewhat risky as this opens up the ability to intercept user input.
+    // However, keyboards and mice are apparently not surfaced via this API.
+    "hid",
+
+    // Privacy sensitive URL access.
+    // "history",
+
+    // Not really useful as there's no signed-in user, so OK to allow.
+    "identity",
+
+    "identity.email",
 
     // Detection of idle state.
     "idle",
 
-    // Dev channel only.  Not evaluated.
-    // "location",
+    // IME extensions see keystrokes. This might be useful though, might rely on
+    // manual whitelisting (assuming the number of useful IME extensions is
+    // relatively limited).
+    // "input",
+
+    // Fair game - admin can manipulate extensions via policy anyways.
+    "management",
 
     // Just another type of connectivity.
     "mdns",
 
-    // Risky: The "allAutoDectected" option could allow access to user data
-    // without their consent.
-    // "mediaGalleries",
+    // Storage is ephemeral, so user needs to get their content onto the Kiosk
+    // device (download or plug in media), both of which seem sufficient consent
+    // actions.
+    "mediaGalleries",
 
-    // Potentially risky: Could be used to spoof system UI.
-    // "notifications",
+    "mediaGalleries.allAutoDetected",
 
-    // TBD.  Could allow UX spoofing.
-    // "pointerLock",
+    "mediaGalleries.copyTo",
+
+    "mediaGalleries.delete",
+
+    "mediaGalleries.read",
+
+    // Probably doesn't work on Chrome OS anyways.
+    "nativeMessaging",
+
+    // Admin controls network connectivity anyways.
+    "networking.config",
+
+    // Status quo considers this risky due to the ability to fake system UI -
+    // low risk IMHO however since notifications are already badged with app
+    // icon and won't extract any data.
+    "notifications",
+
+    // Captures page content, so block. Alternatively: Allow, but either (1)
+    // prompt user or (2) return blank content.
+    // "pageCapture",
+
+    // Allows to use machine crypto keys - these would be provisioned by the
+    // admin anyways.
+    "platformKeys",
+
+    // No plugins on Chrome OS anyways.
+    "plugin",
+
+    // Status quo notes concern about UX spoofing - not an issue IMHO.
+    "pointerLock",
 
     // Potentiall risky: chrome.power.requestKeepAwake can inhibit idle time
     // detection and prevent idle time logout and that way reduce isolation
     // between subsequent Public Session users.
+    // OK to allow as long as it doesn't affect PS idle time detection.
     // "power",
 
-    // Risky: Could be used to siphon printed documents.
-    // "printerProvider",
+    // Printing initiated by user anyways, which provides consent gesture.
+    "printerProvider",
+
+    // The settings exposed via the API are under admin policy control anyways.
+    "privacy",
+
+    // Admin controls network anyways.
+    "proxy",
+
+    "runtime",
+
+    // Looking at the code, this feature is declared but used nowhere.
+    // "screensaver",
 
     // Access serial port.  It's hard to conceive a case in which private data
     // is stored on a serial device and being read without the user's consent.
+    // Minor risk of intercepting input events from serial input devices - given
+    // that serial input devices are exceedingly rare, OK to allow.
     "serial",
+
+    // Privacy sensitive URL access.
+    // "sessions",
+
+    "socket",
 
     // Per-app sandbox.  User cannot log into Public Session, thus storage
     // cannot be sync'ed to the cloud.
     "storage",
 
-    // Access system parameters.
+    // Not very useful since no signed-in user.
+    "syncFileSystem",
+
+    // Returns CPU parameters.
     "system.cpu",
 
-    // Access system parameters.
+    // Display parameters query/manipulation.
     "system.display",
 
-    // Access system parameters.
+    // Memory parameters access.
     "system.memory",
 
-    // Access system parameters.
+    // Enumerates network interfaces.
     "system.network",
 
-    // Risky: Could leak the name of a user-supplied storage medium.
-    // "system.storage",
+    // Enumerates removable storage.
+    "system.storage",
 
-    // Just UX.
+    // Provides access to screen contents, so block. Alternatively, (1) prompt
+    // for user consent or (2) return blank capture.
+    // "tabCapture",
+
+    // Privacy sensitive URL access.
+    // "tabs",
+
+    // Privacy sensitive URL access.
+    // "topSites",
+
+    // Allows to generate TTS, but no content access. Just UX.
     "tts",
+
+    // Might need this, but has content access. Manual whitelisting?
+    // "ttsEngine",
 
     // Excessive resource usage is not a risk.
     "unlimitedStorage",
 
-    // Risky: Raw peripheral access could allow an app to read user data from
-    // USB storage devices that have been plugged in by the user.  Not sure if
-    // that can happen though, because the system might claim storage devices
-    // for itself.  Still, leaving disallowed for now to be on the safe side.
-    // "usb",
+    // Plugging the USB device is sufficient as consent gesture.
+    "usb",
 
-    // TBD: What if one user connects and the next one is unaware of that?
-    // "vpnProvider",
+    // Belongs to the USB API.
+    "usbDevices",
+
+    // Need to surface notification to the user. Check what existing UI we have
+    // and whether that's sufficient for PS.
+    // "videoCapture",
+
+    // Admin controls network config anyways.
+    "vpnProvider",
 
     // Just UX.
     "wallpaper",
 
-    // Web capabilities are safe.
+    // Privacy sensitive URL access.
+    // "webNavigation",
+
+    // Provides access to cookies and form upload data. Options: (1) block,
+    // (2) strip all content in events.
+    // "webRequest",
+
+    // Fine once webRequest is adjusted.
+    // "webRequestBlocking",
+
+    // This allows content scripts and capturing. However, the webview runs
+    // within a separate storage partition, i.e. doesn't share cookies and other
+    // storage with the browsing session. Furthermore, the embedding app could
+    // just as well proxy 3rd-party origin content through its own web origin
+    // server-side or via chrome.socket. Finally, web security doesn't make a
+    // lot of sense when there's no URL bar or HTTPS padlock providing trusted
+    // UI. Bottom line: Risks are mitigated, further restrictions don't make
+    // sense, so OK to allow.
     "webview",
 };
 
@@ -404,6 +690,16 @@ const char* const kSafePermissionDicts[] = {
 
     // Just another type of connectivity.
     "socket",
+};
+
+// List of safe entries for the "app" dict in manifest.
+const char* const kSafeAppStrings[] = {
+    "background",
+    "content_security_policy",
+    "icon_color",
+    "isolation",
+    "launch",
+    "linked_icons",
 };
 
 // Return true iff |entry| is contained in |char_array|.
@@ -426,15 +722,21 @@ bool ArrayContains(const char* const (&char_array)[N],
   return ArrayContainsImpl(char_array, N, entry);
 }
 
-// Returns true for platform apps that are considered safe for Public Sessions,
+// Returns true for extensions that are considered safe for Public Sessions,
 // which among other things requires the manifest top-level entries to be
 // contained in the |kSafeManifestEntries| whitelist and all permissions to be
 // contained in |kSafePermissionStrings| or |kSafePermissionDicts|.  Otherwise
 // returns false and logs all reasons for failure.
-bool IsPlatformAppSafeForPublicSession(const extensions::Extension* extension) {
+bool IsSafeForPublicSession(const extensions::Extension* extension) {
   bool safe = true;
-  if (extension->GetType() != extensions::Manifest::TYPE_PLATFORM_APP) {
-    LOG(ERROR) << extension->id() << " is not a platform app.";
+  if (!extension->is_extension() &&
+      !extension->is_hosted_app() &&
+      !extension->is_platform_app() &&
+      !extension->is_shared_module() &&
+      !extension->is_theme()) {
+    LOG(ERROR) << extension->id()
+               << " is not of a supported type. Extension type: "
+               << extension->GetType();
     safe = false;
   }
 
@@ -489,14 +791,22 @@ bool IsPlatformAppSafeForPublicSession(const extensions::Extension* extension) {
         if (ArrayContains(kSafePermissionStrings, permission_string)) {
           continue;
         }
-        // Allow arbitrary web requests.  Don't include <all_urls> because that
-        // also matches file:// schemes.
+        // Web requests (origin permissions).  Don't include <all_urls> because
+        // that also matches file:// schemes.
         if (base::StartsWith(permission_string, "https://",
                              base::CompareCase::SENSITIVE) ||
             base::StartsWith(permission_string, "http://",
                              base::CompareCase::SENSITIVE) ||
             base::StartsWith(permission_string, "ftp://",
                              base::CompareCase::SENSITIVE)) {
+          // Allow origin permissions if the extension is isolated from the main
+          // browser session (so it can't access user cookies, etc.).
+          if (!extensions::AppIsolationInfo::HasIsolatedStorage(extension)) {
+            LOG(ERROR) << extension->id() << " does not have isolated storage "
+                       "and it requested origin permission: "
+                       << permission_string;
+            safe = false;
+          }
           continue;
         }
         LOG(ERROR) << extension->id()
@@ -504,8 +814,15 @@ bool IsPlatformAppSafeForPublicSession(const extensions::Extension* extension) {
                    << permission_string;
         safe = false;
       }
-    // "app" may only contain "background".
     } else if (it.key() == emk::kApp) {
+      if (!extension->is_hosted_app() &&
+          !extension->is_platform_app()) {
+        LOG(ERROR) << extension->id()
+                   << ": app manifest entry is allowed only for hosted_app or "
+                       "platform_app extension type. Current extension type: "
+                   << extension->GetType();
+        safe = false;
+      }
       const base::DictionaryValue *dict_value;
       if (!it.value().GetAsDictionary(&dict_value)) {
         LOG(ERROR) << extension->id() << ": app is not a dictionary.";
@@ -514,7 +831,7 @@ bool IsPlatformAppSafeForPublicSession(const extensions::Extension* extension) {
       }
       for (base::DictionaryValue::Iterator it2(*dict_value);
            !it2.IsAtEnd(); it2.Advance()) {
-        if (it2.key() != "background") {
+        if (!ArrayContains(kSafeAppStrings, it2.key())) {
           LOG(ERROR) << extension->id()
                      << " has non-whitelisted manifest entry: "
                      << it.key() << "." << it2.key();
@@ -587,6 +904,7 @@ bool DeviceLocalAccountManagementPolicyProvider::UserMayLoad(
       return true;
     }
 
+    // TODO(isandrk): Remove when whitelisting work is done (crbug/651027).
     // Allow extension if its type is whitelisted for use in public sessions.
     if (extension->GetType() == extensions::Manifest::TYPE_HOSTED_APP) {
       return true;
@@ -598,11 +916,10 @@ bool DeviceLocalAccountManagementPolicyProvider::UserMayLoad(
       return true;
     }
 
-    // Allow force-installed platform app if all manifest contents are
-    // whitelisted.
+    // Allow force-installed extension if all manifest contents are whitelisted.
     if ((extension->location() == extensions::Manifest::EXTERNAL_POLICY_DOWNLOAD
          || extension->location() == extensions::Manifest::EXTERNAL_POLICY)
-        && IsPlatformAppSafeForPublicSession(extension)) {
+        && IsSafeForPublicSession(extension)) {
       return true;
     }
   } else if (account_type_ == policy::DeviceLocalAccount::TYPE_KIOSK_APP) {

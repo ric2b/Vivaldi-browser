@@ -55,7 +55,6 @@ PermissionContextBase::PermissionContextBase(
     const content::PermissionType permission_type,
     const ContentSettingsType content_settings_type)
     : profile_(profile),
-      decision_auto_blocker_(new PermissionDecisionAutoBlocker(profile)),
       permission_type_(permission_type),
       content_settings_type_(content_settings_type),
       weak_factory_(this) {
@@ -63,6 +62,7 @@ PermissionContextBase::PermissionContextBase(
   permission_queue_controller_.reset(new PermissionQueueController(
       profile_, permission_type_, content_settings_type_));
 #endif
+  PermissionDecisionAutoBlocker::UpdateFromVariations();
 }
 
 PermissionContextBase::~PermissionContextBase() {
@@ -324,8 +324,8 @@ void PermissionContextBase::PermissionDecided(
   // Check if we should convert a dismiss decision into a block decision. This
   // is gated on enabling the kBlockPromptsIfDismissedOften feature.
   if (content_setting == CONTENT_SETTING_DEFAULT &&
-      decision_auto_blocker_->ShouldChangeDismissalToBlock(requesting_origin,
-                                                           permission_type_)) {
+      PermissionDecisionAutoBlocker::ShouldChangeDismissalToBlock(
+          requesting_origin, permission_type_, profile_)) {
     persist = true;
     content_setting = CONTENT_SETTING_BLOCK;
   }
@@ -359,13 +359,9 @@ void PermissionContextBase::NotifyPermissionSet(
   UpdateTabContext(id, requesting_origin,
                    content_setting == CONTENT_SETTING_ALLOW);
 
-  if (content_setting == CONTENT_SETTING_DEFAULT) {
-    content_setting =
-        HostContentSettingsMapFactory::GetForProfile(profile_)
-            ->GetDefaultContentSetting(content_settings_type_, nullptr);
-  }
+  if (content_setting == CONTENT_SETTING_DEFAULT)
+    content_setting = CONTENT_SETTING_ASK;
 
-  DCHECK_NE(content_setting, CONTENT_SETTING_DEFAULT);
   callback.Run(content_setting);
 }
 
@@ -382,6 +378,8 @@ void PermissionContextBase::UpdateContentSetting(
   DCHECK_EQ(embedding_origin, embedding_origin.GetOrigin());
   DCHECK(content_setting == CONTENT_SETTING_ALLOW ||
          content_setting == CONTENT_SETTING_BLOCK);
+  DCHECK(!requesting_origin.SchemeIsFile());
+  DCHECK(!embedding_origin.SchemeIsFile());
 
   HostContentSettingsMapFactory::GetForProfile(profile_)
       ->SetContentSettingDefaultScope(requesting_origin, embedding_origin,

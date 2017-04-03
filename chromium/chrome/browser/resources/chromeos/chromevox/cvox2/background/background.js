@@ -114,6 +114,15 @@ Background = function() {
                 'Search+Shift' : 'Search';
       }.bind(this)
     });
+
+    Object.defineProperty(cvox.ChromeVox, 'typingEcho', {
+      get: function() {
+        return parseInt(localStorage['typingEcho'], 10);
+      }.bind(this),
+      set: function(v) {
+        localStorage['typingEcho'] = v;
+      }.bind(this)
+    });
   }
 
   Object.defineProperty(cvox.ChromeVox, 'isActive', {
@@ -127,10 +136,10 @@ Background = function() {
 
   cvox.ExtensionBridge.addMessageListener(this.onMessage_);
 
-  /** @type {!BackgroundKeyboardHandler} */
+  /** @type {!BackgroundKeyboardHandler} @private */
   this.keyboardHandler_ = new BackgroundKeyboardHandler();
 
-  /** @type {!LiveRegions} */
+  /** @type {!LiveRegions} @private */
   this.liveRegions_ = new LiveRegions(this);
 
   /** @type {boolean} @private */
@@ -139,6 +148,7 @@ Background = function() {
   /**
    * Stores the mode as computed the last time a current range was set.
    * @type {?ChromeVoxMode}
+   * @private
    */
   this.mode_ = null;
 
@@ -335,6 +345,9 @@ Background.prototype = {
     if (!this.inExcursion_ && newRange)
       this.savedRange_ = new cursors.Range(newRange.start, newRange.end);
 
+    if (newRange && !newRange.isValid())
+      return;
+
     this.currentRange_ = newRange;
     var oldMode = this.mode_;
     var newMode = this.getMode();
@@ -381,7 +394,7 @@ Background.prototype = {
       // Iframes, when focused, causes the child webArea to fire focus event.
       // This can result in getting stuck when navigating backward.
       if (actionNode.role != RoleType.iframe && !actionNode.state.focused &&
-          !AutomationPredicate.container(actionNode))
+          !AutomationPredicate.structuralContainer(actionNode))
         actionNode.focus();
     }
     var prevRange = this.currentRange_;
@@ -516,6 +529,7 @@ Background.prototype = {
    * 1. a url is blacklisted for Classic.
    * 2. the current range is not within web content.
    * @param {string} url
+   * @return {boolean}
    */
   isWhitelistedForCompat_: function(url) {
     return this.isBlacklistedForClassic_(url) || (this.getCurrentRange() &&
@@ -623,7 +637,7 @@ Background.prototype = {
         } else if (action == 'onCommand') {
           CommandHandler.onCommand(msg['command']);
         } else if (action == 'flushNextUtterance') {
-          Output.flushNextSpeechUtterance();
+          Output.forceModeForNextSpeechUtterance(cvox.QueueMode.FLUSH);
         }
         break;
     }

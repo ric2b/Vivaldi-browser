@@ -24,11 +24,10 @@
 #include "chrome/browser/ui/translate/translate_bubble_view_state_transition.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/translate/core/browser/translate_ui_delegate.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/common/referrer.h"
-#include "grit/components_strings.h"
-#include "grit/ui_resources.h"
 #include "skia/ext/skia_utils_mac.h"
 #include "ui/base/cocoa/cocoa_base_utils.h"
 #include "ui/base/cocoa/controls/hyperlink_text_view.h"
@@ -36,6 +35,7 @@
 #import "ui/base/cocoa/window_size_constants.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/combobox_model.h"
+#include "ui/resources/grit/ui_resources.h"
 
 // TODO(hajimehoshi): This class is almost same as that of views. Refactor them.
 class TranslateDenialComboboxModel : public ui::ComboboxModel {
@@ -840,9 +840,9 @@ const CGFloat kContentWidth = kWindowWidth - 2 * kFramePadding;
 
 - (IBAction)handleLanguageSettingsLinkButtonPressed:(id)sender {
   GURL url = chrome::GetSettingsUrl(chrome::kLanguageOptionsSubPage);
-  webContents_->OpenURL(
-      content::OpenURLParams(url, content::Referrer(), NEW_FOREGROUND_TAB,
-                             ui::PAGE_TRANSITION_LINK, false));
+  webContents_->OpenURL(content::OpenURLParams(
+      url, content::Referrer(), WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui::PAGE_TRANSITION_LINK, false));
   translate::ReportUiAction(translate::SETTINGS_LINK_CLICKED);
   [self close];
 }

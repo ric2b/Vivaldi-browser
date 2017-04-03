@@ -4,14 +4,13 @@
 
 #include "ash/common/system/overview/overview_button_tray.h"
 
-#include "ash/common/ash_switches.h"
 #include "ash/common/login_status.h"
-#include "ash/common/shelf/shelf_types.h"
 #include "ash/common/system/status_area_widget.h"
 #include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/common/wm/overview/window_selector_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/display/display_manager.h"
+#include "ash/public/cpp/shelf_types.h"
 #include "ash/root_window_controller.h"
 #include "ash/rotator/screen_rotation_animator.h"
 #include "ash/shell.h"
@@ -25,6 +24,7 @@
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
+#include "ui/display/display_switches.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/gestures/gesture_types.h"
@@ -69,7 +69,7 @@ class OverviewButtonTrayTest : public test::AshTestBase {
 
 void OverviewButtonTrayTest::SetUp() {
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kAshUseFirstDisplayAsInternal);
+      ::switches::kUseFirstDisplayAsInternal);
   AshTestBase::SetUp();
 }
 

@@ -17,10 +17,10 @@
 #include "components/sync/core/model_type_processor.h"
 #include "components/sync/core/non_blocking_sync_common.h"
 #include "components/sync/engine/commit_queue.h"
-#include "components/sync/protocol/data_type_state.pb.h"
+#include "components/sync/protocol/model_type_state.pb.h"
 #include "components/sync/protocol/sync.pb.h"
 
-namespace syncer_v2 {
+namespace syncer {
 
 // Receives and records commit requests sent through the ModelTypeWorker.
 //
@@ -29,7 +29,7 @@ namespace syncer_v2 {
 // plausible UpdateResponseData and CommitResponseData messages.
 class MockModelTypeWorker : public CommitQueue {
  public:
-  MockModelTypeWorker(const sync_pb::DataTypeState& data_type_state,
+  MockModelTypeWorker(const sync_pb::ModelTypeState& model_type_state,
                       ModelTypeProcessor* processor);
   ~MockModelTypeWorker() override;
 
@@ -53,9 +53,10 @@ class MockModelTypeWorker : public CommitQueue {
   // length one.
   void ExpectPendingCommits(const std::vector<std::string>& tag_hashes);
 
-  // Trigger an update from the server containing a single entity. See
-  // GenerateUpdateData for parameter descriptions. |version_offset| defaults to
-  // 1 and |ekn| defaults to the current encryption key name the worker has.
+  // Trigger an update from the server. See GenerateUpdateData for parameter
+  // descriptions. |version_offset| defaults to 1 and |ekn| defaults to the
+  // current encryption key name the worker has.
+  void UpdateFromServer();
   void UpdateFromServer(const std::string& tag_hash,
                         const sync_pb::EntitySpecifics& specifics);
   void UpdateFromServer(const std::string& tag_hash,
@@ -107,7 +108,7 @@ class MockModelTypeWorker : public CommitQueue {
   int64_t GetServerVersion(const std::string& tag_hash);
   void SetServerVersion(const std::string& tag_hash, int64_t version);
 
-  sync_pb::DataTypeState data_type_state_;
+  sync_pb::ModelTypeState model_type_state_;
 
   // A pointer to the processor for this mock worker.
   ModelTypeProcessor* processor_;
@@ -122,6 +123,6 @@ class MockModelTypeWorker : public CommitQueue {
   DISALLOW_COPY_AND_ASSIGN(MockModelTypeWorker);
 };
 
-}  // namespace syncer_v2
+}  // namespace syncer
 
 #endif  // COMPONENTS_SYNC_TEST_ENGINE_MOCK_MODEL_TYPE_WORKER_H_

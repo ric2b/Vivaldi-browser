@@ -6,11 +6,13 @@
 #define COMPONENTS_OFFLINE_PAGES_BACKGROUND_REQUEST_PICKER_H_
 
 #include <memory>
+#include <set>
 
 #include "base/memory/weak_ptr.h"
 #include "components/offline_pages/background/device_conditions.h"
 #include "components/offline_pages/background/offliner_policy.h"
 #include "components/offline_pages/background/request_coordinator.h"
+#include "components/offline_pages/background/request_coordinator_event_logger.h"
 #include "components/offline_pages/background/request_queue.h"
 
 namespace offline_pages {
@@ -24,7 +26,8 @@ class RequestPicker {
  public:
   RequestPicker(RequestQueue* requestQueue,
                 OfflinerPolicy* policy,
-                RequestNotifier* notifier);
+                RequestNotifier* notifier,
+                RequestCoordinatorEventLogger* event_logger);
 
   ~RequestPicker();
 
@@ -32,18 +35,21 @@ class RequestPicker {
   // conditions, and call back to the RequestCoordinator when we have one.
   void ChooseNextRequest(
       RequestCoordinator::RequestPickedCallback picked_callback,
-      RequestCoordinator::RequestQueueEmptyCallback empty_callback,
-      DeviceConditions* device_conditions);
+      RequestCoordinator::RequestNotPickedCallback not_picked_callback,
+      DeviceConditions* device_conditions,
+      const std::set<int64_t>& disabled_requests);
 
  private:
   // Callback for the GetRequest results to be delivered.
-  void GetRequestResultCallback(RequestQueue::GetRequestsResult result,
-                                const std::vector<SavePageRequest>& results);
+  void GetRequestResultCallback(
+      const std::set<int64_t>& disabled_requests,
+      RequestQueue::GetRequestsResult result,
+      std::vector<std::unique_ptr<SavePageRequest>> results);
 
   // Filter out requests that don't meet the current conditions.  For instance,
   // if this is a predictive request, and we are not on WiFi, it should be
   // ignored this round.
-  bool RequestConditionsSatisfied(const SavePageRequest& request);
+  bool RequestConditionsSatisfied(const SavePageRequest* request);
 
   // Using policies, decide if the new request is preferable to the best we have
   // so far.
@@ -67,15 +73,15 @@ class RequestPicker {
   int CompareCreationTime(const SavePageRequest* left,
                           const SavePageRequest* right);
 
-  // Split all requests into expired ones and still valid ones.
-  void SplitRequests(const std::vector<SavePageRequest>& requests,
-                     std::vector<SavePageRequest>& valid_requests,
-                     std::vector<SavePageRequest>& expired_requests);
+  // Split all requests into expired ones and still valid ones.  Takes ownership
+  // of the requests, and moves them into either valid or expired requests.
+  void SplitRequests(
+      std::vector<std::unique_ptr<SavePageRequest>> requests,
+      std::vector<std::unique_ptr<SavePageRequest>>* valid_requests,
+      std::vector<std::unique_ptr<SavePageRequest>>* expired_requests);
 
   // Callback used after requests get expired.
-  void OnRequestExpired(
-      const RequestQueue::UpdateMultipleRequestResults& results,
-      const std::vector<SavePageRequest>& requests);
+  void OnRequestExpired(std::unique_ptr<UpdateRequestsResult> result);
 
   // Unowned pointer to the request queue.
   RequestQueue* queue_;
@@ -83,6 +89,8 @@ class RequestPicker {
   OfflinerPolicy* policy_;
   // Unowned pointer to the request coordinator.
   RequestNotifier* notifier_;
+  // Unowned pointer to the event logger.
+  RequestCoordinatorEventLogger* event_logger_;
   // Current conditions on the device
   std::unique_ptr<DeviceConditions> current_conditions_;
   // True if we prefer less-tried requests
@@ -92,7 +100,7 @@ class RequestPicker {
   // Callback for when we are done picking a request to do next.
   RequestCoordinator::RequestPickedCallback picked_callback_;
   // Callback for when there are no more reqeusts to pick.
-  RequestCoordinator::RequestQueueEmptyCallback empty_callback_;
+  RequestCoordinator::RequestNotPickedCallback not_picked_callback_;
   // Allows us to pass a weak pointer to callbacks.
   base::WeakPtrFactory<RequestPicker> weak_ptr_factory_;
 };

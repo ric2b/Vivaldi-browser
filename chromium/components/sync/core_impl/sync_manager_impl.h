@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -85,7 +86,7 @@ class SyncManagerImpl
                        const base::Closure& retry_task) override;
   void SetInvalidatorEnabled(bool invalidator_enabled) override;
   void OnIncomingInvalidation(
-      syncer::ModelType type,
+      ModelType type,
       std::unique_ptr<InvalidationInterface> invalidation) override;
   void AddObserver(SyncManager::Observer* observer) override;
   void RemoveObserver(SyncManager::Observer* observer) override;
@@ -93,21 +94,19 @@ class SyncManagerImpl
   void SaveChanges() override;
   void ShutdownOnSyncThread(ShutdownReason reason) override;
   UserShare* GetUserShare() override;
-  std::unique_ptr<syncer_v2::ModelTypeConnector> GetModelTypeConnectorProxy()
-      override;
+  std::unique_ptr<ModelTypeConnector> GetModelTypeConnectorProxy() override;
   const std::string cache_guid() override;
   bool ReceivedExperiment(Experiments* experiments) override;
   bool HasUnsyncedItems() override;
   SyncEncryptionHandler* GetEncryptionHandler() override;
-  ScopedVector<syncer::ProtocolEvent> GetBufferedProtocolEvents() override;
-  std::unique_ptr<base::ListValue> GetAllNodesForType(
-      syncer::ModelType type) override;
+  std::vector<std::unique_ptr<ProtocolEvent>> GetBufferedProtocolEvents()
+      override;
   void RegisterDirectoryTypeDebugInfoObserver(
-      syncer::TypeDebugInfoObserver* observer) override;
+      TypeDebugInfoObserver* observer) override;
   void UnregisterDirectoryTypeDebugInfoObserver(
-      syncer::TypeDebugInfoObserver* observer) override;
+      TypeDebugInfoObserver* observer) override;
   bool HasDirectoryTypeDebugInfoObserver(
-      syncer::TypeDebugInfoObserver* observer) override;
+      TypeDebugInfoObserver* observer) override;
   void RequestEmitDebugInfo() override;
   void ClearServerData(const ClearServerDataCallback& callback) override;
   void OnCookieJarChanged(bool account_mismatch, bool empty_jar) override;
@@ -172,9 +171,9 @@ class SyncManagerImpl
       net::NetworkChangeNotifier::ConnectionType) override;
 
   // NudgeHandler implementation.
-  void NudgeForInitialDownload(syncer::ModelType type) override;
-  void NudgeForCommit(syncer::ModelType type) override;
-  void NudgeForRefresh(syncer::ModelType type) override;
+  void NudgeForInitialDownload(ModelType type) override;
+  void NudgeForCommit(ModelType type) override;
+  void NudgeForRefresh(ModelType type) override;
 
   const SyncScheduler* scheduler() const;
 

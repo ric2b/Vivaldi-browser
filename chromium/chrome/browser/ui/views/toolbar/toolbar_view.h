@@ -28,6 +28,10 @@ class HomeButton;
 class ReloadButton;
 class ToolbarButton;
 
+namespace bookmarks {
+class BookmarkBubbleObserver;
+}
+
 namespace extensions {
 class Command;
 class Extension;
@@ -41,7 +45,6 @@ class ToolbarView : public views::AccessiblePaneView,
                     public content::NotificationObserver,
                     public CommandObserver,
                     public views::ButtonListener,
-                    public views::ViewTargeterDelegate,
                     public AppMenuIconController::Delegate {
  public:
   // The view class name.
@@ -72,8 +75,10 @@ class ToolbarView : public views::AccessiblePaneView,
 
   virtual bool GetAcceleratorInfo(int id, ui::Accelerator* accel);
 
-  // Returns the view to which the bookmark bubble should be anchored.
-  views::View* GetBookmarkBubbleAnchor();
+  // Shows a bookmark bubble and anchors it appropriately.
+  void ShowBookmarkBubble(const GURL& url,
+                          bool already_bookmarked,
+                          bookmarks::BookmarkBubbleObserver* observer);
 
   // Returns the view to which the "Save credit card" bubble should be anchored.
   views::View* GetSaveCreditCardBubbleAnchor();
@@ -160,13 +165,9 @@ class ToolbarView : public views::AccessiblePaneView,
                               // bar, used for popups.
   };
 
-  // views::ViewTargeterDelegate:
-  bool DoesIntersectRect(const views::View* target,
-                         const gfx::Rect& rect) const override;
-
   // AppMenuIconController::Delegate:
   void UpdateSeverity(AppMenuIconController::IconType type,
-                      AppMenuIconPainter::Severity severity,
+                      AppMenuIconController::Severity severity,
                       bool animate) override;
 
   // Used to avoid duplicating the near-identical logic of
@@ -193,8 +194,6 @@ class ToolbarView : public views::AccessiblePaneView,
   void ShowOutdatedInstallNotification(bool auto_update_enabled);
 
   void OnShowHomeButtonChanged();
-
-  int content_shadow_height() const;
 
   // Controls. Most of these can be null, e.g. in popup windows. Only
   // |location_bar_| is guaranteed to exist.

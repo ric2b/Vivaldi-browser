@@ -2,15 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/wm/screen_dimmer.h"
+#include "ash/common/wm/screen_dimmer.h"
 
 #include <memory>
 
+#include "ash/aura/wm_window_aura.h"
+#include "ash/common/wm/window_dimmer.h"
+#include "ash/common/wm_shell.h"
+#include "ash/common/wm_window_user_data.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/wm/dim_window.h"
-//#include "ui/aura/window_event_dispatcher.h"
+#include "base/memory/ptr_util.h"
 #include "ui/aura/test/test_windows.h"
 #include "ui/compositor/layer.h"
 
@@ -19,16 +22,24 @@ namespace test {
 
 class ScreenDimmerTest : public AshTestBase {
  public:
-  ScreenDimmerTest() : dimmer_(nullptr) {}
+  ScreenDimmerTest() {}
   ~ScreenDimmerTest() override {}
 
   void SetUp() override {
     AshTestBase::SetUp();
-    dimmer_ = ScreenDimmer::GetForRoot();
+    dimmer_ = base::MakeUnique<ScreenDimmer>(ScreenDimmer::Container::ROOT);
+  }
+
+  void TearDown() override {
+    dimmer_.reset();
+    AshTestBase::TearDown();
   }
 
   aura::Window* GetDimWindow() {
-    return DimWindow::Get(Shell::GetPrimaryRootWindow());
+    WindowDimmer* window_dimmer =
+        dimmer_->window_dimmers_->Get(WmShell::Get()->GetPrimaryRootWindow());
+    return window_dimmer ? WmWindowAura::GetAuraWindow(window_dimmer->window())
+                         : nullptr;
   }
 
   ui::Layer* GetDimWindowLayer() {
@@ -37,7 +48,7 @@ class ScreenDimmerTest : public AshTestBase {
   }
 
  protected:
-  ScreenDimmer* dimmer_;  // not owned
+  std::unique_ptr<ScreenDimmer> dimmer_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ScreenDimmerTest);
@@ -86,19 +97,11 @@ TEST_F(ScreenDimmerTest, MAYBE_ResizeLayer) {
   EXPECT_EQ(kNewBounds.ToString(), dimming_layer->bounds().ToString());
 }
 
-TEST_F(ScreenDimmerTest, RootDimmer) {
-  ScreenDimmer* root_dimmer = ScreenDimmer::GetForRoot();
-  // -100 is the magic number for root window.
-  EXPECT_EQ(root_dimmer, ScreenDimmer::FindForTest(-100));
-  EXPECT_EQ(nullptr, ScreenDimmer::FindForTest(-1));
-}
-
 TEST_F(ScreenDimmerTest, DimAtBottom) {
-  ScreenDimmer* root_dimmer = ScreenDimmer::GetForRoot();
   aura::Window* root_window = Shell::GetPrimaryRootWindow();
   std::unique_ptr<aura::Window> window(
       aura::test::CreateTestWindowWithId(1, root_window));
-  root_dimmer->SetDimming(true);
+  dimmer_->SetDimming(true);
   std::vector<aura::Window*>::const_iterator dim_iter =
       std::find(root_window->children().begin(), root_window->children().end(),
                 GetDimWindow());
@@ -106,15 +109,37 @@ TEST_F(ScreenDimmerTest, DimAtBottom) {
   // Dim layer is at top.
   EXPECT_EQ(*dim_iter, *root_window->children().rbegin());
 
-  root_dimmer->SetDimming(false);
-  root_dimmer->set_at_bottom(true);
-  root_dimmer->SetDimming(true);
+  dimmer_->SetDimming(false);
+  dimmer_->set_at_bottom(true);
+  dimmer_->SetDimming(true);
 
   dim_iter = std::find(root_window->children().begin(),
                        root_window->children().end(), GetDimWindow());
   ASSERT_TRUE(dim_iter != root_window->children().end());
   // Dom layer is at the bottom.
   EXPECT_EQ(*dim_iter, *root_window->children().begin());
+}
+
+// See description above TEST_F for details.
+class ScreenDimmerShellDestructionTest : public AshTestBase {
+ public:
+  ScreenDimmerShellDestructionTest() {}
+  ~ScreenDimmerShellDestructionTest() override {}
+
+  void TearDown() override {
+    ScreenDimmer screen_dimmer(ScreenDimmer::Container::ROOT);
+    AshTestBase::TearDown();
+    // ScreenDimmer is destroyed *after* the shell.
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ScreenDimmerShellDestructionTest);
+};
+
+// This test verifies ScreenDimmer can be destroyed after the shell. The
+// interesting part of this test is in TearDown(), which creates a ScreenDimmer
+// that is deleted after WmShell.
+TEST_F(ScreenDimmerShellDestructionTest, DontCrashIfScreenDimmerOutlivesShell) {
 }
 
 }  // namespace test

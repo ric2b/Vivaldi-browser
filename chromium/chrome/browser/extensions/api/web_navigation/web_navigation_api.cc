@@ -164,8 +164,7 @@ void WebNavigationEventRouter::Retargeting(const RetargetingDetails* details) {
       tab_observer->frame_navigation_state();
 
   content::RenderFrameHost* frame_host = content::RenderFrameHost::FromID(
-      details->source_web_contents->GetRenderProcessHost()->GetID(),
-      details->source_render_frame_id);
+      details->source_render_process_id, details->source_render_frame_id);
   if (!frame_navigation_state.CanSendEvents(frame_host))
     return;
 
@@ -378,12 +377,12 @@ void WebNavigationTabObserver::DidOpenRequestedURL(
 
   // We only send the onCreatedNavigationTarget if we end up creating a new
   // window.
-  if (disposition != SINGLETON_TAB &&
-      disposition != NEW_FOREGROUND_TAB &&
-      disposition != NEW_BACKGROUND_TAB &&
-      disposition != NEW_POPUP &&
-      disposition != NEW_WINDOW &&
-      disposition != OFF_THE_RECORD)
+  if (disposition != WindowOpenDisposition::SINGLETON_TAB &&
+      disposition != WindowOpenDisposition::NEW_FOREGROUND_TAB &&
+      disposition != WindowOpenDisposition::NEW_BACKGROUND_TAB &&
+      disposition != WindowOpenDisposition::NEW_POPUP &&
+      disposition != WindowOpenDisposition::NEW_WINDOW &&
+      disposition != WindowOpenDisposition::OFF_THE_RECORD)
     return;
 
   helpers::DispatchOnCreatedNavigationTarget(web_contents(),

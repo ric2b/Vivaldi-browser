@@ -10,6 +10,7 @@
 #include <string>
 
 #include "base/macros.h"
+#include "net/base/net_export.h"
 #include "net/quic/core/crypto/crypto_handshake.h"
 #include "net/quic/core/crypto/quic_compressed_certs_cache.h"
 #include "net/quic/core/crypto/quic_crypto_server_config.h"
@@ -34,7 +35,8 @@ class QuicCryptoServerStreamPeer;
 // various code and test refactoring.
 class NET_EXPORT_PRIVATE QuicCryptoServerStreamBase : public QuicCryptoStream {
  public:
-  explicit QuicCryptoServerStreamBase(QuicServerSessionBase* session);
+  explicit QuicCryptoServerStreamBase(QuicSession* session);
+
   ~QuicCryptoServerStreamBase() override {}
 
   // Cancel any outstanding callbacks, such as asynchronous validation of client
@@ -76,11 +78,32 @@ class NET_EXPORT_PRIVATE QuicCryptoServerStreamBase : public QuicCryptoStream {
 class NET_EXPORT_PRIVATE QuicCryptoServerStream
     : public QuicCryptoServerStreamBase {
  public:
+  class Helper {
+   public:
+    virtual ~Helper() {}
+
+    // Given the current connection_id, generates a new ConnectionId to
+    // be returned with a stateless reject.
+    virtual QuicConnectionId GenerateConnectionIdForReject(
+        QuicConnectionId connection_id) const = 0;
+
+    // Returns true if |message|, which was received on |self_address| is
+    // acceptable according to the visitor's policy. Otherwise, returns false
+    // and populates |error_details|.
+    virtual bool CanAcceptClientHello(const CryptoHandshakeMessage& message,
+                                      const IPEndPoint& self_address,
+                                      std::string* error_details) const = 0;
+  };
+
   // |crypto_config| must outlive the stream.
+  // |session| must outlive the stream.
+  // |helper| must outlive the stream.
   QuicCryptoServerStream(const QuicCryptoServerConfig* crypto_config,
                          QuicCompressedCertsCache* compressed_certs_cache,
                          bool use_stateless_rejects_if_peer_supported,
-                         QuicServerSessionBase* session);
+                         QuicSession* session,
+                         Helper* helper);
+
   ~QuicCryptoServerStream() override;
 
   // From QuicCryptoServerStreamBase
@@ -103,8 +126,7 @@ class NET_EXPORT_PRIVATE QuicCryptoServerStream
 
  protected:
   virtual QuicErrorCode ProcessClientHello(
-      const CryptoHandshakeMessage& message,
-      const ValidateClientHelloResultCallback::Result& result,
+      scoped_refptr<ValidateClientHelloResultCallback::Result> result,
       std::unique_ptr<ProofSource::Details> proof_source_details,
       CryptoHandshakeMessage* reply,
       DiversificationNonce* out_diversification_nonce,
@@ -113,11 +135,6 @@ class NET_EXPORT_PRIVATE QuicCryptoServerStream
   // Hook that allows the server to set QuicConfig defaults just
   // before going through the parameter negotiation step.
   virtual void OverrideQuicConfigDefaults(QuicConfig* config);
-
-  // Given the current connection_id, generates a new ConnectionId to
-  // be returned with a stateless reject.
-  virtual QuicConnectionId GenerateConnectionIdForReject(
-      QuicConnectionId connection_id);
 
  private:
   friend class test::CryptoTestUtils;
@@ -130,9 +147,8 @@ class NET_EXPORT_PRIVATE QuicCryptoServerStream
     void Cancel();
 
     // From ValidateClientHelloResultCallback
-    void RunImpl(const CryptoHandshakeMessage& client_hello,
-                 const Result& result,
-                 std::unique_ptr<ProofSource::Details> details) override;
+    void Run(scoped_refptr<Result> result,
+             std::unique_ptr<ProofSource::Details> details) override;
 
    private:
     QuicCryptoServerStream* parent_;
@@ -162,9 +178,20 @@ class NET_EXPORT_PRIVATE QuicCryptoServerStream
   // the client hello is complete.  Finishes processing of the client
   // hello message and handles handshake success/failure.
   void FinishProcessingHandshakeMessage(
-      const CryptoHandshakeMessage& message,
-      const ValidateClientHelloResultCallback::Result& result,
+      scoped_refptr<ValidateClientHelloResultCallback::Result> result,
       std::unique_ptr<ProofSource::Details> details);
+
+  class ProcessClientHelloCallback;
+  friend class ProcessClientHelloCallback;
+
+  // Portion of FinishProcessingHandshakeMessage which executes after
+  // ProcessClientHello has been called.
+  void FinishProcessingHandshakeMessageAfterProcessClientHello(
+      const ValidateClientHelloResultCallback::Result& result,
+      QuicErrorCode error,
+      const std::string& error_details,
+      std::unique_ptr<CryptoHandshakeMessage> reply,
+      std::unique_ptr<DiversificationNonce> diversification_nonce);
 
   // Invoked by SendServerConfigUpdateCallback::RunImpl once the proof has been
   // received.  |ok| indicates whether or not the proof was successfully
@@ -172,6 +199,10 @@ class NET_EXPORT_PRIVATE QuicCryptoServerStream
   // SendServerConfigUpdate.
   void FinishSendServerConfigUpdate(bool ok,
                                     const CryptoHandshakeMessage& message);
+
+  // Returns a new ConnectionId to be used for statelessly rejected connections
+  // if |use_stateless_rejects| is true. Returns 0 otherwise.
+  QuicConnectionId GenerateConnectionIdForReject(bool use_stateless_rejects);
 
   // crypto_config_ contains crypto parameters for the handshake.
   const QuicCryptoServerConfig* crypto_config_;
@@ -193,6 +224,9 @@ class NET_EXPORT_PRIVATE QuicCryptoServerStream
   // FinishProcessingHandshakeMessage for processing.  nullptr if no
   // handshake message is being validated.
   ValidateCallback* validate_client_hello_cb_;
+
+  // Pointer to the helper for this crypto stream. Must outlive this stream.
+  Helper* helper_;
 
   // Number of handshake messages received by this stream.
   uint8_t num_handshake_messages_;

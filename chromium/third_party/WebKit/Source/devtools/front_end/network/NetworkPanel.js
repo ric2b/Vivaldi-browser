@@ -82,7 +82,7 @@ WebInspector.NetworkPanel = function()
     this._detailsWidget.element.classList.add("network-details-view");
     this._splitWidget.setMainWidget(this._detailsWidget);
 
-    this._closeButtonElement = createElementWithClass("div", "network-close-button", "dt-close-button");
+    this._closeButtonElement = createElement("div", "dt-close-button");
     this._closeButtonElement.addEventListener("click", this._showRequest.bind(this, null), false);
 
     this._networkLogShowOverviewSetting.addChangeListener(this._toggleShowOverview, this);
@@ -273,7 +273,13 @@ WebInspector.NetworkPanel.prototype = {
     _load: function(event)
     {
         if (this._filmStripRecorder && this._filmStripRecorder.isRecording())
-            this._pendingStopTimer = setTimeout(this._toggleRecord.bind(this, false), 1000);
+            this._pendingStopTimer = setTimeout(this._stopFilmStripRecording.bind(this), 1000);
+    },
+
+    _stopFilmStripRecording: function()
+    {
+        this._filmStripRecorder.stopRecording(this._filmStripAvailable.bind(this));
+        delete this._pendingStopTimer;
     },
 
     _toggleLargerRequests: function()
@@ -419,7 +425,7 @@ WebInspector.NetworkPanel.prototype = {
 
         if (request) {
             this._networkItemView = new WebInspector.NetworkItemView(request, this._networkLogView.timeCalculator());
-            this._networkItemView.insertBeforeTabStrip(this._closeButtonElement);
+            this._networkItemView.leftToolbar().appendToolbarItem(new WebInspector.ToolbarItem(this._closeButtonElement));
             this._networkItemView.show(this._detailsWidget.element);
             this._splitWidget.showBoth();
         } else {
@@ -525,7 +531,7 @@ WebInspector.NetworkPanel.prototype = {
         }
         if (target instanceof WebInspector.UISourceCode) {
             var uiSourceCode = /** @type {!WebInspector.UISourceCode} */ (target);
-            var resource = WebInspector.resourceForURL(WebInspector.networkMapping.networkURL(uiSourceCode));
+            var resource = WebInspector.resourceForURL(uiSourceCode.url());
             if (resource && resource.request)
                 appendRevealItem.call(this, resource.request);
             return;

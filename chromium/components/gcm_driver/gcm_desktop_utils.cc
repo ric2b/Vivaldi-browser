@@ -53,10 +53,9 @@ GCMClient::ChromeChannel GetChannel(version_info::Channel channel) {
       return GCMClient::CHANNEL_BETA;
     case version_info::Channel::STABLE:
       return GCMClient::CHANNEL_STABLE;
-    default:
-      NOTREACHED();
-      return GCMClient::CHANNEL_UNKNOWN;
   }
+  NOTREACHED();
+  return GCMClient::CHANNEL_UNKNOWN;
 }
 
 std::string GetVersion() {
@@ -76,8 +75,8 @@ GCMClient::ChromeBuildInfo GetChromeBuildInfo(
 }
 
 std::string GetChannelStatusRequestUrl(version_info::Channel channel) {
-  GURL sync_url(GetSyncServiceURL(*base::CommandLine::ForCurrentProcess(),
-                                  channel));
+  GURL sync_url(syncer::GetSyncServiceURL(
+      *base::CommandLine::ForCurrentProcess(), channel));
   return sync_url.spec() + kChannelStatusRelativePath;
 }
 
@@ -85,7 +84,7 @@ std::string GetUserAgent(version_info::Channel channel) {
   // TODO(pavely): Fix hardcoded is_tablet value in following call to
   // MakeUserAgentForSync. Current implementation returns iPhone UserAgent for
   // iPad devices.
-  return MakeUserAgentForSync(channel, false);
+  return syncer::MakeUserAgentForSync(channel, false);
 }
 
 }  // namespace

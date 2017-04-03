@@ -15,10 +15,12 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "net/base/ip_endpoint.h"
+#include "net/base/net_export.h"
 #include "net/base/upload_data_stream.h"
 #include "net/http/http_request_info.h"
 #include "net/http/http_response_info.h"
 #include "net/http/http_stream.h"
+#include "net/log/net_log_with_source.h"
 #include "net/quic/core/quic_spdy_stream.h"
 
 namespace net {
@@ -59,7 +61,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientStream : public QuicSpdyStream {
 
   QuicChromiumClientStream(QuicStreamId id,
                            QuicClientSessionBase* session,
-                           const BoundNetLog& net_log);
+                           const NetLogWithSource& net_log);
 
   ~QuicChromiumClientStream() override;
 
@@ -113,13 +115,16 @@ class NET_EXPORT_PRIVATE QuicChromiumClientStream : public QuicSpdyStream {
   // it becomes writable.
   bool CanWrite(const CompletionCallback& callback);
 
-  const BoundNetLog& net_log() const { return net_log_; }
+  const NetLogWithSource& net_log() const { return net_log_; }
 
   // Prevents this stream from migrating to a new network. May cause other
   // concurrent streams within the session to also not migrate.
   void DisableConnectionMigration();
 
   bool can_migrate() { return can_migrate_; }
+
+  // True if this stream is the first data stream created on this session.
+  bool IsFirstStream();
 
   using QuicSpdyStream::HasBufferedData;
 
@@ -132,7 +137,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientStream : public QuicSpdyStream {
   void NotifyDelegateOfDataAvailable();
   void RunOrBuffer(base::Closure closure);
 
-  BoundNetLog net_log_;
+  NetLogWithSource net_log_;
   Delegate* delegate_;
 
   bool headers_delivered_;

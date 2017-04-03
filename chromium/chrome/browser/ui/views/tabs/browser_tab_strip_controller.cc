@@ -28,16 +28,12 @@
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
-#include "components/favicon/content/content_favicon_driver.h"
 #include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/mime_util/mime_util.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/navigation_controller.h"
-#include "content/public/browser/navigation_entry.h"
-#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/plugin_service.h"
 #include "content/public/browser/user_metrics.h"
@@ -49,6 +45,7 @@
 #include "ui/gfx/image/image.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/widget/widget.h"
+#include "url/origin.h"
 
 using base::UserMetricsAction;
 using content::WebContents;
@@ -57,15 +54,8 @@ namespace {
 
 TabRendererData::NetworkState TabContentsNetworkState(
     WebContents* contents) {
-  if (!contents)
+  if (!contents || !contents->IsLoadingToDifferentDocument())
     return TabRendererData::NETWORK_STATE_NONE;
-  if (!contents->IsLoadingToDifferentDocument()) {
-    content::NavigationEntry* entry =
-        contents->GetController().GetLastCommittedEntry();
-    if (entry && (entry->GetPageType() == content::PAGE_TYPE_ERROR))
-      return TabRendererData::NETWORK_STATE_ERROR;
-    return TabRendererData::NETWORK_STATE_NONE;
-  }
   if (contents->IsWaitingForResponse())
     return TabRendererData::NETWORK_STATE_WAITING;
   return TabRendererData::NETWORK_STATE_LOADING;
@@ -352,10 +342,10 @@ void BrowserTabStripController::PerformDrop(bool drop_before,
 
   if (drop_before) {
     content::RecordAction(UserMetricsAction("Tab_DropURLBetweenTabs"));
-    params.disposition = NEW_FOREGROUND_TAB;
+    params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   } else {
     content::RecordAction(UserMetricsAction("Tab_DropURLOnTab"));
-    params.disposition = CURRENT_TAB;
+    params.disposition = WindowOpenDisposition::CURRENT_TAB;
     params.source_contents = model_->GetWebContentsAt(index);
   }
   params.window_action = chrome::NavigateParams::SHOW_WINDOW;
@@ -433,7 +423,8 @@ SkColor BrowserTabStripController::GetToolbarTopSeparatorColor() const {
 ////////////////////////////////////////////////////////////////////////////////
 // BrowserTabStripController, TabStripModelObserver implementation:
 
-void BrowserTabStripController::TabInsertedAt(WebContents* contents,
+void BrowserTabStripController::TabInsertedAt(TabStripModel* tab_strip_model,
+                                              WebContents* contents,
                                               int model_index,
                                               bool is_active) {
   DCHECK(contents);
@@ -486,8 +477,10 @@ void BrowserTabStripController::TabReplacedAt(TabStripModel* tab_strip_model,
   SetTabDataAt(new_contents, model_index);
 }
 
-void BrowserTabStripController::TabPinnedStateChanged(WebContents* contents,
-                                                      int model_index) {
+void BrowserTabStripController::TabPinnedStateChanged(
+    TabStripModel* tab_strip_model,
+    WebContents* contents,
+    int model_index) {
   SetTabDataAt(contents, model_index);
 }
 
@@ -501,10 +494,7 @@ void BrowserTabStripController::SetTabRendererDataFromModel(
     int model_index,
     TabRendererData* data,
     TabStatus tab_status) {
-  favicon::FaviconDriver* favicon_driver =
-      favicon::ContentFaviconDriver::FromWebContents(contents);
-
-  data->favicon = favicon_driver->GetFavicon().AsImageSkia();
+  data->favicon = favicon::TabFaviconFromWebContents(contents).AsImageSkia();
   data->network_state = TabContentsNetworkState(contents);
   data->title = contents->GetTitle();
   data->url = contents->GetURL();
@@ -585,6 +575,6 @@ void BrowserTabStripController::OnFindURLMimeTypeCompleted(
           content::PluginService::GetInstance()->GetPluginInfo(
               -1,                // process ID
               MSG_ROUTING_NONE,  // routing ID
-              model_->profile()->GetResourceContext(), url, GURL(), mime_type,
-              false, NULL, &plugin, NULL));
+              model_->profile()->GetResourceContext(), url, url::Origin(),
+              mime_type, false, NULL, &plugin, NULL));
 }

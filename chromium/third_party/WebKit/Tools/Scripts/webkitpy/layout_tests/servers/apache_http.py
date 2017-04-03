@@ -63,6 +63,7 @@ class ApacheHTTP(server_base.ServerBase):
         mime_types_path = self._filesystem.join(test_dir, "http", "conf", "mime.types")
         cert_file = self._filesystem.join(test_dir, "http", "conf", "webkit-httpd.pem")
         inspector_sources_dir = self._port_obj.inspector_build_directory()
+        inspector_debug_dir = self._port_obj.inspector_debug_directory()
 
         self._access_log_path = self._filesystem.join(output_dir, "access_log.txt")
         self._error_log_path = self._filesystem.join(output_dir, "error_log.txt")
@@ -86,6 +87,7 @@ class ApacheHTTP(server_base.ServerBase):
             '-c', 'PidFile %s' % self._pid_file,
             '-c', 'SSLCertificateFile "%s"' % cert_file,
             '-c', 'Alias /inspector-sources "%s"' % inspector_sources_dir,
+            '-c', 'Alias /inspector-debug "%s"' % inspector_debug_dir,
             '-c', 'DefaultType None',
         ]
 
@@ -95,7 +97,8 @@ class ApacheHTTP(server_base.ServerBase):
             start_cmd += ['-c', "StartServers %d" % self._number_of_servers,
                           '-c', "MinSpareServers %d" % self._number_of_servers,
                           '-c', "MaxSpareServers %d" % self._number_of_servers,
-                          '-C', 'User "%s"' % self._port_obj.host.environ.get('USERNAME', self._port_obj.host.environ.get('USER', '')),
+                          '-C', 'User "%s"' % self._port_obj.host.environ.get('USERNAME',
+                                                                              self._port_obj.host.environ.get('USER', '')),
                           '-k', 'start']
 
         enable_ipv6 = self._port_obj.http_server_supports_ipv6()

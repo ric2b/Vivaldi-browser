@@ -10,6 +10,7 @@
 #include "cc/playback/display_item_list_settings.h"
 #include "cc/playback/drawing_display_item.h"
 #include "cc/trees/layer_tree_host.h"
+#include "cc/trees/layer_tree_settings.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkPictureRecorder.h"
@@ -64,7 +65,7 @@ scoped_refptr<DisplayItemList> PictureImageLayer::PaintContentsToDisplayList(
 
   DisplayItemListSettings settings;
   settings.use_cached_picture =
-      layer_tree_host()->settings().use_cached_picture_raster;
+      layer_tree_host()->GetSettings().use_cached_picture_raster;
   scoped_refptr<DisplayItemList> display_list =
       DisplayItemList::Create(settings);
 

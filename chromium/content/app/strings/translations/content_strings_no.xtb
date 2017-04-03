@@ -1,12 +1,12 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="no">
-<translation id="1014825444426747588">tom</translation>
 <translation id="1018939186200882850">menyelement</translation>
 <translation id="1020833440720551630">slå av lydsporet</translation>
 <translation id="10623998915015855">av/på-knapp</translation>
 <translation id="1088086359088493902">Sekunder</translation>
 <translation id="1171774979989969504">Skriv inn en e-postadresse.</translation>
+<translation id="1178581264944972037">Stans midlertidig</translation>
 <translation id="1188858454923323853">komplementær</translation>
 <translation id="1206619573307042055">marquee</translation>
 <translation id="1206693055195146388">glidebryter</translation>
@@ -25,6 +25,7 @@
 <translation id="1822429046913737220">AM/PM</translation>
 <translation id="1832974991323546415">spill på ekstern enhet</translation>
 <translation id="1842960171412779397">velg</translation>
+<translation id="1854180393107901205">Stopp castingen</translation>
 <translation id="1880518467580572141">omriss</translation>
 <translation id="1921819250265091946">dd</translation>
 <translation id="1930711995431081526">status</translation>
@@ -39,6 +40,7 @@
 <translation id="2507943997699731163">Vennligst fyll ut dette feltet.</translation>
 <translation id="2508569020611168319">faneliste</translation>
 <translation id="2548326553472216322">Ingen nylige søk</translation>
+<translation id="2561842179657104141">vis flere mediakontroller</translation>
 <translation id="2572483411312390101">spill av</translation>
 <translation id="2613802280814924224">Skriv inn en gyldig verdi. Den nærmeste, gyldige verdien er <ph name="VALID_VALUE" />.</translation>
 <translation id="2653659639078652383">Send</translation>
@@ -71,6 +73,7 @@
 <translation id="3808586225841795776">term</translation>
 <translation id="3822383571486410024">Du må forlenge denne teksten til <ph name="MIN_CHARACTERS" /> tegn eller mer (for øyeblikket bruker du <ph name="CURRENT_LENGTH" /> tegn).</translation>
 <translation id="383465348367842624">En del etterfulgt av «<ph name="ATSIGN" />» kan ikke inneholde symbolet «<ph name="INVALIDCHARACTER" />».</translation>
+<translation id="3846214748874656680">Avslutt fullskjermmodus</translation>
 <translation id="3924558731517983934">program</translation>
 <translation id="3960700977367013758">rullefelt</translation>
 <translation id="4103419683916926126">Millisekunder</translation>
@@ -91,6 +94,7 @@
 <translation id="479989351350248267">søk</translation>
 <translation id="4812940957355064477">Skriv inn et tall.</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> er valgt</translation>
+<translation id="4992066212339426712">Slå på lyden</translation>
 <translation id="49969490063480558">Skriv inn en del etterfulgt av «<ph name="ATSIGN" />». «<ph name="INVALIDADDRESS" />» er ufullstendig.</translation>
 <translation id="5034860022980953847">fremdriftsindikator</translation>
 <translation id="5048533449481078685">listemarkør</translation>
@@ -105,13 +109,17 @@
 <translation id="5468998798572797635">avslutt fullskjerm</translation>
 <translation id="5476505524087279545">fjern merke</translation>
 <translation id="5516424706154626233">datovelger</translation>
+<translation id="5537725057119320332">Cast</translation>
 <translation id="5546461542133609677">slå på lyden</translation>
 <translation id="561939826962581046">time</translation>
 <translation id="5641012560118721995">stopp avspillingen midlertidig</translation>
 <translation id="5643186887447432888">knapp</translation>
+<translation id="5677946354068040947">flere alternativer</translation>
+<translation id="57838592816432529">Kutt lyden</translation>
 <translation id="583281660410589416">Ukjent</translation>
 <translation id="5843503607508392247">Andre</translation>
 <translation id="5860033963881614850">Av</translation>
+<translation id="588258955323874662">Fullskjerm</translation>
 <translation id="5939518447894949180">Tilbakestill</translation>
 <translation id="5944544982112848342">2048 (sterk)</translation>
 <translation id="5966707198760109579">Uke</translation>
@@ -134,12 +142,14 @@
 <translation id="6692633176391053278">stepper</translation>
 <translation id="6739588121953935928">linjal</translation>
 <translation id="6755330956360078551">verktøytips</translation>
+<translation id="6790428901817661496">Spill av</translation>
 <translation id="6820355525329141109">Kunne ikke laste inn programtillegget.</translation>
 <translation id="6843725295806269523">kutt lyd</translation>
 <translation id="6845533974506654842">trykk</translation>
 <translation id="6853785296079745596">skjul teksting</translation>
 <translation id="6885760532393684712">katalog</translation>
 <translation id="6934078000481955284">blokksitat</translation>
+<translation id="6941933287844615239">last ned medier</translation>
 <translation id="7057186640035488495">gå til et annet tidspunkt</translation>
 <translation id="709897737746224366">Sørg for samsvar med det forespurte formatet.</translation>
 <translation id="7223624360433298498">brukt tid</translation>
@@ -148,6 +158,7 @@
 <translation id="7364796246159120393">Velg fil</translation>
 <translation id="739024184232394898">Andre</translation>
 <translation id="7491962110804786152">tab</translation>
+<translation id="7514365320538308">Last ned</translation>
 <translation id="7673697353781729403">Timer</translation>
 <translation id="7720026100085573005">tid som gjenstår</translation>
 <translation id="7740016676195725605">slå av tekstingen</translation>
@@ -164,6 +175,7 @@
 <translation id="819205353528511139">spill av filmen i fullskjermmodus</translation>
 <translation id="8199524924445686405">åååå</translation>
 <translation id="8244226242650769279">bildekart</translation>
+<translation id="8284326494547611709">Teksting</translation>
 <translation id="835897206747267392">Ugyldig verdi</translation>
 <translation id="838869780401515933">merk av</translation>
 <translation id="8433900881053900389">verktøyrad</translation>

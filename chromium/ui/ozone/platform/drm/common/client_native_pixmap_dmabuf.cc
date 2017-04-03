@@ -24,6 +24,8 @@ struct local_dma_buf_sync {
 
 #define LOCAL_DMA_BUF_SYNC_READ (1 << 0)
 #define LOCAL_DMA_BUF_SYNC_WRITE (2 << 0)
+#define LOCAL_DMA_BUF_SYNC_RW \
+  (LOCAL_DMA_BUF_SYNC_READ | LOCAL_DMA_BUF_SYNC_WRITE)
 #define LOCAL_DMA_BUF_SYNC_START (0 << 2)
 #define LOCAL_DMA_BUF_SYNC_END (1 << 2)
 
@@ -39,7 +41,7 @@ namespace {
 void PrimeSyncStart(int dmabuf_fd) {
   struct local_dma_buf_sync sync_start = {0};
 
-  sync_start.flags = LOCAL_DMA_BUF_SYNC_START | LOCAL_DMA_BUF_SYNC_READ;
+  sync_start.flags = LOCAL_DMA_BUF_SYNC_START | LOCAL_DMA_BUF_SYNC_RW;
   if (drmIoctl(dmabuf_fd, LOCAL_DMA_BUF_IOCTL_SYNC, &sync_start))
     PLOG(ERROR) << "Failed DMA_BUF_SYNC_START";
 }
@@ -47,7 +49,7 @@ void PrimeSyncStart(int dmabuf_fd) {
 void PrimeSyncEnd(int dmabuf_fd) {
   struct local_dma_buf_sync sync_end = {0};
 
-  sync_end.flags = LOCAL_DMA_BUF_SYNC_END | LOCAL_DMA_BUF_SYNC_WRITE;
+  sync_end.flags = LOCAL_DMA_BUF_SYNC_END | LOCAL_DMA_BUF_SYNC_RW;
   if (drmIoctl(dmabuf_fd, LOCAL_DMA_BUF_IOCTL_SYNC, &sync_end))
     PLOG(ERROR) << "Failed DMA_BUF_SYNC_END";
 }
@@ -56,22 +58,25 @@ void PrimeSyncEnd(int dmabuf_fd) {
 
 // static
 std::unique_ptr<ClientNativePixmap> ClientNativePixmapDmaBuf::ImportFromDmabuf(
-    int dmabuf_fd,
-    const gfx::Size& size,
-    int stride) {
-  DCHECK_GE(dmabuf_fd, 0);
-  return base::WrapUnique(
-      new ClientNativePixmapDmaBuf(dmabuf_fd, size, stride));
+    const gfx::NativePixmapHandle& handle,
+    const gfx::Size& size) {
+  return base::WrapUnique(new ClientNativePixmapDmaBuf(handle, size));
 }
 
-ClientNativePixmapDmaBuf::ClientNativePixmapDmaBuf(int dmabuf_fd,
-                                                   const gfx::Size& size,
-                                                   int stride)
-    : dmabuf_fd_(dmabuf_fd), size_(size), stride_(stride) {
+ClientNativePixmapDmaBuf::ClientNativePixmapDmaBuf(
+    const gfx::NativePixmapHandle& handle,
+    const gfx::Size& size)
+    : pixmap_handle_(handle), size_(size), data_{0} {
   TRACE_EVENT0("drm", "ClientNativePixmapDmaBuf");
-  size_t map_size = stride_ * size_.height();
+  // TODO(dcastagna): support multiple fds.
+  DCHECK_EQ(1u, handle.fds.size());
+  DCHECK_GE(handle.fds.front().fd, 0);
+  dmabuf_fd_.reset(handle.fds.front().fd);
+
+  DCHECK_GE(handle.planes.back().size, 0u);
+  size_t map_size = handle.planes.back().offset + handle.planes.back().size;
   data_ = mmap(nullptr, map_size, (PROT_READ | PROT_WRITE), MAP_SHARED,
-               dmabuf_fd, 0);
+               dmabuf_fd_.get(), 0);
   if (data_ == MAP_FAILED) {
     PLOG(ERROR) << "Failed mmap().";
     base::TerminateBecauseOutOfMemory(map_size);
@@ -80,15 +85,19 @@ ClientNativePixmapDmaBuf::ClientNativePixmapDmaBuf(int dmabuf_fd,
 
 ClientNativePixmapDmaBuf::~ClientNativePixmapDmaBuf() {
   TRACE_EVENT0("drm", "~ClientNativePixmapDmaBuf");
-  size_t size = stride_ * size_.height();
-  int ret = munmap(data_, size);
+  size_t map_size =
+      pixmap_handle_.planes.back().offset + pixmap_handle_.planes.back().size;
+  int ret = munmap(data_, map_size);
   DCHECK(!ret);
 }
 
-void* ClientNativePixmapDmaBuf::Map() {
+bool ClientNativePixmapDmaBuf::Map() {
   TRACE_EVENT0("drm", "DmaBuf:Map");
-  PrimeSyncStart(dmabuf_fd_.get());
-  return data_;
+  if (data_ != nullptr) {
+    PrimeSyncStart(dmabuf_fd_.get());
+    return true;
+  }
+  return false;
 }
 
 void ClientNativePixmapDmaBuf::Unmap() {
@@ -96,8 +105,15 @@ void ClientNativePixmapDmaBuf::Unmap() {
   PrimeSyncEnd(dmabuf_fd_.get());
 }
 
-void ClientNativePixmapDmaBuf::GetStride(int* stride) const {
-  *stride = stride_;
+void* ClientNativePixmapDmaBuf::GetMemoryAddress(size_t plane) const {
+  DCHECK_LT(plane, pixmap_handle_.planes.size());
+  uint8_t* address = reinterpret_cast<uint8_t*>(data_);
+  return address + pixmap_handle_.planes[plane].offset;
+}
+
+int ClientNativePixmapDmaBuf::GetStride(size_t plane) const {
+  DCHECK_LT(plane, pixmap_handle_.planes.size());
+  return pixmap_handle_.planes[plane].stride;
 }
 
 }  // namespace ui

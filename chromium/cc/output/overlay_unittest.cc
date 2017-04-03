@@ -5,16 +5,16 @@
 #include <stddef.h>
 
 #include <utility>
+#include <vector>
 
 #include "base/memory/ptr_util.h"
 #include "cc/base/region.h"
 #include "cc/output/ca_layer_overlay.h"
-#include "cc/output/compositor_frame.h"
-#include "cc/output/compositor_frame_metadata.h"
 #include "cc/output/filter_operation.h"
 #include "cc/output/gl_renderer.h"
 #include "cc/output/output_surface.h"
 #include "cc/output/output_surface_client.h"
+#include "cc/output/output_surface_frame.h"
 #include "cc/output/overlay_candidate_validator.h"
 #include "cc/output/overlay_processor.h"
 #include "cc/output/overlay_strategy_fullscreen.h"
@@ -35,6 +35,7 @@
 #include "cc/test/test_web_graphics_context_3d.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/events/latency_info.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 
 using testing::_;
@@ -68,13 +69,10 @@ void MailboxReleased(const gpu::SyncToken& sync_token,
 class FullscreenOverlayValidator : public OverlayCandidateValidator {
  public:
   void GetStrategies(OverlayProcessor::StrategyList* strategies) override {
-    strategies->push_back(base::MakeUnique<OverlayStrategyFullscreen>());
+    strategies->push_back(base::MakeUnique<OverlayStrategyFullscreen>(this));
   }
   bool AllowCALayerOverlays() override { return false; }
-  void CheckOverlaySupport(OverlayCandidateList* surfaces) override {
-    // We're not checking for support.
-    ASSERT_TRUE(false);
-  }
+  void CheckOverlaySupport(OverlayCandidateList* surfaces) override {}
 };
 
 class SingleOverlayValidator : public OverlayCandidateValidator {
@@ -150,37 +148,28 @@ class OverlayOutputSurface : public OutputSurface {
  public:
   explicit OverlayOutputSurface(
       scoped_refptr<TestContextProvider> context_provider)
-      : OutputSurface(std::move(context_provider), nullptr, nullptr) {
+      : OutputSurface(std::move(context_provider)) {
     surface_size_ = kDisplaySize;
     device_scale_factor_ = 1;
     is_displayed_as_overlay_plane_ = true;
   }
 
-  void SetScaleFactor(float scale_factor) {
-    device_scale_factor_ = scale_factor;
-  }
-
-  // OutputSurface implementation
+  // OutputSurface implementation.
+  void EnsureBackbuffer() override {}
+  void DiscardBackbuffer() override {}
   void BindFramebuffer() override {
-    OutputSurface::BindFramebuffer();
     bind_framebuffer_count_ += 1;
   }
   uint32_t GetFramebufferCopyTextureFormat() override {
     // TestContextProvider has no real framebuffer, just use RGB.
     return GL_RGB;
   }
-  void SwapBuffers(CompositorFrame frame) override {
-  }
-  void OnSwapBuffersComplete() override { client_->DidSwapBuffersComplete(); }
-
-  void SetOverlayCandidateValidator(OverlayCandidateValidator* validator) {
-    overlay_candidate_validator_.reset(validator);
-  }
-
+  void SwapBuffers(OutputSurfaceFrame frame) override {}
+  bool HasExternalStencilTest() const override { return false; }
+  void ApplyExternalStencil() override {}
   OverlayCandidateValidator* GetOverlayCandidateValidator() const override {
     return overlay_candidate_validator_.get();
   }
-
   bool IsDisplayedAsOverlayPlane() const override {
     return is_displayed_as_overlay_plane_;
   }
@@ -188,6 +177,18 @@ class OverlayOutputSurface : public OutputSurface {
   void set_is_displayed_as_overlay_plane(bool value) {
     is_displayed_as_overlay_plane_ = value;
   }
+  bool SurfaceIsSuspendForRecycle() const override { return false; }
+
+  void OnSwapBuffersComplete() { client_->DidSwapBuffersComplete(); }
+
+  void SetScaleFactor(float scale_factor) {
+    device_scale_factor_ = scale_factor;
+  }
+
+  void SetOverlayCandidateValidator(OverlayCandidateValidator* validator) {
+    overlay_candidate_validator_.reset(validator);
+  }
+
   unsigned bind_framebuffer_count() const { return bind_framebuffer_count_; }
 
  private:
@@ -356,7 +357,7 @@ class OverlayTest : public testing::Test {
 
     shared_bitmap_manager_.reset(new TestSharedBitmapManager());
     resource_provider_ = FakeResourceProvider::Create(
-        output_surface_.get(), shared_bitmap_manager_.get());
+        provider_.get(), shared_bitmap_manager_.get());
 
     overlay_processor_.reset(new OverlayProcessor(output_surface_.get()));
     overlay_processor_->Initialize();
@@ -395,8 +396,7 @@ TEST(OverlayTest, OverlaysProcessorHasStrategy) {
   std::unique_ptr<SharedBitmapManager> shared_bitmap_manager(
       new TestSharedBitmapManager());
   std::unique_ptr<ResourceProvider> resource_provider =
-      FakeResourceProvider::Create(&output_surface,
-                                   shared_bitmap_manager.get());
+      FakeResourceProvider::Create(provider.get(), shared_bitmap_manager.get());
 
   std::unique_ptr<DefaultOverlayProcessor> overlay_processor(
       new DefaultOverlayProcessor(&output_surface));
@@ -423,10 +423,12 @@ TEST_F(FullscreenOverlayTest, SuccessfulOverlay) {
   ASSERT_EQ(1U, candidate_list.size());
 
   RenderPass* main_pass = pass.get();
-  // Check that the quad is gone.
-  EXPECT_EQ(1U, main_pass->quad_list.size());
+  // Check that all the quads are gone.
+  EXPECT_EQ(0U, main_pass->quad_list.size());
+  // Check that we have only one overlay.
+  EXPECT_EQ(1U, candidate_list.size());
   // Check that the right resource id got extracted.
-  EXPECT_EQ(original_resource_id, candidate_list.back().resource_id);
+  EXPECT_EQ(original_resource_id, candidate_list.front().resource_id);
 }
 
 TEST_F(FullscreenOverlayTest, ResourceSizeInPixelsFail) {
@@ -490,6 +492,34 @@ TEST_F(FullscreenOverlayTest, NotCoveringFullscreenFail) {
   RenderPass* main_pass = pass.get();
   // Check that the quad is not gone.
   EXPECT_EQ(1U, main_pass->quad_list.size());
+}
+
+TEST_F(FullscreenOverlayTest, RemoveFullscreenQuadFromQuadList) {
+  std::unique_ptr<RenderPass> pass = CreateRenderPass();
+
+  // Add something in front of it that is fully transparent.
+  pass->shared_quad_state_list.back()->opacity = 0.0f;
+  CreateOpaqueQuadAt(resource_provider_.get(),
+                     pass->shared_quad_state_list.back(), pass.get(),
+                     kOverlayTopLeftRect);
+
+  SharedQuadState* shared_state = pass->CreateAndAppendSharedQuadState();
+  shared_state->opacity = 1.f;
+  CreateFullscreenCandidateQuad(resource_provider_.get(),
+                                pass->shared_quad_state_list.back(),
+                                pass.get());
+
+  // Check for potential candidates.
+  OverlayCandidateList candidate_list;
+  overlay_processor_->ProcessForOverlays(resource_provider_.get(), pass.get(),
+                                         &candidate_list, nullptr,
+                                         &damage_rect_);
+  ASSERT_EQ(1U, candidate_list.size());
+
+  // Check that the fullscreen quad is gone.
+  for (const DrawQuad* quad : pass->quad_list) {
+    EXPECT_NE(pass->output_rect, quad->rect);
+  }
 }
 
 TEST_F(SingleOverlayOnTopTest, SuccessfulOverlay) {
@@ -1281,8 +1311,7 @@ class GLRendererWithOverlaysTest : public testing::Test {
     provider_ = TestContextProvider::Create();
     output_surface_.reset(new OverlayOutputSurface(provider_));
     CHECK(output_surface_->BindToClient(&output_surface_client_));
-    resource_provider_ =
-        FakeResourceProvider::Create(output_surface_.get(), nullptr);
+    resource_provider_ = FakeResourceProvider::Create(provider_.get(), nullptr);
 
     provider_->support()->SetScheduleOverlayPlaneCallback(base::Bind(
         &MockOverlayScheduler::Schedule, base::Unretained(&scheduler_)));
@@ -1298,17 +1327,16 @@ class GLRendererWithOverlaysTest : public testing::Test {
     renderer_->SetVisible(true);
   }
 
-  void DrawFrame(RenderPassList* pass_list, const gfx::Rect& viewport_rect) {
-    renderer_->DrawFrame(pass_list, 1.f, gfx::ColorSpace(), viewport_rect,
-                         viewport_rect);
+  void DrawFrame(RenderPassList* pass_list, const gfx::Size& viewport_size) {
+    renderer_->DrawFrame(pass_list, 1.f, gfx::ColorSpace(), viewport_size);
   }
   void SwapBuffers() {
-    renderer_->SwapBuffers(CompositorFrameMetadata());
+    renderer_->SwapBuffers(std::vector<ui::LatencyInfo>());
     output_surface_->OnSwapBuffersComplete();
     renderer_->SwapBuffersComplete();
   }
   void SwapBuffersWithoutComplete() {
-    renderer_->SwapBuffers(CompositorFrameMetadata());
+    renderer_->SwapBuffers(std::vector<ui::LatencyInfo>());
   }
   void SwapBuffersComplete() {
     output_surface_->OnSwapBuffersComplete();
@@ -1337,7 +1365,7 @@ TEST_F(GLRendererWithOverlaysTest, OverlayQuadNotDrawn) {
   bool use_validator = true;
   Init(use_validator);
   renderer_->set_expect_overlays(true);
-  gfx::Rect viewport_rect(16, 16);
+  gfx::Size viewport_size(16, 16);
 
   std::unique_ptr<RenderPass> pass = CreateRenderPass();
 
@@ -1363,7 +1391,7 @@ TEST_F(GLRendererWithOverlaysTest, OverlayQuadNotDrawn) {
                                    kOverlayBottomRightRect,
                                    BoundingRect(kUVTopLeft, kUVBottomRight)))
       .Times(1);
-  DrawFrame(&pass_list, viewport_rect);
+  DrawFrame(&pass_list, viewport_size);
   EXPECT_EQ(1U, output_surface_->bind_framebuffer_count());
 
   SwapBuffers();
@@ -1376,7 +1404,7 @@ TEST_F(GLRendererWithOverlaysTest, OccludedQuadInUnderlay) {
   bool use_validator = true;
   Init(use_validator);
   renderer_->set_expect_overlays(true);
-  gfx::Rect viewport_rect(16, 16);
+  gfx::Size viewport_size(16, 16);
 
   std::unique_ptr<RenderPass> pass = CreateRenderPass();
 
@@ -1403,7 +1431,7 @@ TEST_F(GLRendererWithOverlaysTest, OccludedQuadInUnderlay) {
               Schedule(-1, gfx::OVERLAY_TRANSFORM_NONE, _, kOverlayRect,
                        BoundingRect(kUVTopLeft, kUVBottomRight)))
       .Times(1);
-  DrawFrame(&pass_list, viewport_rect);
+  DrawFrame(&pass_list, viewport_size);
   EXPECT_EQ(1U, output_surface_->bind_framebuffer_count());
 
   SwapBuffers();
@@ -1416,7 +1444,7 @@ TEST_F(GLRendererWithOverlaysTest, NoValidatorNoOverlay) {
   bool use_validator = false;
   Init(use_validator);
   renderer_->set_expect_overlays(false);
-  gfx::Rect viewport_rect(16, 16);
+  gfx::Size viewport_size(16, 16);
 
   std::unique_ptr<RenderPass> pass = CreateRenderPass();
 
@@ -1436,7 +1464,7 @@ TEST_F(GLRendererWithOverlaysTest, NoValidatorNoOverlay) {
   output_surface_->set_is_displayed_as_overlay_plane(false);
   EXPECT_CALL(*renderer_, DoDrawQuad(_, _, _)).Times(3);
   EXPECT_CALL(scheduler_, Schedule(_, _, _, _, _)).Times(0);
-  DrawFrame(&pass_list, viewport_rect);
+  DrawFrame(&pass_list, viewport_size);
   EXPECT_EQ(1U, output_surface_->bind_framebuffer_count());
   SwapBuffers();
   Mock::VerifyAndClearExpectations(renderer_.get());
@@ -1450,7 +1478,7 @@ TEST_F(GLRendererWithOverlaysTest, OccludedQuadNotDrawnWhenPartialSwapEnabled) {
   bool use_validator = true;
   Init(use_validator);
   renderer_->set_expect_overlays(true);
-  gfx::Rect viewport_rect(16, 16);
+  gfx::Size viewport_size(16, 16);
 
   std::unique_ptr<RenderPass> pass = CreateRenderPass();
 
@@ -1468,7 +1496,7 @@ TEST_F(GLRendererWithOverlaysTest, OccludedQuadNotDrawnWhenPartialSwapEnabled) {
   output_surface_->set_is_displayed_as_overlay_plane(true);
   EXPECT_CALL(*renderer_, DoDrawQuad(_, _, _)).Times(0);
   EXPECT_CALL(scheduler_, Schedule(_, _, _, _, _)).Times(2);
-  DrawFrame(&pass_list, viewport_rect);
+  DrawFrame(&pass_list, viewport_size);
   EXPECT_EQ(1U, output_surface_->bind_framebuffer_count());
   SwapBuffers();
   Mock::VerifyAndClearExpectations(renderer_.get());
@@ -1481,7 +1509,7 @@ TEST_F(GLRendererWithOverlaysTest, OccludedQuadNotDrawnWhenEmptySwapAllowed) {
   bool use_validator = true;
   Init(use_validator);
   renderer_->set_expect_overlays(true);
-  gfx::Rect viewport_rect(16, 16);
+  gfx::Size viewport_size(16, 16);
 
   std::unique_ptr<RenderPass> pass = CreateRenderPass();
 
@@ -1500,7 +1528,7 @@ TEST_F(GLRendererWithOverlaysTest, OccludedQuadNotDrawnWhenEmptySwapAllowed) {
   output_surface_->set_is_displayed_as_overlay_plane(true);
   EXPECT_CALL(*renderer_, DoDrawQuad(_, _, _)).Times(0);
   EXPECT_CALL(scheduler_, Schedule(_, _, _, _, _)).Times(2);
-  DrawFrame(&pass_list, viewport_rect);
+  DrawFrame(&pass_list, viewport_size);
   EXPECT_EQ(1U, output_surface_->bind_framebuffer_count());
   SwapBuffers();
   Mock::VerifyAndClearExpectations(renderer_.get());
@@ -1851,6 +1879,23 @@ TEST_F(CALayerOverlayRPDQTest, RenderPassDrawQuadUnsupportedFilter) {
                 kOverlayRect, render_pass_id_, 0, gfx::Vector2dF(), gfx::Size(),
                 filters_, gfx::Vector2dF(1, 1), gfx::PointF(),
                 background_filters_);
+  ProcessForOverlays();
+  EXPECT_EQ(0U, ca_layer_list_.size());
+}
+
+TEST_F(CALayerOverlayRPDQTest, TooManyRenderPassDrawQuads) {
+  filters_.Append(FilterOperation::CreateBlurFilter(0.8f));
+  int count = 35;
+
+  for (int i = 0; i < count; ++i) {
+    RenderPassDrawQuad* quad =
+        pass_->CreateAndAppendDrawQuad<RenderPassDrawQuad>();
+    quad->SetNew(pass_->shared_quad_state_list.back(), kOverlayRect,
+                 kOverlayRect, render_pass_id_, 2, gfx::Vector2dF(),
+                 gfx::Size(), filters_, gfx::Vector2dF(1, 1), gfx::PointF(),
+                 background_filters_);
+  }
+
   ProcessForOverlays();
   EXPECT_EQ(0U, ca_layer_list_.size());
 }

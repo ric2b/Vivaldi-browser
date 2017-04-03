@@ -25,7 +25,7 @@
 #include "base/macros.h"
 #import "base/mac/scoped_nsobject.h"
 #include "base/memory/ref_counted.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -64,13 +64,13 @@
 #include "content/public/browser/browser_plugin_guest_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/native_web_keyboard_event.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view_frame_subscriber.h"
 #import "content/public/browser/render_widget_host_view_mac_delegate.h"
 #include "content/public/browser/web_contents.h"
 #include "gpu/ipc/common/gpu_messages.h"
 #include "skia/ext/platform_canvas.h"
 #include "skia/ext/skia_utils_mac.h"
-#include "third_party/WebKit/public/platform/WebScreenInfo.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 #import "ui/base/clipboard/clipboard_util_mac.h"
 #include "ui/base/cocoa/animation_utils.h"
@@ -405,22 +405,16 @@ SkColor RenderWidgetHostViewMac::BrowserCompositorMacGetGutterColor(
 
 void RenderWidgetHostViewMac::
     BrowserCompositorMacSendReclaimCompositorResources(
-        int output_surface_id,
+        int compositor_frame_sink_id,
         bool is_swap_ack,
         const cc::ReturnedResourceArray& resources) {
   render_widget_host_->Send(new ViewMsg_ReclaimCompositorResources(
-      render_widget_host_->GetRoutingID(), output_surface_id, is_swap_ack,
-      resources));
+      render_widget_host_->GetRoutingID(), compositor_frame_sink_id,
+      is_swap_ack, resources));
 }
 
 void RenderWidgetHostViewMac::BrowserCompositorMacOnLostCompositorResources() {
   render_widget_host_->ScheduleComposite();
-}
-
-void RenderWidgetHostViewMac::BrowserCompositorMacUpdateVSyncParameters(
-    const base::TimeTicks& timebase,
-    const base::TimeDelta& interval) {
-  render_widget_host_->UpdateVSyncParameters(timebase, interval);
 }
 
 void RenderWidgetHostViewMac::BrowserCompositorMacSendBeginFrame(
@@ -489,9 +483,8 @@ RenderWidgetHostViewMac::RenderWidgetHostViewMac(RenderWidgetHost* widget,
   // namespace for surface-based hit testing.
   if (render_widget_host_->delegate() &&
       render_widget_host_->delegate()->GetInputEventRouter()) {
-    render_widget_host_->delegate()
-        ->GetInputEventRouter()
-        ->AddSurfaceClientIdOwner(GetSurfaceClientId(), this);
+    render_widget_host_->delegate()->GetInputEventRouter()->AddFrameSinkIdOwner(
+        GetFrameSinkId(), this);
   }
 
   RenderViewHost* rvh = RenderViewHost::From(render_widget_host_);
@@ -503,6 +496,17 @@ RenderWidgetHostViewMac::RenderWidgetHostViewMac(RenderWidgetHost* widget,
 
   if (GetTextInputManager())
     GetTextInputManager()->AddObserver(this);
+
+  // NOTE(andre@vivaldi.com) : This is a backport of
+  // https://codereview.chromium.org/2451953004
+  // "Because of the way Mac pumps messages during resize, (see the code
+  // in RenderMessageFilter::OnMessageReceived), SetNeedsBeginFrame
+  // messages are not delayed on Mac.  This leads to creation-time
+  // raciness where renderer sends a SetNeedsBeginFrame(true) before
+  // the renderer host is created to recieve it.  In general, all
+  // renderers want begin frames initially anyway, so start this value
+  // at true here to avoid startup raciness and decrease latency."
+  SetNeedsBeginFrames(true);
 }
 
 RenderWidgetHostViewMac::~RenderWidgetHostViewMac() {
@@ -693,7 +697,7 @@ void RenderWidgetHostViewMac::UpdateDisplayLink() {
   }
 }
 
-void RenderWidgetHostViewMac::SendVSyncParametersToRenderer() {
+void RenderWidgetHostViewMac::UpdateDisplayVSyncParameters() {
   if (!render_widget_host_ || !display_link_.get())
     return;
 
@@ -708,6 +712,18 @@ void RenderWidgetHostViewMac::SendVSyncParametersToRenderer() {
 
 void RenderWidgetHostViewMac::SpeakText(const std::string& text) {
   [NSApp speakString:base::SysUTF8ToNSString(text)];
+}
+
+RenderWidgetHostViewBase*
+    RenderWidgetHostViewMac::GetFocusedViewForTextSelection() {
+  // We obtain the TextSelection from focused RWH which is obtained from the
+  // frame tree. BrowserPlugin-based guests' RWH is not part of the frame tree
+  // and the focused RWH will be that of the embedder which is incorrect. In
+  // this case we should use TextSelection for |this| since RWHV for guest
+  // forwards text selection information to its platform view.
+  return is_guest_view_hack_ ? this : GetFocusedWidget()
+                                          ? GetFocusedWidget()->GetView()
+                                          : nullptr;
 }
 
 void RenderWidgetHostViewMac::UpdateBackingStoreProperties() {
@@ -926,21 +942,58 @@ void RenderWidgetHostViewMac::OnImeCompositionRangeChanged(
   composition_bounds_ = info->character_bounds;
 }
 
+void RenderWidgetHostViewMac::OnSelectionBoundsChanged(
+    TextInputManager* text_input_manager,
+    RenderWidgetHostViewBase* updated_view) {
+  DCHECK_EQ(GetTextInputManager(), text_input_manager);
+
+  // The rest of the code is to support the Mac Zoom feature tracking the
+  // text caret; we can skip it if that feature is not currently enabled.
+  if (!UAZoomEnabled())
+    return;
+
+  RenderWidgetHostViewBase* focused_view = GetFocusedViewForTextSelection();
+  if (!focused_view)
+    return;
+
+  const TextInputManager::SelectionRegion* region =
+      GetTextInputManager()->GetSelectionRegion(focused_view);
+  if (!region)
+    return;
+
+  NSWindow* enclosing_window = ApparentWindowForView(cocoa_view_);
+  if (!enclosing_window)
+    return;
+
+  // Create a rectangle for the edge of the selection focus, which will be
+  // the same as the caret position if the selection is collapsed. That's
+  // what we want to try to keep centered on-screen if possible.
+  gfx::Rect gfx_caret_rect(region->focus.edge_top_rounded().x(),
+                           region->focus.edge_top_rounded().y(),
+                           1, region->focus.GetHeight());
+
+  // Convert the caret rect to CG-style flipped widget-relative coordinates.
+  NSRect caret_rect = NSRectFromCGRect(gfx_caret_rect.ToCGRect());
+  caret_rect.origin.y = NSHeight([cocoa_view_ bounds]) -
+      (caret_rect.origin.y + caret_rect.size.height);
+
+  // Now convert that to screen coordinates.
+  caret_rect = [cocoa_view_ convertRect:caret_rect toView:nil];
+  caret_rect = [enclosing_window convertRectToScreen:caret_rect];
+
+  // Finally, flip it again because UAZoomChangeFocus wants unflipped screen
+  // coordinates, and call UAZoomChangeFocus to initiate the scroll.
+  caret_rect.origin.y = FlipYFromRectToScreen(
+      caret_rect.origin.y, caret_rect.size.height);
+  UAZoomChangeFocus(&caret_rect, &caret_rect, kUAZoomFocusTypeInsertionPoint);
+}
+
 void RenderWidgetHostViewMac::OnTextSelectionChanged(
     TextInputManager* text_input_manager,
     RenderWidgetHostViewBase* updated_view) {
   DCHECK_EQ(GetTextInputManager(), text_input_manager);
 
-  // We obtain the TextSelection from focused RWH which is obtained from the
-  // frame tree. BrowserPlugin-based guests' RWH is not part of the frame tree
-  // and the focused RWH will be that of the embedder which is incorrect. In
-  // this case we should use TextSelection for |this| since RWHV for guest
-  // forwards text selection information to its platform view.
-  RenderWidgetHostViewBase* focused_view =
-      is_guest_view_hack_ ? this : GetFocusedWidget()
-                                       ? GetFocusedWidget()->GetView()
-                                       : nullptr;
-
+  RenderWidgetHostViewBase* focused_view = GetFocusedViewForTextSelection();
   if (!focused_view)
     return;
 
@@ -972,7 +1025,7 @@ void RenderWidgetHostViewMac::RenderProcessGone(base::TerminationStatus status,
 }
 
 void RenderWidgetHostViewMac::Destroy() {
-  // SurfaceClientIds registered with RenderWidgetHostInputEventRouter
+  // FrameSinkIds registered with RenderWidgetHostInputEventRouter
   // have already been cleared when RenderWidgetHostViewBase notified its
   // observers of our impending destruction.
   [[NSNotificationCenter defaultCenter]
@@ -1324,8 +1377,22 @@ bool RenderWidgetHostViewMac::HasAcceleratedSurface(
   return false;
 }
 
-void RenderWidgetHostViewMac::OnSwapCompositorFrame(uint32_t output_surface_id,
-                                                    cc::CompositorFrame frame) {
+void RenderWidgetHostViewMac::FocusedNodeChanged(
+    bool is_editable_node,
+    const gfx::Rect& node_bounds_in_screen) {
+  // If the Mac Zoom feature is enabled, update it with the bounds of the
+  // current focused node so that it can ensure that it's scrolled into view.
+  // Don't do anything if it's an editable node, as this will be handled by
+  // OnSelectionBoundsChanged instead.
+  if (UAZoomEnabled() && !is_editable_node) {
+    NSRect bounds = NSRectFromCGRect(node_bounds_in_screen.ToCGRect());
+    UAZoomChangeFocus(&bounds, NULL, kUAZoomFocusTypeOther);
+  }
+}
+
+void RenderWidgetHostViewMac::OnSwapCompositorFrame(
+    uint32_t compositor_frame_sink_id,
+    cc::CompositorFrame frame) {
   TRACE_EVENT0("browser", "RenderWidgetHostViewMac::OnSwapCompositorFrame");
 
   last_scroll_offset_ = frame.metadata.root_scroll_offset;
@@ -1333,9 +1400,9 @@ void RenderWidgetHostViewMac::OnSwapCompositorFrame(uint32_t output_surface_id,
   page_at_minimum_scale_ =
       frame.metadata.page_scale_factor == frame.metadata.min_page_scale_factor;
   if (frame.delegated_frame_data) {
-    browser_compositor_->SwapCompositorFrame(output_surface_id,
+    browser_compositor_->SwapCompositorFrame(compositor_frame_sink_id,
                                              std::move(frame));
-    SendVSyncParametersToRenderer();
+    UpdateDisplayVSyncParameters();
   } else {
     DLOG(ERROR) << "Received unexpected frame type.";
     bad_message::ReceivedBadMessage(render_widget_host_->GetProcess(),
@@ -1419,11 +1486,11 @@ RenderWidgetHostViewMac::CreateSyntheticGestureTarget() {
       new SyntheticGestureTargetMac(host, cocoa_view_));
 }
 
-uint32_t RenderWidgetHostViewMac::GetSurfaceClientId() {
-  return browser_compositor_->GetDelegatedFrameHost()->GetSurfaceClientId();
+cc::FrameSinkId RenderWidgetHostViewMac::GetFrameSinkId() {
+  return browser_compositor_->GetDelegatedFrameHost()->GetFrameSinkId();
 }
 
-uint32_t RenderWidgetHostViewMac::SurfaceClientIdAtPoint(
+cc::FrameSinkId RenderWidgetHostViewMac::FrameSinkIdAtPoint(
     cc::SurfaceHittestDelegate* delegate,
     const gfx::Point& point,
     gfx::Point* transformed_point) {
@@ -1441,8 +1508,8 @@ uint32_t RenderWidgetHostViewMac::SurfaceClientIdAtPoint(
   // It is possible that the renderer has not yet produced a surface, in which
   // case we return our current namespace.
   if (id.is_null())
-    return GetSurfaceClientId();
-  return id.client_id();
+    return GetFrameSinkId();
+  return id.frame_sink_id();
 }
 
 bool RenderWidgetHostViewMac::ShouldRouteEvent(
@@ -1867,7 +1934,7 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
   // simply confirm all ongoing composition here.
   if (type == NSLeftMouseDown || type == NSRightMouseDown ||
       type == NSOtherMouseDown) {
-    [self confirmComposition];
+    [self finishComposingText];
   }
 
   WebMouseEvent event = WebMouseEventBuilder::Build(theEvent, self);
@@ -2094,7 +2161,7 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
 
   // Then send keypress and/or composition related events.
   // If there was a marked text or the text to be inserted is longer than 1
-  // character, then we send the text by calling ConfirmComposition().
+  // character, then we send the text by calling FinishComposingText().
   // Otherwise, if the text to be inserted only contains 1 character, then we
   // can just send a keypress event which is fabricated by changing the type of
   // the keydown event, so that we can retain all necessary informations, such
@@ -2106,8 +2173,7 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
   BOOL textInserted = NO;
   if (textToBeInserted_.length() >
       ((hasMarkedText_ || oldHasMarkedText) ? 0u : 1u)) {
-    widgetHost->ImeConfirmComposition(
-        textToBeInserted_, gfx::Range::InvalidRange(), false);
+    widgetHost->ImeCommitText(textToBeInserted_, gfx::Range::InvalidRange(), 0);
     textInserted = YES;
   }
 
@@ -2124,8 +2190,7 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
                                   NSMaxRange(markedTextSelectedRange_));
   } else if (oldHasMarkedText && !hasMarkedText_ && !textInserted) {
     if (unmarkTextCalled_) {
-      widgetHost->ImeConfirmComposition(
-          base::string16(), gfx::Range::InvalidRange(), false);
+      widgetHost->ImeFinishComposingText(false);
     } else {
       widgetHost->ImeCancelComposition();
     }
@@ -2325,15 +2390,43 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
 }
 
 - (void)showLookUpDictionaryOverlayAtPoint:(NSPoint)point {
+  gfx::Point rootPoint(point.x, NSHeight([self frame]) - point.y);
+  gfx::Point transformedPoint;
+  if (!renderWidgetHostView_->render_widget_host_ ||
+      !renderWidgetHostView_->render_widget_host_->delegate() ||
+      !renderWidgetHostView_->render_widget_host_->delegate()
+           ->GetInputEventRouter())
+    return;
+
+  RenderWidgetHostImpl* widgetHost =
+      renderWidgetHostView_->render_widget_host_->delegate()
+          ->GetInputEventRouter()
+          ->GetRenderWidgetHostAtPoint(renderWidgetHostView_.get(), rootPoint,
+                                       &transformedPoint);
+  if (!widgetHost)
+    return;
+
+  // TODO(ekaramad): The position reported by the renderer is with respect to
+  // |widgetHost|'s coordinate space with y-axis inverted to conform to AppKit
+  // coordinate system. The point will need to be transformed into root view's
+  // coordinate system (RenderWidgetHostViewMac in this case). However, since
+  // the callback is invoked on IO thread it will require some thread hopping to
+  // do so. For this reason, for now, we accept this non-ideal way of fixing the
+  // point offset manually from the view bounds. This should be revisited when
+  // fixing issues in TextInputClientMac (https://crbug.com/643233).
+  gfx::Rect root_box = renderWidgetHostView_->GetViewBounds();
+  gfx::Rect view_box = widgetHost->GetView()->GetViewBounds();
+
   TextInputClientMac::GetInstance()->GetStringAtPoint(
-      renderWidgetHostView_->render_widget_host_,
-      gfx::Point(point.x, NSHeight([self frame]) - point.y),
+      widgetHost, transformedPoint,
       ^(NSAttributedString* string, NSPoint baselinePoint) {
+        baselinePoint.x += view_box.origin().x() - root_box.origin().x();
+        baselinePoint.y +=
+            root_box.bottom_left().y() - view_box.bottom_left().y();
         [self showLookUpDictionaryOverlayInternal:string
                                     baselinePoint:baselinePoint
                                        targetView:self];
-      }
-  );
+      });
 }
 
 // This is invoked only on 10.8 or newer when the user taps a word using
@@ -2417,7 +2510,7 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
 
 // Called repeatedly during a pinch gesture, with incremental change values.
 - (void)magnifyWithEvent:(NSEvent*)event {
-  if (vivaldi::IsVivaldiRunning() && base::mac::IsOSYosemiteOrLater()) {
+  if (vivaldi::IsVivaldiRunning() && base::mac::IsAtLeastOS10_10()) {
     if (event.phase == NSEventPhaseBegan) {
       [self beginGestureWithEvent:event];
       return;
@@ -2869,10 +2962,25 @@ extern NSString *NSTextInputReplacementRangeAttributeName;
   thePoint = [self convertPoint:thePoint fromView:nil];
   thePoint.y = NSHeight([self frame]) - thePoint.y;
 
+  if (!renderWidgetHostView_->render_widget_host_ ||
+      !renderWidgetHostView_->render_widget_host_->delegate() ||
+      !renderWidgetHostView_->render_widget_host_->delegate()
+           ->GetInputEventRouter())
+    return NSNotFound;
+
+  gfx::Point rootPoint(thePoint.x, thePoint.y);
+  gfx::Point transformedPoint;
+  RenderWidgetHostImpl* widgetHost =
+      renderWidgetHostView_->render_widget_host_->delegate()
+          ->GetInputEventRouter()
+          ->GetRenderWidgetHostAtPoint(renderWidgetHostView_.get(), rootPoint,
+                                       &transformedPoint);
+  if (!widgetHost)
+    return NSNotFound;
+
   NSUInteger index =
       TextInputClientMac::GetInstance()->GetCharacterIndexAtPoint(
-          renderWidgetHostView_->render_widget_host_,
-          gfx::Point(thePoint.x, thePoint.y));
+          widgetHost, transformedPoint);
   return index;
 }
 
@@ -3005,12 +3113,11 @@ extern NSString *NSTextInputReplacementRangeAttributeName;
   markedTextSelectedRange_ = NSMakeRange(NSNotFound, 0);
   underlines_.clear();
 
-  // If we are handling a key down event, then ConfirmComposition() will be
+  // If we are handling a key down event, then FinishComposingText() will be
   // called in keyEvent: method.
   if (!handlingKeyDown_) {
     if (renderWidgetHostView_->GetActiveWidget()) {
-      renderWidgetHostView_->GetActiveWidget()->ImeConfirmComposition(
-          base::string16(), gfx::Range::InvalidRange(), false);
+      renderWidgetHostView_->GetActiveWidget()->ImeFinishComposingText(false);
     }
   } else {
     unmarkTextCalled_ = YES;
@@ -3111,8 +3218,8 @@ extern NSString *NSTextInputReplacementRangeAttributeName;
   } else {
     gfx::Range replacement_range(replacementRange);
     if (renderWidgetHostView_->GetActiveWidget()) {
-      renderWidgetHostView_->GetActiveWidget()->ImeConfirmComposition(
-          base::SysNSStringToUTF16(im_text), replacement_range, false);
+      renderWidgetHostView_->GetActiveWidget()->ImeCommitText(
+          base::SysNSStringToUTF16(im_text), replacement_range, 0);
     }
   }
 
@@ -3145,8 +3252,14 @@ extern NSString *NSTextInputReplacementRangeAttributeName;
 - (void)viewDidChangeBackingProperties {
   NSScreen* screen = [[self window] screen];
   if (screen) {
+    CGColorSpaceRef color_space = [[screen colorSpace] CGColorSpace];
+    // On Sierra, we need to operate in a single screen's color space because
+    // IOSurfaces do not opt-out of color correction.
+    // https://crbug.com/654488
+    if (base::mac::IsAtLeastOS10_12())
+      color_space = base::mac::GetSystemColorSpace();
     gfx::ICCProfile icc_profile =
-        gfx::ICCProfile::FromCGColorSpace([[screen colorSpace] CGColorSpace]);
+        gfx::ICCProfile::FromCGColorSpace(color_space);
     renderWidgetHostView_->browser_compositor_->SetDisplayColorSpace(
         icc_profile.GetColorSpace());
   }
@@ -3223,30 +3336,20 @@ extern NSString *NSTextInputReplacementRangeAttributeName;
   if (!hasMarkedText_)
     return;
 
-  // Cancel the ongoing composition. [NSInputManager markedTextAbandoned:]
-  // doesn't call any NSTextInput functions, such as setMarkedText or
-  // insertText. So, we need to send an IPC message to a renderer so it can
-  // delete the composition node.
-  // TODO(erikchen): NSInputManager is deprecated since OSX 10.6. Switch to
-  // NSTextInputContext. http://www.crbug.com/479010.
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-  NSInputManager *currentInputManager = [NSInputManager currentInputManager];
-  [currentInputManager markedTextAbandoned:self];
-#pragma clang diagnostic pop
+  NSTextInputContext* inputContext = [self inputContext];
+  [inputContext discardMarkedText];
 
   hasMarkedText_ = NO;
   // Should not call [self unmarkText] here, because it'll send unnecessary
   // cancel composition IPC message to the renderer.
 }
 
-- (void)confirmComposition {
+- (void)finishComposingText {
   if (!hasMarkedText_)
     return;
 
   if (renderWidgetHostView_->GetActiveWidget()) {
-    renderWidgetHostView_->GetActiveWidget()->ImeConfirmComposition(
-        base::string16(), gfx::Range::InvalidRange(), false);
+    renderWidgetHostView_->GetActiveWidget()->ImeFinishComposingText(false);
   }
 
   [self cancelComposition];
@@ -3313,7 +3416,7 @@ extern NSString *NSTextInputReplacementRangeAttributeName;
 
   // If the user is currently using an IME, confirm the IME input,
   // and then insert the text from the service, the same as TextEdit and Safari.
-  [self confirmComposition];
+  [self finishComposingText];
   [self insertText:string];
   return YES;
 }

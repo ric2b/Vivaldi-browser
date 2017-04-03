@@ -10,25 +10,24 @@
 
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
-#include "components/browser_sync/browser/profile_sync_service_mock.h"
+#include "components/browser_sync/profile_sync_service_mock.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/notification_types.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
+class KeyedService;
+class Profile;
+class TestingProfile;
+
 namespace content {
 class BrowserContext;
 }
 
-namespace sync_driver {
+namespace syncer {
 class SyncClient;
 }
-
-class KeyedService;
-class Profile;
-class ProfileSyncServiceMock;
-class TestingProfile;
 
 ACTION_P(Notify, type) {
   content::NotificationService::current()->Notify(
@@ -43,10 +42,11 @@ ACTION(QuitUIMessageLoop) {
 }
 
 // Helper methods for constructing ProfileSyncService mocks.
-ProfileSyncService::InitParams CreateProfileSyncServiceParamsForTest(
-    Profile* profile);
-ProfileSyncService::InitParams CreateProfileSyncServiceParamsForTest(
-    std::unique_ptr<sync_driver::SyncClient> sync_client,
+browser_sync::ProfileSyncService::InitParams
+CreateProfileSyncServiceParamsForTest(Profile* profile);
+browser_sync::ProfileSyncService::InitParams
+CreateProfileSyncServiceParamsForTest(
+    std::unique_ptr<syncer::SyncClient> sync_client,
     Profile* profile);
 
 // A utility used by sync tests to create a TestingProfile with a Google

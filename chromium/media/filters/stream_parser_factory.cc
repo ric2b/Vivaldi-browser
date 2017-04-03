@@ -8,7 +8,7 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -358,28 +358,8 @@ static bool VerifyCodec(
 #if defined(OS_ANDROID)
       // TODO(wolenetz, dalecurtis): This should instead use MimeUtil() to avoid
       // duplication of subtle Android behavior.  http://crbug.com/587303.
-      if (codec_info->tag == CodecInfo::HISTOGRAM_H264) {
-        if (media::IsUnifiedMediaPipelineEnabled() &&
-            !media::HasPlatformDecoderSupport()) {
-          return false;
-        }
-
-        if (!MediaCodecUtil::IsMediaCodecAvailable())
-          return false;
-      }
-      if (codec_info->tag == CodecInfo::HISTOGRAM_VP8 &&
-          !media::MediaCodecUtil::IsVp8DecoderAvailable() &&
-          !media::IsUnifiedMediaPipelineEnabled()) {
-        return false;
-      }
-      if (codec_info->tag == CodecInfo::HISTOGRAM_VP9 &&
-          !media::MediaCodecUtil::IsVp9DecoderAvailable() &&
-          !media::IsUnifiedMediaPipelineEnabled()) {
-        return false;
-      }
-      if (codec_info->tag == CodecInfo::HISTOGRAM_OPUS &&
-          !media::PlatformHasOpusSupport() &&
-          !media::IsUnifiedMediaPipelineEnabled()) {
+      if (codec_info->tag == CodecInfo::HISTOGRAM_H264 &&
+          !media::HasPlatformDecoderSupport()) {
         return false;
       }
 #endif
@@ -491,21 +471,14 @@ bool StreamParserFactory::IsTypeSupported(
 std::unique_ptr<StreamParser> StreamParserFactory::Create(
     const std::string& type,
     const std::vector<std::string>& codecs,
-    const scoped_refptr<MediaLog>& media_log,
-    bool* has_audio,
-    bool* has_video) {
+    const scoped_refptr<MediaLog>& media_log) {
   std::unique_ptr<StreamParser> stream_parser;
   ParserFactoryFunction factory_function;
   std::vector<CodecInfo::HistogramTag> audio_codecs;
   std::vector<CodecInfo::HistogramTag> video_codecs;
-  *has_audio = false;
-  *has_video = false;
 
   if (CheckTypeAndCodecs(type, codecs, media_log, &factory_function,
                          &audio_codecs, &video_codecs)) {
-    *has_audio = !audio_codecs.empty();
-    *has_video = !video_codecs.empty();
-
     // Log the number of codecs specified, as well as the details on each one.
     UMA_HISTOGRAM_COUNTS_100("Media.MSE.NumberOfTracks", codecs.size());
     for (size_t i = 0; i < audio_codecs.size(); ++i) {

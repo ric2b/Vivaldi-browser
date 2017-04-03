@@ -32,47 +32,54 @@
 
 namespace blink {
 
-template<typename T> class EventSender;
+template <typename T>
+class EventSender;
 using SourceEventSender = EventSender<HTMLSourceElement>;
 
 class HTMLSourceElement final : public HTMLElement {
-    DEFINE_WRAPPERTYPEINFO();
-public:
-    class Listener;
+  DEFINE_WRAPPERTYPEINFO();
 
-    DECLARE_NODE_FACTORY(HTMLSourceElement);
-    ~HTMLSourceElement() override;
+ public:
+  class Listener;
 
-    const AtomicString& type() const;
-    void setSrc(const String&);
-    void setType(const AtomicString&);
+  DECLARE_NODE_FACTORY(HTMLSourceElement);
+  ~HTMLSourceElement() override;
 
-    void scheduleErrorEvent();
-    void cancelPendingErrorEvent();
+  const AtomicString& type() const;
+  void setSrc(const String&);
+  void setType(const AtomicString&);
 
-    void dispatchPendingEvent(SourceEventSender*);
+  void scheduleErrorEvent();
+  void cancelPendingErrorEvent();
 
-    bool mediaQueryMatches() const;
+  void dispatchPendingEvent(SourceEventSender*);
 
-    DECLARE_VIRTUAL_TRACE();
+  bool mediaQueryMatches() const;
 
-private:
-    explicit HTMLSourceElement(Document&);
+  void removeMediaQueryListListener();
+  void addMediaQueryListListener();
 
-    void didMoveToNewDocument(Document& oldDocument) override;
+  DECLARE_VIRTUAL_TRACE();
 
-    InsertionNotificationRequest insertedInto(ContainerNode*) override;
-    void removedFrom(ContainerNode*) override;
-    bool isURLAttribute(const Attribute&) const override;
-    void parseAttribute(const QualifiedName&, const AtomicString&, const AtomicString&) override;
+ private:
+  explicit HTMLSourceElement(Document&);
 
-    void notifyMediaQueryChanged();
-    void createMediaQueryList(const AtomicString& media);
+  void didMoveToNewDocument(Document& oldDocument) override;
 
-    Member<MediaQueryList> m_mediaQueryList;
-    Member<Listener> m_listener;
+  InsertionNotificationRequest insertedInto(ContainerNode*) override;
+  void removedFrom(ContainerNode*) override;
+  bool isURLAttribute(const Attribute&) const override;
+  void parseAttribute(const QualifiedName&,
+                      const AtomicString&,
+                      const AtomicString&) override;
+
+  void notifyMediaQueryChanged();
+  void createMediaQueryList(const AtomicString& media);
+
+  Member<MediaQueryList> m_mediaQueryList;
+  Member<Listener> m_listener;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // HTMLSourceElement_h
+#endif  // HTMLSourceElement_h

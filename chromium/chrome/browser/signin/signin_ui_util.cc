@@ -21,12 +21,12 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/common/profile_management_switches.h"
-#include "grit/components_strings.h"
+#include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/text_elider.h"
@@ -66,11 +66,11 @@ std::vector<GlobalError*> GetSignedInServiceErrors(Profile* profile) {
 }
 
 // If a signed in service is reporting an error, returns the GlobalError
-// object associated with that service, or NULL if no errors are reported.
+// object associated with that service, or null if no errors are reported.
 GlobalError* GetSignedInServiceError(Profile* profile) {
   std::vector<GlobalError*> errors = GetSignedInServiceErrors(profile);
   if (errors.empty())
-    return NULL;
+    return nullptr;
   return errors[0];
 }
 
@@ -82,8 +82,10 @@ base::string16 GetSigninMenuLabel(Profile* profile) {
     return error->MenuItemLabel();
 
   // No errors, so just display the signed in user, if any.
-  ProfileSyncService* service = profile->IsSyncAllowed() ?
-      ProfileSyncServiceFactory::GetForProfile(profile) : NULL;
+  browser_sync::ProfileSyncService* service =
+      profile->IsSyncAllowed()
+          ? ProfileSyncServiceFactory::GetForProfile(profile)
+          : nullptr;
 
   // Even if the user is signed in, don't display the "signed in as..."
   // label if we're still setting up sync.
@@ -177,7 +179,7 @@ void ShowSigninErrorLearnMorePage(Profile* profile) {
       "https://support.google.com/chrome/answer/1181420?";
   chrome::NavigateParams params(
       profile, GURL(kSigninErrorLearnMoreUrl), ui::PAGE_TRANSITION_LINK);
-  params.disposition = NEW_FOREGROUND_TAB;
+  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   chrome::Navigate(&params);
 }
 

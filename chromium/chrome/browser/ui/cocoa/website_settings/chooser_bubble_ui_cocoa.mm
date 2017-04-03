@@ -29,8 +29,8 @@
 #include "ui/base/cocoa/window_size_constants.h"
 
 std::unique_ptr<BubbleUi> ChooserBubbleDelegate::BuildBubbleUi() {
-  return base::WrapUnique(
-      new ChooserBubbleUiCocoa(browser_, std::move(chooser_controller_)));
+  return base::MakeUnique<ChooserBubbleUiCocoa>(browser_,
+                                                std::move(chooser_controller_));
 }
 
 @interface ChooserBubbleUiController
@@ -105,7 +105,7 @@ std::unique_ptr<BubbleUi> ChooserBubbleDelegate::BuildBubbleUi() {
   if ((self = [super initWithWindow:window
                        parentWindow:[self getExpectedParentWindow]
                          anchoredAt:NSZeroPoint])) {
-    [self setShouldCloseOnResignKey:NO];
+    [self setShouldCloseOnResignKey:YES];
     [self setShouldOpenAsKeyWindow:YES];
     [[self bubble] setArrowLocation:[self getExpectedArrowLocation]];
     bridge_ = bridge;
@@ -190,8 +190,8 @@ std::unique_ptr<BubbleUi> ChooserBubbleDelegate::BuildBubbleUi() {
 
 - (NSView*)tableView:(NSTableView*)tableView
     viewForTableColumn:(NSTableColumn*)tableColumn
-                   row:(NSInteger)rowIndex {
-  return [chooserContentView_ createTableRowView:rowIndex].autorelease();
+                   row:(NSInteger)row {
+  return [chooserContentView_ createTableRowView:row].autorelease();
 }
 
 - (BOOL)tableView:(NSTableView*)aTableView
@@ -209,6 +209,13 @@ std::unique_ptr<BubbleUi> ChooserBubbleDelegate::BuildBubbleUi() {
 }
 
 - (void)tableViewSelectionDidChange:(NSNotification*)aNotification {
+  [chooserContentView_ updateContentRowColor];
+  [connectButton_ setEnabled:[tableView_ numberOfSelectedRows] > 0];
+}
+
+// Selection changes (while the mouse button is still down).
+- (void)tableViewSelectionIsChanging:(NSNotification*)aNotification {
+  [chooserContentView_ updateContentRowColor];
   [connectButton_ setEnabled:[tableView_ numberOfSelectedRows] > 0];
 }
 
@@ -266,14 +273,16 @@ std::unique_ptr<BubbleUi> ChooserBubbleDelegate::BuildBubbleUi() {
 - (void)onConnect:(id)sender {
   buttonPressed_ = true;
   [chooserContentView_ accept];
-  self.bubbleReference->CloseBubble(BUBBLE_CLOSE_ACCEPTED);
+  if (self.bubbleReference)
+    self.bubbleReference->CloseBubble(BUBBLE_CLOSE_ACCEPTED);
   [self close];
 }
 
 - (void)onCancel:(id)sender {
   buttonPressed_ = true;
   [chooserContentView_ cancel];
-  self.bubbleReference->CloseBubble(BUBBLE_CLOSE_CANCELED);
+  if (self.bubbleReference)
+    self.bubbleReference->CloseBubble(BUBBLE_CLOSE_CANCELED);
   [self close];
 }
 

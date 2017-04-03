@@ -25,7 +25,6 @@
 #include "chrome/common/chrome_switches.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/variations/variations_associated_data.h"
-#include "components/version_info/version_info.h"
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/chrome_browser_field_trials_mobile.h"
@@ -44,16 +43,10 @@ void InstantiatePersistentHistograms() {
   if (!base::PathService::Get(chrome::DIR_USER_DATA, &metrics_dir))
     return;
 
-  base::FilePath metrics_file =
-      metrics_dir
-          .AppendASCII(ChromeMetricsServiceClient::kBrowserMetricsName)
-          .AddExtension(base::PersistentMemoryAllocator::kFileExtension);
-  base::FilePath active_file =
-      metrics_dir
-          .AppendASCII(
-              std::string(ChromeMetricsServiceClient::kBrowserMetricsName) +
-              "-active")
-          .AddExtension(base::PersistentMemoryAllocator::kFileExtension);
+  base::FilePath metrics_file, active_file;
+  base::GlobalHistogramAllocator::ConstructFilePaths(
+      metrics_dir, ChromeMetricsServiceClient::kBrowserMetricsName,
+      &metrics_file, &active_file);
 
   // Move any existing "active" file to the final name from which it will be
   // read when reporting initial stability metrics. If there is no file to
@@ -111,7 +104,6 @@ void InstantiatePersistentHistograms() {
   // Create tracking histograms for the allocator and record storage file.
   allocator->CreateTrackingHistograms(
       ChromeMetricsServiceClient::kBrowserMetricsName);
-  allocator->SetPersistentLocation(active_file);
 }
 
 // Create a field trial to control metrics/crash sampling for Stable on
@@ -127,11 +119,8 @@ void CreateFallbackSamplingTrialIfNeeded(bool has_seed,
   if (has_seed)
     return;
 
-  // Sampling is only supported on Stable.
-  if (chrome::GetChannel() != version_info::Channel::STABLE)
-    return;
-
-  ChromeMetricsServicesManagerClient::CreateFallbackSamplingTrial(feature_list);
+  ChromeMetricsServicesManagerClient::CreateFallbackSamplingTrial(
+      chrome::GetChannel(), feature_list);
 #endif  // defined(OS_WIN) || defined(OS_ANDROID)
 }
 

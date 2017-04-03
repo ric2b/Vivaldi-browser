@@ -5,7 +5,7 @@
 #include "components/spellcheck/renderer/spellcheck_provider.h"
 
 #include "base/command_line.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "components/spellcheck/common/spellcheck_marker.h"
 #include "components/spellcheck/common/spellcheck_messages.h"
 #include "components/spellcheck/common/spellcheck_result.h"
@@ -260,9 +260,9 @@ void SpellCheckProvider::OnRespondTextCheck(
                                          &textcheck_results);
   completion->didFinishCheckingText(textcheck_results);
 
-  // TODO(groby): Add request caching once OSX reports back original request.
-  // (cf. SpellCheckProvider::OnRespondSpellingService)
   // Cache the request and the converted results.
+  last_request_ = line;
+  last_results_.swap(textcheck_results);
 }
 
 void SpellCheckProvider::OnToggleSpellPanel(bool is_currently_visible) {

@@ -28,7 +28,7 @@ int HttpAuthHandlerFactory::CreateAuthHandlerFromString(
     HttpAuth::Target target,
     const SSLInfo& ssl_info,
     const GURL& origin,
-    const BoundNetLog& net_log,
+    const NetLogWithSource& net_log,
     std::unique_ptr<HttpAuthHandler>* handler) {
   HttpAuthChallengeTokenizer props(challenge.begin(), challenge.end());
   return CreateAuthHandler(&props, target, ssl_info, origin, CREATE_CHALLENGE,
@@ -40,7 +40,7 @@ int HttpAuthHandlerFactory::CreatePreemptiveAuthHandlerFromString(
     HttpAuth::Target target,
     const GURL& origin,
     int digest_nonce_count,
-    const BoundNetLog& net_log,
+    const NetLogWithSource& net_log,
     std::unique_ptr<HttpAuthHandler>* handler) {
   HttpAuthChallengeTokenizer props(challenge.begin(), challenge.end());
   SSLInfo null_ssl_info;
@@ -86,10 +86,10 @@ CreateAuthHandlerRegistryFactory(const HttpAuthPreferences& prefs,
     HttpAuthHandlerNegotiate::Factory* negotiate_factory =
         new HttpAuthHandlerNegotiate::Factory();
 #if defined(OS_WIN)
-    negotiate_factory->set_library(base::WrapUnique(new SSPILibraryDefault()));
+    negotiate_factory->set_library(base::MakeUnique<SSPILibraryDefault>());
 #elif defined(OS_POSIX) && !defined(OS_ANDROID)
     negotiate_factory->set_library(
-        base::WrapUnique(new GSSAPISharedLibrary(prefs.GssapiLibraryName())));
+        base::MakeUnique<GSSAPISharedLibrary>(prefs.GssapiLibraryName()));
 #endif  // defined(OS_POSIX) && !defined(OS_ANDROID)
     negotiate_factory->set_host_resolver(host_resolver);
     registry_factory->RegisterSchemeFactory(kNegotiateAuthScheme,
@@ -170,7 +170,7 @@ int HttpAuthHandlerRegistryFactory::CreateAuthHandler(
     const GURL& origin,
     CreateReason reason,
     int digest_nonce_count,
-    const BoundNetLog& net_log,
+    const NetLogWithSource& net_log,
     std::unique_ptr<HttpAuthHandler>* handler) {
   std::string scheme = challenge->scheme();
   if (scheme.empty()) {

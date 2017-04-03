@@ -10,6 +10,7 @@
 #include "cc/layers/heads_up_display_layer_impl.h"
 #include "cc/proto/layer.pb.h"
 #include "cc/trees/layer_tree_host.h"
+#include "cc/trees/layer_tree_settings.h"
 
 namespace cc {
 
@@ -40,7 +41,7 @@ void HeadsUpDisplayLayer::PrepareForCalculateDrawProperties(
   gfx::Transform matrix;
   matrix.MakeIdentity();
 
-  if (layer_tree_host()->debug_state().ShowHudRects()) {
+  if (layer_tree_host()->GetDebugState().ShowHudRects()) {
     bounds = device_viewport_in_layout_pixels;
   } else {
     int size = 256;

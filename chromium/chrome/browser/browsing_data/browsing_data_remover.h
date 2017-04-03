@@ -127,6 +127,8 @@ class BrowsingDataRemover : public KeyedService
 #if BUILDFLAG(ANDROID_JAVA_UI)
     REMOVE_WEBAPP_DATA = 1 << 18,
 #endif
+    REMOVE_DURABLE_PERMISSION = 1 << 19,
+
     // The following flag is used only in tests. In normal usage, hosted app
     // data is controlled by the REMOVE_COOKIES flag, applied to the
     // protected-web origin.
@@ -146,7 +148,8 @@ class BrowsingDataRemover : public KeyedService
 #if BUILDFLAG(ANDROID_JAVA_UI)
                        REMOVE_WEBAPP_DATA |
 #endif
-                       REMOVE_SITE_USAGE_DATA,
+                       REMOVE_SITE_USAGE_DATA |
+                       REMOVE_DURABLE_PERMISSION,
 
     // Datatypes that can be deleted partially per URL / origin / domain,
     // whichever makes sense.
@@ -305,8 +308,6 @@ class BrowsingDataRemover : public KeyedService
   // The clear API needs to be able to toggle removing_ in order to test that
   // only one BrowsingDataRemover instance can be called at a time.
   FRIEND_TEST_ALL_PREFIXES(ExtensionBrowsingDataTest, OneAtATime);
-  // Testing our static method, ClearSettingsForOneTypeWithPredicate.
-  FRIEND_TEST_ALL_PREFIXES(BrowsingDataRemoverTest, ClearWithPredicate);
   // Testing the private RemovalTask.
   FRIEND_TEST_ALL_PREFIXES(BrowsingDataRemoverTest, MultipleTasks);
 
@@ -337,17 +338,6 @@ class BrowsingDataRemover : public KeyedService
     Observer* observer;
   };
 
-  // Clears all host-specific settings for one content type that satisfy the
-  // given predicate.
-  //
-  // This should only be called on the UI thread.
-  static void ClearSettingsForOneTypeWithPredicate(
-      HostContentSettingsMap* content_settings_map,
-      ContentSettingsType content_type,
-      const base::Callback<
-          bool(const ContentSettingsPattern& primary_pattern,
-               const ContentSettingsPattern& secondary_pattern)>& predicate);
-
   void Shutdown() override;
 
   // Setter for |is_removing_|; DCHECKs that we can only start removing if we're
@@ -356,7 +346,7 @@ class BrowsingDataRemover : public KeyedService
 
   // Callback for when TemplateURLService has finished loading. Clears the data,
   // clears the respective waiting flag, and invokes NotifyIfDone.
-  void OnKeywordsLoaded();
+  void OnKeywordsLoaded(base::Callback<bool(const GURL&)> url_filter);
 
 #if defined(ENABLE_PLUGINS)
   // Called when plugin data has been cleared. Invokes NotifyIfDone.
@@ -409,6 +399,10 @@ class BrowsingDataRemover : public KeyedService
   // Callback for when the hostname resolution cache has been cleared.
   // Clears the respective waiting flag and invokes NotifyIfDone.
   void OnClearedHostnameResolutionCache();
+
+  // Callback for when HTTP auth cache has been cleared.
+  // Clears the respective waiting flag and invokes NotifyIfDone.
+  void OnClearedHttpAuthCache();
 
   // Callback for when speculative data in the network Predictor has been
   // cleared. Clears the respective waiting flag and invokes
@@ -540,6 +534,7 @@ class BrowsingDataRemover : public KeyedService
   bool waiting_for_clear_form_ = false;
   bool waiting_for_clear_history_ = false;
   bool waiting_for_clear_hostname_resolution_cache_ = false;
+  bool waiting_for_clear_http_auth_cache_ = false;
   bool waiting_for_clear_keyword_data_ = false;
   bool waiting_for_clear_nacl_cache_ = false;
   bool waiting_for_clear_network_predictor_ = false;

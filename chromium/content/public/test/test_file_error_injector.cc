@@ -18,6 +18,10 @@
 #include "content/public/browser/browser_thread.h"
 #include "url/gurl.h"
 
+namespace net {
+class NetLogWithSource;
+}
+
 namespace content {
 class ByteStreamReader;
 
@@ -29,7 +33,7 @@ class DownloadFileWithError: public DownloadFileImpl {
   DownloadFileWithError(std::unique_ptr<DownloadSaveInfo> save_info,
                         const base::FilePath& default_download_directory,
                         std::unique_ptr<ByteStreamReader> byte_stream,
-                        const net::BoundNetLog& bound_net_log,
+                        const net::NetLogWithSource& net_log,
                         base::WeakPtr<DownloadDestinationObserver> observer,
                         const TestFileErrorInjector::FileErrorInfo& error_info,
                         const base::Closure& ctor_callback,
@@ -98,7 +102,7 @@ DownloadFileWithError::DownloadFileWithError(
     std::unique_ptr<DownloadSaveInfo> save_info,
     const base::FilePath& default_download_directory,
     std::unique_ptr<ByteStreamReader> byte_stream,
-    const net::BoundNetLog& bound_net_log,
+    const net::NetLogWithSource& net_log,
     base::WeakPtr<DownloadDestinationObserver> observer,
     const TestFileErrorInjector::FileErrorInfo& error_info,
     const base::Closure& ctor_callback,
@@ -106,7 +110,7 @@ DownloadFileWithError::DownloadFileWithError(
     : DownloadFileImpl(std::move(save_info),
                        default_download_directory,
                        std::move(byte_stream),
-                       bound_net_log,
+                       net_log,
                        observer),
       error_info_(error_info),
       destruction_callback_(dtor_callback) {
@@ -252,7 +256,7 @@ class DownloadFileWithErrorFactory : public DownloadFileFactory {
       std::unique_ptr<DownloadSaveInfo> save_info,
       const base::FilePath& default_download_directory,
       std::unique_ptr<ByteStreamReader> byte_stream,
-      const net::BoundNetLog& bound_net_log,
+      const net::NetLogWithSource& net_log,
       base::WeakPtr<DownloadDestinationObserver> observer) override;
 
   bool SetError(TestFileErrorInjector::FileErrorInfo error);
@@ -282,12 +286,12 @@ DownloadFile* DownloadFileWithErrorFactory::CreateFile(
     std::unique_ptr<DownloadSaveInfo> save_info,
     const base::FilePath& default_download_directory,
     std::unique_ptr<ByteStreamReader> byte_stream,
-    const net::BoundNetLog& bound_net_log,
+    const net::NetLogWithSource& net_log,
     base::WeakPtr<DownloadDestinationObserver> observer) {
   return new DownloadFileWithError(std::move(save_info),
                                    default_download_directory,
                                    std::move(byte_stream),
-                                   bound_net_log,
+                                   net_log,
                                    observer,
                                    injected_error_,
                                    construction_callback_,

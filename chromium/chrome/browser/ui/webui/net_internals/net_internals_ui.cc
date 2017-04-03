@@ -47,6 +47,7 @@
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/net_internals_resources.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_compression_stats.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_network_delegate.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_service.h"
@@ -64,7 +65,6 @@
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/browser/web_ui_message_handler.h"
-#include "grit/net_internals_resources.h"
 #include "net/base/net_errors.h"
 #include "net/disk_cache/disk_cache.h"
 #include "net/dns/host_cache.h"
@@ -75,6 +75,9 @@
 #include "net/http/http_server_properties.h"
 #include "net/http/http_stream_factory.h"
 #include "net/http/transport_security_state.h"
+#include "net/log/net_log.h"
+#include "net/log/net_log_capture_mode.h"
+#include "net/log/net_log_entry.h"
 #include "net/log/net_log_util.h"
 #include "net/log/write_to_file_net_log_observer.h"
 #include "net/proxy/proxy_service.h"
@@ -240,8 +243,6 @@ class NetInternalsMessageHandler
   // This is the "real" message handler, which lives on the IO thread.
   scoped_refptr<IOThreadImpl> proxy_;
 
-  base::WeakPtr<prerender::PrerenderManager> prerender_manager_;
-
   DISALLOW_COPY_AND_ASSIGN(NetInternalsMessageHandler);
 };
 
@@ -308,7 +309,7 @@ class NetInternalsMessageHandler::IOThreadImpl
   void OnSetCaptureMode(const base::ListValue* list);
 
   // NetLog::ThreadSafeObserver implementation:
-  void OnAddEntry(const net::NetLog::Entry& entry) override;
+  void OnAddEntry(const net::NetLogEntry& entry) override;
 
   // Helper that calls g_browser.receive in the renderer, passing in |command|
   // and |arg|.  If the renderer is displaying a log file, the message will be
@@ -392,7 +393,7 @@ NetInternalsMessageHandler::~NetInternalsMessageHandler() {
     proxy_->OnWebUIDeleted();
     // Notify the handler on the IO thread that the renderer is gone.
     BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                            base::Bind(&IOThreadImpl::Detach, proxy_.get()));
+                            base::Bind(&IOThreadImpl::Detach, proxy_));
   }
 }
 
@@ -409,14 +410,6 @@ void NetInternalsMessageHandler::RegisterMessages() {
 #if defined(ENABLE_EXTENSIONS)
   proxy_->AddRequestContextGetter(profile->GetRequestContextForExtensions());
 #endif
-
-  prerender::PrerenderManager* prerender_manager =
-      prerender::PrerenderManagerFactory::GetForProfile(profile);
-  if (prerender_manager) {
-    prerender_manager_ = prerender_manager->AsWeakPtr();
-  } else {
-    prerender_manager_ = base::WeakPtr<prerender::PrerenderManager>();
-  }
 
   web_ui()->RegisterMessageCallback(
       "notifyReady",
@@ -542,8 +535,12 @@ void NetInternalsMessageHandler::OnGetPrerenderInfo(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   std::unique_ptr<base::DictionaryValue> value;
-  if (prerender_manager_) {
-    value = prerender_manager_->GetAsValue();
+
+  prerender::PrerenderManager* prerender_manager =
+      prerender::PrerenderManagerFactory::GetForBrowserContext(
+          Profile::FromWebUI(web_ui()));
+  if (prerender_manager) {
+    value = prerender_manager->GetAsValue();
   } else {
     value.reset(new base::DictionaryValue());
     value->SetBoolean("enabled", false);
@@ -1104,7 +1101,7 @@ void NetInternalsMessageHandler::IOThreadImpl::OnSetCaptureMode(
 // Note that unlike other methods of IOThreadImpl, this function
 // can be called from ANY THREAD.
 void NetInternalsMessageHandler::IOThreadImpl::OnAddEntry(
-    const net::NetLog::Entry& entry) {
+    const net::NetLogEntry& entry) {
   BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
                           base::Bind(&IOThreadImpl::AddEntryToQueue, this,
                                      base::Passed(entry.ToValue())));

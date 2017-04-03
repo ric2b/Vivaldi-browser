@@ -47,7 +47,6 @@ Prima Shift + Alt para mudar.</translation>
 <translation id="2268813581635650749">Terminar sessão de todos</translation>
 <translation id="2297568595583585744">Tabuleiro de estado</translation>
 <translation id="2303600792989757991">Ativar/desativar vista geral das janelas</translation>
-<translation id="2372145515558759244">A sincronizar aplicações...</translation>
 <translation id="2391579633712104609">180°</translation>
 <translation id="2429753432712299108">O dispositivo Bluetooth "<ph name="DEVICE_NAME" />" necessita de autorização para sincronizar. Antes de aceitar, confirme que esta chave está indicada nesse dispositivo: <ph name="PASSKEY" /></translation>
 <translation id="2475982808118771221">Ocorreu um erro</translation>
@@ -61,7 +60,6 @@ Prima Shift + Alt para mudar.</translation>
 <translation id="2727977024730340865">Ligado a um carregador de baixo consumo. O carregamento da bateria pode não ser fiável.</translation>
 <translation id="2761704814324807722">Tabuleiro do estado, hora <ph name="TIME" />, <ph name="BATTERY" /></translation>
 <translation id="2792498699870441125">Alt + Pesquisar</translation>
-<translation id="2805756323405976993">Aplicações</translation>
 <translation id="2819276065543622893">A sessão será terminada agora.</translation>
 <translation id="2825619548187458965">Prateleira</translation>
 <translation id="2844169650293029770">Dispositivo USB-C (porta frontal do lado esquerdo)</translation>
@@ -97,7 +95,6 @@ Prima Pesquisar ou Shift para cancelar.</translation>
 <translation id="3621712662352432595">Definições de Áudio</translation>
 <translation id="3625258641415618104">Capturas de ecrã desativadas</translation>
 <translation id="3626281679859535460">Brilho</translation>
-<translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079">A resolução de <ph name="DISPLAY_NAME" /> foi alterada para <ph name="RESOLUTION" /></translation>
 <translation id="370649949373421643">Ativar Wi-Fi</translation>
 <translation id="3709443003275901162">9+</translation>
@@ -111,6 +108,8 @@ Prima Pesquisar ou Shift para cancelar.</translation>
 <translation id="3866182280516392520">Endereço IPv6</translation>
 <translation id="3891340733213178823">Prima Ctrl+Shift+Q duas vezes para terminar sessão.</translation>
 <translation id="3892641579809465218">Ecrã interno</translation>
+<translation id="3893630138897523026">ChromeVox (respostas faladas)</translation>
+<translation id="3899995891769452915">Entrada de texto por voz</translation>
 <translation id="3963445509666917109">Altifalante (interno)</translation>
 <translation id="3967919079500697218">A capacidade de criar capturas de ecrã foi desativada pelo seu administrador.</translation>
 <translation id="397105322502079400">A calcular...</translation>
@@ -134,10 +133,8 @@ Prima Pesquisar ou Shift para cancelar.</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl+Shift+Espaço</translation>
 <translation id="5045002648206642691">Definições do Google Drive...</translation>
-<translation id="511445211639755999"><ph name="RESOLUTION" />, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">Dispositivos de transmissão disponíveis</translation>
 <translation id="5170568018924773124">Mostrar numa pasta</translation>
-<translation id="5191140942132549112">MOSTRAR QUESTÕES</translation>
 <translation id="5222676887888702881">Terminar sessão</translation>
 <translation id="5238774010593222950">Não é possível iniciar sessão noutra conta.</translation>
 <translation id="532063867737390965">Esta definição de rede foi desativada pelo administrador.</translation>
@@ -185,6 +182,7 @@ Prima Shift + Alt para mudar.</translation>
 <translation id="6459472438155181876">A prolongar ecrã para <ph name="DISPLAY_NAME" /></translation>
 <translation id="6490471652906364588">Dispositivo USB-C (porta direita)</translation>
 <translation id="6501401484702599040">A transmitir o ecrã para <ph name="RECEIVER_NAME" /></translation>
+<translation id="6521655319214113338">Entrada de escrita manual</translation>
 <translation id="6537270692134705506">Capturar ecrã</translation>
 <translation id="6550675742724504774">Opções</translation>
 <translation id="6585808820553845416">A sessão termina em <ph name="SESSION_TIME_REMAINING" />.</translation>
@@ -194,7 +192,6 @@ Prima Shift + Alt para mudar.</translation>
 <translation id="6713285437468012787">O dispositivo Bluetooth "<ph name="DEVICE_NAME" />" foi sincronizado e está agora disponível para todos os utilizadores. Pode remover esta sincronização através das Definições.</translation>
 <translation id="6785414152754474415">A bateria está <ph name="PERCENTAGE" />% cheia e a carregar.</translation>
 <translation id="683971173229319003">Pesquisa+L</translation>
-<translation id="68610848741840742">ChromeVox (respostas faladas)</translation>
 <translation id="6911468394164995108">Ligar-se a outra...</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6979158407327259162">Google Drive</translation>
@@ -217,8 +214,10 @@ Prima Alt + Pesquisar ou Shift para cancelar.</translation>
 <translation id="743058460480092004">A câmara e o microfone estão a ser utilizados.</translation>
 <translation id="7510334386202674593">Ctrl+Shift+L</translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" /> não suporta <ph name="SPECIFIED_RESOLUTION" />. A resolução foi alterada para <ph name="FALLBACK_RESOLUTION" /></translation>
+<translation id="7562368315689366235">Paleta de emoji</translation>
 <translation id="7573962313813535744">Modo ancorado</translation>
 <translation id="7580671184200851182">Reproduzir o mesmo áudio em todas as colunas (áudio mono)</translation>
+<translation id="7581273696622423628">Participar no inquérito</translation>
 <translation id="7593891976182323525">Pesquisar ou Shift</translation>
 <translation id="7649070708921625228">Ajuda</translation>
 <translation id="7692480393933218409">A carregar os dispositivos USB-C ligados</translation>

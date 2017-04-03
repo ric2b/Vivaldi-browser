@@ -75,7 +75,6 @@
 
 class SkBitmap;
 struct PP_NetAddress_Private;
-struct ViewMsg_New_Params;
 struct ViewMsg_StopFinding_Params;
 
 namespace base {
@@ -132,6 +131,10 @@ struct FileChooserFileInfo;
 struct RenderViewImplParams;
 struct ResizeParams;
 
+namespace mojom {
+class CreateViewParams;
+}
+
 #if defined(OS_ANDROID)
 class WebMediaPlayerProxyAndroid;
 #endif
@@ -159,14 +162,14 @@ class CONTENT_EXPORT RenderViewImpl
   // |proxy_routing_id| is specified, so a RenderFrameProxy can be created for
   // this RenderView's main RenderFrame.
   static RenderViewImpl* Create(CompositorDependencies* compositor_deps,
-                                const ViewMsg_New_Params& params,
+                                const mojom::CreateViewParams& params,
                                 bool was_created_by_renderer);
 
   // Used by content_layouttest_support to hook into the creation of
   // RenderViewImpls.
   static void InstallCreateHook(RenderViewImpl* (*create_render_view_impl)(
       CompositorDependencies* compositor_deps,
-      const ViewMsg_New_Params&));
+      const mojom::CreateViewParams&));
 
   // Returns the RenderViewImpl containing the given WebView.
   static RenderViewImpl* FromWebView(blink::WebView* webview);
@@ -238,16 +241,6 @@ class CONTENT_EXPORT RenderViewImpl
 
   void AttachWebFrameWidget(blink::WebFrameWidget* frame_widget);
 
-  // Plugin-related functions --------------------------------------------------
-
-#if defined(ENABLE_PLUGINS)
-  // TODO(ekaramad): This method is only used by TextInputClientObserver.
-  // Ideally, TextInputClientObserver should use RenderFrame/RenderWidget to
-  // obtain the plugin. Come back to this later when implementing IME for Mac
-  // to see if we can remove this API (https://crbug.com/578168).
-  PepperPluginInstanceImpl* GetFocusedPepperPlugin();
-#endif  // ENABLE_PLUGINS
-
   void TransferActiveWheelFlingAnimation(
       const blink::WebActiveWheelFlingParameters& params);
 
@@ -304,7 +297,6 @@ class CONTENT_EXPORT RenderViewImpl
                      const blink::WebFloatSize& accumulatedOverscroll,
                      const blink::WebFloatPoint& positionInViewport,
                      const blink::WebFloatSize& velocityInViewport) override;
-  void didUpdateTextOfFocusedElementByNonUserInput() override;
   void hasTouchEventHandlers(bool has_handlers) override;
   void resetInputMethod() override;
   blink::WebScreenInfo screenInfo() override;
@@ -315,7 +307,6 @@ class CONTENT_EXPORT RenderViewImpl
   void showUnhandledTapUIIfNeeded(const blink::WebPoint& tappedPosition,
                                   const blink::WebNode& tappedNode,
                                   bool pageChanged) override;
-  blink::WebRect windowResizerRect() override;
   blink::WebWidgetClient* widgetClient() override;
 
   // blink::WebViewClient implementation --------------------------------------
@@ -433,6 +424,7 @@ class CONTENT_EXPORT RenderViewImpl
 
  protected:
   // RenderWidget overrides:
+  blink::WebWidget* GetWebWidget() const override;
   void CloseForFrame() override;
   void Close() override;
   void OnResize(const ResizeParams& params) override;
@@ -445,9 +437,9 @@ class CONTENT_EXPORT RenderViewImpl
   void ResizeWebWidget() override;
 
   RenderViewImpl(CompositorDependencies* compositor_deps,
-                 const ViewMsg_New_Params& params);
+                 const mojom::CreateViewParams& params);
 
-  void Initialize(const ViewMsg_New_Params& params,
+  void Initialize(const mojom::CreateViewParams& params,
                   bool was_created_by_renderer);
   void SetScreenMetricsEmulationParameters(
       bool enabled,
@@ -611,18 +603,15 @@ class CONTENT_EXPORT RenderViewImpl
                         const blink::WebPluginAction& action);
   void OnMoveOrResizeStarted();
   void OnReleaseDisambiguationPopupBitmap(const cc::SharedBitmapId& id);
-  void OnResetPageEncodingToDefault();
   void OnSetActive(bool active);
   void OnSetBackgroundOpaque(bool opaque);
   void OnExitFullscreen();
   void OnSetHistoryOffsetAndLength(int history_offset, int history_length);
   void OnSetInitialFocus(bool reverse);
-  void OnSetPageEncoding(const std::string& encoding_name);
   void OnSetRendererPrefs(const RendererPreferences& renderer_prefs);
   void OnSetWebUIProperty(const std::string& name, const std::string& value);
   void OnSetZoomLevelForLoadingURL(const GURL& url, double zoom_level);
   void OnSuppressDialogsUntilSwapOut();
-  void OnThemeChanged();
   void OnUpdateTargetURLAck();
   void OnUpdateWebPreferences(const WebPreferences& prefs);
   void OnSetPageScale(float page_scale_factor);
@@ -699,6 +688,13 @@ class CONTENT_EXPORT RenderViewImpl
   void set_navigation_gesture(NavigationGesture gesture) {
     navigation_gesture_ = gesture;
   }
+
+// Platform specific theme preferences if any are updated here.
+#if defined(OS_WIN)
+  void UpdateThemePrefs();
+#else
+  void UpdateThemePrefs() {}
+#endif
 
   void UpdateWebViewWithDeviceScaleFactor();
 

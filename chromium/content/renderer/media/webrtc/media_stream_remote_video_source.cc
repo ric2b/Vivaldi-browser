@@ -98,7 +98,7 @@ void DoNothing(const scoped_refptr<rtc::RefCountInterface>& ref) {}
 void MediaStreamRemoteVideoSource::RemoteVideoSourceDelegate::OnFrame(
     const cricket::VideoFrame& incoming_frame) {
   const base::TimeDelta incoming_timestamp = base::TimeDelta::FromMicroseconds(
-      incoming_frame.GetTimeStamp() / rtc::kNumNanosecsPerMicrosec);
+      incoming_frame.timestamp_us());
   const base::TimeTicks render_time =
       base::TimeTicks() + incoming_timestamp + time_diff_;
 
@@ -124,10 +124,9 @@ void MediaStreamRemoteVideoSource::RemoteVideoSourceDelegate::OnFrame(
           WebRTCToMediaVideoRotation(incoming_frame.rotation()));
     }
   } else {
-    // Note that the GetCopyWithRotationApplied returns a pointer to a
-    // frame owned by incoming_frame.
-    buffer =
-        incoming_frame.GetCopyWithRotationApplied()->video_frame_buffer();
+    buffer = webrtc::I420Buffer::Rotate(incoming_frame.video_frame_buffer(),
+                                        incoming_frame.rotation());
+
     gfx::Size size(buffer->width(), buffer->height());
 
     // Make a shallow copy. Both |frame| and |video_frame| will share a single

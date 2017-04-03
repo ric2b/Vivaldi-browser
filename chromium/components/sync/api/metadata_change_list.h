@@ -8,11 +8,11 @@
 #include <string>
 
 namespace sync_pb {
-class DataTypeState;
 class EntityMetadata;
+class ModelTypeState;
 }  // namespace sync_pb
 
-namespace syncer_v2 {
+namespace syncer {
 
 // Interface used by the processor and service to communicate about metadata.
 // The purpose of the interface is to record changes to data type global and
@@ -27,12 +27,12 @@ class MetadataChangeList {
   MetadataChangeList() {}
   virtual ~MetadataChangeList() {}
 
-  // Requests DataTypeState to be updated in the storage.
-  virtual void UpdateDataTypeState(
-      const sync_pb::DataTypeState& data_type_state) = 0;
+  // Requests ModelTypeState to be updated in the storage.
+  virtual void UpdateModelTypeState(
+      const sync_pb::ModelTypeState& model_type_state) = 0;
 
-  // Requests DataTypeState to be cleared from the storage.
-  virtual void ClearDataTypeState() = 0;
+  // Requests ModelTypeState to be cleared from the storage.
+  virtual void ClearModelTypeState() = 0;
 
   // Requests metadata entry to be updated in the storage.
   // Please note that the update might contain a deleted entry if
@@ -45,6 +45,6 @@ class MetadataChangeList {
   virtual void ClearMetadata(const std::string& storage_key) = 0;
 };
 
-}  // namespace syncer_v2
+}  // namespace syncer
 
 #endif  // COMPONENTS_SYNC_API_METADATA_CHANGE_LIST_H_

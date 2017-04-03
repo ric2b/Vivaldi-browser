@@ -7,9 +7,7 @@
 #include <list>
 #include <map>
 
-#include "ash/common/ash_switches.h"
 #include "ash/common/shell_window_ids.h"
-#include "ash/common/wm/forwarding_layer_delegate.h"
 #include "ash/common/wm/mru_window_tracker.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_root_window_controller.h"
@@ -393,8 +391,6 @@ class WindowCycleView : public views::WidgetDelegateView {
     WmShell::Get()->window_cycle_controller()->StopCycling();
   }
 
-  View* GetContentsView() override { return this; }
-
   View* GetInitiallyFocusedView() override {
     return window_view_map_[target_window_];
   }
@@ -519,8 +515,14 @@ void WindowCycleList::Step(WindowCycleController::Direction direction) {
 
   DCHECK(static_cast<size_t>(current_index_) < windows_.size());
 
-  if (!cycle_view_ && current_index_ == 0)
+  if (!cycle_view_ && current_index_ == 0) {
     initial_direction_ = direction;
+    // Special case the situation where we're cycling forward but the MRU window
+    // is not active. This occurs when all windows are minimized. The starting
+    // window should be the first one rather than the second.
+    if (direction == WindowCycleController::FORWARD && !windows_[0]->IsActive())
+      current_index_ = -1;
+  }
 
   // We're in a valid cycle, so step forward or backward.
   current_index_ += direction == WindowCycleController::FORWARD ? 1 : -1;

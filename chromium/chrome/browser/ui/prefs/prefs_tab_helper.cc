@@ -28,6 +28,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/pref_names_util.h"
 #include "chrome/grit/locale_settings.h"
+#include "chrome/grit/platform_locale_settings.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -43,7 +44,6 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/renderer_preferences.h"
 #include "content/public/common/web_preferences.h"
-#include "grit/platform_locale_settings.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
 #include "third_party/icu/source/common/unicode/uscript.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -65,7 +65,7 @@ DEFINE_WEB_CONTENTS_USER_DATA_KEY(PrefsTabHelper);
 namespace {
 
 // The list of prefs we want to observe.
-const char* kPrefsToObserve[] = {
+const char* const kPrefsToObserve[] = {
 #if defined(ENABLE_EXTENSIONS)
   prefs::kAnimationPolicy,
 #endif
@@ -73,7 +73,6 @@ const char* kPrefsToObserve[] = {
   prefs::kDefaultCharset,
   prefs::kDisable3DAPIs,
   prefs::kEnableHyperlinkAuditing,
-  prefs::kWebKitAllowDisplayingInsecureContent,
   prefs::kWebKitAllowRunningInsecureContent,
   prefs::kWebKitDefaultFixedFontSize,
   prefs::kWebKitDefaultFontSize,
@@ -91,7 +90,6 @@ const char* kPrefsToObserve[] = {
   prefs::kWebKitPluginsEnabled,
   prefs::kWebkitTabsToLinks,
   prefs::kWebKitTextAreasAreResizable,
-  prefs::kWebKitUsesUniversalDetector,
   prefs::kWebKitWebSecurityEnabled,
 };
 
@@ -523,8 +521,6 @@ void PrefsTabHelper::RegisterProfilePrefs(
                                 pref_defaults.tabs_to_links);
   registry->RegisterBooleanPref(prefs::kWebKitAllowRunningInsecureContent,
                                 false);
-  registry->RegisterBooleanPref(prefs::kWebKitAllowDisplayingInsecureContent,
-                                true);
   registry->RegisterBooleanPref(prefs::kEnableReferrers, true);
 #if defined(OS_ANDROID)
   registry->RegisterDoublePref(prefs::kWebKitFontScaleFactor, 1.0);
@@ -599,14 +595,6 @@ void PrefsTabHelper::RegisterProfilePrefs(
                             IDS_MINIMUM_FONT_SIZE);
   RegisterLocalizedFontPref(registry, prefs::kWebKitMinimumLogicalFontSize,
                             IDS_MINIMUM_LOGICAL_FONT_SIZE);
-  registry->RegisterBooleanPref(
-      prefs::kWebKitUsesUniversalDetector,
-      l10n_util::GetStringUTF8(IDS_USES_UNIVERSAL_DETECTOR) == "true",
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-  registry->RegisterStringPref(
-      prefs::kStaticEncodings,
-      l10n_util::GetStringUTF8(IDS_STATIC_ENCODING_LIST));
-  registry->RegisterStringPref(prefs::kRecentlySelectedEncoding, std::string());
 }
 
 // static

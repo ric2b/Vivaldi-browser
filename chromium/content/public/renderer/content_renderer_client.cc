@@ -7,6 +7,7 @@
 #include "content/public/renderer/media_stream_renderer_factory.h"
 #include "media/base/renderer_factory.h"
 #include "third_party/WebKit/public/platform/modules/app_banner/WebAppBannerClient.h"
+#include "ui/gfx/icc_profile.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -135,6 +136,12 @@ bool ContentRendererClient::WillSendRequest(
   return false;
 }
 
+bool ContentRendererClient::IsPrefetchOnly(
+    RenderFrame* render_frame,
+    const blink::WebURLRequest& request) {
+  return false;
+}
+
 unsigned long long ContentRendererClient::VisitedLinkHash(
     const char* canonical_url, size_t length) {
   return 0LL;
@@ -167,14 +174,6 @@ bool ContentRendererClient::AllowPepperMediaStreamAPI(const GURL& url) {
 void ContentRendererClient::AddSupportedKeySystems(
     std::vector<std::unique_ptr<media::KeySystemProperties>>* key_systems) {}
 
-std::unique_ptr<media::RendererFactory>
-ContentRendererClient::CreateMediaRendererFactory(
-    RenderFrame* render_frame,
-    media::GpuVideoAcceleratorFactories* gpu_factories,
-    const scoped_refptr<media::MediaLog>& media_log) {
-  return nullptr;
-}
-
 std::unique_ptr<MediaStreamRendererFactory>
 ContentRendererClient::CreateMediaStreamRendererFactory() {
   return nullptr;
@@ -182,6 +181,11 @@ ContentRendererClient::CreateMediaStreamRendererFactory() {
 
 cc::ImageSerializationProcessor*
 ContentRendererClient::GetImageSerializationProcessor() {
+  return nullptr;
+}
+
+std::unique_ptr<gfx::ICCProfile>
+ContentRendererClient::GetImageDecodeColorProfile() {
   return nullptr;
 }
 

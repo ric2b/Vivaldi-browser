@@ -7,7 +7,7 @@
 #include "base/logging.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 #include "net/socket/client_socket_factory.h"
 #include "net/socket/websocket_endpoint_lock_manager.h"
 
@@ -70,7 +70,7 @@ ClientSocketFactory* WebSocketTransportConnectSubJob::client_socket_factory()
   return parent_job_->client_socket_factory_;
 }
 
-const BoundNetLog& WebSocketTransportConnectSubJob::net_log() const {
+const NetLogWithSource& WebSocketTransportConnectSubJob::net_log() const {
   return parent_job_->net_log();
 }
 

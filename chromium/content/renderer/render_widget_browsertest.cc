@@ -19,6 +19,10 @@ class RenderWidgetTest : public RenderViewTest {
     widget()->OnResize(params);
   }
 
+  void GetCompositionRange(gfx::Range* range) {
+    widget()->GetCompositionRange(range);
+  }
+
   bool next_paint_is_resize_ack() {
     return widget()->next_paint_is_resize_ack();
   }
@@ -28,7 +32,7 @@ TEST_F(RenderWidgetTest, OnResize) {
   // The initial bounds is empty, so setting it to the same thing should do
   // nothing.
   ResizeParams resize_params;
-  resize_params.screen_info = blink::WebScreenInfo();
+  resize_params.screen_info = ScreenInfo();
   resize_params.new_size = gfx::Size();
   resize_params.physical_backing_size = gfx::Size();
   resize_params.top_controls_height = 0.f;
@@ -68,12 +72,12 @@ TEST_F(RenderWidgetTest, OnResize) {
   EXPECT_EQ(resize_params.needs_resize_ack, next_paint_is_resize_ack());
 
   // Changing the screen info should not send the ack.
-  resize_params.screen_info.orientationAngle = 90;
+  resize_params.screen_info.orientation_angle = 90;
   OnResize(resize_params);
   EXPECT_EQ(resize_params.needs_resize_ack, next_paint_is_resize_ack());
 
-  resize_params.screen_info.orientationType =
-      blink::WebScreenOrientationPortraitPrimary;
+  resize_params.screen_info.orientation_type =
+      SCREEN_ORIENTATION_VALUES_PORTRAIT_PRIMARY;
   OnResize(resize_params);
   EXPECT_EQ(resize_params.needs_resize_ack, next_paint_is_resize_ack());
 }
@@ -97,9 +101,41 @@ class RenderWidgetInitialSizeTest : public RenderWidgetTest {
 
 TEST_F(RenderWidgetInitialSizeTest, InitialSize) {
   EXPECT_EQ(initial_size_, widget()->size());
-  EXPECT_EQ(initial_size_, gfx::Size(widget()->webwidget()->size()));
+  EXPECT_EQ(initial_size_, gfx::Size(widget()->GetWebWidget()->size()));
   EXPECT_TRUE(next_paint_is_resize_ack());
 }
 
+TEST_F(RenderWidgetTest, GetCompositionRangeValidComposition) {
+  LoadHTML(
+      "<div contenteditable>EDITABLE</div>"
+      "<script> document.querySelector('div').focus(); </script>");
+  blink::WebVector<blink::WebCompositionUnderline> emptyUnderlines;
+  widget()->GetWebWidget()->setComposition("hello", emptyUnderlines, 3, 3);
+  gfx::Range range;
+  GetCompositionRange(&range);
+  EXPECT_TRUE(range.IsValid());
+  EXPECT_EQ(0U, range.start());
+  EXPECT_EQ(5U, range.end());
+}
+
+TEST_F(RenderWidgetTest, GetCompositionRangeForSelection) {
+  LoadHTML(
+      "<div>NOT EDITABLE</div>"
+      "<script> document.execCommand('selectAll'); </script>");
+  gfx::Range range;
+  GetCompositionRange(&range);
+  // Selection range should not be treated as composition range.
+  EXPECT_FALSE(range.IsValid());
+}
+
+TEST_F(RenderWidgetTest, GetCompositionRangeInvalid) {
+  LoadHTML("<div>NOT EDITABLE</div>");
+  gfx::Range range;
+  GetCompositionRange(&range);
+  // If this test ever starts failing, one likely outcome is that WebRange
+  // and gfx::Range::InvalidRange are no longer expressed in the same
+  // values of start/end.
+  EXPECT_FALSE(range.IsValid());
+}
 
 }  // namespace content

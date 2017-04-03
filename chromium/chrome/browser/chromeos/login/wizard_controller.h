@@ -280,6 +280,9 @@ class WizardController : public BaseScreenDelegate,
   // Changes status area visibility.
   void SetStatusAreaVisible(bool visible);
 
+  // Changes whether to show the Material Design OOBE or not.
+  void SetShowMdOobe(bool show);
+
   // Launched kiosk app configured for auto-launch.
   void AutoLaunchKioskApp();
 
@@ -372,7 +375,7 @@ class WizardController : public BaseScreenDelegate,
 
   base::OneShotTimer smooth_show_timer_;
 
-  OobeUI* oobe_ui_ = nullptr;
+  OobeUI* const oobe_ui_;
 
   // State of Usage stat/error reporting checkbox on EULA screen
   // during wizard lifetime.

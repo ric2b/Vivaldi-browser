@@ -10,7 +10,10 @@
 #include <memory>
 #include <set>
 
+#include "ash/public/interfaces/shelf.mojom.h"
+#include "ash/public/interfaces/wallpaper.mojom.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "mash/session/public/interfaces/session.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
@@ -18,6 +21,16 @@
 #include "services/tracing/public/cpp/provider.h"
 #include "services/ui/common/types.h"
 #include "services/ui/public/interfaces/accelerator_registrar.mojom.h"
+
+namespace base {
+class SequencedWorkerPool;
+}
+
+namespace chromeos {
+namespace system {
+class ScopedFakeStatisticsProvider;
+}
+}
 
 namespace views {
 class AuraInit;
@@ -38,9 +51,10 @@ class NativeWidgetFactoryMus;
 class WindowManager;
 
 // Hosts the window manager and the ash system user interface for mash.
-// TODO(mash): Port ash_sysui's ShelfController and WallpaperController here.
 class WindowManagerApplication
     : public shell::Service,
+      public shell::InterfaceFactory<mojom::ShelfController>,
+      public shell::InterfaceFactory<mojom::WallpaperController>,
       public shell::InterfaceFactory<ui::mojom::AcceleratorRegistrar>,
       public mash::session::mojom::ScreenlockStateListener {
  public:
@@ -57,17 +71,30 @@ class WindowManagerApplication
 
   void OnAcceleratorRegistrarDestroyed(AcceleratorRegistrarImpl* registrar);
 
-  void InitWindowManager(ui::WindowTreeClient* window_tree_client);
+  void InitWindowManager(
+      std::unique_ptr<ui::WindowTreeClient> window_tree_client,
+      const scoped_refptr<base::SequencedWorkerPool>& blocking_pool);
+
+  // Initializes lower-level OS-specific components (e.g. D-Bus services).
+  void InitializeComponents();
+  void ShutdownComponents();
 
   // shell::Service:
   void OnStart(const shell::Identity& identity) override;
   bool OnConnect(const shell::Identity& remote_identity,
                  shell::InterfaceRegistry* registry) override;
 
+  // InterfaceFactory<mojom::ShelfController>:
+  void Create(const shell::Identity& remote_identity,
+              mojom::ShelfControllerRequest request) override;
+
+  // InterfaceFactory<mojom::WallpaperController>:
+  void Create(const shell::Identity& remote_identity,
+              mojom::WallpaperControllerRequest request) override;
+
   // shell::InterfaceFactory<ui::mojom::AcceleratorRegistrar>:
-  void Create(
-      const shell::Identity& remote_identity,
-      mojo::InterfaceRequest<ui::mojom::AcceleratorRegistrar> request) override;
+  void Create(const shell::Identity& remote_identity,
+              ui::mojom::AcceleratorRegistrarRequest request) override;
 
   // session::mojom::ScreenlockStateListener:
   void ScreenlockStateChanged(bool locked) override;
@@ -81,12 +108,25 @@ class WindowManagerApplication
   std::unique_ptr<views::SurfaceContextFactory> compositor_context_factory_;
   std::unique_ptr<WindowManager> window_manager_;
 
+  // A blocking pool used by the WindowManager's shell; not used in tests.
+  scoped_refptr<base::SequencedWorkerPool> blocking_pool_;
+
+  mojo::BindingSet<mojom::ShelfController> shelf_controller_bindings_;
+  mojo::BindingSet<mojom::WallpaperController> wallpaper_controller_bindings_;
+
   std::set<AcceleratorRegistrarImpl*> accelerator_registrars_;
 
   mash::session::mojom::SessionPtr session_;
 
   mojo::Binding<mash::session::mojom::ScreenlockStateListener>
       screenlock_state_listener_binding_;
+
+#if defined(OS_CHROMEOS)
+  class StubNetworkConnectDelegate;
+  std::unique_ptr<StubNetworkConnectDelegate> network_connect_delegate_;
+  std::unique_ptr<chromeos::system::ScopedFakeStatisticsProvider>
+      statistics_provider_;
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(WindowManagerApplication);
 };

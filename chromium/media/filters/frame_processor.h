@@ -6,6 +6,7 @@
 #define MEDIA_FILTERS_FRAME_PROCESSOR_H_
 
 #include <map>
+#include <memory>
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
@@ -24,15 +25,6 @@ class MseTrackBuffer;
 class MEDIA_EXPORT FrameProcessor {
  public:
   typedef base::Callback<void(base::TimeDelta)> UpdateDurationCB;
-
-  // TODO(wolenetz/acolwell): Ensure that all TrackIds are coherent and unique
-  // for each track buffer. For now, special track identifiers are used for each
-  // of audio and video here, and text TrackIds are assumed to be non-negative.
-  // See http://crbug.com/341581.
-  enum {
-    kAudioTrackId = -2,
-    kVideoTrackId = -3
-  };
 
   FrameProcessor(const UpdateDurationCB& update_duration_cb,
                  const scoped_refptr<MediaLog>& media_log);
@@ -66,12 +58,15 @@ class MEDIA_EXPORT FrameProcessor {
   // frames for the track |id| to |stream|.
   bool AddTrack(StreamParser::TrackId id, ChunkDemuxerStream* stream);
 
-  // Updates the internal mapping of TrackId to track buffer for the track
-  // buffer formerly associated with |old_id| to be associated with |new_id|.
-  // Returns false to indicate failure due to either no existing track buffer
-  // for |old_id| or collision with previous track buffer already mapped to
-  // |new_id|. Otherwise returns true.
-  bool UpdateTrack(StreamParser::TrackId old_id, StreamParser::TrackId new_id);
+  // A map that describes how track ids changed between init segment. Maps the
+  // old track id for a new track id for the same track.
+  using TrackIdChanges = std::map<StreamParser::TrackId, StreamParser::TrackId>;
+
+  // Updates the internal mapping of TrackIds to track buffers. The input
+  // parameter |track_id_changes| maps old track ids to new ones. The track ids
+  // not present in the map must be assumed unchanged. Returns false if
+  // remapping failed.
+  bool UpdateTrackIds(const TrackIdChanges& track_id_changes);
 
   // Sets the need random access point flag on all track buffers to true.
   void SetAllTrackBuffersNeedRandomAccessPoint();
@@ -88,8 +83,6 @@ class MEDIA_EXPORT FrameProcessor {
 
  private:
   friend class FrameProcessorTest;
-
-  typedef std::map<StreamParser::TrackId, MseTrackBuffer*> TrackBufferMap;
 
   // If |track_buffers_| contains |id|, returns a pointer to the associated
   // MseTrackBuffer. Otherwise, returns NULL.
@@ -133,7 +126,9 @@ class MEDIA_EXPORT FrameProcessor {
                     base::TimeDelta* timestamp_offset);
 
   // TrackId-indexed map of each track's stream.
-  TrackBufferMap track_buffers_;
+  using TrackBuffersMap =
+      std::map<StreamParser::TrackId, std::unique_ptr<MseTrackBuffer>>;
+  TrackBuffersMap track_buffers_;
 
   // The last audio buffer seen by the frame processor that was removed because
   // it was entirely before the start of the append window.

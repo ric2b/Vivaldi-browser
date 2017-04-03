@@ -37,20 +37,22 @@ namespace blink {
 
 // This type is used for 2 kinds of elements:
 // - Unknown Elements in SVG namespace
-// - Registered custom tag elements in SVG namespace (http://www.w3.org/TR/2013/WD-custom-elements-20130514/#registering-custom-elements)
+// - Registered custom tag elements in SVG namespace
+// (http://www.w3.org/TR/2013/WD-custom-elements-20130514/#registering-custom-elements)
 //
-// The main purpose of this class at the moment is to override layoutObjectIsNeeded() to return
-// false to make sure we don't attempt to layout such elements.
+// The main purpose of this class at the moment is to override
+// layoutObjectIsNeeded() to return false to make sure we don't attempt to
+// layout such elements.
 class SVGUnknownElement final : public SVGElement {
-public:
-    DECLARE_ELEMENT_FACTORY_WITH_TAGNAME(SVGUnknownElement);
+ public:
+  DECLARE_ELEMENT_FACTORY_WITH_TAGNAME(SVGUnknownElement);
 
-private:
-    SVGUnknownElement(const QualifiedName&, Document&);
+ private:
+  SVGUnknownElement(const QualifiedName&, Document&);
 
-    bool layoutObjectIsNeeded(const ComputedStyle&) override { return false; }
+  bool layoutObjectIsNeeded(const ComputedStyle&) override { return false; }
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // SVGUnknownElement_h
+#endif  // SVGUnknownElement_h

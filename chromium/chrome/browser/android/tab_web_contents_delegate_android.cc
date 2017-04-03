@@ -17,9 +17,9 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/file_select_helper.h"
 #include "chrome/browser/infobars/infobar_service.h"
-#include "chrome/browser/media/media_capture_devices_dispatcher.h"
-#include "chrome/browser/media/media_stream_capture_indicator.h"
 #include "chrome/browser/media/protected_media_identifier_permission_context.h"
+#include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
+#include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -93,7 +93,6 @@ infobars::InfoBar* FindHungRendererInfoBar(InfoBarService* infobar_service) {
 
 }  // anonymous namespace
 
-namespace chrome {
 namespace android {
 
 TabWebContentsDelegateAndroid::TabWebContentsDelegateAndroid(JNIEnv* env,
@@ -128,7 +127,7 @@ std::unique_ptr<BluetoothChooser>
 TabWebContentsDelegateAndroid::RunBluetoothChooser(
     content::RenderFrameHost* frame,
     const BluetoothChooser::EventHandler& event_handler) {
-  return base::WrapUnique(new BluetoothChooserAndroid(frame, event_handler));
+  return base::MakeUnique<BluetoothChooserAndroid>(frame, event_handler);
 }
 
 void TabWebContentsDelegateAndroid::CloseContents(
@@ -300,12 +299,12 @@ WebContents* TabWebContentsDelegateAndroid::OpenURLFromTab(
     WebContents* source,
     const content::OpenURLParams& params) {
   WindowOpenDisposition disposition = params.disposition;
-  if (!source || (disposition != CURRENT_TAB &&
-                  disposition != NEW_FOREGROUND_TAB &&
-                  disposition != NEW_BACKGROUND_TAB &&
-                  disposition != OFF_THE_RECORD &&
-                  disposition != NEW_POPUP &&
-                  disposition != NEW_WINDOW)) {
+  if (!source || (disposition != WindowOpenDisposition::CURRENT_TAB &&
+                  disposition != WindowOpenDisposition::NEW_FOREGROUND_TAB &&
+                  disposition != WindowOpenDisposition::NEW_BACKGROUND_TAB &&
+                  disposition != WindowOpenDisposition::OFF_THE_RECORD &&
+                  disposition != WindowOpenDisposition::NEW_POPUP &&
+                  disposition != WindowOpenDisposition::NEW_WINDOW)) {
     // We can't handle this here.  Give the parent a chance.
     return WebContentsDelegateAndroid::OpenURLFromTab(source, params);
   }
@@ -323,10 +322,10 @@ WebContents* TabWebContentsDelegateAndroid::OpenURLFromTab(
       PopupBlockerTabHelper::FromWebContents(source);
   DCHECK(popup_blocker_helper);
 
-  if ((params.disposition == NEW_POPUP ||
-       params.disposition == NEW_FOREGROUND_TAB ||
-       params.disposition == NEW_BACKGROUND_TAB ||
-       params.disposition == NEW_WINDOW) &&
+  if ((params.disposition == WindowOpenDisposition::NEW_POPUP ||
+       params.disposition == WindowOpenDisposition::NEW_FOREGROUND_TAB ||
+       params.disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB ||
+       params.disposition == WindowOpenDisposition::NEW_WINDOW) &&
       !params.user_gesture &&
       !base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisablePopupBlocking)) {
@@ -336,12 +335,12 @@ WebContents* TabWebContentsDelegateAndroid::OpenURLFromTab(
     }
   }
 
-  if (disposition == CURRENT_TAB) {
+  if (disposition == WindowOpenDisposition::CURRENT_TAB) {
     // Only prerender for a current-tab navigation to avoid session storage
     // namespace issues.
     nav_params.target_contents = source;
     prerender::PrerenderManager* prerender_manager =
-        prerender::PrerenderManagerFactory::GetForProfile(profile);
+        prerender::PrerenderManagerFactory::GetForBrowserContext(profile);
     if (prerender_manager &&
         prerender_manager->MaybeUsePrerenderedPage(params.url, &nav_params)) {
       return nav_params.target_contents;
@@ -369,9 +368,9 @@ void TabWebContentsDelegateAndroid::AddNewContents(
     bool user_gesture,
     bool* was_blocked) {
   // No code for this yet.
-  DCHECK_NE(disposition, SAVE_TO_DISK);
+  DCHECK_NE(disposition, WindowOpenDisposition::SAVE_TO_DISK);
   // Can't create a new contents for the current tab - invalid case.
-  DCHECK_NE(disposition, CURRENT_TAB);
+  DCHECK_NE(disposition, WindowOpenDisposition::CURRENT_TAB);
 
   TabHelpers::AttachTabHelpers(new_contents);
 
@@ -406,7 +405,6 @@ void TabWebContentsDelegateAndroid::RequestAppBannerFromDevTools(
 }
 
 }  // namespace android
-}  // namespace chrome
 
 void OnRendererUnresponsive(JNIEnv* env,
                             const JavaParamRef<jclass>& clazz,
@@ -449,8 +447,8 @@ jboolean IsCapturingAudio(JNIEnv* env,
   content::WebContents* web_contents =
       content::WebContents::FromJavaWebContents(java_web_contents);
   scoped_refptr<MediaStreamCaptureIndicator> indicator =
-      MediaCaptureDevicesDispatcher::GetInstance()->
-          GetMediaStreamCaptureIndicator();
+      MediaCaptureDevicesDispatcher::GetInstance()
+          ->GetMediaStreamCaptureIndicator();
   return indicator->IsCapturingAudio(web_contents);
 }
 
@@ -460,7 +458,29 @@ jboolean IsCapturingVideo(JNIEnv* env,
   content::WebContents* web_contents =
       content::WebContents::FromJavaWebContents(java_web_contents);
   scoped_refptr<MediaStreamCaptureIndicator> indicator =
-      MediaCaptureDevicesDispatcher::GetInstance()->
-          GetMediaStreamCaptureIndicator();
+      MediaCaptureDevicesDispatcher::GetInstance()
+          ->GetMediaStreamCaptureIndicator();
   return indicator->IsCapturingVideo(web_contents);
+}
+
+jboolean IsCapturingScreen(JNIEnv* env,
+                           const JavaParamRef<jclass>& clazz,
+                           const JavaParamRef<jobject>& java_web_contents) {
+  content::WebContents* web_contents =
+      content::WebContents::FromJavaWebContents(java_web_contents);
+  scoped_refptr<MediaStreamCaptureIndicator> indicator =
+      MediaCaptureDevicesDispatcher::GetInstance()
+          ->GetMediaStreamCaptureIndicator();
+  return indicator->IsBeingMirrored(web_contents);
+}
+
+void NotifyStopped(JNIEnv* env,
+                   const JavaParamRef<jclass>& clazz,
+                   const JavaParamRef<jobject>& java_web_contents) {
+  content::WebContents* web_contents =
+      content::WebContents::FromJavaWebContents(java_web_contents);
+  scoped_refptr<MediaStreamCaptureIndicator> indicator =
+      MediaCaptureDevicesDispatcher::GetInstance()
+          ->GetMediaStreamCaptureIndicator();
+  indicator->NotifyStopped(web_contents);
 }

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_notification_controller.h"
 
+#include "ash/common/strings/grit/ash_strings.h"
 #include "ash/common/system/system_notifier.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -16,10 +17,9 @@
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/notification_service.h"
-#include "grit/ash_strings.h"
-#include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/strings/grit/ui_strings.h"
@@ -118,7 +118,7 @@ void QuickUnlockNotificationController::Click() {
   chrome::NavigateParams params(profile_,
                                 GURL(kChromeAuthenticationSettingsURL),
                                 ui::PAGE_TRANSITION_LINK);
-  params.disposition = NEW_FOREGROUND_TAB;
+  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   params.window_action = chrome::NavigateParams::SHOW_WINDOW;
   chrome::Navigate(&params);
 

@@ -1,12 +1,12 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="am">
-<translation id="1014825444426747588">ባዶ</translation>
 <translation id="1018939186200882850">የምናሌ ንጥል</translation>
 <translation id="1020833440720551630">የድምጽ ትራክ ላይ ድምጸ-ከል አድርግ</translation>
 <translation id="10623998915015855">የማቀያየሪያ አዝራር</translation>
 <translation id="1088086359088493902">ሰኮንዶች</translation>
 <translation id="1171774979989969504">እባክዎ የኢሜይል አድራሻ ያስገቡ።</translation>
+<translation id="1178581264944972037">ለአፍታ አቁም</translation>
 <translation id="1188858454923323853">ማሟያ</translation>
 <translation id="1206619573307042055">መልሶ መልስ</translation>
 <translation id="1206693055195146388">ተንሸራታች</translation>
@@ -25,6 +25,7 @@
 <translation id="1822429046913737220">ጥዋት/ከሰዓት</translation>
 <translation id="1832974991323546415">በርቀት መሳሪያ ላይ አጫውት</translation>
 <translation id="1842960171412779397">ምረጥ</translation>
+<translation id="1854180393107901205">መውሰድ አቁም</translation>
 <translation id="1880518467580572141">ቢጋር</translation>
 <translation id="1921819250265091946">ቀቀ</translation>
 <translation id="1930711995431081526">ሁኔታ</translation>
@@ -39,6 +40,7 @@
 <translation id="2507943997699731163">እባክዎ ይህን መስክ ይሙሉት።</translation>
 <translation id="2508569020611168319">የትር ዝርዝር</translation>
 <translation id="2548326553472216322">የቅርብ ጊዜ ፍለጋዎች የሉም</translation>
+<translation id="2561842179657104141">ተጨማሪ የማህደረ መረጃ ቁጥጥሮችን አሳይ</translation>
 <translation id="2572483411312390101">አጫውት</translation>
 <translation id="2613802280814924224">እባክዎ የሚሰራ ዋጋ ያስገቡ። የሚቀርበው ዋጋ <ph name="VALID_VALUE" /> ነው።</translation>
 <translation id="2653659639078652383">አስገባ</translation>
@@ -71,6 +73,7 @@
 <translation id="3808586225841795776">የጊዜ ቆይታ</translation>
 <translation id="3822383571486410024">እባክዎ ይህን ጽሑፍ ወደ <ph name="MIN_CHARACTERS" /> ቁምፊዎች ወይም ከዚያ በላይ ያራዝሙት (አሁን እየተጠቀሙ ያሉት <ph name="CURRENT_LENGTH" />ቁምፊዎችን ነው)።</translation>
 <translation id="383465348367842624">ከ«<ph name="ATSIGN" />» በፊት የሚመጣ ክፍል የ«<ph name="INVALIDCHARACTER" />» ምልክት መያዝ የለበትም።</translation>
+<translation id="3846214748874656680">ከሙሉ ማያገጽ ውጣ</translation>
 <translation id="3924558731517983934">መተግበሪያ</translation>
 <translation id="3960700977367013758">የማሸብለያ አሞሌ</translation>
 <translation id="4103419683916926126">ሚሊሰኮንዶች</translation>
@@ -91,6 +94,7 @@
 <translation id="479989351350248267">ፈልግ</translation>
 <translation id="4812940957355064477">እባክዎ ቁጥር ያስገቡ።</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> ተመርጠዋል</translation>
+<translation id="4992066212339426712">ድምጸ-ከል አንሳ</translation>
 <translation id="49969490063480558">እባክዎ ከ«<ph name="ATSIGN" />» በኋላ አንድ ክፍል ያስገቡ። «<ph name="INVALIDADDRESS" />» ያልተሟላ ነው።</translation>
 <translation id="5034860022980953847">የሂደት አመልካች</translation>
 <translation id="5048533449481078685">ዝርዝር አመልካች</translation>
@@ -105,13 +109,17 @@
 <translation id="5468998798572797635">ከሙሉ ማያ ገጽ ውጣ</translation>
 <translation id="5476505524087279545">አታመልክት</translation>
 <translation id="5516424706154626233">ቀን መራጭ</translation>
+<translation id="5537725057119320332">Cast</translation>
 <translation id="5546461542133609677">ድምፅ-ከልን አንሳ</translation>
 <translation id="561939826962581046">ሰዓት</translation>
 <translation id="5641012560118721995">መልሶ ማጫወትን ለአፍታ አቁም</translation>
 <translation id="5643186887447432888">አዝራር</translation>
+<translation id="5677946354068040947">ተጨማሪ አማራጮች</translation>
+<translation id="57838592816432529">ድምጽ ይዝጉ</translation>
 <translation id="583281660410589416">ያልታወቀ </translation>
 <translation id="5843503607508392247">ሌላ...</translation>
 <translation id="5860033963881614850">አጥፋ</translation>
+<translation id="588258955323874662">ሙሉ ገጽ ዕይታ</translation>
 <translation id="5939518447894949180">ዳግም አስጀምር</translation>
 <translation id="5944544982112848342">2048(ከፍተኛ ደረጃ)</translation>
 <translation id="5966707198760109579">ሳምንት</translation>
@@ -134,12 +142,14 @@
 <translation id="6692633176391053278">አስኪያጅ</translation>
 <translation id="6739588121953935928">ማስመሪያ</translation>
 <translation id="6755330956360078551">ጠቃሚ የመሣሪያ ምክር</translation>
+<translation id="6790428901817661496">አጫውት</translation>
 <translation id="6820355525329141109">ተሰኪን መጫን አልተቻለም።</translation>
 <translation id="6843725295806269523">ድምጸ-ከል ያድርጉ</translation>
 <translation id="6845533974506654842">ተጫን</translation>
 <translation id="6853785296079745596">የተዘጉ የስዕል መግለጫዎችን ይደብቁ</translation>
 <translation id="6885760532393684712">ማውጫ</translation>
 <translation id="6934078000481955284">የጽሑፍ ጥቅስ</translation>
+<translation id="6941933287844615239">ማህደረ መረጃን አውርድ</translation>
 <translation id="7057186640035488495">የፊልም ሰዓት</translation>
 <translation id="709897737746224366">እባክዎ የተጠየቀውን ቅርጸት ያዛምዱ።</translation>
 <translation id="7223624360433298498">ያለፈው ጊዜ</translation>
@@ -148,6 +158,7 @@
 <translation id="7364796246159120393">ፋይል ምረጥ</translation>
 <translation id="739024184232394898">ሌላ...</translation>
 <translation id="7491962110804786152">TAB</translation>
+<translation id="7514365320538308">አውርድ</translation>
 <translation id="7673697353781729403">ሰዓቶች</translation>
 <translation id="7720026100085573005">ቀሪ ጊዜ</translation>
 <translation id="7740016676195725605">የተዘጉ የስዕል መግለጫዎችን ማሳየት አቁም</translation>
@@ -164,6 +175,7 @@
 <translation id="819205353528511139">ፊልሙን በሙሉ ማያ ገጽ ሁነታ አጫውት</translation>
 <translation id="8199524924445686405">ዓዓዓዓ</translation>
 <translation id="8244226242650769279">የምስል ካርታ</translation>
+<translation id="8284326494547611709">መግለጫ ጽሑፎች</translation>
 <translation id="835897206747267392">ልክ ያልሆነ እሴት።</translation>
 <translation id="838869780401515933">አመልክት</translation>
 <translation id="8433900881053900389">የመሣሪያ አሞሌ</translation>

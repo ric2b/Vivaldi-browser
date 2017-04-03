@@ -5,37 +5,41 @@
 #ifndef ClipPathClipper_h
 #define ClipPathClipper_h
 
-#include "core/paint/SVGClipPainter.h"
 #include "platform/graphics/paint/ClipPathRecorder.h"
 #include "wtf/Optional.h"
 
 namespace blink {
 
+class ClipPathOperation;
 class FloatPoint;
 class FloatRect;
 class GraphicsContext;
 class LayoutSVGResourceClipper;
 class LayoutObject;
 
-class ClipPathClipper {
-    DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
-public:
-    ClipPathClipper(
-        GraphicsContext&,
-        const LayoutObject&,
-        const FloatRect& referenceBox,
-        const FloatRect& visualOverflowRect,
-        const FloatPoint& origin);
-    ~ClipPathClipper();
+enum class ClipperState { NotApplied, AppliedPath, AppliedMask };
 
-private:
-    LayoutSVGResourceClipper* m_resourceClipper;
-    Optional<ClipPathRecorder> m_clipPathRecorder;
-    SVGClipPainter::ClipperState m_clipperState;
-    const LayoutObject& m_layoutObject;
-    GraphicsContext& m_context;
+class ClipPathClipper {
+  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+
+ public:
+  ClipPathClipper(GraphicsContext&,
+                  ClipPathOperation&,
+                  const LayoutObject&,
+                  const FloatRect& referenceBox,
+                  const FloatPoint& origin);
+  ~ClipPathClipper();
+
+  bool usingMask() const { return m_clipperState == ClipperState::AppliedMask; }
+
+ private:
+  LayoutSVGResourceClipper* m_resourceClipper;
+  Optional<ClipPathRecorder> m_clipPathRecorder;
+  ClipperState m_clipperState;
+  const LayoutObject& m_layoutObject;
+  GraphicsContext& m_context;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // ClipPathClipper_h
+#endif  // ClipPathClipper_h

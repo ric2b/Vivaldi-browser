@@ -9,8 +9,8 @@
 #import "chrome/browser/ui/cocoa/omnibox/omnibox_view_mac.h"
 #import "chrome/browser/ui/cocoa/themed_window.h"
 #include "chrome/grit/generated_resources.h"
-#include "grit/components_strings.h"
-#include "grit/theme_resources.h"
+#include "chrome/grit/theme_resources.h"
+#include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/gfx/color_palette.h"
@@ -37,12 +37,6 @@ StarDecoration::~StarDecoration() {
 void StarDecoration::SetStarred(bool starred, bool location_bar_is_dark) {
   starred_ = starred;
   const int tip_id = starred ? IDS_TOOLTIP_STARRED : IDS_TOOLTIP_STAR;
-  if (!ui::MaterialDesignController::IsModeMaterial()) {
-    const int image_id = starred ? IDR_STAR_LIT : IDR_STAR;
-    SetImage(OmniboxViewMac::ImageForResource(image_id));
-    tooltip_.reset([l10n_util::GetNSStringWithFixup(tip_id) retain]);
-    return;
-  }
   SetImage(GetMaterialIcon(location_bar_is_dark));
   tooltip_.reset([l10n_util::GetNSStringWithFixup(tip_id) retain]);
 }

@@ -13,6 +13,7 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "net/base/host_port_pair.h"
+#include "net/base/net_export.h"
 #include "net/dns/host_resolver.h"
 #include "net/socket/client_socket_pool.h"
 #include "net/socket/client_socket_pool_base.h"
@@ -22,9 +23,11 @@ namespace net {
 
 class ClientSocketFactory;
 class SocketPerformanceWatcherFactory;
+class NetLog;
+class NetLogWithSource;
 
-typedef base::Callback<int(const AddressList&, const BoundNetLog& net_log)>
-OnHostResolutionCallback;
+typedef base::Callback<int(const AddressList&, const NetLogWithSource& net_log)>
+    OnHostResolutionCallback;
 
 class NET_EXPORT_PRIVATE TransportSocketParams
     : public base::RefCounted<TransportSocketParams> {
@@ -215,11 +218,11 @@ class NET_EXPORT_PRIVATE TransportClientSocketPool : public ClientSocketPool {
                     RespectLimits respect_limits,
                     ClientSocketHandle* handle,
                     const CompletionCallback& callback,
-                    const BoundNetLog& net_log) override;
+                    const NetLogWithSource& net_log) override;
   void RequestSockets(const std::string& group_name,
                       const void* params,
                       int num_sockets,
-                      const BoundNetLog& net_log) override;
+                      const NetLogWithSource& net_log) override;
   void CancelRequest(const std::string& group_name,
                      ClientSocketHandle* handle) override;
   void ReleaseSocket(const std::string& group_name,
@@ -245,7 +248,7 @@ class NET_EXPORT_PRIVATE TransportClientSocketPool : public ClientSocketPool {
  protected:
   // Methods shared with WebSocketTransportClientSocketPool
   void NetLogTcpClientSocketPoolRequestedSocket(
-      const BoundNetLog& net_log,
+      const NetLogWithSource& net_log,
       const scoped_refptr<TransportSocketParams>* casted_params);
 
  private:

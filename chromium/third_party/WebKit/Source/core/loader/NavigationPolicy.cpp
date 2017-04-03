@@ -36,43 +36,45 @@
 
 namespace blink {
 
-bool navigationPolicyFromMouseEvent(unsigned short button, bool ctrl, bool shift, bool alt, bool meta, NavigationPolicy* policy)
-{
+bool navigationPolicyFromMouseEvent(unsigned short button,
+                                    bool ctrl,
+                                    bool shift,
+                                    bool alt,
+                                    bool meta,
+                                    NavigationPolicy* policy) {
 #if OS(MACOSX)
-    const bool newTabModifier = (button == 1) || meta;
+  const bool newTabModifier = (button == 1) || meta;
 #else
-    const bool newTabModifier = (button == 1) || ctrl;
+  const bool newTabModifier = (button == 1) || ctrl;
 #endif
-    if (!newTabModifier && !shift && !alt)
-        return false;
+  if (!newTabModifier && !shift && !alt)
+    return false;
 
-    ASSERT(policy);
-    if (newTabModifier) {
-      if (shift){
-        if (ctrl && vivaldi::IsVivaldiRunning()){
-          *policy = NavigationPolicyNewWindow;
-          return true;
-        }
-        else{
-          *policy = NavigationPolicyNewForegroundTab;
-        }
+  DCHECK(policy);
+  if (newTabModifier) {
+    if (shift) {
+      if (ctrl && vivaldi::IsVivaldiRunning()){
+        *policy = NavigationPolicyNewWindow;
+        return true;
+      } else {
+      *policy = NavigationPolicyNewForegroundTab;
       }
-      else
-        *policy = NavigationPolicyNewBackgroundTab;
-    } else {
-      if (shift){
-        if (vivaldi::IsVivaldiRunning()){
-          *policy = NavigationPolicyNewForegroundTab;
-        }
-        else{
-          *policy = NavigationPolicyNewWindow;
-        }
-      }
-      else
-        *policy = NavigationPolicyDownload;
     }
-    return true;
+    else
+      *policy = NavigationPolicyNewBackgroundTab;
+  } else {
+    if (shift) {
+      if (vivaldi::IsVivaldiRunning()){
+        *policy = NavigationPolicyNewForegroundTab;
+      }
+      else{
+      *policy = NavigationPolicyNewWindow;
+      }
+    }
+    else
+      *policy = NavigationPolicyDownload;
+  }
+  return true;
 }
 
-} // namespace blink
-
+}  // namespace blink

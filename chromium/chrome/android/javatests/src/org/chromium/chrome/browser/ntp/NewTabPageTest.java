@@ -17,6 +17,7 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageRecyclerView;
@@ -48,6 +49,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * Tests for the native android New Tab Page.
  */
+@RetryOnFailure
 public class NewTabPageTest extends ChromeTabbedActivityTestBase {
 
     private static final String TEST_PAGE = "/chrome/test/data/android/navigate/simple.html";
@@ -72,7 +74,7 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
                 "chrome/test/data/android/render_tests", "NewTabPageTest");
         viewRenderer.renderAndCompare(mMostVisitedLayout, "most_visited");
         viewRenderer.renderAndCompare(mFakebox, "fakebox");
-        viewRenderer.renderAndCompare(mNtp.getView(), "new_tab_page");
+        viewRenderer.renderAndCompare(mNtp.getView().getRootView(), "new_tab_page");
 
         // Scroll to search bar
         final NewTabPageRecyclerView recyclerView = (NewTabPageRecyclerView)
@@ -92,7 +94,7 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
             }
         });
 
-        viewRenderer.renderAndCompare(mNtp.getView(), "new_tab_page_scrolled");
+        viewRenderer.renderAndCompare(mNtp.getView().getRootView(), "new_tab_page_scrolled");
     }
 
     @Override
@@ -269,7 +271,7 @@ public class NewTabPageTest extends ChromeTabbedActivityTestBase {
     }
 
     @LargeTest
-    @Feature({"NewTagPage"})
+    @Feature({"NewTabPage"})
     public void testUrlFocusAnimationsEnabledOnFailedLoad() throws Exception {
         // TODO(jbudorick): switch this to EmbeddedTestServer.
         TestWebServer webServer = TestWebServer.start();

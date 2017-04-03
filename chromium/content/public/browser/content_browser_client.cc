@@ -8,6 +8,7 @@
 #include "base/guid.h"
 #include "build/build_config.h"
 #include "content/public/browser/client_certificate_delegate.h"
+#include "content/public/browser/navigation_ui_data.h"
 #include "content/public/browser/vpn_service_proxy.h"
 #include "content/public/common/sandbox_type.h"
 #include "media/base/cdm_factory.h"
@@ -368,7 +369,7 @@ bool ContentBrowserClient::IsPluginAllowedToUseDevChannelAPIs(
   return false;
 }
 
-std::string ContentBrowserClient::GetShellUserIdForBrowserContext(
+std::string ContentBrowserClient::GetServiceUserIdForBrowserContext(
     BrowserContext* browser_context) {
   return base::GenerateGUID();
 }
@@ -390,6 +391,11 @@ ScopedVector<NavigationThrottle>
 ContentBrowserClient::CreateThrottlesForNavigation(
     NavigationHandle* navigation_handle) {
   return ScopedVector<NavigationThrottle>();
+}
+
+std::unique_ptr<NavigationUIData> ContentBrowserClient::GetNavigationUIData(
+    NavigationHandle* navigation_handle) {
+  return nullptr;
 }
 
 #if defined(OS_WIN)
@@ -419,13 +425,9 @@ bool ContentBrowserClient::IsWin32kLockdownEnabledForMimeType(
 }
 #endif  // defined(OS_WIN)
 
-#if defined(VIDEO_HOLE)
-ExternalVideoSurfaceContainer*
-ContentBrowserClient::OverrideCreateExternalVideoSurfaceContainer(
-    WebContents* web_contents) {
-  NOTREACHED() << "Hole-punching is not supported. See crbug.com/469348.";
+std::unique_ptr<base::Value> ContentBrowserClient::GetServiceManifestOverlay(
+    const std::string& name) {
   return nullptr;
 }
-#endif
 
 }  // namespace content

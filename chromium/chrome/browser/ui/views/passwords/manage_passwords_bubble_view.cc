@@ -11,6 +11,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
+#include "chrome/browser/ui/passwords/password_dialog_prompts.h"
 #include "chrome/browser/ui/passwords/passwords_model_delegate.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/passwords/credentials_item_view.h"
@@ -18,8 +19,8 @@
 #include "chrome/browser/ui/views/passwords/manage_password_items_view.h"
 #include "chrome/browser/ui/views/passwords/manage_passwords_icon_views.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/user_metrics.h"
-#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -218,13 +219,10 @@ ManagePasswordsBubbleView::AutoSigninView::AutoSigninView(
   SetLayoutManager(new views::FillLayout);
   const autofill::PasswordForm& form = parent_->model()->pending_password();
   CredentialsItemView* credential = new CredentialsItemView(
-      this,
-      base::string16(),
+      this, base::string16(),
       l10n_util::GetStringFUTF16(IDS_MANAGE_PASSWORDS_AUTO_SIGNIN_TITLE,
                                  form.username_value),
-      GetNativeTheme()->GetSystemColor(
-          ui::NativeTheme::kColorId_ButtonBackgroundColor),
-      &form,
+      kButtonHoverColor, &form,
       parent_->model()->GetProfile()->GetRequestContext());
   credential->SetEnabled(false);
   AddChildView(credential);
@@ -655,7 +653,7 @@ ManagePasswordsBubbleView::UpdatePendingView::UpdatePendingView(
   nope_button_ = views::MdTextButton::CreateSecondaryUiButton(
       this, l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_CANCEL_BUTTON));
 
-  update_button_ = new views::BlueButton(
+  update_button_ = views::MdTextButton::CreateSecondaryUiBlueButton(
       this, l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_UPDATE_BUTTON));
 
   // Title row.

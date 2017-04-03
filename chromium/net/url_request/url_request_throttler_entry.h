@@ -13,7 +13,8 @@
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "net/base/backoff_entry.h"
-#include "net/log/net_log.h"
+#include "net/base/net_export.h"
+#include "net/log/net_log_with_source.h"
 #include "net/url_request/url_request_throttler_entry_interface.h"
 
 namespace net {
@@ -111,11 +112,6 @@ class NET_EXPORT URLRequestThrottlerEntry
   virtual const BackoffEntry* GetBackoffEntry() const;
   virtual BackoffEntry* GetBackoffEntry();
 
-  // Returns true if |load_flags| contains a flag that indicates an
-  // explicit request by the user to load the resource. We never
-  // throttle requests with such load flags.
-  static bool ExplicitUserRequest(const int load_flags);
-
   // Used by tests.
   base::TimeTicks sliding_window_release_time() const {
     return sliding_window_release_time_;
@@ -154,7 +150,7 @@ class NET_EXPORT URLRequestThrottlerEntry
   // Canonicalized URL string that this entry is for; used for logging only.
   std::string url_id_;
 
-  BoundNetLog net_log_;
+  NetLogWithSource net_log_;
 
   DISALLOW_COPY_AND_ASSIGN(URLRequestThrottlerEntry);
 };

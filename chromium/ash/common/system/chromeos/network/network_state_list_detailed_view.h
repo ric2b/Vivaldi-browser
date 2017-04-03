@@ -10,7 +10,6 @@
 
 #include "ash/common/login_status.h"
 #include "ash/common/system/chromeos/network/network_detailed_view.h"
-#include "ash/common/system/tray/view_click_listener.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/chromeos/network/network_list_delegate.h"
@@ -40,8 +39,6 @@ namespace tray {
 
 class NetworkStateListDetailedView
     : public NetworkDetailedView,
-      public views::ButtonListener,
-      public ViewClickListener,
       public ui::NetworkListDelegate,
       public base::SupportsWeakPtr<NetworkStateListDetailedView> {
  public:
@@ -57,15 +54,15 @@ class NetworkStateListDetailedView
   DetailedViewType GetViewType() const override;
   void Update() override;
 
- protected:
-  // Overridden from ButtonListener.
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
-  // Overridden from ViewClickListener.
-  void OnViewClicked(views::View* sender) override;
-
  private:
   class InfoBubble;
+
+  // TrayDetailsView:
+  void HandleViewClicked(views::View* view) override;
+  void HandleButtonPressed(views::Button* sender,
+                           const ui::Event& event) override;
+  void CreateExtraTitleRowButtons() override;
+  void ShowSettings() override;
 
   // Create UI components.
   void CreateHeaderEntry();
@@ -116,6 +113,8 @@ class NetworkStateListDetailedView
   void UpdateViewForNetwork(views::View* view,
                             const ui::NetworkInfo& info) override;
   views::Label* CreateInfoLabel() override;
+  void OnNetworkEntryClicked(views::View* sender) override;
+  void OnOtherWifiClicked() override;
   void RelayoutScrollList() override;
 
   // Type of list (all networks or vpn)
@@ -124,13 +123,19 @@ class NetworkStateListDetailedView
   // Track login state.
   LoginStatus login_;
 
-  // Track WiFi scanning state.
-  bool wifi_scanning_;
+  // Tracks the WiFi scanning state to help detect if the state has changed. Use
+  // NetworkHandler::GetScanningByType() if you require the current wifi
+  // scanning state.
+  bool prev_wifi_scanning_state_;
 
-  // Child views.
   views::ImageButton* info_icon_;
+
+  // Not used for material design.
   TrayPopupHeaderButton* button_wifi_;
+
+  // Not used for material design.
   TrayPopupHeaderButton* button_mobile_;
+
   TrayPopupLabelButton* other_wifi_;
   TrayPopupLabelButton* turn_on_wifi_;
   TrayPopupLabelButton* other_mobile_;

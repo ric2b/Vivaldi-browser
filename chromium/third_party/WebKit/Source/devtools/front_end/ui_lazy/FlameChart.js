@@ -154,7 +154,7 @@ WebInspector.FlameChart.GroupStyle;
 
 /**
  * @constructor
- * @param {!Array<number>|!Uint8Array} entryLevels
+ * @param {!Array<number>|!Uint16Array} entryLevels
  * @param {!Array<number>|!Float32Array} entryTotalTimes
  * @param {!Array<number>|!Float64Array} entryStartTimes
  * @param {?Array<!WebInspector.FlameChart.Group>} groups
@@ -215,7 +215,7 @@ WebInspector.FlameChartDataProvider.prototype = {
 
     /**
      * @param {number} entryIndex
-     * @return {?Array.<!{title: string, value: (string|!Element)}>}
+     * @return {?Element}
      */
     prepareHighlightedEntryInfo: function(entryIndex) { },
 
@@ -430,7 +430,7 @@ WebInspector.FlameChart.Calculator.prototype = {
         this._minimumBoundaries = this._zeroTime + mainPane._windowLeft * this._totalTime;
         this._maximumBoundaries = this._zeroTime + mainPane._windowRight * this._totalTime;
         this._paddingLeft = mainPane._paddingLeft;
-        this._width = mainPane._canvas.width / window.devicePixelRatio - this._paddingLeft;
+        this._width = mainPane._offsetWidth - this._paddingLeft;
         this._timeToPixel = this._width / this.boundarySpan();
     },
 
@@ -813,12 +813,20 @@ WebInspector.FlameChart.prototype = {
      */
     _updatePopover: function(entryIndex)
     {
-        if (entryIndex !== this._highlightedEntryIndex) {
-            this._entryInfo.removeChildren();
-            var entryInfo = this._dataProvider.prepareHighlightedEntryInfo(entryIndex);
-            if (entryInfo)
-                this._entryInfo.appendChild(this._buildEntryInfo(entryInfo));
+        if (entryIndex === this._highlightedEntryIndex) {
+            this._updatePopoverOffset();
+            return;
         }
+        this._entryInfo.removeChildren();
+        var popoverElement = this._dataProvider.prepareHighlightedEntryInfo(entryIndex);
+        if (popoverElement) {
+            this._entryInfo.appendChild(popoverElement);
+            this._updatePopoverOffset();
+        }
+    },
+
+    _updatePopoverOffset: function()
+    {
         var mouseX = this._lastMouseOffsetX;
         var mouseY = this._lastMouseOffsetY;
         var parentWidth = this._entryInfo.parentElement.clientWidth;
@@ -1236,7 +1244,6 @@ WebInspector.FlameChart.prototype = {
         var nextMarkerIndex = 0;
         var textPadding = this._dataProvider.textPadding();
         var minTextWidth = 2 * textPadding + this._measureWidth(context, "\u2026");
-        var unclippedWidth = width - (WebInspector.isMac() ? 0 : this._vScrollElement.offsetWidth);
         var barHeight = this._barHeight;
         var top = this._scrollTop;
         var minVisibleBarLevel = Math.max(this._visibleLevelOffsets.upperBound(top) - 1, 0);
@@ -1331,7 +1338,7 @@ WebInspector.FlameChart.prototype = {
             var entryIndex = titleIndices[i];
             var entryStartTime = entryStartTimes[entryIndex];
             var barX = this._timeToPositionClipped(entryStartTime);
-            var barRight = Math.min(this._timeToPositionClipped(entryStartTime + entryTotalTimes[entryIndex]), unclippedWidth) + 1;
+            var barRight = Math.min(this._timeToPositionClipped(entryStartTime + entryTotalTimes[entryIndex]), width) + 1;
             var barWidth = barRight - barX;
             var barLevel = entryLevels[entryIndex];
             var barY = this._levelToHeight(barLevel);
@@ -1712,7 +1719,7 @@ WebInspector.FlameChart.prototype = {
         var levelCount = this._dataProvider.maxStackDepth();
         var groups = this._rawTimelineData.groups || [];
         this._visibleLevelOffsets = new Uint32Array(levelCount + 1);
-        this._visibleLevels = new Uint8Array(levelCount);
+        this._visibleLevels = new Uint16Array(levelCount);
         this._groupOffsets = new Uint32Array(groups.length + 1);
 
         var groupIndex = -1;
@@ -1799,7 +1806,7 @@ WebInspector.FlameChart.prototype = {
         var timelineData = this._timelineData();
         var barX = this._timeToPositionClipped(timeRange.startTime);
         var barRight = this._timeToPositionClipped(timeRange.endTime);
-        if (barRight === 0 || barX === this._canvas.width)
+        if (barRight === 0 || barX === this._offsetWidth)
             return;
         var barWidth = barRight - barX;
         var barCenter = barX + barWidth / 2;
@@ -1820,7 +1827,7 @@ WebInspector.FlameChart.prototype = {
      */
     _timeToPositionClipped: function(time)
     {
-        return Number.constrain(this._timeToPosition(time), 0, this._canvas.width);
+        return Number.constrain(this._timeToPosition(time), 0, this._offsetWidth);
     },
 
     /**
@@ -1839,24 +1846,6 @@ WebInspector.FlameChart.prototype = {
     _levelToHeight: function(level)
     {
         return this._visibleLevelOffsets[level];
-    },
-
-    /**
-     * @param {!Array<!{title: string, value: (string|!Element)}>} entryInfo
-     * @return {!Element}
-     */
-    _buildEntryInfo: function(entryInfo)
-    {
-        var infoTable = createElementWithClass("table", "info-table");
-        for (var entry of entryInfo) {
-            var row = infoTable.createChild("tr");
-            row.createChild("td", "title").textContent = entry.title;
-            if (typeof entry.value === "string")
-                row.createChild("td").textContent = entry.value;
-            else
-                row.createChild("td").appendChild(entry.value);
-        }
-        return infoTable;
     },
 
     /**
@@ -1975,7 +1964,10 @@ WebInspector.FlameChart.prototype = {
 
     _updateContentElementSize: function()
     {
-        this._offsetWidth = this.contentElement.offsetWidth;
+        var offsetWidth = this._vScrollElement.offsetLeft;
+        if (!offsetWidth)
+            offsetWidth = this.contentElement.offsetWidth;
+        this._offsetWidth = offsetWidth;
         this._offsetHeight = this.contentElement.offsetHeight;
     },
 

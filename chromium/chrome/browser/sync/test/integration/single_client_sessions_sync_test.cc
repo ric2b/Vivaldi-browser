@@ -7,11 +7,11 @@
 #include "chrome/browser/sessions/session_service.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/sessions_helper.h"
-#include "chrome/browser/sync/test/integration/sync_integration_test_util.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "chrome/browser/sync/test/integration/typed_urls_helper.h"
+#include "chrome/browser/sync/test/integration/updated_progress_marker_checker.h"
 #include "chrome/common/url_constants.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/sessions/core/session_types.h"
 #include "components/sync/base/time.h"
@@ -29,7 +29,6 @@ using sessions_helper::SessionWindowMap;
 using sessions_helper::SyncedSessionVector;
 using sessions_helper::WaitForTabsToLoad;
 using sessions_helper::WindowsMatch;
-using sync_integration_test_util::AwaitCommitActivityCompletion;
 using typed_urls_helper::GetUrlFromClient;
 
 class SingleClientSessionsSyncTest : public SyncTest {
@@ -49,8 +48,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, Sanity) {
   // Add a new session to client 0 and wait for it to sync.
   ScopedWindowMap old_windows;
   GURL url = GURL("http://127.0.0.1/bubba");
-  ASSERT_TRUE(OpenTabAndGetLocalWindows(0, url, old_windows.GetMutable()));
-  ASSERT_TRUE(AwaitCommitActivityCompletion(GetSyncService((0))));
+  ASSERT_TRUE(OpenTabAndGetLocalWindows(0, url, &old_windows));
+  ASSERT_TRUE(UpdatedProgressMarkerChecker(GetSyncService(0)).Wait());
 
   // Get foreign session data from client 0.
   SyncedSessionVector sessions;
@@ -59,8 +58,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, Sanity) {
 
   // Verify client didn't change.
   ScopedWindowMap new_windows;
-  ASSERT_TRUE(GetLocalWindows(0, new_windows.GetMutable()));
-  ASSERT_TRUE(WindowsMatch(*old_windows.Get(), *new_windows.Get()));
+  ASSERT_TRUE(GetLocalWindows(0, &new_windows));
+  ASSERT_TRUE(WindowsMatch(old_windows, new_windows));
 
   fake_server::FakeServerVerifier fake_server_verifier(GetFakeServer());
   SessionsHierarchy expected_sessions;
@@ -83,9 +82,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, ChromeHistory) {
 
   // Add a new session to client 0 and wait for it to sync.
   ScopedWindowMap old_windows;
-  ASSERT_TRUE(OpenTabAndGetLocalWindows(0,
-                                        GURL(chrome::kChromeUIHistoryURL),
-                                        old_windows.GetMutable()));
+  ASSERT_TRUE(OpenTabAndGetLocalWindows(0, GURL(chrome::kChromeUIHistoryURL),
+                                        &old_windows));
   std::vector<GURL> urls;
   urls.push_back(GURL(chrome::kChromeUIHistoryURL));
   ASSERT_TRUE(WaitForTabsToLoad(0, urls));
@@ -104,15 +102,13 @@ IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, TimestampMatchesHistory) {
   const GURL url("data:text/html,<html><title>Test</title></html>");
 
   ScopedWindowMap windows;
-  ASSERT_TRUE(OpenTabAndGetLocalWindows(0, url, windows.GetMutable()));
+  ASSERT_TRUE(OpenTabAndGetLocalWindows(0, url, &windows));
 
   int found_navigations = 0;
-  for (SessionWindowMap::const_iterator it = windows.Get()->begin();
-       it != windows.Get()->end(); ++it) {
-    for (std::vector<sessions::SessionTab*>::const_iterator it2 =
-             it->second->tabs.begin(); it2 != it->second->tabs.end(); ++it2) {
-      for (std::vector<sessions::SerializedNavigationEntry>::const_iterator
-               it3 = (*it2)->navigations.begin();
+  for (auto it = windows.begin(); it != windows.end(); ++it) {
+    for (auto it2 = it->second->tabs.begin(); it2 != it->second->tabs.end();
+         ++it2) {
+      for (auto it3 = (*it2)->navigations.begin();
            it3 != (*it2)->navigations.end(); ++it3) {
         const base::Time timestamp = it3->timestamp();
 
@@ -137,15 +133,13 @@ IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, ResponseCodeIsPreserved) {
   const GURL url("data:text/html,<html><title>Test</title></html>");
 
   ScopedWindowMap windows;
-  ASSERT_TRUE(OpenTabAndGetLocalWindows(0, url, windows.GetMutable()));
+  ASSERT_TRUE(OpenTabAndGetLocalWindows(0, url, &windows));
 
   int found_navigations = 0;
-  for (SessionWindowMap::const_iterator it = windows.Get()->begin();
-       it != windows.Get()->end(); ++it) {
-    for (std::vector<sessions::SessionTab*>::const_iterator it2 =
-             it->second->tabs.begin(); it2 != it->second->tabs.end(); ++it2) {
-      for (std::vector<sessions::SerializedNavigationEntry>::const_iterator
-               it3 = (*it2)->navigations.begin();
+  for (auto it = windows.begin(); it != windows.end(); ++it) {
+    for (auto it2 = it->second->tabs.begin(); it2 != it->second->tabs.end();
+         ++it2) {
+      for (auto it3 = (*it2)->navigations.begin();
            it3 != (*it2)->navigations.end(); ++it3) {
         EXPECT_EQ(200, it3->http_status_code());
         ++found_navigations;
@@ -164,9 +158,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, CookieJarMismatch) {
   base::HistogramTester histogram_tester;
   ScopedWindowMap old_windows;
   GURL url = GURL("http://127.0.0.1/bubba");
-  ASSERT_TRUE(OpenTabAndGetLocalWindows(0, url, old_windows.GetMutable()));
+  ASSERT_TRUE(OpenTabAndGetLocalWindows(0, url, &old_windows));
   TriggerSyncForModelTypes(0, syncer::ModelTypeSet(syncer::SESSIONS));
-  ASSERT_TRUE(AwaitCommitActivityCompletion(GetSyncService((0))));
+  ASSERT_TRUE(UpdatedProgressMarkerChecker(GetSyncService(0)).Wait());
 
   // The cookie jar mismatch value will be true by default due to
   // the way integration tests trigger signin (which does not involve a normal
@@ -191,9 +185,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientSessionsSyncTest, CookieJarMismatch) {
 
   // Trigger a sync and wait for it.
   url = GURL("http://127.0.0.1/bubba2");
-  ASSERT_TRUE(OpenTabAndGetLocalWindows(0, url, old_windows.GetMutable()));
+  ASSERT_TRUE(OpenTabAndGetLocalWindows(0, url, &old_windows));
   TriggerSyncForModelTypes(0, syncer::ModelTypeSet(syncer::SESSIONS));
-  ASSERT_TRUE(AwaitCommitActivityCompletion(GetSyncService((0))));
+  ASSERT_TRUE(UpdatedProgressMarkerChecker(GetSyncService(0)).Wait());
 
   // Verify the cookie jar mismatch bool is set to false.
   ASSERT_TRUE(GetFakeServer()->GetLastCommitMessage(&message));

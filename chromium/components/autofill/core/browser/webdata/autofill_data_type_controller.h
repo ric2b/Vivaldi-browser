@@ -20,22 +20,20 @@ class AutofillWebDataService;
 namespace browser_sync {
 
 // A class that manages the startup and shutdown of autofill sync.
-class AutofillDataTypeController : public sync_driver::NonUIDataTypeController {
+class AutofillDataTypeController : public syncer::NonUIDataTypeController {
  public:
+  // |dump_stack| is called when an unrecoverable error occurs.
   AutofillDataTypeController(
-      const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
       const scoped_refptr<base::SingleThreadTaskRunner>& db_thread,
-      const base::Closure& error_callback,
-      sync_driver::SyncClient* sync_client,
+      const base::Closure& dump_stack,
+      syncer::SyncClient* sync_client,
       const scoped_refptr<autofill::AutofillWebDataService>& web_data_service);
+  ~AutofillDataTypeController() override;
 
   // NonUIDataTypeController implementation.
-  syncer::ModelType type() const override;
   syncer::ModelSafeGroup model_safe_group() const override;
 
  protected:
-  ~AutofillDataTypeController() override;
-
   // NonUIDataTypeController implementation.
   bool PostTaskOnBackendThread(const tracked_objects::Location& from_here,
                                const base::Closure& task) override;

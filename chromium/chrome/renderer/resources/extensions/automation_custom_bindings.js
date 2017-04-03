@@ -216,10 +216,13 @@ automationInternal.onChildTreeID.addListener(function(treeID,
 
       privates(root).impl.setHostNode(node);
 
-      if (root.docLoaded)
-        privates(root).impl.dispatchEvent(schema.EventType.loadComplete);
+      if (root.docLoaded) {
+        privates(root).impl.dispatchEvent(
+            schema.EventType.loadComplete, 'page');
+      }
 
-      privates(node).impl.dispatchEvent(schema.EventType.childrenChanged);
+      privates(node).impl.dispatchEvent(
+          schema.EventType.childrenChanged, 'none');
     });
 
     automationInternal.enableFrame(childTreeID);
@@ -326,6 +329,11 @@ automationInternal.onAccessibilityTreeDestroyed.addListener(function(id) {
 
   // Destroy the native cache of the accessibility tree.
   DestroyAccessibilityTree(id);
+});
+
+automationInternal.onAccessibilityTreeSerializationError.addListener(
+    function(id) {
+  automationInternal.enableFrame(id);
 });
 
 var binding = automation.generate();

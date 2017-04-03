@@ -6,7 +6,6 @@
 #define IOS_WEB_PUBLIC_TEST_WEB_TEST_WITH_WEB_STATE_H_
 
 #include "base/ios/block_types.h"
-#import "base/ios/weak_nsobject.h"
 #include "base/message_loop/message_loop.h"
 #include "ios/web/public/test/web_test.h"
 #include "url/gurl.h"
@@ -26,19 +25,12 @@ class WebTestWithWebState : public WebTest,
   void SetUp() override;
   void TearDown() override;
 
-  // base::MessageLoop::TaskObserver overrides.
-  void WillProcessTask(const base::PendingTask& pending_task) override;
-  void DidProcessTask(const base::PendingTask& pending_task) override;
-
-  // Loads the specified HTML content into the WebController via public APIs.
+  // Loads the specified HTML content with URL into the WebState.
+  void LoadHtml(NSString* html, const GURL& url);
+  // Loads the specified HTML content into the WebState, using test url name.
   void LoadHtml(NSString* html);
-  // Loads the specified HTML content into the WebController via public APIs.
+  // Loads the specified HTML content into the WebState, using test url name.
   void LoadHtml(const std::string& html);
-  // Loads |url| into the WebController via public APIs.
-  // Note if anyone uses this to load web pages from the live internet, the
-  // tests can be flaky / dependent on content and behavior beyond our control.
-  // Use this only when it's impossible to test with static HTML using LoadHtml.
-  void LoadURL(const GURL& url);
   // Blocks until both known NSRunLoop-based and known message-loop-based
   // background tasks have completed
   void WaitForBackgroundTasks();
@@ -55,20 +47,15 @@ class WebTestWithWebState : public WebTest,
   web::WebState* web_state();
   const web::WebState* web_state() const;
 
-  // true if a task has been processed.
-  bool processed_a_task_;
-
  private:
-  // LoadURL() for data URLs sometimes lock up navigation, so if the loaded page
-  // is not the one expected, reset the web view. In some cases, document or
-  // document.body does not exist either; also reset in those cases.
-  // Returns true if a reset occurred. One may want to load the page again.
-  bool ResetPageIfNavigationStalled(NSString* load_check);
-  // Creates a unique HTML element to look for in
-  // ResetPageIfNavigationStalled().
-  NSString* CreateLoadCheck();
+  // base::MessageLoop::TaskObserver overrides.
+  void WillProcessTask(const base::PendingTask& pending_task) override;
+  void DidProcessTask(const base::PendingTask& pending_task) override;
+
   // The web state for testing.
   std::unique_ptr<WebState> web_state_;
+  // true if a task has been processed.
+  bool processed_a_task_;
 };
 
 }  // namespace web

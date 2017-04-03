@@ -44,7 +44,6 @@
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/user_metrics.h"
-#include "content/public/common/browser_plugin_guest_mode.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/referrer.h"
@@ -209,8 +208,7 @@ RenderFrameHostImpl* RenderFrameHostManager::Navigate(
   // Create a pending RenderFrameHost to use for the navigation.
   RenderFrameHostImpl* dest_render_frame_host = UpdateStateForNavigate(
       dest_url, frame_entry.source_site_instance(), frame_entry.site_instance(),
-      entry.GetTransitionType(),
-      entry.restore_type() != NavigationEntryImpl::RESTORE_NONE,
+      entry.GetTransitionType(), entry.restore_type() != RestoreType::NONE,
       entry.IsViewSourceMode(), entry.transferred_global_request_id(),
       entry.bindings(), is_reload);
   if (!dest_render_frame_host)
@@ -544,6 +542,8 @@ void RenderFrameHostManager::CommitPendingIfNecessary(
     // pending/speculative RenderFrameHost replaces the current one in the
     // commit call below.
     CommitPending();
+    if (IsBrowserSideNavigationEnabled())
+      frame_tree_node_->ResetNavigationRequest(false);
   } else if (render_frame_host == render_frame_host_.get()) {
     // A same-process navigation committed while a simultaneous cross-process
     // navigation is still ongoing.
@@ -559,6 +559,7 @@ void RenderFrameHostManager::CommitPendingIfNecessary(
     if (was_caused_by_user_gesture) {
       if (IsBrowserSideNavigationEnabled()) {
         CleanUpNavigation();
+        frame_tree_node_->ResetNavigationRequest(false);
       } else {
         CancelPending();
       }
@@ -763,8 +764,7 @@ RenderFrameHostImpl* RenderFrameHostManager::GetFrameHostForNavigation(
       request.common_params().url, request.source_site_instance(),
       request.dest_site_instance(), candidate_site_instance,
       request.common_params().transition,
-      request.restore_type() != NavigationEntryImpl::RESTORE_NONE,
-      request.is_view_source());
+      request.restore_type() != RestoreType::NONE, request.is_view_source());
 
   // The appropriate RenderFrameHost to commit the navigation.
   RenderFrameHostImpl* navigation_rfh = nullptr;
@@ -1867,7 +1867,8 @@ void RenderFrameHostManager::EnsureRenderViewInitialized(
 void RenderFrameHostManager::CreateOuterDelegateProxy(
     SiteInstance* outer_contents_site_instance,
     RenderFrameHostImpl* render_frame_host) {
-  CHECK(BrowserPluginGuestMode::UseCrossProcessFramesForGuests());
+  // We only get here when Delegate for this manager is an inner delegate and is
+  // based on cross process frames.
   RenderFrameProxyHost* proxy =
       CreateRenderFrameProxyHost(outer_contents_site_instance, nullptr);
 
@@ -1884,6 +1885,9 @@ void RenderFrameHostManager::CreateOuterDelegateProxy(
       false /* is_loading */,
       render_frame_host->frame_tree_node()->current_replication_state()));
   proxy->set_render_frame_proxy_created(true);
+
+  // There is no longer a RenderFrame associated with this RenderFrameHost.
+  render_frame_host->SetRenderFrameCreated(false);
 }
 
 void RenderFrameHostManager::SetRWHViewForInnerContents(

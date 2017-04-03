@@ -9,6 +9,7 @@ import android.test.UiThreadTest;
 import android.test.suitebuilder.annotation.MediumTest;
 
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
 
@@ -36,6 +37,7 @@ public class WebappUrlBarTest extends WebappActivityTestBase {
     @UiThreadTest
     @MediumTest
     @Feature({"Webapps"})
+    @RetryOnFailure
     public void testUrlDisplay() {
         final String scheme = "https://";
         final String host = "lorem.com";
@@ -46,12 +48,12 @@ public class WebappUrlBarTest extends WebappActivityTestBase {
         final int[] securityLevels = {ConnectionSecurityLevel.NONE,
                 ConnectionSecurityLevel.EV_SECURE, ConnectionSecurityLevel.SECURE,
                 ConnectionSecurityLevel.SECURITY_WARNING,
-                ConnectionSecurityLevel.SECURITY_POLICY_WARNING,
-                ConnectionSecurityLevel.SECURITY_ERROR};
+                ConnectionSecurityLevel.SECURE_WITH_POLICY_INSTALLED_CERT,
+                ConnectionSecurityLevel.DANGEROUS};
 
         for (int i : securityLevels) {
             // TODO(palmer): http://crbug.com/297249
-            if (i == ConnectionSecurityLevel.SECURITY_POLICY_WARNING) continue;
+            if (i == ConnectionSecurityLevel.SECURE_WITH_POLICY_INSTALLED_CERT) continue;
             mUrlBar.update(url, i);
 
             int iconResource = mUrlBar.getCurrentIconResourceForTests();

@@ -7,12 +7,16 @@
 
 #include <memory>
 
+#include "base/guid.h"
 #include "base/macros.h"
 #include "components/offline_pages/background/request_coordinator.h"
+#include "components/offline_pages/client_policy_controller.h"
 
 namespace offline_pages {
 
+struct ClientId;
 struct OfflinePageDownloadNotifier;
+class ClientPolicyController;
 class SavePageRequest;
 
 // Class observing the save page requests and issuing corresponding user
@@ -31,17 +35,23 @@ class DownloadNotifyingObserver : public RequestCoordinator::Observer,
   // RequestCoordinator::Observer implementation:
   void OnAdded(const SavePageRequest& request) override;
   void OnChanged(const SavePageRequest& request) override;
-  void OnCompleted(const SavePageRequest& request,
-                   RequestCoordinator::SavePageStatus status) override;
+  void OnCompleted(
+      const SavePageRequest& request,
+      RequestCoordinator::BackgroundSavePageResult status) override;
 
  private:
   friend class DownloadNotifyingObserverTest;
 
-  explicit DownloadNotifyingObserver(
-      std::unique_ptr<OfflinePageDownloadNotifier> notifier);
+  DownloadNotifyingObserver(
+      std::unique_ptr<OfflinePageDownloadNotifier> notifier,
+      ClientPolicyController* policy_controller);
+
+  bool IsVisibleInUI(const ClientId& id);
 
   // Used to issue notifications related to save page requests.
   std::unique_ptr<OfflinePageDownloadNotifier> notifier_;
+  // Used to determine policy-related permissions. Not owned.
+  ClientPolicyController* policy_controller_;
 
   DISALLOW_COPY_AND_ASSIGN(DownloadNotifyingObserver);
 };

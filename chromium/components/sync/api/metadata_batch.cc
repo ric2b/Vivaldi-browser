@@ -6,7 +6,7 @@
 
 #include <utility>
 
-namespace syncer_v2 {
+namespace syncer {
 
 MetadataBatch::MetadataBatch() {}
 MetadataBatch::~MetadataBatch() {}
@@ -20,12 +20,12 @@ void MetadataBatch::AddMetadata(const std::string& storage_key,
   metadata_map_.insert(std::make_pair(storage_key, metadata));
 }
 
-const sync_pb::DataTypeState& MetadataBatch::GetDataTypeState() const {
+const sync_pb::ModelTypeState& MetadataBatch::GetModelTypeState() const {
   return state_;
 }
 
-void MetadataBatch::SetDataTypeState(const sync_pb::DataTypeState& state) {
+void MetadataBatch::SetModelTypeState(const sync_pb::ModelTypeState& state) {
   state_ = state;
 }
 
-}  // namespace syncer_v2
+}  // namespace syncer

@@ -5,10 +5,25 @@
 #include "components/sync/api/entity_data.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/logging.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
+#include "components/sync/base/time.h"
+#include "components/sync/base/unique_position.h"
+#include "components/sync/protocol/proto_value_conversions.h"
 
-namespace syncer_v2 {
+namespace syncer {
+
+namespace {
+
+std::string UniquePositionToString(
+    const sync_pb::UniquePosition& unique_position) {
+  return UniquePosition::FromProto(unique_position).ToDebugString();
+}
+
+}  // namespace
 
 EntityData::EntityData() {}
 EntityData::~EntityData() {}
@@ -33,6 +48,24 @@ EntityDataPtr EntityData::PassToPtr() {
   return target;
 }
 
+#define ADD_TO_DICT(dict, value, transform) \
+  dict->SetString(base::ToUpperASCII(#value), transform(value));
+
+std::unique_ptr<base::DictionaryValue> EntityData::ToDictionaryValue() {
+  std::unique_ptr<base::DictionaryValue> dict =
+      EntitySpecificsToValue(specifics);
+  ADD_TO_DICT(dict, id, );
+  ADD_TO_DICT(dict, client_tag_hash, );
+  ADD_TO_DICT(dict, non_unique_name, );
+  ADD_TO_DICT(dict, parent_id, );
+  ADD_TO_DICT(dict, creation_time, GetTimeDebugString);
+  ADD_TO_DICT(dict, modification_time, GetTimeDebugString);
+  ADD_TO_DICT(dict, unique_position, UniquePositionToString);
+  return dict;
+}
+
+#undef ADD_TO_DICT
+
 void EntityDataTraits::SwapValue(EntityData* dest, EntityData* src) {
   dest->Swap(src);
 }
@@ -46,4 +79,4 @@ const EntityData& EntityDataTraits::DefaultValue() {
   return default_instance;
 }
 
-}  // namespace syncer_v2
+}  // namespace syncer

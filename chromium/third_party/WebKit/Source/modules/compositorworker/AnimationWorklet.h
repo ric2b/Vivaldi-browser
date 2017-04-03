@@ -12,26 +12,31 @@
 namespace blink {
 
 class LocalFrame;
-class ThreadedWorkletGlobalScopeProxy;
+class ThreadedWorkletMessagingProxy;
 class WorkletGlobalScopeProxy;
 
 class MODULES_EXPORT AnimationWorklet final : public Worklet {
-    WTF_MAKE_NONCOPYABLE(AnimationWorklet);
-public:
-    static AnimationWorklet* create(LocalFrame*);
-    ~AnimationWorklet() override;
+  WTF_MAKE_NONCOPYABLE(AnimationWorklet);
 
-    WorkletGlobalScopeProxy* workletGlobalScopeProxy() const final;
+ public:
+  static AnimationWorklet* create(LocalFrame*);
+  ~AnimationWorklet() override;
 
-    DECLARE_VIRTUAL_TRACE();
+  void initialize() final;
+  bool isInitialized() const final;
 
-private:
-    explicit AnimationWorklet(LocalFrame*);
+  WorkletGlobalScopeProxy* workletGlobalScopeProxy() const final;
 
-    // TODO(ikilpatrick): this will change to a raw ptr once we have a thread.
-    std::unique_ptr<ThreadedWorkletGlobalScopeProxy> m_workletGlobalScopeProxy;
+  DECLARE_VIRTUAL_TRACE();
+
+ private:
+  explicit AnimationWorklet(LocalFrame*);
+
+  // The proxy outlives the worklet as it is used to perform thread shutdown,
+  // it deletes itself once this has occured.
+  ThreadedWorkletMessagingProxy* m_workletMessagingProxy;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // AnimationWorklet_h
+#endif  // AnimationWorklet_h

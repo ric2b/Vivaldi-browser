@@ -5,9 +5,6 @@
 #ifndef NET_CERT_INTERNAL_VERIFY_CERTIFICATE_CHAIN_TYPED_UNITTEST_H_
 #define NET_CERT_INTERNAL_VERIFY_CERTIFICATE_CHAIN_TYPED_UNITTEST_H_
 
-#include "base/base_paths.h"
-#include "base/files/file_util.h"
-#include "base/path_service.h"
 #include "net/cert/internal/parsed_certificate.h"
 #include "net/cert/internal/test_helpers.h"
 #include "net/cert/internal/trust_store.h"
@@ -25,11 +22,16 @@ class VerifyCertificateChainTest : public ::testing::Test {
     scoped_refptr<TrustAnchor> trust_anchor;
     der::GeneralizedTime time;
     bool expected_result;
+    std::string expected_errors;
 
-    ReadVerifyCertChainTestFromFile(file_name, &chain, &trust_anchor, &time,
-                                    &expected_result);
+    std::string path =
+        std::string("net/data/verify_certificate_chain_unittest/") + file_name;
 
-    TestDelegate::Verify(chain, trust_anchor, time, expected_result);
+    ReadVerifyCertChainTestFromFile(path, &chain, &trust_anchor, &time,
+                                    &expected_result, &expected_errors);
+
+    TestDelegate::Verify(chain, trust_anchor, time, expected_result,
+                         expected_errors, path);
   }
 };
 
@@ -184,8 +186,8 @@ TYPED_TEST_P(VerifyCertificateChainSingleRootTest, KeyRolloverNewChain) {
   this->RunTest("key-rollover-newchain.pem");
 }
 
-TYPED_TEST_P(VerifyCertificateChainSingleRootTest, UnknownRoot) {
-  this->RunTest("unknown-root.pem");
+TYPED_TEST_P(VerifyCertificateChainSingleRootTest, IncorrectTrustAnchor) {
+  this->RunTest("incorrect-trust-anchor.pem");
 }
 
 TYPED_TEST_P(VerifyCertificateChainSingleRootTest,
@@ -254,7 +256,7 @@ REGISTER_TYPED_TEST_CASE_P(VerifyCertificateChainSingleRootTest,
                            KeyRolloverRolloverChain,
                            KeyRolloverLongRolloverChain,
                            KeyRolloverNewChain,
-                           UnknownRoot,
+                           IncorrectTrustAnchor,
                            UnconstrainedRootLacksBasicConstraints,
                            ConstrainedRootLacksBasicConstraints,
                            UnconstrainedRootBasicConstraintsCaFalse,

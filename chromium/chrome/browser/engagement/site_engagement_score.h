@@ -114,7 +114,7 @@ class SiteEngagementScore {
   // SiteEngagementScore.
   SiteEngagementScore(base::Clock* clock,
                       const GURL& origin,
-                      HostContentSettingsMap* settings_map);
+                      HostContentSettingsMap* settings);
   SiteEngagementScore(SiteEngagementScore&& other);
   ~SiteEngagementScore();
 
@@ -153,10 +153,12 @@ class SiteEngagementScore {
   }
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(SiteEngagementScoreTest, FirstDailyEngagementBonus);
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementScoreTest, PartiallyEmptyDictionary);
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementScoreTest, PopulatedDictionary);
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementScoreTest, Reset);
-  FRIEND_TEST_ALL_PREFIXES(SiteEngagementScoreTest, FirstDailyEngagementBonus);
+  friend class ChromePluginServiceFilterTest;
+  friend class ImportantSitesUtil;
   friend class ImportantSitesUtilTest;
   friend class SiteEngagementHelperTest;
   friend class SiteEngagementScoreTest;
@@ -176,6 +178,7 @@ class SiteEngagementScore {
 
   // This version of the constructor is used in unit tests.
   SiteEngagementScore(base::Clock* clock,
+                      const GURL& origin,
                       std::unique_ptr<base::DictionaryValue> score_dict);
 
   // Determine the score, accounting for any decay.
@@ -218,7 +221,7 @@ class SiteEngagementScore {
   // The origin this score represents.
   GURL origin_;
 
-  // The settings map to write this score to when Commit() is called.
+  // The settings to write this score to when Commit() is called.
   HostContentSettingsMap* settings_map_;
 
   DISALLOW_COPY_AND_ASSIGN(SiteEngagementScore);

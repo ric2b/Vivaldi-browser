@@ -4,7 +4,6 @@
 
 #include "chrome/test/base/in_process_browser_test.h"
 
-#include "ash/common/ash_switches.h"
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -58,6 +57,7 @@
 #include "content/public/test/test_launcher.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "ui/display/display_switches.h"
 
 #if defined(OS_MACOSX)
 #include "base/mac/scoped_nsautorelease_pool.h"
@@ -86,12 +86,20 @@
 #include "chrome/test/base/default_ash_event_generator_delegate.h"
 #endif
 
+#if !defined(OS_CHROMEOS) && defined(OS_LINUX)
+#include "ui/views/test/test_desktop_screen_x11.h"
+#endif
+
 namespace {
 
 // Passed as value of kTestType.
 const char kBrowserTestType[] = "browser";
 
 }  // namespace
+
+// static
+InProcessBrowserTest::SetUpBrowserFunction*
+    InProcessBrowserTest::global_browser_set_up_function_ = nullptr;
 
 // Library used for testing accessibility.
 const base::FilePath::CharType kAXSTesting[] =
@@ -212,13 +220,17 @@ void InProcessBrowserTest::SetUp() {
   base::CreateDirectory(log_dir);
   // Disable IME extension loading to avoid many browser tests failures.
   chromeos::input_method::DisableExtensionLoading();
-  if (!command_line->HasSwitch(ash::switches::kAshHostWindowBounds)) {
+  if (!command_line->HasSwitch(switches::kHostWindowBounds)) {
     // Adjusting window location & size so that the ash desktop window fits
-    // inside the Xvfb'x defualt resolution.
-    command_line->AppendSwitchASCII(ash::switches::kAshHostWindowBounds,
+    // inside the Xvfb'x default resolution.
+    command_line->AppendSwitchASCII(switches::kHostWindowBounds,
                                     "0+0-1280x800");
   }
-#endif  // defined(OS_CHROMEOS)
+#elif defined(OS_LINUX)
+  DCHECK(!display::Screen::GetScreen());
+  display::Screen::SetScreenInstance(
+      views::test::TestDesktopScreenX11::GetInstance());
+#endif
 
   // Always use a mocked password storage if OS encryption is used (which is
   // when anything sensitive gets stored, including Cookies). Without this on
@@ -331,10 +343,10 @@ bool InProcessBrowserTest::CreateUserDataDirectory() {
   if (user_data_dir.empty()) {
     if (temp_user_data_dir_.CreateUniqueTempDir() &&
         temp_user_data_dir_.IsValid()) {
-      user_data_dir = temp_user_data_dir_.path();
+      user_data_dir = temp_user_data_dir_.GetPath();
     } else {
       LOG(ERROR) << "Could not create temporary user data directory \""
-                 << temp_user_data_dir_.path().value() << "\".";
+                 << temp_user_data_dir_.GetPath().value() << "\".";
       return false;
     }
   }
@@ -387,7 +399,7 @@ void InProcessBrowserTest::AddTabAtIndexToBrowser(
     bool check_navigation_success) {
   chrome::NavigateParams params(browser, url, transition);
   params.tabstrip_index = index;
-  params.disposition = NEW_FOREGROUND_TAB;
+  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   chrome::Navigate(&params);
 
   if (check_navigation_success)
@@ -538,6 +550,9 @@ void InProcessBrowserTest::RunTestOnMainThreadLoop() {
   // SetUpOnMainThread or RunTestOnMainThread so that one or all tests can
   // enable/disable the accessibility audit.
   run_accessibility_checks_for_test_case_ = false;
+
+  if (browser_ && global_browser_set_up_function_)
+    ASSERT_TRUE(global_browser_set_up_function_(browser_));
 
   SetUpOnMainThread();
 #if defined(OS_MACOSX)

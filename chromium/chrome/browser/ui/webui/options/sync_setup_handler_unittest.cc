@@ -42,6 +42,8 @@ using ::testing::Mock;
 using ::testing::Return;
 using ::testing::ReturnRef;
 using ::testing::Values;
+using browser_sync::ProfileSyncService;
+using browser_sync::ProfileSyncServiceMock;
 
 typedef GoogleServiceAuthError AuthError;
 
@@ -203,8 +205,8 @@ class SyncSetupHandlerTest : public testing::Test {
         ProfileSyncServiceFactory::GetInstance()->SetTestingFactoryAndUse(
             profile_.get(), BuildMockProfileSyncService));
     EXPECT_CALL(*mock_pss_, GetAuthError()).WillRepeatedly(ReturnRef(error_));
-    ON_CALL(*mock_pss_, GetPassphraseType()).WillByDefault(
-        Return(syncer::IMPLICIT_PASSPHRASE));
+    ON_CALL(*mock_pss_, GetPassphraseType())
+        .WillByDefault(Return(syncer::PassphraseType::IMPLICIT_PASSPHRASE));
     ON_CALL(*mock_pss_, GetExplicitPassphraseTime()).WillByDefault(
         Return(base::Time()));
     ON_CALL(*mock_pss_, GetRegisteredDataTypes())
@@ -797,7 +799,7 @@ TEST_F(SyncSetupHandlerTest, ShowSetupManuallySyncAll) {
   EXPECT_CALL(*mock_pss_, IsUsingSecondaryPassphrase())
       .WillRepeatedly(Return(false));
   SetupInitializedProfileSyncService();
-  sync_driver::SyncPrefs sync_prefs(profile_->GetPrefs());
+  syncer::SyncPrefs sync_prefs(profile_->GetPrefs());
   sync_prefs.SetKeepEverythingSynced(false);
   SetDefaultExpectationsForConfigPage();
   // This should display the sync setup dialog (not login).
@@ -819,7 +821,7 @@ TEST_F(SyncSetupHandlerTest, ShowSetupSyncForAllTypesIndividually) {
     EXPECT_CALL(*mock_pss_, IsUsingSecondaryPassphrase())
         .WillRepeatedly(Return(false));
     SetupInitializedProfileSyncService();
-    sync_driver::SyncPrefs sync_prefs(profile_->GetPrefs());
+    syncer::SyncPrefs sync_prefs(profile_->GetPrefs());
     sync_prefs.SetKeepEverythingSynced(false);
     SetDefaultExpectationsForConfigPage();
     syncer::ModelTypeSet types;
@@ -870,7 +872,7 @@ TEST_F(SyncSetupHandlerTest, ShowSetupCustomPassphraseRequired) {
   EXPECT_CALL(*mock_pss_, IsUsingSecondaryPassphrase())
       .WillRepeatedly(Return(true));
   EXPECT_CALL(*mock_pss_, GetPassphraseType())
-      .WillRepeatedly(Return(syncer::CUSTOM_PASSPHRASE));
+      .WillRepeatedly(Return(syncer::PassphraseType::CUSTOM_PASSPHRASE));
   SetupInitializedProfileSyncService();
   SetDefaultExpectationsForConfigPage();
 

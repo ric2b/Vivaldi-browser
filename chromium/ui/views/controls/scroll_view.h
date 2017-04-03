@@ -96,6 +96,7 @@ class VIEWS_EXPORT ScrollView : public View, public ScrollBarController {
   bool OnMouseWheel(const ui::MouseWheelEvent& e) override;
   void OnMouseEntered(const ui::MouseEvent& event) override;
   void OnMouseExited(const ui::MouseEvent& event) override;
+  void OnScrollEvent(ui::ScrollEvent* event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
   const char* GetClassName() const override;
 
@@ -104,6 +105,10 @@ class VIEWS_EXPORT ScrollView : public View, public ScrollBarController {
   int GetScrollIncrement(ScrollBar* source,
                          bool is_page,
                          bool is_positive) override;
+
+  // TODO(djacobo): Remove this method when http://crbug.com/656198  is closed.
+  // Force |contents_viewport_| to enable a Layer().
+  void EnableViewPortLayer();
 
  private:
   friend class test::ScrollViewTestApi;

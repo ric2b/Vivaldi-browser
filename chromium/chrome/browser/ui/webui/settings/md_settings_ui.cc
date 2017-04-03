@@ -30,11 +30,11 @@
 #include "chrome/browser/ui/webui/settings/settings_startup_pages_handler.h"
 #include "chrome/browser/ui/webui/settings/site_settings_handler.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/settings_resources.h"
+#include "chrome/grit/settings_resources_map.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
-#include "grit/settings_resources.h"
-#include "grit/settings_resources_map.h"
 
 #if defined(OS_CHROMEOS)
 #include "ash/common/system/chromeos/palette/palette_utils.h"
@@ -42,8 +42,10 @@
 #include "chrome/browser/ui/webui/settings/chromeos/accessibility_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/change_picture_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/cups_printers_handler.h"
+#include "chrome/browser/ui/webui/settings/chromeos/date_time_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/device_keyboard_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/device_pointer_handler.h"
+#include "chrome/browser/ui/webui/settings/chromeos/device_storage_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/easy_unlock_settings_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/internet_handler.h"
 #else  // !defined(OS_CHROMEOS)
@@ -96,6 +98,7 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui, const GURL& url)
   AddSettingsPageUIHandler(new chromeos::settings::CupsPrintersHandler(web_ui));
   AddSettingsPageUIHandler(new chromeos::settings::KeyboardHandler(web_ui));
   AddSettingsPageUIHandler(new chromeos::settings::PointerHandler());
+  AddSettingsPageUIHandler(new chromeos::settings::StorageHandler());
   AddSettingsPageUIHandler(new chromeos::settings::InternetHandler());
 #else
   AddSettingsPageUIHandler(new DefaultBrowserHandler(web_ui));
@@ -117,6 +120,9 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui, const GURL& url)
                                                             profile);
   if (easy_unlock_handler)
     AddSettingsPageUIHandler(easy_unlock_handler);
+
+  AddSettingsPageUIHandler(
+      chromeos::settings::DateTimeHandler::Create(html_source));
 
   html_source->AddBoolean("stylusAllowed", ash::IsPaletteFeatureEnabled());
   html_source->AddBoolean("quickUnlockEnabled",

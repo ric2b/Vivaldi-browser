@@ -19,6 +19,7 @@
 #include "components/sync/protocol/nigori_specifics.pb.h"
 #include "components/sync/protocol/password_specifics.pb.h"
 #include "components/sync/protocol/preference_specifics.pb.h"
+#include "components/sync/protocol/reading_list_specifics.pb.h"
 #include "components/sync/protocol/search_engine_specifics.pb.h"
 #include "components/sync/protocol/session_specifics.pb.h"
 #include "components/sync/protocol/sync.pb.h"
@@ -133,6 +134,10 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
      sync_pb::EntitySpecifics::kManagedUserWhitelistFieldNumber, 33},
     {ARC_PACKAGE, "ARC_PACKAGE", "arc_package", "Arc Package",
      sync_pb::EntitySpecifics::kArcPackageFieldNumber, 36},
+    {PRINTERS, "PRINTER", "printers", "Printers",
+     sync_pb::EntitySpecifics::kPrinterFieldNumber, 37},
+    {READING_LIST, "READING_LIST", "reading_list", "Reading List",
+     sync_pb::EntitySpecifics::kReadingListFieldNumber, 38},
     {PROXY_TABS, "", "", "Tabs", -1, 25},
     {NIGORI, "NIGORI", "nigori", "Encryption keys",
      sync_pb::EntitySpecifics::kNigoriFieldNumber, 17},
@@ -154,7 +159,7 @@ const char* kUserSelectableDataTypeNames[] = {
 };
 
 static_assert(
-    37 == MODEL_TYPE_COUNT,
+    39 == MODEL_TYPE_COUNT,
     "update kUserSelectableDataTypeName to match UserSelectableTypes");
 
 void AddDefaultFieldValue(ModelType datatype,
@@ -236,6 +241,9 @@ void AddDefaultFieldValue(ModelType datatype,
     case EXPERIMENTS:
       specifics->mutable_experiments();
       break;
+    case PRINTERS:
+      specifics->mutable_printer();
+      break;
     case PRIORITY_PREFERENCES:
       specifics->mutable_priority_preference();
       break;
@@ -265,6 +273,9 @@ void AddDefaultFieldValue(ModelType datatype,
       break;
     case WIFI_CREDENTIALS:
       specifics->mutable_wifi_credential();
+      break;
+    case READING_LIST:
+      specifics->mutable_reading_list();
       break;
     default:
       NOTREACHED() << "No known extension for model type.";
@@ -382,6 +393,9 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
   if (specifics.has_app_notification())
     return APP_NOTIFICATIONS;
 
+  if (specifics.has_reading_list())
+    return READING_LIST;
+
   if (specifics.has_history_delete_directive())
     return HISTORY_DELETE_DIRECTIVES;
 
@@ -399,6 +413,9 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
 
   if (specifics.has_priority_preference())
     return PRIORITY_PREFERENCES;
+
+  if (specifics.has_printer())
+    return PRINTERS;
 
   if (specifics.has_dictionary())
     return DICTIONARY;
@@ -540,7 +557,7 @@ bool IsControlType(ModelType model_type) {
 }
 
 ModelTypeSet CoreTypes() {
-  syncer::ModelTypeSet result;
+  ModelTypeSet result;
   result.PutAll(PriorityCoreTypes());
 
   // The following are low priority core types.
@@ -553,7 +570,7 @@ ModelTypeSet CoreTypes() {
 }
 
 ModelTypeSet PriorityCoreTypes() {
-  syncer::ModelTypeSet result;
+  ModelTypeSet result;
   result.PutAll(ControlTypes());
 
   // The following are non-control core types.
@@ -656,7 +673,7 @@ ModelTypeSet ModelTypeSetFromString(const std::string& model_types_string) {
     } else {
       type_str = working_copy.substr(0, end);
     }
-    syncer::ModelType type = ModelTypeFromString(type_str);
+    ModelType type = ModelTypeFromString(type_str);
     if (IsRealDataType(type))
       model_types.Put(type);
     working_copy = working_copy.substr(end + 1);

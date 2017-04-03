@@ -16,17 +16,21 @@ source_set("session") {
   ]
 
   public_deps = [
-    ":feature",
-    "//blimp/client/core:switches",
+    "//blimp/client/core",
+    "//blimp/client/core/geolocation",
+    "//blimp/client/core/switches",
+    "//blimp/common/proto",
+    "//device/geolocation",
     "//ui/events",
   ]
 
   deps = [
-    ":compositor",
     "//base",
     "//blimp/client/core/compositor",
     "//blimp/client/core/contents",
+    "//blimp/client/core/render_widget",
     "//blimp/client/core/session",
+    "//blimp/client/core/settings",
     "//blimp/common",
     "//blimp/common/proto",
     "//blimp/net",
@@ -48,8 +52,9 @@ source_set("client") {
 
   public_deps = [
     ":session",
-    "//blimp/client/core:switches",
     "//blimp/client/core/compositor",
+    "//blimp/client/core/switches",
+    "//blimp/client/support",
     "//cc",
     "//cc/surfaces",
     "//components/safe_json",
@@ -60,9 +65,10 @@ source_set("client") {
   ]
 
   deps = [
-    ":compositor_support",
     "//base",
     "//blimp/client/core",
+    "//blimp/client/public:public_headers",
+    "//blimp/client/support",
     "//blimp/common",
     "//blimp/common/proto",
     "//blimp/net",
@@ -94,162 +100,36 @@ source_set("app_unit_tests") {
   ]
 }
 
-source_set("feature") {
-  sources = [
-    "core/contents/tab_control_feature.cc",
-    "core/contents/tab_control_feature.h",
-    "feature/render_widget_feature.cc",
-    "feature/render_widget_feature.h",
-    "feature/settings_feature.cc",
-    "feature/settings_feature.h",
-  ]
-
-  deps = [
-    "//base:base",
-    "//blimp/common",
-    "//blimp/net",
-    "//cc",
-    "//cc/proto",
-    "//components/url_formatter",
-    "//net:net",
-    "//skia",
-    "//ui/gfx/geometry:geometry",
-  ]
-
-  public_deps = [
-    "//blimp/common/proto",
-  ]
-}
-
 source_set("test_support") {
   testonly = true
 
   sources = [
-    "feature/mock_render_widget_feature_delegate.cc",
-    "feature/mock_render_widget_feature_delegate.h",
     "session/test_client_session.cc",
     "session/test_client_session.h",
   ]
 
   deps = [
     ":session",
-    "//skia",
-    "//testing/gmock",
     "//url",
-  ]
-}
-
-# TODO(khushalsagar): Move these files to app/compositor.
-source_set("compositor_support") {
-  sources = [
-    "feature/compositor/blimp_context_provider.cc",
-    "feature/compositor/blimp_context_provider.h",
-    "feature/compositor/blimp_gpu_memory_buffer_manager.cc",
-    "feature/compositor/blimp_gpu_memory_buffer_manager.h",
-  ]
-
-  deps = [
-    "//cc",
-    "//gpu/command_buffer/client",
-    "//gpu/command_buffer/client:gl_in_process_context",
-    "//gpu/command_buffer/client:gles2_c_lib",
-    "//gpu/command_buffer/client:gles2_implementation",
-    "//gpu/command_buffer/common:gles2_utils",
-    "//gpu/skia_bindings",
-    "//skia",
-    "//ui/gl",
-  ]
-}
-
-source_set("compositor") {
-  sources = [
-    "feature/compositor/blimp_compositor.cc",
-    "feature/compositor/blimp_compositor.h",
-    "feature/compositor/blimp_compositor_manager.cc",
-    "feature/compositor/blimp_compositor_manager.h",
-    "feature/compositor/blimp_input_handler_wrapper.cc",
-    "feature/compositor/blimp_input_handler_wrapper.h",
-    "feature/compositor/blimp_input_manager.cc",
-    "feature/compositor/blimp_input_manager.h",
-    "feature/compositor/blimp_layer_tree_settings.cc",
-    "feature/compositor/blimp_layer_tree_settings.h",
-  ]
-
-  deps = [
-    ":compositor_support",
-    "//blimp/client/core/compositor",
-    "//blimp/client/core/compositor",
-    "//blimp/common",
-    "//blimp/net",
-    "//cc",
-    "//cc/proto",
-    "//cc/surfaces",
-    "//net",
-    "//third_party/WebKit/public:blink_headers",
-    "//third_party/libwebp",
-    "//ui/events:gesture_detection",
-    "//ui/events/blink",
-    "//ui/events/gestures/blink",
-    "//ui/gfx/geometry:geometry",
-    "//ui/gl:gl",
-  ]
-
-  public_deps = [
-    ":feature",
-    "//blimp/common/proto",
-    "//skia",
-  ]
-}
-
-source_set("feature_unit_tests") {
-  testonly = true
-
-  sources = [
-    "core/contents/tab_control_feature_unittest.cc",
-    "feature/compositor/blimp_compositor_manager_unittest.cc",
-    "feature/compositor/blimp_compositor_unittest.cc",
-    "feature/render_widget_feature_unittest.cc",
-  ]
-
-  deps = [
-    ":compositor",
-    ":compositor_support",
-    ":test_support",
-    "//base",
-    "//base/test:test_support",
-    "//blimp/client/core/compositor",
-    "//blimp/common",
-    "//blimp/common/proto",
-    "//blimp/net",
-    "//blimp/net:test_support",
-    "//blimp/test:support",
-    "//cc/proto",
-    "//cc/surfaces:surfaces",
-    "//net",
-    "//net:test_support",
-    "//skia",
-    "//testing/gmock",
-    "//testing/gtest",
-    "//ui/events:gesture_detection",
-    "//ui/gfx/geometry",
   ]
 }
 
 if (is_linux && !is_chromeos && use_x11) {
   executable("blimp_shell") {
     sources = [
-      "app/linux/blimp_client_session_linux.cc",
-      "app/linux/blimp_client_session_linux.h",
+      "app/linux/blimp_client_context_delegate_linux.cc",
+      "app/linux/blimp_client_context_delegate_linux.h",
       "app/linux/blimp_display_manager.cc",
       "app/linux/blimp_display_manager.h",
+      "app/linux/blimp_display_manager_delegate_main.cc",
+      "app/linux/blimp_display_manager_delegate_main.h",
       "app/linux/blimp_main.cc",
     ]
 
     deps = [
       ":client",
-      ":compositor",
       "//base",
-      "//blimp/client:compositor",
+      "//blimp/client/core/compositor",
       "//blimp/client/core/session",
       "//blimp/net",
       "//net",
@@ -300,7 +180,6 @@ if (is_android) {
     sources = [
       "app/android/java/src/org/chromium/blimp/BlimpLibraryLoader.java",
       "app/android/java/src/org/chromium/blimp/BlimpView.java",
-      "app/android/java/src/org/chromium/blimp/input/WebInputBox.java",
       "app/android/java/src/org/chromium/blimp/session/BlimpClientSession.java",
       "app/android/java/src/org/chromium/blimp/session/TabControlFeature.java",
       "app/android/java/src/org/chromium/blimp/toolbar/Toolbar.java",
@@ -390,7 +269,6 @@ if (is_android) {
       "app/android/java/src/org/chromium/blimp/BlimpRendererActivity.java",
       "app/android/java/src/org/chromium/blimp/BlimpView.java",
       "app/android/java/src/org/chromium/blimp/BrowserRestartActivity.java",
-      "app/android/java/src/org/chromium/blimp/input/WebInputBox.java",
       "app/android/java/src/org/chromium/blimp/preferences/PreferencesUtil.java",
       "app/android/java/src/org/chromium/blimp/session/BlimpClientSession.java",
       "app/android/java/src/org/chromium/blimp/session/EngineInfo.java",
@@ -410,15 +288,22 @@ if (is_android) {
       ":blimp_java",
       "//base:base_java",
       "//base:base_java_test_support",
-      "//blimp/client/core:settings_java",
+      "//blimp/client/core/common:common_java",
       "//blimp/client/core/contents:contents_java",
+      "//blimp/client/core/settings:settings_java",
       "//blimp/client/public:public_headers_java",
+      "//components/signin/core/browser/android:java",
+      "//components/sync/android:sync_java",
+      "//third_party/android_tools:android_support_v7_appcompat_java",
+      "//ui/android:ui_java",
       google_play_services_library,
     ]
 
     java_files = [
       "app/android/javatests/src/org/chromium/blimp/auth/MockTokenSource.java",
       "app/android/javatests/src/org/chromium/blimp/auth/RetryingTokenSourceTest.java",
+      "app/android/javatests/src/org/chromium/blimp/core/MockBlimpClientContext.java",
+      "app/android/javatests/src/org/chromium/blimp/core/MockBlimpClientContextDelegate.java",
       "app/android/javatests/src/org/chromium/blimp/core/settings/BlimpPreferencesTest.java",
       "app/android/javatests/src/org/chromium/blimp/core/settings/MockPreferences.java",
       "app/android/javatests/src/org/chromium/blimp/BlimpNativeInstrumentationTestCase.java",
@@ -430,10 +315,11 @@ if (is_android) {
       ":client",
       ":jni_headers",
       "//base",
-      "//blimp/client:compositor",
       "//blimp/client/core",
+      "//blimp/client/core/compositor",
       "//blimp/client/core/contents",
       "//blimp/client/core/session:session",
+      "//blimp/client/core/settings",
       "//blimp/client/public:public_headers",
       "//blimp/common",
       "//blimp/common/proto",
@@ -452,8 +338,6 @@ if (is_android) {
       "app/android/blimp_app_jni_registrar.h",
       "app/android/blimp_client_session_android.cc",
       "app/android/blimp_client_session_android.h",
-      "app/android/blimp_compositor_manager_android.cc",
-      "app/android/blimp_compositor_manager_android.h",
       "app/android/blimp_library_loader.cc",
       "app/android/blimp_library_loader.h",
       "app/android/blimp_view.cc",
@@ -462,8 +346,6 @@ if (is_android) {
       "app/android/tab_control_feature_android.h",
       "app/android/toolbar.cc",
       "app/android/toolbar.h",
-      "app/android/web_input_box.cc",
-      "app/android/web_input_box.h",
       "app/user_agent.cc",
       "app/user_agent.h",
     ]

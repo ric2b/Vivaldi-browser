@@ -167,6 +167,8 @@ class TestBidirectionalStreamCallback {
       return false;
 
     cronet_bidirectional_stream_cancel(stream);
+    cronet_bidirectional_stream_write(stream, "abc", 3, false);
+
     return true;
   }
 
@@ -176,7 +178,7 @@ class TestBidirectionalStreamCallback {
 
   void AddWriteData(const std::string& data) { AddWriteData(data, true); }
   void AddWriteData(const std::string& data, bool flush) {
-    write_data.push_back(base::WrapUnique(new WriteData(data, flush)));
+    write_data.push_back(base::MakeUnique<WriteData>(data, flush));
   }
 
   virtual void MaybeWriteNextData(cronet_bidirectional_stream* stream) {
@@ -625,6 +627,36 @@ TEST_P(CronetBidirectionalStreamTest, WriteFailsBeforeRequestStarted) {
   ASSERT_TRUE(test.read_data.empty());
   ASSERT_EQ(TestBidirectionalStreamCallback::ON_FAILED, test.response_step);
   ASSERT_EQ(net::ERR_UNEXPECTED, test.net_error);
+  cronet_bidirectional_stream_destroy(test.stream);
+}
+
+TEST_P(CronetBidirectionalStreamTest, StreamFailAfterStreamReadyCallback) {
+  class CustomTestBidirectionalStreamCallback
+      : public TestBidirectionalStreamCallback {
+    bool MaybeCancel(cronet_bidirectional_stream* stream,
+                     ResponseStep step) override {
+      if (step == ResponseStep::ON_STREAM_READY) {
+        // Shut down the server, and the stream should error out.
+        // The second call to ShutdownQuicTestServer is no-op.
+        ShutdownQuicTestServer();
+      }
+      return TestBidirectionalStreamCallback::MaybeCancel(stream, step);
+    }
+  };
+
+  CustomTestBidirectionalStreamCallback test;
+  test.AddWriteData("Test String");
+  test.stream =
+      cronet_bidirectional_stream_create(engine(), &test, test.callback());
+  DCHECK(test.stream);
+  cronet_bidirectional_stream_delay_request_headers_until_flush(test.stream,
+                                                                GetParam());
+  cronet_bidirectional_stream_start(test.stream, kTestServerUrl, 0, "POST",
+                                    &kTestHeadersArray, false);
+  test.BlockForDone();
+  ASSERT_EQ(TestBidirectionalStreamCallback::ON_FAILED, test.response_step);
+  ASSERT_TRUE(test.net_error == net::ERR_QUIC_PROTOCOL_ERROR ||
+              test.net_error == net::ERR_QUIC_HANDSHAKE_FAILED);
   cronet_bidirectional_stream_destroy(test.stream);
 }
 

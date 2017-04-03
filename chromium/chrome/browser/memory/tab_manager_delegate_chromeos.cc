@@ -63,6 +63,8 @@ const char kArcProcessNamePrefix[] = "org.chromium.arc.";
 // a little while before doing the adjustment.
 const int kFocusedProcessScoreAdjustIntervalMs = 500;
 
+const uint32_t kMinVersionForKillProcess = 1;
+
 aura::client::ActivationClient* GetActivationClient() {
   if (!ash::Shell::HasInstance())
     return nullptr;
@@ -312,8 +314,6 @@ TabManagerDelegate::TabManagerDelegate(
     : tab_manager_(tab_manager),
       focused_process_(new FocusedProcess()),
       mem_stat_(mem_stat),
-      arc_process_instance_(nullptr),
-      arc_process_instance_version_(0),
       uma_(new UmaReporter()),
       weak_ptr_factory_(this) {
   registrar_.Add(this, content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
@@ -322,9 +322,6 @@ TabManagerDelegate::TabManagerDelegate(
                  content::NotificationService::AllBrowserContextsAndSources());
   registrar_.Add(this, content::NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
                  content::NotificationService::AllBrowserContextsAndSources());
-  auto* arc_bridge_service = arc::ArcBridgeService::Get();
-  if (arc_bridge_service)
-    arc_bridge_service->process()->AddObserver(this);
   auto* activation_client = GetActivationClient();
   if (activation_client)
     activation_client->AddObserver(this);
@@ -336,9 +333,6 @@ TabManagerDelegate::~TabManagerDelegate() {
   auto* activation_client = GetActivationClient();
   if (activation_client)
     activation_client->RemoveObserver(this);
-  auto* arc_bridge_service = arc::ArcBridgeService::Get();
-  if (arc_bridge_service)
-    arc_bridge_service->process()->RemoveObserver(this);
 }
 
 void TabManagerDelegate::OnBrowserSetLastActive(Browser* browser) {
@@ -355,41 +349,6 @@ void TabManagerDelegate::OnBrowserSetLastActive(Browser* browser) {
 
   base::ProcessHandle pid = contents->GetRenderProcessHost()->GetHandle();
   AdjustFocusedTabScore(pid);
-}
-
-void TabManagerDelegate::OnInstanceReady() {
-  auto* arc_bridge_service = arc::ArcBridgeService::Get();
-  DCHECK(arc_bridge_service);
-
-  arc_process_instance_ = arc_bridge_service->process()->instance();
-  arc_process_instance_version_ = arc_bridge_service->process()->version();
-
-  DCHECK(arc_process_instance_);
-
-  if (!IsArcMemoryManagementEnabled())
-    return;
-
-  if (arc_process_instance_version_ < 2) {
-    VLOG(1) << "ProcessInstance version < 2 does not "
-               "support DisableBuiltinOomAdjustment() yet.";
-    return;
-  }
-  // Stop Android system-wide oom_adj adjustment since this class will
-  // take over oom_score_adj settings.
-  arc_process_instance_->DisableBuiltinOomAdjustment();
-
-  if (arc_process_instance_version_ < 3) {
-    VLOG(1) << "arc::ProcessInstance version < 3 does not "
-               "support DisableLowMemoryKiller() yet.";
-    return;
-  }
-  VLOG(2) << "Disable LowMemoryKiller";
-  arc_process_instance_->DisableLowMemoryKiller();
-}
-
-void TabManagerDelegate::OnInstanceClosed() {
-  arc_process_instance_ = nullptr;
-  arc_process_instance_version_ = 0;
 }
 
 // TODO(cylee): Remove this function if Android process OOM score settings
@@ -437,7 +396,7 @@ void TabManagerDelegate::LowMemoryKill(
     const TabStatsList& tab_list) {
   arc::ArcProcessService* arc_process_service = arc::ArcProcessService::Get();
   if (arc_process_service &&
-      arc_process_service->RequestProcessList(
+      arc_process_service->RequestAppProcessList(
           base::Bind(&TabManagerDelegate::LowMemoryKillImpl,
                      weak_ptr_factory_.GetWeakPtr(), tab_list))) {
     // LowMemoryKillImpl will be called asynchronously so nothing left to do.
@@ -569,7 +528,7 @@ void TabManagerDelegate::AdjustOomPriorities(const TabStatsList& tab_list) {
   if (IsArcMemoryManagementEnabled()) {
     arc::ArcProcessService* arc_process_service = arc::ArcProcessService::Get();
     if (arc_process_service &&
-        arc_process_service->RequestProcessList(
+        arc_process_service->RequestAppProcessList(
             base::Bind(&TabManagerDelegate::AdjustOomPrioritiesImpl,
                        weak_ptr_factory_.GetWeakPtr(), tab_list))) {
       return;
@@ -617,9 +576,17 @@ TabManagerDelegate::GetSortedCandidates(
 }
 
 bool TabManagerDelegate::KillArcProcess(const int nspid) {
-  if (!arc_process_instance_)
+  auto* arc_bridge_service = arc::ArcBridgeService::Get();
+  if (!arc_bridge_service)
     return false;
-  arc_process_instance_->KillProcess(nspid, "LowMemoryKill");
+
+  auto* arc_process_instance =
+      arc_bridge_service->process()->GetInstanceForMethod(
+          "KillProcess", kMinVersionForKillProcess);
+  if (!arc_process_instance)
+    return false;
+
+  arc_process_instance->KillProcess(nspid, "LowMemoryKill");
   return true;
 }
 

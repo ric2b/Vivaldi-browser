@@ -6,9 +6,14 @@
 
 #include <stdint.h>
 
+#include <memory>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/values.h"
 #include "dbus/message.h"
@@ -207,7 +212,7 @@ TEST_F(GsmSMSClientTest, SmsReceived) {
                                             base::Unretained(&handler)));
 
   // Run the message loop to run the signal connection result callback.
-  message_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   // Send signal.
   dbus::Signal signal(modemmanager::kModemManagerSMSInterface,
@@ -240,7 +245,7 @@ TEST_F(GsmSMSClientTest, Delete) {
                              base::Unretained(&callback)));
 
   // Run the message loop.
-  message_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 }
 
 TEST_F(GsmSMSClientTest, Get) {
@@ -280,7 +285,7 @@ TEST_F(GsmSMSClientTest, Get) {
                base::Bind(&MockGetCallback::Run, base::Unretained(&callback)));
 
   // Run the message loop.
-  message_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 }
 
 TEST_F(GsmSMSClientTest, List) {
@@ -311,11 +316,11 @@ TEST_F(GsmSMSClientTest, List) {
   response_ = response.get();
   // Create expected result.
   base::ListValue expected_result;
-  base::DictionaryValue* sms = new base::DictionaryValue;
+  auto sms = base::MakeUnique<base::DictionaryValue>();
   sms->SetWithoutPathExpansion(kNumberKey,
                                new base::StringValue(kExampleNumber));
   sms->SetWithoutPathExpansion(kTextKey, new base::StringValue(kExampleText));
-  expected_result.Append(sms);
+  expected_result.Append(std::move(sms));
   expected_result_ = &expected_result;
   // Call List.
   client_->List(kServiceName, dbus::ObjectPath(kObjectPath),
@@ -323,7 +328,7 @@ TEST_F(GsmSMSClientTest, List) {
                            base::Unretained(&callback)));
 
   // Run the message loop.
-  message_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 }
 
 }  // namespace chromeos

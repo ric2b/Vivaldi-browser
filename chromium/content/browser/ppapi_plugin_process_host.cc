@@ -23,7 +23,6 @@
 #include "content/common/child_process_host_impl.h"
 #include "content/common/child_process_messages.h"
 #include "content/common/content_switches_internal.h"
-#include "content/common/mojo/constants.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_switches.h"
@@ -32,7 +31,7 @@
 #include "content/public/common/process_type.h"
 #include "content/public/common/sandbox_type.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
-#include "ipc/ipc_switches.h"
+#include "content/public/common/service_names.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "net/base/network_change_notifier.h"
 #include "ppapi/proxy/ppapi_messages.h"
@@ -48,6 +47,7 @@
 #include "sandbox/win/src/process_mitigations.h"
 #include "sandbox/win/src/sandbox_policy.h"
 #include "ui/display/win/dpi.h"
+#include "ui/gfx/font_render_params.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -333,7 +333,7 @@ PpapiPluginProcessHost::PpapiPluginProcessHost(
   permissions_ = ppapi::PpapiPermissions::GetForCommandLine(base_permissions);
 
   process_.reset(new BrowserChildProcessHostImpl(
-      PROCESS_TYPE_PPAPI_PLUGIN, this, kPluginMojoApplicationName));
+      PROCESS_TYPE_PPAPI_PLUGIN, this, kPluginServiceName));
 
   host_impl_.reset(new BrowserPpapiHostImpl(this, permissions_, info.name,
                                             info.path, profile_data_directory,
@@ -356,7 +356,7 @@ PpapiPluginProcessHost::PpapiPluginProcessHost(
 
 PpapiPluginProcessHost::PpapiPluginProcessHost() : is_broker_(true) {
   process_.reset(new BrowserChildProcessHostImpl(
-      PROCESS_TYPE_PPAPI_BROKER, this, kPluginMojoApplicationName));
+      PROCESS_TYPE_PPAPI_BROKER, this, kPluginServiceName));
 
   ppapi::PpapiPermissions permissions;  // No permissions.
   // The plugin name, path and profile data directory shouldn't be needed for
@@ -448,6 +448,13 @@ bool PpapiPluginProcessHost::Init(const PepperPluginInfo& info) {
   cmd_line->AppendSwitchASCII(
       switches::kDeviceScaleFactor,
       base::DoubleToString(display::win::GetDPIScale()));
+  const gfx::FontRenderParams font_params =
+      gfx::GetFontRenderParams(gfx::FontRenderParamsQuery(), nullptr);
+  cmd_line->AppendSwitchASCII(switches::kPpapiAntialiasedTextEnabled,
+                              base::IntToString(font_params.antialiasing));
+  cmd_line->AppendSwitchASCII(
+      switches::kPpapiSubpixelRenderingSetting,
+      base::IntToString(font_params.subpixel_rendering));
 #endif
 
   if (!plugin_launcher.empty())
@@ -480,7 +487,7 @@ void PpapiPluginProcessHost::RequestPluginChannel(Client* client) {
   // We can't send any sync messages from the browser because it might lead to
   // a hang. See the similar code in PluginProcessHost for more description.
   PpapiMsg_CreateChannel* msg = new PpapiMsg_CreateChannel(
-      process_id, renderer_child_id, client->OffTheRecord());
+      process_id, renderer_child_id, client->Incognito());
   msg->set_unblock(true);
   if (Send(msg)) {
     sent_requests_.push(client);

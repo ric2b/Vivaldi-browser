@@ -38,12 +38,12 @@ namespace blink {
 class Navigator;
 
 class NavigatorEvents {
-    STATIC_ONLY(NavigatorEvents);
-public:
-    static long maxTouchPoints(Navigator&);
-    static bool pointerEnabled(Navigator&);
+  STATIC_ONLY(NavigatorEvents);
+
+ public:
+  static long maxTouchPoints(Navigator&);
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // NavigatorEvents_h
+#endif  // NavigatorEvents_h

@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/android/config.gni")
 import("//build/config/clang/clang.gni")
 import("//build/config/nacl/config.gni")
 import("//build/config/sanitizers/sanitizers.gni")
@@ -233,8 +234,16 @@ template("gcc_toolchain") {
       depsformat = "gcc"
       description = "CC {{output}}"
       outputs = [
+        # The whitelist file is also an output, but ninja does not
+        # currently support multiple outputs for tool("cc").
         "$object_subdir/{{source_name_part}}.o",
       ]
+      if (enable_resource_whitelist_generation) {
+        compile_wrapper =
+            rebase_path("//build/toolchain/gcc_compile_wrapper.py",
+                        root_build_dir)
+        command = "$python_path \"$compile_wrapper\" --resource-whitelist=\"{{output}}.whitelist\" $command"
+      }
     }
 
     tool("cxx") {
@@ -243,8 +252,16 @@ template("gcc_toolchain") {
       depsformat = "gcc"
       description = "CXX {{output}}"
       outputs = [
+        # The whitelist file is also an output, but ninja does not
+        # currently support multiple outputs for tool("cxx").
         "$object_subdir/{{source_name_part}}.o",
       ]
+      if (enable_resource_whitelist_generation) {
+        compile_wrapper =
+            rebase_path("//build/toolchain/gcc_compile_wrapper.py",
+                        root_build_dir)
+        command = "$python_path \"$compile_wrapper\" --resource-whitelist=\"{{output}}.whitelist\" $command"
+      }
     }
 
     tool("asm") {
@@ -260,13 +277,17 @@ template("gcc_toolchain") {
 
     tool("alink") {
       rspfile = "{{output}}.rsp"
+      whitelist_flag = " "
+      if (enable_resource_whitelist_generation) {
+        whitelist_flag = " --resource-whitelist=\"{{output}}.whitelist\""
+      }
 
       # This needs a Python script to avoid using simple sh features in this
       # command, in case the host does not use a POSIX shell (e.g. compiling
       # POSIX-like toolchains such as NaCl on Windows).
       ar_wrapper =
           rebase_path("//build/toolchain/gcc_ar_wrapper.py", root_build_dir)
-      command = "$python_path \"$ar_wrapper\" --output={{output}} --ar=\"$ar\" {{arflags}} rcsD @\"$rspfile\""
+      command = "$python_path \"$ar_wrapper\"$whitelist_flag --output={{output}} --ar=\"$ar\" {{arflags}} rcsD @\"$rspfile\""
       description = "AR {{output}}"
       rspfile_content = "{{inputs}}"
       outputs = [
@@ -285,6 +306,11 @@ template("gcc_toolchain") {
       sofile = "{{output_dir}}/$soname"  # Possibly including toolchain dir.
       rspfile = sofile + ".rsp"
       pool = "//build/toolchain:link_pool($default_toolchain)"
+      whitelist_flag = " "
+      if (enable_resource_whitelist_generation) {
+        whitelist_file = "$sofile.whitelist"
+        whitelist_flag = " --resource-whitelist=\"$whitelist_file\""
+      }
 
       if (defined(invoker.strip)) {
         unstripped_sofile = "{{root_out_dir}}/lib.unstripped/$soname"
@@ -311,7 +337,7 @@ template("gcc_toolchain") {
       # requiring sh control structures, pipelines, and POSIX utilities.
       # The host might not have a POSIX shell and utilities (e.g. Windows).
       solink_wrapper = rebase_path("//build/toolchain/gcc_solink_wrapper.py")
-      command = "$python_path \"$solink_wrapper\" --readelf=\"$readelf\" --nm=\"$nm\" $strip_switch --sofile=\"$unstripped_sofile\" --tocfile=\"$tocfile\" --output=\"$sofile\" -- $link_command"
+      command = "$python_path \"$solink_wrapper\" --readelf=\"$readelf\" --nm=\"$nm\" $strip_switch --sofile=\"$unstripped_sofile\" --tocfile=\"$tocfile\" --output=\"$sofile\"$whitelist_flag -- $link_command"
 
       rspfile_content = "-Wl,--whole-archive {{inputs}} {{solibs}} -Wl,--no-whole-archive $solink_libs_section_prefix {{libs}} $solink_libs_section_postfix"
 
@@ -340,6 +366,9 @@ template("gcc_toolchain") {
         sofile,
         tocfile,
       ]
+      if (enable_resource_whitelist_generation) {
+        outputs += [ whitelist_file ]
+      }
       if (sofile != unstripped_sofile) {
         outputs += [ unstripped_sofile ]
       }

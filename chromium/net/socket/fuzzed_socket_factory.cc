@@ -11,7 +11,7 @@
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
 #include "net/base/network_change_notifier.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/connection_attempts.h"
 #include "net/socket/fuzzed_socket.h"
@@ -19,6 +19,8 @@
 #include "net/udp/fuzzed_datagram_client_socket.h"
 
 namespace net {
+
+class NetLog;
 
 namespace {
 
@@ -62,7 +64,7 @@ class FailingSSLClientSocket : public SSLClientSocket {
     return ERR_SOCKET_NOT_CONNECTED;
   }
 
-  const BoundNetLog& NetLog() const override { return net_log_; }
+  const NetLogWithSource& NetLog() const override { return net_log_; }
 
   void SetSubresourceSpeculation() override {}
   void SetOmniboxSpeculation() override {}
@@ -105,8 +107,9 @@ class FailingSSLClientSocket : public SSLClientSocket {
     return nullptr;
   }
 
-  Error GetSignedEKMForTokenBinding(crypto::ECPrivateKey* key,
-                                    std::vector<uint8_t>* out) override {
+  Error GetTokenBindingSignature(crypto::ECPrivateKey* key,
+                                 TokenBindingType tb_type,
+                                 std::vector<uint8_t>* out) override {
     NOTREACHED();
     return ERR_UNEXPECTED;
   }
@@ -117,7 +120,7 @@ class FailingSSLClientSocket : public SSLClientSocket {
   }
 
  private:
-  BoundNetLog net_log_;
+  NetLogWithSource net_log_;
 
   DISALLOW_COPY_AND_ASSIGN(FailingSSLClientSocket);
 };
@@ -135,15 +138,15 @@ FuzzedSocketFactory::CreateDatagramClientSocket(
     DatagramSocket::BindType bind_type,
     const RandIntCallback& rand_int_cb,
     NetLog* net_log,
-    const NetLog::Source& source) {
-  return base::WrapUnique(new FuzzedDatagramClientSocket(data_provider_));
+    const NetLogSource& source) {
+  return base::MakeUnique<FuzzedDatagramClientSocket>(data_provider_);
 }
 
 std::unique_ptr<StreamSocket> FuzzedSocketFactory::CreateTransportClientSocket(
     const AddressList& addresses,
     std::unique_ptr<SocketPerformanceWatcher> socket_performance_watcher,
     NetLog* net_log,
-    const NetLog::Source& source) {
+    const NetLogSource& source) {
   std::unique_ptr<FuzzedSocket> socket(
       new FuzzedSocket(data_provider_, net_log));
   socket->set_fuzz_connect_result(true);
@@ -157,7 +160,7 @@ std::unique_ptr<SSLClientSocket> FuzzedSocketFactory::CreateSSLClientSocket(
     const HostPortPair& host_and_port,
     const SSLConfig& ssl_config,
     const SSLClientSocketContext& context) {
-  return base::WrapUnique(new FailingSSLClientSocket());
+  return base::MakeUnique<FailingSSLClientSocket>();
 }
 
 void FuzzedSocketFactory::ClearSSLSessionCache() {}

@@ -24,11 +24,62 @@ WARN_UNUSED_RESULT bool GetSequenceValue(const der::Input& tlv,
 ParsedCertificate::ParsedCertificate() {}
 ParsedCertificate::~ParsedCertificate() {}
 
-scoped_refptr<ParsedCertificate> ParsedCertificate::CreateFromCertificateData(
+scoped_refptr<ParsedCertificate> ParsedCertificate::Create(
+    const uint8_t* data,
+    size_t length,
+    const ParseCertificateOptions& options,
+    CertErrors* errors) {
+  return CreateInternal(data, length, DataSource::INTERNAL_COPY, options,
+                        errors);
+}
+
+scoped_refptr<ParsedCertificate> ParsedCertificate::Create(
+    const base::StringPiece& data,
+    const ParseCertificateOptions& options,
+    CertErrors* errors) {
+  return ParsedCertificate::Create(
+      reinterpret_cast<const uint8_t*>(data.data()), data.size(), options,
+      errors);
+}
+
+bool ParsedCertificate::CreateAndAddToVector(
+    const uint8_t* data,
+    size_t length,
+    const ParseCertificateOptions& options,
+    ParsedCertificateList* chain,
+    CertErrors* errors) {
+  scoped_refptr<ParsedCertificate> cert(Create(data, length, options, errors));
+  if (!cert)
+    return false;
+  chain->push_back(std::move(cert));
+  return true;
+}
+
+bool ParsedCertificate::CreateAndAddToVector(
+    const base::StringPiece& data,
+    const ParseCertificateOptions& options,
+    ParsedCertificateList* chain,
+    CertErrors* errors) {
+  return CreateAndAddToVector(reinterpret_cast<const uint8_t*>(data.data()),
+                              data.size(), options, chain, errors);
+}
+
+scoped_refptr<ParsedCertificate> ParsedCertificate::CreateWithoutCopyingUnsafe(
+    const uint8_t* data,
+    size_t length,
+    const ParseCertificateOptions& options,
+    CertErrors* errors) {
+  return CreateInternal(data, length, DataSource::EXTERNAL_REFERENCE, options,
+                        errors);
+}
+
+scoped_refptr<ParsedCertificate> ParsedCertificate::CreateInternal(
     const uint8_t* data,
     size_t length,
     DataSource source,
-    const ParseCertificateOptions& options) {
+    const ParseCertificateOptions& options,
+    CertErrors* errors) {
+  // TODO(crbug.com/634443): Add errors
   scoped_refptr<ParsedCertificate> result(new ParsedCertificate);
 
   switch (source) {
@@ -44,22 +95,22 @@ scoped_refptr<ParsedCertificate> ParsedCertificate::CreateFromCertificateData(
 
   if (!ParseCertificate(result->cert_, &result->tbs_certificate_tlv_,
                         &result->signature_algorithm_tlv_,
-                        &result->signature_value_)) {
+                        &result->signature_value_, errors)) {
     return nullptr;
   }
 
-  if (!ParseTbsCertificate(result->tbs_certificate_tlv_, options,
-                           &result->tbs_)) {
+  if (!ParseTbsCertificate(result->tbs_certificate_tlv_, options, &result->tbs_,
+                           errors)) {
     return nullptr;
   }
 
   // Attempt to parse the signature algorithm contained in the Certificate.
-  // Do not give up on failure here, since SignatureAlgorithm::CreateFromDer
+  // Do not give up on failure here, since SignatureAlgorithm::Create
   // will fail on valid but unsupported signature algorithms.
   // TODO(mattm): should distinguish between unsupported algorithms and parsing
   // errors.
   result->signature_algorithm_ =
-      SignatureAlgorithm::CreateFromDer(result->signature_algorithm_tlv_);
+      SignatureAlgorithm::Create(result->signature_algorithm_tlv_, errors);
 
   der::Input subject_value;
   if (!GetSequenceValue(result->tbs_.subject_tlv, &subject_value) ||
@@ -105,8 +156,8 @@ scoped_refptr<ParsedCertificate> ParsedCertificate::CreateFromCertificateData(
                          &result->subject_alt_names_extension_)) {
       // RFC 5280 section 4.2.1.6:
       // SubjectAltName ::= GeneralNames
-      result->subject_alt_names_ = GeneralNames::CreateFromDer(
-          result->subject_alt_names_extension_.value);
+      result->subject_alt_names_ =
+          GeneralNames::Create(result->subject_alt_names_extension_.value);
       if (!result->subject_alt_names_)
         return nullptr;
       // RFC 5280 section 4.1.2.6:
@@ -124,7 +175,7 @@ scoped_refptr<ParsedCertificate> ParsedCertificate::CreateFromCertificateData(
     if (ConsumeExtension(NameConstraintsOid(), &result->unparsed_extensions_,
                          &extension)) {
       result->name_constraints_ =
-          NameConstraints::CreateFromDer(extension.value, extension.critical);
+          NameConstraints::Create(extension.value, extension.critical);
       if (!result->name_constraints_)
         return nullptr;
     }
@@ -147,28 +198,6 @@ scoped_refptr<ParsedCertificate> ParsedCertificate::CreateFromCertificateData(
   }
 
   return result;
-}
-
-scoped_refptr<ParsedCertificate> ParsedCertificate::CreateFromCertificateCopy(
-    const base::StringPiece& data,
-    const ParseCertificateOptions& options) {
-  return ParsedCertificate::CreateFromCertificateData(
-      reinterpret_cast<const uint8_t*>(data.data()), data.size(),
-      DataSource::INTERNAL_COPY, options);
-}
-
-bool ParsedCertificate::CreateAndAddToVector(
-    const uint8_t* data,
-    size_t length,
-    DataSource source,
-    const ParseCertificateOptions& options,
-    ParsedCertificateList* chain) {
-  scoped_refptr<ParsedCertificate> cert(
-      CreateFromCertificateData(data, length, source, options));
-  if (!cert)
-    return false;
-  chain->push_back(std::move(cert));
-  return true;
 }
 
 }  // namespace net

@@ -28,15 +28,6 @@
 #include "ui/native_theme/native_theme.h"
 
 namespace views {
-namespace {
-
-const gfx::FontList& GetDefaultFontList() {
-  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-  return rb.GetFontListWithDelta(ui::kLabelFontSizeDelta);
-}
-
-}  // namespace
-
 // static
 const char Label::kViewClassName[] = "Label";
 const int Label::kFocusBorderPadding = 1;
@@ -52,6 +43,12 @@ Label::Label(const base::string16& text, const gfx::FontList& font_list) {
 }
 
 Label::~Label() {
+}
+
+// static
+const gfx::FontList& Label::GetDefaultFontList() {
+  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
+  return rb.GetFontListWithDelta(ui::kLabelFontSizeDelta);
 }
 
 void Label::SetFontList(const gfx::FontList& font_list) {
@@ -599,8 +596,8 @@ void Label::UpdateColorsFromTheme(const ui::NativeTheme* theme) {
         ui::NativeTheme::kColorId_LabelDisabledColor);
   }
   if (!background_color_set_) {
-    background_color_ = theme->GetSystemColor(
-        ui::NativeTheme::kColorId_LabelBackgroundColor);
+    background_color_ =
+        theme->GetSystemColor(ui::NativeTheme::kColorId_DialogBackground);
   }
   RecalculateColors();
 }

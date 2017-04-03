@@ -19,6 +19,7 @@
 #include "chrome/browser/ui/webui/media_router/media_router_dialog_controller_impl.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
@@ -152,7 +153,8 @@ void MediaRouterIntegrationBrowserTest::OpenTestPageInNewTab(
     base::FilePath::StringPieceType file_name) {
   base::FilePath full_path = GetResourceFile(file_name);
   ui_test_utils::NavigateToURLWithDisposition(
-      browser(), net::FilePathToFileURL(full_path), NEW_FOREGROUND_TAB,
+      browser(), net::FilePathToFileURL(full_path),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
 }
 
@@ -172,7 +174,9 @@ void MediaRouterIntegrationBrowserTest::ChooseSink(
   content::WebContents* dialog_contents = GetMRDialog(web_contents);
   std::string script = base::StringPrintf(
       kChooseSinkScript, sink_name.c_str());
-  ASSERT_TRUE(content::ExecuteScript(dialog_contents, script));
+  // Execute javascript to choose sink, but don't wait until it finishes.
+  dialog_contents->GetMainFrame()->ExecuteJavaScriptWithUserGestureForTests(
+      base::UTF8ToUTF16(script));
 }
 
 void MediaRouterIntegrationBrowserTest::CheckStartFailed(

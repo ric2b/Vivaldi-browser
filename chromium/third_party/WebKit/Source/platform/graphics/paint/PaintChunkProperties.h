@@ -7,6 +7,7 @@
 
 #include "platform/graphics/paint/ClipPaintPropertyNode.h"
 #include "platform/graphics/paint/EffectPaintPropertyNode.h"
+#include "platform/graphics/paint/ScrollPaintPropertyNode.h"
 #include "platform/graphics/paint/TransformPaintPropertyNode.h"
 #include "wtf/Allocator.h"
 #include "wtf/Noncopyable.h"
@@ -24,36 +25,37 @@ namespace blink {
 // This differs from |ObjectPaintProperties| because it only stores one property
 // for each type (e.g., either transform or perspective, but not both).
 struct PaintChunkProperties {
-    DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
 
-    PaintChunkProperties() : backfaceHidden(false) { }
+  PaintChunkProperties() : backfaceHidden(false) {}
 
-    // TODO(pdr): Add scroll properties.
-    RefPtr<const TransformPaintPropertyNode> transform;
-    RefPtr<const ClipPaintPropertyNode> clip;
-    RefPtr<const EffectPaintPropertyNode> effect;
-    bool backfaceHidden;
+  // TODO(pdr): Refactor these to use PropertyTreeState.
+  RefPtr<const TransformPaintPropertyNode> transform;
+  RefPtr<const ClipPaintPropertyNode> clip;
+  RefPtr<const EffectPaintPropertyNode> effect;
+  RefPtr<const ScrollPaintPropertyNode> scroll;
+  bool backfaceHidden;
 };
 
 // Equality is based only on the pointers and is not 'deep' which would require
 // crawling the entire property tree to compute.
-inline bool operator==(const PaintChunkProperties& a, const PaintChunkProperties& b)
-{
-    return a.transform.get() == b.transform.get()
-        && a.clip.get() == b.clip.get()
-        && a.effect.get() == b.effect.get()
-        && a.backfaceHidden == b.backfaceHidden;
+inline bool operator==(const PaintChunkProperties& a,
+                       const PaintChunkProperties& b) {
+  return a.transform.get() == b.transform.get() &&
+         a.clip.get() == b.clip.get() && a.effect.get() == b.effect.get() &&
+         a.scroll.get() == b.scroll.get() &&
+         a.backfaceHidden == b.backfaceHidden;
 }
 
-inline bool operator!=(const PaintChunkProperties& a, const PaintChunkProperties& b)
-{
-    return !(a == b);
+inline bool operator!=(const PaintChunkProperties& a,
+                       const PaintChunkProperties& b) {
+  return !(a == b);
 }
 
 // Redeclared here to avoid ODR issues.
 // See platform/testing/PaintPrinters.h.
 void PrintTo(const PaintChunkProperties&, std::ostream*);
 
-} // namespace blink
+}  // namespace blink
 
-#endif // PaintChunkProperties_h
+#endif  // PaintChunkProperties_h

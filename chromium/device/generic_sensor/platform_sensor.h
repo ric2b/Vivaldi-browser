@@ -36,6 +36,7 @@ class PlatformSensor : public base::RefCountedThreadSafe<PlatformSensor> {
   };
 
   virtual mojom::ReportingMode GetReportingMode() = 0;
+  virtual PlatformSensorConfiguration GetDefaultConfiguration() = 0;
 
   mojom::SensorType GetType() const;
 
@@ -56,7 +57,10 @@ class PlatformSensor : public base::RefCountedThreadSafe<PlatformSensor> {
 
   using ConfigMap = std::map<Client*, std::list<PlatformSensorConfiguration>>;
 
-  virtual bool UpdateSensorInternal(const ConfigMap& configurations) = 0;
+  virtual bool UpdateSensorInternal(const ConfigMap& configurations);
+  virtual bool StartSensor(
+      const PlatformSensorConfiguration& configuration) = 0;
+  virtual void StopSensor() = 0;
   virtual bool CheckSensorConfiguration(
       const PlatformSensorConfiguration& configuration) = 0;
 
@@ -64,6 +68,9 @@ class PlatformSensor : public base::RefCountedThreadSafe<PlatformSensor> {
   void NotifySensorError();
 
   mojo::ScopedSharedBufferMapping shared_buffer_mapping_;
+
+  // For testing purposes.
+  const ConfigMap& config_map() const { return config_map_; }
 
  private:
   friend class base::RefCountedThreadSafe<PlatformSensor>;

@@ -16,7 +16,7 @@
 #import "chrome/browser/ui/cocoa/themed_window.h"
 #import "chrome/browser/ui/cocoa/view_id_util.h"
 #include "chrome/grit/generated_resources.h"
-#include "grit/theme_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "skia/ext/skia_utils_mac.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMFadeTruncatingTextFieldCell.h"
 #import "ui/base/cocoa/nsgraphics_context_additions.h"
@@ -82,11 +82,6 @@ enum StrokeType {
 };
 
 NSImage* imageForResourceID(int resource_id, StrokeType stroke_type) {
-  if (!ui::MaterialDesignController::IsModeMaterial()) {
-    ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-    return [rb.GetNativeImageNamed(resource_id).CopyNSImage() autorelease];
-  }
-
   CGFloat imageWidth = resource_id == IDR_TAB_ACTIVE_CENTER ? 1 : 18;
   SEL theSelector = 0;
   switch (resource_id) {
@@ -136,14 +131,6 @@ ui::ThreePartImage& GetMaskImage() {
 }
 
 ui::ThreePartImage& GetStrokeImage(bool active, StrokeType stroke_type) {
-  if (!ui::MaterialDesignController::IsModeMaterial() && !active) {
-    CR_DEFINE_STATIC_LOCAL(
-        ui::ThreePartImage, inactiveStroke,
-        (imageForResourceID(IDR_TAB_INACTIVE_LEFT, STROKE_NORMAL),
-         imageForResourceID(IDR_TAB_INACTIVE_CENTER, STROKE_NORMAL),
-         imageForResourceID(IDR_TAB_INACTIVE_RIGHT, STROKE_NORMAL)));
-    return inactiveStroke;
-  }
   CR_DEFINE_STATIC_LOCAL(
       ui::ThreePartImage, stroke,
       (imageForResourceID(IDR_TAB_ACTIVE_LEFT, STROKE_NORMAL),
@@ -202,11 +189,6 @@ CGFloat LineWidthFromContext(CGContextRef context) {
     base::scoped_nsobject<GTMFadeTruncatingTextFieldCell> labelCell(
         [[GTMFadeTruncatingTextFieldCell alloc] initTextCell:@"Label"]);
     [labelCell setControlSize:NSSmallControlSize];
-    // Font size is 12, per Material Design spec.
-    CGFloat fontSize = 12;
-    if (!ui::MaterialDesignController::IsModeMaterial()) {
-      fontSize = [NSFont systemFontSizeForControlSize:NSSmallControlSize];
-    }
     [titleView_ setCell:labelCell];
     titleViewCell_ = labelCell;
 
@@ -366,15 +348,11 @@ CGFloat LineWidthFromContext(CGContextRef context) {
     }
   }
 
-  // Fire the action to select the tab.
-  [controller_ selectTab:self];
-
-  // Messaging the drag controller with |-endDrag:| would seem like the right
-  // thing to do here. But, when a tab has been detached, the controller's
-  // target is nil until the drag is finalized. Since |-mouseUp:| gets called
-  // via the manual event loop inside -[TabStripDragController
-  // maybeStartDrag:forTab:], the drag controller can end the dragging session
-  // itself directly after calling this.
+  // Except in the rapid tab closure case, mouseDown: triggers a nested run loop
+  // that swallows the mouseUp: event. There's a bug in AppKit that sends
+  // mouseUp: callbacks to inappropriate views, so it's doubly important that
+  // this method doesn't do anything. https://crbug.com/511095.
+  [super mouseUp:theEvent];
 }
 
 - (void)otherMouseUp:(NSEvent*)theEvent {
@@ -432,9 +410,6 @@ CGFloat LineWidthFromContext(CGContextRef context) {
     // Background tabs should not paint over the tab strip separator, which is
     // two pixels high in both lodpi and hidpi, and one pixel high in MD.
     CGFloat tabStripSeparatorLineWidth = [self cr_lineWidth];
-    if (!ui::MaterialDesignController::IsModeMaterial()) {
-      tabStripSeparatorLineWidth *= 2;
-    }
     clippingRect.origin.y = tabStripSeparatorLineWidth;
     clippingRect.size.height -= tabStripSeparatorLineWidth;
   }
@@ -490,9 +465,8 @@ CGFloat LineWidthFromContext(CGContextRef context) {
     if (hoverAlpha > 0) {
       if (themeProvider && !hasCustomTheme) {
         CGFloat whiteValue = 1;
-        // In MD Incognito mode, give the glow a darker value.
-        if (ui::MaterialDesignController::IsModeMaterial() && themeProvider
-            && themeProvider->InIncognitoMode()) {
+        // In Incognito mode, give the glow a darker value.
+        if (themeProvider && themeProvider->InIncognitoMode()) {
           whiteValue = 0.5;
         }
         base::scoped_nsobject<NSGradient> glow([NSGradient alloc]);
@@ -517,17 +491,14 @@ CGFloat LineWidthFromContext(CGContextRef context) {
 
 // Draws the tab outline.
 - (void)drawStroke:(NSRect)dirtyRect {
-  CGFloat alpha = [[self window] isMainWindow] ? 1.0 : tabs::kImageNoFocusAlpha;
+  // In MD, the tab stroke is always opaque.
+  CGFloat alpha = 1;
   NSRect bounds = [self bounds];
-  if (ui::MaterialDesignController::IsModeMaterial()) {
-    // In Material Design the tab strip separator is always 1 pixel high -
-    // add a clip rect to avoid drawing the tab edge over it.
-    NSRect clipRect = bounds;
-    clipRect.origin.y += [self cr_lineWidth];
-    NSRectClip(clipRect);
-    // In MD, the tab stroke is always opaque.
-    alpha = 1;
-  }
+  // In Material Design the tab strip separator is always 1 pixel high -
+  // add a clip rect to avoid drawing the tab edge over it.
+  NSRect clipRect = bounds;
+  clipRect.origin.y += [self cr_lineWidth];
+  NSRectClip(clipRect);
   const ui::ThemeProvider* provider = [[self window] themeProvider];
   GetStrokeImage(state_ == NSOnState,
                  provider && provider->ShouldIncreaseContrast()

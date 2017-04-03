@@ -23,6 +23,8 @@ declare_args() {
 
   # The SDK name as accepted by xcodebuild.
   mac_sdk_name = "macosx"
+
+  mac_use_sdk = false
 }
 
 # Check that the version of macOS SDK used is the one requested when building
@@ -39,6 +41,9 @@ _verify_sdk =
     (is_chrome_branded || is_vivaldi) && is_official_build && target_os != "ios"
 
 find_sdk_args = [ "--print_sdk_path" ]
+if (mac_use_sdk != false) {
+  find_sdk_args += [ "--use-sdk", mac_use_sdk]
+}
 if (_verify_sdk) {
   find_sdk_args += [
     "--verify",

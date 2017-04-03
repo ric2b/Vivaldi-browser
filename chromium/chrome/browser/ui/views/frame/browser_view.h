@@ -380,10 +380,10 @@ class BrowserView : public BrowserWindow,
   BookmarkBarView* GetBookmarkBarView() const;
   LocationBarView* GetLocationBarView() const;
   views::View* GetTabContentsContainerView() const;
-  ToolbarView* GetToolbarView() const;
 
   // Overridden from TabStripModelObserver:
-  void TabInsertedAt(content::WebContents* contents,
+  void TabInsertedAt(TabStripModel* tab_strip_model,
+                     content::WebContents* contents,
                      int index,
                      bool foreground) override;
   void TabDetachedAt(content::WebContents* contents, int index) override;
@@ -663,7 +663,7 @@ class BrowserView : public BrowserWindow,
   // The Status information bubble that appears at the bottom of the window.
   std::unique_ptr<StatusBubbleViews> status_bubble_;
 
-  // A mapping between accelerators and commands.
+  // A mapping between accelerators and command IDs.
   std::map<ui::Accelerator, int> accelerator_table_;
 
   // True if we have already been initialized.

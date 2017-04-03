@@ -15,57 +15,75 @@
 namespace blink {
 
 class CSSParserTokenRange;
+class CSSSyntaxDescriptor;
 
 class CSSVariableData : public RefCounted<CSSVariableData> {
-    WTF_MAKE_NONCOPYABLE(CSSVariableData);
-    USING_FAST_MALLOC(CSSVariableData);
-public:
-    static PassRefPtr<CSSVariableData> create(const CSSParserTokenRange& range, bool needsVariableResolution = true)
-    {
-        return adoptRef(new CSSVariableData(range, needsVariableResolution));
-    }
+  WTF_MAKE_NONCOPYABLE(CSSVariableData);
+  USING_FAST_MALLOC(CSSVariableData);
 
-    static PassRefPtr<CSSVariableData> createResolved(const Vector<CSSParserToken>& resolvedTokens, const CSSVariableData& unresolvedData)
-    {
-        return adoptRef(new CSSVariableData(resolvedTokens, unresolvedData.m_backingString));
-    }
+ public:
+  static PassRefPtr<CSSVariableData> create(const CSSParserTokenRange& range,
+                                            bool isAnimationTainted,
+                                            bool needsVariableResolution) {
+    return adoptRef(new CSSVariableData(range, isAnimationTainted,
+                                        needsVariableResolution));
+  }
 
-    CSSParserTokenRange tokenRange() { return m_tokens; }
+  static PassRefPtr<CSSVariableData> createResolved(
+      const Vector<CSSParserToken>& resolvedTokens,
+      const CSSVariableData& unresolvedData,
+      bool isAnimationTainted) {
+    return adoptRef(new CSSVariableData(
+        resolvedTokens, unresolvedData.m_backingString, isAnimationTainted));
+  }
 
-    const Vector<CSSParserToken>& tokens() const { return m_tokens; }
+  CSSParserTokenRange tokenRange() const { return m_tokens; }
 
-    bool operator==(const CSSVariableData& other) const;
+  const Vector<CSSParserToken>& tokens() const { return m_tokens; }
 
-    bool needsVariableResolution() const { return m_needsVariableResolution; }
+  bool operator==(const CSSVariableData& other) const;
 
-    StylePropertySet* propertySet();
+  bool isAnimationTainted() const { return m_isAnimationTainted; }
 
-private:
-    CSSVariableData(const CSSParserTokenRange&, bool needsVariableResolution);
+  bool needsVariableResolution() const { return m_needsVariableResolution; }
 
-    // We can safely copy the tokens (which have raw pointers to substrings) because
-    // StylePropertySets contain references to CSSCustomPropertyDeclarations, which
-    // point to the unresolved CSSVariableData values that own the backing strings
-    // this will potentially reference.
-    CSSVariableData(const Vector<CSSParserToken>& resolvedTokens, String backingString)
-        : m_backingString(backingString)
-        , m_tokens(resolvedTokens)
-        , m_needsVariableResolution(false)
-        , m_cachedPropertySet(false)
-    { }
+  const CSSValue* parseForSyntax(const CSSSyntaxDescriptor&) const;
 
-    void consumeAndUpdateTokens(const CSSParserTokenRange&);
-    template<typename CharacterType> void updateTokens(const CSSParserTokenRange&);
+  StylePropertySet* propertySet();
 
-    String m_backingString;
-    Vector<CSSParserToken> m_tokens;
-    const bool m_needsVariableResolution;
+ private:
+  CSSVariableData(const CSSParserTokenRange&,
+                  bool isAnimationTainted,
+                  bool needsVariableResolution);
 
-    // Parsed representation for @apply
-    bool m_cachedPropertySet;
-    Persistent<StylePropertySet> m_propertySet;
+  // We can safely copy the tokens (which have raw pointers to substrings)
+  // because StylePropertySets contain references to
+  // CSSCustomPropertyDeclarations, which point to the unresolved
+  // CSSVariableData values that own the backing strings this will potentially
+  // reference.
+  CSSVariableData(const Vector<CSSParserToken>& resolvedTokens,
+                  String backingString,
+                  bool isAnimationTainted)
+      : m_backingString(backingString),
+        m_tokens(resolvedTokens),
+        m_isAnimationTainted(isAnimationTainted),
+        m_needsVariableResolution(false),
+        m_cachedPropertySet(false) {}
+
+  void consumeAndUpdateTokens(const CSSParserTokenRange&);
+  template <typename CharacterType>
+  void updateTokens(const CSSParserTokenRange&);
+
+  String m_backingString;
+  Vector<CSSParserToken> m_tokens;
+  const bool m_isAnimationTainted;
+  const bool m_needsVariableResolution;
+
+  // Parsed representation for @apply
+  bool m_cachedPropertySet;
+  Persistent<StylePropertySet> m_propertySet;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // CSSVariableData_h
+#endif  // CSSVariableData_h

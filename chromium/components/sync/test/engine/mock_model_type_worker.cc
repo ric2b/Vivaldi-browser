@@ -4,24 +4,23 @@
 
 #include "components/sync/test/engine/mock_model_type_worker.h"
 
-#include <stddef.h>
-#include <stdint.h>
-
 #include "base/logging.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/syncable/syncable_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace syncer_v2 {
+namespace syncer {
 
 namespace {
 
 }  // namespace
 
 MockModelTypeWorker::MockModelTypeWorker(
-    const sync_pb::DataTypeState& data_type_state,
+    const sync_pb::ModelTypeState& model_type_state,
     ModelTypeProcessor* processor)
-    : data_type_state_(data_type_state), processor_(processor) {}
+    : model_type_state_(model_type_state), processor_(processor) {
+  model_type_state_.set_initial_sync_done(true);
+}
 
 MockModelTypeWorker::~MockModelTypeWorker() {}
 
@@ -88,6 +87,10 @@ void MockModelTypeWorker::ExpectPendingCommits(
   }
 }
 
+void MockModelTypeWorker::UpdateFromServer() {
+  processor_->OnUpdateReceived(model_type_state_, UpdateResponseDataList());
+}
+
 void MockModelTypeWorker::UpdateFromServer(
     const std::string& tag_hash,
     const sync_pb::EntitySpecifics& specifics) {
@@ -99,7 +102,7 @@ void MockModelTypeWorker::UpdateFromServer(
     const sync_pb::EntitySpecifics& specifics,
     int64_t version_offset) {
   UpdateFromServer(tag_hash, specifics, version_offset,
-                   data_type_state_.encryption_key_name());
+                   model_type_state_.encryption_key_name());
 }
 
 void MockModelTypeWorker::UpdateFromServer(
@@ -107,10 +110,10 @@ void MockModelTypeWorker::UpdateFromServer(
     const sync_pb::EntitySpecifics& specifics,
     int64_t version_offset,
     const std::string& ekn) {
-  UpdateResponseDataList update;
-  update.push_back(
+  UpdateResponseDataList updates;
+  updates.push_back(
       GenerateUpdateData(tag_hash, specifics, version_offset, ekn));
-  processor_->OnUpdateReceived(data_type_state_, update);
+  processor_->OnUpdateReceived(model_type_state_, updates);
 }
 
 UpdateResponseData MockModelTypeWorker::GenerateUpdateData(
@@ -162,11 +165,11 @@ void MockModelTypeWorker::TombstoneFromServer(const std::string& tag_hash) {
   UpdateResponseData response_data;
   response_data.entity = data.PassToPtr();
   response_data.response_version = version;
-  response_data.encryption_key_name = data_type_state_.encryption_key_name();
+  response_data.encryption_key_name = model_type_state_.encryption_key_name();
 
   UpdateResponseDataList list;
   list.push_back(response_data);
-  processor_->OnUpdateReceived(data_type_state_, list);
+  processor_->OnUpdateReceived(model_type_state_, list);
 }
 
 void MockModelTypeWorker::AckOnePendingCommit() {
@@ -175,7 +178,7 @@ void MockModelTypeWorker::AckOnePendingCommit() {
     list.push_back(SuccessfulCommitResponse(data));
   }
   pending_commits_.pop_front();
-  processor_->OnCommitCompleted(data_type_state_, list);
+  processor_->OnCommitCompleted(model_type_state_, list);
 }
 
 CommitResponseData MockModelTypeWorker::SuccessfulCommitResponse(
@@ -215,8 +218,8 @@ void MockModelTypeWorker::UpdateWithEncryptionKey(const std::string& ekn) {
 void MockModelTypeWorker::UpdateWithEncryptionKey(
     const std::string& ekn,
     const UpdateResponseDataList& update) {
-  data_type_state_.set_encryption_key_name(ekn);
-  processor_->OnUpdateReceived(data_type_state_, update);
+  model_type_state_.set_encryption_key_name(ekn);
+  processor_->OnUpdateReceived(model_type_state_, update);
 }
 
 std::string MockModelTypeWorker::GenerateId(const std::string& tag_hash) {
@@ -238,4 +241,4 @@ void MockModelTypeWorker::SetServerVersion(const std::string& tag_hash,
   server_versions_[tag_hash] = version;
 }
 
-}  // namespace syncer_v2
+}  // namespace syncer

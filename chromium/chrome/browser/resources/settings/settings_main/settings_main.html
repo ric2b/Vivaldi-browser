@@ -2,6 +2,7 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/html/promise_resolver.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="/about_page/about_page.html">
 <link rel="import" href="/advanced_page/advanced_page.html">
 <link rel="import" href="/basic_page/basic_page.html">
@@ -13,6 +14,9 @@
   <template>
     <style>
       #advancedToggle {
+        --paper-button: {
+          text-transform: none;
+        }
         @apply(--settings-actionable);
         align-items: center;
         display: flex;
@@ -29,7 +33,10 @@
       #toggleContainer {
         align-items: center;
         display: flex;
+        font: inherit;
         justify-content: center;
+        margin-bottom: 0;
+        margin-top: 0;
       }
 
       #toggleSpacer {
@@ -57,28 +64,33 @@
       <div>$i18n{searchNoResults}</div>
       <div>$i18nRaw{searchNoResultsHelp}</div>
     </div>
-    <template is="dom-if" if="[[showPages_.basic]]">
+    <template is="dom-if" if="[[showBasicPage_(
+        showPages_.basic, inSearchMode_, hasExpandedSection_)]]">
       <settings-basic-page prefs="{{prefs}}"
           page-visibility="[[pageVisibility]]"
-          on-subpage-expand="onSubpageExpand_">
+          on-subpage-expand="onSubpageExpand_"
+          on-freeze-scroll="onFreezeScroll_">
       </settings-basic-page>
     </template>
     <template is="dom-if"
         if="[[showAdvancedSettings_(pageVisibility.advancedSettings)]]">
       <template is="dom-if" if="[[showAdvancedToggle_(
-          showPages_.basic, hasExpandedSection_, previousShowPages_)]]">
+          showPages_.basic, hasExpandedSection_, inSearchMode_)]]">
         <div id="toggleSpacer"></div>
-        <div id="toggleContainer">
-          <div id="advancedToggle" on-tap="toggleAdvancedPage_">
+        <h2 id="toggleContainer">
+          <paper-button id="advancedToggle" on-tap="toggleAdvancedPage_">
             <span>$i18n{advancedPageTitle}</span>
-            <iron-icon icon="[[arrowState_(showPages_.advanced)]]"></iron-icon>
-          </div>
-        </div>
+            <iron-icon icon="[[arrowState_(advancedToggleExpanded_)]]">
+            </iron-icon>
+          </paper-button>
+        </h2>
       </template>
-      <template is="dom-if" if="[[showPages_.advanced]]">
+      <template is="dom-if" if="[[showAdvancedPage_(
+          showPages_.advanced, inSearchMode_, hasExpandedSection_)]]">
         <settings-advanced-page prefs="{{prefs}}"
             page-visibility="[[pageVisibility]]"
-            on-subpage-expand="onSubpageExpand_">
+            on-subpage-expand="onSubpageExpand_"
+            on-freeze-scroll="onFreezeScroll_">
         </settings-advanced-page>
       </template>
     </template>

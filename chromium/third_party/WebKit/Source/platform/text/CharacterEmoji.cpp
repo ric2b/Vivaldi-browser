@@ -43,7 +43,9 @@ namespace blink {
 //     (replace-match "-" nil nil))
 //   (goto-char 0)
 //   ; Pad 4 digit characters, step 1
-//   (while (re-search-forward "\\([^0-9A-F]*\\)\\([0-9A-F]\\{4\\}\\)\\([^0-9A-F]\\)" nil t)
+//   (while (re-search-forward
+//           "\\([^0-9A-F]*\\)\\([0-9A-F]\\{4\\}\\)\\([^0-9A-F]\\)"
+//           nil t)
 //     (replace-match "\\1\\\\U0000\\2\\3" nil nil))
 //   (goto-char 0)
 //   ; Fix up 5 digit characters padding, step 2
@@ -180,74 +182,64 @@ static const char kEmojiModifierBasePattern[] =
     R"([\U0001F918][\U0001F919-\U0001F91E][\U0001F926][\U0001F930])"
     R"([\U0001F933-\U0001F939][\U0001F93C-\U0001F93E]])";
 
-static void applyPatternAndFreeze(icu::UnicodeSet* unicodeSet, const char* pattern)
-{
-    UErrorCode err = U_ZERO_ERROR;
-    // Use ICU's invariant-character initialization method.
-    unicodeSet->applyPattern(icu::UnicodeString(pattern, -1, US_INV), err);
-    unicodeSet->freeze();
-    ASSERT(err == U_ZERO_ERROR);
+static void applyPatternAndFreeze(icu::UnicodeSet* unicodeSet,
+                                  const char* pattern) {
+  UErrorCode err = U_ZERO_ERROR;
+  // Use ICU's invariant-character initialization method.
+  unicodeSet->applyPattern(icu::UnicodeString(pattern, -1, US_INV), err);
+  unicodeSet->freeze();
+  ASSERT(err == U_ZERO_ERROR);
 }
 
-bool Character::isEmoji(UChar32 ch)
-{
-    return Character::isEmojiTextDefault(ch) || Character::isEmojiEmojiDefault(ch);
+bool Character::isEmoji(UChar32 ch) {
+  return Character::isEmojiTextDefault(ch) ||
+         Character::isEmojiEmojiDefault(ch);
 }
 
-bool Character::isEmojiTextDefault(UChar32 ch)
-{
-    DEFINE_STATIC_LOCAL(icu::UnicodeSet, emojiTextSet, ());
-    if (emojiTextSet.isEmpty())
-        applyPatternAndFreeze(&emojiTextSet, kEmojiTextPattern);
-    return emojiTextSet.contains(ch) && !isEmojiEmojiDefault(ch);
+bool Character::isEmojiTextDefault(UChar32 ch) {
+  DEFINE_STATIC_LOCAL(icu::UnicodeSet, emojiTextSet, ());
+  if (emojiTextSet.isEmpty())
+    applyPatternAndFreeze(&emojiTextSet, kEmojiTextPattern);
+  return emojiTextSet.contains(ch) && !isEmojiEmojiDefault(ch);
 }
 
-bool Character::isEmojiEmojiDefault(UChar32 ch)
-{
-    DEFINE_STATIC_LOCAL(icu::UnicodeSet, emojiEmojiSet, ());
-    if (emojiEmojiSet.isEmpty())
-        applyPatternAndFreeze(&emojiEmojiSet, kEmojiEmojiPattern);
-    return emojiEmojiSet.contains(ch);
+bool Character::isEmojiEmojiDefault(UChar32 ch) {
+  DEFINE_STATIC_LOCAL(icu::UnicodeSet, emojiEmojiSet, ());
+  if (emojiEmojiSet.isEmpty())
+    applyPatternAndFreeze(&emojiEmojiSet, kEmojiEmojiPattern);
+  return emojiEmojiSet.contains(ch);
 }
 
-bool Character::isEmojiModifierBase(UChar32 ch)
-{
-    DEFINE_STATIC_LOCAL(icu::UnicodeSet, emojieModifierBaseSet, ());
-    if (emojieModifierBaseSet.isEmpty())
-        applyPatternAndFreeze(&emojieModifierBaseSet, kEmojiModifierBasePattern);
-    return emojieModifierBaseSet.contains(ch);
+bool Character::isEmojiModifierBase(UChar32 ch) {
+  DEFINE_STATIC_LOCAL(icu::UnicodeSet, emojieModifierBaseSet, ());
+  if (emojieModifierBaseSet.isEmpty())
+    applyPatternAndFreeze(&emojieModifierBaseSet, kEmojiModifierBasePattern);
+  return emojieModifierBaseSet.contains(ch);
 }
 #else
-bool Character::isEmoji(UChar32 ch)
-{
-    return u_hasBinaryProperty(ch, UCHAR_EMOJI);
+bool Character::isEmoji(UChar32 ch) {
+  return u_hasBinaryProperty(ch, UCHAR_EMOJI);
 }
-bool Character::isEmojiTextDefault(UChar32 ch)
-{
-    return u_hasBinaryProperty(ch, UCHAR_EMOJI)
-        && !u_hasBinaryProperty(ch, UCHAR_EMOJI_PRESENTATION);
+bool Character::isEmojiTextDefault(UChar32 ch) {
+  return u_hasBinaryProperty(ch, UCHAR_EMOJI) &&
+         !u_hasBinaryProperty(ch, UCHAR_EMOJI_PRESENTATION);
 }
 
-bool Character::isEmojiEmojiDefault(UChar32 ch)
-{
-    return u_hasBinaryProperty(ch, UCHAR_EMOJI_PRESENTATION);
+bool Character::isEmojiEmojiDefault(UChar32 ch) {
+  return u_hasBinaryProperty(ch, UCHAR_EMOJI_PRESENTATION);
 }
 
-bool Character::isEmojiModifierBase(UChar32 ch)
-{
-    return u_hasBinaryProperty(ch, UCHAR_EMOJI_MODIFIER_BASE);
+bool Character::isEmojiModifierBase(UChar32 ch) {
+  return u_hasBinaryProperty(ch, UCHAR_EMOJI_MODIFIER_BASE);
 }
-#endif // defined(USING_SYSTEM_ICU) && (U_ICU_VERSION_MAJOR_NUM <= 56)
+#endif  // defined(USING_SYSTEM_ICU) && (U_ICU_VERSION_MAJOR_NUM <= 56)
 
-bool Character::isEmojiKeycapBase(UChar32 ch)
-{
-    return (ch >= '0' && ch <= '9') || ch == '#' || ch == '*';
+bool Character::isEmojiKeycapBase(UChar32 ch) {
+  return (ch >= '0' && ch <= '9') || ch == '#' || ch == '*';
 }
 
-bool Character::isRegionalIndicator(UChar32 ch)
-{
-    return (ch >= 0x1F1E6 && ch <= 0x1F1FF);
+bool Character::isRegionalIndicator(UChar32 ch) {
+  return (ch >= 0x1F1E6 && ch <= 0x1F1FF);
 }
 
-
-}; // namespace blink
+};  // namespace blink

@@ -8,9 +8,9 @@
 #include <memory>
 
 #include "components/sync/core/non_blocking_sync_common.h"
-#include "components/sync/protocol/data_type_state.pb.h"
+#include "components/sync/protocol/model_type_state.pb.h"
 
-namespace syncer_v2 {
+namespace syncer {
 class CommitQueue;
 
 // Interface used by sync backend to issue requests to a synced data type.
@@ -33,15 +33,15 @@ class ModelTypeProcessor {
   // Informs this object that some of its commit requests have been
   // successfully serviced.
   virtual void OnCommitCompleted(
-      const sync_pb::DataTypeState& type_state,
+      const sync_pb::ModelTypeState& type_state,
       const CommitResponseDataList& response_list) = 0;
 
   // Informs this object that there are some incoming updates is should
   // handle.
-  virtual void OnUpdateReceived(const sync_pb::DataTypeState& type_state,
+  virtual void OnUpdateReceived(const sync_pb::ModelTypeState& type_state,
                                 const UpdateResponseDataList& updates) = 0;
 };
 
-}  // namespace syncer_v2
+}  // namespace syncer
 
 #endif  // COMPONENTS_SYNC_CORE_MODEL_TYPE_PROCESSOR_H_

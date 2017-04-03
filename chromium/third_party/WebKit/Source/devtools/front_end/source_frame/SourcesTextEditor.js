@@ -9,7 +9,11 @@
  */
 WebInspector.SourcesTextEditor = function(delegate)
 {
-    WebInspector.CodeMirrorTextEditor.call(this);
+    WebInspector.CodeMirrorTextEditor.call(this, {
+        lineNumbers: true,
+        lineWrapping: false,
+        bracketMatchingSetting: WebInspector.moduleSetting("textEditorBracketMatching"),
+    });
 
     this.codeMirror().addKeyMap({
         "Enter": "smartNewlineAndIndent",
@@ -32,6 +36,10 @@ WebInspector.SourcesTextEditor = function(delegate)
 
     /** @type {!Array<string>} */
     this._gutters = ["CodeMirror-linenumbers"];
+    this.codeMirror().setOption("gutters", this._gutters.slice());
+
+    this.codeMirror().setOption("electricChars", false);
+    this.codeMirror().setOption("smartIndent", false);
 
     /**
      * @this {WebInspector.SourcesTextEditor}
@@ -57,6 +65,16 @@ WebInspector.SourcesTextEditor.prototype = {
     _isSearchActive: function()
     {
         return !!this._tokenHighlighter.highlightedRegex();
+    },
+
+    /**
+     * @override
+     * @param {number} lineNumber
+     */
+    scrollToLine: function(lineNumber)
+    {
+        WebInspector.CodeMirrorTextEditor.prototype.scrollToLine.call(this, lineNumber);
+        this._scroll();
     },
 
     /**
@@ -169,7 +187,7 @@ WebInspector.SourcesTextEditor.prototype = {
             this._gutters.push(type);
 
         this.codeMirror().setOption("gutters", this._gutters.slice());
-        this.codeMirror().refresh();
+        this.refresh();
     },
 
     /**
@@ -177,9 +195,12 @@ WebInspector.SourcesTextEditor.prototype = {
      */
     uninstallGutter: function(type)
     {
-        this._gutters = this._gutters.filter(gutter => gutter !== type);
+        var index = this._gutters.indexOf(type);
+        if (index === -1)
+            return;
+        this._gutters.splice(index,1);
         this.codeMirror().setOption("gutters", this._gutters.slice());
-        this.codeMirror().refresh();
+        this.refresh();
     },
 
     /**
@@ -474,11 +495,13 @@ WebInspector.SourcesTextEditor.prototype = {
     /**
      * @override
      * @param {string} mimeType
+     * @return {!Promise}
      */
     setMimeType: function(mimeType)
     {
         this._mimeType = mimeType;
-        WebInspector.CodeMirrorTextEditor.prototype.setMimeType.call(this, this._applyWhitespaceMimetype(mimeType));
+        return WebInspector.CodeMirrorTextEditor.prototype.setMimeType.call(this, mimeType)
+            .then(() => this._codeMirror.setOption("mode", this._applyWhitespaceMimetype(mimeType)));
     },
 
     _updateWhitespace: function()
@@ -599,10 +622,11 @@ WebInspector.SourcesTextEditor.prototype = {
 /** @typedef {{lineNumber: number, event: !Event}} */
 WebInspector.SourcesTextEditor.GutterClickEventData;
 
-/** @enum {string} */
+/** @enum {symbol} */
 WebInspector.SourcesTextEditor.Events = {
-    GutterClick: "GutterClick"
+    GutterClick: Symbol("GutterClick")
 }
+
 /**
  * @interface
  */

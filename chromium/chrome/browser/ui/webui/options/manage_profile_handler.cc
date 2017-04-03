@@ -35,7 +35,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/signin/core/browser/signin_manager.h"
@@ -76,7 +76,7 @@ ManageProfileHandler::ManageProfileHandler()
 }
 
 ManageProfileHandler::~ManageProfileHandler() {
-  ProfileSyncService* service =
+  browser_sync::ProfileSyncService* service =
       ProfileSyncServiceFactory::GetForProfile(Profile::FromWebUI(web_ui()));
   // Sync may be disabled in tests.
   if (service)
@@ -151,7 +151,7 @@ void ManageProfileHandler::InitializeHandler() {
       prefs::kSupervisedUserCreationAllowed,
       base::Bind(&ManageProfileHandler::OnCreateSupervisedUserPrefChange,
                  base::Unretained(this)));
-  ProfileSyncService* service =
+  browser_sync::ProfileSyncService* service =
       ProfileSyncServiceFactory::GetForProfile(profile);
   // Sync may be disabled for tests.
   if (service)
@@ -474,8 +474,8 @@ void ManageProfileHandler::RequestCreateProfileUpdate(
       SigninManagerFactory::GetForProfile(profile);
   base::string16 username =
       base::UTF8ToUTF16(manager->GetAuthenticatedAccountInfo().email);
-  ProfileSyncService* service =
-     ProfileSyncServiceFactory::GetForProfile(profile);
+  browser_sync::ProfileSyncService* service =
+      ProfileSyncServiceFactory::GetForProfile(profile);
   GoogleServiceAuthError::State state = GoogleServiceAuthError::NONE;
 
   // |service| might be null if Sync is disabled from the command line.

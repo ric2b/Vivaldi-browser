@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "base/timer/timer.h"
+#include "cc/surfaces/frame_sink_id.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 
@@ -18,10 +19,17 @@ class CopyOutputRequest;
 class RenderPass;
 }
 
+namespace gpu {
+class GpuChannelHost;
+}
+
 namespace ui {
 
+namespace surfaces {
+class CompositorFrameSink;
+}
+
 class DisplayCompositor;
-class SurfacesState;
 
 namespace ws {
 
@@ -33,12 +41,14 @@ class FrameGeneratorDelegate;
 class ServerWindow;
 
 // Responsible for redrawing the display in response to the redraw requests by
-// submitting CompositorFrames to the owned DisplayCompositor.
+// submitting CompositorFrames to the owned CompositorFrameSink.
 class FrameGenerator {
  public:
   FrameGenerator(FrameGeneratorDelegate* delegate,
-                 scoped_refptr<SurfacesState> surfaces_state);
+                 scoped_refptr<DisplayCompositor> display_compositor);
   virtual ~FrameGenerator();
+
+  void OnGpuChannelEstablished(scoped_refptr<gpu::GpuChannelHost> gpu_channel);
 
   // Schedules a redraw for the provided region.
   void RequestRedraw(const gfx::Rect& redraw_region);
@@ -58,7 +68,7 @@ class FrameGenerator {
   // http://crbug.com/533042
   void Draw();
 
-  // This is called after the DisplayCompositor has completed generating a new
+  // This is called after the CompositorFrameSink has completed generating a new
   // frame for the display. TODO(fsamuel): Idle time processing should happen
   // here if there is budget for it.
   void DidDraw();
@@ -76,9 +86,12 @@ class FrameGenerator {
                       bool* may_contain_video) const;
 
   FrameGeneratorDelegate* delegate_;
-  scoped_refptr<SurfacesState> surfaces_state_;
+  scoped_refptr<DisplayCompositor> display_compositor_;
+  cc::FrameSinkId frame_sink_id_;
+  scoped_refptr<gpu::GpuChannelHost> gpu_channel_;
 
-  std::unique_ptr<DisplayCompositor> display_compositor_;
+  std::unique_ptr<surfaces::CompositorFrameSink> compositor_frame_sink_;
+  gfx::AcceleratedWidget widget_ = gfx::kNullAcceleratedWidget;
 
   // The region that needs to be redrawn next time the compositor frame is
   // generated.

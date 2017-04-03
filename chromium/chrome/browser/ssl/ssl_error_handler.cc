@@ -10,7 +10,7 @@
 #include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
@@ -337,9 +337,9 @@ void SSLErrorHandler::ShowSSLInterstitial() {
   RecordUMA(IsErrorOverridable() ? SHOW_SSL_INTERSTITIAL_OVERRIDABLE
                                  : SHOW_SSL_INTERSTITIAL_NONOVERRIDABLE);
 
-  (new SSLBlockingPage(web_contents_, cert_error_, ssl_info_, request_url_,
-                       options_mask_, base::Time::NowFromSystemTime(),
-                       std::move(ssl_cert_reporter_), callback_))
+  (SSLBlockingPage::Create(web_contents_, cert_error_, ssl_info_, request_url_,
+                           options_mask_, base::Time::NowFromSystemTime(),
+                           std::move(ssl_cert_reporter_), callback_))
       ->Show();
   // Once an interstitial is displayed, no need to keep the handler around.
   // This is the equivalent of "delete this".
@@ -394,10 +394,10 @@ void SSLErrorHandler::Observe(
 
 void SSLErrorHandler::DidStartNavigationToPendingEntry(
     const GURL& /* url */,
-    content::NavigationController::ReloadType /* reload_type */) {
-// Destroy the error handler on all new navigations. This ensures that the
-// handler is properly recreated when a hanging page is navigated to an SSL
-// error, even when the tab's WebContents doesn't change.
+    content::ReloadType /* reload_type */) {
+  // Destroy the error handler on all new navigations. This ensures that the
+  // handler is properly recreated when a hanging page is navigated to an SSL
+  // error, even when the tab's WebContents doesn't change.
   DeleteSSLErrorHandler();
 }
 

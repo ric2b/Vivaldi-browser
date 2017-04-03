@@ -41,13 +41,9 @@ def platform_options(use_globs=False):
                              const=('android*' if use_globs else 'android'),
                              help=('Alias for --platform=android*' if use_globs else 'Alias for --platform=android')),
 
-        # FIXME: Update run_webkit_tests.sh, any other callers to no longer pass --chromium, then remove this flag.
-        optparse.make_option('--chromium', action='store_const', dest='platform',
-                             const=('chromium*' if use_globs else 'chromium'),
-                             help=('Alias for --platform=chromium*' if use_globs else 'Alias for --platform=chromium')),
-
         optparse.make_option('--platform', action='store',
-                             help=('Glob-style list of platform/ports to use (e.g., "mac*")' if use_globs else 'Platform to use (e.g., "mac-lion")')),
+                             help=('Glob-style list of platform/ports to use (e.g., "mac*")'
+                                   if use_globs else 'Platform to use (e.g., "mac-lion")')),
     ]
 
 
@@ -115,8 +111,7 @@ def _read_configuration_from_gn(fs, options):
 
     args = fs.read_text_file(path)
     for l in args.splitlines():
-        m = re.match('^\s*is_debug\s*=\s*false(\s*$|\s*#.*$)', l)
-        if m:
+        if re.match(r'^\s*is_debug\s*=\s*false(\s*$|\s*#.*$)', l):
             return 'Release'
 
     # if is_debug is set to anything other than false, or if it
@@ -137,7 +132,7 @@ class PortFactory(object):
     def __init__(self, host):
         self._host = host
 
-    def _default_port(self, options):
+    def _default_port(self):
         platform = self._host.platform
         if platform.is_linux() or platform.is_freebsd():
             return 'linux'
@@ -150,15 +145,11 @@ class PortFactory(object):
     def get(self, port_name=None, options=None, **kwargs):
         """Returns an object implementing the Port interface. If
         port_name is None, this routine attempts to guess at the most
-        appropriate port on this platform."""
-        port_name = port_name or self._default_port(options)
+        appropriate port on this platform.
+        """
+        port_name = port_name or self._default_port()
 
         _check_configuration_and_target(self._host.filesystem, options)
-
-        # FIXME(steveblock): There's no longer any need to pass '--platform
-        # chromium' on the command line so we can remove this logic.
-        if port_name == 'chromium':
-            port_name = self._host.platform.os_name
 
         if 'browser_test' in port_name:
             module_name, class_name = port_name.rsplit('.', 1)
@@ -185,7 +176,8 @@ class PortFactory(object):
         by real ports. This does not include any "fake" names like "test"
         or "mock-mac", and it does not include any directories that are not.
 
-        If platform is not specified, we will glob-match all ports"""
+        If platform is not specified, we will glob-match all ports
+        """
         platform = platform or '*'
         return fnmatch.filter(self._host.builders.all_port_names(), platform)
 

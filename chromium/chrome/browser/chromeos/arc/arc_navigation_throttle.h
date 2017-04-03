@@ -16,8 +16,7 @@
 #include "components/arc/intent_helper/activity_icon_loader.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "ui/gfx/image/image.h"
-
-class GURL;
+#include "url/gurl.h"
 
 namespace content {
 class NavigationHandle;
@@ -47,11 +46,18 @@ class ArcNavigationThrottle : public content::NavigationThrottle {
   // ScrollView.
   enum { kMaxAppResults = 3 };
 
-  using NameAndIcon = std::pair<std::string, gfx::Image>;
-  using ShowIntentPickerCallback =
-      base::Callback<void(content::WebContents* web_contents,
-                          const std::vector<NameAndIcon>& app_info,
-                          const base::Callback<void(size_t, CloseReason)>& cb)>;
+  struct AppInfo {
+    explicit AppInfo(gfx::Image img, std::string package, std::string activity)
+        : icon(img), package_name(package), activity_name(activity) {}
+    gfx::Image icon;
+    std::string package_name;
+    std::string activity_name;
+  };
+
+  using ShowIntentPickerCallback = base::Callback<void(
+      content::WebContents* web_contents,
+      const std::vector<AppInfo>& app_info,
+      const base::Callback<void(std::string, CloseReason)>& cb)>;
   ArcNavigationThrottle(content::NavigationHandle* navigation_handle,
                         const ShowIntentPickerCallback& show_intent_picker_cb);
   ~ArcNavigationThrottle() override;
@@ -65,13 +71,15 @@ class ArcNavigationThrottle : public content::NavigationThrottle {
   NavigationThrottle::ThrottleCheckResult WillRedirectRequest() override;
 
   NavigationThrottle::ThrottleCheckResult HandleRequest();
-  void OnAppCandidatesReceived(mojo::Array<mojom::UrlHandlerInfoPtr> handlers);
+  void OnAppCandidatesReceived(
+      mojo::Array<mojom::IntentHandlerInfoPtr> handlers);
   void OnAppIconsReceived(
-      mojo::Array<mojom::UrlHandlerInfoPtr> handlers,
+      mojo::Array<mojom::IntentHandlerInfoPtr> handlers,
       std::unique_ptr<ActivityIconLoader::ActivityToIconsMap> icons);
-  void OnIntentPickerClosed(mojo::Array<mojom::UrlHandlerInfoPtr> handlers,
-                            size_t selected_app_index,
+  void OnIntentPickerClosed(mojo::Array<mojom::IntentHandlerInfoPtr> handlers,
+                            std::string selected_app_package,
                             CloseReason close_reason);
+  GURL GetStartingGURL() const;
   // A callback object that allow us to display an IntentPicker when Run() is
   // executed, it also allow us to report the user's selection back to
   // OnIntentPickerClosed().
@@ -82,6 +90,9 @@ class ArcNavigationThrottle : public content::NavigationThrottle {
   // before, this will have a value of CloseReason::INVALID.  Used to avoid
   // popping up the dialog multiple times on chains of multiple redirects.
   CloseReason previous_user_action_;
+
+  // Keeps a referrence to the starting GURL.
+  GURL starting_gurl_;
 
   // This has to be the last member of the class.
   base::WeakPtrFactory<ArcNavigationThrottle> weak_ptr_factory_;

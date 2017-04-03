@@ -1,0 +1,22 @@
+{
+  "name": "service:content_browser",
+  "capabilities": {
+    "provided": {
+      "renderer": [
+        "autofill::mojom::AutofillDriver",
+        "autofill::mojom::PasswordManagerDriver",
+        "extensions::StashService",
+        "metrics::mojom::LeakDetector",
+        "startup_metric_utils::mojom::StartupMetricHost",
+        "translate::mojom::ContentTranslateDriver"
+      ],
+      "gpu": [
+        "metrics::mojom::CallStackProfileCollector"
+      ],
+      "ash": [
+        "ash::mojom::SystemTray",
+        "ash::mojom::SystemTrayClient"
+      ]
+    }
+  }
+}

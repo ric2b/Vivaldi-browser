@@ -18,6 +18,7 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/time/time.h"
 #include "net/base/request_priority.h"
 #include "net/url_request/url_request.h"
 #include "url/gurl.h"
@@ -60,7 +61,8 @@ class CronetURLRequestAdapter : public net::URLRequest::Delegate {
                           const GURL& url,
                           net::RequestPriority priority,
                           jboolean jdisable_cache,
-                          jboolean jdisable_connection_migration);
+                          jboolean jdisable_connection_migration,
+                          jboolean jenable_metrics);
   ~CronetURLRequestAdapter() override;
 
   // Methods called prior to Start are never called on network thread.
@@ -117,7 +119,7 @@ class CronetURLRequestAdapter : public net::URLRequest::Delegate {
   void OnSSLCertificateError(net::URLRequest* request,
                              const net::SSLInfo& ssl_info,
                              bool fatal) override;
-  void OnResponseStarted(net::URLRequest* request) override;
+  void OnResponseStarted(net::URLRequest* request, int net_error) override;
   void OnReadCompleted(net::URLRequest* request, int bytes_read) override;
 
   net::URLRequest* GetURLRequestForTesting();
@@ -136,9 +138,10 @@ class CronetURLRequestAdapter : public net::URLRequest::Delegate {
       int buffer_size);
   void DestroyOnNetworkThread(bool send_on_canceled);
 
-  // Checks status of the request_adapter, return false if |is_success()| is
-  // true, otherwise report error and cancel request_adapter.
-  bool MaybeReportError(net::URLRequest* request) const;
+  // Report error and cancel request_adapter.
+  void ReportError(net::URLRequest* request, int net_error);
+  // Reports metrics collected to the Java layer
+  void MaybeReportMetrics(JNIEnv* env) const;
 
   CronetURLRequestContextAdapter* context_;
 
@@ -154,6 +157,10 @@ class CronetURLRequestAdapter : public net::URLRequest::Delegate {
 
   scoped_refptr<IOBufferWithByteBuffer> read_buffer_;
   std::unique_ptr<net::URLRequest> url_request_;
+
+  // Whether detailed metrics should be collected and reported to Java for this
+  // request.
+  const bool enable_metrics_;
 
   DISALLOW_COPY_AND_ASSIGN(CronetURLRequestAdapter);
 };

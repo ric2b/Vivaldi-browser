@@ -5,7 +5,7 @@
 #include "chrome/browser/extensions/suspicious_extension_bubble_delegate.h"
 
 #include "base/lazy_instance.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
@@ -13,10 +13,10 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/strings/grit/components_strings.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/extension.h"
-#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
 using extensions::ExtensionMessageBubbleController;

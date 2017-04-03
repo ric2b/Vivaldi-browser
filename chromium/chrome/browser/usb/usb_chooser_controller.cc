@@ -17,6 +17,7 @@
 #include "chrome/browser/usb/usb_chooser_context.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
 #include "chrome/browser/usb/web_usb_histograms.h"
+#include "chrome/browser/usb/web_usb_permission_provider.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
@@ -97,6 +98,11 @@ base::string16 UsbChooserController::GetOption(size_t index) const {
                    devices_[index].first->serial_number());
 }
 
+bool UsbChooserController::IsPaired(size_t index) const {
+  return WebUSBPermissionProvider::HasDevicePermission(render_frame_host_,
+                                                       devices_[index].first);
+}
+
 void UsbChooserController::RefreshOptions() {}
 
 base::string16 UsbChooserController::GetStatus() const {
@@ -139,8 +145,8 @@ void UsbChooserController::Close() {}
 void UsbChooserController::OpenHelpCenterUrl() const {
   GetBrowser()->OpenURL(content::OpenURLParams(
       GURL(chrome::kChooserUsbOverviewURL), content::Referrer(),
-      NEW_FOREGROUND_TAB, ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
-      false /* is_renderer_initialized */));
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false /* is_renderer_initialized */));
 }
 
 void UsbChooserController::OnDeviceAdded(

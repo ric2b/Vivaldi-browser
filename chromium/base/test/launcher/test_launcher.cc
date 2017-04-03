@@ -19,6 +19,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/process/kill.h"
 #include "base/process/launch.h"
@@ -37,6 +38,7 @@
 #include "base/test/sequenced_worker_pool_owner.h"
 #include "base/test/test_switches.h"
 #include "base/test/test_timeouts.h"
+#include "base/threading/thread.h"
 #include "base/threading/thread_checker.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -45,6 +47,8 @@
 
 #if defined(OS_POSIX)
 #include <fcntl.h>
+
+#include "base/files/file_descriptor_watcher_posix.h"
 #endif
 
 #if defined(OS_MACOSX)
@@ -150,26 +154,15 @@ void KillSpawnedTestProcesses() {
 
 // I/O watcher for the reading end of the self-pipe above.
 // Terminates any launched child processes and exits the process.
-class SignalFDWatcher : public MessageLoopForIO::Watcher {
- public:
-  SignalFDWatcher() {
-  }
+void OnShutdownPipeReadable() {
+  fprintf(stdout, "\nCaught signal. Killing spawned test processes...\n");
+  fflush(stdout);
 
-  void OnFileCanReadWithoutBlocking(int fd) override {
-    fprintf(stdout, "\nCaught signal. Killing spawned test processes...\n");
-    fflush(stdout);
+  KillSpawnedTestProcesses();
 
-    KillSpawnedTestProcesses();
-
-    // The signal would normally kill the process, so exit now.
-    _exit(1);
-  }
-
-  void OnFileCanWriteWithoutBlocking(int fd) override { NOTREACHED(); }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SignalFDWatcher);
-};
+  // The signal would normally kill the process, so exit now.
+  _exit(1);
+}
 #endif  // defined(OS_POSIX)
 
 // Parses the environment variable var as an Int32.  If it is unset, returns
@@ -528,15 +521,8 @@ bool TestLauncher::Run() {
   CHECK_EQ(0, sigaction(SIGQUIT, &action, NULL));
   CHECK_EQ(0, sigaction(SIGTERM, &action, NULL));
 
-  MessageLoopForIO::FileDescriptorWatcher controller;
-  SignalFDWatcher watcher;
-
-  CHECK(MessageLoopForIO::current()->WatchFileDescriptor(
-            g_shutdown_pipe[0],
-            true,
-            MessageLoopForIO::WATCH_READ,
-            &controller,
-            &watcher));
+  auto controller = base::FileDescriptorWatcher::WatchReadable(
+      g_shutdown_pipe[0], base::Bind(&OnShutdownPipeReadable));
 #endif  // defined(OS_POSIX)
 
   // Start the watchdog timer.
@@ -573,7 +559,7 @@ void TestLauncher::LaunchChildGTestProcess(
   // JSON summary.
   bool redirect_stdio = (parallel_jobs_ > 1) || BotModeEnabled();
 
-  worker_pool_owner_->pool()->PostWorkerTask(
+  GetTaskRunner()->PostTask(
       FROM_HERE,
       Bind(&DoLaunchChildTestProcess, new_command_line, timeout, options,
            redirect_stdio, RetainedRef(ThreadTaskRunnerHandle::Get()),
@@ -802,10 +788,10 @@ bool TestLauncher::Init() {
 
   fprintf(stdout, "Initial parallel jobs limit: %" PRIuS ".\n", parallel_jobs_);
   if (command_line->HasSwitch(switches::kTestLauncherJobs)) {
-    int jobs = -1;
-    if (!StringToInt(command_line->GetSwitchValueASCII(
+    size_t jobs = 0U;
+    if (!StringToSizeT(command_line->GetSwitchValueASCII(
                          switches::kTestLauncherJobs), &jobs) ||
-        jobs < 0) {
+        !jobs) {
       LOG(ERROR) << "Invalid value for " << switches::kTestLauncherJobs;
       return false;
     }
@@ -815,14 +801,19 @@ bool TestLauncher::Init() {
   } else if (command_line->HasSwitch(kGTestFilterFlag) && !BotModeEnabled()) {
     // Do not run jobs in parallel by default if we are running a subset of
     // the tests and if bot mode is off.
-    parallel_jobs_ = 1;
+    parallel_jobs_ = 1U;
     fprintf(stdout, "Filter flag update parallel jobs limit: %" PRIuS ".\n", parallel_jobs_);
   }
 
   fprintf(stdout, "Using %" PRIuS " parallel jobs.\n", parallel_jobs_);
   fflush(stdout);
-  worker_pool_owner_.reset(
-      new SequencedWorkerPoolOwner(parallel_jobs_, "test_launcher"));
+  if (parallel_jobs_ > 1U) {
+    worker_pool_owner_ = MakeUnique<SequencedWorkerPoolOwner>(
+        parallel_jobs_, "test_launcher");
+  } else {
+    worker_thread_ = MakeUnique<Thread>("test_launcher");
+    worker_thread_->Start();
+  }
 
   if (command_line->HasSwitch(switches::kTestLauncherFilterFile) &&
       command_line->HasSwitch(kGTestFilterFlag)) {
@@ -1114,6 +1105,17 @@ void TestLauncher::OnOutputTimeout() {
 
   // Arm the timer again - otherwise it would fire only once.
   watchdog_timer_.Reset();
+}
+
+scoped_refptr<TaskRunner> TestLauncher::GetTaskRunner() {
+  // One and only one of |worker_pool_owner_| or |worker_thread_| should be
+  // ready.
+  DCHECK_NE(!!worker_pool_owner_, !!worker_thread_);
+
+  if (worker_pool_owner_)
+    return worker_pool_owner_->pool();
+  DCHECK(worker_thread_->IsRunning());
+  return worker_thread_->task_runner();
 }
 
 std::string GetTestOutputSnippet(const TestResult& result,

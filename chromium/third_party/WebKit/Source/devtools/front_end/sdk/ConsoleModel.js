@@ -32,8 +32,9 @@
  * @constructor
  * @extends {WebInspector.SDKModel}
  * @param {!WebInspector.Target} target
+ * @param {?Protocol.LogAgent} logAgent
  */
-WebInspector.ConsoleModel = function(target)
+WebInspector.ConsoleModel = function(target, logAgent)
 {
     WebInspector.SDKModel.call(this, WebInspector.ConsoleModel, target);
 
@@ -44,17 +45,19 @@ WebInspector.ConsoleModel = function(target)
     this._warnings = 0;
     this._errors = 0;
     this._revokedErrors = 0;
-    this._logAgent = target.logAgent();
-    target.registerLogDispatcher(new WebInspector.LogDispatcher(this));
-    this._logAgent.enable();
+    this._logAgent = logAgent;
+    if (this._logAgent) {
+        target.registerLogDispatcher(new WebInspector.LogDispatcher(this));
+        this._logAgent.enable();
+    }
 }
 
-/** @enum {string} */
+/** @enum {symbol} */
 WebInspector.ConsoleModel.Events = {
-    ConsoleCleared: "ConsoleCleared",
-    MessageAdded: "MessageAdded",
-    MessageUpdated: "MessageUpdated",
-    CommandEvaluated: "CommandEvaluated"
+    ConsoleCleared: Symbol("ConsoleCleared"),
+    MessageAdded: Symbol("MessageAdded"),
+    MessageUpdated: Symbol("MessageUpdated"),
+    CommandEvaluated: Symbol("CommandEvaluated")
 }
 
 WebInspector.ConsoleModel.prototype = {
@@ -134,7 +137,7 @@ WebInspector.ConsoleModel.prototype = {
 
     requestClearMessages: function()
     {
-        this._logAgent.clear();
+        this._logAgent && this._logAgent.clear();
         this.clear();
     },
 

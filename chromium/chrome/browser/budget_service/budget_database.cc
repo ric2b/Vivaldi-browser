@@ -4,13 +4,17 @@
 
 #include "chrome/browser/budget_service/budget_database.h"
 
-#include "base/containers/adapters.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/time/clock.h"
 #include "base/time/default_clock.h"
 #include "chrome/browser/budget_service/budget.pb.h"
+#include "chrome/browser/engagement/site_engagement_score.h"
+#include "chrome/browser/engagement/site_engagement_service.h"
+#include "chrome/browser/profiles/profile.h"
 #include "components/leveldb_proto/proto_database_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 using content::BrowserThread;
 
@@ -22,8 +26,8 @@ namespace {
 const char kDatabaseUMAName[] = "BudgetManager";
 
 // The default amount of time during which a budget will be valid.
-// This is 3 days = 72 hours.
-constexpr double kBudgetDurationInHours = 72;
+// This is 10 days = 240 hours.
+constexpr double kBudgetDurationInHours = 240;
 
 }  // namespace
 
@@ -37,9 +41,11 @@ BudgetDatabase::BudgetInfo::BudgetInfo(const BudgetInfo&& other)
 BudgetDatabase::BudgetInfo::~BudgetInfo() {}
 
 BudgetDatabase::BudgetDatabase(
+    Profile* profile,
     const base::FilePath& database_dir,
     const scoped_refptr<base::SequencedTaskRunner>& task_runner)
-    : db_(new leveldb_proto::ProtoDatabaseImpl<budget_service::Budget>(
+    : profile_(profile),
+      db_(new leveldb_proto::ProtoDatabaseImpl<budget_service::Budget>(
           task_runner)),
       clock_(base::WrapUnique(new base::DefaultClock)),
       weak_ptr_factory_(this) {
@@ -50,146 +56,66 @@ BudgetDatabase::BudgetDatabase(
 
 BudgetDatabase::~BudgetDatabase() {}
 
-void BudgetDatabase::GetBudgetDetails(
-    const GURL& origin,
-    const GetBudgetDetailsCallback& callback) {
-  DCHECK_EQ(origin.GetOrigin(), origin);
-
-  // If this origin is already in the cache, immediately return the data.
-  if (IsCached(origin)) {
-    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                            base::Bind(&BudgetDatabase::DidGetBudget,
-                                       weak_ptr_factory_.GetWeakPtr(), origin,
-                                       callback, true /* success */));
-    return;
-  }
-
-  // Otherwise, query for the data, add it to the cache, then return the result.
-  AddToCacheCallback cache_callback =
-      base::Bind(&BudgetDatabase::DidGetBudget, weak_ptr_factory_.GetWeakPtr(),
-                 origin, callback);
-  db_->GetEntry(origin.spec(), base::Bind(&BudgetDatabase::AddToCache,
-                                          weak_ptr_factory_.GetWeakPtr(),
-                                          origin, cache_callback));
+void BudgetDatabase::GetBudgetDetails(const url::Origin& origin,
+                                      const GetBudgetCallback& callback) {
+  SyncCache(origin,
+            base::Bind(&BudgetDatabase::GetBudgetAfterSync,
+                       weak_ptr_factory_.GetWeakPtr(), origin, callback));
 }
 
-void BudgetDatabase::AddBudget(const GURL& origin,
-                               double amount,
-                               const StoreBudgetCallback& callback) {
-  DCHECK_EQ(origin.GetOrigin(), origin);
-
-  // Add a new chunk of budget for the origin at the default expiration time.
-  base::Time expiration =
-      clock_->Now() + base::TimeDelta::FromHours(kBudgetDurationInHours);
-  budget_map_[origin.spec()].chunks.emplace_back(amount, expiration);
-
-  // Now that the cache is updated, write the data to the database.
-  WriteCachedValuesToDatabase(origin, callback);
-}
-
-void BudgetDatabase::AddEngagementBudget(const GURL& origin,
-                                         double score,
-                                         const StoreBudgetCallback& callback) {
-  DCHECK_EQ(origin.GetOrigin(), origin);
-
-  // By default we award the "full" award. Then that ratio is decreased if
-  // there have been other awards recently.
-  double ratio = 1.0;
-
-  // Calculate how much budget should be awarded. If the origin is not cached,
-  // then we award a full amount.
-  if (IsCached(origin)) {
-    base::TimeDelta elapsed =
-        clock_->Now() - budget_map_[origin.spec()].last_engagement_award;
-    int elapsed_hours = elapsed.InHours();
-    if (elapsed_hours == 0) {
-      // Don't give engagement awards for periods less than an hour.
-      callback.Run(true);
-      return;
-    }
-    if (elapsed_hours < kBudgetDurationInHours)
-      ratio = elapsed_hours / kBudgetDurationInHours;
-  }
-
-  // Update the last_engagement_award to the current time. If the origin wasn't
-  // already in the map, this adds a new entry for it.
-  budget_map_[origin.spec()].last_engagement_award = clock_->Now();
-
-  // Pass to the base AddBudget to update the cache and write to the database.
-  AddBudget(origin, score * ratio, callback);
-}
-
-void BudgetDatabase::SpendBudget(const GURL& origin,
+void BudgetDatabase::SpendBudget(const url::Origin& origin,
                                  double amount,
-                                 const StoreBudgetCallback& callback) {
-  DCHECK_EQ(origin.GetOrigin(), origin);
+                                 const SpendBudgetCallback& callback) {
+  SyncCache(origin, base::Bind(&BudgetDatabase::SpendBudgetAfterSync,
+                               weak_ptr_factory_.GetWeakPtr(), origin, amount,
+                               callback));
+}
 
-  // First, cleanup any expired budget chunks for the origin.
-  CleanupExpiredBudget(origin);
-
-  if (!IsCached(origin)) {
-    callback.Run(false);
-    return;
-  }
-
-  // Walk the list of budget chunks to see if the origin has enough budget.
-  double total = 0;
-  BudgetInfo& info = budget_map_[origin.spec()];
-  for (const BudgetChunk& chunk : info.chunks)
-    total += chunk.amount;
-
-  if (total < amount) {
-    callback.Run(false);
-    return;
-  }
-
-  // Walk the chunks and remove enough budget to cover the needed amount.
-  double bill = amount;
-  for (auto iter = info.chunks.begin(); iter != info.chunks.end();) {
-    if (iter->amount > bill) {
-      iter->amount -= bill;
-      bill = 0;
-      ++iter;
-      break;
-    }
-    bill -= iter->amount;
-    iter = info.chunks.erase(iter);
-  }
-
-  // There should have been enough budget to cover the entire bill.
-  DCHECK_EQ(0, bill);
-
-  // Now that the cache is updated, write the data to the database.
-  // TODO(harkness): Consider adding a second parameter to the callback so the
-  // caller can distinguish between not enough budget and a failed database
-  // write.
-  // TODO(harkness): If the database write fails, the cache will be out of sync
-  // with the database. Consider ways to mitigate this.
-  WriteCachedValuesToDatabase(origin, callback);
+void BudgetDatabase::SetClockForTesting(std::unique_ptr<base::Clock> clock) {
+  clock_ = std::move(clock);
 }
 
 void BudgetDatabase::OnDatabaseInit(bool success) {
   // TODO(harkness): Consider caching the budget database now?
 }
 
-bool BudgetDatabase::IsCached(const GURL& origin) const {
-  return budget_map_.find(origin.spec()) != budget_map_.end();
+bool BudgetDatabase::IsCached(const url::Origin& origin) const {
+  return budget_map_.find(origin) != budget_map_.end();
+}
+
+double BudgetDatabase::GetBudget(const url::Origin& origin) const {
+  double total = 0;
+  auto iter = budget_map_.find(origin);
+  if (iter == budget_map_.end())
+    return total;
+
+  const BudgetInfo& info = iter->second;
+  for (const BudgetChunk& chunk : info.chunks)
+    total += chunk.amount;
+  return total;
 }
 
 void BudgetDatabase::AddToCache(
-    const GURL& origin,
-    const AddToCacheCallback& callback,
+    const url::Origin& origin,
+    const CacheCallback& callback,
     bool success,
     std::unique_ptr<budget_service::Budget> budget_proto) {
-  // If the database read failed, there's nothing to add to the cache.
+  // If the database read failed or there's nothing to add, just return.
   if (!success || !budget_proto) {
+    callback.Run(success);
+    return;
+  }
+
+  // If there were two simultaneous loads, don't overwrite the cache value,
+  // which might have been updated after the previous load.
+  if (IsCached(origin)) {
     callback.Run(success);
     return;
   }
 
   // Add the data to the cache, converting from the proto format to an STL
   // format which is better for removing things from the list.
-  BudgetInfo& info = budget_map_[origin.spec()];
+  BudgetInfo& info = budget_map_[origin];
   for (const auto& chunk : budget_proto->budget()) {
     info.chunks.emplace_back(chunk.amount(),
                              base::Time::FromInternalValue(chunk.expiration()));
@@ -201,52 +127,115 @@ void BudgetDatabase::AddToCache(
   callback.Run(success);
 }
 
-void BudgetDatabase::DidGetBudget(const GURL& origin,
-                                  const GetBudgetDetailsCallback& callback,
-                                  bool success) {
+void BudgetDatabase::GetBudgetAfterSync(const url::Origin& origin,
+                                        const GetBudgetCallback& callback,
+                                        bool success) {
+  mojo::Array<blink::mojom::BudgetStatePtr> predictions;
+
   // If the database wasn't able to read the information, return the
-  // failure and an empty BudgetPrediction.
+  // failure and an empty predictions array.
   if (!success) {
-    callback.Run(success, BudgetPrediction());
+    callback.Run(blink::mojom::BudgetServiceErrorType::DATABASE_ERROR,
+                 std::move(predictions));
     return;
   }
 
-  // First, cleanup any expired budget chunks for the origin.
-  CleanupExpiredBudget(origin);
-
   // Now, build up the BudgetExpection. This is different from the format
   // in which the cache stores the data. The cache stores chunks of budget and
-  // when that budget expires. The BudgetPrediction describes a set of times
+  // when that budget expires. The mojo array describes a set of times
   // and the budget at those times.
-  BudgetPrediction prediction;
-  double total = 0;
-
-  if (IsCached(origin)) {
-    // Starting with the chunks that expire the farthest in the future, build up
-    // the budget predictions for those future times.
-    const BudgetChunks& chunks = budget_map_[origin.spec()].chunks;
-    for (const auto& chunk : base::Reversed(chunks)) {
-      prediction.emplace_front(total, chunk.expiration);
-      total += chunk.amount;
-    }
-  }
+  double total = GetBudget(origin);
 
   // Always add one entry at the front of the list for the total budget now.
-  prediction.emplace_front(total, clock_->Now());
+  blink::mojom::BudgetStatePtr prediction(blink::mojom::BudgetState::New());
+  prediction->budget_at = total;
+  prediction->time = clock_->Now().ToDoubleT();
+  predictions.push_back(std::move(prediction));
 
-  callback.Run(true /* success */, prediction);
+  // Starting with the soonest expiring chunks, add entries for the
+  // expiration times going forward.
+  const BudgetChunks& chunks = budget_map_[origin].chunks;
+  for (const auto& chunk : chunks) {
+    blink::mojom::BudgetStatePtr prediction(blink::mojom::BudgetState::New());
+    total -= chunk.amount;
+    prediction->budget_at = total;
+    prediction->time = chunk.expiration.ToDoubleT();
+    predictions.push_back(std::move(prediction));
+  }
+
+  DCHECK_EQ(0, total);
+
+  callback.Run(blink::mojom::BudgetServiceErrorType::NONE,
+               std::move(predictions));
 }
 
-void BudgetDatabase::SetClockForTesting(std::unique_ptr<base::Clock> clock) {
-  clock_ = std::move(clock);
+void BudgetDatabase::SpendBudgetAfterSync(const url::Origin& origin,
+                                          double amount,
+                                          const SpendBudgetCallback& callback,
+                                          bool success) {
+  if (!success) {
+    callback.Run(blink::mojom::BudgetServiceErrorType::DATABASE_ERROR,
+                 false /* success */);
+    return;
+  }
+
+  // Get the current SES score, to generate UMA.
+  SiteEngagementService* service = SiteEngagementService::Get(profile_);
+  double score = service->GetScore(GURL(origin.Serialize()));
+
+  // Walk the list of budget chunks to see if the origin has enough budget.
+  double total = 0;
+  BudgetInfo& info = budget_map_[origin];
+  for (const BudgetChunk& chunk : info.chunks)
+    total += chunk.amount;
+
+  if (total < amount) {
+    UMA_HISTOGRAM_COUNTS_100("PushMessaging.SESForNoBudgetOrigin", score);
+    callback.Run(blink::mojom::BudgetServiceErrorType::NONE,
+                 false /* success */);
+    return;
+  } else if (total < amount * 2) {
+    UMA_HISTOGRAM_COUNTS_100("PushMessaging.SESForLowBudgetOrigin", score);
+  }
+
+  // Walk the chunks and remove enough budget to cover the needed amount.
+  double bill = amount;
+  for (auto iter = info.chunks.begin(); iter != info.chunks.end();) {
+    if (iter->amount > bill) {
+      iter->amount -= bill;
+      bill = 0;
+      break;
+    }
+    bill -= iter->amount;
+    iter = info.chunks.erase(iter);
+  }
+
+  // There should have been enough budget to cover the entire bill.
+  DCHECK_EQ(0, bill);
+
+  // Now that the cache is updated, write the data to the database.
+  WriteCachedValuesToDatabase(
+      origin, base::Bind(&BudgetDatabase::SpendBudgetAfterWrite,
+                         weak_ptr_factory_.GetWeakPtr(), callback));
+}
+
+// This converts the bool value which is returned from the database to a Mojo
+// error type.
+void BudgetDatabase::SpendBudgetAfterWrite(const SpendBudgetCallback& callback,
+                                           bool write_successful) {
+  // TODO(harkness): If the database write fails, the cache will be out of sync
+  // with the database. Consider ways to mitigate this.
+  if (!write_successful) {
+    callback.Run(blink::mojom::BudgetServiceErrorType::DATABASE_ERROR,
+                 false /* success */);
+    return;
+  }
+  callback.Run(blink::mojom::BudgetServiceErrorType::NONE, true /* success */);
 }
 
 void BudgetDatabase::WriteCachedValuesToDatabase(
-    const GURL& origin,
+    const url::Origin& origin,
     const StoreBudgetCallback& callback) {
-  // First, cleanup any expired budget chunks for the origin.
-  CleanupExpiredBudget(origin);
-
   // Create the data structures that are passed to the ProtoDatabase.
   std::unique_ptr<
       leveldb_proto::ProtoDatabase<budget_service::Budget>::KeyEntryVector>
@@ -260,7 +249,7 @@ void BudgetDatabase::WriteCachedValuesToDatabase(
   if (IsCached(origin)) {
     // Build the Budget proto object.
     budget_service::Budget budget;
-    const BudgetInfo& info = budget_map_[origin.spec()];
+    const BudgetInfo& info = budget_map_[origin];
     for (const auto& chunk : info.chunks) {
       budget_service::BudgetChunk* budget_chunk = budget.add_budget();
       budget_chunk->set_amount(chunk.amount);
@@ -268,23 +257,96 @@ void BudgetDatabase::WriteCachedValuesToDatabase(
     }
     budget.set_engagement_last_updated(
         info.last_engagement_award.ToInternalValue());
-    entries->push_back(std::make_pair(origin.spec(), budget));
+    entries->push_back(std::make_pair(origin.Serialize(), budget));
   } else {
     // If the origin doesn't exist in the cache, this is a remove operation.
-    keys_to_remove->push_back(origin.spec());
+    keys_to_remove->push_back(origin.Serialize());
   }
 
   // Send the updates to the database.
   db_->UpdateEntries(std::move(entries), std::move(keys_to_remove), callback);
 }
 
-void BudgetDatabase::CleanupExpiredBudget(const GURL& origin) {
-  if (!IsCached(origin))
+void BudgetDatabase::SyncCache(const url::Origin& origin,
+                               const CacheCallback& callback) {
+  // If the origin isn't already cached, add it to the cache.
+  if (!IsCached(origin)) {
+    CacheCallback add_callback =
+        base::Bind(&BudgetDatabase::SyncLoadedCache,
+                   weak_ptr_factory_.GetWeakPtr(), origin, callback);
+    db_->GetEntry(origin.Serialize(), base::Bind(&BudgetDatabase::AddToCache,
+                                                 weak_ptr_factory_.GetWeakPtr(),
+                                                 origin, add_callback));
     return;
+  }
+  SyncLoadedCache(origin, callback, true /* success */);
+}
+
+void BudgetDatabase::SyncLoadedCache(const url::Origin& origin,
+                                     const CacheCallback& callback,
+                                     bool success) {
+  if (!success) {
+    callback.Run(false /* success */);
+    return;
+  }
+
+  // Now, cleanup any expired budget chunks for the origin.
+  bool needs_write = CleanupExpiredBudget(origin);
+
+  // Get the SES score and add engagement budget for the site.
+  AddEngagementBudget(origin);
+
+  if (needs_write)
+    WriteCachedValuesToDatabase(origin, callback);
+  else
+    callback.Run(success);
+}
+
+void BudgetDatabase::AddEngagementBudget(const url::Origin& origin) {
+  // Get the current SES score, which we'll use to set a new budget.
+  SiteEngagementService* service = SiteEngagementService::Get(profile_);
+  double score = service->GetScore(GURL(origin.Serialize()));
+
+  // By default we award the "full" award. Then that ratio is decreased if
+  // there have been other awards recently.
+  double ratio = 1.0;
+
+  // Calculate how much budget should be awarded. If there is no entry in the
+  // cache then we award a full amount.
+  if (IsCached(origin)) {
+    base::TimeDelta elapsed =
+        clock_->Now() - budget_map_[origin].last_engagement_award;
+    int elapsed_hours = elapsed.InHours();
+    // Don't give engagement awards for periods less than an hour.
+    if (elapsed_hours < 1)
+      return;
+    if (elapsed_hours < kBudgetDurationInHours)
+      ratio = elapsed_hours / kBudgetDurationInHours;
+  }
+
+  // Update the last_engagement_award to the current time. If the origin wasn't
+  // already in the map, this adds a new entry for it.
+  budget_map_[origin].last_engagement_award = clock_->Now();
+
+  // Add a new chunk of budget for the origin at the default expiration time.
+  base::Time expiration =
+      clock_->Now() + base::TimeDelta::FromHours(kBudgetDurationInHours);
+  budget_map_[origin].chunks.emplace_back(ratio * score, expiration);
+
+  // Any time we award engagement budget, which is done at most once an hour
+  // whenever any budget action is taken, record the budget.
+  double budget = GetBudget(origin);
+  UMA_HISTOGRAM_COUNTS_100("PushMessaging.BackgroundBudget", budget);
+}
+
+// Cleans up budget in the cache. Relies on the caller eventually writing the
+// cache back to the database.
+bool BudgetDatabase::CleanupExpiredBudget(const url::Origin& origin) {
+  if (!IsCached(origin))
+    return false;
 
   base::Time now = clock_->Now();
-
-  BudgetChunks& chunks = budget_map_[origin.spec()].chunks;
+  BudgetChunks& chunks = budget_map_[origin].chunks;
   auto cleanup_iter = chunks.begin();
 
   // This relies on the list of chunks being in timestamp order.
@@ -294,7 +356,14 @@ void BudgetDatabase::CleanupExpiredBudget(const GURL& origin) {
   // If the entire budget is empty now AND there have been no engagements
   // in the last kBudgetDurationInHours hours, remove this from the cache.
   if (chunks.empty() &&
-      budget_map_[origin.spec()].last_engagement_award <
-          clock_->Now() - base::TimeDelta::FromHours(kBudgetDurationInHours))
-    budget_map_.erase(origin.spec());
+      budget_map_[origin].last_engagement_award <
+          clock_->Now() - base::TimeDelta::FromHours(kBudgetDurationInHours)) {
+    budget_map_.erase(origin);
+    return true;
+  }
+
+  // Although some things may have expired, there are some chunks still valid.
+  // Don't write to the DB now, write either when all chunks expire or when the
+  // origin spends some budget.
+  return false;
 }

@@ -2,12 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-[JavaPackage="org.chromium.mojo.bindings"]
-module mojo;
+[JavaPackage="org.chromium.mojo.bindings.interfacecontrol"]
+module mojo.interface_control;
 
-// For each user-defined interface, some control functions are provided at the
-// same end of the message pipe as the user-defined interface, providing
-// information about the user-defined interface.
+// For each user-defined interface, some control functions are provided by the
+// interface endpoints at both sides.
 
 ////////////////////////////////////////////////////////////////////////////////
 // Run@0xFFFFFFFF(RunInput input) => (RunOutput? output);
@@ -15,46 +14,34 @@ module mojo;
 // This control function runs the input command. If the command is not
 // supported, |output| is set to null; otherwise |output| stores the result,
 // whose type depends on the input.
-//
-// TODO(yzshen): Once union support is ready, switch the following definition
-// to:
-// struct RunMessageParams {
-//   RunInput input;
-// };
-// union RunInput {
-//   QueryVersion query_version;
-// };
-//
-// struct RunResponseMessageParams {
-//   RunOutput? output;
-// };
-// union RunOutput {
-//   QueryVersionResult query_version_result;
-// };
 
 const uint32 kRunMessageId = 0xFFFFFFFF;
 
 struct RunMessageParams {
-  // The reserved fields make the layout compatible with the RunInput union
-  // described above.
-  uint32 reserved0;  // Must be set to 16.
-  uint32 reserved1;  // Must be set to 0;
+  RunInput input;
+};
+union RunInput {
   QueryVersion query_version;
+  FlushForTesting flush_for_testing;
 };
 
 struct RunResponseMessageParams {
-  // The reserved fields make the layout compatible with the RunOutput union
-  // described above.
-  uint32 reserved0;  // Must be set to 16.
-  uint32 reserved1;  // Must be set to 0.
+  RunOutput? output;
+};
+union RunOutput {
   QueryVersionResult query_version_result;
 };
 
 // Queries the max supported version of the user-defined interface.
+// Sent by the interface client side.
 struct QueryVersion {
 };
 struct QueryVersionResult {
   uint32 version;
+};
+
+// Sent by either side of the interface.
+struct FlushForTesting {
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -62,28 +49,28 @@ struct QueryVersionResult {
 //
 // This control function runs the input command. If the operation fails or the
 // command is not supported, the message pipe is closed.
-//
-// TODO(yzshen): Once union support is ready, switch the following definition
-// to:
-// struct RunOrClosePipeMessageParams {
-//   RunOrClosePipeInput input;
-// };
-// union RunOrClosePipeInput {
-//   RequireVersion require_version;
-// };
 
 const uint32 kRunOrClosePipeMessageId = 0xFFFFFFFE;
 
 struct RunOrClosePipeMessageParams {
-  // The reserved fields make the layout compatible with the RunOrClosePipeInput
-  // union described above.
-  uint32 reserved0;  // Must be set to 16.
-  uint32 reserved1;  // Must be set to 0.
+  RunOrClosePipeInput input;
+};
+union RunOrClosePipeInput {
   RequireVersion require_version;
+  SendDisconnectReason send_disconnect_reason;
 };
 
 // If the specified version of the user-defined interface is not supported, the
 // function fails and the pipe is closed.
+// Sent by the interface client side.
 struct RequireVersion {
   uint32 version;
+};
+
+// A user-defined reason about why the interface is disconnected. The sender
+// usually send this message and immediately disconnect the interface.
+// Sent by either side of the interface.
+struct SendDisconnectReason {
+  uint32 custom_reason;
+  string description;
 };

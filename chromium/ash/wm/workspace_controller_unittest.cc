@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/wm/workspace_controller.h"
+#include "ash/common/wm/workspace_controller.h"
 
 #include <map>
 
@@ -15,7 +15,6 @@
 #include "ash/common/wm/panels/panel_layout_manager.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm/workspace/workspace_window_resizer.h"
-#include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
 #include "ash/test/ash_md_test_base.h"
@@ -142,12 +141,10 @@ class WorkspaceControllerTest : public test::AshMDTestBase {
         .bounds();
   }
 
-  ShelfWidget* shelf_widget() {
-    return Shell::GetPrimaryRootWindowController()->shelf_widget();
-  }
+  ShelfWidget* shelf_widget() { return GetPrimaryShelf()->shelf_widget(); }
 
   ShelfLayoutManager* shelf_layout_manager() {
-    return Shell::GetPrimaryRootWindowController()->GetShelfLayoutManager();
+    return GetPrimaryShelf()->shelf_layout_manager();
   }
 
   bool GetWindowOverlapsShelf() {
@@ -724,8 +721,6 @@ TEST_P(WorkspaceControllerTest, TransientParent) {
 
 // Test the placement of newly created windows.
 TEST_P(WorkspaceControllerTest, BasicAutoPlacingOnCreate) {
-  if (!SupportsHostWindowResize())
-    return;
   UpdateDisplay("1600x1200");
   // Creating a popup handler here to make sure it does not interfere with the
   // existing windows.
@@ -1040,9 +1035,6 @@ TEST_P(WorkspaceControllerTest, TestUserHandledWindowRestore) {
 
 // Solo window should be restored to the bounds where a user moved to.
 TEST_P(WorkspaceControllerTest, TestRestoreToUserModifiedBounds) {
-  if (!SupportsHostWindowResize())
-    return;
-
   UpdateDisplay("400x300");
   gfx::Rect default_bounds(10, 0, 100, 100);
   std::unique_ptr<aura::Window> window1(

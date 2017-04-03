@@ -68,7 +68,7 @@ base::WeakPtr<BluetoothAdapterMac> BluetoothAdapterMac::CreateAdapterForTest(
 // static
 BluetoothUUID BluetoothAdapterMac::BluetoothUUIDWithCBUUID(CBUUID* uuid) {
   // UUIDString only available OS X >= 10.10.
-  DCHECK(base::mac::IsOSYosemiteOrLater());
+  DCHECK(base::mac::IsAtLeastOS10_10());
   std::string uuid_c_string = base::SysNSStringToUTF8([uuid UUIDString]);
   return device::BluetoothUUID(uuid_c_string);
 }
@@ -195,18 +195,10 @@ void BluetoothAdapterMac::CreateL2capService(
       this, uuid, options, base::Bind(callback, socket), error_callback);
 }
 
-void BluetoothAdapterMac::RegisterAudioSink(
-    const BluetoothAudioSink::Options& options,
-    const AcquiredCallback& callback,
-    const BluetoothAudioSink::ErrorCallback& error_callback) {
-  NOTIMPLEMENTED();
-  error_callback.Run(BluetoothAudioSink::ERROR_UNSUPPORTED_PLATFORM);
-}
-
 void BluetoothAdapterMac::RegisterAdvertisement(
     std::unique_ptr<BluetoothAdvertisement::Data> advertisement_data,
     const CreateAdvertisementCallback& callback,
-    const CreateAdvertisementErrorCallback& error_callback) {
+    const AdvertisementErrorCallback& error_callback) {
   NOTIMPLEMENTED();
   error_callback.Run(BluetoothAdvertisement::ERROR_UNSUPPORTED_PLATFORM);
 }
@@ -241,7 +233,7 @@ void BluetoothAdapterMac::DeviceConnected(IOBluetoothDevice* device) {
 
 // static
 bool BluetoothAdapterMac::IsLowEnergyAvailable() {
-  return base::mac::IsOSYosemiteOrLater();
+  return base::mac::IsAtLeastOS10_10();
 }
 
 void BluetoothAdapterMac::RemovePairingDelegateInternal(
@@ -469,12 +461,19 @@ void BluetoothAdapterMac::ClassicDeviceAdded(IOBluetoothDevice* device) {
   std::string device_address =
       BluetoothClassicDeviceMac::GetDeviceAddress(device);
 
-  // Only notify observers once per device.
-  if (devices_.count(device_address))
-    return;
+  BluetoothDevice* device_classic = GetDevice(device_address);
 
-  BluetoothDevice* device_classic = new BluetoothClassicDeviceMac(this, device);
+  // Only notify observers once per device.
+  if (device_classic != nullptr) {
+    VLOG(3) << "Updating classic device: " << device_classic->GetAddress();
+    device_classic->UpdateTimestamp();
+    return;
+  }
+
+  device_classic = new BluetoothClassicDeviceMac(this, device);
   devices_.set(device_address, base::WrapUnique(device_classic));
+  VLOG(1) << "Adding new classic device: " << device_classic->GetAddress();
+
   FOR_EACH_OBSERVER(BluetoothAdapter::Observer, observers_,
                     DeviceAdded(this, device_classic));
 }
@@ -567,7 +566,11 @@ void BluetoothAdapterMac::LowEnergyCentralManagerUpdatedState() {}
 void BluetoothAdapterMac::AddPairedDevices() {
   // Add any new paired devices.
   for (IOBluetoothDevice* device in [IOBluetoothDevice pairedDevices]) {
-    ClassicDeviceAdded(device);
+    // pairedDevices sometimes includes unknown devices that are not paired.
+    // Radar issue with id 2282763004 has been filed about it.
+    if ([device isPaired]) {
+      ClassicDeviceAdded(device);
+    }
   }
 }
 

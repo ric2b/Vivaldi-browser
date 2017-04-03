@@ -4,12 +4,20 @@
 
 #include "net/spdy/spdy_flags.h"
 
+namespace net {
+
+// Log compressed size of HTTP/2 requests.
+bool FLAGS_chromium_http2_flag_log_compressed_size = true;
+
+// If true, SpdyFramer uses the new visitor methods OnHeaderFrameStart and
+// OnHeaderFrameEnd.  Fourth attempt.
+bool FLAGS_chromium_http2_flag_spdy_framer_use_new_methods4 = true;
+
+// If true, increase HPACK table size up to optimal size kOptTableSize if
+// clients allow it.
+bool FLAGS_chromium_reloadable_flag_increase_hpack_table_size = false;
+
 // Use NestedSpdyFramerDecoder.
 bool FLAGS_use_nested_spdy_framer_decoder = false;
 
-// If true, SpdyFramer uses the new visitor methods OnHeaderFrameStart and
-// OnHeaderFrameEnd.  Third attempt.
-bool FLAGS_chromium_http2_flag_spdy_framer_use_new_methods3 = true;
-
-// Use SpdyHeaderBlock::AppendValueOrAddHeader when adding to headers.
-bool FLAGS_chromium_http2_flag_use_new_spdy_header_block_header_joining = true;
+}  // namespace net

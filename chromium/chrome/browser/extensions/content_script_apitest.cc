@@ -164,12 +164,11 @@ DialogHelper::DialogHelper(content::WebContents* web_contents)
       client_(nullptr) {
   app_modal::JavaScriptDialogManager* dialog_manager_impl =
       app_modal::JavaScriptDialogManager::GetInstance();
-  dialog_manager_ =
-      web_contents_->GetDelegate()->GetJavaScriptDialogManager(web_contents_);
-  DCHECK_EQ(dialog_manager_impl, dialog_manager_);
-
   client_ = new DialogClient(this);
   dialog_manager_impl->SetExtensionsClient(base::WrapUnique(client_));
+
+  dialog_manager_ =
+      web_contents_->GetDelegate()->GetJavaScriptDialogManager(web_contents_);
 }
 
 DialogHelper::~DialogHelper() {
@@ -335,6 +334,43 @@ class ContentScriptCssInjectionTest : public ExtensionApiTest {
   }
 };
 
+IN_PROC_BROWSER_TEST_F(ExtensionApiTest,
+                       ContentScriptDuplicateScriptInjection) {
+  host_resolver()->AddRule("maps.google.com", "127.0.0.1");
+  ASSERT_TRUE(StartEmbeddedTestServer());
+
+  GURL url(
+      base::StringPrintf("http://maps.google.com:%i/extensions/test_file.html",
+                         embedded_test_server()->port()));
+
+  ASSERT_TRUE(LoadExtension(test_data_dir_.AppendASCII(
+      "content_scripts/duplicate_script_injection")));
+
+  ui_test_utils::NavigateToURL(browser(), url);
+
+  // Test that a script that matches two separate, yet overlapping match
+  // patterns is only injected once.
+  bool scripts_injected_once = false;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+      browser()->tab_strip_model()->GetActiveWebContents(),
+      "window.domAutomationController.send("
+      "document.getElementsByClassName('injected-once')"
+      ".length == 1)",
+      &scripts_injected_once));
+  ASSERT_TRUE(scripts_injected_once);
+
+  // Test that a script injected at two different load process times, document
+  // idle and document end, is injected exactly twice.
+  bool scripts_injected_twice = false;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+      browser()->tab_strip_model()->GetActiveWebContents(),
+      "window.domAutomationController.send("
+      "document.getElementsByClassName('injected-twice')"
+      ".length == 2)",
+      &scripts_injected_twice));
+  ASSERT_TRUE(scripts_injected_twice);
+}
+
 IN_PROC_BROWSER_TEST_F(ContentScriptCssInjectionTest,
                        ContentScriptInjectsStyles) {
   ASSERT_TRUE(StartEmbeddedTestServer());
@@ -421,7 +457,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, ContentScriptExtensionAPIs) {
   // listening for.
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), extension->GetResourceURL("fire_event.html"),
-      NEW_FOREGROUND_TAB, ui_test_utils::BROWSER_TEST_NONE);
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_NONE);
   EXPECT_TRUE(catcher.GetNextResult());
 }
 
@@ -454,13 +491,13 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, ContentScriptBlockingScript) {
   ext_dir1.WriteManifest(
       base::StringPrintf(kManifest, "ext1", "document_start"));
   ext_dir1.WriteFile(FILE_PATH_LITERAL("script.js"), kBlockingScript);
-  const Extension* ext1 = LoadExtension(ext_dir1.unpacked_path());
+  const Extension* ext1 = LoadExtension(ext_dir1.UnpackedPath());
   ASSERT_TRUE(ext1);
 
   TestExtensionDir ext_dir2;
   ext_dir2.WriteManifest(base::StringPrintf(kManifest, "ext2", "document_end"));
   ext_dir2.WriteFile(FILE_PATH_LITERAL("script.js"), kNonBlockingScript);
-  const Extension* ext2 = LoadExtension(ext_dir2.unpacked_path());
+  const Extension* ext2 = LoadExtension(ext_dir2.UnpackedPath());
   ASSERT_TRUE(ext2);
 
   content::WebContents* web_contents =
@@ -474,10 +511,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, ContentScriptBlockingScript) {
 
   // Navigate! Both extensions will try to inject.
   ui_test_utils::NavigateToURLWithDisposition(
-      browser(),
-      embedded_test_server()->GetURL("/empty.html"),
-      CURRENT_TAB,
-      ui_test_utils::BROWSER_TEST_NONE);
+      browser(), embedded_test_server()->GetURL("/empty.html"),
+      WindowOpenDisposition::CURRENT_TAB, ui_test_utils::BROWSER_TEST_NONE);
 
   run_loop.Run();
   // Right now, the alert dialog is showing and blocking injection of anything
@@ -499,9 +534,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, ContentScriptBlockingScriptTabClosed) {
   // We're going to close a tab in this test, so make a new one (to ensure
   // we don't close the browser).
   ui_test_utils::NavigateToURLWithDisposition(
-      browser(),
-      embedded_test_server()->GetURL("/empty.html"),
-      NEW_FOREGROUND_TAB,
+      browser(), embedded_test_server()->GetURL("/empty.html"),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
 
   // Set up the same as the previous test case.
@@ -509,13 +543,13 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, ContentScriptBlockingScriptTabClosed) {
   ext_dir1.WriteManifest(
       base::StringPrintf(kManifest, "ext1", "document_start"));
   ext_dir1.WriteFile(FILE_PATH_LITERAL("script.js"), kBlockingScript);
-  const Extension* ext1 = LoadExtension(ext_dir1.unpacked_path());
+  const Extension* ext1 = LoadExtension(ext_dir1.UnpackedPath());
   ASSERT_TRUE(ext1);
 
   TestExtensionDir ext_dir2;
   ext_dir2.WriteManifest(base::StringPrintf(kManifest, "ext2", "document_end"));
   ext_dir2.WriteFile(FILE_PATH_LITERAL("script.js"), kNonBlockingScript);
-  const Extension* ext2 = LoadExtension(ext_dir2.unpacked_path());
+  const Extension* ext2 = LoadExtension(ext_dir2.UnpackedPath());
   ASSERT_TRUE(ext2);
 
   content::WebContents* web_contents =
@@ -529,10 +563,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, ContentScriptBlockingScriptTabClosed) {
 
   // Navitate!
   ui_test_utils::NavigateToURLWithDisposition(
-      browser(),
-      embedded_test_server()->GetURL("/empty.html"),
-      CURRENT_TAB,
-      ui_test_utils::BROWSER_TEST_NONE);
+      browser(), embedded_test_server()->GetURL("/empty.html"),
+      WindowOpenDisposition::CURRENT_TAB, ui_test_utils::BROWSER_TEST_NONE);
 
   // Now, instead of closing the dialog, just close the tab. Later scripts
   // should never get a chance to run (and we shouldn't crash).
@@ -555,7 +587,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest,
   ext_dir1.WriteManifest(
       base::StringPrintf(kManifest, "ext1", "document_idle"));
   ext_dir1.WriteFile(FILE_PATH_LITERAL("script.js"), kBlockingScript);
-  const Extension* ext1 = LoadExtension(ext_dir1.unpacked_path());
+  const Extension* ext1 = LoadExtension(ext_dir1.UnpackedPath());
   ASSERT_TRUE(ext1);
 
   content::WebContents* web_contents =
@@ -566,10 +598,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest,
 
   // Navigate!
   ui_test_utils::NavigateToURLWithDisposition(
-      browser(),
-      embedded_test_server()->GetURL("/empty.html"),
-      CURRENT_TAB,
-      ui_test_utils::BROWSER_TEST_NONE);
+      browser(), embedded_test_server()->GetURL("/empty.html"),
+      WindowOpenDisposition::CURRENT_TAB, ui_test_utils::BROWSER_TEST_NONE);
 
   run_loop.Run();
 
@@ -589,14 +619,14 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest,
   new_tab_override_dir.WriteManifest(kNewTabOverrideManifest);
   new_tab_override_dir.WriteFile(FILE_PATH_LITERAL("newtab.html"), kNewTabHtml);
   const Extension* new_tab_override =
-      LoadExtension(new_tab_override_dir.unpacked_path());
+      LoadExtension(new_tab_override_dir.UnpackedPath());
   ASSERT_TRUE(new_tab_override);
 
   TestExtensionDir injector_dir;
   injector_dir.WriteManifest(
       base::StringPrintf(kManifest, "injector", "document_start"));
   injector_dir.WriteFile(FILE_PATH_LITERAL("script.js"), kNonBlockingScript);
-  const Extension* injector = LoadExtension(injector_dir.unpacked_path());
+  const Extension* injector = LoadExtension(injector_dir.UnpackedPath());
   ASSERT_TRUE(injector);
 
   ExtensionTestMessageListener listener("done", false);
@@ -612,7 +642,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest,
 
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), embedded_test_server()->GetURL("/empty.html"),
-      CURRENT_TAB, ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      WindowOpenDisposition::CURRENT_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(listener.was_satisfied());
 }

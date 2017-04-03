@@ -547,6 +547,7 @@ wrap
 wrap-reverse
 
 // grid-auto-flow
+auto-flow
 dense
 
 //
@@ -647,6 +648,8 @@ media-time-remaining-display
 -internal-media-track-selection-checkmark
 -internal-media-closed-captions-icon
 -internal-media-subtitles-icon
+-internal-media-overflow-button
+-internal-media-download-button
 menulist
 menulist-button
 menulist-text
@@ -954,6 +957,7 @@ pan-right
 pan-up
 pan-down
 manipulation
+pinch-zoom
 
 // justify-items / justify-self
 // auto

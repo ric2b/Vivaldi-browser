@@ -202,28 +202,14 @@ AppListView::AppListView(AppListViewDelegate* delegate)
       animation_observer_(new HideViewAnimationObserver()) {
   CHECK(delegate);
 
-  delegate_->AddObserver(this);
   delegate_->GetSpeechUI()->AddObserver(this);
 }
 
 AppListView::~AppListView() {
   delegate_->GetSpeechUI()->RemoveObserver(this);
-  delegate_->RemoveObserver(this);
   animation_observer_.reset();
   // Remove child views first to ensure no remaining dependencies on delegate_.
   RemoveAllChildViews(true);
-}
-
-void AppListView::InitAsBubbleAttachedToAnchor(
-    gfx::NativeView parent,
-    int initial_apps_page,
-    views::View* anchor,
-    const gfx::Vector2d& anchor_offset,
-    views::BubbleBorder::Arrow arrow,
-    bool border_accepts_events) {
-  SetAnchorView(anchor);
-  InitAsBubbleInternal(
-      parent, initial_apps_page, arrow, border_accepts_events, anchor_offset);
 }
 
 void AppListView::InitAsBubbleAtFixedLocation(
@@ -232,8 +218,8 @@ void AppListView::InitAsBubbleAtFixedLocation(
     const gfx::Point& anchor_point_in_screen,
     views::BubbleBorder::Arrow arrow,
     bool border_accepts_events) {
-  SetAnchorView(NULL);
   SetAnchorRect(gfx::Rect(anchor_point_in_screen, gfx::Size()));
+  // TODO(mgiuca): Inline InitAsBubbleInternal, since there is only one caller.
   InitAsBubbleInternal(
       parent, initial_apps_page, arrow, border_accepts_events, gfx::Vector2d());
 }
@@ -328,10 +314,6 @@ void AppListView::SetAppListOverlayVisible(bool visible) {
   }
 }
 
-bool AppListView::ShouldCenterWindow() const {
-  return delegate_->ShouldCenterWindow();
-}
-
 gfx::Size AppListView::GetPreferredSize() const {
   return app_list_main_view_->GetPreferredSize();
 }
@@ -362,15 +344,6 @@ bool AppListView::ShouldDescendIntoChildForEventHandling(
 
   return views::BubbleDialogDelegateView::
       ShouldDescendIntoChildForEventHandling(child, location);
-}
-
-void AppListView::OnProfilesChanged() {
-  app_list_main_view_->search_box_view()->InvalidateMenu();
-}
-
-void AppListView::OnShutdown() {
-  // Nothing to do on views - the widget will soon be closed, which will tear
-  // everything down.
 }
 
 void AppListView::SetProfileByPath(const base::FilePath& profile_path) {
@@ -436,8 +409,6 @@ void AppListView::InitContents(gfx::NativeView parent, int initial_apps_page) {
     speech_view_->layer()->SetOpacity(0.0f);
     AddChildView(speech_view_);
   }
-
-  OnProfilesChanged();
 }
 
 void AppListView::InitChildWidgets() {
@@ -599,26 +570,14 @@ void AppListView::GetWidgetHitTestMask(gfx::Path* mask) const {
 
 bool AppListView::AcceleratorPressed(const ui::Accelerator& accelerator) {
   DCHECK_EQ(ui::VKEY_ESCAPE, accelerator.key_code());
-  if (switches::IsExperimentalAppListEnabled()) {
-    // If the ContentsView does not handle the back action, then this is the
-    // top level, so we close the app list.
-    if (!app_list_main_view_->contents_view()->Back()) {
-      GetWidget()->Deactivate();
-      CloseAppList();
-    }
-  } else if (app_list_main_view_->search_box_view()->HasSearch()) {
-    app_list_main_view_->search_box_view()->ClearSearch();
-  } else if (app_list_main_view_->contents_view()
-                 ->apps_container_view()
-                 ->IsInFolderView()) {
-    app_list_main_view_->contents_view()
-        ->apps_container_view()
-        ->app_list_folder_view()
-        ->CloseFolderPage();
-  } else {
+
+  // If the ContentsView does not handle the back action, then this is the
+  // top level, so we close the app list.
+  if (!app_list_main_view_->contents_view()->Back()) {
     GetWidget()->Deactivate();
     CloseAppList();
   }
+
   // Don't let DialogClientView handle the accelerator.
   return true;
 }

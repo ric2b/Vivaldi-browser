@@ -40,6 +40,7 @@
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:icon',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:load_time_data',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:util',
+        '<(DEPTH)/ui/webui/resources/js/cr/ui/compiled_resources2.gyp:focus_row',
         'constants',
         'browser_service',
         '../history/compiled_resources2.gyp:externs',
@@ -76,6 +77,7 @@
         '<(DEPTH)/ui/webui/resources/cr_elements/cr_toolbar/compiled_resources2.gyp:cr_toolbar',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:load_time_data',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:util',
+        'browser_service',
       ],
       'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
@@ -92,19 +94,14 @@
       'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
     {
-      'target_name': 'lazy_render',
-      'dependencies': [
-        'externs',
-      ],
-      'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
-    },
-    {
       'target_name': 'list_container',
       'dependencies': [
+        '<(DEPTH)/third_party/polymer/v1_0/components-chromium/iron-a11y-announcer/compiled_resources2.gyp:iron-a11y-announcer-extracted',
+        '<(DEPTH)/ui/webui/resources/cr_elements/cr_lazy_render/compiled_resources2.gyp:cr_lazy_render',
+        'externs',
         'grouped_list',
         'history_list',
         'history_list_behavior',
-        'lazy_render',
         '<(EXTERNS_GYP):chrome_send',
         '../history/compiled_resources2.gyp:externs',
       ],
@@ -115,6 +112,7 @@
       'dependencies': [
         # TODO(calamity): Add app-route elements after closure issues are fixed.
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:util',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:web_ui_listener_behavior',
         '<(DEPTH)/ui/webui/resources/js/cr/ui/compiled_resources2.gyp:command',
         'constants',
         'history_toolbar',
@@ -127,11 +125,16 @@
       'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
     {
+      'target_name': 'router',
+      'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
       'target_name': 'side_bar',
       'dependencies': [
         '<(DEPTH)/third_party/polymer/v1_0/components-chromium/app-layout/app-drawer/compiled_resources2.gyp:app-drawer-extracted',
         '<(DEPTH)/third_party/polymer/v1_0/components-chromium/iron-a11y-keys-behavior/compiled_resources2.gyp:iron-a11y-keys-behavior-extracted',
         '<(DEPTH)/third_party/polymer/v1_0/components-chromium/iron-selector/compiled_resources2.gyp:iron-selector-extracted',
+        '<(DEPTH)/third_party/polymer/v1_0/components-chromium/paper-ripple/compiled_resources2.gyp:paper-ripple-extracted',
         'browser_service',
       ],
       'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
@@ -142,6 +145,7 @@
         '../history/compiled_resources2.gyp:externs',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:icon',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:load_time_data',
+        '<(DEPTH)/ui/webui/resources/js/cr/ui/compiled_resources2.gyp:focus_row',
         'browser_service',
         'constants',
         'externs',
@@ -151,9 +155,10 @@
     {
       'target_name': 'synced_device_manager',
       'dependencies': [
+        '<(DEPTH)/ui/webui/resources/cr_elements/cr_lazy_render/compiled_resources2.gyp:cr_lazy_render',
         '<(DEPTH)/ui/webui/resources/cr_elements/cr_shared_menu/compiled_resources2.gyp:cr_shared_menu',
+        '<(DEPTH)/ui/webui/resources/js/cr/ui/compiled_resources2.gyp:focus_grid',
         'browser_service',
-        'lazy_render',
         'synced_device_card',
       ],
       'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],

@@ -14,6 +14,7 @@
 #include "dbus/bus.h"
 #include "dbus/message.h"
 #include "net/base/net_errors.h"
+#include "net/log/net_log_with_source.h"
 #include "net/proxy/proxy_service.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -134,7 +135,7 @@ class ProxyResolverImpl : public ProxyResolverInterface {
                    origin_thread);
     const int result = proxy_service->ResolveProxy(
         GURL(request->source_url_), std::string(), &request->proxy_info_,
-        completion_callback, NULL, NULL, net::BoundNetLog());
+        completion_callback, NULL, NULL, net::NetLogWithSource());
     if (result != net::ERR_IO_PENDING) {
       VLOG(1) << "Network proxy resolution completed synchronously.";
       completion_callback.Run(result);

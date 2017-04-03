@@ -16,10 +16,10 @@
 #include "cc/playback/display_item_list_settings.h"
 #include "cc/proto/layer.pb.h"
 #include "cc/test/fake_client_picture_cache.h"
+#include "cc/test/fake_compositor_frame_sink.h"
 #include "cc/test/fake_engine_picture_cache.h"
 #include "cc/test/fake_image_serialization_processor.h"
 #include "cc/test/fake_layer_tree_host.h"
-#include "cc/test/fake_output_surface.h"
 #include "cc/test/fake_picture_layer.h"
 #include "cc/test/fake_picture_layer_impl.h"
 #include "cc/test/fake_proxy.h"
@@ -67,10 +67,10 @@ class TestSerializationPictureLayer : public PictureLayer {
 
   void ValidateSerialization(
       ImageSerializationProcessor* image_serialization_processor,
-      LayerTreeHost* host) {
+      LayerTreeHostInProcess* host) {
     std::vector<uint32_t> engine_picture_ids = GetPictureIds();
     proto::LayerProperties proto;
-    LayerSpecificPropertiesToProto(&proto);
+    LayerSpecificPropertiesToProto(&proto, false);
 
     FakeEnginePictureCache* engine_picture_cache =
         static_cast<FakeEnginePictureCache*>(host->engine_picture_cache());
@@ -241,9 +241,9 @@ TEST(PictureLayerTest, NoTilesIfEmptyBounds) {
   layer->SavePaintProperties();
   layer->Update();
 
-  EXPECT_EQ(0, host->source_frame_number());
+  EXPECT_EQ(0, host->SourceFrameNumber());
   host->CommitComplete();
-  EXPECT_EQ(1, host->source_frame_number());
+  EXPECT_EQ(1, host->SourceFrameNumber());
 
   layer->SetBounds(gfx::Size(0, 0));
   layer->SavePaintProperties();
@@ -253,12 +253,12 @@ TEST(PictureLayerTest, NoTilesIfEmptyBounds) {
   FakeImplTaskRunnerProvider impl_task_runner_provider;
 
   TestSharedBitmapManager shared_bitmap_manager;
-  std::unique_ptr<FakeOutputSurface> output_surface =
-      FakeOutputSurface::CreateDelegatingSoftware();
+  std::unique_ptr<FakeCompositorFrameSink> compositor_frame_sink =
+      FakeCompositorFrameSink::CreateSoftware();
   FakeLayerTreeHostImpl host_impl(LayerTreeSettings(),
                                   &impl_task_runner_provider,
                                   &shared_bitmap_manager, &task_graph_runner);
-  host_impl.InitializeRenderer(output_surface.get());
+  host_impl.InitializeRenderer(compositor_frame_sink.get());
   host_impl.CreatePendingTree();
   std::unique_ptr<FakePictureLayerImpl> layer_impl =
       FakePictureLayerImpl::Create(host_impl.pending_tree(), 1);
@@ -294,15 +294,15 @@ TEST(PictureLayerTest, InvalidateRasterAfterUpdate) {
   host->CommitComplete();
   FakeImplTaskRunnerProvider impl_task_runner_provider;
   TestSharedBitmapManager shared_bitmap_manager;
-  std::unique_ptr<OutputSurface> output_surface(
-      FakeOutputSurface::CreateDelegating3d());
+  std::unique_ptr<CompositorFrameSink> compositor_frame_sink(
+      FakeCompositorFrameSink::Create3d());
   LayerTreeSettings layer_tree_settings = LayerTreeSettingsForTesting();
   layer_tree_settings.image_decode_tasks_enabled = true;
   FakeLayerTreeHostImpl host_impl(layer_tree_settings,
                                   &impl_task_runner_provider,
                                   &shared_bitmap_manager, &task_graph_runner);
   host_impl.SetVisible(true);
-  host_impl.InitializeRenderer(output_surface.get());
+  host_impl.InitializeRenderer(compositor_frame_sink.get());
   host_impl.CreatePendingTree();
   host_impl.pending_tree()->SetRootLayerForTesting(
       FakePictureLayerImpl::Create(host_impl.pending_tree(), 1));
@@ -338,15 +338,15 @@ TEST(PictureLayerTest, InvalidateRasterWithoutUpdate) {
   host->CommitComplete();
   FakeImplTaskRunnerProvider impl_task_runner_provider;
   TestSharedBitmapManager shared_bitmap_manager;
-  std::unique_ptr<OutputSurface> output_surface(
-      FakeOutputSurface::CreateDelegating3d());
+  std::unique_ptr<CompositorFrameSink> compositor_frame_sink(
+      FakeCompositorFrameSink::Create3d());
   LayerTreeSettings layer_tree_settings = LayerTreeSettingsForTesting();
   layer_tree_settings.image_decode_tasks_enabled = true;
   FakeLayerTreeHostImpl host_impl(layer_tree_settings,
                                   &impl_task_runner_provider,
                                   &shared_bitmap_manager, &task_graph_runner);
   host_impl.SetVisible(true);
-  host_impl.InitializeRenderer(output_surface.get());
+  host_impl.InitializeRenderer(compositor_frame_sink.get());
   host_impl.CreatePendingTree();
   host_impl.pending_tree()->SetRootLayerForTesting(
       FakePictureLayerImpl::Create(host_impl.pending_tree(), 1));
@@ -376,9 +376,9 @@ TEST(PictureLayerTest, ClearVisibleRectWhenNoTiling) {
   layer->SavePaintProperties();
   layer->Update();
 
-  EXPECT_EQ(0, host->source_frame_number());
+  EXPECT_EQ(0, host->SourceFrameNumber());
   host->CommitComplete();
-  EXPECT_EQ(1, host->source_frame_number());
+  EXPECT_EQ(1, host->SourceFrameNumber());
 
   layer->SavePaintProperties();
   layer->Update();
@@ -386,15 +386,15 @@ TEST(PictureLayerTest, ClearVisibleRectWhenNoTiling) {
   FakeImplTaskRunnerProvider impl_task_runner_provider;
 
   TestSharedBitmapManager shared_bitmap_manager;
-  std::unique_ptr<OutputSurface> output_surface(
-      FakeOutputSurface::CreateDelegating3d());
+  std::unique_ptr<CompositorFrameSink> compositor_frame_sink(
+      FakeCompositorFrameSink::Create3d());
   LayerTreeSettings layer_tree_settings = LayerTreeSettingsForTesting();
   layer_tree_settings.image_decode_tasks_enabled = true;
   FakeLayerTreeHostImpl host_impl(layer_tree_settings,
                                   &impl_task_runner_provider,
                                   &shared_bitmap_manager, &task_graph_runner);
   host_impl.SetVisible(true);
-  EXPECT_TRUE(host_impl.InitializeRenderer(output_surface.get()));
+  EXPECT_TRUE(host_impl.InitializeRenderer(compositor_frame_sink.get()));
 
   host_impl.CreatePendingTree();
   host_impl.pending_tree()->SetRootLayerForTesting(
@@ -407,7 +407,7 @@ TEST(PictureLayerTest, ClearVisibleRectWhenNoTiling) {
   layer->PushPropertiesTo(layer_impl);
 
   host->CommitComplete();
-  EXPECT_EQ(2, host->source_frame_number());
+  EXPECT_EQ(2, host->SourceFrameNumber());
 
   host_impl.ActivateSyncTree();
 
@@ -497,7 +497,7 @@ TEST(PictureLayerTest, NonMonotonicSourceFrameNumber) {
   ContentLayerClient* client = EmptyContentLayerClient::GetInstance();
   scoped_refptr<FakePictureLayer> layer = FakePictureLayer::Create(client);
 
-  LayerTreeHost::InitParams params;
+  LayerTreeHostInProcess::InitParams params;
   params.client = &host_client1;
   params.shared_bitmap_manager = &shared_bitmap_manager;
   params.settings = &settings;
@@ -505,12 +505,13 @@ TEST(PictureLayerTest, NonMonotonicSourceFrameNumber) {
   params.main_task_runner = base::ThreadTaskRunnerHandle::Get();
   params.animation_host = AnimationHost::CreateForTesting(ThreadInstance::MAIN);
   std::unique_ptr<LayerTreeHost> host1 =
-      LayerTreeHost::CreateSingleThreaded(&single_thread_client, &params);
+      LayerTreeHostInProcess::CreateSingleThreaded(&single_thread_client,
+                                                   &params);
   host1->SetVisible(true);
   host_client1.SetLayerTreeHost(host1.get());
 
   // TODO(sad): InitParams will be movable.
-  LayerTreeHost::InitParams params2;
+  LayerTreeHostInProcess::InitParams params2;
   params2.client = &host_client1;
   params2.shared_bitmap_manager = &shared_bitmap_manager;
   params2.settings = &settings;
@@ -520,7 +521,8 @@ TEST(PictureLayerTest, NonMonotonicSourceFrameNumber) {
   params2.animation_host =
       AnimationHost::CreateForTesting(ThreadInstance::MAIN);
   std::unique_ptr<LayerTreeHost> host2 =
-      LayerTreeHost::CreateSingleThreaded(&single_thread_client, &params2);
+      LayerTreeHostInProcess::CreateSingleThreaded(&single_thread_client,
+                                                   &params2);
   host2->SetVisible(true);
   host_client2.SetLayerTreeHost(host2.get());
 
@@ -531,13 +533,13 @@ TEST(PictureLayerTest, NonMonotonicSourceFrameNumber) {
   layer->SetNeedsDisplay();
   host1->Composite(base::TimeTicks::Now());
   EXPECT_EQ(1, layer->update_count());
-  EXPECT_EQ(1, host1->source_frame_number());
+  EXPECT_EQ(1, host1->SourceFrameNumber());
 
   // The source frame number in |host1| is now higher than host2.
   layer->SetNeedsDisplay();
   host1->Composite(base::TimeTicks::Now());
   EXPECT_EQ(2, layer->update_count());
-  EXPECT_EQ(2, host1->source_frame_number());
+  EXPECT_EQ(2, host1->SourceFrameNumber());
 
   // Then moved to another LayerTreeHost.
   host1->GetLayerTree()->SetRootLayer(nullptr);
@@ -548,7 +550,7 @@ TEST(PictureLayerTest, NonMonotonicSourceFrameNumber) {
   layer->SetNeedsDisplay();
   host2->Composite(base::TimeTicks::Now());
   EXPECT_EQ(3, layer->update_count());
-  EXPECT_EQ(1, host2->source_frame_number());
+  EXPECT_EQ(1, host2->SourceFrameNumber());
 }
 
 }  // namespace

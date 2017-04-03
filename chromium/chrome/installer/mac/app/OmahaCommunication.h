@@ -7,9 +7,12 @@
 
 #import <Foundation/Foundation.h>
 
+@class OmahaCommunication;
 @protocol OmahaCommunicationDelegate
-- (void)onOmahaSuccessWithURLs:(NSArray*)URLs;
-- (void)onOmahaFailureWithError:(NSError*)error;
+- (void)omahaCommunication:(OmahaCommunication*)messenger
+                 onSuccess:(NSArray*)URLs;
+- (void)omahaCommunication:(OmahaCommunication*)messenger
+                 onFailure:(NSError*)error;
 @end
 
 @interface OmahaCommunication : NSObject<NSURLSessionDataDelegate>
@@ -20,8 +23,7 @@
 - (id)init;
 - (id)initWithBody:(NSXMLDocument*)xmlBody;
 
-// Asks the Omaha servers for the most updated version of Chrome by sending a
-// request using this function.
+// Asks the Omaha servers for the most updated version of Chrome.
 - (void)fetchDownloadURLs;
 
 @end

@@ -16,15 +16,16 @@
 #include "ash/common/system/tray/tray_details_view.h"
 #include "ash/common/system/tray/tray_item_more.h"
 #include "ash/common/system/tray/tray_popup_header_button.h"
-#include "ash/common/system/tray/view_click_listener.h"
+#include "ash/common/system/tray/tray_popup_item_style.h"
 #include "ash/common/wm_shell.h"
+#include "ash/resources/vector_icons/vector_icons.h"
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/gfx/vector_icons_public.h"
+#include "ui/views/controls/button/toggle_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
@@ -71,11 +72,11 @@ class BluetoothDefaultView : public TrayItemMore {
   BluetoothDefaultView(SystemTrayItem* owner, bool show_more)
       : TrayItemMore(owner, show_more) {
     if (!MaterialDesignController::IsSystemTrayMenuMaterial()) {
+      // The icon doesn't change in non-md.
       ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
       SetImage(
           *bundle.GetImageNamed(IDR_AURA_UBER_TRAY_BLUETOOTH).ToImageSkia());
     }
-    Update();
   }
 
   ~BluetoothDefaultView() override {}
@@ -83,13 +84,6 @@ class BluetoothDefaultView : public TrayItemMore {
   void Update() {
     SystemTrayDelegate* delegate = WmShell::Get()->system_tray_delegate();
     const bool enabled = delegate->GetBluetoothEnabled();
-    if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
-      gfx::VectorIconId icon_id =
-          enabled ? gfx::VectorIconId::SYSTEM_MENU_BLUETOOTH
-                  : gfx::VectorIconId::SYSTEM_MENU_BLUETOOTH_DISABLED;
-      SetImage(gfx::CreateVectorIcon(icon_id, kMenuIconColor));
-    }
-
     if (delegate->GetBluetoothAvailable()) {
       ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
       const base::string16 label = rb.GetLocalizedString(
@@ -101,22 +95,53 @@ class BluetoothDefaultView : public TrayItemMore {
     } else {
       SetVisible(false);
     }
+    UpdateStyle();
+  }
+
+ protected:
+  // TrayItemMore:
+  std::unique_ptr<TrayPopupItemStyle> CreateStyle() const override {
+    SystemTrayDelegate* delegate = WmShell::Get()->system_tray_delegate();
+    std::unique_ptr<TrayPopupItemStyle> style = TrayItemMore::CreateStyle();
+    style->set_color_style(
+        delegate->GetBluetoothEnabled()
+            ? TrayPopupItemStyle::ColorStyle::ACTIVE
+            : delegate->GetBluetoothAvailable()
+                  ? TrayPopupItemStyle::ColorStyle::INACTIVE
+                  : TrayPopupItemStyle::ColorStyle::DISABLED);
+
+    return style;
+  }
+
+  void UpdateStyle() override {
+    TrayItemMore::UpdateStyle();
+
+    if (!MaterialDesignController::IsSystemTrayMenuMaterial())
+      return;
+
+    SystemTrayDelegate* delegate = WmShell::Get()->system_tray_delegate();
+    std::unique_ptr<TrayPopupItemStyle> style = CreateStyle();
+
+    SetImage(gfx::CreateVectorIcon(delegate->GetBluetoothEnabled()
+                                       ? kSystemMenuBluetoothIcon
+                                       : kSystemMenuBluetoothDisabledIcon,
+                                   style->GetForegroundColor()));
   }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(BluetoothDefaultView);
 };
 
-class BluetoothDetailedView : public TrayDetailsView,
-                              public ViewClickListener,
-                              public views::ButtonListener {
+class BluetoothDetailedView : public TrayDetailsView {
  public:
   BluetoothDetailedView(SystemTrayItem* owner, LoginStatus login)
       : TrayDetailsView(owner),
         login_(login),
-        manage_devices_(NULL),
-        toggle_bluetooth_(NULL),
-        enable_bluetooth_(NULL) {
+        manage_devices_(nullptr),
+        throbber_(nullptr),
+        toggle_bluetooth_(nullptr),
+        enable_bluetooth_(nullptr),
+        toggle_(nullptr) {
     CreateItems();
   }
 
@@ -139,28 +164,31 @@ class BluetoothDetailedView : public TrayDetailsView,
   void CreateItems() {
     CreateScrollableList();
     AppendSettingsEntries();
-    AppendHeaderEntry();
+    CreateTitleRow(IDS_ASH_STATUS_TRAY_BLUETOOTH);
   }
 
   void BluetoothStartDiscovering() {
+    // TODO(tdanderson|fukino): The material design version of the detailed
+    // view should use an infinite loader bar instead of a throbber. See
+    // crbug.com/632128.
     SystemTrayDelegate* delegate = WmShell::Get()->system_tray_delegate();
-    bool bluetooth_enabled = delegate->GetBluetoothEnabled();
-    bool bluetooth_discovering = delegate->GetBluetoothDiscovering();
-    if (bluetooth_discovering) {
-      throbber_->Start();
+    if (delegate->GetBluetoothDiscovering()) {
+      if (throbber_)
+        throbber_->Start();
       return;
     }
-    throbber_->Stop();
-    if (bluetooth_enabled) {
+    if (throbber_)
+      throbber_->Stop();
+    if (delegate->GetBluetoothEnabled())
       delegate->BluetoothStartDiscovering();
-    }
   }
 
   void BluetoothStopDiscovering() {
     SystemTrayDelegate* delegate = WmShell::Get()->system_tray_delegate();
     if (delegate && delegate->GetBluetoothDiscovering()) {
       delegate->BluetoothStopDiscovering();
-      throbber_->Stop();
+      if (throbber_)
+        throbber_->Stop();
     }
   }
 
@@ -201,34 +229,6 @@ class BluetoothDetailedView : public TrayDetailsView,
                                            new_discovered_not_paired_devices);
   }
 
-  void AppendHeaderEntry() {
-    CreateSpecialRow(IDS_ASH_STATUS_TRAY_BLUETOOTH, this);
-
-    if (login_ == LoginStatus::LOCKED)
-      return;
-
-    throbber_ = new ThrobberView;
-    throbber_->SetTooltipText(
-        l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_BLUETOOTH_DISCOVERING));
-    footer()->AddView(throbber_, false /* separator */);
-
-    // Do not allow toggling bluetooth in the lock screen.
-    SystemTrayDelegate* delegate = WmShell::Get()->system_tray_delegate();
-    toggle_bluetooth_ =
-        new TrayPopupHeaderButton(this, IDR_AURA_UBER_TRAY_BLUETOOTH_ENABLED,
-                                  IDR_AURA_UBER_TRAY_BLUETOOTH_DISABLED,
-                                  IDR_AURA_UBER_TRAY_BLUETOOTH_ENABLED_HOVER,
-                                  IDR_AURA_UBER_TRAY_BLUETOOTH_DISABLED_HOVER,
-                                  IDS_ASH_STATUS_TRAY_BLUETOOTH);
-    toggle_bluetooth_->SetToggled(!delegate->GetBluetoothEnabled());
-    toggle_bluetooth_->SetTooltipText(
-        l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_DISABLE_BLUETOOTH));
-    toggle_bluetooth_->SetToggledTooltipText(
-        l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_ENABLE_BLUETOOTH));
-    toggle_bluetooth_->EnableCanvasFlippingForRTLUI(false);
-    footer()->AddButton(toggle_bluetooth_);
-  }
-
   void UpdateHeaderEntry() {
     if (toggle_bluetooth_) {
       toggle_bluetooth_->SetToggled(
@@ -239,7 +239,7 @@ class BluetoothDetailedView : public TrayDetailsView,
   void UpdateDeviceScrollList() {
     device_map_.clear();
     scroll_content()->RemoveAllChildViews(true);
-    enable_bluetooth_ = NULL;
+    enable_bluetooth_ = nullptr;
 
     SystemTrayDelegate* delegate = WmShell::Get()->system_tray_delegate();
     bool bluetooth_enabled = delegate->GetBluetoothEnabled();
@@ -353,36 +353,48 @@ class BluetoothDetailedView : public TrayDetailsView,
     }
   }
 
-  // Overridden from ViewClickListener.
-  void OnViewClicked(views::View* sender) override {
+  // TrayDetailsView:
+  void HandleViewClicked(views::View* view) override {
     SystemTrayDelegate* delegate = WmShell::Get()->system_tray_delegate();
-    if (sender == footer()->content()) {
-      TransitionToDefaultView();
-    } else if (sender == manage_devices_) {
+    if (view == manage_devices_) {
       delegate->ManageBluetoothDevices();
       owner()->system_tray()->CloseSystemBubble();
-    } else if (sender == enable_bluetooth_) {
+      return;
+    }
+
+    if (view == enable_bluetooth_) {
       WmShell::Get()->RecordUserMetricsAction(
           delegate->GetBluetoothEnabled() ? UMA_STATUS_AREA_BLUETOOTH_DISABLED
                                           : UMA_STATUS_AREA_BLUETOOTH_ENABLED);
       delegate->ToggleBluetooth();
-    } else {
-      if (!delegate->GetBluetoothEnabled())
-        return;
-      std::map<views::View*, std::string>::iterator find;
-      find = device_map_.find(sender);
-      if (find == device_map_.end())
-        return;
-      const std::string device_id = find->second;
-      if (FoundDevice(device_id, connecting_devices_, NULL))
-        return;
-      UpdateClickedDevice(device_id, sender);
-      delegate->ConnectToBluetoothDevice(device_id);
+      return;
     }
+
+    if (!delegate->GetBluetoothEnabled())
+      return;
+
+    std::map<views::View*, std::string>::iterator find;
+    find = device_map_.find(view);
+    if (find == device_map_.end())
+      return;
+
+    const std::string device_id = find->second;
+    if (FoundDevice(device_id, connecting_devices_, nullptr))
+      return;
+
+    UpdateClickedDevice(device_id, view);
+    delegate->ConnectToBluetoothDevice(device_id);
   }
 
-  // Overridden from ButtonListener.
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override {
+  void HandleButtonPressed(views::Button* sender,
+                           const ui::Event& event) override {
+    if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
+      // TODO(fukino): Make the toggle button functional.
+      if (sender == toggle_)
+        toggle_->SetIsOn(toggle_->is_on(), true);
+      return;
+    }
+
     SystemTrayDelegate* delegate = WmShell::Get()->system_tray_delegate();
     if (sender == toggle_bluetooth_)
       delegate->ToggleBluetooth();
@@ -390,17 +402,56 @@ class BluetoothDetailedView : public TrayDetailsView,
       NOTREACHED();
   }
 
+  void CreateExtraTitleRowButtons() override {
+    if (login_ == LoginStatus::LOCKED)
+      return;
+
+    if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
+      toggle_ = title_row()->AddToggleButton(this);
+      return;
+    }
+
+    throbber_ = new ThrobberView;
+    throbber_->SetTooltipText(
+        l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_BLUETOOTH_DISCOVERING));
+    title_row()->AddViewToRowNonMd(throbber_, false);
+
+    // Do not allow toggling bluetooth in the lock screen.
+    SystemTrayDelegate* delegate = WmShell::Get()->system_tray_delegate();
+    toggle_bluetooth_ =
+        new TrayPopupHeaderButton(this, IDR_AURA_UBER_TRAY_BLUETOOTH_ENABLED,
+                                  IDR_AURA_UBER_TRAY_BLUETOOTH_DISABLED,
+                                  IDR_AURA_UBER_TRAY_BLUETOOTH_ENABLED_HOVER,
+                                  IDR_AURA_UBER_TRAY_BLUETOOTH_DISABLED_HOVER,
+                                  IDS_ASH_STATUS_TRAY_BLUETOOTH);
+    toggle_bluetooth_->SetToggled(!delegate->GetBluetoothEnabled());
+    toggle_bluetooth_->SetTooltipText(
+        l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_DISABLE_BLUETOOTH));
+    toggle_bluetooth_->SetToggledTooltipText(
+        l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_ENABLE_BLUETOOTH));
+    toggle_bluetooth_->EnableCanvasFlippingForRTLUI(false);
+    title_row()->AddViewToRowNonMd(toggle_bluetooth_, true);
+  }
+
   LoginStatus login_;
 
   std::map<views::View*, std::string> device_map_;
   views::View* manage_devices_;
+
+  // Not used in material design.
   ThrobberView* throbber_;
+
+  // Not used in material design.
   TrayPopupHeaderButton* toggle_bluetooth_;
+
   HoverHighlightView* enable_bluetooth_;
   BluetoothDeviceList connected_devices_;
   BluetoothDeviceList connecting_devices_;
   BluetoothDeviceList paired_not_connected_devices_;
   BluetoothDeviceList discovered_not_paired_devices_;
+
+  // The on/off toggle button used in material design.
+  views::ToggleButton* toggle_;
 
   DISALLOW_COPY_AND_ASSIGN(BluetoothDetailedView);
 };
@@ -426,6 +477,7 @@ views::View* TrayBluetooth::CreateDefaultView(LoginStatus status) {
   CHECK(default_ == NULL);
   default_ =
       new tray::BluetoothDefaultView(this, status != LoginStatus::LOCKED);
+  default_->Update();
   return default_;
 }
 

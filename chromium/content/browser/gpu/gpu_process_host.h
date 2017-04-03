@@ -26,7 +26,6 @@
 #include "content/public/browser/gpu_data_manager.h"
 #include "gpu/command_buffer/common/constants.h"
 #include "gpu/config/gpu_info.h"
-#include "gpu/ipc/common/gpu_memory_uma_stats.h"
 #include "gpu/ipc/common/surface_handle.h"
 #include "ipc/ipc_sender.h"
 #include "ipc/message_filter.h"
@@ -35,6 +34,10 @@
 #include "url/gurl.h"
 
 struct GPUCreateCommandBufferConfig;
+
+namespace base {
+class Thread;
+}
 
 namespace IPC {
 struct ChannelHandle;
@@ -207,7 +210,6 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
                         gpu::error::ContextLostReason reason,
                         const GURL& url);
   void OnDidDestroyOffscreenContext(const GURL& url);
-  void OnGpuMemoryUmaStatsReceived(const gpu::GPUMemoryUmaStats& stats);
   void OnFieldTrialActivated(const std::string& trial_name);
 
 #if defined(OS_WIN)
@@ -302,10 +304,6 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   // received, assume all of these URLs are guilty, and block
   // automatic execution of 3D content from those domains.
   std::multiset<GURL> urls_with_live_offscreen_contexts_;
-
-  // Statics kept around to send to UMA histograms on GPU process lost.
-  bool uma_memory_stats_received_;
-  gpu::GPUMemoryUmaStats uma_memory_stats_;
 
   typedef std::map<int32_t, scoped_refptr<ShaderDiskCache>>
       ClientIdToShaderCacheMap;

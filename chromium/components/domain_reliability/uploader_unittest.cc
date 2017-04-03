@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <string>
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
@@ -17,6 +18,7 @@
 #include "net/base/load_flags.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_response_info.h"
+#include "net/log/net_log_with_source.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_filter.h"
 #include "net/url_request/url_request_interceptor.h"
@@ -53,7 +55,7 @@ class UploadMockURLRequestJob : public net::URLRequestJob {
     int rv = upload_stream_->Init(
         base::Bind(&UploadMockURLRequestJob::OnStreamInitialized,
                    base::Unretained(this)),
-        net::BoundNetLog());
+        net::NetLogWithSource());
     if (rv == net::ERR_IO_PENDING)
       return;
     OnStreamInitialized(rv);

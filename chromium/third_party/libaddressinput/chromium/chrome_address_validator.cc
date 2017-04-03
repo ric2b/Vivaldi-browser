@@ -9,8 +9,8 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "third_party/libaddressinput/chromium/addressinput_util.h"
 #include "third_party/libaddressinput/chromium/input_suggester.h"
 #include "third_party/libaddressinput/src/cpp/include/libaddressinput/address_data.h"
@@ -112,17 +112,16 @@ AddressValidator::Status AddressValidator::GetSuggestions(
   return SUCCESS;
 }
 
-bool AddressValidator::CanonicalizeAdministrativeArea(
-    AddressData* address) const {
+bool AddressValidator::NormalizeAddress(AddressData* address) const {
   if (!supplier_->IsLoaded(address->region_code))
     return false;
 
-  // TODO: It would probably be beneficial to use the full canonicalization.
-  AddressData tmp(*address);
-  normalizer_->Normalize(&tmp);
-  address->administrative_area = tmp.administrative_area;
-
+  normalizer_->Normalize(address);
   return true;
+}
+
+bool AddressValidator::AreRulesLoadedForRegion(const std::string& region_code) {
+  return supplier_->IsLoaded(region_code);
 }
 
 AddressValidator::AddressValidator()
@@ -148,7 +147,7 @@ void AddressValidator::RulesLoaded(bool success,
   if (success || attempts_number_[region_code] + 1 >= kMaxAttemptsNumber)
     return;
 
-  base::MessageLoop::current()->task_runner()->PostDelayedTask(
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::Bind(&AddressValidator::RetryLoadRules,
                             weak_factory_.GetWeakPtr(), region_code),
       GetBaseRetryPeriod() * pow(2, attempts_number_[region_code]++));

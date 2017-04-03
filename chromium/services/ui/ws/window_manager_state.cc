@@ -103,7 +103,8 @@ class WindowManagerState::ProcessedEventTarget {
 bool WindowManagerState::DebugAccelerator::Matches(
     const ui::KeyEvent& event) const {
   return key_code == event.key_code() &&
-         event_flags == (kAcceleratorEventFlags & event.flags());
+         event_flags == (kAcceleratorEventFlags & event.flags()) &&
+         !event.is_char();
 }
 
 WindowManagerState::QueuedEvent::QueuedEvent() {}
@@ -117,7 +118,13 @@ WindowManagerState::WindowManagerState(WindowTree* window_tree)
   AddDebugAccelerators();
 }
 
-WindowManagerState::~WindowManagerState() {}
+WindowManagerState::~WindowManagerState() {
+  for (auto& display_root : window_manager_display_roots_)
+    display_root->display()->OnWillDestroyTree(window_tree_);
+
+  for (auto& display_root : orphaned_window_manager_display_roots_)
+    display_root->root()->RemoveObserver(this);
+}
 
 void WindowManagerState::SetFrameDecorationValues(
     mojom::FrameDecorationValuesPtr values) {
@@ -154,6 +161,37 @@ void WindowManagerState::ReleaseCaptureBlockedByAnyModalWindow() {
   event_dispatcher_.ReleaseCaptureBlockedByAnyModalWindow();
 }
 
+void WindowManagerState::SetDragDropSourceWindow(
+    DragSource* drag_source,
+    ServerWindow* window,
+    DragTargetConnection* source_connection,
+    mojo::Map<mojo::String, mojo::Array<uint8_t>> drag_data,
+    uint32_t drag_operation) {
+  int32_t drag_pointer = PointerEvent::kMousePointerId;
+  if (event_awaiting_input_ack_ &&
+      event_awaiting_input_ack_->IsPointerEvent()) {
+    drag_pointer = event_awaiting_input_ack_->AsPointerEvent()->pointer_id();
+  } else {
+    NOTIMPLEMENTED() << "Set drag drop set up during something other than a "
+                     << "pointer event; rejecting drag.";
+    drag_source->OnDragCompleted(false, ui::mojom::kDropEffectNone);
+    return;
+  }
+
+  event_dispatcher_.SetDragDropSourceWindow(
+      drag_source, window, source_connection, drag_pointer,
+      std::move(drag_data), drag_operation);
+}
+
+void WindowManagerState::CancelDragDrop() {
+  event_dispatcher_.CancelDragDrop();
+}
+
+void WindowManagerState::EndDragDrop() {
+  event_dispatcher_.EndDragDrop();
+  UpdateNativeCursorFromDispatcher();
+}
+
 void WindowManagerState::AddSystemModalWindow(ServerWindow* window) {
   DCHECK(!window->transient_parent());
   event_dispatcher_.AddSystemModalWindow(window);
@@ -164,6 +202,8 @@ const UserId& WindowManagerState::user_id() const {
 }
 
 void WindowManagerState::OnWillDestroyTree(WindowTree* tree) {
+  event_dispatcher_.OnWillDestroyDragTargetConnection(tree);
+
   if (tree_awaiting_input_ack_ != tree)
     return;
 
@@ -173,6 +213,14 @@ void WindowManagerState::OnWillDestroyTree(WindowTree* tree) {
   OnEventAck(tree_awaiting_input_ack_, tree == window_tree_
                                            ? mojom::EventResult::HANDLED
                                            : mojom::EventResult::UNHANDLED);
+}
+
+ServerWindow* WindowManagerState::GetOrphanedRootWithId(const WindowId& id) {
+  for (auto& display_root_ptr : orphaned_window_manager_display_roots_) {
+    if (display_root_ptr->root()->id() == id)
+      return display_root_ptr->root();
+  }
+  return nullptr;
 }
 
 bool WindowManagerState::IsActive() const {
@@ -274,21 +322,37 @@ const DisplayManager* WindowManagerState::display_manager() const {
   return window_tree_->display_manager();
 }
 
-void WindowManagerState::SetAllRootWindowsVisible(bool value) {
-  for (Display* display : display_manager()->displays()) {
-    WindowManagerDisplayRoot* display_root =
-        display->GetWindowManagerDisplayRootForUser(user_id());
-    if (display_root)
-      display_root->root()->SetVisible(value);
+void WindowManagerState::AddWindowManagerDisplayRoot(
+    std::unique_ptr<WindowManagerDisplayRoot> display_root) {
+  window_manager_display_roots_.push_back(std::move(display_root));
+}
+
+void WindowManagerState::OnDisplayDestroying(Display* display) {
+  if (display->platform_display() == platform_display_with_capture_)
+    platform_display_with_capture_ = nullptr;
+
+  for (auto iter = window_manager_display_roots_.begin();
+       iter != window_manager_display_roots_.end(); ++iter) {
+    if ((*iter)->display() == display) {
+      (*iter)->root()->AddObserver(this);
+      orphaned_window_manager_display_roots_.push_back(std::move(*iter));
+      window_manager_display_roots_.erase(iter);
+      window_tree_->OnDisplayDestroying(display->GetId());
+      return;
+    }
   }
+  NOTREACHED();
+}
+
+void WindowManagerState::SetAllRootWindowsVisible(bool value) {
+  for (auto& display_root_ptr : window_manager_display_roots_)
+    display_root_ptr->root()->SetVisible(value);
 }
 
 ServerWindow* WindowManagerState::GetWindowManagerRoot(ServerWindow* window) {
-  for (Display* display : display_manager()->displays()) {
-    WindowManagerDisplayRoot* display_root =
-        display->GetWindowManagerDisplayRootForUser(user_id());
-    if (display_root && display_root->root()->parent() == window)
-      return display_root->root();
+  for (auto& display_root_ptr : window_manager_display_roots_) {
+    if (display_root_ptr->root()->parent() == window)
+      return display_root_ptr->root();
   }
   NOTREACHED();
   return nullptr;
@@ -350,13 +414,7 @@ void WindowManagerState::DispatchInputEventToWindowImpl(
 
   if (event.IsMousePointerEvent()) {
     DCHECK(event_dispatcher_.mouse_cursor_source_window());
-
-    int32_t cursor_id = 0;
-    if (event_dispatcher_.GetCurrentMouseCursor(&cursor_id)) {
-      WindowManagerDisplayRoot* display_root =
-          display_manager()->GetWindowManagerDisplayRoot(target);
-      display_root->display()->UpdateNativeCursor(cursor_id);
-    }
+    UpdateNativeCursorFromDispatcher();
   }
 
   event_dispatch_phase_ = EventDispatchPhase::TARGET;
@@ -365,10 +423,10 @@ void WindowManagerState::DispatchInputEventToWindowImpl(
   DCHECK(tree);
   ScheduleInputEventTimeout(tree);
 
-  if (accelerator) {
-    event_awaiting_input_ack_ = ui::Event::Clone(event);
+  event_awaiting_input_ack_ = ui::Event::Clone(event);
+
+  if (accelerator)
     post_target_accelerator_ = accelerator;
-  }
 
   // Ignore |tree| because it will receive the event via normal dispatch.
   window_server()->SendToPointerWatchers(event, user_id(), target, tree);
@@ -468,6 +526,14 @@ void WindowManagerState::ReleaseNativeCapture() {
   platform_display_with_capture_ = nullptr;
 }
 
+void WindowManagerState::UpdateNativeCursorFromDispatcher() {
+  ui::mojom::Cursor cursor_id = mojom::Cursor::CURSOR_NULL;
+  if (event_dispatcher_.GetCurrentMouseCursor(&cursor_id)) {
+    for (Display* display : display_manager()->displays())
+      display->UpdateNativeCursor(cursor_id);
+  }
+}
+
 void WindowManagerState::OnCaptureChanged(ServerWindow* new_capture,
                                           ServerWindow* old_capture) {
   window_server()->ProcessCaptureChanged(new_capture, old_capture);
@@ -503,71 +569,75 @@ void WindowManagerState::DispatchInputEventToWindow(ServerWindow* target,
 ClientSpecificId WindowManagerState::GetEventTargetClientId(
     const ServerWindow* window,
     bool in_nonclient_area) {
-  // If the event is in the non-client area the event goes to the owner of
-  // the window.
-  WindowTree* tree = nullptr;
   if (in_nonclient_area) {
-    tree = window_server()->GetTreeWithId(window->id().client_id);
-  } else {
-    // If the window is an embed root, forward to the embedded window.
-    tree = window_server()->GetTreeWithRoot(window);
-    if (!tree)
-      tree = window_server()->GetTreeWithId(window->id().client_id);
+    // Events in the non-client area always go to the window manager.
+    return window_tree_->id();
   }
 
-  if (tree) {
-    const ServerWindow* embed_root =
-        tree->HasRoot(window) ? window : GetEmbedRoot(window);
-    while (tree && tree->embedder_intercepts_events()) {
-      DCHECK(tree->HasRoot(embed_root));
-      tree = window_server()->GetTreeWithId(embed_root->id().client_id);
-      embed_root = GetEmbedRoot(embed_root);
-    }
-  }
-
+  // If the window is an embed root, it goes to the tree embedded in the window.
+  WindowTree* tree = window_server()->GetTreeWithRoot(window);
   if (!tree) {
-    DCHECK(in_nonclient_area);
-    tree = window_tree_;
+    // Window is not an embed root, event goes to owner of the window.
+    tree = window_server()->GetTreeWithId(window->id().client_id);
   }
+  DCHECK(tree);
+
+  // Ascend to the first tree marked as not embedder_intercepts_events().
+  const ServerWindow* embed_root =
+      tree->HasRoot(window) ? window : GetEmbedRoot(window);
+  while (tree && tree->embedder_intercepts_events()) {
+    DCHECK(tree->HasRoot(embed_root));
+    tree = window_server()->GetTreeWithId(embed_root->id().client_id);
+    embed_root = GetEmbedRoot(embed_root);
+  }
+  DCHECK(tree);
   return tree->id();
 }
 
 ServerWindow* WindowManagerState::GetRootWindowContaining(
     gfx::Point* location) {
-  if (display_manager()->displays().empty())
-      return nullptr;
+  if (window_manager_display_roots_.empty())
+    return nullptr;
 
-  Display* target_display = nullptr;
-  for (Display* display : display_manager()->displays()) {
-    if (display->platform_display()->GetBounds().Contains(*location)) {
-      target_display = display;
+  WindowManagerDisplayRoot* target_display_root = nullptr;
+  for (auto& display_root_ptr : window_manager_display_roots_) {
+    if (display_root_ptr->display()->platform_display()->GetBounds().Contains(
+            *location)) {
+      target_display_root = display_root_ptr.get();
       break;
     }
   }
 
   // TODO(kylechar): Better handle locations outside the window. Overlapping X11
   // windows, dragging and touch sensors need to be handled properly.
-  if (!target_display) {
+  if (!target_display_root) {
     DVLOG(1) << "Invalid event location " << location->ToString();
-    target_display = *(display_manager()->displays().begin());
+    target_display_root = window_manager_display_roots_.begin()->get();
   }
-
-  WindowManagerDisplayRoot* display_root =
-      target_display->GetWindowManagerDisplayRootForUser(user_id());
-
-  if (!display_root)
-    return nullptr;
 
   // Translate the location to be relative to the display instead of relative
   // to the screen space.
-  gfx::Point origin = target_display->platform_display()->GetBounds().origin();
+  gfx::Point origin =
+      target_display_root->display()->platform_display()->GetBounds().origin();
   *location -= origin.OffsetFromOrigin();
-  return display_root->root();
+  return target_display_root->root();
 }
 
 void WindowManagerState::OnEventTargetNotFound(const ui::Event& event) {
   window_server()->SendToPointerWatchers(event, user_id(), nullptr, /* window */
                                          nullptr /* ignore_tree */);
+}
+
+void WindowManagerState::OnWindowEmbeddedAppDisconnected(ServerWindow* window) {
+  for (auto iter = orphaned_window_manager_display_roots_.begin();
+       iter != orphaned_window_manager_display_roots_.end(); ++iter) {
+    if ((*iter)->root() == window) {
+      window->RemoveObserver(this);
+      orphaned_window_manager_display_roots_.erase(iter);
+      return;
+    }
+  }
+  NOTREACHED();
 }
 
 }  // namespace ws

@@ -4,7 +4,7 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/first_run/first_run_controller.h"
@@ -45,9 +45,9 @@ void LaunchDialogForProfile(Profile* profile) {
   if (!extension)
     return;
 
-  OpenApplication(
-      AppLaunchParams(profile, extension, extensions::LAUNCH_CONTAINER_WINDOW,
-                      NEW_WINDOW, extensions::SOURCE_CHROME_INTERNAL));
+  OpenApplication(AppLaunchParams(
+      profile, extension, extensions::LAUNCH_CONTAINER_WINDOW,
+      WindowOpenDisposition::NEW_WINDOW, extensions::SOURCE_CHROME_INTERNAL));
   profile->GetPrefs()->SetBoolean(prefs::kFirstRunTutorialShown, true);
 }
 

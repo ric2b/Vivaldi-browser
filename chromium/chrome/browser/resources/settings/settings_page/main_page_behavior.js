@@ -3,28 +3,6 @@
 // found in the LICENSE file.
 
 /**
- * Calls |readyTest| repeatedly until it returns true, then calls
- * |readyCallback|.
- * @param {function():boolean} readyTest
- * @param {!Function} readyCallback
- */
-function doWhenReady(readyTest, readyCallback) {
-  if (readyTest()) {
-    readyCallback();
-    return;
-  }
-
-  // TODO(michaelpg): Remove this hack.
-  // See also: https://github.com/Polymer/polymer/issues/3629
-  var intervalId = setInterval(function() {
-    if (readyTest()) {
-      clearInterval(intervalId);
-      readyCallback();
-    }
-  }, 10);
-}
-
-/**
  * Responds to route changes by expanding, collapsing, or scrolling to sections
  * on the page. Expanded sections take up the full height of the container. At
  * most one section should be expanded at any given time.
@@ -47,16 +25,13 @@ var MainPageBehaviorImpl = {
    * @param {settings.Route} oldRoute
    */
   currentRouteChanged: function(newRoute, oldRoute) {
-    // Allow the page to load before expanding the section. TODO(michaelpg):
-    // Time this better when refactoring settings-animated-pages.
-    if (!oldRoute && newRoute.isSubpage()) {
+    // If this is the first route, or the page was hidden, allow the page to
+    // render before expanding the section.
+    if (!oldRoute && newRoute.contains(settings.getCurrentRoute()) ||
+        this.scrollHeight == 0) {
       setTimeout(this.tryTransitionToSection_.bind(this));
     } else {
-      doWhenReady(
-        function() {
-          return this.scrollHeight > 0;
-        }.bind(this),
-        this.tryTransitionToSection_.bind(this));
+      this.tryTransitionToSection_();
     }
   },
 
@@ -88,14 +63,17 @@ var MainPageBehaviorImpl = {
       if (!currentRoute.isSubpage() || expandedSection != currentSection) {
         promise = this.collapseSection_(expandedSection);
         // Scroll to the collapsed section.
-        if (currentSection)
+        if (currentSection && !settings.lastRouteChangeWasPopstate())
           currentSection.scrollIntoView();
+      } else {
+        // Scroll to top while sliding to another subpage.
+        this.scroller.scrollTop = 0;
       }
     } else if (currentSection) {
       // Expand the section into a subpage or scroll to it on the main page.
       if (currentRoute.isSubpage())
         promise = this.expandSection_(currentSection);
-      else
+      else if (!settings.lastRouteChangeWasPopstate())
         currentSection.scrollIntoView();
     }
 
@@ -161,7 +139,7 @@ var MainPageBehaviorImpl = {
 
     // Save the scroller position before freezing it.
     this.origScrollTop_ = this.scroller.scrollTop;
-    this.toggleScrolling_(false);
+    this.fire('freeze-scroll', true);
 
     // Freeze the section's height so its card can be removed from the flow.
     section.setFrozen(true);
@@ -187,7 +165,7 @@ var MainPageBehaviorImpl = {
 
       finished = false;
     }.bind(this)).then(function() {
-      this.toggleScrolling_(true);
+      this.fire('freeze-scroll', false);
       this.currentAnimation_ = null;
     }.bind(this));
   },
@@ -201,9 +179,17 @@ var MainPageBehaviorImpl = {
     assert(this.scroller);
     assert(section.classList.contains('expanded'));
 
-    var canAnimateCollapse = section.canAnimateCollapse();
-    if (canAnimateCollapse) {
-      this.toggleScrolling_(false);
+    // Don't animate the collapse if we are transitioning between Basic/Advanced
+    // and About, since the section won't be visible.
+    var needAnimate =
+        settings.Route.ABOUT.contains(settings.getCurrentRoute()) ==
+        (section.domHost.tagName == 'SETTINGS-ABOUT-PAGE');
+
+    // Animate the collapse if the section knows the original height, except
+    // when switching between Basic/Advanced and About.
+    var shouldAnimateCollapse = needAnimate && section.canAnimateCollapse();
+    if (shouldAnimateCollapse) {
+      this.fire('freeze-scroll', true);
       // Do the initial collapse setup, which takes the section out of the flow,
       // before showing everything.
       section.setUpAnimateCollapse(this.scroller);
@@ -215,7 +201,7 @@ var MainPageBehaviorImpl = {
     this.toggleOtherSectionsHidden_(section.section, false);
     this.classList.remove('showing-subpage');
 
-    if (!canAnimateCollapse) {
+    if (!shouldAnimateCollapse) {
       // Finish by restoring the section into the page.
       section.setFrozen(false);
       return Promise.resolve();
@@ -228,13 +214,7 @@ var MainPageBehaviorImpl = {
         var newSection = settings.getCurrentRoute().section &&
             this.getSection(settings.getCurrentRoute().section);
 
-        // Scroll to the section if indicated by the route. TODO(michaelpg): Is
-        // this the right behavior, or should we return to the previous scroll
-        // position?
-        if (newSection)
-          newSection.scrollIntoView();
-        else
-          this.scroller.scrollTop = this.origScrollTop_;
+        this.scroller.scrollTop = this.origScrollTop_;
 
         this.currentAnimation_ = section.animateCollapse(
             /** @type {!HTMLElement} */(this.scroller));
@@ -246,7 +226,7 @@ var MainPageBehaviorImpl = {
           // Clean up after the animation succeeds or cancels.
           section.setFrozen(false);
           section.classList.remove('collapsing');
-          this.toggleScrolling_(true);
+          this.fire('freeze-scroll', false);
           this.currentAnimation_ = null;
           resolve();
         }.bind(this));
@@ -279,25 +259,6 @@ var MainPageBehaviorImpl = {
     return /** @type {?SettingsSectionElement} */(
         this.$$('settings-section[section="' + section + '"]'));
   },
-
-  /**
-   * Enables or disables user scrolling, via overscroll: hidden. Room for the
-   * hidden scrollbar is added to prevent the page width from changing back and
-   * forth.
-   * @param {boolean} enabled
-   * @private
-   */
-  toggleScrolling_: function(enabled) {
-    if (enabled) {
-      this.scroller.style.overflow = '';
-      this.scroller.style.width = '';
-    } else {
-      var scrollerWidth = this.scroller.clientWidth;
-      this.scroller.style.overflow = 'hidden';
-      var scrollbarWidth = this.scroller.clientWidth - scrollerWidth;
-      this.scroller.style.width = 'calc(100% - ' + scrollbarWidth + 'px)';
-    }
-  }
 };
 
 /** @polymerBehavior */

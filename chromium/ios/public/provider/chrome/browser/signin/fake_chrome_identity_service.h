@@ -18,13 +18,21 @@ namespace ios {
 class FakeChromeIdentityService : public ChromeIdentityService {
  public:
   FakeChromeIdentityService();
-  ~FakeChromeIdentityService();
+  virtual ~FakeChromeIdentityService();
 
   // Convenience method that returns the instance of
   // |FakeChromeIdentityService| from the ChromeBrowserProvider.
   static FakeChromeIdentityService* GetInstanceFromChromeProvider();
 
   // ChromeIdentityService implementation.
+  base::scoped_nsobject<UINavigationController> NewAccountDetails(
+      ChromeIdentity* identity,
+      id<ChromeIdentityBrowserOpener> browser_opener) override;
+  base::scoped_nsobject<ChromeIdentityInteractionManager>
+  NewChromeIdentityInteractionManager(
+      ios::ChromeBrowserState* browser_state,
+      id<ChromeIdentityInteractionManagerDelegate> delegate) const override;
+
   bool IsValidIdentity(ChromeIdentity* identity) const override;
   ChromeIdentity* GetIdentityWithGaiaID(
       const std::string& gaia_id) const override;
@@ -41,6 +49,15 @@ class FakeChromeIdentityService : public ChromeIdentityService {
                     const std::set<std::string>& scopes,
                     const ios::AccessTokenCallback& callback));
 
+  MOCK_METHOD2(GetAvatarForIdentity,
+               void(ChromeIdentity* identity, GetAvatarCallback callback));
+
+  MOCK_METHOD1(GetCachedAvatarForIdentity, UIImage*(ChromeIdentity* identity));
+
+  MOCK_METHOD2(GetHostedDomainForIdentity,
+               void(ChromeIdentity* identity,
+                    GetHostedDomainCallback callback));
+
   MOCK_METHOD1(GetMDMDeviceStatus,
                ios::MDMDeviceStatus(NSDictionary* user_info));
 
@@ -48,6 +65,9 @@ class FakeChromeIdentityService : public ChromeIdentityService {
                bool(ChromeIdentity* identity,
                     NSDictionary* user_info,
                     ios::MDMStatusCallback callback));
+
+  // Sets up the mock methods for integration tests.
+  void SetUpForIntegrationTests();
 
   // Adds the identities given their name.
   void AddIdentities(NSArray* identitiesNames);

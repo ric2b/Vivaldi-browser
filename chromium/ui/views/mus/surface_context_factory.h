@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include "base/macros.h"
+#include "cc/surfaces/surface_manager.h"
 #include "services/ui/public/cpp/raster_thread_helper.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "ui/compositor/compositor.h"
@@ -26,7 +27,8 @@ class VIEWS_MUS_EXPORT SurfaceContextFactory : public ui::ContextFactory {
 
  private:
   // ContextFactory:
-  void CreateOutputSurface(base::WeakPtr<ui::Compositor> compositor) override;
+  void CreateCompositorFrameSink(
+      base::WeakPtr<ui::Compositor> compositor) override;
   std::unique_ptr<ui::Reflector> CreateReflector(
       ui::Compositor* mirrored_compositor,
       ui::Layer* mirroring_layer) override;
@@ -39,7 +41,7 @@ class VIEWS_MUS_EXPORT SurfaceContextFactory : public ui::ContextFactory {
   cc::SharedBitmapManager* GetSharedBitmapManager() override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
   cc::TaskGraphRunner* GetTaskGraphRunner() override;
-  uint32_t AllocateSurfaceClientId() override;
+  cc::FrameSinkId AllocateFrameSinkId() override;
   cc::SurfaceManager* GetSurfaceManager() override;
   void SetDisplayVisible(ui::Compositor* compositor, bool visible) override;
   void ResizeDisplay(ui::Compositor* compositor,
@@ -55,7 +57,8 @@ class VIEWS_MUS_EXPORT SurfaceContextFactory : public ui::ContextFactory {
   void AddObserver(ui::ContextFactoryObserver* observer) override {}
   void RemoveObserver(ui::ContextFactoryObserver* observer) override {}
 
-  uint32_t next_surface_id_namespace_;
+  cc::SurfaceManager surface_manager_;
+  uint32_t next_sink_id_;
   ui::RasterThreadHelper raster_thread_helper_;
   ui::GpuService* gpu_service_;
 

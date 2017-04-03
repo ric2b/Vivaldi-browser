@@ -23,7 +23,6 @@
 class PermissionQueueController;
 #endif
 class GURL;
-class PermissionDecisionAutoBlocker;
 class PermissionRequestID;
 class Profile;
 
@@ -176,7 +175,6 @@ class PermissionContextBase : public KeyedService {
   int RemoveBridgeID(int bridge_id);
 
   Profile* profile_;
-  std::unique_ptr<PermissionDecisionAutoBlocker> decision_auto_blocker_;
   const content::PermissionType permission_type_;
   const ContentSettingsType content_settings_type_;
 #if defined(OS_ANDROID)

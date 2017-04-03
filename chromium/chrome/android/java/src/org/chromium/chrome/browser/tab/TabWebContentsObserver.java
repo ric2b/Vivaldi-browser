@@ -164,6 +164,7 @@ public class TabWebContentsObserver extends WebContentsObserver {
     @Override
     public void didFailLoad(boolean isProvisionalLoad, boolean isMainFrame, int errorCode,
             String description, String failingUrl, boolean wasIgnoredByHandler) {
+        mTab.updateThemeColorIfNeeded(true);
         RewindableIterator<TabObserver> observers = mTab.getTabObservers();
         while (observers.hasNext()) {
             observers.next().onDidFailLoad(mTab, isProvisionalLoad, isMainFrame, errorCode,
@@ -314,7 +315,7 @@ public class TabWebContentsObserver extends WebContentsObserver {
     @Override
     public void destroy() {
         MediaCaptureNotificationService.updateMediaNotificationForTab(
-                mTab.getApplicationContext(), mTab.getId(), false, false, mTab.getUrl());
+                mTab.getApplicationContext(), mTab.getId(), 0, mTab.getUrl());
         super.destroy();
     }
 }

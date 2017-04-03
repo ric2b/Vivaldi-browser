@@ -13,7 +13,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread.h"
@@ -380,6 +380,13 @@ std::unique_ptr<media::VideoCaptureDevice> DesktopCaptureDevice::Create(
                 webrtc::MouseCursorMonitor::CreateForScreen(options,
                                                             source.id)));
             IncrementDesktopCaptureCounter(SCREEN_CAPTURER_CREATED);
+            if (source.audio_share) {
+              IncrementDesktopCaptureCounter(
+                  SCREEN_CAPTURER_CREATED_WITH_AUDIO);
+            } else {
+              IncrementDesktopCaptureCounter(
+                  SCREEN_CAPTURER_CREATED_WITHOUT_AUDIO);
+            }
           }
           break;
         }

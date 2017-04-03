@@ -30,6 +30,7 @@ class ServiceProviderImpl;
 class WindowObserver;
 class WindowSurface;
 class WindowSurfaceBinding;
+class WindowDropTarget;
 class WindowTreeClient;
 class WindowTreeClientPrivate;
 
@@ -60,6 +61,9 @@ class Window {
   // destruction is allowed observers are notified and the Window is
   // immediately deleted.
   void Destroy();
+
+  // Returns true if this client created and owns this window.
+  bool WasCreatedByThisClient() const;
 
   WindowTreeClient* window_tree() { return client_; }
 
@@ -209,6 +213,11 @@ class Window {
   bool HasFocus() const;
   void SetCanFocus(bool can_focus);
 
+  // Sets whether this window accepts drags. Passing a non-null |drop_target|
+  // will enable acceptance of drops. Passing null will disable it.
+  void SetCanAcceptDrops(WindowDropTarget* drop_target);
+  WindowDropTarget* drop_target() { return drop_target_; }
+
   // Sets whether this window accepts events.
   void SetCanAcceptEvents(bool can_accept_events);
 
@@ -224,6 +233,20 @@ class Window {
   // TODO(sky): this API is only applicable to the WindowManager. Move it
   // to a better place.
   void RequestClose();
+
+  // Starts an inter-process drag and drop operation. When this finishes, will
+  // return the tuple [success, action_taken] to |callback|, where action_taken
+  // is one of the ui::mojom::kDropEffect constants in
+  // window_tree_constants.mojom.
+  void PerformDragDrop(
+      const std::map<std::string, std::vector<uint8_t>>& drag_data,
+      int drag_operation,
+      const gfx::Point& cursor_location,
+      const SkBitmap& bitmap,
+      const base::Callback<void(bool, uint32_t)>& callback);
+
+  // Cancels the in progress drag started with PerformDragDrop().
+  void CancelDragDrop();
 
   // Tells the window manager to take control of moving the window. Returns
   // true if the move wasn't canceled.
@@ -291,15 +314,15 @@ class Window {
   void NotifyWindowStackingChanged();
   // Methods implementing visibility change notifications. See WindowObserver
   // for more details.
-  void NotifyWindowVisibilityChanged(Window* target);
+  void NotifyWindowVisibilityChanged(Window* target, bool visible);
   // Notifies this window's observers. Returns false if |this| was deleted
   // during the call (by an observer), otherwise true.
-  bool NotifyWindowVisibilityChangedAtReceiver(Window* target);
+  bool NotifyWindowVisibilityChangedAtReceiver(Window* target, bool visible);
   // Notifies this window and its child hierarchy. Returns false if |this| was
   // deleted during the call (by an observer), otherwise true.
-  bool NotifyWindowVisibilityChangedDown(Window* target);
+  bool NotifyWindowVisibilityChangedDown(Window* target, bool visible);
   // Notifies this window and its parent hierarchy.
-  void NotifyWindowVisibilityChangedUp(Window* target);
+  void NotifyWindowVisibilityChangedUp(Window* target, bool visible);
 
   // Returns true if embed is allowed for this node. If embedding is allowed all
   // the children are removed.
@@ -309,6 +332,7 @@ class Window {
   static void ReorderWithoutNotification(Window* window,
                                          Window* relative,
                                          mojom::OrderDirection direction);
+  // Returns true if the order actually changed.
   static bool ReorderImpl(Window* window,
                           Window* relative,
                           mojom::OrderDirection direction,
@@ -341,6 +365,10 @@ class Window {
   bool visible_;
   float opacity_;
   int64_t display_id_;
+
+  // The client supplied delegate that receives drag events for this
+  // window (weak ptr).
+  WindowDropTarget* drop_target_ = nullptr;
 
   // Whether this window can accept events. Initialized to true to
   // match ServerWindow.

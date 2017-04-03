@@ -11,6 +11,7 @@ import android.test.suitebuilder.annotation.Smoke;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
@@ -131,6 +132,7 @@ public class MediaPermissionsTest extends ChromeActivityTestCaseBase<ChromeActiv
     @MediumTest
     @CommandLineFlags.Add("enable-features=DisplayPersistenceToggleInPermissionPrompts")
     @Feature({"MediaPermissions"})
+    @RetryOnFailure
     public void testMicrophonePersistenceOn() throws Exception {
         testMediaPermissionsPlumbing("Mic count:", "initiate_getMicrophone()", 1, true, false);
     }
@@ -155,6 +157,7 @@ public class MediaPermissionsTest extends ChromeActivityTestCaseBase<ChromeActiv
     @MediumTest
     @CommandLineFlags.Add("enable-features=DisplayPersistenceToggleInPermissionPrompts")
     @Feature({"MediaPermissions"})
+    @RetryOnFailure
     public void testCameraPersistenceOn() throws Exception {
         testMediaPermissionsPlumbing("Camera count:", "initiate_getCamera()", 1, true, false);
     }

@@ -106,19 +106,23 @@ int MockHostResolverBase::Resolve(const RequestInfo& info,
                                   AddressList* addresses,
                                   const CompletionCallback& callback,
                                   std::unique_ptr<Request>* request,
-                                  const BoundNetLog& net_log) {
+                                  const NetLogWithSource& net_log) {
   DCHECK(CalledOnValidThread());
   DCHECK(request);
   last_request_priority_ = priority;
   num_resolve_++;
   size_t id = next_request_id_++;
   int rv = ResolveFromIPLiteralOrCache(info, addresses);
-  if (rv != ERR_DNS_CACHE_MISS) {
+  if (rv != ERR_DNS_CACHE_MISS)
     return rv;
-  }
-  if (synchronous_mode_) {
+
+  // Just like the real resolver, refuse to do anything with invalid hostnames.
+  if (!IsValidDNSDomain(info.hostname()))
+    return ERR_NAME_NOT_RESOLVED;
+
+  if (synchronous_mode_)
     return ResolveProc(info, addresses);
-  }
+
   // Store the request for asynchronous resolution
   std::unique_ptr<RequestImpl> req(
       new RequestImpl(info, addresses, callback, this, id));
@@ -136,7 +140,7 @@ int MockHostResolverBase::Resolve(const RequestInfo& info,
 
 int MockHostResolverBase::ResolveFromCache(const RequestInfo& info,
                                            AddressList* addresses,
-                                           const BoundNetLog& net_log) {
+                                           const NetLogWithSource& net_log) {
   num_resolve_from_cache_++;
   DCHECK(CalledOnValidThread());
   next_request_id_++;
@@ -448,13 +452,13 @@ int HangingHostResolver::Resolve(const RequestInfo& info,
                                  AddressList* addresses,
                                  const CompletionCallback& callback,
                                  std::unique_ptr<Request>* request,
-                                 const BoundNetLog& net_log) {
+                                 const NetLogWithSource& net_log) {
   return ERR_IO_PENDING;
 }
 
 int HangingHostResolver::ResolveFromCache(const RequestInfo& info,
                                           AddressList* addresses,
-                                          const BoundNetLog& net_log) {
+                                          const NetLogWithSource& net_log) {
   return ERR_DNS_CACHE_MISS;
 }
 

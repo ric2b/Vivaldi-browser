@@ -4,10 +4,7 @@
 
 #include "components/sync/syncable/model_neutral_mutable_entry.h"
 
-#include <stddef.h>
-#include <stdint.h>
-
-#include <string>
+#include <memory>
 
 #include "components/sync/base/unique_position.h"
 #include "components/sync/syncable/directory.h"

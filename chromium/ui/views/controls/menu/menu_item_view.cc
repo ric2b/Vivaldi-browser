@@ -12,7 +12,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/models/menu_model.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
@@ -784,12 +783,11 @@ void MenuItemView::PaintButton(gfx::Canvas* canvas, PaintButtonMode mode) {
         ui::NativeTheme::kColorId_SelectedMenuItemForegroundColor:
         ui::NativeTheme::kColorId_EnabledMenuItemForegroundColor;
   } else {
-    bool emphasized = delegate &&
-                      delegate->GetShouldUseDisabledEmphasizedForegroundColor(
-                          GetCommand());
-    color_id = emphasized ?
-        ui::NativeTheme::kColorId_DisabledEmphasizedMenuItemForegroundColor :
-        ui::NativeTheme::kColorId_DisabledMenuItemForegroundColor;
+    bool emphasized =
+        delegate && delegate->GetShouldUseNormalForegroundColor(GetCommand());
+    color_id = emphasized
+                   ? ui::NativeTheme::kColorId_EnabledMenuItemForegroundColor
+                   : ui::NativeTheme::kColorId_DisabledMenuItemForegroundColor;
   }
   SkColor fg_color = native_theme->GetSystemColor(color_id);
   SkColor override_foreground_color;
@@ -798,10 +796,7 @@ void MenuItemView::PaintButton(gfx::Canvas* canvas, PaintButtonMode mode) {
                                                &override_foreground_color)) {
     fg_color = override_foreground_color;
   }
-  SkColor icon_color =
-      render_selection && !ui::MaterialDesignController::IsModeMaterial()
-          ? fg_color
-          : color_utils::DeriveDefaultIconColor(fg_color);
+  SkColor icon_color = color_utils::DeriveDefaultIconColor(fg_color);
 
   // Render the check.
   if (type_ == CHECKBOX && delegate->IsItemChecked(GetCommand())) {

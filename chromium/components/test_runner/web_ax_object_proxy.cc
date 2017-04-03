@@ -41,6 +41,8 @@ std::string RoleToString(blink::WebAXRole role)
       return result.append("Application");
     case blink::WebAXRoleArticle:
       return result.append("Article");
+    case blink::WebAXRoleAudio:
+      return result.append("Audio");
     case blink::WebAXRoleBanner:
       return result.append("Banner");
     case blink::WebAXRoleBlockquote:
@@ -127,6 +129,8 @@ std::string RoleToString(blink::WebAXRole role)
       return result.append("Legend");
     case blink::WebAXRoleLink:
       return result.append("Link");
+    case blink::WebAXRoleLineBreak:
+      return result.append("LineBreak");
     case blink::WebAXRoleListBoxOption:
       return result.append("ListBoxOption");
     case blink::WebAXRoleListBox:
@@ -259,6 +263,8 @@ std::string RoleToString(blink::WebAXRole role)
       return result.append("Unknown");
     case blink::WebAXRoleUserInterfaceTooltip:
       return result.append("UserInterfaceTooltip");
+    case blink::WebAXRoleVideo:
+      return result.append("Video");
     case blink::WebAXRoleWebArea:
       return result.append("WebArea");
     case blink::WebAXRoleWindow:
@@ -357,8 +363,9 @@ blink::WebRect BoundsForCharacter(const blink::WebAXObject& object,
     int localIndex = characterIndex - start;
     blink::WebVector<int> character_offsets;
     inline_text_box.characterOffsets(character_offsets);
-    DCHECK(character_offsets.size() > 0 &&
-           character_offsets.size() == name.length());
+    if (character_offsets.size() != name.length())
+      return blink::WebRect();
+
     switch (inline_text_box.textDirection()) {
       case blink::WebAXTextDirectionLR: {
         if (localIndex) {
@@ -1049,12 +1056,14 @@ int WebAXObjectProxy::SetSize() {
 
 int WebAXObjectProxy::ClickPointX() {
   accessibility_object_.updateLayoutAndCheckValidity();
-  return accessibility_object_.clickPoint().x;
+  blink::WebFloatRect bounds = BoundsForObject(accessibility_object_);
+  return bounds.x + bounds.width / 2;
 }
 
 int WebAXObjectProxy::ClickPointY() {
   accessibility_object_.updateLayoutAndCheckValidity();
-  return accessibility_object_.clickPoint().y;
+  blink::WebFloatRect bounds = BoundsForObject(accessibility_object_);
+  return bounds.y + bounds.height / 2;
 }
 
 int32_t WebAXObjectProxy::RowCount() {

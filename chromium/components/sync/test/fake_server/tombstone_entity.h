@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_SYNC_TEST_FAKE_SERVER_TOMBSTONE_ENTITY_H_
 #define COMPONENTS_SYNC_TEST_FAKE_SERVER_TOMBSTONE_ENTITY_H_
 
+#include <memory>
 #include <string>
 
 #include "components/sync/base/model_type.h"
@@ -19,7 +20,9 @@ class TombstoneEntity : public FakeServerEntity {
   ~TombstoneEntity() override;
 
   // Factory function for TombstoneEntity.
-  static std::unique_ptr<FakeServerEntity> Create(const std::string& id);
+  static std::unique_ptr<FakeServerEntity> Create(
+      const std::string& id,
+      const std::string& client_defined_unique_tag);
 
   // FakeServerEntity implementation.
   bool RequiresParentId() const override;
@@ -28,7 +31,9 @@ class TombstoneEntity : public FakeServerEntity {
   bool IsDeleted() const override;
 
  private:
-  TombstoneEntity(const std::string& id, const syncer::ModelType& model_type);
+  TombstoneEntity(const std::string& id,
+                  const std::string& client_defined_unique_tag,
+                  const syncer::ModelType& model_type);
 };
 
 }  // namespace fake_server

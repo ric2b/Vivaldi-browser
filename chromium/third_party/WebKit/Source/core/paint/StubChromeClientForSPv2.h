@@ -6,7 +6,6 @@
 #define StubChromeClientForSPv2_h
 
 #include "core/loader/EmptyClients.h"
-#include "platform/graphics/compositing/PaintArtifactCompositor.h"
 #include "platform/testing/WebLayerTreeViewImplForTesting.h"
 
 namespace blink {
@@ -15,26 +14,21 @@ namespace blink {
 // PaintArtifactCompositor attached to a testing WebLayerTreeView, and permits
 // simple analysis of the results.
 class StubChromeClientForSPv2 : public EmptyChromeClient {
-public:
-    StubChromeClientForSPv2(WebLayerTreeViewImplForTesting::LayerListPolicy layerListPolicy)
-        : m_layerTreeView(layerListPolicy)
-    {
-        m_layerTreeView.setRootLayer(*m_paintArtifactCompositor.getWebLayer());
-    }
+ public:
+  StubChromeClientForSPv2() : m_layerTreeView() {}
 
-    bool hasLayer(const WebLayer& layer) { return m_layerTreeView.hasLayer(layer); }
+  bool hasLayer(const WebLayer& layer) {
+    return m_layerTreeView.hasLayer(layer);
+  }
 
-    // ChromeClient
-    void didPaint(const PaintArtifact& artifact) override
-    {
-        m_paintArtifactCompositor.update(artifact);
-    }
+  void attachRootLayer(WebLayer* layer, LocalFrame* localRoot) override {
+    m_layerTreeView.setRootLayer(*layer);
+  }
 
-private:
-    WebLayerTreeViewImplForTesting m_layerTreeView;
-    PaintArtifactCompositor m_paintArtifactCompositor;
+ private:
+  WebLayerTreeViewImplForTesting m_layerTreeView;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // StubChromeClientForSPv2_h
+#endif  // StubChromeClientForSPv2_h

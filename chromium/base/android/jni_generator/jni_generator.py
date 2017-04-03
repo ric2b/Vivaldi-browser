@@ -518,6 +518,7 @@ RE_SCOPED_JNI_TYPES = re.compile('jobject|jclass|jstring|jthrowable|.*Array')
 RE_CALLED_BY_NATIVE = re.compile(
     '@CalledByNative(?P<Unchecked>(Unchecked)*?)(?:\("(?P<annotation>.*)"\))?'
     '\s+(?P<prefix>[\w ]*?)'
+    '(:?\s*@\w+)?'  # Ignore annotations in return types.
     '\s*(?P<return_type>\S+?)'
     '\s+(?P<name>\w+)'
     '\s*\((?P<params>[^\)]*)\)')
@@ -1021,9 +1022,7 @@ ${NATIVES}
           'P0_TYPE': native.p0_type,
       })
       template = Template("""\
-extern "C" __attribute__((visibility("default")))
-${RETURN} ${STUB_NAME}(JNIEnv* env,
-    ${PARAMS_IN_STUB}) {
+JNI_GENERATOR_EXPORT ${RETURN} ${STUB_NAME}(JNIEnv* env, ${PARAMS_IN_STUB}) {
   ${P0_TYPE}* native = reinterpret_cast<${P0_TYPE}*>(${PARAM0_NAME});
   CHECK_NATIVE_PTR(env, jcaller, native, "${NAME}"${OPTIONAL_ERROR_RETURN});
   return native->${NAME}(${PARAMS_IN_CALL})${POST_CALL};
@@ -1033,8 +1032,7 @@ ${RETURN} ${STUB_NAME}(JNIEnv* env,
       template = Template("""
 static ${RETURN_DECLARATION} ${NAME}(JNIEnv* env, ${PARAMS});
 
-extern "C" __attribute__((visibility("default")))
-${RETURN} ${STUB_NAME}(JNIEnv* env, ${PARAMS_IN_STUB}) {
+JNI_GENERATOR_EXPORT ${RETURN} ${STUB_NAME}(JNIEnv* env, ${PARAMS_IN_STUB}) {
   return ${NAME}(${PARAMS_IN_CALL})${POST_CALL};
 }
 """)
@@ -1379,9 +1377,7 @@ See SampleForTests.java for more details.
   GenerateJNIHeader(input_file, output_file, options)
 
   if options.depfile:
-    build_utils.WriteDepfile(
-        options.depfile,
-        build_utils.GetPythonDependencies())
+    build_utils.WriteDepfile(options.depfile, output_file)
 
 
 if __name__ == '__main__':

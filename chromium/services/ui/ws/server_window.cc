@@ -55,7 +55,8 @@ ServerWindow::~ServerWindow() {
   // parent, as destroying an active transient child may otherwise attempt to
   // refocus us.
   Windows transient_children(transient_children_);
-  base::STLDeleteElements(&transient_children);
+  for (auto window : transient_children)
+    delete window;
   DCHECK(transient_children_.empty());
 
   while (!children_.empty())
@@ -180,11 +181,15 @@ void ServerWindow::SetClientArea(
 }
 
 void ServerWindow::SetHitTestMask(const gfx::Rect& mask) {
-  hit_test_mask_.reset(new gfx::Rect(mask));
+  hit_test_mask_ = base::MakeUnique<gfx::Rect>(mask);
 }
 
 void ServerWindow::ClearHitTestMask() {
   hit_test_mask_.reset();
+}
+
+void ServerWindow::SetCanAcceptDrops(bool accepts_drops) {
+  accepts_drops_ = accepts_drops;
 }
 
 const ServerWindow* ServerWindow::GetRoot() const {
@@ -284,7 +289,7 @@ void ServerWindow::SetPredefinedCursor(ui::mojom::Cursor value) {
   cursor_id_ = value;
   FOR_EACH_OBSERVER(
       ServerWindowObserver, observers_,
-      OnWindowPredefinedCursorChanged(this, static_cast<int32_t>(value)));
+      OnWindowPredefinedCursorChanged(this, value));
 }
 
 void ServerWindow::SetNonClientCursor(ui::mojom::Cursor value) {
@@ -293,7 +298,7 @@ void ServerWindow::SetNonClientCursor(ui::mojom::Cursor value) {
   non_client_cursor_id_ = value;
   FOR_EACH_OBSERVER(
       ServerWindowObserver, observers_,
-      OnWindowNonClientCursorChanged(this, static_cast<int32_t>(value)));
+      OnWindowNonClientCursorChanged(this, value));
 }
 
 void ServerWindow::SetTransform(const gfx::Transform& transform) {
@@ -369,7 +374,7 @@ void ServerWindow::DestroySurfacesScheduledForDestruction() {
 
 ServerWindowSurfaceManager* ServerWindow::GetOrCreateSurfaceManager() {
   if (!surface_manager_.get())
-    surface_manager_.reset(new ServerWindowSurfaceManager(this));
+    surface_manager_ = base::MakeUnique<ServerWindowSurfaceManager>(this);
   return surface_manager_.get();
 }
 
@@ -379,6 +384,11 @@ void ServerWindow::SetUnderlayOffset(const gfx::Vector2d& offset) {
 
   underlay_offset_ = offset;
   delegate_->OnScheduleWindowPaint(this);
+}
+
+void ServerWindow::OnEmbeddedAppDisconnected() {
+  FOR_EACH_OBSERVER(ServerWindowObserver, observers_,
+                    OnWindowEmbeddedAppDisconnected(this));
 }
 
 #if !defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)

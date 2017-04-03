@@ -52,7 +52,8 @@ class URLDataManagerBackend : public base::SupportsUserData::Data {
   // Adds a DataSource to the collection of data sources.
   void AddDataSource(URLDataSourceImpl* source);
 
-  // DataSource invokes this. Sends the data to the URLRequest.
+  // DataSource invokes this. Sends the data to the URLRequest. |bytes| may be
+  // null, which signals an error handling the request.
   void DataAvailable(RequestID request_id, base::RefCountedMemory* bytes);
 
   static net::URLRequestJob* Factory(net::URLRequest* request,
@@ -72,11 +73,12 @@ class URLDataManagerBackend : public base::SupportsUserData::Data {
   // Helper function to call StartDataRequest on |source|'s delegate. This is
   // needed because while we want to call URLDataSourceDelegate's method, we
   // need to add a refcount on the source.
-  static void CallStartRequest(scoped_refptr<URLDataSourceImpl> source,
-                               const std::string& path,
-                               int render_process_id,
-                               int render_frame_id,
-                               int request_id);
+  static void CallStartRequest(
+      scoped_refptr<URLDataSourceImpl> source,
+      const std::string& path,
+      int child_id,
+      const ResourceRequestInfo::WebContentsGetter& wc_getter,
+      int request_id);
 
   // Remove a request from the list of pending requests.
   void RemoveRequest(URLRequestChromeJob* job);

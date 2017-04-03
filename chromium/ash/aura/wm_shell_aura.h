@@ -32,16 +32,20 @@ class ASH_EXPORT WmShellAura : public WmShell,
 
   // WmShell:
   void Shutdown() override;
-  WmWindow* NewContainerWindow() override;
+  bool IsRunningInMash() const override;
+  WmWindow* NewWindow(ui::wm::WindowType window_type,
+                      ui::LayerType layer_type) override;
   WmWindow* GetFocusedWindow() override;
   WmWindow* GetActiveWindow() override;
   WmWindow* GetCaptureWindow() override;
   WmWindow* GetPrimaryRootWindow() override;
   WmWindow* GetRootWindowForDisplayId(int64_t display_id) override;
-  const DisplayInfo& GetDisplayInfo(int64_t display_id) const override;
+  const display::ManagedDisplayInfo& GetDisplayInfo(
+      int64_t display_id) const override;
   bool IsActiveDisplayId(int64_t display_id) const override;
   display::Display GetFirstDisplay() const override;
   bool IsInUnifiedMode() const override;
+  bool IsInUnifiedModeIgnoreMirroring() const override;
   bool IsForceMaximizeOnFirstRun() override;
   void SetDisplayWorkAreaInsets(WmWindow* window,
                                 const gfx::Insets& insets) override;
@@ -55,8 +59,6 @@ class ASH_EXPORT WmShellAura : public WmShell,
   void RecordGestureAction(GestureActionType action) override;
   void RecordUserMetricsAction(UserMetricsAction action) override;
   void RecordTaskSwitchMetric(TaskSwitchSource source) override;
-  void ShowContextMenu(const gfx::Point& location_in_screen,
-                       ui::MenuSourceType source_type) override;
   std::unique_ptr<WindowResizer> CreateDragWindowResizer(
       std::unique_ptr<WindowResizer> next_window_resizer,
       wm::WindowState* window_state) override;
@@ -64,6 +66,8 @@ class ASH_EXPORT WmShellAura : public WmShell,
       override;
   std::unique_ptr<wm::MaximizeModeEventHandler> CreateMaximizeModeEventHandler()
       override;
+  std::unique_ptr<WorkspaceEventHandler> CreateWorkspaceEventHandler(
+      WmWindow* workspace_window) override;
   std::unique_ptr<ScopedDisableInternalMouseAndKeyboard>
   CreateScopedDisableInternalMouseAndKeyboard() override;
   std::unique_ptr<ImmersiveFullscreenController>
@@ -77,7 +81,7 @@ class ASH_EXPORT WmShellAura : public WmShell,
   void AddDisplayObserver(WmDisplayObserver* observer) override;
   void RemoveDisplayObserver(WmDisplayObserver* observer) override;
   void AddPointerWatcher(views::PointerWatcher* watcher,
-                         bool wants_moves) override;
+                         views::PointerWatcherEventTypes events) override;
   void RemovePointerWatcher(views::PointerWatcher* watcher) override;
   bool IsTouchDown() override;
 #if defined(OS_CHROMEOS)

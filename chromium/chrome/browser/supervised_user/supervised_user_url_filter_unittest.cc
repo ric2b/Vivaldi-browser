@@ -35,6 +35,10 @@ class SupervisedUserURLFilterTest : public ::testing::Test,
            SupervisedUserURLFilter::ALLOW;
   }
 
+  GURL GetEmbeddedURL(const std::string& url) {
+    return filter_->GetEmbeddedURL(GURL(url));
+  }
+
   base::MessageLoop message_loop_;
   base::RunLoop run_loop_;
   scoped_refptr<SupervisedUserURLFilter> filter_;
@@ -63,6 +67,66 @@ TEST_F(SupervisedUserURLFilterTest, Basic) {
   EXPECT_TRUE(IsURLWhitelisted("chrome://extensions/"));
   EXPECT_TRUE(IsURLWhitelisted("chrome-extension://foo/main.html"));
   EXPECT_TRUE(IsURLWhitelisted("file:///home/chronos/user/Downloads/img.jpg"));
+}
+
+TEST_F(SupervisedUserURLFilterTest, EffectiveURL) {
+  std::vector<std::string> list;
+  // Allow domain and all subdomains, for any filtered scheme.
+  list.push_back("example.com");
+  filter_->SetFromPatternsForTesting(list);
+  run_loop_.Run();
+
+  ASSERT_TRUE(IsURLWhitelisted("http://example.com"));
+  ASSERT_TRUE(IsURLWhitelisted("https://example.com"));
+
+  EXPECT_FALSE(IsURLWhitelisted("https://cdn.ampproject.org"));
+  EXPECT_TRUE(IsURLWhitelisted("https://cdn.ampproject.org/c/example.com"));
+  EXPECT_TRUE(IsURLWhitelisted("https://cdn.ampproject.org/c/www.example.com"));
+  EXPECT_TRUE(
+      IsURLWhitelisted("https://cdn.ampproject.org/c/example.com/path"));
+  EXPECT_TRUE(IsURLWhitelisted("https://cdn.ampproject.org/c/s/example.com"));
+  EXPECT_FALSE(IsURLWhitelisted("https://cdn.ampproject.org/c/other.com"));
+
+  EXPECT_FALSE(IsURLWhitelisted("https://sub.cdn.ampproject.org"));
+  EXPECT_TRUE(IsURLWhitelisted("https://sub.cdn.ampproject.org/c/example.com"));
+  EXPECT_TRUE(
+      IsURLWhitelisted("https://sub.cdn.ampproject.org/c/www.example.com"));
+  EXPECT_TRUE(
+      IsURLWhitelisted("https://sub.cdn.ampproject.org/c/example.com/path"));
+  EXPECT_TRUE(
+      IsURLWhitelisted("https://sub.cdn.ampproject.org/c/s/example.com"));
+  EXPECT_FALSE(IsURLWhitelisted("https://sub.cdn.ampproject.org/c/other.com"));
+
+  EXPECT_FALSE(IsURLWhitelisted("https://www.google.com"));
+  EXPECT_FALSE(IsURLWhitelisted("https://www.google.com/amp/"));
+  EXPECT_TRUE(IsURLWhitelisted("https://www.google.com/amp/example.com"));
+  EXPECT_TRUE(IsURLWhitelisted("https://www.google.com/amp/www.example.com"));
+  EXPECT_TRUE(IsURLWhitelisted("https://www.google.com/amp/s/example.com"));
+  EXPECT_TRUE(
+      IsURLWhitelisted("https://www.google.com/amp/s/example.com/path"));
+  EXPECT_FALSE(IsURLWhitelisted("https://www.google.com/amp/other.com"));
+
+  EXPECT_FALSE(IsURLWhitelisted("https://webcache.googleusercontent.com"));
+  EXPECT_FALSE(
+      IsURLWhitelisted("https://webcache.googleusercontent.com/search"));
+  EXPECT_FALSE(IsURLWhitelisted(
+      "https://webcache.googleusercontent.com/search?q=example.com"));
+  EXPECT_TRUE(IsURLWhitelisted(
+      "https://webcache.googleusercontent.com/search?q=cache:example.com"));
+  EXPECT_TRUE(
+      IsURLWhitelisted("https://webcache.googleusercontent.com/"
+                       "search?q=cache:example.com+search_query"));
+  EXPECT_TRUE(
+      IsURLWhitelisted("https://webcache.googleusercontent.com/"
+                       "search?q=cache:123456789-01:example.com+search_query"));
+  EXPECT_FALSE(IsURLWhitelisted(
+      "https://webcache.googleusercontent.com/search?q=cache:other.com"));
+  EXPECT_FALSE(
+      IsURLWhitelisted("https://webcache.googleusercontent.com/"
+                       "search?q=cache:other.com+example.com"));
+  EXPECT_FALSE(
+      IsURLWhitelisted("https://webcache.googleusercontent.com/"
+                       "search?q=cache:123456789-01:other.com+example.com"));
 }
 
 TEST_F(SupervisedUserURLFilterTest, Inactive) {
@@ -418,7 +482,7 @@ TEST_F(SupervisedUserURLFilterTest, WhitelistsHostnameHashes) {
   const base::string16 title1 = base::ASCIIToUTF16("Title 1");
   const base::string16 title2 = base::ASCIIToUTF16("Title 2");
   const base::string16 title3 = base::ASCIIToUTF16("Title 3");
-  const GURL entry_point("htttps://entry.com");
+  const GURL entry_point("https://entry.com");
 
   scoped_refptr<SupervisedUserSiteList> site_list1 = make_scoped_refptr(
       new SupervisedUserSiteList(id1, title1, entry_point, base::FilePath(),
@@ -453,4 +517,170 @@ TEST_F(SupervisedUserURLFilterTest, WhitelistsHostnameHashes) {
   actual_whitelists =
       filter_->GetMatchingWhitelistTitles(GURL("https://secure.com"));
   ASSERT_EQ(expected_whitelists, actual_whitelists);
+}
+
+#if defined(ENABLE_EXTENSIONS)
+TEST_F(SupervisedUserURLFilterTest, ChromeWebstoreDownloadsAreAlwaysAllowed) {
+  // When installing an extension from Chrome Webstore, it tries to download the
+  // crx file from "https://clients2.google.com/service/update2/", which
+  // redirects to "https://clients2.googleusercontent.com/crx/blobs/"
+  // or "https://chrome.google.com/webstore/download/".
+  // All URLs should be whitelisted regardless from the default filtering
+  // behavior.
+  GURL crx_download_url1(
+      "https://clients2.google.com/service/update2/"
+      "crx?response=redirect&os=linux&arch=x64&nacl_arch=x86-64&prod="
+      "chromiumcrx&prodchannel=&prodversion=55.0.2882.0&lang=en-US&x=id%"
+      "3Dciniambnphakdoflgeamacamhfllbkmo%26installsource%3Dondemand%26uc");
+  GURL crx_download_url2(
+      "https://clients2.googleusercontent.com/crx/blobs/"
+      "QgAAAC6zw0qH2DJtnXe8Z7rUJP1iCQF099oik9f2ErAYeFAX7_"
+      "CIyrNH5qBru1lUSBNvzmjILCGwUjcIBaJqxgegSNy2melYqfodngLxKtHsGBehAMZSmuWSg6"
+      "FupAcPS3Ih6NSVCOB9KNh6Mw/extension_2_0.crx");
+  GURL crx_download_url3(
+      "https://chrome.google.com/webstore/download/"
+      "QgAAAC6zw0qH2DJtnXe8Z7rUJP1iCQF099oik9f2ErAYeFAX7_"
+      "CIyrNH5qBru1lUSBNvzmjILCGwUjcIBaJqxgegSNy2melYqfodngLxKtHsGBehAMZSmuWSg6"
+      "FupAcPS3Ih6NSVCOB9KNh6Mw/extension_2_0.crx");
+
+  filter_->SetDefaultFilteringBehavior(SupervisedUserURLFilter::BLOCK);
+  EXPECT_EQ(SupervisedUserURLFilter::ALLOW,
+            filter_->GetFilteringBehaviorForURL(crx_download_url1));
+  EXPECT_EQ(SupervisedUserURLFilter::ALLOW,
+            filter_->GetFilteringBehaviorForURL(crx_download_url2));
+  EXPECT_EQ(SupervisedUserURLFilter::ALLOW,
+            filter_->GetFilteringBehaviorForURL(crx_download_url3));
+
+  // Set explicit host rules to block those website, and make sure the
+  // update URLs still work.
+  std::map<std::string, bool> hosts;
+  hosts["clients2.google.com"] = false;
+  hosts["clients2.googleusercontent.com"] = false;
+  filter_->SetManualHosts(&hosts);
+  filter_->SetDefaultFilteringBehavior(SupervisedUserURLFilter::ALLOW);
+  EXPECT_EQ(SupervisedUserURLFilter::ALLOW,
+            filter_->GetFilteringBehaviorForURL(crx_download_url1));
+  EXPECT_EQ(SupervisedUserURLFilter::ALLOW,
+            filter_->GetFilteringBehaviorForURL(crx_download_url2));
+  EXPECT_EQ(SupervisedUserURLFilter::ALLOW,
+            filter_->GetFilteringBehaviorForURL(crx_download_url3));
+}
+#endif
+
+TEST_F(SupervisedUserURLFilterTest, GetEmbeddedURLAmpCache) {
+  // Base case.
+  EXPECT_EQ(GURL("http://example.com"),
+            GetEmbeddedURL("https://cdn.ampproject.org/c/example.com"));
+  // "s/" means "use https".
+  EXPECT_EQ(GURL("https://example.com"),
+            GetEmbeddedURL("https://cdn.ampproject.org/c/s/example.com"));
+  // With path and query. Fragment is not extracted.
+  EXPECT_EQ(GURL("https://example.com/path/to/file.html?q=asdf"),
+            GetEmbeddedURL("https://cdn.ampproject.org/c/s/example.com/path/to/"
+                           "file.html?q=asdf#baz"));
+
+  // Different host is not supported.
+  EXPECT_EQ(GURL(), GetEmbeddedURL("https://www.ampproject.org/c/example.com"));
+  // Different TLD is not supported.
+  EXPECT_EQ(GURL(), GetEmbeddedURL("https://cdn.ampproject.com/c/example.com"));
+  // Content type ("c/") is missing.
+  EXPECT_EQ(GURL(), GetEmbeddedURL("https://cdn.ampproject.org/example.com"));
+  // Content type is mis-formatted, must be a single character.
+  EXPECT_EQ(GURL(),
+            GetEmbeddedURL("https://cdn.ampproject.org/cd/example.com"));
+}
+
+TEST_F(SupervisedUserURLFilterTest, GetEmbeddedURLGoogleAmpViewer) {
+  // Base case.
+  EXPECT_EQ(GURL("http://example.com"),
+            GetEmbeddedURL("https://www.google.com/amp/example.com"));
+  // "s/" means "use https".
+  EXPECT_EQ(GURL("https://example.com"),
+            GetEmbeddedURL("https://www.google.com/amp/s/example.com"));
+  // Different Google TLDs are supported.
+  EXPECT_EQ(GURL("http://example.com"),
+            GetEmbeddedURL("https://www.google.de/amp/example.com"));
+  EXPECT_EQ(GURL("http://example.com"),
+            GetEmbeddedURL("https://www.google.co.uk/amp/example.com"));
+  // With path.
+  EXPECT_EQ(GURL("http://example.com/path"),
+            GetEmbeddedURL("https://www.google.com/amp/example.com/path"));
+  // Query is *not* part of the embedded URL.
+  EXPECT_EQ(
+      GURL("http://example.com/path"),
+      GetEmbeddedURL("https://www.google.com/amp/example.com/path?q=baz"));
+  // Query and fragment in percent-encoded form *are* part of the embedded URL.
+  EXPECT_EQ(
+      GURL("http://example.com/path?q=foo#bar"),
+      GetEmbeddedURL(
+          "https://www.google.com/amp/example.com/path%3fq=foo%23bar?q=baz"));
+  // "/" may also be percent-encoded.
+  EXPECT_EQ(GURL("http://example.com/path?q=foo#bar"),
+            GetEmbeddedURL("https://www.google.com/amp/"
+                           "example.com%2fpath%3fq=foo%23bar?q=baz"));
+
+  // Missing "amp/".
+  EXPECT_EQ(GURL(), GetEmbeddedURL("https://www.google.com/example.com"));
+  // Path component before the "amp/".
+  EXPECT_EQ(GURL(),
+            GetEmbeddedURL("https://www.google.com/foo/amp/example.com"));
+  // Different host.
+  EXPECT_EQ(GURL(), GetEmbeddedURL("https://www.other.com/amp/example.com"));
+  // Different subdomain.
+  EXPECT_EQ(GURL(), GetEmbeddedURL("https://mail.google.com/amp/example.com"));
+  // Invalid TLD.
+  EXPECT_EQ(GURL(), GetEmbeddedURL("https://www.google.nope/amp/example.com"));
+}
+
+TEST_F(SupervisedUserURLFilterTest, GetEmbeddedURLGoogleWebCache) {
+  // Base case.
+  EXPECT_EQ(GURL("http://example.com"),
+            GetEmbeddedURL("https://webcache.googleusercontent.com/"
+                           "search?q=cache:ABCDEFGHI-JK:example.com/"));
+  // With search query.
+  EXPECT_EQ(
+      GURL("http://example.com"),
+      GetEmbeddedURL("https://webcache.googleusercontent.com/"
+                     "search?q=cache:ABCDEFGHI-JK:example.com/+search_query"));
+  // Without fingerprint.
+  EXPECT_EQ(GURL("http://example.com"),
+            GetEmbeddedURL("https://webcache.googleusercontent.com/"
+                           "search?q=cache:example.com/"));
+  // With search query, without fingerprint.
+  EXPECT_EQ(GURL("http://example.com"),
+            GetEmbeddedURL("https://webcache.googleusercontent.com/"
+                           "search?q=cache:example.com/+search_query"));
+  // Query params other than "q=" don't matter.
+  EXPECT_EQ(GURL("http://example.com"),
+            GetEmbeddedURL("https://webcache.googleusercontent.com/"
+                           "search?a=b&q=cache:example.com/&c=d"));
+  // With scheme.
+  EXPECT_EQ(GURL("http://example.com"),
+            GetEmbeddedURL("https://webcache.googleusercontent.com/"
+                           "search?q=cache:http://example.com/"));
+  // Preserve https.
+  EXPECT_EQ(GURL("https://example.com"),
+            GetEmbeddedURL("https://webcache.googleusercontent.com/"
+                           "search?q=cache:https://example.com/"));
+
+  // Wrong host.
+  EXPECT_EQ(GURL(), GetEmbeddedURL("https://www.googleusercontent.com/"
+                                   "search?q=cache:example.com/"));
+  // Wrong path.
+  EXPECT_EQ(GURL(), GetEmbeddedURL("https://webcache.googleusercontent.com/"
+                                   "path?q=cache:example.com/"));
+  EXPECT_EQ(GURL(), GetEmbeddedURL("https://webcache.googleusercontent.com/"
+                                   "path/search?q=cache:example.com/"));
+  // Missing "cache:".
+  EXPECT_EQ(GURL(), GetEmbeddedURL("https://webcache.googleusercontent.com/"
+                                   "search?q=example.com"));
+  // Wrong fingerprint.
+  EXPECT_EQ(GURL(), GetEmbeddedURL("https://webcache.googleusercontent.com/"
+                                   "search?q=cache:123:example.com/"));
+  // Wrong query param.
+  EXPECT_EQ(GURL(), GetEmbeddedURL("https://webcache.googleusercontent.com/"
+                                   "search?a=cache:example.com/"));
+  // Invalid scheme.
+  EXPECT_EQ(GURL(), GetEmbeddedURL("https://webcache.googleusercontent.com/"
+                                   "search?q=cache:abc://example.com/"));
 }

@@ -10,8 +10,8 @@
 
 #include "ash/common/shelf/shelf_delegate.h"
 #include "ash/common/shelf/shelf_model_observer.h"
-#include "ash/common/shelf/shelf_types.h"
 #include "ash/display/window_tree_host_manager.h"
+#include "ash/public/cpp/shelf_types.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -134,7 +134,7 @@ class ChromeLauncherControllerImpl
   LauncherItemController* GetLauncherItemController(
       const ash::ShelfID id) override;
   bool ShelfBoundsChangesProbablyWithUser(
-      ash::Shelf* shelf,
+      ash::WmShelf* shelf,
       const AccountId& account_id) const override;
   void OnUserProfileReadyToSwitch(Profile* profile) override;
   ArcAppDeferredLauncherController* GetArcDeferredLauncher() override;
@@ -160,6 +160,9 @@ class ChromeLauncherControllerImpl
   void OnShelfAutoHideStateChanged(ash::WmShelf* shelf) override;
   void OnShelfVisibilityStateChanged(ash::WmShelf* shelf) override;
   ash::ShelfID GetShelfIDForAppID(const std::string& app_id) override;
+  ash::ShelfID GetShelfIDForAppIDAndLaunchID(
+      const std::string& app_id,
+      const std::string& launch_id) override;
   bool HasShelfIDToAppIDMapping(ash::ShelfID id) const override;
   const std::string& GetAppIDForShelfID(ash::ShelfID id) override;
   void PinAppWithID(const std::string& app_id) override;

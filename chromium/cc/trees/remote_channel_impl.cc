@@ -12,12 +12,12 @@
 #include "cc/proto/compositor_message_to_impl.pb.h"
 #include "cc/proto/compositor_message_to_main.pb.h"
 #include "cc/proto/gfx_conversions.h"
-#include "cc/trees/layer_tree_host.h"
+#include "cc/trees/layer_tree_host_in_process.h"
 #include "cc/trees/layer_tree_settings.h"
 
 namespace cc {
 
-RemoteChannelImpl::RemoteChannelImpl(LayerTreeHost* layer_tree_host,
+RemoteChannelImpl::RemoteChannelImpl(LayerTreeHostInProcess* layer_tree_host,
                                      RemoteProtoChannel* remote_proto_channel,
                                      TaskRunnerProvider* task_runner_provider)
     : task_runner_provider_(task_runner_provider),
@@ -38,14 +38,11 @@ RemoteChannelImpl::~RemoteChannelImpl() {
 
 std::unique_ptr<ProxyImpl> RemoteChannelImpl::CreateProxyImpl(
     ChannelImpl* channel_impl,
-    LayerTreeHost* layer_tree_host,
-    TaskRunnerProvider* task_runner_provider,
-    std::unique_ptr<BeginFrameSource> external_begin_frame_source) {
+    LayerTreeHostInProcess* layer_tree_host,
+    TaskRunnerProvider* task_runner_provider) {
   DCHECK(task_runner_provider_->IsImplThread());
-  DCHECK(!external_begin_frame_source);
   return base::MakeUnique<ProxyImpl>(channel_impl, layer_tree_host,
-                                     task_runner_provider,
-                                     std::move(external_begin_frame_source));
+                                     task_runner_provider);
 }
 
 void RemoteChannelImpl::OnProtoReceived(
@@ -54,10 +51,10 @@ void RemoteChannelImpl::OnProtoReceived(
   DCHECK(main().started);
   DCHECK(proto->has_to_impl());
 
-  // If we don't have an output surface, queue the message and defer processing
-  // it till we initialize a new output surface.
-  if (main().waiting_for_output_surface_initialization) {
-    VLOG(1) << "Queueing message proto since output surface was released.";
+  // If we don't have an CompositorFrameSink, queue the message and defer
+  // processing it till we initialize a new CompositorFrameSink.
+  if (main().waiting_for_compositor_frame_sink_initialization) {
+    VLOG(1) << "Queueing message proto since CompositorFrameSink was released.";
     main().pending_messages.push(proto->to_impl());
   } else {
     HandleProto(proto->to_impl());
@@ -68,23 +65,11 @@ void RemoteChannelImpl::HandleProto(
     const proto::CompositorMessageToImpl& proto) {
   DCHECK(task_runner_provider_->IsMainThread());
   DCHECK(proto.has_message_type());
-  DCHECK(!main().waiting_for_output_surface_initialization);
+  DCHECK(!main().waiting_for_compositor_frame_sink_initialization);
 
   switch (proto.message_type()) {
     case proto::CompositorMessageToImpl::UNKNOWN:
       NOTIMPLEMENTED() << "Ignoring message of UNKNOWN type";
-      break;
-    case proto::CompositorMessageToImpl::INITIALIZE_IMPL:
-      NOTREACHED() << "Should be handled by the embedder";
-      break;
-    case proto::CompositorMessageToImpl::CLOSE_IMPL:
-      NOTREACHED() << "Should be handled by the embedder";
-      break;
-    case proto::CompositorMessageToImpl::
-        MAIN_THREAD_HAS_STOPPED_FLINGING_ON_IMPL:
-      ImplThreadTaskRunner()->PostTask(
-          FROM_HERE, base::Bind(&ProxyImpl::MainThreadHasStoppedFlingingOnImpl,
-                                proxy_impl_weak_ptr_));
       break;
     case proto::CompositorMessageToImpl::SET_NEEDS_COMMIT:
       VLOG(1) << "Received commit request from the engine.";
@@ -159,29 +144,30 @@ bool RemoteChannelImpl::CommitToActiveTree() const {
   return false;
 }
 
-void RemoteChannelImpl::SetOutputSurface(OutputSurface* output_surface) {
+void RemoteChannelImpl::SetCompositorFrameSink(
+    CompositorFrameSink* compositor_frame_sink) {
   DCHECK(task_runner_provider_->IsMainThread());
 
   ImplThreadTaskRunner()->PostTask(
-      FROM_HERE, base::Bind(&ProxyImpl::InitializeOutputSurfaceOnImpl,
-                            proxy_impl_weak_ptr_, output_surface));
+      FROM_HERE, base::Bind(&ProxyImpl::InitializeCompositorFrameSinkOnImpl,
+                            proxy_impl_weak_ptr_, compositor_frame_sink));
 }
 
-void RemoteChannelImpl::ReleaseOutputSurface() {
+void RemoteChannelImpl::ReleaseCompositorFrameSink() {
   DCHECK(task_runner_provider_->IsMainThread());
-  DCHECK(!main().waiting_for_output_surface_initialization);
-  VLOG(1) << "Releasing Output Surface";
+  DCHECK(!main().waiting_for_compositor_frame_sink_initialization);
+  VLOG(1) << "Releasing CompositorFrameSink";
 
   {
     CompletionEvent completion;
     DebugScopedSetMainThreadBlocked main_thread_blocked(task_runner_provider_);
     ImplThreadTaskRunner()->PostTask(
-        FROM_HERE, base::Bind(&ProxyImpl::ReleaseOutputSurfaceOnImpl,
+        FROM_HERE, base::Bind(&ProxyImpl::ReleaseCompositorFrameSinkOnImpl,
                               proxy_impl_weak_ptr_, &completion));
     completion.Wait();
   }
 
-  main().waiting_for_output_surface_initialization = true;
+  main().waiting_for_compositor_frame_sink_initialization = true;
 }
 
 void RemoteChannelImpl::SetVisible(bool visible) {
@@ -203,10 +189,10 @@ void RemoteChannelImpl::SetNeedsUpdateLayers() {
 
 void RemoteChannelImpl::SetNeedsCommit() {
   // Ideally commits should be requested only on the server. But we have to
-  // allow this call since the LayerTreeHost will currently ask for a commit in
-  // 2 cases:
+  // allow this call since the LayerTreeHostInProcesswill currently ask for a
+  // commit in 2 cases:
   // 1) When it is being initialized from a protobuf for a commit.
-  // 2) When it loses the output surface.
+  // 2) When it loses the CompositorFrameSink.
   NOTIMPLEMENTED() << "Commits should not be requested on the client";
 }
 
@@ -240,11 +226,9 @@ bool RemoteChannelImpl::BeginMainFrameRequested() const {
   return false;
 }
 
-void RemoteChannelImpl::Start(
-    std::unique_ptr<BeginFrameSource> external_begin_frame_source) {
+void RemoteChannelImpl::Start() {
   DCHECK(task_runner_provider_->IsMainThread());
   DCHECK(!main().started);
-  DCHECK(!external_begin_frame_source);
 
   CompletionEvent completion;
   {
@@ -331,28 +315,30 @@ void RemoteChannelImpl::DidCommitAndDrawFrame() {
 void RemoteChannelImpl::SetAnimationEvents(
     std::unique_ptr<AnimationEvents> queue) {}
 
-void RemoteChannelImpl::DidLoseOutputSurface() {
-  DCHECK(task_runner_provider_->IsImplThread());
-
-  MainThreadTaskRunner()->PostTask(
-      FROM_HERE, base::Bind(&RemoteChannelImpl::DidLoseOutputSurfaceOnMain,
-                            impl().remote_channel_weak_ptr));
-}
-
-void RemoteChannelImpl::RequestNewOutputSurface() {
-  DCHECK(task_runner_provider_->IsImplThread());
-
-  MainThreadTaskRunner()->PostTask(
-      FROM_HERE, base::Bind(&RemoteChannelImpl::RequestNewOutputSurfaceOnMain,
-                            impl().remote_channel_weak_ptr));
-}
-
-void RemoteChannelImpl::DidInitializeOutputSurface(bool success) {
+void RemoteChannelImpl::DidLoseCompositorFrameSink() {
   DCHECK(task_runner_provider_->IsImplThread());
 
   MainThreadTaskRunner()->PostTask(
       FROM_HERE,
-      base::Bind(&RemoteChannelImpl::DidInitializeOutputSurfaceOnMain,
+      base::Bind(&RemoteChannelImpl::DidLoseCompositorFrameSinkOnMain,
+                 impl().remote_channel_weak_ptr));
+}
+
+void RemoteChannelImpl::RequestNewCompositorFrameSink() {
+  DCHECK(task_runner_provider_->IsImplThread());
+
+  MainThreadTaskRunner()->PostTask(
+      FROM_HERE,
+      base::Bind(&RemoteChannelImpl::RequestNewCompositorFrameSinkOnMain,
+                 impl().remote_channel_weak_ptr));
+}
+
+void RemoteChannelImpl::DidInitializeCompositorFrameSink(bool success) {
+  DCHECK(task_runner_provider_->IsImplThread());
+
+  MainThreadTaskRunner()->PostTask(
+      FROM_HERE,
+      base::Bind(&RemoteChannelImpl::DidInitializeCompositorFrameSinkOnMain,
                  impl().remote_channel_weak_ptr, success));
 }
 
@@ -394,41 +380,41 @@ void RemoteChannelImpl::DidCommitAndDrawFrameOnMain() {
   main().layer_tree_host->DidCommitAndDrawFrame();
 }
 
-void RemoteChannelImpl::DidLoseOutputSurfaceOnMain() {
+void RemoteChannelImpl::DidLoseCompositorFrameSinkOnMain() {
   DCHECK(task_runner_provider_->IsMainThread());
 
-  main().layer_tree_host->DidLoseOutputSurface();
+  main().layer_tree_host->DidLoseCompositorFrameSink();
 }
 
-void RemoteChannelImpl::RequestNewOutputSurfaceOnMain() {
+void RemoteChannelImpl::RequestNewCompositorFrameSinkOnMain() {
   DCHECK(task_runner_provider_->IsMainThread());
 
-  main().layer_tree_host->RequestNewOutputSurface();
+  main().layer_tree_host->RequestNewCompositorFrameSink();
 }
 
-void RemoteChannelImpl::DidInitializeOutputSurfaceOnMain(bool success) {
+void RemoteChannelImpl::DidInitializeCompositorFrameSinkOnMain(bool success) {
   DCHECK(task_runner_provider_->IsMainThread());
 
   if (!success) {
-    main().layer_tree_host->DidFailToInitializeOutputSurface();
+    main().layer_tree_host->DidFailToInitializeCompositorFrameSink();
     return;
   }
 
-  VLOG(1) << "OutputSurface initialized successfully";
-  main().layer_tree_host->DidInitializeOutputSurface();
+  VLOG(1) << "CompositorFrameSink initialized successfully";
+  main().layer_tree_host->DidInitializeCompositorFrameSink();
 
-  // If we were waiting for output surface initialization, we might have queued
-  // some messages. Relay them now that a new output surface has been
-  // initialized.
-  main().waiting_for_output_surface_initialization = false;
+  // If we were waiting for CompositorFrameSink initialization, we might have
+  // queued some messages. Relay them now that a new CompositorFrameSink has
+  // been initialized.
+  main().waiting_for_compositor_frame_sink_initialization = false;
   while (!main().pending_messages.empty()) {
     VLOG(1) << "Handling queued message";
     HandleProto(main().pending_messages.front());
     main().pending_messages.pop();
   }
 
-  // The commit after a new output surface can early out, in which case we will
-  // never redraw. Schedule one just to be safe.
+  // The commit after a new CompositorFrameSink can early out, in which case we
+  // will never redraw. Schedule one just to be safe.
   PostSetNeedsRedrawToImpl(gfx::Rect(
       main().layer_tree_host->GetLayerTree()->device_viewport_size()));
 }
@@ -450,13 +436,14 @@ void RemoteChannelImpl::PostSetNeedsRedrawToImpl(
                             proxy_impl_weak_ptr_, damaged_rect));
 }
 
-void RemoteChannelImpl::InitializeImplOnImpl(CompletionEvent* completion,
-                                             LayerTreeHost* layer_tree_host) {
+void RemoteChannelImpl::InitializeImplOnImpl(
+    CompletionEvent* completion,
+    LayerTreeHostInProcess* layer_tree_host) {
   DCHECK(task_runner_provider_->IsMainThreadBlocked());
   DCHECK(task_runner_provider_->IsImplThread());
 
   impl().proxy_impl =
-      CreateProxyImpl(this, layer_tree_host, task_runner_provider_, nullptr);
+      CreateProxyImpl(this, layer_tree_host, task_runner_provider_);
   impl().proxy_impl_weak_factory =
       base::MakeUnique<base::WeakPtrFactory<ProxyImpl>>(
           impl().proxy_impl.get());
@@ -507,12 +494,12 @@ base::SingleThreadTaskRunner* RemoteChannelImpl::ImplThreadTaskRunner() const {
 
 RemoteChannelImpl::MainThreadOnly::MainThreadOnly(
     RemoteChannelImpl* remote_channel_impl,
-    LayerTreeHost* layer_tree_host,
+    LayerTreeHostInProcess* layer_tree_host,
     RemoteProtoChannel* remote_proto_channel)
     : layer_tree_host(layer_tree_host),
       remote_proto_channel(remote_proto_channel),
       started(false),
-      waiting_for_output_surface_initialization(false),
+      waiting_for_compositor_frame_sink_initialization(false),
       remote_channel_weak_factory(remote_channel_impl) {
   DCHECK(layer_tree_host);
   DCHECK(remote_proto_channel);

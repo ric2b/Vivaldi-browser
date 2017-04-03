@@ -4,11 +4,11 @@
 
 #include "ash/shared/immersive_fullscreen_controller.h"
 
-#include "ash/common/shelf/shelf_types.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/display/display_manager.h"
 #include "ash/display/mouse_cursor_event_filter.h"
+#include "ash/public/cpp/shelf_types.h"
 #include "ash/root_window_controller.h"
 #include "ash/shared/immersive_fullscreen_controller_delegate.h"
 #include "ash/shell.h"
@@ -354,8 +354,8 @@ TEST_F(ImmersiveFullscreenControllerTest, OnMouseEvent) {
                           top_container_bounds_in_screen.y());
 
   // Mouse wheel event does nothing.
-  ui::MouseEvent wheel(ui::ET_MOUSEWHEEL, top_edge_pos, top_edge_pos,
-                       ui::EventTimeForNow(), ui::EF_NONE, ui::EF_NONE);
+  ui::MouseWheelEvent wheel(gfx::Vector2d(), top_edge_pos, top_edge_pos,
+                            ui::EventTimeForNow(), ui::EF_NONE, ui::EF_NONE);
   event_generator.Dispatch(&wheel);
   EXPECT_FALSE(top_edge_hover_timer_running());
 
@@ -502,7 +502,8 @@ TEST_F(ImmersiveFullscreenControllerTest, MouseEventsVerticalDisplayLayout) {
   // Set up initial state.
   UpdateDisplay("800x600,800x600");
   ash::Shell::GetInstance()->display_manager()->SetLayoutForCurrentDisplays(
-      test::CreateDisplayLayout(display::DisplayPlacement::TOP, 0));
+      test::CreateDisplayLayout(display_manager(),
+                                display::DisplayPlacement::TOP, 0));
 
   SetEnabled(true);
   ASSERT_TRUE(controller()->IsEnabled());

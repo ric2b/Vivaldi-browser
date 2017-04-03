@@ -79,17 +79,22 @@ GURL GetVivaldiNewTabURL() {
 }
 
 #if defined(OS_WIN)
-const int kWinSparkleInitDelaySecs = 20;
+const int kWinSparkleInitDelaySecs = 30;
 
 void WinSparkleCheckForUpdates() {
-  win_sparkle_check_update_without_ui();
+  const int interval_secs = win_sparkle_get_update_check_interval();
+  const time_t last_check_time = win_sparkle_get_last_check_time();
+  const time_t current_time = time(NULL);
 
-  int interval_secs = win_sparkle_get_update_check_interval();
-  base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
+  // Only check for updates in reasonable intervals.
+  if (current_time - last_check_time >= interval_secs) {
+    win_sparkle_check_update_without_ui();
+  }
+
+  base::MessageLoop::current()->task_runner()->PostDelayedTask(FROM_HERE,
       base::Bind(&WinSparkleCheckForUpdates),
       base::TimeDelta::FromSeconds(interval_secs));
 }
-
 #endif
 
 //#define _DEBUG_AUTOUPDATE
@@ -190,7 +195,7 @@ bool LaunchVivaldi(const base::CommandLine &command_line,
       if (key.Valid())
         key.ReadValue(kEnabled, &enabled);
       if (enabled == L"1") {
-        base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
+        base::MessageLoop::current()->task_runner()->PostDelayedTask(FROM_HERE,
           base::Bind(&WinSparkleCheckForUpdates),
           base::TimeDelta::FromSeconds(kWinSparkleInitDelaySecs));
       }
@@ -207,7 +212,8 @@ bool LaunchVivaldi(const base::CommandLine &command_line,
   }
 
   AppLaunchParams params(profile, extension,
-                          extensions::LAUNCH_CONTAINER_NONE, NEW_WINDOW,
+                          extensions::LAUNCH_CONTAINER_NONE,
+                          WindowOpenDisposition::NEW_WINDOW,
                           extensions::SOURCE_EXTENSIONS_PAGE);
   params.command_line = command_line;
   params.current_directory = cur_dir;

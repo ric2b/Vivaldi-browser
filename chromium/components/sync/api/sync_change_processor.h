@@ -20,6 +20,8 @@ namespace syncer {
 
 class SyncChange;
 
+class LocalChangeObserver;
+
 typedef std::vector<SyncChange> SyncChangeList;
 
 // An interface for services that handle receiving SyncChanges.
@@ -71,10 +73,15 @@ class SyncChangeProcessor {
   // that can affect all SyncData sent to/from the server, much like a cookie.
   // TODO(zea): consider pulling the refresh logic into a separate method
   // unrelated to datatype implementations.
-  virtual syncer::SyncError UpdateDataTypeContext(
-      ModelType type,
-      ContextRefreshStatus refresh_status,
-      const std::string& context);
+  virtual SyncError UpdateDataTypeContext(ModelType type,
+                                          ContextRefreshStatus refresh_status,
+                                          const std::string& context);
+
+  // Adds an observer of local sync changes. This observer is notified when
+  // local sync changes are applied by GenericChangeProcessor. observer is
+  // not owned by the SyncChangeProcessor.
+  virtual void AddLocalChangeObserver(LocalChangeObserver* observer);
+  virtual void RemoveLocalChangeObserver(LocalChangeObserver* observer);
 };
 
 }  // namespace syncer

@@ -112,26 +112,7 @@ void OmniboxView::SetUserText(const base::string16& text,
   SetWindowTextAndCaretPos(text, text.length(), update_popup, true);
 }
 
-void OmniboxView::ShowURL() {
-  SetFocus();
-  controller_->GetToolbarModel()->set_url_replacement_enabled(false);
-  model_->UpdatePermanentText();
-  RevertWithoutResettingSearchTermReplacement();
-  SelectAll(true);
-}
-
-void OmniboxView::HideURL() {
-  controller_->GetToolbarModel()->set_url_replacement_enabled(true);
-  model_->UpdatePermanentText();
-  RevertWithoutResettingSearchTermReplacement();
-}
-
 void OmniboxView::RevertAll() {
-  controller_->GetToolbarModel()->set_url_replacement_enabled(true);
-  RevertWithoutResettingSearchTermReplacement();
-}
-
-void OmniboxView::RevertWithoutResettingSearchTermReplacement() {
   CloseOmniboxPopup();
   if (model_.get())
     model_->Revert();

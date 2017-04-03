@@ -9,20 +9,17 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "components/sync/api/data_type_error_handler.h"
 #include "components/sync/base/model_type.h"
 
 namespace syncer {
+
 class AttachmentService;
-class DataTypeErrorHandler;
-class SyncableService;
-class SyncMergeResult;
-struct UserShare;
-}
-
-namespace sync_driver {
-
 class GenericChangeProcessor;
 class SyncClient;
+class SyncMergeResult;
+class SyncableService;
+struct UserShare;
 
 // Because GenericChangeProcessors are created and used only from the model
 // thread, their lifetime is strictly shorter than other components like
@@ -38,17 +35,17 @@ class GenericChangeProcessorFactory {
   GenericChangeProcessorFactory();
   virtual ~GenericChangeProcessorFactory();
   virtual std::unique_ptr<GenericChangeProcessor> CreateGenericChangeProcessor(
-      syncer::ModelType type,
-      syncer::UserShare* user_share,
-      syncer::DataTypeErrorHandler* error_handler,
-      const base::WeakPtr<syncer::SyncableService>& local_service,
-      const base::WeakPtr<syncer::SyncMergeResult>& merge_result,
+      ModelType type,
+      UserShare* user_share,
+      std::unique_ptr<DataTypeErrorHandler> error_handler,
+      const base::WeakPtr<SyncableService>& local_service,
+      const base::WeakPtr<SyncMergeResult>& merge_result,
       SyncClient* sync_client);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(GenericChangeProcessorFactory);
 };
 
-}  // namespace sync_driver
+}  // namespace syncer
 
 #endif  // COMPONENTS_SYNC_DRIVER_GENERIC_CHANGE_PROCESSOR_FACTORY_H_

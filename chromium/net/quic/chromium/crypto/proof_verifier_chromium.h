@@ -16,7 +16,7 @@
 #include "net/cert/cert_verify_result.h"
 #include "net/cert/ct_verify_result.h"
 #include "net/cert/x509_certificate.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 #include "net/quic/core/crypto/proof_verifier.h"
 
 namespace net {
@@ -54,11 +54,12 @@ class NET_EXPORT_PRIVATE ProofVerifyDetailsChromium
 // ProofVerifierChromium needs in order to log correctly.
 struct ProofVerifyContextChromium : public ProofVerifyContext {
  public:
-  ProofVerifyContextChromium(int cert_verify_flags, const BoundNetLog& net_log)
+  ProofVerifyContextChromium(int cert_verify_flags,
+                             const NetLogWithSource& net_log)
       : cert_verify_flags(cert_verify_flags), net_log(net_log) {}
 
   int cert_verify_flags;
-  BoundNetLog net_log;
+  NetLogWithSource net_log;
 };
 
 // ProofVerifierChromium implements the QUIC ProofVerifier interface.  It is

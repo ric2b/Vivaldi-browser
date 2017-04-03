@@ -100,30 +100,30 @@ class UnicodeRangeSet;
 // one for Latin U+00-U+FF and one unrestricted unicode-range.
 //
 // FontFallbackIterator provides the shaper with Heiti SC, then Tinos of the
-// restricted unicode-range, then the unrestricted full unicode-range Tinos, then
-// a system sans-serif.
+// restricted unicode-range, then the unrestricted full unicode-range Tinos,
+// then a system sans-serif.
 //
 // The initial segment 0-2 to the shaper, together with the segmentation
 // properties and the initial Heiti SC font. Characters 0-2 are shaped
-// successfully with Heiti SC. The next segment, 3-5 is passed to the shaper. The
-// shaper attempts to shape it with Heiti SC, which fails for the Combining
+// successfully with Heiti SC. The next segment, 3-5 is passed to the shaper.
+// The shaper attempts to shape it with Heiti SC, which fails for the Combining
 // Macron. So the shaping result for this segment would look similar to this.
 //
 // Glyphpos: 0 1 2 3
 // Cluster:  0 0 2 3
 // Glyph:    a x a A (where x is .notdef)
 //
-// Now in the extractShapeResults() step we notice that there is more work to do,
-// since Heiti SC does not have a glyph for the Combining Macron combined with an
-// a. So, this cluster together with a Todo item for switching to the next font
-// is put into HolesQueue.
+// Now in the extractShapeResults() step we notice that there is more work to
+// do, since Heiti SC does not have a glyph for the Combining Macron combined
+// with an a. So, this cluster together with a Todo item for switching to the
+// next font is put into HolesQueue.
 //
 // After shaping the initial segment, the remaining items in the HolesQueue are
 // processed, picking them from the head of the queue. So, first, the next font
-// is requested from the FontFallbackIterator. In this case, Tinos (for the range
-// U+00-U+FF) comes back. Shaping using this font, assuming it is subsetted,
-// fails again since there is no combining mark available. This triggers
-// requesting yet another font. This time, the Tinos font for the full
+// is requested from the FontFallbackIterator. In this case, Tinos (for the
+// range U+00-U+FF) comes back. Shaping using this font, assuming it is
+// subsetted, fails again since there is no combining mark available. This
+// triggers requesting yet another font. This time, the Tinos font for the full
 // range. With this, shaping succeeds with the following HarfBuzz result:
 //
 //  Glyphpos 0 1 2 3
@@ -138,80 +138,82 @@ class UnicodeRangeSet;
 // Shaping then continues analogously for the remaining Hiragana Japanese
 // sub-run, and the result is inserted into ShapeResult as well.
 class PLATFORM_EXPORT HarfBuzzShaper final : public Shaper {
-public:
-    HarfBuzzShaper(const Font*, const TextRun&);
-    PassRefPtr<ShapeResult> shapeResult();
-    ~HarfBuzzShaper() { }
+ public:
+  HarfBuzzShaper(const Font*, const TextRun&);
+  PassRefPtr<ShapeResult> shapeResult();
+  ~HarfBuzzShaper() {}
 
-    enum HolesQueueItemAction {
-        HolesQueueNextFont,
-        HolesQueueRange
-    };
+  enum HolesQueueItemAction { HolesQueueNextFont, HolesQueueRange };
 
-    struct HolesQueueItem {
-        DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
-        HolesQueueItemAction m_action;
-        unsigned m_startIndex;
-        unsigned m_numCharacters;
-        HolesQueueItem(HolesQueueItemAction action, unsigned start, unsigned num)
-            : m_action(action)
-            , m_startIndex(start)
-            , m_numCharacters(num) {};
-    };
+  struct HolesQueueItem {
+    DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+    HolesQueueItemAction m_action;
+    unsigned m_startIndex;
+    unsigned m_numCharacters;
+    HolesQueueItem(HolesQueueItemAction action, unsigned start, unsigned num)
+        : m_action(action), m_startIndex(start), m_numCharacters(num){};
+  };
 
-protected:
-    using FeaturesVector = Vector<hb_feature_t, 6>;
+ protected:
+  using FeaturesVector = Vector<hb_feature_t, 6>;
 
-    class CapsFeatureSettingsScopedOverlay final {
-        STACK_ALLOCATED()
+  class CapsFeatureSettingsScopedOverlay final {
+    STACK_ALLOCATED()
 
-    public:
-        CapsFeatureSettingsScopedOverlay(FeaturesVector&, FontDescription::FontVariantCaps);
-        CapsFeatureSettingsScopedOverlay() = delete;
-        ~CapsFeatureSettingsScopedOverlay();
-    private:
-        void overlayCapsFeatures(FontDescription::FontVariantCaps);
-        void prependCounting(const hb_feature_t&);
-        FeaturesVector& m_features;
-        size_t m_countFeatures;
-    };
+   public:
+    CapsFeatureSettingsScopedOverlay(FeaturesVector&,
+                                     FontDescription::FontVariantCaps);
+    CapsFeatureSettingsScopedOverlay() = delete;
+    ~CapsFeatureSettingsScopedOverlay();
 
-private:
-    void setFontFeatures();
+   private:
+    void overlayCapsFeatures(FontDescription::FontVariantCaps);
+    void prependCounting(const hb_feature_t&);
+    FeaturesVector& m_features;
+    size_t m_countFeatures;
+  };
 
-    void appendToHolesQueue(HolesQueueItemAction,
-        unsigned startIndex,
-        unsigned numCharacters);
-    void prependHolesQueue(HolesQueueItemAction,
-        unsigned startIndex,
-        unsigned numCharacters);
-    void splitUntilNextCaseChange(HolesQueueItem& currentQueueItem, SmallCapsIterator::SmallCapsBehavior&);
-    inline bool shapeRange(hb_buffer_t* harfBuzzBuffer,
-        unsigned startIndex,
-        unsigned numCharacters,
-        const SimpleFontData* currentFont,
-        PassRefPtr<UnicodeRangeSet> currentFontRangeSet,
-        UScriptCode currentRunScript,
-        hb_language_t);
-    bool extractShapeResults(hb_buffer_t* harfBuzzBuffer,
-        ShapeResult*,
-        bool& fontCycleQueued,
-        const HolesQueueItem& currentQueueItem,
-        const SimpleFontData* currentFont,
-        UScriptCode currentRunScript,
-        bool isLastResort);
-    bool collectFallbackHintChars(Vector<UChar32>& hint);
+ private:
+  void setFontFeatures();
 
-    void insertRunIntoShapeResult(ShapeResult*, std::unique_ptr<ShapeResult::RunInfo> runToInsert, unsigned startGlyph, unsigned numGlyphs, hb_buffer_t*);
+  void appendToHolesQueue(HolesQueueItemAction,
+                          unsigned startIndex,
+                          unsigned numCharacters);
+  void prependHolesQueue(HolesQueueItemAction,
+                         unsigned startIndex,
+                         unsigned numCharacters);
+  void splitUntilNextCaseChange(HolesQueueItem& currentQueueItem,
+                                SmallCapsIterator::SmallCapsBehavior&);
+  inline bool shapeRange(hb_buffer_t* harfBuzzBuffer,
+                         unsigned startIndex,
+                         unsigned numCharacters,
+                         const SimpleFontData* currentFont,
+                         PassRefPtr<UnicodeRangeSet> currentFontRangeSet,
+                         UScriptCode currentRunScript,
+                         hb_language_t);
+  bool extractShapeResults(hb_buffer_t* harfBuzzBuffer,
+                           ShapeResult*,
+                           bool& fontCycleQueued,
+                           const HolesQueueItem& currentQueueItem,
+                           const SimpleFontData* currentFont,
+                           UScriptCode currentRunScript,
+                           bool isLastResort);
+  bool collectFallbackHintChars(Vector<UChar32>& hint);
 
-    std::unique_ptr<UChar[]> m_normalizedBuffer;
-    unsigned m_normalizedBufferLength;
+  void insertRunIntoShapeResult(
+      ShapeResult*,
+      std::unique_ptr<ShapeResult::RunInfo> runToInsert,
+      unsigned startGlyph,
+      unsigned numGlyphs,
+      hb_buffer_t*);
 
-    FeaturesVector m_features;
-    Deque<HolesQueueItem> m_holesQueue;
+  std::unique_ptr<UChar[]> m_normalizedBuffer;
+  unsigned m_normalizedBufferLength;
+
+  FeaturesVector m_features;
+  Deque<HolesQueueItem> m_holesQueue;
 };
 
+}  // namespace blink
 
-} // namespace blink
-
-#endif // HarfBuzzShaper_h
+#endif  // HarfBuzzShaper_h

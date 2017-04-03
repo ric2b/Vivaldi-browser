@@ -1,8 +1,9 @@
-<link rel="import" href="chrome://resources/html/polymer.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-input/paper-input-container.html">
 <link rel="import" href="chrome://resources/cr_elements/network/cr_onc_types.html">
 <link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_network_behavior.html">
 <link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_network_indicator.html">
+<link rel="import" href="chrome://resources/html/i18n_behavior.html">
+<link rel="import" href="chrome://resources/html/polymer.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-input/paper-input-container.html">
 <link rel="import" href="internet_shared_css.html">
 
 <dom-module name="network-property-list">
@@ -12,25 +13,35 @@
         margin-bottom: -12px;
         margin-top: -8px;
       }
+
+      /* Property lists are embedded; stretch the box and remove the padding. */
+      .settings-box {
+        align-items: stretch;
+        padding: 0;
+      }
+
+      .settings-box:first-of-type {
+        border-top: none;
+      }
     </style>
     <template is="dom-repeat" items="[[fields]]"
         filter="[[computeFilter_(propertyDict, editFieldTypes)]]">
-      <div class="settings-box single-column">
+      <div class="settings-box single-column two-line">
         <!-- Propety label -->
-        <div>[[getPropertyLabel_(item)]]</div>
+        <div>[[getPropertyLabel_(item, prefix)]]</div>
         <!-- Uneditable property value -->
         <div class="layout horizontal"
-            hidden$="[[isEditable_(propertyDict, editFieldTypes, item, '')]]">
-          <div class="secondary">[[getPropertyValue_(propertyDict, item)]]</div>
+            hidden$="[[isEditable_(item, '', propertyDict, editFieldTypes)]]">
+          <div class="secondary">[[getPropertyValue_(item, propertyDict)]]</div>
           <cr-policy-network-indicator property="[[propertyDict]]">
           </cr-policy-network-indicator>
         </div>
         <!-- Editable string property value -->
         <div class="layout horizontal" hidden$="[[!isEditable_(
-            propertyDict, editFieldTypes, item, 'String')]]">
+            item, 'String', propertyDict, editFieldTypes)]]">
           <paper-input-container no-label-float>
-            <input class="embedded-input" id="[[item]]" is="iron-input"
-                value="[[getPropertyValue_(propertyDict, item)]]"
+            <input id="[[item]]" is="iron-input"
+                value="[[getPropertyValue_(item, propertyDict)]]"
                 on-blur="onValueChange_">
           </paper-input-container>
         </div>

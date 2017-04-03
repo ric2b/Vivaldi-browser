@@ -1209,7 +1209,7 @@ struct ClientWaitSync {
     return NextCmdAddress<ValueType>(cmd);
   }
 
-  GLuint64 timeout() const {
+  GLuint64 timeout() const volatile {
     return static_cast<GLuint64>(
         GLES2Util::MapTwoUint32ToUint64(timeout_0, timeout_1));
   }
@@ -10768,7 +10768,7 @@ struct WaitSync {
     return NextCmdAddress<ValueType>(cmd);
   }
 
-  GLuint64 timeout() const {
+  GLuint64 timeout() const volatile {
     return static_cast<GLuint64>(
         GLES2Util::MapTwoUint32ToUint64(timeout_0, timeout_1));
   }
@@ -11990,6 +11990,47 @@ static_assert(offsetof(UnmapBuffer, header) == 0,
               "offset of UnmapBuffer header should be 0");
 static_assert(offsetof(UnmapBuffer, target) == 4,
               "offset of UnmapBuffer target should be 4");
+
+struct FlushMappedBufferRange {
+  typedef FlushMappedBufferRange ValueType;
+  static const CommandId kCmdId = kFlushMappedBufferRange;
+  static const cmd::ArgFlags kArgFlags = cmd::kFixed;
+  static const uint8_t cmd_flags = CMD_FLAG_SET_TRACE_LEVEL(1);
+
+  static uint32_t ComputeSize() {
+    return static_cast<uint32_t>(sizeof(ValueType));  // NOLINT
+  }
+
+  void SetHeader() { header.SetCmd<ValueType>(); }
+
+  void Init(GLenum _target, GLintptr _offset, GLsizeiptr _size) {
+    SetHeader();
+    target = _target;
+    offset = _offset;
+    size = _size;
+  }
+
+  void* Set(void* cmd, GLenum _target, GLintptr _offset, GLsizeiptr _size) {
+    static_cast<ValueType*>(cmd)->Init(_target, _offset, _size);
+    return NextCmdAddress<ValueType>(cmd);
+  }
+
+  gpu::CommandHeader header;
+  uint32_t target;
+  int32_t offset;
+  int32_t size;
+};
+
+static_assert(sizeof(FlushMappedBufferRange) == 16,
+              "size of FlushMappedBufferRange should be 16");
+static_assert(offsetof(FlushMappedBufferRange, header) == 0,
+              "offset of FlushMappedBufferRange header should be 0");
+static_assert(offsetof(FlushMappedBufferRange, target) == 4,
+              "offset of FlushMappedBufferRange target should be 4");
+static_assert(offsetof(FlushMappedBufferRange, offset) == 8,
+              "offset of FlushMappedBufferRange offset should be 8");
+static_assert(offsetof(FlushMappedBufferRange, size) == 12,
+              "offset of FlushMappedBufferRange size should be 12");
 
 struct ResizeCHROMIUM {
   typedef ResizeCHROMIUM ValueType;
@@ -13215,7 +13256,7 @@ struct InsertFenceSyncCHROMIUM {
     return NextCmdAddress<ValueType>(cmd);
   }
 
-  GLuint64 release_count() const {
+  GLuint64 release_count() const volatile {
     return static_cast<GLuint64>(
         GLES2Util::MapTwoUint32ToUint64(release_count_0, release_count_1));
   }
@@ -13266,12 +13307,12 @@ struct WaitSyncTokenCHROMIUM {
     return NextCmdAddress<ValueType>(cmd);
   }
 
-  GLuint64 command_buffer_id() const {
+  GLuint64 command_buffer_id() const volatile {
     return static_cast<GLuint64>(GLES2Util::MapTwoUint32ToUint64(
         command_buffer_id_0, command_buffer_id_1));
   }
 
-  GLuint64 release_count() const {
+  GLuint64 release_count() const volatile {
     return static_cast<GLuint64>(
         GLES2Util::MapTwoUint32ToUint64(release_count_0, release_count_1));
   }
@@ -15450,5 +15491,50 @@ static_assert(offsetof(UniformMatrix4fvStreamTextureMatrixCHROMIUMImmediate,
                        transpose) == 8,
               "offset of UniformMatrix4fvStreamTextureMatrixCHROMIUMImmediate "
               "transpose should be 8");
+
+struct SwapBuffersWithDamageCHROMIUM {
+  typedef SwapBuffersWithDamageCHROMIUM ValueType;
+  static const CommandId kCmdId = kSwapBuffersWithDamageCHROMIUM;
+  static const cmd::ArgFlags kArgFlags = cmd::kFixed;
+  static const uint8_t cmd_flags = CMD_FLAG_SET_TRACE_LEVEL(3);
+
+  static uint32_t ComputeSize() {
+    return static_cast<uint32_t>(sizeof(ValueType));  // NOLINT
+  }
+
+  void SetHeader() { header.SetCmd<ValueType>(); }
+
+  void Init(GLint _x, GLint _y, GLint _width, GLint _height) {
+    SetHeader();
+    x = _x;
+    y = _y;
+    width = _width;
+    height = _height;
+  }
+
+  void* Set(void* cmd, GLint _x, GLint _y, GLint _width, GLint _height) {
+    static_cast<ValueType*>(cmd)->Init(_x, _y, _width, _height);
+    return NextCmdAddress<ValueType>(cmd);
+  }
+
+  gpu::CommandHeader header;
+  int32_t x;
+  int32_t y;
+  int32_t width;
+  int32_t height;
+};
+
+static_assert(sizeof(SwapBuffersWithDamageCHROMIUM) == 20,
+              "size of SwapBuffersWithDamageCHROMIUM should be 20");
+static_assert(offsetof(SwapBuffersWithDamageCHROMIUM, header) == 0,
+              "offset of SwapBuffersWithDamageCHROMIUM header should be 0");
+static_assert(offsetof(SwapBuffersWithDamageCHROMIUM, x) == 4,
+              "offset of SwapBuffersWithDamageCHROMIUM x should be 4");
+static_assert(offsetof(SwapBuffersWithDamageCHROMIUM, y) == 8,
+              "offset of SwapBuffersWithDamageCHROMIUM y should be 8");
+static_assert(offsetof(SwapBuffersWithDamageCHROMIUM, width) == 12,
+              "offset of SwapBuffersWithDamageCHROMIUM width should be 12");
+static_assert(offsetof(SwapBuffersWithDamageCHROMIUM, height) == 16,
+              "offset of SwapBuffersWithDamageCHROMIUM height should be 16");
 
 #endif  // GPU_COMMAND_BUFFER_COMMON_GLES2_CMD_FORMAT_AUTOGEN_H_

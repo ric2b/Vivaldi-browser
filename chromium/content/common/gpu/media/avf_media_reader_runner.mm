@@ -82,7 +82,7 @@ AVFMediaReaderRunner::~AVFMediaReaderRunner() {
 
 // static
 bool AVFMediaReaderRunner::IsAvailable() {
-  return base::mac::IsOSYosemiteOrLater();
+  return base::mac::IsAtLeastOS10_10();
 }
 
 void AVFMediaReaderRunner::Initialize(const std::string& mime_type,

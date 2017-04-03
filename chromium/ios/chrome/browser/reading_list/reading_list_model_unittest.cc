@@ -2,15 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/bind.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_impl.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
 
+const GURL callback_url("http://example.com");
+const std::string callback_title("test title");
+
 class ReadingListModelTest : public ReadingListModelObserver,
                              public testing::Test {
  public:
-  ReadingListModelTest() : model_(new ReadingListModelImpl()) {
+  ReadingListModelTest()
+      : callback_called_(false), model_(new ReadingListModelImpl()) {
     ClearCounts();
     model_->AddObserver(this);
   }
@@ -98,6 +103,13 @@ class ReadingListModelTest : public ReadingListModelObserver,
   void ReadingListDidApplyChanges(ReadingListModel* model) override {
     observer_did_apply_ += 1;
   }
+  void Callback(const ReadingListEntry& entry) {
+    EXPECT_EQ(callback_url, entry.URL());
+    EXPECT_EQ(callback_title, entry.Title());
+    callback_called_ = true;
+  }
+
+  bool CallbackCalled() { return callback_called_; }
 
  protected:
   int observer_loaded_;
@@ -112,6 +124,7 @@ class ReadingListModelTest : public ReadingListModelObserver,
   int observer_update_unread_;
   int observer_update_read_;
   int observer_did_apply_;
+  bool callback_called_;
 
   std::unique_ptr<ReadingListModelImpl> model_;
 };
@@ -128,7 +141,7 @@ TEST_F(ReadingListModelTest, EmptyLoaded) {
 
 TEST_F(ReadingListModelTest, AddEntry) {
   ClearCounts();
-  const ReadingListEntry entry =
+  const ReadingListEntry& entry =
       model_->AddEntry(GURL("http://example.com"), "sample");
   EXPECT_EQ(GURL("http://example.com"), entry.URL());
   EXPECT_EQ("sample", entry.Title());
@@ -138,14 +151,13 @@ TEST_F(ReadingListModelTest, AddEntry) {
   EXPECT_EQ(0ul, model_->read_size());
   EXPECT_TRUE(model_->HasUnseenEntries());
 
-  const ReadingListEntry other_entry = model_->GetUnreadEntryAtIndex(0);
+  const ReadingListEntry& other_entry = model_->GetUnreadEntryAtIndex(0);
   EXPECT_EQ(GURL("http://example.com"), other_entry.URL());
   EXPECT_EQ("sample", other_entry.Title());
 }
 
 TEST_F(ReadingListModelTest, ReadEntry) {
-  const ReadingListEntry entry =
-      model_->AddEntry(GURL("http://example.com"), "sample");
+  model_->AddEntry(GURL("http://example.com"), "sample");
 
   ClearCounts();
   model_->MarkReadByURL(GURL("http://example.com"));
@@ -154,7 +166,7 @@ TEST_F(ReadingListModelTest, ReadEntry) {
   EXPECT_EQ(1ul, model_->read_size());
   EXPECT_FALSE(model_->HasUnseenEntries());
 
-  const ReadingListEntry other_entry = model_->GetReadEntryAtIndex(0);
+  const ReadingListEntry& other_entry = model_->GetReadEntryAtIndex(0);
   EXPECT_EQ(GURL("http://example.com"), other_entry.URL());
   EXPECT_EQ("sample", other_entry.Title());
 }
@@ -266,6 +278,60 @@ TEST_F(ReadingListModelTest, UpdateReadDistilledURL) {
   AssertObserverCount(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1);
   EXPECT_EQ(ReadingListEntry::PROCESSED, entry.DistilledState());
   EXPECT_EQ(gurl, entry.DistilledURL());
+}
+
+// Tests that the callback is called when the entry is unread.
+TEST_F(ReadingListModelTest, CallbackEntryURLUnread) {
+  // Setup.
+  model_->AddEntry(callback_url, callback_title);
+
+  ASSERT_EQ(0UL, model_->read_size());
+  ASSERT_EQ(1UL, model_->unread_size());
+
+  // Action.
+  bool result = model_->CallbackEntryURL(
+      callback_url,
+      base::Bind(&ReadingListModelTest::Callback, base::Unretained(this)));
+
+  // Test.
+  EXPECT_TRUE(result);
+  EXPECT_TRUE(CallbackCalled());
+}
+
+// Tests that the callback is called when the entry is read.
+TEST_F(ReadingListModelTest, CallbackEntryURLRead) {
+  // Setup.
+  model_->AddEntry(callback_url, callback_title);
+  model_->MarkReadByURL(callback_url);
+
+  ASSERT_EQ(1UL, model_->read_size());
+  ASSERT_EQ(0UL, model_->unread_size());
+
+  // Action.
+  bool result = model_->CallbackEntryURL(
+      callback_url,
+      base::Bind(&ReadingListModelTest::Callback, base::Unretained(this)));
+
+  // Test.
+  EXPECT_TRUE(result);
+  EXPECT_TRUE(CallbackCalled());
+}
+
+// Tests that the callback is not called when the entry is not present.
+TEST_F(ReadingListModelTest, CallbackEntryURLNotPresent) {
+  // Setup.
+  const GURL gurl("http://foo.bar");
+  ASSERT_NE(gurl, callback_url);
+  model_->AddEntry(gurl, callback_title);
+
+  // Action.
+  bool result = model_->CallbackEntryURL(
+      callback_url,
+      base::Bind(&ReadingListModelTest::Callback, base::Unretained(this)));
+
+  // Test.
+  EXPECT_FALSE(result);
+  EXPECT_FALSE(CallbackCalled());
 }
 
 }  // namespace

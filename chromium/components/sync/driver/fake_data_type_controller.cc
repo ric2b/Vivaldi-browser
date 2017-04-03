@@ -4,21 +4,20 @@
 
 #include "components/sync/driver/fake_data_type_controller.h"
 
+#include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/sync/api/data_type_error_handler_impl.h"
 #include "components/sync/api/sync_merge_result.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using syncer::ModelType;
-
-namespace sync_driver {
+namespace syncer {
 
 FakeDataTypeController::FakeDataTypeController(ModelType type)
-    : DirectoryDataTypeController(base::ThreadTaskRunnerHandle::Get(),
-                                  base::Closure()),
+    : DirectoryDataTypeController(type, base::Closure(), nullptr),
       state_(NOT_RUNNING),
       model_load_delayed_(false),
-      type_(type),
       ready_for_start_(true),
       should_load_model_before_configure_(false),
       register_with_backend_call_count_(0) {}
@@ -32,6 +31,7 @@ bool FakeDataTypeController::ShouldLoadModelBeforeConfigure() const {
 // NOT_RUNNING ->MODEL_LOADED |MODEL_STARTING.
 void FakeDataTypeController::LoadModels(
     const ModelLoadCallback& model_load_callback) {
+  DCHECK(CalledOnValidThread());
   model_load_callback_ = model_load_callback;
   if (state_ != NOT_RUNNING) {
     ADD_FAILURE();
@@ -57,6 +57,7 @@ void FakeDataTypeController::RegisterWithBackend(
 // MODEL_LOADED -> MODEL_STARTING.
 void FakeDataTypeController::StartAssociating(
     const StartCallback& start_callback) {
+  DCHECK(CalledOnValidThread());
   last_start_callback_ = start_callback;
   state_ = ASSOCIATING;
 }
@@ -64,6 +65,7 @@ void FakeDataTypeController::StartAssociating(
 // MODEL_STARTING | ASSOCIATING -> RUNNING | DISABLED | NOT_RUNNING
 // (depending on |result|)
 void FakeDataTypeController::FinishStart(ConfigureResult result) {
+  DCHECK(CalledOnValidThread());
   // We should have a callback from Start().
   if (last_start_callback_.is_null()) {
     ADD_FAILURE();
@@ -71,24 +73,23 @@ void FakeDataTypeController::FinishStart(ConfigureResult result) {
   }
 
   // Set |state_| first below since the callback may call state().
-  syncer::SyncMergeResult local_merge_result(type());
-  syncer::SyncMergeResult syncer_merge_result(type());
+  SyncMergeResult local_merge_result(type());
+  SyncMergeResult syncer_merge_result(type());
   if (result <= OK_FIRST_RUN) {
     state_ = RUNNING;
   } else if (result == ASSOCIATION_FAILED) {
     state_ = DISABLED;
-    local_merge_result.set_error(
-        syncer::SyncError(FROM_HERE, syncer::SyncError::DATATYPE_ERROR,
-                          "Association failed", type()));
+    local_merge_result.set_error(SyncError(FROM_HERE, SyncError::DATATYPE_ERROR,
+                                           "Association failed", type()));
   } else if (result == UNRECOVERABLE_ERROR) {
     state_ = NOT_RUNNING;
-    local_merge_result.set_error(
-        syncer::SyncError(FROM_HERE, syncer::SyncError::UNRECOVERABLE_ERROR,
-                          "Unrecoverable error", type()));
+    local_merge_result.set_error(SyncError(FROM_HERE,
+                                           SyncError::UNRECOVERABLE_ERROR,
+                                           "Unrecoverable error", type()));
   } else if (result == NEEDS_CRYPTO) {
     state_ = NOT_RUNNING;
-    local_merge_result.set_error(syncer::SyncError(
-        FROM_HERE, syncer::SyncError::CRYPTO_ERROR, "Crypto error", type()));
+    local_merge_result.set_error(
+        SyncError(FROM_HERE, SyncError::CRYPTO_ERROR, "Crypto error", type()));
   } else {
     NOTREACHED();
   }
@@ -97,6 +98,7 @@ void FakeDataTypeController::FinishStart(ConfigureResult result) {
 
 // * -> NOT_RUNNING
 void FakeDataTypeController::Stop() {
+  DCHECK(CalledOnValidThread());
   if (!model_load_callback_.is_null()) {
     // Real data type controllers run the callback and specify "ABORTED" as an
     // error.  We should probably find a way to use the real code and mock out
@@ -106,16 +108,12 @@ void FakeDataTypeController::Stop() {
   state_ = NOT_RUNNING;
 }
 
-ModelType FakeDataTypeController::type() const {
-  return type_;
-}
-
 std::string FakeDataTypeController::name() const {
-  return ModelTypeToString(type_);
+  return ModelTypeToString(type());
 }
 
-syncer::ModelSafeGroup FakeDataTypeController::model_safe_group() const {
-  return syncer::GROUP_PASSIVE;
+ModelSafeGroup FakeDataTypeController::model_safe_group() const {
+  return GROUP_PASSIVE;
 }
 
 ChangeProcessor* FakeDataTypeController::GetChangeProcessor() const {
@@ -126,12 +124,6 @@ DataTypeController::State FakeDataTypeController::state() const {
   return state_;
 }
 
-void FakeDataTypeController::OnSingleDataTypeUnrecoverableError(
-    const syncer::SyncError& error) {
-  if (!model_load_callback_.is_null())
-    model_load_callback_.Run(type(), error);
-}
-
 bool FakeDataTypeController::ReadyForStart() const {
   return ready_for_start_;
 }
@@ -140,7 +132,7 @@ void FakeDataTypeController::SetDelayModelLoad() {
   model_load_delayed_ = true;
 }
 
-void FakeDataTypeController::SetModelLoadError(syncer::SyncError error) {
+void FakeDataTypeController::SetModelLoadError(SyncError error) {
   load_error_ = error;
 }
 
@@ -160,4 +152,12 @@ void FakeDataTypeController::SetShouldLoadModelBeforeConfigure(bool value) {
   should_load_model_before_configure_ = value;
 }
 
-}  // namespace sync_driver
+std::unique_ptr<DataTypeErrorHandler>
+FakeDataTypeController::CreateErrorHandler() {
+  DCHECK(CalledOnValidThread());
+  return base::MakeUnique<DataTypeErrorHandlerImpl>(
+      base::ThreadTaskRunnerHandle::Get(), base::Closure(),
+      base::Bind(model_load_callback_, type()));
+}
+
+}  // namespace syncer

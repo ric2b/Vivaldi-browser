@@ -8,34 +8,39 @@
 #include "core/CSSValueKeywords.h"
 #include "core/CoreExport.h"
 #include "core/css/cssom/CSSStyleValue.h"
+#include "wtf/text/AtomicString.h"
 
 namespace blink {
 
 class ExceptionState;
 
 class CORE_EXPORT CSSKeywordValue final : public CSSStyleValue {
-    WTF_MAKE_NONCOPYABLE(CSSKeywordValue);
-    DEFINE_WRAPPERTYPEINFO();
-public:
-    static CSSKeywordValue* create(const String& keyword, ExceptionState&);
+  WTF_MAKE_NONCOPYABLE(CSSKeywordValue);
+  DEFINE_WRAPPERTYPEINFO();
 
-    StyleValueType type() const override { return KeywordType; }
+ public:
+  static CSSKeywordValue* create(const AtomicString& keyword, ExceptionState&);
 
-    const String& keywordValue() const;
-    CSSValueID keywordValueID() const;
+  StyleValueType type() const override { return KeywordType; }
 
-    CSSValue* toCSSValue() const override;
+  const AtomicString& keywordValue() const;
+  CSSValueID keywordValueID() const;
 
-private:
-    CSSKeywordValue(const String& keyword) : m_keywordValue(keyword) {}
+  CSSValue* toCSSValue() const override;
 
-    String m_keywordValue;
+ private:
+  explicit CSSKeywordValue(const AtomicString& keyword)
+      : m_keywordValue(keyword) {}
+
+  AtomicString m_keywordValue;
 };
 
-DEFINE_TYPE_CASTS(CSSKeywordValue, CSSStyleValue, value,
-    value->type() == CSSStyleValue::StyleValueType::KeywordType,
-    value.type() == CSSStyleValue::StyleValueType::KeywordType);
+DEFINE_TYPE_CASTS(CSSKeywordValue,
+                  CSSStyleValue,
+                  value,
+                  value->type() == CSSStyleValue::StyleValueType::KeywordType,
+                  value.type() == CSSStyleValue::StyleValueType::KeywordType);
 
-} // namespace blink
+}  // namespace blink
 
 #endif

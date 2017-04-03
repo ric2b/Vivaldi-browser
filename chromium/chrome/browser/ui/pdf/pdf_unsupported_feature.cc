@@ -20,9 +20,11 @@
 #include "chrome/browser/renderer_preferences_util.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/common/chrome_content_client.h"
+#include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/pdf/browser/open_pdf_in_reader_prompt_client.h"
 #include "components/pdf/browser/pdf_web_contents_helper.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/interstitial_page_delegate.h"
 #include "content/public/browser/navigation_details.h"
@@ -34,8 +36,6 @@
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/renderer_preferences.h"
-#include "grit/browser_resources.h"
-#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/webui/jstemplate_builder.h"
@@ -128,9 +128,9 @@ base::string16 PDFEnableAdobeReaderPromptClient::GetMessageText() const {
 
 // Launch the url to get the latest Adbobe Reader installer.
 void OpenReaderUpdateURL(WebContents* web_contents) {
-  OpenURLParams params(
-      GURL(kAdobeReaderUpdateUrl), Referrer(), NEW_FOREGROUND_TAB,
-      ui::PAGE_TRANSITION_LINK, false);
+  OpenURLParams params(GURL(kAdobeReaderUpdateUrl), Referrer(),
+                       WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                       ui::PAGE_TRANSITION_LINK, false);
   web_contents->OpenURL(params);
 }
 

@@ -8,7 +8,7 @@
     },
     "new_history_page": {
       "friendly_name": "New History Page",
-      "description": "Enable the new history page (under heavy development).",
+      "description": "Enable the new history page (under heavy development). Restart required.",
       "value": "false",
       "internal_value": "true"
     },

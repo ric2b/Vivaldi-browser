@@ -28,6 +28,35 @@ fuzzer_test("pdfium_fuzzer") {
   dict = "dicts/pdf.dict"
 }
 
+fuzzer_test("pdf_cmap_fuzzer") {
+  sources = []
+  deps = [
+    "//third_party/pdfium/testing/libfuzzer:pdf_cmap_fuzzer",
+  ]
+}
+
+fuzzer_test("pdf_codec_fax_fuzzer") {
+  sources = []
+  deps = [
+    "//third_party/pdfium/testing/libfuzzer:pdf_codec_fax_fuzzer",
+  ]
+}
+
+fuzzer_test("pdf_codec_icc_fuzzer") {
+  sources = []
+  deps = [
+    "//third_party/pdfium/testing/libfuzzer:pdf_codec_icc_fuzzer",
+  ]
+  dict = "dicts/pdf_codec_icc.dict"
+}
+
+fuzzer_test("pdf_codec_jbig2_fuzzer") {
+  sources = []
+  deps = [
+    "//third_party/pdfium/testing/libfuzzer:pdf_codec_jbig2_fuzzer",
+  ]
+}
+
 fuzzer_test("pdf_hint_table_fuzzer") {
   sources = []
   deps = [
@@ -47,6 +76,13 @@ fuzzer_test("pdf_psengine_fuzzer") {
   sources = []
   deps = [
     "//third_party/pdfium/testing/libfuzzer:pdf_psengine_fuzzer",
+  ]
+}
+
+fuzzer_test("pdf_streamparser_fuzzer") {
+  sources = []
+  deps = [
+    "//third_party/pdfium/testing/libfuzzer:pdf_streamparser_fuzzer",
   ]
 }
 

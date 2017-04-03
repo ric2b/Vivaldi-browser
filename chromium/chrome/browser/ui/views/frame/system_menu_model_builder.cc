@@ -14,13 +14,13 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
-#include "grit/components_strings.h"
+#include "components/strings/grit/components_strings.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/models/simple_menu_model.h"
 
 #if defined(OS_CHROMEOS)
-#include "ash/common/session/session_state_delegate.h"
-#include "ash/common/wm_shell.h"
+#include "ash/common/session/session_state_delegate.h"  // nogncheck
+#include "ash/common/wm_shell.h"  // nogncheck
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -115,10 +115,6 @@ void SystemMenuModelBuilder::BuildSystemMenuForAppOrPopupWindow(
   zoom_menu_contents_.reset(new ZoomMenuModel(&menu_delegate_));
   model->AddSubMenuWithStringId(IDC_ZOOM_MENU, IDS_ZOOM_MENU,
                                 zoom_menu_contents_.get());
-  encoding_menu_contents_.reset(new EncodingMenuModel(browser()));
-  model->AddSubMenuWithStringId(IDC_ENCODING_MENU,
-                                IDS_ENCODING_MENU,
-                                encoding_menu_contents_.get());
   if (browser()->is_app() && chrome::CanOpenTaskManager()) {
     model->AddSeparator(ui::NORMAL_SEPARATOR);
     model->AddItemWithStringId(IDC_TASK_MANAGER, IDS_TASK_MANAGER);

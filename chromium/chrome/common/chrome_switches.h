@@ -14,6 +14,10 @@
 // installer where dependencies should be limited. Instead, have files
 // directly include your switch file.
 
+namespace base {
+class CommandLine;
+};
+
 #include "base/vivaldi_switches.h"
 
 namespace switches {
@@ -58,12 +62,12 @@ extern const char kCrashOnHangThreads[];
 extern const char kCreateBrowserOnStartupForTests[];
 extern const char kDebugEnableFrameToggle[];
 extern const char kDebugPackedApps[];
+extern const char kDevToolsFlags[];
 extern const char kDiagnostics[];
 extern const char kDiagnosticsFormat[];
 extern const char kDiagnosticsRecovery[];
 extern const char kDisableAboutInSettings[];
 extern const char kDisableAddToShelf[];
-extern const char kDisableAsyncDns[];
 extern const char kDisableBackgroundNetworking[];
 extern const char kDisableBundledPpapiFlash[];
 extern const char kDisableCastStreamingHWEncoding[];
@@ -76,6 +80,7 @@ extern const char kDisableDefaultApps[];
 extern const char kDisableDeviceDiscoveryNotifications[];
 extern const char kDisableDomainReliability[];
 extern const char kDisableExtensions[];
+extern const char kDisableExtensionsExcept[];
 extern const char kDisableExtensionsFileAccessCheck[];
 extern const char kDisableExtensionsHttpThrottling[];
 extern const char kDisableFieldTrialTestingConfig[];
@@ -105,7 +110,6 @@ extern const char kDnsLogDetails[];
 extern const char kDumpBrowserHistograms[];
 extern const char kEasyUnlockAppPath[];
 extern const char kEnableAddToShelf[];
-extern const char kEnableAllBookmarksView[];
 extern const char kEnableAppsFileAssociations[];
 extern const char kEnableAudioDebugRecordingsFromExtension[];
 extern const char kEnableBenchmarking[];
@@ -179,9 +183,13 @@ extern const char kKioskModePrinting[];
 extern const char kLoadComponentExtension[];
 extern const char kLoadExtension[];
 extern const char kMakeDefaultBrowser[];
+extern const char kMaterialSecurityVerbose[];
+extern const char kMaterialSecurityVerboseShowAllAnimated[];
+extern const char kMaterialSecurityVerboseShowAllNonAnimated[];
+extern const char kMaterialSecurityVerboseShowNonSecureAnimated[];
+extern const char kMaterialSecurityVerboseShowNonSecureNonAnimated[];
 extern const char kMediaCacheSize[];
 extern const char kMediaRouter[];
-extern const char kMessageLoopHistogrammer[];
 extern const char kMetricsRecordingOnly[];
 extern const char kMonitoringDestinationID[];
 extern const char kNetLogCaptureMode[];
@@ -235,6 +243,12 @@ extern const char kSbDisableAutoUpdate[];
 extern const char kSbDisableDownloadProtection[];
 extern const char kSbDisableExtensionBlacklist[];
 extern const char kSbManualDownloadBlacklist[];
+extern const char kSecurityChipShowNonSecureOnly[];
+extern const char kSecurityChipShowAll[];
+extern const char kSecurityChipAnimation[];
+extern const char kSecurityChipAnimationNone[];
+extern const char kSecurityChipAnimationNonSecureOnly[];
+extern const char kSecurityChipAnimationAll[];
 extern const char kServiceProcess[];
 extern const char kShowAppList[];
 extern const char kSilentDebuggerExtensionAPI[];
@@ -288,6 +302,7 @@ extern const char kDisableVrShell[];
 extern const char kEnableAccessibilityTabSwitcher[];
 extern const char kEnableAppLink[];
 extern const char kEnableContextualSearch[];
+extern const char kEnableContextualSearchContextualCardsBarIntegration[];
 extern const char kEnableHostedMode[];
 extern const char kEnableHungRendererInfoBar[];
 extern const char kEnableVrShell[];
@@ -300,10 +315,6 @@ extern const char kForceShowUpdateMenuItemSummary[];
 extern const char kMarketUrlForTesting[];
 extern const char kNtpSwitchToExistingTab[];
 extern const char kProgressBarAnimation[];
-extern const char kTabManagementExperimentTypeAnise[];
-extern const char kTabManagementExperimentTypeBasil[];
-extern const char kTabManagementExperimentTypeChive[];
-extern const char kTabManagementExperimentTypeDill[];
 extern const char kTabManagementExperimentTypeDisabled[];
 extern const char kTabManagementExperimentTypeElderberry[];
 extern const char kWebApkServerUrl[];
@@ -322,7 +333,6 @@ extern const char kHelp[];
 extern const char kHelpShort[];
 extern const char kPasswordStore[];
 extern const char kWmClass[];
-extern const char kWmUserTimeMs[];
 #endif
 
 #if defined(OS_MACOSX)
@@ -342,10 +352,12 @@ extern const char kEnableFullscreenToolbarReveal[];
 extern const char kEnableHostedAppsInWindows[];
 extern const char kEnableMacViewsNativeAppWindows[];
 extern const char kEnableTranslateNewUX[];
+extern const char kEnableUserMetrics[];
 extern const char kHostedAppQuitNotification[];
 extern const char kMetricsClientID[];
 extern const char kRelauncherProcess[];
 extern const char kRelauncherProcessDMGDevice[];
+extern const char kMakeChromeDefault[];
 #endif  // defined(OS_MACOSX)
 
 #if defined(OS_WIN)
@@ -386,6 +398,7 @@ extern const char kEnableInputImeAPI[];
 #endif
 
 bool AboutInSettingsEnabled();
+bool ExtensionsDisabled(const base::CommandLine& command_line);
 bool MdFeedbackEnabled();
 bool MdPolicyPageEnabled();
 bool PdfMaterialUIEnabled();

@@ -41,6 +41,7 @@ CrExtensionsBrowserTest.prototype = {
     'extension_item_test.js',
     'extension_item_list_test.js',
     'extension_keyboard_shortcuts_test.js',
+    'extension_options_dialog_test.js',
     'extension_pack_dialog_test.js',
     'extension_service_test.js',
     'extension_shortcut_input_test.js',
@@ -70,6 +71,20 @@ CrExtensionsBrowserTestWithInstalledExtension.prototype = {
     GEN('  InstallGoodExtension();');
     GEN('  SetAutoConfirmUninstall();');
   },
+};
+
+/**
+ * Test fixture that navigates to chrome://extensions/?id=<id>.
+ * @constructor
+ * @extends {CrExtensionsBrowserTestWithInstalledExtension}
+ */
+function CrExtensionsBrowserTestWithIdQueryParam() {}
+
+CrExtensionsBrowserTestWithIdQueryParam.prototype = {
+  __proto__: CrExtensionsBrowserTestWithInstalledExtension.prototype,
+
+  /** @override */
+  browsePreload: 'chrome://extensions/?id=ldnnhddmnhbkjipkidpdiheffobcpfmf',
 };
 
 /**
@@ -215,6 +230,13 @@ TEST_F('CrExtensionsBrowserTestWithMultipleExtensionTypesInstalled',
   mocha.grep(assert(extension_manager_tests.TestNames.ChangePages)).run();
 });
 
+TEST_F('CrExtensionsBrowserTestWithIdQueryParam',
+       'ExtensionManagerNavigationToDetailsTest', function() {
+  extension_manager_tests.registerTests();
+  mocha.grep(
+      assert(extension_manager_tests.TestNames.UrlNavigationToDetails)).run();
+});
+
 ////////////////////////////////////////////////////////////////////////////////
 // Extension Keyboard Shortcuts Tests
 
@@ -243,4 +265,13 @@ TEST_F('CrExtensionsBrowserTest', 'ExtensionPackDialogInteractionTest',
        function() {
   extension_pack_dialog_tests.registerTests();
   mocha.grep(assert(extension_pack_dialog_tests.TestNames.Interaction)).run();
+});
+
+////////////////////////////////////////////////////////////////////////////////
+// Extension Options Dialog Tests
+
+TEST_F('CrExtensionsBrowserTest', 'ExtensionOptionsDialogInteractionTest',
+       function() {
+  extension_options_dialog_tests.registerTests();
+  mocha.grep(assert(extension_options_dialog_tests.TestNames.Layout)).run();
 });

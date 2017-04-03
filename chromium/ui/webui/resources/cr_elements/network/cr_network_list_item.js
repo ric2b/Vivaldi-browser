@@ -91,7 +91,7 @@ Polymer({
     }
     let network = /** @type {!CrOnc.NetworkStateProperties} */ (this.item);
     if (this.isListItem)
-      return this.getNetworkName_(network);
+      return CrOnc.getNetworkName(network, this);
     return this.i18n('OncType' + network.Type);
   },
 
@@ -113,11 +113,14 @@ Polymer({
     if (!this.isStateTextVisible_())
       return '';
     let network = this.networkState;
-    if (this.isListItem)
-      return this.i18n('networkListItemConnected');
+    if (this.isListItem) {
+      if (this.isConnected_())
+        return this.i18n('networkListItemConnected');
+      return '';
+    }
     if (network.Name && network.ConnectionState) {
       return this.getConnectionStateText_(
-          network.ConnectionState, this.getNetworkName_(network));
+          network.ConnectionState, CrOnc.getNetworkName(network, this));
     }
     return this.i18n('networkDisabled');
   },
@@ -132,31 +135,13 @@ Polymer({
     if (state == CrOnc.ConnectionState.CONNECTED)
       return name;
     if (state == CrOnc.ConnectionState.CONNECTING)
-      return this.i18n('networkConnecting', name);
+      return this.i18n('networkListItemConnecting', name);
     if (state == CrOnc.ConnectionState.NOT_CONNECTED)
-      return this.i18n('networkNotConnected');
+      return this.i18n('networkListItemNotConnected');
     // TODO(stevenjb): Audit state translations and remove test.
     if (this.i18nExists(state))
       return this.i18n(state);
     return state;
-  },
-
-  /**
-   * Returns the name to display for |network|.
-   * @param {?CrOnc.NetworkStateProperties} network
-   * @return {string}
-   */
-  getNetworkName_: function(network) {
-    let name = network.Name;
-    if (!name)
-      return this.i18n('OncType' + network.Type);
-    if (network.Type == 'VPN' && network.VPN &&
-        network.VPN.Type == 'ThirdPartyVPN' && network.VPN.ThirdPartyVPN) {
-      let providerName = network.VPN.ThirdPartyVPN.ProviderName;
-      if (providerName)
-        return this.i18n('vpnNameTemplate', providerName, name);
-    }
-    return name;
   },
 
   /** @private */
@@ -167,8 +152,7 @@ Polymer({
   /** @private */
   isConnected_: function() {
     return this.networkState &&
-        this.networkState.ConnectionState !=
-        CrOnc.ConnectionState.NOT_CONNECTED;
+        this.networkState.ConnectionState == CrOnc.ConnectionState.CONNECTED;
   },
 
   /**

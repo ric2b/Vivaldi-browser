@@ -42,8 +42,8 @@ struct wl_resource;
  * reset.
  *
  * @section page_ifaces_secure_output_unstable_v1 Interfaces
- * - @subpage page_iface_zwp_secure_output_v1 - secure output
- * - @subpage page_iface_zwp_security_v1 - security interface to a wl_surface
+ * - @subpage page_iface_zcr_secure_output_v1 - secure output
+ * - @subpage page_iface_zcr_security_v1 - security interface to a wl_surface
  * @section page_copyright_secure_output_unstable_v1 Copyright
  * <pre>
  *
@@ -70,32 +70,32 @@ struct wl_resource;
  * </pre>
  */
 struct wl_surface;
-struct zwp_secure_output_v1;
-struct zwp_security_v1;
+struct zcr_secure_output_v1;
+struct zcr_security_v1;
 
 /**
- * @page page_iface_zwp_secure_output_v1 zwp_secure_output_v1
- * @section page_iface_zwp_secure_output_v1_desc Description
+ * @page page_iface_zcr_secure_output_v1 zcr_secure_output_v1
+ * @section page_iface_zcr_secure_output_v1_desc Description
  *
  * The global interface exposing secure output capabilities is used
  * to instantiate an interface extension for a wl_surface object.
  * This extended interface will then allow surfaces to be marked as
  * as only visible on secure outputs.
- * @section page_iface_zwp_secure_output_v1_api API
- * See @ref iface_zwp_secure_output_v1.
+ * @section page_iface_zcr_secure_output_v1_api API
+ * See @ref iface_zcr_secure_output_v1.
  */
 /**
- * @defgroup iface_zwp_secure_output_v1 The zwp_secure_output_v1 interface
+ * @defgroup iface_zcr_secure_output_v1 The zcr_secure_output_v1 interface
  *
  * The global interface exposing secure output capabilities is used
  * to instantiate an interface extension for a wl_surface object.
  * This extended interface will then allow surfaces to be marked as
  * as only visible on secure outputs.
  */
-extern const struct wl_interface zwp_secure_output_v1_interface;
+extern const struct wl_interface zcr_secure_output_v1_interface;
 /**
- * @page page_iface_zwp_security_v1 zwp_security_v1
- * @section page_iface_zwp_security_v1_desc Description
+ * @page page_iface_zcr_security_v1 zcr_security_v1
+ * @section page_iface_zcr_security_v1_desc Description
  *
  * An additional interface to a wl_surface object, which allows the
  * client to specify that a surface should not appear in screenshots
@@ -107,11 +107,11 @@ extern const struct wl_interface zwp_secure_output_v1_interface;
  * If the security object is destroyed, the security state is removed
  * from the wl_surface. The change will be applied on the next
  * wl_surface.commit.
- * @section page_iface_zwp_security_v1_api API
- * See @ref iface_zwp_security_v1.
+ * @section page_iface_zcr_security_v1_api API
+ * See @ref iface_zcr_security_v1.
  */
 /**
- * @defgroup iface_zwp_security_v1 The zwp_security_v1 interface
+ * @defgroup iface_zcr_security_v1 The zcr_security_v1 interface
  *
  * An additional interface to a wl_surface object, which allows the
  * client to specify that a surface should not appear in screenshots
@@ -124,23 +124,23 @@ extern const struct wl_interface zwp_secure_output_v1_interface;
  * from the wl_surface. The change will be applied on the next
  * wl_surface.commit.
  */
-extern const struct wl_interface zwp_security_v1_interface;
+extern const struct wl_interface zcr_security_v1_interface;
 
-#ifndef ZWP_SECURE_OUTPUT_V1_ERROR_ENUM
-#define ZWP_SECURE_OUTPUT_V1_ERROR_ENUM
-enum zwp_secure_output_v1_error {
+#ifndef ZCR_SECURE_OUTPUT_V1_ERROR_ENUM
+#define ZCR_SECURE_OUTPUT_V1_ERROR_ENUM
+enum zcr_secure_output_v1_error {
 	/**
 	 * the surface already has a security object associated
 	 */
-	ZWP_SECURE_OUTPUT_V1_ERROR_SECURITY_EXISTS = 0,
+	ZCR_SECURE_OUTPUT_V1_ERROR_SECURITY_EXISTS = 0,
 };
-#endif /* ZWP_SECURE_OUTPUT_V1_ERROR_ENUM */
+#endif /* ZCR_SECURE_OUTPUT_V1_ERROR_ENUM */
 
 /**
- * @ingroup iface_zwp_secure_output_v1
- * @struct zwp_secure_output_v1_interface
+ * @ingroup iface_zcr_secure_output_v1
+ * @struct zcr_secure_output_v1_interface
  */
-struct zwp_secure_output_v1_interface {
+struct zcr_secure_output_v1_interface {
 	/**
 	 * unbind from the secure output interface
 	 *
@@ -168,10 +168,10 @@ struct zwp_secure_output_v1_interface {
 
 
 /**
- * @ingroup iface_zwp_security_v1
- * @struct zwp_security_v1_interface
+ * @ingroup iface_zcr_security_v1
+ * @struct zcr_security_v1_interface
  */
-struct zwp_security_v1_interface {
+struct zcr_security_v1_interface {
 	/**
 	 * remove security from the surface
 	 *

@@ -673,10 +673,13 @@ class PathSearcher:
 
   @classmethod
   def LocatePath(cls, path, base_path=None):
-    if os.path.isabs(path):
+    path = normpath(path)
+    if base_path:
+      base_path= normpath(base_path)
+    if os.path.isabs(path) or "${" in path:
       return path
 
-    pl = []
+    pl = [os.getcwd()]
     if base_path:
       if os.access(os.path.join(base_path, path), os.F_OK):
         return path

@@ -180,17 +180,17 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   gfx::NativeViewAccessible AccessibilityGetNativeViewAccessible() override;
   bool LockMouse() override;
   void UnlockMouse() override;
-  void OnSwapCompositorFrame(uint32_t output_surface_id,
+  void OnSwapCompositorFrame(uint32_t compositor_frame_sink_id,
                              cc::CompositorFrame frame) override;
   void ClearCompositorFrame() override;
   void DidStopFlinging() override;
   void OnDidNavigateMainFrameToNewPage() override;
   void LockCompositingSurface() override;
   void UnlockCompositingSurface() override;
-  uint32_t GetSurfaceClientId() override;
-  uint32_t SurfaceClientIdAtPoint(cc::SurfaceHittestDelegate* delegate,
-                                  const gfx::Point& point,
-                                  gfx::Point* transformed_point) override;
+  cc::FrameSinkId GetFrameSinkId() override;
+  cc::FrameSinkId FrameSinkIdAtPoint(cc::SurfaceHittestDelegate* delegate,
+                                     const gfx::Point& point,
+                                     gfx::Point* transformed_point) override;
   void ProcessMouseEvent(const blink::WebMouseEvent& event,
                          const ui::LatencyInfo& latency) override;
   void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event,
@@ -206,7 +206,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
       const gfx::Point& point,
       RenderWidgetHostViewBase* target_view) override;
 
-  void FocusedNodeChanged(bool is_editable_node) override;
+  void FocusedNodeChanged(bool is_editable_node,
+                          const gfx::Rect& node_bounds_in_screen) override;
 
   // Overridden from ui::TextInputClient:
   void SetCompositionText(const ui::CompositionText& composition) override;
@@ -360,7 +361,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraTest, TouchEventSyncAsync);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraTest, Resize);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraTest, SwapNotifiesWindow);
-  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraTest, RecreateLayers);
+  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraTest, MirrorLayers);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraTest,
                            SkippedDelegatedFrames);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraTest, OutputSurfaceIdChange);
@@ -455,13 +456,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
       bool defer_compositor_lock) override;
   void DelegatedFrameHostResizeLockWasReleased() override;
   void DelegatedFrameHostSendReclaimCompositorResources(
-      int output_surface_id,
+      int compositor_frame_sink_id,
       bool is_swap_ack,
       const cc::ReturnedResourceArray& resources) override;
   void DelegatedFrameHostOnLostCompositorResources() override;
-  void DelegatedFrameHostUpdateVSyncParameters(
-      const base::TimeTicks& timebase,
-      const base::TimeDelta& interval) override;
   void SetBeginFrameSource(cc::BeginFrameSource* source) override;
   bool IsAutoResizeEnabled() const override;
 
@@ -536,6 +534,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   // Forwards a mouse event to this view's parent window delegate.
   void ForwardMouseEventToParent(ui::MouseEvent* event);
 
+  void UpdateNeedsBeginFramesInternal();
+
   // Returns the RenderViewHostDelegateView instance for this view. Returns
   // NULL on failure.
   RenderViewHostDelegateView* GetRenderViewHostDelegateView();
@@ -596,7 +596,12 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   // The begin frame source being observed.  Null if none.
   cc::BeginFrameSource* begin_frame_source_;
   cc::BeginFrameArgs last_begin_frame_args_;
+
+  // Whether a request for begin frames has been issued.
   bool needs_begin_frames_;
+
+  // Whether or not a frame observer has been added.
+  bool added_frame_observer_;
 
   // Used to record the last position of the mouse.
   // While the mouse is locked, they store the last known position just as mouse

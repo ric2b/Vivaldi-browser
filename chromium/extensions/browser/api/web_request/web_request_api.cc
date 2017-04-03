@@ -25,6 +25,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/browser/user_metrics.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/child_process_host.h"
 #include "extensions/browser/api/activity_log/web_request_constants.h"
 #include "extensions/browser/api/declarative/rules_registry_service.h"
@@ -39,6 +40,7 @@
 #include "extensions/browser/api/web_request/web_request_time_tracker.h"
 #include "extensions/browser/api_activity_monitor.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_navigation_ui_data.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
@@ -393,7 +395,7 @@ struct ExtensionWebRequestEventRouter::BlockedRequest {
 
   // Pointer to NetLog to report significant changes to the request for
   // debugging.
-  const net::BoundNetLog* net_log;
+  const net::NetLogWithSource* net_log;
 
   // The callback to call when we get a response from all event handlers.
   net::CompletionCallback callback;
@@ -555,6 +557,7 @@ ExtensionWebRequestEventRouter::CreateEventDetails(
 int ExtensionWebRequestEventRouter::OnBeforeRequest(
     void* browser_context,
     const InfoMap* extension_info_map,
+    ExtensionNavigationUIData* navigation_ui_data,
     net::URLRequest* request,
     const net::CompletionCallback& callback,
     GURL* new_url) {
@@ -587,8 +590,9 @@ int ExtensionWebRequestEventRouter::OnBeforeRequest(
         CreateEventDetails(request, extra_info_spec));
     event_details->SetRequestBody(request);
 
-    initialize_blocked_requests |= DispatchEvent(
-        browser_context, request, listeners, std::move(event_details));
+    initialize_blocked_requests |=
+        DispatchEvent(browser_context, request, listeners, navigation_ui_data,
+                      std::move(event_details));
   }
 
   if (!initialize_blocked_requests)
@@ -614,6 +618,7 @@ int ExtensionWebRequestEventRouter::OnBeforeRequest(
 int ExtensionWebRequestEventRouter::OnBeforeSendHeaders(
     void* browser_context,
     const InfoMap* extension_info_map,
+    ExtensionNavigationUIData* navigation_ui_data,
     net::URLRequest* request,
     const net::CompletionCallback& callback,
     net::HttpRequestHeaders* headers) {
@@ -636,8 +641,9 @@ int ExtensionWebRequestEventRouter::OnBeforeSendHeaders(
         CreateEventDetails(request, extra_info_spec));
     event_details->SetRequestHeaders(*headers);
 
-    initialize_blocked_requests |= DispatchEvent(
-        browser_context, request, listeners, std::move(event_details));
+    initialize_blocked_requests |=
+        DispatchEvent(browser_context, request, listeners, navigation_ui_data,
+                      std::move(event_details));
   }
 
   if (!initialize_blocked_requests)
@@ -663,6 +669,7 @@ int ExtensionWebRequestEventRouter::OnBeforeSendHeaders(
 void ExtensionWebRequestEventRouter::OnSendHeaders(
     void* browser_context,
     const InfoMap* extension_info_map,
+    ExtensionNavigationUIData* navigation_ui_data,
     net::URLRequest* request,
     const net::HttpRequestHeaders& headers) {
   if (ShouldHideEvent(browser_context, extension_info_map, request))
@@ -684,12 +691,14 @@ void ExtensionWebRequestEventRouter::OnSendHeaders(
       CreateEventDetails(request, extra_info_spec));
   event_details->SetRequestHeaders(headers);
 
-  DispatchEvent(browser_context, request, listeners, std::move(event_details));
+  DispatchEvent(browser_context, request, listeners, navigation_ui_data,
+                std::move(event_details));
 }
 
 int ExtensionWebRequestEventRouter::OnHeadersReceived(
     void* browser_context,
     const InfoMap* extension_info_map,
+    ExtensionNavigationUIData* navigation_ui_data,
     net::URLRequest* request,
     const net::CompletionCallback& callback,
     const net::HttpResponseHeaders* original_response_headers,
@@ -715,8 +724,9 @@ int ExtensionWebRequestEventRouter::OnHeadersReceived(
         CreateEventDetails(request, extra_info_spec));
     event_details->SetResponseHeaders(request, original_response_headers);
 
-    initialize_blocked_requests |= DispatchEvent(
-        browser_context, request, listeners, std::move(event_details));
+    initialize_blocked_requests |=
+        DispatchEvent(browser_context, request, listeners, navigation_ui_data,
+                      std::move(event_details));
   }
 
   if (!initialize_blocked_requests)
@@ -745,6 +755,7 @@ net::NetworkDelegate::AuthRequiredResponse
 ExtensionWebRequestEventRouter::OnAuthRequired(
     void* browser_context,
     const InfoMap* extension_info_map,
+    ExtensionNavigationUIData* navigation_ui_data,
     net::URLRequest* request,
     const net::AuthChallengeInfo& auth_info,
     const net::NetworkDelegate::AuthCallback& callback,
@@ -768,7 +779,7 @@ ExtensionWebRequestEventRouter::OnAuthRequired(
   event_details->SetResponseHeaders(request, request->response_headers());
   event_details->SetAuthInfo(auth_info);
 
-  if (DispatchEvent(browser_context, request, listeners,
+  if (DispatchEvent(browser_context, request, listeners, navigation_ui_data,
                     std::move(event_details))) {
     BlockedRequest& blocked_request = blocked_requests_[request->identifier()];
     blocked_request.event = kOnAuthRequired;
@@ -785,6 +796,7 @@ ExtensionWebRequestEventRouter::OnAuthRequired(
 void ExtensionWebRequestEventRouter::OnBeforeRedirect(
     void* browser_context,
     const InfoMap* extension_info_map,
+    ExtensionNavigationUIData* navigation_ui_data,
     net::URLRequest* request,
     const GURL& new_location) {
   if (ShouldHideEvent(browser_context, extension_info_map, request))
@@ -811,18 +823,23 @@ void ExtensionWebRequestEventRouter::OnBeforeRedirect(
   event_details->SetResponseSource(request);
   event_details->SetString(keys::kRedirectUrlKey, new_location.spec());
 
-  DispatchEvent(browser_context, request, listeners, std::move(event_details));
+  DispatchEvent(browser_context, request, listeners, navigation_ui_data,
+                std::move(event_details));
 }
 
 void ExtensionWebRequestEventRouter::OnResponseStarted(
     void* browser_context,
     const InfoMap* extension_info_map,
-    net::URLRequest* request) {
+    ExtensionNavigationUIData* navigation_ui_data,
+    net::URLRequest* request,
+    int net_error) {
+  DCHECK_NE(net::ERR_IO_PENDING, net_error);
+
   if (ShouldHideEvent(browser_context, extension_info_map, request))
     return;
 
   // OnResponseStarted is even triggered, when the request was cancelled.
-  if (request->status().status() != net::URLRequestStatus::SUCCESS)
+  if (net_error != net::OK)
     return;
 
   int extra_info_spec = 0;
@@ -837,13 +854,27 @@ void ExtensionWebRequestEventRouter::OnResponseStarted(
   event_details->SetResponseHeaders(request, request->response_headers());
   event_details->SetResponseSource(request);
 
-  DispatchEvent(browser_context, request, listeners, std::move(event_details));
+  DispatchEvent(browser_context, request, listeners, navigation_ui_data,
+                std::move(event_details));
+}
+
+// Deprecated.
+// TODO(maksims): Remove this.
+void ExtensionWebRequestEventRouter::OnResponseStarted(
+    void* browser_context,
+    const InfoMap* extension_info_map,
+    ExtensionNavigationUIData* navigation_ui_data,
+    net::URLRequest* request) {
+  OnResponseStarted(browser_context, extension_info_map, navigation_ui_data,
+                    request, request->status().error());
 }
 
 void ExtensionWebRequestEventRouter::OnCompleted(
     void* browser_context,
     const InfoMap* extension_info_map,
-    net::URLRequest* request) {
+    ExtensionNavigationUIData* navigation_ui_data,
+    net::URLRequest* request,
+    int net_error) {
   // We hide events from the system context as well as sensitive requests.
   // However, if the request first became sensitive after redirecting we have
   // already signaled it and thus we have to signal the end of it. This is
@@ -857,7 +888,7 @@ void ExtensionWebRequestEventRouter::OnCompleted(
   request_time_tracker_->LogRequestEndTime(request->identifier(),
                                            base::Time::Now());
 
-  DCHECK(request->status().status() == net::URLRequestStatus::SUCCESS);
+  DCHECK_EQ(net::OK, net_error);
 
   DCHECK(!GetAndSetSignaled(request->identifier(), kOnCompleted));
 
@@ -875,14 +906,28 @@ void ExtensionWebRequestEventRouter::OnCompleted(
   event_details->SetResponseHeaders(request, request->response_headers());
   event_details->SetResponseSource(request);
 
-  DispatchEvent(browser_context, request, listeners, std::move(event_details));
+  DispatchEvent(browser_context, request, listeners, navigation_ui_data,
+                std::move(event_details));
+}
+
+// Deprecated.
+// TODO(maksims): Remove this.
+void ExtensionWebRequestEventRouter::OnCompleted(
+    void* browser_context,
+    const InfoMap* extension_info_map,
+    ExtensionNavigationUIData* navigation_ui_data,
+    net::URLRequest* request) {
+  OnCompleted(browser_context, extension_info_map, navigation_ui_data, request,
+              request->status().error());
 }
 
 void ExtensionWebRequestEventRouter::OnErrorOccurred(
     void* browser_context,
     const InfoMap* extension_info_map,
+    ExtensionNavigationUIData* navigation_ui_data,
     net::URLRequest* request,
-    bool started) {
+    bool started,
+    int net_error) {
   // We hide events from the system context as well as sensitive requests.
   // However, if the request first became sensitive after redirecting we have
   // already signaled it and thus we have to signal the end of it. This is
@@ -896,8 +941,8 @@ void ExtensionWebRequestEventRouter::OnErrorOccurred(
   request_time_tracker_->LogRequestEndTime(request->identifier(),
                                            base::Time::Now());
 
-  DCHECK(request->status().status() == net::URLRequestStatus::FAILED ||
-         request->status().status() == net::URLRequestStatus::CANCELED);
+  DCHECK_NE(net::OK, net_error);
+  DCHECK_NE(net::ERR_IO_PENDING, net_error);
 
   DCHECK(!GetAndSetSignaled(request->identifier(), kOnErrorOccurred));
 
@@ -916,10 +961,20 @@ void ExtensionWebRequestEventRouter::OnErrorOccurred(
     event_details->SetResponseSource(request);
   else
     event_details->SetBoolean(keys::kFromCache, request->was_cached());
-  event_details->SetString(keys::kErrorKey,
-                           net::ErrorToString(request->status().error()));
+  event_details->SetString(keys::kErrorKey, net::ErrorToString(net_error));
 
-  DispatchEvent(browser_context, request, listeners, std::move(event_details));
+  DispatchEvent(browser_context, request, listeners, navigation_ui_data,
+                std::move(event_details));
+}
+
+void ExtensionWebRequestEventRouter::OnErrorOccurred(
+    void* browser_context,
+    const InfoMap* extension_info_map,
+    ExtensionNavigationUIData* navigation_ui_data,
+    net::URLRequest* request,
+    bool started) {
+  OnErrorOccurred(browser_context, extension_info_map, navigation_ui_data,
+                  request, started, request->status().error());
 }
 
 void ExtensionWebRequestEventRouter::OnURLRequestDestroyed(
@@ -942,6 +997,7 @@ bool ExtensionWebRequestEventRouter::DispatchEvent(
     void* browser_context,
     net::URLRequest* request,
     const RawListeners& listeners,
+    ExtensionNavigationUIData* navigation_ui_data,
     std::unique_ptr<WebRequestEventDetails> event_details) {
   // TODO(mpcomplete): Consider consolidating common (extension_id,json_args)
   // pairs into a single message sent to a list of sub_event_names.
@@ -968,9 +1024,28 @@ bool ExtensionWebRequestEventRouter::DispatchEvent(
     }
   }
 
-  event_details.release()->DetermineFrameDataOnIO(base::Bind(
-      &ExtensionWebRequestEventRouter::DispatchEventToListeners, AsWeakPtr(),
-      browser_context, base::Passed(&listeners_to_dispatch)));
+  // PlzNavigate: if this request corresponds to a navigation, use the
+  // NavigationUIData that was provided to the navigation on the UI thread to
+  // get the FrameData.
+  // For subresources loads, the request is first received on the IO thread,
+  // therefore a construct such as the NavigationUIData cannot be used. Instead,
+  // use the map of FrameData with the ids of the renderer that sent the
+  // request.
+  // Note: it's possible for ResourceRequestInfo to be null in certain cases
+  // (eg when created by a URLFetcher instead of the ResourceDispatcherHost).
+  const content::ResourceRequestInfo* info =
+      content::ResourceRequestInfo::ForRequest(request);
+  if (content::IsBrowserSideNavigationEnabled() && info &&
+      IsResourceTypeFrame(info->GetResourceType())) {
+    DCHECK(navigation_ui_data);
+    event_details->SetFrameData(navigation_ui_data->frame_data());
+    DispatchEventToListeners(browser_context, std::move(listeners_to_dispatch),
+                             std::move(event_details));
+  } else {
+    event_details.release()->DetermineFrameDataOnIO(base::Bind(
+        &ExtensionWebRequestEventRouter::DispatchEventToListeners, AsWeakPtr(),
+        browser_context, base::Passed(&listeners_to_dispatch)));
+  }
 
   if (num_handlers_blocking > 0) {
     BlockedRequest& blocked_request = blocked_requests_[request->identifier()];
@@ -1581,15 +1656,11 @@ void ExtensionWebRequestEventRouter::DecrementBlockCount(
         linked_ptr<helpers::EventResponseDelta>(delta));
   }
 
-  base::TimeDelta block_time =
-      base::Time::Now() - blocked_request.blocking_time;
   if (!extension_id.empty()) {
+    base::TimeDelta block_time =
+        base::Time::Now() - blocked_request.blocking_time;
     request_time_tracker_->IncrementExtensionBlockTime(
         extension_id, request_id, block_time);
-  } else {
-    // |extension_id| is empty for requests blocked on startup waiting for the
-    // declarative rules to be read from disk.
-    UMA_HISTOGRAM_TIMES("Extensions.NetworkDelayStartup", block_time);
   }
 
   if (num_handlers_blocking == 0) {
@@ -1950,13 +2021,13 @@ WebRequestInternalAddEventListenerFunction::Run() {
   // Argument 0 is the callback, which we don't use here.
   ExtensionWebRequestEventRouter::RequestFilter filter;
   base::DictionaryValue* value = NULL;
-  error_.clear();
   EXTENSION_FUNCTION_VALIDATE(args_->GetDictionary(1, &value));
   // Failure + an empty error string means a fatal error.
-  EXTENSION_FUNCTION_VALIDATE(filter.InitFromValue(*value, &error_) ||
-                              !error_.empty());
-  if (!error_.empty())
-    return RespondNow(Error(error_));
+  std::string error;
+  EXTENSION_FUNCTION_VALIDATE(filter.InitFromValue(*value, &error) ||
+                              !error.empty());
+  if (!error.empty())
+    return RespondNow(Error(error));
 
   int extra_info_spec = 0;
   if (HasOptionalArgument(2)) {

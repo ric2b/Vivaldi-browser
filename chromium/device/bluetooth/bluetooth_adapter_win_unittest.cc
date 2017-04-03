@@ -168,8 +168,8 @@ TEST_F(BluetoothAdapterWinTest, SingleStartDiscovery) {
       base::Bind(&BluetoothAdapterWinTest::IncrementNumStartDiscoveryCallbacks,
                  base::Unretained(this)),
       DiscoverySessionErrorCallback());
-  EXPECT_TRUE(ui_task_runner_->GetPendingTasks().empty());
-  EXPECT_EQ(1u, bluetooth_task_runner_->GetPendingTasks().size());
+  EXPECT_FALSE(ui_task_runner_->HasPendingTask());
+  EXPECT_EQ(1u, bluetooth_task_runner_->NumPendingTasks());
   EXPECT_FALSE(adapter_->IsDiscovering());
   EXPECT_EQ(0, num_start_discovery_callbacks_);
   adapter_win_->DiscoveryStarted(true);
@@ -201,9 +201,9 @@ TEST_F(BluetoothAdapterWinTest, MultipleStartDiscoveries) {
             &BluetoothAdapterWinTest::IncrementNumStartDiscoveryCallbacks,
             base::Unretained(this)),
         DiscoverySessionErrorCallback());
-    EXPECT_EQ(1u, bluetooth_task_runner_->GetPendingTasks().size());
+    EXPECT_EQ(1u, bluetooth_task_runner_->NumPendingTasks());
   }
-  EXPECT_TRUE(ui_task_runner_->GetPendingTasks().empty());
+  EXPECT_FALSE(ui_task_runner_->HasPendingTask());
   EXPECT_FALSE(adapter_->IsDiscovering());
   EXPECT_EQ(0, num_start_discovery_callbacks_);
   adapter_win_->DiscoveryStarted(true);
@@ -248,8 +248,8 @@ TEST_F(BluetoothAdapterWinTest, MultipleStartDiscoveriesAfterDiscovering) {
             base::Unretained(this)),
         DiscoverySessionErrorCallback());
     EXPECT_TRUE(adapter_->IsDiscovering());
-    EXPECT_TRUE(bluetooth_task_runner_->GetPendingTasks().empty());
-    EXPECT_TRUE(ui_task_runner_->GetPendingTasks().empty());
+    EXPECT_FALSE(bluetooth_task_runner_->HasPendingTask());
+    EXPECT_FALSE(ui_task_runner_->HasPendingTask());
     EXPECT_EQ(num_start_discovery_callbacks + 1,
               num_start_discovery_callbacks_);
   }
@@ -292,7 +292,7 @@ TEST_F(BluetoothAdapterWinTest, SingleStopDiscovery) {
   ui_task_runner_->RunPendingTasks();
   EXPECT_FALSE(adapter_->IsDiscovering());
   EXPECT_EQ(1, num_stop_discovery_callbacks_);
-  EXPECT_TRUE(bluetooth_task_runner_->GetPendingTasks().empty());
+  EXPECT_FALSE(bluetooth_task_runner_->HasPendingTask());
   EXPECT_EQ(2, observer_.discovering_changed_count());
 }
 
@@ -309,7 +309,7 @@ TEST_F(BluetoothAdapterWinTest, MultipleStopDiscoveries) {
         base::Bind(&BluetoothAdapterWinTest::IncrementNumStopDiscoveryCallbacks,
                    base::Unretained(this)),
         DiscoverySessionErrorCallback());
-    EXPECT_TRUE(bluetooth_task_runner_->GetPendingTasks().empty());
+    EXPECT_FALSE(bluetooth_task_runner_->HasPendingTask());
     ui_task_runner_->RunPendingTasks();
     EXPECT_EQ(i + 1, num_stop_discovery_callbacks_);
   }
@@ -317,7 +317,7 @@ TEST_F(BluetoothAdapterWinTest, MultipleStopDiscoveries) {
       base::Bind(&BluetoothAdapterWinTest::IncrementNumStopDiscoveryCallbacks,
                  base::Unretained(this)),
       DiscoverySessionErrorCallback());
-  EXPECT_EQ(1u, bluetooth_task_runner_->GetPendingTasks().size());
+  EXPECT_EQ(1u, bluetooth_task_runner_->NumPendingTasks());
   EXPECT_TRUE(adapter_->IsDiscovering());
   adapter_win_->DiscoveryStopped();
   ui_task_runner_->RunPendingTasks();
@@ -343,12 +343,12 @@ TEST_F(BluetoothAdapterWinTest,
       base::Bind(&BluetoothAdapterWinTest::IncrementNumStopDiscoveryCallbacks,
                  base::Unretained(this)),
       DiscoverySessionErrorCallback());
-  EXPECT_TRUE(bluetooth_task_runner_->GetPendingTasks().empty());
+  EXPECT_FALSE(bluetooth_task_runner_->HasPendingTask());
   CallRemoveDiscoverySession(
       base::Bind(&BluetoothAdapterWinTest::IncrementNumStopDiscoveryCallbacks,
                  base::Unretained(this)),
       DiscoverySessionErrorCallback());
-  EXPECT_EQ(1u, bluetooth_task_runner_->GetPendingTasks().size());
+  EXPECT_EQ(1u, bluetooth_task_runner_->NumPendingTasks());
 }
 
 TEST_F(BluetoothAdapterWinTest,
@@ -371,7 +371,7 @@ TEST_F(BluetoothAdapterWinTest, StartDiscoveryBeforeDiscoveryStopped) {
   CallAddDiscoverySession(base::Closure(), DiscoverySessionErrorCallback());
   bluetooth_task_runner_->ClearPendingTasks();
   adapter_win_->DiscoveryStopped();
-  EXPECT_EQ(1u, bluetooth_task_runner_->GetPendingTasks().size());
+  EXPECT_EQ(1u, bluetooth_task_runner_->NumPendingTasks());
 }
 
 TEST_F(BluetoothAdapterWinTest, StopDiscoveryWithoutStartDiscovery) {
@@ -388,7 +388,7 @@ TEST_F(BluetoothAdapterWinTest, StopDiscoveryBeforeDiscoveryStarted) {
   CallRemoveDiscoverySession(base::Closure(), DiscoverySessionErrorCallback());
   bluetooth_task_runner_->ClearPendingTasks();
   adapter_win_->DiscoveryStarted(true);
-  EXPECT_EQ(1u, bluetooth_task_runner_->GetPendingTasks().size());
+  EXPECT_EQ(1u, bluetooth_task_runner_->NumPendingTasks());
 }
 
 TEST_F(BluetoothAdapterWinTest, StartAndStopBeforeDiscoveryStarted) {
@@ -409,7 +409,7 @@ TEST_F(BluetoothAdapterWinTest, StartAndStopBeforeDiscoveryStarted) {
   }
   bluetooth_task_runner_->ClearPendingTasks();
   adapter_win_->DiscoveryStarted(true);
-  EXPECT_TRUE(bluetooth_task_runner_->GetPendingTasks().empty());
+  EXPECT_FALSE(bluetooth_task_runner_->HasPendingTask());
   ui_task_runner_->RunPendingTasks();
   EXPECT_EQ(num_expected_start_discoveries, num_start_discovery_callbacks_);
   EXPECT_EQ(num_expected_stop_discoveries, num_stop_discovery_callbacks_);

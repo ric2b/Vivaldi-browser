@@ -145,7 +145,7 @@ class Display : public PlatformDisplayDelegate,
   // Called just before |tree| is destroyed.
   void OnWillDestroyTree(WindowTree* tree);
 
-  void UpdateNativeCursor(int32_t cursor_id);
+  void UpdateNativeCursor(mojom::Cursor cursor_id);
 
   // mojom::WindowTreeHost:
   void SetSize(const gfx::Size& size) override;
@@ -155,7 +155,7 @@ class Display : public PlatformDisplayDelegate,
   friend class test::DisplayTestApi;
 
   using WindowManagerDisplayRootMap =
-      std::map<UserId, std::unique_ptr<WindowManagerDisplayRoot>>;
+      std::map<UserId, WindowManagerDisplayRoot*>;
 
   // Inits the necessary state once the display is ready.
   void InitWindowManagerDisplayRootsIfNecessary();
@@ -168,11 +168,11 @@ class Display : public PlatformDisplayDelegate,
       WindowManagerWindowTreeFactory* factory);
 
   // PlatformDisplayDelegate:
+  void CreateRootWindow(const gfx::Size& size) override;
   ServerWindow* GetRootWindow() override;
   bool IsInHighContrastMode() override;
   void OnEvent(const ui::Event& event) override;
   void OnNativeCaptureLost() override;
-  void OnDisplayClosed() override;
   void OnViewportMetricsChanged(const ViewportMetrics& old_metrics,
                                 const ViewportMetrics& new_metrics) override;
   void OnCompositorFrameDrawn() override;
@@ -206,7 +206,7 @@ class Display : public PlatformDisplayDelegate,
   std::unique_ptr<FocusController> focus_controller_;
 
   // The last cursor set. Used to track whether we need to change the cursor.
-  int32_t last_cursor_;
+  mojom::Cursor last_cursor_;
 
   ServerWindowTracker activation_parents_;
 

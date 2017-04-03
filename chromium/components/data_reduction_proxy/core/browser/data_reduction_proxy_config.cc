@@ -28,10 +28,12 @@
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_config_values.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_event_creator.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
+#include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/variations/variations_associated_data.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/load_flags.h"
 #include "net/base/network_change_notifier.h"
+#include "net/log/net_log_source_type.h"
 #include "net/proxy/proxy_server.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_fetcher_delegate.h"
@@ -231,6 +233,9 @@ class SecureProxyChecker : public net::URLFetcherDelegate {
                                    FetcherResponseCallback fetcher_callback) {
     fetcher_ = net::URLFetcher::Create(secure_proxy_check_url,
                                        net::URLFetcher::GET, this);
+    data_use_measurement::DataUseUserData::AttachToFetcher(
+        fetcher_.get(),
+        data_use_measurement::DataUseUserData::DATA_REDUCTION_PROXY);
     fetcher_->SetLoadFlags(net::LOAD_DISABLE_CACHE | net::LOAD_BYPASS_PROXY);
     fetcher_->SetRequestContext(url_request_context_getter_.get());
     // Configure max retries to be at most kMaxRetries times for 5xx errors.
@@ -339,13 +344,18 @@ bool DataReductionProxyConfig::WasDataReductionProxyUsed(
 }
 
 bool DataReductionProxyConfig::IsDataReductionProxy(
-    const net::HostPortPair& host_port_pair,
+    const net::ProxyServer& proxy_server,
     DataReductionProxyTypeInfo* proxy_info) const {
   DCHECK(thread_checker_.CalledOnValidThread());
 
+  if (!proxy_server.is_valid() || proxy_server.is_direct())
+    return false;
+
   const std::vector<net::ProxyServer>& proxy_list =
       config_values_->proxies_for_http();
-  auto proxy_it =
+
+  net::HostPortPair host_port_pair = proxy_server.host_port_pair();
+  const auto proxy_it =
       std::find_if(proxy_list.begin(), proxy_list.end(),
                    [&host_port_pair](const net::ProxyServer& proxy) {
                      return proxy.is_valid() &&
@@ -377,7 +387,7 @@ bool DataReductionProxyConfig::IsBypassedByDataReductionProxyLocalRules(
     return true;
   if (result.proxy_server().is_direct())
     return true;
-  return !IsDataReductionProxy(result.proxy_server().host_port_pair(), NULL);
+  return !IsDataReductionProxy(result.proxy_server(), NULL);
 }
 
 bool DataReductionProxyConfig::AreDataReductionProxiesBypassed(
@@ -422,7 +432,7 @@ bool DataReductionProxyConfig::AreProxiesBypassed(
       continue;
 
     base::TimeDelta delay;
-    if (IsDataReductionProxy(proxy.host_port_pair(), NULL)) {
+    if (IsDataReductionProxy(proxy, NULL)) {
       if (!IsProxyBypassed(retry_map, proxy, &delay))
         return false;
       if (delay < min_delay)
@@ -589,7 +599,7 @@ bool DataReductionProxyConfig::ContainsDataReductionProxy(
       proxy_rules.MapUrlSchemeToProxyList("http");
   if (http_proxy_list && !http_proxy_list->IsEmpty() &&
       // Sufficient to check only the first proxy.
-      IsDataReductionProxy(http_proxy_list->Get().host_port_pair(), NULL)) {
+      IsDataReductionProxy(http_proxy_list->Get(), NULL)) {
     return true;
   }
 
@@ -643,7 +653,7 @@ void DataReductionProxyConfig::HandleSecureProxyCheckResponse(
   bool success_response =
       base::StartsWith(response, "OK", base::CompareCase::SENSITIVE);
   if (event_creator_)
-    event_creator_->EndSecureProxyCheck(bound_net_log_, status.error(),
+    event_creator_->EndSecureProxyCheck(net_log_with_source_, status.error(),
                                         http_response_code, success_response);
 
   if (!status.is_success()) {
@@ -753,11 +763,11 @@ void DataReductionProxyConfig::RecordSecureProxyCheckFetchResult(
 void DataReductionProxyConfig::SecureProxyCheck(
     const GURL& secure_proxy_check_url,
     FetcherResponseCallback fetcher_callback) {
-  bound_net_log_ = net::BoundNetLog::Make(
-      net_log_, net::NetLog::SOURCE_DATA_REDUCTION_PROXY);
+  net_log_with_source_ = net::NetLogWithSource::Make(
+      net_log_, net::NetLogSourceType::DATA_REDUCTION_PROXY);
   if (event_creator_) {
     event_creator_->BeginSecureProxyCheck(
-        bound_net_log_, config_values_->secure_proxy_check_url());
+        net_log_with_source_, config_values_->secure_proxy_check_url());
   }
 
   secure_proxy_checker_->CheckIfSecureProxyIsAllowed(secure_proxy_check_url,
@@ -857,7 +867,7 @@ bool DataReductionProxyConfig::IsEffectiveConnectionTypeSlowerThanThreshold(
 bool DataReductionProxyConfig::ShouldEnableLoFiMode(
     const net::URLRequest& request) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK((request.load_flags() & net::LOAD_MAIN_FRAME) != 0);
+  DCHECK((request.load_flags() & net::LOAD_MAIN_FRAME_DEPRECATED) != 0);
   DCHECK(!request.url().SchemeIsCryptographic());
 
   net::NetworkQualityEstimator* network_quality_estimator;

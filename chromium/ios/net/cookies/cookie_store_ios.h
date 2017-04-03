@@ -253,7 +253,7 @@ class CookieStoreIOS : public net::CookieStore,
   void RunCallbacksForCookies(const GURL& url,
                               const std::string& name,
                               const std::vector<net::CanonicalCookie>& cookies,
-                              bool removed);
+                              net::CookieStore::ChangeCause cause);
 
   // Called by this CookieStoreIOS' internal CookieMonster instance when
   // GetAllCookiesForURLAsync() completes. Updates the cookie cache and runs
@@ -324,9 +324,9 @@ class CookieStoreIOS : public net::CookieStore,
   std::unique_ptr<CookieCache> cookie_cache_;
 
   // Callbacks for cookie changes installed by AddCallbackForCookie.
-  typedef std::map<std::pair<GURL, std::string>, CookieChangedCallbackList*>
-      CookieChangedHookMap;
-  CookieChangedHookMap hook_map_;
+  std::map<std::pair<GURL, std::string>,
+           std::unique_ptr<CookieChangedCallbackList>>
+      hook_map_;
 
   base::WeakPtrFactory<CookieStoreIOS> weak_factory_;
 

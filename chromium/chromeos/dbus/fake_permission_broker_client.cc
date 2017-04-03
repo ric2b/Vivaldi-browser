@@ -15,7 +15,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/threading/worker_pool.h"
-#include "dbus/file_descriptor.h"
 
 namespace chromeos {
 
@@ -27,13 +26,12 @@ const char kOpenFailedError[] = "open_failed";
 // function implements a simplified version of the method implemented by the
 // permission broker by opening the path specified and returning the resulting
 // file descriptor.
-void OpenPathAndValidate(
-    const std::string& path,
-    const PermissionBrokerClient::OpenPathCallback& callback,
-    const PermissionBrokerClient::ErrorCallback& error_callback,
-    scoped_refptr<base::TaskRunner> task_runner) {
-  int fd = HANDLE_EINTR(open(path.c_str(), O_RDWR));
-  if (fd < 0) {
+void OpenPath(const std::string& path,
+              const PermissionBrokerClient::OpenPathCallback& callback,
+              const PermissionBrokerClient::ErrorCallback& error_callback,
+              scoped_refptr<base::TaskRunner> task_runner) {
+  base::ScopedFD fd(HANDLE_EINTR(open(path.c_str(), O_RDWR)));
+  if (!fd.is_valid()) {
     int error_code = logging::GetLastSystemErrorCode();
     task_runner->PostTask(
         FROM_HERE,
@@ -44,11 +42,7 @@ void OpenPathAndValidate(
     return;
   }
 
-  dbus::FileDescriptor dbus_fd;
-  dbus_fd.PutValue(fd);
-  dbus_fd.CheckValidity();
-  task_runner->PostTask(FROM_HERE,
-                        base::Bind(callback, base::Passed(&dbus_fd)));
+  task_runner->PostTask(FROM_HERE, base::Bind(callback, base::Passed(&fd)));
 }
 
 }  // namespace
@@ -69,27 +63,24 @@ void FakePermissionBrokerClient::OpenPath(const std::string& path,
                                           const OpenPathCallback& callback,
                                           const ErrorCallback& error_callback) {
   base::WorkerPool::PostTask(
-      FROM_HERE,
-      base::Bind(&OpenPathAndValidate, path, callback, error_callback,
-                 base::ThreadTaskRunnerHandle::Get()),
+      FROM_HERE, base::Bind(&chromeos::OpenPath, path, callback, error_callback,
+                            base::ThreadTaskRunnerHandle::Get()),
       false);
 }
 
 void FakePermissionBrokerClient::RequestTcpPortAccess(
     uint16_t port,
     const std::string& interface,
-    const dbus::FileDescriptor& lifeline_fd,
+    int lifeline_fd,
     const ResultCallback& callback) {
-  DCHECK(lifeline_fd.is_valid());
   callback.Run(true);
 }
 
 void FakePermissionBrokerClient::RequestUdpPortAccess(
     uint16_t port,
     const std::string& interface,
-    const dbus::FileDescriptor& lifeline_fd,
+    int lifeline_fd,
     const ResultCallback& callback) {
-  DCHECK(lifeline_fd.is_valid());
   callback.Run(true);
 }
 

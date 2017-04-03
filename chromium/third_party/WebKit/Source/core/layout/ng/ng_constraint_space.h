@@ -6,138 +6,144 @@
 #define NGConstraintSpace_h
 
 #include "core/CoreExport.h"
-#include "core/layout/ng/ng_units.h"
-#include "wtf/DoublyLinkedList.h"
+#include "core/layout/ng/ng_physical_constraint_space.h"
+#include "core/layout/ng/ng_writing_mode.h"
+#include "platform/heap/Handle.h"
+#include "wtf/text/WTFString.h"
+#include "wtf/Vector.h"
 
 namespace blink {
 
-class NGConstraintSpace;
-class NGDerivedConstraintSpace;
-class NGExclusion;
+class LayoutBox;
 class NGFragment;
 class NGLayoutOpportunityIterator;
-class LayoutBox;
 
-enum NGExclusionType {
-  NGClearNone = 0,
-  NGClearFloatLeft = 1,
-  NGClearFloatRight = 2,
-  NGClearFragment = 4
-};
-
-enum NGFragmentationType {
-  FragmentNone,
-  FragmentPage,
-  FragmentColumn,
-  FragmentRegion
-};
-
-enum NGWritingMode {
-  HorizontalTopBottom = 0,
-  VerticalRightLeft = 1,
-  VerticalLeftRight = 2,
-  SidewaysRightLeft = 3,
-  SidewaysLeftRight = 4
-};
-
-enum NGDirection { LeftToRight = 0, RightToLeft = 1 };
-
-class NGExclusion {
+// The NGConstraintSpace represents a set of constraints and available space
+// which a layout algorithm may produce a NGFragment within. It is a view on
+// top of a NGPhysicalConstraintSpace and provides accessor methods in the
+// logical coordinate system defined by the writing mode given.
+class CORE_EXPORT NGConstraintSpace final
+    : public GarbageCollected<NGConstraintSpace> {
  public:
-  NGExclusion();
-  ~NGExclusion() {}
-};
+  // Constructs a constraint space with a new backing NGPhysicalConstraintSpace.
+  // The size will be used for both for the physical constraint space's
+  // container size and this constraint space's Size().
+  NGConstraintSpace(NGWritingMode, NGDirection, NGLogicalSize);
 
-class CORE_EXPORT NGConstraintSpace {
- public:
-  NGConstraintSpace(NGLogicalSize container_size);
-  virtual ~NGConstraintSpace() {}
+  // Constructs a constraint space based on an existing backing
+  // NGPhysicalConstraintSpace. Sets this constraint space's size to the
+  // physical constraint space's container size, converted to logical
+  // coordinates.
+  // TODO(layout-ng): Do we need this constructor?
+  NGConstraintSpace(NGWritingMode, NGDirection, NGPhysicalConstraintSpace*);
 
-  // Constructs a new constraint space based on an old one with a new size but
-  // the same exclusions.
-  NGConstraintSpace(const NGConstraintSpace&, NGLogicalSize container_size);
+  // Constructs a constraint space with a different NGWritingMode and
+  // NGDirection that's otherwise identical.
+  NGConstraintSpace(NGWritingMode, NGDirection, const NGConstraintSpace*);
 
-  // Constructs Layout NG constraint space from legacy layout object.
-  static NGConstraintSpace fromLayoutObject(const LayoutBox&);
+  // Constructs a derived constraint space sharing the same backing
+  // NGPhysicalConstraintSpace, NGWritingMode and NGDirection. Primarily for use
+  // by NGLayoutOpportunityIterator.
+  NGConstraintSpace(const NGConstraintSpace& other,
+                    NGLogicalOffset,
+                    NGLogicalSize);
 
-  void addExclusion(const NGExclusion, unsigned options = 0);
-  void setOverflowTriggersScrollbar(bool inlineTriggers, bool blockTriggers);
-  void setFixedSize(bool inlineFixed, bool blockFixed);
-  void setFragmentationType(NGFragmentationType);
+  // Constructs a derived constraint space that shares the exclusions of the
+  // input constraint space, but has a different container size, writing mode
+  // and direction. Sets the offset to zero. For use by layout algorithms
+  // to use as the basis to find layout opportunities for children.
+  NGConstraintSpace(NGWritingMode,
+                    NGDirection,
+                    const NGConstraintSpace& other,
+                    NGLogicalSize);
+
+  // This should live on NGBox or another layout bridge and probably take a root
+  // NGConstraintSpace or a NGPhysicalConstraintSpace.
+  static NGConstraintSpace* CreateFromLayoutObject(const LayoutBox&);
+
+  NGPhysicalConstraintSpace* PhysicalSpace() const { return physical_space_; }
+
+  NGDirection Direction() const { return static_cast<NGDirection>(direction_); }
+
+  NGWritingMode WritingMode() const {
+    return static_cast<NGWritingMode>(writing_mode_);
+  }
 
   // Size of the container. Used for the following three cases:
   // 1) Percentage resolution.
   // 2) Resolving absolute positions of children.
-  // 3) Defining the threashold that triggers the presence of a scrollbar. Only
+  // 3) Defining the threshold that triggers the presence of a scrollbar. Only
   //    applies if the corresponding scrollbarTrigger flag has been set for the
   //    direction.
-  NGLogicalSize ContainerSize() const { return container_size_; }
+  NGLogicalSize ContainerSize() const;
 
-  // Returns the effective size of the constraint space. Defaults to
+  // Offset relative to the root constraint space.
+  NGLogicalOffset Offset() const { return offset_; }
+
+  // Returns the effective size of the constraint space. Equal to the
   // ContainerSize() for the root constraint space but derived constraint spaces
-  // overrides it to return the size of the layout opportunity.
-  virtual NGLogicalSize Size() const { return ContainerSize(); }
+  // return the size of the layout opportunity.
+  virtual NGLogicalSize Size() const { return size_; }
+
+  // Whether the current constraint space is for the newly established
+  // Formatting Context.
+  bool IsNewFormattingContext() const { return is_new_fc_; }
 
   // Whether exceeding the containerSize triggers the presence of a scrollbar
   // for the indicated direction.
   // If exceeded the current layout should be aborted and invoked again with a
   // constraint space modified to reserve space for a scrollbar.
-  bool inlineTriggersScrollbar() const { return inline_triggers_scrollbar_; }
-  bool blockTriggersScrollbar() const { return block_triggers_scrollbar_; }
+  bool InlineTriggersScrollbar() const;
+  bool BlockTriggersScrollbar() const;
 
   // Some layout modes “stretch” their children to a fixed size (e.g. flex,
   // grid). These flags represented whether a layout needs to produce a
   // fragment that satisfies a fixed constraint in the inline and block
   // direction respectively.
-  bool fixedInlineSize() const { return fixed_inline_size_; }
-  bool fixedBlockSize() const { return fixed_block_size_; }
+  bool FixedInlineSize() const;
+  bool FixedBlockSize() const;
 
   // If specified a layout should produce a Fragment which fragments at the
   // blockSize if possible.
-  NGFragmentationType blockFragmentationType() const {
-    return static_cast<NGFragmentationType>(block_fragmentation_type_);
-  }
-
-  DoublyLinkedList<const NGExclusion> exclusions(unsigned options = 0) const;
-
-  NGLayoutOpportunityIterator layoutOpportunities(
-      unsigned clear = NGClearNone,
-      bool for_inline_or_bfc = false) const;
+  NGFragmentationType BlockFragmentationType() const;
 
   // Modifies constraint space to account for a placed fragment. Depending on
   // the shape of the fragment this will either modify the inline or block
   // size, or add an exclusion.
-  void subtract(const NGFragment);
+  void Subtract(const NGFragment*);
+
+  NGLayoutOpportunityIterator* LayoutOpportunities(
+      unsigned clear = NGClearNone,
+      bool for_inline_or_bfc = false);
+
+  DEFINE_INLINE_VIRTUAL_TRACE() { visitor->trace(physical_space_); }
+
+  // The setters for the NGConstraintSpace should only be used when constructing
+  // a derived NGConstraintSpace.
+  void SetOverflowTriggersScrollbar(bool inlineTriggers, bool blockTriggers);
+  void SetFixedSize(bool inlineFixed, bool blockFixed);
+  void SetFragmentationType(NGFragmentationType);
+  // TODO(layout-ng): Add m_isNewFc flag to ComputedStyle and use it instead of
+  // the function below.
+  void SetIsNewFormattingContext(bool is_new_fc) { is_new_fc_ = is_new_fc; }
+
+  String ToString() const;
 
  private:
-  NGLogicalSize container_size_;
-
-  unsigned fixed_inline_size_ : 1;
-  unsigned fixed_block_size_ : 1;
-  unsigned inline_triggers_scrollbar_ : 1;
-  unsigned block_triggers_scrollbar_ : 1;
-  unsigned block_fragmentation_type_ : 2;
-
-  DoublyLinkedList<const NGExclusion> exclusions_;
+  Member<NGPhysicalConstraintSpace> physical_space_;
+  NGLogicalOffset offset_;
+  NGLogicalSize size_;
+  unsigned writing_mode_ : 3;
+  unsigned direction_ : 1;
+  // Whether the current constraint space is for the newly established
+  // formatting Context
+  bool is_new_fc_ : 1;
 };
 
-class CORE_EXPORT NGLayoutOpportunityIterator final {
- public:
-  NGLayoutOpportunityIterator(const NGConstraintSpace* space,
-                              unsigned clear,
-                              bool for_inline_or_bfc)
-      : constraint_space_(space),
-        clear_(clear),
-        for_inline_or_bfc_(for_inline_or_bfc) {}
-  ~NGLayoutOpportunityIterator() {}
-
-  const NGDerivedConstraintSpace* next();
-
- private:
-  const NGConstraintSpace* constraint_space_;
-  unsigned clear_;
-  bool for_inline_or_bfc_;
-};
+inline std::ostream& operator<<(std::ostream& stream,
+                                const NGConstraintSpace& value) {
+  return stream << value.ToString();
+}
 
 }  // namespace blink
 

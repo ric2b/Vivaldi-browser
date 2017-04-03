@@ -205,7 +205,7 @@ AudioConverterRef ATAudioDecoder::ScopedAudioConverterRefTraits::InvalidValue() 
 ATAudioDecoder::ATAudioDecoder(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner)
     : task_runner_(task_runner),
-      needs_eos_workaround_(base::mac::IsOSMavericks()) {}
+      needs_eos_workaround_(base::mac::IsOS10_9()) {}
 
 ATAudioDecoder::~ATAudioDecoder() = default;
 

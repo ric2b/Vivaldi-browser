@@ -3,7 +3,7 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/classes/iron-flex-layout.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-checkbox/paper-checkbox.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-dropdown-menu/paper-dropdown-menu.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-dropdown-menu/paper-dropdown-menu-light.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-listbox/paper-listbox.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-slider/paper-slider.html">
 <link rel="import" href="/device_page/display_layout.html">
@@ -13,13 +13,6 @@
 <dom-module id="settings-display">
   <template>
     <style include="settings-shared">
-     .display-section {
-       align-self: flex-start;
-       font-size: 100%;
-       font-weight: 500;
-       margin: 10px 0;
-     }
-
      .settings-box.embedded {
        align-self: stretch;
        margin-left: 20px;
@@ -47,14 +40,14 @@
      }
     </style>
     <div class="settings-box first layout vertical self-stretch">
-      <div class="display-section">$i18n{displayArrangement}</div>
+      <h2>$i18n{displayArrangement}</h2>
       <display-layout id="displayLayout"
           selected-display="[[selectedDisplay]]"
           on-select-display="onSelectDisplay_">
       </display-layout>
     </div>
-    <div class="settings-box layout vertical">
-      <div class="display-section">[[selectedDisplay.name]]</div>
+    <div class="settings-box layout vertical first">
+      <h2>[[selectedDisplay.name]]</h2>
       <div class="settings-box embedded first">
         <paper-checkbox class="flex" checked="[[isMirrored_(displays)]]"
             hidden$="[[!showMirror_(displays)]]" on-tap="onMirroredTap_">
@@ -83,7 +76,7 @@
       </div>
       <div class="settings-box embedded">
         <div class="start textarea">$i18n{displayOrientation}</div>
-        <paper-dropdown-menu vertical-align="auto" no-label-float>
+        <paper-dropdown-menu-light vertical-align="auto" no-label-float>
           <paper-listbox class="dropdown-content"
               selected="[[selectedDisplay.rotation]]"
               attr-for-selected="value"
@@ -95,7 +88,7 @@
             <button class="dropdown-item" role="option" value="180">180</button>
             <button class="dropdown-item" role="option" value="270">270</button>
           </paper-listbox>
-        </paper-dropdown-menu>
+        </paper-dropdown-menu-light>
       </div>
       <div class="settings-box embedded"
           hidden$="[[selectedDisplay.isInternal]]">

@@ -346,6 +346,21 @@ Press any key to continue exploring.
   <message name="IDS_FILE_BROWSER_GALLERY_ASPECT_RATIO_16_9" desc="Button label to fix aspect to 16:9 ratio when cropping.">
     16x9
   </message>
+  <message name="IDS_FILE_BROWSER_GALLERY_RESIZE" desc="In the Gallery, the title on the button that resize a photo.">
+    Resize
+  </message>
+  <message name="IDS_FILE_BROWSER_GALLERY_FIXRATIO" desc="Togglable Button to fix the ratio of width/height input field when resizing.">
+    Fix ratio
+  </message>
+  <message name="IDS_FILE_BROWSER_GALLERY_HEIGHT" desc="Input field to set the new size for height.">
+    Height
+  </message>
+  <message name="IDS_FILE_BROWSER_GALLERY_INVALIDVALUE" desc="In the Gallery, the message informing that the input value is invalid.">
+    Input value is invalid.
+  </message>
+  <message name="IDS_FILE_BROWSER_GALLERY_WIDTH" desc="Input field to set the new size for width.">
+    Width
+  </message>
   <message name="IDS_FILE_BROWSER_GALLERY_EXPOSURE" desc="In the Gallery, the title on the button that applies the Brightness/Contrast filter to a photo.">
     Brightness
   </message>
@@ -436,13 +451,16 @@ Press any key to continue exploring.
   <message name="IDS_FILE_BROWSER_ERROR_RENAMING" desc="Error message.">
     Unable to rename "<ph name="FILE_NAME">$1<ex>document.pdf</ex></ph>". <ph name="ERROR_MESSAGE">$2<ex>An error occurred (code: ABORT)</ex></ph>
   </message>
-  <message name="IDS_FILE_BROWSER_RENAME_BUTTON_LABEL" desc="Button Label.">
+  <message name="IDS_FILE_BROWSER_GET_INFO_BUTTON_LABEL" desc="Context menu item that shows the currently-selected file's metadata.">
+    Get info
+  </message>
+  <message name="IDS_FILE_BROWSER_RENAME_BUTTON_LABEL" desc="Context menu item that renames the currently-selected file.">
     Rename
   </message>
-  <message name="IDS_FILE_BROWSER_DELETE_BUTTON_LABEL" desc="Button Label.">
+  <message name="IDS_FILE_BROWSER_DELETE_BUTTON_LABEL" desc="Context menu item that deletes the currently-selected file(s).">
     Delete
   </message>
-  <message name="IDS_FILE_BROWSER_PASTE_BUTTON_LABEL" desc="Button Label.">
+  <message name="IDS_FILE_BROWSER_PASTE_BUTTON_LABEL" desc="Context menu item that pastes the file(s) in the clipboard.">
     Paste
   </message>
   <message name="IDS_FILE_BROWSER_REFRESH_BUTTON_LABEL" desc="Label for a button for refreshing the current directory.">
@@ -451,10 +469,10 @@ Press any key to continue exploring.
   <message name="IDS_FILE_BROWSER_PASTE_INTO_FOLDER_BUTTON_LABEL" desc="Menu item label, pasting files into the selected folder.">
     Paste into folder
   </message>
-  <message name="IDS_FILE_BROWSER_COPY_BUTTON_LABEL" desc="Button Label.">
+  <message name="IDS_FILE_BROWSER_COPY_BUTTON_LABEL" desc="Context menu item that copies the currently-selected file(s) to the clipboard.">
     Copy
   </message>
-  <message name="IDS_FILE_BROWSER_CUT_BUTTON_LABEL" desc="Button Label.">
+  <message name="IDS_FILE_BROWSER_CUT_BUTTON_LABEL" desc="Context menu item that cuts the currently-selected file(s) to the clipboard.">
     Cut
   </message>
   <message name="IDS_FILE_BROWSER_MORE_ACTIONS_BUTTON_LABEL" desc="Menu item label, showing dialog to choose extension to open selected files or directories.">
@@ -1386,6 +1404,12 @@ Press any key to continue exploring.
   <message name="IDS_FLAGS_FULLSCREEN_APP_LIST_DESCRIPTION" desc="Description for the flag to enable experimental fullscreen app list.">
     The app-list will appear as fullscreen mode when it's in touch view mode. This flag does nothing outside of the mode.
   </message>
+  <message name="IDS_FLAGS_MD_STORAGE_MANAGER_NAME" desc="Description for the flag to enable experimental storage manager.">
+    Material Design storage manager
+  </message>
+  <message name="IDS_FLAGS_MD_STORAGE_MANAGER_DESCRIPTION" desc="Description for the flag to enable experimental storage manager.">
+    Enables storage manager in Material Design Settings.
+  </message>
   <message name="IDS_FLAGS_QUICK_UNLOCK_PIN" desc="Title of the flag used to enable quick unlock pin.">
     Quick Unlock (PIN)
   </message>
@@ -1533,6 +1557,9 @@ Press any key to continue exploring.
   <message name="IDS_UPDATE_SCREEN_TITLE" desc="Title of the OOBE update screen">
     Update
   </message>
+  <message name="IDS_UPDATING_SCREEN_TITLE" desc="Title of the OOBE screen displayed while system update is being dowloaded.">
+    Updating
+  </message>
   <message name="IDS_UPDATE_SCREEN_ACCESSIBLE_TITLE" desc="Title to be spoken on opening the OOBE update screen">
     Chrome updates automatically so you always have the freshest version
   </message>
@@ -1543,6 +1570,9 @@ Press any key to continue exploring.
     Sign in, press the tab key to interact with input elements
   </message>
   <message name="IDS_LOGIN_GAIA_LOADING_MESSAGE" desc="Message on the OOBE gaia loading screen">
+    Please wait...
+  </message>
+  <message name="IDS_ENTERPRISE_ENROLLMENT_WORKING_MESSAGE" desc="Message to show while enrollment is in progress">
     Please wait...
   </message>
   <message name="IDS_NETWORK_SELECTION_TITLE" desc="Welcome title shown on network selection screen">
@@ -1637,6 +1667,9 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_KEYBOARD_DROPDOWN_TITLE" desc="Title of keyboard selection dropdown menu" meaning="Small title near keyboard dropdown menu suggesting that this is a keyboard layout selector.">
     Keyboard
+  </message>
+  <message name="IDS_OOBE_WELCOME_NEXT_BUTTON_TEXT" desc="Text on 'Start to use ChromeOS' button" meaning="This is the text label displayed on the 'Next' button for the first ChromeOS initial device setup screen ('Welcome screen').">
+    Let's go
   </message>
   <message name="IDS_OOBE_OK_BUTTON_TEXT" desc="Text on 'OK' button" meaning="This is 'OK' text for all 'OK' buttons on ChromeOS initial device setup screens.">
     OK
@@ -1822,6 +1855,15 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_LOGIN_CONFIRM_PASSWORD_TITLE" desc="Title for the confirm password dialog.">
     Please re-enter your password to update your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> profile.
+  </message>
+  <message name="IDS_LOGIN_MANUAL_PASSWORD_TITLE" desc="Title for the manual password setting dialog.">
+    Please create a password to protect your local data.
+  </message>
+  <message name="IDS_LOGIN_MANUAL_PASSWORD_INPUT_LABEL" desc="Label for the password input when setting the password manually.">
+    Enter your password
+  </message>
+  <message name="IDS_LOGIN_MANUAL_PASSWORD_MISMATCH" desc="Error shown when passwords don't match when setting the password manually.">
+    Passwords don't match
   </message>
   <message name="IDS_LOGIN_CONFIRM_PASSWORD_LABEL" desc="Label for the password field on the confirm password dialog.">
     Confirm your password
@@ -2607,9 +2649,6 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_ADDITIONAL_FEATURES_TITLE" desc="In the settings tab, the title of a link that adds additional accessibility features not found in the built-in settings.">
     Add additional features
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_ADDITIONAL_FEATURES_DESCRIPTION" desc="In the settings tab, an explanation that additional accessibility features are found on the Chrome Web Store.">
-    Choose from the Chrome Web Store
   </message>
   <message name="IDS_FLAGS_EXPERIMENTAL_ACCESSIBILITY_FEATURES_NAME" desc="Name of the about:flag option for experimental accessibility features.">
     Experimental accessibility features
@@ -4627,6 +4666,9 @@ Battery full
   <message name="IDS_KEYBOARD_OVERLAY_TOGGLE_CHROMEVOX_SPOKEN_FEEDBACK" desc="The text in the keyboard overlay to explain the shortcut (enable or disable spoken feedback).">
     ChromeVox (spoken feedback)
   </message>
+  <message name="IDS_KEYBOARD_OVERLAY_TOGGLE_HIGH_CONTRAST_MODE" desc="The text in the keyboard overlay to explain the shortcut (Toggle high contrast mode).">
+    Toggle High Contrast Mode
+  </message>
   <message name="IDS_KEYBOARD_OVERLAY_TOGGLE_PROJECTION_TOUCH_HUD" desc="The text in the keyboard overlay to explain the shortcut.">
     Projection touch HUD
   </message>
@@ -5282,9 +5324,6 @@ Battery full
   <message name="IDS_LOGIN_ERROR_AUTHENTICATING_NEW" desc="Couldn't sign in because username or password invalid">
     Sorry, your email or password could not be verified. Please try again.
   </message>
-  <message name="IDS_LOGIN_ERROR_AUTHENTICATING_HOSTED" desc="Couldn't sign in because hosted account is used">
-    Your account does not work on <ph name="PRODUCT_NAME">$1<ex>Google Chrome OS</ex></ph>. Please contact your domain administrator or use a regular Google Account to sign in.
-  </message>
   <message name="IDS_LOGIN_ERROR_AUTHENTICATING_KIOSK" desc="Couldn't pass kiosk lock screen to configure network.">
     Sorry, your password could not be verified. Please try again.
   </message>
@@ -5924,7 +5963,7 @@ All users must sign out to continue.
     Connection was lost
   </message>
 
-  <!-- Strings for the le OAuth-based enterprise enrollment page -->
+  <!-- Strings for the enterprise enrollment page -->
   <message name="IDS_ENTERPRISE_ENROLLMENT_STATUS_REGISTRATION_FAILED" desc="Error message shown on the enrollment screen upon failed device registration.">
     Error when registering the device with the server: <ph name="CLIENT_ERROR">$1<ex>Failed to connect to the server</ex></ph>.
   </message>
@@ -5949,7 +5988,6 @@ All users must sign out to continue.
   <message name="IDS_ENTERPRISE_ENROLLMENT_ROBOT_REFRESH_STORE_FAILED" desc="Error message shown on the enrollment screen upon failure to store the OAuth2 refresh token for device-level API access.">
     Oops!  The system failed to store the long-term API access token for this device.
   </message>
-
   <message name="IDS_ENTERPRISE_ENROLLMENT_STATUS_LOCK_ERROR" desc="Error message shown on the enrollment screen upon failure to lock the device mode.">
     Oops!  The system failed to establish the device installation-time attributes lock.
   </message>
@@ -5996,10 +6034,13 @@ All users must sign out to continue.
     This device cannot be enrolled to the domain your account belongs to because the device is marked for management by a different domain.
   </message>
   <message name="IDS_ENTERPRISE_ENROLLMENT_ATTRIBUTE_ERROR" desc="Error message shown when successfully enrolled, but the device attribute update has failed.">
-  Your device has successfully been enrolled for enterprise management, but failed to send its asset and location information. Please manually enter this information from your Admin console for this device.
+    Your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> has successfully been enrolled for enterprise management, but failed to send its asset and location information. Please manually enter this information from your Admin console for this device.
   </message>
   <message name="IDS_ENTERPRISE_ENROLLMENT_STATUS_REGISTRATION_CERT_FETCH_FAILED" desc="Error message shown when a registration certificate could not be obtained.">
     A registration certificate could not be obtained.
+  </message>
+  <message name="IDS_ENTERPRISE_ENROLLMENT_STATUS_NO_MACHINE_IDENTIFICATION" desc="Error message shown on the enrollment screen when the system failed to determine the device model or serial number.">
+    Oops!  The system failed to determine device model or serial number.
   </message>
   <message name="IDS_ENTERPRISE_ENROLLMENT_SCREEN_TITLE" desc="The title on the enterprise enrollment dialog.">
     Enterprise enrollment
@@ -6017,7 +6058,12 @@ All users must sign out to continue.
     Skip
   </message>
   <message name="IDS_ENTERPRISE_ENROLLMENT_SUCCESS" desc="Success message to be shown once enterprise enrollment completes.">
-    Your device has successfully been enrolled for enterprise management.
+    Your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> has successfully been enrolled for enterprise management.
+  </message>
+  <message name="IDS_ENTERPRISE_ENROLLMENT_ABE_SUCCESS" desc="Success message to be shown once attestation-based enterprise enrollment completes.">
+    Your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> has successfully been enrolled for enterprise management by <ph name="BEGIN_BOLD">&lt;strong&gt;</ph><ph name="DOMAIN">$2<ex>acmecorp.com</ex></ph><ph name="END_BOLD">&lt;/strong&gt;</ph>.
+    <ph name="LINE_BREAK_AND_EMPTY_LINE">&lt;br&gt;&lt;br&gt;</ph>
+    If this is unexpected, please contact support.
   </message>
   <message name="IDS_ENTERPRISE_ENROLLMENT_ASSET_ID_LABEL" desc="Label for asset id text box on the device naming screen in the enterprise enrollment dialog.">
     Asset Identifier
@@ -6069,92 +6115,6 @@ All users must sign out to continue.
 
   <message name="IDS_DEVICE_LOG_LINK_TEXT" desc="Message preceeding link to chrome://device-log">
     For network logs, see: <ph name="DEVICE_LOG_LINK">&lt;a href="chrome://device-log"&gt;chrome://device-log&lt;/a&gt;</ph>
-  </message>
-
-  <!-- About NFC Debug UI display strings. They aren't being internationalized bacause this page is meant for debugging only. -->
-  <message name="IDS_NFC_DEBUG_TITLE" desc="Title of the debug page meant for developers to test NFC functionality" translateable="false">
-    NFC API Test Page
-  </message>
-  <message name="IDS_NFC_DEBUG_NOT_SUPPORTED" desc="Message shown if the NFC API is not supported on platform" translateable="false">
-    NFC is not supported on the current platform.
-  </message>
-  <message name="IDS_NFC_DEBUG_ADAPTER_HEADER" desc="Header of the 'NFC Adapter' box, that shows the state of the NFC adapter" translateable="false">
-    NFC Adapter
-  </message>
-  <message name="IDS_NFC_DEBUG_ADAPTER_POWER_ON" desc="Adapter power button text to turn the adapter on" translateable="false">
-    Power ON
-  </message>
-  <message name="IDS_NFC_DEBUG_ADAPTER_POWER_OFF" desc="Adapter power button text to turn the adapter off" translateable="false">
-    Power OFF
-  </message>
-  <message name="IDS_NFC_DEBUG_ADAPTER_START_POLL" desc="Adapter poll button text to start polling" translateable="false">
-    Start Poll
-  </message>
-  <message name="IDS_NFC_DEBUG_ADAPTER_STOP_POLL" desc="Adapter poll button text to stop polling" translateable="false">
-    Stop Poll
-  </message>
-  <message name="IDS_NFC_DEBUG_NDEF_FORM_HEADER" desc="Header of the 'NFC NDEF message form' box used send a message to tag/peer" translateable="false">
-    Push/Write NDEF Message
-  </message>
-  <message name="IDS_NFC_DEBUG_NDEF_FORM_TYPE_TEXT" desc="NDEF message form dropdown menu item for message type 'Text'" translateable="false">
-    Text
-  </message>
-  <message name="IDS_NFC_DEBUG_NDEF_FORM_TYPE_URI" desc="NDEF message form dropdown menu item for message type 'URI'" translateable="false">
-    URI
-  </message>
-  <message name="IDS_NFC_DEBUG_NDEF_FORM_TYPE_SMART_POSTER" desc="NDEF message form dropdown menu text for message type 'SmartPoster'" translateable="false">
-    SmartPoster
-  </message>
-  <message name="IDS_NFC_DEBUG_NDEF_FORM_FIELD_TEXT" desc="Label for required input field 'Text'" translateable="false">
-    Text (required):
-  </message>
-  <message name="IDS_NFC_DEBUG_NDEF_FORM_FIELD_ENCODING" desc="Label for required input field 'Encoding'" translateable="false">
-    Encoding (required):
-  </message>
-  <message name="IDS_NFC_DEBUG_NDEF_FORM_FIELD_LANGUAGE_CODE" desc="Label for required input field 'Language Code'" translateable="false">
-    Language Code (required):
-  </message>
-  <message name="IDS_NFC_DEBUG_NDEF_FORM_FIELD_URI" desc="Label for required input field 'URI'" translateable="false">
-    URI (required):
-  </message>
-  <message name="IDS_NFC_DEBUG_NDEF_FORM_FIELD_MIME_TYPE" desc="Label for input field 'MIME Type'" translateable="false">
-    MIME Type:
-  </message>
-  <message name="IDS_NFC_DEBUG_NDEF_FORM_FIELD_TARGET_SIZE" desc="Label for input field 'Target Size'" translateable="false">
-    Target Size:
-  </message>
-  <message name="IDS_NFC_DEBUG_NDEF_FORM_FIELD_TITLE_TEXT" desc="Label for required input field 'Title Text'" translateable="false">
-    Title Text (required):
-  </message>
-  <message name="IDS_NFC_DEBUG_NDEF_FORM_FIELD_TITLE_ENCODING" desc="Label for required input field 'Title Encoding'" translateable="false">
-    Title Encoding (required):
-  </message>
-  <message name="IDS_NFC_DEBUG_NDEF_FORM_FIELD_TITLE_LANGUAGE_CODE" desc="Label for required input field 'Title Language Code'" translateable="false">
-    Title Language Code (required):
-  </message>
-  <message name="IDS_NFC_DEBUG_NDEF_FORM_WRITE_BUTTON" desc="NDEF message form button text for writing message to an NFC tag" translateable="false">
-    Write to Tag
-  </message>
-  <message name="IDS_NFC_DEBUG_NDEF_FORM_PUSH_BUTTON" desc="NDEF message form button text for pushing a message to an NFC peer device" translateable="false">
-    Push to Peer
-  </message>
-  <message name="IDS_NFC_DEBUG_NFC_PEER_HEADER" desc="Header of the 'NFC Peer' box" translateable="false">
-    NDEF Peer
-  </message>
-  <message name="IDS_NFC_DEBUG_NFC_TAG_HEADER" desc="Header of the 'NFC Tag' box" translateable="false">
-    NDEF Tag
-  </message>
-  <message name="IDS_NFC_DEBUG_RECORDS_HEADER" desc="Header of the 'Records' section in the tag and peer boxes" translateable="false">
-    Records
-  </message>
-  <message name="IDS_NFC_DEBUG_ERROR_FAILED_TO_SET_POWER" desc="Error message shown when adapter power could not be set." translateable="false">
-    Failed to set adapter power.
-  </message>
-  <message name="IDS_NFC_DEBUG_ERROR_FAILED_TO_SET_POLLING" desc="Error message shown when polling state could not be set." translateable="false">
-    Failed to start/stop polling.
-  </message>
-  <message name="IDS_NFC_DEBUG_ERROR_FAILED_TO_SUBMIT_PREFIX" desc="Error message shown when an NDEF form could not be submitted." translateable="false">
-    Failed to submit NDEF:
   </message>
 
   <!-- Set time/date UI display strings -->
@@ -6254,7 +6214,10 @@ All users must sign out to continue.
 
   <!-- Android Apps -->
   <message name="IDS_OPTIONS_ARC_TITLE" desc="The title of Google Play Store section.">
-    Google Play Store
+    Google Play Store (beta)
+  </message>
+  <message name="IDS_ARC_PLAYSTORE_ICON_TITLE_BETA" desc="The Play Store icon title with the beta label in the launcher.">
+    Play Store (beta)
   </message>
   <message name="IDS_OPTIONS_ARC_ENABLE" desc="Label for the checkbox that enables Google Play Store apps.">
     Enable Google Play Store on your Chromebook.
@@ -6325,6 +6288,23 @@ All users must sign out to continue.
   <message name="IDS_ARC_OPT_IN_SCANNING_SETTING" desc="Message in the opt-in dialog for Android apps for the user to enable wifi and bluetooth scanning to improve location">
     Improve location accuracy by allowing apps and services to scan for Wi-Fi networks and Bluetooth devices.
   </message>
+  <message name="IDS_ARC_OPT_IN_LEARN_MORE_CLOSE" desc="Text for close button in learn more dialog">
+    Close
+  </message>
+  <message name="IDS_ARC_OPT_IN_LEARN_MORE_STATISTICS" desc="Message shown in pop up overlay dialog when user clicks learn more UMA">
+    <ph name="BEGIN_PARAGRAPH1">&lt;p&gt;</ph>This is general information about your device and how you use it, such as battery level, how often you use your apps, the quality and duration of your network connections (like Wi-Fi and Bluetooth), and crash reports when things aren’t working the way they should. It will be used to improve Google’s products and services for everyone. Some aggregated information will help partners, such as Android developers, make their apps and products better, too.<ph name="END_PARAGRAPH1">&lt;/p&gt;</ph>
+    <ph name="BEGIN_PARAGRAPH2">&lt;p&gt;</ph>You can turn this on or off a any time in the Android apps Settings. This doesn’t affect your device’s ability to send the information it needs to receive essential services such as system updates and security.<ph name="END_PARAGRAPH2">&lt;/p&gt;</ph>
+  </message>
+  <message name="IDS_ARC_OPT_IN_LEARN_MORE_BACKUP_AND_RESTORE" desc="Message shown in pop up overlay dialog when user clicks learn more backup and restore">
+    <ph name="BEGIN_PARAGRAPH1">&lt;p&gt;</ph>When you turn on automatic backup, device and app data is periodically saved to a private folder in Google Drive. App data can be any data that an app has saved (based on developer settings), including potentially sensitive data such as contacts, messages, and photos.<ph name="END_PARAGRAPH1">&lt;/p&gt;</ph>
+    <ph name="BEGIN_PARAGRAPH2">&lt;p&gt;</ph>Backup data will not count towards your Drive storage quota. Large files, or files developers have chosen to exclude from the service will not be backed up.<ph name="END_PARAGRAPH2">&lt;/p&gt;</ph>
+  </message>
+  <message name="IDS_ARC_OPT_IN_LEARN_MORE_LOCATION_SERVICES" desc="Message shown in pop up overlay dialog when user clicks learn more location services">
+    <ph name="BEGIN_PARAGRAPH">&lt;p&gt;</ph>Google’s location service uses sources like Wi-Fi to help estimate your device’s location faster and more accurately. When you turn on Google’s location services, your device enters a mode that uses Wi-Fi to provide location information. You can turn this off in location settings anytime.<ph name="END_PARAGRAPH">&lt;/p&gt;</ph>
+  </message>
+  <message name="IDS_ARC_OPT_IN_PRIVACY_POLICY_LINK" desc="Text of the Link to Goolge Privacy Policy in opt-in dialog">
+    Google privacy policy
+  </message>
   <message name="IDS_ARC_OPT_OUT_TAB_TITLE" desc="Tab title when viewing opt-out setting dialog for android apps.">
     Settings - Remove Android apps
   </message>
@@ -6374,6 +6354,12 @@ All users must sign out to continue.
   <message name="IDS_ARC_CRITICALLY_LOW_DISK_NOTIFICATION_MESSAGE" desc="Notification text warning users that they are critically low on disk space and Android apps can not be launched.">
     Free up disk space to launch Android apps.
   </message>
+  <message name="IDS_FLAGS_ARC_BOOT_COMPLETED" desc="Name of the flag for blocking the ACTION_BOOT_COMPLETED broadcast for third-party apps on ARC.">
+    Load Android apps automatically
+  </message>
+  <message name="IDS_FLAGS_ARC_BOOT_COMPLETED_DESCRIPTION" desc="Description for the flag for blocking ACTION_BOOT_COMPLETED broadcast for third-party apps.">
+    Allow Android apps to start automatically after signing in.
+  </message>
   <message name="IDS_FLAGS_ENABLE_IME_MENU_NAME" desc="Name of the about: flag for enabling opt-in IME menu.">
     Enable opt-in IME menu
     </message>
@@ -6394,5 +6380,14 @@ All users must sign out to continue.
   </message>
   <message name="IDS_LOW_DISK_NOTIFICATION_BUTTON" desc="Button on the low disk notification to open storage management.">
     Manage storage
+  </message>
+  <message name="IDS_FLAGS_ENABLE_EHV_INPUT_NAME" desc="Name of the about: flag for enabling emoji, handwriting and voice input on opt-in IME menu.">
+    Emoji, handwriting and voice input on opt-in IME menu
+    </message>
+  <message name="IDS_FLAGS_ENABLE_EHV_INPUT_DESCRIPTION" desc="Description of the about: flag enabling emoji, handwriting and voice input on opt-in IME menu.">
+    Enable access to emoji, handwriting and voice input form opt-in IME menu.
+  </message>
+  <message name="IDS_HATS_DONE_BUTTON_LABEL" desc="Label used for the done button at the end of survey">
+    Done
   </message>
 </grit-part>

@@ -1,0 +1,47 @@
+
+post_process_template("//chrome:packed_resources") {
+  if (!defined(additional_extra_paks)) {
+    additional_extra_paks = []
+  }
+  additional_extra_paks += [
+    "$root_gen_dir/vivaldi/vivaldi_extension_resources.pak",
+  ]
+  # Both deps and public_deps need to be updated; deps are used by subtargets
+  if (!defined(deps)) { deps = [] }
+  deps += [ "//vivaldi/extensions:resources" ]
+  if (!defined(public_deps)) { public_deps = [] }
+  public_deps += [ "//vivaldi/extensions:resources" ]
+}
+
+post_process_template("//chrome/browser:browser") {
+  public_deps += [
+    "//vivaldi/extensions/schema:api",
+  ]
+}
+
+post_process_template("//chrome/browser/ui:ui") {
+  public_deps += [
+    "//components/sessions:sessions",
+    "//vivaldi/extensions/schema:api",
+  ]
+}
+
+post_process_target("//components/guest_view/browser:browser") {
+  public_deps += [ "//vivaldi/extensions/helper:helper" ]
+}
+
+post_process_target("//components/history/core/browser:browser") {
+  deps += [ "//vivaldi/prefs:prefs" ]
+  public_deps += [ "//vivaldi/db" ]
+}
+
+post_process_target("//content/common:common") {
+  deps += [ "//components/version_info:generate_version_info" ]
+}
+
+post_process_target("//extensions/browser/guest_view/web_view:web_view") {
+  deps += [
+    "//vivaldi/extensions/schema:api",
+    "//vivaldi/extensions/schema:api_registration",
+  ]
+}

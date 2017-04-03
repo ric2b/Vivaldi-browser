@@ -8,24 +8,24 @@
 
 namespace blink {
 
-v8::Local<v8::Value> stringToV8Value(String string)
-{
-    return v8::Local<v8::Value>::Cast(v8String(v8::Isolate::GetCurrent(), string));
+void setV8ObjectPropertyAsString(v8::Isolate* isolate,
+                                 v8::Local<v8::Object> object,
+                                 const StringView& name,
+                                 const StringView& value) {
+  object
+      ->Set(isolate->GetCurrentContext(), v8String(isolate, name),
+            v8String(isolate, value))
+      .ToChecked();
 }
 
-v8::Local<v8::Value> doubleToV8Value(double number)
-{
-    return v8::Local<v8::Value>::Cast(v8::Number::New(v8::Isolate::GetCurrent(), number));
+void setV8ObjectPropertyAsNumber(v8::Isolate* isolate,
+                                 v8::Local<v8::Object> object,
+                                 const StringView& name,
+                                 double value) {
+  object
+      ->Set(isolate->GetCurrentContext(), v8String(isolate, name),
+            v8::Number::New(isolate, value))
+      .ToChecked();
 }
 
-void setV8ObjectPropertyAsString(v8::Isolate* isolate, v8::Local<v8::Object> object, String name, String value)
-{
-    object->Set(isolate->GetCurrentContext(), stringToV8Value(name), stringToV8Value(value)).ToChecked();
-}
-
-void setV8ObjectPropertyAsNumber(v8::Isolate* isolate, v8::Local<v8::Object> object, String name, double value)
-{
-    object->Set(isolate->GetCurrentContext(), stringToV8Value(name), doubleToV8Value(value)).ToChecked();
-}
-
-} // namespace blink
+}  // namespace blink

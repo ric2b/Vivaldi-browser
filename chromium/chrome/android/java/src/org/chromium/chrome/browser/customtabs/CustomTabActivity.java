@@ -34,9 +34,6 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.ChromeFeatureList;
-import org.chromium.chrome.browser.ChromeSwitches;
-import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.IntentHandler.ExternalAppId;
 import org.chromium.chrome.browser.KeyboardShortcuts;
@@ -62,7 +59,6 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelectorImpl;
 import org.chromium.chrome.browser.tabmodel.TabPersistencePolicy;
 import org.chromium.chrome.browser.toolbar.ToolbarControlContainer;
 import org.chromium.chrome.browser.util.ColorUtils;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.UrlUtilities;
 import org.chromium.chrome.browser.widget.findinpage.FindToolbarManager;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
@@ -76,9 +72,6 @@ import org.chromium.ui.base.WindowAndroid;
  * The activity for custom tabs. It will be launched on top of a client's task.
  */
 public class CustomTabActivity extends ChromeActivity {
-    public static final int RESULT_BACK_PRESSED = 1;
-    public static final int RESULT_STOPPED = 2;
-    public static final int RESULT_CLOSED = 3;
 
     private static final String TAG = "CustomTabActivity";
     private static final String LAST_URL_PREF = "pref_last_custom_tab_url";
@@ -248,15 +241,6 @@ public class CustomTabActivity extends ChromeActivity {
 
     @Override
     public void onStop() {
-        // This happens before super.onStop() to maximize chances of getting the Tab while it's
-        // alive.
-        // TODO(dfalcantara): Once this is addressed on M50, consider transferring the Tab directly
-        //                    via Tab reparenting.
-        if (mIntentDataProvider.isOpenedByChrome() && isHerbResultNeeded()) {
-            createHerbResultIntent(RESULT_STOPPED);
-            finish();
-        }
-
         super.onStop();
         CustomTabsConnection.getInstance(getApplication())
                 .dontKeepAliveForSession(mIntentDataProvider.getSession());
@@ -376,9 +360,6 @@ public class CustomTabActivity extends ChromeActivity {
                 new OnClickListener() {
                     @Override
                     public void onClick(View v) {
-                        if (mIntentDataProvider.isOpenedByChrome() && isHerbResultNeeded()) {
-                            createHerbResultIntent(RESULT_CLOSED);
-                        }
                         RecordUserAction.record("CustomTabs.CloseButtonClicked");
                         finishAndClose();
                     }
@@ -614,7 +595,8 @@ public class CustomTabActivity extends ChromeActivity {
     protected AppMenuPropertiesDelegate createAppMenuPropertiesDelegate() {
         return new CustomTabAppMenuPropertiesDelegate(this, mIntentDataProvider.getMenuTitles(),
                 mIntentDataProvider.shouldShowShareMenuItem(),
-                mIntentDataProvider.isOpenedByChrome());
+                mIntentDataProvider.isOpenedByChrome(),
+                mIntentDataProvider.isMediaViewer());
     }
 
     @Override
@@ -683,9 +665,6 @@ public class CustomTabActivity extends ChromeActivity {
             if (getCurrentTabModel().getCount() > 1) {
                 getCurrentTabModel().closeTab(getActivityTab(), false, false, false);
             } else {
-                if (mIntentDataProvider.isOpenedByChrome() && isHerbResultNeeded()) {
-                    createHerbResultIntent(RESULT_BACK_PRESSED);
-                }
                 finishAndClose();
             }
         }
@@ -759,12 +738,8 @@ public class CustomTabActivity extends ChromeActivity {
                 || id == R.id.open_history_menu_id) {
             return true;
         } else if (id == R.id.open_in_browser_id) {
-            openCurrentUrlInBrowser(false, true);
+            openCurrentUrlInBrowser(false);
             RecordUserAction.record("CustomTabsMenuOpenInChrome");
-            return true;
-        } else if (id == R.id.read_it_later_id) {
-            openCurrentUrlInBrowser(false, false);
-            RecordUserAction.record("CustomTabsMenuReadItLater");
             return true;
         } else if (id == R.id.info_menu_id) {
             if (getTabModelSelector().getCurrentTab() == null) return false;
@@ -810,10 +785,10 @@ public class CustomTabActivity extends ChromeActivity {
     /**
      * Opens the URL currently being displayed in the Custom Tab in the regular browser.
      * @param forceReparenting Whether tab reparenting should be forced for testing.
-     * @param stayInChrome     Whether the user stays in Chrome after the tab is reparented.
+     *
      * @return Whether or not the tab was sent over successfully.
      */
-    boolean openCurrentUrlInBrowser(boolean forceReparenting, boolean stayInChrome) {
+    boolean openCurrentUrlInBrowser(boolean forceReparenting) {
         Tab tab = getActivityTab();
         if (tab == null) return false;
 
@@ -825,10 +800,6 @@ public class CustomTabActivity extends ChromeActivity {
         Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         intent.putExtra(ChromeLauncherActivity.EXTRA_IS_ALLOWED_TO_RETURN_TO_PARENT, false);
-        if (ChromeFeatureList.isEnabled("ReadItLaterInMenu")) {
-            // In this trial both "open in chrome" and "read it later" should target Chrome.
-            intent.setPackage(getPackageName());
-        }
 
         boolean willChromeHandleIntent = getIntentDataProvider().isOpenedByChrome();
         StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
@@ -851,8 +822,7 @@ public class CustomTabActivity extends ChromeActivity {
             };
 
             mMainTab = null;
-            tab.detachAndStartReparenting(intent, startActivityOptions, finalizeCallback,
-                    stayInChrome);
+            tab.detachAndStartReparenting(intent, startActivityOptions, finalizeCallback);
         } else {
             // Temporarily allowing disk access while fixing. TODO: http://crbug.com/581860
             StrictMode.allowThreadDiskReads();
@@ -864,44 +834,6 @@ public class CustomTabActivity extends ChromeActivity {
             }
         }
         return true;
-    }
-
-    /**
-     * @return Whether {@link ChromeTabbedActivity} is waiting for a result from this Activity.
-     */
-    private boolean isHerbResultNeeded() {
-        if (!TextUtils.equals(FeatureUtilities.getHerbFlavor(), ChromeSwitches.HERB_FLAVOR_DILL)) {
-            return false;
-        }
-
-        String callingActivity =
-                getCallingActivity() == null ? null : getCallingActivity().getClassName();
-        return TextUtils.equals(callingActivity, ChromeTabbedActivity.class.getName());
-    }
-
-    /**
-     * Lets the original Activity know how this {@link CustomTabActivity} was finished.
-     */
-    private void createHerbResultIntent(int result) {
-        if (getActivityTab() == null) return;
-        Intent resultIntent = new Intent();
-
-        switch (result) {
-            case RESULT_STOPPED:
-                // Send the URL to the browser.  Should pass the Tab in the future.
-                resultIntent.setAction(Intent.ACTION_VIEW);
-                resultIntent.setData(Uri.parse(getActivityTab().getUrl()));
-                break;
-
-            case RESULT_BACK_PRESSED:
-            case RESULT_CLOSED:
-                break;
-
-            default:
-                assert false;
-        }
-
-        setResult(result, resultIntent);
     }
 
     /**

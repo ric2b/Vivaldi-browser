@@ -86,7 +86,7 @@ TEST(PropertyTreeSerializationTest, TransformTreeSerialization) {
   gfx::Transform transform =
       gfx::Transform(1.05f, 2.15f, 3.14f, 4.13f, 5.12f, 6.11f, 7.1f, 8.9f, 9.8f,
                      10.7f, 11.6f, 12.5f, 13.4f, 14.3f, 15.2f, 16.1f);
-  original.SetDeviceTransformScaleFactor(transform);
+  original.SetRootTransformsAndScales(0.6f, 1.f, transform, gfx::PointF());
   original.AddNodeAffectedByInnerViewportBoundsDelta(0);
   original.AddNodeAffectedByOuterViewportBoundsDelta(1);
 
@@ -172,8 +172,6 @@ TEST(PropertyTreeSerializationTest, EffectNodeSerialization) {
   original.transform_id = 2;
   original.clip_id = 3;
   original.mask_layer_id = 6;
-  original.replica_layer_id = 10;
-  original.replica_mask_layer_id = 9;
   original.surface_contents_scale = gfx::Vector2dF(0.5f, 0.5f);
 
   proto::TreeNode proto;
@@ -198,15 +196,11 @@ TEST(PropertyTreeSerializationTest, EffectTreeSerialization) {
   EffectNode third;
   third.owner_id = 7;
   third.clip_id = 3;
-  third.replica_layer_id = 44;
-  third.replica_mask_layer_id = 45;
   third.has_render_surface = false;
 
   original.Insert(second, 0);
   original.Insert(third, 1);
-  original.AddMaskOrReplicaLayerId(32);
-  original.AddMaskOrReplicaLayerId(44);
-  original.AddMaskOrReplicaLayerId(45);
+  original.AddMaskLayerId(32);
   original.set_needs_update(true);
 
   proto::PropertyTree proto;
@@ -426,6 +420,28 @@ class PropertyTreeTestComputeTransformRoot : public PropertyTreeTest {
 
 DIRECT_AND_SERIALIZED_PROPERTY_TREE_TEST_F(
     PropertyTreeTestComputeTransformRoot);
+
+class PropertyTreeTestSetNeedsUpdate : public PropertyTreeTest {
+ protected:
+  void StartTest() override {
+    PropertyTrees property_trees;
+    TransformTree& tree = property_trees.transform_tree;
+    TransformNode contents_root;
+    contents_root.source_node_id = 0;
+    contents_root.id = tree.Insert(contents_root, 0);
+    tree.SetTargetId(contents_root.id, 0);
+    SetupTransformTreeForTest(&tree);
+
+    EXPECT_FALSE(tree.needs_update());
+    tree.SetRootTransformsAndScales(0.6f, 1.f, gfx::Transform(), gfx::PointF());
+    EXPECT_TRUE(tree.needs_update());
+    tree.set_needs_update(false);
+    tree.SetRootTransformsAndScales(0.6f, 1.f, gfx::Transform(), gfx::PointF());
+    EXPECT_FALSE(tree.needs_update());
+  }
+};
+
+DIRECT_AND_SERIALIZED_PROPERTY_TREE_TEST_F(PropertyTreeTestSetNeedsUpdate);
 
 class PropertyTreeTestComputeTransformChild : public PropertyTreeTest {
  protected:
@@ -1127,6 +1143,9 @@ class PropertyTreeTestSingularTransformSnapTest : public PropertyTreeTest {
     int parent = tree.Insert(TransformNode(), 0);
     int effect_parent = effect_tree.Insert(EffectNode(), 0);
     effect_tree.Node(effect_parent)->has_render_surface = true;
+    effect_tree.Node(effect_parent)->surface_contents_scale =
+        gfx::Vector2dF(1.f, 1.f);
+
     tree.SetTargetId(parent, parent);
     tree.Node(parent)->scrolls = true;
     tree.Node(parent)->source_node_id = 0;

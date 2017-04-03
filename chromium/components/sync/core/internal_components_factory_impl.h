@@ -8,6 +8,7 @@
 #ifndef COMPONENTS_SYNC_CORE_INTERNAL_COMPONENTS_FACTORY_IMPL_H_
 #define COMPONENTS_SYNC_CORE_INTERNAL_COMPONENTS_FACTORY_IMPL_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -24,7 +25,7 @@ class InternalComponentsFactoryImpl : public InternalComponentsFactory {
   std::unique_ptr<SyncScheduler> BuildScheduler(
       const std::string& name,
       SyncCycleContext* context,
-      syncer::CancelationSignal* cancelation_signal) override;
+      CancelationSignal* cancelation_signal) override;
 
   std::unique_ptr<SyncCycleContext> BuildContext(
       ServerConnectionManager* connection_manager,

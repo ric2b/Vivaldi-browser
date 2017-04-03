@@ -13,8 +13,8 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/page_navigator.h"
-#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/window_open_disposition.h"
@@ -154,7 +154,9 @@ void InvertBubbleView::OpenLink(const std::string& url, int event_flags) {
       ui::DispositionFromEventFlags(event_flags);
   content::OpenURLParams params(
       GURL(url), content::Referrer(),
-      disposition == CURRENT_TAB ? NEW_FOREGROUND_TAB : disposition,
+      disposition == WindowOpenDisposition::CURRENT_TAB
+          ? WindowOpenDisposition::NEW_FOREGROUND_TAB
+          : disposition,
       ui::PAGE_TRANSITION_LINK, false);
   browser_->OpenURL(params);
 }

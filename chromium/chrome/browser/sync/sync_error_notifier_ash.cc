@@ -5,8 +5,6 @@
 #include "chrome/browser/sync/sync_error_notifier_ash.h"
 
 #include "ash/common/system/system_notifier.h"
-#include "base/macros.h"
-#include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -20,8 +18,8 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/signin/core/account_id/account_id.h"
-#include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/message_center/notification.h"
@@ -96,12 +94,11 @@ void SyncNotificationDelegate::ShowSyncSetup() {
   chrome::ShowSettingsSubPageForProfile(profile_, chrome::kSyncSetupSubPage);
 }
 
-} // namespace
+}  // namespace
 
-SyncErrorNotifier::SyncErrorNotifier(SyncErrorController* controller,
+SyncErrorNotifier::SyncErrorNotifier(syncer::SyncErrorController* controller,
                                      Profile* profile)
-    : error_controller_(controller),
-      profile_(profile) {
+    : error_controller_(controller), profile_(profile) {
   // Create a unique notification ID for this profile.
   notification_id_ =
       kProfileSyncNotificationId + profile_->GetProfileUserName();

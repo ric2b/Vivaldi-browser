@@ -9,12 +9,9 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "base/timer/timer.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_status_code.h"
-#include "net/url_request/url_fetcher.h"
-#include "net/url_request/url_request_context_getter.h"
 
 namespace {
 
@@ -28,7 +25,7 @@ const int kRequestTimeoutSeconds = 10;
 
 }  // namespace
 
-namespace browser_sync {
+namespace syncer {
 
 SyncStoppedReporter::SyncStoppedReporter(
     const GURL& sync_service_url,
@@ -116,4 +113,4 @@ void SyncStoppedReporter::SetTimerTaskRunnerForTest(
   timer_.SetTaskRunner(task_runner);
 }
 
-}  // namespace browser_sync
+}  // namespace syncer

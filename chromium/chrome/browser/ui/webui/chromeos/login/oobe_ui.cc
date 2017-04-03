@@ -8,11 +8,11 @@
 
 #include <memory>
 
-#include "ash/common/shell_window_ids.h"
-#include "ash/wm/screen_dimmer.h"
+#include "ash/common/wm/screen_dimmer.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
@@ -63,14 +63,16 @@
 #include "chrome/browser/ui/webui/theme_source.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/browser_resources.h"
+#include "chrome/grit/chrome_unscaled_resources.h"
 #include "chromeos/chromeos_switches.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/content_switches.h"
-#include "grit/browser_resources.h"
-#include "grit/chrome_unscaled_resources.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/webui/web_ui_util.h"
 
@@ -185,11 +187,6 @@ std::string GetDisplayType(const GURL& url) {
     return OobeUI::kLoginDisplay;
   }
   return path;
-}
-
-bool UseMDOobe() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      chromeos::switches::kEnableMdOobe);
 }
 
 }  // namespace
@@ -364,11 +361,9 @@ OobeUI::OobeUI(content::WebUI* web_ui, const GURL& url)
 OobeUI::~OobeUI() {
   core_handler_->SetDelegate(nullptr);
   network_dropdown_handler_->RemoveObserver(error_screen_handler_);
-  if (!chrome::IsRunningInMash()) {
-    ash::ScreenDimmer::GetForContainer(
-        ash::kShellWindowId_LockScreenContainersContainer)
-        ->SetDimming(false);
-  } else {
+  if (chrome::IsRunningInMash()) {
+    // TODO: Ash needs to expose screen dimming api. See
+    // http://crbug.com/646034.
     NOTIMPLEMENTED();
   }
 }
@@ -498,7 +493,10 @@ void OobeUI::GetLocalizedStrings(base::DictionaryValue* localized_strings) {
 
   bool new_kiosk_ui = KioskAppMenuHandler::EnableNewKioskUI();
   localized_strings->SetString("newKioskUI", new_kiosk_ui ? "on" : "off");
-  localized_strings->SetString("newOobeUI", UseMDOobe() ? "on" : "off");
+  localized_strings->SetString(
+      "newOobeUI",
+      g_browser_process->local_state()->GetBoolean(prefs::kOobeMdMode) ? "on"
+                                                                       : "off");
 }
 
 void OobeUI::AddScreenHandler(BaseScreenHandler* handler) {
@@ -590,11 +588,15 @@ void OobeUI::OnCurrentScreenChanged(const std::string& screen) {
                 std::end(kDimOverlayScreenIds),
                 new_screen) != std::end(kDimOverlayScreenIds);
   if (!chrome::IsRunningInMash()) {
-    ash::ScreenDimmer* screen_dimmer = ash::ScreenDimmer::GetForContainer(
-        ash::kShellWindowId_LockScreenContainersContainer);
-    screen_dimmer->set_at_bottom(true);
-    screen_dimmer->SetDimming(should_dim);
+    if (!screen_dimmer_) {
+      screen_dimmer_ = base::MakeUnique<ash::ScreenDimmer>(
+          ash::ScreenDimmer::Container::LOCK_SCREEN);
+    }
+    screen_dimmer_->set_at_bottom(true);
+    screen_dimmer_->SetDimming(should_dim);
   } else {
+    // TODO: Ash needs to expose screen dimming api. See
+    // http://crbug.com/646034.
     NOTIMPLEMENTED();
   }
 

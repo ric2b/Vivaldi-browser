@@ -15,6 +15,7 @@
 
 #include "base/macros.h"
 #include "net/base/linked_hash_map.h"
+#include "net/base/net_export.h"
 #include "net/quic/core/congestion_control/general_loss_algorithm.h"
 #include "net/quic/core/congestion_control/loss_detection_interface.h"
 #include "net/quic/core/congestion_control/pacing_sender.h"
@@ -188,8 +189,6 @@ class NET_EXPORT_PRIVATE QuicSentPacketManager
 
   // Called when peer address changes and the connection migrates.
   void OnConnectionMigration(QuicPathId, PeerAddressChangeType type) override;
-
-  bool IsHandshakeConfirmed() const override;
 
   void SetDebugDelegate(DebugDelegate* debug_delegate) override;
 
@@ -388,6 +387,8 @@ class NET_EXPORT_PRIVATE QuicSentPacketManager
   // If true, cancel pending retransmissions if they're larger than
   // largest_newly_acked.
   bool undo_pending_retransmits_;
+  // If true, use a more conservative handshake retransmission policy.
+  bool conservative_handshake_retransmits_;
 
   // Vectors packets acked and lost as a result of the last congestion event.
   SendAlgorithmInterface::CongestionVector packets_acked_;

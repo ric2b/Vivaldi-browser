@@ -24,10 +24,6 @@ void TabControlFeature::set_outgoing_message_processor(
 
 void TabControlFeature::SetSizeAndScale(const gfx::Size& size,
                                         float device_pixel_ratio) {
-  if (last_size_ == size && last_device_pixel_ratio_ == device_pixel_ratio) {
-    return;
-  }
-
   last_size_ = size;
   last_device_pixel_ratio_ = device_pixel_ratio;
 
@@ -47,6 +43,7 @@ void TabControlFeature::CreateTab(int tab_id) {
   TabControlMessage* tab_control;
   std::unique_ptr<BlimpMessage> message = CreateBlimpMessage(&tab_control);
   tab_control->mutable_create_tab();
+  message->set_target_tab_id(tab_id);
   outgoing_message_processor_->ProcessMessage(std::move(message),
                                               net::CompletionCallback());
 }
@@ -55,6 +52,7 @@ void TabControlFeature::CloseTab(int tab_id) {
   TabControlMessage* tab_control;
   std::unique_ptr<BlimpMessage> message = CreateBlimpMessage(&tab_control);
   tab_control->mutable_close_tab();
+  message->set_target_tab_id(tab_id);
   outgoing_message_processor_->ProcessMessage(std::move(message),
                                               net::CompletionCallback());
 }

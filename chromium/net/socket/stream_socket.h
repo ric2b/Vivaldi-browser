@@ -8,7 +8,7 @@
 #include <stdint.h>
 
 #include "base/macros.h"
-#include "net/log/net_log.h"
+#include "net/base/net_export.h"
 #include "net/socket/connection_attempts.h"
 #include "net/socket/next_proto.h"
 #include "net/socket/socket.h"
@@ -17,6 +17,7 @@ namespace net {
 
 class AddressList;
 class IPEndPoint;
+class NetLogWithSource;
 class SSLInfo;
 
 class NET_EXPORT_PRIVATE StreamSocket : public Socket {
@@ -66,7 +67,7 @@ class NET_EXPORT_PRIVATE StreamSocket : public Socket {
   virtual int GetLocalAddress(IPEndPoint* address) const = 0;
 
   // Gets the NetLog for this socket.
-  virtual const BoundNetLog& NetLog() const = 0;
+  virtual const NetLogWithSource& NetLog() const = 0;
 
   // Set the annotation to indicate this socket was created for speculative
   // reasons.  This call is generally forwarded to a basic TCPClientSocket*,

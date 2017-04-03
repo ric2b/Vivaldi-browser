@@ -4,9 +4,12 @@
 
 #include "components/update_client/test_configurator.h"
 
+#include "base/sequenced_task_runner.h"
+#include "base/single_thread_task_runner.h"
 #include "base/version.h"
 #include "components/prefs/pref_service.h"
 #include "components/update_client/component_patcher_operation.h"
+#include "net/url_request/url_request_test_util.h"
 #include "url/gurl.h"
 
 namespace update_client {
@@ -68,6 +71,10 @@ std::vector<GURL> TestConfigurator::PingUrl() const {
     return std::vector<GURL>(1, ping_url_);
 
   return UpdateUrl();
+}
+
+std::string TestConfigurator::GetProdId() const {
+  return "fake_prodid";
 }
 
 base::Version TestConfigurator::GetBrowserVersion() const {
@@ -166,6 +173,10 @@ TestConfigurator::GetSequencedTaskRunner() const {
 
 PrefService* TestConfigurator::GetPrefService() const {
   return nullptr;
+}
+
+bool TestConfigurator::IsPerUserInstall() const {
+  return true;
 }
 
 }  // namespace update_client

@@ -16,7 +16,6 @@
 #include "chrome/browser/ssl/bad_clock_blocking_page.h"
 #include "chrome/browser/ssl/ssl_blocking_page.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/grit/browser_resources.h"
 #include "components/grit/components_resources.h"
 #include "components/security_interstitials/core/ssl_error_ui.h"
 #include "content/public/browser/interstitial_page_delegate.h"
@@ -76,8 +75,7 @@ class InterstitialHTMLSource : public content::URLDataSource {
   std::string GetContentSecurityPolicyImgSrc() const override;
   void StartDataRequest(
       const std::string& path,
-      int render_process_id,
-      int render_frame_id,
+      const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
       const content::URLDataSource::GotDataCallback& callback) override;
 
  private:
@@ -154,7 +152,7 @@ SSLBlockingPage* CreateSSLBlockingPage(content::WebContents* web_contents) {
     options_mask |= security_interstitials::SSLErrorUI::SOFT_OVERRIDE_ENABLED;
   if (strict_enforcement)
     options_mask |= security_interstitials::SSLErrorUI::STRICT_ENFORCEMENT;
-  return new SSLBlockingPage(
+  return SSLBlockingPage::Create(
       web_contents, cert_error, ssl_info, request_url, options_mask,
       time_triggered_, nullptr,
       base::Callback<void(content::CertificateRequestResultType)>());
@@ -352,8 +350,7 @@ std::string InterstitialHTMLSource::GetContentSecurityPolicyImgSrc() const {
 
 void InterstitialHTMLSource::StartDataRequest(
     const std::string& path,
-    int render_process_id,
-    int render_frame_id,
+    const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
     const content::URLDataSource::GotDataCallback& callback) {
   std::unique_ptr<content::InterstitialPageDelegate> interstitial_delegate;
   if (base::StartsWith(path, "ssl", base::CompareCase::SENSITIVE)) {

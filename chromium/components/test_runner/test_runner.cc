@@ -29,7 +29,6 @@
 #include "components/test_runner/test_interfaces.h"
 #include "components/test_runner/test_preferences.h"
 #include "components/test_runner/test_runner_for_specific_view.h"
-#include "components/test_runner/web_task.h"
 #include "components/test_runner/web_test_delegate.h"
 #include "components/test_runner/web_view_test_proxy.h"
 #include "gin/arguments.h"
@@ -191,7 +190,6 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   void SendBluetoothManualChooserEvent(const std::string& event,
                                        const std::string& argument);
   void SetAcceptLanguages(const std::string& accept_languages);
-  void SetAllowDisplayOfInsecureContent(bool allowed);
   void SetAllowFileAccessFromFileURLs(bool allow);
   void SetAllowRunningOfInsecureContent(bool allowed);
   void SetAutoplayAllowed(bool allowed);
@@ -214,6 +212,7 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   void SetDomainRelaxationForbiddenForURLScheme(bool forbidden,
                                                 const std::string& scheme);
   void SetDumpConsoleMessages(bool value);
+  void SetEffectiveConnectionType(const std::string& connection_type);
   void SetMockSpellCheckerEnabled(bool enabled);
   void SetImagesAllowed(bool allowed);
   void SetIsolatedWorldContentSecurityPolicy(int world_id,
@@ -258,11 +257,12 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   void WaitForPolicyDelegate();
   void WaitUntilDone();
   void WaitUntilExternalURLLoad();
-  void AddMockCredentialManagerError(const std::string& error);
-  void AddMockCredentialManagerResponse(const std::string& id,
+  void SetMockCredentialManagerError(const std::string& error);
+  void SetMockCredentialManagerResponse(const std::string& id,
                                         const std::string& name,
                                         const std::string& avatar,
                                         const std::string& password);
+  void ClearMockCredentialManagerResponse();
   bool AnimationScheduled();
   bool CallShouldCloseOnWebView();
   bool DisableAutoResizeMode(int new_width, int new_height);
@@ -337,10 +337,12 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
   return gin::Wrappable<TestRunnerBindings>::GetObjectTemplateBuilder(isolate)
       .SetMethod("abortModal", &TestRunnerBindings::NotImplemented)
       .SetMethod("addDisallowedURL", &TestRunnerBindings::NotImplemented)
-      .SetMethod("addMockCredentialManagerError",
-                 &TestRunnerBindings::AddMockCredentialManagerError)
-      .SetMethod("addMockCredentialManagerResponse",
-                 &TestRunnerBindings::AddMockCredentialManagerResponse)
+      .SetMethod("setMockCredentialManagerError",
+                 &TestRunnerBindings::SetMockCredentialManagerError)
+      .SetMethod("setMockCredentialManagerResponse",
+                 &TestRunnerBindings::SetMockCredentialManagerResponse)
+      .SetMethod("clearMockCredentialManagerResponse",
+                 &TestRunnerBindings::ClearMockCredentialManagerResponse)
       .SetMethod("addMockSpeechRecognitionResult",
                  &TestRunnerBindings::AddMockSpeechRecognitionResult)
       .SetMethod("addOriginAccessWhitelistEntry",
@@ -481,8 +483,6 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
       .SetMethod("sendBluetoothManualChooserEvent",
                  &TestRunnerBindings::SendBluetoothManualChooserEvent)
       .SetMethod("setAcceptLanguages", &TestRunnerBindings::SetAcceptLanguages)
-      .SetMethod("setAllowDisplayOfInsecureContent",
-                 &TestRunnerBindings::SetAllowDisplayOfInsecureContent)
       .SetMethod("setAllowFileAccessFromFileURLs",
                  &TestRunnerBindings::SetAllowFileAccessFromFileURLs)
       .SetMethod("setAllowRunningOfInsecureContent",
@@ -515,6 +515,8 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
                  &TestRunnerBindings::SetDomainRelaxationForbiddenForURLScheme)
       .SetMethod("setDumpConsoleMessages",
                  &TestRunnerBindings::SetDumpConsoleMessages)
+      .SetMethod("setEffectiveConnectionType",
+                 &TestRunnerBindings::SetEffectiveConnectionType)
       .SetMethod("setMockSpellCheckerEnabled",
                  &TestRunnerBindings::SetMockSpellCheckerEnabled)
       .SetMethod("setIconDatabaseEnabled", &TestRunnerBindings::NotImplemented)
@@ -706,6 +708,29 @@ void TestRunnerBindings::SetDomainRelaxationForbiddenForURLScheme(
 void TestRunnerBindings::SetDumpConsoleMessages(bool enabled) {
   if (runner_)
     runner_->SetDumpConsoleMessages(enabled);
+}
+
+void TestRunnerBindings::SetEffectiveConnectionType(
+    const std::string& connection_type) {
+  blink::WebEffectiveConnectionType web_type =
+      blink::WebEffectiveConnectionType::TypeUnknown;
+  if (connection_type == "TypeUnknown")
+    web_type = blink::WebEffectiveConnectionType::TypeUnknown;
+  else if (connection_type == "TypeOffline")
+    web_type = blink::WebEffectiveConnectionType::TypeOffline;
+  else if (connection_type == "TypeSlow2G")
+    web_type = blink::WebEffectiveConnectionType::TypeSlow2G;
+  else if (connection_type == "Type2G")
+    web_type = blink::WebEffectiveConnectionType::Type2G;
+  else if (connection_type == "Type3G")
+    web_type = blink::WebEffectiveConnectionType::Type3G;
+  else if (connection_type == "Type4G")
+    web_type = blink::WebEffectiveConnectionType::Type4G;
+  else
+    NOTREACHED();
+
+  if (runner_)
+    runner_->SetEffectiveConnectionType(web_type);
 }
 
 void TestRunnerBindings::SetMockSpellCheckerEnabled(bool enabled) {
@@ -1132,11 +1157,6 @@ void TestRunnerBindings::SetPluginsAllowed(bool allowed) {
     runner_->SetPluginsAllowed(allowed);
 }
 
-void TestRunnerBindings::SetAllowDisplayOfInsecureContent(bool allowed) {
-  if (runner_)
-    runner_->SetAllowDisplayOfInsecureContent(allowed);
-}
-
 void TestRunnerBindings::SetAllowRunningOfInsecureContent(bool allowed) {
   if (runner_)
     runner_->SetAllowRunningOfInsecureContent(allowed);
@@ -1359,19 +1379,24 @@ void TestRunnerBindings::SetMockSpeechRecognitionError(
     runner_->SetMockSpeechRecognitionError(error, message);
 }
 
-void TestRunnerBindings::AddMockCredentialManagerResponse(
+void TestRunnerBindings::SetMockCredentialManagerResponse(
     const std::string& id,
     const std::string& name,
     const std::string& avatar,
     const std::string& password) {
   if (runner_)
-    runner_->AddMockCredentialManagerResponse(id, name, avatar, password);
+    runner_->SetMockCredentialManagerResponse(id, name, avatar, password);
 }
 
-void TestRunnerBindings::AddMockCredentialManagerError(
+void TestRunnerBindings::ClearMockCredentialManagerResponse() {
+  if (runner_)
+    runner_->ClearMockCredentialManagerResponse();
+}
+
+void TestRunnerBindings::SetMockCredentialManagerError(
     const std::string& error) {
   if (runner_)
-    runner_->AddMockCredentialManagerError(error);
+    runner_->SetMockCredentialManagerError(error);
 }
 
 void TestRunnerBindings::AddWebPageOverlay() {
@@ -1504,8 +1529,8 @@ void TestRunner::WorkQueue::ProcessWorkSoon() {
 
   if (!queue_.empty()) {
     // We delay processing queued work to avoid recursion problems.
-    controller_->delegate_->PostTask(new WebCallbackTask(base::Bind(
-        &TestRunner::WorkQueue::ProcessWork, weak_factory_.GetWeakPtr())));
+    controller_->delegate_->PostTask(base::Bind(
+        &TestRunner::WorkQueue::ProcessWork, weak_factory_.GetWeakPtr()));
   } else if (!controller_->layout_test_runtime_flags_.wait_until_done()) {
     controller_->delegate_->TestFinished();
   }
@@ -1562,6 +1587,8 @@ TestRunner::TestRunner(TestInterfaces* interfaces)
       chooser_count_(0),
       previously_focused_view_(nullptr),
       is_web_platform_tests_mode_(false),
+      effective_connection_type_(
+          blink::WebEffectiveConnectionType::TypeUnknown),
       weak_factory_(this) {}
 
 TestRunner::~TestRunner() {}
@@ -2313,8 +2340,6 @@ void TestRunner::OverridePreference(const std::string& key,
     prefs->hyperlink_auditing_enabled = value->BooleanValue();
   } else if (key == "WebKitEnableCaretBrowsing") {
     prefs->caret_browsing_enabled = value->BooleanValue();
-  } else if (key == "WebKitAllowDisplayingInsecureContent") {
-    prefs->allow_display_of_insecure_content = value->BooleanValue();
   } else if (key == "WebKitAllowRunningInsecureContent") {
     prefs->allow_running_of_insecure_content = value->BooleanValue();
   } else if (key == "WebKitDisableReadingFromCanvas") {
@@ -2481,11 +2506,6 @@ void TestRunner::SetPluginsAllowed(bool allowed) {
   OnLayoutTestRuntimeFlagsChanged();
 }
 
-void TestRunner::SetAllowDisplayOfInsecureContent(bool allowed) {
-  layout_test_runtime_flags_.set_displaying_insecure_content_allowed(allowed);
-  OnLayoutTestRuntimeFlagsChanged();
-}
-
 void TestRunner::SetAllowRunningOfInsecureContent(bool allowed) {
   layout_test_runtime_flags_.set_running_insecure_content_allowed(allowed);
   OnLayoutTestRuntimeFlagsChanged();
@@ -2578,6 +2598,11 @@ void TestRunner::DumpNavigationPolicy() {
 void TestRunner::SetDumpConsoleMessages(bool value) {
   layout_test_runtime_flags_.set_dump_console_messages(value);
   OnLayoutTestRuntimeFlagsChanged();
+}
+
+void TestRunner::SetEffectiveConnectionType(
+    blink::WebEffectiveConnectionType connection_type) {
+  effective_connection_type_ = connection_type;
 }
 
 void TestRunner::SetMockSpellCheckerEnabled(bool enabled) {
@@ -2682,7 +2707,7 @@ void TestRunner::SetMockSpeechRecognitionError(const std::string& error,
                                          WebString::fromUTF8(message));
 }
 
-void TestRunner::AddMockCredentialManagerResponse(const std::string& id,
+void TestRunner::SetMockCredentialManagerResponse(const std::string& id,
                                                   const std::string& name,
                                                   const std::string& avatar,
                                                   const std::string& password) {
@@ -2691,7 +2716,11 @@ void TestRunner::AddMockCredentialManagerResponse(const std::string& id,
       WebString::fromUTF8(name), WebURL(GURL(avatar))));
 }
 
-void TestRunner::AddMockCredentialManagerError(const std::string& error) {
+void TestRunner::ClearMockCredentialManagerResponse() {
+  credential_manager_client_->SetResponse(nullptr);
+}
+
+void TestRunner::SetMockCredentialManagerError(const std::string& error) {
   credential_manager_client_->SetError(error);
 }
 

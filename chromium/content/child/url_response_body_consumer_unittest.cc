@@ -9,12 +9,17 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
-#include "content/child/request_info.h"
+#include "content/child/request_extra_data.h"
 #include "content/child/resource_dispatcher.h"
 #include "content/common/resource_messages.h"
+#include "content/common/resource_request.h"
 #include "content/common/resource_request_completion_status.h"
+#include "content/common/service_worker/service_worker_types.h"
 #include "content/public/child/request_peer.h"
+#include "content/public/common/request_context_frame_type.h"
+#include "net/base/request_priority.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
 
 namespace content {
 
@@ -52,7 +57,6 @@ class TestRequestPeer : public RequestPeer {
   void OnCompletedRequest(int error_code,
                           bool was_ignored_by_handler,
                           bool stale_copy_in_cache,
-                          const std::string& security_info,
                           const base::TimeTicks& completion_time,
                           int64_t total_transfer_size) override {
     EXPECT_FALSE(context_->complete);
@@ -92,11 +96,20 @@ class URLResponseBodyConsumerTest : public ::testing::Test,
     return true;
   }
 
-  std::unique_ptr<RequestInfo> CreateRequestInfo() {
-    std::unique_ptr<RequestInfo> request_info(new RequestInfo);
-    request_info->method = "GET";
-    request_info->url = GURL("http://www.example.com/");
-    return request_info;
+  std::unique_ptr<ResourceRequest> CreateResourceRequest() {
+    std::unique_ptr<ResourceRequest> request(new ResourceRequest);
+
+    request->method = "GET";
+    request->url = GURL("http://www.example.com/");
+    request->priority = net::LOW;
+    request->appcache_host_id = 0;
+    request->fetch_request_mode = FETCH_REQUEST_MODE_NO_CORS;
+    request->fetch_frame_type = REQUEST_CONTEXT_FRAME_TYPE_NONE;
+
+    const RequestExtraData extra_data;
+    extra_data.CopyToResourceRequest(request.get());
+
+    return request;
   }
 
   MojoCreateDataPipeOptions CreateDataPipeOptions() {
@@ -109,10 +122,11 @@ class URLResponseBodyConsumerTest : public ::testing::Test,
   }
 
   // Returns the request id.
-  int SetUpRequestPeer(const RequestInfo& request_info,
+  int SetUpRequestPeer(std::unique_ptr<ResourceRequest> request,
                        TestRequestPeer::Context* context) {
     return dispatcher_->StartAsync(
-        request_info, nullptr, base::MakeUnique<TestRequestPeer>(context),
+        std::move(request), 0, nullptr, GURL(),
+        base::MakeUnique<TestRequestPeer>(context),
         blink::WebURLRequest::LoadingIPCType::ChromeIPC, nullptr);
   }
 
@@ -129,13 +143,13 @@ class URLResponseBodyConsumerTest : public ::testing::Test,
 
 TEST_F(URLResponseBodyConsumerTest, ReceiveData) {
   TestRequestPeer::Context context;
-  std::unique_ptr<RequestInfo> request_info(CreateRequestInfo());
-  int request_id = SetUpRequestPeer(*request_info, &context);
+  std::unique_ptr<ResourceRequest> request(CreateResourceRequest());
+  int request_id = SetUpRequestPeer(std::move(request), &context);
   mojo::DataPipe data_pipe(CreateDataPipeOptions());
 
   scoped_refptr<URLResponseBodyConsumer> consumer(new URLResponseBodyConsumer(
       request_id, dispatcher_.get(), std::move(data_pipe.consumer_handle),
-      message_loop_.task_runner().get()));
+      message_loop_.task_runner()));
 
   mojo::ScopedDataPipeProducerHandle writer =
       std::move(data_pipe.producer_handle);
@@ -154,13 +168,13 @@ TEST_F(URLResponseBodyConsumerTest, ReceiveData) {
 
 TEST_F(URLResponseBodyConsumerTest, OnCompleteThenClose) {
   TestRequestPeer::Context context;
-  std::unique_ptr<RequestInfo> request_info(CreateRequestInfo());
-  int request_id = SetUpRequestPeer(*request_info, &context);
+  std::unique_ptr<ResourceRequest> request(CreateResourceRequest());
+  int request_id = SetUpRequestPeer(std::move(request), &context);
   mojo::DataPipe data_pipe(CreateDataPipeOptions());
 
   scoped_refptr<URLResponseBodyConsumer> consumer(new URLResponseBodyConsumer(
       request_id, dispatcher_.get(), std::move(data_pipe.consumer_handle),
-      message_loop_.task_runner().get()));
+      message_loop_.task_runner()));
 
   consumer->OnComplete(ResourceRequestCompletionStatus());
   mojo::ScopedDataPipeProducerHandle writer =
@@ -186,13 +200,13 @@ TEST_F(URLResponseBodyConsumerTest, OnCompleteThenClose) {
 
 TEST_F(URLResponseBodyConsumerTest, CloseThenOnComplete) {
   TestRequestPeer::Context context;
-  std::unique_ptr<RequestInfo> request_info(CreateRequestInfo());
-  int request_id = SetUpRequestPeer(*request_info, &context);
+  std::unique_ptr<ResourceRequest> request(CreateResourceRequest());
+  int request_id = SetUpRequestPeer(std::move(request), &context);
   mojo::DataPipe data_pipe(CreateDataPipeOptions());
 
   scoped_refptr<URLResponseBodyConsumer> consumer(new URLResponseBodyConsumer(
       request_id, dispatcher_.get(), std::move(data_pipe.consumer_handle),
-      message_loop_.task_runner().get()));
+      message_loop_.task_runner()));
 
   ResourceRequestCompletionStatus status;
   status.error_code = net::ERR_FAILED;

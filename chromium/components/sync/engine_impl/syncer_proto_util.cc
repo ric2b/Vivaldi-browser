@@ -8,9 +8,7 @@
 
 #include "base/format_macros.h"
 #include "base/strings/stringprintf.h"
-#include "components/sync/base/model_type.h"
 #include "components/sync/base/time.h"
-#include "components/sync/engine_impl/cycle/sync_cycle.h"
 #include "components/sync/engine_impl/net/server_connection_manager.h"
 #include "components/sync/engine_impl/syncer.h"
 #include "components/sync/engine_impl/syncer_types.h"
@@ -19,7 +17,6 @@
 #include "components/sync/protocol/sync_protocol_error.h"
 #include "components/sync/syncable/directory.h"
 #include "components/sync/syncable/entry.h"
-#include "components/sync/syncable/syncable-inl.h"
 #include "components/sync/syncable/syncable_proto_util.h"
 #include "google_apis/google_api_keys.h"
 
@@ -425,6 +422,10 @@ SyncerError SyncerProtoUtil::PostClientToServerMessage(
     if (command.has_sessions_commit_delay_seconds()) {
       std::map<ModelType, base::TimeDelta> delay_map;
       delay_map[SESSIONS] =
+          base::TimeDelta::FromSeconds(command.sessions_commit_delay_seconds());
+      delay_map[FAVICON_TRACKING] =
+          base::TimeDelta::FromSeconds(command.sessions_commit_delay_seconds());
+      delay_map[FAVICON_IMAGES] =
           base::TimeDelta::FromSeconds(command.sessions_commit_delay_seconds());
       cycle->delegate()->OnReceivedCustomNudgeDelays(delay_map);
     }

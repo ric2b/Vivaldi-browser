@@ -18,7 +18,7 @@
 #include "net/base/address_family.h"
 #include "net/base/completion_callback.h"
 #include "net/base/net_export.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 #include "net/socket/socket_performance_watcher.h"
 
 namespace net {
@@ -26,6 +26,8 @@ namespace net {
 class AddressList;
 class IOBuffer;
 class IPEndPoint;
+class NetLog;
+struct NetLogSource;
 
 class NET_EXPORT TCPSocketWin : NON_EXPORTED_BASE(public base::NonThreadSafe),
                                 public base::win::ObjectWatcher::Delegate  {
@@ -33,7 +35,7 @@ class NET_EXPORT TCPSocketWin : NON_EXPORTED_BASE(public base::NonThreadSafe),
   TCPSocketWin(
       std::unique_ptr<SocketPerformanceWatcher> socket_performance_watcher,
       NetLog* net_log,
-      const NetLog::Source& source);
+      const NetLogSource& source);
   ~TCPSocketWin() override;
 
   int Open(AddressFamily family);
@@ -99,16 +101,16 @@ class NET_EXPORT TCPSocketWin : NON_EXPORTED_BASE(public base::NonThreadSafe),
   //
   // TCPClientSocket may attempt to connect to multiple addresses until it
   // succeeds in establishing a connection. The corresponding log will have
-  // multiple NetLog::TYPE_TCP_CONNECT_ATTEMPT entries nested within a
-  // NetLog::TYPE_TCP_CONNECT. These methods set the start/end of
-  // NetLog::TYPE_TCP_CONNECT.
+  // multiple NetLogEventType::TCP_CONNECT_ATTEMPT entries nested within a
+  // NetLogEventType::TCP_CONNECT. These methods set the start/end of
+  // NetLogEventType::TCP_CONNECT.
   //
   // TODO(yzshen): Change logging format and let TCPClientSocket log the
   // start/end of a series of connect attempts itself.
   void StartLoggingMultipleConnectAttempts(const AddressList& addresses);
   void EndLoggingMultipleConnectAttempts(int net_error);
 
-  const BoundNetLog& net_log() const { return net_log_; }
+  const NetLogWithSource& net_log() const { return net_log_; }
 
  private:
   class Core;
@@ -164,7 +166,7 @@ class NET_EXPORT TCPSocketWin : NON_EXPORTED_BASE(public base::NonThreadSafe),
 
   bool logging_multiple_connect_attempts_;
 
-  BoundNetLog net_log_;
+  NetLogWithSource net_log_;
 
   DISALLOW_COPY_AND_ASSIGN(TCPSocketWin);
 };

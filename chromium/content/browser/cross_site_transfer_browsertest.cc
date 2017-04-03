@@ -100,6 +100,8 @@ class TrackingResourceDispatcherHostDelegate
       // If the request is deleted without being cancelled, its status will
       // indicate it succeeded, so have to check if the request is still pending
       // as well.
+      // TODO(maksims): Stop using request_->status() here, because it is
+      // going to be deprecated.
       tracker_->OnTrackedRequestDestroyed(
           !request_->is_pending() && request_->status().is_success());
     }
@@ -446,7 +448,7 @@ IN_PROC_BROWSER_TEST_F(CrossSiteTransferTest, PostWithFileData) {
   base::FilePath file_path;
   std::string file_content("test-file-content");
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
-  ASSERT_TRUE(base::CreateTemporaryFileInDir(temp_dir.path(), &file_path));
+  ASSERT_TRUE(base::CreateTemporaryFileInDir(temp_dir.GetPath(), &file_path));
   ASSERT_LT(
       0, base::WriteFile(file_path, file_content.data(), file_content.size()));
 

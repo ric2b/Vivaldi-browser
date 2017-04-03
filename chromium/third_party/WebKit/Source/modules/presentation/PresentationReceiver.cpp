@@ -5,43 +5,69 @@
 #include "modules/presentation/PresentationReceiver.h"
 
 #include "bindings/core/v8/ScriptPromise.h"
+#include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/frame/LocalFrame.h"
-#include "modules/EventTargetModules.h"
+#include "modules/presentation/PresentationConnection.h"
+#include "modules/presentation/PresentationConnectionList.h"
+#include "public/platform/modules/presentation/WebPresentationClient.h"
 
 namespace blink {
 
-PresentationReceiver::PresentationReceiver(LocalFrame* frame)
-    : DOMWindowProperty(frame)
-{
+PresentationReceiver::PresentationReceiver(LocalFrame* frame,
+                                           WebPresentationClient* client)
+    : DOMWindowProperty(frame) {
+  m_connectionList = new PresentationConnectionList(frame->document());
+
+  if (client)
+    client->setReceiver(this);
 }
 
-const AtomicString& PresentationReceiver::interfaceName() const
-{
-    return EventTargetNames::PresentationReceiver;
+ScriptPromise PresentationReceiver::connectionList(ScriptState* scriptState) {
+  if (!m_connectionListProperty)
+    m_connectionListProperty =
+        new ConnectionListProperty(scriptState->getExecutionContext(), this,
+                                   ConnectionListProperty::Ready);
+
+  if (!m_connectionList->isEmpty() &&
+      m_connectionListProperty->getState() ==
+          ScriptPromisePropertyBase::Pending)
+    m_connectionListProperty->resolve(m_connectionList);
+
+  return m_connectionListProperty->promise(scriptState->world());
 }
 
-ExecutionContext* PresentationReceiver::getExecutionContext() const
-{
-    return frame() ? frame()->document() : nullptr;
+void PresentationReceiver::onReceiverConnectionAvailable(
+    WebPresentationConnectionClient* connectionClient) {
+  DCHECK(connectionClient);
+  // take() will call PresentationReceiver::registerConnection()
+  // and register the connection.
+  auto connection =
+      PresentationConnection::take(this, wrapUnique(connectionClient));
+
+  // receiver.connectionList property not accessed
+  if (!m_connectionListProperty)
+    return;
+
+  if (m_connectionListProperty->getState() ==
+      ScriptPromisePropertyBase::Pending)
+    m_connectionListProperty->resolve(m_connectionList);
+  else if (m_connectionListProperty->getState() ==
+           ScriptPromisePropertyBase::Resolved)
+    m_connectionList->dispatchConnectionAvailableEvent(connection);
 }
 
-ScriptPromise PresentationReceiver::getConnection(ScriptState* scriptState)
-{
-    return ScriptPromise::rejectWithDOMException(scriptState, DOMException::create(NotSupportedError, "PresentationReceiver::getConnection() is not implemented yet."));
+void PresentationReceiver::registerConnection(
+    PresentationConnection* connection) {
+  DCHECK(m_connectionList);
+  m_connectionList->addConnection(connection);
 }
 
-ScriptPromise PresentationReceiver::getConnections(ScriptState* scriptState)
-{
-    return ScriptPromise::rejectWithDOMException(scriptState, DOMException::create(NotSupportedError, "PresentationReceiver::getConnections() is not implemented yet."));
+DEFINE_TRACE(PresentationReceiver) {
+  visitor->trace(m_connectionList);
+  visitor->trace(m_connectionListProperty);
+  DOMWindowProperty::trace(visitor);
 }
-
-DEFINE_TRACE(PresentationReceiver)
-{
-    EventTargetWithInlineData::trace(visitor);
-    DOMWindowProperty::trace(visitor);
-}
-
-} // namespace blink
+}  // namespace blink

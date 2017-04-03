@@ -2,13 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+#include <string>
+
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/callback_helpers.h"
-#include "base/location.h"
+#include "base/i18n/message_formatter.h"
 #include "base/macros.h"
-#include "base/memory/weak_ptr.h"
-#include "base/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/memory/ptr_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "remoting/base/string_resources.h"
 #include "remoting/host/chromeos/message_box.h"
 #include "remoting/host/it2me/it2me_confirmation_dialog.h"
@@ -22,7 +25,8 @@ class It2MeConfirmationDialogChromeOS : public It2MeConfirmationDialog {
   ~It2MeConfirmationDialogChromeOS() override;
 
   // It2MeConfirmationDialog implementation.
-  void Show(const ResultCallback& callback) override;
+  void Show(const std::string& remote_user_email,
+            const ResultCallback& callback) override;
 
  private:
   // Handles result from |message_box_|.
@@ -38,12 +42,17 @@ It2MeConfirmationDialogChromeOS::It2MeConfirmationDialogChromeOS() {}
 
 It2MeConfirmationDialogChromeOS::~It2MeConfirmationDialogChromeOS() {}
 
-void It2MeConfirmationDialogChromeOS::Show(const ResultCallback& callback) {
+void It2MeConfirmationDialogChromeOS::Show(const std::string& remote_user_email,
+                                           const ResultCallback& callback) {
+  DCHECK(!remote_user_email.empty());
   callback_ = callback;
 
   message_box_.reset(new MessageBox(
       l10n_util::GetStringUTF16(IDS_MODE_IT2ME),
-      l10n_util::GetStringUTF16(IDS_SHARE_CONFIRM_DIALOG_MESSAGE),
+      base::i18n::MessageFormatter::FormatWithNumberedArgs(
+          l10n_util::GetStringUTF16(
+              IDS_SHARE_CONFIRM_DIALOG_MESSAGE_WITH_USERNAME),
+          base::UTF8ToUTF16(remote_user_email)),
       l10n_util::GetStringUTF16(IDS_SHARE_CONFIRM_DIALOG_CONFIRM),
       l10n_util::GetStringUTF16(IDS_SHARE_CONFIRM_DIALOG_DECLINE),
       base::Bind(&It2MeConfirmationDialogChromeOS::OnMessageBoxResult,
@@ -59,10 +68,9 @@ void It2MeConfirmationDialogChromeOS::OnMessageBoxResult(
                                        Result::OK : Result::CANCEL);
 }
 
-std::unique_ptr<It2MeConfirmationDialog>
-It2MeConfirmationDialogFactory::Create() {
-  return std::unique_ptr<It2MeConfirmationDialog>(
-      new It2MeConfirmationDialogChromeOS());
+// static
+std::unique_ptr<It2MeConfirmationDialog> It2MeConfirmationDialog::Create() {
+  return base::MakeUnique<It2MeConfirmationDialogChromeOS>();
 }
 
 }  // namespace remoting

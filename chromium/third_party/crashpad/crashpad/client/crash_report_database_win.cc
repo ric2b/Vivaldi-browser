@@ -30,6 +30,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "client/settings.h"
 #include "util/misc/initialization_state_dcheck.h"
+#include "util/misc/metrics.h"
 
 namespace crashpad {
 
@@ -588,7 +589,8 @@ class CrashReportDatabaseWin : public CrashReportDatabase {
   OperationStatus RecordUploadAttempt(const Report* report,
                                       bool successful,
                                       const std::string& id) override;
-  OperationStatus SkipReportUpload(const UUID& uuid) override;
+  OperationStatus SkipReportUpload(const UUID& uuid,
+                                   Metrics::CrashSkippedReason reason) override;
   OperationStatus DeleteReport(const UUID& uuid) override;
   OperationStatus RequestUpload(const UUID& uuid) override;
 
@@ -677,6 +679,10 @@ OperationStatus CrashReportDatabaseWin::FinishedWritingCrashReport(
                                     time(nullptr),
                                     ReportState::kPending));
   *uuid = scoped_report->uuid;
+
+  Metrics::CrashReportPending(Metrics::PendingReportReason::kNewlyCreated);
+  Metrics::CrashReportSize(handle.get());
+
   return kNoError;
 }
 
@@ -770,6 +776,8 @@ OperationStatus CrashReportDatabaseWin::RecordUploadAttempt(
     const std::string& id) {
   INITIALIZATION_STATE_DCHECK_VALID(initialized_);
 
+  Metrics::CrashUploadAttempted(successful);
+
   // Take ownership, allocated in GetReportForUploading.
   std::unique_ptr<const Report> upload_report(report);
   std::unique_ptr<Metadata> metadata(AcquireMetadata());
@@ -822,8 +830,12 @@ OperationStatus CrashReportDatabaseWin::DeleteReport(const UUID& uuid) {
   return kNoError;
 }
 
-OperationStatus CrashReportDatabaseWin::SkipReportUpload(const UUID& uuid) {
+OperationStatus CrashReportDatabaseWin::SkipReportUpload(
+    const UUID& uuid,
+    Metrics::CrashSkippedReason reason) {
   INITIALIZATION_STATE_DCHECK_VALID(initialized_);
+
+  Metrics::CrashUploadSkipped(reason);
 
   std::unique_ptr<Metadata> metadata(AcquireMetadata());
   if (!metadata)
@@ -880,6 +892,8 @@ OperationStatus CrashReportDatabaseWin::RequestUpload(const UUID& uuid) {
   // and move it to the pending state.
   report_disk->upload_explicitly_requested = true;
   report_disk->state = ReportState::kPending;
+
+  Metrics::CrashReportPending(Metrics::PendingReportReason::kUserInitiated);
 
   return kNoError;
 }

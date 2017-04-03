@@ -8,17 +8,21 @@
 
 #include "base/logging.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
+#include "chrome/browser/engagement/important_sites_util.h"
 #include "chrome/browser/permissions/permission_request_id.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/browser/website_settings_registry.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/permission_type.h"
 #include "content/public/common/origin_util.h"
+#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "url/gurl.h"
 
 using bookmarks::BookmarkModel;
@@ -37,15 +41,43 @@ void DurableStoragePermissionContext::DecidePermission(
     bool user_gesture,
     const BrowserPermissionCallback& callback) {
   DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
+  DCHECK_NE(CONTENT_SETTING_ALLOW,
+            GetPermissionStatus(requesting_origin, embedding_origin));
+  DCHECK_NE(CONTENT_SETTING_BLOCK,
+            GetPermissionStatus(requesting_origin, embedding_origin));
 
-  // TODO(dgrogan): Remove bookmarks check in favor of site engagement. In the
-  // meantime maybe grant permission to A2HS origins as well.
-  BookmarkModel* model =
-      BookmarkModelFactory::GetForBrowserContextIfExists(profile());
-  if (model) {
-    std::vector<bookmarks::BookmarkModel::URLAndTitle> bookmarks;
-    model->GetBookmarks(&bookmarks);
-    if (IsOriginBookmarked(bookmarks, requesting_origin)) {
+  // Durable is only allowed to be granted to the top-level origin. Embedding
+  // origin is the last committed navigation origin to the web contents.
+  if (requesting_origin != embedding_origin) {
+    NotifyPermissionSet(id, requesting_origin, embedding_origin, callback,
+                        false /* persist */, CONTENT_SETTING_DEFAULT);
+    return;
+  }
+
+  // Don't grant durable if we can't write cookies.
+  scoped_refptr<content_settings::CookieSettings> cookie_settings =
+      CookieSettingsFactory::GetForProfile(profile());
+  if (!cookie_settings->IsSettingCookieAllowed(requesting_origin,
+                                               requesting_origin)) {
+    NotifyPermissionSet(id, requesting_origin, embedding_origin, callback,
+                        false /* persist */, CONTENT_SETTING_DEFAULT);
+    return;
+  }
+
+  const size_t kMaxImportantResults = 10;
+  std::vector<ImportantSitesUtil::ImportantDomainInfo> important_sites =
+      ImportantSitesUtil::GetImportantRegisterableDomains(profile(),
+                                                          kMaxImportantResults);
+
+  std::string registerable_domain =
+      net::registry_controlled_domains::GetDomainAndRegistry(
+          requesting_origin,
+          net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
+  if (registerable_domain.empty() && requesting_origin.HostIsIPAddress())
+    registerable_domain = requesting_origin.host();
+
+  for (const auto& important_site : important_sites) {
+    if (important_site.registerable_domain == registerable_domain) {
       NotifyPermissionSet(id, requesting_origin, embedding_origin, callback,
                           true /* persist */, CONTENT_SETTING_ALLOW);
       return;
@@ -73,16 +105,4 @@ void DurableStoragePermissionContext::UpdateContentSetting(
 
 bool DurableStoragePermissionContext::IsRestrictedToSecureOrigins() const {
   return true;
-}
-
-bool DurableStoragePermissionContext::IsOriginBookmarked(
-    const std::vector<bookmarks::BookmarkModel::URLAndTitle>& bookmarks,
-    const GURL& origin) {
-  BookmarkModel::URLAndTitle looking_for;
-  looking_for.url = origin;
-  return std::binary_search(bookmarks.begin(), bookmarks.end(), looking_for,
-                            [](const BookmarkModel::URLAndTitle& a,
-                               const BookmarkModel::URLAndTitle& b) {
-                              return a.url.GetOrigin() < b.url.GetOrigin();
-                            });
 }

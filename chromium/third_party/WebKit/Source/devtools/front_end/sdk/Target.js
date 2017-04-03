@@ -34,11 +34,12 @@ WebInspector.Target = function(targetManager, name, capabilitiesMask, connection
  */
 WebInspector.Target.Capability = {
     Browser: 1,
-    JS: 2,
-    Network: 4,
-    Worker: 8,
-    DOM: 16
-}
+    DOM: 2,
+    JS: 4,
+    Log: 8,
+    Network: 16,
+    Worker: 32
+};
 
 WebInspector.Target._nextId = 1;
 
@@ -56,7 +57,7 @@ WebInspector.Target.prototype = {
      */
     name: function()
     {
-        return this._name;
+        return this._name || this._inspectedURLName;
     },
 
     /**
@@ -118,6 +119,14 @@ WebInspector.Target.prototype = {
     hasJSCapability: function()
     {
         return this.hasAllCapabilities(WebInspector.Target.Capability.JS);
+    },
+
+    /**
+     * @return {boolean}
+     */
+    hasLogCapability: function()
+    {
+        return this.hasAllCapabilities(WebInspector.Target.Capability.Log);
     },
 
     /**
@@ -204,8 +213,13 @@ WebInspector.Target.prototype = {
     setInspectedURL: function(inspectedURL)
     {
         this._inspectedURL = inspectedURL;
-        InspectorFrontendHost.inspectedURLChanged(inspectedURL || "");
+        var parsedURL = inspectedURL.asParsedURL();
+        this._inspectedURLName = parsedURL ? parsedURL.lastPathComponentWithFragment() : "#" + this._id;
+        if (!this.parentTarget())
+            InspectorFrontendHost.inspectedURLChanged(inspectedURL || "");
         this._targetManager.dispatchEventToListeners(WebInspector.TargetManager.Events.InspectedURLChanged, this);
+        if (!this._name)
+            this._targetManager.dispatchEventToListeners(WebInspector.TargetManager.Events.NameChanged, this);
     },
 
     __proto__: Protocol.Agents.prototype

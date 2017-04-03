@@ -5,7 +5,7 @@
 #include "chrome/browser/metrics/metrics_reporting_state.h"
 
 #include "base/callback.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
@@ -61,10 +61,8 @@ bool SetGoogleUpdateSettings(bool enabled) {
 void SetMetricsReporting(bool to_update_pref,
                          const OnMetricsReportingCallbackType& callback_fn,
                          bool updated_pref) {
-#if !defined(OS_ANDROID)
   g_browser_process->local_state()->SetBoolean(
       metrics::prefs::kMetricsReportingEnabled, updated_pref);
-#endif  // !defined(OS_ANDROID)
 
   UpdateMetricsPrefsOnPermissionChange(updated_pref);
 
@@ -92,7 +90,7 @@ void OnDeviceSettingChange() {
 }
 #endif
 
-} // namespace
+}  // namespace
 
 void ChangeMetricsReportingState(bool enabled) {
   ChangeMetricsReportingStateWithReply(enabled,
@@ -155,5 +153,5 @@ void SetupMetricsStateForChromeOS() {
       chromeos::kStatsReportingPref, base::Bind(&OnDeviceSettingChange));
 
   OnDeviceSettingChange();
-#endif // defined(OS_CHROMEOS)
+#endif  // defined(OS_CHROMEOS)
 }

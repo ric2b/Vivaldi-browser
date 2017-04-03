@@ -19,7 +19,7 @@
 #include "net/base/io_buffer.h"
 #include "net/base/net_export.h"
 #include "net/base/request_priority.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 #include "net/socket/next_proto.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/spdy/spdy_buffer.h"
@@ -173,7 +173,7 @@ class NET_EXPORT_PRIVATE SpdyStream {
              RequestPriority priority,
              int32_t initial_send_window_size,
              int32_t max_recv_window_size,
-             const BoundNetLog& net_log);
+             const NetLogWithSource& net_log);
 
   ~SpdyStream();
 
@@ -287,7 +287,7 @@ class NET_EXPORT_PRIVATE SpdyStream {
   // writes.
   bool WasEverUsed() const;
 
-  const BoundNetLog& net_log() const { return net_log_; }
+  const NetLogWithSource& net_log() const { return net_log_; }
 
   base::Time GetRequestTime() const;
   void SetRequestTime(base::Time t);
@@ -547,7 +547,7 @@ class NET_EXPORT_PRIVATE SpdyStream {
   // Not valid until the stream is closed.
   int response_status_;
 
-  BoundNetLog net_log_;
+  NetLogWithSource net_log_;
 
   base::TimeTicks send_time_;
   base::TimeTicks recv_first_byte_time_;

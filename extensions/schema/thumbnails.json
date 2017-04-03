@@ -46,6 +46,43 @@
             "description": "Height of the capture."
           }
         }
+      },
+      {
+        "id": "CaptureTabParams",
+        "type": "object",
+        "description": "A structure containing parameters for the captureTab call.",
+        "properties": {
+          "encodeFormat": {
+            "type": "string",
+            "optional": true,
+            "description": "The encoding format. 'jpg' or 'png'. Defaults to 'png'."
+          },
+          "encodeQuality": {
+            "type": "integer",
+            "optional": true,
+            "description": "The jpg encoding quality if format is 'jpg', otherwise ignored. Default is 90, which is very high quality."
+          },
+          "fullPage": {
+            "type": "boolean",
+            "optional": true,
+            "description": "true to capture the full height of the page, restricted to 20000 pixels height. Default is false."
+          },
+          "width": {
+            "type": "integer",
+            "optional": true,
+            "description": "The resulting width of the capture after scaling. Ignored if |fullPage| is true."
+          },
+          "height": {
+            "type": "integer",
+            "optional": true,
+            "description": "The resulting height of the capture after scaling or if onlyVisible is false, the maximum number of pixels to capture in height."
+          },
+          "saveToBasePath": {
+            "type": "string",
+            "optional": true,
+            "description": "The resulting image is saved under the |saveToBasePath| location in the OS Pictures directory."
+          }
+        }
       }
     ],
     "functions": [
@@ -94,6 +131,38 @@
                 "name": "image",
                 "type": "string",
                 "description": "base64-encoded png of the captured image."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "captureTab",
+        "type": "function",
+        "description": "Captures the contents of a tab.",
+        "parameters": [
+          {
+            "name": "tabId",
+            "type": "integer",
+            "description": "The tab id to capture."
+          },
+          {
+            "name": "params",
+            "$ref": "CaptureTabParams"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "tabId",
+                "type": "integer",
+                "description": "The tab id that was captured."
+              },
+              {
+                "name": "image",
+                "type": "string",
+                "description": "base64-encoded jpg of the captured image or, if |saveToBasePath| is used, the full path to the image on disk."
               }
             ]
           }

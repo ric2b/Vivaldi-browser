@@ -35,7 +35,6 @@ class MetricsReportingHandlerTest : public testing::Test {
  public:
   MetricsReportingHandlerTest() {
     // Local state must be set up before |handler_|.
-    TestingBrowserProcess::CreateInstance();
     local_state_.reset(new ScopedTestingLocalState(
         TestingBrowserProcess::GetGlobal()));
 
@@ -52,7 +51,7 @@ class MetricsReportingHandlerTest : public testing::Test {
     EXPECT_TRUE(test_web_ui()->call_data().empty());
 
     base::ListValue args;
-    args.Append(base::WrapUnique(new base::FundamentalValue(1)));
+    args.Append(base::MakeUnique<base::FundamentalValue>(1));
     handler()->HandleGetMetricsReporting(&args);
 
     EXPECT_TRUE(handler()->IsJavascriptAllowed());
@@ -106,11 +105,9 @@ TEST_F(MetricsReportingHandlerTest, PrefChangesNotifyPage) {
 TEST_F(MetricsReportingHandlerTest, PolicyChangesNotifyPage) {
   // Change the policy, check that the page was notified.
   map()->Set(policy::key::kMetricsReportingEnabled,
-             policy::POLICY_LEVEL_MANDATORY,
-             policy::POLICY_SCOPE_USER,
+             policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
              policy::POLICY_SOURCE_CLOUD,
-             base::WrapUnique(new base::FundamentalValue(true)),
-             nullptr);
+             base::MakeUnique<base::FundamentalValue>(true), nullptr);
   provider()->UpdateChromePolicy(*map());
   EXPECT_EQ(1u, test_web_ui()->call_data().size());
 
@@ -119,11 +116,9 @@ TEST_F(MetricsReportingHandlerTest, PolicyChangesNotifyPage) {
 
   // Policies changing while JavaScript is disabled shouldn't notify the page.
   map()->Set(policy::key::kMetricsReportingEnabled,
-             policy::POLICY_LEVEL_MANDATORY,
-             policy::POLICY_SCOPE_USER,
+             policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
              policy::POLICY_SOURCE_CLOUD,
-             base::WrapUnique(new base::FundamentalValue(false)),
-             nullptr);
+             base::MakeUnique<base::FundamentalValue>(false), nullptr);
   provider()->UpdateChromePolicy(*map());
   EXPECT_TRUE(test_web_ui()->call_data().empty());
 }

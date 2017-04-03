@@ -11,7 +11,9 @@
 #include "ash/common/shell_window_ids.h"
 #include "ash/mus/accelerators/accelerator_handler.h"
 #include "ash/mus/accelerators/accelerator_ids.h"
+#include "ash/mus/app_list_presenter_mus.h"
 #include "ash/mus/bridge/wm_lookup_mus.h"
+#include "ash/mus/bridge/wm_root_window_controller_mus.h"
 #include "ash/mus/bridge/wm_shell_mus.h"
 #include "ash/mus/bridge/wm_window_mus.h"
 #include "ash/mus/move_event_handler.h"
@@ -22,6 +24,7 @@
 #include "ash/mus/shell_delegate_mus.h"
 #include "ash/mus/window_manager_observer.h"
 #include "ash/public/interfaces/container.mojom.h"
+#include "base/memory/ptr_util.h"
 #include "services/ui/common/event_matcher_util.h"
 #include "services/ui/common/types.h"
 #include "services/ui/public/cpp/property_type_converters.h"
@@ -30,8 +33,8 @@
 #include "services/ui/public/cpp/window_tree_client.h"
 #include "services/ui/public/interfaces/mus_constants.mojom.h"
 #include "services/ui/public/interfaces/window_manager.mojom.h"
-#include "ui/app_list/presenter/app_list_presenter.h"
 #include "ui/base/hit_test.h"
+#include "ui/display/display_observer.h"
 #include "ui/events/mojo/event.mojom.h"
 #include "ui/views/mus/pointer_watcher_event_router.h"
 #include "ui/views/mus/screen_mus.h"
@@ -39,49 +42,25 @@
 namespace ash {
 namespace mus {
 
-void AssertTrue(bool success) {
-  DCHECK(success);
-}
-
-// TODO(jamescook): Port ash::sysui::AppListPresenterMus and eliminate this.
-class AppListPresenterStub : public app_list::AppListPresenter {
- public:
-  AppListPresenterStub() {}
-  ~AppListPresenterStub() override {}
-
-  // app_list::AppListPresenter:
-  void Show(int64_t display_id) override { NOTIMPLEMENTED(); }
-  void Dismiss() override { NOTIMPLEMENTED(); }
-  void ToggleAppList(int64_t display_id) override { NOTIMPLEMENTED(); }
-  bool IsVisible() const override {
-    NOTIMPLEMENTED();
-    return false;
-  }
-  bool GetTargetVisibility() const override {
-    NOTIMPLEMENTED();
-    return false;
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(AppListPresenterStub);
-};
-
 WindowManager::WindowManager(shell::Connector* connector)
     : connector_(connector) {}
 
 WindowManager::~WindowManager() {
-  // NOTE: |window_tree_client_| may already be null.
-  delete window_tree_client_;
+  Shutdown();
 }
 
-void WindowManager::Init(ui::WindowTreeClient* window_tree_client) {
+void WindowManager::Init(
+    std::unique_ptr<ui::WindowTreeClient> window_tree_client,
+    const scoped_refptr<base::SequencedWorkerPool>& blocking_pool) {
   DCHECK(!window_tree_client_);
-  window_tree_client_ = window_tree_client;
+  window_tree_client_ = std::move(window_tree_client);
+
+  screen_ = base::MakeUnique<display::ScreenBase>();
 
   pointer_watcher_event_router_.reset(
-      new views::PointerWatcherEventRouter(window_tree_client));
+      new views::PointerWatcherEventRouter(window_tree_client_.get()));
 
-  shadow_controller_.reset(new ShadowController(window_tree_client));
+  shadow_controller_.reset(new ShadowController(window_tree_client_.get()));
 
   // The insets are roughly what is needed by CustomFrameView. The expectation
   // is at some point we'll write our own NonClientFrameView and get the insets
@@ -97,11 +76,9 @@ void WindowManager::Init(ui::WindowTreeClient* window_tree_client) {
   window_manager_client_->SetFrameDecorationValues(
       std::move(frame_decoration_values));
 
-  std::unique_ptr<ShellDelegate> shell_delegate(new ShellDelegateMus(
-      base::MakeUnique<AppListPresenterStub>(), connector_));
-  shell_.reset(new WmShellMus(std::move(shell_delegate), this,
-                              pointer_watcher_event_router_.get()));
-  shell_->Initialize();
+  shell_.reset(new WmShellMus(base::MakeUnique<ShellDelegateMus>(connector_),
+                              this, pointer_watcher_event_router_.get()));
+  shell_->Initialize(blocking_pool);
   lookup_.reset(new WmLookupMus);
 }
 
@@ -117,9 +94,8 @@ void WindowManager::SetScreenLocked(bool is_locked) {
 
 ui::Window* WindowManager::NewTopLevelWindow(
     std::map<std::string, std::vector<uint8_t>>* properties) {
-  // TODO(sky): need to maintain active as well as allowing specifying display.
   RootWindowController* root_window_controller =
-      root_window_controllers_.begin()->get();
+      GetRootWindowControllerForNewTopLevelWindow(properties);
   return root_window_controller->NewTopLevelWindow(properties);
 }
 
@@ -161,63 +137,82 @@ void WindowManager::RemoveObserver(WindowManagerObserver* observer) {
 RootWindowController* WindowManager::CreateRootWindowController(
     ui::Window* window,
     const display::Display& display) {
-  // TODO(sky): there is timing issues with using ScreenMus.
-  if (!screen_) {
-    std::unique_ptr<views::ScreenMus> screen(new views::ScreenMus(nullptr));
-    screen->Init(connector_);
-    screen_ = std::move(screen);
-  }
+  // CreateRootWindowController() means a new display is being added, so the
+  // DisplayList needs to be updated. Calling AddDisplay() results in
+  // notifying DisplayObservers. Ash code assumes when this happens there is
+  // a valid RootWindowController for the new display. Suspend notifying
+  // observers, add the Display, create the RootWindowController, and then
+  // notify DisplayObservers. Classic ash does this by making sure
+  // WindowTreeHostManager is added as a DisplayObserver early on.
+  std::unique_ptr<display::DisplayListObserverLock> display_lock =
+      screen_->display_list()->SuspendObserverUpdates();
+  const bool is_first_display = screen_->display_list()->displays().empty();
+  // TODO(sky): should be passed whether display is primary.
+  screen_->display_list()->AddDisplay(
+      display, is_first_display ? display::DisplayList::Type::PRIMARY
+                                : display::DisplayList::Type::NOT_PRIMARY);
 
   std::unique_ptr<RootWindowController> root_window_controller_ptr(
       new RootWindowController(this, window, display));
   RootWindowController* root_window_controller =
       root_window_controller_ptr.get();
   root_window_controllers_.insert(std::move(root_window_controller_ptr));
-  window->AddObserver(this);
 
   FOR_EACH_OBSERVER(WindowManagerObserver, observers_,
                     OnRootWindowControllerAdded(root_window_controller));
+
+  FOR_EACH_OBSERVER(display::DisplayObserver,
+                    *screen_->display_list()->observers(),
+                    OnDisplayAdded(root_window_controller->display()));
+
   return root_window_controller;
 }
 
-void WindowManager::OnWindowDestroying(ui::Window* window) {
-  for (auto it = root_window_controllers_.begin();
-       it != root_window_controllers_.end(); ++it) {
-    if ((*it)->root() == window) {
-      FOR_EACH_OBSERVER(WindowManagerObserver, observers_,
-                        OnWillDestroyRootWindowController((*it).get()));
-      return;
-    }
+void WindowManager::DestroyRootWindowController(
+    RootWindowController* root_window_controller) {
+  if (root_window_controllers_.size() > 1) {
+    DCHECK_NE(root_window_controller, GetPrimaryRootWindowController());
+    root_window_controller->wm_root_window_controller()->MoveWindowsTo(
+        WmWindowMus::Get(GetPrimaryRootWindowController()->root()));
   }
-  NOTREACHED();
+
+  ui::Window* root_window = root_window_controller->root();
+  auto it = FindRootWindowControllerByWindow(root_window);
+  DCHECK(it != root_window_controllers_.end());
+
+  (*it)->Shutdown();
+
+  // NOTE: classic ash deleted RootWindowController after a delay (DeleteSoon())
+  // this may need to change to mirror that.
+  root_window_controllers_.erase(it);
 }
 
-void WindowManager::OnWindowDestroyed(ui::Window* window) {
-  window->RemoveObserver(this);
-  for (auto it = root_window_controllers_.begin();
-       it != root_window_controllers_.end(); ++it) {
-    if ((*it)->root() == window) {
-      root_window_controllers_.erase(it);
-      return;
-    }
-  }
-  NOTREACHED();
-}
-
-void WindowManager::OnEmbed(ui::Window* root) {
-  // WindowManager should never see this, instead OnWmNewDisplay() is called.
-  NOTREACHED();
-}
-
-void WindowManager::OnDidDestroyClient(ui::WindowTreeClient* client) {
-  // Destroying the roots should result in removal from
-  // |root_window_controllers_|.
-  DCHECK(root_window_controllers_.empty());
+void WindowManager::Shutdown() {
+  if (!window_tree_client_)
+    return;
 
   // Observers can rely on WmShell from the callback. So notify the observers
   // before destroying it.
   FOR_EACH_OBSERVER(WindowManagerObserver, observers_,
                     OnWindowTreeClientDestroyed());
+
+  // Primary RootWindowController must be destroyed last.
+  RootWindowController* primary_root_window_controller =
+      GetPrimaryRootWindowController();
+  std::set<RootWindowController*> secondary_root_window_controllers;
+  for (auto& root_window_controller_ptr : root_window_controllers_) {
+    if (root_window_controller_ptr.get() != primary_root_window_controller)
+      secondary_root_window_controllers.insert(
+          root_window_controller_ptr.get());
+  }
+  for (RootWindowController* root_window_controller :
+       secondary_root_window_controllers) {
+    DestroyRootWindowController(root_window_controller);
+  }
+  if (primary_root_window_controller)
+    DestroyRootWindowController(primary_root_window_controller);
+
+  DCHECK(root_window_controllers_.empty());
 
   lookup_.reset();
   shell_->Shutdown();
@@ -226,8 +221,58 @@ void WindowManager::OnDidDestroyClient(ui::WindowTreeClient* client) {
 
   pointer_watcher_event_router_.reset();
 
-  window_tree_client_ = nullptr;
+  window_tree_client_.reset();
   window_manager_client_ = nullptr;
+}
+
+WindowManager::RootWindowControllers::iterator
+WindowManager::FindRootWindowControllerByWindow(ui::Window* window) {
+  for (auto it = root_window_controllers_.begin();
+       it != root_window_controllers_.end(); ++it) {
+    if ((*it)->root() == window)
+      return it;
+  }
+  return root_window_controllers_.end();
+}
+
+RootWindowController* WindowManager::GetPrimaryRootWindowController() {
+  return static_cast<WmRootWindowControllerMus*>(
+             WmShell::Get()->GetPrimaryRootWindowController())
+      ->root_window_controller();
+}
+
+RootWindowController*
+WindowManager::GetRootWindowControllerForNewTopLevelWindow(
+    std::map<std::string, std::vector<uint8_t>>* properties) {
+  // If a specific display was requested, use it.
+  const int64_t display_id = GetInitialDisplayId(*properties);
+  for (auto& root_window_controller_ptr : root_window_controllers_) {
+    if (root_window_controller_ptr->display().id() == display_id)
+      return root_window_controller_ptr.get();
+  }
+
+  return static_cast<WmRootWindowControllerMus*>(
+             WmShellMus::Get()
+                 ->GetRootWindowForNewWindows()
+                 ->GetRootWindowController())
+      ->root_window_controller();
+}
+
+void WindowManager::OnEmbed(ui::Window* root) {
+  // WindowManager should never see this, instead OnWmNewDisplay() is called.
+  NOTREACHED();
+}
+
+void WindowManager::OnEmbedRootDestroyed(ui::Window* root) {
+  // WindowManager should never see this.
+  NOTREACHED();
+}
+
+void WindowManager::OnLostConnection(ui::WindowTreeClient* client) {
+  DCHECK_EQ(client, window_tree_client_.get());
+  Shutdown();
+  // TODO(sky): this case should trigger shutting down WindowManagerApplication
+  // too.
 }
 
 void WindowManager::OnPointerEventObserved(const ui::PointerEvent& event,
@@ -251,11 +296,12 @@ bool WindowManager::OnWmSetProperty(
     ui::Window* window,
     const std::string& name,
     std::unique_ptr<std::vector<uint8_t>>* new_data) {
-  // TODO(sky): constrain this to set of keys we know about, and allowed
-  // values.
+  // TODO(sky): constrain this to set of keys we know about, and allowed values.
   return name == ui::mojom::WindowManager::kShowState_Property ||
          name == ui::mojom::WindowManager::kPreferredSize_Property ||
          name == ui::mojom::WindowManager::kResizeBehavior_Property ||
+         name == ui::mojom::WindowManager::kShelfIconResourceId_Property ||
+         name == ui::mojom::WindowManager::kShelfItemType_Property ||
          name == ui::mojom::WindowManager::kWindowAppIcon_Property ||
          name == ui::mojom::WindowManager::kWindowTitle_Property;
 }
@@ -275,6 +321,12 @@ void WindowManager::OnWmClientJankinessChanged(
 void WindowManager::OnWmNewDisplay(ui::Window* window,
                                    const display::Display& display) {
   CreateRootWindowController(window, display);
+}
+
+void WindowManager::OnWmDisplayRemoved(ui::Window* window) {
+  auto iter = FindRootWindowControllerByWindow(window);
+  DCHECK(iter != root_window_controllers_.end());
+  DestroyRootWindowController(iter->get());
 }
 
 void WindowManager::OnWmPerformMoveLoop(

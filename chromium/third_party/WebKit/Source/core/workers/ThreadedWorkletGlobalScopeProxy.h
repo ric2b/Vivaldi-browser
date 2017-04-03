@@ -7,21 +7,16 @@
 
 #include "core/workers/WorkletGlobalScopeProxy.h"
 
+// TODO(ikilpatrick): remove this file once AudioWorklet is no longer using it.
+
 namespace blink {
 
 class ThreadedWorkletGlobalScopeProxy : public WorkletGlobalScopeProxy {
-public:
-    void evaluateScript(const ScriptSourceCode&) final
-    {
-        // TODO(ikilpatrick): implement.
-    }
-
-    void terminateWorkletGlobalScope() final
-    {
-        // TODO(ikilpatrick): implement.
-    }
+ public:
+  void evaluateScript(const ScriptSourceCode&) final {}
+  void terminateWorkletGlobalScope() final {}
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // ThreadedWorkletGlobalScopeProxy_h
+#endif  // ThreadedWorkletGlobalScopeProxy_h

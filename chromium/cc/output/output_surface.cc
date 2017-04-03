@@ -11,9 +11,11 @@
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/output/managed_memory_policy.h"
 #include "cc/output/output_surface_client.h"
+#include "cc/output/output_surface_frame.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -118,67 +120,59 @@ class SkiaGpuTraceMemoryDump : public SkTraceMemoryDump {
 
 }  // namespace
 
+OutputSurface::OutputSurface(scoped_refptr<ContextProvider> context_provider)
+    : context_provider_(std::move(context_provider)), weak_ptr_factory_(this) {
+  DCHECK(context_provider_);
+  thread_checker_.DetachFromThread();
+}
+
 OutputSurface::OutputSurface(
-    scoped_refptr<ContextProvider> context_provider,
-    scoped_refptr<ContextProvider> worker_context_provider,
     std::unique_ptr<SoftwareOutputDevice> software_device)
-    : context_provider_(std::move(context_provider)),
-      worker_context_provider_(std::move(worker_context_provider)),
-      software_device_(std::move(software_device)),
-      weak_ptr_factory_(this) {
-  client_thread_checker_.DetachFromThread();
+    : software_device_(std::move(software_device)), weak_ptr_factory_(this) {
+  DCHECK(software_device_);
+  thread_checker_.DetachFromThread();
 }
 
 OutputSurface::OutputSurface(
     scoped_refptr<VulkanContextProvider> vulkan_context_provider)
     : vulkan_context_provider_(vulkan_context_provider),
       weak_ptr_factory_(this) {
-  client_thread_checker_.DetachFromThread();
-}
-
-// Forwarded to OutputSurfaceClient
-void OutputSurface::SetNeedsRedrawRect(const gfx::Rect& damage_rect) {
-  TRACE_EVENT0("cc", "OutputSurface::SetNeedsRedrawRect");
-  client_->SetNeedsRedrawRect(damage_rect);
-}
-
-void OutputSurface::ReclaimResources(const ReturnedResourceArray& resources) {
-  client_->ReclaimResources(resources);
-}
-
-void OutputSurface::DidLoseOutputSurface() {
-  TRACE_EVENT0("cc", "OutputSurface::DidLoseOutputSurface");
-  client_->DidLoseOutputSurface();
-}
-
-void OutputSurface::SetExternalStencilTest(bool enabled) {
-  external_stencil_test_enabled_ = enabled;
+  DCHECK(vulkan_context_provider_);
+  thread_checker_.DetachFromThread();
 }
 
 OutputSurface::~OutputSurface() {
-  if (client_)
-    DetachFromClientInternal();
-}
+  // Is destroyed on the thread it is bound to.
+  DCHECK(thread_checker_.CalledOnValidThread());
 
-bool OutputSurface::HasExternalStencilTest() const {
-  return external_stencil_test_enabled_;
-}
+  if (!client_)
+    return;
 
-void OutputSurface::ApplyExternalStencil() {}
+  // Unregister any dump provider. Safe to call (no-op) if we have not yet
+  // registered.
+  if (base::ThreadTaskRunnerHandle::IsSet()) {
+    base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
+        this);
+  }
+
+  if (context_provider_) {
+    context_provider_->SetLostContextCallback(
+        ContextProvider::LostContextCallback());
+  }
+}
 
 bool OutputSurface::BindToClient(OutputSurfaceClient* client) {
-  DCHECK(client_thread_checker_.CalledOnValidThread());
+  DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(client);
   DCHECK(!client_);
   client_ = client;
-  bool success = true;
 
-  if (context_provider_.get()) {
-    success = context_provider_->BindToCurrentThread();
-    if (success) {
-      context_provider_->SetLostContextCallback(base::Bind(
-          &OutputSurface::DidLoseOutputSurface, base::Unretained(this)));
-    }
+  if (context_provider_) {
+    if (!context_provider_->BindToCurrentThread())
+      return false;
+
+    context_provider_->SetLostContextCallback(base::Bind(
+        &OutputSurface::DidLoseOutputSurface, base::Unretained(this)));
   }
 
   // In certain cases, ThreadTaskRunnerHandle isn't set (Android Webview).
@@ -191,26 +185,7 @@ bool OutputSurface::BindToClient(OutputSurfaceClient* client) {
     base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
         this, "OutputSurface", base::ThreadTaskRunnerHandle::Get());
   }
-
-  if (!success)
-    DetachFromClient();
-  return success;
-}
-
-void OutputSurface::DetachFromClient() {
-  DetachFromClientInternal();
-}
-
-void OutputSurface::EnsureBackbuffer() {
-  if (software_device_)
-    software_device_->EnsureBackbuffer();
-}
-
-void OutputSurface::DiscardBackbuffer() {
-  if (context_provider_.get())
-    context_provider_->ContextGL()->DiscardBackbufferCHROMIUM();
-  if (software_device_)
-    software_device_->DiscardBackbuffer();
+  return true;
 }
 
 void OutputSurface::Reshape(const gfx::Size& size,
@@ -233,11 +208,6 @@ void OutputSurface::Reshape(const gfx::Size& size,
     software_device_->Resize(size, scale_factor);
 }
 
-void OutputSurface::BindFramebuffer() {
-  DCHECK(context_provider_.get());
-  context_provider_->ContextGL()->BindFramebuffer(GL_FRAMEBUFFER, 0);
-}
-
 void OutputSurface::PostSwapBuffersComplete() {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(&OutputSurface::OnSwapBuffersComplete,
@@ -250,37 +220,6 @@ void OutputSurface::OnSwapBuffersComplete() {
   client_->DidSwapBuffersComplete();
 }
 
-void OutputSurface::DidReceiveTextureInUseResponses(
-    const gpu::TextureInUseResponses& responses) {
-  client_->DidReceiveTextureInUseResponses(responses);
-}
-
-void OutputSurface::SetMemoryPolicy(const ManagedMemoryPolicy& policy) {
-  TRACE_EVENT1("cc", "OutputSurface::SetMemoryPolicy",
-               "bytes_limit_when_visible", policy.bytes_limit_when_visible);
-  // Just ignore the memory manager when it says to set the limit to zero
-  // bytes. This will happen when the memory manager thinks that the renderer
-  // is not visible (which the renderer knows better).
-  if (policy.bytes_limit_when_visible)
-    client_->SetMemoryPolicy(policy);
-}
-
-OverlayCandidateValidator* OutputSurface::GetOverlayCandidateValidator() const {
-  return nullptr;
-}
-
-bool OutputSurface::IsDisplayedAsOverlayPlane() const {
-  return false;
-}
-
-unsigned OutputSurface::GetOverlayTextureId() const {
-  return 0;
-}
-
-bool OutputSurface::SurfaceIsSuspendForRecycle() const {
-  return false;
-}
-
 bool OutputSurface::OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
                                  base::trace_event::ProcessMemoryDump* pmd) {
   if (auto* context_provider = this->context_provider()) {
@@ -291,35 +230,12 @@ bool OutputSurface::OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
       gr_context->dumpMemoryStatistics(&trace_memory_dump);
     }
   }
-  if (auto* context_provider = worker_context_provider()) {
-    ContextProvider::ScopedContextLock scoped_context(context_provider);
-
-    if (auto* gr_context = context_provider->GrContext()) {
-      SkiaGpuTraceMemoryDump trace_memory_dump(
-          pmd, context_provider->ContextSupport()->ShareGroupTracingGUID());
-      gr_context->dumpMemoryStatistics(&trace_memory_dump);
-    }
-  }
-
   return true;
 }
 
-void OutputSurface::DetachFromClientInternal() {
-  DCHECK(client_thread_checker_.CalledOnValidThread());
-  DCHECK(client_);
-
-  // Unregister any dump provider. Safe to call (no-op) if we have not yet
-  // registered.
-  base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
-      this);
-
-  if (context_provider_.get()) {
-    context_provider_->SetLostContextCallback(
-        ContextProvider::LostContextCallback());
-  }
-  context_provider_ = nullptr;
-  client_ = nullptr;
-  weak_ptr_factory_.InvalidateWeakPtrs();
+void OutputSurface::DidLoseOutputSurface() {
+  TRACE_EVENT0("cc", "OutputSurface::DidLoseOutputSurface");
+  client_->DidLoseOutputSurface();
 }
 
 }  // namespace cc

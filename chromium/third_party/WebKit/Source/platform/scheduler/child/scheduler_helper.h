@@ -47,21 +47,14 @@ class BLINK_PLATFORM_EXPORT SchedulerHelper
   // task queues.
   scoped_refptr<TaskQueue> ControlTaskRunner();
 
-  // Returns the control task after wakeup runner.  Tasks posted to this runner
-  // are executed with the highest priority but do not cause the scheduler to
-  // wake up. Care must be taken to avoid starvation of other task queues.
-  scoped_refptr<TaskQueue> ControlAfterWakeUpTaskRunner();
-
   // Adds or removes a task observer from the scheduler. The observer will be
   // notified before and after every executed task. These functions can only be
   // called on the thread this class was created on.
   void AddTaskObserver(base::MessageLoop::TaskObserver* task_observer);
   void RemoveTaskObserver(base::MessageLoop::TaskObserver* task_observer);
 
-  void SetTaskTimeTracker(TaskTimeTracker* task_time_tracker) {
-    if (task_queue_manager_)
-      task_queue_manager_->SetTaskTimeTracker(task_time_tracker);
-  }
+  void AddTaskTimeObserver(TaskTimeObserver* task_time_observer);
+  void RemoveTaskTimeObserver(TaskTimeObserver* task_time_observer);
 
   // Shuts down the scheduler by dropping any remaining pending work in the work
   // queues. After this call any work posted to the task runners will be
@@ -71,7 +64,7 @@ class BLINK_PLATFORM_EXPORT SchedulerHelper
   // Returns true if Shutdown() has been called. Otherwise returns false.
   bool IsShutdown() const { return !task_queue_manager_.get(); }
 
-  void CheckOnValidThread() const {
+  inline void CheckOnValidThread() const {
     DCHECK(thread_checker_.CalledOnValidThread());
   }
 
@@ -116,7 +109,6 @@ class BLINK_PLATFORM_EXPORT SchedulerHelper
   scoped_refptr<SchedulerTqmDelegate> task_queue_manager_delegate_;
   std::unique_ptr<TaskQueueManager> task_queue_manager_;
   scoped_refptr<TaskQueue> control_task_runner_;
-  scoped_refptr<TaskQueue> control_after_wakeup_task_runner_;
   scoped_refptr<TaskQueue> default_task_runner_;
 
   Observer* observer_;  // NOT OWNED

@@ -206,10 +206,6 @@
           <button class="exceptions-list-button" contentType="plugins"
               i18n-content="manageExceptions"></button>
         </div>
-        <div id="disable-plugins-container">
-          <a href="chrome://plugins" i18n-content="manageIndividualPlugins"
-              target="_blank"></a>
-        </div>
       </div>
     </section>
     <!-- Pop-ups filter -->
@@ -649,6 +645,23 @@
         <div class="settings-row">
           <button class="exceptions-list-button" contentType="mouselock"
               i18n-content="manageExceptions"></button>
+        </div>
+      </div>
+    </section>
+    <!-- PDF Plugin filter -->
+    <section id="pdf-section">
+      <h3 i18n-content="pdfTabLabel" class="content-settings-header"></h3>
+      <div>
+        <div class="checkbox">
+          <label>
+            <input pref="plugins.always_open_pdf_externally" type="checkbox">
+            <span>
+              <span i18n-content="pdfEnable"></span>
+              <span class="controlled-setting-indicator"
+                  pref="plugins.always_open_pdf_externally">
+              </span>
+            </span>
+          </label>
         </div>
       </div>
     </section>

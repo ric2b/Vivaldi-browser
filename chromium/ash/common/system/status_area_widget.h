@@ -8,7 +8,7 @@
 #include "ash/ash_export.h"
 #include "ash/common/login_status.h"
 #include "ash/common/shelf/shelf_background_animator_observer.h"
-#include "ash/common/shelf/shelf_types.h"
+#include "ash/public/cpp/shelf_types.h"
 #include "base/macros.h"
 #include "ui/views/widget/widget.h"
 
@@ -65,9 +65,9 @@ class ASH_EXPORT StatusAreaWidget : public views::Widget,
   OverviewButtonTray* overview_button_tray() { return overview_button_tray_; }
 
 #if defined(OS_CHROMEOS)
-  ImeMenuTray* ime_menu_tray() { return ime_menu_tray_; }
-
   PaletteTray* palette_tray() { return palette_tray_; }
+
+  ImeMenuTray* ime_menu_tray() { return ime_menu_tray_; }
 #endif
 
   WmShelf* wm_shelf() { return wm_shelf_; }

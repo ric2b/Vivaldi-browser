@@ -8,7 +8,7 @@
 #include "base/debug/leak_annotations.h"
 #include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/safe_browsing_db/v4_database.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -23,24 +23,24 @@ V4StoreFactory* V4Database::factory_ = NULL;
 void V4Database::Create(
     const scoped_refptr<base::SequencedTaskRunner>& db_task_runner,
     const base::FilePath& base_path,
-    const StoreFileNameMap& store_file_name_map,
+    const ListInfos& list_infos,
     NewDatabaseReadyCallback new_db_callback) {
   DCHECK(base_path.IsAbsolute());
-  DCHECK(!store_file_name_map.empty());
+  DCHECK(!list_infos.empty());
 
-  const scoped_refptr<base::SingleThreadTaskRunner>& callback_task_runner =
-      base::MessageLoop::current()->task_runner();
+  const scoped_refptr<base::SingleThreadTaskRunner> callback_task_runner =
+      base::ThreadTaskRunnerHandle::Get();
   db_task_runner->PostTask(
       FROM_HERE,
       base::Bind(&V4Database::CreateOnTaskRunner, db_task_runner, base_path,
-                 store_file_name_map, callback_task_runner, new_db_callback));
+                 list_infos, callback_task_runner, new_db_callback));
 }
 
 // static
 void V4Database::CreateOnTaskRunner(
     const scoped_refptr<base::SequencedTaskRunner>& db_task_runner,
     const base::FilePath& base_path,
-    const StoreFileNameMap& store_file_name_map,
+    const ListInfos& list_infos,
     const scoped_refptr<base::SingleThreadTaskRunner>& callback_task_runner,
     NewDatabaseReadyCallback new_db_callback) {
   DCHECK(db_task_runner->RunsTasksOnCurrentThread());
@@ -55,10 +55,14 @@ void V4Database::CreateOnTaskRunner(
   }
 
   std::unique_ptr<StoreMap> store_map = base::MakeUnique<StoreMap>();
-  for (const auto& store_info : store_file_name_map) {
-    const UpdateListIdentifier& update_list_identifier = store_info.first;
-    const base::FilePath store_path = base_path.AppendASCII(store_info.second);
-    (*store_map)[update_list_identifier].reset(
+  for (const auto& it : list_infos) {
+    if (!it.fetch_updates()) {
+      // This list doesn't need to be fetched or stored on disk.
+      continue;
+    }
+
+    const base::FilePath store_path = base_path.AppendASCII(it.filename());
+    (*store_map)[it.list_id()].reset(
         factory_->CreateV4Store(db_task_runner, store_path));
   }
   std::unique_ptr<V4Database> v4_database(
@@ -103,11 +107,11 @@ void V4Database::ApplyUpdate(
 
   // Post the V4Store update task on the task runner but get the callback on the
   // current thread.
-  const scoped_refptr<base::SingleThreadTaskRunner>& current_task_runner =
-      base::MessageLoop::current()->task_runner();
+  const scoped_refptr<base::SingleThreadTaskRunner> current_task_runner =
+      base::ThreadTaskRunnerHandle::Get();
   for (std::unique_ptr<ListUpdateResponse>& response :
        *parsed_server_response) {
-    UpdateListIdentifier identifier(*response);
+    ListIdentifier identifier(*response);
     StoreMap::const_iterator iter = store_map_->find(identifier);
     if (iter != store_map_->end()) {
       const std::unique_ptr<V4Store>& old_store = iter->second;
@@ -133,7 +137,7 @@ void V4Database::ApplyUpdate(
   }
 }
 
-void V4Database::UpdatedStoreReady(UpdateListIdentifier identifier,
+void V4Database::UpdatedStoreReady(ListIdentifier identifier,
                                    std::unique_ptr<V4Store> new_store) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(pending_store_updates_);
@@ -170,17 +174,33 @@ std::unique_ptr<StoreStateMap> V4Database::GetStoreStateMap() {
 
 void V4Database::GetStoresMatchingFullHash(
     const FullHash& full_hash,
-    const base::hash_set<UpdateListIdentifier>& stores_to_look,
-    MatchedHashPrefixMap* matched_hash_prefix_map) {
-  for (const UpdateListIdentifier& identifier : stores_to_look) {
+    const StoresToCheck& stores_to_check,
+    StoreAndHashPrefixes* matched_store_and_hash_prefixes) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  matched_store_and_hash_prefixes->clear();
+  for (const ListIdentifier& identifier : stores_to_check) {
     const auto& store_pair = store_map_->find(identifier);
     DCHECK(store_pair != store_map_->end());
     const std::unique_ptr<V4Store>& store = store_pair->second;
     HashPrefix hash_prefix = store->GetMatchingHashPrefix(full_hash);
     if (!hash_prefix.empty()) {
-      (*matched_hash_prefix_map)[identifier] = hash_prefix;
+      matched_store_and_hash_prefixes->emplace_back(identifier, hash_prefix);
     }
   }
 }
+
+ListInfo::ListInfo(const bool fetch_updates,
+                   const std::string& filename,
+                   const ListIdentifier& list_id,
+                   const SBThreatType sb_threat_type)
+    : fetch_updates_(fetch_updates),
+      filename_(filename),
+      list_id_(list_id),
+      sb_threat_type_(sb_threat_type) {
+  DCHECK(!fetch_updates_ || !filename_.empty());
+  DCHECK_NE(SB_THREAT_TYPE_SAFE, sb_threat_type_);
+}
+
+ListInfo::~ListInfo() {}
 
 }  // namespace safe_browsing

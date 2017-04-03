@@ -61,6 +61,7 @@ using base::ASCIIToUTF16;
 using base::UTF8ToUTF16;
 using testing::_;
 using testing::AtLeast;
+using testing::Return;
 using testing::SaveArg;
 
 namespace autofill {
@@ -575,7 +576,7 @@ class TestAutofillManager : public AutofillManager {
 
   void UploadFormData(const FormStructure& submitted_form,
                       bool observed_submission) override {
-    submitted_form_signature_ = submitted_form.FormSignature();
+    submitted_form_signature_ = submitted_form.FormSignatureAsStr();
   }
 
   const std::string GetSubmittedFormSignature() {
@@ -1577,6 +1578,41 @@ TEST_F(AutofillManagerTest, GetCreditCardSuggestions_NonHTTPS) {
   GetAutofillSuggestions(form, field);
   // Autocomplete suggestions are queried, but not Autofill.
   EXPECT_FALSE(external_delegate_->on_suggestions_returned_seen());
+}
+
+// Test that we will eventually return the credit card signin promo when there
+// are no credit card suggestions and the promo is active. See the tests in
+// AutofillExternalDelegateTest that test whether the promo is added.
+TEST_F(AutofillManagerTest, GetCreditCardSuggestions_OnlySigninPromo) {
+  // Enable the signin promo feature with no impression limit.
+  EnableCreditCardSigninPromoFeatureWithLimit(0);
+
+  // Make sure there are no credit cards.
+  personal_data_.ClearCreditCards();
+
+  // Set up our form data.
+  FormData form;
+  CreateTestCreditCardFormData(&form, true, false);
+  std::vector<FormData> forms(1, form);
+  FormsSeen(forms);
+  FormFieldData field = form.fields[1];
+
+  ON_CALL(autofill_client_, ShouldShowSigninPromo())
+      .WillByDefault(Return(true));
+  EXPECT_CALL(autofill_client_, ShouldShowSigninPromo()).Times(2);
+  EXPECT_TRUE(autofill_manager_->ShouldShowCreditCardSigninPromo(form, field));
+
+  // Autocomplete suggestions are not queried.
+  MockAutocompleteHistoryManager* m = RecreateMockAutocompleteHistoryManager();
+  EXPECT_CALL(*m, OnGetAutocompleteSuggestions(_, _, _, _)).Times(0);
+
+  GetAutofillSuggestions(form, field);
+
+  // Test that we sent no values to the external delegate. It will add the promo
+  // before passing along the results.
+  external_delegate_->CheckNoSuggestions(kDefaultPageID);
+
+  EXPECT_TRUE(external_delegate_->on_suggestions_returned_seen());
 }
 
 // Test that we return all credit card suggestions in the case that two cards
@@ -3250,8 +3286,8 @@ TEST_F(AutofillManagerTest, OnLoadedServerPredictions) {
   ASSERT_TRUE(response.SerializeToString(&response_string));
 
   std::vector<std::string> signatures;
-  signatures.push_back(form_structure->FormSignature());
-  signatures.push_back(form_structure2->FormSignature());
+  signatures.push_back(form_structure->FormSignatureAsStr());
+  signatures.push_back(form_structure2->FormSignatureAsStr());
 
   base::HistogramTester histogram_tester;
   autofill_manager_->OnLoadedServerPredictions(response_string, signatures);
@@ -3300,7 +3336,7 @@ TEST_F(AutofillManagerTest, OnLoadedServerPredictions_ResetManager) {
   ASSERT_TRUE(response.SerializeToString(&response_string));
 
   std::vector<std::string> signatures;
-  signatures.push_back(form_structure->FormSignature());
+  signatures.push_back(form_structure->FormSignatureAsStr());
 
   // Reset the manager (such as during a navigation).
   autofill_manager_->Reset();
@@ -3402,7 +3438,7 @@ TEST_F(AutofillManagerTest, FormSubmittedWithDifferentFields) {
   FormsSeen(forms);
 
   // Cache the expected form signature.
-  std::string signature = FormStructure(form).FormSignature();
+  std::string signature = FormStructure(form).FormSignatureAsStr();
 
   // Change the structure of the form prior to submission.
   // Websites would typically invoke JavaScript either on page load or on form

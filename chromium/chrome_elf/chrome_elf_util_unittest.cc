@@ -120,12 +120,12 @@ TEST(ChromeElfUtilTest, BrowserProcessSecurityTest) {
 
   // First, ensure that the emergency-off finch signal works.
   EXPECT_TRUE(SetSecurityFinchFlag(true));
-  EarlyBrowserSecurity();
+  elf_security::EarlyBrowserSecurity();
   EXPECT_FALSE(IsSecuritySet());
   EXPECT_TRUE(SetSecurityFinchFlag(false));
 
   // Second, test that the process mitigation is set when no finch signal.
-  EarlyBrowserSecurity();
+  elf_security::EarlyBrowserSecurity();
   EXPECT_TRUE(IsSecuritySet());
 
   CancelRegRedirect(nt::HKCU);
@@ -230,7 +230,7 @@ class ChromeElfUtilTest
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_STREQ(L"-m", channel.c_str());
+      EXPECT_STREQ(L"m", channel.c_str());
     } else {
       EXPECT_STREQ(install_static::kChromeChannelStable, channel.c_str());
     }
@@ -239,7 +239,7 @@ class ChromeElfUtilTest
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_STREQ(L"-m", channel.c_str());
+      EXPECT_STREQ(L"m", channel.c_str());
     } else {
       EXPECT_STREQ(install_static::kChromeChannelStable, channel.c_str());
     }
@@ -284,7 +284,7 @@ class ChromeElfUtilTest
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_STREQ(L"-m", channel.c_str());
+      EXPECT_STREQ(L"m", channel.c_str());
     } else {
       EXPECT_STREQ(install_static::kChromeChannelStable, channel.c_str());
     }
@@ -292,7 +292,7 @@ class ChromeElfUtilTest
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_STREQ(L"-m", channel.c_str());
+      EXPECT_STREQ(L"m", channel.c_str());
     } else {
       EXPECT_STREQ(install_static::kChromeChannelStable, channel.c_str());
     }
@@ -341,7 +341,7 @@ class ChromeElfUtilTest
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_STREQ(L"-m", channel.c_str());
+      EXPECT_STREQ(L"m", channel.c_str());
     } else {
       EXPECT_STREQ(install_static::kChromeChannelStable, channel.c_str());
     }
@@ -349,7 +349,7 @@ class ChromeElfUtilTest
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_STREQ(L"-m", channel.c_str());
+      EXPECT_STREQ(L"m", channel.c_str());
     } else {
       EXPECT_STREQ(install_static::kChromeChannelStable, channel.c_str());
     }
@@ -383,7 +383,7 @@ class ChromeElfUtilTest
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_STREQ(L"-m", channel.c_str());
+      EXPECT_STREQ(L"m", channel.c_str());
     } else {
       EXPECT_STREQ(install_static::kChromeChannelStable, channel.c_str());
     }
@@ -391,7 +391,7 @@ class ChromeElfUtilTest
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_STREQ(L"-m", channel.c_str());
+      EXPECT_STREQ(L"m", channel.c_str());
     } else {
       EXPECT_STREQ(install_static::kChromeChannelStable, channel.c_str());
     }
@@ -399,7 +399,7 @@ class ChromeElfUtilTest
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_STREQ(L"-m", channel.c_str());
+      EXPECT_STREQ(L"m", channel.c_str());
     } else {
       EXPECT_STREQ(install_static::kChromeChannelStable, channel.c_str());
     }
@@ -408,7 +408,7 @@ class ChromeElfUtilTest
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_STREQ(L"-m", channel.c_str());
+      EXPECT_STREQ(L"m", channel.c_str());
     } else {
       EXPECT_STREQ(install_static::kChromeChannelStable, channel.c_str());
     }
@@ -416,9 +416,27 @@ class ChromeElfUtilTest
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_STREQ(L"-m", channel.c_str());
+      EXPECT_STREQ(L"m", channel.c_str());
     } else {
       EXPECT_STREQ(install_static::kChromeChannelStable, channel.c_str());
+    }
+    // Variations on stable channel.
+    static constexpr const wchar_t* kStableApValues[] = {
+        L"-multi-chrome",
+        L"x64-stable-multi-chrome",
+        L"-stage:ensemble_patching-multi-chrome-full",
+        L"-multi-chrome-full",
+    };
+    for (const wchar_t* ap_value : kStableApValues) {
+      SetChannelName(ap_value);
+      install_static::GetChromeChannelName(!system_level_, add_modifier,
+                                           &channel);
+      if (multi_install_ && add_modifier) {
+        EXPECT_STREQ(L"m", channel.c_str()) << ap_value;
+      } else {
+        EXPECT_STREQ(install_static::kChromeChannelStable, channel.c_str())
+            << ap_value;
+      }
     }
   }
 

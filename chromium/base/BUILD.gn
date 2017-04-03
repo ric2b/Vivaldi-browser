@@ -211,6 +211,8 @@ component("base") {
     "android/record_user_action.h",
     "android/scoped_java_ref.cc",
     "android/scoped_java_ref.h",
+    "android/statistics_recorder_android.cc",
+    "android/statistics_recorder_android.h",
     "android/sys_utils.cc",
     "android/sys_utils.h",
     "android/trace_event_binding.cc",
@@ -291,6 +293,8 @@ component("base") {
     "debug/proc_maps_linux.h",
     "debug/profiler.cc",
     "debug/profiler.h",
+    "debug/scoped_thread_heap_usage.cc",
+    "debug/scoped_thread_heap_usage.h",
     "debug/stack_trace.cc",
     "debug/stack_trace.h",
     "debug/stack_trace_android.cc",
@@ -329,6 +333,8 @@ component("base") {
     "files/dir_reader_linux.h",
     "files/dir_reader_posix.h",
     "files/file.cc",
+    "files/file_descriptor_watcher_posix.cc",
+    "files/file_descriptor_watcher_posix.h",
     "files/file_enumerator.cc",
     "files/file_enumerator.h",
     "files/file_enumerator_posix.cc",
@@ -427,8 +433,8 @@ component("base") {
     "mac/dispatch_source_mach.h",
     "mac/foundation_util.h",
     "mac/foundation_util.mm",
-    "mac/launch_services_util.cc",
     "mac/launch_services_util.h",
+    "mac/launch_services_util.mm",
     "mac/launchd.cc",
     "mac/launchd.h",
     "mac/mac_logging.h",
@@ -481,6 +487,9 @@ component("base") {
     "memory/free_deleter.h",
     "memory/linked_ptr.h",
     "memory/manual_constructor.h",
+    "memory/memory_coordinator_client.h",
+    "memory/memory_coordinator_client_registry.cc",
+    "memory/memory_coordinator_client_registry.h",
     "memory/memory_pressure_listener.cc",
     "memory/memory_pressure_listener.h",
     "memory/memory_pressure_monitor.cc",
@@ -972,6 +981,8 @@ component("base") {
     "tracking_info.cc",
     "tracking_info.h",
     "tuple.h",
+    "unguessable_token.cc",
+    "unguessable_token.h",
     "value_conversions.cc",
     "value_conversions.h",
     "values.cc",
@@ -1171,6 +1182,8 @@ component("base") {
       configs += [ ":nacl_nonsfi_warnings" ]
     } else {
       sources -= [
+        "files/file_descriptor_watcher_posix.cc",
+        "files/file_descriptor_watcher_posix.h",
         "files/file_util.cc",
         "files/file_util.h",
         "files/file_util_posix.cc",
@@ -1464,7 +1477,7 @@ component("base") {
     ]
   }
 
-  if (is_asan || is_lsan || is_msan || is_tsan) {
+  if (using_sanitizer) {
     data += [ "//tools/valgrind/asan/" ]
     if (is_win) {
       data +=
@@ -1764,6 +1777,7 @@ test("base_unittests") {
     "base64_unittest.cc",
     "base64url_unittest.cc",
     "big_endian_unittest.cc",
+    "bind_helpers_unittest.cc",
     "bind_unittest.cc",
     "bit_cast_unittest.cc",
     "bits_unittest.cc",
@@ -1787,6 +1801,7 @@ test("base_unittests") {
     "debug/debugger_unittest.cc",
     "debug/leak_tracker_unittest.cc",
     "debug/proc_maps_linux_unittest.cc",
+    "debug/scoped_thread_heap_usage_unittest.cc",
     "debug/stack_trace_unittest.cc",
     "debug/task_annotator_unittest.cc",
     "deferred_sequenced_task_runner_unittest.cc",
@@ -1794,6 +1809,7 @@ test("base_unittests") {
     "feature_list_unittest.cc",
     "file_version_info_win_unittest.cc",
     "files/dir_reader_posix_unittest.cc",
+    "files/file_descriptor_watcher_posix_unittest.cc",
     "files/file_locking_unittest.cc",
     "files/file_path_unittest.cc",
     "files/file_path_watcher_unittest.cc",
@@ -1945,6 +1961,7 @@ test("base_unittests") {
     "task_scheduler/sequence_unittest.cc",
     "task_scheduler/task_scheduler_impl_unittest.cc",
     "task_scheduler/task_tracker_unittest.cc",
+    "task_scheduler/task_unittest.cc",
     "task_scheduler/test_task_factory.cc",
     "task_scheduler/test_task_factory.h",
     "template_util_unittest.cc",
@@ -1992,6 +2009,7 @@ test("base_unittests") {
     "trace_event/trace_event_unittest.cc",
     "tracked_objects_unittest.cc",
     "tuple_unittest.cc",
+    "unguessable_token_unittest.cc",
     "values_unittest.cc",
     "version_unittest.cc",
     "vlog_unittest.cc",
@@ -2208,7 +2226,6 @@ if (enable_nocompile_tests) {
 }
 
 if (is_android) {
-  # GYP: //base.gyp:base_jni_headers
   generate_jni("base_jni_headers") {
     sources = [
       "android/java/src/org/chromium/base/AnimationFrameTimeHistogram.java",
@@ -2238,6 +2255,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/library_loader/LibraryLoader.java",
       "android/java/src/org/chromium/base/metrics/RecordHistogram.java",
       "android/java/src/org/chromium/base/metrics/RecordUserAction.java",
+      "android/java/src/org/chromium/base/metrics/StatisticsRecorderAndroid.java",
     ]
 
     public_deps = [
@@ -2247,13 +2265,11 @@ if (is_android) {
     jni_package = "base"
   }
 
-  # GYP: //base.gyp:android_runtime_jni_headers
   generate_jar_jni("android_runtime_jni_headers") {
     jni_package = "base"
     classes = [ "java/lang/Runtime.class" ]
   }
 
-  # GYP: //base.gyp:base_java
   android_library("base_java") {
     srcjar_deps = [
       ":base_android_java_enums_srcjar",
@@ -2329,6 +2345,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/library_loader/ProcessInitException.java",
       "android/java/src/org/chromium/base/metrics/RecordHistogram.java",
       "android/java/src/org/chromium/base/metrics/RecordUserAction.java",
+      "android/java/src/org/chromium/base/metrics/StatisticsRecorderAndroid.java",
       "android/java/src/org/chromium/base/multidex/ChromiumMultiDexInstaller.java",
     ]
 
@@ -2341,8 +2358,8 @@ if (is_android) {
     ]
   }
 
-  # GYP: //base.gyp:base_javatests
   android_library("base_javatests") {
+    testonly = true
     deps = [
       ":base_java",
       ":base_java_test_support",
@@ -2357,11 +2374,12 @@ if (is_android) {
     ]
   }
 
-  # GYP: //base.gyp:base_java_test_support
   android_library("base_java_test_support") {
+    testonly = true
     deps = [
       ":base_java",
       "//testing/android/reporter:reporter_java",
+      "//third_party/hamcrest:hamcrest_core_java",
     ]
     java_files = [
       "test/android/javatests/src/org/chromium/base/test/BaseActivityInstrumentationTestCase.java",
@@ -2380,6 +2398,7 @@ if (is_android) {
       "test/android/javatests/src/org/chromium/base/test/util/InstrumentationUtils.java",
       "test/android/javatests/src/org/chromium/base/test/util/IntegrationTest.java",
       "test/android/javatests/src/org/chromium/base/test/util/Manual.java",
+      "test/android/javatests/src/org/chromium/base/test/util/Matchers.java",
       "test/android/javatests/src/org/chromium/base/test/util/MetricsUtils.java",
       "test/android/javatests/src/org/chromium/base/test/util/MinAndroidSdkLevel.java",
       "test/android/javatests/src/org/chromium/base/test/util/MinAndroidSdkLevelSkipCheck.java",
@@ -2401,7 +2420,6 @@ if (is_android) {
     ]
   }
 
-  # GYP: //base.gyp:base_junit_tests
   junit_binary("base_junit_tests") {
     java_files = [
       "android/junit/src/org/chromium/base/BaseChromiumApplicationTest.java",
@@ -2419,10 +2437,6 @@ if (is_android) {
     srcjar_deps = [ ":base_build_config_gen" ]
   }
 
-  # GYP: //base.gyp:base_java_application_state
-  # GYP: //base.gyp:base_java_library_load_from_apk_status_codes
-  # GYP: //base.gyp:base_java_library_process_type
-  # GYP: //base.gyp:base_java_memory_pressure_level
   java_cpp_enum("base_android_java_enums_srcjar") {
     sources = [
       "android/application_status_listener.h",
@@ -2432,7 +2446,6 @@ if (is_android) {
     ]
   }
 
-  # GYP: //base/base.gyp:base_build_config_gen
   java_cpp_template("base_build_config_gen") {
     sources = [
       "android/java/templates/BuildConfig.template",
@@ -2445,7 +2458,6 @@ if (is_android) {
     }
   }
 
-  # GYP: //base/base.gyp:base_native_libraries_gen
   java_cpp_template("base_native_libraries_gen") {
     sources = [
       "android/java/templates/NativeLibraries.template",
@@ -2453,8 +2465,8 @@ if (is_android) {
     package_name = "org/chromium/base/library_loader"
   }
 
-  # GYP: //base.gyp:base_java_unittest_support
   android_library("base_java_unittest_support") {
+    testonly = true
     deps = [
       ":base_java",
     ]

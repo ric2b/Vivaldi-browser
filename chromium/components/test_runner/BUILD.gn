@@ -89,8 +89,6 @@ component("test_runner") {
     "web_frame_test_client.h",
     "web_frame_test_proxy.cc",
     "web_frame_test_proxy.h",
-    "web_task.cc",
-    "web_task.h",
     "web_test_delegate.h",
     "web_test_interfaces.cc",
     "web_test_interfaces.h",
@@ -101,6 +99,8 @@ component("test_runner") {
     "web_view_test_proxy.h",
     "web_widget_test_client.cc",
     "web_widget_test_client.h",
+    "web_widget_test_proxy.cc",
+    "web_widget_test_proxy.h",
   ]
 
   # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
@@ -201,17 +201,11 @@ group("resources") {
   }
 }
 
-if (is_mac || is_win) {
-  # GYP version: components/test_runner/test_runner.gyp:layout_test_helper
+if (is_win) {
   executable("layout_test_helper") {
     sources = [
-      "helper/layout_test_helper_mac.mm",
       "helper/layout_test_helper_win.cc",
     ]
-
-    if (is_mac) {
-      libs = [ "AppKit.framework" ]
-    }
 
     deps = [
       "//build/config/sanitizers:deps",

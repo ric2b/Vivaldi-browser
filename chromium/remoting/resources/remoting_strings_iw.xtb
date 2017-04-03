@@ -65,7 +65,6 @@
 <translation id="2359808026110333948">המשך</translation>
 <translation id="2366718077645204424">לא ניתן להשיג את המארח. הסיבה לכך יכולה להיות תצורת הרשת שבה אתה משתמש.</translation>
 <translation id="2370754117186920852">המארח <ph name="OPTIONAL_OFFLINE_REASON" />  נראה לאחרונה במצב מקוון <ph name="RELATIVE_TIMESTAMP" />.</translation>
-<translation id="2498359688066513246">עזרה ומשוב</translation>
 <translation id="2499160551253595098">‏עזור לנו לשפר את 'שולחן עבודה מרוחק של Chrome' בכך שתאפשר לנו לאסוף סטטיסטיקות שימוש ודוחות קריסה.</translation>
 <translation id="2512228156274966424">‏שים לב: על מנת לוודא שכל מקשי הקיצור זמינים, ניתן להגדיר את שולחן העבודה המרוחק של Chrome ל'פתח כחלון'.</translation>
 <translation id="2540992418118313681">האם ברצונך לשתף מחשב זה כך שמשתמש אחר יראה אותו וישלוט בו?</translation>
@@ -264,6 +263,7 @@ Chromoting</translation>
 <translation id="7948001860594368197">אפשרויות מסך</translation>
 <translation id="7970576581263377361">‏האימות נכשל. היכנס שוב ל-Chromium.</translation>
 <translation id="7981525049612125370">פג התוקף של ההפעלה המרוחקת.</translation>
+<translation id="8041089156583427627">שלח משוב</translation>
 <translation id="8041721485428375115">‏בהורדת מנהל ההתקנה של מארח שולחן העבודה המרוחק של Chrome, אתה מביע הסכמה ל<ph name="LINK_BEGIN" />תנאים ולהגבלות<ph name="LINK_END" /> של Google.</translation>
 <translation id="8073845705237259513">‏כדי להשתמש ב'שולחן עבודה מרוחק של Chrome', עליך להוסיף חשבון Google למכשיר שלך.</translation>
 <translation id="80739703311984697">‏המארח המרוחק דורש שתבצע אימות מול אתר של צד שלישי. כדי להמשיך, עליך להעניק ל-Chromoting הרשאות נוספות כדי לגשת לכתובת זו:</translation>
@@ -287,6 +287,7 @@ Chromoting</translation>
 <translation id="8548209692293300397">‏נכנסת בעבר כ-<ph name="USER_NAME" /> (<ph name="USER_EMAIL" />). כדי להיכנס למחשבים שלך בחשבון הזה, <ph name="LINK_BEGIN" />היכנס אל Google Chrome<ph name="LINK_END" /> עם החשבון והתקן מחדש את שולחן העבודה המרוחק של Chrome.</translation>
 <translation id="8642984861538780905">איכות סבירה</translation>
 <translation id="8712909229180978490">‏איני יכול לראות את הקבצים השמורים שלי ב-Google Drive באינטרנט.</translation>
+<translation id="8743328882720071828">האם ברצונך לאפשר ל-<ph name="CLIENT_USERNAME" /> לראות את המחשב שלך ולשלוט בו?</translation>
 <translation id="8759753423332885148">למידע נוסף</translation>
 <translation id="8791202241915690908">‏הורד את מנהל ההתקנה של מארח Chromoting</translation>
 <translation id="894763922177556086">איכות טובה</translation>

@@ -5,8 +5,10 @@
 import("//build/config/chrome_build.gni")
 import("//build/config/features.gni")
 import("//build/config/sanitizers/sanitizers.gni")
+import("//build/config/sysroot.gni")
+import("//build/util/process_version.gni")
 import("//build/util/version.gni")
-import("//chrome/version.gni")
+import("//chrome/process_version_rc_template.gni")  # For branding_file_path.
 
 if (current_cpu == "x86" || current_cpu == "x64") {
   import("//media/cdm/ppapi/cdm_paths.gni")
@@ -16,10 +18,9 @@ if (is_vivaldi) {
   import("//vivaldi/gn/config/product.gni")
 }
 
-assert(is_linux && (is_chrome_branded || is_vivaldi))
+assert(is_linux)
 
 # This target builds all "normal" Linux installers.
-# GYP version: chrome/chrome_installer.gypi:linux_packages_all
 #
 # The bot setup is to build stable, unstable, and beta packages for the current
 # build. Then a later step picks up the package corresponding to what the
@@ -94,6 +95,12 @@ copy("common_packaging_files") {
     "common/xfce-helper.template",
   ]
 
+  if (is_chrome_branded) {
+    sources += [ "common/google-chrome/google-chrome.info" ]
+  } else {
+    sources += [ "common/chromium-browser/chromium-browser.info" ]
+  }
+
   if (current_cpu == "x86") {
     sources += [ "//build/linux/bin/eu-strip" ]
   } else if (current_cpu == "x64") {
@@ -112,8 +119,10 @@ copy("deb_packaging_files") {
     "debian/changelog.template",
     "debian/control.template",
     "debian/debian.menu",
-    "debian/expected_deps_ia32",
-    "debian/expected_deps_x64",
+    "debian/expected_deps_ia32_jessie",
+    "debian/expected_deps_ia32_wheezy",
+    "debian/expected_deps_x64_jessie",
+    "debian/expected_deps_x64_wheezy",
     "debian/postinst",
     "debian/postrm",
     "debian/prerm",
@@ -164,6 +173,11 @@ if (!is_chromeos) {
 process_version("save_build_info") {
   # Just output the default version info variables (no template).
   process_only = true
+  sources = [
+    "//build/util/LASTCHANGE",
+    "//chrome/VERSION",
+    branding_file_path,
+  ]
   output = "$root_out_dir/installer/version.txt"
 }
 
@@ -233,20 +247,21 @@ template("linux_package") {
   ]
 
   if (false && current_cpu == "x86") {
-    packaging_files_binaries += [
-      "$root_out_dir/nacl_irt_x86_32.nexe",
-      "$root_out_dir/$widevine_cdm_path/libwidevinecdmadapter.so",
-      "$root_out_dir/$widevine_cdm_path/libwidevinecdm.so",
-    ]
+    packaging_files_binaries += [ "$root_out_dir/nacl_irt_x86_32.nexe" ]
   } else if (false && current_cpu == "x64") {
-    packaging_files_binaries += [
-      "$root_out_dir/nacl_irt_x86_64.nexe",
-      "$root_out_dir/$widevine_cdm_path/libwidevinecdmadapter.so",
-      "$root_out_dir/$widevine_cdm_path/libwidevinecdm.so",
-    ]
+    packaging_files_binaries += [ "$root_out_dir/nacl_irt_x86_64.nexe" ]
   } else if (current_cpu == "arm") {
     packaging_files_binaries += [ "$root_out_dir/nacl_irt_arm.nexe" ]
   }
+
+  # The widevine BUILD.gn only produces shared libraries for x86 and x64
+  if (is_chrome_branded && (current_cpu == "x86" || current_cpu == "x64")) {
+    packaging_files_binaries += [
+      "$root_out_dir/$widevine_cdm_path/libwidevinecdmadapter.so",
+      "$root_out_dir/$widevine_cdm_path/libwidevinecdm.so",
+    ]
+  }
+
   if (is_asan) {
     packaging_files_binaries += [ "$root_out_dir/lib/libc++.so" ]
   }
@@ -290,6 +305,10 @@ template("linux_package") {
       invoker.channel,
       "-d",
       branding_path_component,
+      "-s",
+      rebase_path(sysroot),
+      "-e",
+      rebase_path("//third_party/dpkg-dev"),
     ]
     deps = [
       ":installer_deps",

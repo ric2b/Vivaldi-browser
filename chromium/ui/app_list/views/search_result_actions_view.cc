@@ -80,8 +80,8 @@ void SearchResultActionsView::CreateImageButton(
 void SearchResultActionsView::CreateBlueButton(
     const SearchResult::Action& action) {
   views::MdTextButton* button =
-      views::MdTextButton::CreateMdButton(this, action.label_text);
-  button->SetCallToAction(true);
+      views::MdTextButton::Create(this, action.label_text);
+  button->SetProminent(true);
   button->SetTooltipText(action.tooltip_text);
   button->SetFocusBehavior(FocusBehavior::NEVER);
   AddChildView(button);

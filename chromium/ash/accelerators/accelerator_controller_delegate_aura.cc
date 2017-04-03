@@ -12,26 +12,17 @@
 #include "ash/accelerators/accelerator_commands_aura.h"
 #include "ash/common/accelerators/debug_commands.h"
 #include "ash/common/accessibility_types.h"
-#include "ash/common/ash_switches.h"
-#include "ash/common/focus_cycler.h"
-#include "ash/common/gpu_support.h"
 #include "ash/common/session/session_state_delegate.h"
-#include "ash/common/shelf/shelf.h"
-#include "ash/common/shelf/shelf_widget.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shell_delegate.h"
 #include "ash/common/shell_window_ids.h"
-#include "ash/common/system/status_area_widget.h"
 #include "ash/common/system/system_notifier.h"
 #include "ash/common/system/tray/system_tray.h"
-#include "ash/common/system/web_notification/web_notification_tray.h"
-#include "ash/common/wallpaper/wallpaper_delegate.h"
 #include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm/wm_event.h"
 #include "ash/common/wm_shell.h"
 #include "ash/debug.h"
-#include "ash/desktop_background/desktop_background_controller.h"
 #include "ash/display/display_manager.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/host/ash_window_tree_host.h"
@@ -39,7 +30,6 @@
 #include "ash/root_window_controller.h"
 #include "ash/rotator/screen_rotation_animator.h"
 #include "ash/rotator/window_rotation.h"
-#include "ash/screen_util.h"
 #include "ash/screenshot_delegate.h"
 #include "ash/shell.h"
 #include "ash/touch/touch_hud_debug.h"
@@ -61,8 +51,6 @@
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
-#include "ui/gfx/canvas.h"
-#include "ui/gfx/image/image_skia.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/notification.h"
 #include "ui/message_center/notifier_settings.h"
@@ -135,22 +123,6 @@ base::string16 GetNotificationText(int message_id,
   return l10n_util::GetStringFUTF16(message_id, new_shortcut, old_shortcut);
 }
 
-void HandleFocusShelf() {
-  base::RecordAction(UserMetricsAction("Accel_Focus_Shelf"));
-  WmShell::Get()->focus_cycler()->FocusWidget(
-      Shelf::ForPrimaryDisplay()->shelf_widget());
-}
-
-void HandleLaunchAppN(int n) {
-  base::RecordAction(UserMetricsAction("Accel_Launch_App"));
-  WmShelf::LaunchShelfItem(n);
-}
-
-void HandleLaunchLastApp() {
-  base::RecordAction(UserMetricsAction("Accel_Launch_Last_App"));
-  WmShelf::LaunchShelfItem(-1);
-}
-
 bool CanHandleMagnifyScreen() {
   return Shell::GetInstance()->magnification_controller()->IsEnabled();
 }
@@ -195,7 +167,7 @@ void HandleRotateScreen() {
   gfx::Point point = display::Screen::GetScreen()->GetCursorScreenPoint();
   display::Display display =
       display::Screen::GetScreen()->GetDisplayNearestPoint(point);
-  const DisplayInfo& display_info =
+  const display::ManagedDisplayInfo& display_info =
       Shell::GetInstance()->display_manager()->GetDisplayInfo(display.id());
   ScreenRotationAnimator(display.id())
       .Rotate(GetNextRotation(display_info.GetActiveRotation()),
@@ -216,29 +188,6 @@ void HandleRotateActiveWindow() {
     active_window->layer()->GetAnimator()->StartAnimation(
         new ui::LayerAnimationSequence(
             new WindowRotation(360, active_window->layer())));
-  }
-}
-
-bool CanHandleShowMessageCenterBubble() {
-  RootWindowController* controller =
-      RootWindowController::ForTargetRootWindow();
-  StatusAreaWidget* status_area_widget =
-      controller->shelf_widget()->status_area_widget();
-  return status_area_widget &&
-         status_area_widget->web_notification_tray()->visible();
-}
-
-void HandleShowMessageCenterBubble() {
-  base::RecordAction(UserMetricsAction("Accel_Show_Message_Center_Bubble"));
-  RootWindowController* controller =
-      RootWindowController::ForTargetRootWindow();
-  StatusAreaWidget* status_area_widget =
-      controller->shelf_widget()->status_area_widget();
-  if (status_area_widget) {
-    WebNotificationTray* notification_tray =
-        status_area_widget->web_notification_tray();
-    if (notification_tray->visible())
-      notification_tray->ShowMessageCenterBubble();
   }
 }
 
@@ -274,58 +223,24 @@ void HandleTakeScreenshot(ScreenshotDelegate* screenshot_delegate) {
     screenshot_delegate->HandleTakeScreenshotForAllRootWindows();
 }
 
-gfx::ImageSkia CreateWallpaperImage(SkColor fill, SkColor rect) {
-  // TODO(oshima): Consider adding a command line option to control
-  // wallpaper images for testing.
-  // The size is randomly picked.
-  gfx::Size image_size(1366, 768);
-  gfx::Canvas canvas(image_size, 1.0f, true);
-  canvas.DrawColor(fill);
-  SkPaint paint;
-  paint.setColor(rect);
-  paint.setStrokeWidth(10);
-  paint.setStyle(SkPaint::kStroke_Style);
-  paint.setXfermodeMode(SkXfermode::kSrcOver_Mode);
-  canvas.DrawRoundRect(gfx::Rect(image_size), 100, paint);
-  return gfx::ImageSkia(canvas.ExtractImageRep());
-}
-
-void HandleToggleDesktopBackgroundMode() {
-  static int index = 0;
-  DesktopBackgroundController* desktop_background_controller =
-      Shell::GetInstance()->desktop_background_controller();
-  switch (++index % 4) {
-    case 0:
-      ash::WmShell::Get()->wallpaper_delegate()->InitializeWallpaper();
-      break;
-    case 1:
-      desktop_background_controller->SetWallpaperImage(
-          CreateWallpaperImage(SK_ColorRED, SK_ColorBLUE),
-          wallpaper::WALLPAPER_LAYOUT_STRETCH);
-      break;
-    case 2:
-      desktop_background_controller->SetWallpaperImage(
-          CreateWallpaperImage(SK_ColorBLUE, SK_ColorGREEN),
-          wallpaper::WALLPAPER_LAYOUT_CENTER);
-      break;
-    case 3:
-      desktop_background_controller->SetWallpaperImage(
-          CreateWallpaperImage(SK_ColorGREEN, SK_ColorRED),
-          wallpaper::WALLPAPER_LAYOUT_CENTER_CROPPED);
-      break;
-  }
-}
-
 bool CanHandleUnpin() {
+  // Returns true only for WINDOW_STATE_TYPE_PINNED.
+  // WINDOW_STATE_TYPE_TRUSTED_PINNED does not accept user's unpin operation.
   wm::WindowState* window_state = wm::GetActiveWindowState();
-  return window_state && window_state->IsPinned();
+  return window_state &&
+         window_state->GetStateType() == wm::WINDOW_STATE_TYPE_PINNED;
 }
 
 #if defined(OS_CHROMEOS)
 void HandleSwapPrimaryDisplay() {
   base::RecordAction(UserMetricsAction("Accel_Swap_Primary_Display"));
+
+  // TODO(rjkroege): This is not correct behaviour on devices with more than
+  // two screens. Behave the same as mirroring: fail and notify if there are
+  // three or more screens.
   Shell::GetInstance()->display_configuration_controller()->SetPrimaryDisplayId(
-      ScreenUtil::GetSecondaryDisplay().id(), true /* user_action */);
+      Shell::GetInstance()->display_manager()->GetSecondaryDisplay().id(),
+      true /* user_action */);
 }
 
 void HandleToggleMirrorMode() {
@@ -364,23 +279,14 @@ void AcceleratorControllerDelegateAura::SetScreenshotDelegate(
 
 bool AcceleratorControllerDelegateAura::HandlesAction(
     AcceleratorAction action) {
+  // NOTE: When adding a new accelerator that only depends on //ash/common code,
+  // add it to accelerator_controller.cc instead. See class comment.
   switch (action) {
-    case DEBUG_TOGGLE_DESKTOP_BACKGROUND_MODE:
     case DEBUG_TOGGLE_DEVICE_SCALE_FACTOR:
-    case DEBUG_TOGGLE_ROOT_WINDOW_FULL_SCREEN:
     case DEBUG_TOGGLE_SHOW_DEBUG_BORDERS:
     case DEBUG_TOGGLE_SHOW_FPS_COUNTER:
     case DEBUG_TOGGLE_SHOW_PAINT_RECTS:
-    case FOCUS_SHELF:
-    case LAUNCH_APP_0:
-    case LAUNCH_APP_1:
-    case LAUNCH_APP_2:
-    case LAUNCH_APP_3:
-    case LAUNCH_APP_4:
-    case LAUNCH_APP_5:
-    case LAUNCH_APP_6:
-    case LAUNCH_APP_7:
-    case LAUNCH_LAST_APP:
+    case DEV_TOGGLE_ROOT_WINDOW_FULL_SCREEN:
     case MAGNIFY_SCREEN_ZOOM_IN:
     case MAGNIFY_SCREEN_ZOOM_OUT:
     case ROTATE_SCREEN:
@@ -397,9 +303,8 @@ bool AcceleratorControllerDelegateAura::HandlesAction(
       return true;
 
 #if defined(OS_CHROMEOS)
-    case DEBUG_ADD_REMOVE_DISPLAY:
-    case DEBUG_TOGGLE_UNIFIED_DESKTOP:
-    case DISABLE_GPU_WATCHDOG:
+    case DEV_ADD_REMOVE_DISPLAY:
+    case DEV_TOGGLE_UNIFIED_DESKTOP:
     case LOCK_PRESSED:
     case LOCK_RELEASED:
     case POWER_PRESSED:
@@ -423,13 +328,13 @@ bool AcceleratorControllerDelegateAura::CanPerformAction(
     const ui::Accelerator& accelerator,
     const ui::Accelerator& previous_accelerator) {
   switch (action) {
-    case DEBUG_TOGGLE_DESKTOP_BACKGROUND_MODE:
     case DEBUG_TOGGLE_DEVICE_SCALE_FACTOR:
-    case DEBUG_TOGGLE_ROOT_WINDOW_FULL_SCREEN:
     case DEBUG_TOGGLE_SHOW_DEBUG_BORDERS:
     case DEBUG_TOGGLE_SHOW_FPS_COUNTER:
     case DEBUG_TOGGLE_SHOW_PAINT_RECTS:
       return debug::DebugAcceleratorsEnabled();
+    case DEV_TOGGLE_ROOT_WINDOW_FULL_SCREEN:
+      return debug::DeveloperAcceleratorsEnabled();
     case MAGNIFY_SCREEN_ZOOM_IN:
     case MAGNIFY_SCREEN_ZOOM_OUT:
       return CanHandleMagnifyScreen();
@@ -437,22 +342,10 @@ bool AcceleratorControllerDelegateAura::CanPerformAction(
     case SCALE_UI_RESET:
     case SCALE_UI_UP:
       return accelerators::IsInternalDisplayZoomEnabled();
-    case SHOW_MESSAGE_CENTER_BUBBLE:
-      return CanHandleShowMessageCenterBubble();
     case UNPIN:
       return CanHandleUnpin();
 
     // Following are always enabled:
-    case FOCUS_SHELF:
-    case LAUNCH_APP_0:
-    case LAUNCH_APP_1:
-    case LAUNCH_APP_2:
-    case LAUNCH_APP_3:
-    case LAUNCH_APP_4:
-    case LAUNCH_APP_5:
-    case LAUNCH_APP_6:
-    case LAUNCH_APP_7:
-    case LAUNCH_LAST_APP:
     case ROTATE_SCREEN:
     case ROTATE_WINDOW:
     case SHOW_SYSTEM_TRAY_BUBBLE:
@@ -462,9 +355,9 @@ bool AcceleratorControllerDelegateAura::CanPerformAction(
       return true;
 
 #if defined(OS_CHROMEOS)
-    case DEBUG_ADD_REMOVE_DISPLAY:
-    case DEBUG_TOGGLE_UNIFIED_DESKTOP:
-      return debug::DebugAcceleratorsEnabled();
+    case DEV_ADD_REMOVE_DISPLAY:
+    case DEV_TOGGLE_UNIFIED_DESKTOP:
+      return debug::DeveloperAcceleratorsEnabled();
 
     case SWAP_PRIMARY_DISPLAY:
       return display::Screen::GetScreen()->GetNumDisplays() > 1;
@@ -473,7 +366,6 @@ bool AcceleratorControllerDelegateAura::CanPerformAction(
       return CanHandleTouchHud();
 
     // Following are always enabled.
-    case DISABLE_GPU_WATCHDOG:
     case LOCK_PRESSED:
     case LOCK_RELEASED:
     case POWER_PRESSED:
@@ -494,14 +386,8 @@ void AcceleratorControllerDelegateAura::PerformAction(
     AcceleratorAction action,
     const ui::Accelerator& accelerator) {
   switch (action) {
-    case DEBUG_TOGGLE_DESKTOP_BACKGROUND_MODE:
-      HandleToggleDesktopBackgroundMode();
-      break;
     case DEBUG_TOGGLE_DEVICE_SCALE_FACTOR:
       Shell::GetInstance()->display_manager()->ToggleDisplayScaleFactor();
-      break;
-    case DEBUG_TOGGLE_ROOT_WINDOW_FULL_SCREEN:
-      Shell::GetPrimaryRootWindowController()->ash_host()->ToggleFullScreen();
       break;
     case DEBUG_TOGGLE_SHOW_DEBUG_BORDERS:
       debug::ToggleShowDebugBorders();
@@ -512,35 +398,8 @@ void AcceleratorControllerDelegateAura::PerformAction(
     case DEBUG_TOGGLE_SHOW_PAINT_RECTS:
       debug::ToggleShowPaintRects();
       break;
-    case FOCUS_SHELF:
-      HandleFocusShelf();
-      break;
-    case LAUNCH_APP_0:
-      HandleLaunchAppN(0);
-      break;
-    case LAUNCH_APP_1:
-      HandleLaunchAppN(1);
-      break;
-    case LAUNCH_APP_2:
-      HandleLaunchAppN(2);
-      break;
-    case LAUNCH_APP_3:
-      HandleLaunchAppN(3);
-      break;
-    case LAUNCH_APP_4:
-      HandleLaunchAppN(4);
-      break;
-    case LAUNCH_APP_5:
-      HandleLaunchAppN(5);
-      break;
-    case LAUNCH_APP_6:
-      HandleLaunchAppN(6);
-      break;
-    case LAUNCH_APP_7:
-      HandleLaunchAppN(7);
-      break;
-    case LAUNCH_LAST_APP:
-      HandleLaunchLastApp();
+    case DEV_TOGGLE_ROOT_WINDOW_FULL_SCREEN:
+      Shell::GetPrimaryRootWindowController()->ash_host()->ToggleFullScreen();
       break;
     case MAGNIFY_SCREEN_ZOOM_IN:
       HandleMagnifyScreen(1);
@@ -563,9 +422,6 @@ void AcceleratorControllerDelegateAura::PerformAction(
     case SCALE_UI_UP:
       accelerators::ZoomInternalDisplay(true /* up */);
       break;
-    case SHOW_MESSAGE_CENTER_BUBBLE:
-      HandleShowMessageCenterBubble();
-      break;
     case SHOW_SYSTEM_TRAY_BUBBLE:
       HandleShowSystemTrayBubble();
       break;
@@ -582,15 +438,12 @@ void AcceleratorControllerDelegateAura::PerformAction(
       accelerators::Unpin();
       break;
 #if defined(OS_CHROMEOS)
-    case DEBUG_ADD_REMOVE_DISPLAY:
+    case DEV_ADD_REMOVE_DISPLAY:
       Shell::GetInstance()->display_manager()->AddRemoveDisplay();
       break;
-    case DEBUG_TOGGLE_UNIFIED_DESKTOP:
+    case DEV_TOGGLE_UNIFIED_DESKTOP:
       Shell::GetInstance()->display_manager()->SetUnifiedDesktopEnabled(
           !Shell::GetInstance()->display_manager()->unified_desktop_enabled());
-      break;
-    case DISABLE_GPU_WATCHDOG:
-      Shell::GetInstance()->gpu_support()->DisableGpuWatchdog();
       break;
     case LOCK_PRESSED:
     case LOCK_RELEASED:

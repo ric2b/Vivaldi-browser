@@ -160,18 +160,6 @@ hooks = [
       '-s', 'vivaldi/chromium/buildtools/linux64/clang-format.sha1'
     ],
   },
-  # Pull the prebuilt libc++ static library for mac.
-  {
-    'name': 'libcpp_mac',
-    'pattern': '.',
-    'action': [ 'download_from_google_storage',
-                '--no_resume',
-                '--platform=darwin',
-                '--no_auth',
-                '--bucket', 'chromium-libcpp',
-                '-s', 'vivaldi/chromium/third_party/libc++-static/libc++.a.sha1',
-    ],
-  },
   # Pull luci-go binaries (isolate, swarming) using checked-in hashes.
   {
     'name': 'luci-go_win',
@@ -236,7 +224,7 @@ hooks = [
     'action': ['python',
       'vivaldi/chromium/build/get_syzygy_binaries.py',
       '--output-dir', 'vivaldi/chromium/third_party/syzygy/binaries',
-      '--revision=eb38b59577062c496435c346d7595dc609326a0a',
+      '--revision=734ae20be0862a6e1667f45d4fd4ceb2c430b2f6',
       '--overwrite'
     ],
   },

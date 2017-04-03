@@ -17,6 +17,7 @@
 #include "net/http/http_network_session.h"
 #include "net/http/http_proxy_client_socket.h"
 #include "net/http/http_response_headers.h"
+#include "net/log/net_log_with_source.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/next_proto.h"
 #include "net/socket/socket_test_util.h"
@@ -71,7 +72,7 @@ class HttpProxyClientSocketPoolTest
                          NULL,
                          NULL,
                          session_deps_.ssl_config_service.get(),
-                         BoundNetLog().net_log()),
+                         NetLogWithSource().net_log()),
         pool_(kMaxSockets,
               kMaxSocketsPerGroup,
               &transport_socket_pool_,
@@ -221,7 +222,7 @@ TEST_P(HttpProxyClientSocketPoolTest, NoTunnel) {
   std::unique_ptr<TestProxyDelegate> proxy_delegate(new TestProxyDelegate());
   int rv = handle_.Init("a", CreateNoTunnelParams(proxy_delegate.get()), LOW,
                         ClientSocketPool::RespectLimits::ENABLED,
-                        CompletionCallback(), &pool_, BoundNetLog());
+                        CompletionCallback(), &pool_, NetLogWithSource());
   EXPECT_THAT(rv, IsOk());
   EXPECT_TRUE(handle_.is_initialized());
   ASSERT_TRUE(handle_.socket());
@@ -237,7 +238,7 @@ TEST_P(HttpProxyClientSocketPoolTest, SetSocketRequestPriorityOnInit) {
   Initialize(NULL, 0, NULL, 0, NULL, 0, NULL, 0);
   EXPECT_EQ(OK, handle_.Init("a", CreateNoTunnelParams(NULL), HIGHEST,
                              ClientSocketPool::RespectLimits::ENABLED,
-                             CompletionCallback(), &pool_, BoundNetLog()));
+                             CompletionCallback(), &pool_, NetLogWithSource()));
   EXPECT_EQ(HIGHEST, GetLastTransportRequestPriority());
 }
 
@@ -277,7 +278,7 @@ TEST_P(HttpProxyClientSocketPoolTest, NeedAuth) {
 
   int rv = handle_.Init("a", CreateTunnelParams(NULL), LOW,
                         ClientSocketPool::RespectLimits::ENABLED,
-                        callback_.callback(), &pool_, BoundNetLog());
+                        callback_.callback(), &pool_, NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   EXPECT_FALSE(handle_.is_initialized());
   EXPECT_FALSE(handle_.socket());
@@ -326,7 +327,7 @@ TEST_P(HttpProxyClientSocketPoolTest, HaveAuth) {
   std::unique_ptr<TestProxyDelegate> proxy_delegate(new TestProxyDelegate());
   int rv = handle_.Init("a", CreateTunnelParams(proxy_delegate.get()), LOW,
                         ClientSocketPool::RespectLimits::ENABLED,
-                        callback_.callback(), &pool_, BoundNetLog());
+                        callback_.callback(), &pool_, NetLogWithSource());
   EXPECT_THAT(rv, IsOk());
   EXPECT_TRUE(handle_.is_initialized());
   ASSERT_TRUE(handle_.socket());
@@ -377,7 +378,7 @@ TEST_P(HttpProxyClientSocketPoolTest, AsyncHaveAuth) {
   std::unique_ptr<TestProxyDelegate> proxy_delegate(new TestProxyDelegate());
   int rv = handle_.Init("a", CreateTunnelParams(proxy_delegate.get()), LOW,
                         ClientSocketPool::RespectLimits::ENABLED,
-                        callback_.callback(), &pool_, BoundNetLog());
+                        callback_.callback(), &pool_, NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   EXPECT_FALSE(handle_.is_initialized());
   EXPECT_FALSE(handle_.socket());
@@ -414,7 +415,7 @@ TEST_P(HttpProxyClientSocketPoolTest,
   EXPECT_EQ(ERR_IO_PENDING,
             handle_.Init("a", CreateTunnelParams(NULL), MEDIUM,
                          ClientSocketPool::RespectLimits::ENABLED,
-                         callback_.callback(), &pool_, BoundNetLog()));
+                         callback_.callback(), &pool_, NetLogWithSource()));
   EXPECT_EQ(MEDIUM, GetLastTransportRequestPriority());
 
   EXPECT_THAT(callback_.WaitForResult(), IsOk());
@@ -430,7 +431,7 @@ TEST_P(HttpProxyClientSocketPoolTest, TCPError) {
 
   int rv = handle_.Init("a", CreateTunnelParams(NULL), LOW,
                         ClientSocketPool::RespectLimits::ENABLED,
-                        callback_.callback(), &pool_, BoundNetLog());
+                        callback_.callback(), &pool_, NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   EXPECT_FALSE(handle_.is_initialized());
   EXPECT_FALSE(handle_.socket());
@@ -457,7 +458,7 @@ TEST_P(HttpProxyClientSocketPoolTest, SSLError) {
 
   int rv = handle_.Init("a", CreateTunnelParams(NULL), LOW,
                         ClientSocketPool::RespectLimits::ENABLED,
-                        callback_.callback(), &pool_, BoundNetLog());
+                        callback_.callback(), &pool_, NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   EXPECT_FALSE(handle_.is_initialized());
   EXPECT_FALSE(handle_.socket());
@@ -485,7 +486,7 @@ TEST_P(HttpProxyClientSocketPoolTest, SslClientAuth) {
 
   int rv = handle_.Init("a", CreateTunnelParams(NULL), LOW,
                         ClientSocketPool::RespectLimits::ENABLED,
-                        callback_.callback(), &pool_, BoundNetLog());
+                        callback_.callback(), &pool_, NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   EXPECT_FALSE(handle_.is_initialized());
   EXPECT_FALSE(handle_.socket());
@@ -524,7 +525,7 @@ TEST_P(HttpProxyClientSocketPoolTest, TunnelUnexpectedClose) {
 
   int rv = handle_.Init("a", CreateTunnelParams(NULL), LOW,
                         ClientSocketPool::RespectLimits::ENABLED,
-                        callback_.callback(), &pool_, BoundNetLog());
+                        callback_.callback(), &pool_, NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   EXPECT_FALSE(handle_.is_initialized());
   EXPECT_FALSE(handle_.socket());
@@ -564,7 +565,7 @@ TEST_P(HttpProxyClientSocketPoolTest, Tunnel1xxResponse) {
 
   int rv = handle_.Init("a", CreateTunnelParams(NULL), LOW,
                         ClientSocketPool::RespectLimits::ENABLED,
-                        callback_.callback(), &pool_, BoundNetLog());
+                        callback_.callback(), &pool_, NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   EXPECT_FALSE(handle_.is_initialized());
   EXPECT_FALSE(handle_.socket());
@@ -603,7 +604,7 @@ TEST_P(HttpProxyClientSocketPoolTest, TunnelSetupError) {
 
   int rv = handle_.Init("a", CreateTunnelParams(NULL), LOW,
                         ClientSocketPool::RespectLimits::ENABLED,
-                        callback_.callback(), &pool_, BoundNetLog());
+                        callback_.callback(), &pool_, NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   EXPECT_FALSE(handle_.is_initialized());
   EXPECT_FALSE(handle_.socket());
@@ -660,7 +661,7 @@ TEST_P(HttpProxyClientSocketPoolTest, TunnelSetupRedirect) {
 
   int rv = handle_.Init("a", CreateTunnelParams(NULL), LOW,
                         ClientSocketPool::RespectLimits::ENABLED,
-                        callback_.callback(), &pool_, BoundNetLog());
+                        callback_.callback(), &pool_, NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   EXPECT_FALSE(handle_.is_initialized());
   EXPECT_FALSE(handle_.socket());

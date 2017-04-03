@@ -191,6 +191,12 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
     return inputs_.position_constraint;
   }
 
+  void SetStickyPositionConstraint(
+      const LayerStickyPositionConstraint& constraint);
+  const LayerStickyPositionConstraint& sticky_position_constraint() const {
+    return inputs_.sticky_position_constraint;
+  }
+
   void SetTransform(const gfx::Transform& transform);
   const gfx::Transform& transform() const { return inputs_.transform; }
 
@@ -312,17 +318,7 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   void SetFiltersOrigin(const gfx::PointF& origin);
   gfx::PointF filters_origin() const { return inputs_.filters_origin; }
 
-  void SetReplicaLayer(Layer* layer);
-  Layer* replica_layer() { return inputs_.replica_layer.get(); }
-  const Layer* replica_layer() const { return inputs_.replica_layer.get(); }
-
   bool has_mask() const { return !!inputs_.mask_layer.get(); }
-  bool has_replica() const { return !!inputs_.replica_layer.get(); }
-  bool replica_has_mask() const {
-    return inputs_.replica_layer.get() &&
-           (inputs_.mask_layer.get() ||
-            inputs_.replica_layer->inputs_.mask_layer.get());
-  }
 
   int NumDescendantsThatDrawContent() const;
 
@@ -383,7 +379,8 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   // a LayerImpl, it pushes the properties to proto::LayerProperties. It is
   // called only on layers that have changed properties. The properties
   // themselves are pushed to proto::LayerProperties.
-  void ToLayerPropertiesProto(proto::LayerUpdate* layer_update);
+  void ToLayerPropertiesProto(proto::LayerUpdate* layer_update,
+                              bool inputs_only);
 
   // Read all property values from the given LayerProperties object and update
   // the current layer. The values for |needs_push_properties_| and
@@ -391,10 +388,7 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   // of |proto| is only read if |needs_push_properties_| is set.
   void FromLayerPropertiesProto(const proto::LayerProperties& proto);
 
-  // TODO(xingliu): Layer will hold LayerTree instead of LayerTreeHost.
-  // http://crbug.com/628683
-  LayerTreeHost* layer_tree_host() { return layer_tree_host_; }
-  const LayerTreeHost* layer_tree_host() const { return layer_tree_host_; }
+  LayerTreeHost* GetLayerTreeHostForTesting() const { return layer_tree_host_; }
   LayerTree* GetLayerTree() const;
 
   virtual ScrollbarLayerInterface* ToScrollbarLayer();
@@ -471,9 +465,6 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   void SetSubtreePropertyChanged();
   bool subtree_property_changed() const { return subtree_property_changed_; }
 
-  void SetLayerPropertyChanged();
-  bool layer_property_changed() const { return layer_property_changed_; }
-
   void SetMayContainVideo(bool yes);
 
   void DidBeginTracing();
@@ -502,6 +493,13 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   friend class TreeSynchronizer;
   virtual ~Layer();
   Layer();
+
+  // Tests in remote mode need to explicitly set the layer id so it matches the
+  // layer id for the corresponding Layer on the engine.
+  explicit Layer(int layer_id);
+
+  LayerTreeHost* layer_tree_host() { return layer_tree_host_; }
+  const LayerTreeHost* layer_tree_host() const { return layer_tree_host_; }
 
   // These SetNeeds functions are in order of severity of update:
   //
@@ -539,7 +537,8 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   // into proto::LayerProperties. This method is not marked as const
   // as some implementations need reset member fields, similarly to
   // PushPropertiesTo().
-  virtual void LayerSpecificPropertiesToProto(proto::LayerProperties* proto);
+  virtual void LayerSpecificPropertiesToProto(proto::LayerProperties* proto,
+                                              bool inputs_only);
 
   // Deserialize all the necessary properties from proto::LayerProperties into
   // this Layer.
@@ -566,12 +565,9 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   void OnOpacityAnimated(float opacity);
   void OnTransformAnimated(const gfx::Transform& transform);
   void OnScrollOffsetAnimated(const gfx::ScrollOffset& scroll_offset);
-  void OnTransformIsCurrentlyAnimatingChanged(bool is_animating);
-  void OnTransformIsPotentiallyAnimatingChanged(bool is_animating);
-  void OnOpacityIsCurrentlyAnimatingChanged(bool is_currently_animating);
-  void OnOpacityIsPotentiallyAnimatingChanged(bool has_potential_animation);
-  void OnFilterIsCurrentlyAnimatingChanged(bool is_currently_animating);
-  void OnFilterIsPotentiallyAnimatingChanged(bool has_potential_animation);
+
+  void OnIsAnimatingChanged(const PropertyAnimationState& mask,
+                            const PropertyAnimationState& state);
 
   bool FilterIsAnimating() const;
   bool TransformIsAnimating() const;
@@ -607,7 +603,7 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   // internally in cc. Update this for the SPv2 path where blink generates
   // PropertyTrees.
   struct Inputs {
-    Inputs();
+    explicit Inputs(int layer_id);
     ~Inputs();
 
     int layer_id;
@@ -625,9 +621,6 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
     bool masks_to_bounds;
 
     scoped_refptr<Layer> mask_layer;
-
-    // Replica layer used for reflections.
-    scoped_refptr<Layer> replica_layer;
 
     float opacity;
     SkXfermode::Mode blend_mode;
@@ -675,6 +668,8 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
     bool is_container_for_fixed_position_layers : 1;
     LayerPositionConstraint position_constraint;
 
+    LayerStickyPositionConstraint sticky_position_constraint;
+
     ElementId element_id;
 
     uint32_t mutable_properties;
@@ -715,7 +710,6 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   bool should_check_backface_visibility_ : 1;
   bool force_render_surface_for_testing_ : 1;
   bool subtree_property_changed_ : 1;
-  bool layer_property_changed_ : 1;
   bool may_contain_video_ : 1;
   SkColor safe_opaque_background_color_;
   // draw_blend_mode may be different than blend_mode_,

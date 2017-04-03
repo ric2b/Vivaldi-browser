@@ -4,6 +4,7 @@
 
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -24,7 +25,7 @@ namespace {
 const char kEnabled[] = "Enabled";
 const char kControl[] = "Control";
 const char kDisabled[] = "Disabled";
-const char kPreview[] = "Enabled_Preview";
+const char kLitePage[] = "Enabled_Preview";
 const char kDefaultSpdyOrigin[] = "https://proxy.googlezip.net:443";
 // A one-off change, until the Data Reduction Proxy configuration service is
 // available.
@@ -58,6 +59,18 @@ const char kServerExperimentsFieldTrial[] =
 bool IsIncludedInFieldTrial(const std::string& name) {
   return base::StartsWith(FieldTrialList::FindFullName(name), kEnabled,
                           base::CompareCase::SENSITIVE);
+}
+
+// Returns the variation value for |parameter_name|. If the value is
+// unavailable, |default_value| is returned.
+std::string GetStringValueForVariationParamWithDefaultValue(
+    const std::map<std::string, std::string>& variation_params,
+    const std::string& parameter_name,
+    const std::string& default_value) {
+  const auto it = variation_params.find(parameter_name);
+  if (it == variation_params.end())
+    return default_value;
+  return it->second;
 }
 
 }  // namespace
@@ -105,10 +118,10 @@ bool IsIncludedInLoFiControlFieldTrial() {
                           kControl, base::CompareCase::SENSITIVE);
 }
 
-bool IsIncludedInLoFiPreviewFieldTrial() {
+bool IsIncludedInLitePageFieldTrial() {
   return !IsLoFiOnViaFlags() && !IsLoFiDisabledViaFlags() &&
          base::StartsWith(FieldTrialList::FindFullName(GetLoFiFieldTrialName()),
-                          kPreview, base::CompareCase::SENSITIVE);
+                          kLitePage, base::CompareCase::SENSITIVE);
 }
 
 bool IsIncludedInServerExperimentsFieldTrial() {
@@ -162,9 +175,9 @@ bool IsLoFiDisabledViaFlags() {
          data_reduction_proxy::switches::kDataReductionProxyLoFiValueDisabled;
 }
 
-bool AreLoFiPreviewsEnabledViaFlags() {
+bool AreLitePagesEnabledViaFlags() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      data_reduction_proxy::switches::kEnableDataReductionProxyLoFiPreview);
+      data_reduction_proxy::switches::kEnableDataReductionProxyLitePage);
 }
 
 bool IsForcePingbackEnabledViaFlags() {
@@ -183,6 +196,15 @@ bool IsIncludedInQuicFieldTrial() {
 
 const char* GetQuicFieldTrialName() {
   return kQuicFieldTrial;
+}
+
+bool IsZeroRttQuicEnabled() {
+  if (!IsIncludedInQuicFieldTrial())
+    return false;
+  std::map<std::string, std::string> params;
+  variations::GetVariationParams(GetQuicFieldTrialName(), &params);
+  return GetStringValueForVariationParamWithDefaultValue(
+             params, "enable_zero_rtt", "false") == "true";
 }
 
 bool IsConfigClientEnabled() {

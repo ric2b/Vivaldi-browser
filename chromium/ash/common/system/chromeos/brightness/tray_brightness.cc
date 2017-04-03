@@ -15,6 +15,7 @@
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/common/wm_shell.h"
+#include "ash/resources/vector_icons/vector_icons.h"
 #include "base/bind.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -26,7 +27,7 @@
 #include "ui/display/display.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/gfx/vector_icons_public.h"
+#include "ui/views/border.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
@@ -46,6 +47,9 @@ const double kMinBrightnessPercent = 5.0;
 
 }  // namespace
 
+// TODO(yiyix|tdanderson): Once Chrome OS material design is enabled by default,
+// BrightnessView does not need to be a ShellObserver to observe touch view mode
+// changes. See crbug.com/614453.
 class BrightnessView : public ShellObserver,
                        public views::View,
                        public views::SliderListener {
@@ -103,26 +107,34 @@ BrightnessView::BrightnessView(bool default_view, double initial_percent)
   views::ImageView* icon =
       new FixedSizedImageView(0, GetTrayConstant(TRAY_POPUP_ITEM_HEIGHT));
   if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
-    icon->SetImage(gfx::CreateVectorIcon(
-        gfx::VectorIconId::SYSTEM_MENU_BRIGHTNESS, kMenuIconColor));
+    icon->SetImage(
+        gfx::CreateVectorIcon(kSystemMenuBrightnessIcon, kMenuIconColor));
   } else {
     icon->SetImage(
         rb.GetImageNamed(IDR_AURA_UBER_TRAY_BRIGHTNESS).ToImageSkia());
   }
   AddChildView(icon);
-
-  slider_ = new views::Slider(this, views::Slider::HORIZONTAL);
+  slider_ = views::Slider::CreateSlider(
+      ash::MaterialDesignController::IsSystemTrayMenuMaterial(), this);
+  if (ash::MaterialDesignController::IsSystemTrayMenuMaterial()) {
+    slider_->SetBorder(views::Border::CreateEmptyBorder(
+        gfx::Insets(0, kTrayPopupSliderPaddingMD) + slider_->GetInsets()));
+  }
   slider_->set_focus_border_color(kFocusBorderColor);
   slider_->SetValue(static_cast<float>(initial_percent / 100.0));
   slider_->SetAccessibleName(
       rb.GetLocalizedString(IDS_ASH_STATUS_TRAY_BRIGHTNESS));
   AddChildView(slider_);
 
-  if (is_default_view_) {
-    WmShell::Get()->AddShellObserver(this);
-    SetVisible(WmShell::Get()
-                   ->maximize_mode_controller()
-                   ->IsMaximizeModeWindowManagerEnabled());
+  if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
+    SetVisible(true);
+  } else {
+    if (is_default_view_) {
+      WmShell::Get()->AddShellObserver(this);
+      SetVisible(WmShell::Get()
+                     ->maximize_mode_controller()
+                     ->IsMaximizeModeWindowManagerEnabled());
+    }
   }
 }
 
@@ -138,11 +150,13 @@ void BrightnessView::SetBrightnessPercent(double percent) {
 }
 
 void BrightnessView::OnMaximizeModeStarted() {
-  SetVisible(true);
+  if (!MaterialDesignController::IsSystemTrayMenuMaterial())
+    SetVisible(true);
 }
 
 void BrightnessView::OnMaximizeModeEnded() {
-  SetVisible(false);
+  if (!MaterialDesignController::IsSystemTrayMenuMaterial())
+    SetVisible(false);
 }
 
 void BrightnessView::OnBoundsChanged(const gfx::Rect& old_bounds) {

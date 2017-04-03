@@ -10,6 +10,7 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -263,16 +264,15 @@ TEST_P(HttpServerPropertiesManagerTest,
   server_pref_dict->SetWithoutPathExpansion("network_stats", stats);
 
   // Set the server preference for https://www.google.com.
-  base::DictionaryValue* servers_dict = new base::DictionaryValue;
+  auto servers_dict = base::MakeUnique<base::DictionaryValue>();
   servers_dict->SetWithoutPathExpansion(
       GetParam() >= 5 ? "https://www.google.com" : "www.google.com:443",
       server_pref_dict);
   base::ListValue* servers_list = nullptr;
   if (GetParam() >= 4) {
     servers_list = new base::ListValue;
-    // |servers_list| takes ownership of |servers_dict|.
-    servers_list->AppendIfNotPresent(servers_dict);
-    servers_dict = new base::DictionaryValue;
+    servers_list->AppendIfNotPresent(std::move(servers_dict));
+    servers_dict = base::MakeUnique<base::DictionaryValue>();
   }
 
   // Set the preference for mail.google.com server.
@@ -284,7 +284,7 @@ TEST_P(HttpServerPropertiesManagerTest,
   // Set up alternative_services for https://mail.google.com.
   std::unique_ptr<base::DictionaryValue> alternative_service_dict2(
       new base::DictionaryValue);
-  alternative_service_dict2->SetString("protocol_str", "npn-spdy/3.1");
+  alternative_service_dict2->SetString("protocol_str", "h2");
   alternative_service_dict2->SetInteger("port", 444);
   base::ListValue* alternative_service_list1 = new base::ListValue;
   alternative_service_list1->Append(std::move(alternative_service_dict2));
@@ -302,8 +302,7 @@ TEST_P(HttpServerPropertiesManagerTest,
       server_pref_dict1);
   base::DictionaryValue http_server_properties_dict;
   if (GetParam() >= 4) {
-    // |servers_list| takes ownership of |servers_dict|.
-    servers_list->AppendIfNotPresent(servers_dict);
+    servers_list->AppendIfNotPresent(std::move(servers_dict));
     if (GetParam() == 5) {
       HttpServerPropertiesManager::SetVersion(&http_server_properties_dict, -1);
     } else {
@@ -315,8 +314,8 @@ TEST_P(HttpServerPropertiesManagerTest,
   } else {
     HttpServerPropertiesManager::SetVersion(&http_server_properties_dict,
                                             GetParam());
-    http_server_properties_dict.SetWithoutPathExpansion("servers",
-                                                        servers_dict);
+    http_server_properties_dict.SetWithoutPathExpansion(
+        "servers", std::move(servers_dict));
   }
   base::DictionaryValue* supports_quic = new base::DictionaryValue;
   supports_quic->SetBoolean("used_quic", true);
@@ -382,7 +381,7 @@ TEST_P(HttpServerPropertiesManagerTest,
     AlternativeServiceMap::const_iterator map_it = map.begin();
     EXPECT_EQ("mail.google.com", map_it->first.host());
     ASSERT_EQ(1u, map_it->second.size());
-    EXPECT_EQ(NPN_SPDY_3_1, map_it->second[0].alternative_service.protocol);
+    EXPECT_EQ(NPN_HTTP_2, map_it->second[0].alternative_service.protocol);
     EXPECT_TRUE(map_it->second[0].alternative_service.host.empty());
     EXPECT_EQ(444, map_it->second[0].alternative_service.port);
     ++map_it;
@@ -410,7 +409,7 @@ TEST_P(HttpServerPropertiesManagerTest,
     ++map_it;
     EXPECT_EQ("mail.google.com", map_it->first.host());
     ASSERT_EQ(1u, map_it->second.size());
-    EXPECT_EQ(NPN_SPDY_3_1, map_it->second[0].alternative_service.protocol);
+    EXPECT_EQ(NPN_HTTP_2, map_it->second[0].alternative_service.protocol);
     EXPECT_TRUE(map_it->second[0].alternative_service.host.empty());
     EXPECT_EQ(444, map_it->second[0].alternative_service.port);
   }
@@ -475,14 +474,13 @@ TEST_P(HttpServerPropertiesManagerTest, BadCachedHostPortPair) {
   server_pref_dict->SetWithoutPathExpansion("network_stats", stats);
 
   // Set the server preference for www.google.com:65536.
-  base::DictionaryValue* servers_dict = new base::DictionaryValue;
+  auto servers_dict = base::MakeUnique<base::DictionaryValue>();
   servers_dict->SetWithoutPathExpansion("www.google.com:65536",
                                         server_pref_dict);
   base::DictionaryValue http_server_properties_dict;
   if (GetParam() >= 4) {
     base::ListValue* servers_list = new base::ListValue;
-    // |servers_list| takes ownership of |servers_dict|.
-    servers_list->AppendIfNotPresent(servers_dict);
+    servers_list->AppendIfNotPresent(std::move(servers_dict));
     if (GetParam() == 5) {
       HttpServerPropertiesManager::SetVersion(&http_server_properties_dict, -1);
     } else {
@@ -494,8 +492,8 @@ TEST_P(HttpServerPropertiesManagerTest, BadCachedHostPortPair) {
   } else {
     HttpServerPropertiesManager::SetVersion(&http_server_properties_dict,
                                             GetParam());
-    http_server_properties_dict.SetWithoutPathExpansion("servers",
-                                                        servers_dict);
+    http_server_properties_dict.SetWithoutPathExpansion(
+        "servers", std::move(servers_dict));
   }
 
   // Set quic_server_info for www.google.com:65536.
@@ -552,13 +550,12 @@ TEST_P(HttpServerPropertiesManagerTest, BadCachedAltProtocolPort) {
                                             alternative_service_list);
 
   // Set the server preference for www.google.com:80.
-  base::DictionaryValue* servers_dict = new base::DictionaryValue;
+  auto servers_dict = base::MakeUnique<base::DictionaryValue>();
   servers_dict->SetWithoutPathExpansion("www.google.com:80", server_pref_dict);
   base::DictionaryValue http_server_properties_dict;
   if (GetParam() >= 4) {
     base::ListValue* servers_list = new base::ListValue;
-    // |servers_list| takes ownership of |servers_dict|.
-    servers_list->AppendIfNotPresent(servers_dict);
+    servers_list->AppendIfNotPresent(std::move(servers_dict));
     if (GetParam() == 5) {
       HttpServerPropertiesManager::SetVersion(&http_server_properties_dict, -1);
     } else {
@@ -570,8 +567,8 @@ TEST_P(HttpServerPropertiesManagerTest, BadCachedAltProtocolPort) {
   } else {
     HttpServerPropertiesManager::SetVersion(&http_server_properties_dict,
                                             GetParam());
-    http_server_properties_dict.SetWithoutPathExpansion("servers",
-                                                        servers_dict);
+    http_server_properties_dict.SetWithoutPathExpansion(
+        "servers", std::move(servers_dict));
   }
 
   // Set up the pref.
@@ -972,7 +969,7 @@ TEST_P(HttpServerPropertiesManagerTest, Clear) {
 TEST_P(HttpServerPropertiesManagerTest, BadSupportsQuic) {
   ExpectCacheUpdate();
 
-  base::DictionaryValue* servers_dict = new base::DictionaryValue;
+  auto servers_dict = base::MakeUnique<base::DictionaryValue>();
   base::ListValue* servers_list = nullptr;
   if (GetParam() >= 4)
     servers_list = new base::ListValue;
@@ -996,9 +993,8 @@ TEST_P(HttpServerPropertiesManagerTest, BadSupportsQuic) {
           StringPrintf("www.google.com:%d", i), server_pref_dict);
     }
     if (GetParam() >= 4) {
-      // |servers_list| takes ownership of |servers_dict|.
-      servers_list->AppendIfNotPresent(servers_dict);
-      servers_dict = new base::DictionaryValue;
+      servers_list->AppendIfNotPresent(std::move(servers_dict));
+      servers_dict = base::MakeUnique<base::DictionaryValue>();
     }
   }
 
@@ -1013,8 +1009,7 @@ TEST_P(HttpServerPropertiesManagerTest, BadSupportsQuic) {
   }
   base::DictionaryValue http_server_properties_dict;
   if (GetParam() >= 4) {
-    // |servers_list| takes ownership of |servers_dict|.
-    servers_list->AppendIfNotPresent(servers_dict);
+    servers_list->AppendIfNotPresent(std::move(servers_dict));
     if (GetParam() == 5) {
       HttpServerPropertiesManager::SetVersion(&http_server_properties_dict, -1);
     } else {
@@ -1026,8 +1021,8 @@ TEST_P(HttpServerPropertiesManagerTest, BadSupportsQuic) {
   } else {
     HttpServerPropertiesManager::SetVersion(&http_server_properties_dict,
                                             GetParam());
-    http_server_properties_dict.SetWithoutPathExpansion("servers",
-                                                        servers_dict);
+    http_server_properties_dict.SetWithoutPathExpansion(
+        "servers", std::move(servers_dict));
   }
 
   // Set up SupportsQuic for 127.0.0.1
@@ -1087,7 +1082,7 @@ TEST_P(HttpServerPropertiesManagerTest, UpdateCacheWithPrefs) {
   http_server_props_manager_->SetAlternativeServices(
       server_www, alternative_service_info_vector);
 
-  AlternativeService mail_alternative_service(NPN_SPDY_3_1, "foo.google.com",
+  AlternativeService mail_alternative_service(NPN_HTTP_2, "foo.google.com",
                                               444);
   base::Time expiration3 = base::Time::Max();
   http_server_props_manager_->SetAlternativeService(
@@ -1126,7 +1121,7 @@ TEST_P(HttpServerPropertiesManagerTest, UpdateCacheWithPrefs) {
       "\"port\":1234,\"protocol_str\":\"h2\"}]}},"
       "{\"http://mail.google.com\":{\"alternative_service\":[{"
       "\"expiration\":\"9223372036854775807\",\"host\":\"foo.google.com\","
-      "\"port\":444,\"protocol_str\":\"npn-spdy/3.1\"}],"
+      "\"port\":444,\"protocol_str\":\"h2\"}],"
       "\"network_stats\":{\"srtt\":42}}}"
       "],"
       "\"supports_quic\":{\"address\":\"127.0.0.1\",\"used_quic\":true},"

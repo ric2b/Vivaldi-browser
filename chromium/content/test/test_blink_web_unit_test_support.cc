@@ -17,6 +17,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "cc/blink/web_layer_impl.h"
+#include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "content/child/web_url_loader_impl.h"
 #include "content/test/mock_webclipboard_impl.h"
@@ -44,6 +45,12 @@
 
 #ifdef V8_USE_EXTERNAL_STARTUP_DATA
 #include "gin/v8_initializer.h"
+#endif
+
+#if defined(ENABLE_WEBRTC)
+#include "content/renderer/media/rtc_certificate.h"
+#include "third_party/WebKit/public/platform/WebRTCCertificateGenerator.h"
+#include "third_party/webrtc/base/rtccertificate.h"
 #endif
 
 namespace {
@@ -111,6 +118,7 @@ TestBlinkWebUnitTestSupport::TestBlinkWebUnitTestSupport() {
   }
   renderer_scheduler_ = blink::scheduler::CreateRendererSchedulerForTests();
   web_thread_ = renderer_scheduler_->CreateMainThread();
+  shared_bitmap_manager_.reset(new cc::TestSharedBitmapManager);
 
   // Set up a FeatureList instance, so that code using that API will not hit a
   // an error that it's not set. Cleared by ClearInstanceForTesting() below.
@@ -135,7 +143,7 @@ TestBlinkWebUnitTestSupport::TestBlinkWebUnitTestSupport() {
   if (!file_system_root_.CreateUniqueTempDir()) {
     LOG(WARNING) << "Failed to create a temp dir for the filesystem."
                     "FileSystem feature will be disabled.";
-    DCHECK(file_system_root_.path().empty());
+    DCHECK(file_system_root_.GetPath().empty());
   }
 
 #if defined(OS_WIN)
@@ -158,7 +166,7 @@ TestBlinkWebUnitTestSupport::~TestBlinkWebUnitTestSupport() {
   base::FeatureList::ClearInstanceForTesting();
 }
 
-blink::WebBlobRegistry* TestBlinkWebUnitTestSupport::blobRegistry() {
+blink::WebBlobRegistry* TestBlinkWebUnitTestSupport::getBlobRegistry() {
   return &blob_registry_;
 }
 
@@ -191,6 +199,13 @@ blink::WebURLLoader* TestBlinkWebUnitTestSupport::createURLLoader() {
 
 blink::WebString TestBlinkWebUnitTestSupport::userAgent() {
   return blink::WebString::fromUTF8("test_runner/0.0.0.0");
+}
+
+std::unique_ptr<cc::SharedBitmap>
+TestBlinkWebUnitTestSupport::allocateSharedBitmap(
+    const blink::WebSize& size) {
+  return shared_bitmap_manager_
+      ->AllocateSharedBitmap(gfx::Size(size.width, size.height));
 }
 
 blink::WebString TestBlinkWebUnitTestSupport::queryLocalizedString(
@@ -286,9 +301,51 @@ blink::WebThread* TestBlinkWebUnitTestSupport::currentThread() {
 }
 
 void TestBlinkWebUnitTestSupport::getPluginList(
-    bool refresh, blink::WebPluginListBuilder* builder) {
+    bool refresh,
+    const blink::WebSecurityOrigin& mainFrameOrigin,
+    blink::WebPluginListBuilder* builder) {
   builder->addPlugin("pdf", "pdf", "pdf-files");
   builder->addMediaTypeToLastPlugin("application/pdf", "pdf");
+}
+
+#if defined(ENABLE_WEBRTC)
+namespace {
+
+class TestWebRTCCertificateGenerator
+    : public blink::WebRTCCertificateGenerator {
+  void generateCertificate(
+      const blink::WebRTCKeyParams& key_params,
+      std::unique_ptr<blink::WebRTCCertificateCallback> callback) override {
+    NOTIMPLEMENTED();
+  }
+  void generateCertificateWithExpiration(
+      const blink::WebRTCKeyParams& key_params,
+      uint64_t expires_ms,
+      std::unique_ptr<blink::WebRTCCertificateCallback> callback) override {
+    NOTIMPLEMENTED();
+  }
+  bool isSupportedKeyParams(const blink::WebRTCKeyParams& key_params) override {
+    return false;
+  }
+  std::unique_ptr<blink::WebRTCCertificate> fromPEM(
+      blink::WebString pem_private_key,
+      blink::WebString pem_certificate) override {
+    return base::MakeUnique<RTCCertificate>(
+        rtc::RTCCertificate::FromPEM(rtc::RTCCertificatePEM(
+            pem_private_key.utf8(), pem_certificate.utf8())));
+  }
+};
+
+}  // namespace
+#endif  // defined(ENABLE_WEBRTC)
+
+blink::WebRTCCertificateGenerator*
+TestBlinkWebUnitTestSupport::createRTCCertificateGenerator() {
+#if defined(ENABLE_WEBRTC)
+  return new TestWebRTCCertificateGenerator();
+#else
+  return nullptr;
+#endif
 }
 
 }  // namespace content

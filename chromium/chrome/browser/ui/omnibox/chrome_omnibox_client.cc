@@ -10,7 +10,7 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
@@ -127,7 +127,7 @@ ChromeOmniboxClient::~ChromeOmniboxClient() {
 
 std::unique_ptr<AutocompleteProviderClient>
 ChromeOmniboxClient::CreateAutocompleteProviderClient() {
-  return base::WrapUnique(new ChromeAutocompleteProviderClient(profile_));
+  return base::MakeUnique<ChromeAutocompleteProviderClient>(profile_);
 }
 
 std::unique_ptr<OmniboxNavigationObserver>
@@ -135,8 +135,8 @@ ChromeOmniboxClient::CreateOmniboxNavigationObserver(
     const base::string16& text,
     const AutocompleteMatch& match,
     const AutocompleteMatch& alternate_nav_match) {
-  return base::WrapUnique(new ChromeOmniboxNavigationObserver(
-      profile_, text, match, alternate_nav_match));
+  return base::MakeUnique<ChromeOmniboxNavigationObserver>(
+      profile_, text, match, alternate_nav_match);
 }
 
 bool ChromeOmniboxClient::CurrentPageExists() const {
@@ -212,7 +212,7 @@ gfx::Image ChromeOmniboxClient::GetIconIfExtensionMatch(
       TemplateURLServiceFactory::GetForProfile(profile_);
   const TemplateURL* template_url = match.GetTemplateURL(service, false);
   if (template_url &&
-      (template_url->GetType() == TemplateURL::OMNIBOX_API_EXTENSION)) {
+      (template_url->type() == TemplateURL::OMNIBOX_API_EXTENSION)) {
     return extensions::OmniboxAPI::Get(profile_)
         ->GetOmniboxPopupIcon(template_url->GetExtensionId());
   }
@@ -224,7 +224,7 @@ bool ChromeOmniboxClient::ProcessExtensionKeyword(
     const AutocompleteMatch& match,
     WindowOpenDisposition disposition,
     OmniboxNavigationObserver* observer) {
-  if (template_url->GetType() != TemplateURL::OMNIBOX_API_EXTENSION)
+  if (template_url->type() != TemplateURL::OMNIBOX_API_EXTENSION)
     return false;
 
   // Strip the keyword + leading space off the input, but don't exceed

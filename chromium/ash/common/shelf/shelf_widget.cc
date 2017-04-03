@@ -287,11 +287,9 @@ void ShelfWidget::DelegateView::UpdateShelfAssetBackground(int alpha) {
   SchedulePaint();
 }
 
-ShelfWidget::ShelfWidget(WmWindow* shelf_container,
-                         WmWindow* status_container,
-                         WmShelf* wm_shelf)
+ShelfWidget::ShelfWidget(WmWindow* shelf_container, WmShelf* wm_shelf)
     : wm_shelf_(wm_shelf),
-      shelf_(nullptr),
+      status_area_widget_(nullptr),
       delegate_view_(new DelegateView(wm_shelf, this)),
       shelf_view_(nullptr),
       background_animator_(SHELF_BACKGROUND_DEFAULT, wm_shelf_),
@@ -321,17 +319,6 @@ ShelfWidget::ShelfWidget(WmWindow* shelf_container,
   background_animator_.PaintBackground(
       shelf_layout_manager_->GetShelfBackgroundType(),
       BACKGROUND_CHANGE_IMMEDIATE);
-  wm_shelf_->SetShelfLayoutManager(shelf_layout_manager_);
-
-  // TODO(jamescook): Move ownership to RootWindowController.
-  status_area_widget_ = new StatusAreaWidget(status_container, wm_shelf_);
-  status_area_widget_->CreateTrayViews();
-  if (WmShell::Get()->GetSessionStateDelegate()->IsActiveUserSessionStarted())
-    status_area_widget_->Show();
-  WmShell::Get()->focus_cycler()->AddWidget(status_area_widget_);
-  background_animator_.AddObserver(status_area_widget_);
-  status_container->SetLayoutManager(
-      base::MakeUnique<StatusAreaLayoutManager>(this));
 
   views::Widget::AddObserver(this);
 }
@@ -344,6 +331,20 @@ ShelfWidget::~ShelfWidget() {
   RemoveObserver(this);
   background_animator_.RemoveObserver(delegate_view_);
   background_animator_.RemoveObserver(this);
+}
+
+void ShelfWidget::CreateStatusAreaWidget(WmWindow* status_container) {
+  DCHECK(status_container);
+  DCHECK(!status_area_widget_);
+  // TODO(jamescook): Move ownership to RootWindowController.
+  status_area_widget_ = new StatusAreaWidget(status_container, wm_shelf_);
+  status_area_widget_->CreateTrayViews();
+  if (WmShell::Get()->GetSessionStateDelegate()->IsActiveUserSessionStarted())
+    status_area_widget_->Show();
+  WmShell::Get()->focus_cycler()->AddWidget(status_area_widget_);
+  background_animator_.AddObserver(status_area_widget_);
+  status_container->SetLayoutManager(
+      base::MakeUnique<StatusAreaLayoutManager>(this));
 }
 
 void ShelfWidget::SetPaintsBackground(
@@ -428,7 +429,6 @@ bool ShelfWidget::GetDimsShelf() const {
 }
 
 ShelfView* ShelfWidget::CreateShelfView() {
-  DCHECK(!shelf_);
   DCHECK(!shelf_view_);
 
   shelf_view_ =
@@ -497,6 +497,8 @@ void ShelfWidget::Shutdown() {
     status_area_widget_->Shutdown();
     status_area_widget_ = nullptr;
   }
+
+  CloseNow();
 }
 
 void ShelfWidget::ForceUndimming(bool force) {
@@ -519,6 +521,15 @@ gfx::Rect ShelfWidget::GetScreenBoundsOfItemIconForWindow(WmWindow* window) {
   return gfx::Rect(screen_origin.x() + bounds.x(),
                    screen_origin.y() + bounds.y(), bounds.width(),
                    bounds.height());
+}
+
+AppListButton* ShelfWidget::GetAppListButton() const {
+  return shelf_view_->GetAppListButton();
+}
+
+app_list::ApplicationDragAndDropHost*
+ShelfWidget::GetDragAndDropHostForAppList() {
+  return shelf_view_;
 }
 
 void ShelfWidget::OnWidgetActivationChanged(views::Widget* widget,

@@ -9,25 +9,29 @@
 #include "components/sync/driver/sync_service_observer.h"
 
 class Profile;
+
+namespace browser_sync {
 class ProfileSyncService;
+}  // namespace browser_sync
 
 // This class observes ProfileSyncService events and emits refresh notifications
 // to other test profiles for any committed changes it observes.
 //
 // It register and unregisters in its constructor and destructor.  This is
 // intended to make it easy to manage with a scoped_ptr.
-class P2PSyncRefresher : public sync_driver::SyncServiceObserver {
+class P2PSyncRefresher : public syncer::SyncServiceObserver {
  public:
-  P2PSyncRefresher(Profile* profile, ProfileSyncService* sync_service);
+  P2PSyncRefresher(Profile* profile,
+                   browser_sync::ProfileSyncService* sync_service);
   ~P2PSyncRefresher() override;
 
-  // Implementation of sync_driver::SyncServiceObserver
+  // Implementation of syncer::SyncServiceObserver
   void OnStateChanged() override;
   void OnSyncCycleCompleted() override;
 
  private:
   Profile* const profile_;            // weak
-  ProfileSyncService* sync_service_;  // weak
+  browser_sync::ProfileSyncService* sync_service_;  // weak
 
   DISALLOW_COPY_AND_ASSIGN(P2PSyncRefresher);
 };

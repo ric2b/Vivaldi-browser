@@ -36,10 +36,10 @@ class ShellContentBrowserClient : public ContentBrowserClient {
   bool DoesSiteRequireDedicatedProcess(BrowserContext* browser_context,
                                        const GURL& effective_site_url) override;
   bool IsHandledURL(const GURL& url) override;
-  void RegisterInProcessMojoApplications(
-      StaticMojoApplicationMap* apps) override;
-  void RegisterOutOfProcessMojoApplications(
-      OutOfProcessMojoApplicationMap* apps) override;
+  void RegisterInProcessServices(StaticServiceMap* services) override;
+  void RegisterOutOfProcessServices(OutOfProcessServiceMap* services) override;
+  std::unique_ptr<base::Value> GetServiceManifestOverlay(
+      const std::string& name) override;
   void AppendExtraCommandLineSwitches(base::CommandLine* command_line,
                                       int child_process_id) override;
   void ResourceDispatcherHostCreated() override;
@@ -51,7 +51,6 @@ class ShellContentBrowserClient : public ContentBrowserClient {
       WebContents* web_contents,
       net::SSLCertRequestInfo* cert_request_info,
       std::unique_ptr<ClientCertificateDelegate> delegate) override;
-
   SpeechRecognitionManagerDelegate* CreateSpeechRecognitionManagerDelegate()
       override;
   net::NetLog* GetNetLog() override;

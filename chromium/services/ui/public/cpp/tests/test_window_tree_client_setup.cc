@@ -13,12 +13,7 @@ namespace ui {
 
 TestWindowTreeClientSetup::TestWindowTreeClientSetup() {}
 
-TestWindowTreeClientSetup::~TestWindowTreeClientSetup() {
-  std::unique_ptr<WindowTreeClient> window_tree_client =
-      std::move(window_tree_client_);
-  if (window_tree_client)
-    window_tree_client->RemoveObserver(this);
-}
+TestWindowTreeClientSetup::~TestWindowTreeClientSetup() {}
 
 void TestWindowTreeClientSetup::Init(
     WindowTreeClientDelegate* window_tree_delegate) {
@@ -29,11 +24,16 @@ void TestWindowTreeClientSetup::Init(
 
 void TestWindowTreeClientSetup::InitForWindowManager(
     WindowTreeClientDelegate* window_tree_delegate,
-    WindowManagerDelegate* window_manager_delegate,
-    const display::Display& display) {
+    WindowManagerDelegate* window_manager_delegate) {
   CommonInit(window_tree_delegate, window_manager_delegate);
   WindowTreeClientPrivate(window_tree_client_.get())
       .SetTreeAndClientId(window_tree_.get(), 1);
+}
+
+std::unique_ptr<WindowTreeClient>
+TestWindowTreeClientSetup::OwnWindowTreeClient() {
+  DCHECK(window_tree_client_);
+  return std::move(window_tree_client_);
 }
 
 WindowTreeClient* TestWindowTreeClientSetup::window_tree_client() {
@@ -46,14 +46,6 @@ void TestWindowTreeClientSetup::CommonInit(
   window_tree_.reset(new TestWindowTree);
   window_tree_client_.reset(new WindowTreeClient(
       window_tree_delegate, window_manager_delegate, nullptr));
-  static_cast<WindowTreeClient*>(window_tree_client_.get())
-      ->AddObserver(this);
-}
-
-void TestWindowTreeClientSetup::OnDidDestroyClient(
-    ui::WindowTreeClient* client) {
-  // See comment in header as to why we do this.
-  window_tree_client_.release();
 }
 
 }  // namespace ui

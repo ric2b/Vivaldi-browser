@@ -15,6 +15,7 @@
 <translation id="1107591249535594099">Hvis dette felt er markeret, gemmer Chrome en kopi af dit kort på denne enhed, så formularer hurtigere kan udfyldes fremover.</translation>
 <translation id="1111153019813902504">Seneste bogmærker</translation>
 <translation id="1113869188872983271">&amp;Fortryd omarrangering</translation>
+<translation id="1126551341858583091">Størrelsen på den lokale lagerplads er <ph name="CRASH_SIZE" />.</translation>
 <translation id="112840717907525620">Cache for politik er OK</translation>
 <translation id="113188000913989374"><ph name="SITE" /> siger:</translation>
 <translation id="1132774398110320017">Indstillinger for Autofyld i Chrome...</translation>
@@ -79,7 +80,6 @@
 <translation id="1871208020102129563">Proxy er indstillet til at bruge faste proxyservere, ikke webadresser til .pac-scripts.</translation>
 <translation id="1883255238294161206">Skjul liste</translation>
 <translation id="1898423065542865115">Filtrering</translation>
-<translation id="1911837502049945214"><ph name="HOST_NAME" /> accepterede ikke dit logincertifikat, eller dit logincertifikat er muligvis udløbet.</translation>
 <translation id="194030505837763158">Gå til <ph name="LINK" /></translation>
 <translation id="1962204205936693436">Bogmærker fra <ph name="DOMAIN" /></translation>
 <translation id="1973335181906896915">Serialiseringsfejl</translation>
@@ -172,10 +172,8 @@
 <translation id="2824775600643448204">Adresse og søgelinje</translation>
 <translation id="2826760142808435982">Forbindelsen er krypteret og godkendt ved hjælp af <ph name="CIPHER" />, og den anvender <ph name="KX" /> som primær udvekslingsmekanisme.</translation>
 <translation id="2835170189407361413">Ryd formular</translation>
-<translation id="2837049386027881519">Forbindelsen skulle prøves igen ved hjælp af en ældre version af TLS- eller SSL-protokollen. Det betyder typisk, at serveren bruger meget gammel software og kan have andre sikkerhedsproblemer.</translation>
 <translation id="284702764277384724">Serverens certifikat på <ph name="HOST_NAME" /> lader til at være en forfalskning.</translation>
 <translation id="2889159643044928134">Genindlæs ikke siden</translation>
-<translation id="2896499918916051536">Dette plugin understøttes ikke.</translation>
 <translation id="2900469785430194048">Google Chrome løb tør for hukommelse, da websiden skulle vises.</translation>
 <translation id="2909946352844186028">Der blev registreret en netværksændring.</translation>
 <translation id="2922350208395188000">Serverens certifikat kan ikke kontrolleres.</translation>
@@ -217,8 +215,10 @@
 <translation id="3254409185687681395">Tilføj denne side som bogmærke</translation>
 <translation id="3270847123878663523">&amp;Fortryd omarrangering</translation>
 <translation id="3286538390144397061">Genstart nu</translation>
+<translation id="3303855915957856445">Der blev ikke fundet nogen søgeresultater</translation>
 <translation id="3305707030755673451">Dine data blev krypteret med din adgangssætning til synkronisering d. <ph name="TIME" />. Indtast adgangssætningen for at starte synkroniseringen.</translation>
 <translation id="333371639341676808">Undgå, at denne side laver nye dialogbokse.</translation>
+<translation id="3338095232262050444">Sikker</translation>
 <translation id="3340978935015468852">indstillinger</translation>
 <translation id="3345135638360864351">Din anmodning om at få adgang til dette website kunne ikke sendes til <ph name="NAME" />. Prøv igen.</translation>
 <translation id="3355823806454867987">Skift indstillinger for proxy...</translation>
@@ -290,6 +290,7 @@
 <translation id="3963721102035795474">Læser-tilstand</translation>
 <translation id="397105322502079400">Beregner...</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> er blokeret</translation>
+<translation id="40103911065039147">{URL_count,plural, =1{1 webside tæt på}one{# webside tæt på}other{# websider tæt på}}</translation>
 <translation id="4021036232240155012">DNS er den netværkstjeneste, der oversætter navnet på et website til dets internetadresse.</translation>
 <translation id="4030383055268325496">&amp;Fortryd tilføjelse</translation>
 <translation id="404928562651467259">ADVARSEL</translation>
@@ -320,11 +321,13 @@
 <translation id="4304224509867189079">Log ind</translation>
 <translation id="432290197980158659">Serveren præsenterede et certifikat, der ikke svarer til de indbyggede forventninger. Disse forventninger medtages for bestemte websites med høj sikkerhed for at beskytte dig. <ph name="BEGIN_LEARN_MORE_LINK" />Få flere oplysninger<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="4325863107915753736">Artiklen blev ikke fundet.</translation>
+<translation id="4331708818696583467">Ikke sikker</translation>
 <translation id="4372948949327679948">Forventet <ph name="VALUE_TYPE" />-værdi.</translation>
 <translation id="4381091992796011497">Brugernavn:</translation>
 <translation id="4394049700291259645">Deaktiver</translation>
 <translation id="4395129973926795186"><ph name="START_DATE" /> til <ph name="END_DATE" /></translation>
 <translation id="4406896451731180161">søgeresultater</translation>
+<translation id="4432688616882109544"><ph name="HOST_NAME" /> accepterede ikke dit logincertifikat, eller der er ikke angivet et.</translation>
 <translation id="443673843213245140">Brug af en proxy er deaktiveret, men en eksplicit proxykonfiguration er angivet.</translation>
 <translation id="4458874409874303848">SafeSites</translation>
 <translation id="4461847750548395463">Denne meddelelse vises, fordi Google SafeSites er aktiveret.</translation>
@@ -339,6 +342,7 @@
 <translation id="4589078953350245614">Du har forsøgt at få forbindelse til <ph name="DOMAIN" />, men serveren præsenterede et ugyldigt certifikat. <ph name="BEGIN_LEARN_MORE_LINK" />Få flere oplysninger<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="4592951414987517459">Din forbindelse til <ph name="DOMAIN" /> er krypteret ved hjælp af en moderne krypteringspakke.</translation>
 <translation id="4594403342090139922">&amp;Fortryd sletning</translation>
+<translation id="4627442949885028695">Fortsæt fra en anden enhed</translation>
 <translation id="4668929960204016307">,</translation>
 <translation id="4670097147947922288">Du er i øjeblikket på en udvidelsesside.</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
@@ -359,14 +363,15 @@
 <translation id="4880827082731008257">Søg i historikken</translation>
 <translation id="4884656795097055129">Der vises flere artikler, når det er relevant.</translation>
 <translation id="4895877746940133817"><ph name="TYPE_1" />, <ph name="TYPE_2" />, <ph name="TYPE_3" /></translation>
+<translation id="4914479371620770914">{URL_count,plural, =1{og 1 anden webside}one{og # anden webside}other{og # andre websider}}</translation>
 <translation id="4923417429809017348">Denne side er oversat fra et ukendt sprog til <ph name="LANGUAGE_LANGUAGE" /></translation>
 <translation id="4926049483395192435">Skal angives.</translation>
 <translation id="4930497775425430760">Denne meddelelse vises, fordi en af dine forældre skal godkende nye websites, første gang du besøger dem.</translation>
 <translation id="495170559598752135">Handlinger</translation>
 <translation id="4958444002117714549">Udvid liste</translation>
 <translation id="4962322354953122629">Denne server kunne ikke bevise, at den tilhører <ph name="DOMAIN" />, da Chrome ikke har tillid til sikkerhedscertifikatet. Dette kan skyldes en fejlkonfiguration, eller at en hacker har opfanget din forbindelse. <ph name="BEGIN_LEARN_MORE_LINK" />Få flere oplysninger<ph name="END_LEARN_MORE_LINK" />.</translation>
-<translation id="4986920000862467124">Intet ulæst</translation>
 <translation id="498957508165411911">Vil du oversætte fra <ph name="ORIGINAL_LANGUAGE" /> til <ph name="TARGET_LANGUAGE" />?</translation>
+<translation id="4989809363548539747">Dette plugin understøttes ikke</translation>
 <translation id="5002932099480077015">Hvis denne indstilling er slået til, gemmer Chrome en kopi af dit kort på denne enhed for at gøre det hurtigere at udfylde formularer.</translation>
 <translation id="5019198164206649151">Sikkerhedskopien er fejlbehæftet</translation>
 <translation id="5023310440958281426">Læs din administrators politikker</translation>
@@ -380,7 +385,6 @@
 <translation id="5089810972385038852">Delstat</translation>
 <translation id="5095208057601539847">Provins</translation>
 <translation id="5115563688576182185">(64-bit)</translation>
-<translation id="5122371513570456792">Der blev fundet <ph name="NUMBER_OF_RESULTS" /> <ph name="SEARCH_RESULTS" /> for "<ph name="SEARCH_STRING" />".</translation>
 <translation id="5141240743006678641">Krypter synkroniserede adgangskoder med dine Google-loginoplysninger</translation>
 <translation id="5145883236150621069">Fejlkode til stede i politiksvar</translation>
 <translation id="5171045022955879922">Søg, eller indtast webadresse</translation>
@@ -388,8 +392,8 @@
 <translation id="5179510805599951267">Ikke på <ph name="ORIGINAL_LANGUAGE" />? Rapporter denne fejl</translation>
 <translation id="5190835502935405962">Bogmærkelinje</translation>
 <translation id="5199729219167945352">Eksperimenter</translation>
-<translation id="52060377617855516">{URL_count,plural, =1{Der blev fundet 1 webside}one{Der blev fundet # webside}other{Der blev fundet # websider}}</translation>
 <translation id="5251803541071282808">Skyen</translation>
+<translation id="5277279256032773186">Bruger du Chrome på arbejdet? Virksomheder kan administrere Chrome-indstillinger for deres medarbejdere. Få flere oplysninger</translation>
 <translation id="5299298092464848405">Der opstod en fejl ved parsing af politik</translation>
 <translation id="5300589172476337783">Vis</translation>
 <translation id="5308689395849655368">Rapportering af nedbrud er deaktiveret.</translation>
@@ -423,7 +427,6 @@
 <translation id="5622887735448669177">Vil du forlade denne side?</translation>
 <translation id="5629630648637658800">Der kunne ikke indlæses indstillinger for politik</translation>
 <translation id="5631439013527180824">Ugyldigt token for enhedsadministration</translation>
-<translation id="5650551054760837876">Ingen søgeresultater fundet.</translation>
 <translation id="5677928146339483299">Blokeret</translation>
 <translation id="5710435578057952990">Dette websites identitet er ikke blevet bekræftet.</translation>
 <translation id="5720705177508910913">Aktuel bruger</translation>
@@ -462,7 +465,6 @@
 <translation id="6150607114729249911">Ups! Du er nødt til at spørge dine forældre, om det er i orden, at du åbner dette website.</translation>
 <translation id="6151417162996330722">Servercertifikatet har en gyldighedsperiode, der er for lang.</translation>
 <translation id="6165508094623778733">Flere oplysninger</translation>
-<translation id="6180780615171238625">Du kan ikke gå til <ph name="SITE" /> lige nu, da dette certifikat er blevet tilbagekaldt. Netværksfejl og hackerangreb er normalt midlertidige, så denne side vil sandsynligvis fungere senere. <ph name="BEGIN_LEARN_MORE_LINK" />Få flere oplysninger<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="6203231073485539293">Kontrollér din internetforbindelse</translation>
 <translation id="6218753634732582820">Vil du fjerne adressen fra Chromium?</translation>
 <translation id="6259156558325130047">&amp;Annuller fortryd omarrangering</translation>
@@ -490,6 +492,7 @@
 <translation id="647261751007945333">Enhedspolitikker</translation>
 <translation id="6489534406876378309">Start upload af nedbrud</translation>
 <translation id="6529602333819889595">&amp;Annuller fortryd slet</translation>
+<translation id="6534179046333460208">Forslag til Fysisk web</translation>
 <translation id="6550675742724504774">Valgmuligheder</translation>
 <translation id="6593753688552673085">mindre end <ph name="UPPER_ESTIMATE" /></translation>
 <translation id="6596325263575161958">Krypteringsmuligheder</translation>
@@ -523,8 +526,10 @@
 <translation id="6970216967273061347">Distrikt</translation>
 <translation id="6973656660372572881">Både faste proxyservere og en webadresse for .pac-script angives.</translation>
 <translation id="6989763994942163495">Vis avancerede indstillinger...</translation>
+<translation id="7000990526846637657">Der blev ikke fundet nogen poster i historikken</translation>
 <translation id="7009986207543992532">Du forsøgte at få forbindelse til <ph name="DOMAIN" />, men serveren præsenterede et certifikat, hvis gyldighedsperiode er for lang til at være pålidelig. <ph name="BEGIN_LEARN_MORE_LINK" />Få flere oplysninger<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="7012363358306927923">China UnionPay</translation>
+<translation id="7012372675181957985">Din Google-konto kan have andre former for browserhistorik på <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" />.</translation>
 <translation id="7029809446516969842">Adgangskoder</translation>
 <translation id="7087282848513945231">Amt/region</translation>
 <translation id="7088615885725309056">Ældre</translation>
@@ -550,6 +555,7 @@
 <translation id="7309308571273880165">Nedbrudsrapport registreret <ph name="CRASH_TIME" /> (upload, som brugeren anmodede om, er endnu ikke uploadet)</translation>
 <translation id="7334320624316649418">&amp;Annuller fortryd omarrangering</translation>
 <translation id="733923710415886693">Servercertifikatet blev ikke fremvist via Certifikatsgennemsigtighed.</translation>
+<translation id="7351800657706554155">Du kan ikke gå til <ph name="SITE" /> lige nu, da dette certifikat er blevet tilbagekaldt. Netværksfejl og hackerangreb er normalt midlertidige, så denne side vil sandsynligvis fungere senere. <ph name="BEGIN_LEARN_MORE_LINK" />Få flere oplysninger<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="7353601530677266744">Kommandolinje</translation>
 <translation id="7372973238305370288">søgeresultat</translation>
 <translation id="7377249249140280793"><ph name="RELATIVE_DATE" /> - <ph name="FULL_DATE" /></translation>
@@ -568,6 +574,7 @@ Psst! Prøv at bruge Inkognitotilstand <ph name="SHORTCUT_KEY" /> næste gang.</
 <translation id="7469372306589899959">Bekræfter kort</translation>
 <translation id="7481312909269577407">Frem</translation>
 <translation id="7485870689360869515">Der blev ikke fundet nogen data.</translation>
+<translation id="7508255263130623398">Det returnerede enheds-id for politikken er tomt eller stemmer ikke overens med det nuværende enheds-id</translation>
 <translation id="7514365320538308">Download</translation>
 <translation id="7518003948725431193">Ingen webside fundet på webadressen: <ph name="URL" /></translation>
 <translation id="7537536606612762813">Obligatorisk</translation>
@@ -577,6 +584,7 @@ Psst! Prøv at bruge Inkognitotilstand <ph name="SHORTCUT_KEY" /> næste gang.</
 <translation id="7568593326407688803">Denne side er på<ph name="ORIGINAL_LANGUAGE" />Vil du oversætte den?</translation>
 <translation id="7569952961197462199">Vil du fjerne kreditkortet fra Chrome?</translation>
 <translation id="7578104083680115302">Betal hurtigt på websites og i apps på alle enheder ved hjælp af kort, du har gemt med Google.</translation>
+<translation id="7588950540487816470">Fysisk web</translation>
 <translation id="7592362899630581445">Begrænsningerne for serverens certifikatnavn er overtrådt.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> kan i øjeblikket ikke behandle denne anmodning.</translation>
 <translation id="7600965453749440009">Oversæt aldrig <ph name="LANGUAGE" /></translation>
@@ -604,6 +612,7 @@ Psst! Prøv at bruge Inkognitotilstand <ph name="SHORTCUT_KEY" /> næste gang.</
 <translation id="780301667611848630">Nej tak</translation>
 <translation id="7805768142964895445">Status</translation>
 <translation id="7813600968533626083">Vil du fjerne formularforslaget fra Chrome?</translation>
+<translation id="7815407501681723534">Der blev fundet <ph name="NUMBER_OF_RESULTS" /> <ph name="SEARCH_RESULTS" /> for "<ph name="SEARCH_STRING" />"</translation>
 <translation id="785549533363645510">Du er dog ikke usynlig. Inkognitotilstand skjuler ikke din browserhistorik over for din arbejdsgiver, din internetudbyder eller de websites, du besøger.</translation>
 <translation id="7887683347370398519">Kontrollér, om din kontrolkode er korrekt, og prøv igen.</translation>
 <translation id="7894616681410591072">Ups! Du skal have tilladelse fra <ph name="NAME" /> for at få adgang til dette website.</translation>
@@ -619,7 +628,6 @@ Psst! Prøv at bruge Inkognitotilstand <ph name="SHORTCUT_KEY" /> næste gang.</
 <translation id="7995512525968007366">Ikke angivet</translation>
 <translation id="8012647001091218357">Vi kan ikke få kontakt til dine forældre på nuværende tidspunkt. Prøv igen.</translation>
 <translation id="8034522405403831421">Denne side er på <ph name="SOURCE_LANGUAGE" />. Vil du oversætte den til <ph name="TARGET_LANGUAGE" />?</translation>
-<translation id="8034955203865359138">Der blev ikke fundet nogen poster i historikken.</translation>
 <translation id="8088680233425245692">Artiklen kunne ikke vises.</translation>
 <translation id="8089520772729574115">mindre end 1 MB</translation>
 <translation id="8091372947890762290">Aktivering afventer serveren</translation>
@@ -645,6 +653,7 @@ Psst! Prøv at bruge Inkognitotilstand <ph name="SHORTCUT_KEY" /> næste gang.</
 <translation id="8349305172487531364">Bogmærkelinje</translation>
 <translation id="8363502534493474904">Deaktivere flytilstand</translation>
 <translation id="8364627913115013041">Ikke angivet.</translation>
+<translation id="8380941800586852976">Farlig</translation>
 <translation id="8412145213513410671">Nedbrud (<ph name="CRASH_COUNT" />)</translation>
 <translation id="8412392972487953978">Du skal angive den samme adgangssætning to gange.</translation>
 <translation id="8428213095426709021">Indstillinger</translation>
@@ -668,10 +677,9 @@ Psst! Prøv at bruge Inkognitotilstand <ph name="SHORTCUT_KEY" /> næste gang.</
 <translation id="8703575177326907206">Din forbindelse til <ph name="DOMAIN" /> er ikke krypteret.</translation>
 <translation id="8725066075913043281">Forsøg igen</translation>
 <translation id="8728672262656704056">Du er nu i inkognitotilstand</translation>
-<translation id="8730621377337864115">Fuldført</translation>
+<translation id="8730621377337864115">Udfør</translation>
 <translation id="8738058698779197622">For at kunne oprette en sikker forbindelse skal dit ur være indstillet korrekt. Det er vigtigt, da de certifikater, som websites bruger til at identificere sig selv, kun er gyldige i bestemte tidsperioder. Da uret på din enhed går forkert, kan Chromium ikke bekræfte disse certifikater.</translation>
 <translation id="8740359287975076522">&lt;abbr id="dnsDefinition"&gt;DNS-adressen&lt;/abbr&gt; for <ph name="HOST_NAME" /> blev ikke fundet. Diagnosticerer problemet.</translation>
-<translation id="8741995161408053644">Din Google-konto kan have andre former for browserhistorik på <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" />.</translation>
 <translation id="8790007591277257123">&amp;Annuller fortryd sletning</translation>
 <translation id="8798099450830957504">Standard</translation>
 <translation id="8804164990146287819">Privatlivspolitik</translation>

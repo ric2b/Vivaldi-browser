@@ -8,7 +8,7 @@
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "modules/ModulesExport.h"
 #include "platform/heap/Handle.h"
-#include "public/platform/modules/mediasession/WebMediaArtwork.h"
+#include "wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -16,26 +16,26 @@ class ExecutionContext;
 class MediaArtworkInit;
 
 class MODULES_EXPORT MediaArtwork final
-    : public GarbageCollectedFinalized<MediaArtwork>
-    , public ScriptWrappable {
-    DEFINE_WRAPPERTYPEINFO();
-public:
-    static MediaArtwork* create(ExecutionContext*, const MediaArtworkInit&);
+    : public GarbageCollectedFinalized<MediaArtwork>,
+      public ScriptWrappable {
+  DEFINE_WRAPPERTYPEINFO();
 
-    String src() const;
-    String sizes() const;
-    String type() const;
+ public:
+  static MediaArtwork* create(ExecutionContext*, const MediaArtworkInit&);
 
-    WebMediaArtwork* data() { return &m_data; }
+  String src() const;
+  String sizes() const;
+  String type() const;
 
-    DEFINE_INLINE_TRACE() { }
+  DEFINE_INLINE_TRACE() {}
 
-private:
-    MediaArtwork(ExecutionContext*, const MediaArtworkInit&);
+ private:
+  MediaArtwork(ExecutionContext*, const MediaArtworkInit&);
 
-    WebMediaArtwork m_data;
+  String m_src;
+  String m_sizes;
+  String m_type;
 };
-
 }
 
-#endif // MediaArtwork_h
+#endif  // MediaArtwork_h

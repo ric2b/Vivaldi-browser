@@ -5,11 +5,10 @@
 #ifndef MediaSession_h
 #define MediaSession_h
 
-#include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "modules/ModulesExport.h"
 #include "platform/heap/Handle.h"
-#include "public/platform/modules/mediasession/WebMediaSession.h"
+#include "public/platform/modules/mediasession/media_session.mojom-blink.h"
 #include <memory>
 
 namespace blink {
@@ -18,31 +17,30 @@ class MediaMetadata;
 class ScriptState;
 
 class MODULES_EXPORT MediaSession final
-    : public GarbageCollectedFinalized<MediaSession>
-    , public ScriptWrappable {
-    DEFINE_WRAPPERTYPEINFO();
-public:
-    static MediaSession* create(ExecutionContext*, ExceptionState&);
+    : public GarbageCollectedFinalized<MediaSession>,
+      public ScriptWrappable {
+  DEFINE_WRAPPERTYPEINFO();
 
-    WebMediaSession* getWebMediaSession() { return m_webMediaSession.get(); }
+ public:
+  static MediaSession* create();
 
-    ScriptPromise activate(ScriptState*);
-    ScriptPromise deactivate(ScriptState*);
+  void setMetadata(ScriptState*, MediaMetadata*);
+  MediaMetadata* metadata(ScriptState*) const;
 
-    void setMetadata(MediaMetadata*);
-    MediaMetadata* metadata() const;
+  DECLARE_VIRTUAL_TRACE();
 
-    DECLARE_VIRTUAL_TRACE();
+ private:
+  friend class MediaSessionTest;
 
-private:
-    friend class MediaSessionTest;
+  MediaSession();
 
-    explicit MediaSession(std::unique_ptr<WebMediaSession>);
+  // Returns null when the ExecutionContext is not document.
+  mojom::blink::MediaSessionService* getService(ScriptState*);
 
-    std::unique_ptr<WebMediaSession> m_webMediaSession;
-    Member<MediaMetadata> m_metadata;
+  Member<MediaMetadata> m_metadata;
+  mojom::blink::MediaSessionServicePtr m_service;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // MediaSession_h
+#endif  // MediaSession_h

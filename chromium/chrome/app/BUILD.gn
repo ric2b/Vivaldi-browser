@@ -13,6 +13,19 @@ source_set("command_ids") {
   ]
 }
 
+# On Windows, links chrome_dll.rc. On other platforms, does nothing so you can
+# unconditionally depend on it.
+source_set("chrome_dll_resources") {
+  # This source is added unconditionally for include checking on non-Windows
+  # platforms.
+  sources = [
+    "chrome_dll_resource.h",
+  ]
+  if (is_win) {
+    sources += [ "chrome_dll.rc" ]
+  }
+}
+
 if (is_android) {
   import("//build/config/android/rules.gni")
   android_generated_java_resources = [
@@ -63,12 +76,10 @@ if (is_android) {
   ]
 }
 
-# GYP version: chrome/chrome_resources.gyp:chrome_strings
-#              (generate_generated_resources action)
 grit("generated_resources") {
   source = "generated_resources.grd"
-  output_dir = "$root_gen_dir/chrome"
   use_qualified_include = true
+  output_dir = "$root_gen_dir/chrome"
   outputs = [
     "grit/generated_resources.h",
     "generated_resources_am.pak",
@@ -143,12 +154,10 @@ if (is_android) {
   }
 }
 
-# GYP version: chrome/chrome_resources.gyp:chrome_strings
-#              (generate_google_chrome_strings action)
 grit("google_chrome_strings") {
   source = "google_chrome_strings.grd"
-  output_dir = "$root_gen_dir/chrome"
   use_qualified_include = true
+  output_dir = "$root_gen_dir/chrome"
   outputs = [
     "grit/google_chrome_strings.h",
     "google_chrome_strings_am.pak",
@@ -208,12 +217,10 @@ grit("google_chrome_strings") {
   ]
 }
 
-# GYP version: chrome/chrome_resources.gyp:chrome_strings
-#              (generate_chromium_strings action)
 grit("chromium_strings") {
   source = "chromium_strings.grd"
-  output_dir = "$root_gen_dir/chrome"
   use_qualified_include = true
+  output_dir = "$root_gen_dir/chrome"
   outputs = [
     "grit/chromium_strings.h",
     "chromium_strings_am.pak",
@@ -336,7 +343,7 @@ if (use_aura) {
     type = "exe"
     name = "chrome"
     source = "mojo/chrome_manifest.json"
-    base_manifest = "${root_out_dir}/content_browser_manifest.json"
+    base_manifest = "${root_out_dir}/Packages/content_browser/manifest.json"
     base_deps = [ "//content/public/app:browser_manifest" ]
   }
 
@@ -344,7 +351,7 @@ if (use_aura) {
     type = "exe"
     name = "chrome_renderer"
     source = "mojo/chrome_renderer_manifest.json"
-    base_manifest = "${root_out_dir}/content_renderer_manifest.json"
+    base_manifest = "${root_out_dir}/Packages/content_renderer/manifest.json"
     base_deps = [ "//content/public/app:renderer_manifest" ]
   }
 

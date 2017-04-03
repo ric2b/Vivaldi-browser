@@ -4,6 +4,8 @@
 
 #include "chrome/browser/prerender/prerender_resource_throttle.h"
 
+#include "base/logging.h"
+#include "base/numerics/safe_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/prerender/prerender_final_status.h"
 #include "chrome/browser/prerender/prerender_manager.h"
@@ -13,6 +15,7 @@
 #include "content/public/browser/resource_controller.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/browser/web_contents.h"
+#include "net/http/http_response_headers.h"
 #include "net/url_request/redirect_info.h"
 #include "net/url_request/url_request.h"
 
@@ -25,7 +28,15 @@ static const char kFollowOnlyWhenPrerenderShown[] =
     "follow-only-when-prerender-shown";
 
 PrerenderContents* g_prerender_contents_for_testing;
+
+// Returns true if the response has a "no-store" cache control header.
+bool IsNoStoreResponse(const net::URLRequest& request) {
+  const net::HttpResponseInfo& response_info = request.response_info();
+  return response_info.headers.get() &&
+         response_info.headers->HasHeaderValue("cache-control", "no-store");
 }
+
+}  // namespace
 
 void PrerenderResourceThrottle::OverridePrerenderContentsForTesting(
     PrerenderContents* contents) {
@@ -59,12 +70,29 @@ void PrerenderResourceThrottle::WillRedirectRequest(
   request_->GetResponseHeaderByName(kFollowOnlyWhenPrerenderShown, &header);
 
   content::BrowserThread::PostTask(
-      content::BrowserThread::UI,
-      FROM_HERE,
+      content::BrowserThread::UI, FROM_HERE,
       base::Bind(&PrerenderResourceThrottle::WillRedirectRequestOnUI,
                  AsWeakPtr(), header, info->GetResourceType(), info->IsAsync(),
-                 info->GetChildID(), info->GetRenderFrameID(),
-                 redirect_info.new_url));
+                 IsNoStoreResponse(*request_), info->GetChildID(),
+                 info->GetRenderFrameID(), redirect_info.new_url));
+}
+
+void PrerenderResourceThrottle::WillProcessResponse(bool* defer) {
+  const content::ResourceRequestInfo* info =
+      content::ResourceRequestInfo::ForRequest(request_);
+  if (!info)
+    return;
+
+  DCHECK_GT(request_->url_chain().size(), 0u);
+  int redirect_count =
+      base::saturated_cast<int>(request_->url_chain().size()) - 1;
+
+  content::BrowserThread::PostTask(
+      content::BrowserThread::UI, FROM_HERE,
+      base::Bind(&PrerenderResourceThrottle::WillProcessResponseOnUI,
+                 content::IsResourceTypeFrame(info->GetResourceType()),
+                 IsNoStoreResponse(*request_), redirect_count,
+                 info->GetChildID(), info->GetRenderFrameID()));
 }
 
 const char* PrerenderResourceThrottle::GetNameForLogging() const {
@@ -79,6 +107,7 @@ void PrerenderResourceThrottle::Cancel() {
   controller()->Cancel();
 }
 
+// static
 void PrerenderResourceThrottle::WillStartRequestOnUI(
     const base::WeakPtr<PrerenderResourceThrottle>& throttle,
     const std::string& method,
@@ -92,8 +121,14 @@ void PrerenderResourceThrottle::WillStartRequestOnUI(
   if (prerender_contents) {
     // Abort any prerenders that spawn requests that use unsupported HTTP
     // methods or schemes.
-    if (!PrerenderManager::IsValidHttpMethod(method)) {
-      prerender_contents->Destroy(FINAL_STATUS_INVALID_HTTP_METHOD);
+    if (!prerender_contents->IsValidHttpMethod(method)) {
+      // If this is a full prerender, cancel the prerender in response to
+      // invalid requests.  For prefetches, cancel invalid requests but keep the
+      // prefetch going, unless it's the main frame that's invalid.
+      if (prerender_contents->prerender_mode() == FULL_PRERENDER ||
+          resource_type == content::RESOURCE_TYPE_MAIN_FRAME) {
+        prerender_contents->Destroy(FINAL_STATUS_INVALID_HTTP_METHOD);
+      }
       cancel = true;
     } else if (!PrerenderManager::DoesSubresourceURLHaveValidScheme(url)) {
       prerender_contents->Destroy(FINAL_STATUS_UNSUPPORTED_SCHEME);
@@ -116,11 +151,13 @@ void PrerenderResourceThrottle::WillStartRequestOnUI(
                  &PrerenderResourceThrottle::Resume, throttle));
 }
 
+// static
 void PrerenderResourceThrottle::WillRedirectRequestOnUI(
     const base::WeakPtr<PrerenderResourceThrottle>& throttle,
     const std::string& follow_only_when_prerender_shown_header,
     ResourceType resource_type,
     bool async,
+    bool is_no_store,
     int render_process_id,
     int render_frame_id,
     const GURL& new_url) {
@@ -128,6 +165,10 @@ void PrerenderResourceThrottle::WillRedirectRequestOnUI(
   PrerenderContents* prerender_contents =
       PrerenderContentsFromRenderFrame(render_process_id, render_frame_id);
   if (prerender_contents) {
+    prerender_contents->prerender_manager()->RecordPrefetchResponseReceived(
+        prerender_contents->origin(),
+        content::IsResourceTypeFrame(resource_type), true /* is_redirect */,
+        is_no_store);
     // Abort any prerenders with requests which redirect to invalid schemes.
     if (!PrerenderManager::DoesURLHaveValidScheme(new_url)) {
       prerender_contents->Destroy(FINAL_STATUS_UNSUPPORTED_SCHEME);
@@ -157,6 +198,28 @@ void PrerenderResourceThrottle::WillRedirectRequestOnUI(
                  &PrerenderResourceThrottle::Resume, throttle));
 }
 
+// static
+void PrerenderResourceThrottle::WillProcessResponseOnUI(bool is_main_resource,
+                                                        bool is_no_store,
+                                                        int redirect_count,
+                                                        int render_process_id,
+                                                        int render_frame_id) {
+  PrerenderContents* prerender_contents =
+      PrerenderContentsFromRenderFrame(render_process_id, render_frame_id);
+  if (!prerender_contents)
+    return;
+
+  if (prerender_contents->prerender_mode() != PREFETCH_ONLY)
+    return;
+
+  prerender_contents->prerender_manager()->RecordPrefetchResponseReceived(
+      prerender_contents->origin(), is_main_resource, false /* is_redirect */,
+      is_no_store);
+  prerender_contents->prerender_manager()->RecordPrefetchRedirectCount(
+      prerender_contents->origin(), is_main_resource, redirect_count);
+}
+
+// static
 PrerenderContents* PrerenderResourceThrottle::PrerenderContentsFromRenderFrame(
     int render_process_id, int render_frame_id) {
   if (g_prerender_contents_for_testing)

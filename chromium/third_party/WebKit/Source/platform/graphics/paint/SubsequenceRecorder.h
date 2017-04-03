@@ -16,32 +16,35 @@ namespace blink {
 class GraphicsContext;
 class PaintController;
 
-// SubsequenceRecorder records BeginSubsequenceDisplayItem and EndSubsequenceDisplayItem
-// sentinels at either end of a continguous sequence of DisplayItems, and supports
-// caching via a CachedDisplayItem with the CachedSubsequence DisplayItem type.
+// SubsequenceRecorder records BeginSubsequenceDisplayItem and
+// EndSubsequenceDisplayItem sentinels at either end of a continguous sequence
+// of DisplayItems, and supports caching via a CachedDisplayItem with the
+// CachedSubsequence DisplayItem type.
 //
-// Also note that useCachedSubsequenceIfPossible is not sufficient to determine whether a
-// CachedSubsequence can be used. In particular, the client is responsible for checking that
-// none of the DisplayItemClients that contribute to the subsequence have been invalidated.
+// Also note that useCachedSubsequenceIfPossible is not sufficient to determine
+// whether a CachedSubsequence can be used. In particular, the client is
+// responsible for checking that none of the DisplayItemClients that contribute
+// to the subsequence have been invalidated.
 //
 class PLATFORM_EXPORT SubsequenceRecorder final {
-    DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
-    WTF_MAKE_NONCOPYABLE(SubsequenceRecorder);
-public:
-    static bool useCachedSubsequenceIfPossible(GraphicsContext& context, const DisplayItemClient& client)
-    {
-        return context.getPaintController().useCachedSubsequenceIfPossible(client);
-    }
+  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+  WTF_MAKE_NONCOPYABLE(SubsequenceRecorder);
 
-    SubsequenceRecorder(GraphicsContext&, const DisplayItemClient&);
-    ~SubsequenceRecorder();
+ public:
+  static bool useCachedSubsequenceIfPossible(GraphicsContext& context,
+                                             const DisplayItemClient& client) {
+    return context.getPaintController().useCachedSubsequenceIfPossible(client);
+  }
 
-private:
-    PaintController& m_paintController;
-    const DisplayItemClient& m_client;
-    size_t m_beginSubsequenceIndex;
+  SubsequenceRecorder(GraphicsContext&, const DisplayItemClient&);
+  ~SubsequenceRecorder();
+
+ private:
+  PaintController& m_paintController;
+  const DisplayItemClient& m_client;
+  size_t m_beginSubsequenceIndex;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // SubsequenceRecorder_h
+#endif  // SubsequenceRecorder_h

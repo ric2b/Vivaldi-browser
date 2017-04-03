@@ -10,16 +10,39 @@
 
 namespace content {
 
-SynchronousCompositor::Frame::Frame() : output_surface_id(0u) {}
+SynchronousCompositor::Frame::Frame() : compositor_frame_sink_id(0u) {}
 
 SynchronousCompositor::Frame::~Frame() {}
 
 SynchronousCompositor::Frame::Frame(Frame&& rhs)
-    : output_surface_id(rhs.output_surface_id), frame(std::move(rhs.frame)) {}
+    : compositor_frame_sink_id(rhs.compositor_frame_sink_id),
+      frame(std::move(rhs.frame)) {}
+
+SynchronousCompositor::FrameFuture::FrameFuture()
+    : waitable_event_(base::WaitableEvent::ResetPolicy::MANUAL,
+                      base::WaitableEvent::InitialState::NOT_SIGNALED) {}
+
+SynchronousCompositor::FrameFuture::~FrameFuture() {}
+
+void SynchronousCompositor::FrameFuture::setFrame(
+    std::unique_ptr<Frame> frame) {
+  frame_ = std::move(frame);
+  waitable_event_.Signal();
+}
+
+std::unique_ptr<SynchronousCompositor::Frame>
+SynchronousCompositor::FrameFuture::getFrame() {
+#if DCHECK_IS_ON()
+  DCHECK(!waited_);
+  waited_ = true;
+#endif
+  waitable_event_.Wait();
+  return std::move(frame_);
+}
 
 SynchronousCompositor::Frame& SynchronousCompositor::Frame::operator=(
     Frame&& rhs) {
-  output_surface_id = rhs.output_surface_id;
+  compositor_frame_sink_id = rhs.compositor_frame_sink_id;
   frame = std::move(rhs.frame);
   return *this;
 }

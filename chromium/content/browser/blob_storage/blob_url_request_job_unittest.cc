@@ -153,7 +153,7 @@ class BlobURLRequestJobTest : public testing::Test {
   void SetUp() override {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
 
-    temp_file1_ = temp_dir_.path().AppendASCII("BlobFile1.dat");
+    temp_file1_ = temp_dir_.GetPath().AppendASCII("BlobFile1.dat");
     ASSERT_EQ(static_cast<int>(arraysize(kTestFileData1) - 1),
               base::WriteFile(temp_file1_, kTestFileData1,
                                    arraysize(kTestFileData1) - 1));
@@ -161,7 +161,7 @@ class BlobURLRequestJobTest : public testing::Test {
     base::GetFileInfo(temp_file1_, &file_info1);
     temp_file_modification_time1_ = file_info1.last_modified;
 
-    temp_file2_ = temp_dir_.path().AppendASCII("BlobFile2.dat");
+    temp_file2_ = temp_dir_.GetPath().AppendASCII("BlobFile2.dat");
     ASSERT_EQ(static_cast<int>(arraysize(kTestFileData2) - 1),
               base::WriteFile(temp_file2_, kTestFileData2,
                                    arraysize(kTestFileData2) - 1));
@@ -174,7 +174,7 @@ class BlobURLRequestJobTest : public testing::Test {
         disk_cache_backend_.get(), kTestDiskCacheKey1, kTestDiskCacheData1);
 
     url_request_job_factory_.SetProtocolHandler(
-        "blob", base::WrapUnique(new MockProtocolHandler(this)));
+        "blob", base::MakeUnique<MockProtocolHandler>(this));
     url_request_context_.set_job_factory(&url_request_job_factory_);
   }
 
@@ -188,8 +188,8 @@ class BlobURLRequestJobTest : public testing::Test {
 
   void SetUpFileSystem() {
     // Prepare file system.
-    file_system_context_ = CreateFileSystemContextForTesting(
-        NULL, temp_dir_.path());
+    file_system_context_ =
+        CreateFileSystemContextForTesting(NULL, temp_dir_.GetPath());
 
     file_system_context_->OpenFileSystem(
         GURL(kFileSystemURLOrigin),
@@ -274,7 +274,7 @@ class BlobURLRequestJobTest : public testing::Test {
     base::RunLoop().Run();
 
     // Verify response.
-    EXPECT_TRUE(request_->status().is_success());
+    EXPECT_EQ(net::OK, url_request_delegate_.request_status());
     EXPECT_EQ(expected_status_code_,
               request_->response_headers()->response_code());
     EXPECT_EQ(expected_response_, url_request_delegate_.response_data());
@@ -373,7 +373,7 @@ TEST_F(BlobURLRequestJobTest, TestGetSimpleFileRequest) {
 
 TEST_F(BlobURLRequestJobTest, TestGetLargeFileRequest) {
   base::FilePath large_temp_file =
-      temp_dir_.path().AppendASCII("LargeBlob.dat");
+      temp_dir_.GetPath().AppendASCII("LargeBlob.dat");
   std::string large_data;
   large_data.reserve(kBufferSize * 5);
   for (int i = 0; i < kBufferSize * 5; ++i)

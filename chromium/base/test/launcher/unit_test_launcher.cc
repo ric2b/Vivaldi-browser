@@ -31,6 +31,10 @@
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#if defined(OS_POSIX)
+#include "base/files/file_descriptor_watcher_posix.h"
+#endif
+
 #include "base/vivaldi_switches.h"
 
 namespace base {
@@ -123,7 +127,7 @@ class DefaultUnitTestPlatformDelegate : public UnitTestPlatformDelegate {
 
     CHECK(temp_dir_.IsValid() || temp_dir_.CreateUniqueTempDir());
     FilePath temp_file;
-    CHECK(CreateTemporaryFileInDir(temp_dir_.path(), &temp_file));
+    CHECK(CreateTemporaryFileInDir(temp_dir_.GetPath(), &temp_file));
     std::string long_flags(
         std::string("--") + kGTestFilterFlag + "=" +
         JoinString(test_names, ":"));
@@ -233,6 +237,9 @@ int LaunchUnitTestsInternal(const RunTestSuiteCallback& run_test_suite,
   fflush(stdout);
 
   MessageLoopForIO message_loop;
+#if defined(OS_POSIX)
+  FileDescriptorWatcher file_descriptor_watcher(&message_loop);
+#endif
 
   DefaultUnitTestPlatformDelegate platform_delegate;
   UnitTestLauncherDelegate delegate(

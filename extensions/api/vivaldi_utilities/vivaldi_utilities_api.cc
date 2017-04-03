@@ -202,41 +202,6 @@ bool UtilitiesClearAllRecentlyClosedSessionsFunction::RunAsync() {
   return result;
 }
 
-UtilitiesGetAvailablePageEncodingsFunction::
-    ~UtilitiesGetAvailablePageEncodingsFunction() {
-}
-
-bool UtilitiesGetAvailablePageEncodingsFunction::RunSync() {
-  const std::vector<CharacterEncoding::EncodingInfo> *encodings;
-  PrefService *pref_service = GetProfile()->GetPrefs();
-  encodings = CharacterEncoding::GetCurrentDisplayEncodings(
-      g_browser_process->GetApplicationLocale(),
-      pref_service->GetString(prefs::kStaticEncodings),
-      pref_service->GetString(prefs::kRecentlySelectedEncoding));
-  DCHECK(encodings);
-  DCHECK(!encodings->empty());
-
-  std::vector<vivaldi::utilities::EncodingItem> encodingItems;
-
-  std::vector<CharacterEncoding::EncodingInfo>::const_iterator it;
-  for (it = encodings->begin(); it != encodings->end(); ++it) {
-    if (it->encoding_id) {
-      vivaldi::utilities::EncodingItem *encodingItem =
-          new vivaldi::utilities::EncodingItem;
-      int cmd_id = it->encoding_id;
-      std::string encoding =
-          CharacterEncoding::GetCanonicalEncodingNameByCommandId(cmd_id);
-      encodingItem->name = base::UTF16ToUTF8(it->encoding_display_name);
-      encodingItem->encoding = encoding;
-      encodingItems.push_back(std::move(*encodingItem));
-    }
-  }
-
-  results_ = vivaldi::utilities::GetAvailablePageEncodings::Results::Create(
-      encodingItems);
-  return true;
-}
-
 UtilitiesMapFocusAppWindowToWindowIdFunction::UtilitiesMapFocusAppWindowToWindowIdFunction() {
 
 }

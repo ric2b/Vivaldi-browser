@@ -47,7 +47,6 @@ Druk op Shift + Alt om te schakelen.j</translation>
 <translation id="2268813581635650749">Alle gebruikers uitloggen</translation>
 <translation id="2297568595583585744">Statussysteemvak</translation>
 <translation id="2303600792989757991">Overzicht venster in-/uitschakelen</translation>
-<translation id="2372145515558759244">Apps synchroniseren...</translation>
 <translation id="2391579633712104609">180°</translation>
 <translation id="2429753432712299108">Bluetooth-apparaat '<ph name="DEVICE_NAME" />' wil toestemming om te koppelen. Bevestig vóór het accepteren dat de volgende toegangscode op dat apparaat wordt weergegeven: <ph name="PASSKEY" /></translation>
 <translation id="2475982808118771221">Er is een fout opgetreden</translation>
@@ -61,7 +60,6 @@ Druk op Shift + Alt om te schakelen.j</translation>
 <translation id="2727977024730340865">Aangesloten op een laag-vermogen-lader. Opladen van de batterij mogelijk niet betrouwbaar.</translation>
 <translation id="2761704814324807722">Statusvak, tijd <ph name="TIME" />, <ph name="BATTERY" /></translation>
 <translation id="2792498699870441125">Alt+Zoeken</translation>
-<translation id="2805756323405976993">Apps</translation>
 <translation id="2819276065543622893">Je wordt nu uitgelogd.</translation>
 <translation id="2825619548187458965">Plank</translation>
 <translation id="2844169650293029770">USB-C-apparaat (poort links aan de voorkant)</translation>
@@ -97,7 +95,6 @@ Druk op Zoeken of Shift om te annuleren.</translation>
 <translation id="3621712662352432595">Audio-instellingen</translation>
 <translation id="3625258641415618104">Screenshots uitgeschakeld</translation>
 <translation id="3626281679859535460">Helderheid</translation>
-<translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079">De resolutie van <ph name="DISPLAY_NAME" /> is gewijzigd in <ph name="RESOLUTION" /></translation>
 <translation id="370649949373421643">Wifi inschakelen</translation>
 <translation id="3709443003275901162">9+</translation>
@@ -111,6 +108,8 @@ Druk op Zoeken of Shift om te annuleren.</translation>
 <translation id="3866182280516392520">IPv6-adres</translation>
 <translation id="3891340733213178823">Druk twee keer op Ctrl+Shift+Q om uit te loggen.</translation>
 <translation id="3892641579809465218">Interne display</translation>
+<translation id="3893630138897523026">ChromeVox (gesproken feedback)</translation>
+<translation id="3899995891769452915">Spraakinvoer</translation>
 <translation id="3963445509666917109">Luidspreker (intern)</translation>
 <translation id="3967919079500697218">Je beheerder heeft de mogelijkheid uitgeschakeld om screenshots te maken.</translation>
 <translation id="397105322502079400">Berekenen...</translation>
@@ -134,10 +133,8 @@ Druk op Zoeken of Shift om te annuleren.</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl+Shift+spatie</translation>
 <translation id="5045002648206642691">Instellingen voor Google Drive...</translation>
-<translation id="511445211639755999"><ph name="RESOLUTION" />, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">Cast-apparaten beschikbaar</translation>
 <translation id="5170568018924773124">Weergeven in map</translation>
-<translation id="5191140942132549112">VRAGEN WEERGEVEN</translation>
 <translation id="5222676887888702881">Uitloggen</translation>
 <translation id="5238774010593222950">Kan niet inloggen op een ander account.</translation>
 <translation id="532063867737390965">Deze netwerkinstelling is uitgeschakeld door de beheerder.</translation>
@@ -185,6 +182,7 @@ Druk op Shift + Alt om te schakelen.</translation>
 <translation id="6459472438155181876">Scherm uitbreiden naar <ph name="DISPLAY_NAME" /></translation>
 <translation id="6490471652906364588">USB-C-apparaat (poort aan rechterkant)</translation>
 <translation id="6501401484702599040">Scherm casten naar <ph name="RECEIVER_NAME" /></translation>
+<translation id="6521655319214113338">Handschriftinvoer</translation>
 <translation id="6537270692134705506">Screenshot maken</translation>
 <translation id="6550675742724504774">Opties</translation>
 <translation id="6585808820553845416">Sessie loopt af over <ph name="SESSION_TIME_REMAINING" />.</translation>
@@ -194,7 +192,6 @@ Druk op Shift + Alt om te schakelen.</translation>
 <translation id="6713285437468012787">Bluetooth-apparaat '<ph name="DEVICE_NAME" />' is gekoppeld en is nu beschikbaar voor alle gebruikers. Je kunt deze koppeling verwijderen via 'Instellingen'.</translation>
 <translation id="6785414152754474415">De accu is <ph name="PERCENTAGE" />% vol en wordt opgeladen.</translation>
 <translation id="683971173229319003">Zoeken+L</translation>
-<translation id="68610848741840742">ChromeVox (gesproken feedback)</translation>
 <translation id="6911468394164995108">Verbinding met ander netwerk maken...</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6979158407327259162">Google Drive</translation>
@@ -217,8 +214,10 @@ Druk op Alt+Zoeken of Shift om te annuleren.</translation>
 <translation id="743058460480092004">Camera en microfoon zijn in gebruik.</translation>
 <translation id="7510334386202674593">Ctrl+Shift+L</translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" /> ondersteunt <ph name="SPECIFIED_RESOLUTION" /> niet. De resolutie is gewijzigd in <ph name="FALLBACK_RESOLUTION" /></translation>
+<translation id="7562368315689366235">Emoji-palet</translation>
 <translation id="7573962313813535744">Gedockte modus</translation>
 <translation id="7580671184200851182">Dezelfde audio afspelen via alle speakers (mono-audio)</translation>
+<translation id="7581273696622423628">Enquête invullen</translation>
 <translation id="7593891976182323525">Zoeken of Shift</translation>
 <translation id="7649070708921625228">Help</translation>
 <translation id="7692480393933218409">De aangesloten USB-C-apparaten worden opgeladen</translation>

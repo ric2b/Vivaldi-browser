@@ -15,7 +15,7 @@
 #include "base/compiler_specific.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/field_trial.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -98,8 +98,8 @@ bool GetInt64Param(const std::map<std::string, std::string>& params,
 // Parses the key. e.g.: "PerfCommand::arm::0" returns "arm"
 bool ExtractPerfCommandCpuSpecifier(const std::string& key,
                                     std::string* cpu_specifier) {
-  std::vector<std::string> tokens;
-  base::SplitStringUsingSubstr(key, "::", &tokens);
+  std::vector<std::string> tokens = base::SplitStringUsingSubstr(
+      key, "::", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (tokens.size() != 3)
     return false;
   if (tokens[0] != "PerfCommand")

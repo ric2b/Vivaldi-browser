@@ -6,21 +6,60 @@
 
 #include <limits>
 
-#include "base/atomicops.h"
 #include "base/callback.h"
 #include "base/debug/task_annotator.h"
+#include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sequence_token.h"
+#include "base/synchronization/condition_variable.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
+#include "base/values.h"
 
 namespace base {
 namespace internal {
 
 namespace {
+
+// An immutable copy of a scheduler task's info required by tracing.
+class TaskTracingInfo : public trace_event::ConvertableToTraceFormat {
+ public:
+  TaskTracingInfo(const TaskTraits& task_traits,
+                  ExecutionMode execution_mode,
+                  const SequenceToken& sequence_token)
+      : task_traits_(task_traits),
+        execution_mode_(execution_mode),
+        sequence_token_(sequence_token) {}
+
+  // trace_event::ConvertableToTraceFormat implementation.
+  void AppendAsTraceFormat(std::string* out) const override;
+
+ private:
+  const TaskTraits task_traits_;
+  const ExecutionMode execution_mode_;
+  const SequenceToken sequence_token_;
+
+  DISALLOW_COPY_AND_ASSIGN(TaskTracingInfo);
+};
+
+void TaskTracingInfo::AppendAsTraceFormat(std::string* out) const {
+  DictionaryValue dict;
+
+  dict.SetString("task_priority",
+                 base::TaskPriorityToString(task_traits_.priority()));
+  dict.SetString("execution_mode",
+                 base::ExecutionModeToString(execution_mode_));
+  if (execution_mode_ != ExecutionMode::PARALLEL)
+    dict.SetInteger("sequence_token", sequence_token_.ToInternalValue());
+
+  std::string tmp;
+  JSONWriter::Write(dict, &tmp);
+  out->append(tmp);
+}
 
 const char kQueueFunctionName[] = "base::PostTask";
 
@@ -128,10 +167,120 @@ class TaskTracker::State {
   DISALLOW_COPY_AND_ASSIGN(State);
 };
 
-TaskTracker::TaskTracker() : state_(new State) {}
+TaskTracker::TaskTracker()
+    : state_(new State),
+      flush_cv_(flush_lock_.CreateConditionVariable()),
+      shutdown_lock_(&flush_lock_) {}
 TaskTracker::~TaskTracker() = default;
 
 void TaskTracker::Shutdown() {
+  PerformShutdown();
+  DCHECK(IsShutdownComplete());
+
+  // Unblock Flush() when shutdown completes.
+  AutoSchedulerLock auto_lock(flush_lock_);
+  flush_cv_->Signal();
+}
+
+void TaskTracker::Flush() {
+  AutoSchedulerLock auto_lock(flush_lock_);
+  while (subtle::NoBarrier_Load(&num_pending_undelayed_tasks_) != 0 &&
+         !IsShutdownComplete()) {
+    flush_cv_->Wait();
+  }
+}
+
+bool TaskTracker::WillPostTask(const Task* task) {
+  DCHECK(task);
+
+  if (!BeforePostTask(task->traits.shutdown_behavior()))
+    return false;
+
+  if (task->delayed_run_time.is_null())
+    subtle::NoBarrier_AtomicIncrement(&num_pending_undelayed_tasks_, 1);
+
+  debug::TaskAnnotator task_annotator;
+  task_annotator.DidQueueTask(kQueueFunctionName, *task);
+
+  return true;
+}
+
+bool TaskTracker::RunTask(const Task* task,
+                          const SequenceToken& sequence_token) {
+  DCHECK(task);
+  DCHECK(sequence_token.IsValid());
+
+  const TaskShutdownBehavior shutdown_behavior =
+      task->traits.shutdown_behavior();
+  const bool can_run_task = BeforeRunTask(shutdown_behavior);
+
+  if (can_run_task) {
+    // All tasks run through here and the scheduler itself doesn't use
+    // singletons. Therefore, it isn't necessary to reset the singleton allowed
+    // bit after running the task.
+    ThreadRestrictions::SetSingletonAllowed(
+        task->traits.shutdown_behavior() !=
+        TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN);
+
+    {
+      // Set up SequenceToken as expected for the scope of the task.
+      ScopedSetSequenceTokenForCurrentThread
+          scoped_set_sequence_token_for_current_thread(sequence_token);
+
+      // Set up TaskRunnerHandle as expected for the scope of the task.
+      std::unique_ptr<SequencedTaskRunnerHandle> sequenced_task_runner_handle;
+      std::unique_ptr<ThreadTaskRunnerHandle> single_thread_task_runner_handle;
+      DCHECK(!task->sequenced_task_runner_ref ||
+             !task->single_thread_task_runner_ref);
+      if (task->sequenced_task_runner_ref) {
+        sequenced_task_runner_handle.reset(
+            new SequencedTaskRunnerHandle(task->sequenced_task_runner_ref));
+      } else if (task->single_thread_task_runner_ref) {
+        single_thread_task_runner_handle.reset(
+            new ThreadTaskRunnerHandle(task->single_thread_task_runner_ref));
+      }
+
+      TRACE_TASK_EXECUTION(kRunFunctionName, *task);
+
+      const ExecutionMode execution_mode =
+          task->single_thread_task_runner_ref
+              ? ExecutionMode::SINGLE_THREADED
+              : (task->sequenced_task_runner_ref ? ExecutionMode::SEQUENCED
+                                                 : ExecutionMode::PARALLEL);
+      // TODO(gab): In a better world this would be tacked on as an extra arg
+      // to the trace event generated above. This is not possible however until
+      // http://crbug.com/652692 is resolved.
+      TRACE_EVENT1("task_scheduler", "TaskTracker::RunTask", "task_info",
+                   MakeUnique<TaskTracingInfo>(task->traits, execution_mode,
+                                               sequence_token));
+
+      debug::TaskAnnotator task_annotator;
+      task_annotator.RunTask(kQueueFunctionName, *task);
+    }
+
+    AfterRunTask(shutdown_behavior);
+  }
+
+  if (task->delayed_run_time.is_null())
+    DecrementNumPendingUndelayedTasks();
+
+  return can_run_task;
+}
+
+bool TaskTracker::HasShutdownStarted() const {
+  return state_->HasShutdownStarted();
+}
+
+bool TaskTracker::IsShutdownComplete() const {
+  AutoSchedulerLock auto_lock(shutdown_lock_);
+  return shutdown_event_ && shutdown_event_->IsSignaled();
+}
+
+void TaskTracker::SetHasShutdownStartedForTesting() {
+  state_->StartShutdown();
+}
+
+void TaskTracker::PerformShutdown() {
   {
     AutoSchedulerLock auto_lock(shutdown_lock_);
 
@@ -162,7 +311,10 @@ void TaskTracker::Shutdown() {
 
   // It is safe to access |shutdown_event_| without holding |lock_| because the
   // pointer never changes after being set above.
-  shutdown_event_->Wait();
+  {
+    base::ThreadRestrictions::ScopedAllowWait allow_wait;
+    shutdown_event_->Wait();
+  }
 
   {
     AutoSchedulerLock auto_lock(shutdown_lock_);
@@ -177,76 +329,6 @@ void TaskTracker::Shutdown() {
           num_block_shutdown_tasks_posted_during_shutdown_);
     }
   }
-}
-
-bool TaskTracker::WillPostTask(const Task* task) {
-  DCHECK(task);
-
-  if (!BeforePostTask(task->traits.shutdown_behavior()))
-    return false;
-
-  debug::TaskAnnotator task_annotator;
-  task_annotator.DidQueueTask(kQueueFunctionName, *task);
-
-  return true;
-}
-
-void TaskTracker::RunNextTaskInSequence(const Sequence* sequence) {
-  DCHECK(sequence);
-  DCHECK(sequence->PeekTask());
-
-  const Task* task = sequence->PeekTask();
-
-  const TaskShutdownBehavior shutdown_behavior =
-      task->traits.shutdown_behavior();
-  if (!BeforeRunTask(shutdown_behavior))
-    return;
-
-  // All tasks run through here and the scheduler itself doesn't use singletons.
-  // Therefore, it isn't necessary to reset the singleton allowed bit after
-  // running the task.
-  ThreadRestrictions::SetSingletonAllowed(
-      task->traits.shutdown_behavior() !=
-      TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN);
-
-  {
-    // Set up SequenceToken as expected for the scope of the task.
-    ScopedSetSequenceTokenForCurrentThread
-        scoped_set_sequence_token_for_current_thread(sequence->token());
-
-    // Set up TaskRunnerHandle as expected for the scope of the task.
-    std::unique_ptr<SequencedTaskRunnerHandle> sequenced_task_runner_handle;
-    std::unique_ptr<ThreadTaskRunnerHandle> single_thread_task_runner_handle;
-    DCHECK(!task->sequenced_task_runner_ref ||
-           !task->single_thread_task_runner_ref);
-    if (task->sequenced_task_runner_ref) {
-      sequenced_task_runner_handle.reset(
-          new SequencedTaskRunnerHandle(task->sequenced_task_runner_ref));
-    } else if (task->single_thread_task_runner_ref) {
-      single_thread_task_runner_handle.reset(
-          new ThreadTaskRunnerHandle(task->single_thread_task_runner_ref));
-    }
-
-    TRACE_TASK_EXECUTION(kRunFunctionName, *task);
-
-    debug::TaskAnnotator task_annotator;
-    task_annotator.RunTask(kQueueFunctionName, *task);
-  }
-
-  AfterRunTask(shutdown_behavior);
-}
-
-bool TaskTracker::HasShutdownStarted() const {
-  return state_->HasShutdownStarted();
-}
-
-bool TaskTracker::IsShutdownComplete() const {
-  AutoSchedulerLock auto_lock(shutdown_lock_);
-  return shutdown_event_ && shutdown_event_->IsSignaled();
-}
-
-void TaskTracker::SetHasShutdownStartedForTesting() {
-  state_->StartShutdown();
 }
 
 bool TaskTracker::BeforePostTask(TaskShutdownBehavior shutdown_behavior) {
@@ -346,6 +428,16 @@ void TaskTracker::OnBlockingShutdownTasksComplete() {
   DCHECK(shutdown_event_);
 
   shutdown_event_->Signal();
+}
+
+void TaskTracker::DecrementNumPendingUndelayedTasks() {
+  const auto new_num_pending_undelayed_tasks =
+      subtle::NoBarrier_AtomicIncrement(&num_pending_undelayed_tasks_, -1);
+  DCHECK_GE(new_num_pending_undelayed_tasks, 0);
+  if (new_num_pending_undelayed_tasks == 0) {
+    AutoSchedulerLock auto_lock(flush_lock_);
+    flush_cv_->Signal();
+  }
 }
 
 }  // namespace internal

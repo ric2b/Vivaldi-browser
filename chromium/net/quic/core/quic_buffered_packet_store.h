@@ -7,6 +7,7 @@
 
 #include "net/base/ip_address.h"
 #include "net/base/linked_hash_map.h"
+#include "net/base/net_export.h"
 #include "net/quic/core/quic_alarm.h"
 #include "net/quic/core/quic_alarm_factory.h"
 #include "net/quic/core/quic_clock.h"
@@ -19,9 +20,15 @@ namespace test {
 class QuicBufferedPacketStorePeer;
 }  // namespace test
 
-// This class buffers undeliverable packets for each connection until either
-// 1) They are requested to be delivered via DeliverPacket(), or
+// This class buffers packets for each connection until either
+// 1) They are requested to be delivered via
+//    DeliverPacket()/DeliverPacketsForNextConnection(), or
 // 2) They expire after exceeding their lifetime in the store.
+//
+// It can only buffer packets on certain number of connections. It has two pools
+// of connections: connections with CHLO buffered and those without CHLO. The
+// latter has its own upper limit along with the max number of connections this
+// store can hold. The former pool can grow till this store is full.
 class NET_EXPORT_PRIVATE QuicBufferedPacketStore {
  public:
   enum EnqueuePacketResult {
@@ -85,7 +92,8 @@ class NET_EXPORT_PRIVATE QuicBufferedPacketStore {
   EnqueuePacketResult EnqueuePacket(QuicConnectionId connection_id,
                                     const QuicReceivedPacket& packet,
                                     IPEndPoint server_address,
-                                    IPEndPoint client_address);
+                                    IPEndPoint client_address,
+                                    bool is_chlo);
 
   // Returns true if there are any packets buffered for |connection_id|.
   bool HasBufferedPackets(QuicConnectionId connection_id) const;
@@ -95,14 +103,39 @@ class NET_EXPORT_PRIVATE QuicBufferedPacketStore {
   // connection are present.
   std::list<BufferedPacket> DeliverPackets(QuicConnectionId connection_id);
 
+  // Discards packets buffered for |connection_id|, if any.
+  void DiscardPackets(QuicConnectionId connection_id);
+
   // Examines how long packets have been buffered in the store for each
   // connection. If they stay too long, removes them for new coming packets and
   // calls |visitor_|'s OnPotentialConnectionExpire().
   // Resets the alarm at the end.
   void OnExpirationTimeout();
 
+  // Delivers buffered packets for next connection with CHLO to open.
+  // Return connection id for next connection in |connection_id|
+  // and all buffered packets including CHLO.
+  // The returned std::list should at least has one packet(CHLO) if
+  // store does have any connection to open. If no connection in the store has
+  // received CHLO yet, empty std::list will be returned.
+  std::list<BufferedPacket> DeliverPacketsForNextConnection(
+      QuicConnectionId* connection_id);
+
+  // Is given connection already buffered in the store?
+  bool HasChloForConnection(QuicConnectionId connection_id);
+
+  // Is there any CHLO buffered in the store?
+  bool HasChlosBuffered() const;
+
  private:
   friend class test::QuicBufferedPacketStorePeer;
+
+  // Set expiration alarm if it hasn't been set.
+  void MaybeSetExpirationAlarm();
+
+  // Return true if add an extra packet will go beyond allowed max connection
+  // limit. The limit for non-CHLO packet and CHLO packet is different.
+  bool ShouldBufferPacket(bool is_chlo);
 
   // A map to store packet queues with creation time for each connection.
   BufferedPacketMap undecryptable_packets_;
@@ -117,6 +150,10 @@ class NET_EXPORT_PRIVATE QuicBufferedPacketStore {
   // This alarm fires every |connection_life_span_| to clean up
   // packets staying in the store for too long.
   std::unique_ptr<QuicAlarm> expiration_alarm_;
+
+  // Keeps track of connection with CHLO buffered up already and the order they
+  // arrive.
+  linked_hash_map<QuicConnectionId, bool> connections_with_chlo_;
 };
 
 }  // namespace net

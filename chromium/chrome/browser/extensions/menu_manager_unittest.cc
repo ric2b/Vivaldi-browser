@@ -11,6 +11,7 @@
 #include "base/json/json_reader.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -59,7 +60,7 @@ class MenuManagerTest : public testing::Test {
 
   void TearDown() override {
     prefs_.pref_service()->CommitPendingWrite();
-    message_loop_.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
   }
 
   // Returns a test item.
@@ -484,7 +485,7 @@ class MockEventRouter : public EventRouter {
 // MockEventRouter factory function
 std::unique_ptr<KeyedService> MockEventRouterFactoryFunction(
     content::BrowserContext* context) {
-  return base::WrapUnique(new MockEventRouter(static_cast<Profile*>(context)));
+  return base::MakeUnique<MockEventRouter>(static_cast<Profile*>(context));
 }
 
 }  // namespace

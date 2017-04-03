@@ -15,7 +15,7 @@
 #include "base/compiler_specific.h"
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
@@ -537,10 +537,9 @@ void ExtensionInstallDialogView::LinkClicked(views::Link* source,
                                              int event_flags) {
   GURL store_url(extension_urls::GetWebstoreItemDetailURLPrefix() +
                  prompt_->extension()->id());
-  OpenURLParams params(
-      store_url, Referrer(), NEW_FOREGROUND_TAB,
-      ui::PAGE_TRANSITION_LINK,
-      false);
+  OpenURLParams params(store_url, Referrer(),
+                       WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                       ui::PAGE_TRANSITION_LINK, false);
 
   if (navigator_) {
     navigator_->OpenURL(params);

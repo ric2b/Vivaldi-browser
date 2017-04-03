@@ -33,6 +33,10 @@ class RenderWidgetHostView;
 class TextInputManager;
 class WebContentsView;
 
+namespace mojom {
+class CreateNewWindowParams;
+}
+
 enum ResourceRequestAction {
   BLOCK,
   RESUME,
@@ -134,7 +138,7 @@ class CONTENT_EXPORT InterstitialPageImpl
       int32_t route_id,
       int32_t main_frame_route_id,
       int32_t main_frame_widget_route_id,
-      const ViewHostMsg_CreateWindow_Params& params,
+      const mojom::CreateNewWindowParams& params,
       SessionStorageNamespace* session_storage_namespace) override;
   void CreateNewWidget(int32_t render_process_id,
                        int32_t route_id,
@@ -162,7 +166,7 @@ class CONTENT_EXPORT InterstitialPageImpl
                               bool* is_keyboard_shortcut) override;
   void HandleKeyboardEvent(const NativeWebKeyboardEvent& event) override;
   TextInputManager* GetTextInputManager() override;
-  void GetScreenInfo(blink::WebScreenInfo* screen_info) override;
+  void GetScreenInfo(content::ScreenInfo* screen_info) override;
   void UpdateDeviceScaleFactor(double device_scale_factor) override;
 
   bool enabled() const { return enabled_; }

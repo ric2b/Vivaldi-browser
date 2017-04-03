@@ -180,7 +180,7 @@ class FetcherTestURLRequestContext : public TestURLRequestContext {
     context_storage_.set_host_resolver(
         std::unique_ptr<HostResolver>(mock_resolver_));
     context_storage_.set_throttler_manager(
-        base::WrapUnique(new URLRequestThrottlerManager()));
+        base::MakeUnique<URLRequestThrottlerManager>());
     Init();
   }
 
@@ -1443,7 +1443,7 @@ TEST_F(URLFetcherTest, FileTestSmallGet) {
 
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
-  base::FilePath out_path = temp_dir.path().AppendASCII(kFileToFetch);
+  base::FilePath out_path = temp_dir.GetPath().AppendASCII(kFileToFetch);
   SaveFileTest(kFileToFetch, false, out_path, false);
 }
 
@@ -1454,7 +1454,7 @@ TEST_F(URLFetcherTest, FileTestLargeGet) {
 
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
-  base::FilePath out_path = temp_dir.path().AppendASCII(kFileToFetch);
+  base::FilePath out_path = temp_dir.GetPath().AppendASCII(kFileToFetch);
   SaveFileTest(kFileToFetch, false, out_path, false);
 }
 
@@ -1465,7 +1465,7 @@ TEST_F(URLFetcherTest, FileTestTakeOwnership) {
 
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
-  base::FilePath out_path = temp_dir.path().AppendASCII(kFileToFetch);
+  base::FilePath out_path = temp_dir.GetPath().AppendASCII(kFileToFetch);
   SaveFileTest(kFileToFetch, false, out_path, true);
 }
 
@@ -1477,7 +1477,7 @@ TEST_F(URLFetcherTest, FileTestOverwriteExisting) {
   // Create a file before trying to fetch.
   const char kFileToFetch[] = "simple.html";
   std::string data(10000, '?');  // Meant to be larger than simple.html.
-  base::FilePath out_path = temp_dir.path().AppendASCII(kFileToFetch);
+  base::FilePath out_path = temp_dir.GetPath().AppendASCII(kFileToFetch);
   ASSERT_EQ(static_cast<int>(data.size()),
             base::WriteFile(out_path, data.data(), data.size()));
   ASSERT_TRUE(base::PathExists(out_path));
@@ -1492,7 +1492,7 @@ TEST_F(URLFetcherTest, FileTestTryToOverwriteDirectory) {
 
   // Create a directory before trying to fetch.
   static const char kFileToFetch[] = "simple.html";
-  base::FilePath out_path = temp_dir.path().AppendASCII(kFileToFetch);
+  base::FilePath out_path = temp_dir.GetPath().AppendASCII(kFileToFetch);
   ASSERT_TRUE(base::CreateDirectory(out_path));
   ASSERT_TRUE(base::PathExists(out_path));
 

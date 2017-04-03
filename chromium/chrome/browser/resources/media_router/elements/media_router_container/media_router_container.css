@@ -119,6 +119,7 @@
 paper-checkbox {
   --paper-checkbox-checked-color: white;
   --paper-checkbox-checkmark-color: var(--paper-blue-700);
+  --paper-checkbox-ink-size: 35px;
   --paper-checkbox-unchecked-color: white;
 }
 
@@ -148,13 +149,15 @@ paper-menu {
   flex-grow: 1;
 }
 
+#search-results {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
 #search-results-container {
   bottom: 0;
   left: 0;
   overflow-x: hidden;
-  /* overflow-y is set to auto when the results are actually displayed to allow
-   * scrolling. It is set to hidden by default so the scrollbar isn't displayed
-   * while animating. */
   overflow-y: hidden;
   position: absolute;
   right: 0;
@@ -194,6 +197,11 @@ paper-menu {
 
 #sink-list-view {
   position: relative;
+}
+
+#sink-list {
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .sink-name {

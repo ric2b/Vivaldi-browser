@@ -8,17 +8,15 @@
 
 namespace base {
 
-TestSimpleTaskRunner::TestSimpleTaskRunner() {}
+TestSimpleTaskRunner::TestSimpleTaskRunner() = default;
 
-TestSimpleTaskRunner::~TestSimpleTaskRunner() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-}
+TestSimpleTaskRunner::~TestSimpleTaskRunner() = default;
 
 bool TestSimpleTaskRunner::PostDelayedTask(
     const tracked_objects::Location& from_here,
     const Closure& task,
     TimeDelta delay) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  AutoLock auto_lock(lock_);
   pending_tasks_.push_back(
       TestPendingTask(from_here, task, TimeTicks(), delay,
                       TestPendingTask::NESTABLE));
@@ -29,7 +27,7 @@ bool TestSimpleTaskRunner::PostNonNestableDelayedTask(
     const tracked_objects::Location& from_here,
     const Closure& task,
     TimeDelta delay) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  AutoLock auto_lock(lock_);
   pending_tasks_.push_back(
       TestPendingTask(from_here, task, TimeTicks(), delay,
                       TestPendingTask::NON_NESTABLE));
@@ -37,40 +35,51 @@ bool TestSimpleTaskRunner::PostNonNestableDelayedTask(
 }
 
 bool TestSimpleTaskRunner::RunsTasksOnCurrentThread() const {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  return true;
+  return thread_ref_ == PlatformThread::CurrentRef();
 }
 
-const std::deque<TestPendingTask>&
-TestSimpleTaskRunner::GetPendingTasks() const {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  return pending_tasks_;
+std::deque<TestPendingTask> TestSimpleTaskRunner::TakePendingTasks() {
+  AutoLock auto_lock(lock_);
+  return std::move(pending_tasks_);
+}
+
+size_t TestSimpleTaskRunner::NumPendingTasks() const {
+  AutoLock auto_lock(lock_);
+  return pending_tasks_.size();
 }
 
 bool TestSimpleTaskRunner::HasPendingTask() const {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  AutoLock auto_lock(lock_);
   return !pending_tasks_.empty();
 }
 
 base::TimeDelta TestSimpleTaskRunner::NextPendingTaskDelay() const {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  AutoLock auto_lock(lock_);
   return pending_tasks_.front().GetTimeToRun() - base::TimeTicks();
 }
 
+base::TimeDelta TestSimpleTaskRunner::FinalPendingTaskDelay() const {
+  AutoLock auto_lock(lock_);
+  return pending_tasks_.back().GetTimeToRun() - base::TimeTicks();
+}
+
 void TestSimpleTaskRunner::ClearPendingTasks() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  AutoLock auto_lock(lock_);
   pending_tasks_.clear();
 }
 
 void TestSimpleTaskRunner::RunPendingTasks() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(RunsTasksOnCurrentThread());
+
   // Swap with a local variable to avoid re-entrancy problems.
   std::deque<TestPendingTask> tasks_to_run;
-  tasks_to_run.swap(pending_tasks_);
-  for (std::deque<TestPendingTask>::iterator it = tasks_to_run.begin();
-       it != tasks_to_run.end(); ++it) {
-    it->task.Run();
+  {
+    AutoLock auto_lock(lock_);
+    tasks_to_run.swap(pending_tasks_);
   }
+
+  for (const auto& task : tasks_to_run)
+    task.task.Run();
 }
 
 void TestSimpleTaskRunner::RunUntilIdle() {

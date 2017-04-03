@@ -11,7 +11,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "content/browser/site_instance_impl.h"
@@ -201,6 +201,10 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
     can_send_midi_sysex_ = true;
   }
 
+  bool CanCommitOrigin(const url::Origin& origin) {
+    return base::ContainsKey(origin_set_, origin);
+  }
+
   // Determine whether permission has been granted to commit |url|.
   bool CanCommitURL(const GURL& url) {
     DCHECK(!url.SchemeIsBlob() && !url.SchemeIsFileSystem())
@@ -212,7 +216,7 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
       return scheme_judgment->second;
 
     // Otherwise, check for permission for specific origin.
-    if (base::ContainsKey(origin_set_, url::Origin(url)))
+    if (CanCommitOrigin(url::Origin(url)))
       return true;
 
     // file:// URLs are more granular.  The child may have been given
@@ -346,6 +350,8 @@ ChildProcessSecurityPolicyImpl::ChildProcessSecurityPolicyImpl() {
   RegisterPseudoScheme(url::kAboutScheme);
   RegisterPseudoScheme(url::kJavaScriptScheme);
   RegisterPseudoScheme(kViewSourceScheme);
+  RegisterPseudoScheme(kHttpSuboriginScheme);
+  RegisterPseudoScheme(kHttpsSuboriginScheme);
 }
 
 ChildProcessSecurityPolicyImpl::~ChildProcessSecurityPolicyImpl() {
@@ -710,6 +716,13 @@ bool ChildProcessSecurityPolicyImpl::CanSetAsOriginHeader(int child_id,
   if (!url.is_valid())
     return false;  // Can't set invalid URLs as origin headers.
 
+  // Suborigin URLs are a special case and are allowed to be an origin header.
+  if (url.scheme() == kHttpSuboriginScheme ||
+      url.scheme() == kHttpsSuboriginScheme) {
+    DCHECK(IsPseudoScheme(url.scheme()));
+    return true;
+  }
+
   // If this process can commit |url|, it can use |url| as an origin for
   // outbound requests.
   if (CanCommitURL(child_id, url))
@@ -922,6 +935,16 @@ bool ChildProcessSecurityPolicyImpl::CanAccessDataForOrigin(int child_id,
     return true;
   }
   return state->second->CanAccessDataForOrigin(gurl);
+}
+
+bool ChildProcessSecurityPolicyImpl::HasSpecificPermissionForOrigin(
+    int child_id,
+    const url::Origin& origin) {
+  base::AutoLock lock(lock_);
+  SecurityStateMap::iterator state = security_state_.find(child_id);
+  if (state == security_state_.end())
+    return false;
+  return state->second->CanCommitOrigin(origin);
 }
 
 void ChildProcessSecurityPolicyImpl::LockToOrigin(int child_id,

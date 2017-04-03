@@ -8,7 +8,6 @@
 #include "base/macros.h"
 #include "device/generic_sensor/platform_sensor.h"
 #include "device/generic_sensor/public/interfaces/sensor.mojom.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
 
 namespace device {
 
@@ -16,8 +15,7 @@ namespace device {
 // Instances of this class are created by SensorProviderImpl.
 class SensorImpl final : public mojom::Sensor, public PlatformSensor::Client {
  public:
-  SensorImpl(mojo::InterfaceRequest<mojom::Sensor> request,
-             scoped_refptr<PlatformSensor> sensor);
+  explicit SensorImpl(scoped_refptr<PlatformSensor> sensor);
   ~SensorImpl() override;
 
   mojom::SensorClientRequest GetClient();
@@ -26,6 +24,8 @@ class SensorImpl final : public mojom::Sensor, public PlatformSensor::Client {
   // Sensor implementation.
   void AddConfiguration(const PlatformSensorConfiguration& configuration,
                         const AddConfigurationCallback& callback) override;
+  void GetDefaultConfiguration(
+      const GetDefaultConfigurationCallback& callback) override;
   void RemoveConfiguration(
       const PlatformSensorConfiguration& configuration,
       const RemoveConfigurationCallback& callback) override;
@@ -39,9 +39,9 @@ class SensorImpl final : public mojom::Sensor, public PlatformSensor::Client {
 
  private:
   scoped_refptr<PlatformSensor> sensor_;
-  mojo::StrongBinding<Sensor> binding_;
   mojom::SensorClientPtr client_;
   bool suspended_;
+
   DISALLOW_COPY_AND_ASSIGN(SensorImpl);
 };
 

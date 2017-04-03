@@ -198,9 +198,8 @@ public class ChromeLauncherActivity extends Activity
         }
 
         // Check if we should launch an Instant App to handle the intent.
-        ChromeApplication application = (ChromeApplication) getApplication();
-        if (InstantAppsHandler.getInstance(application).handleIncomingIntent(
-                this, intent, mIsCustomTabIntent)) {
+        if (InstantAppsHandler.getInstance().handleIncomingIntent(
+                this, intent, mIsCustomTabIntent && !mIsHerbIntent)) {
             finish();
             return;
         }
@@ -329,21 +328,9 @@ public class ChromeLauncherActivity extends Activity
         } else if (TextUtils.equals(flavor, ChromeSwitches.HERB_FLAVOR_ELDERBERRY)) {
             return IntentUtils.safeGetBooleanExtra(getIntent(),
                     ChromeLauncherActivity.EXTRA_IS_ALLOWED_TO_RETURN_TO_PARENT, true);
-        } else if (TextUtils.equals(flavor, ChromeSwitches.HERB_FLAVOR_ANISE)
-                || TextUtils.equals(flavor, ChromeSwitches.HERB_FLAVOR_BASIL)
-                || TextUtils.equals(flavor, ChromeSwitches.HERB_FLAVOR_DILL)) {
-            // Only Intents without NEW_TASK and NEW_DOCUMENT will trigger a Custom Tab.
-            boolean isSameTask = (getIntent().getFlags() & Intent.FLAG_ACTIVITY_NEW_TASK) == 0;
-            boolean isSameDocument =
-                    (getIntent().getFlags() & Intent.FLAG_ACTIVITY_NEW_DOCUMENT) == 0;
-            Log.d(TAG, "Herb Intent proprties -- SAME TASK: "
-                    + isSameTask + ", SAME DOCUMENT: " + isSameDocument);
-            return isSameTask && isSameDocument;
-        } else if (TextUtils.equals(flavor, ChromeSwitches.HERB_FLAVOR_CHIVE)) {
-            // Send all View Intents to the main browser.
-            return false;
         } else {
-            assert false;
+            // Legacy Herb Flavors might hit this path before the caching logic corrects it, so
+            // treat this as disabled.
             return false;
         }
     }
@@ -367,7 +354,8 @@ public class ChromeLauncherActivity extends Activity
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 // Force a new document L+ to ensure the proper task/stack creation.
-                newIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
+                newIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT
+                        | Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS);
                 newIntent.setClassName(context, SeparateTaskCustomTabActivity.class.getName());
             } else {
                 int activityIndex =

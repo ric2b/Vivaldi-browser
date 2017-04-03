@@ -18,10 +18,9 @@
 #import "chrome/browser/ui/cocoa/profiles/profile_chooser_controller.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/signin/core/common/profile_management_switches.h"
-#include "grit/theme_resources.h"
 #import "testing/gtest_mac.h"
-#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 

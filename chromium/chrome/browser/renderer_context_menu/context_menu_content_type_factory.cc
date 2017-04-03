@@ -60,6 +60,9 @@ ContextMenuContentType* ContextMenuContentTypeFactory::CreateInternal(
     content::WebContents* web_contents,
     const content::ContextMenuParams& params) {
 #if defined(ENABLE_EXTENSIONS)
+  if (chrome::IsRunningInForcedAppMode())
+    return new ContextMenuContentTypeAppMode(web_contents, params);
+
   if (extensions::WebViewGuest::FromWebContents(web_contents)){
     if (vivaldi::IsVivaldiRunning()) {
       return new ContextMenuContentType(web_contents, params, true);
@@ -67,9 +70,6 @@ ContextMenuContentType* ContextMenuContentTypeFactory::CreateInternal(
     return new ContextMenuContentTypeWebView(web_contents, params);
     }
   }
-
-  if (chrome::IsRunningInForcedAppMode())
-    return new ContextMenuContentTypeAppMode(web_contents, params);
 
   const extensions::ViewType view_type = extensions::GetViewType(web_contents);
 

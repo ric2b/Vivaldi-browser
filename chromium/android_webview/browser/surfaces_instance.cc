@@ -39,7 +39,7 @@ scoped_refptr<SurfacesInstance> SurfacesInstance::GetOrCreateInstance() {
 }
 
 SurfacesInstance::SurfacesInstance()
-    : next_surface_client_id_(1u) {
+    : next_client_id_(1u), frame_sink_id_(AllocateFrameSinkId()) {
   cc::RendererSettings settings;
 
   // Should be kept in sync with compositor_impl_android.cc.
@@ -50,9 +50,8 @@ SurfacesInstance::SurfacesInstance()
   settings.should_clear_root_render_pass = false;
 
   surface_manager_.reset(new cc::SurfaceManager);
-  surface_id_allocator_.reset(
-      new cc::SurfaceIdAllocator(next_surface_client_id_++));
-  surface_manager_->RegisterSurfaceClientId(surface_id_allocator_->client_id());
+  surface_id_allocator_.reset(new cc::SurfaceIdAllocator());
+  surface_manager_->RegisterFrameSinkId(frame_sink_id_);
 
   std::unique_ptr<cc::BeginFrameSource> begin_frame_source(
       new cc::StubBeginFrameSource);
@@ -71,11 +70,11 @@ SurfacesInstance::SurfacesInstance()
       nullptr /* gpu_memory_buffer_manager */, settings,
       std::move(begin_frame_source), std::move(output_surface_holder),
       std::move(scheduler), std::move(texture_mailbox_deleter)));
-  display_->Initialize(this, surface_manager_.get(),
-                       surface_id_allocator_->client_id());
+  display_->Initialize(this, surface_manager_.get(), frame_sink_id_);
   display_->SetVisible(true);
 
-  surface_factory_.reset(new cc::SurfaceFactory(surface_manager_.get(), this));
+  surface_factory_.reset(
+      new cc::SurfaceFactory(frame_sink_id_, surface_manager_.get(), this));
 
   DCHECK(!g_surfaces_instance);
   g_surfaces_instance = this;
@@ -90,12 +89,11 @@ SurfacesInstance::~SurfacesInstance() {
   if (!root_id_.is_null())
     surface_factory_->Destroy(root_id_);
 
-  surface_manager_->InvalidateSurfaceClientId(
-      surface_id_allocator_->client_id());
+  surface_manager_->InvalidateFrameSinkId(frame_sink_id_);
 }
 
-uint32_t SurfacesInstance::AllocateSurfaceClientId() {
-  return next_surface_client_id_++;
+cc::FrameSinkId SurfacesInstance::AllocateFrameSinkId() {
+  return cc::FrameSinkId(next_client_id_++, 0 /* sink_id */);
 }
 
 cc::SurfaceManager* SurfacesInstance::GetSurfaceManager() {
@@ -121,6 +119,8 @@ void SurfacesInstance::DrawAndSwap(const gfx::Size& viewport,
   quad_state->quad_to_target_transform = transform;
   quad_state->quad_layer_bounds = frame_size;
   quad_state->visible_quad_layer_rect = gfx::Rect(frame_size);
+  quad_state->clip_rect = clip;
+  quad_state->is_clipped = true;
   quad_state->opacity = 1.f;
 
   cc::SurfaceDrawQuad* surface_quad =
@@ -138,14 +138,12 @@ void SurfacesInstance::DrawAndSwap(const gfx::Size& viewport,
   if (root_id_.is_null()) {
     root_id_ = surface_id_allocator_->GenerateId();
     surface_factory_->Create(root_id_);
-    display_->SetSurfaceId(root_id_, 1.f);
+    display_->SetSurfaceId(cc::SurfaceId(frame_sink_id_, root_id_), 1.f);
   }
   surface_factory_->SubmitCompositorFrame(root_id_, std::move(frame),
                                           cc::SurfaceFactory::DrawCallback());
 
-  output_surface_->UpdateStencilTest();
   display_->Resize(viewport);
-  display_->SetExternalClip(clip);
   display_->DrawAndSwap();
 }
 

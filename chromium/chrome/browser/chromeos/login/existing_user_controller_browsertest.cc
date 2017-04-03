@@ -11,6 +11,7 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -198,7 +199,8 @@ class ExistingUserControllerTest : public policy::DevicePolicyCrosBrowserTest {
   void RegisterUser(const std::string& user_id) {
     ListPrefUpdate users_pref(g_browser_process->local_state(),
                               "LoggedInUsers");
-    users_pref->AppendIfNotPresent(new base::StringValue(user_id));
+    users_pref->AppendIfNotPresent(
+        base::MakeUnique<base::StringValue>(user_id));
   }
 
   // ExistingUserController private member accessors.
@@ -239,7 +241,7 @@ IN_PROC_BROWSER_TEST_F(ExistingUserControllerTest, PRE_ExistingUserLogin) {
   RegisterUser(account_id_.GetUserEmail());
 }
 
-IN_PROC_BROWSER_TEST_F(ExistingUserControllerTest, ExistingUserLogin) {
+IN_PROC_BROWSER_TEST_F(ExistingUserControllerTest, DISABLED_ExistingUserLogin) {
   EXPECT_CALL(*mock_login_display_, SetUIEnabled(false))
       .Times(2);
   UserContext user_context(account_id_);
@@ -541,8 +543,11 @@ IN_PROC_BROWSER_TEST_F(ExistingUserControllerPublicSessionTest,
   EXPECT_FALSE(auto_login_timer()->IsRunning());
 }
 
+// Disable since the flake from this test makes it hard to track down other
+// problems on the bots.
+// See https://crbug.com/644205 or https://crbug.com/516015 .
 IN_PROC_BROWSER_TEST_F(ExistingUserControllerPublicSessionTest,
-                       AutoLoginNoDelay) {
+                       DISABLED_AutoLoginNoDelay) {
   // Set up mocks to check login success.
   UserContext user_context(user_manager::USER_TYPE_PUBLIC_ACCOUNT,
                            public_session_account_id_);

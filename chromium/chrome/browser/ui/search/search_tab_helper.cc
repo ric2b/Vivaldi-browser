@@ -8,7 +8,7 @@
 #include <set>
 
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -28,7 +28,7 @@
 #include "chrome/browser/ui/webui/ntp/ntp_user_data_logger.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
@@ -36,7 +36,6 @@
 #include "components/search/search.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/strings/grit/components_strings.h"
-#include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_service.h"
@@ -124,7 +123,7 @@ void RecordNewTabLoadTime(content::WebContents* contents) {
 // disable a feature that should not be shown to users who prefer not to sync
 // their history.
 bool IsHistorySyncEnabled(Profile* profile) {
-  ProfileSyncService* sync =
+  browser_sync::ProfileSyncService* sync =
       ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile);
   return sync &&
       sync->GetPreferredDataTypes().Has(syncer::HISTORY_DELETE_DIRECTIVES);
@@ -219,7 +218,7 @@ void SearchTabHelper::OnTabDeactivated() {
 
 void SearchTabHelper::DidStartNavigationToPendingEntry(
     const GURL& url,
-    content::NavigationController::ReloadType /* reload_type */) {
+    content::ReloadType /* reload_type */) {
   if (search::IsNTPURL(url, profile())) {
     // Set the title on any pending entry corresponding to the NTP. This
     // prevents any flickering of the tab title.

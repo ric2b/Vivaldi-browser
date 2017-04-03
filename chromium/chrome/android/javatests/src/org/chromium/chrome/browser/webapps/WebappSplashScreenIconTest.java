@@ -13,6 +13,7 @@ import android.widget.ImageView;
 
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.metrics.WebappUma;
@@ -20,6 +21,7 @@ import org.chromium.chrome.browser.metrics.WebappUma;
 /**
  * Tests for splash screens with an icon registered in WebappRegistry.
  */
+@RetryOnFailure
 public class WebappSplashScreenIconTest extends WebappActivityTestBase {
 
     @Override
@@ -31,10 +33,8 @@ public class WebappSplashScreenIconTest extends WebappActivityTestBase {
 
     @Override
     protected void setUp() throws Exception {
-        WebappDataStorage.open(getInstrumentation().getTargetContext(), WEBAPP_ID)
-                .updateSplashScreenImage(ShortcutHelper.decodeBitmapFromString(TEST_SPLASH_ICON));
-
         super.setUp();
+        WebappDataStorage.open(WEBAPP_ID).updateSplashScreenImageForTests(TEST_SPLASH_ICON);
         startWebappActivity();
     }
 

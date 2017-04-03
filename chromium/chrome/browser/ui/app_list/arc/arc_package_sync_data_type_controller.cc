@@ -12,7 +12,6 @@
 #include "components/sync/driver/sync_client.h"
 #include "components/sync/driver/sync_prefs.h"
 #include "components/sync/driver/sync_service.h"
-#include "content/public/browser/browser_thread.h"
 
 // ArcPackage sync service is controlled by apps checkbox in sync settings. Arc
 // apps and regular Chrome apps have same user control.
@@ -28,15 +27,10 @@ bool IsArcEnabled(Profile* profile) {
 
 ArcPackageSyncDataTypeController::ArcPackageSyncDataTypeController(
     syncer::ModelType type,
-    const base::Closure& error_callback,
-    sync_driver::SyncClient* sync_client,
+    const base::Closure& dump_stack,
+    syncer::SyncClient* sync_client,
     Profile* profile)
-    : sync_driver::UIDataTypeController(
-          content::BrowserThread::GetTaskRunnerForThread(
-              content::BrowserThread::UI),
-          error_callback,
-          type,
-          sync_client),
+    : syncer::UIDataTypeController(type, dump_stack, sync_client),
       profile_(profile),
       sync_client_(sync_client) {
   pref_registrar_.Init(profile_->GetPrefs());
@@ -50,7 +44,7 @@ ArcPackageSyncDataTypeController::~ArcPackageSyncDataTypeController() {
 }
 
 bool ArcPackageSyncDataTypeController::ReadyForStart() const {
-  DCHECK(ui_thread()->BelongsToCurrentThread());
+  DCHECK(CalledOnValidThread());
   return IsArcEnabled(profile_) && ShouldSyncArc();
 }
 
@@ -84,7 +78,7 @@ void ArcPackageSyncDataTypeController::StopModels() {
 }
 
 void ArcPackageSyncDataTypeController::OnArcEnabledPrefChanged() {
-  DCHECK(ui_thread()->BelongsToCurrentThread());
+  DCHECK(CalledOnValidThread());
 
   if (!ReadyForStart()) {
     // If enable Arc in settings is turned off then generate an unrecoverable
@@ -94,7 +88,7 @@ void ArcPackageSyncDataTypeController::OnArcEnabledPrefChanged() {
           FROM_HERE, syncer::SyncError::DATATYPE_POLICY_ERROR,
           "Arc package sync is now disabled because user disables Arc.",
           type());
-      OnSingleDataTypeUnrecoverableError(error);
+      CreateErrorHandler()->OnUnrecoverableError(error);
     }
     return;
   }
@@ -102,13 +96,13 @@ void ArcPackageSyncDataTypeController::OnArcEnabledPrefChanged() {
 }
 
 void ArcPackageSyncDataTypeController::EnableDataType() {
-  sync_driver::SyncService* sync_service = sync_client_->GetSyncService();
+  syncer::SyncService* sync_service = sync_client_->GetSyncService();
   DCHECK(sync_service);
   sync_service->ReenableDatatype(type());
 }
 
 bool ArcPackageSyncDataTypeController::ShouldSyncArc() const {
-  sync_driver::SyncService* sync_service = sync_client_->GetSyncService();
+  syncer::SyncService* sync_service = sync_client_->GetSyncService();
   DCHECK(sync_service);
   return sync_service->GetPreferredDataTypes().Has(type());
 }

@@ -28,7 +28,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-// All of the functions in this file should move to new homes and this file should be deleted.
+// All of the functions in this file should move to new homes and this file
+// should be deleted.
 
 #ifndef SkiaUtils_h
 #define SkiaUtils_h
@@ -51,16 +52,18 @@ class GraphicsContext;
 /**** constants ****/
 
 enum {
-    // Firefox limits width/height to 32767 pixels, but slows down dramatically before it
-    // reaches that limit. We limit by area instead, giving us larger maximum dimensions,
-    // in exchange for a smaller maximum canvas size.
-    kMaxCanvasArea = 32768 * 8192, // Maximum canvas area in CSS pixels
+  // Firefox limits width/height to 32767 pixels, but slows down dramatically
+  // before it reaches that limit. We limit by area instead, giving us larger
+  // maximum dimensions, in exchange for a smaller maximum canvas size.
+  kMaxCanvasArea = 32768 * 8192,  // Maximum canvas area in CSS pixels
 
-    // In Skia, we will also limit width/height to 32767.
-    kMaxSkiaDim = 32767 // Maximum width/height in CSS pixels.
+  // In Skia, we will also limit width/height to 32767.
+  kMaxSkiaDim = 32767  // Maximum width/height in CSS pixels.
 };
 
-SkXfermode::Mode PLATFORM_EXPORT WebCoreCompositeToSkiaComposite(CompositeOperator, WebBlendMode = WebBlendModeNormal);
+SkXfermode::Mode PLATFORM_EXPORT
+    WebCoreCompositeToSkiaComposite(CompositeOperator,
+                                    WebBlendMode = WebBlendModeNormal);
 CompositeOperator PLATFORM_EXPORT compositeOperatorFromSkia(SkXfermode::Mode);
 WebBlendMode PLATFORM_EXPORT blendModeFromSkia(SkXfermode::Mode);
 
@@ -76,149 +79,102 @@ SkColor PLATFORM_EXPORT scaleAlpha(SkColor, float);
 SkColor PLATFORM_EXPORT scaleAlpha(SkColor, int);
 
 // Skia has problems when passed infinite, etc floats, filter them to 0.
-inline SkScalar WebCoreFloatToSkScalar(float f)
-{
-    return SkFloatToScalar(std::isfinite(f) ? f : 0);
+inline SkScalar WebCoreFloatToSkScalar(float f) {
+  return SkFloatToScalar(std::isfinite(f) ? f : 0);
 }
 
-inline SkScalar WebCoreDoubleToSkScalar(double d)
-{
-    return SkDoubleToScalar(std::isfinite(d) ? d : 0);
+inline SkScalar WebCoreDoubleToSkScalar(double d) {
+  return SkDoubleToScalar(std::isfinite(d) ? d : 0);
 }
 
-inline bool WebCoreFloatNearlyEqual(float a, float b)
-{
-    return SkScalarNearlyEqual(WebCoreFloatToSkScalar(a), WebCoreFloatToSkScalar(b));
+inline bool WebCoreFloatNearlyEqual(float a, float b) {
+  return SkScalarNearlyEqual(WebCoreFloatToSkScalar(a),
+                             WebCoreFloatToSkScalar(b));
 }
 
-inline SkPath::FillType WebCoreWindRuleToSkFillType(WindRule rule)
-{
-    return static_cast<SkPath::FillType>(rule);
+inline SkPath::FillType WebCoreWindRuleToSkFillType(WindRule rule) {
+  return static_cast<SkPath::FillType>(rule);
 }
 
-inline WindRule SkFillTypeToWindRule(SkPath::FillType fillType)
-{
-    switch (fillType) {
+inline WindRule SkFillTypeToWindRule(SkPath::FillType fillType) {
+  switch (fillType) {
     case SkPath::kWinding_FillType:
     case SkPath::kEvenOdd_FillType:
-        return static_cast<WindRule>(fillType);
+      return static_cast<WindRule>(fillType);
     default:
-        ASSERT_NOT_REACHED();
-        break;
-    }
-    return RULE_NONZERO;
+      ASSERT_NOT_REACHED();
+      break;
+  }
+  return RULE_NONZERO;
 }
 
 SkMatrix PLATFORM_EXPORT affineTransformToSkMatrix(const AffineTransform&);
 
 bool nearlyIntegral(float value);
 
-InterpolationQuality limitInterpolationQuality(const GraphicsContext&, InterpolationQuality resampling);
+InterpolationQuality limitInterpolationQuality(const GraphicsContext&,
+                                               InterpolationQuality resampling);
 
-InterpolationQuality computeInterpolationQuality(
-    float srcWidth,
-    float srcHeight,
-    float destWidth,
-    float destHeight,
-    bool isDataComplete = true);
+InterpolationQuality computeInterpolationQuality(float srcWidth,
+                                                 float srcHeight,
+                                                 float destWidth,
+                                                 float destHeight,
+                                                 bool isDataComplete = true);
 
-// This replicates the old skia behavior when it used to take radius for blur. Now it takes sigma.
-inline SkScalar skBlurRadiusToSigma(SkScalar radius)
-{
-    SkASSERT(radius >= 0);
-    if (radius == 0)
-        return 0.0f;
-    return 0.288675f * radius + 0.5f;
+// This replicates the old skia behavior when it used to take radius for blur.
+// Now it takes sigma.
+inline SkScalar skBlurRadiusToSigma(SkScalar radius) {
+  SkASSERT(radius >= 0);
+  if (radius == 0)
+    return 0.0f;
+  return 0.288675f * radius + 0.5f;
 }
 
-template<typename PrimitiveType>
+template <typename PrimitiveType>
 void drawPlatformFocusRing(const PrimitiveType&, SkCanvas*, SkColor, int width);
 
 // TODO(fmalita): remove in favor of direct SrcRectConstraint use.
-inline SkCanvas::SrcRectConstraint WebCoreClampingModeToSkiaRectConstraint(Image::ImageClampingMode clampMode)
-{
-    return clampMode == Image::ClampImageToSourceRect
-        ? SkCanvas::kStrict_SrcRectConstraint
-        : SkCanvas::kFast_SrcRectConstraint;
+inline SkCanvas::SrcRectConstraint WebCoreClampingModeToSkiaRectConstraint(
+    Image::ImageClampingMode clampMode) {
+  return clampMode == Image::ClampImageToSourceRect
+             ? SkCanvas::kStrict_SrcRectConstraint
+             : SkCanvas::kFast_SrcRectConstraint;
 }
 
-// Skia's smart pointer APIs are preferable over their legacy raw pointer counterparts.
-// The following helpers ensure interoperability between Skia's SkRefCnt wrapper sk_sp<T> and
-// Blink's RefPtr<T>/PassRefPtr<T>.
-//
-//   - fromSkSp(sk_sp<T>):       adopts an sk_sp into a PassRefPtr (to be used when transferring
-//                               ownership from Skia to Blink).
-//   - toSkSp(PassRefPtr<T>):    releases a PassRefPtr into a sk_sp (to be used when transferring
-//                               ownership from Blink to Skia).
-//   - toSkSp(const RefPtr<T>&): shares a RefPtr as a new sk_sp (to be used when sharing
-//                               ownership).
+// Skia's smart pointer APIs are preferable over their legacy raw pointer
+// counterparts.
 //
 // General guidelines
 //
 // When receiving ref counted objects from Skia:
 //
-//   1) use sk_sp-based Skia factories if available (e.g. SkShader::MakeFoo() instead of
-//      SkShader::CreateFoo())
-//
-//   2) use sk_sp<T> locals for temporary objects (to be immediately transferred back to Skia)
-//
-//   3) use RefPtr<T>/PassRefPtr<T> for objects to be retained in Blink, use
-//      fromSkSp(sk_sp<T>) to convert
+//   1) Use sk_sp-based Skia factories if available (e.g. SkShader::MakeFoo()
+//      instead of SkShader::CreateFoo()).
+//   2) Use sk_sp<T> locals for all objects.
 //
 // When passing ref counted objects to Skia:
 //
-//   1) use sk_sk-based Skia APIs when available (e.g. SkPaint::setShader(sk_sp<SkShader>)
-//      instead of SkPaint::setShader(SkShader*))
-//
-//   2) if the object ownership is being passed to Skia, use std::move(sk_sp<T>) or
-//      toSkSp(PassRefPtr<T>) to transfer without refcount churn
-//
-//   3) if the object ownership is shared with Skia (Blink retains a reference), use
-//      toSkSp(const RefPtr<T>&)
+//   1) Use sk_sp-based Skia APIs when available (e.g.
+//      SkPaint::setShader(sk_sp<SkShader>) instead of
+//      SkPaint::setShader(SkShader*)).
+//   2) If object ownership is being passed to Skia, use std::move(sk_sp<T>).
 //
 // Example (creating a SkShader and setting it on SkPaint):
 //
-// a) legacy/old style
-//
-//     RefPtr<SkShader> shader = adoptRef(SkShader::CreateFoo(...));
-//     paint.setShader(shader.get());
-//
-//  (Note: the legacy approach introduces refcount churn as Skia grabs a ref while Blink is
-//   temporarily holding on to its own)
-//
-// b) new style, ownership transferred
+// a) ownership transferred
 //
 //     // using Skia smart pointer locals
 //     sk_sp<SkShader> shader = SkShader::MakeFoo(...);
 //     paint.setShader(std::move(shader));
 //
-//     // using Blink smart pointer locals
-//     RefPtr<SkShader> shader = fromSkSp(SkShader::MakeFoo(...));
-//     paint.setShader(toSkSp(shader.release());
-//
 //     // using no locals
 //     paint.setShader(SkShader::MakeFoo(...));
 //
-// c) new style, shared ownership
+// b) shared ownership
 //
-//     RefPtr<SkShader> shader = fromSkSp(SkShader::MakeFoo(...));
-//     paint.setShader(toSkSp(shader));
-//
-template <typename T> PassRefPtr<T> fromSkSp(sk_sp<T> sp)
-{
-    return adoptRef(sp.release());
-}
+//     sk_sp<SkShader> shader = SkShader::MakeFoo(...);
+//     paint.setShader(shader);
 
-template <typename T> sk_sp<T> toSkSp(PassRefPtr<T> ref)
-{
-    return sk_sp<T>(ref.leakRef());
-}
-
-template <typename T> sk_sp<T> toSkSp(const RefPtr<T>& ref)
-{
-    return toSkSp(PassRefPtr<T>(ref));
-}
-
-} // namespace blink
+}  // namespace blink
 
 #endif  // SkiaUtils_h

@@ -5,42 +5,55 @@
 #ifndef CSSContentDistributionValue_h
 #define CSSContentDistributionValue_h
 
-#include "core/css/CSSPrimitiveValue.h"
+#include "core/css/CSSIdentifierValue.h"
 #include "core/css/CSSValue.h"
 #include "wtf/RefPtr.h"
 
 namespace blink {
 
 class CSSContentDistributionValue : public CSSValue {
-public:
-    static CSSContentDistributionValue* create(CSSValueID distribution, CSSValueID position, CSSValueID overflow)
-    {
-        return new CSSContentDistributionValue(distribution, position, overflow);
-    }
-    ~CSSContentDistributionValue();
+ public:
+  static CSSContentDistributionValue* create(CSSValueID distribution,
+                                             CSSValueID position,
+                                             CSSValueID overflow) {
+    return new CSSContentDistributionValue(distribution, position, overflow);
+  }
+  ~CSSContentDistributionValue();
 
-    CSSPrimitiveValue* distribution() const { return CSSPrimitiveValue::createIdentifier(m_distribution); }
+  // TODO(sashab): Make these return CSSValueIDs instead of CSSValues.
+  CSSIdentifierValue* distribution() const {
+    return CSSIdentifierValue::create(m_distribution);
+  }
 
-    CSSPrimitiveValue* position() const { return CSSPrimitiveValue::createIdentifier(m_position); }
+  CSSIdentifierValue* position() const {
+    return CSSIdentifierValue::create(m_position);
+  }
 
-    CSSPrimitiveValue* overflow() const { return CSSPrimitiveValue::createIdentifier(m_overflow); }
+  CSSIdentifierValue* overflow() const {
+    return CSSIdentifierValue::create(m_overflow);
+  }
 
-    String customCSSText() const;
+  String customCSSText() const;
 
-    bool equals(const CSSContentDistributionValue&) const;
+  bool equals(const CSSContentDistributionValue&) const;
 
-    DEFINE_INLINE_TRACE_AFTER_DISPATCH() { CSSValue::traceAfterDispatch(visitor); }
+  DEFINE_INLINE_TRACE_AFTER_DISPATCH() {
+    CSSValue::traceAfterDispatch(visitor);
+  }
 
-private:
-    CSSContentDistributionValue(CSSValueID distribution, CSSValueID position, CSSValueID overflow);
+ private:
+  CSSContentDistributionValue(CSSValueID distribution,
+                              CSSValueID position,
+                              CSSValueID overflow);
 
-    CSSValueID m_distribution;
-    CSSValueID m_position;
-    CSSValueID m_overflow;
+  CSSValueID m_distribution;
+  CSSValueID m_position;
+  CSSValueID m_overflow;
 };
 
-DEFINE_CSS_VALUE_TYPE_CASTS(CSSContentDistributionValue, isContentDistributionValue());
+DEFINE_CSS_VALUE_TYPE_CASTS(CSSContentDistributionValue,
+                            isContentDistributionValue());
 
-} // namespace blink
+}  // namespace blink
 
-#endif // CSSContentDistributionValue_h
+#endif  // CSSContentDistributionValue_h

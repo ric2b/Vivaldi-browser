@@ -35,6 +35,12 @@ interface ExternalNavigationDelegate {
     boolean isSpecializedHandlerAvailable(List<ResolveInfo> infos);
 
     /**
+     * Returns true if the current activity is a webapp and {@params url} lies within the scope of
+     * that webapp.
+     */
+    boolean isWithinCurrentWebappScope(String url);
+
+    /**
      * Returns the number of specialized intent handlers in {@params infos}. Specialized intent
      * handlers are intent handlers which handle only a few URLs (e.g. google maps or youtube).
      */
@@ -55,23 +61,36 @@ interface ExternalNavigationDelegate {
 
     /**
      * Start an activity for the intent. Used for intents that must be handled externally.
+     * @param intent The intent we want to send.
+     * @param proxy Whether we need to proxy the intent through AuthenticatedProxyActivity (this is
+     *              used by Instant Apps intents).
      */
-    void startActivity(Intent intent);
+    void startActivity(Intent intent, boolean proxy);
 
     /**
      * Start an activity for the intent. Used for intents that may be handled internally or
      * externally. If the user chooses to handle the intent internally, this routine must return
      * false.
+     * @param intent The intent we want to send.
+     * @param proxy Whether we need to proxy the intent through AuthenticatedProxyActivity (this is
+     *              used by Instant Apps intents).
      */
-    boolean startActivityIfNeeded(Intent intent);
+    boolean startActivityIfNeeded(Intent intent, boolean proxy);
 
     /**
      * Display a dialog warning the user that they may be leaving Chrome by starting this
      * intent. Give the user the opportunity to cancel the action. And if it is canceled, a
      * navigation will happen in Chrome.
+     * @param intent The intent for external application that will be sent.
+     * @param referrerUrl The referrer for the current navigation.
+     * @param fallbackUrl The URL to load if the user doesn't proceed with external intent.
+     * @param tab The current tab.
+     * @param needsToCloseTab Whether the current tab has to be closed after the intent is sent.
+     * @param proxy Whether we need to proxy the intent through AuthenticatedProxyActivity (this is
+     *              used by Instant Apps intents.
      */
     void startIncognitoIntent(Intent intent, String referrerUrl, String fallbackUrl, Tab tab,
-            boolean needsToCloseTab);
+            boolean needsToCloseTab, boolean proxy);
 
     /**
      * @param url The requested url.
@@ -123,4 +142,23 @@ interface ExternalNavigationDelegate {
      * @return Whether the URL is a file download.
      */
     boolean isPdfDownload(String url);
+
+    /**
+     * Check if the URL should be handled by an instant app, or kick off an async request for an
+     * instant app banner.
+     * @param tab The current tab.
+     * @param url The current URL.
+     * @param referrerUrl The referrer URL.
+     * @param isIncomingRedirect Whether we are handling an incoming redirect to an instant app.
+     * @return Whether we launched an instant app.
+     */
+    boolean maybeLaunchInstantApp(Tab tab, String url, String referrerUrl,
+            boolean isIncomingRedirect);
+
+    /**
+     * @param referrerUrl The referrer URL.
+     * @param tab The current tab.
+     * @return whether this navigation is from the search results page.
+     */
+    boolean isSerpReferrer(String referrerUrl, Tab tab);
 }

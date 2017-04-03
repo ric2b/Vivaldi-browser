@@ -4,7 +4,11 @@
 
 #include "chrome/browser/ui/webui/extensions/extensions_ui.h"
 
+#include <memory>
+
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
@@ -14,14 +18,16 @@
 #include "chrome/browser/ui/webui/metrics_handler.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/browser_resources.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/google/core/browser/google_util.h"
+#include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "extensions/common/extension_urls.h"
-#include "grit/browser_resources.h"
-#include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 
@@ -33,6 +39,63 @@
 namespace extensions {
 
 namespace {
+
+class ExtensionWebUiTimer : public content::WebContentsObserver {
+ public:
+  explicit ExtensionWebUiTimer(content::WebContents* web_contents, bool is_md)
+      : content::WebContentsObserver(web_contents), is_md_(is_md) {}
+  ~ExtensionWebUiTimer() override {}
+
+  void DidStartProvisionalLoadForFrame(
+      content::RenderFrameHost* render_frame_host,
+      const GURL& validated_url,
+      bool is_error_page,
+      bool is_iframe_srcdoc) override {
+    timer_.reset(new base::ElapsedTimer());
+  }
+
+  void DocumentLoadedInFrame(
+      content::RenderFrameHost* render_frame_host) override {
+    if (render_frame_host != web_contents()->GetMainFrame() ||
+        !timer_) {  // See comment in DocumentOnLoadCompletedInMainFrame()
+      return;
+    }
+    if (is_md_) {
+      UMA_HISTOGRAM_TIMES("Extensions.WebUi.DocumentLoadedInMainFrameTime.MD",
+                          timer_->Elapsed());
+    } else {
+      UMA_HISTOGRAM_TIMES("Extensions.WebUi.DocumentLoadedInMainFrameTime.Uber",
+                          timer_->Elapsed());
+    }
+  }
+
+  void DocumentOnLoadCompletedInMainFrame() override {
+    // Sometimes*, DidStartProvisionalLoadForFrame() isn't called before this
+    // or DocumentLoadedInFrame(). Don't log anything in those cases.
+    // *This appears to be for in-page navigations like hash changes.
+    // TODO(devlin): The usefulness of these metrics remains to be seen.
+    if (!timer_)
+      return;
+    if (is_md_) {
+      UMA_HISTOGRAM_TIMES("Extensions.WebUi.LoadCompletedInMainFrame.MD",
+                          timer_->Elapsed());
+    } else {
+      UMA_HISTOGRAM_TIMES("Extensions.WebUi.LoadCompletedInMainFrame.Uber",
+                          timer_->Elapsed());
+    }
+    timer_.reset();
+  }
+
+  void WebContentsDestroyed() override { delete this; }
+
+ private:
+  // Whether this is the MD version of the chrome://extensions page.
+  bool is_md_;
+
+  std::unique_ptr<base::ElapsedTimer> timer_;
+
+  DISALLOW_COPY_AND_ASSIGN(ExtensionWebUiTimer);
+};
 
 content::WebUIDataSource* CreateMdExtensionsSource() {
   content::WebUIDataSource* source =
@@ -85,8 +148,10 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
                              IDS_MD_EXTENSIONS_ITEM_SOURCE_SIDELOADED);
   source->AddLocalizedString("itemSourceUnpacked",
                              IDS_MD_EXTENSIONS_ITEM_SOURCE_UNPACKED);
+  source->AddLocalizedString("itemSourceWebstore",
+                             IDS_MD_EXTENSIONS_ITEM_SOURCE_WEBSTORE);
   source->AddLocalizedString("itemVersion",
-                             IDS_MD_EXTENSIONS_ITEM_SOURCE);
+                             IDS_MD_EXTENSIONS_ITEM_VERSION);
   source->AddLocalizedString("itemAllowOnFileUrls",
                              IDS_EXTENSIONS_ALLOW_FILE_ACCESS);
   source->AddLocalizedString("itemAllowOnAllSites",
@@ -160,16 +225,20 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
                           IDR_MD_EXTENSIONS_KEYBOARD_SHORTCUTS_HTML);
   source->AddResourcePath("keyboard_shortcuts.js",
                           IDR_MD_EXTENSIONS_KEYBOARD_SHORTCUTS_JS);
-  source->AddResourcePath("manager.css", IDR_MD_EXTENSIONS_MANAGER_CSS);
   source->AddResourcePath("manager.html", IDR_MD_EXTENSIONS_MANAGER_HTML);
   source->AddResourcePath("manager.js", IDR_MD_EXTENSIONS_MANAGER_JS);
   source->AddResourcePath("icons.html", IDR_MD_EXTENSIONS_ICONS_HTML);
-  source->AddResourcePath("item.css", IDR_MD_EXTENSIONS_ITEM_CSS);
   source->AddResourcePath("item.html", IDR_MD_EXTENSIONS_ITEM_HTML);
   source->AddResourcePath("item.js", IDR_MD_EXTENSIONS_ITEM_JS);
-  source->AddResourcePath("item_list.css", IDR_MD_EXTENSIONS_ITEM_LIST_CSS);
   source->AddResourcePath("item_list.html", IDR_MD_EXTENSIONS_ITEM_LIST_HTML);
   source->AddResourcePath("item_list.js", IDR_MD_EXTENSIONS_ITEM_LIST_JS);
+  source->AddResourcePath("item_source.html",
+                          IDR_MD_EXTENSIONS_ITEM_SOURCE_HTML);
+  source->AddResourcePath("item_source.js", IDR_MD_EXTENSIONS_ITEM_SOURCE_JS);
+  source->AddResourcePath("options_dialog.html",
+                          IDR_MD_EXTENSIONS_OPTIONS_DIALOG_HTML);
+  source->AddResourcePath("options_dialog.js",
+                          IDR_MD_EXTENSIONS_OPTIONS_DIALOG_JS);
   source->AddResourcePath("pack_dialog.html",
                           IDR_MD_EXTENSIONS_PACK_DIALOG_HTML);
   source->AddResourcePath("pack_dialog.js", IDR_MD_EXTENSIONS_PACK_DIALOG_JS);
@@ -182,7 +251,6 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
   source->AddResourcePath("shortcut_util.html",
                           IDR_EXTENSIONS_SHORTCUT_UTIL_HTML);
   source->AddResourcePath("shortcut_util.js", IDR_EXTENSIONS_SHORTCUT_UTIL_JS);
-  source->AddResourcePath("sidebar.css", IDR_MD_EXTENSIONS_SIDEBAR_CSS);
   source->AddResourcePath("sidebar.html", IDR_MD_EXTENSIONS_SIDEBAR_HTML);
   source->AddResourcePath("sidebar.js", IDR_MD_EXTENSIONS_SIDEBAR_JS);
   source->AddResourcePath("strings.html", IDR_MD_EXTENSIONS_STRINGS_HTML);
@@ -211,7 +279,10 @@ ExtensionsUI::ExtensionsUI(content::WebUI* web_ui) : WebUIController(web_ui) {
   Profile* profile = Profile::FromWebUI(web_ui);
   content::WebUIDataSource* source = nullptr;
 
-  if (base::FeatureList::IsEnabled(features::kMaterialDesignExtensions)) {
+  bool is_md =
+      base::FeatureList::IsEnabled(features::kMaterialDesignExtensions);
+
+  if (is_md) {
     source = CreateMdExtensionsSource();
     InstallExtensionHandler* install_extension_handler =
         new InstallExtensionHandler();
@@ -244,13 +315,15 @@ ExtensionsUI::ExtensionsUI(content::WebUI* web_ui) : WebUIController(web_ui) {
 #endif
 
     web_ui->AddMessageHandler(new MetricsHandler());
-
-    // Need to allow <object> elements so that the <extensionoptions> browser
-    // plugin can be loaded within chrome://extensions.
-    source->OverrideContentSecurityPolicyObjectSrc("object-src 'self';");
   }
 
+  // Need to allow <object> elements so that the <extensionoptions> browser
+  // plugin can be loaded within chrome://extensions.
+  source->OverrideContentSecurityPolicyObjectSrc("object-src 'self';");
+
   content::WebUIDataSource::Add(profile, source);
+  // Handles its own lifetime.
+  new ExtensionWebUiTimer(web_ui->GetWebContents(), is_md);
 }
 
 ExtensionsUI::~ExtensionsUI() {}

@@ -21,7 +21,7 @@ import java.util.ArrayList;
  * JNI interface for native SpellCheckerSessionBridge to use Android's spellchecker.
  */
 public class SpellCheckerSessionBridge implements SpellCheckerSessionListener {
-    private final long mNativeSpellCheckerSessionBridge;
+    private long mNativeSpellCheckerSessionBridge;
     private final SpellCheckerSession mSpellCheckerSession;
 
     /**
@@ -61,6 +61,16 @@ public class SpellCheckerSessionBridge implements SpellCheckerSessionListener {
     }
 
     /**
+     * Reset the native brigde pointer, called when the native counterpart is destroyed.
+     */
+    @CalledByNative
+    private void disconnect() {
+        mNativeSpellCheckerSessionBridge = 0;
+        mSpellCheckerSession.cancel();
+        mSpellCheckerSession.close();
+    }
+
+    /**
      * Queries the input text against the SpellCheckerSession.
      * @param text Text to be queried.
      */
@@ -82,10 +92,20 @@ public class SpellCheckerSessionBridge implements SpellCheckerSessionListener {
      */
     @Override
     public void onGetSentenceSuggestions(SentenceSuggestionsInfo[] results) {
+        if (mNativeSpellCheckerSessionBridge == 0) {
+            return;
+        }
+
         ArrayList<Integer> offsets = new ArrayList<Integer>();
         ArrayList<Integer> lengths = new ArrayList<Integer>();
 
         for (SentenceSuggestionsInfo result : results) {
+            if (result == null) {
+                // In some cases null can be returned by the selected spellchecking service,
+                // see crbug.com/651458. In this case skip to next result to avoid a
+                // NullPointerException later on.
+                continue;
+            }
             for (int i = 0; i < result.getSuggestionsCount(); i++) {
                 // If a word looks like a typo, record its offset and length.
                 if ((result.getSuggestionsInfoAt(i).getSuggestionsAttributes()
@@ -96,7 +116,6 @@ public class SpellCheckerSessionBridge implements SpellCheckerSessionListener {
                 }
             }
         }
-
         nativeProcessSpellCheckResults(mNativeSpellCheckerSessionBridge,
                 convertListToArray(offsets), convertListToArray(lengths));
     }

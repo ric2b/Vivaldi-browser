@@ -23,6 +23,7 @@
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/spin_wait.h"
+#include "base/threading/thread.h"
 #include "base/time/time.h"
 #include "ipc/attachment_broker_messages.h"
 #include "ipc/attachment_broker_privileged_mac.h"
@@ -820,8 +821,8 @@ TEST_F(IPCAttachmentBrokerMacTest, SendPosixFDAndMachPort) {
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
   base::FilePath fp1, fp2;
-  ASSERT_TRUE(base::CreateTemporaryFileInDir(temp_dir.path(), &fp1));
-  ASSERT_TRUE(base::CreateTemporaryFileInDir(temp_dir.path(), &fp2));
+  ASSERT_TRUE(base::CreateTemporaryFileInDir(temp_dir.GetPath(), &fp1));
+  ASSERT_TRUE(base::CreateTemporaryFileInDir(temp_dir.GetPath(), &fp2));
 
   CommonSetUp("SendPosixFDAndMachPort");
 

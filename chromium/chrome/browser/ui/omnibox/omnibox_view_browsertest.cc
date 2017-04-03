@@ -7,6 +7,7 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/scoped_observer.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
@@ -275,12 +276,11 @@ class OmniboxViewTest : public InProcessBrowserTest,
     data.SetShortName(ASCIIToUTF16(kSearchShortName));
     data.SetKeyword(ASCIIToUTF16(kSearchKeyword));
     data.SetURL(kSearchURL);
-    TemplateURL* template_url = new TemplateURL(data);
-    model->Add(template_url);
+    TemplateURL* template_url = model->Add(base::MakeUnique<TemplateURL>(data));
     model->SetUserSelectedDefaultSearchProvider(template_url);
 
     data.SetKeyword(ASCIIToUTF16(kSearchKeyword2));
-    model->Add(new TemplateURL(data));
+    model->Add(base::MakeUnique<TemplateURL>(data));
 
     // Remove built-in template urls, like google.com, bing.com etc., as they
     // may appear as autocomplete suggests and interfere with our tests.
@@ -638,7 +638,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, MAYBE_DesiredTLDWithTemporaryText) {
   data.SetShortName(ASCIIToUTF16("abc"));
   data.SetKeyword(ASCIIToUTF16(kSearchText));
   data.SetURL("http://abc.com/");
-  template_url_service->Add(new TemplateURL(data));
+  template_url_service->Add(base::MakeUnique<TemplateURL>(data));
 
   // Send "ab", so that an "abc" entry appears in the popup.
   const ui::KeyboardCode kSearchTextPrefixKeys[] = {
@@ -692,7 +692,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, ClearUserTextAfterBackgroundCommit) {
   GURL url2("data:text/html,page2");
   chrome::NavigateParams params(browser(), url2, ui::PAGE_TRANSITION_LINK);
   params.source_contents = contents;
-  params.disposition = CURRENT_TAB;
+  params.disposition = WindowOpenDisposition::CURRENT_TAB;
   ui_test_utils::NavigateToURL(&params);
 
   // Switch back to the first tab.  The user text should be cleared, and the
@@ -1113,8 +1113,8 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, NonSubstitutingKeywordTest) {
   data.SetShortName(ASCIIToUTF16("Search abc"));
   data.SetKeyword(ASCIIToUTF16(kSearchText));
   data.SetURL("http://abc.com/{searchTerms}");
-  TemplateURL* template_url = new TemplateURL(data);
-  template_url_service->Add(template_url);
+  TemplateURL* template_url =
+      template_url_service->Add(base::MakeUnique<TemplateURL>(data));
 
   omnibox_view->SetUserText(base::string16());
 
@@ -1137,7 +1137,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, NonSubstitutingKeywordTest) {
   template_url_service->Remove(template_url);
   data.SetShortName(ASCIIToUTF16("abc"));
   data.SetURL("http://abc.com/");
-  template_url_service->Add(new TemplateURL(data));
+  template_url_service->Add(base::MakeUnique<TemplateURL>(data));
 
   // We always allow exact matches for non-substituting keywords.
   ASSERT_NO_FATAL_FAILURE(SendKeySequence(kSearchTextKeys));
@@ -1848,67 +1848,6 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, CtrlArrowAfterArrowSuggestions) {
   ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_LEFT, modifiers));
   ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_LEFT, modifiers));
   ASSERT_EQ(ASCIIToUTF16("www.bar.com/2"), omnibox_view->GetText());
-}
-
-IN_PROC_BROWSER_TEST_F(OmniboxViewTest,
-                       PersistSearchReplacementAcrossTabSwitch) {
-  EXPECT_TRUE(browser()->toolbar_model()->url_replacement_enabled());
-  browser()->toolbar_model()->set_url_replacement_enabled(false);
-
-  // Create a new tab.
-  chrome::NewTab(browser());
-  EXPECT_TRUE(browser()->toolbar_model()->url_replacement_enabled());
-
-  // Switch back to the first tab.
-  browser()->tab_strip_model()->ActivateTabAt(0, true);
-  EXPECT_FALSE(browser()->toolbar_model()->url_replacement_enabled());
-}
-
-IN_PROC_BROWSER_TEST_F(OmniboxViewTest,
-                       DontUpdateURLWhileSearchTermReplacementIsDisabled) {
-  OmniboxView* omnibox_view = NULL;
-  ASSERT_NO_FATAL_FAILURE(GetOmniboxView(&omnibox_view));
-  TestToolbarModel* test_toolbar_model = new TestToolbarModel;
-  std::unique_ptr<ToolbarModel> toolbar_model(test_toolbar_model);
-  browser()->swap_toolbar_models(&toolbar_model);
-
-  base::string16 url_a(ASCIIToUTF16("http://www.a.com/"));
-  base::string16 url_b(ASCIIToUTF16("http://www.b.com/"));
-  base::string16 url_c(ASCIIToUTF16("http://www.c.com/"));
-  chrome::FocusLocationBar(browser());
-  test_toolbar_model->set_text(url_a);
-  omnibox_view->Update();
-  EXPECT_EQ(url_a, omnibox_view->GetText());
-
-  // Disable URL replacement and update.  Because the omnibox has focus, the
-  // visible text shouldn't change; see comments in
-  // OmniboxEditModel::UpdatePermanentText().
-  browser()->toolbar_model()->set_url_replacement_enabled(false);
-  test_toolbar_model->set_text(url_b);
-  omnibox_view->Update();
-  EXPECT_EQ(url_a, omnibox_view->GetText());
-
-  // Re-enable URL replacement and ensure updating changes the text.
-  browser()->toolbar_model()->set_url_replacement_enabled(true);
-  // We have to change the toolbar model text here, or Update() will do nothing.
-  // This is because the previous update already updated the permanent text.
-  test_toolbar_model->set_text(url_c);
-  omnibox_view->Update();
-  EXPECT_EQ(url_c, omnibox_view->GetText());
-
-  // The same test, but using RevertAll() to reset search term replacement.
-  test_toolbar_model->set_text(url_a);
-  omnibox_view->Update();
-  EXPECT_EQ(url_a, omnibox_view->GetText());
-  browser()->toolbar_model()->set_url_replacement_enabled(false);
-  test_toolbar_model->set_text(url_b);
-  omnibox_view->Update();
-  EXPECT_EQ(url_a, omnibox_view->GetText());
-  omnibox_view->RevertAll();
-  EXPECT_EQ(url_b, omnibox_view->GetText());
-  test_toolbar_model->set_text(url_c);
-  omnibox_view->Update();
-  EXPECT_EQ(url_c, omnibox_view->GetText());
 }
 
 namespace {

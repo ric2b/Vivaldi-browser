@@ -4,6 +4,7 @@
 
 #include "chrome/browser/safe_browsing/srt_global_error_win.h"
 
+#include "base/base_paths.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
@@ -18,18 +19,19 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
+#include "chrome/browser/safe_browsing/srt_client_info_win.h"
 #include "chrome/browser/safe_browsing/srt_field_trial_win.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/global_error/global_error_service.h"
 #include "chrome/common/channel_info.h"
+#include "chrome/grit/chromium_strings.h"
+#include "chrome/grit/generated_resources.h"
 #include "chrome/installer/util/install_util.h"
 #include "components/component_updater/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
-#include "grit/chromium_strings.h"
-#include "grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 
 using base::SingleThreadTaskRunner;
@@ -51,31 +53,9 @@ const base::FilePath::CharType kExecutableExtension[] = L"exe";
 
 // A switch to add to the command line when executing the SRT.
 const char kChromePromptSwitch[] = "chrome-prompt";
-const char kChromeVersionSwitch[] = "chrome-version";
+const char kChromeExePathSwitch[] = "chrome-exe-path";
 const char kChromeSystemInstallSwitch[] = "chrome-system-install";
-const char kChromeChannelSwitch[] = "chrome-channel";
-const char kEnableCrashReporting[] = "enable-crash-reporting";
 const char kUmaUserSwitch[] = "uma-user";
-
-// Encodes Chrome's channel as an integer to be passed to the SRT on the command
-// line. The SRT binary expects to recieve Chrome's channel encoded as:
-//     0: unknown; 1: canary; 2: dev; 3: beta; 4: stable.
-int ChannelAsInt() {
-  switch (chrome::GetChannel()) {
-    case version_info::Channel::UNKNOWN:
-      return 0;
-    case version_info::Channel::CANARY:
-      return 1;
-    case version_info::Channel::DEV:
-      return 2;
-    case version_info::Channel::BETA:
-      return 3;
-    case version_info::Channel::STABLE:
-      return 4;
-    default:
-      return 0;
-  }
-}
 
 void MaybeExecuteSRTFromBlockingPool(
     const base::FilePath& downloaded_path,
@@ -98,6 +78,7 @@ void MaybeExecuteSRTFromBlockingPool(
 
       base::FilePath chrome_exe_path;
       PathService::Get(base::FILE_EXE, &chrome_exe_path);
+      srt_command_line.AppendSwitchPath(kChromeExePathSwitch, chrome_exe_path);
       if (!InstallUtil::IsPerUserInstall(chrome_exe_path))
         srt_command_line.AppendSwitch(kChromeSystemInstallSwitch);
 
@@ -246,9 +227,10 @@ void SRTGlobalError::FallbackToDownloadPage() {
 
   Browser* browser = chrome::FindLastActive();
   if (browser) {
-    browser->OpenURL(content::OpenURLParams(
-        GURL(kSRTDownloadURL), content::Referrer(), NEW_FOREGROUND_TAB,
-        ui::PAGE_TRANSITION_LINK, false));
+    browser->OpenURL(
+        content::OpenURLParams(GURL(kSRTDownloadURL), content::Referrer(),
+                               WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                               ui::PAGE_TRANSITION_LINK, false));
   }
 
   BrowserThread::PostBlockingPoolTask(

@@ -15,7 +15,6 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_vector.h"
-#include "base/observer_list.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/search/hotword_client.h"
@@ -112,18 +111,6 @@ class AppListViewDelegate : public app_list::AppListViewDelegate,
 #endif
   bool IsSpeechRecognitionEnabled() override;
   const Users& GetUsers() const override;
-  bool ShouldCenterWindow() const override;
-  void AddObserver(app_list::AppListViewDelegateObserver* observer) override;
-  void RemoveObserver(app_list::AppListViewDelegateObserver* observer) override;
-#if !defined(OS_CHROMEOS)
-  base::string16 GetMessageTitle() const override;
-  base::string16 GetMessageText(size_t* message_break) const override;
-  base::string16 GetAppsShortcutName() const override;
-  base::string16 GetLearnMoreText() const override;
-  base::string16 GetLearnMoreLink() const override;
-  gfx::ImageSkia* GetAppsIcon() const override;
-  void OpenLearnMoreLink() override;
-#endif
 
   // Overridden from TemplateURLServiceObserver:
   void OnTemplateURLServiceChanged() override;
@@ -201,8 +188,6 @@ class AppListViewDelegate : public app_list::AppListViewDelegate,
 #if defined(USE_ASH)
   std::unique_ptr<AppSyncUIStateWatcher> app_sync_ui_state_watcher_;
 #endif
-
-  base::ObserverList<app_list::AppListViewDelegateObserver> observers_;
 
   ScopedObserver<TemplateURLService, AppListViewDelegate>
       template_url_service_observer_;

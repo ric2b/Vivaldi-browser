@@ -50,10 +50,13 @@ namespace {
 // When adding a new choice, add it to the end of the list.
 const flags_ui::FeatureEntry kFeatureEntries[] = {
     {"contextual-search", IDS_IOS_FLAGS_CONTEXTUAL_SEARCH,
-     IDS_IOS_FLAGS_CONTEXTUAL_SEARCH_DESCRIPTION,
-     flags_ui::kOsIos,
+     IDS_IOS_FLAGS_CONTEXTUAL_SEARCH_DESCRIPTION, flags_ui::kOsIos,
      ENABLE_DISABLE_VALUE_TYPE(switches::kEnableContextualSearch,
                                switches::kDisableContextualSearch)},
+    {"ios-physical-web", IDS_IOS_FLAGS_PHYSICAL_WEB,
+     IDS_IOS_FLAGS_PHYSICAL_WEB_DESCRIPTION, flags_ui::kOsIos,
+     ENABLE_DISABLE_VALUE_TYPE(switches::kEnableIOSPhysicalWeb,
+                               switches::kDisableIOSPhysicalWeb)},
 };
 
 // Add all switches from experimental flags to |command_line|.
@@ -168,11 +171,17 @@ void AppendSwitchesFromExperimentalSettings(base::CommandLine* command_line) {
     NSString* readerModeDetectionHeuristics =
         [defaults stringForKey:@"ReaderModeDetectionHeuristics"];
     if (!readerModeDetectionHeuristics) {
-      command_line->AppendSwitch(switches::reader_mode_heuristics::kOGArticle);
+      command_line->AppendSwitchASCII(
+          switches::kReaderModeHeuristics,
+          switches::reader_mode_heuristics::kOGArticle);
     } else if ([readerModeDetectionHeuristics isEqualToString:@"AdaBoost"]) {
-      command_line->AppendSwitch(switches::reader_mode_heuristics::kAdaBoost);
+      command_line->AppendSwitchASCII(
+          switches::kReaderModeHeuristics,
+          switches::reader_mode_heuristics::kAdaBoost);
     } else {
       DCHECK([readerModeDetectionHeuristics isEqualToString:@"Off"]);
+      command_line->AppendSwitchASCII(switches::kReaderModeHeuristics,
+                                      switches::reader_mode_heuristics::kNone);
     }
   }
 
@@ -191,7 +200,9 @@ void AppendSwitchesFromExperimentalSettings(base::CommandLine* command_line) {
   }
 
   // Populate command line flags from QRScanner.
-  if ([defaults boolForKey:@"EnableQRCodeReader"]) {
+  if ([defaults boolForKey:@"DisableQRCodeReader"]) {
+    command_line->AppendSwitch(switches::kDisableQRScanner);
+  } else {
     command_line->AppendSwitch(switches::kEnableQRScanner);
   }
 
@@ -202,6 +213,11 @@ void AppendSwitchesFromExperimentalSettings(base::CommandLine* command_line) {
     command_line->AppendSwitch(switches::kEnablePaymentRequest);
   } else if ([enable_payment_request isEqualToString:@"Disabled"]) {
     command_line->AppendSwitch(switches::kDisablePaymentRequest);
+  }
+
+  // Populate command line flag for Spotlight Actions.
+  if ([defaults boolForKey:@"DisableSpotlightActions"]) {
+    command_line->AppendSwitch(switches::kDisableSpotlightActions);
   }
 
   // Freeform commandline flags.  These are added last, so that any flags added

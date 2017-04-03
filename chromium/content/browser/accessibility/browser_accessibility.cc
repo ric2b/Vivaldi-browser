@@ -229,7 +229,7 @@ bool BrowserAccessibility::IsNextSiblingOnSameLine() const {
     const BrowserAccessibility* next_on_line =
         manager()->GetFromID(next_on_line_id);
     // In the case of a static text sibling, the object designated to be the
-    // next object on this line might be one of its children, i.e. the last
+    // next object on this line might be one of its children, i.e. the first
     // inline text box.
     return next_on_line && next_on_line->IsDescendantOf(next_sibling);
   }
@@ -414,7 +414,7 @@ gfx::Rect BrowserAccessibility::GetPageBoundsForRange(int start, int len)
       else
         start = 0;
     }
-    return RelativeToAbsoluteBounds(gfx::RectF(bounds), false);
+    return bounds;
   }
 
   int end = start + len;
@@ -457,7 +457,7 @@ gfx::Rect BrowserAccessibility::GetPageBoundsForRange(int start, int len)
     int end_pixel_offset =
         local_end > 0 ? character_offsets[local_end - 1] : 0;
 
-    gfx::Rect child_rect = gfx::ToEnclosingRect(child->GetLocation());
+    gfx::Rect child_rect = child->GetPageBoundsRect();
     auto text_direction = static_cast<ui::AXTextDirection>(
         child->GetIntAttribute(ui::AX_ATTR_TEXT_DIRECTION));
     gfx::Rect child_overlap_rect;
@@ -501,7 +501,7 @@ gfx::Rect BrowserAccessibility::GetPageBoundsForRange(int start, int len)
       bounds.Union(child_overlap_rect);
   }
 
-  return RelativeToAbsoluteBounds(gfx::RectF(bounds), false);
+  return bounds;
 }
 
 gfx::Rect BrowserAccessibility::GetScreenBoundsForRange(int start, int len)
@@ -533,9 +533,7 @@ int BrowserAccessibility::GetLineStartBoundary(
   DCHECK_LE(start, static_cast<int>(GetText().length()));
 
   if (IsSimpleTextControl()) {
-    const std::vector<int32_t>& line_breaks =
-        GetIntListAttribute(ui::AX_ATTR_LINE_BREAKS);
-    return ui::FindAccessibleTextBoundary(GetText(), line_breaks,
+    return ui::FindAccessibleTextBoundary(GetText(), GetLineStartOffsets(),
                                           ui::LINE_BOUNDARY, start, direction,
                                           affinity);
   }
@@ -1140,6 +1138,12 @@ std::string BrowserAccessibility::ComputeAccessibleNameFromDescendants() {
   }
 
   return name;
+}
+
+std::vector<int> BrowserAccessibility::GetLineStartOffsets() const {
+  if (!instance_active())
+    return std::vector<int>();
+  return node()->GetOrComputeLineStartOffsets();
 }
 
 base::string16 BrowserAccessibility::GetInnerText() const {

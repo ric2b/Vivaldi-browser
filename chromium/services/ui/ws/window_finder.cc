@@ -5,7 +5,6 @@
 #include "services/ui/ws/window_finder.h"
 
 #include "base/containers/adapters.h"
-#include "services/ui/surfaces/surfaces_state.h"
 #include "services/ui/ws/server_window.h"
 #include "services/ui/ws/server_window_delegate.h"
 #include "services/ui/ws/server_window_surface.h"
@@ -20,8 +19,12 @@ namespace ws {
 
 bool IsValidWindowForEvents(ServerWindow* window) {
   ServerWindowSurfaceManager* surface_manager = window->surface_manager();
+  // Valid windows have at least one of the two surface types. Only an underlay
+  // is valid as we assume the window manager will likely get the event in this
+  // case.
   return surface_manager &&
-         surface_manager->HasSurfaceOfType(mojom::SurfaceType::DEFAULT);
+         (surface_manager->HasSurfaceOfType(mojom::SurfaceType::DEFAULT) ||
+          surface_manager->HasSurfaceOfType(mojom::SurfaceType::UNDERLAY));
 }
 
 ServerWindow* FindDeepestVisibleWindowForEvents(ServerWindow* window,

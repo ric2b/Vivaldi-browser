@@ -67,7 +67,6 @@ namespace blimp {
 namespace engine {
 namespace {
 
-const int kDummyTabId = 0;
 const float kDefaultScaleFactor = 1.f;
 const int kDefaultDisplayWidth = 800;
 const int kDefaultDisplayHeight = 600;
@@ -87,10 +86,6 @@ class FocusRulesImpl : public wm::BaseFocusRules {
   DISALLOW_COPY_AND_ASSIGN(FocusRulesImpl);
 };
 
-net::IPAddress GetIPv4AnyAddress() {
-  return net::IPAddress(0, 0, 0, 0);
-}
-
 // Proxies calls to TaskRunner::PostTask while stripping the return value,
 // which provides a suitable function prototype for binding a base::Closure.
 void PostTask(const scoped_refptr<base::TaskRunner>& task_runner,
@@ -102,6 +97,13 @@ void PostTask(const scoped_refptr<base::TaskRunner>& task_runner,
 base::Closure QuitCurrentMessageLoopClosure() {
   return base::Bind(&PostTask, base::ThreadTaskRunnerHandle::Get(),
                     base::MessageLoop::QuitWhenIdleClosure());
+}
+
+net::IPAddress GetListeningAddress() {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(kAllowNonLocalhost)) {
+    return net::IPAddress::IPv4AllZeros();
+  }
+  return net::IPAddress::IPv4Localhost();
 }
 
 uint16_t GetListeningPort() {
@@ -194,7 +196,7 @@ void EngineNetworkComponents::Initialize(
       base::MakeUnique<BlobChannelService>(blob_channel_sender, ui_task_runner);
 
   // Adds BlimpTransports to connection_manager_.
-  net::IPEndPoint address(GetIPv4AnyAddress(), GetListeningPort());
+  net::IPEndPoint address(GetListeningAddress(), GetListeningPort());
   TCPEngineTransport* transport = new TCPEngineTransport(address, net_log_);
   connection_manager_->AddTransport(base::WrapUnique(transport));
 
@@ -233,7 +235,6 @@ BlimpEngineSession::BlimpEngineSession(
   screen_->UpdateDisplayScaleAndSize(
       kDefaultScaleFactor,
       gfx::Size(kDefaultDisplayWidth, kDefaultDisplayHeight));
-  render_widget_feature_.SetDelegate(kDummyTabId, this);
 
   std::unique_ptr<HeliumBlobSenderDelegate> helium_blob_delegate(
       new HeliumBlobSenderDelegate);
@@ -249,8 +250,6 @@ BlimpEngineSession::BlimpEngineSession(
 }
 
 BlimpEngineSession::~BlimpEngineSession() {
-  render_widget_feature_.RemoveDelegate(kDummyTabId);
-
   window_tree_host_->GetInputMethod()->RemoveObserver(this);
 
   // Ensure that all tabs are torn down first, since teardown will
@@ -299,7 +298,7 @@ void BlimpEngineSession::Initialize() {
                  base::Unretained(net_components_.get()),
                  base::ThreadTaskRunnerHandle::Get(),
                  blob_channel_sender_weak_factory_->GetWeakPtr(),
-                 engine_config_->client_token()));
+                 engine_config_->client_auth_token()));
 }
 
 BlobChannelService* BlimpEngineSession::GetBlobChannelService() {
@@ -382,22 +381,6 @@ void BlimpEngineSession::HandleResize(float device_pixel_ratio,
   }
 }
 
-void BlimpEngineSession::OnWebGestureEvent(
-    content::RenderWidgetHost* render_widget_host,
-    std::unique_ptr<blink::WebGestureEvent> event) {
-  TRACE_EVENT1("blimp", "BlimpEngineSession::OnWebGestureEvent", "type",
-               event->type);
-  render_widget_host->ForwardGestureEvent(*event);
-}
-
-void BlimpEngineSession::OnCompositorMessageReceived(
-    content::RenderWidgetHost* render_widget_host,
-    const std::vector<uint8_t>& message) {
-  TRACE_EVENT0("blimp", "BlimpEngineSession::OnCompositorMessageReceived");
-
-  render_widget_host->HandleCompositorProto(message);
-}
-
 void BlimpEngineSession::OnTextInputTypeChanged(
     const ui::TextInputClient* client) {}
 
@@ -425,7 +408,7 @@ void BlimpEngineSession::OnTextInputStateChanged(
   // OnShowImeIfNeeded is used instead to send show IME request to client.
   if (type == ui::TEXT_INPUT_TYPE_NONE)
     render_widget_feature_.SendHideImeRequest(
-        kDummyTabId,
+        tab_->tab_id(),
         tab_->web_contents()->GetRenderWidgetHostView()->GetRenderWidgetHost());
 }
 
@@ -440,7 +423,7 @@ void BlimpEngineSession::OnShowImeIfNeeded() {
     return;
 
   render_widget_feature_.SendShowImeRequest(
-      kDummyTabId,
+      tab_->tab_id(),
       tab_->web_contents()->GetRenderWidgetHostView()->GetRenderWidgetHost(),
       window_tree_host_->GetInputMethod()->GetTextInputClient());
 }
@@ -515,7 +498,7 @@ content::WebContents* BlimpEngineSession::OpenURLFromTab(
     content::WebContents* source,
     const content::OpenURLParams& params) {
   // CURRENT_TAB is the only one we implement for now.
-  if (params.disposition != CURRENT_TAB) {
+  if (params.disposition != WindowOpenDisposition::CURRENT_TAB) {
     NOTIMPLEMENTED();
     return nullptr;
   }
@@ -557,8 +540,11 @@ void BlimpEngineSession::ForwardCompositorProto(
     content::RenderWidgetHost* render_widget_host,
     const std::vector<uint8_t>& proto) {
   TRACE_EVENT0("blimp", "BlimpEngineSession::ForwardCompositorProto");
-  render_widget_feature_.SendCompositorMessage(kDummyTabId, render_widget_host,
-                                               proto);
+  if (!tab_) {
+    return;
+  }
+  render_widget_feature_.SendCompositorMessage(tab_->tab_id(),
+                                               render_widget_host, proto);
 }
 
 void BlimpEngineSession::NavigationStateChanged(

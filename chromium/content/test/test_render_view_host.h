@@ -13,7 +13,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "build/build_config.h"
-#include "cc/surfaces/surface_id_allocator.h"
+#include "cc/surfaces/frame_sink_id.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/public/common/web_preferences.h"
@@ -89,7 +89,7 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   bool IsSpeaking() const override;
   void StopSpeaking() override;
 #endif  // defined(OS_MACOSX)
-  void OnSwapCompositorFrame(uint32_t output_surface_id,
+  void OnSwapCompositorFrame(uint32_t compositor_frame_sink_id,
                              cc::CompositorFrame frame) override;
   void ClearCompositorFrame() override {}
   void SetNeedsBeginFrames(bool needs_begin_frames) override {}
@@ -121,7 +121,7 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   gfx::Rect GetBoundsInRootWindow() override;
   bool LockMouse() override;
   void UnlockMouse() override;
-  uint32_t GetSurfaceClientId() override;
+  cc::FrameSinkId GetFrameSinkId() override;
 
   bool is_showing() const { return is_showing_; }
   bool is_occluded() const { return is_occluded_; }
@@ -129,9 +129,9 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
 
  protected:
   RenderWidgetHostImpl* rwh_;
+  cc::FrameSinkId frame_sink_id_;
 
  private:
-  std::unique_ptr<cc::SurfaceIdAllocator> surface_id_allocator_;
   bool is_showing_;
   bool is_occluded_;
   bool did_swap_compositor_frame_;

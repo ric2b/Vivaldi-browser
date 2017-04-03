@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 1999 Lars Knoll (knoll@kde.org)
- * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011 Apple Inc. All rights reserved.
+ * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011 Apple Inc.
+ * All rights reserved.
  * Copyright (C) 2013 Google Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
@@ -31,25 +32,28 @@ namespace blink {
 class ContainerNode;
 
 class MatchRequest {
-    STACK_ALLOCATED();
-public:
-    MatchRequest(RuleSet* ruleSet, const ContainerNode* scope = 0, const CSSStyleSheet* cssSheet = 0, unsigned styleSheetIndex = 0)
-        : ruleSet(ruleSet)
-        , scope(scope)
-        , styleSheet(cssSheet)
-        , styleSheetIndex(styleSheetIndex)
-    {
-        // Now that we're about to read from the RuleSet, we're done adding more
-        // rules to the set and we should make sure it's compacted.
-        ruleSet->compactRulesIfNeeded();
-    }
+  STACK_ALLOCATED();
 
-    Member<const RuleSet> ruleSet;
-    Member<const ContainerNode> scope;
-    Member<const CSSStyleSheet> styleSheet;
-    const unsigned styleSheetIndex;
+ public:
+  MatchRequest(RuleSet* ruleSet,
+               const ContainerNode* scope = 0,
+               const CSSStyleSheet* cssSheet = 0,
+               unsigned styleSheetIndex = 0)
+      : ruleSet(ruleSet),
+        scope(scope),
+        styleSheet(cssSheet),
+        styleSheetIndex(styleSheetIndex) {
+    // Now that we're about to read from the RuleSet, we're done adding more
+    // rules to the set and we should make sure it's compacted.
+    ruleSet->compactRulesIfNeeded();
+  }
+
+  Member<const RuleSet> ruleSet;
+  Member<const ContainerNode> scope;
+  Member<const CSSStyleSheet> styleSheet;
+  const unsigned styleSheetIndex;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // MatchRequest_h
+#endif  // MatchRequest_h

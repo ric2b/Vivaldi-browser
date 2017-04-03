@@ -18,6 +18,7 @@
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/constants.h"
+#include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "gpu/gpu_export.h"
 #include "gpu/ipc/service/gpu_memory_manager.h"
@@ -56,7 +57,7 @@ namespace gpu {
 class GpuChannel;
 class GpuChannelManagerDelegate;
 class GpuMemoryBufferFactory;
-class GpuWatchdog;
+class GpuWatchdogThread;
 
 // A GpuChannelManager is a thread responsible for issuing rendering commands
 // managing the lifetimes of GPU channels and forwarding IPC requests from the
@@ -65,7 +66,7 @@ class GPU_EXPORT GpuChannelManager {
  public:
   GpuChannelManager(const GpuPreferences& gpu_preferences,
                     GpuChannelManagerDelegate* delegate,
-                    GpuWatchdog* watchdog,
+                    GpuWatchdogThread* watchdog,
                     base::SingleThreadTaskRunner* task_runner,
                     base::SingleThreadTaskRunner* io_task_runner,
                     base::WaitableEvent* shutdown_event,
@@ -151,7 +152,7 @@ class GPU_EXPORT GpuChannelManager {
   PreemptionFlag* preemption_flag() const {
     return preemption_flag_.get();
   }
-  GpuWatchdog* watchdog() {return watchdog_;}
+  gpu::GpuWatchdogThread* watchdog() {return watchdog_;}
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
@@ -170,12 +171,12 @@ class GPU_EXPORT GpuChannelManager {
   void DoWakeUpGpu();
 #endif
 
-  const GpuPreferences& gpu_preferences_;
+  const GpuPreferences gpu_preferences_;
   GpuDriverBugWorkarounds gpu_driver_bug_workarounds_;
 
   GpuChannelManagerDelegate* const delegate_;
 
-  GpuWatchdog* watchdog_;
+  GpuWatchdogThread* watchdog_;
 
   base::WaitableEvent* shutdown_event_;
 

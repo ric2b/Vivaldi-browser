@@ -8,10 +8,10 @@
 #include <map>
 #include <string>
 
-#include "components/sync/protocol/data_type_state.pb.h"
 #include "components/sync/protocol/entity_metadata.pb.h"
+#include "components/sync/protocol/model_type_state.pb.h"
 
-namespace syncer_v2 {
+namespace syncer {
 
 // Map of storage keys to EntityMetadata proto.
 typedef std::map<std::string, sync_pb::EntityMetadata> EntityMetadataMap;
@@ -31,17 +31,17 @@ class MetadataBatch {
   void AddMetadata(const std::string& storage_key,
                    const sync_pb::EntityMetadata& metadata);
 
-  // Get the DataTypeState for this batch.
-  const sync_pb::DataTypeState& GetDataTypeState() const;
+  // Get the ModelTypeState for this batch.
+  const sync_pb::ModelTypeState& GetModelTypeState() const;
 
-  // Set the DataTypeState for this batch.
-  void SetDataTypeState(const sync_pb::DataTypeState& state);
+  // Set the ModelTypeState for this batch.
+  void SetModelTypeState(const sync_pb::ModelTypeState& state);
 
  private:
   EntityMetadataMap metadata_map_;
-  sync_pb::DataTypeState state_;
+  sync_pb::ModelTypeState state_;
 };
 
-}  // namespace syncer_v2
+}  // namespace syncer
 
 #endif  // COMPONENTS_SYNC_API_METADATA_BATCH_H_

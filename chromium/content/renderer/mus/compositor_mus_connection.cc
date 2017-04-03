@@ -7,8 +7,8 @@
 #include "base/single_thread_task_runner.h"
 #include "content/renderer/input/input_handler_manager.h"
 #include "content/renderer/mus/render_widget_mus_connection.h"
-#include "mojo/converters/blink/blink_input_events_type_converters.h"
-#include "ui/events/blink/did_overscroll_params.h"
+#include "ui/events/blink/blink_event_util.h"
+#include "ui/events/blink/web_input_event.h"
 #include "ui/events/blink/web_input_event_traits.h"
 #include "ui/events/latency_info.h"
 #include "ui/events/mojo/event.mojom.h"
@@ -18,6 +18,10 @@ using ui::mojom::EventResult;
 namespace {
 
 void DoNothingWithEventResult(EventResult result) {}
+
+gfx::Point GetScreenLocationFromEvent(const ui::LocatedEvent& event) {
+  return event.root_location();
+}
 
 }  // namespace
 
@@ -50,7 +54,11 @@ void CompositorMusConnection::AttachSurfaceOnMainThread(
                  this, base::Passed(std::move(surface_binding))));
 }
 
-CompositorMusConnection::~CompositorMusConnection() {}
+CompositorMusConnection::~CompositorMusConnection() {
+  base::AutoLock auto_lock(window_tree_client_lock_);
+  // Destruction must happen on the compositor task runner.
+  DCHECK(!window_tree_client_);
+}
 
 void CompositorMusConnection::AttachSurfaceOnCompositorThread(
     std::unique_ptr<ui::WindowSurfaceBinding> surface_binding) {
@@ -65,7 +73,11 @@ void CompositorMusConnection::AttachSurfaceOnCompositorThread(
 void CompositorMusConnection::CreateWindowTreeClientOnCompositorThread(
     mojo::InterfaceRequest<ui::mojom::WindowTreeClient> request) {
   DCHECK(compositor_task_runner_->BelongsToCurrentThread());
-  new ui::WindowTreeClient(this, nullptr, std::move(request));
+  DCHECK(!window_tree_client_);
+  std::unique_ptr<ui::WindowTreeClient> window_tree_client =
+      base::MakeUnique<ui::WindowTreeClient>(this, nullptr, std::move(request));
+  base::AutoLock auto_lock(window_tree_client_lock_);
+  window_tree_client_ = std::move(window_tree_client);
 }
 
 void CompositorMusConnection::OnConnectionLostOnMainThread() {
@@ -78,7 +90,7 @@ void CompositorMusConnection::OnConnectionLostOnMainThread() {
 }
 
 void CompositorMusConnection::OnWindowInputEventOnMainThread(
-    std::unique_ptr<blink::WebInputEvent> web_event,
+    ui::ScopedWebInputEvent web_event,
     const base::Callback<void(EventResult)>& ack) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   RenderWidgetMusConnection* connection =
@@ -97,8 +109,39 @@ void CompositorMusConnection::OnWindowInputEventAckOnMainThread(
   compositor_task_runner_->PostTask(FROM_HERE, base::Bind(ack, result));
 }
 
-void CompositorMusConnection::OnDidDestroyClient(ui::WindowTreeClient* client) {
+std::unique_ptr<blink::WebInputEvent> CompositorMusConnection::Convert(
+    const ui::Event& event) {
+  if (event.IsMousePointerEvent()) {
+    const ui::MouseEvent mouse_event(*event.AsPointerEvent());
+    blink::WebMouseEvent blink_event = ui::MakeWebMouseEvent(
+        mouse_event, base::Bind(&GetScreenLocationFromEvent));
+    return base::MakeUnique<blink::WebMouseEvent>(blink_event);
+  } else if (event.IsTouchPointerEvent()) {
+    ui::TouchEvent touch_event(*event.AsPointerEvent());
+    pointer_state_.OnTouch(touch_event);
+    blink::WebTouchEvent blink_event = ui::CreateWebTouchEventFromMotionEvent(
+        pointer_state_, touch_event.may_cause_scrolling());
+    pointer_state_.CleanupRemovedTouchPoints(touch_event);
+    return base::MakeUnique<blink::WebTouchEvent>(blink_event);
+  } else if (event.IsMouseWheelEvent()) {
+    blink::WebMouseWheelEvent blink_event = ui::MakeWebMouseWheelEvent(
+        *event.AsMouseWheelEvent(), base::Bind(&GetScreenLocationFromEvent));
+    return base::MakeUnique<blink::WebMouseWheelEvent>(blink_event);
+  } else if (event.IsKeyEvent()) {
+    blink::WebKeyboardEvent blink_event =
+        ui::MakeWebKeyboardEvent(*event.AsKeyEvent());
+    return base::MakeUnique<blink::WebKeyboardEvent>(blink_event);
+  }
+  return nullptr;
+}
+
+void CompositorMusConnection::DeleteWindowTreeClient() {
   DCHECK(compositor_task_runner_->BelongsToCurrentThread());
+  std::unique_ptr<ui::WindowTreeClient> window_tree_client;
+  {
+    base::AutoLock auto_lock(window_tree_client_lock_);
+    window_tree_client = std::move(window_tree_client_);
+  }
   main_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&CompositorMusConnection::OnConnectionLostOnMainThread, this));
@@ -114,6 +157,14 @@ void CompositorMusConnection::OnEmbed(ui::Window* root) {
   }
 }
 
+void CompositorMusConnection::OnEmbedRootDestroyed(ui::Window* window) {
+  DeleteWindowTreeClient();
+}
+
+void CompositorMusConnection::OnLostConnection(ui::WindowTreeClient* client) {
+  DeleteWindowTreeClient();
+}
+
 void CompositorMusConnection::OnPointerEventObserved(
     const ui::PointerEvent& event,
     ui::Window* target) {
@@ -125,17 +176,34 @@ void CompositorMusConnection::OnWindowInputEvent(
     const ui::Event& event,
     std::unique_ptr<base::Callback<void(EventResult)>>* ack_callback) {
   DCHECK(compositor_task_runner_->BelongsToCurrentThread());
-  std::unique_ptr<blink::WebInputEvent> web_event(
-      mojo::TypeConverter<std::unique_ptr<blink::WebInputEvent>,
-                          ui::Event>::Convert(event));
+
+  // Take ownership of the callback, indicating that we will handle it.
+  std::unique_ptr<base::Callback<void(EventResult)>> callback =
+      std::move(*ack_callback);
+  ui::ScopedWebInputEvent web_event(Convert(event).release());
   // TODO(sad): We probably need to plumb LatencyInfo through Mus.
   ui::LatencyInfo info;
-  InputEventAckState ack_state = input_handler_manager_->HandleInputEvent(
-      routing_id_, web_event.get(), &info);
+  input_handler_manager_->HandleInputEvent(
+      routing_id_, std::move(web_event), info,
+      base::Bind(
+          &CompositorMusConnection::DidHandleWindowInputEventAndOverscroll,
+          this, base::Passed(std::move(callback))));
+}
+
+void CompositorMusConnection::DidHandleWindowInputEventAndOverscroll(
+    std::unique_ptr<base::Callback<void(EventResult)>> ack_callback,
+    InputEventAckState ack_state,
+    ui::ScopedWebInputEvent web_event,
+    const ui::LatencyInfo& latency_info,
+    std::unique_ptr<ui::DidOverscrollParams> overscroll_params) {
   // TODO(jonross): We probably need to ack the event based on the consumed
   // state.
-  if (ack_state != INPUT_EVENT_ACK_STATE_NOT_CONSUMED)
+  if (ack_state != INPUT_EVENT_ACK_STATE_NOT_CONSUMED) {
+    // We took the ownership of the callback, so we need to send the ack, and
+    // mark the event as not consumed to preserve existing behavior.
+    ack_callback->Run(EventResult::UNHANDLED);
     return;
+  }
   base::Callback<void(EventResult)> ack =
       base::Bind(&::DoNothingWithEventResult);
   const bool send_ack =
@@ -147,9 +215,14 @@ void CompositorMusConnection::OnWindowInputEvent(
     // OnWindowInputEventAckOnMainThread.
     ack =
         base::Bind(&CompositorMusConnection::OnWindowInputEventAckOnMainThread,
-                   this, *ack_callback->get());
-    ack_callback->reset();
+                   this, *ack_callback);
+  } else {
+    // We took the ownership of the callback, so we need to send the ack, and
+    // mark the event as not consumed to preserve existing behavior.
+    ack_callback->Run(EventResult::UNHANDLED);
   }
+  ack_callback.reset();
+
   main_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&CompositorMusConnection::OnWindowInputEventOnMainThread, this,

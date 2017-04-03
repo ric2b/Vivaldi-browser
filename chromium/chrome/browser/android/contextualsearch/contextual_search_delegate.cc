@@ -5,6 +5,7 @@
 #include "chrome/browser/android/contextualsearch/contextual_search_delegate.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/base64.h"
 #include "base/command_line.h"
@@ -20,7 +21,7 @@
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/translate/translate_service.h"
 #include "chrome/common/pref_names.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/variations/net/variations_http_headers.h"
@@ -45,6 +46,8 @@ const char kContextualSearchResponseMidParam[] = "mid";
 const char kContextualSearchResponseResolvedTermParam[] = "resolved_term";
 const char kContextualSearchPreventPreload[] = "prevent_preload";
 const char kContextualSearchMentions[] = "mentions";
+const char kContextualSearchCaption[] = "caption";
+const char kContextualSearchThumbnail[] = "thumbnail";
 const char kContextualSearchServerEndpoint[] = "_/contextualsearch?";
 const int kContextualSearchRequestVersion = 2;
 const int kContextualSearchMaxSelection = 100;
@@ -55,7 +58,10 @@ const char kDoPreventPreloadValue[] = "1";
 // The number of characters that should be shown after the selected expression.
 const int kSurroundingSizeForUI = 60;
 
-} // namespace
+// The version of the Contextual Cards API that we want to invoke.
+const int kContextualCardsVersion = 1;
+
+}  // namespace
 
 // URLFetcher ID, only used for tests: we only have one kind of fetcher.
 const int ContextualSearchDelegate::kContextualSearchURLFetcherID = 1;
@@ -164,10 +170,13 @@ ContextualSearchDelegate::GetResolvedSearchTermFromJson(
   int start_adjust = 0;
   int end_adjust = 0;
   std::string context_language;
+  std::string thumbnail_url = "";
+  std::string caption = "";
 
   DecodeSearchTermFromJsonResponse(
       json_string, &search_term, &display_text, &alternate_term, &mid,
-      &prevent_preload, &mention_start, &mention_end, &context_language);
+      &prevent_preload, &mention_start, &mention_end, &context_language,
+      &thumbnail_url, &caption);
   if (mention_start != 0 || mention_end != 0) {
     // Sanity check that our selection is non-zero and it is less than
     // 100 characters as that would make contextual search bar hide.
@@ -188,7 +197,7 @@ ContextualSearchDelegate::GetResolvedSearchTermFromJson(
   return std::unique_ptr<ResolvedSearchTerm>(new ResolvedSearchTerm(
       is_invalid, response_code, search_term, display_text, alternate_term, mid,
       prevent_preload == kDoPreventPreloadValue, start_adjust, end_adjust,
-      context_language));
+      context_language, thumbnail_url, caption));
 }
 
 std::string ContextualSearchDelegate::BuildRequestUrl(std::string selection) {
@@ -204,8 +213,13 @@ std::string ContextualSearchDelegate::BuildRequestUrl(std::string selection) {
   TemplateURLRef::SearchTermsArgs search_terms_args =
       TemplateURLRef::SearchTermsArgs(base::string16());
 
+  int contextual_cards_version =
+      field_trial_->IsContextualCardsBarIntegrationEnabled()
+      ? kContextualCardsVersion : 0;
+
   TemplateURLRef::SearchTermsArgs::ContextualSearchParams params(
-      kContextualSearchRequestVersion, selected_text, "", true);
+      kContextualSearchRequestVersion, selected_text, std::string(),
+      contextual_cards_version);
 
   search_terms_args.contextual_search_params = params;
 
@@ -235,21 +249,19 @@ void ContextualSearchDelegate::GatherSurroundingTextWithCallback(
     content::WebContents* web_contents,
     bool may_send_base_page_url,
     HandleSurroundingsCallback callback) {
-  DCHECK(web_contents);
-  DCHECK(!callback.is_null());
-  DCHECK(!selection.empty());
-  RenderFrameHost* focused_frame = web_contents->GetFocusedFrame();
-  if (!focused_frame) {
-    callback.Run(base::string16(), 0, 0);
-    return;
-  }
   // Immediately cancel any request that's in flight, since we're building a new
   // context (and the response disposes of any existing context).
   search_term_fetcher_.reset();
   BuildContext(selection, use_resolved_search_term, web_contents,
                may_send_base_page_url);
-  focused_frame->RequestTextSurroundingSelection(
-      callback, field_trial_->GetSurroundingSize());
+  DCHECK(web_contents);
+  RenderFrameHost* focused_frame = web_contents->GetFocusedFrame();
+  if (focused_frame) {
+    focused_frame->RequestTextSurroundingSelection(
+        callback, field_trial_->GetSurroundingSize());
+  } else {
+    callback.Run(base::string16(), 0, 0);
+  }
 }
 
 void ContextualSearchDelegate::BuildContext(
@@ -396,9 +408,9 @@ bool ContextualSearchDelegate::CanSendPageURL(
 
   // Check that the user has sync enabled, is logged in, and syncs their Chrome
   // History.
-  ProfileSyncService* service =
+  browser_sync::ProfileSyncService* service =
       ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile);
-  sync_driver::SyncPrefs sync_prefs(profile->GetPrefs());
+  syncer::SyncPrefs sync_prefs(profile->GetPrefs());
   if (service == NULL || !service->CanSyncStart() ||
       !sync_prefs.GetPreferredDataTypes(syncer::UserTypes())
            .Has(syncer::PROXY_TABS) ||
@@ -436,7 +448,9 @@ void ContextualSearchDelegate::DecodeSearchTermFromJsonResponse(
     std::string* prevent_preload,
     int* mention_start,
     int* mention_end,
-    std::string* lang) {
+    std::string* lang,
+    std::string* thumbnail_url,
+    std::string* caption) {
   bool contains_xssi_escape =
       base::StartsWith(response, kXssiEscape, base::CompareCase::SENSITIVE);
   const std::string& proper_json =
@@ -445,7 +459,7 @@ void ContextualSearchDelegate::DecodeSearchTermFromJsonResponse(
   JSONStringValueDeserializer deserializer(proper_json);
   std::unique_ptr<base::Value> root =
       deserializer.Deserialize(nullptr, nullptr);
-  std::unique_ptr<base::DictionaryValue> dict =
+  const std::unique_ptr<base::DictionaryValue> dict =
       base::DictionaryValue::From(std::move(root));
   if (!dict)
     return;
@@ -480,6 +494,26 @@ void ContextualSearchDelegate::DecodeSearchTermFromJsonResponse(
     dict->GetString(kContextualSearchResponseResolvedTermParam, &resolved_term);
     if (resolved_term != *search_term) {
       *alternate_term = resolved_term;
+    }
+  }
+
+  if (field_trial_->IsContextualCardsBarIntegrationEnabled()) {
+    // Get the basic Bar data for Contextual Cards integration directly
+    // from the root.
+    dict->GetString(kContextualSearchCaption, caption);
+    dict->GetString(kContextualSearchThumbnail, thumbnail_url);
+    // For testing purposes check if there was a coca backend failure and
+    // flag that in the log.
+    // TODO(donnd): remove after full Coca integration.
+    bool contextual_cards_backend_responded = true;
+    dict->GetBoolean("coca_responded", &contextual_cards_backend_responded);
+    if (!contextual_cards_backend_responded) {
+      DVLOG(0) << "";
+      DVLOG(0) << "!!! CONTEXTUAL SEARCH WARNING !!!";
+      DVLOG(0)
+          << "The Contextual Cards backend did not respond to this "
+             "request!!! The backend server may not be configured or is down.";
+      DVLOG(0) << "";
     }
   }
 }

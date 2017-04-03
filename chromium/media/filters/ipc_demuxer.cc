@@ -146,6 +146,10 @@ void IPCDemuxer::Stop() {
   weak_ptr_factory_.InvalidateWeakPtrs();
 }
 
+void IPCDemuxer::AbortPendingReads() {
+  DCHECK(task_runner_->BelongsToCurrentThread());
+}
+
 DemuxerStream* IPCDemuxer::GetStream(DemuxerStream::Type type) {
   DCHECK(task_runner_->BelongsToCurrentThread());
 

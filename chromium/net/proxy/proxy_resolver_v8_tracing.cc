@@ -24,6 +24,7 @@
 #include "net/base/net_errors.h"
 #include "net/base/network_interfaces.h"
 #include "net/dns/host_resolver.h"
+#include "net/log/net_log_with_source.h"
 #include "net/proxy/proxy_info.h"
 #include "net/proxy/proxy_resolver_error_observer.h"
 #include "net/proxy/proxy_resolver_v8.h"
@@ -710,7 +711,7 @@ void Job::DoDnsOperation() {
   int result = host_resolver()->Resolve(
       MakeDnsRequestInfo(pending_dns_host_, pending_dns_op_), DEFAULT_PRIORITY,
       &pending_dns_addresses_, base::Bind(&Job::OnDnsOperationComplete, this),
-      &dns_request, bindings_->GetBoundNetLog());
+      &dns_request, bindings_->GetNetLogWithSource());
 
   pending_dns_completed_synchronously_ = result != ERR_IO_PENDING;
 

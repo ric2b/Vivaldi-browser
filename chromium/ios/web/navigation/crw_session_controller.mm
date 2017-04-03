@@ -534,6 +534,7 @@ NSString* const kXCallbackParametersKey = @"xCallbackParameters";
   web::NavigationItemImpl* currentItem = self.currentEntry.navigationItemImpl;
   currentItem->SetURL(url);
   currentItem->SetSerializedStateObject(stateObject);
+  currentItem->SetHasStateBeenReplaced(true);
   currentEntry.navigationItem->SetURL(url);
   // If the change is to a committed entry, notify interested parties.
   if (currentEntry != self.pendingEntry && _navigationManager)
@@ -690,6 +691,10 @@ NSString* const kXCallbackParametersKey = @"xCallbackParameters";
 }
 
 - (void)goDelta:(int)delta {
+  // Store the navigation index at the start of this function, as |-goForward|
+  // and |-goBack| will incrementally reset |_previousNavigationIndex| each time
+  // they are called.
+  NSInteger previousNavigationIndex = self.currentNavigationIndex;
   if (delta < 0) {
     while ([self canGoBack] && delta < 0) {
       [self goBack];
@@ -701,6 +706,7 @@ NSString* const kXCallbackParametersKey = @"xCallbackParameters";
       --delta;
     }
   }
+  _previousNavigationIndex = previousNavigationIndex;
 }
 
 - (void)goToEntry:(CRWSessionEntry*)entry {
@@ -710,8 +716,10 @@ NSString* const kXCallbackParametersKey = @"xCallbackParameters";
 
   // Check that |entries_| still contains |entry|. |entry| could have been
   // removed by -clearForwardEntries.
-  if ([_entries containsObject:entry])
+  if ([_entries containsObject:entry]) {
+    _previousNavigationIndex = self.currentNavigationIndex;
     self.currentNavigationIndex = [_entries indexOfObject:entry];
+  }
 }
 
 - (void)removeEntryAtIndex:(NSInteger)index {
@@ -788,11 +796,9 @@ NSString* const kXCallbackParametersKey = @"xCallbackParameters";
   return results;
 }
 
-- (BOOL)isPushStateNavigationBetweenEntry:(CRWSessionEntry*)firstEntry
-                                 andEntry:(CRWSessionEntry*)secondEntry {
-  DCHECK(firstEntry);
-  DCHECK(secondEntry);
-  if (firstEntry == secondEntry)
+- (BOOL)isSameDocumentNavigationBetweenEntry:(CRWSessionEntry*)firstEntry
+                                    andEntry:(CRWSessionEntry*)secondEntry {
+  if (!firstEntry || !secondEntry || firstEntry == secondEntry)
     return NO;
   NSUInteger firstIndex = [_entries indexOfObject:firstEntry];
   NSUInteger secondIndex = [_entries indexOfObject:secondEntry];
@@ -803,8 +809,9 @@ NSString* const kXCallbackParametersKey = @"xCallbackParameters";
 
   for (NSUInteger i = startIndex + 1; i <= endIndex; i++) {
     web::NavigationItemImpl* item = [_entries[i] navigationItemImpl];
-    // Every entry in the sequence has to be created from a pushState() call.
-    if (!item->IsCreatedFromPushState())
+    // Every entry in the sequence has to be created from a hash change or
+    // pushState() call.
+    if (!item->IsCreatedFromPushState() && !item->IsCreatedFromHashChange())
       return NO;
     // Every entry in the sequence has to have a URL that could have been
     // created from a pushState() call.
@@ -843,6 +850,8 @@ NSString* const kXCallbackParametersKey = @"xCallbackParameters";
 - (NSString*)uniqueID {
   CFUUIDRef uuidRef = CFUUIDCreate(NULL);
   CFStringRef uuidStringRef = CFUUIDCreateString(NULL, uuidRef);
+  CFRelease(uuidRef);
+
   NSString* uuid =
       [NSString stringWithString:base::mac::ObjCCastStrict<NSString>(
                                      CFBridgingRelease(uuidStringRef))];

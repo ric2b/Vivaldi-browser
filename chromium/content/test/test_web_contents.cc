@@ -15,6 +15,7 @@
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/common/frame_messages.h"
+#include "content/common/render_message_filter.mojom.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/navigation_data.h"
 #include "content/public/browser/notification_registrar.h"
@@ -22,6 +23,7 @@
 #include "content/public/browser/notification_types.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/page_state.h"
+#include "content/public/test/browser_side_navigation_test_utils.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/test/test_render_view_host.h"
 #include "ui/base/page_transition_types.h"
@@ -73,11 +75,12 @@ void TestWebContents::StartNavigation(const GURL& url) {
   BrowserURLHandlerImpl::GetInstance()->RewriteURLIfNecessary(
       &loaded_url, GetBrowserContext(), &reverse_on_redirect);
 
+  if (GetMainFrame()->is_waiting_for_beforeunload_ack())
+    GetMainFrame()->SendBeforeUnloadACK(true);
+
   // This will simulate receiving the DidStartProvisionalLoad IPC from the
   // renderer.
   if (!IsBrowserSideNavigationEnabled()) {
-    if (GetMainFrame()->is_waiting_for_beforeunload_ack())
-      GetMainFrame()->SendBeforeUnloadACK(true);
     TestRenderFrameHost* rfh =
         GetPendingMainFrame() ? GetPendingMainFrame() : GetMainFrame();
     rfh->SimulateNavigationStart(url);
@@ -135,7 +138,6 @@ void TestWebContents::TestDidNavigateWithReferrer(
   params.searchable_form_url = GURL();
   params.searchable_form_encoding = std::string();
   params.did_create_new_entry = did_create_new_entry;
-  params.security_info = std::string();
   params.gesture = NavigationGestureUser;
   params.was_within_same_page = false;
   params.method = "GET";
@@ -218,31 +220,25 @@ void TestWebContents::CommitPendingNavigation() {
   const NavigationEntry* entry = GetController().GetPendingEntry();
   DCHECK(entry);
 
-  // If we are doing a cross-site navigation, this simulates the current RFH
-  // notifying that it has unloaded so the pending RFH is resumed and can
-  // navigate.
-  // PlzNavigate: the pending RFH is not created before the navigation commit,
-  // so it is necessary to simulate the IO thread response here to commit in the
-  // proper renderer. It is necessary to call PrepareForCommit before getting
-  // the main and the pending frame because when we are trying to navigate to a
-  // webui from a new tab, a RenderFrameHost is created to display it that is
-  // committed immediately (since it is a new tab). Therefore the main frame is
-  // replaced without a pending frame being created, and we don't get the right
-  // values for the RFH to navigate: we try to use the old one that has been
-  // deleted in the meantime.
-  // Note that for some synchronous navigations (about:blank, javascript
-  // urls, etc.) there will be no NavigationRequest, and no simulation of the
-  // network stack is required.
-  bool browser_side_navigation = IsBrowserSideNavigationEnabled();
-  if (!browser_side_navigation ||
-      GetMainFrame()->frame_tree_node()->navigation_request()) {
-    GetMainFrame()->PrepareForCommit();
-  }
-
   TestRenderFrameHost* old_rfh = GetMainFrame();
+
+  // PlzNavigate: the pending RenderFrameHost is not created before the
+  // navigation commit, so it is necessary to simulate the IO thread response
+  // here to commit in the proper renderer. It is necessary to call
+  // PrepareForCommit before getting the main and the pending frame because when
+  // we are trying to navigate to a webui from a new tab, a RenderFrameHost is
+  // created to display it that is committed immediately (since it is a new
+  // tab). Therefore the main frame is replaced without a pending frame being
+  // created, and we don't get the right values for the RenderFrameHost to
+  // navigate: we try to use the old one that has been deleted in the meantime.
+  // Note that for some synchronous navigations (about:blank, javascript urls,
+  // etc.), no simulation of the network stack is required.
+  old_rfh->PrepareForCommitIfNecessary();
+
   TestRenderFrameHost* rfh = GetPendingMainFrame();
   if (!rfh)
     rfh = old_rfh;
+  const bool browser_side_navigation = IsBrowserSideNavigationEnabled();
   CHECK(!browser_side_navigation || rfh->is_loading());
   CHECK(!browser_side_navigation ||
         !rfh->frame_tree_node()->navigation_request());
@@ -330,7 +326,7 @@ void TestWebContents::CreateNewWindow(
     int32_t route_id,
     int32_t main_frame_route_id,
     int32_t main_frame_widget_route_id,
-    const ViewHostMsg_CreateWindow_Params& params,
+    const mojom::CreateNewWindowParams& params,
     SessionStorageNamespace* session_storage_namespace) {}
 
 void TestWebContents::CreateNewWidget(int32_t render_process_id,

@@ -10,12 +10,14 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "components/offline_pages/offline_page_item.h"
+#include "components/offline_pages/offline_store_types.h"
 
 class GURL;
 
 namespace offline_pages {
 
-struct OfflinePageItem;
+typedef StoreUpdateResult<OfflinePageItem> OfflinePagesUpdateResult;
 
 // OfflinePageMetadataStore keeps metadata for the offline pages.
 // Ability to create multiple instances of the store as well as behavior of
@@ -38,19 +40,24 @@ class OfflinePageMetadataStore {
 
   typedef base::Callback<void(LoadStatus, const std::vector<OfflinePageItem>&)>
       LoadCallback;
-  typedef base::Callback<void(bool)> UpdateCallback;
+  typedef base::Callback<void(ItemActionStatus)> AddCallback;
+  typedef base::Callback<void(std::unique_ptr<OfflinePagesUpdateResult>)>
+      UpdateCallback;
   typedef base::Callback<void(bool)> ResetCallback;
 
   OfflinePageMetadataStore();
   virtual ~OfflinePageMetadataStore();
 
   // Get all of the offline pages from the store.
-  virtual void Load(const LoadCallback& callback) = 0;
+  virtual void GetOfflinePages(const LoadCallback& callback) = 0;
 
-  // Asynchronously adds or updates offline page metadata to the store.
-  // Result of the update is passed in callback.
-  virtual void AddOrUpdateOfflinePage(const OfflinePageItem& offline_page,
-                                      const UpdateCallback& callback) = 0;
+  // Asynchronously adds an offline page item metadata to the store.
+  virtual void AddOfflinePage(const OfflinePageItem& offline_page,
+                              const AddCallback& callback) = 0;
+
+  // Asynchronously updates a set of offline page items in the store.
+  virtual void UpdateOfflinePages(const std::vector<OfflinePageItem>& pages,
+                                  const UpdateCallback& callback) = 0;
 
   // Asynchronously removes offline page metadata from the store.
   // Result of the update is passed in callback.
@@ -59,6 +66,9 @@ class OfflinePageMetadataStore {
 
   // Resets the store.
   virtual void Reset(const ResetCallback& callback) = 0;
+
+  // Gets the store state.
+  virtual StoreState state() const = 0;
 };
 
 }  // namespace offline_pages

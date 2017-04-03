@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/passwords/manage_passwords_view_utils_desktop.h"
 
+#include "base/memory/ptr_util.h"
+#include "base/metrics/field_trial.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/mock_entropy_provider.h"
@@ -11,7 +13,7 @@
 #include "chrome/browser/sync/profile_sync_test_util.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -70,9 +72,10 @@ class ManagePasswordsViewUtilDesktopTest : public testing::Test {
         base::FieldTrialList::CreateFieldTrial(kBrandingExperimentName, name);
   }
 
-  ProfileSyncService* GetSyncServiceForSmartLockUser() {
-    ProfileSyncServiceMock* sync_service = static_cast<ProfileSyncServiceMock*>(
-        ProfileSyncServiceFactory::GetInstance()->GetForProfile(&profile_));
+  browser_sync::ProfileSyncService* GetSyncServiceForSmartLockUser() {
+    browser_sync::ProfileSyncServiceMock* sync_service =
+        static_cast<browser_sync::ProfileSyncServiceMock*>(
+            ProfileSyncServiceFactory::GetInstance()->GetForProfile(&profile_));
     EXPECT_CALL(*sync_service, IsSyncActive()).WillRepeatedly(Return(true));
     EXPECT_CALL(*sync_service, IsFirstSetupComplete())
         .WillRepeatedly(Return(true));
@@ -83,9 +86,10 @@ class ManagePasswordsViewUtilDesktopTest : public testing::Test {
     return sync_service;
   }
 
-  ProfileSyncService* GetSyncServiceForNonSmartLockUser() {
-    ProfileSyncServiceMock* sync_service = static_cast<ProfileSyncServiceMock*>(
-        ProfileSyncServiceFactory::GetInstance()->GetForProfile(&profile_));
+  browser_sync::ProfileSyncService* GetSyncServiceForNonSmartLockUser() {
+    browser_sync::ProfileSyncServiceMock* sync_service =
+        static_cast<browser_sync::ProfileSyncServiceMock*>(
+            ProfileSyncServiceFactory::GetInstance()->GetForProfile(&profile_));
     EXPECT_CALL(*sync_service, IsSyncActive()).WillRepeatedly(Return(false));
     return sync_service;
   }
@@ -150,9 +154,10 @@ TEST_F(ManagePasswordsViewUtilDesktopTest, GetPasswordManagerSettingsStringId) {
   };
 
   for (const auto& test_case : kTestData) {
-    base::FieldTrialList field_trial_list(new base::MockEntropyProvider());
+    base::FieldTrialList field_trial_list(
+        base::MakeUnique<base::MockEntropyProvider>());
     SCOPED_TRACE(testing::Message(test_case.description));
-    ProfileSyncService* sync_service;
+    browser_sync::ProfileSyncService* sync_service;
     if (test_case.user_type == SMART_LOCK_USER)
       sync_service = GetSyncServiceForSmartLockUser();
     else

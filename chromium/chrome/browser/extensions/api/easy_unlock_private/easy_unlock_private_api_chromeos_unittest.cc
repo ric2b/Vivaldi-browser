@@ -135,8 +135,7 @@ class EasyUnlockPrivateApiTest : public extensions::ExtensionApiUnittest {
     chromeos::DBusThreadManager::Initialize();
     bluez::BluezDBusManager::Initialize(
         chromeos::DBusThreadManager::Get()->GetSystemBus(),
-        chromeos::DBusThreadManager::Get()->IsUsingStub(
-            chromeos::DBusClientBundle::BLUETOOTH));
+        chromeos::DBusThreadManager::Get()->IsUsingFakes());
     client_ = chromeos::DBusThreadManager::Get()->GetEasyUnlockClient();
 
     extensions::ExtensionApiUnittest::SetUp();
@@ -307,8 +306,8 @@ TEST_F(EasyUnlockPrivateApiTest, CreateSecureMessage_EmptyOptions) {
   std::unique_ptr<base::ListValue> args(new base::ListValue);
   args->Append(StringToBinaryValue("PAYLOAD"));
   args->Append(StringToBinaryValue("KEY"));
-  base::DictionaryValue* options = new base::DictionaryValue();
-  args->Append(options);
+  auto options = base::MakeUnique<base::DictionaryValue>();
+  args->Append(std::move(options));
 
   ASSERT_TRUE(extension_function_test_utils::RunFunction(
       function.get(), std::move(args), browser(),
@@ -414,8 +413,8 @@ TEST_F(EasyUnlockPrivateApiTest, UnwrapSecureMessage_EmptyOptions) {
   std::unique_ptr<base::ListValue> args(new base::ListValue);
   args->Append(StringToBinaryValue("MESSAGE"));
   args->Append(StringToBinaryValue("KEY"));
-  base::DictionaryValue* options = new base::DictionaryValue();
-  args->Append(options);
+  auto options = base::MakeUnique<base::DictionaryValue>();
+  args->Append(std::move(options));
 
   ASSERT_TRUE(extension_function_test_utils::RunFunction(
       function.get(), std::move(args), browser(),
@@ -517,8 +516,8 @@ std::unique_ptr<KeyedService> FakeEventRouterFactoryFunction(
     content::BrowserContext* profile) {
   std::unique_ptr<extensions::TestExtensionPrefs> extension_prefs(
       new extensions::TestExtensionPrefs(base::ThreadTaskRunnerHandle::Get()));
-  return base::WrapUnique(new FakeEventRouter(static_cast<Profile*>(profile),
-                                              std::move(extension_prefs)));
+  return base::MakeUnique<FakeEventRouter>(static_cast<Profile*>(profile),
+                                           std::move(extension_prefs));
 }
 
 TEST_F(EasyUnlockPrivateApiTest, AutoPairing) {

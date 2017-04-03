@@ -126,6 +126,9 @@ void AppBannerManager::RequestAppBanner(const GURL& validated_url,
     return;
   }
 
+  if (validated_url_.is_empty())
+    validated_url_ = validated_url;
+
   manager_->GetData(
       ParamsToGetManifest(),
       base::Bind(&AppBannerManager::OnDidGetManifest, GetWeakPtr()));
@@ -310,6 +313,7 @@ void AppBannerManager::Stop() {
   was_canceled_by_page_ = false;
   page_requested_prompt_ = false;
   need_to_log_status_ = false;
+  validated_url_ = GURL();
   referrer_.erase();
 }
 
@@ -331,7 +335,7 @@ void AppBannerManager::SendBannerPromptRequest() {
 }
 
 void AppBannerManager::DidStartNavigation(content::NavigationHandle* handle) {
-  if (!handle->IsInMainFrame())
+  if (!handle->IsInMainFrame() || handle->IsSamePage())
     return;
 
   load_finished_ = false;
@@ -346,7 +350,8 @@ void AppBannerManager::DidStartNavigation(content::NavigationHandle* handle) {
 }
 
 void AppBannerManager::DidFinishNavigation(content::NavigationHandle* handle) {
-  if (handle->IsInMainFrame() && handle->HasCommitted()) {
+  if (handle->IsInMainFrame() && handle->HasCommitted() &&
+      !handle->IsSamePage()) {
     last_transition_type_ = handle->GetPageTransition();
     active_media_players_.clear();
     if (is_active_)
@@ -363,8 +368,12 @@ void AppBannerManager::DidFinishLoad(
 
   load_finished_ = true;
   validated_url_ = validated_url;
+  // Start the pipeline immediately if we aren't using engagement, or if 0
+  // engagement is required.
   if (!AppBannerSettingsHelper::ShouldUseSiteEngagementScore() ||
-      banner_request_queued_) {
+      banner_request_queued_ ||
+      AppBannerSettingsHelper::HasSufficientEngagement(0)) {
+    SiteEngagementObserver::Observe(nullptr);
     banner_request_queued_ = false;
 
     RequestAppBanner(validated_url, false /* is_debug_mode */);
@@ -426,6 +435,23 @@ bool AppBannerManager::CheckIfShouldShowBanner() {
       contents, validated_url_, GetAppIdentifier(), GetCurrentTime());
   if (code == NO_ERROR_DETECTED)
     return true;
+
+  switch (code) {
+    case ALREADY_INSTALLED:
+      banners::TrackDisplayEvent(banners::DISPLAY_EVENT_INSTALLED_PREVIOUSLY);
+      break;
+    case PREVIOUSLY_BLOCKED:
+      banners::TrackDisplayEvent(banners::DISPLAY_EVENT_BLOCKED_PREVIOUSLY);
+      break;
+    case PREVIOUSLY_IGNORED:
+      banners::TrackDisplayEvent(banners::DISPLAY_EVENT_IGNORED_PREVIOUSLY);
+      break;
+    case INSUFFICIENT_ENGAGEMENT:
+      banners::TrackDisplayEvent(banners::DISPLAY_EVENT_NOT_VISITED_ENOUGH);
+      break;
+    default:
+      break;
+  }
 
   // If we are in debug mode, AppBannerSettingsHelper::ShouldShowBanner must
   // return NO_ERROR_DETECTED (bypass flag is set) or we must not have entered

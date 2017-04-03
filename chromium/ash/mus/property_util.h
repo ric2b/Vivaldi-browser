@@ -62,6 +62,7 @@ ui::wm::WindowType GetWmWindowType(const ui::Window* window);
 
 mojom::AshWindowType GetAshWindowType(const ui::Window* window);
 
+void SetWindowTitle(ui::Window* window, base::string16 title);
 base::string16 GetWindowTitle(const ui::Window* window);
 
 mojo::Array<uint8_t> GetWindowAppIcon(const ui::Window* window);
@@ -79,6 +80,13 @@ void SetAlwaysOnTop(ui::Window* window, bool value);
 bool IsAlwaysOnTop(ui::Window* window);
 
 bool ShouldRemoveStandardFrame(ui::Window* window);
+
+// See description of |WindowManager::kRendererParentTitleArea_Property|.
+bool ShouldRenderParentTitleArea(ui::Window* window);
+
+// Returns the kInitialDisplayId_Property if present, otherwise
+// kInvalidDisplayID.
+int64_t GetInitialDisplayId(const ui::Window::SharedProperties& properties);
 
 }  // namespace mus
 }  // namespace ash

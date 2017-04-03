@@ -119,7 +119,6 @@ gfx::GpuMemoryBufferHandle ShareGpuMemoryBufferToGpuThread(
       return handle;
     }
     case gfx::IO_SURFACE_BUFFER:
-    case gfx::SURFACE_TEXTURE_BUFFER:
     case gfx::OZONE_NATIVE_PIXMAP:
       *requires_sync_point = true;
       return source_handle;
@@ -167,7 +166,7 @@ InProcessCommandBuffer::Service::gpu_driver_bug_workarounds() {
 
 scoped_refptr<gl::GLShareGroup> InProcessCommandBuffer::Service::share_group() {
   if (!share_group_.get())
-    share_group_ = new gl::GLShareGroup;
+    share_group_ = new gl::GLShareGroup();
   return share_group_;
 }
 
@@ -293,10 +292,8 @@ bool InProcessCommandBuffer::Initialize(
 
   gpu_memory_buffer_manager_ = gpu_memory_buffer_manager;
 
-  if (result) {
+  if (result)
     capabilities_ = capabilities;
-    capabilities_.image = capabilities_.image && gpu_memory_buffer_manager_;
-  }
 
   return result;
 }
@@ -331,7 +328,7 @@ bool InProcessCommandBuffer::InitializeOnGpuThread(
                 service_->gpu_preferences(), service_->mailbox_manager(), NULL,
                 service_->shader_translator_cache(),
                 service_->framebuffer_completeness_cache(), feature_info,
-                bind_generates_resource, nullptr)));
+                bind_generates_resource, nullptr, nullptr)));
 
   executor_.reset(new CommandExecutor(command_buffer.get(), decoder_.get(),
                                       decoder_.get()));
@@ -363,11 +360,11 @@ bool InProcessCommandBuffer::InitializeOnGpuThread(
           ->feature_info()
           ->workarounds()
           .use_virtualized_gl_contexts) {
-    context_ = gl_share_group_->GetSharedContext();
+    context_ = gl_share_group_->GetSharedContext(surface_.get());
     if (!context_.get()) {
       context_ = gl::init::CreateGLContext(
           gl_share_group_.get(), surface_.get(), params.attribs.gpu_preference);
-      gl_share_group_->SetSharedContext(context_.get());
+      gl_share_group_->SetSharedContext(surface_.get(), context_.get());
     }
 
     context_ = new GLContextVirtual(

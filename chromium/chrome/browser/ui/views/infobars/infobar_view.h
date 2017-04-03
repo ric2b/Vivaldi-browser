@@ -11,6 +11,7 @@
 #include "components/infobars/core/infobar_container.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/views/controls/button/button.h"
+#include "ui/views/controls/button/vector_icon_button_delegate.h"
 #include "ui/views/controls/menu/menu_types.h"
 #include "ui/views/focus/external_focus_tracker.h"
 #include "ui/views/view_targeter_delegate.h"
@@ -20,28 +21,25 @@ class MenuModel;
 }
 
 namespace views {
-class ImageButton;
 class ImageView;
 class Label;
 class LabelButton;
 class Link;
 class LinkListener;
-class MdTextButton;
 class MenuButton;
 class MenuRunner;
+class VectorIconButton;
 }  // namespace views
 
 class InfoBarView : public infobars::InfoBar,
                     public views::View,
-                    public views::ButtonListener,
+                    public views::VectorIconButtonDelegate,
                     public views::ExternalFocusTracker,
                     public views::ViewTargeterDelegate {
  public:
   explicit InfoBarView(std::unique_ptr<infobars::InfoBarDelegate> delegate);
 
   const infobars::InfoBarContainer::Delegate* container_delegate() const;
-  const SkPath& fill_path() const { return fill_path_; }
-  const SkPath& stroke_path() const { return stroke_path_; }
 
  protected:
   typedef std::vector<views::Label*> Labels;
@@ -60,12 +58,6 @@ class InfoBarView : public infobars::InfoBar,
   views::Link* CreateLink(const base::string16& text,
                           views::LinkListener* listener) const;
 
-  // Creates a focusable button for use on an infobar. The appearance is
-  // customized for infobars. Used for pre-MD only.
-  // NOTE: Subclasses must ignore button presses if we're unowned.
-  static views::LabelButton* CreateTextButton(views::ButtonListener* listener,
-                                              const base::string16& text);
-
   // Given |labels| and the total |available_width| to display them in, sets
   // each label's size so that the longest label shrinks until it reaches the
   // length of the next-longest label, then both shrink until reaching the
@@ -77,10 +69,11 @@ class InfoBarView : public infobars::InfoBar,
   void ViewHierarchyChanged(
       const ViewHierarchyChangedDetails& details) override;
 
-  // views::ButtonListener:
+  // views::VectorIconButtonDelegate:
   // NOTE: This must not be called if we're unowned.  (Subclasses should ignore
   // calls to ButtonPressed() in this case.)
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
+  SkColor GetVectorIconBaseColor() const override;
 
   // Returns the minimum width the content (that is, everything between the icon
   // and the close button) can be shrunk to.  This is used to prevent the close
@@ -96,13 +89,6 @@ class InfoBarView : public infobars::InfoBar,
   // taking into account animation so the control "slides in" (or out) as we
   // animate open and closed.
   int OffsetY(views::View* view) const;
-
-  // Shows a menu at the specified position.
-  // NOTE: This must not be called if we're unowned.  (Subclasses should ignore
-  // calls to RunMenu() in this case.)
-  void RunMenuAt(ui::MenuModel* menu_model,
-                 views::MenuButton* button,
-                 views::MenuAnchorPosition anchor);
 
  protected:
   // Adds |view| to the content area, i.e. |child_container_|. The |view| won't
@@ -138,12 +124,7 @@ class InfoBarView : public infobars::InfoBar,
   views::ImageView* icon_;
 
   // The close button at the right edge of the InfoBar.
-  views::ImageButton* close_button_;
-
-  // The paths for the InfoBarBackground to draw, sized according to the heights
-  // above. TODO(estade): remove these when MD is default.
-  SkPath fill_path_;
-  SkPath stroke_path_;
+  views::VectorIconButton* close_button_;
 
   // Used to run the menu.
   std::unique_ptr<views::MenuRunner> menu_runner_;

@@ -98,7 +98,6 @@ struct CONTENT_EXPORT WebPreferences {
   bool plugins_enabled;
   bool dom_paste_enabled;
   bool shrinks_standalone_images_to_fit;
-  bool uses_universal_detector;
   bool text_areas_are_resizable;
   bool allow_scripts_to_close_windows;
   bool remote_fonts_enabled;
@@ -117,6 +116,7 @@ struct CONTENT_EXPORT WebPreferences {
   bool application_cache_enabled;
   bool tabs_to_links;
   bool caret_browsing_enabled;
+  bool history_entry_requires_user_gesture;
   bool hyperlink_auditing_enabled;
   bool allow_universal_access_from_file_urls;
   bool allow_file_access_from_file_urls;
@@ -128,6 +128,7 @@ struct CONTENT_EXPORT WebPreferences {
   bool privileged_webgl_extensions_enabled;
   bool webgl_errors_to_console_enabled;
   bool mock_scrollbars_enabled;
+  bool hide_scrollbars;
   bool accelerated_2d_canvas_enabled;
   int minimum_accelerated_2d_canvas_size;
   bool disable_2d_canvas_copy_on_write;
@@ -137,7 +138,6 @@ struct CONTENT_EXPORT WebPreferences {
   bool accelerated_filters_enabled;
   bool deferred_filters_enabled;
   bool container_culling_enabled;
-  bool allow_displaying_insecure_content;
   bool allow_running_insecure_content;
   // If true, taints all <canvas> elements, regardless of origin.
   bool disable_reading_from_canvas;
@@ -239,6 +239,9 @@ struct CONTENT_EXPORT WebPreferences {
   bool resue_global_for_unowned_main_frame;
   bool autoplay_muted_videos_enabled;
   ProgressBarCompletion progress_bar_completion;
+  // Specifies default setting for spellcheck when the spellcheck attribute is
+  // not explicitly specified.
+  bool spellcheck_enabled_by_default;
 #endif
 
   // String that describes how media element autoplay behavior should be

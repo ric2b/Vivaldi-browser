@@ -128,21 +128,17 @@ class TestLoFiDecider : public LoFiDecider {
 
 class TestLoFiUIService : public LoFiUIService {
  public:
-  TestLoFiUIService() : on_lofi_response_(false), is_preview_(false) {}
+  TestLoFiUIService() : on_lofi_response_(false) {}
   ~TestLoFiUIService() override {}
 
   bool DidNotifyLoFiResponse() const { return on_lofi_response_; }
-  bool is_preview() const { return is_preview_; }
 
-  void OnLoFiReponseReceived(const net::URLRequest& request,
-                             bool is_preview) override {
+  void OnLoFiReponseReceived(const net::URLRequest& request) override {
     on_lofi_response_ = true;
-    is_preview_ = is_preview;
   }
 
  private:
   bool on_lofi_response_;
-  bool is_preview_;
 };
 
 // Overrides net::NetworkQualityEstimator for testing.
@@ -212,10 +208,6 @@ class DataReductionProxyNetworkDelegateTest : public testing::Test {
 
   void VerifyDidNotifyLoFiResponse(bool lofi_response) const {
     EXPECT_EQ(lofi_response, lofi_ui_service_->DidNotifyLoFiResponse());
-  }
-
-  void VerifyLoFiPreviewResponse(bool is_preview) const {
-    EXPECT_EQ(is_preview, lofi_ui_service_->is_preview());
   }
 
   void VerifyDataReductionProxyData(const net::URLRequest& request,
@@ -395,7 +387,7 @@ TEST_F(DataReductionProxyNetworkDelegateTest, LoFiTransitions) {
 
       std::unique_ptr<net::URLRequest> fake_request(FetchURLRequest(
           GURL("http://www.google.com/"), nullptr, std::string(), 0));
-      fake_request->SetLoadFlags(net::LOAD_MAIN_FRAME);
+      fake_request->SetLoadFlags(net::LOAD_MAIN_FRAME_DEPRECATED);
       lofi_decider()->SetIsUsingLoFiMode(
           config()->ShouldEnableLoFiMode(*fake_request.get()));
       network_delegate()->NotifyBeforeSendHeaders(fake_request.get(),
@@ -452,7 +444,7 @@ TEST_F(DataReductionProxyNetworkDelegateTest, LoFiTransitions) {
       net::ProxyRetryInfoMap proxy_retry_info;
       std::unique_ptr<net::URLRequest> fake_request(FetchURLRequest(
           GURL("http://www.google.com/"), nullptr, std::string(), 0));
-      fake_request->SetLoadFlags(net::LOAD_MAIN_FRAME);
+      fake_request->SetLoadFlags(net::LOAD_MAIN_FRAME_DEPRECATED);
       lofi_decider()->SetIsUsingLoFiMode(false);
       network_delegate()->NotifyBeforeSendHeaders(fake_request.get(),
                                                   data_reduction_proxy_info,
@@ -487,7 +479,7 @@ TEST_F(DataReductionProxyNetworkDelegateTest, LoFiTransitions) {
       net::ProxyRetryInfoMap proxy_retry_info;
       std::unique_ptr<net::URLRequest> fake_request(FetchURLRequest(
           GURL("http://www.google.com/"), nullptr, std::string(), 0));
-      fake_request->SetLoadFlags(net::LOAD_MAIN_FRAME);
+      fake_request->SetLoadFlags(net::LOAD_MAIN_FRAME_DEPRECATED);
       lofi_decider()->SetIsUsingLoFiMode(
           config()->ShouldEnableLoFiMode(*fake_request.get()));
       network_delegate()->NotifyBeforeSendHeaders(fake_request.get(),
@@ -548,7 +540,8 @@ TEST_F(DataReductionProxyNetworkDelegateTest, RequestDataConfigurations) {
 
     std::unique_ptr<net::URLRequest> request = context()->CreateRequest(
         GURL("http://www.google.com/"), net::RequestPriority::IDLE, nullptr);
-    request->SetLoadFlags(test.main_frame ? net::LOAD_MAIN_FRAME : 0);
+    request->SetLoadFlags(test.main_frame ? net::LOAD_MAIN_FRAME_DEPRECATED
+                                          : 0);
     lofi_decider()->SetIsUsingLoFiMode(test.lofi_on);
     io_data()->request_options()->SetSecureSession("fake-session");
     network_delegate()->NotifyBeforeSendHeaders(
@@ -563,7 +556,7 @@ TEST_F(DataReductionProxyNetworkDelegateTest, RequestDataConfigurations) {
                                 : net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN,
                 data->effective_connection_type());
       EXPECT_TRUE(data->used_data_reduction_proxy());
-      EXPECT_EQ(GURL("http://www.google.com/"), data->original_request_url());
+      EXPECT_EQ(GURL("http://www.google.com/"), data->request_url());
       EXPECT_EQ("fake-session", data->session_key());
       EXPECT_EQ(test.lofi_on, data->lofi_requested());
     }
@@ -617,6 +610,49 @@ TEST_F(DataReductionProxyNetworkDelegateTest,
   }
 }
 
+TEST_F(DataReductionProxyNetworkDelegateTest, RedirectRequestDataCleared) {
+  net::ProxyInfo data_reduction_proxy_info;
+  std::string data_reduction_proxy;
+  base::TrimString(params()->DefaultOrigin(), "/", &data_reduction_proxy);
+  data_reduction_proxy_info.UseNamedProxy(data_reduction_proxy);
+
+  // Main frame loaded. Lo-Fi should be used.
+  net::HttpRequestHeaders headers;
+  net::ProxyRetryInfoMap proxy_retry_info;
+
+  std::map<std::string, std::string> network_quality_estimator_params;
+  TestNetworkQualityEstimator test_network_quality_estimator(
+      network_quality_estimator_params, net::EFFECTIVE_CONNECTION_TYPE_OFFLINE);
+  context()->set_network_quality_estimator(&test_network_quality_estimator);
+
+  std::unique_ptr<net::URLRequest> request = context()->CreateRequest(
+      GURL("http://www.google.com/"), net::RequestPriority::IDLE, nullptr);
+  request->SetLoadFlags(net::LOAD_MAIN_FRAME_DEPRECATED);
+  lofi_decider()->SetIsUsingLoFiMode(true);
+  io_data()->request_options()->SetSecureSession("fake-session");
+  network_delegate()->NotifyBeforeSendHeaders(
+      request.get(), data_reduction_proxy_info, proxy_retry_info, &headers);
+  DataReductionProxyData* data =
+      DataReductionProxyData::GetData(*request.get());
+
+  EXPECT_TRUE(data);
+  EXPECT_EQ(net::EFFECTIVE_CONNECTION_TYPE_OFFLINE,
+            data->effective_connection_type());
+  EXPECT_TRUE(data->used_data_reduction_proxy());
+  EXPECT_EQ(GURL("http://www.google.com/"), data->request_url());
+  EXPECT_EQ("fake-session", data->session_key());
+  EXPECT_TRUE(data->lofi_requested());
+
+  data_reduction_proxy_info.UseNamedProxy("port.of.other.proxy");
+
+  // Simulate a redirect by calling NotifyBeforeSendHeaders again with different
+  // proxy info.
+  network_delegate()->NotifyBeforeSendHeaders(
+      request.get(), data_reduction_proxy_info, proxy_retry_info, &headers);
+  data = DataReductionProxyData::GetData(*request.get());
+  EXPECT_FALSE(data);
+}
+
 TEST_F(DataReductionProxyNetworkDelegateTest, NetHistograms) {
   const std::string kReceivedValidOCLHistogramName =
       "Net.HttpContentLengthWithValidOCL";
@@ -660,7 +696,8 @@ TEST_F(DataReductionProxyNetworkDelegateTest, NetHistograms) {
   std::unique_ptr<net::URLRequest> fake_request(
       FetchURLRequest(GURL("http://www.google.com/"), nullptr, response_headers,
                       kResponseContentLength));
-  fake_request->SetLoadFlags(fake_request->load_flags() | net::LOAD_MAIN_FRAME);
+  fake_request->SetLoadFlags(fake_request->load_flags() |
+                             net::LOAD_MAIN_FRAME_DEPRECATED);
 
   base::TimeDelta freshness_lifetime =
       fake_request->response_info().headers->GetFreshnessLifetimes(
@@ -737,7 +774,7 @@ TEST_F(DataReductionProxyNetworkDelegateTest, NetHistograms) {
     fake_request = (FetchURLRequest(GURL("http://www.example.com/"), nullptr,
                                     response_headers, kResponseContentLength));
     fake_request->SetLoadFlags(fake_request->load_flags() |
-                               net::LOAD_MAIN_FRAME);
+                               net::LOAD_MAIN_FRAME_DEPRECATED);
 
     // Histograms are accumulative, so get the sum of all the tests so far.
     int expected_count = 0;
@@ -792,34 +829,6 @@ TEST_F(DataReductionProxyNetworkDelegateTest, OnCompletedInternalLoFi) {
   }
 }
 
-TEST_F(DataReductionProxyNetworkDelegateTest, OnCompletedInternalLoFiPreview) {
-  // Enable Lo-Fi.
-  const struct {
-    bool is_preview;
-  } tests[] = {
-      {false}, {true},
-  };
-
-  for (size_t i = 0; i < arraysize(tests); ++i) {
-    std::string response_headers =
-        "HTTP/1.1 200 OK\r\n"
-        "Date: Wed, 28 Nov 2007 09:40:09 GMT\r\n"
-        "Expires: Mon, 24 Nov 2014 12:45:26 GMT\r\n"
-        "Via: 1.1 Chrome-Compression-Proxy\r\n"
-        "x-original-content-length: 200\r\n";
-
-    if (tests[i].is_preview)
-      response_headers += "Chrome-Proxy: q=preview\r\n";
-
-    response_headers += "\r\n";
-    FetchURLRequest(GURL("http://www.google.com/"), nullptr, response_headers,
-                    140);
-
-    VerifyDidNotifyLoFiResponse(tests[i].is_preview);
-    VerifyLoFiPreviewResponse(tests[i].is_preview);
-  }
-}
-
 TEST_F(DataReductionProxyNetworkDelegateTest,
        TestLoFiTransformationTypeHistogram) {
   const char kLoFiTransformationTypeHistogram[] =
@@ -831,7 +840,7 @@ TEST_F(DataReductionProxyNetworkDelegateTest,
   FetchURLRequest(GURL("http://www.google.com/"), &request_headers,
                   std::string(), 140);
   histogram_tester.ExpectBucketCount(kLoFiTransformationTypeHistogram,
-                                     NO_TRANSFORMATION_PREVIEW_REQUESTED, 1);
+                                     NO_TRANSFORMATION_LITE_PAGE_REQUESTED, 1);
 
   std::string response_headers =
       "HTTP/1.1 200 OK\r\n"
@@ -845,8 +854,8 @@ TEST_F(DataReductionProxyNetworkDelegateTest,
   FetchURLRequest(GURL("http://www.google.com/"), nullptr, response_headers,
                   140);
 
-  histogram_tester.ExpectBucketCount(kLoFiTransformationTypeHistogram, PREVIEW,
-                                     1);
+  histogram_tester.ExpectBucketCount(kLoFiTransformationTypeHistogram,
+                                     LITE_PAGE, 1);
 }
 
 }  // namespace

@@ -40,7 +40,9 @@ class LayerTreeImplTest : public testing::Test {
     return host_impl().active_tree()->RenderSurfaceLayerList();
   }
 
-  void ExecuteCalculateDrawProperties(LayerImpl* root_layer) {
+  void ExecuteCalculateDrawProperties(
+      LayerImpl* root_layer,
+      bool skip_verify_visible_rect_calculations = false) {
     // We are probably not testing what is intended if the root_layer bounds are
     // empty.
     DCHECK(!root_layer->bounds().IsEmpty());
@@ -49,6 +51,8 @@ class LayerTreeImplTest : public testing::Test {
     LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting inputs(
         root_layer, root_layer->bounds(), &render_surface_layer_list_impl_);
     inputs.can_adjust_raster_scales = true;
+    if (skip_verify_visible_rect_calculations)
+      inputs.verify_visible_rect_calculations = false;
     LayerTreeHostCommon::CalculateDrawPropertiesForTesting(&inputs);
   }
 
@@ -240,7 +244,14 @@ TEST_F(LayerTreeImplTest, HitTestingForUninvertibleTransform) {
   root->SetDrawsContent(true);
 
   host_impl().SetViewportSize(root->bounds());
-  host_impl().UpdateNumChildrenAndDrawPropertiesForActiveTree();
+  // While computing visible rects by combining clips in screen space, we set
+  // the entire layer as visible if the screen space transform is singular. This
+  // is not always true when we combine clips in target space because if the
+  // intersection of combined_clip in taret space with layer_rect projected to
+  // target space is empty, we set it to an empty rect.
+  bool skip_verify_visible_rect_calculations = true;
+  host_impl().UpdateNumChildrenAndDrawPropertiesForActiveTree(
+      skip_verify_visible_rect_calculations);
   // Sanity check the scenario we just created.
   ASSERT_EQ(1u, RenderSurfaceLayerList().size());
   ASSERT_EQ(1u, root_layer()->render_surface()->layer_list().size());
@@ -620,6 +631,10 @@ TEST_F(LayerTreeImplTest, HitTestingForMultiClippedRotatedLayer) {
 
   root->SetBounds(gfx::Size(100, 100));
   root->SetMasksToBounds(true);
+  // Visible rects computed by combinig clips in target space and root space
+  // don't match because of rotation transforms. So, we skip
+  // verify_visible_rect_calculations.
+  bool skip_verify_visible_rect_calculations = true;
   {
     std::unique_ptr<LayerImpl> child =
         LayerImpl::Create(host_impl().active_tree(), 456);
@@ -659,11 +674,12 @@ TEST_F(LayerTreeImplTest, HitTestingForMultiClippedRotatedLayer) {
     child->test_properties()->AddChild(std::move(grand_child));
     root->test_properties()->AddChild(std::move(child));
 
-    ExecuteCalculateDrawProperties(root);
+    ExecuteCalculateDrawProperties(root, skip_verify_visible_rect_calculations);
   }
 
   host_impl().SetViewportSize(root->bounds());
-  host_impl().UpdateNumChildrenAndDrawPropertiesForActiveTree();
+  host_impl().UpdateNumChildrenAndDrawPropertiesForActiveTree(
+      skip_verify_visible_rect_calculations);
   // (11, 89) is close to the the bottom left corner within the clip, but it is
   // not inside the layer.
   gfx::PointF test_point(11.f, 89.f);
@@ -1324,7 +1340,14 @@ TEST_F(LayerTreeImplTest,
   root->SetTouchEventHandlerRegion(touch_handler_region);
 
   host_impl().SetViewportSize(root->bounds());
-  host_impl().UpdateNumChildrenAndDrawPropertiesForActiveTree();
+  // While computing visible rects by combining clips in screen space, we set
+  // the entire layer as visible if the screen space transform is singular. This
+  // is not always true when we combine clips in target space because if the
+  // intersection of combined_clip in taret space with layer_rect projected to
+  // target space is empty, we set it to an empty rect.
+  bool skip_verify_visible_rect_calculations = true;
+  host_impl().UpdateNumChildrenAndDrawPropertiesForActiveTree(
+      skip_verify_visible_rect_calculations);
 
   // Sanity check the scenario we just created.
   ASSERT_EQ(1u, RenderSurfaceLayerList().size());
@@ -2222,6 +2245,16 @@ TEST_F(LayerTreeImplTest, DeviceScaleFactorNeedsDrawPropertiesUpdate) {
   EXPECT_FALSE(host_impl().active_tree()->needs_update_draw_properties());
   host_impl().active_tree()->SetDeviceScaleFactor(2.f);
   EXPECT_TRUE(host_impl().active_tree()->needs_update_draw_properties());
+}
+
+TEST_F(LayerTreeImplTest, DeviceColorSpaceDoesNotNeedDrawPropertiesUpdate) {
+  host_impl().active_tree()->BuildPropertyTreesForTesting();
+  host_impl().active_tree()->SetDeviceColorSpace(
+      gfx::ColorSpace::CreateXYZD50());
+  host_impl().active_tree()->UpdateDrawProperties(false);
+  EXPECT_FALSE(host_impl().active_tree()->needs_update_draw_properties());
+  host_impl().active_tree()->SetDeviceColorSpace(gfx::ColorSpace::CreateSRGB());
+  EXPECT_FALSE(host_impl().active_tree()->needs_update_draw_properties());
 }
 
 TEST_F(LayerTreeImplTest, HitTestingCorrectLayerWheelListener) {

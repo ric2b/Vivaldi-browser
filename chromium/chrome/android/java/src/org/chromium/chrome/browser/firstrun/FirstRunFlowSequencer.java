@@ -23,8 +23,8 @@ import org.chromium.chrome.browser.preferences.privacy.PrivacyPreferencesManager
 import org.chromium.chrome.browser.services.AndroidEduAndChildAccountHelper;
 import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.util.FeatureUtilities;
-import org.chromium.components.sync.signin.AccountManagerHelper;
-import org.chromium.components.sync.signin.ChromeSigninController;
+import org.chromium.components.signin.AccountManagerHelper;
+import org.chromium.components.signin.ChromeSigninController;
 
 /**
  * A helper to determine what should be the sequence of First Run Experience screens.
@@ -88,8 +88,9 @@ public abstract class FirstRunFlowSequencer  {
 
     @VisibleForTesting
     protected boolean isSyncAllowed() {
-        return FeatureUtilities.canAllowSync(mActivity)
-                && !SigninManager.get(mActivity.getApplicationContext()).isSigninDisabledByPolicy();
+        SigninManager signinManager = SigninManager.get(mActivity.getApplicationContext());
+        return FeatureUtilities.canAllowSync(mActivity) && !signinManager.isSigninDisabledByPolicy()
+                && signinManager.isSigninSupported();
     }
 
     @VisibleForTesting
@@ -119,7 +120,7 @@ public abstract class FirstRunFlowSequencer  {
 
     @VisibleForTesting
     protected void setDefaultMetricsAndCrashReporting() {
-        PrivacyPreferencesManager.getInstance().initCrashUploadPreference(
+        PrivacyPreferencesManager.getInstance().setUsageAndCrashReporting(
                 FirstRunActivity.DEFAULT_METRICS_AND_CRASH_REPORTING);
     }
 

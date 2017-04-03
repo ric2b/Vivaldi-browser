@@ -10,14 +10,20 @@
 #include "net/base/net_errors.h"
 
 #if defined(ENABLE_EXTENSIONS)
+#include "base/debug/alias.h"
+#include "base/debug/dump_without_crashing.h"
+#include "base/strings/string_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/proxy/proxy_api.h"
 #include "chrome/browser/extensions/event_router_forwarder.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/renderer_host/chrome_navigation_ui_data.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/resource_request_info.h"
 #include "extensions/browser/api/web_request/web_request_api.h"
+#include "extensions/browser/extension_navigation_ui_data.h"
 #include "extensions/browser/info_map.h"
 #include "extensions/browser/process_manager.h"
 #include "extensions/common/constants.h"
@@ -81,6 +87,19 @@ void ForwardRequestStatus(
         base::Bind(&NotifyEPMRequestStatus, status, profile_id,
                    request->identifier(), process_id, render_frame_id));
   }
+}
+
+extensions::ExtensionNavigationUIData* GetExtensionNavigationUIData(
+    net::URLRequest* request) {
+  const content::ResourceRequestInfo* info =
+      content::ResourceRequestInfo::ForRequest(request);
+  if (!info)
+    return nullptr;
+  ChromeNavigationUIData* navigation_data =
+      static_cast<ChromeNavigationUIData*>(info->GetNavigationUIData());
+  if (!navigation_data)
+    return nullptr;
+  return navigation_data->GetExtensionNavigationUIData();
 }
 
 class ChromeExtensionsNetworkDelegateImpl
@@ -182,12 +201,30 @@ int ChromeExtensionsNetworkDelegateImpl::OnBeforeURLRequest(
         extension &&
         extension->permissions_data()->HasAPIPermission(
             extensions::APIPermission::kWebView);
-    if (!has_webview_permission)
+    // Check whether the request is coming from a <webview> guest process via
+    // ChildProcessSecurityPolicy.  A guest process should have already been
+    // granted permission to request |origin| when its WebContents was created.
+    // See https://crbug.com/656752.
+    auto* policy = content::ChildProcessSecurityPolicy::GetInstance();
+    bool from_guest =
+        policy->HasSpecificPermissionForOrigin(info->GetChildID(), origin);
+    if (!has_webview_permission || !from_guest) {
+      // TODO(alexmos): Temporary instrumentation to find any regressions for
+      // this blocking.  Remove after verifying that this is not breaking any
+      // legitimate use cases.
+      char origin_copy[256];
+      base::strlcpy(origin_copy, origin.Serialize().c_str(),
+                    arraysize(origin_copy));
+      base::debug::Alias(&origin_copy);
+      base::debug::Alias(&from_guest);
+      base::debug::DumpWithoutCrashing();
       return net::ERR_ABORTED;
+    }
   }
 
   return ExtensionWebRequestEventRouter::GetInstance()->OnBeforeRequest(
-      profile_, extension_info_map_.get(), request, callback, new_url);
+      profile_, extension_info_map_.get(),
+      GetExtensionNavigationUIData(request), request, callback, new_url);
 }
 
 int ChromeExtensionsNetworkDelegateImpl::OnBeforeStartTransaction(
@@ -195,14 +232,16 @@ int ChromeExtensionsNetworkDelegateImpl::OnBeforeStartTransaction(
     const net::CompletionCallback& callback,
     net::HttpRequestHeaders* headers) {
   return ExtensionWebRequestEventRouter::GetInstance()->OnBeforeSendHeaders(
-      profile_, extension_info_map_.get(), request, callback, headers);
+      profile_, extension_info_map_.get(),
+      GetExtensionNavigationUIData(request), request, callback, headers);
 }
 
 void ChromeExtensionsNetworkDelegateImpl::OnStartTransaction(
     net::URLRequest* request,
     const net::HttpRequestHeaders& headers) {
   ExtensionWebRequestEventRouter::GetInstance()->OnSendHeaders(
-      profile_, extension_info_map_.get(), request, headers);
+      profile_, extension_info_map_.get(),
+      GetExtensionNavigationUIData(request), request, headers);
 }
 
 int ChromeExtensionsNetworkDelegateImpl::OnHeadersReceived(
@@ -212,12 +251,9 @@ int ChromeExtensionsNetworkDelegateImpl::OnHeadersReceived(
     scoped_refptr<net::HttpResponseHeaders>* override_response_headers,
     GURL* allowed_unsafe_redirect_url) {
   return ExtensionWebRequestEventRouter::GetInstance()->OnHeadersReceived(
-      profile_,
-      extension_info_map_.get(),
-      request,
-      callback,
-      original_response_headers,
-      override_response_headers,
+      profile_, extension_info_map_.get(),
+      GetExtensionNavigationUIData(request), request, callback,
+      original_response_headers, override_response_headers,
       allowed_unsafe_redirect_url);
 }
 
@@ -225,14 +261,16 @@ void ChromeExtensionsNetworkDelegateImpl::OnBeforeRedirect(
     net::URLRequest* request,
     const GURL& new_location) {
   ExtensionWebRequestEventRouter::GetInstance()->OnBeforeRedirect(
-      profile_, extension_info_map_.get(), request, new_location);
+      profile_, extension_info_map_.get(),
+      GetExtensionNavigationUIData(request), request, new_location);
 }
 
 
 void ChromeExtensionsNetworkDelegateImpl::OnResponseStarted(
     net::URLRequest* request) {
   ExtensionWebRequestEventRouter::GetInstance()->OnResponseStarted(
-      profile_, extension_info_map_.get(), request);
+      profile_, extension_info_map_.get(),
+      GetExtensionNavigationUIData(request), request);
   ForwardProxyErrors(request);
 }
 
@@ -245,7 +283,8 @@ void ChromeExtensionsNetworkDelegateImpl::OnCompleted(
             request->response_headers()->response_code());
     if (!is_redirect) {
       ExtensionWebRequestEventRouter::GetInstance()->OnCompleted(
-          profile_, extension_info_map_.get(), request);
+          profile_, extension_info_map_.get(),
+          GetExtensionNavigationUIData(request), request);
     }
     return;
   }
@@ -253,7 +292,8 @@ void ChromeExtensionsNetworkDelegateImpl::OnCompleted(
   if (request->status().status() == net::URLRequestStatus::FAILED ||
       request->status().status() == net::URLRequestStatus::CANCELED) {
     ExtensionWebRequestEventRouter::GetInstance()->OnErrorOccurred(
-        profile_, extension_info_map_.get(), request, started);
+        profile_, extension_info_map_.get(),
+        GetExtensionNavigationUIData(request), request, started);
     return;
   }
 
@@ -280,7 +320,8 @@ ChromeExtensionsNetworkDelegateImpl::OnAuthRequired(
     const AuthCallback& callback,
     net::AuthCredentials* credentials) {
   return ExtensionWebRequestEventRouter::GetInstance()->OnAuthRequired(
-      profile_, extension_info_map_.get(), request, auth_info, callback,
+      profile_, extension_info_map_.get(),
+      GetExtensionNavigationUIData(request), request, auth_info, callback,
       credentials);
 }
 

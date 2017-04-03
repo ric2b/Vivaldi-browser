@@ -22,7 +22,7 @@
 #include "cc/resources/memory_history.h"
 #include "cc/resources/resource_pool.h"
 #include "cc/tiles/eviction_tile_priority_queue.h"
-#include "cc/tiles/image_decode_controller.h"
+#include "cc/tiles/image_manager.h"
 #include "cc/tiles/raster_tile_priority_queue.h"
 #include "cc/tiles/tile.h"
 #include "cc/tiles/tile_draw_info.h"
@@ -38,6 +38,7 @@ class TracedValue;
 namespace cc {
 class PictureLayerImpl;
 class ResourceProvider;
+class ImageDecodeController;
 
 class CC_EXPORT TileManagerClient {
  public:
@@ -76,6 +77,9 @@ class CC_EXPORT TileManagerClient {
   // draw. This can be used to preemptively start a frame.
   virtual void SetIsLikelyToRequireADraw(bool is_likely_to_require_a_draw) = 0;
 
+  // Requests the color space into which tiles should be rasterized.
+  virtual gfx::ColorSpace GetTileColorSpace() const = 0;
+
  protected:
   virtual ~TileManagerClient() {}
 };
@@ -98,8 +102,7 @@ class CC_EXPORT TileManager {
   TileManager(TileManagerClient* client,
               base::SequencedTaskRunner* task_runner,
               size_t scheduled_raster_task_limit,
-              bool use_partial_raster,
-              int max_preraster_distance_in_screen_pixels);
+              bool use_partial_raster);
   virtual ~TileManager();
 
   // Assigns tile memory and schedules work to prepare tiles for drawing.
@@ -149,7 +152,8 @@ class CC_EXPORT TileManager {
       TileDrawInfo& draw_info = tiles[i]->draw_info();
       draw_info.resource_ = resource_pool_->AcquireResource(
           tiles[i]->desired_texture_size(),
-          raster_buffer_provider_->GetResourceFormat(false), gfx::ColorSpace());
+          raster_buffer_provider_->GetResourceFormat(false),
+          client_->GetTileColorSpace());
     }
   }
 
@@ -258,7 +262,8 @@ class CC_EXPORT TileManager {
   void FreeResourcesForTile(Tile* tile);
   void FreeResourcesForTileAndNotifyClientIfTileWasReadyToDraw(Tile* tile);
   scoped_refptr<TileTask> CreateRasterTask(
-      const PrioritizedTile& prioritized_tile);
+      const PrioritizedTile& prioritized_tile,
+      const gfx::ColorSpace& color_space);
 
   std::unique_ptr<EvictionTilePriorityQueue>
   FreeTileResourcesUntilUsageIsWithinLimit(
@@ -313,7 +318,7 @@ class CC_EXPORT TileManager {
   bool did_check_for_completed_tasks_since_last_schedule_tasks_;
   bool did_oom_on_last_assign_;
 
-  ImageDecodeController* image_decode_controller_;
+  ImageManager image_manager_;
 
   RasterTaskCompletionStats flush_stats_;
 
@@ -338,8 +343,7 @@ class CC_EXPORT TileManager {
   uint64_t next_tile_id_;
 
   std::unordered_map<Tile::Id, std::vector<DrawImage>> scheduled_draw_images_;
-  const int max_preraster_distance_in_screen_pixels_;
-  std::vector<std::pair<DrawImage, scoped_refptr<TileTask>>> locked_images_;
+  std::vector<scoped_refptr<TileTask>> locked_image_tasks_;
 
   base::WeakPtrFactory<TileManager> task_set_finished_weak_ptr_factory_;
 

@@ -17,6 +17,11 @@ void SetUpSimpleHttpServer(const std::map<GURL, std::string>& responses) {
   SetUpHttpServer(base::MakeUnique<HtmlResponseProvider>(responses));
 }
 
+void SetUpSimpleHttpServerWithSetCookies(
+    const std::map<GURL, std::pair<std::string, std::string>>& responses) {
+  SetUpHttpServer(base::MakeUnique<HtmlResponseProvider>(responses));
+}
+
 void SetUpFileBasedHttpServer() {
   base::FilePath path;
   PathService::Get(base::DIR_MODULE, &path);
@@ -28,6 +33,12 @@ void SetUpHttpServer(std::unique_ptr<web::ResponseProvider> provider) {
   DCHECK(server.IsRunning());
 
   server.RemoveAllResponseProviders();
+  server.AddResponseProvider(std::move(provider));
+}
+
+void AddResponseProvider(std::unique_ptr<web::ResponseProvider> provider) {
+  web::test::HttpServer& server = web::test::HttpServer::GetSharedInstance();
+  DCHECK(server.IsRunning());
   server.AddResponseProvider(std::move(provider));
 }
 

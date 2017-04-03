@@ -12,16 +12,15 @@
 #include "base/time/time.h"
 #include "chrome/browser/sync/test/integration/bookmarks_helper.h"
 #include "chrome/browser/sync/test/integration/single_client_status_change_checker.h"
-#include "chrome/browser/sync/test/integration/sync_integration_test_util.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "chrome/browser/sync/test/integration/updated_progress_marker_checker.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/sync/syncable/directory.h"
 #include "components/sync/test/directory_backing_store_corruption_testing.h"
 #include "content/public/browser/browser_thread.h"
 #include "url/gurl.h"
 
 using content::BrowserThread;
-using sync_integration_test_util::AwaitCommitActivityCompletion;
 using syncer::syncable::corruption_testing::kNumEntriesRequiredForCorruption;
 using syncer::syncable::corruption_testing::CorruptDatabase;
 
@@ -49,7 +48,8 @@ bool WaitForExistingTasksOnLoop(base::MessageLoop* loop) {
 // A status change checker that waits for an unrecoverable sync error to occur.
 class SyncUnrecoverableErrorChecker : public SingleClientStatusChangeChecker {
  public:
-  explicit SyncUnrecoverableErrorChecker(ProfileSyncService* service)
+  explicit SyncUnrecoverableErrorChecker(
+      browser_sync::ProfileSyncService* service)
       : SingleClientStatusChangeChecker(service) {}
 
   bool IsExitConditionSatisfied() override {
@@ -64,10 +64,10 @@ class SyncUnrecoverableErrorChecker : public SingleClientStatusChangeChecker {
 IN_PROC_BROWSER_TEST_F(SingleClientDirectorySyncTest,
                        StopThenDisableDeletesDirectory) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
-  ProfileSyncService* sync_service = GetSyncService(0);
+  browser_sync::ProfileSyncService* sync_service = GetSyncService(0);
   base::FilePath directory_path = sync_service->GetDirectoryPathForTest();
   ASSERT_TRUE(base::DirectoryExists(directory_path));
-  sync_service->RequestStop(ProfileSyncService::CLEAR_DATA);
+  sync_service->RequestStop(browser_sync::ProfileSyncService::CLEAR_DATA);
 
   // Wait for StartupController::StartUp()'s tasks to finish.
   base::RunLoop run_loop;
@@ -91,12 +91,12 @@ IN_PROC_BROWSER_TEST_F(SingleClientDirectorySyncTest,
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
   // Sync and wait for syncing to complete.
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
-  ASSERT_TRUE(AwaitCommitActivityCompletion(GetSyncService((0))));
+  ASSERT_TRUE(UpdatedProgressMarkerChecker(GetSyncService(0)).Wait());
   ASSERT_TRUE(bookmarks_helper::ModelMatchesVerifier(0));
 
   // Flush the directory to the backing store and wait until the flush
   // completes.
-  ProfileSyncService* sync_service = GetSyncService(0);
+  browser_sync::ProfileSyncService* sync_service = GetSyncService(0);
   sync_service->FlushDirectory();
   base::MessageLoop* sync_loop = sync_service->GetSyncLoopForTest();
   ASSERT_TRUE(WaitForExistingTasksOnLoop(sync_loop));
@@ -128,9 +128,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientDirectorySyncTest,
   sync_service->FlushDirectory();
 
   // Wait for an unrecoverable error to occur.
-  SyncUnrecoverableErrorChecker checker(sync_service);
-  checker.Wait();
-  ASSERT_TRUE(!checker.TimedOut());
+  ASSERT_TRUE(SyncUnrecoverableErrorChecker(sync_service).Wait());
   ASSERT_TRUE(sync_service->HasUnrecoverableError());
 
   // Wait until the sync loop has processed any existing tasks and see that the

@@ -32,8 +32,7 @@ namespace ppapi {
 class ManifestMessageFilter : public IPC::SyncMessageFilter {
  public:
   ManifestMessageFilter(base::WaitableEvent* shutdown_event)
-      : SyncMessageFilter(shutdown_event,
-                          false /* is_channel_send_thread_safe */),
+      : SyncMessageFilter(shutdown_event),
         connected_event_(base::WaitableEvent::ResetPolicy::MANUAL,
                          base::WaitableEvent::InitialState::NOT_SIGNALED) {}
 
@@ -45,8 +44,8 @@ class ManifestMessageFilter : public IPC::SyncMessageFilter {
 
   // When set up is done, OnFilterAdded is called on IO thread. Unblocks the
   // Send().
-  void OnFilterAdded(IPC::Sender* sender) override {
-    SyncMessageFilter::OnFilterAdded(sender);
+  void OnFilterAdded(IPC::Channel* channel) override {
+    SyncMessageFilter::OnFilterAdded(channel);
     connected_event_.Signal();
   }
 

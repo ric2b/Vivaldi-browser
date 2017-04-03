@@ -10,7 +10,7 @@
 
 #include "base/bind.h"
 #include "base/files/file_path.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/value_conversions.h"
 #include "base/values.h"
@@ -25,7 +25,7 @@
 #include "chrome/browser/ui/webui/profile_helper.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_ui.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -330,12 +330,13 @@ bool CreateProfileHandler::ProcessSupervisedCreateProfileArgs(
       // If sync is not yet fully initialized, the creation may take extra time,
       // so show a message. Import doesn't wait for an acknowledgment, so it
       // won't have the same potential delay.
-      ProfileSyncService* sync_service =
+      browser_sync::ProfileSyncService* sync_service =
           ProfileSyncServiceFactory::GetInstance()->GetForProfile(
               Profile::FromWebUI(web_ui()));
-      ProfileSyncService::SyncStatusSummary status =
+      browser_sync::ProfileSyncService::SyncStatusSummary status =
           sync_service->QuerySyncStatusSummary();
-      if (status == ProfileSyncService::DATATYPES_NOT_INITIALIZED) {
+      if (status ==
+          browser_sync::ProfileSyncService::DATATYPES_NOT_INITIALIZED) {
         ShowProfileCreationWarning(l10n_util::GetStringUTF16(
             IDS_PROFILES_CREATE_SUPERVISED_JUST_SIGNED_IN));
       }

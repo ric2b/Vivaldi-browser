@@ -24,6 +24,7 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.FlakyTest;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
@@ -45,6 +46,7 @@ import java.util.concurrent.TimeoutException;
 /**
  * Test the behavior of tabs when opening a URL from an external app.
  */
+@RetryOnFailure
 public class TabsOpenedFromExternalAppTest extends ChromeTabbedActivityTestBase {
     private static final String EXTERNAL_APP_1_ID = "app1";
     private static final String EXTERNAL_APP_2_ID = "app2";
@@ -708,7 +710,7 @@ public class TabsOpenedFromExternalAppTest extends ChromeTabbedActivityTestBase 
      */
     @MediumTest
     @CommandLineFlags.Add({"enable-spdy-proxy-auth", "data-reduction-proxy-lo-fi=always-on",
-            "enable-data-reduction-proxy-lo-fi-preview"})
+            "enable-data-reduction-proxy-lite-page"})
     public void testLaunchWebLiteURL() throws InterruptedException {
         startMainActivityFromLauncher();
 

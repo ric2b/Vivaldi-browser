@@ -350,17 +350,16 @@ bool BufferedResourceLoader::range_supported() {
 
 /////////////////////////////////////////////////////////////////////////////
 // blink::WebURLLoaderClient implementation.
-void BufferedResourceLoader::willFollowRedirect(
+bool BufferedResourceLoader::willFollowRedirect(
     WebURLLoader* loader,
     WebURLRequest& newRequest,
-    const WebURLResponse& redirectResponse,
-    int64_t encodedDataLength) {
+    const WebURLResponse& redirectResponse) {
   // The load may have been stopped and |start_cb| is destroyed.
   // In this case we shouldn't do anything.
   if (start_cb_.is_null()) {
     // Set the url in the request to an invalid value (empty url).
     newRequest.setURL(blink::WebURL());
-    return;
+    return false;
   }
 
   // Only allow |single_origin_| if we haven't seen a different origin yet.
@@ -368,6 +367,7 @@ void BufferedResourceLoader::willFollowRedirect(
     single_origin_ = url_.GetOrigin() == GURL(newRequest.url()).GetOrigin();
 
   url_ = newRequest.url();
+  return true;
 }
 
 void BufferedResourceLoader::didSendData(

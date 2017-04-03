@@ -26,6 +26,7 @@
 #include "content/common/input/input_event_ack_state.h"
 #include "content/public/browser/readback_types.h"
 #include "content/public/browser/render_widget_host_view.h"
+#include "content/public/common/screen_info.h"
 #include "ipc/ipc_listener.h"
 #include "third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationType.h"
 #include "third_party/WebKit/public/web/WebPopupType.h"
@@ -49,7 +50,6 @@ class VideoFrame;
 }
 
 namespace blink {
-struct WebScreenInfo;
 class WebMouseEvent;
 class WebMouseWheelEvent;
 }
@@ -206,9 +206,10 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   virtual gfx::NativeViewAccessible AccessibilityGetNativeViewAccessible();
 
   // Informs that the focused DOM node has changed.
-  virtual void FocusedNodeChanged(bool is_editable_node) {}
+  virtual void FocusedNodeChanged(bool is_editable_node,
+                                  const gfx::Rect& node_bounds_in_screen) {}
 
-  virtual void OnSwapCompositorFrame(uint32_t output_surface_id,
+  virtual void OnSwapCompositorFrame(uint32_t compositor_frame_sink_id,
                                      cc::CompositorFrame frame) {}
 
   // This method exists to allow removing of displayed graphics, after a new
@@ -230,16 +231,17 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
 
   // Returns the compositing surface ID namespace, or 0 if Surfaces are not
   // enabled.
-  virtual uint32_t GetSurfaceClientId();
+  virtual cc::FrameSinkId GetFrameSinkId();
 
   // When there are multiple RenderWidgetHostViews for a single page, input
   // events need to be targeted to the correct one for handling. The following
   // methods are invoked on the RenderWidgetHostView that should be able to
   // properly handle the event (i.e. it has focus for keyboard events, or has
   // been identified by hit testing mouse, touch or gesture events).
-  virtual uint32_t SurfaceClientIdAtPoint(cc::SurfaceHittestDelegate* delegate,
-                                          const gfx::Point& point,
-                                          gfx::Point* transformed_point);
+  virtual cc::FrameSinkId FrameSinkIdAtPoint(
+      cc::SurfaceHittestDelegate* delegate,
+      const gfx::Point& point,
+      gfx::Point* transformed_point);
   virtual void ProcessKeyboardEvent(const NativeWebKeyboardEvent& event) {}
   virtual void ProcessMouseEvent(const blink::WebMouseEvent& event,
                                  const ui::LatencyInfo& latency) {}
@@ -269,6 +271,20 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   virtual gfx::Point TransformPointToCoordSpaceForView(
       const gfx::Point& point,
       RenderWidgetHostViewBase* target_view);
+
+  // TODO(kenrb, wjmaclean): This is a temporary subclass identifier for
+  // RenderWidgetHostViewGuests that is needed for special treatment during
+  // input event routing. It can be removed either when RWHVGuests properly
+  // support direct mouse event routing, or when RWHVGuest is removed
+  // entirely, which comes first.
+  virtual bool IsRenderWidgetHostViewGuest();
+
+  // Subclass identifier for RenderWidgetHostViewChildFrames. This is useful
+  // to be able to know if this RWHV is embedded within another RWHV. If
+  // other kinds of embeddable RWHVs are created, this should be renamed to
+  // a more generic term -- in which case, static casts to RWHVChildFrame will
+  // need to also be resolved.
+  virtual bool IsRenderWidgetHostViewChildFrame();
 
   //----------------------------------------------------------------------------
   // The following methods are related to IME.
@@ -370,11 +386,11 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   virtual bool HasAcceleratedSurface(const gfx::Size& desired_size) = 0;
 
   // Compute the orientation type of the display assuming it is a mobile device.
-  static blink::WebScreenOrientationType GetOrientationTypeForMobile(
+  static ScreenOrientationValues GetOrientationTypeForMobile(
       const display::Display& display);
 
   // Compute the orientation type of the display assuming it is a desktop.
-  static blink::WebScreenOrientationType GetOrientationTypeForDesktop(
+  static ScreenOrientationValues GetOrientationTypeForDesktop(
       const display::Display& display);
 
   // Gets the bounds of the window, in screen coordinates.

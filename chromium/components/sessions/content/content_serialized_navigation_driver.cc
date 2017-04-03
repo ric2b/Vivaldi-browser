@@ -18,6 +18,13 @@ const int kObsoleteReferrerPolicyAlways = 0;
 const int kObsoleteReferrerPolicyDefault = 1;
 const int kObsoleteReferrerPolicyNever = 2;
 const int kObsoleteReferrerPolicyOrigin = 3;
+
+bool IsUberOrUberReplacementURL(const GURL& url) {
+  return url.SchemeIs(content::kChromeUIScheme) &&
+         (url.host() == content::kChromeUIHistoryHost ||
+          url.host() == content::kChromeUIUberHost);
+}
+
 }  // namespace
 
 // static
@@ -103,6 +110,14 @@ void ContentSerializedNavigationDriver::Sanitize(
       content::Referrer::SanitizeForRequest(navigation->virtual_url_,
                                             old_referrer);
 
+  // Clear any Uber UI page state so that these pages are reloaded rather than
+  // restored from page state. This fixes session restore when WebUI URLs
+  // change.
+  if (IsUberOrUberReplacementURL(navigation->virtual_url_) &&
+      IsUberOrUberReplacementURL(navigation->original_request_url_)) {
+    navigation->encoded_page_state_ = std::string();
+  }
+
   // No need to compare the policy, as it doesn't change during
   // sanitization. If there has been a change, the referrer needs to be
   // stripped from the page state as well.
@@ -131,6 +146,20 @@ std::string ContentSerializedNavigationDriver::StripReferrerFromPageState(
   return content::PageState::CreateFromEncodedData(page_state)
       .RemoveReferrer()
       .ToEncodedData();
+}
+
+void ContentSerializedNavigationDriver::RegisterExtendedInfoHandler(
+    const std::string& key,
+    std::unique_ptr<ExtendedInfoHandler> handler) {
+  DCHECK(!key.empty());
+  DCHECK(!extended_info_handler_map_.count(key));
+  DCHECK(handler.get());
+  extended_info_handler_map_[key] = std::move(handler);
+}
+
+const ContentSerializedNavigationDriver::ExtendedInfoHandlerMap&
+ContentSerializedNavigationDriver::GetAllExtendedInfoHandlers() const {
+  return extended_info_handler_map_;
 }
 
 }  // namespace sessions

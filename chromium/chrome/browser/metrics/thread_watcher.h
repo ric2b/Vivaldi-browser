@@ -62,6 +62,7 @@
 #include "base/threading/thread.h"
 #include "base/threading/watchdog.h"
 #include "base/time/time.h"
+#include "components/metrics/call_stack_profile_params.h"
 #include "components/omnibox/browser/omnibox_event_global_tracker.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_observer.h"
@@ -78,10 +79,10 @@ class ThreadWatcher {
   // base::Bind supports methods with up to 6 parameters. WatchingParams is used
   // as a workaround that limitation for invoking ThreadWatcher::StartWatching.
   struct WatchingParams {
-    const content::BrowserThread::ID& thread_id;
-    const std::string& thread_name;
-    const base::TimeDelta& sleep_time;
-    const base::TimeDelta& unresponsive_time;
+    content::BrowserThread::ID thread_id;
+    std::string thread_name;
+    base::TimeDelta sleep_time;
+    base::TimeDelta unresponsive_time;
     uint32_t unresponsive_threshold;
     bool crash_on_hang;
     uint32_t live_threads_threshold;
@@ -101,6 +102,8 @@ class ThreadWatcher {
           crash_on_hang(crash_on_hang_in),
           live_threads_threshold(live_threads_threshold_in) {}
   };
+
+  virtual ~ThreadWatcher();
 
   // This method starts performing health check on the given |thread_id|. It
   // will create ThreadWatcher object for the given |thread_id|, |thread_name|.
@@ -143,8 +146,6 @@ class ThreadWatcher {
   // wait time between ping messages. |unresponsive_time| is the wait time after
   // ping message is sent, to check if we have received pong message or not.
   explicit ThreadWatcher(const WatchingParams& params);
-
-  virtual ~ThreadWatcher();
 
   // This method activates the thread watching which starts ping/pong messaging.
   virtual void ActivateThreadWatching();
@@ -394,10 +395,8 @@ class ThreadWatcherList {
   static void StopWatchingAll();
 
   // Register() stores a pointer to the given ThreadWatcher in a global map.
-  static void Register(ThreadWatcher* watcher);
-
-  // This method returns true if the ThreadWatcher object is registerd.
-  static bool IsRegistered(const content::BrowserThread::ID thread_id);
+  // Returns the pointer if it was successfully registered, null otherwise.
+  static ThreadWatcher* Register(std::unique_ptr<ThreadWatcher> watcher);
 
   // This method returns number of responsive and unresponsive watched threads.
   static void GetStatusOfThreads(uint32_t* responding_thread_count,
@@ -626,9 +625,10 @@ class StartupTimeBomb {
   static void DisarmStartupTimeBomb();
 
  private:
-  // Deletes |startup_watchdog_| if it is joinable. If |startup_watchdog_| is
-  // not joinable, then it will post a delayed task to try again.
-  void DeleteStartupWatchdog();
+  // Deletes the watchdog thread if it is joinable; otherwise it posts a delayed
+  // task to try again.
+  static void DeleteStartupWatchdog(const base::PlatformThreadId thread_id,
+                                    base::Watchdog* startup_watchdog);
 
   // The singleton of this class.
   static StartupTimeBomb* g_startup_timebomb_;
@@ -647,8 +647,10 @@ class JankTimeBomb {
  public:
   // This is instantiated when the jank needs to be detected in a method. Posts
   // an Alarm callback task on WatchDogThread with |duration| as the delay. This
-  // can be called on any thread.
-  explicit JankTimeBomb(base::TimeDelta duration);
+  // can be called on any thread, but the thread's identity should be provided
+  // in |thread|.
+  JankTimeBomb(base::TimeDelta duration,
+               metrics::CallStackProfileParams::Thread thread);
   virtual ~JankTimeBomb();
 
   // Returns true if JankTimeBomb is enabled.
@@ -660,6 +662,9 @@ class JankTimeBomb {
   virtual void Alarm(base::PlatformThreadId thread_id);
 
  private:
+  // The thread that instantiated this object.
+  const metrics::CallStackProfileParams::Thread thread_;
+
   // A profiler that periodically samples stack traces. Used to sample jank
   // behavior.
   std::unique_ptr<base::StackSamplingProfiler> sampling_profiler_;

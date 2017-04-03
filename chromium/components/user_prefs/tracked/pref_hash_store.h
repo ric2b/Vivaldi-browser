@@ -6,6 +6,10 @@
 #define COMPONENTS_PREFS_TRACKED_PREF_HASH_STORE_H_
 
 #include <memory>
+#include <string>
+
+#include "base/values.h"
+#include "components/user_prefs/tracked/pref_hash_store_transaction.h"
 
 class HashStoreContents;
 class PrefHashStoreTransaction;
@@ -21,8 +25,24 @@ class PrefHashStore {
   // of operations on the hash store. |storage| MAY be used as the backing store
   // depending on the implementation. Therefore the HashStoreContents used for
   // related transactions should correspond to the same underlying data store.
+  // |storage| must outlive the returned transaction.
   virtual std::unique_ptr<PrefHashStoreTransaction> BeginTransaction(
-      std::unique_ptr<HashStoreContents> storage) = 0;
+      HashStoreContents* storage) = 0;
+
+  // Computes the MAC to be associated with |path| and |value| in this store.
+  // PrefHashStoreTransaction typically uses this internally but it's also
+  // exposed for users that want to compute MACs ahead of time for asynchronous
+  // operations.
+  virtual std::string ComputeMac(const std::string& path,
+                                 const base::Value* value) = 0;
+
+  // Computes the MAC to be associated with |path| and |split_values| in this
+  // store. PrefHashStoreTransaction typically uses this internally but it's
+  // also exposed for users that want to compute MACs ahead of time for
+  // asynchronous operations.
+  virtual std::unique_ptr<base::DictionaryValue> ComputeSplitMacs(
+      const std::string& path,
+      const base::DictionaryValue* split_values) = 0;
 };
 
 #endif  // COMPONENTS_PREFS_TRACKED_PREF_HASH_STORE_H_

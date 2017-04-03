@@ -93,7 +93,7 @@ class LayerTreeHostSerializationTest : public testing::Test {
   void VerifyHostHasAllExpectedLayersInTree(Layer* root_layer) {
     LayerTreeHostCommon::CallFunctionForEveryLayer(
         root_layer->GetLayerTree(), [root_layer](Layer* layer) {
-          DCHECK(layer->layer_tree_host());
+          DCHECK(layer->GetLayerTreeHostForTesting());
           EXPECT_EQ(layer, layer->GetLayerTree()->LayerById(layer->id()));
         });
   }
@@ -118,20 +118,11 @@ class LayerTreeHostSerializationTest : public testing::Test {
     EXPECT_EQ(layer_tree_host_src_->root_layer()->id(),
               layer_tree_host_dst_->root_layer()->id());
     EXPECT_EQ(layer_tree_host_dst_.get(),
-              layer_tree_dst->inputs_.root_layer->layer_tree_host());
+              layer_tree_dst->inputs_.root_layer->GetLayerTreeHostForTesting());
     EXPECT_EQ(layer_tree_src->inputs_.root_layer->double_sided(),
               layer_tree_dst->inputs_.root_layer->double_sided());
-    EXPECT_EQ(
-        layer_tree_host_src_->debug_state_.show_replica_screen_space_rects,
-        layer_tree_host_dst_->debug_state_.show_replica_screen_space_rects);
     EXPECT_EQ(layer_tree_src->inputs_.device_viewport_size,
               layer_tree_dst->inputs_.device_viewport_size);
-    EXPECT_EQ(layer_tree_src->inputs_.top_controls_shrink_blink_size,
-              layer_tree_dst->inputs_.top_controls_shrink_blink_size);
-    EXPECT_EQ(layer_tree_src->inputs_.top_controls_height,
-              layer_tree_dst->inputs_.top_controls_height);
-    EXPECT_EQ(layer_tree_src->inputs_.top_controls_shown_ratio,
-              layer_tree_dst->inputs_.top_controls_shown_ratio);
     EXPECT_EQ(layer_tree_src->inputs_.device_scale_factor,
               layer_tree_dst->inputs_.device_scale_factor);
     EXPECT_EQ(layer_tree_src->inputs_.painted_device_scale_factor,
@@ -209,10 +200,6 @@ class LayerTreeHostSerializationTest : public testing::Test {
     EXPECT_EQ(layer_tree_src->inputs_.selection,
               layer_tree_dst->inputs_.selection);
     EXPECT_EQ(layer_tree_src->property_trees_, layer_tree_dst->property_trees_);
-    EXPECT_EQ(layer_tree_host_src_->surface_client_id_,
-              layer_tree_host_dst_->surface_client_id_);
-    EXPECT_EQ(layer_tree_host_src_->next_surface_sequence_,
-              layer_tree_host_dst_->next_surface_sequence_);
 
     // All layers must have a property tree index that matches PropertyTrees.
     if (layer_tree_dst->property_trees_.sequence_number) {
@@ -239,15 +226,7 @@ class LayerTreeHostSerializationTest : public testing::Test {
     layer_tree_host_dst_->SetRootLayer(Layer::Create());
     root_layer_src->SetDoubleSided(!root_layer_src->double_sided());
 
-    layer_tree_host_src_->debug_state_.show_replica_screen_space_rects =
-        !layer_tree_host_src_->debug_state_.show_replica_screen_space_rects;
     layer_tree_src->inputs_.device_viewport_size = gfx::Size(3, 14);
-    layer_tree_src->inputs_.top_controls_shrink_blink_size =
-        !layer_tree_src->inputs_.top_controls_shrink_blink_size;
-    layer_tree_src->inputs_.top_controls_height =
-        layer_tree_src->inputs_.top_controls_height * 3 + 1;
-    layer_tree_src->inputs_.top_controls_shown_ratio =
-        layer_tree_src->inputs_.top_controls_shown_ratio * 3 + 1;
     layer_tree_src->inputs_.device_scale_factor =
         layer_tree_src->inputs_.device_scale_factor * 3 + 1;
     layer_tree_src->inputs_.painted_device_scale_factor =
@@ -300,11 +279,6 @@ class LayerTreeHostSerializationTest : public testing::Test {
 
     layer_tree_src->property_trees_.sequence_number =
         layer_tree_src->property_trees_.sequence_number * 3 + 1;
-
-    layer_tree_host_src_->surface_client_id_ =
-        layer_tree_host_src_->surface_client_id_ * 3 + 1;
-    layer_tree_host_src_->next_surface_sequence_ =
-        layer_tree_host_src_->next_surface_sequence_ * 3 + 1;
 
     VerifySerializationAndDeserialization();
   }

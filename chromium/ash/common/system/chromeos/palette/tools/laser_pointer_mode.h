@@ -8,6 +8,10 @@
 #include "ash/ash_export.h"
 #include "ash/common/system/chromeos/palette/common_palette_tool.h"
 
+namespace base {
+class Timer;
+}
+
 namespace ash {
 
 // Controller for the laser pointer functionality.
@@ -22,11 +26,11 @@ class ASH_EXPORT LaserPointerMode : public CommonPaletteTool {
   PaletteToolId GetToolId() const override;
   void OnEnable() override;
   void OnDisable() override;
-  gfx::VectorIconId GetActiveTrayIcon() override;
+  const gfx::VectorIcon& GetActiveTrayIcon() const override;
   views::View* CreateView() override;
 
   // CommonPaletteTool:
-  gfx::VectorIconId GetPaletteIconId() override;
+  const gfx::VectorIcon& GetPaletteIcon() const override;
 
   DISALLOW_COPY_AND_ASSIGN(LaserPointerMode);
 };

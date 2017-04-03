@@ -34,7 +34,7 @@
 #include "components/history/core/browser/top_sites.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/core/tab_restore_service.h"
-#include "grit/components_strings.h"
+#include "components/strings/grit/components_strings.h"
 #include "ui/base/accelerators/menu_label_accelerator_util_linux.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/keycodes/keyboard_code_conversion_x.h"
@@ -850,15 +850,13 @@ void GlobalMenuBarX11::OnHistoryItemActivated(DbusmenuMenuitem* sender,
       TabRestoreServiceFactory::GetForProfile(profile_);
   if (item->session_id && service) {
     service->RestoreEntryById(browser_->live_tab_context(), item->session_id,
-                              UNKNOWN);
+                              WindowOpenDisposition::UNKNOWN);
   } else {
     DCHECK(item->url.is_valid());
-    browser_->OpenURL(content::OpenURLParams(
-        item->url,
-        content::Referrer(),
-        NEW_FOREGROUND_TAB,
-        ui::PAGE_TRANSITION_AUTO_BOOKMARK,
-        false));
+    browser_->OpenURL(
+        content::OpenURLParams(item->url, content::Referrer(),
+                               WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                               ui::PAGE_TRANSITION_AUTO_BOOKMARK, false));
   }
 }
 

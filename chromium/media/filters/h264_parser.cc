@@ -9,8 +9,10 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/stl_util.h"
+#include "base/numerics/safe_math.h"
 #include "media/base/decrypt_config.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/size.h"
 
 namespace media {
 
@@ -40,6 +42,83 @@ H264NALU::H264NALU() {
 
 H264SPS::H264SPS() {
   memset(this, 0, sizeof(*this));
+}
+
+// Based on T-REC-H.264 7.4.2.1.1, "Sequence parameter set data semantics",
+// available from http://www.itu.int/rec/T-REC-H.264.
+base::Optional<gfx::Size> H264SPS::GetCodedSize() const {
+  // Interlaced frames are twice the height of each field.
+  const int mb_unit = 16;
+  int map_unit = frame_mbs_only_flag ? 16 : 32;
+
+  // Verify that the values are not too large before multiplying them.
+  // TODO(sandersd): These limits could be much smaller. The currently-largest
+  // specified limit (excluding SVC, multiview, etc., which I didn't bother to
+  // read) is 543 macroblocks (section A.3.1).
+  int max_mb_minus1 = std::numeric_limits<int>::max() / mb_unit - 1;
+  int max_map_units_minus1 = std::numeric_limits<int>::max() / map_unit - 1;
+  if (pic_width_in_mbs_minus1 > max_mb_minus1 ||
+      pic_height_in_map_units_minus1 > max_map_units_minus1) {
+    DVLOG(1) << "Coded size is too large.";
+    return base::nullopt;
+  }
+
+  return gfx::Size(mb_unit * (pic_width_in_mbs_minus1 + 1),
+                   map_unit * (pic_height_in_map_units_minus1 + 1));
+}
+
+// Also based on section 7.4.2.1.1.
+base::Optional<gfx::Rect> H264SPS::GetVisibleRect() const {
+  base::Optional<gfx::Size> coded_size = GetCodedSize();
+  if (!coded_size)
+    return base::nullopt;
+
+  if (!frame_cropping_flag)
+    return gfx::Rect(coded_size.value());
+
+  int crop_unit_x;
+  int crop_unit_y;
+  if (chroma_array_type == 0) {
+    crop_unit_x = 1;
+    crop_unit_y = frame_mbs_only_flag ? 1 : 2;
+  } else {
+    // Section 6.2.
+    // |chroma_format_idc| may be:
+    //   1 => 4:2:0
+    //   2 => 4:2:2
+    //   3 => 4:4:4
+    // Everything else has |chroma_array_type| == 0.
+    int sub_width_c = chroma_format_idc > 2 ? 1 : 2;
+    int sub_height_c = chroma_format_idc > 1 ? 1 : 2;
+    crop_unit_x = sub_width_c;
+    crop_unit_y = sub_height_c * (frame_mbs_only_flag ? 1 : 2);
+  }
+
+  // Verify that the values are not too large before multiplying.
+  if (coded_size->width() / crop_unit_x < frame_crop_left_offset ||
+      coded_size->width() / crop_unit_x < frame_crop_right_offset ||
+      coded_size->height() / crop_unit_y < frame_crop_top_offset ||
+      coded_size->height() / crop_unit_y < frame_crop_bottom_offset) {
+    DVLOG(1) << "Frame cropping exceeds coded size.";
+    return base::nullopt;
+  }
+  int crop_left = crop_unit_x * frame_crop_left_offset;
+  int crop_right = crop_unit_x * frame_crop_right_offset;
+  int crop_top = crop_unit_y * frame_crop_top_offset;
+  int crop_bottom = crop_unit_y * frame_crop_bottom_offset;
+
+  // Verify that the values are sane. Note that some decoders also require that
+  // crops are smaller than a macroblock and/or that crops must be adjacent to
+  // at least one corner of the coded frame.
+  if (coded_size->width() - crop_left <= crop_right ||
+      coded_size->height() - crop_top <= crop_bottom) {
+    DVLOG(1) << "Frame cropping excludes entire frame.";
+    return base::nullopt;
+  }
+
+  return gfx::Rect(crop_left, crop_top,
+                   coded_size->width() - crop_left - crop_right,
+                   coded_size->height() - crop_top - crop_bottom);
 }
 
 H264PPS::H264PPS() {
@@ -126,8 +205,6 @@ H264Parser::H264Parser() {
 }
 
 H264Parser::~H264Parser() {
-  base::STLDeleteValues(&active_SPSes_);
-  base::STLDeleteValues(&active_PPSes_);
 }
 
 void H264Parser::Reset() {
@@ -171,7 +248,7 @@ const H264PPS* H264Parser::GetPPS(int pps_id) const {
     return nullptr;
   }
 
-  return it->second;
+  return it->second.get();
 }
 
 const H264SPS* H264Parser::GetSPS(int sps_id) const {
@@ -181,7 +258,7 @@ const H264SPS* H264Parser::GetSPS(int sps_id) const {
     return nullptr;
   }
 
-  return it->second;
+  return it->second.get();
 }
 
 static inline bool IsStartCode(const uint8_t* data) {
@@ -868,10 +945,10 @@ H264Parser::Result H264Parser::ParseSPS(int* sps_id) {
   READ_UE_OR_RETURN(&sps->pic_order_cnt_type);
   TRUE_OR_RETURN(sps->pic_order_cnt_type < 3);
 
-  sps->expected_delta_per_pic_order_cnt_cycle = 0;
   if (sps->pic_order_cnt_type == 0) {
     READ_UE_OR_RETURN(&sps->log2_max_pic_order_cnt_lsb_minus4);
     TRUE_OR_RETURN(sps->log2_max_pic_order_cnt_lsb_minus4 < 13);
+    sps->expected_delta_per_pic_order_cnt_cycle = 0;
   } else if (sps->pic_order_cnt_type == 1) {
     READ_BOOL_OR_RETURN(&sps->delta_pic_order_always_zero_flag);
     READ_SE_OR_RETURN(&sps->offset_for_non_ref_pic);
@@ -879,11 +956,14 @@ H264Parser::Result H264Parser::ParseSPS(int* sps_id) {
     READ_UE_OR_RETURN(&sps->num_ref_frames_in_pic_order_cnt_cycle);
     TRUE_OR_RETURN(sps->num_ref_frames_in_pic_order_cnt_cycle < 255);
 
+    base::CheckedNumeric<int> offset_acc = 0;
     for (int i = 0; i < sps->num_ref_frames_in_pic_order_cnt_cycle; ++i) {
       READ_SE_OR_RETURN(&sps->offset_for_ref_frame[i]);
-      sps->expected_delta_per_pic_order_cnt_cycle +=
-          sps->offset_for_ref_frame[i];
+      offset_acc += sps->offset_for_ref_frame[i];
     }
+    if (!offset_acc.IsValid())
+      return kInvalidStream;
+    sps->expected_delta_per_pic_order_cnt_cycle = offset_acc.ValueOrDefault(0);
   }
 
   READ_UE_OR_RETURN(&sps->max_num_ref_frames);
@@ -916,8 +996,7 @@ H264Parser::Result H264Parser::ParseSPS(int* sps_id) {
 
   // If an SPS with the same id already exists, replace it.
   *sps_id = sps->seq_parameter_set_id;
-  delete active_SPSes_[*sps_id];
-  active_SPSes_[*sps_id] = sps.release();
+  active_SPSes_[*sps_id] = std::move(sps);
 
   return kOk;
 }
@@ -992,8 +1071,7 @@ H264Parser::Result H264Parser::ParsePPS(int* pps_id) {
 
   // If a PPS with the same id already exists, replace it.
   *pps_id = pps->pic_parameter_set_id;
-  delete active_PPSes_[*pps_id];
-  active_PPSes_[*pps_id] = pps.release();
+  active_PPSes_[*pps_id] = std::move(pps);
 
   return kOk;
 }

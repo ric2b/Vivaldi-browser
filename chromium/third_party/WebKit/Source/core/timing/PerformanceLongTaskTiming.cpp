@@ -4,21 +4,26 @@
 
 #include "core/timing/PerformanceLongTaskTiming.h"
 
+#include "core/frame/DOMWindow.h"
+
 namespace blink {
 
-PerformanceLongTaskTiming::PerformanceLongTaskTiming(
-    double startTime, double endTime, String frameContextUrl)
-    : PerformanceEntry(frameContextUrl, "longtask", startTime, endTime)
-{
+PerformanceLongTaskTiming::PerformanceLongTaskTiming(double startTime,
+                                                     double endTime,
+                                                     String name,
+                                                     DOMWindow* culpritWindow)
+    : PerformanceEntry(name, "longtask", startTime, endTime),
+      m_culpritWindow(*culpritWindow) {}
+
+PerformanceLongTaskTiming::~PerformanceLongTaskTiming() {}
+
+DOMWindow* PerformanceLongTaskTiming::culpritWindow() const {
+  return m_culpritWindow.get();
 }
 
-PerformanceLongTaskTiming::~PerformanceLongTaskTiming()
-{
+DEFINE_TRACE(PerformanceLongTaskTiming) {
+  visitor->trace(m_culpritWindow);
+  PerformanceEntry::trace(visitor);
 }
 
-DEFINE_TRACE(PerformanceLongTaskTiming)
-{
-    PerformanceEntry::trace(visitor);
-}
-
-} // namespace blink
+}  // namespace blink

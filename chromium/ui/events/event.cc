@@ -18,6 +18,7 @@
 #include <cstring>
 
 #include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "ui/events/base_event_utils.h"
@@ -104,6 +105,8 @@ std::string EventTypeName(ui::EventType type) {
     CASE_TYPE(ET_POINTER_CANCELLED);
     CASE_TYPE(ET_POINTER_ENTERED);
     CASE_TYPE(ET_POINTER_EXITED);
+    CASE_TYPE(ET_POINTER_WHEEL_CHANGED);
+    CASE_TYPE(ET_POINTER_CAPTURE_CHANGED);
     CASE_TYPE(ET_GESTURE_SCROLL_BEGIN);
     CASE_TYPE(ET_GESTURE_SCROLL_END);
     CASE_TYPE(ET_GESTURE_SCROLL_UPDATE);
@@ -215,6 +218,16 @@ bool Event::IsTouchPointerEvent() const {
   return IsPointerEvent() &&
          AsPointerEvent()->pointer_details().pointer_type ==
              EventPointerType::POINTER_TYPE_TOUCH;
+}
+
+CancelModeEvent* Event::AsCancelModeEvent() {
+  CHECK(IsCancelModeEvent());
+  return static_cast<CancelModeEvent*>(this);
+}
+
+const CancelModeEvent* Event::AsCancelModeEvent() const {
+  CHECK(IsCancelModeEvent());
+  return static_cast<const CancelModeEvent*>(this);
 }
 
 GestureEvent* Event::AsGestureEvent() {
@@ -494,6 +507,15 @@ MouseEvent::MouseEvent(const PointerEvent& pointer_event)
       SetType(ET_MOUSE_RELEASED);
       break;
 
+    case ET_POINTER_WHEEL_CHANGED:
+      // Explicitly not setting a type here. MouseWheelEvent should be converted
+      // from PointerEvent using its own ctor.
+      break;
+
+    case ET_POINTER_CAPTURE_CHANGED:
+      SetType(ET_MOUSE_CAPTURE_CHANGED);
+      break;
+
     default:
       NOTREACHED();
   }
@@ -512,6 +534,7 @@ MouseEvent::MouseEvent(EventType type,
                    flags),
       changed_button_flags_(changed_button_flags),
       pointer_details_(PointerDetails(EventPointerType::POINTER_TYPE_MOUSE)) {
+  DCHECK_NE(ET_MOUSEWHEEL, type);
   latency()->AddLatencyNumber(INPUT_EVENT_LATENCY_UI_COMPONENT, 0, 0);
   if (this->type() == ET_MOUSE_MOVED && IsAnyButton())
     SetType(ET_MOUSE_DRAGGED);
@@ -614,8 +637,8 @@ void MouseEvent::SetClickCount(int click_count) {
   if (type() != ET_MOUSE_PRESSED && type() != ET_MOUSE_RELEASED)
     return;
 
-  DCHECK(click_count > 0);
-  DCHECK(click_count <= 3);
+  DCHECK_LT(0, click_count);
+  DCHECK_GE(3, click_count);
 
   int f = flags();
   switch (click_count) {
@@ -650,17 +673,24 @@ MouseWheelEvent::MouseWheelEvent(const ScrollEvent& scroll_event)
   SetType(ET_MOUSEWHEEL);
 }
 
+MouseWheelEvent::MouseWheelEvent(const PointerEvent& pointer_event)
+    : MouseEvent(pointer_event),
+      offset_(pointer_event.pointer_details().offset.x(),
+              pointer_event.pointer_details().offset.y()) {
+  SetType(ET_MOUSEWHEEL);
+}
+
 MouseWheelEvent::MouseWheelEvent(const MouseEvent& mouse_event,
                                  int x_offset,
                                  int y_offset)
     : MouseEvent(mouse_event), offset_(x_offset, y_offset) {
-  DCHECK(type() == ET_MOUSEWHEEL);
+  SetType(ET_MOUSEWHEEL);
 }
 
 MouseWheelEvent::MouseWheelEvent(const MouseWheelEvent& mouse_wheel_event)
     : MouseEvent(mouse_wheel_event),
       offset_(mouse_wheel_event.offset()) {
-  DCHECK(type() == ET_MOUSEWHEEL);
+  DCHECK_EQ(ET_MOUSEWHEEL, type());
 }
 
 MouseWheelEvent::MouseWheelEvent(const gfx::Vector2d& offset,
@@ -669,13 +699,18 @@ MouseWheelEvent::MouseWheelEvent(const gfx::Vector2d& offset,
                                  base::TimeTicks time_stamp,
                                  int flags,
                                  int changed_button_flags)
-    : MouseEvent(ui::ET_MOUSEWHEEL,
+    : MouseEvent(ui::ET_UNKNOWN,
                  location,
                  root_location,
                  time_stamp,
                  flags,
                  changed_button_flags),
-      offset_(offset) {}
+      offset_(offset) {
+  // Set event type to ET_UNKNOWN initially in MouseEvent() to pass the
+  // DCHECK for type to enforce that we use MouseWheelEvent() to create
+  // a MouseWheelEvent.
+  SetType(ui::ET_MOUSEWHEEL);
+}
 
 #if defined(OS_WIN)
 // This value matches windows WHEEL_DELTA.
@@ -845,6 +880,8 @@ bool PointerEvent::CanConvertFrom(const Event& event) {
     case ET_MOUSE_ENTERED:
     case ET_MOUSE_EXITED:
     case ET_MOUSE_RELEASED:
+    case ET_MOUSEWHEEL:
+    case ET_MOUSE_CAPTURE_CHANGED:
     case ET_TOUCH_PRESSED:
     case ET_TOUCH_MOVED:
     case ET_TOUCH_RELEASED:
@@ -887,6 +924,16 @@ PointerEvent::PointerEvent(const MouseEvent& mouse_event)
 
     case ET_MOUSE_RELEASED:
       SetType(ET_POINTER_UP);
+      break;
+
+    case ET_MOUSEWHEEL:
+      SetType(ET_POINTER_WHEEL_CHANGED);
+      details_ = PointerDetails(EventPointerType::POINTER_TYPE_MOUSE,
+                                mouse_event.AsMouseWheelEvent()->offset());
+      break;
+
+    case ET_MOUSE_CAPTURE_CHANGED:
+      SetType(ET_POINTER_CAPTURE_CHANGED);
       break;
 
     default:
@@ -1123,7 +1170,7 @@ base::char16 KeyEvent::GetCharacter() const {
     // Until this explicitly changes, require |key_| to hold a BMP character.
     DomKey::Base utf32_character = key_.ToCharacter();
     base::char16 ucs2_character = static_cast<base::char16>(utf32_character);
-    DCHECK(static_cast<DomKey::Base>(ucs2_character) == utf32_character);
+    DCHECK_EQ(static_cast<DomKey::Base>(ucs2_character), utf32_character);
     // Check if the control character is down. Note that ALTGR is represented
     // on Windows as CTRL|ALT, so we need to make sure that is not set.
     if ((flags() & (EF_ALTGR_DOWN | EF_CONTROL_DOWN)) == EF_CONTROL_DOWN) {
@@ -1220,12 +1267,11 @@ ScrollEvent::ScrollEvent(const base::NativeEvent& native_event)
       y_offset_(0.0f),
       x_offset_ordinal_(0.0f),
       y_offset_ordinal_(0.0f),
-      finger_count_(0) {
+      finger_count_(0),
+      momentum_phase_(EventMomentumPhase::NONE) {
   if (type() == ET_SCROLL) {
-    GetScrollOffsets(native_event,
-                     &x_offset_, &y_offset_,
-                     &x_offset_ordinal_, &y_offset_ordinal_,
-                     &finger_count_);
+    GetScrollOffsets(native_event, &x_offset_, &y_offset_, &x_offset_ordinal_,
+                     &y_offset_ordinal_, &finger_count_, &momentum_phase_);
   } else if (type() == ET_SCROLL_FLING_START ||
              type() == ET_SCROLL_FLING_CANCEL) {
     GetFlingData(native_event,

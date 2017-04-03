@@ -36,6 +36,7 @@ class ThreadPipeManager;
 namespace client {
 
 class ClientNetworkComponents;
+class GeolocationFeature;
 class NavigationFeature;
 class ImeFeature;
 class RenderWidgetFeature;
@@ -85,6 +86,10 @@ class BlimpClientSession
  private:
   void RegisterFeatures();
 
+  // Terminates the active connection held by |net_connections_| on the IO
+  // thread. Should be called on the main thread.
+  void DropConnection();
+
   // NetworkEventObserver implementation.
   void OnConnected() override;
   void OnDisconnected(int result) override;
@@ -103,6 +108,7 @@ class BlimpClientSession
   BlobImageSerializationProcessor blob_image_processor_;
 
   std::unique_ptr<BlobChannelReceiver> blob_receiver_;
+  std::unique_ptr<GeolocationFeature> geolocation_feature_;
   std::unique_ptr<TabControlFeature> tab_control_feature_;
   std::unique_ptr<NavigationFeature> navigation_feature_;
   std::unique_ptr<ImeFeature> ime_feature_;

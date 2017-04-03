@@ -5,9 +5,7 @@
 #include "components/sync/core_impl/sync_manager_impl.h"
 
 #include <stddef.h>
-#include <stdint.h>
 
-#include <string>
 #include <utility>
 
 #include "base/base64.h"
@@ -17,7 +15,7 @@
 #include "base/json/json_writer.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -32,10 +30,8 @@
 #include "components/sync/core/internal_components_factory.h"
 #include "components/sync/core/read_node.h"
 #include "components/sync/core/read_transaction.h"
-#include "components/sync/core/user_share.h"
 #include "components/sync/core/write_node.h"
 #include "components/sync/core/write_transaction.h"
-#include "components/sync/core_impl/change_reorder_buffer.h"
 #include "components/sync/core_impl/model_type_connector_proxy.h"
 #include "components/sync/core_impl/syncapi_internal.h"
 #include "components/sync/core_impl/syncapi_server_connection_manager.h"
@@ -789,17 +785,17 @@ void SyncManagerImpl::RequestNudgeForDataTypes(
   scheduler_->ScheduleLocalNudge(types, nudge_location);
 }
 
-void SyncManagerImpl::NudgeForInitialDownload(syncer::ModelType type) {
+void SyncManagerImpl::NudgeForInitialDownload(ModelType type) {
   DCHECK(thread_checker_.CalledOnValidThread());
   scheduler_->ScheduleInitialSyncNudge(type);
 }
 
-void SyncManagerImpl::NudgeForCommit(syncer::ModelType type) {
+void SyncManagerImpl::NudgeForCommit(ModelType type) {
   DCHECK(thread_checker_.CalledOnValidThread());
   RequestNudgeForDataTypes(FROM_HERE, ModelTypeSet(type));
 }
 
-void SyncManagerImpl::NudgeForRefresh(syncer::ModelType type) {
+void SyncManagerImpl::NudgeForRefresh(ModelType type) {
   DCHECK(thread_checker_.CalledOnValidThread());
   RefreshTypes(ModelTypeSet(type));
 }
@@ -852,23 +848,6 @@ void SyncManagerImpl::SetJsEventHandler(
   js_sync_encryption_handler_observer_.SetJsEventHandler(event_handler);
 }
 
-std::unique_ptr<base::ListValue> SyncManagerImpl::GetAllNodesForType(
-    syncer::ModelType type) {
-  DirectoryTypeDebugInfoEmitterMap* emitter_map =
-      model_type_registry_->directory_type_debug_info_emitter_map();
-  DirectoryTypeDebugInfoEmitterMap::iterator it = emitter_map->find(type);
-
-  if (it == emitter_map->end()) {
-    // This can happen in some cases.  The UI thread makes requests of us
-    // when it doesn't really know which types are enabled or disabled.
-    DLOG(WARNING) << "Asked to return debug info for invalid type "
-                  << ModelTypeToString(type);
-    return std::unique_ptr<base::ListValue>(new base::ListValue());
-  }
-
-  return it->second->GetAllNodes();
-}
-
 void SyncManagerImpl::SetInvalidatorEnabled(bool invalidator_enabled) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
@@ -878,7 +857,7 @@ void SyncManagerImpl::SetInvalidatorEnabled(bool invalidator_enabled) {
 }
 
 void SyncManagerImpl::OnIncomingInvalidation(
-    syncer::ModelType type,
+    ModelType type,
     std::unique_ptr<InvalidationInterface> invalidation) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
@@ -909,10 +888,10 @@ UserShare* SyncManagerImpl::GetUserShare() {
   return &share_;
 }
 
-std::unique_ptr<syncer_v2::ModelTypeConnector>
+std::unique_ptr<ModelTypeConnector>
 SyncManagerImpl::GetModelTypeConnectorProxy() {
   DCHECK(initialized_);
-  return base::MakeUnique<syncer_v2::ModelTypeConnectorProxy>(
+  return base::MakeUnique<ModelTypeConnectorProxy>(
       base::ThreadTaskRunnerHandle::Get(), model_type_registry_->AsWeakPtr());
 }
 
@@ -931,8 +910,8 @@ bool SyncManagerImpl::ReceivedExperiment(Experiments* experiments) {
   bool found_experiment = false;
 
   ReadNode favicon_sync_node(&trans);
-  if (favicon_sync_node.InitByClientTagLookup(
-          syncer::EXPERIMENTS, syncer::kFaviconSyncTag) == BaseNode::INIT_OK) {
+  if (favicon_sync_node.InitByClientTagLookup(EXPERIMENTS, kFaviconSyncTag) ==
+      BaseNode::INIT_OK) {
     experiments->favicon_sync_limit =
         favicon_sync_node.GetExperimentsSpecifics()
             .favicon_sync()
@@ -942,8 +921,7 @@ bool SyncManagerImpl::ReceivedExperiment(Experiments* experiments) {
 
   ReadNode pre_commit_update_avoidance_node(&trans);
   if (pre_commit_update_avoidance_node.InitByClientTagLookup(
-          syncer::EXPERIMENTS, syncer::kPreCommitUpdateAvoidanceTag) ==
-      BaseNode::INIT_OK) {
+          EXPERIMENTS, kPreCommitUpdateAvoidanceTag) == BaseNode::INIT_OK) {
     cycle_context_->set_server_enabled_pre_commit_update_avoidance(
         pre_commit_update_avoidance_node.GetExperimentsSpecifics()
             .pre_commit_update_avoidance()
@@ -954,8 +932,7 @@ bool SyncManagerImpl::ReceivedExperiment(Experiments* experiments) {
 
   ReadNode gcm_invalidations_node(&trans);
   if (gcm_invalidations_node.InitByClientTagLookup(
-          syncer::EXPERIMENTS, syncer::kGCMInvalidationsTag) ==
-      BaseNode::INIT_OK) {
+          EXPERIMENTS, kGCMInvalidationsTag) == BaseNode::INIT_OK) {
     const sync_pb::GcmInvalidationsFlags& gcm_invalidations =
         gcm_invalidations_node.GetExperimentsSpecifics().gcm_invalidations();
     if (gcm_invalidations.has_enabled()) {
@@ -976,23 +953,23 @@ SyncEncryptionHandler* SyncManagerImpl::GetEncryptionHandler() {
   return sync_encryption_handler_.get();
 }
 
-ScopedVector<syncer::ProtocolEvent>
+std::vector<std::unique_ptr<ProtocolEvent>>
 SyncManagerImpl::GetBufferedProtocolEvents() {
   return protocol_event_buffer_.GetBufferedProtocolEvents();
 }
 
 void SyncManagerImpl::RegisterDirectoryTypeDebugInfoObserver(
-    syncer::TypeDebugInfoObserver* observer) {
+    TypeDebugInfoObserver* observer) {
   model_type_registry_->RegisterDirectoryTypeDebugInfoObserver(observer);
 }
 
 void SyncManagerImpl::UnregisterDirectoryTypeDebugInfoObserver(
-    syncer::TypeDebugInfoObserver* observer) {
+    TypeDebugInfoObserver* observer) {
   model_type_registry_->UnregisterDirectoryTypeDebugInfoObserver(observer);
 }
 
 bool SyncManagerImpl::HasDirectoryTypeDebugInfoObserver(
-    syncer::TypeDebugInfoObserver* observer) {
+    TypeDebugInfoObserver* observer) {
   return model_type_registry_->HasDirectoryTypeDebugInfoObserver(observer);
 }
 

@@ -55,11 +55,20 @@ class V4L2CaptureDelegate final
                         std::unique_ptr<VideoCaptureDevice::Client> client);
   void StopAndDeAllocate();
 
+  void TakePhoto(VideoCaptureDevice::TakePhotoCallback callback);
+
+  void GetPhotoCapabilities(
+      VideoCaptureDevice::GetPhotoCapabilitiesCallback callback);
+  void SetPhotoOptions(mojom::PhotoSettingsPtr settings,
+                       VideoCaptureDevice::SetPhotoOptionsCallback callback);
+
   void SetRotation(int rotation);
 
  private:
   friend class base::RefCountedThreadSafe<V4L2CaptureDelegate>;
   ~V4L2CaptureDelegate();
+
+  class BufferTracker;
 
   // VIDIOC_QUERYBUFs a buffer from V4L2, creates a BufferTracker for it and
   // enqueues it (VIDIOC_QBUF) back into V4L2.
@@ -80,8 +89,9 @@ class V4L2CaptureDelegate final
   std::unique_ptr<VideoCaptureDevice::Client> client_;
   base::ScopedFD device_fd_;
 
+  std::queue<VideoCaptureDevice::TakePhotoCallback> take_photo_callbacks_;
+
   // Vector of BufferTracker to keep track of mmap()ed pointers and their use.
-  class BufferTracker;
   std::vector<scoped_refptr<BufferTracker>> buffer_tracker_pool_;
 
   bool is_capturing_;

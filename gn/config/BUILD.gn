@@ -2,6 +2,18 @@ import("features.gni")
 import("product.gni")
 import("//build/toolchain/cc_wrapper.gni")
 
+config("enable_disabled_tests") {
+  # Turns off the disabling of unittests performed by
+  # testing/disable_unittests.cpp
+  defines = [ "DONT_DISABLE_UNITTESTS" ]
+}
+
+config("enable_permanently_disabled_tests") {
+  # Turns off the permanent disabling of unittests performed by
+  # testing/disable_unittests.cpp
+  defines = [ "DONT_PERMANENTLY_DISABLE_UNITTESTS" ]
+}
+
 config("features") {
   defines = [
     "VIVALDI_BUILD",
@@ -24,18 +36,6 @@ config("features") {
   if (is_win) {
     ldflags = [ "notelemetry.obj" ]
   }
-}
-
-config("enable_disabled_tests") {
-  # Turns off the disabling of unittests performed by
-  # testing/disable_unittests.cpp
-  defines = [ "DONT_DISABLE_UNITTESTS" ]
-}
-
-config("enable_permanently_disabled_tests") {
-  # Turns off the permanent disabling of unittests performed by
-  # testing/disable_unittests.cpp
-  defines = [ "DONT_PERMANENTLY_DISABLE_UNITTESTS" ]
 }
 
 if (is_win) {

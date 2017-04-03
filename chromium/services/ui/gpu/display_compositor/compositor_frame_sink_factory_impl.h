@@ -6,10 +6,9 @@
 #define SERVICES_UI_GPU_DISPLAY_COMPOSITOR_COMPOSITOR_FRAME_SINK_FACTORY_IMPL_H_
 
 #include "cc/surfaces/surface_id_allocator.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/ui/gpu/display_compositor/compositor_frame_sink_delegate.h"
 #include "services/ui/public/interfaces/gpu/display_compositor.mojom.h"
-#include "services/ui/surfaces/surfaces_state.h"
+#include "services/ui/surfaces/display_compositor.h"
 
 namespace ui {
 namespace gpu {
@@ -21,8 +20,7 @@ class CompositorFrameSinkFactoryImpl : public mojom::CompositorFrameSinkFactory,
  public:
   CompositorFrameSinkFactoryImpl(
       uint32_t client_id,
-      mojo::InterfaceRequest<mojom::CompositorFrameSinkFactory> request,
-      const scoped_refptr<SurfacesState>& surfaces_state);
+      const scoped_refptr<DisplayCompositor>& display_compositor);
   ~CompositorFrameSinkFactoryImpl() override;
 
   uint32_t client_id() const { return client_id_; }
@@ -39,12 +37,11 @@ class CompositorFrameSinkFactoryImpl : public mojom::CompositorFrameSinkFactory,
 
  private:
   const uint32_t client_id_;
-  scoped_refptr<SurfacesState> surfaces_state_;
+  scoped_refptr<DisplayCompositor> display_compositor_;
   cc::SurfaceIdAllocator allocator_;
   using CompositorFrameSinkMap =
       std::map<uint32_t, std::unique_ptr<CompositorFrameSinkImpl>>;
   CompositorFrameSinkMap sinks_;
-  mojo::StrongBinding<mojom::CompositorFrameSinkFactory> binding_;
 
   DISALLOW_COPY_AND_ASSIGN(CompositorFrameSinkFactoryImpl);
 };

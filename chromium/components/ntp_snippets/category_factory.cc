@@ -7,6 +7,8 @@
 #include <algorithm>
 
 #include "base/logging.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 
 namespace ntp_snippets {
 
@@ -14,11 +16,15 @@ CategoryFactory::CategoryFactory() {
   // Add all local categories in a fixed order.
   AddKnownCategory(KnownCategories::DOWNLOADS);
   AddKnownCategory(KnownCategories::RECENT_TABS);
+  AddKnownCategory(KnownCategories::FOREIGN_TABS);
   AddKnownCategory(KnownCategories::BOOKMARKS);
   AddKnownCategory(KnownCategories::PHYSICAL_WEB_PAGES);
+
+  DCHECK_EQ(static_cast<size_t>(KnownCategories::LOCAL_CATEGORIES_COUNT),
+            ordered_categories_.size());
 }
 
-CategoryFactory::~CategoryFactory() {}
+CategoryFactory::~CategoryFactory() = default;
 
 Category CategoryFactory::FromKnownCategory(KnownCategories known_category) {
   if (known_category < KnownCategories::LOCAL_CATEGORIES_COUNT) {

@@ -115,6 +115,7 @@ struct GPU_EXPORT Capabilities {
   int uniform_buffer_offset_alignment;
 
   bool post_sub_buffer;
+  bool swap_buffers_with_damage;
   bool commit_overlay_planes;
   bool egl_image_external;
   bool texture_format_astc;
@@ -130,7 +131,6 @@ struct GPU_EXPORT Capabilities {
   bool texture_storage;
   bool discard_framebuffer;
   bool sync_query;
-  bool image;
   bool future_sync_points;
   bool blend_equation_advanced;
   bool blend_equation_advanced_coherent;
@@ -144,6 +144,7 @@ struct GPU_EXPORT Capabilities {
   bool surfaceless;
   bool flips_vertically;
   bool msaa_is_slow;
+  bool disable_one_component_textures;
   bool disable_multisampling_color_mask_usage;
   bool disable_webgl_rgb_multisampling_usage;
 

@@ -44,7 +44,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterAndroid final
   // The BluetoothAdapterAndroid instance will indirectly hold a Java reference
   // to |bluetooth_adapter_wrapper|.
   static base::WeakPtr<BluetoothAdapterAndroid> Create(
-      jobject bluetooth_adapter_wrapper);  // Java Type: bluetoothAdapterWrapper
+      const base::android::JavaRef<jobject>&
+          bluetooth_adapter_wrapper);  // Java Type: bluetoothAdapterWrapper
 
   // Register C++ methods exposed to Java using JNI.
   static bool RegisterJNI(JNIEnv* env);
@@ -77,14 +78,10 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterAndroid final
       const ServiceOptions& options,
       const CreateServiceCallback& callback,
       const CreateServiceErrorCallback& error_callback) override;
-  void RegisterAudioSink(
-      const BluetoothAudioSink::Options& options,
-      const AcquiredCallback& callback,
-      const BluetoothAudioSink::ErrorCallback& error_callback) override;
   void RegisterAdvertisement(
       std::unique_ptr<BluetoothAdvertisement::Data> advertisement_data,
       const CreateAdvertisementCallback& callback,
-      const CreateAdvertisementErrorCallback& error_callback) override;
+      const AdvertisementErrorCallback& error_callback) override;
   BluetoothLocalGattService* GetGattService(
       const std::string& identifier) const override;
 

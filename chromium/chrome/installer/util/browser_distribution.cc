@@ -31,6 +31,7 @@
 #include "chrome/installer/util/l10n_string_util.h"
 #include "chrome/installer/util/master_preferences.h"
 #include "chrome/installer/util/non_updating_app_registration_data.h"
+
 #include "chrome/installer/util/util_constants.h"
 
 using installer::MasterPreferences;
@@ -56,11 +57,11 @@ BrowserDistribution::Type GetCurrentDistributionType() {
 
 BrowserDistribution::BrowserDistribution()
     : type_(CHROME_BROWSER),
-      app_reg_data_(base::WrapUnique(
+      app_reg_data_(base::MakeUnique<NonUpdatingAppRegistrationData>(
 #if defined(VIVALDI_BUILD)
-          new NonUpdatingAppRegistrationData(L"Software\\Vivaldi")
+          L"Software\\Vivaldi"
 #else
-          new NonUpdatingAppRegistrationData(L"Software\\Chromium")
+          L"Software\\Chromium"
 #endif
           )) {}
 

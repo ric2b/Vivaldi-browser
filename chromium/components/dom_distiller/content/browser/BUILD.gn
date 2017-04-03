@@ -4,7 +4,6 @@
 
 assert(!is_ios)
 
-# GYP version: components/dom_distiller.gypi:dom_distiller_content_browser
 static_library("browser") {
   sources = [
     "distillability_driver.cc",
@@ -49,12 +48,12 @@ static_library("browser") {
 
   if (is_android) {
     sources += [
-      "//components/dom_distiller/android/component_jni_registrar.cc",
-      "//components/dom_distiller/android/component_jni_registrar.h",
+      "android/content_jni_registrar.cc",
+      "android/content_jni_registrar.h",
       "distillable_page_utils_android.cc",
       "distillable_page_utils_android.h",
     ]
-    deps += [ "//components/dom_distiller/android:jni_headers" ]
+    deps += [ "android:jni_headers" ]
   }
 }
 

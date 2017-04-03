@@ -81,8 +81,41 @@ static_assert(static_cast<int>(PP_INPUTEVENT_MODIFIER_ISRIGHT) ==
                   static_cast<int>(WebInputEvent::IsRight),
               "IsRight should match");
 
-PP_InputEvent_Type ConvertEventTypes(WebInputEvent::Type wetype) {
-  switch (wetype) {
+bool IsStylusEvent(const WebInputEvent& event) {
+  switch (event.type) {
+    case WebInputEvent::MouseDown:
+    case WebInputEvent::MouseUp:
+    case WebInputEvent::MouseMove: {
+      const WebMouseEvent& mouse_event =
+          static_cast<const WebMouseEvent&>(event);
+      using PointerType = blink::WebPointerProperties::PointerType;
+      return mouse_event.pointerType == PointerType::Pen ||
+             mouse_event.pointerType == PointerType::Eraser;
+    }
+    default:
+      return false;
+  }
+}
+
+PP_InputEvent_Type ConvertEventTypes(const WebInputEvent& event) {
+  if (IsStylusEvent(event)) {
+    const WebMouseEvent& mouse_event = static_cast<const WebMouseEvent&>(event);
+    if (mouse_event.button != blink::WebMouseEvent::Button::Left &&
+        !(mouse_event.modifiers & blink::WebInputEvent::LeftButtonDown))
+      return PP_INPUTEVENT_TYPE_UNDEFINED;
+
+    switch (event.type) {
+      case WebInputEvent::MouseDown:
+        return PP_INPUTEVENT_TYPE_TOUCHSTART;
+      case WebInputEvent::MouseUp:
+        return PP_INPUTEVENT_TYPE_TOUCHEND;
+      case WebInputEvent::MouseMove:
+        return PP_INPUTEVENT_TYPE_TOUCHMOVE;
+      default:
+        return PP_INPUTEVENT_TYPE_UNDEFINED;
+    }
+  }
+  switch (event.type) {
     case WebInputEvent::MouseDown:
       return PP_INPUTEVENT_TYPE_MOUSEDOWN;
     case WebInputEvent::MouseUp:
@@ -141,7 +174,7 @@ int ConvertEventModifiers(int modifiers) {
 // initialized.
 InputEventData GetEventWithCommonFieldsAndType(const WebInputEvent& web_event) {
   InputEventData result;
-  result.event_type = ConvertEventTypes(web_event.type);
+  result.event_type = ConvertEventTypes(web_event);
   result.event_time_stamp = web_event.timeStampSeconds;
   return result;
 }
@@ -184,6 +217,29 @@ void AppendCharEvent(const WebInputEvent& event,
     result_events->push_back(result);
     iter.Advance();
   }
+}
+
+void AppendStylusTouchEvent(const WebInputEvent& event,
+                            std::vector<InputEventData>* result_events) {
+  const WebMouseEvent& mouse_event = static_cast<const WebMouseEvent&>(event);
+
+  InputEventData result = GetEventWithCommonFieldsAndType(event);
+  result.event_modifiers = ConvertEventModifiers(event.modifiers);
+  if (result.event_type == PP_INPUTEVENT_TYPE_UNDEFINED)
+    return;
+
+  PP_TouchPoint touch_point;
+  touch_point.id = 0;
+  touch_point.position.x = mouse_event.x;
+  touch_point.position.y = mouse_event.y;
+  touch_point.pressure = mouse_event.force;
+
+  result.changed_touches.push_back(touch_point);
+  result.target_touches.push_back(touch_point);
+  if (result.event_type != PP_INPUTEVENT_TYPE_TOUCHEND)
+    result.touches.push_back(touch_point);
+
+  result_events->push_back(result);
 }
 
 void AppendMouseEvent(const WebInputEvent& event,
@@ -580,7 +636,11 @@ void CreateInputEventData(const WebInputEvent& event,
     case WebInputEvent::MouseEnter:
     case WebInputEvent::MouseLeave:
     case WebInputEvent::ContextMenu:
-      AppendMouseEvent(event, result);
+      if (IsStylusEvent(event)) {
+        AppendStylusTouchEvent(event, result);
+      } else {
+        AppendMouseEvent(event, result);
+      }
       break;
     case WebInputEvent::MouseWheel:
       AppendMouseWheelEvent(event, result);
@@ -741,15 +801,19 @@ std::vector<std::unique_ptr<WebInputEvent>> CreateSimulatedWebInputEvents(
   return events;
 }
 
-PP_InputEvent_Class ClassifyInputEvent(WebInputEvent::Type type) {
-  switch (type) {
+PP_InputEvent_Class ClassifyInputEvent(const WebInputEvent& event) {
+  switch (event.type) {
     case WebInputEvent::MouseDown:
     case WebInputEvent::MouseUp:
     case WebInputEvent::MouseMove:
     case WebInputEvent::MouseEnter:
     case WebInputEvent::MouseLeave:
     case WebInputEvent::ContextMenu:
-      return PP_INPUTEVENT_CLASS_MOUSE;
+      if (IsStylusEvent(event)) {
+        return PP_INPUTEVENT_CLASS_TOUCH;
+      } else {
+        return PP_INPUTEVENT_CLASS_MOUSE;
+      }
     case WebInputEvent::MouseWheel:
       return PP_INPUTEVENT_CLASS_WHEEL;
     case WebInputEvent::RawKeyDown:
@@ -765,7 +829,7 @@ PP_InputEvent_Class ClassifyInputEvent(WebInputEvent::Type type) {
     case WebInputEvent::TouchScrollStarted:
       return PP_InputEvent_Class(0);
     default:
-      CHECK(WebInputEvent::isGestureEventType(type));
+      CHECK(WebInputEvent::isGestureEventType(event.type));
       return PP_InputEvent_Class(0);
   }
 }

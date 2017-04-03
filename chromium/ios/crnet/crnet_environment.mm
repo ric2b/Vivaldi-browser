@@ -15,7 +15,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
-#include "base/i18n/icu_util.h"
 #include "base/json/json_writer.h"
 #include "base/mac/bind_objc_block.h"
 #include "base/mac/bundle_locations.h"
@@ -40,7 +39,10 @@
 #include "net/base/network_change_notifier.h"
 #include "net/base/sdch_manager.h"
 #include "net/cert/cert_verifier.h"
+#include "net/cert/ct_known_logs.h"
+#include "net/cert/ct_log_verifier.h"
 #include "net/cert/ct_policy_enforcer.h"
+#include "net/cert/ct_verifier.h"
 #include "net/cert/multi_log_ct_verifier.h"
 #include "net/cookies/cookie_store.h"
 #include "net/http/http_auth_handler_factory.h"
@@ -64,6 +66,10 @@
 #include "net/url_request/url_request_job_factory_impl.h"
 #include "url/url_features.h"
 #include "url/url_util.h"
+
+#if !BUILDFLAG(USE_PLATFORM_ICU_ALTERNATIVES)
+#include "base/i18n/icu_util.h"  // nogncheck
+#endif
 
 namespace {
 
@@ -261,12 +267,14 @@ void CrNetEnvironment::CloseAllSpdySessionsInternal() {
   }
 }
 
-CrNetEnvironment::CrNetEnvironment(const std::string& user_agent_product_name)
+CrNetEnvironment::CrNetEnvironment(const std::string& user_agent,
+                                   bool user_agent_partial)
     : spdy_enabled_(false),
       quic_enabled_(false),
       sdch_enabled_(false),
       main_context_(new net::URLRequestContext),
-      user_agent_product_name_(user_agent_product_name),
+      user_agent_(user_agent),
+      user_agent_partial_(user_agent_partial),
       net_log_(new net::NetLog) {}
 
 void CrNetEnvironment::Install() {
@@ -379,28 +387,33 @@ void CrNetEnvironment::InitializeOnNetworkThread() {
     acceptableLanguages = @"en-US,en";
   std::string acceptable_languages =
       [acceptableLanguages cStringUsingEncoding:NSUTF8StringEncoding];
-  std::string user_agent =
-      web::BuildUserAgentFromProduct(user_agent_product_name_);
+  if (user_agent_partial_) {
+    user_agent_ = web::BuildUserAgentFromProduct(user_agent_);
+    user_agent_partial_ = false;
+  }
   // Set the user agent through NSUserDefaults. This sets it for both
   // UIWebViews and WKWebViews, and javascript calls to navigator.userAgent
   // return this value.
   [[NSUserDefaults standardUserDefaults] registerDefaults:@{
-    @"UserAgent" : [NSString stringWithUTF8String:user_agent.c_str()]
+    @"UserAgent" : [NSString stringWithUTF8String:user_agent_.c_str()]
   }];
   main_context_->set_http_user_agent_settings(
-      new net::StaticHttpUserAgentSettings(acceptable_languages, user_agent));
+      new net::StaticHttpUserAgentSettings(acceptable_languages, user_agent_));
 
   main_context_->set_ssl_config_service(new net::SSLConfigServiceDefaults);
   main_context_->set_transport_security_state(
       new net::TransportSecurityState());
-  main_context_->set_cert_transparency_verifier(new net::MultiLogCTVerifier());
-  main_context_->set_ct_policy_enforcer(new net::CTPolicyEnforcer());
-  http_server_properties_.reset(new net::HttpServerPropertiesImpl());
-  main_context_->set_http_server_properties(http_server_properties_.get());
-  // TODO(rdsmith): Note that the ".release()" calls below are leaking
+  std::unique_ptr<net::MultiLogCTVerifier> ct_verifier =
+      base::MakeUnique<net::MultiLogCTVerifier>();
+  ct_verifier->AddLogs(net::ct::CreateLogVerifiersForKnownLogs());
+  // TODO(mef): Note that the ".release()" calls below are leaking
   // the objects in question; this should be fixed by having an object
   // corresponding to URLRequestContextStorage that actually owns those
   // objects.  See http://crbug.com/523858.
+  main_context_->set_cert_transparency_verifier(ct_verifier.release());
+  main_context_->set_ct_policy_enforcer(new net::CTPolicyEnforcer());
+  http_server_properties_.reset(new net::HttpServerPropertiesImpl());
+  main_context_->set_http_server_properties(http_server_properties_.get());
   main_context_->set_host_resolver(
       net::HostResolver::CreateDefaultResolver(nullptr).release());
   main_context_->set_cert_verifier(
@@ -493,7 +506,7 @@ std::string CrNetEnvironment::user_agent() {
 
 void CrNetEnvironment::ClearCache(ClearCacheCallback callback) {
   PostToNetworkThread(
-      FROM_HERE,
-      base::Bind(&net::ClearHttpCache, main_context_getter_,
-                 network_io_thread_->task_runner(), base::BindBlock(callback)));
+      FROM_HERE, base::Bind(&net::ClearHttpCache, main_context_getter_,
+                            network_io_thread_->task_runner(), base::Time(),
+                            base::Time::Max(), base::BindBlock(callback)));
 }

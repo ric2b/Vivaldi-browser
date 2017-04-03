@@ -47,7 +47,6 @@ Pritisnite Shift + Alt za promjenu.</translation>
 <translation id="2268813581635650749">Odjavi sve</translation>
 <translation id="2297568595583585744">Ladica statusa</translation>
 <translation id="2303600792989757991">Prebaci na prozor pregleda</translation>
-<translation id="2372145515558759244">Sinkroniziranje aplikacija...</translation>
 <translation id="2391579633712104609">180°</translation>
 <translation id="2429753432712299108">Bluetooth uređaj "<ph name="DEVICE_NAME" />" traži dopuštenje za uparivanje. Prije prihvaćanja provjerite prikazuje li se na njemu ovaj pristupni ključ: <ph name="PASSKEY" /></translation>
 <translation id="2475982808118771221">Došlo je do pogreške</translation>
@@ -61,7 +60,6 @@ Pritisnite Shift + Alt za promjenu.</translation>
 <translation id="2727977024730340865">Uređaj je priključen na punjač male snage. Punjenje baterije možda nije pouzdano.</translation>
 <translation id="2761704814324807722">Traka statusa, vrijeme <ph name="TIME" />, <ph name="BATTERY" /></translation>
 <translation id="2792498699870441125">Alt + Pretraživanje</translation>
-<translation id="2805756323405976993">Aplikacije</translation>
 <translation id="2819276065543622893">Odjavit ćete se sada.</translation>
 <translation id="2825619548187458965">Polica</translation>
 <translation id="2844169650293029770">USB-C uređaj (prednji lijevi priključak)</translation>
@@ -97,7 +95,6 @@ Pritisnite tipke Pretraživanje ili Shift da biste ju isključili.</translation>
 <translation id="3621712662352432595">Postavke zvuka</translation>
 <translation id="3625258641415618104">Snimke zaslona onemogućene su</translation>
 <translation id="3626281679859535460">Svjetlina</translation>
-<translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079">Razlučivost zaslona <ph name="DISPLAY_NAME" /> promijenjena je na <ph name="RESOLUTION" /></translation>
 <translation id="370649949373421643">Omogući Wi-Fi</translation>
 <translation id="3709443003275901162">više od 9</translation>
@@ -111,6 +108,8 @@ Pritisnite tipke Pretraživanje ili Shift da biste ju isključili.</translation>
 <translation id="3866182280516392520">IPv6 adresa</translation>
 <translation id="3891340733213178823">Pritisnite Ctrl + Shift + Q dvaput da biste se odjavili.</translation>
 <translation id="3892641579809465218">Unutarnji zaslon</translation>
+<translation id="3893630138897523026">ChromeVox (govorne povratne informacije)</translation>
+<translation id="3899995891769452915">Glasovni unos</translation>
 <translation id="3963445509666917109">Zvučnik (ugrađeni)</translation>
 <translation id="3967919079500697218">Administrator je onemogućio izradu snimki zaslona.</translation>
 <translation id="397105322502079400">Izračun u tijeku…</translation>
@@ -134,10 +133,8 @@ Pritisnite tipke Pretraživanje ili Shift da biste ju isključili.</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl + Shift + razmak</translation>
 <translation id="5045002648206642691">Postavke Google diska...</translation>
-<translation id="511445211639755999"><ph name="RESOLUTION" />, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">Dostupni su uređaji za emitiranje</translation>
 <translation id="5170568018924773124">Pokaži u mapi</translation>
-<translation id="5191140942132549112">PRIKAŽI PITANJA</translation>
 <translation id="5222676887888702881">Odjava</translation>
 <translation id="5238774010593222950">Nije moguća prijava na drugi račun.</translation>
 <translation id="532063867737390965">Tu postavku mreže onemogućio je administrator.</translation>
@@ -185,6 +182,7 @@ Pritisnite Shift + Alt za promjenu.</translation>
 <translation id="6459472438155181876">Proširivanje zaslona na zaslon <ph name="DISPLAY_NAME" /></translation>
 <translation id="6490471652906364588">USB-C uređaj (desni priključak)</translation>
 <translation id="6501401484702599040">Emitiranje zaslona na <ph name="RECEIVER_NAME" /></translation>
+<translation id="6521655319214113338">Unos rukopisom</translation>
 <translation id="6537270692134705506">Snimi zaslon</translation>
 <translation id="6550675742724504774">Opcije</translation>
 <translation id="6585808820553845416">Sesija će završiti za <ph name="SESSION_TIME_REMAINING" />.</translation>
@@ -194,7 +192,6 @@ Pritisnite Shift + Alt za promjenu.</translation>
 <translation id="6713285437468012787">Bluetooth uređaj "<ph name="DEVICE_NAME" />" sada je uparen i dostupan svim korisnicima. To uparivanje možete ukloniti u Postavkama.</translation>
 <translation id="6785414152754474415">Baterija je <ph name="PERCENTAGE" />% puna i puni se.</translation>
 <translation id="683971173229319003">Pretraživanje + L</translation>
-<translation id="68610848741840742">ChromeVox (govorne povratne informacije)</translation>
 <translation id="6911468394164995108">Pridruži se drugoj...</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6979158407327259162">Google disk</translation>
@@ -217,8 +214,10 @@ Pritisnite tipke Alt + Pretraživanje ili Shift da biste ju isključili.</transl
 <translation id="743058460480092004">Fotoaparat i mikrofon su aktivni.</translation>
 <translation id="7510334386202674593">Ctrl + Shift + L</translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" /> ne podržava razlučivost <ph name="SPECIFIED_RESOLUTION" />. Razlučivost je promijenjena u <ph name="FALLBACK_RESOLUTION" /></translation>
+<translation id="7562368315689366235">Paleta emojija</translation>
 <translation id="7573962313813535744">Način rada u priključnoj stanici</translation>
 <translation id="7580671184200851182">Reprodukcija istog zvuka na svim zvučnicima (mono audio)</translation>
+<translation id="7581273696622423628">Ispunite anketu</translation>
 <translation id="7593891976182323525">Pretraživanje ili Shift</translation>
 <translation id="7649070708921625228">Pomoć</translation>
 <translation id="7692480393933218409">Punjenje povezanih USB-C uređaja</translation>

@@ -137,6 +137,9 @@ class ManagePasswordsUIController
   virtual AutoSigninFirstRunPrompt* CreateAutoSigninPrompt(
       PasswordDialogController* controller);
 
+  // Check if |web_contents()| is attached to some Browser. Mocked in tests.
+  virtual bool HasBrowserWindow() const;
+
   // For Vivaldi, show the bubble without anchoring it to any icon, since we
   // don't have the location bar or the icon.
   virtual void VivaldiShowBubble();

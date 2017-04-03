@@ -39,7 +39,6 @@
 #define E2E_ONLY(test_name) MACRO_CONCAT(DISABLED_E2ETest, test_name)
 #define E2E_ENABLED(test_name) MACRO_CONCAT(test_name, E2ETest)
 
-class ProfileSyncService;
 class ProfileSyncServiceHarness;
 class P2PInvalidationForwarder;
 class P2PSyncRefresher;
@@ -47,19 +46,23 @@ class P2PSyncRefresher;
 namespace base {
 class CommandLine;
 class ScopedTempDir;
-}
+}  // namespace base
+
+namespace browser_sync {
+class ProfileSyncService;
+}  // namespace browser_sync
 
 namespace fake_server {
 class FakeServer;
 class FakeServerInvalidationService;
-}
+}  // namespace fake_server
 
 namespace net {
 class FakeURLFetcherFactory;
 class ScopedDefaultHostResolverProc;
 class URLFetcherImplFactory;
 class URLRequestContextGetter;
-}
+}  // namespace net
 
 // This is the base class for integration tests for all sync data types. Derived
 // classes must be defined for each sync data type. Individual tests are defined
@@ -94,18 +97,18 @@ class SyncTest : public InProcessBrowserTest {
   // The type of server we're running against.
   enum ServerType {
     SERVER_TYPE_UNDECIDED,
-    LOCAL_PYTHON_SERVER,    // The mock python server that runs locally and is
-                            // part of the Chromium checkout.
-    LOCAL_LIVE_SERVER,      // Some other server (maybe the real binary used by
-                            // Google's sync service) that can be started on
-                            // a per-test basis by running a command
-    EXTERNAL_LIVE_SERVER,   // A remote server that the test code has no control
-                            // over whatsoever; cross your fingers that the
-                            // account state is initially clean.
-    IN_PROCESS_FAKE_SERVER, // The fake Sync server (FakeServer) running
-                            // in-process (bypassing HTTP calls). This
-                            // ServerType will eventually replace
-                            // LOCAL_PYTHON_SERVER.
+    LOCAL_PYTHON_SERVER,   // The mock python server that runs locally and is
+                           // part of the Chromium checkout.
+    LOCAL_LIVE_SERVER,     // Some other server (maybe the real binary used by
+                           // Google's sync service) that can be started on
+                           // a per-test basis by running a command
+    EXTERNAL_LIVE_SERVER,  // A remote server that the test code has no control
+                           // over whatsoever; cross your fingers that the
+                           // account state is initially clean.
+    IN_PROCESS_FAKE_SERVER,  // The fake Sync server (FakeServer) running
+                             // in-process (bypassing HTTP calls). This
+                             // ServerType will eventually replace
+                             // LOCAL_PYTHON_SERVER.
   };
 
   // A SyncTest must be associated with a particular test type.
@@ -149,10 +152,10 @@ class SyncTest : public InProcessBrowserTest {
   }
 
   // Returns a ProfileSyncService at the given index.
-  ProfileSyncService* GetSyncService(int index);
+  browser_sync::ProfileSyncService* GetSyncService(int index);
 
   // Returns the set of ProfileSyncServices.
-  std::vector<ProfileSyncService*> GetSyncServices();
+  std::vector<browser_sync::ProfileSyncService*> GetSyncServices();
 
   // Returns a pointer to the sync profile that is used to verify changes to
   // individual sync profiles. Callee owns the object and manages its lifetime.

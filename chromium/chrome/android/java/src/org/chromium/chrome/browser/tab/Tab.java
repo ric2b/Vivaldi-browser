@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.tab;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
@@ -11,9 +12,8 @@ import android.content.Intent;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Color;
-import android.graphics.Point;
+import android.graphics.Rect;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
@@ -25,21 +25,19 @@ import android.view.ContextThemeWrapper;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.ViewGroup;
-import android.view.ViewGroup.LayoutParams;
 import android.view.accessibility.AccessibilityEvent;
 import android.widget.FrameLayout;
+import android.widget.FrameLayout.LayoutParams;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ObserverList.RewindableIterator;
-import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.blimp_public.contents.BlimpContents;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
@@ -61,9 +59,8 @@ import org.chromium.chrome.browser.blimp.BlimpClientContextFactory;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.contextmenu.ContextMenuPopulator;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchTabHelper;
-import org.chromium.chrome.browser.crash.MinidumpDirectoryObserver;
-import org.chromium.chrome.browser.crash.MinidumpUploadService;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
+import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.download.ChromeDownloadDelegate;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.help.HelpAndFeedback;
@@ -80,7 +77,6 @@ import org.chromium.chrome.browser.printing.TabPrinter;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.rlz.RevenueStats;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
-import org.chromium.chrome.browser.snackbar.LofiBarController;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ssl.SecurityStateModel;
 import org.chromium.chrome.browser.tab.TabUma.TabCreationState;
@@ -96,10 +92,7 @@ import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.components.navigation_interception.InterceptNavigationDelegate;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
-import org.chromium.components.variations.VariationsAssociatedData;
-import org.chromium.content.browser.ActivityContentVideoViewEmbedder;
 import org.chromium.content.browser.ChildProcessLauncher;
-import org.chromium.content.browser.ContentVideoViewEmbedder;
 import org.chromium.content.browser.ContentView;
 import org.chromium.content.browser.ContentViewClient;
 import org.chromium.content.browser.ContentViewCore;
@@ -113,15 +106,14 @@ import org.chromium.content_public.common.TopControlsState;
 import org.chromium.printing.PrintManagerDelegateImpl;
 import org.chromium.printing.PrintingController;
 import org.chromium.printing.PrintingControllerImpl;
-import org.chromium.ui.WindowOpenDisposition;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.mojom.WindowOpenDisposition;
 
 import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -162,6 +154,8 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
 
     /** Used for logging. */
     private static final String TAG = "Tab";
+
+    private static final String PRODUCT_VERSION = ChromeVersionInfo.getProductVersion();
 
     private long mNativeTabAndroid;
 
@@ -209,12 +203,6 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
 
     /** A list of Tab observers.  These are used to broadcast Tab events to listeners. */
     private final ObserverList<TabObserver> mObservers = new ObserverList<>();
-
-    /**
-     * A list of {@link ContentViewCore} overlay objects that are managed by external components but
-     * need to be sized and rendered along side this {@link Tab}s content.
-     */
-    private final List<ContentViewCore> mOverlayContentViewCores = new ArrayList<>();
 
     // Content layer Observers and Delegates
     private ContentViewClient mContentViewClient;
@@ -389,8 +377,6 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
 
     protected Handler mHandler;
 
-    private LofiBarController mLoFiBarController;
-
     /** Whether or not the tab closing the tab can send the user back to the app that opened it. */
     private boolean mIsAllowedToReturnToExternalApp;
 
@@ -494,48 +480,12 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
             }
             return 0;
         }
-
-        @Override
-        public ContentVideoViewEmbedder getContentVideoViewEmbedder() {
-            return new ActivityContentVideoViewEmbedder(getActivity()) {
-                @Override
-                public void enterFullscreenVideo(View view, boolean isVideoLoaded) {
-                    super.enterFullscreenVideo(view, isVideoLoaded);
-                    FullscreenManager fullscreenManager = getFullscreenManager();
-                    if (fullscreenManager != null) {
-                        fullscreenManager.setOverlayVideoMode(true);
-                        // Disable double tap for video.
-                        if (getContentViewCore() != null) {
-                            getContentViewCore().updateDoubleTapSupport(false);
-                        }
-                    }
-                }
-
-                @Override
-                public void exitFullscreenVideo() {
-                    FullscreenManager fullscreenManager = getFullscreenManager();
-                    if (fullscreenManager != null) {
-                        fullscreenManager.setOverlayVideoMode(false);
-                        // Disable double tap for video.
-                        if (getContentViewCore() != null) {
-                            getContentViewCore().updateDoubleTapSupport(true);
-                        }
-                    }
-                    super.exitFullscreenVideo();
-                }
-            };
-        }
-
-        @Override
-        public String getProductVersion() {
-            return ChromeVersionInfo.getProductVersion();
-        }
     }
 
     private GestureStateListener createGestureStateListener() {
         return new GestureStateListener() {
             @Override
-            public void onFlingStartGesture(int vx, int vy, int scrollOffsetY, int scrollExtentY) {
+            public void onFlingStartGesture(int scrollOffsetY, int scrollExtentY) {
                 onScrollingStateChanged();
             }
 
@@ -633,6 +583,7 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
      *                      accounting. When null, TabUma will not be initialized.
      * @param frozenState State containing information about this Tab, if it was persisted.
      */
+    @SuppressLint("HandlerLeak")
     public Tab(int id, int parentId, boolean incognito, Context context,
             WindowAndroid window, TabLaunchType type, TabCreationState creationState,
             TabState frozenState) {
@@ -1046,16 +997,6 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
     }
 
     /**
-     * Reloads the current page content with Lo-Fi off.
-     * This version ignores the cache and reloads from the network.
-     */
-    public void reloadDisableLoFi() {
-        if (getWebContents() != null) {
-            getWebContents().getNavigationController().reloadDisableLoFi(true);
-        }
-    }
-
-    /**
      * Reloads all the Lo-Fi images in this Tab's WebContents.
      * This version ignores the cache and reloads from the network.
      */
@@ -1128,11 +1069,17 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
             if (themeColor != 0 && !ColorUtils.isValidThemeColor(themeColor)) themeColor = 0;
         }
 
+        // Apply theme color for Blimp tab.
+        if (isBlimpTab() && getBlimpContents() != null) {
+            themeColor = getBlimpContents().getThemeColor();
+            if (themeColor != 0 && !ColorUtils.isValidThemeColor(themeColor)) themeColor = 0;
+        }
+
         // Do not apply the theme color if there are any security issues on the page.
         int securityLevel = getSecurityLevel();
-        if (securityLevel == ConnectionSecurityLevel.SECURITY_ERROR
+        if (securityLevel == ConnectionSecurityLevel.DANGEROUS
                 || securityLevel == ConnectionSecurityLevel.SECURITY_WARNING
-                || securityLevel == ConnectionSecurityLevel.SECURITY_POLICY_WARNING) {
+                || securityLevel == ConnectionSecurityLevel.SECURE_WITH_POLICY_INSTALLED_CERT) {
             themeColor = getDefaultThemeColor();
         }
 
@@ -1206,6 +1153,15 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
      */
     public boolean isIncognito() {
         return mIncognito;
+    }
+
+    /**
+     * @return The {@link ContentViewCore} associated with the current page.
+     */
+    public ContentViewCore getActiveContentViewCore() {
+        // TODO(jinsukkim): Remove this along with the refactoring for Blimp.
+        //                  See https://crbug.com/650515.
+        return mContentViewCore;
     }
 
     /**
@@ -1361,6 +1317,7 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
             assert !isFrozen();
 
             if (mContentViewCore != null) mContentViewCore.onShow();
+            if (mBlimpContents != null) mBlimpContents.show();
 
             if (mTabUma != null) {
                 mTabUma.onShow(type, getTimestampMillis(),
@@ -1400,6 +1357,7 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
             mIsHidden = true;
 
             if (mContentViewCore != null) mContentViewCore.onHide();
+            if (mBlimpContents != null) mBlimpContents.hide();
 
             // Clean up any fullscreen state that might impact other tabs.
             if (mFullscreenManager != null) {
@@ -1511,8 +1469,13 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
             if (isBlimpTab() && getBlimpContents() == null) {
                 Profile profile = Profile.getLastUsedProfile();
                 if (mIncognito) profile = profile.getOffTheRecordProfile();
-                mBlimpContents = nativeInitBlimpContents(mNativeTabAndroid, profile);
-                getBlimpContents().addObserver(new TabBlimpContentsObserver(this));
+                mBlimpContents = nativeInitBlimpContents(
+                        mNativeTabAndroid, profile, mWindowAndroid.getNativePointer());
+                if (mBlimpContents != null) {
+                    getBlimpContents().addObserver(new TabBlimpContentsObserver(this));
+                } else {
+                    mBlimp = false;
+                }
             }
 
             boolean creatingWebContents = webContents == null;
@@ -1557,17 +1520,18 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
      * @param startActivityOptions Options to pass to {@link Activity#startActivity(Intent, Bundle)}
      * @param finalizeCallback A callback that will be called after the tab is attached to the new
      *                         host activity in {@link #attachAndFinishReparenting}.
-     * @param stayInChrome Whether the user should stay in Chrome after the tab is reparented.
      * @return Whether reparenting succeeded. If false, the tab was not removed and the intent was
      *         not fired.
      */
     public boolean detachAndStartReparenting(Intent intent, Bundle startActivityOptions,
-            Runnable finalizeCallback, boolean stayInChrome) {
+            Runnable finalizeCallback) {
         ChromeActivity activity = getActivity();
         if (activity == null) return false;
 
         if (intent == null) intent = new Intent();
-        intent.setPackage(activity.getPackageName());
+        if (intent.getComponent() == null) {
+            intent.setClass(mThemedApplicationContext, ChromeLauncherActivity.class);
+        }
         intent.setAction(Intent.ACTION_VIEW);
         if (TextUtils.isEmpty(intent.getDataString())) intent.setData(Uri.parse(getUrl()));
         if (isIncognito()) {
@@ -1584,10 +1548,13 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
             // ensure the global count of tabs is correct. See crbug.com/611806.
             intent.putExtra(IntentHandler.EXTRA_TAB_ID, mId);
             AsyncTabParamsManager.add(mId,
-                    new TabReparentingParams(this, intent, finalizeCallback, stayInChrome));
+                    new TabReparentingParams(this, intent, finalizeCallback));
 
             tabModelSelector.getModel(mIncognito).removeTab(this);
 
+            // We can't call updateWindowAndroid here and set mWindowAndroid to null because the tab
+            // may navigate while being reparented and cause a crash.
+            // TODO(mthiesse): File a bug when crbug isn't down.
             if (mContentViewCore != null) mContentViewCore.updateWindowAndroid(null);
             attachTabContentManager(null);
         }
@@ -1610,9 +1577,7 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
         // TODO(yusufo): Share these calls with the construction related calls.
         // crbug.com/590281
 
-        // Update and propagate for the new WindowAndroid.
-        mWindowAndroid = activity.getWindowAndroid();
-        mContentViewCore.updateWindowAndroid(mWindowAndroid);
+        updateWindowAndroid(activity.getWindowAndroid());
 
         // Update for the controllers that need the Compositor from the new Activity.
         attachTabContentManager(activity.getTabContentManager());
@@ -1642,6 +1607,15 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
     }
 
     /**
+     * Update and propagate the new WindowAndroid.
+     * @param windowAndroid The WindowAndroid to propagate.
+     */
+    public void updateWindowAndroid(WindowAndroid windowAndroid) {
+        mWindowAndroid = windowAndroid;
+        if (mContentViewCore != null) mContentViewCore.updateWindowAndroid(mWindowAndroid);
+    }
+
+    /**
      * @return Whether the tab is detached from its Activity and {@link WindowAndroid} for
      * reparenting. Certain functionalities will not work until it is attached to a new activity
      * with {@link Tab#attachAndFinishReparenting(
@@ -1667,78 +1641,15 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
         return mDelegateFactory;
     }
 
-    /**
-     * Used to get a list of Android {@link View}s that represent both the normal content as well as
-     * overlays.  This does not return {@link View}s for {@link NativePage}s.
-     * @param content A {@link List} that will be populated with {@link View}s that represent all of
-     *                the content in this {@link Tab}.
-     */
-    public void getAllContentViews(List<View> content) {
+    public View getContentView() {
         if (!isNativePage()) {
-            content.add(getView());
+            return getView();
+        } else if (mBlimpContents != null) {
+            return mBlimpContents.getView();
         } else if (mContentViewCore != null) {
-            content.add(mContentViewCore.getContainerView());
+            return mContentViewCore.getContainerView();
         }
-        for (int i = 0; i < mOverlayContentViewCores.size(); i++) {
-            content.add(mOverlayContentViewCores.get(i).getContainerView());
-        }
-    }
-
-    /**
-     * Used to get a list of {@link ContentViewCore}s that represent both the normal content as well
-     * as overlays.  These are all {@link ContentViewCore}s currently showing or rendering content
-     * for this {@link Tab}.
-     * @param content A {@link List} that will be populated with {@link ContentViewCore}s currently
-     *                rendering content related to this {@link Tab}.
-     */
-    public void getAllContentViewCores(List<ContentViewCore> content) {
-        if (mContentViewCore != null) content.add(mContentViewCore);
-        for (int i = 0; i < mOverlayContentViewCores.size(); i++) {
-            content.add(mOverlayContentViewCores.get(i));
-        }
-    }
-
-    /**
-     * Adds a {@link ContentViewCore} to this {@link Tab} as an overlay object.
-     * If attachLayer is set, the {@link ContentViewCore} will be attached to CC layer hierarchy.
-     * This {@link ContentViewCore} will have all layout events propagated to it.
-     * This {@link ContentViewCore} can be removed via
-     * {@link #detachOverlayContentViewCore(ContentViewCore)}.
-     * @param content The {@link ContentViewCore} to attach.
-     * @param visible Whether or not to make the content visible.
-     * @param attachLayer Whether or not to attach the content view to the CC layer hierarchy.
-     */
-    public void attachOverlayContentViewCore(
-            ContentViewCore content, boolean visible, boolean attachLayer) {
-        if (content == null) return;
-
-        assert !mOverlayContentViewCores.contains(content);
-        mOverlayContentViewCores.add(content);
-        if (attachLayer) {
-            nativeAttachOverlayWebContents(mNativeTabAndroid, content.getWebContents(), visible);
-        }
-        for (TabObserver observer : mObservers) {
-            observer.onOverlayContentViewCoreAdded(this, content);
-        }
-    }
-
-    /**
-     * Removes a {@link ContentViewCore} overlay object from this {@link Tab}.  This
-     * {@link ContentViewCore} must have previously been added via
-     * {@link #attachOverlayContentViewCore(ContentViewCore, boolean)}.
-     * @param content The {@link ContentViewCore} to detach.
-     */
-    public void detachOverlayContentViewCore(ContentViewCore content) {
-        if (content == null) return;
-
-        for (TabObserver observer : mObservers) {
-            observer.onOverlayContentViewCoreRemoved(this, content);
-        }
-
-        assert mOverlayContentViewCores.contains(content);
-        mOverlayContentViewCores.remove(content);
-
-        nativeDetachOverlayWebContents(mNativeTabAndroid, content.getWebContents());
+        return null;
     }
 
     /**
@@ -1768,10 +1679,6 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
      */
     protected void didStartPageLoad(String validatedUrl, boolean showingErrorPage) {
         mIsFullscreenWaitingForLoad = !DomDistillerUrlUtils.isDistilledPage(validatedUrl);
-
-        if (getLoFiBarController() != null) {
-            mLoFiBarController.resetLoFiPopupShownForPageLoad();
-        }
 
         updateTitle();
         removeSadTabIfPresent();
@@ -1857,7 +1764,7 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
      *                    {@link ContentViewCore}.
      */
     protected void initContentViewCore(WebContents webContents) {
-        ContentViewCore cvc = new ContentViewCore(mThemedApplicationContext);
+        ContentViewCore cvc = new ContentViewCore(mThemedApplicationContext, PRODUCT_VERSION);
         ContentView cv = ContentView.createContentView(mThemedApplicationContext, cvc);
         cv.setContentDescription(mThemedApplicationContext.getResources().getString(
                 R.string.accessibility_content_view));
@@ -1935,8 +1842,7 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
             }
             mInfoBarContainer.setContentViewCore(mContentViewCore);
 
-            mSwipeRefreshHandler = new SwipeRefreshHandler(mThemedApplicationContext);
-            mSwipeRefreshHandler.setContentViewCore(mContentViewCore);
+            mSwipeRefreshHandler = new SwipeRefreshHandler(mThemedApplicationContext, this);
 
             updateThemeColorIfNeeded(false);
             notifyContentChanged();
@@ -2107,6 +2013,9 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
         mPreviousFullscreenContentOffsetY = Float.NaN;
 
         mNeedsReload = false;
+
+        // Remove pending handler actions to prevent memory leaks.
+        mHandler.removeCallbacksAndMessages(null);
     }
 
     /**
@@ -2446,7 +2355,7 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
             mInfoBarContainer.setContentViewCore(null);
         }
         if (mSwipeRefreshHandler != null) {
-            mSwipeRefreshHandler.setContentViewCore(null);
+            mSwipeRefreshHandler.destroy();
             mSwipeRefreshHandler = null;
         }
         mContentViewParent = null;
@@ -2521,15 +2430,6 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
         return getActivity().getSnackbarManager();
     }
 
-    private LofiBarController getLoFiBarController() {
-        ThreadUtils.assertOnUiThread();
-        if (mLoFiBarController == null && getSnackbarManager() != null) {
-            mLoFiBarController =
-                    new LofiBarController(mThemedApplicationContext, getSnackbarManager());
-        }
-        return mLoFiBarController;
-    }
-
     /**
      * @return The native pointer representing the native side of this {@link Tab} object.
      */
@@ -2543,7 +2443,7 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
     @CalledByNative
     public void swapWebContents(
             WebContents webContents, boolean didStartLoad, boolean didFinishLoad) {
-        ContentViewCore cvc = new ContentViewCore(mThemedApplicationContext);
+        ContentViewCore cvc = new ContentViewCore(mThemedApplicationContext, PRODUCT_VERSION);
         ContentView cv = ContentView.createContentView(mThemedApplicationContext, cvc);
         cv.setContentDescription(mThemedApplicationContext.getResources().getString(
                 R.string.accessibility_content_view));
@@ -2574,11 +2474,12 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
             mContentViewCore.onHide();
         }
 
+        Rect bounds = new Rect();
         if (originalWidth == 0 && originalHeight == 0) {
-            Point size = ExternalPrerenderHandler.estimateContentSize(
+            bounds = ExternalPrerenderHandler.estimateContentSize(
                     (Application) getApplicationContext(), false);
-            originalWidth = size.x;
-            originalHeight = size.y;
+            originalWidth = bounds.right - bounds.left;
+            originalHeight = bounds.bottom - bounds.top;
         }
 
         destroyContentViewCore(deleteOldNativeWebContents);
@@ -2590,6 +2491,9 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
         // However, this size fluttering may confuse Blink and rendered result can be broken
         // (see http://crbug.com/340987).
         newContentViewCore.onSizeChanged(originalWidth, originalHeight, 0, 0);
+        if (!bounds.isEmpty()) {
+            newContentViewCore.onPhysicalBackingSizeChanged(bounds.right, bounds.bottom);
+        }
         newContentViewCore.onShow();
         setContentViewCore(newContentViewCore);
 
@@ -2838,29 +2742,6 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
         mIsBeingRestored = false;
 
         if (mTabUma != null) mTabUma.onRendererCrashed();
-
-        if (!TextUtils.equals("true", VariationsAssociatedData.getVariationParamValue(
-                MinidumpDirectoryObserver.MINIDUMP_EXPERIMENT_NAME, "Enabled"))) {
-            try {
-                // Update the most recent minidump file with the logcat. Doing this asynchronously
-                // adds a race condition in the case of multiple simultaneously renderer crashses
-                // but because the data will be the same for all of them it is innocuous. We can
-                // attempt to do this regardless of whether it was a foreground tab in the event
-                // that it's a real crash and not just android killing the tab.
-                Context context = getApplicationContext();
-                Intent intent = MinidumpUploadService.createFindAndUploadLastCrashIntent(context);
-                context.startService(intent);
-                RecordUserAction.record("MobileBreakpadUploadAttempt");
-            } catch (SecurityException e) {
-                // For KitKat and below, there was a framework bug which cause us to not be able to
-                // find our own crash uploading service. Ignore a SecurityException here on older
-                // OS versions since the crash will eventually get uploaded on next start.
-                // crbug/542533
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    throw e;
-                }
-            }
-        }
     }
 
     /**
@@ -2903,6 +2784,21 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
             }
             mFullscreenManager.showControlsTransient();
             updateFullscreenEnabledState();
+        }
+
+        // For blimp mode, offset the blimp view by the height of top controls. This will ensure
+        // that the view doesn't get clipped at the bottom of the page and also the touch offsets
+        // would work correctly.
+        if (getBlimpContents() != null && mFullscreenManager != null) {
+            ViewGroup blimpView = getBlimpContents().getView();
+            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) blimpView.getLayoutParams();
+            if (lp == null) {
+                lp = new FrameLayout.LayoutParams(
+                        LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
+            }
+
+            lp.topMargin = mFullscreenManager.getTopControlsHeight();
+            blimpView.setLayoutParams(lp);
         }
     }
 
@@ -2984,18 +2880,6 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
      */
     public String getOriginalUrl() {
         return DomDistillerUrlUtils.getOriginalUrlFromDistillerUrl(getUrl());
-    }
-
-    /**
-     * If a Lo-Fi snackbar has not been shown yet for this page load, a Lo-Fi snackbar is shown.
-     *
-     * @param isPreview Whether the Lo-Fi response was a preview response.
-     */
-    @CalledByNative
-    public void onLoFiResponseReceived(boolean isPreview) {
-        if (getLoFiBarController() != null) {
-            mLoFiBarController.maybeCreateLoFiBar(this, isPreview);
-        }
     }
 
     /**
@@ -3327,7 +3211,8 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
     private native void nativeInitWebContents(long nativeTabAndroid, boolean incognito,
             WebContents webContents, TabWebContentsDelegateAndroid delegate,
             ContextMenuPopulator contextMenuPopulator);
-    private native BlimpContents nativeInitBlimpContents(long nativeTabAndroid, Profile profile);
+    private native BlimpContents nativeInitBlimpContents(
+            long nativeTabAndroid, Profile profile, long windowAndroidPtr);
     private native void nativeUpdateDelegates(long nativeTabAndroid,
             TabWebContentsDelegateAndroid delegate, ContextMenuPopulator contextMenuPopulator);
     private native void nativeDestroyWebContents(long nativeTabAndroid, boolean deleteNative);
@@ -3351,9 +3236,5 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
             InterceptNavigationDelegate delegate);
     private native void nativeAttachToTabContentManager(long nativeTabAndroid,
             TabContentManager tabContentManager);
-    private native void nativeAttachOverlayWebContents(
-            long nativeTabAndroid, WebContents webContents, boolean visible);
-    private native void nativeDetachOverlayWebContents(
-            long nativeTabAndroid, WebContents webContents);
     private native boolean nativeHasPrerenderedUrl(long nativeTabAndroid, String url);
 }

@@ -123,7 +123,12 @@ enum VideoFormat {
   YUV422P10,
   YUV444P9,
   YUV444P10,
-  FORMAT_MAX = YUV444P10,
+  YUV420P12,
+  YUV422P12,
+  YUV444P12,
+  Y8,
+  Y16,
+  FORMAT_MAX = Y16,
 };
 
 // Kept in sync with media::ColorSpace via static_asserts.
@@ -235,12 +240,9 @@ struct VideoDecoderConfig {
   EncryptionScheme encryption_scheme;
 };
 
-// This defines a mojo transport format for media::SubsampleEntry.
-// See media/base/decrypt_config.h for descriptions.
-struct SubsampleEntry {
-  uint32 clear_bytes;
-  uint32 cypher_bytes;
-};
+// Native struct media::SubsampleEntry;
+[Native]
+struct SubsampleEntry;
 
 // This defines a mojo transport format for media::DecryptConfig.
 // See media/base/decrypt_config.h for descriptions.

@@ -10,7 +10,7 @@
 Polymer({
   is: 'add-site-dialog',
 
-  behaviors: [SiteSettingsBehavior],
+  behaviors: [SiteSettingsBehavior, WebUIListenerBehavior],
 
   properties: {
     /**
@@ -31,7 +31,10 @@ Polymer({
    *     Block list.
    */
   open: function(type) {
+    this.addWebUIListener('onIncognitoStatusChanged',
+        this.onIncognitoStatusChanged_.bind(this));
     this.allowException = type == settings.PermissionValues.ALLOW;
+    this.browserProxy.updateIncognitoStatus();
     this.$.dialog.showModal();
   },
 
@@ -40,8 +43,7 @@ Polymer({
    * @private
    */
   validate_: function() {
-    var pattern = this.addPatternWildcard_(this.site_);
-    this.browserProxy.isPatternValid(pattern).then(function(isValid) {
+    this.browserProxy.isPatternValid(this.site_).then(function(isValid) {
       this.$.add.disabled = !isValid;
     }.bind(this));
   },
@@ -52,6 +54,19 @@ Polymer({
   },
 
   /**
+   * A handler for when we get notified of the current profile creating or
+   * destroying their incognito counterpart.
+   * @param {boolean} incognitoEnabled Whether the current profile has an
+   *     incognito profile.
+   * @private
+   */
+  onIncognitoStatusChanged_: function(incognitoEnabled) {
+    this.$.incognito.disabled = !incognitoEnabled;
+    if (!incognitoEnabled)
+      this.$.incognito.checked = false;
+  },
+
+  /**
    * The tap handler for the Add [Site] button (adds the pattern and closes
    * the dialog).
    * @private
@@ -59,10 +74,11 @@ Polymer({
   onSubmit_: function() {
     if (this.$.add.disabled)
       return;  // Can happen when Enter is pressed.
-    var pattern = this.addPatternWildcard_(this.site_);
-    this.setCategoryPermissionForOrigin(
+    var pattern = this.addPatternWildcard(this.site_);
+    this.browserProxy.setCategoryPermissionForOrigin(
         pattern, pattern, this.category, this.allowException ?
-            settings.PermissionValues.ALLOW : settings.PermissionValues.BLOCK);
+            settings.PermissionValues.ALLOW : settings.PermissionValues.BLOCK,
+        this.$.incognito.checked);
     this.$.dialog.close();
   },
 });

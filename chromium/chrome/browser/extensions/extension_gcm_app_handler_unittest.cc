@@ -209,7 +209,7 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
         worker_pool->GetSequencedTaskRunnerWithShutdownBehavior(
             worker_pool->GetSequenceToken(),
             base::SequencedWorkerPool::SKIP_ON_SHUTDOWN));
-    return base::WrapUnique(new gcm::GCMProfileService(
+    return base::MakeUnique<gcm::GCMProfileService>(
         profile->GetPrefs(), profile->GetPath(), profile->GetRequestContext(),
         chrome::GetChannel(),
         gcm::GetProductCategoryForSubtypes(profile->GetPrefs()),
@@ -219,7 +219,7 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
             LoginUIServiceFactory::GetShowLoginPopupCallbackForProfile(
                 profile))),
         base::WrapUnique(new gcm::FakeGCMClientFactory(ui_thread, io_thread)),
-        ui_thread, io_thread, blocking_task_runner));
+        ui_thread, io_thread, blocking_task_runner);
   }
 
   ExtensionGCMAppHandlerTest()
@@ -259,7 +259,7 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
     TestExtensionSystem* extension_system(
         static_cast<TestExtensionSystem*>(ExtensionSystem::Get(profile())));
     base::FilePath extensions_install_dir =
-        temp_dir_.path().Append(FILE_PATH_LITERAL("Extensions"));
+        temp_dir_.GetPath().Append(FILE_PATH_LITERAL("Extensions"));
     extension_system->CreateExtensionService(
         base::CommandLine::ForCurrentProcess(), extensions_install_dir, false);
     extension_service_ = extension_system->Get(profile())->extension_service();
@@ -293,12 +293,8 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
 
     std::string error;
     scoped_refptr<Extension> extension = Extension::Create(
-        temp_dir_.path(),
-        Manifest::UNPACKED,
-        manifest,
-        Extension::NO_FLAGS,
-        "ldnnhddmnhbkjipkidpdiheffobcpfmf",
-        &error);
+        temp_dir_.GetPath(), Manifest::UNPACKED, manifest, Extension::NO_FLAGS,
+        "ldnnhddmnhbkjipkidpdiheffobcpfmf", &error);
     EXPECT_TRUE(extension.get()) << error;
     EXPECT_TRUE(
         extension->permissions_data()->HasAPIPermission(APIPermission::kGcm));
@@ -327,7 +323,7 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
     data_dir = data_dir.AppendASCII("extensions");
     data_dir = data_dir.AppendASCII(update_crx);
 
-    base::FilePath path = temp_dir_.path();
+    base::FilePath path = temp_dir_.GetPath();
     path = path.Append(data_dir.BaseName());
     ASSERT_TRUE(base::CopyFile(data_dir, path));
 

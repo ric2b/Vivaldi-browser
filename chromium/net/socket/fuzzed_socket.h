@@ -13,7 +13,7 @@
 #include "net/base/completion_callback.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 #include "net/socket/stream_socket.h"
 
 namespace base {
@@ -24,6 +24,7 @@ namespace net {
 
 class IPEndPoint;
 class IOBuffer;
+class NetLog;
 
 // A StreamSocket that uses a FuzzedDataProvider to generate responses. Writes
 // can succeed synchronously or asynchronously, can write some or all of the
@@ -73,7 +74,7 @@ class FuzzedSocket : public StreamSocket {
   bool IsConnectedAndIdle() const override;
   int GetPeerAddress(IPEndPoint* address) const override;
   int GetLocalAddress(IPEndPoint* address) const override;
-  const BoundNetLog& NetLog() const override;
+  const NetLogWithSource& NetLog() const override;
   void SetSubresourceSpeculation() override;
   void SetOmniboxSpeculation() override;
   bool WasEverUsed() const override;
@@ -118,7 +119,7 @@ class FuzzedSocket : public StreamSocket {
   int64_t total_bytes_read_ = 0;
   int64_t total_bytes_written_ = 0;
 
-  BoundNetLog bound_net_log_;
+  NetLogWithSource net_log_;
 
   IPEndPoint remote_address_;
 

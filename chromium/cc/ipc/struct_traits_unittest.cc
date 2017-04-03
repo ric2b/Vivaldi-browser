@@ -286,7 +286,7 @@ TEST_F(StructTraitsTest, CompositorFrameMetadata) {
   std::vector<ui::LatencyInfo> latency_infos = {latency_info};
   std::vector<uint32_t> satisfies_sequences = {1234, 1337};
   std::vector<SurfaceId> referenced_surfaces;
-  SurfaceId id(1234, 5678, 9101112);
+  SurfaceId id(FrameSinkId(1234, 4321), LocalFrameId(5678, 9101112));
   referenced_surfaces.push_back(id);
 
   CompositorFrameMetadata input;
@@ -438,7 +438,7 @@ TEST_F(StructTraitsTest, QuadListBasic) {
   solid_quad->SetNew(sqs, rect2, rect2, color2, force_anti_aliasing_off);
 
   const gfx::Rect rect3(1029, 3847, 5610, 2938);
-  const SurfaceId surface_id(1234, 5678, 2468);
+  const SurfaceId surface_id(FrameSinkId(1234, 4321), LocalFrameId(5678, 2468));
   SurfaceDrawQuad* surface_quad =
       render_pass->CreateAndAppendDrawQuad<SurfaceDrawQuad>();
   surface_quad->SetNew(sqs, rect3, rect3, surface_id);
@@ -609,8 +609,9 @@ TEST_F(StructTraitsTest, RenderPass) {
   SurfaceDrawQuad* surface_quad =
       input->CreateAndAppendDrawQuad<SurfaceDrawQuad>();
   const gfx::Rect surface_quad_rect(1337, 2448, 1234, 5678);
-  surface_quad->SetNew(shared_state_2, surface_quad_rect, surface_quad_rect,
-                       SurfaceId(1337, 1234, 2468));
+  surface_quad->SetNew(
+      shared_state_2, surface_quad_rect, surface_quad_rect,
+      SurfaceId(FrameSinkId(1337, 1234), LocalFrameId(1234, 2468)));
 
   std::unique_ptr<RenderPass> output;
   mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
@@ -764,26 +765,24 @@ TEST_F(StructTraitsTest, Selection) {
 }
 
 TEST_F(StructTraitsTest, SurfaceId) {
-  const uint32_t client_id = 1337;
-  const uint32_t local_id = 0xfbadbeef;
-  const uint64_t nonce = 0xdeadbeef;
-  SurfaceId input(client_id, local_id, nonce);
+  static constexpr FrameSinkId frame_sink_id(1337, 1234);
+  static constexpr LocalFrameId local_frame_id(0xfbadbeef, 0xdeadbeef);
+  SurfaceId input(frame_sink_id, local_frame_id);
   mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
   SurfaceId output;
   proxy->EchoSurfaceId(input, &output);
-  EXPECT_EQ(client_id, output.client_id());
-  EXPECT_EQ(local_id, output.local_id());
-  EXPECT_EQ(nonce, output.nonce());
+  EXPECT_EQ(frame_sink_id, output.frame_sink_id());
+  EXPECT_EQ(local_frame_id, output.local_frame_id());
 }
 
 TEST_F(StructTraitsTest, SurfaceSequence) {
-  const uint32_t client_id = 2016;
+  const FrameSinkId frame_sink_id(2016, 1234);
   const uint32_t sequence = 0xfbadbeef;
-  SurfaceSequence input(client_id, sequence);
+  SurfaceSequence input(frame_sink_id, sequence);
   mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
   SurfaceSequence output;
   proxy->EchoSurfaceSequence(input, &output);
-  EXPECT_EQ(client_id, output.client_id);
+  EXPECT_EQ(frame_sink_id, output.frame_sink_id);
   EXPECT_EQ(sequence, output.sequence);
 }
 

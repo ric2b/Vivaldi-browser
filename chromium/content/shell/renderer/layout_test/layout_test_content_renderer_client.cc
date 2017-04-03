@@ -18,6 +18,7 @@
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
 #include "content/public/test/layouttest_support.h"
+#include "content/shell/common/layout_test/layout_test_switches.h"
 #include "content/shell/common/shell_switches.h"
 #include "content/shell/renderer/layout_test/blink_test_helpers.h"
 #include "content/shell/renderer/layout_test/blink_test_runner.h"
@@ -29,9 +30,13 @@
 #include "ppapi/shared_impl/ppapi_switches.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamCenter.h"
 #include "third_party/WebKit/public/platform/modules/app_banner/WebAppBannerClient.h"
+#include "third_party/WebKit/public/web/WebFrameWidget.h"
+#include "third_party/WebKit/public/web/WebKit.h"
 #include "third_party/WebKit/public/web/WebPluginParams.h"
+#include "third_party/WebKit/public/web/WebRuntimeFeatures.h"
 #include "third_party/WebKit/public/web/WebTestingSupport.h"
 #include "third_party/WebKit/public/web/WebView.h"
+#include "ui/gfx/icc_profile.h"
 #include "v8/include/v8.h"
 
 using blink::WebAudioDevice;
@@ -72,10 +77,30 @@ void WebViewTestProxyCreated(RenderView* render_view,
   proxy->set_view_test_client(LayoutTestRenderThreadObserver::GetInstance()
                                   ->test_interfaces()
                                   ->CreateWebViewTestClient(proxy));
-  proxy->set_widget_test_client(LayoutTestRenderThreadObserver::GetInstance()
-                                    ->test_interfaces()
-                                    ->CreateWebWidgetTestClient(proxy));
+  std::unique_ptr<test_runner::WebWidgetTestClient> widget_test_client =
+      LayoutTestRenderThreadObserver::GetInstance()
+          ->test_interfaces()
+          ->CreateWebWidgetTestClient(proxy);
+  proxy->set_widget_test_client(std::move(widget_test_client));
   proxy->SetInterfaces(interfaces);
+}
+
+void WebWidgetTestProxyCreated(blink::WebWidget* web_widget,
+                               test_runner::WebWidgetTestProxyBase* proxy) {
+  CHECK(web_widget->isWebFrameWidget());
+  proxy->set_web_widget(web_widget);
+  blink::WebFrameWidget* web_frame_widget =
+      static_cast<blink::WebFrameWidget*>(web_widget);
+  blink::WebView* web_view = web_frame_widget->localRoot()->view();
+  RenderView* render_view = RenderView::FromWebView(web_view);
+  test_runner::WebViewTestProxyBase* view_proxy =
+      GetWebViewTestProxyBase(render_view);
+  std::unique_ptr<test_runner::WebWidgetTestClient> widget_test_client =
+      LayoutTestRenderThreadObserver::GetInstance()
+          ->test_interfaces()
+          ->CreateWebWidgetTestClient(proxy);
+  proxy->set_web_view_test_proxy_base(view_proxy);
+  proxy->set_widget_test_client(std::move(widget_test_client));
 }
 
 void WebFrameTestProxyCreated(RenderFrame* render_frame,
@@ -92,6 +117,7 @@ void WebFrameTestProxyCreated(RenderFrame* render_frame,
 
 LayoutTestContentRendererClient::LayoutTestContentRendererClient() {
   EnableWebTestProxyCreation(base::Bind(&WebViewTestProxyCreated),
+                             base::Bind(&WebWidgetTestProxyCreated),
                              base::Bind(&WebFrameTestProxyCreated));
 }
 
@@ -203,9 +229,43 @@ LayoutTestContentRendererClient::CreateMediaStreamRendererFactory() {
 #endif
 }
 
+std::unique_ptr<gfx::ICCProfile>
+LayoutTestContentRendererClient::GetImageDecodeColorProfile() {
+  // TODO(ccameron): Make all platforms use the same color profile for layout
+  // tests.
+#if defined(OS_WIN)
+  return base::WrapUnique(new gfx::ICCProfile(
+      GetTestingICCProfile("sRGB")));
+#elif defined(OS_MACOSX)
+  return base::WrapUnique(new gfx::ICCProfile(
+      GetTestingICCProfile("genericRGB")));
+#else
+  return base::WrapUnique(new gfx::ICCProfile());
+#endif
+}
+
 void LayoutTestContentRendererClient::DidInitializeWorkerContextOnWorkerThread(
     v8::Local<v8::Context> context) {
   blink::WebTestingSupport::injectInternalsObject(context);
+}
+
+void LayoutTestContentRendererClient::
+    SetRuntimeFeaturesDefaultsBeforeBlinkInitialization() {
+  // We always expose GC to layout tests.
+  std::string flags("--expose-gc");
+  v8::V8::SetFlagsFromString(flags.c_str(), static_cast<int>(flags.size()));
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kStableReleaseMode)) {
+    blink::WebRuntimeFeatures::enableTestOnlyFeatures(true);
+  }
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableFontAntialiasing)) {
+    blink::setFontAntialiasingEnabledForTest(true);
+  }
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kAlwaysUseComplexText)) {
+    blink::setAlwaysUseComplexTextForTest(true);
+  }
 }
 
 }  // namespace content

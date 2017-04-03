@@ -13,9 +13,10 @@
 namespace content {
 
 class BrowserContext;
+class NavigationUIData;
 class NavigationURLLoaderDelegate;
 class NavigationURLLoaderFactory;
-class ServiceWorkerContextWrapper;
+class ServiceWorkerNavigationHandle;
 struct CommonNavigationParams;
 struct NavigationRequestInfo;
 
@@ -36,7 +37,8 @@ class CONTENT_EXPORT NavigationURLLoader {
   static std::unique_ptr<NavigationURLLoader> Create(
       BrowserContext* browser_context,
       std::unique_ptr<NavigationRequestInfo> request_info,
-      ServiceWorkerContextWrapper* service_worker_context_wrapper,
+      std::unique_ptr<NavigationUIData> navigation_ui_data,
+      ServiceWorkerNavigationHandle* service_worker_handle,
       NavigationURLLoaderDelegate* delegate);
 
   // For testing purposes; sets the factory for use in testing.

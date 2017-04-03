@@ -11,25 +11,34 @@
 
 namespace blink {
 
+class AXObjectCacheImpl;
 class InspectorDOMAgent;
+class LocalFrame;
 class Page;
 
-class MODULES_EXPORT InspectorAccessibilityAgent : public InspectorBaseAgent<protocol::Accessibility::Metainfo> {
-    WTF_MAKE_NONCOPYABLE(InspectorAccessibilityAgent);
-public:
-    InspectorAccessibilityAgent(Page*, InspectorDOMAgent*);
+class MODULES_EXPORT InspectorAccessibilityAgent
+    : public InspectorBaseAgent<protocol::Accessibility::Metainfo> {
+  WTF_MAKE_NONCOPYABLE(InspectorAccessibilityAgent);
 
-    // Base agent methods.
-    DECLARE_VIRTUAL_TRACE();
+ public:
+  InspectorAccessibilityAgent(Page*, InspectorDOMAgent*);
 
-    // Protocol methods.
-    void getAXNode(ErrorString*, int nodeId, Maybe<protocol::Accessibility::AXNode>* accessibilityNode) override;
+  // Base agent methods.
+  DECLARE_VIRTUAL_TRACE();
 
-private:
-    Member<Page> m_page;
-    Member<InspectorDOMAgent> m_domAgent;
+  // Protocol methods.
+  void getAXNodeChain(
+      ErrorString*,
+      int domNodeId,
+      bool fetchAncestors,
+      std::unique_ptr<protocol::Array<protocol::Accessibility::AXNode>>*)
+      override;
+
+ private:
+  Member<Page> m_page;
+  Member<InspectorDOMAgent> m_domAgent;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // InspectorAccessibilityAgent_h
+#endif  // InspectorAccessibilityAgent_h

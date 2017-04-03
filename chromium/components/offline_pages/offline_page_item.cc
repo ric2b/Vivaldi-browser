@@ -4,13 +4,7 @@
 
 #include "components/offline_pages/offline_page_item.h"
 
-#include "net/base/filename_util.h"
-
 namespace offline_pages {
-
-namespace {
-const int kCurrentVersion = 1;
-}
 
 ClientId::ClientId() : name_space(""), id("") {}
 
@@ -29,11 +23,7 @@ bool ClientId::operator<(const ClientId& client_id) const {
 }
 
 OfflinePageItem::OfflinePageItem()
-    : version(kCurrentVersion),
-      file_size(0),
-      access_count(0),
-      flags(NO_FLAG) {
-}
+    : file_size(0), access_count(0), flags(NO_FLAG) {}
 
 OfflinePageItem::OfflinePageItem(const GURL& url,
                                  int64_t offline_id,
@@ -43,7 +33,6 @@ OfflinePageItem::OfflinePageItem(const GURL& url,
     : url(url),
       offline_id(offline_id),
       client_id(client_id),
-      version(kCurrentVersion),
       file_path(file_path),
       file_size(file_size),
       access_count(0),
@@ -58,7 +47,6 @@ OfflinePageItem::OfflinePageItem(const GURL& url,
     : url(url),
       offline_id(offline_id),
       client_id(client_id),
-      version(kCurrentVersion),
       file_path(file_path),
       file_size(file_size),
       creation_time(creation_time),
@@ -71,8 +59,17 @@ OfflinePageItem::OfflinePageItem(const OfflinePageItem& other) = default;
 OfflinePageItem::~OfflinePageItem() {
 }
 
-GURL OfflinePageItem::GetOfflineURL() const {
-  return net::FilePathToFileURL(file_path);
+bool OfflinePageItem::operator==(const OfflinePageItem& other) const {
+  return url == other.url &&
+         offline_id == other.offline_id &&
+         client_id == other.client_id &&
+         file_path == other.file_path &&
+         creation_time == other.creation_time &&
+         last_access_time == other.last_access_time &&
+         expiration_time == other.expiration_time &&
+         access_count == other.access_count &&
+         title == other.title &&
+         flags == other.flags;
 }
 
 bool OfflinePageItem::IsExpired() const {

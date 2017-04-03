@@ -15,7 +15,6 @@
 #include "chrome/browser/ui/search_engines/template_url_table_model.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/locale_settings.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "content/public/browser/user_metrics.h"
@@ -198,7 +197,7 @@ SearchEngineManagerHandler::CreateDictionaryForEngine(int index,
                    list_controller_->CanMakeDefault(template_url));
   dict->SetBoolean("default", is_default);
   dict->SetBoolean("canBeEdited", list_controller_->CanEdit(template_url));
-  TemplateURL::Type type = template_url->GetType();
+  TemplateURL::Type type = template_url->type();
   dict->SetBoolean("isOmniboxExtension",
                    type == TemplateURL::OMNIBOX_API_EXTENSION);
   if (type == TemplateURL::NORMAL_CONTROLLED_BY_EXTENSION ||

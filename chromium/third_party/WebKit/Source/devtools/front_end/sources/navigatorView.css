@@ -35,7 +35,7 @@
     margin: -3px -3px -3px -7px;
 }
 
-@media (-webkit-min-device-pixel-ratio: 1.5) {
+@media (-webkit-min-device-pixel-ratio: 1.1) {
 .icon {
     -webkit-mask-image: url(Images/toolbarButtonGlyphs_2x.png);
 }
@@ -44,6 +44,17 @@
 .navigator-file-tree-item .icon {
     -webkit-mask-position: -224px -72px;
     background: linear-gradient(45deg, hsl(0, 0%, 50%), hsl(0, 0%, 70%));
+}
+
+.navigator-fs-tree-item:not(.has-mapped-files),
+.navigator-fs-folder-tree-item:not(.has-mapped-files) {
+    filter: grayscale(50%);
+    opacity: 0.5;
+}
+
+.mapped-file-bubble {
+    color: green;
+    margin-left: 2px;
 }
 
 :focus .navigator-file-tree-item.selected .icon {

@@ -35,6 +35,10 @@ class TraceEventSystemStatsMonitor;
 }  // namespace trace_event
 }  // namespace base
 
+namespace device {
+class TimeZoneMonitor;
+}
+
 namespace media {
 #if defined(OS_WIN)
 class SystemMessageWindowWin;
@@ -49,10 +53,6 @@ namespace midi {
 class MidiManager;
 }  // namespace midi
 }  // namespace media
-
-namespace memory_coordinator {
-class MemoryCoordinator;
-}  // namespace memory_coordinator
 
 namespace mojo {
 namespace edk {
@@ -76,18 +76,23 @@ class BrowserOnlineStateObserver;
 class BrowserThreadImpl;
 class LoaderDelegateImpl;
 class MediaStreamManager;
-class MojoShellContext;
 class ResourceDispatcherHostImpl;
 class SaveFileManager;
+class ServiceManagerContext;
 class SpeechRecognitionManagerImpl;
 class StartupTaskRunner;
-class TimeZoneMonitor;
 struct MainFunctionParams;
 
 #if defined(OS_ANDROID)
 class ScreenOrientationDelegate;
 #elif defined(OS_WIN)
 class ScreenOrientationDelegate;
+#endif
+
+#if defined(USE_X11) && !defined(OS_CHROMEOS)
+namespace internal {
+class GpuDataManagerVisualProxy;
+}
 #endif
 
 // Implements the main browser loop stages called from BrowserMainRunner.
@@ -135,6 +140,9 @@ class CONTENT_EXPORT BrowserMainLoop {
   media::UserInputMonitor* user_input_monitor() const {
     return user_input_monitor_.get();
   }
+  device::TimeZoneMonitor* time_zone_monitor() const {
+    return time_zone_monitor_.get();
+  }
   media::midi::MidiManager* midi_manager() const { return midi_manager_.get(); }
   base::Thread* indexed_db_thread() const { return indexed_db_thread_.get(); }
 
@@ -147,10 +155,6 @@ class CONTENT_EXPORT BrowserMainLoop {
   }
 
   void StopStartupTracingTimer();
-
-  memory_coordinator::MemoryCoordinator* memory_coordinator() const {
-    return memory_coordinator_.get();
-  }
 
 #if defined(OS_MACOSX) && !defined(OS_IOS)
   media::DeviceMonitorMac* device_monitor_mac() const {
@@ -259,7 +263,10 @@ class CONTENT_EXPORT BrowserMainLoop {
   // Members initialized in |PreCreateThreads()| -------------------------------
   // Torn down in ShutdownThreadsAndCleanUp.
   std::unique_ptr<base::MemoryPressureMonitor> memory_pressure_monitor_;
-  std::unique_ptr<memory_coordinator::MemoryCoordinator> memory_coordinator_;
+#if defined(USE_X11) && !(OS_CHROMEOS)
+  std::unique_ptr<internal::GpuDataManagerVisualProxy>
+      gpu_data_manager_visual_proxy_;
+#endif
 
   // Members initialized in |CreateThreads()| ----------------------------------
   std::unique_ptr<BrowserProcessSubThread> db_thread_;
@@ -271,7 +278,7 @@ class CONTENT_EXPORT BrowserMainLoop {
 
   // Members initialized in |BrowserThreadsStarted()| --------------------------
   std::unique_ptr<base::Thread> indexed_db_thread_;
-  std::unique_ptr<MojoShellContext> mojo_shell_context_;
+  std::unique_ptr<ServiceManagerContext> service_manager_context_;
   std::unique_ptr<mojo::edk::ScopedIPCSupport> mojo_ipc_support_;
 
   // |user_input_monitor_| has to outlive |audio_manager_|, so declared first.
@@ -297,7 +304,7 @@ class CONTENT_EXPORT BrowserMainLoop {
   std::unique_ptr<ResourceDispatcherHostImpl> resource_dispatcher_host_;
   std::unique_ptr<MediaStreamManager> media_stream_manager_;
   std::unique_ptr<SpeechRecognitionManagerImpl> speech_recognition_manager_;
-  std::unique_ptr<TimeZoneMonitor> time_zone_monitor_;
+  std::unique_ptr<device::TimeZoneMonitor> time_zone_monitor_;
   scoped_refptr<SaveFileManager> save_file_manager_;
 
   // DO NOT add members here. Add them to the right categories above.

@@ -28,6 +28,9 @@
 #include "net/base/network_activity_monitor.h"
 #include "net/base/sockaddr_storage.h"
 #include "net/log/net_log.h"
+#include "net/log/net_log_event_type.h"
+#include "net/log/net_log_source.h"
+#include "net/log/net_log_source_type.h"
 #include "net/socket/socket_descriptor.h"
 #include "net/udp/udp_net_log_parameters.h"
 
@@ -74,7 +77,7 @@ int GetIPv4AddressFromIndex(int socket, uint32_t index, uint32_t* address) {
 UDPSocketPosix::UDPSocketPosix(DatagramSocket::BindType bind_type,
                                const RandIntCallback& rand_int_cb,
                                net::NetLog* net_log,
-                               const net::NetLog::Source& source)
+                               const net::NetLogSource& source)
     : socket_(kInvalidSocket),
       addr_family_(0),
       is_connected_(false),
@@ -88,9 +91,9 @@ UDPSocketPosix::UDPSocketPosix(DatagramSocket::BindType bind_type,
       read_buf_len_(0),
       recv_from_address_(NULL),
       write_buf_len_(0),
-      net_log_(BoundNetLog::Make(net_log, NetLog::SOURCE_UDP_SOCKET)),
+      net_log_(NetLogWithSource::Make(net_log, NetLogSourceType::UDP_SOCKET)),
       bound_network_(NetworkChangeNotifier::kInvalidNetworkHandle) {
-  net_log_.BeginEvent(NetLog::TYPE_SOCKET_ALIVE,
+  net_log_.BeginEvent(NetLogEventType::SOCKET_ALIVE,
                       source.ToEventParametersCallback());
   if (bind_type == DatagramSocket::RANDOM_BIND)
     DCHECK(!rand_int_cb.is_null());
@@ -98,7 +101,7 @@ UDPSocketPosix::UDPSocketPosix(DatagramSocket::BindType bind_type,
 
 UDPSocketPosix::~UDPSocketPosix() {
   Close();
-  net_log_.EndEvent(NetLog::TYPE_SOCKET_ALIVE);
+  net_log_.EndEvent(NetLogEventType::SOCKET_ALIVE);
 }
 
 int UDPSocketPosix::Open(AddressFamily address_family) {
@@ -180,7 +183,7 @@ int UDPSocketPosix::GetLocalAddress(IPEndPoint* address) const {
       return ERR_ADDRESS_INVALID;
     local_address_.reset(address.release());
     net_log_.AddEvent(
-        NetLog::TYPE_UDP_LOCAL_ADDRESS,
+        NetLogEventType::UDP_LOCAL_ADDRESS,
         CreateNetLogUDPConnectCallback(local_address_.get(), bound_network_));
   }
 
@@ -273,10 +276,10 @@ int UDPSocketPosix::SendToOrWrite(IOBuffer* buf,
 
 int UDPSocketPosix::Connect(const IPEndPoint& address) {
   DCHECK_NE(socket_, kInvalidSocket);
-  net_log_.BeginEvent(NetLog::TYPE_UDP_CONNECT,
+  net_log_.BeginEvent(NetLogEventType::UDP_CONNECT,
                       CreateNetLogUDPConnectCallback(&address, bound_network_));
   int rv = InternalConnect(address);
-  net_log_.EndEventWithNetErrorCode(NetLog::TYPE_UDP_CONNECT, rv);
+  net_log_.EndEventWithNetErrorCode(NetLogEventType::UDP_CONNECT, rv);
   is_connected_ = (rv == OK);
   return rv;
 }
@@ -475,10 +478,15 @@ int UDPSocketPosix::SetBroadcast(bool broadcast) {
   // SO_REUSEPORT on OSX permits multiple processes to each receive
   // UDP multicast or broadcast datagrams destined for the bound
   // port.
+  // This is only being set on OSX because its behavior is platform dependent
+  // and we are playing it safe by only setting it on platforms where things
+  // break.
   rv = setsockopt(socket_, SOL_SOCKET, SO_REUSEPORT, &value, sizeof(value));
-#else
-  rv = setsockopt(socket_, SOL_SOCKET, SO_BROADCAST, &value, sizeof(value));
+  if (rv != 0)
+    return MapSystemError(errno);
 #endif  // defined(OS_MACOSX)
+  rv = setsockopt(socket_, SOL_SOCKET, SO_BROADCAST, &value, sizeof(value));
+
   return rv == 0 ? OK : MapSystemError(errno);
 }
 
@@ -532,7 +540,8 @@ void UDPSocketPosix::LogRead(int result,
                              socklen_t addr_len,
                              const sockaddr* addr) const {
   if (result < 0) {
-    net_log_.AddEventWithNetErrorCode(NetLog::TYPE_UDP_RECEIVE_ERROR, result);
+    net_log_.AddEventWithNetErrorCode(NetLogEventType::UDP_RECEIVE_ERROR,
+                                      result);
     return;
   }
 
@@ -542,11 +551,9 @@ void UDPSocketPosix::LogRead(int result,
 
     IPEndPoint address;
     bool is_address_valid = address.FromSockAddr(addr, addr_len);
-    net_log_.AddEvent(
-        NetLog::TYPE_UDP_BYTES_RECEIVED,
-        CreateNetLogUDPDataTranferCallback(
-            result, bytes,
-            is_address_valid ? &address : NULL));
+    net_log_.AddEvent(NetLogEventType::UDP_BYTES_RECEIVED,
+                      CreateNetLogUDPDataTranferCallback(
+                          result, bytes, is_address_valid ? &address : NULL));
   }
 
   NetworkActivityMonitor::GetInstance()->IncrementBytesReceived(result);
@@ -569,13 +576,13 @@ void UDPSocketPosix::LogWrite(int result,
                               const char* bytes,
                               const IPEndPoint* address) const {
   if (result < 0) {
-    net_log_.AddEventWithNetErrorCode(NetLog::TYPE_UDP_SEND_ERROR, result);
+    net_log_.AddEventWithNetErrorCode(NetLogEventType::UDP_SEND_ERROR, result);
     return;
   }
 
   if (net_log_.IsCapturing()) {
     net_log_.AddEvent(
-        NetLog::TYPE_UDP_BYTES_SENT,
+        NetLogEventType::UDP_BYTES_SENT,
         CreateNetLogUDPDataTranferCallback(result, bytes, address));
   }
 

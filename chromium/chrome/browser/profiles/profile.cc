@@ -13,7 +13,7 @@
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_prefs.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
@@ -213,8 +213,9 @@ bool Profile::IsSyncAllowed() {
 
   // No ProfileSyncService created yet - we don't want to create one, so just
   // infer the accessible state by looking at prefs/command line flags.
-  sync_driver::SyncPrefs prefs(GetPrefs());
-  return ProfileSyncService::IsSyncAllowedByFlag() && !prefs.IsManaged();
+  syncer::SyncPrefs prefs(GetPrefs());
+  return browser_sync::ProfileSyncService::IsSyncAllowedByFlag() &&
+         !prefs.IsManaged();
 }
 
 void Profile::MaybeSendDestroyedNotification() {

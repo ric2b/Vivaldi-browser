@@ -5,25 +5,27 @@
 #ifndef CC_IPC_SURFACE_SEQUENCE_STRUCT_TRAITS_H_
 #define CC_IPC_SURFACE_SEQUENCE_STRUCT_TRAITS_H_
 
+#include "cc/ipc/surface_sequence.mojom-shared.h"
 #include "cc/surfaces/surface_sequence.h"
 
 namespace mojo {
 
-// This template is fully specialized as cc::mojom::SurfaceSequenceDataView and
-// as cc::mojom::blink::SurfaceSequenceDataView, in generated .mojom.h and
-// .mojom-blink.h respectively.
-template <typename T>
-struct StructTraits<T, cc::SurfaceSequence> {
-  static uint32_t client_id(const cc::SurfaceSequence& id) {
-    return id.client_id;
+template <>
+struct StructTraits<cc::mojom::SurfaceSequenceDataView, cc::SurfaceSequence> {
+  static const cc::FrameSinkId& frame_sink_id(const cc::SurfaceSequence& id) {
+    return id.frame_sink_id;
   }
 
   static uint32_t sequence(const cc::SurfaceSequence& id) {
     return id.sequence;
   }
 
-  static bool Read(T data, cc::SurfaceSequence* out) {
-    *out = cc::SurfaceSequence(data.client_id(), data.sequence());
+  static bool Read(cc::mojom::SurfaceSequenceDataView data,
+                   cc::SurfaceSequence* out) {
+    cc::FrameSinkId frame_sink_id;
+    if (!data.ReadFrameSinkId(&frame_sink_id))
+      return false;
+    *out = cc::SurfaceSequence(frame_sink_id, data.sequence());
     return true;
   }
 };

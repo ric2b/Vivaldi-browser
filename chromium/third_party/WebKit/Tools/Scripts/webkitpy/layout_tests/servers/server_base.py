@@ -47,8 +47,8 @@ class ServerBase(object):
 
     def __init__(self, port_obj, output_dir):
         self._port_obj = port_obj
-        self._executive = port_obj._executive
-        self._filesystem = port_obj._filesystem
+        self._executive = port_obj.host.executive
+        self._filesystem = port_obj.host.filesystem
         self._platform = port_obj.host.platform
         self._output_dir = output_dir
 
@@ -82,7 +82,8 @@ class ServerBase(object):
     def start(self):
         """Starts the server. It is an error to start an already started server.
 
-        This method also stops any stale servers started by a previous instance."""
+        This method also stops any stale servers started by a previous instance.
+        """
         assert not self._pid, '%s server is already running' % self._name
 
         # Stop any stale servers left over from previous instances.
@@ -146,13 +147,15 @@ class ServerBase(object):
 
     def _prepare_config(self):
         """This routine can be overridden by subclasses to do any sort
-        of initialization required prior to starting the server that may fail."""
+        of initialization required prior to starting the server that may fail.
+        """
 
     def _remove_stale_logs(self):
         """This routine can be overridden by subclasses to try and remove logs
         left over from a prior run. This routine should log warnings if the
         files cannot be deleted, but should not fail unless failure to
-        delete the logs will actually cause start() to fail."""
+        delete the logs will actually cause start() to fail.
+        """
         # Sometimes logs are open in other processes but they should clear eventually.
         for log_prefix in self._log_prefixes:
             try:
@@ -227,7 +230,8 @@ class ServerBase(object):
 
     def _wait_for_action(self, action, wait_secs=20.0, sleep_secs=1.0):
         """Repeat the action for wait_sec or until it succeeds, sleeping for sleep_secs
-        in between each attempt. Returns whether it succeeded."""
+        in between each attempt. Returns whether it succeeded.
+        """
         start_time = time.time()
         while time.time() - start_time < wait_secs:
             if action():

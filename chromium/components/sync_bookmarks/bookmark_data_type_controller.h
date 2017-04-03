@@ -14,25 +14,20 @@
 #include "components/history/core/browser/history_service_observer.h"
 #include "components/sync/driver/frontend_data_type_controller.h"
 
-namespace browser_sync {
+namespace sync_bookmarks {
 
 // A class that manages the startup and shutdown of bookmark sync.
-class BookmarkDataTypeController : public FrontendDataTypeController,
+class BookmarkDataTypeController : public syncer::FrontendDataTypeController,
                                    public bookmarks::BaseBookmarkModelObserver,
                                    public history::HistoryServiceObserver {
  public:
-  BookmarkDataTypeController(
-      const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
-      const base::Closure& error_callback,
-      sync_driver::SyncClient* sync_client);
-
-  // FrontendDataTypeController:
-  syncer::ModelType type() const override;
-
- private:
+  // |dump_stack| is called when an unrecoverable error occurs.
+  BookmarkDataTypeController(const base::Closure& dump_stack,
+                             syncer::SyncClient* sync_client);
   ~BookmarkDataTypeController() override;
 
-  // FrontendDataTypeController:
+ private:
+  // syncer::FrontendDataTypeController:
   bool StartModels() override;
   void CleanUpState() override;
   void CreateSyncComponents() override;
@@ -60,6 +55,6 @@ class BookmarkDataTypeController : public FrontendDataTypeController,
   DISALLOW_COPY_AND_ASSIGN(BookmarkDataTypeController);
 };
 
-}  // namespace browser_sync
+}  // namespace sync_bookmarks
 
 #endif  // COMPONENTS_SYNC_BOOKMARKS_BOOKMARK_DATA_TYPE_CONTROLLER_H__

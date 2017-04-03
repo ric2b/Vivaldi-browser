@@ -6,7 +6,7 @@
 
 #include "components/sync/engine/commit_queue.h"
 
-namespace syncer_v2 {
+namespace syncer {
 
 FakeModelTypeProcessor::FakeModelTypeProcessor() {}
 FakeModelTypeProcessor::~FakeModelTypeProcessor() {}
@@ -16,11 +16,11 @@ void FakeModelTypeProcessor::ConnectSync(std::unique_ptr<CommitQueue> worker) {}
 void FakeModelTypeProcessor::DisconnectSync() {}
 
 void FakeModelTypeProcessor::OnCommitCompleted(
-    const sync_pb::DataTypeState& type_state,
+    const sync_pb::ModelTypeState& type_state,
     const CommitResponseDataList& response_list) {}
 
 void FakeModelTypeProcessor::OnUpdateReceived(
-    const sync_pb::DataTypeState& type_state,
+    const sync_pb::ModelTypeState& type_state,
     const UpdateResponseDataList& updates) {}
 
-}  // namespace syncer_v2
+}  // namespace syncer

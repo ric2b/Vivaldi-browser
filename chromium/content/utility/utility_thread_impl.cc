@@ -47,7 +47,6 @@ UtilityThreadImpl::UtilityThreadImpl()
 UtilityThreadImpl::UtilityThreadImpl(const InProcessChildThreadParams& params)
     : ChildThreadImpl(ChildThreadImpl::Options::Builder()
                           .InBrowserProcess(params)
-                          .UseMojoChannel(true)
                           .Build()) {
   Init();
 }
@@ -57,9 +56,6 @@ UtilityThreadImpl::~UtilityThreadImpl() {
 
 void UtilityThreadImpl::Shutdown() {
   ChildThreadImpl::Shutdown();
-
-  if (blink_platform_impl_)
-    blink::Platform::shutdown();
 }
 
 void UtilityThreadImpl::ReleaseProcessIfNeeded() {

@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "net/dns/mdns_client_impl.h"
+#include "net/log/net_log_with_source.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace net {
@@ -50,7 +51,7 @@ class MockMDnsDatagramServerSocket : public DatagramServerSocket {
   MOCK_CONST_METHOD1(GetPeerAddress, int(IPEndPoint* address));
   int GetLocalAddress(IPEndPoint* address) const override;
   MOCK_METHOD0(UseNonBlockingIO, void());
-  MOCK_CONST_METHOD0(NetLog, const BoundNetLog&());
+  MOCK_CONST_METHOD0(NetLog, const NetLogWithSource&());
 
   MOCK_METHOD0(AllowAddressReuse, void());
   MOCK_METHOD0(AllowBroadcast, void());

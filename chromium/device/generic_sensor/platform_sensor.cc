@@ -6,8 +6,8 @@
 
 #include <utility>
 
-#include "device/generic_sensor/platform_sensor_configuration.h"
 #include "device/generic_sensor/platform_sensor_provider.h"
+#include "device/generic_sensor/public/cpp/platform_sensor_configuration.h"
 
 namespace device {
 
@@ -81,11 +81,39 @@ void PlatformSensor::RemoveClient(Client* client) {
 }
 
 void PlatformSensor::NotifySensorReadingChanged() {
-  FOR_EACH_OBSERVER(Client, clients_, OnSensorReadingChanged());
+  using ClientsList = decltype(clients_);
+  ClientsList::Iterator it(&clients_);
+  Client* client;
+  while ((client = it.GetNext()) != nullptr) {
+    if (!client->IsNotificationSuspended())
+      client->OnSensorReadingChanged();
+  }
 }
 
 void PlatformSensor::NotifySensorError() {
   FOR_EACH_OBSERVER(Client, clients_, OnSensorError());
+}
+
+bool PlatformSensor::UpdateSensorInternal(const ConfigMap& configurations) {
+  const PlatformSensorConfiguration* optimal_configuration = nullptr;
+  for (const auto& pair : configurations) {
+    if (pair.first->IsNotificationSuspended())
+      continue;
+
+    const auto& conf_list = pair.second;
+    for (const auto& configuration : conf_list) {
+      if (!optimal_configuration || configuration > *optimal_configuration) {
+        optimal_configuration = &configuration;
+      }
+    }
+  }
+
+  if (!optimal_configuration) {
+    StopSensor();
+    return true;
+  }
+
+  return StartSensor(*optimal_configuration);
 }
 
 }  // namespace device

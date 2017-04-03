@@ -14,7 +14,7 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
-#include "grit/components_strings.h"
+#include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/bubble/bubble_dialog_delegate.h"
 #include "ui/views/controls/label.h"
@@ -110,9 +110,10 @@ void NetworkProfileBubbleView::LinkClicked(views::Link* source,
       ui::DispositionFromEventFlags(event_flags);
   content::OpenURLParams params(
       GURL("https://sites.google.com/a/chromium.org/dev/administrators/"
-            "common-problems-and-solutions#network_profile"),
-      content::Referrer(),
-      disposition == CURRENT_TAB ? NEW_FOREGROUND_TAB : disposition,
+           "common-problems-and-solutions#network_profile"),
+      content::Referrer(), disposition == WindowOpenDisposition::CURRENT_TAB
+                               ? WindowOpenDisposition::NEW_FOREGROUND_TAB
+                               : disposition,
       ui::PAGE_TRANSITION_LINK, false);
   navigator_->OpenURL(params);
 
@@ -130,8 +131,8 @@ void NetworkProfileBubbleView::LinkClicked(views::Link* source,
 void NetworkProfileBubble::ShowNotification(Browser* browser) {
   views::View* anchor = NULL;
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
-  if (browser_view && browser_view->GetToolbarView())
-    anchor = browser_view->GetToolbarView()->app_menu_button();
+  if (browser_view && browser_view->toolbar())
+    anchor = browser_view->toolbar()->app_menu_button();
   NetworkProfileBubbleView* bubble =
       new NetworkProfileBubbleView(anchor, browser, browser->profile());
   views::BubbleDialogDelegateView::CreateBubble(bubble)->Show();

@@ -61,6 +61,10 @@ const char kAppOemManifestFile[] = "app-mode-oem-manifest";
 // Signals the availability of the ARC instance on this device.
 const char kArcAvailable[] = "arc-available";
 
+// Specifies ARC authorization endpoint to enable automatic sign-in in OptIn
+// flow.
+const char kArcUseAuthEndpoint[] = "arc-use-auth-endpoint";
+
 // Screenshot testing: specifies the directoru where artifacts will be stored.
 const char kArtifactsDir[] = "artifacts-dir";
 
@@ -96,10 +100,6 @@ const char kDataSaverPromptDemoMode[] = "demo";
 
 // Forces the stub implementation of dbus clients.
 const char kDbusStub[] = "dbus-stub";
-
-// Comma-spearated list of dbus clients that should be unstubbed.
-// See chromeos/dbus/dbus_client_bundle.cc for the names of the dbus clients.
-const char kDbusUnstubClients[] = "dbus-unstub-clients";
 
 // Indicates that the wallpaper images specified by
 // kAshDefaultWallpaper{Large,Small} are OEM-specific (i.e. they are not
@@ -252,6 +252,9 @@ const char kEnableMdOobe[] = "enable-md-oobe";
 // Enables notifications about captive portals in session.
 const char kEnableNetworkPortalNotification[] =
     "enable-network-portal-notification";
+
+// Enables storage manager in MD Settings.
+const char kEnableMdStorageManager[] = "enable-md-storage-manager";
 
 // Enables suggestions while typing on a physical keyboard.
 const char kEnablePhysicalKeyboardAutocorrect[] =

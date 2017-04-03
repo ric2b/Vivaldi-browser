@@ -4,16 +4,13 @@
 
 #include "components/sync/test/engine/single_type_mock_server.h"
 
-#include <stddef.h>
-#include <stdint.h>
-
 #include "components/sync/base/time.h"
 
 using google::protobuf::RepeatedPtrField;
 
 namespace syncer {
 
-SingleTypeMockServer::SingleTypeMockServer(syncer::ModelType type)
+SingleTypeMockServer::SingleTypeMockServer(ModelType type)
     : type_(type), type_root_id_(ModelTypeToRootTag(type)) {}
 
 SingleTypeMockServer::~SingleTypeMockServer() {}

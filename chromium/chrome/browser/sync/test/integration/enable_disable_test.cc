@@ -5,7 +5,7 @@
 #include "base/macros.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/core/read_node.h"
 #include "components/sync/core/read_transaction.h"
@@ -34,7 +34,7 @@ bool DoesTopLevelNodeExist(syncer::UserShare* user_share,
     return node.InitTypeRoot(type) == syncer::BaseNode::INIT_OK;
 }
 
-bool IsUnready(const sync_driver::DataTypeStatusTable& data_type_status_table,
+bool IsUnready(const syncer::DataTypeStatusTable& data_type_status_table,
                syncer::ModelType type) {
   return data_type_status_table.GetUnreadyErrorTypes().Has(type);
 }
@@ -46,7 +46,7 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, EnableOneAtATime) {
   ASSERT_TRUE(GetClient(0)->SetupSync(syncer::ModelTypeSet()));
 
   syncer::UserShare* user_share = GetSyncService(0)->GetUserShare();
-  const sync_driver::DataTypeStatusTable& data_type_status_table =
+  const syncer::DataTypeStatusTable& data_type_status_table =
       GetSyncService(0)->data_type_status_table();
 
   const syncer::ModelTypeSet registered_types =
@@ -95,7 +95,7 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, DisableOneAtATime) {
 
   syncer::UserShare* user_share = GetSyncService(0)->GetUserShare();
 
-  const sync_driver::DataTypeStatusTable& data_type_status_table =
+  const syncer::DataTypeStatusTable& data_type_status_table =
       GetSyncService(0)->data_type_status_table();
 
   // Make sure all top-level nodes exist first.

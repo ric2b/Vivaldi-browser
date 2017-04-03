@@ -1,0 +1,40 @@
+
+post_process_template("//chrome/browser/ui:ui") {
+  sources += [
+    "//vivaldi/ui/vivaldi_browser_window.cc",
+    "//vivaldi/ui/vivaldi_browser_window.h",
+    "//vivaldi/ui/vivaldi_session_service.cc",
+    "//vivaldi/ui/vivaldi_session_service.h",
+    "//vivaldi/ui/vivaldi_ui_utils.cc",
+    "//vivaldi/ui/vivaldi_ui_utils.h",
+  ]
+  if (is_mac) {
+    sources += [
+      "//vivaldi/ui/cocoa/vivaldi_browser_window_cocoa.h",
+      "//vivaldi/ui/cocoa/vivaldi_browser_window_cocoa.mm",
+      "//vivaldi/ui/cocoa/vivaldi_context_menu_mac.h",
+      "//vivaldi/ui/cocoa/vivaldi_context_menu_mac.mm",
+      "//vivaldi/ui/cocoa/vivaldi_main_menu_mac.h",
+      "//vivaldi/ui/cocoa/vivaldi_main_menu_mac.mm",
+    ]
+  } else {
+    sources += [
+      "//vivaldi/ui/views/vivaldi_context_menu_views.cc",
+      "//vivaldi/ui/views/vivaldi_context_menu_views.h",
+      "//vivaldi/ui/views/vivaldi_main_menu_views.cc",
+    ]
+  }
+}
+
+if (is_win) {
+  post_process_target("//ui/base:base") {
+    sources += [
+      "//vivaldi/ui/dragging/custom_drag_source_win.cc",
+      "//vivaldi/ui/dragging/custom_drag_source_win.h",
+    ]
+  }
+
+  post_process_target("//third_party/WebKit/Source/platform:blink_common") {
+    deps += [ "//ui/events:events" ]
+  }
+}

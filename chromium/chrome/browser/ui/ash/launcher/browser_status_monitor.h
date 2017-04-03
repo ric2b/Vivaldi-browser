@@ -71,7 +71,8 @@ class BrowserStatusMonitor : public aura::client::ActivationChangeObserver,
                      content::WebContents* old_contents,
                      content::WebContents* new_contents,
                      int index) override;
-  void TabInsertedAt(content::WebContents* contents,
+  void TabInsertedAt(TabStripModel* tab_strip_model,
+                     content::WebContents* contents,
                      int index,
                      bool foreground) override;
   void TabClosingAt(TabStripModel* tab_strip_mode,
@@ -97,11 +98,6 @@ class BrowserStatusMonitor : public aura::client::ActivationChangeObserver,
 
  private:
   class LocalWebContentsObserver;
-  class SettingsWindowObserver;
-
-  typedef std::map<Browser*, std::string> BrowserToAppIDMap;
-  typedef std::map<content::WebContents*, LocalWebContentsObserver*>
-      WebContentsToObserverMap;
 
   // Create LocalWebContentsObserver for |contents|.
   void AddWebContentsObserver(content::WebContents* contents);
@@ -118,9 +114,9 @@ class BrowserStatusMonitor : public aura::client::ActivationChangeObserver,
 
   ChromeLauncherController* launcher_controller_;
 
-  BrowserToAppIDMap browser_to_app_id_map_;
-  WebContentsToObserverMap webcontents_to_observer_map_;
-  std::unique_ptr<SettingsWindowObserver> settings_window_observer_;
+  std::map<Browser*, std::string> browser_to_app_id_map_;
+  std::map<content::WebContents*, std::unique_ptr<LocalWebContentsObserver>>
+      webcontents_to_observer_map_;
 
   BrowserTabStripTracker browser_tab_strip_tracker_;
 

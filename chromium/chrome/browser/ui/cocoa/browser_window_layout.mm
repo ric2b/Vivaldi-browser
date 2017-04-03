@@ -9,6 +9,7 @@
 
 #include "base/logging.h"
 #include "base/mac/mac_util.h"
+#include "chrome/browser/ui/cocoa/l10n_util.h"
 #import "chrome/browser/ui/cocoa/tabs/tab_strip_controller.h"
 
 namespace chrome {
@@ -61,7 +62,7 @@ const CGFloat kLocationBarRightOffset = 35;
 
 - (instancetype)init {
   if ((self = [super init])) {
-    parameters_.isOSYosemiteOrLater = base::mac::IsOSYosemiteOrLater();
+    parameters_.isOSYosemiteOrLater = base::mac::IsAtLeastOS10_10();
   }
   return self;
 }
@@ -248,6 +249,12 @@ const CGFloat kLocationBarRightOffset = 35;
   }
   layout.rightIndent = width - maxX;
 
+  if (cocoa_l10n_util::ShouldDoExperimentalRTLLayout()) {
+    std::swap(layout.leftIndent, layout.rightIndent);
+    layout.avatarFrame.origin.x =
+        width - parameters_.avatarSize.width - layout.avatarFrame.origin.x;
+  }
+
   output_.tabStripLayout = layout;
 }
 
@@ -293,7 +300,6 @@ const CGFloat kLocationBarRightOffset = 35;
 
   // Place the find bar immediately below the toolbar/attached bookmark bar.
   output_.findBarMaxY = maxY;
-  output_.fullscreenExitButtonMaxY = maxY;
 
   if (parameters_.inAnyFullscreen &&
       (parameters_.slidingStyle ==

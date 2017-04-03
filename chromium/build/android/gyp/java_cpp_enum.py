@@ -130,7 +130,7 @@ class DirectiveSet(object):
 
 
 class HeaderParser(object):
-  single_line_comment_re = re.compile(r'\s*//\s*([^\n]+)')
+  single_line_comment_re = re.compile(r'\s*//\s*([^\n]*)')
   multi_line_comment_start_re = re.compile(r'\s*/\*')
   enum_line_re = re.compile(r'^\s*(\w+)(\s*\=\s*([^,\n]+))?,?')
   enum_end_re = re.compile(r'^\s*}\s*;\.*$')
@@ -159,6 +159,7 @@ class HeaderParser(object):
     self._current_comments = []
     self._generator_directives = DirectiveSet()
     self._multi_line_generator_directive = None
+    self._current_enum_entry = ''
 
   def _ApplyGeneratorDirectives(self):
     self._generator_directives.UpdateDefinition(self._current_definition)
@@ -178,28 +179,50 @@ class HeaderParser(object):
       self._ParseEnumLine(line)
 
   def _ParseEnumLine(self, line):
-    enum_comment = HeaderParser.single_line_comment_re.match(line)
-    if enum_comment:
-      self._current_comments.append(enum_comment.groups()[0])
-      return
     if HeaderParser.multi_line_comment_start_re.match(line):
       raise Exception('Multi-line comments in enums are not supported in ' +
                       self._path)
-    enum_end = HeaderParser.enum_end_re.match(line)
-    enum_entry = HeaderParser.enum_line_re.match(line)
-    if enum_end:
-      self._ApplyGeneratorDirectives()
-      self._current_definition.Finalize()
-      self._enum_definitions.append(self._current_definition)
-      self._in_enum = False
-    elif enum_entry:
-      enum_key = enum_entry.groups()[0]
-      enum_value = enum_entry.groups()[2]
-      self._current_definition.AppendEntry(enum_key, enum_value)
-      if self._current_comments:
-         self._current_definition.AppendEntryComment(
-                 enum_key, ' '.join(self._current_comments))
-         self._current_comments = []
+
+    enum_comment = HeaderParser.single_line_comment_re.match(line)
+    if enum_comment:
+      comment = enum_comment.groups()[0]
+      if comment:
+        self._current_comments.append(comment)
+    elif HeaderParser.enum_end_re.match(line):
+      self._FinalizeCurrentEnumEntry()
+    else:
+      self._AddToCurrentEnumEntry(line)
+      if ',' in line:
+        self._ParseCurrentEnumEntry()
+
+  def _ParseCurrentEnumEntry(self):
+    if not self._current_enum_entry:
+      return
+
+    enum_entry = HeaderParser.enum_line_re.match(self._current_enum_entry)
+    if not enum_entry:
+      raise Exception('Unexpected error while attempting to parse %s as enum '
+                      'entry.' % self._current_enum_entry)
+
+    enum_key = enum_entry.groups()[0]
+    enum_value = enum_entry.groups()[2]
+    self._current_definition.AppendEntry(enum_key, enum_value)
+    if self._current_comments:
+       self._current_definition.AppendEntryComment(
+               enum_key, ' '.join(self._current_comments))
+       self._current_comments = []
+    self._current_enum_entry = ''
+
+  def _AddToCurrentEnumEntry(self, line):
+    self._current_enum_entry += ' ' + line.strip()
+
+  def _FinalizeCurrentEnumEntry(self):
+    if self._current_enum_entry:
+      self._ParseCurrentEnumEntry()
+    self._ApplyGeneratorDirectives()
+    self._current_definition.Finalize()
+    self._enum_definitions.append(self._current_definition)
+    self._in_enum = False
 
   def _ParseMultiLineDirectiveLine(self, line):
     multi_line_directive_continuation = (
@@ -340,78 +363,27 @@ ${ENUM_ENTRIES}
   return template.substitute(values)
 
 
-def AssertFilesList(output_paths, assert_files_list):
-  actual = set(output_paths)
-  expected = set(assert_files_list)
-  if not actual == expected:
-    need_to_add = list(actual - expected)
-    need_to_remove = list(expected - actual)
-    raise Exception('Output files list does not match expectations. Please '
-                    'add %s and remove %s.' % (need_to_add, need_to_remove))
-
 def DoMain(argv):
   usage = 'usage: %prog [options] [output_dir] input_file(s)...'
   parser = optparse.OptionParser(usage=usage)
   build_utils.AddDepfileOption(parser)
 
-  parser.add_option('--assert_file', action="append", default=[],
-                    dest="assert_files_list", help='Assert that the given '
-                    'file is an output. There can be multiple occurrences of '
-                    'this flag.')
   parser.add_option('--srcjar',
                     help='When specified, a .srcjar at the given path is '
                     'created instead of individual .java files.')
-  parser.add_option('--print_output_only', help='Only print output paths.',
-                    action='store_true')
-  parser.add_option('--verbose', help='Print more information.',
-                    action='store_true')
 
   options, args = parser.parse_args(argv)
 
-  if options.srcjar:
-    if not args:
-      parser.error('Need to specify at least one input file')
-    input_paths = args
-  else:
-    if len(args) < 2:
-      parser.error(
-          'Need to specify output directory and at least one input file')
-    output_dir = args[0]
-    input_paths = args[1:]
+  if not args:
+    parser.error('Need to specify at least one input file')
+  input_paths = args
+
+  with zipfile.ZipFile(options.srcjar, 'w', zipfile.ZIP_STORED) as srcjar:
+    for output_path, data in DoGenerate(input_paths):
+      build_utils.AddToZipHermetic(srcjar, output_path, data=data)
 
   if options.depfile:
-    python_deps = build_utils.GetPythonDependencies()
-    build_utils.WriteDepfile(options.depfile, input_paths + python_deps)
-
-  if options.srcjar:
-    if options.print_output_only:
-      parser.error('--print_output_only does not work with --srcjar')
-    if options.assert_files_list:
-      parser.error('--assert_file does not work with --srcjar')
-
-    with zipfile.ZipFile(options.srcjar, 'w', zipfile.ZIP_STORED) as srcjar:
-      for output_path, data in DoGenerate(input_paths):
-        build_utils.AddToZipHermetic(srcjar, output_path, data=data)
-  else:
-    # TODO(agrieve): Delete this non-srcjar branch once GYP is gone.
-    output_paths = []
-    for output_path, data in DoGenerate(input_paths):
-      full_path = os.path.join(output_dir, output_path)
-      output_paths.append(full_path)
-      if not options.print_output_only:
-        build_utils.MakeDirectory(os.path.dirname(full_path))
-        with open(full_path, 'w') as out_file:
-          out_file.write(data)
-
-    if options.assert_files_list:
-      AssertFilesList(output_paths, options.assert_files_list)
-
-    if options.verbose:
-      print 'Output paths:'
-      print '\n'.join(output_paths)
-
-    # Used by GYP.
-    return ' '.join(output_paths)
+    build_utils.WriteDepfile(options.depfile, options.srcjar)
 
 
 if __name__ == '__main__':

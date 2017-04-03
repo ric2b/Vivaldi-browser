@@ -19,9 +19,10 @@
 #include "chrome/browser/sync/profile_sync_test_util.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/browser_sync/browser/test_profile_sync_service.h"
+#include "components/browser_sync/test_profile_sync_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/sync/driver/startup_controller.h"
+#include "content/public/browser/reload_type.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/test_utils.h"
@@ -45,10 +46,11 @@ class MockWebContentsObserver : public content::WebContentsObserver {
   // navigation start is a sufficient signal for the purposes of this test.
   // Listening for this call also has the advantage of being synchronous.
   MOCK_METHOD2(DidStartNavigationToPendingEntry,
-               void(const GURL&, content::NavigationController::ReloadType));
+               void(const GURL&, content::ReloadType));
 };
 
-class OneClickTestProfileSyncService : public TestProfileSyncService {
+class OneClickTestProfileSyncService
+    : public browser_sync::TestProfileSyncService {
  public:
   ~OneClickTestProfileSyncService() override {}
 
@@ -75,9 +77,8 @@ class OneClickTestProfileSyncService : public TestProfileSyncService {
   }
 
  private:
-  explicit OneClickTestProfileSyncService(
-      ProfileSyncService::InitParams init_params)
-      : TestProfileSyncService(std::move(init_params)),
+  explicit OneClickTestProfileSyncService(InitParams init_params)
+      : browser_sync::TestProfileSyncService(std::move(init_params)),
         first_setup_in_progress_(false),
         sync_active_(false) {}
 
@@ -125,10 +126,9 @@ class OneClickSigninSyncObserverTest : public ChromeRenderViewHostTestHarness {
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
     web_contents_observer_.reset(new MockWebContentsObserver(web_contents()));
-    sync_service_ =
-        static_cast<OneClickTestProfileSyncService*>(
-            ProfileSyncServiceFactory::GetInstance()->SetTestingFactoryAndUse(
-                profile(), OneClickTestProfileSyncService::Build));
+    sync_service_ = static_cast<OneClickTestProfileSyncService*>(
+        ProfileSyncServiceFactory::GetInstance()->SetTestingFactoryAndUse(
+            profile(), OneClickTestProfileSyncService::Build));
   }
 
   void TearDown() override {
@@ -172,10 +172,9 @@ class OneClickSigninSyncObserverTest : public ChromeRenderViewHostTestHarness {
 // observer immediately loads the continue URL.
 TEST_F(OneClickSigninSyncObserverTest, NoSyncService_RedirectsImmediately) {
   // Simulate disabling Sync.
-  sync_service_ =
-      static_cast<OneClickTestProfileSyncService*>(
-          ProfileSyncServiceFactory::GetInstance()->SetTestingFactoryAndUse(
-              profile(), BuildNullService));
+  sync_service_ = static_cast<OneClickTestProfileSyncService*>(
+      ProfileSyncServiceFactory::GetInstance()->SetTestingFactoryAndUse(
+          profile(), BuildNullService));
 
   // The observer should immediately redirect to the continue URL.
   EXPECT_CALL(*web_contents_observer_, DidStartNavigationToPendingEntry(_, _));

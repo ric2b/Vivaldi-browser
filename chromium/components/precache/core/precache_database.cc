@@ -198,7 +198,8 @@ void PrecacheDatabase::RecordURLPrefetch(const GURL& url,
   // then the timestamp is updated.
   buffered_writes_.push_back(base::Bind(
       &PrecacheDatabase::RecordURLPrefetchInternal, GetWeakPtr(), url,
-      referrer_host, !was_cached || precache_url_table_.IsURLPrecached(url),
+      referrer_host,
+      !was_cached || precache_url_table_.GetURLInfo(url).is_precached,
       fetch_time));
   buffered_urls_.insert(url.spec());
   MaybePostFlush();
@@ -209,8 +210,12 @@ void PrecacheDatabase::RecordURLPrefetchInternal(
     const std::string& referrer_host,
     bool is_precached,
     const base::Time& fetch_time) {
-  auto referrer_host_id = precache_referrer_host_table_.UpdateReferrerHost(
-      referrer_host, 0, fetch_time);
+  int64_t referrer_host_id =
+      precache_referrer_host_table_.GetReferrerHost(referrer_host).id;
+  if (referrer_host_id == PrecacheReferrerHostEntry::kInvalidId) {
+    referrer_host_id = precache_referrer_host_table_.UpdateReferrerHost(
+        referrer_host, 0, fetch_time);
+  }
   DCHECK_NE(referrer_host_id, PrecacheReferrerHostEntry::kInvalidId);
   precache_url_table_.AddURL(url, referrer_host_id, is_precached, fetch_time);
 }
@@ -250,10 +255,13 @@ void PrecacheDatabase::RecordURLNonPrefetch(const GURL& url,
     Flush();
   }
 
-  bool is_precached = precache_url_table_.IsURLPrecachedAndUnused(url);
-  if (info.was_cached && !is_precached) {
-    // Ignore cache hits that precache can't take credit for.
-    return;
+  const PrecacheURLInfo url_info = precache_url_table_.GetURLInfo(url);
+
+  if (url_info.was_precached) {
+    UMA_HISTOGRAM_ENUMERATION(
+        "Precache.CacheStatus.NonPrefetch.FromPrecache",
+        info.cache_entry_status,
+        net::HttpResponseInfo::CacheEntryStatus::ENTRY_MAX);
   }
 
   base::HistogramBase::Sample size_sample =
@@ -275,7 +283,8 @@ void PrecacheDatabase::RecordURLNonPrefetch(const GURL& url,
                    base::Unretained(&precache_url_table_), url));
     buffered_urls_.insert(url.spec());
     MaybePostFlush();
-  } else {  // info.was_cached.
+  } else if (/* info.was_cached && */ url_info.is_precached &&
+             !url_info.was_used) {
     // The fetch was served from the cache, and since there's an entry for this
     // URL in the URL table, this means that the resource was served from the
     // cache only because precaching put it there. Thus, precaching was helpful,

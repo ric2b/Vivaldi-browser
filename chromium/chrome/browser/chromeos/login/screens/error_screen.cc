@@ -29,6 +29,7 @@
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/common/extensions/extension_constants.h"
+#include "chrome/grit/browser_resources.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "chromeos/dbus/session_manager_client.h"
@@ -38,7 +39,6 @@
 #include "content/public/browser/notification_service.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/constants.h"
-#include "grit/browser_resources.h"
 #include "ui/gfx/native_widget_types.h"
 
 namespace chromeos {
@@ -278,9 +278,9 @@ void ErrorScreen::OnDiagnoseButtonClicked() {
 
   const extensions::Extension* extension =
       extension_service->GetExtensionById(extension_id, true);
-  OpenApplication(
-      AppLaunchParams(profile, extension, extensions::LAUNCH_CONTAINER_WINDOW,
-                      NEW_WINDOW, extensions::SOURCE_CHROME_INTERNAL));
+  OpenApplication(AppLaunchParams(
+      profile, extension, extensions::LAUNCH_CONTAINER_WINDOW,
+      WindowOpenDisposition::NEW_WINDOW, extensions::SOURCE_CHROME_INTERNAL));
   KioskAppManager::Get()->InitSession(profile, extension_id);
 
   user_manager::UserManager::Get()->SessionStarted();

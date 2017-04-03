@@ -21,6 +21,7 @@
 #include "chrome/common/extensions/api/easy_unlock_private.h"
 #include "chrome/common/extensions/api/screenlock_private.h"
 #include "chrome/common/extensions/extension_constants.h"
+#include "chrome/grit/browser_resources.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/proximity_auth/switches.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -33,7 +34,6 @@
 #include "extensions/browser/process_manager_factory.h"
 #include "extensions/common/api/app_runtime.h"
 #include "extensions/common/extension.h"
-#include "grit/browser_resources.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(OS_CHROMEOS)
@@ -77,13 +77,12 @@ class TestProcessManager : public extensions::ProcessManager {
 
 std::unique_ptr<KeyedService> CreateTestProcessManager(
     content::BrowserContext* context) {
-  return base::WrapUnique(new TestProcessManager(context));
+  return base::MakeUnique<TestProcessManager>(context);
 }
 
 std::unique_ptr<KeyedService> CreateScreenlockPrivateEventRouter(
     content::BrowserContext* context) {
-  return base::WrapUnique(
-      new extensions::ScreenlockPrivateEventRouter(context));
+  return base::MakeUnique<extensions::ScreenlockPrivateEventRouter>(context);
 }
 
 // Observes extension registry for unload and load events (in that order) of an
@@ -278,9 +277,8 @@ class TestEventRouter : public extensions::EventRouter {
 // TestEventRouter factory function
 std::unique_ptr<KeyedService> TestEventRouterFactoryFunction(
     content::BrowserContext* context) {
-  return base::WrapUnique(
-      new TestEventRouter(static_cast<Profile*>(context),
-                          extensions::ExtensionPrefs::Get(context)));
+  return base::MakeUnique<TestEventRouter>(
+      static_cast<Profile*>(context), extensions::ExtensionPrefs::Get(context));
 }
 
 class EasyUnlockAppManagerTest : public testing::Test {

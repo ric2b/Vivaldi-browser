@@ -22,9 +22,11 @@
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_line_validator.h"
 #include "net/http/http_util.h"
+#include "net/log/net_log_event_type.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/ssl/token_binding.h"
+#include "url/url_canon.h"
 
 namespace net {
 
@@ -202,11 +204,12 @@ const size_t HttpStreamParser::kChunkHeaderFooterSize = 12;
 HttpStreamParser::HttpStreamParser(ClientSocketHandle* connection,
                                    const HttpRequestInfo* request,
                                    GrowableIOBuffer* read_buffer,
-                                   const BoundNetLog& net_log)
+                                   const NetLogWithSource& net_log)
     : io_state_(STATE_NONE),
       request_(request),
       request_headers_(nullptr),
       request_headers_length_(0),
+      http_09_on_non_default_ports_enabled_(false),
       read_buf_(read_buffer),
       read_buf_unused_offset_(0),
       response_header_start_offset_(-1),
@@ -239,11 +242,9 @@ int HttpStreamParser::SendRequest(const std::string& request_line,
   DCHECK(!callback.is_null());
   DCHECK(response);
 
-  net_log_.AddEvent(
-      NetLog::TYPE_HTTP_TRANSACTION_SEND_REQUEST_HEADERS,
-      base::Bind(&HttpRequestHeaders::NetLogCallback,
-                 base::Unretained(&headers),
-                 &request_line));
+  net_log_.AddEvent(NetLogEventType::HTTP_TRANSACTION_SEND_REQUEST_HEADERS,
+                    base::Bind(&HttpRequestHeaders::NetLogCallback,
+                               base::Unretained(&headers), &request_line));
 
   DVLOG(1) << __func__ << "() request_line = \"" << request_line << "\""
            << " headers = \"" << headers.ToString() << "\"";
@@ -304,12 +305,11 @@ int HttpStreamParser::SendRequest(const std::string& request_line,
     request_headers_->SetOffset(0);
     did_merge = true;
 
-    net_log_.AddEvent(
-        NetLog::TYPE_HTTP_TRANSACTION_SEND_REQUEST_BODY,
-        base::Bind(&NetLogSendRequestBodyCallback,
-                   request_->upload_data_stream->size(),
-                   false, /* not chunked */
-                   true /* merged */));
+    net_log_.AddEvent(NetLogEventType::HTTP_TRANSACTION_SEND_REQUEST_BODY,
+                      base::Bind(&NetLogSendRequestBodyCallback,
+                                 request_->upload_data_stream->size(),
+                                 false, /* not chunked */
+                                 true /* merged */));
   }
 
   if (!did_merge) {
@@ -433,14 +433,14 @@ int HttpStreamParser::DoLoop(int result) {
         result = DoSendRequestComplete(result);
         break;
       case STATE_READ_HEADERS:
-        net_log_.BeginEvent(NetLog::TYPE_HTTP_STREAM_PARSER_READ_HEADERS);
+        net_log_.BeginEvent(NetLogEventType::HTTP_STREAM_PARSER_READ_HEADERS);
         DCHECK_GE(result, 0);
         result = DoReadHeaders();
         break;
       case STATE_READ_HEADERS_COMPLETE:
         result = DoReadHeadersComplete(result);
         net_log_.EndEventWithNetErrorCode(
-            NetLog::TYPE_HTTP_STREAM_PARSER_READ_HEADERS, result);
+            NetLogEventType::HTTP_STREAM_PARSER_READ_HEADERS, result);
         break;
       case STATE_READ_BODY:
         DCHECK_GE(result, 0);
@@ -505,12 +505,11 @@ int HttpStreamParser::DoSendHeadersComplete(int result) {
       // !IsEOF() indicates that the body wasn't merged.
       (request_->upload_data_stream->size() > 0 &&
         !request_->upload_data_stream->IsEOF()))) {
-    net_log_.AddEvent(
-        NetLog::TYPE_HTTP_TRANSACTION_SEND_REQUEST_BODY,
-        base::Bind(&NetLogSendRequestBodyCallback,
-                   request_->upload_data_stream->size(),
-                   request_->upload_data_stream->is_chunked(),
-                   false /* not merged */));
+    net_log_.AddEvent(NetLogEventType::HTTP_TRANSACTION_SEND_REQUEST_BODY,
+                      base::Bind(&NetLogSendRequestBodyCallback,
+                                 request_->upload_data_stream->size(),
+                                 request_->upload_data_stream->is_chunked(),
+                                 false /* not merged */));
     io_state_ = STATE_SEND_BODY;
     return OK;
   }
@@ -997,7 +996,20 @@ int HttpStreamParser::ParseResponseHeaders(int end_offset) {
         std::string(read_buf_->StartOfBuffer(), raw_headers.find('\0')));
     headers = new HttpResponseHeaders(raw_headers);
   } else {
-    // Enough data was read -- there is no status line.
+    // Enough data was read -- there is no status line, so this is HTTP/0.9, or
+    // the server is broken / doesn't speak HTTP.
+
+    // If the port is not the default for the scheme, assume it's not a real
+    // HTTP/0.9 response, and fail the request.
+    // TODO(crbug.com/624462):  Further restrict the cases in which we allow
+    // HTTP/0.9.
+    std::string scheme(request_->url.scheme());
+    if (!http_09_on_non_default_ports_enabled_ &&
+        url::DefaultPortForScheme(scheme.c_str(), scheme.length()) !=
+            request_->url.EffectiveIntPort()) {
+      return ERR_INVALID_HTTP_RESPONSE;
+    }
+
     headers = new HttpResponseHeaders(std::string("HTTP/0.9 200 OK"));
 
     if (request_->url.SchemeIsCryptographic()) {
@@ -1089,14 +1101,6 @@ void HttpStreamParser::CalculateResponseBodySize() {
   }
 }
 
-UploadProgress HttpStreamParser::GetUploadProgress() const {
-  if (!request_->upload_data_stream)
-    return UploadProgress();
-
-  return UploadProgress(request_->upload_data_stream->position(),
-                        request_->upload_data_stream->size());
-}
-
 bool HttpStreamParser::IsResponseBodyComplete() const {
   if (chunked_decoder_.get())
     return chunked_decoder_->reached_eof();
@@ -1161,15 +1165,16 @@ void HttpStreamParser::GetSSLCertRequestInfo(
   }
 }
 
-Error HttpStreamParser::GetSignedEKMForTokenBinding(crypto::ECPrivateKey* key,
-                                                    std::vector<uint8_t>* out) {
+Error HttpStreamParser::GetTokenBindingSignature(crypto::ECPrivateKey* key,
+                                                 TokenBindingType tb_type,
+                                                 std::vector<uint8_t>* out) {
   if (!request_->url.SchemeIsCryptographic() || !connection_->socket()) {
     NOTREACHED();
     return ERR_FAILED;
   }
   SSLClientSocket* ssl_socket =
       static_cast<SSLClientSocket*>(connection_->socket());
-  return ssl_socket->GetSignedEKMForTokenBinding(key, out);
+  return ssl_socket->GetTokenBindingSignature(key, tb_type, out);
 }
 
 int HttpStreamParser::EncodeChunk(const base::StringPiece& payload,

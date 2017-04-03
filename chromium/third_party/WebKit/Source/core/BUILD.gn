@@ -2,48 +2,23 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/chrome_build.gni")
 import("//build/config/chromecast_build.gni")
+import("//build/toolchain/toolchain.gni")
 import("//build/config/ui.gni")
 import("//build/split_static_library.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//third_party/WebKit/Source/bindings/bindings.gni")
-import("//third_party/WebKit/Source/bindings/core/v8/generated.gni")
-import("//third_party/WebKit/Source/bindings/modules/modules.gni")
 import("//third_party/WebKit/Source/bindings/modules/v8/generated.gni")
 import("//third_party/WebKit/Source/bindings/scripts/scripts.gni")
 import("//third_party/WebKit/Source/config.gni")
 import("//third_party/WebKit/Source/core/core.gni")
 import("//third_party/WebKit/Source/build/scripts/scripts.gni")
+import("//third_party/WebKit/Source/modules/modules_idl_files.gni")
 import("//third_party/WebKit/Source/platform/platform_generated.gni")
 
 visibility = [ "//third_party/WebKit/Source/*" ]
 
 rel_blink_core_gen_dir = rebase_path(blink_core_output_dir, root_build_dir)
-
-# Compute the optimization level. The GYP code sets "optimize: max" which sets
-# speed-over-size optimization for official builds on Windows only. The GN's
-# build optimize_max config applies this optimization on all platforms, so
-# compute how to modify the config list to duplicate the GYP behavior.
-if (is_debug || !is_win || !is_official_build) {
-  # NOP.
-  core_config_add = []
-  core_config_remove = []
-} else {
-  core_config_remove = [ "//build/config/compiler:default_optimization" ]
-  core_config_add = [ "//build/config/compiler:optimize_max" ]
-}
-
-# Core targets also get wexit time destructors.
-core_config_add += [
-  "//build/config/compiler:wexit_time_destructors",
-  "//third_party/WebKit/Source:non_test_config",
-]
-
-if (remove_webcore_debug_symbols) {
-  core_config_remove += [ "//build/config/compiler:default_symbols" ]
-  core_config_add += [ "//build/config/compiler:no_symbols" ]
-}
 
 # Config for code that builds as part of core.
 config("config") {
@@ -56,10 +31,9 @@ config("config") {
   }
 
   if (is_chromecast) {
-    defines += [ "BLINK_MEDIA_LOG=DVLOG(2)" ]
+    defines += [ "BLINK_MEDIA_LOG=VLOG(2)" ]
   }
 }
-core_config_add += [ ":config" ]
 
 config("core_include_dirs") {
   include_dirs = [
@@ -71,30 +45,14 @@ config("core_include_dirs") {
   }
 }
 
-if (is_component_build) {
-  link_target_type = "source_set"
-} else {
-  link_target_type = "split_static_library"
-
-  if (is_win && is_official_build) {
-    # Shard this target into parts to work around linker limitations
-    # on link time code generation builds.
-    split_count = 5
-  } else {
-    split_count = 1
-  }
-}
-
-# GYP version: WebKit/Source/core/core.gyp:webcore_generated
 source_set("generated") {
   deps = [
-    ":make_core_generated",
+    ":core_generated",
     ":prerequisites",
-    "inspector:instrumentation_sources",
-    "inspector:protocol_sources",
     "//gin",
     "//skia",
     "//third_party/WebKit/Source/bindings/core/v8:bindings_core_v8_generated",
+    "//third_party/WebKit/Source/core/inspector:generated",
     "//third_party/iccjpeg",
     "//third_party/libpng",
     "//third_party/libwebp",
@@ -113,11 +71,11 @@ source_set("generated") {
   ]
 }
 
-# GYP version: WebKit/Source/core/core.gyp:webcore_prerequisites
 source_set("prerequisites") {
   public_deps = [
     "//gpu/command_buffer/client:gles2_c_lib",
     "//skia",
+    "//third_party/WebKit/Source/core/inspector:generated",
     "//third_party/WebKit/Source/wtf",
     "//third_party/angle:translator",
     "//third_party/iccjpeg",
@@ -136,9 +94,6 @@ source_set("prerequisites") {
     "//v8",
   ]
   deps = [
-    ":make_core_generated",
-    "inspector:instrumentation_sources",
-    "inspector:protocol_sources",
     "//third_party/WebKit/Source/bindings/core/v8:bindings_core_v8_generated",
 
     # FIXME: don't depend on bindings_modules http://crbug.com/358074
@@ -165,13 +120,18 @@ source_set("prerequisites") {
 # sources. A group would implicitly forward all direct dependent configs
 # through it, but we want to keep our internal targets' public_configs private
 # and only forward some of them.
-#
-# GYP version: WebKit/Source/core/core.gyp:webcore
 component("core") {
   output_name = "blink_core"
 
   visibility = []  # Allow re-assignment of list.
   visibility = [ "//third_party/WebKit/*" ]
+
+  # If you create a new subdirectory, make a new BUILD file for that directory
+  # and reference it in the deps below rather than adding the sources here.
+  sources = [
+    "CoreInitializer.cpp",
+    "CoreInitializer.h",
+  ]
 
   configs -= core_config_remove
   configs += core_config_add
@@ -186,132 +146,59 @@ component("core") {
     "//v8",
   ]
   deps = [
-    ":dom",
-    ":html",
-    ":remaining",
-    ":rendering",
-    ":svg",
+    "//third_party/WebKit/Source/core/animation",
+    "//third_party/WebKit/Source/core/clipboard",
+    "//third_party/WebKit/Source/core/css",
+    "//third_party/WebKit/Source/core/dom",
+    "//third_party/WebKit/Source/core/editing",
+    "//third_party/WebKit/Source/core/events",
+    "//third_party/WebKit/Source/core/fetch",
+    "//third_party/WebKit/Source/core/fileapi",
+    "//third_party/WebKit/Source/core/frame",
+    "//third_party/WebKit/Source/core/html",
+    "//third_party/WebKit/Source/core/imagebitmap",
+    "//third_party/WebKit/Source/core/input",
+    "//third_party/WebKit/Source/core/inspector",
+    "//third_party/WebKit/Source/core/layout",
+    "//third_party/WebKit/Source/core/layout/svg",
+    "//third_party/WebKit/Source/core/loader",
+    "//third_party/WebKit/Source/core/observer",
+    "//third_party/WebKit/Source/core/offscreencanvas",
+    "//third_party/WebKit/Source/core/origin_trials",
+    "//third_party/WebKit/Source/core/page",
+    "//third_party/WebKit/Source/core/paint",
+    "//third_party/WebKit/Source/core/plugins",
+    "//third_party/WebKit/Source/core/streams",
+    "//third_party/WebKit/Source/core/style:rendering",
+    "//third_party/WebKit/Source/core/style:svg",
+    "//third_party/WebKit/Source/core/svg",
+    "//third_party/WebKit/Source/core/timing",
+    "//third_party/WebKit/Source/core/workers",
+    "//third_party/WebKit/Source/core/xml",
+    "//third_party/WebKit/Source/core/xmlhttprequest",
   ]
 
-  if (is_win && is_debug && is_component_build) {
-    # Incremental linking doesn't work on this target in debug mode, even
-    # with symbol_level=1.
+  if (is_win && is_debug && is_component_build && current_cpu == "x64") {
+    # Incremental linking doesn't work on this target in debug mode for
+    # 64-bit builds - the .ilk file gets too large and the incremental
+    # link silently fails. Therefore 32-bit builds or 64-bit release builds
+    # (component either way) should be used for fastest incremental build
+    # performance. VC++ bug filed for 64-bit debug incremental link failures:
+    # https://connect.microsoft.com/VisualStudio/feedback/details/2846790
     configs -= [ "//build/config/win:default_incremental_linking" ]
     configs += [ "//build/config/win:no_incremental_linking" ]
   }
 
   public_configs = [ ":core_include_dirs" ]
-}
-
-# GYP version: //third_party/WebKit/Source/core/core.gyp:webcore_dom
-target(link_target_type, "dom") {
-  sources = rebase_path(webcore_dom_files, ".", "//")
-
-  configs -= core_config_remove
-  configs += core_config_add + [
-               # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-               "//build/config/compiler:no_size_t_to_int_warning",
-             ]
-
-  deps = [
-    ":prerequisites",
-  ]
-}
-
-# GYP version: //third_party/WebKit/Source/core/core.gyp:webcore_html
-target(link_target_type, "html") {
-  sources = rebase_path(webcore_html_files, ".", "//")
-
-  configs -= core_config_remove
-  configs += core_config_add
-
-  deps = [
-    ":prerequisites",
-  ]
-}
-
-# GYP version: //third_party/WebKit/Source/core/core.gyp:webcore_svg
-target(link_target_type, "svg") {
-  sources = rebase_path(webcore_svg_files, ".", "//")
-
-  configs -= core_config_remove
-  configs += core_config_add
-
-  deps = [
-    ":prerequisites",
-  ]
-}
-
-# GYP version: //third_party/WebKit/Source/core/core.gyp:webcore_remaining
-target(link_target_type, "remaining") {
-  if (is_win && is_official_build &&
-      link_target_type == "split_static_library") {
-    # Shard this target into parts to work around linker limitations
-    # on link time code generation builds.
-    split_count = 19
-  }
-
-  # This is currently a mashup of "webcore_rendering" and "webcore_remaining"
-  # in GYP. The file list variable is the same and then GYP filters on wether
-  # the path starts with "rendering/" or not. We should tweak the .gypis a bit
-  # to separate out the rendering files.
-  sources = rebase_path(webcore_non_rendering_files, ".", "//")
-  sources += rebase_path(webcore_rendering_files, ".", "//")
-
-  configs -= core_config_remove
-  configs += core_config_add + [
-               # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-               "//build/config/compiler:no_size_t_to_int_warning",
-             ]
-
-  cflags = []
-  libs = []
-
-  deps = [
-    ":prerequisites",
-  ]
-
-  if (is_win) {
-    cflags += [ "/wd4334" ]
-    sources -= [ "layout/LayoutThemeFontProviderDefault.cpp" ]
-  } else {  # !is_win
-    sources -= [
-      "layout/LayoutThemeFontProviderWin.cpp",
-      "layout/LayoutThemeWin.cpp",
-      "layout/LayoutThemeWin.h",
-    ]
-  }
-
-  if (!is_linux) {
-    sources -= [
-      "layout/LayoutThemeLinux.cpp",
-      "layout/LayoutThemeLinux.h",
-    ]
-  }
-
-  if (!is_android) {
-    sources -= [
-      "layout/LayoutThemeAndroid.cpp",
-      "layout/LayoutThemeAndroid.h",
-    ]
-  }
 
   if (is_mac) {
-    libs += [
+    libs = [
       "AppKit.framework",
       "Carbon.framework",
     ]
-  } else {  # !is_mac
-    sources -= [ "editing/commands/SmartReplaceCF.cpp" ]
   }
 }
 
-# GYP version: //third_party/WebKit/Source/core/core.gyp:webcore_rendering
-source_set("rendering") {
-  # The files that go here are currently in "remaining".
-}
-
-# GYP version: WebKit/Source/core/core.gyp:webcore_testing
 source_set("testing") {
   configs += [
     "//third_party/WebKit/Source:inside_blink",
@@ -321,167 +208,672 @@ source_set("testing") {
   deps = [
     ":core",
     ":generated_testing_idls",
+    "//third_party/WebKit/Source/bindings/core/v8:testing",
   ]
 
-  sources = generated_core_testing_dictionary_files + webcore_testing_files
-  sources += [
-    "$bindings_core_v8_output_dir/V8DictionaryTest.cpp",
-    "$bindings_core_v8_output_dir/V8DictionaryTest.h",
-    "$bindings_core_v8_output_dir/V8GCObservation.cpp",
-    "$bindings_core_v8_output_dir/V8GCObservation.h",
-    "$bindings_core_v8_output_dir/V8GarbageCollectedScriptWrappable.cpp",
-    "$bindings_core_v8_output_dir/V8GarbageCollectedScriptWrappable.h",
-    "$bindings_core_v8_output_dir/V8InternalDictionary.cpp",
-    "$bindings_core_v8_output_dir/V8InternalDictionary.h",
-    "$bindings_core_v8_output_dir/V8InternalDictionaryDerived.cpp",
-    "$bindings_core_v8_output_dir/V8InternalDictionaryDerived.h",
-    "$bindings_core_v8_output_dir/V8InternalDictionaryDerivedDerived.cpp",
-    "$bindings_core_v8_output_dir/V8InternalDictionaryDerivedDerived.h",
-    "$bindings_core_v8_output_dir/V8InternalRuntimeFlags.cpp",
-    "$bindings_core_v8_output_dir/V8InternalRuntimeFlags.h",
-    "$bindings_core_v8_output_dir/V8InternalSettings.cpp",
-    "$bindings_core_v8_output_dir/V8InternalSettings.h",
-    "$bindings_core_v8_output_dir/V8InternalSettingsGenerated.cpp",
-    "$bindings_core_v8_output_dir/V8InternalSettingsGenerated.h",
-    "$bindings_core_v8_output_dir/V8Internals.cpp",
-    "$bindings_core_v8_output_dir/V8Internals.h",
-    "$bindings_core_v8_output_dir/V8LayerRect.cpp",
-    "$bindings_core_v8_output_dir/V8LayerRect.h",
-    "$bindings_core_v8_output_dir/V8LayerRectList.cpp",
-    "$bindings_core_v8_output_dir/V8LayerRectList.h",
-    "$bindings_core_v8_output_dir/V8PrivateScriptTest.cpp",
-    "$bindings_core_v8_output_dir/V8PrivateScriptTest.h",
-    "$bindings_core_v8_output_dir/V8TypeConversions.cpp",
-    "$bindings_core_v8_output_dir/V8TypeConversions.h",
-    "$bindings_core_v8_output_dir/V8UnionTypesTest.cpp",
-    "$bindings_core_v8_output_dir/V8UnionTypesTest.h",
-    "$bindings_core_v8_output_dir/V8WorkerInternals.cpp",
-    "$bindings_core_v8_output_dir/V8WorkerInternals.h",
+  sources = [
+    "$blink_core_output_dir/testing/InternalSettingsGenerated.cpp",
+    "$blink_core_output_dir/testing/InternalSettingsGenerated.h",
+    "testing/CallbackFunctionTest.cpp",
+    "testing/CallbackFunctionTest.h",
+    "testing/DeathAwareScriptWrappable.cpp",
+    "testing/DeathAwareScriptWrappable.h",
+    "testing/DictionaryTest.cpp",
+    "testing/DictionaryTest.h",
+    "testing/DummyPageHolder.cpp",
+    "testing/DummyPageHolder.h",
+    "testing/GCObservation.cpp",
+    "testing/GCObservation.h",
+    "testing/GarbageCollectedScriptWrappable.cpp",
+    "testing/GarbageCollectedScriptWrappable.h",
+    "testing/InternalSettings.cpp",
+    "testing/InternalSettings.h",
+    "testing/Internals.cpp",
+    "testing/Internals.h",
+    "testing/LayerRect.h",
+    "testing/LayerRectList.cpp",
+    "testing/LayerRectList.h",
+    "testing/MockHyphenation.cpp",
+    "testing/MockHyphenation.h",
+    "testing/NullExecutionContext.cpp",
+    "testing/NullExecutionContext.h",
+    "testing/OriginTrialsTest.cpp",
+    "testing/OriginTrialsTest.h",
+    "testing/OriginTrialsTestPartial.h",
+    "testing/PrivateScriptTest.cpp",
+    "testing/PrivateScriptTest.h",
+    "testing/TypeConversions.h",
+    "testing/UnionTypesTest.cpp",
+    "testing/UnionTypesTest.h",
+    "testing/WorkerInternals.cpp",
+    "testing/WorkerInternals.h",
+    "testing/v8/WebCoreTestSupport.cpp",
+    "testing/v8/WebCoreTestSupport.h",
+  ]
+
+  # Compile the sources produced by these IDL file lists.
+  sources += process_file_template(
+          webcore_testing_idl_files + core_testing_dictionary_idl_files +
+              generated_webcore_testing_idl_files +
+              webcore_testing_idl_with_modules_dependency_files,
+          [
+            "$bindings_core_v8_output_dir/V8{{source_name_part}}.cpp",
+            "$bindings_core_v8_output_dir/V8{{source_name_part}}.h",
+          ])
+}
+
+# core_bindings_generated ------------------------------------------------------
+
+generate_event_interfaces("core_event_interfaces") {
+  sources = [
+    "css/FontFaceSetLoadEvent.idl",
+    "css/MediaQueryListEvent.idl",
+    "events/AnimationEvent.idl",
+    "events/AnimationPlaybackEvent.idl",
+    "events/ApplicationCacheErrorEvent.idl",
+    "events/BeforeUnloadEvent.idl",
+    "events/ClipboardEvent.idl",
+    "events/CompositionEvent.idl",
+    "events/CustomEvent.idl",
+    "events/DragEvent.idl",
+    "events/ErrorEvent.idl",
+    "events/Event.idl",
+    "events/FocusEvent.idl",
+    "events/HashChangeEvent.idl",
+    "events/InputEvent.idl",
+    "events/KeyboardEvent.idl",
+    "events/MessageEvent.idl",
+    "events/MouseEvent.idl",
+    "events/MutationEvent.idl",
+    "events/PageTransitionEvent.idl",
+    "events/PointerEvent.idl",
+    "events/PopStateEvent.idl",
+    "events/ProgressEvent.idl",
+    "events/PromiseRejectionEvent.idl",
+    "events/RelatedEvent.idl",
+    "events/ResourceProgressEvent.idl",
+    "events/SecurityPolicyViolationEvent.idl",
+    "events/TextEvent.idl",
+    "events/TouchEvent.idl",
+    "events/TransitionEvent.idl",
+    "events/UIEvent.idl",
+    "events/WheelEvent.idl",
+    "html/track/TrackEvent.idl",
+  ]
+  output_file = "core/EventInterfaces.in"
+}
+
+# generated_testing_idls -------------------------------------------------------
+
+group("generated_testing_idls") {
+  public_deps = [
+    ":generated_settings_macros",
+    ":generated_testing_idls_internal_runtime_flags",
+    ":generated_testing_idls_settings",
   ]
 }
 
-# GYP version: //third_party/WebKit/Source/core/core.gyp:webcore_generated
-target(link_target_type, "core_generated") {
-  sources = bindings_core_v8_files
+action("generated_settings_macros") {
+  script = "../build/scripts/make_settings.py"
 
-  # These files include all the .cpp files generated from the .idl files
-  # in webcore_files.
-  sources += bindings_core_generated_aggregate_files
-  sources += bindings_core_generated_union_type_files
+  inputs = scripts_for_in_files + [
+             "../build/scripts/make_settings.py",
+             "../build/scripts/templates/SettingsMacros.h.tmpl",
+             "frame/Settings.in",
+           ]
+  outputs = [
+    "$blink_core_output_dir/SettingsMacros.h",
+  ]
 
-  # IDL dictionary impl files generated by IDL compiler
-  sources += generated_core_dictionary_files
+  args = [
+    rebase_path("frame/Settings.in", root_build_dir),
+    "--output_dir",
+    rel_blink_core_gen_dir,
+  ]
+}
 
-  sources += [
-    # Additional .cpp files for HashTools.h
+action("generated_testing_idls_settings") {
+  script = "../build/scripts/make_internal_settings.py"
+
+  inputs = scripts_for_in_files + [
+             "../build/scripts/make_internal_settings.py",
+             "../build/scripts/templates/InternalSettingsGenerated.idl.tmpl",
+             "../build/scripts/templates/InternalSettingsGenerated.cpp.tmpl",
+             "../build/scripts/templates/InternalSettingsGenerated.h.tmpl",
+             "frame/Settings.in",
+           ]
+  outputs = [
+    "$blink_core_output_dir/testing/InternalSettingsGenerated.idl",
+    "$blink_core_output_dir/testing/InternalSettingsGenerated.cpp",
+    "$blink_core_output_dir/testing/InternalSettingsGenerated.h",
+  ]
+
+  args = [
+    rebase_path("frame/Settings.in", root_build_dir),
+    "--output_dir",
+    "$rel_blink_core_gen_dir/testing",
+  ]
+}
+
+action("generated_testing_idls_internal_runtime_flags") {
+  script = "../build/scripts/make_internal_runtime_flags.py"
+
+  inputs = scripts_for_in_files + [
+             "../build/scripts/make_internal_runtime_flags.py",
+             "../platform/RuntimeEnabledFeatures.in",
+             "../build/scripts/templates/InternalRuntimeFlags.h.tmpl",
+             "../build/scripts/templates/InternalRuntimeFlags.idl.tmpl",
+           ]
+  outputs = [
+    "$blink_core_output_dir/testing/InternalRuntimeFlags.idl",
+    "$blink_core_output_dir/testing/InternalRuntimeFlags.h",
+  ]
+
+  args = [
+    rebase_path("../platform/RuntimeEnabledFeatures.in", root_build_dir),
+    "--output_dir",
+    "$rel_blink_core_gen_dir/testing",
+  ]
+}
+
+css_properties("make_core_generated_computed_style_base") {
+  script = "../build/scripts/make_computed_style_base.py"
+  other_inputs = [
+    "../build/scripts/templates/ComputedStyleBase.cpp.tmpl",
+    "../build/scripts/templates/ComputedStyleBase.h.tmpl",
+    "../build/scripts/templates/ComputedStyleBaseConstants.h.tmpl",
+  ]
+  outputs = [
+    "$blink_core_output_dir/ComputedStyleBase.cpp",
+    "$blink_core_output_dir/ComputedStyleBase.h",
+    "$blink_core_output_dir/ComputedStyleBaseConstants.h",
+  ]
+}
+
+css_properties("make_core_generated_css_property_names") {
+  script = "../build/scripts/make_css_property_names.py"
+  outputs = [
     "$blink_core_output_dir/CSSPropertyNames.cpp",
-    "$blink_core_output_dir/CSSValueKeywords.cpp",
+    "$blink_core_output_dir/CSSPropertyNames.h",
+  ]
+}
 
-    # Additional .cpp files from make_core_generated actions.
-    "$blink_core_output_dir/CSSPrimitiveValueUnitTrie.cpp",
-    "$blink_core_output_dir/Event.cpp",
-    "$blink_core_output_dir/EventHeaders.h",
-    "$blink_core_output_dir/EventNames.cpp",
-    "$blink_core_output_dir/EventNames.h",
-    "$blink_core_output_dir/EventTargetNames.cpp",
-    "$blink_core_output_dir/EventTargetNames.h",
-    "$blink_core_output_dir/EventTypeNames.cpp",
-    "$blink_core_output_dir/EventTypeNames.h",
+process_in_files("make_core_generated_media_features") {
+  script = "../build/scripts/make_media_features.py"
+  in_files = [ "css/MediaFeatureNames.in" ]
+  other_inputs = [
+    "../build/scripts/make_media_features.py",
+    "../build/scripts/templates/MediaFeatures.h.tmpl",
+  ]
+  outputs = [
+    "$blink_core_output_dir/MediaFeatures.h",
+  ]
+}
+
+css_properties("make_core_generated_style_property_shorthand") {
+  script = "../build/scripts/make_style_shorthands.py"
+  other_inputs = [
+    "../build/scripts/templates/StylePropertyShorthand.cpp.tmpl",
+    "../build/scripts/templates/StylePropertyShorthand.h.tmpl",
+  ]
+  outputs = [
+    "$blink_core_output_dir/StylePropertyShorthand.cpp",
+    "$blink_core_output_dir/StylePropertyShorthand.h",
+  ]
+}
+
+css_properties("make_core_generated_style_builder") {
+  script = "../build/scripts/make_style_builder.py"
+  other_inputs = [
+    "../build/scripts/templates/StyleBuilder.cpp.tmpl",
+    "../build/scripts/templates/StyleBuilderFunctions.cpp.tmpl",
+    "../build/scripts/templates/StyleBuilderFunctions.h.tmpl",
+  ]
+  outputs = [
+    "$blink_core_output_dir/StyleBuilder.cpp",
+    "$blink_core_output_dir/StyleBuilderFunctions.h",
+    "$blink_core_output_dir/StyleBuilderFunctions.cpp",
+  ]
+}
+
+css_properties("make_core_generated_cssom_types") {
+  script = "../build/scripts/make_cssom_types.py"
+  other_inputs = [
+    "../build/scripts/templates/CSSOMKeywords.cpp.tmpl",
+    "../build/scripts/templates/CSSOMTypes.cpp.tmpl",
+  ]
+  outputs = [
+    "$blink_core_output_dir/CSSOMKeywords.cpp",
+    "$blink_core_output_dir/CSSOMTypes.cpp",
+  ]
+}
+
+css_properties("make_core_generated_css_property_metadata") {
+  script = "../build/scripts/make_css_property_metadata.py"
+  other_inputs = [ "../build/scripts/templates/CSSPropertyMetadata.cpp.tmpl" ]
+  outputs = [
+    "$blink_core_output_dir/CSSPropertyMetadata.cpp",
+  ]
+}
+
+process_in_files("make_core_generated_css_value_keywords") {
+  script = "../build/scripts/make_css_value_keywords.py"
+
+  in_files = [
+    "css/CSSValueKeywords.in",
+    "css/SVGCSSValueKeywords.in",
+  ]
+  outputs = [
+    "$blink_core_output_dir/CSSValueKeywords.cpp",
+    "$blink_core_output_dir/CSSValueKeywords.h",
+  ]
+  other_args = [
+    "--gperf",
+    gperf_exe,
+  ]
+}
+
+process_in_files("make_core_generated_html_element_factory") {
+  script = "../build/scripts/make_element_factory.py"
+
+  in_files = [
+    "html/HTMLTagNames.in",
+    "html/HTMLAttributeNames.in",
+  ]
+  other_inputs = make_element_factory_files
+  outputs = [
     "$blink_core_output_dir/HTMLElementFactory.cpp",
     "$blink_core_output_dir/HTMLElementFactory.h",
+    "$blink_core_output_dir/HTMLNames.cpp",
+    "$blink_core_output_dir/HTMLNames.h",
+  ]
+}
+
+process_in_files("make_core_generated_html_element_type_helpers") {
+  script = "../build/scripts/make_element_type_helpers.py"
+
+  in_files = [ "html/HTMLTagNames.in" ]
+  other_inputs = make_element_type_helpers_files
+  outputs = [
+    "$blink_core_output_dir/HTMLElementTypeHelpers.h",
+  ]
+}
+
+process_in_files("make_core_generated_svg_names") {
+  script = "../build/scripts/make_element_factory.py"
+
+  in_files = [
+    "svg/SVGTagNames.in",
+    "svg/SVGAttributeNames.in",
+  ]
+  other_inputs = make_element_factory_files
+  outputs = [
+    "$blink_core_output_dir/SVGElementFactory.cpp",
+    "$blink_core_output_dir/SVGElementFactory.h",
+    "$blink_core_output_dir/SVGNames.cpp",
+    "$blink_core_output_dir/SVGNames.h",
+  ]
+}
+
+process_in_files("make_core_generated_svg_element_type_helpers") {
+  script = "../build/scripts/make_element_type_helpers.py"
+
+  in_files = [ "svg/SVGTagNames.in" ]
+  other_inputs = make_element_type_helpers_files
+  outputs = [
+    "$blink_core_output_dir/SVGElementTypeHelpers.h",
+  ]
+}
+
+# make_event_factory -----------------------------------------------------------
+
+make_event_factory("make_core_generated_event_factory") {
+  in_files = [
+    "$blink_core_output_dir/EventInterfaces.in",
+    "events/EventAliases.in",
+  ]
+  outputs = [
+    "$blink_core_output_dir/Event.cpp",
+    "$blink_core_output_dir/EventHeaders.h",
+  ]
+}
+
+# make_names -------------------------------------------------------------------
+
+process_in_files("make_core_generated_media_feature_names") {
+  script = "../build/scripts/make_media_feature_names.py"
+  in_files = [ "css/MediaFeatureNames.in" ]
+  other_inputs = make_names_files
+  outputs = [
+    "$blink_core_output_dir/MediaFeatureNames.cpp",
+    "$blink_core_output_dir/MediaFeatureNames.h",
+  ]
+}
+
+make_names("make_core_generated_media_type_names") {
+  in_files = [ "css/MediaTypeNames.in" ]
+  outputs = [
+    "$blink_core_output_dir/MediaTypeNames.cpp",
+    "$blink_core_output_dir/MediaTypeNames.h",
+  ]
+}
+
+make_names("make_core_generated_event_names") {
+  in_files = [ "$blink_core_output_dir/EventInterfaces.in" ]
+  outputs = [
+    "$blink_core_output_dir/EventNames.cpp",
+    "$blink_core_output_dir/EventNames.h",
+  ]
+}
+
+make_names("make_core_generated_event_target_names") {
+  in_files = [ "events/EventTargetFactory.in" ]
+  outputs = [
+    "$blink_core_output_dir/EventTargetNames.cpp",
+    "$blink_core_output_dir/EventTargetNames.h",
+  ]
+}
+
+make_names("make_core_generated_fetch_initiator_type_names") {
+  in_files = [ "fetch/FetchInitiatorTypeNames.in" ]
+  outputs = [
+    "$blink_core_output_dir/fetch/FetchInitiatorTypeNames.cpp",
+    "$blink_core_output_dir/fetch/FetchInitiatorTypeNames.h",
+  ]
+}
+
+make_names("make_core_generated_event_type_names") {
+  in_files = [ "events/EventTypeNames.in" ]
+  outputs = [
+    "$blink_core_output_dir/EventTypeNames.cpp",
+    "$blink_core_output_dir/EventTypeNames.h",
+  ]
+}
+
+make_names("make_core_generated_html_tokenizer_names") {
+  in_files = [ "html/parser/HTMLTokenizerNames.in" ]
+  outputs = [
+    "$blink_core_output_dir/HTMLTokenizerNames.cpp",
+    "$blink_core_output_dir/HTMLTokenizerNames.h",
+  ]
+}
+
+make_names("make_core_generated_input_type_names") {
+  in_files = [ "html/forms/InputTypeNames.in" ]
+  outputs = [
+    "$blink_core_output_dir/InputTypeNames.cpp",
+    "$blink_core_output_dir/InputTypeNames.h",
+  ]
+}
+
+# make_qualified_names ---------------------------------------------------------
+
+make_qualified_names("make_core_generated_math_ml_names") {
+  in_files = [
+    "html/parser/MathMLTagNames.in",
+    "html/parser/MathMLAttributeNames.in",
+  ]
+  outputs = [
+    "$blink_core_output_dir/MathMLNames.cpp",
+    "$blink_core_output_dir/MathMLNames.h",
+  ]
+}
+
+make_qualified_names("make_core_generated_xlink_names") {
+  in_files = [ "svg/xlinkattrs.in" ]
+  outputs = [
+    "$blink_core_output_dir/XLinkNames.cpp",
+    "$blink_core_output_dir/XLinkNames.h",
+  ]
+}
+
+make_qualified_names("make_core_generated_xml_ns_names") {
+  in_files = [ "xml/xmlnsattrs.in" ]
+  outputs = [
+    "$blink_core_output_dir/XMLNSNames.cpp",
+    "$blink_core_output_dir/XMLNSNames.h",
+  ]
+}
+
+make_qualified_names("make_core_generated_xml_names") {
+  in_files = [ "xml/xmlattrs.in" ]
+  outputs = [
+    "$blink_core_output_dir/XMLNames.cpp",
+    "$blink_core_output_dir/XMLNames.h",
+  ]
+}
+
+# One-off scripts --------------------------------------------------------------
+
+# FIXME: The implementation of Blink-in-JS is not yet mature.
+# You can use Blink-in-JS in your local experiment, but don't ship it.
+# crbug.com/341031
+action("make_core_generated_private_script") {
+  visibility = []  # Allow re-assignment of list.
+  visibility = [ ":*" ]
+  script = "../build/scripts/make_private_script_source.py"
+
+  inputs = [
+    "../bindings/core/v8/PrivateScriptRunner.js",
+    "html/HTMLMarqueeElement.js",
+    "xml/DocumentXMLTreeViewer.js",
+  ]
+  outputs = [
+    "$blink_core_output_dir/PrivateScriptSources.h",
+  ]
+
+  args = rebase_path(outputs, root_build_dir)
+  args += rebase_path(inputs, root_build_dir)
+
+  deps = make_core_generated_deps
+}
+
+action("make_core_generated_private_script_for_testing") {
+  visibility = []  # Allow re-assignment of list.
+  visibility = [ ":*" ]
+  script = "../build/scripts/make_private_script_source.py"
+
+  inputs = [
+    "testing/PartialPrivateScriptTest.js",
+    "testing/PrivateScriptTest.js",
+  ]
+  outputs = [
+    "$blink_core_output_dir/PrivateScriptSourcesForTesting.h",
+  ]
+
+  args = [ "--for-testing" ]
+  args += rebase_path(outputs, root_build_dir)
+  args += rebase_path(inputs, root_build_dir)
+
+  deps = make_core_generated_deps
+}
+
+action("make_core_generated_html_entity_table") {
+  visibility = []  # Allow re-assignment of list.
+  visibility = [ ":*" ]
+  script = "html/parser/create-html-entity-table"
+
+  inputs = [
+    "html/parser/HTMLEntityNames.in",
+  ]
+  outputs = [
+    "$blink_core_output_dir/HTMLEntityTable.cpp",
+  ]
+
+  args = [ "-o" ] + rebase_path(outputs, root_build_dir)
+  args += rebase_path(inputs, root_build_dir)
+
+  deps = make_core_generated_deps
+}
+
+action("make_core_generated_css_tokenizer_codepoints") {
+  visibility = []  # Allow re-assignment of list.
+  visibility = [ ":*" ]
+  script = "../build/scripts/make_css_tokenizer_codepoints.py"
+
+  outputs = [
+    "$blink_core_output_dir/CSSTokenizerCodepoints.cpp",
+  ]
+
+  args = [
+    "--output_dir",
+    rel_blink_core_gen_dir,
+  ]
+
+  deps = make_core_generated_deps
+}
+
+action("make_core_generated_css_primitive_value_unit_trie") {
+  visibility = []  # Allow re-assignment of list.
+  visibility = [ ":*" ]
+  script = "../build/scripts/make_css_primitive_value_unit_trie.py"
+
+  input_file = "css/CSSPrimitiveValueUnits.in"
+  inputs = make_trie_helpers_files + [
+             input_file,
+             "../build/scripts/templates/CSSPrimitiveValueUnitTrie.cpp.tmpl",
+           ]
+  outputs = [
+    "$blink_core_output_dir/CSSPrimitiveValueUnitTrie.cpp",
+  ]
+
+  args = [
+    rebase_path(input_file, root_build_dir),
+    "--output_dir",
+    rel_blink_core_gen_dir,
+  ]
+
+  deps = make_core_generated_deps
+}
+
+action("make_core_generated_html_element_lookup_trie") {
+  visibility = []  # Allow re-assignment of list.
+  visibility = [ ":*" ]
+  script = "../build/scripts/make_element_lookup_trie.py"
+
+  input_file = "html/HTMLTagNames.in"
+  inputs = make_trie_helpers_files + [
+             input_file,
+             "../build/scripts/templates/ElementLookupTrie.cpp.tmpl",
+             "../build/scripts/templates/ElementLookupTrie.h.tmpl",
+           ]
+  outputs = [
     "$blink_core_output_dir/HTMLElementLookupTrie.cpp",
     "$blink_core_output_dir/HTMLElementLookupTrie.h",
-    "$blink_core_output_dir/HTMLNames.cpp",
-    "$blink_core_output_dir/HTMLTokenizerNames.cpp",
-    "$blink_core_output_dir/InputTypeNames.cpp",
-    "$blink_core_output_dir/MathMLNames.cpp",
-    "$blink_core_output_dir/SVGNames.cpp",
-    "$blink_core_output_dir/XLinkNames.cpp",
-    "$blink_core_output_dir/XMLNSNames.cpp",
-    "$blink_core_output_dir/XMLNames.cpp",
-    "$blink_core_output_dir/fetch/FetchInitiatorTypeNames.cpp",
+  ]
+
+  args = [
+    rebase_path(input_file, root_build_dir),
+    "--output_dir",
+    rel_blink_core_gen_dir,
+  ]
+
+  deps = make_core_generated_deps
+}
+
+action("make_core_generated_origin_trials") {
+  script = "../build/scripts/make_origin_trials.py"
+
+  inputs = scripts_for_in_files + [
+             "../build/scripts/make_origin_trials.py",
+             "../platform/RuntimeEnabledFeatures.in",
+             "../build/scripts/templates/OriginTrials.cpp.tmpl",
+             "../build/scripts/templates/OriginTrials.h.tmpl",
+           ]
+  outputs = [
     "$blink_core_output_dir/origin_trials/OriginTrials.cpp",
     "$blink_core_output_dir/origin_trials/OriginTrials.h",
+  ]
 
-    # Generated from HTMLEntityNames.in
-    "$blink_core_output_dir/HTMLEntityTable.cpp",
+  args = [
+    rebase_path("../platform/RuntimeEnabledFeatures.in", root_build_dir),
+    "--output_dir",
+    "$rel_blink_core_gen_dir/origin_trials",
+  ]
+}
 
-    # Generated from MediaFeatureNames.in
-    "$blink_core_output_dir/MediaFeatureNames.cpp",
+action_foreach("make_core_generated_bison") {
+  script = "../build/scripts/rule_bison.py"
+  sources = [
+    "xml/XPathGrammar.y",
+  ]
+  outputs = [
+    "$blink_core_output_dir/{{source_name_part}}.cpp",
+    "$blink_core_output_dir/{{source_name_part}}.h",
+  ]
+  args = [
+    "{{source}}",
+    rel_blink_core_gen_dir,
+    bison_exe,
+  ]
+  if (!use_system_xcode) {
+    args += [ hermetic_xcode_path ]
+  }
 
-    # Generated from MediaTypeNames.in
-    "$blink_core_output_dir/MediaTypeNames.cpp",
+  deps = make_core_generated_deps
+}
 
-    # Generated from HTMLMetaElement-in.cpp
-    "$blink_core_output_dir/HTMLMetaElement.cpp",
+# Compiles the code generated by the targets above.
+target(core_link_small_target_type, "core_generated") {
+  sources = bindings_core_v8_files
 
-    # Additional .cpp files from the make_core_generated rules.
-    "$blink_core_output_dir/XPathGrammar.cpp",
+  # Targets from above that generate outputs that need to be compiled.
+  # All sources declared as outputs from these targets will be compiled into this
+  # target.
+  targets_generating_sources = [
+    ":make_core_generated_bison",
+    ":make_core_generated_css_primitive_value_unit_trie",
+    ":make_core_generated_css_property_metadata",
+    ":make_core_generated_computed_style_base",
+    ":make_core_generated_css_property_names",
+    ":make_core_generated_cssom_types",
+    ":make_core_generated_event_factory",
+    ":make_core_generated_event_names",
+    ":make_core_generated_event_target_names",
+    ":make_core_generated_event_type_names",
+    ":make_core_generated_fetch_initiator_type_names",
+    ":make_core_generated_html_element_factory",
+    ":make_core_generated_html_element_lookup_trie",
+    ":make_core_generated_html_entity_table",
+    ":make_core_generated_html_tokenizer_names",
+    ":make_core_generated_input_type_names",
+    ":make_core_generated_math_ml_names",
+    ":make_core_generated_media_feature_names",
+    ":make_core_generated_media_type_names",
+    ":make_core_generated_origin_trials",
+    ":make_core_generated_style_builder",
+    ":make_core_generated_style_property_shorthand",
+    ":make_core_generated_svg_names",
+    ":make_core_generated_xlink_names",
+    ":make_core_generated_xml_names",
+    ":make_core_generated_xml_ns_names",
+    ":make_core_generated_private_script",
+    ":make_core_generated_html_element_type_helpers",
+    ":make_core_generated_css_value_keywords",
+    ":make_core_generated_media_features",
+    ":make_core_generated_svg_element_type_helpers",
+    ":make_core_generated_private_script_for_testing",
+  ]
 
-    # Additional .cpp files from the inspector:instrumentation_sources list.
-    "$blink_core_output_dir/InspectorInstrumentationImpl.cpp",
-    "$blink_core_output_dir/InspectorInstrumentationInl.h",
-    "$blink_core_output_dir/InspectorOverridesInl.h",
-    "$blink_core_output_dir/InstrumentingAgents.h",
-
-    # Additional .cpp files from the inspector:protocol_sources list.
-    "$blink_core_output_dir/inspector/protocol/Accessibility.cpp",
-    "$blink_core_output_dir/inspector/protocol/Animation.cpp",
-    "$blink_core_output_dir/inspector/protocol/ApplicationCache.cpp",
-    "$blink_core_output_dir/inspector/protocol/CSS.cpp",
-    "$blink_core_output_dir/inspector/protocol/CacheStorage.cpp",
-    "$blink_core_output_dir/inspector/protocol/DOM.cpp",
-    "$blink_core_output_dir/inspector/protocol/DOMDebugger.cpp",
-    "$blink_core_output_dir/inspector/protocol/DOMStorage.cpp",
-    "$blink_core_output_dir/inspector/protocol/Database.cpp",
-    "$blink_core_output_dir/inspector/protocol/DeviceOrientation.cpp",
-    "$blink_core_output_dir/inspector/protocol/Emulation.cpp",
-    "$blink_core_output_dir/inspector/protocol/IO.cpp",
-    "$blink_core_output_dir/inspector/protocol/IndexedDB.cpp",
-    "$blink_core_output_dir/inspector/protocol/Input.cpp",
-    "$blink_core_output_dir/inspector/protocol/Inspector.cpp",
-    "$blink_core_output_dir/inspector/protocol/LayerTree.cpp",
-    "$blink_core_output_dir/inspector/protocol/Log.cpp",
-    "$blink_core_output_dir/inspector/protocol/Memory.cpp",
-    "$blink_core_output_dir/inspector/protocol/Network.cpp",
-    "$blink_core_output_dir/inspector/protocol/Page.cpp",
-    "$blink_core_output_dir/inspector/protocol/Rendering.cpp",
-    "$blink_core_output_dir/inspector/protocol/Security.cpp",
-    "$blink_core_output_dir/inspector/protocol/ServiceWorker.cpp",
-    "$blink_core_output_dir/inspector/protocol/Storage.cpp",
-    "$blink_core_output_dir/inspector/protocol/Tracing.cpp",
-    "$blink_core_output_dir/inspector/protocol/Worker.cpp",
-
-    # Additional .cpp files for SVG.
-    "$blink_core_output_dir/SVGElementFactory.cpp",
-
-    # Generated from make_style_shorthands.py
-    "$blink_core_output_dir/StylePropertyShorthand.cpp",
-
-    # Generated from make_style_builder.py
-    "$blink_core_output_dir/StyleBuilder.cpp",
-    "$blink_core_output_dir/StyleBuilderFunctions.cpp",
-
-    # Generated from make_css_property_metadata.py
-    "$blink_core_output_dir/CSSPropertyMetadata.cpp",
-
-    # Generated from make_cssom_types.py
-    "$blink_core_output_dir/CSSOMTypes.cpp",
-
-    # Generated from make_cssom_keywords.py
-    "$blink_core_output_dir/CSSOMKeywords.cpp",
+  # Add all sources generated by the targets above.
+  foreach(current, targets_generating_sources) {
+    sources += get_target_outputs(current)
+  }
+  public_deps = targets_generating_sources
+  public_deps += [
+    # This target's generated source is #included into another source file.
+    # So we don't want to list it in the "generating sources" list above,
+    # but it does need to be listed as a dependency here.
+    ":make_core_generated_css_tokenizer_codepoints",
+    "//third_party/WebKit/Source/bindings/core/v8:bindings_core_impl",
   ]
 
   configs -= core_config_remove
-  configs += core_config_add
+  configs += core_config_add + [ "..:inside_blink" ]
 
-  configs += [ "..:inside_blink" ]
-
-  public_deps = [
-    ":make_core_generated",
+  # Dependencies required to compile the sources.
+  public_deps += [
     ":prerequisites",
-    "inspector:instrumentation_sources",
-    "inspector:protocol_sources",
     "//gin",
     "//skia",
     "//third_party/WebKit/Source/bindings/core/v8:bindings_core_v8_generated",
@@ -529,601 +921,349 @@ target(link_target_type, "core_generated") {
   }
 }
 
-# core_bindings_generated ------------------------------------------------------
-
-# GYP version: WebKit/Source/core/core_generated.gyp:core_event_interfaces
-generate_event_interfaces("core_event_interfaces") {
-  sources = core_event_idl_files
-  output_file = "core/EventInterfaces.in"
-}
-
-# generated_testing_idls -------------------------------------------------------
-
-# GYP version: WebKit/Source/core/core_generated.gyp:generated_testing_idls
-group("generated_testing_idls") {
-  public_deps = [
-    ":generated_settings_macros",
-    ":generated_testing_idls_internal_runtime_flags",
-    ":generated_testing_idls_settings",
-  ]
-}
-
-# "Settings" action in generated_testing_idls from GYP.
-action("generated_settings_macros") {
-  script = "../build/scripts/make_settings.py"
-
-  inputs = scripts_for_in_files + [
-             "../build/scripts/make_settings.py",
-             "../build/scripts/templates/SettingsMacros.h.tmpl",
-             "frame/Settings.in",
-           ]
-  outputs = [
-    "$blink_core_output_dir/SettingsMacros.h",
-  ]
-
-  args = [
-    rebase_path("frame/Settings.in", root_build_dir),
-    "--output_dir",
-    rel_blink_core_gen_dir,
-  ]
-}
-
-# "InternalSettings" action in generated_testing_idls from GYP.
-action("generated_testing_idls_settings") {
-  script = "../build/scripts/make_internal_settings.py"
-
-  inputs = scripts_for_in_files + [
-             "../build/scripts/make_internal_settings.py",
-             "../build/scripts/templates/InternalSettingsGenerated.idl.tmpl",
-             "../build/scripts/templates/InternalSettingsGenerated.cpp.tmpl",
-             "../build/scripts/templates/InternalSettingsGenerated.h.tmpl",
-             "frame/Settings.in",
-           ]
-  outputs = [
-    "$blink_core_output_dir/testing/InternalSettingsGenerated.idl",
-    "$blink_core_output_dir/testing/InternalSettingsGenerated.cpp",
-    "$blink_core_output_dir/testing/InternalSettingsGenerated.h",
-  ]
-
-  args = [
-    rebase_path("frame/Settings.in", root_build_dir),
-    "--output_dir",
-    "$rel_blink_core_gen_dir/testing",
-  ]
-}
-
-# "InternalRuntimeFlags" action in generated_testing_idls from GYP.
-action("generated_testing_idls_internal_runtime_flags") {
-  script = "../build/scripts/make_internal_runtime_flags.py"
-
-  inputs = scripts_for_in_files + [
-             "../build/scripts/make_internal_runtime_flags.py",
-             "../platform/RuntimeEnabledFeatures.in",
-             "../build/scripts/templates/InternalRuntimeFlags.h.tmpl",
-             "../build/scripts/templates/InternalRuntimeFlags.idl.tmpl",
-           ]
-  outputs = [
-    "$blink_core_output_dir/testing/InternalRuntimeFlags.idl",
-    "$blink_core_output_dir/testing/InternalRuntimeFlags.h",
-  ]
-
-  args = [
-    rebase_path("../platform/RuntimeEnabledFeatures.in", root_build_dir),
-    "--output_dir",
-    "$rel_blink_core_gen_dir/testing",
-  ]
-}
-
-# make_core_generated ----------------------------------------------------------
-
-# GYP version: WebKit/Source/core/core_generated.gyp:make_core_generated
-group("make_core_generated") {
-  public_deps = [
-    ":make_core_generated_bison",
-    ":make_core_generated_css_primitive_value_unit_trie",
-    ":make_core_generated_css_property_metadata",
-    ":make_core_generated_css_property_names",
-    ":make_core_generated_css_tokenizer_codepoints",
-    ":make_core_generated_css_value_keywords",
-    ":make_core_generated_cssom_types",
-    ":make_core_generated_event_factory",
-    ":make_core_generated_event_names",
-    ":make_core_generated_event_target_names",
-    ":make_core_generated_event_type_names",
-    ":make_core_generated_fetch_initiator_type_names",
-    ":make_core_generated_html_element_factory",
-    ":make_core_generated_html_element_lookup_trie",
-    ":make_core_generated_html_element_type_helpers",
-    ":make_core_generated_html_entity_table",
-    ":make_core_generated_html_tokenizer_names",
-    ":make_core_generated_input_type_names",
-    ":make_core_generated_make_token_matcher_for_viewport",
-    ":make_core_generated_math_ml_names",
-    ":make_core_generated_media_feature_names",
-    ":make_core_generated_media_features",
-    ":make_core_generated_media_type_names",
-    ":make_core_generated_origin_trials",
-    ":make_core_generated_private_script",
-    ":make_core_generated_private_script_for_testing",
-    ":make_core_generated_style_builder",
-    ":make_core_generated_style_property_shorthand",
-    ":make_core_generated_svg_element_type_helpers",
-    ":make_core_generated_svg_names",
-    ":make_core_generated_xlink_names",
-    ":make_core_generated_xml_names",
-    ":make_core_generated_xml_ns_names",
-  ]
-}
-
-# "CSSPropertyNames" in make_core_generated from GYP.
-css_properties("make_core_generated_css_property_names") {
-  script = "../build/scripts/make_css_property_names.py"
-  outputs = [
-    "$blink_core_output_dir/CSSPropertyNames.cpp",
-    "$blink_core_output_dir/CSSPropertyNames.h",
-  ]
-}
-
-# "MediaFeatures" in make_core_generated from GYP.
-process_in_files("make_core_generated_media_features") {
-  script = "../build/scripts/make_media_features.py"
-  in_files = [ "css/MediaFeatureNames.in" ]
-  other_inputs = [
-    "../build/scripts/make_media_features.py",
-    "../build/scripts/templates/MediaFeatures.h.tmpl",
-  ]
-  outputs = [
-    "$blink_core_output_dir/MediaFeatures.h",
-  ]
-}
-
-# "StylePropertyShorthand" in make_core_generated from GYP.
-css_properties("make_core_generated_style_property_shorthand") {
-  script = "../build/scripts/make_style_shorthands.py"
-  other_inputs = [
-    "../build/scripts/templates/StylePropertyShorthand.cpp.tmpl",
-    "../build/scripts/templates/StylePropertyShorthand.h.tmpl",
-  ]
-  outputs = [
-    "$blink_core_output_dir/StylePropertyShorthand.cpp",
-    "$blink_core_output_dir/StylePropertyShorthand.h",
-  ]
-}
-
-# "StyleBuilder" in make_core_generated from GYP.
-css_properties("make_core_generated_style_builder") {
-  script = "../build/scripts/make_style_builder.py"
-  other_inputs = [
-    "../build/scripts/templates/StyleBuilder.cpp.tmpl",
-    "../build/scripts/templates/StyleBuilderFunctions.cpp.tmpl",
-    "../build/scripts/templates/StyleBuilderFunctions.h.tmpl",
-  ]
-  outputs = [
-    "$blink_core_output_dir/StyleBuilder.cpp",
-    "$blink_core_output_dir/StyleBuilderFunctions.h",
-    "$blink_core_output_dir/StyleBuilderFunctions.cpp",
-  ]
-}
-
-# "CSSOMTypes" in make_core_generated from GYP.
-css_properties("make_core_generated_cssom_types") {
-  script = "../build/scripts/make_cssom_types.py"
-  other_inputs = [
-    "../build/scripts/templates/CSSOMKeywords.cpp.tmpl",
-    "../build/scripts/templates/CSSOMTypes.cpp.tmpl",
-  ]
-  outputs = [
-    "$blink_core_output_dir/CSSOMKeywords.cpp",
-    "$blink_core_output_dir/CSSOMTypes.cpp",
-  ]
-}
-
-# "CSSPropertyMetadata" in make_core_generated from GYP.
-css_properties("make_core_generated_css_property_metadata") {
-  script = "../build/scripts/make_css_property_metadata.py"
-  other_inputs = [ "../build/scripts/templates/CSSPropertyMetadata.cpp.tmpl" ]
-  outputs = [
-    "$blink_core_output_dir/CSSPropertyMetadata.cpp",
-  ]
-}
-
-# "CSSValueKeywords" in make_core_generated from GYP.
-process_in_files("make_core_generated_css_value_keywords") {
-  script = "../build/scripts/make_css_value_keywords.py"
-
-  in_files = [
-    "css/CSSValueKeywords.in",
-    "css/SVGCSSValueKeywords.in",
-  ]
-  outputs = [
-    "$blink_core_output_dir/CSSValueKeywords.cpp",
-    "$blink_core_output_dir/CSSValueKeywords.h",
-  ]
-  other_args = [
-    "--gperf",
-    gperf_exe,
-  ]
-}
-
-# "HTMLElementFactory" in make_core_generated from GYP.
-process_in_files("make_core_generated_html_element_factory") {
-  script = "../build/scripts/make_element_factory.py"
-
-  in_files = [
-    "html/HTMLTagNames.in",
-    "html/HTMLAttributeNames.in",
-  ]
-  other_inputs = make_element_factory_files
-  outputs = [
-    "$blink_core_output_dir/HTMLElementFactory.cpp",
-    "$blink_core_output_dir/HTMLElementFactory.h",
-    "$blink_core_output_dir/HTMLNames.cpp",
-    "$blink_core_output_dir/HTMLNames.h",
-  ]
-}
-
-# "HTMLElementTypeHelpers" in make_core_generated from GYP.
-process_in_files("make_core_generated_html_element_type_helpers") {
-  script = "../build/scripts/make_element_type_helpers.py"
-
-  in_files = [ "html/HTMLTagNames.in" ]
-  other_inputs = make_element_type_helpers_files
-  outputs = [
-    "$blink_core_output_dir/HTMLElementTypeHelpers.h",
-  ]
-}
-
-# "SVGNames" in make_core_generated from GYP.
-process_in_files("make_core_generated_svg_names") {
-  script = "../build/scripts/make_element_factory.py"
-
-  in_files = [
-    "svg/SVGTagNames.in",
-    "svg/SVGAttributeNames.in",
-  ]
-  other_inputs = make_element_factory_files
-  outputs = [
-    "$blink_core_output_dir/SVGElementFactory.cpp",
-    "$blink_core_output_dir/SVGElementFactory.h",
-    "$blink_core_output_dir/SVGNames.cpp",
-    "$blink_core_output_dir/SVGNames.h",
-  ]
-}
-
-# "SVGElementTypeHelpers" in make_core_generated from GYP.
-process_in_files("make_core_generated_svg_element_type_helpers") {
-  script = "../build/scripts/make_element_type_helpers.py"
-
-  in_files = [ "svg/SVGTagNames.in" ]
-  other_inputs = make_element_type_helpers_files
-  outputs = [
-    "$blink_core_output_dir/SVGElementTypeHelpers.h",
-  ]
-}
-
-# make_event_factory -----------------------------------------------------------
-
-# "EventFactory" in make_core_generated from GYP.
-process_in_files("make_core_generated_event_factory") {
-  script = "../build/scripts/make_event_factory.py"
-
-  in_files = [
-    "$blink_core_output_dir/EventInterfaces.in",
-    "events/EventAliases.in",
-  ]
-  other_inputs = make_event_factory_files
-  outputs = [
-    "$blink_core_output_dir/Event.cpp",
-    "$blink_core_output_dir/EventHeaders.h",
-  ]
-}
-
-# make_names -------------------------------------------------------------------
-
-# "MediaFeatureNames" in make_core_generated from GYP.
-process_in_files("make_core_generated_media_feature_names") {
-  script = "../build/scripts/make_media_feature_names.py"
-  in_files = [ "css/MediaFeatureNames.in" ]
-  other_inputs = make_names_files
-  outputs = [
-    "$blink_core_output_dir/MediaFeatureNames.cpp",
-    "$blink_core_output_dir/MediaFeatureNames.h",
-  ]
-}
-
-# "MediaTypeNames" in make_core_generated from GYP.
-make_names("make_core_generated_media_type_names") {
-  in_files = [ "css/MediaTypeNames.in" ]
-  outputs = [
-    "$blink_core_output_dir/MediaTypeNames.cpp",
-    "$blink_core_output_dir/MediaTypeNames.h",
-  ]
-}
-
-# "EventNames" in make_core_generated from GYP.
-make_names("make_core_generated_event_names") {
-  in_files = [ "$blink_core_output_dir/EventInterfaces.in" ]
-  outputs = [
-    "$blink_core_output_dir/EventNames.cpp",
-    "$blink_core_output_dir/EventNames.h",
-  ]
-}
-
-# "EventTargetNames" in make_core_generated from GYP.
-make_names("make_core_generated_event_target_names") {
-  in_files = [ "events/EventTargetFactory.in" ]
-  outputs = [
-    "$blink_core_output_dir/EventTargetNames.cpp",
-    "$blink_core_output_dir/EventTargetNames.h",
-  ]
-}
-
-# "FetchInitiatorTypeNames" in make_core_generated from GYP.
-make_names("make_core_generated_fetch_initiator_type_names") {
-  in_files = [ "fetch/FetchInitiatorTypeNames.in" ]
-  outputs = [
-    "$blink_core_output_dir/fetch/FetchInitiatorTypeNames.cpp",
-    "$blink_core_output_dir/fetch/FetchInitiatorTypeNames.h",
-  ]
-}
-
-# "EventTypeNames" in make_core_generated from GYP.
-make_names("make_core_generated_event_type_names") {
-  in_files = [ "events/EventTypeNames.in" ]
-  outputs = [
-    "$blink_core_output_dir/EventTypeNames.cpp",
-    "$blink_core_output_dir/EventTypeNames.h",
-  ]
-}
-
-# "HTMLTokenizerNames" in make_core_generated from GYP.
-make_names("make_core_generated_html_tokenizer_names") {
-  in_files = [ "html/parser/HTMLTokenizerNames.in" ]
-  outputs = [
-    "$blink_core_output_dir/HTMLTokenizerNames.cpp",
-    "$blink_core_output_dir/HTMLTokenizerNames.h",
-  ]
-}
-
-# "InputTypeNames" in make_core_generated from GYP.
-make_names("make_core_generated_input_type_names") {
-  in_files = [ "html/forms/InputTypeNames.in" ]
-  outputs = [
-    "$blink_core_output_dir/InputTypeNames.cpp",
-    "$blink_core_output_dir/InputTypeNames.h",
-  ]
-}
-
-# make_qualified_names ---------------------------------------------------------
-
-# "MathMLNames" in make_core_generated from GYP.
-make_qualified_names("make_core_generated_math_ml_names") {
-  in_files = [
-    "html/parser/MathMLTagNames.in",
-    "html/parser/MathMLAttributeNames.in",
-  ]
-  outputs = [
-    "$blink_core_output_dir/MathMLNames.cpp",
-    "$blink_core_output_dir/MathMLNames.h",
-  ]
-}
-
-# "XLinkNames" in make_core_generated from GYP.
-make_qualified_names("make_core_generated_xlink_names") {
-  in_files = [ "svg/xlinkattrs.in" ]
-  outputs = [
-    "$blink_core_output_dir/XLinkNames.cpp",
-    "$blink_core_output_dir/XLinkNames.h",
-  ]
-}
-
-# "XMLNSNames" in make_core_generated from GYP.
-make_qualified_names("make_core_generated_xml_ns_names") {
-  in_files = [ "xml/xmlnsattrs.in" ]
-  outputs = [
-    "$blink_core_output_dir/XMLNSNames.cpp",
-    "$blink_core_output_dir/XMLNSNames.h",
-  ]
-}
-
-# "XMLNames" in make_core_generated from GYP.
-make_qualified_names("make_core_generated_xml_names") {
-  in_files = [ "xml/xmlattrs.in" ]
-  outputs = [
-    "$blink_core_output_dir/XMLNames.cpp",
-    "$blink_core_output_dir/XMLNames.h",
-  ]
-}
-
-# make_token_matcher -----------------------------------------------------------
-
-# "MakeTokenMatcherForViewport" in make_core_generated from GYP.
-make_token_matcher("make_core_generated_make_token_matcher_for_viewport") {
-  input_file = "html/HTMLMetaElement-in.cpp"
-  output_file = "$blink_core_output_dir/HTMLMetaElement.cpp"
-}
-
-# One-off scripts --------------------------------------------------------------
-
-# "generatePrivateScript" in make_core_generated from GYP.
-# FIXME: The implementation of Blink-in-JS is not yet mature.
-# You can use Blink-in-JS in your local experiment, but don't ship it.
-# crbug.com/341031
-action("make_core_generated_private_script") {
-  visibility = []  # Allow re-assignment of list.
-  visibility = [ ":make_core_generated" ]
-  script = "../build/scripts/make_private_script_source.py"
-
-  inputs = [
-    "../bindings/core/v8/PrivateScriptRunner.js",
-    "html/HTMLMarqueeElement.js",
-    "xml/DocumentXMLTreeViewer.js",
-  ]
-  outputs = [
-    "$blink_core_output_dir/PrivateScriptSources.h",
-  ]
-
-  args = rebase_path(outputs, root_build_dir)
-  args += rebase_path(inputs, root_build_dir)
-
-  deps = make_core_generated_deps
-}
-
-action("make_core_generated_private_script_for_testing") {
-  visibility = []  # Allow re-assignment of list.
-  visibility = [ ":make_core_generated" ]
-  script = "../build/scripts/make_private_script_source.py"
-
-  inputs = [
-    "testing/PartialPrivateScriptTest.js",
-    "testing/PrivateScriptTest.js",
-  ]
-  outputs = [
-    "$blink_core_output_dir/PrivateScriptSourcesForTesting.h",
-  ]
-
-  args = [ "--for-testing" ]
-  args += rebase_path(outputs, root_build_dir)
-  args += rebase_path(inputs, root_build_dir)
-
-  deps = make_core_generated_deps
-}
-
-# "HTMLEntityTable" in make_core_generated from GYP.
-action("make_core_generated_html_entity_table") {
-  visibility = []  # Allow re-assignment of list.
-  visibility = [ ":make_core_generated" ]
-  script = "html/parser/create-html-entity-table"
-
-  inputs = [
-    "html/parser/HTMLEntityNames.in",
-  ]
-  outputs = [
-    "$blink_core_output_dir/HTMLEntityTable.cpp",
-  ]
-
-  args = [ "-o" ] + rebase_path(outputs, root_build_dir)
-  args += rebase_path(inputs, root_build_dir)
-
-  deps = make_core_generated_deps
-}
-
-# "CSSTokenizerCodepoints" in make_core_generated from GYP.
-action("make_core_generated_css_tokenizer_codepoints") {
-  visibility = []  # Allow re-assignment of list.
-  visibility = [ ":make_core_generated" ]
-  script = "../build/scripts/make_css_tokenizer_codepoints.py"
-
-  outputs = [
-    "$blink_core_output_dir/CSSTokenizerCodepoints.cpp",
-  ]
-
-  args = [
-    "--output_dir",
-    rel_blink_core_gen_dir,
-  ]
-
-  deps = make_core_generated_deps
-}
-
-# "CSSPrimitiveValueUnitTrie" in make_core_generated from GYP.
-action("make_core_generated_css_primitive_value_unit_trie") {
-  visibility = []  # Allow re-assignment of list.
-  visibility = [ ":make_core_generated" ]
-  script = "../build/scripts/make_css_primitive_value_unit_trie.py"
-
-  input_file = "css/CSSPrimitiveValueUnits.in"
-  inputs = make_trie_helpers_files + [
-             input_file,
-             "../build/scripts/templates/CSSPrimitiveValueUnitTrie.cpp.tmpl",
-           ]
-  outputs = [
-    "$blink_core_output_dir/CSSPrimitiveValueUnitTrie.cpp",
-  ]
-
-  args = [
-    rebase_path(input_file, root_build_dir),
-    "--output_dir",
-    rel_blink_core_gen_dir,
-  ]
-
-  deps = make_core_generated_deps
-}
-
-# "HTMLElementLookupTrie" in make_core_generated from GYP.
-action("make_core_generated_html_element_lookup_trie") {
-  visibility = []  # Allow re-assignment of list.
-  visibility = [ ":make_core_generated" ]
-  script = "../build/scripts/make_element_lookup_trie.py"
-
-  input_file = "html/HTMLTagNames.in"
-  inputs = make_trie_helpers_files + [
-             input_file,
-             "../build/scripts/templates/ElementLookupTrie.cpp.tmpl",
-             "../build/scripts/templates/ElementLookupTrie.h.tmpl",
-           ]
-  outputs = [
-    "$blink_core_output_dir/HTMLElementLookupTrie.cpp",
-    "$blink_core_output_dir/HTMLElementLookupTrie.h",
-  ]
-
-  args = [
-    rebase_path(input_file, root_build_dir),
-    "--output_dir",
-    rel_blink_core_gen_dir,
-  ]
-
-  deps = make_core_generated_deps
-}
-
-# "OriginTrials" action in make_core_generated from GYP.
-action("make_core_generated_origin_trials") {
-  script = "../build/scripts/make_origin_trials.py"
-
-  inputs = scripts_for_in_files + [
-             "../build/scripts/make_origin_trials.py",
-             "../platform/RuntimeEnabledFeatures.in",
-             "../build/scripts/templates/OriginTrials.cpp.tmpl",
-             "../build/scripts/templates/OriginTrials.h.tmpl",
-           ]
-  outputs = [
-    "$blink_core_output_dir/origin_trials/OriginTrials.cpp",
-    "$blink_core_output_dir/origin_trials/OriginTrials.h",
-  ]
-
-  args = [
-    rebase_path("../platform/RuntimeEnabledFeatures.in", root_build_dir),
-    "--output_dir",
-    "$rel_blink_core_gen_dir/origin_trials",
-  ]
-}
-
-# The bison rules from make_core_generated.
-action_foreach("make_core_generated_bison") {
-  script = "../build/scripts/rule_bison.py"
-  sources = [
-    "xml/XPathGrammar.y",
-  ]
-  outputs = [
-    "$blink_core_output_dir/{{source_name_part}}.cpp",
-    "$blink_core_output_dir/{{source_name_part}}.h",
-  ]
-  args = [
-    "{{source}}",
-    rel_blink_core_gen_dir,
-    bison_exe,
-  ]
-
-  deps = make_core_generated_deps
-}
-
 # Fuzzer for blink::TextResourceDecoder.
 fuzzer_test("text_resource_decoder_fuzzer") {
   sources = [
+    "html/parser/TextResourceDecoderForFuzzing.h",
     "html/parser/TextResourceDecoderFuzzer.cpp",
   ]
   deps = [
     ":core",
     "../platform:test_support",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "animation/AnimationClockTest.cpp",
+    "animation/AnimationEffectReadOnlyTest.cpp",
+    "animation/AnimationInputHelpersTest.cpp",
+    "animation/AnimationStackTest.cpp",
+    "animation/AnimationTest.cpp",
+    "animation/AnimationTestHelper.cpp",
+    "animation/AnimationTestHelper.h",
+    "animation/AnimationTimelineTest.cpp",
+    "animation/CompositorAnimationsTest.cpp",
+    "animation/DocumentTimelineTest.cpp",
+    "animation/EffectInputTest.cpp",
+    "animation/InterpolableValueTest.cpp",
+    "animation/InterpolationEffectTest.cpp",
+    "animation/KeyframeEffectModelTest.cpp",
+    "animation/KeyframeEffectTest.cpp",
+    "animation/PropertyHandleTest.cpp",
+    "animation/TimingCalculationsTest.cpp",
+    "animation/TimingInputTest.cpp",
+    "animation/animatable/AnimatableColorTest.cpp",
+    "animation/animatable/AnimatableDoubleAndBoolTest.cpp",
+    "animation/animatable/AnimatableDoubleTest.cpp",
+    "animation/animatable/AnimatableLengthTest.cpp",
+    "animation/animatable/AnimatableNeutralTest.cpp",
+    "animation/animatable/AnimatableStrokeDasharrayListTest.cpp",
+    "animation/animatable/AnimatableUnknownTest.cpp",
+    "animation/animatable/AnimatableValueTestHelper.cpp",
+    "animation/animatable/AnimatableValueTestHelper.h",
+    "animation/animatable/AnimatableValueTestHelperTest.cpp",
+    "clipboard/DataObjectTest.cpp",
+    "css/ActiveStyleSheetsTest.cpp",
+    "css/AffectedByFocusTest.cpp",
+    "css/CSSCalculationValueTest.cpp",
+    "css/CSSFontFaceSourceTest.cpp",
+    "css/CSSPageRuleTest.cpp",
+    "css/CSSSelectorTest.cpp",
+    "css/CSSStyleDeclarationTest.cpp",
+    "css/CSSStyleSheetResourceTest.cpp",
+    "css/CSSTestHelper.cpp",
+    "css/CSSTestHelper.h",
+    "css/CSSValueTestHelper.h",
+    "css/DragUpdateTest.cpp",
+    "css/MediaQueryEvaluatorTest.cpp",
+    "css/MediaQueryListTest.cpp",
+    "css/MediaQueryMatcherTest.cpp",
+    "css/MediaQuerySetTest.cpp",
+    "css/MediaValuesTest.cpp",
+    "css/RuleFeatureSetTest.cpp",
+    "css/RuleSetTest.cpp",
+    "css/StyleSheetContentsTest.cpp",
+    "css/cssom/CSSResourceValueTest.cpp",
+    "css/cssom/CSSStyleImageValueTest.cpp",
+    "css/cssom/CSSURLImageValueTest.cpp",
+    "css/cssom/CSSUnparsedValueTest.cpp",
+    "css/cssom/CSSVariableReferenceValueTest.cpp",
+    "css/cssom/FilteredComputedStylePropertyMapTest.cpp",
+    "css/invalidation/InvalidationSetTest.cpp",
+    "css/parser/CSSParserFastPathsTest.cpp",
+    "css/parser/CSSParserTokenTest.cpp",
+    "css/parser/CSSPropertyParserTest.cpp",
+    "css/parser/CSSSelectorParserTest.cpp",
+    "css/parser/CSSTokenizerTest.cpp",
+    "css/parser/MediaConditionTest.cpp",
+    "css/parser/SizesAttributeParserTest.cpp",
+    "css/parser/SizesCalcParserTest.cpp",
+    "css/resolver/FontBuilderTest.cpp",
+    "css/resolver/MatchResultTest.cpp",
+    "css/resolver/SharedStyleFinderTest.cpp",
+    "dom/ActiveDOMObjectTest.cpp",
+    "dom/AttrTest.cpp",
+    "dom/CSSSelectorWatchTest.cpp",
+    "dom/DOMImplementationTest.cpp",
+    "dom/DOMMatrixTest.cpp",
+    "dom/DocumentStatisticsCollectorTest.cpp",
+    "dom/DocumentTest.cpp",
+    "dom/ElementTest.cpp",
+    "dom/ExecutionContextTaskTest.cpp",
+    "dom/MainThreadTaskRunnerTest.cpp",
+    "dom/NodeTest.cpp",
+    "dom/NthIndexCacheTest.cpp",
+    "dom/RangeTest.cpp",
+    "dom/ScriptRunnerTest.cpp",
+    "dom/SelectorQueryTest.cpp",
+    "dom/StaticRangeTest.cpp",
+    "dom/StyleElementTest.cpp",
+    "dom/StyleEngineTest.cpp",
+    "dom/TextTest.cpp",
+    "dom/TreeScopeStyleSheetCollectionTest.cpp",
+    "dom/TreeScopeTest.cpp",
+    "dom/URLSearchParamsTest.cpp",
+    "dom/custom/CustomElementDescriptorTest.cpp",
+    "dom/custom/CustomElementReactionQueueTest.cpp",
+    "dom/custom/CustomElementReactionStackTest.cpp",
+    "dom/custom/CustomElementReactionTestHelpers.h",
+    "dom/custom/CustomElementRegistryTest.cpp",
+    "dom/custom/CustomElementTest.cpp",
+    "dom/custom/CustomElementTestHelpers.h",
+    "dom/custom/CustomElementUpgradeSorterTest.cpp",
+    "dom/shadow/FlatTreeTraversalTest.cpp",
+    "dom/shadow/SlotScopedTraversalTest.cpp",
+    "editing/CompositionUnderlineTest.cpp",
+    "editing/EditingCommandTest.cpp",
+    "editing/EditingStrategyTest.cpp",
+    "editing/EditingStyleTest.cpp",
+    "editing/EditingTestBase.cpp",
+    "editing/EditingTestBase.h",
+    "editing/EditingUtilitiesTest.cpp",
+    "editing/EditorTest.cpp",
+    "editing/EphemeralRangeTest.cpp",
+    "editing/FrameSelectionTest.cpp",
+    "editing/GranularityStrategyTest.cpp",
+    "editing/InputMethodControllerTest.cpp",
+    "editing/PositionTest.cpp",
+    "editing/RelocatablePositionTest.cpp",
+    "editing/SelectionAdjusterTest.cpp",
+    "editing/SurroundingTextTest.cpp",
+    "editing/VisiblePositionTest.cpp",
+    "editing/VisibleSelectionTest.cpp",
+    "editing/VisibleUnitsTest.cpp",
+    "editing/commands/InsertListCommandTest.cpp",
+    "editing/commands/ReplaceSelectionCommandTest.cpp",
+    "editing/iterators/BackwardsTextBufferTest.cpp",
+    "editing/iterators/CharacterIteratorTest.cpp",
+    "editing/iterators/ForwardsTextBufferTest.cpp",
+    "editing/iterators/SearchBufferTest.cpp",
+    "editing/iterators/SimplifiedBackwardsTextIteratorTest.cpp",
+    "editing/iterators/TextIteratorTest.cpp",
+    "editing/markers/DocumentMarkerControllerTest.cpp",
+    "editing/serializers/StyledMarkupSerializerTest.cpp",
+    "editing/spellcheck/SpellCheckerTest.cpp",
+    "editing/state_machines/BackspaceStateMachineTest.cpp",
+    "editing/state_machines/BackwardGraphemeBoundaryStateMachineTest.cpp",
+    "editing/state_machines/ForwardGraphemeBoundaryStateMachineTest.cpp",
+    "editing/state_machines/StateMachineTestUtil.cpp",
+    "editing/state_machines/StateMachineUtilTest.cpp",
+    "events/EventPathTest.cpp",
+    "events/EventTargetTest.cpp",
+    "events/PointerEventFactoryTest.cpp",
+    "fetch/CachingCorrectnessTest.cpp",
+    "fetch/ClientHintsPreferencesTest.cpp",
+    "fetch/CrossOriginAccessControlTest.cpp",
+    "fetch/FetchUtilsTest.cpp",
+    "fetch/ImageResourceTest.cpp",
+    "fetch/MemoryCacheTest.cpp",
+    "fetch/MockResourceClients.cpp",
+    "fetch/MultipartImageResourceParserTest.cpp",
+    "fetch/RawResourceTest.cpp",
+    "fetch/ResourceFetcherTest.cpp",
+    "fetch/ResourceLoaderOptionsTest.cpp",
+    "fetch/ResourceTest.cpp",
+    "fileapi/FileListTest.cpp",
+    "fileapi/FileTest.cpp",
+    "frame/FrameViewTest.cpp",
+    "frame/HistoryTest.cpp",
+    "frame/ImageBitmapTest.cpp",
+    "frame/LocalFrameTest.cpp",
+    "frame/OriginsUsingFeaturesTest.cpp",
+    "frame/RootFrameViewportTest.cpp",
+    "frame/SubresourceIntegrityTest.cpp",
+    "frame/UseCounterTest.cpp",
+    "frame/csp/CSPDirectiveListTest.cpp",
+    "frame/csp/CSPSourceListTest.cpp",
+    "frame/csp/CSPSourceTest.cpp",
+    "frame/csp/ContentSecurityPolicyTest.cpp",
+    "html/AutoplayExperimentTest.cpp",
+    "html/FormDataTest.cpp",
+    "html/HTMLDimensionTest.cpp",
+    "html/HTMLFormControlElementTest.cpp",
+    "html/HTMLIFrameElementPermissionsTest.cpp",
+    "html/HTMLIFrameElementTest.cpp",
+    "html/HTMLImageElementTest.cpp",
+    "html/HTMLInputElementTest.cpp",
+    "html/HTMLLinkElementSizesAttributeTest.cpp",
+    "html/HTMLOutputElementTest.cpp",
+    "html/HTMLSelectElementTest.cpp",
+    "html/HTMLTableRowElementTest.cpp",
+    "html/HTMLTextAreaElementTest.cpp",
+    "html/HTMLTextFormControlElementTest.cpp",
+    "html/HTMLVideoElementTest.cpp",
+    "html/ImageDocumentTest.cpp",
+    "html/LinkRelAttributeTest.cpp",
+    "html/TimeRangesTest.cpp",
+    "html/canvas/CanvasAsyncBlobCreatorTest.cpp",
+    "html/canvas/CanvasFontCacheTest.cpp",
+    "html/forms/EmailInputTypeTest.cpp",
+    "html/forms/FileInputTypeTest.cpp",
+    "html/forms/OptionListTest.cpp",
+    "html/forms/StepRangeTest.cpp",
+    "html/parser/AtomicHTMLTokenTest.cpp",
+    "html/parser/CSSPreloadScannerTest.cpp",
+    "html/parser/CompactHTMLTokenTest.cpp",
+    "html/parser/HTMLDocumentParserTest.cpp",
+    "html/parser/HTMLEntityParserTest.cpp",
+    "html/parser/HTMLParserIdiomsTest.cpp",
+    "html/parser/HTMLParserThreadTest.cpp",
+    "html/parser/HTMLPreloadScannerTest.cpp",
+    "html/parser/HTMLResourcePreloaderTest.cpp",
+    "html/parser/HTMLSrcsetParserTest.cpp",
+    "html/parser/HTMLTokenizerTest.cpp",
+    "html/parser/TextResourceDecoderTest.cpp",
+    "html/shadow/MediaControlsTest.cpp",
+    "html/track/TextTrackListTest.cpp",
+    "html/track/vtt/BufferedLineReaderTest.cpp",
+    "html/track/vtt/VTTScannerTest.cpp",
+    "input/EventHandlerTest.cpp",
+    "inspector/InspectorWebPerfAgentTest.cpp",
+    "inspector/ProtocolParserTest.cpp",
+    "layout/ImageQualityControllerTest.cpp",
+    "layout/InlineTextBoxTest.cpp",
+    "layout/LayoutBlockTest.cpp",
+    "layout/LayoutBoxModelObjectTest.cpp",
+    "layout/LayoutBoxTest.cpp",
+    "layout/LayoutInlineTest.cpp",
+    "layout/LayoutMultiColumnFlowThreadTest.cpp",
+    "layout/LayoutObjectTest.cpp",
+    "layout/LayoutPartTest.cpp",
+    "layout/LayoutProgressTest.cpp",
+    "layout/LayoutTableCellTest.cpp",
+    "layout/LayoutTableRowTest.cpp",
+    "layout/LayoutTableSectionTest.cpp",
+    "layout/LayoutTestHelper.cpp",
+    "layout/LayoutTestHelper.h",
+    "layout/LayoutTextTest.cpp",
+    "layout/LayoutThemeTest.cpp",
+    "layout/MapCoordinatesTest.cpp",
+    "layout/MultiColumnFragmentainerGroupTest.cpp",
+    "layout/OverflowModelTest.cpp",
+    "layout/PaginationTest.cpp",
+    "layout/PaintContainmentTest.cpp",
+    "layout/ScrollAnchorTest.cpp",
+    "layout/TextAutosizerTest.cpp",
+    "layout/VisualRectMappingTest.cpp",
+    "layout/compositing/CompositedLayerMappingTest.cpp",
+    "layout/ng/ng_block_layout_algorithm_test.cc",
+    "layout/ng/ng_constraint_space_test.cc",
+    "layout/ng/ng_length_utils_test.cc",
+    "layout/ng/ng_units_test.cc",
+    "layout/shapes/BoxShapeTest.cpp",
+    "layout/svg/LayoutSVGRootTest.cpp",
+    "loader/DocumentLoadTimingTest.cpp",
+    "loader/FrameFetchContextTest.cpp",
+    "loader/LinkLoaderTest.cpp",
+    "loader/MixedContentCheckerTest.cpp",
+    "loader/PingLoaderTest.cpp",
+    "loader/TextResourceDecoderBuilderTest.cpp",
+    "loader/ThreadableLoaderTest.cpp",
+    "origin_trials/OriginTrialContextTest.cpp",
+    "page/ChromeClientTest.cpp",
+    "page/ContextMenuControllerTest.cpp",
+    "page/EventSourceParserTest.cpp",
+    "page/FocusControllerTest.cpp",
+    "page/NetworkStateNotifierTest.cpp",
+    "page/PagePopupClientTest.cpp",
+    "page/PrintContextTest.cpp",
+    "page/WindowFeaturesTest.cpp",
+    "page/scrolling/ScrollStateTest.cpp",
+    "page/scrolling/SnapCoordinatorTest.cpp",
+    "paint/FirstMeaningfulPaintDetectorTest.cpp",
+    "paint/HTMLCanvasPainterTest.cpp",
+    "paint/LayerClipRecorderTest.cpp",
+    "paint/LayoutObjectDrawingRecorderTest.cpp",
+    "paint/NinePieceImageGridTest.cpp",
+    "paint/ObjectPaintInvalidatorTest.cpp",
+    "paint/PaintControllerPaintTest.cpp",
+    "paint/PaintControllerPaintTest.h",
+    "paint/PaintInfoTest.cpp",
+    "paint/PaintLayerClipperTest.cpp",
+    "paint/PaintLayerPainterTest.cpp",
+    "paint/PaintLayerScrollableAreaTest.cpp",
+    "paint/PaintPropertyTreeBuilderTest.cpp",
+    "paint/PaintPropertyTreePrinterTest.cpp",
+    "paint/SVGInlineTextBoxPainterTest.cpp",
+    "paint/StubChromeClientForSPv2.h",
+    "paint/TableCellPainterTest.cpp",
+    "paint/TextPainterTest.cpp",
+    "paint/VideoPainterTest.cpp",
+    "streams/ReadableStreamOperationsTest.cpp",
+    "style/ComputedStyleTest.cpp",
+    "style/FilterOperationsTest.cpp",
+    "style/OutlineValueTest.cpp",
+    "style/SVGComputedStyleTest.cpp",
+    "svg/SVGPathParserTest.cpp",
+    "svg/UnsafeSVGAttributeSanitizationTest.cpp",
+    "svg/graphics/SVGImageTest.cpp",
+    "testing/PrivateScriptTestTest.cpp",
+    "timing/MemoryInfoTest.cpp",
+    "timing/PerformanceBaseTest.cpp",
+    "timing/PerformanceObserverTest.cpp",
+    "timing/PerformanceTest.cpp",
+    "workers/DedicatedWorkerTest.cpp",
+    "workers/WorkerThreadTest.cpp",
+    "workers/WorkerThreadTestHelper.h",
+    "xml/parser/SharedBufferReaderTest.cpp",
+  ]
+
+  configs += [
+    "//third_party/WebKit/Source:config",
+    "//third_party/WebKit/Source:inside_blink",
+  ]
+
+  deps = [
+    ":core",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}
+
+# Fuzzer for blink::StyleSheetContents
+fuzzer_test("stylesheet_contents_fuzzer") {
+  sources = [
+    "css/StyleSheetContentsFuzzer.cpp",
+  ]
+  deps = [
+    ":core",
+    "../platform:blink_fuzzer_test_support",
+  ]
+  seed_corpus = "//third_party/WebKit/LayoutTests/fast/css/resources"
+  libfuzzer_options = [ "max_len=2048" ]
+}
+
+# Fuzzer for blink::HTMLPreloadScanner.
+fuzzer_test("html_preload_scanner_fuzzer") {
+  sources = [
+    "html/parser/HTMLPreloadScannerFuzzer.cpp",
+    "html/parser/TextResourceDecoderForFuzzing.h",
+  ]
+  seed_corpus = "//third_party/WebKit/LayoutTests/fast/parser"
+  deps = [
+    ":core",
+    "../platform:blink_fuzzer_test_support",
   ]
 }

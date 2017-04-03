@@ -30,9 +30,26 @@ Polymer({
     },
 
     /**
-     * Whether to show the '(recommended)' label prefix for permissions.
+     * The description to be shown next to the slider.
      */
-    showRecommendation: {
+    sliderDescription_: String,
+
+    /**
+     * Used only for the Flash to persist the Ask First checkbox state.
+     * Defaults to true, as the checkbox should be checked unless the user
+     * has explicitly unchecked it or has the ALLOW setting on Flash.
+     */
+    flashAskFirst_: {
+      type: Boolean,
+      value: true,
+    },
+
+    /**
+     * Used only for Cookies to keep track of the Session Only state.
+     * Defaults to true, as the checkbox should be checked unless the user
+     * has explicitly unchecked it or has the ALLOW setting on Cookies.
+     */
+    cookiesSessionOnly_: {
       type: Boolean,
       value: true,
     },
@@ -58,13 +75,12 @@ Polymer({
   },
 
   /**
-   * A handler for flipping the toggle value.
+   * A handler for changing the default permission value for a content type.
    * @private
    */
-  onToggleChange_: function(event) {
+  onChangePermissionControl_: function(event) {
     switch (this.category) {
       case settings.ContentSettingsTypes.BACKGROUND_SYNC:
-      case settings.ContentSettingsTypes.COOKIES:
       case settings.ContentSettingsTypes.IMAGES:
       case settings.ContentSettingsTypes.JAVASCRIPT:
       case settings.ContentSettingsTypes.KEYGEN:
@@ -90,13 +106,26 @@ Polymer({
                 settings.PermissionValues.ASK :
                 settings.PermissionValues.BLOCK);
         break;
+      case settings.ContentSettingsTypes.COOKIES:
+        // This category is tri-state: "Allow", "Block", "Keep data until
+        // browser quits".
+        var value = settings.PermissionValues.BLOCK;
+        if (this.categoryEnabled) {
+          value = this.cookiesSessionOnly_ ?
+              settings.PermissionValues.SESSION_ONLY :
+              settings.PermissionValues.ALLOW;
+        }
+        this.browserProxy.setDefaultValueForContentType(this.category, value);
+        break;
       case settings.ContentSettingsTypes.PLUGINS:
-        // "Detect important" vs "Let me choose".
-        this.browserProxy.setDefaultValueForContentType(
-            this.category,
-            this.categoryEnabled ?
-                settings.PermissionValues.IMPORTANT_CONTENT :
-                settings.PermissionValues.BLOCK);
+        // This category is tri-state: "Allow", "Block", "Ask before running".
+        var value = settings.PermissionValues.BLOCK;
+        if (this.categoryEnabled) {
+          value = this.flashAskFirst_ ?
+              settings.PermissionValues.IMPORTANT_CONTENT :
+              settings.PermissionValues.ALLOW;
+        }
+        this.browserProxy.setDefaultValueForContentType(this.category, value);
         break;
       default:
         assertNotReached('Invalid category: ' + this.category);
@@ -110,8 +139,69 @@ Polymer({
   onCategoryChanged_: function() {
     settings.SiteSettingsPrefsBrowserProxyImpl.getInstance()
         .getDefaultValueForContentType(
-            this.category).then(function(enabled) {
-              this.categoryEnabled = enabled;
+            this.category).then(function(setting) {
+              this.categoryEnabled =
+                  this.computeIsSettingEnabled(this.category, setting);
+
+              // Flash only shows ALLOW or BLOCK descriptions on the slider.
+              var sliderSetting = setting;
+              if (this.category == settings.ContentSettingsTypes.PLUGINS &&
+                  setting == settings.PermissionValues.IMPORTANT_CONTENT) {
+                sliderSetting = settings.PermissionValues.ALLOW;
+              } else if (
+                  this.category == settings.ContentSettingsTypes.COOKIES &&
+                  setting == settings.PermissionValues.SESSION_ONLY) {
+                sliderSetting = settings.PermissionValues.ALLOW;
+              }
+              this.sliderDescription_ =
+                  this.computeCategoryDesc(this.category, sliderSetting, true);
+
+              if (this.category == settings.ContentSettingsTypes.PLUGINS) {
+                // The checkbox should only be cleared when the Flash setting
+                // is explicitly set to ALLOW.
+                if (setting == settings.PermissionValues.ALLOW)
+                  this.flashAskFirst_ = false;
+                if (setting == settings.PermissionValues.IMPORTANT_CONTENT)
+                  this.flashAskFirst_ = true;
+              } else if (
+                  this.category == settings.ContentSettingsTypes.COOKIES) {
+                if (setting == settings.PermissionValues.ALLOW)
+                  this.cookiesSessionOnly_ = false;
+                else if (setting == settings.PermissionValues.SESSION_ONLY)
+                  this.cookiesSessionOnly_ = true;
+              }
             }.bind(this));
+  },
+
+  /** @private */
+  isFlashCategory_: function(category) {
+    return category == settings.ContentSettingsTypes.PLUGINS;
+  },
+
+  /** @private */
+  isCookiesCategory_: function(category) {
+    return category == settings.ContentSettingsTypes.COOKIES;
+  },
+
+  /**
+   * Returns whether this is the Plugins category.
+   * @param {string} category The current category.
+   * @return {boolean} Whether this is the Plugins category.
+   * @private
+   */
+  isPluginCategory_: function(category) {
+    return category == settings.ContentSettingsTypes.PLUGINS;
+  },
+
+  /** @private */
+  onLearnMoreClicked_: function() {
+    window.open(
+        'https://support.google.com/chrome/?p=settings_manage_exceptions');
+  },
+
+  /** @private */
+  onAdobeFlashStorageClicked_: function() {
+    window.open('https://www.macromedia.com/support/' +
+        'documentation/en/flashplayer/help/settings_manager07.html');
   },
 });

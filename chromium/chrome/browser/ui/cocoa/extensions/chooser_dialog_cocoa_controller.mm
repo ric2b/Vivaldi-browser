@@ -47,8 +47,8 @@ initWithChooserDialogCocoa:(ChooserDialogCocoa*)chooserDialogCocoa
 
 - (NSView*)tableView:(NSTableView*)tableView
     viewForTableColumn:(NSTableColumn*)tableColumn
-                   row:(NSInteger)rowIndex {
-  return [chooserContentView_ createTableRowView:rowIndex].autorelease();
+                   row:(NSInteger)row {
+  return [chooserContentView_ createTableRowView:row].autorelease();
 }
 
 - (BOOL)tableView:(NSTableView*)aTableView
@@ -62,6 +62,13 @@ initWithChooserDialogCocoa:(ChooserDialogCocoa*)chooserDialogCocoa
 }
 
 - (void)tableViewSelectionDidChange:(NSNotification*)aNotification {
+  [chooserContentView_ updateContentRowColor];
+  [connectButton_ setEnabled:[tableView_ numberOfSelectedRows] > 0];
+}
+
+// Selection changes (while the mouse button is still down).
+- (void)tableViewSelectionIsChanging:(NSNotification*)aNotification {
+  [chooserContentView_ updateContentRowColor];
   [connectButton_ setEnabled:[tableView_ numberOfSelectedRows] > 0];
 }
 

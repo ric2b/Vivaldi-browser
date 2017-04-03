@@ -102,9 +102,8 @@ TEST_F(PersistentHistogramAllocatorTest, CreateAndIterateTest) {
 
   // Create a second allocator and have it access the memory of the first.
   std::unique_ptr<HistogramBase> recovered;
-  PersistentHistogramAllocator recovery(
-      WrapUnique(new PersistentMemoryAllocator(
-          allocator_memory_.get(), kAllocatorMemorySize, 0, 0, "", false)));
+  PersistentHistogramAllocator recovery(MakeUnique<PersistentMemoryAllocator>(
+      allocator_memory_.get(), kAllocatorMemorySize, 0, 0, "", false));
   PersistentHistogramAllocator::Iterator histogram_iter(&recovery);
 
   recovered = histogram_iter.GetNext();
@@ -131,7 +130,7 @@ TEST_F(PersistentHistogramAllocatorTest, CreateWithFileTest) {
   const char temp_name[] = "CreateWithFileTest";
   ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
-  FilePath temp_file = temp_dir.path().AppendASCII(temp_name);
+  FilePath temp_file = temp_dir.GetPath().AppendASCII(temp_name);
   const size_t temp_size = 64 << 10;  // 64 KiB
 
   // Test creation of a new file.
@@ -181,9 +180,8 @@ TEST_F(PersistentHistogramAllocatorTest, StatisticsRecorderTest) {
 
   // Create a second allocator and have it access the memory of the first.
   std::unique_ptr<HistogramBase> recovered;
-  PersistentHistogramAllocator recovery(
-      WrapUnique(new PersistentMemoryAllocator(
-          allocator_memory_.get(), kAllocatorMemorySize, 0, 0, "", false)));
+  PersistentHistogramAllocator recovery(MakeUnique<PersistentMemoryAllocator>(
+      allocator_memory_.get(), kAllocatorMemorySize, 0, 0, "", false));
   PersistentHistogramAllocator::Iterator histogram_iter(&recovery);
 
   recovered = histogram_iter.GetNext();

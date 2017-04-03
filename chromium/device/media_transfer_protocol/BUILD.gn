@@ -5,7 +5,9 @@
 import("//build/config/features.gni")
 import("//third_party/protobuf/proto_library.gni")
 
-# GYP version: device/media_transfer_protocol/media_transfer_protocol.gyp:mtp_file_entry_proto
+assert(is_chromeos)
+assert(use_dbus)
+
 proto_library("mtp_file_entry_proto") {
   sources = [
     "//third_party/cros_system_api/dbus/mtp_file_entry.proto",
@@ -13,7 +15,6 @@ proto_library("mtp_file_entry_proto") {
   proto_out_dir = "device/media_transfer_protocol"
 }
 
-# GYP version: device/media_transfer_protocol/media_transfer_protocol.gyp:mtp_storage_info_proto
 proto_library("mtp_storage_info_proto") {
   sources = [
     "//third_party/cros_system_api/dbus/mtp_storage_info.proto",
@@ -21,7 +22,6 @@ proto_library("mtp_storage_info_proto") {
   proto_out_dir = "device/media_transfer_protocol"
 }
 
-# GYP version: device/media_transfer_protocol:media_transfer_protocol.gyp:media_transfer_protocol
 static_library("media_transfer_protocol") {
   sources = [
     "media_transfer_protocol_daemon_client.cc",
@@ -35,13 +35,8 @@ static_library("media_transfer_protocol") {
     ":mtp_storage_info_proto",
     "//base",
   ]
-  if (use_dbus) {
-    deps = [
-      "//dbus",
-    ]
-  }
-
-  if (is_chromeos) {
-    deps += [ "//chromeos" ]
-  }
+  deps = [
+    "//chromeos",
+    "//dbus",
+  ]
 }

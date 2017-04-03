@@ -112,7 +112,7 @@ base::FilePath CreateTempBrowserStateDir(base::ScopedTempDir* temp_dir) {
       CHECK(temp_dir->Set(system_tmp_dir));
     }
   }
-  return temp_dir->path();
+  return temp_dir->GetPath();
 }
 }  // namespace
 
@@ -360,9 +360,10 @@ void TestChromeBrowserState::DestroyHistoryService() {
   if (!history_service)
     return;
 
+  base::RunLoop run_loop;
+
   history_service->ClearCachedDataForContextID(0);
-  history_service->SetOnBackendDestroyTask(
-      base::MessageLoop::QuitWhenIdleClosure());
+  history_service->SetOnBackendDestroyTask(run_loop.QuitWhenIdleClosure());
   history_service->Shutdown();
   history_service = nullptr;
 
@@ -374,13 +375,7 @@ void TestChromeBrowserState::DestroyHistoryService() {
   // moving to the next test. Note: if this never terminates, somebody is
   // probably leaking a reference to the history backend, so it never calls
   // our destroy task.
-  base::MessageLoop::current()->Run();
-
-  // Make sure we don't have any event pending that could disrupt the next
-  // test.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
-  base::MessageLoop::current()->Run();
+  run_loop.Run();
 }
 
 syncable_prefs::TestingPrefServiceSyncable*

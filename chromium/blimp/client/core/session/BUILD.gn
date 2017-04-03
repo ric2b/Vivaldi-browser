@@ -18,6 +18,8 @@ source_set("session") {
     "assignment_source.h",
     "client_network_components.cc",
     "client_network_components.h",
+    "connection_status.cc",
+    "connection_status.h",
     "cross_thread_network_event_observer.cc",
     "cross_thread_network_event_observer.h",
     "identity_source.cc",
@@ -36,7 +38,7 @@ source_set("session") {
   ]
 
   deps = [
-    "//blimp/client/core:switches",
+    "//blimp/client/core/switches",
     "//blimp/common",
   ]
 }
@@ -67,7 +69,7 @@ source_set("unit_tests") {
     sources += [ "assignment_source_unittest.cc" ]
 
     deps += [
-      "//blimp/client/core:switches",
+      "//blimp/client/core/switches",
       "//blimp/common",
       "//blimp/common:test_support",
       "//components/safe_json:test_support",

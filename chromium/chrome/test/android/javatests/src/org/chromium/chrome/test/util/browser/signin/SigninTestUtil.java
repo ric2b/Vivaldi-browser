@@ -10,13 +10,14 @@ import android.content.Context;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
+import org.chromium.chrome.browser.init.ProcessInitializationHandler;
 import org.chromium.chrome.browser.signin.AccountIdProvider;
 import org.chromium.chrome.browser.signin.AccountTrackerService;
 import org.chromium.chrome.browser.signin.OAuth2TokenService;
-import org.chromium.components.sync.signin.AccountManagerHelper;
-import org.chromium.components.sync.signin.ChromeSigninController;
-import org.chromium.components.sync.test.util.AccountHolder;
-import org.chromium.components.sync.test.util.MockAccountManager;
+import org.chromium.components.signin.AccountManagerHelper;
+import org.chromium.components.signin.ChromeSigninController;
+import org.chromium.components.signin.test.util.AccountHolder;
+import org.chromium.components.signin.test.util.MockAccountManager;
 
 import java.util.HashSet;
 
@@ -39,6 +40,12 @@ public final class SigninTestUtil {
     public static void setUpAuthForTest(Instrumentation instrumentation) {
         assert sContext == null;
         sContext = instrumentation.getTargetContext();
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                ProcessInitializationHandler.getInstance().initializePreNative();
+            }
+        });
         sAccountManager = new MockAccountManager(sContext, instrumentation.getContext());
         AccountManagerHelper.overrideAccountManagerHelperForTests(sContext, sAccountManager);
         overrideAccountIdProvider();

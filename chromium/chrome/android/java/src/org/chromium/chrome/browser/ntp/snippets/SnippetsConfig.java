@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.ntp.snippets;
 
 import org.chromium.chrome.browser.ChromeFeatureList;
-import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 
 /**
@@ -20,7 +19,6 @@ public final class SnippetsConfig {
     }
 
     public static boolean isSaveToOfflineEnabled() {
-        return ChromeFeatureList.isEnabled(ChromeFeatureList.NTP_SNIPPETS_SAVE_TO_OFFLINE)
-                && OfflinePageBridge.isBackgroundLoadingEnabled();
+        return ChromeFeatureList.isEnabled(ChromeFeatureList.NTP_SNIPPETS_SAVE_TO_OFFLINE);
     }
 }

@@ -31,10 +31,11 @@ SettingsLanguagesPageBrowserTest.prototype = {
   },
 };
 
+// Flaky on Windows. See https://crbug.com/641400.
 // May time out on debug builders and memory bots because
 // the Settings page can take several seconds to load in a Release build
 // and several times that in a Debug build. See https://crbug.com/558434.
-GEN('#if defined(MEMORY_SANITIZER) || !defined(NDEBUG)');
+GEN('#if defined(OS_WINDOWS) || defined(MEMORY_SANITIZER) || !defined(NDEBUG)');
 GEN('#define MAYBE_LanguagesPage DISABLED_LanguagesPage');
 GEN('#else');
 GEN('#define MAYBE_LanguagesPage LanguagesPage');
@@ -50,6 +51,7 @@ TEST_F('SettingsLanguagesPageBrowserTest', 'MAYBE_LanguagesPage', function() {
 
     var languagesSection;
     var languagesPage;
+    var languagesCollapse;
     var languageHelper;
 
     /**
@@ -81,10 +83,11 @@ TEST_F('SettingsLanguagesPageBrowserTest', 'MAYBE_LanguagesPage', function() {
       advanced.set('pageVisibility.languages', true);
       Polymer.dom.flush();
 
-      languagesSection = this.getSection(advanced, 'languages');
-      assertTrue(!!languagesSection);
-      languagesPage = languagesSection.querySelector('settings-languages-page');
-      assertTrue(!!languagesPage);
+      languagesSection = assert(this.getSection(advanced, 'languages'));
+      languagesPage = assert(
+          languagesSection.querySelector('settings-languages-page'));
+      languagesCollapse = languagesPage.$.languagesCollapse;
+      languagesCollapse.opened = true;
 
       languageHelper = languagesPage.languageHelper;
       return languageHelper.whenReady();
@@ -107,12 +110,13 @@ TEST_F('SettingsLanguagesPageBrowserTest', 'MAYBE_LanguagesPage', function() {
       var actionButton;
 
       setup(function(done) {
-        var addLanguagesButton = languagesPage.$.languagesCollapse
-            .querySelector('.list-button:last-of-type');
+        var addLanguagesButton =
+            languagesCollapse.querySelector('.list-button:last-of-type');
         MockInteractions.tap(addLanguagesButton);
 
-        // The page stamps the dialog and registers listeners asynchronously.
-        Polymer.Base.async(function() {
+        // The page stamps the dialog, registers listeners, and populates the
+        // iron-list asynchronously at microtask timing, so wait for a new task.
+        setTimeout(function() {
           dialog = languagesPage.$$('settings-add-languages-dialog');
           assertTrue(!!dialog);
 
@@ -190,65 +194,90 @@ TEST_F('SettingsLanguagesPageBrowserTest', 'MAYBE_LanguagesPage', function() {
       });
     });
 
-    test('Should not set UI language', function() {
-      var languagesCollapse = languagesPage.$.languagesCollapse;
-      var languageOptionsDropdownTrigger = languagesCollapse.querySelector(
-          'paper-icon-button');
-      assertTrue(!!languageOptionsDropdownTrigger);
+    suite('language menu', function() {
+      var origTranslateEnabled;
 
-      // This shouldn't get called.
-      languageHelper.setUILanguage = assertNotReached;
+      suiteSetup(function() {
+        // Cache the value of Translate to avoid side effects.
+        origTranslateEnabled = languageHelper.prefs.translate.enabled.value;
+      });
 
-      MockInteractions.tap(languageOptionsDropdownTrigger);
-    });
+      suiteTeardown(function() {
+        var cur = languageHelper.prefs.translate.enabled.value;
+        // Restore the value of Translate.
+        languageHelper.setPrefValue('translate.enabled', origTranslateEnabled);
+        cur = languageHelper.prefs.translate.enabled.value;
+      });
 
-    test('remove language', function() {
-      var numEnabled = languagesPage.languages.enabled.length;
+      test('structure', function(done) {
+        var languageOptionsDropdownTrigger = languagesCollapse.querySelector(
+            'paper-icon-button');
+        assertTrue(!!languageOptionsDropdownTrigger);
+        MockInteractions.tap(languageOptionsDropdownTrigger);
+        var languageMenu = assert(languagesPage.$$('cr-shared-menu'));
 
-      // Enabled a language which we can then disable.
-      var newLanguage = getAvailableLanguage();
-      languageHelper.enableLanguage(newLanguage.code);
+        listenOnce(languageMenu, 'iron-overlay-opened', function() {
+          assertTrue(languageMenu.menuOpen);
 
-      // Wait for the language to be enabled.
-      return whenNumEnabledLanguagesBecomes(numEnabled + 1).then(function() {
-        // Populate the dom-repeat.
-        Polymer.dom.flush();
+          // Enable Translate so the menu always shows the Translate checkbox.
+          languageHelper.setPrefValue('translate.enabled', true);
 
-        // Find the new language item.
-        var languagesCollapse = languagesPage.$.languagesCollapse;
-        var items = languagesCollapse.querySelectorAll('.list-item');
-        var domRepeat = assert(
-            languagesCollapse.querySelector('template[is="dom-repeat"]'));
-        var item = Array.from(items).find(function(el) {
-          return domRepeat.itemForElement(el) &&
-              domRepeat.itemForElement(el).language == newLanguage;
-        });
+          var separator = languageMenu.querySelector('hr');
+          assertEquals(1, separator.offsetHeight);
 
-        // Open the menu and select Remove.
-        MockInteractions.tap(item.querySelector('paper-icon-button'));
-        var removeMenuItem = assert(item.querySelector(
-            '.dropdown-content .dropdown-item:last-of-type'));
-        assertFalse(removeMenuItem.disabled);
-        MockInteractions.tap(removeMenuItem);
+          // Disable Translate. On platforms that can't change the UI language,
+          // this hides all the checkboxes, so the separator isn't needed.
+          // Chrome OS and Windows still show a checkbox and thus the separator.
+          languageHelper.setPrefValue('translate.enabled', false);
+          if (cr.isChromeOS || cr.isWindows)
+            assertEquals(1, separator.offsetHeight);
+          else
+            assertEquals(0, separator.offsetHeight);
 
-        // We should go back down to the original number of enabled languages.
-        return whenNumEnabledLanguagesBecomes(numEnabled).then(function() {
-          assertFalse(languageHelper.isLanguageEnabled(newLanguage.code));
+          MockInteractions.tap(languageOptionsDropdownTrigger);
+          assertFalse(languageMenu.menuOpen);
+          done();
         });
       });
-    });
 
-    test('language detail', function() {
-      var languagesCollapse = languagesPage.$.languagesCollapse;
-      var languageDetailMenuItem = languagesCollapse.querySelectorAll(
-          '.dropdown-content .dropdown-item')[2];
-      assertTrue(!!languageDetailMenuItem);
-      MockInteractions.tap(languageDetailMenuItem);
+      test('remove language', function() {
+        var numEnabled = languagesPage.languages.enabled.length;
 
-      var languageDetailPage =
-          languagesPage.$$('settings-language-detail-page');
-      assertTrue(!!languageDetailPage);
-      assertEquals('en-US', languageDetailPage.detail.language.code);
+        // Enabled a language which we can then disable.
+        var newLanguage = getAvailableLanguage();
+        languageHelper.enableLanguage(newLanguage.code);
+
+        // Wait for the language to be enabled.
+        return whenNumEnabledLanguagesBecomes(numEnabled + 1).then(function() {
+          // Populate the dom-repeat.
+          Polymer.dom.flush();
+
+          // Find the new language item.
+          var items = languagesCollapse.querySelectorAll('.list-item');
+          var domRepeat = assert(
+              languagesCollapse.querySelector('template[is="dom-repeat"]'));
+          var item = Array.from(items).find(function(el) {
+            return domRepeat.itemForElement(el) &&
+                domRepeat.itemForElement(el).language == newLanguage;
+          });
+
+          // Open the menu and select Remove.
+          MockInteractions.tap(item.querySelector('paper-icon-button'));
+
+          var languageMenu = assert(languagesPage.$$('cr-shared-menu'));
+          assertTrue(languageMenu.menuOpen);
+          var removeMenuItem = assert(languageMenu.querySelector(
+              '.dropdown-item:last-child'));
+          assertFalse(removeMenuItem.disabled);
+          MockInteractions.tap(removeMenuItem);
+          assertFalse(languageMenu.menuOpen);
+
+          // We should go back down to the original number of enabled languages.
+          return whenNumEnabledLanguagesBecomes(numEnabled).then(function() {
+            assertFalse(languageHelper.isLanguageEnabled(newLanguage.code));
+          });
+        });
+      });
     });
 
     test('manage input methods', function() {

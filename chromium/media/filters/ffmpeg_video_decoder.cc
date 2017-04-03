@@ -96,7 +96,8 @@ int FFmpegVideoDecoder::GetVideoBuffer(struct AVCodecContext* codec_context,
          format == PIXEL_FORMAT_YV24 || format == PIXEL_FORMAT_YUV420P9 ||
          format == PIXEL_FORMAT_YUV420P10 || format == PIXEL_FORMAT_YUV422P9 ||
          format == PIXEL_FORMAT_YUV422P10 || format == PIXEL_FORMAT_YUV444P9 ||
-         format == PIXEL_FORMAT_YUV444P10);
+         format == PIXEL_FORMAT_YUV444P10 || format == PIXEL_FORMAT_YUV420P12 ||
+         format == PIXEL_FORMAT_YUV422P12 || format == PIXEL_FORMAT_YUV444P12);
 
   gfx::Size size(codec_context->width, codec_context->height);
   const int ret = av_image_check_size(size.width(), size.height(), 0, NULL);
@@ -132,6 +133,9 @@ int FFmpegVideoDecoder::GetVideoBuffer(struct AVCodecContext* codec_context,
   scoped_refptr<VideoFrame> video_frame = frame_pool_.CreateFrame(
       format, coded_size, gfx::Rect(size), natural_size, kNoTimestamp);
 
+  if (!video_frame)
+    return AVERROR(EINVAL);
+
   // Prefer the color space from the codec context. If it's not specified (or is
   // set to an unsupported value), fall back on the value from the config.
   ColorSpace color_space = AVColorSpaceToColorSpace(codec_context->colorspace,
@@ -144,13 +148,12 @@ int FFmpegVideoDecoder::GetVideoBuffer(struct AVCodecContext* codec_context,
   if (codec_context->color_primaries != AVCOL_PRI_UNSPECIFIED ||
       codec_context->color_trc != AVCOL_TRC_UNSPECIFIED ||
       codec_context->colorspace != AVCOL_SPC_UNSPECIFIED) {
-    video_frame->set_color_space(gfx::ColorSpace(
-        static_cast<gfx::ColorSpace::PrimaryID>(codec_context->color_primaries),
-        static_cast<gfx::ColorSpace::TransferID>(codec_context->color_trc),
-        static_cast<gfx::ColorSpace::MatrixID>(codec_context->colorspace),
-        codec_context->color_range != AVCOL_RANGE_MPEG
-            ? gfx::ColorSpace::RangeID::FULL
-            : gfx::ColorSpace::RangeID::LIMITED));
+    video_frame->set_color_space(
+        gfx::ColorSpace(codec_context->color_primaries,
+                        codec_context->color_trc, codec_context->colorspace,
+                        codec_context->color_range != AVCOL_RANGE_MPEG
+                            ? gfx::ColorSpace::RangeID::FULL
+                            : gfx::ColorSpace::RangeID::LIMITED));
   }
 
   for (size_t i = 0; i < VideoFrame::NumPlanes(video_frame->format()); i++) {

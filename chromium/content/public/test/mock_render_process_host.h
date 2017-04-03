@@ -50,7 +50,7 @@ class MockRenderProcessHost : public RenderProcessHost {
   void RemoveRoute(int32_t routing_id) override;
   void AddObserver(RenderProcessHostObserver* observer) override;
   void RemoveObserver(RenderProcessHostObserver* observer) override;
-  void ShutdownForBadMessage() override;
+  void ShutdownForBadMessage(CrashReportMode crash_report_mode) override;
   void WidgetRestored() override;
   void WidgetHidden() override;
   int VisibleWidgetCount() const override;
@@ -93,18 +93,17 @@ class MockRenderProcessHost : public RenderProcessHost {
       const WebRtcRtpPacketCallback& packet_callback) override;
 #endif
   void ResumeDeferredNavigation(const GlobalRequestID& request_id) override;
-  void NotifyTimezoneChange(const std::string& zone_id) override;
   shell::InterfaceProvider* GetRemoteInterfaces() override;
   std::unique_ptr<base::SharedPersistentMemoryAllocator> TakeMetricsAllocator()
       override;
   const base::TimeTicks& GetInitTimeForNavigationMetrics() const override;
-#if defined(ENABLE_BROWSER_CDMS)
-  scoped_refptr<media::MediaKeys> GetCdm(int render_frame_id,
-                                         int cdm_id) const override;
-#endif
   bool IsProcessBackgrounded() const override;
-  void IncrementWorkerRefCount() override;
-  void DecrementWorkerRefCount() override;
+  void IncrementServiceWorkerRefCount() override;
+  void DecrementServiceWorkerRefCount() override;
+  void IncrementSharedWorkerRefCount() override;
+  void DecrementSharedWorkerRefCount() override;
+  void ForceReleaseWorkerRefCounts() override;
+  bool IsWorkerRefCountDisabled() override;
   void PurgeAndSuspend() override;
 
   // IPC::Sender via RenderProcessHost.

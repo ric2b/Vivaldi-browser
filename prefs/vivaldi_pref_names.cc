@@ -20,6 +20,10 @@ const char kVivaldiNumberOfDaysToKeepVisits[] =
 // Used to store active vivaldi experiments
 const char kVivaldiExperiments[] = "vivaldi.experiments";
 
+#if defined(USE_AURA)
+const char kHideMouseCursorInFullscreen[] = "vivaldi.hide_mouse_in_fullscreen";
+#endif //USE_AURA
+
 #if defined(OS_MACOSX)
 const char kAppleKeyboardUIMode[] = "vivaldi.apple_keyboard_ui_mode";
 const char kAppleMiniaturizeOnDoubleClick[] =

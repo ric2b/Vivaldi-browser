@@ -76,6 +76,12 @@ class MockDRTPortTest(port_testcase.PortTestCase):
     def test_virtual_test_suites(self):
         pass
 
+    def test_path_to_apache_config_file(self):
+        pass
+
+    def test_skipped_directories_for_symbols(self):
+        pass
+
 
 class MockDRTTest(unittest.TestCase):
 
@@ -123,8 +129,8 @@ class MockDRTTest(unittest.TestCase):
         host = host or MockSystemHost()
         test.add_unit_tests_to_mock_filesystem(host.filesystem)
         port = PortFactory(host).get(port_name)
-        drt_input, drt_output = self.make_input_output(port, test_name,
-                                                       pixel_tests, expected_checksum, drt_output, drt_input=None, expected_text=expected_text)
+        drt_input, drt_output = self.make_input_output(
+            port, test_name, pixel_tests, expected_checksum, drt_output, drt_input=None, expected_text=expected_text)
 
         args = ['--run-layout-test', '--platform', port_name, '-']
         stdin = io.BytesIO(drt_input)

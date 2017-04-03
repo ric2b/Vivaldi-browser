@@ -22,7 +22,9 @@ vivaldi_version_full =
           "-t",
           "@VIVALDI_MAJOR@.@VIVALDI_MINOR@.@VIVALDI_NIGHTLY@.$GLOBAL_BUILDNUM",
         ],
-        "trim string")
+        "trim string",
+        [vivaldi_version_path, chrome_version_path]
+      )
 
 chrome_dylib_version =
     exec_script(vivaldi_version_py_path,
@@ -38,4 +40,6 @@ chrome_dylib_version =
                   "-e",
                   "PATCH_LO=int($GLOBAL_BUILDNUM)%256",
                 ],
-                "trim string")
+                "trim string",
+                [vivaldi_version_path, chrome_version_path]
+        )

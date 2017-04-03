@@ -11,6 +11,7 @@
 #include <deque>
 #include <map>
 #include <memory>
+#include <queue>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
@@ -23,6 +24,7 @@
 #include "content/common/cursors/webcursor.h"
 #include "content/common/edit_command.h"
 #include "content/common/input/synthetic_gesture_params.h"
+#include "content/public/common/screen_info.h"
 #include "content/renderer/devtools/render_widget_screen_metrics_emulator_delegate.h"
 #include "content/renderer/gpu/render_widget_compositor_delegate.h"
 #include "content/renderer/input/render_widget_input_handler.h"
@@ -72,7 +74,8 @@ struct WebPoint;
 }
 
 namespace cc {
-class OutputSurface;
+class CompositorFrameSink;
+class FrameSinkId;
 class SwapPromise;
 }
 
@@ -96,6 +99,7 @@ class RenderWidgetCompositor;
 class RenderWidgetOwnerDelegate;
 class RenderWidgetScreenMetricsEmulator;
 class ResizingModeSelector;
+class TextInputClientObserver;
 struct ContextMenuParams;
 struct ResizeParams;
 
@@ -121,14 +125,28 @@ class CONTENT_EXPORT RenderWidget
   static RenderWidget* Create(int32_t opener_id,
                               CompositorDependencies* compositor_deps,
                               blink::WebPopupType popup_type,
-                              const blink::WebScreenInfo& screen_info);
+                              const ScreenInfo& screen_info);
 
   // Creates a new RenderWidget that will be attached to a RenderFrame.
   static RenderWidget* CreateForFrame(int routing_id,
                                       bool hidden,
-                                      const blink::WebScreenInfo& screen_info,
+                                      const ScreenInfo& screen_info,
                                       CompositorDependencies* compositor_deps,
                                       blink::WebLocalFrame* frame);
+
+  // Used by content_layouttest_support to hook into the creation of
+  // RenderWidgets.
+  using CreateRenderWidgetFunction =
+      RenderWidget* (*)(CompositorDependencies*,
+                        blink::WebPopupType,
+                        const ScreenInfo&,
+                        bool,
+                        bool,
+                        bool);
+  using RenderWidgetInitializedCallback = void (*)(RenderWidget*);
+  static void InstallCreateHook(
+      CreateRenderWidgetFunction create_render_widget,
+      RenderWidgetInitializedCallback render_widget_initialized_callback);
 
   // Closes a RenderWidget that was created by |CreateForFrame|.
   // TODO(avi): De-virtualize this once RenderViewImpl has-a RenderWidget.
@@ -139,7 +157,7 @@ class CONTENT_EXPORT RenderWidget
   void SetRoutingID(int32_t routing_id);
 
   CompositorDependencies* compositor_deps() const { return compositor_deps_; }
-  blink::WebWidget* webwidget() const { return webwidget_; }
+  virtual blink::WebWidget* GetWebWidget() const;
   const gfx::Size& size() const { return size_; }
   bool is_fullscreen_granted() const { return is_fullscreen_granted_; }
   blink::WebDisplayMode display_mode() const { return display_mode_; }
@@ -162,7 +180,7 @@ class CONTENT_EXPORT RenderWidget
   RenderWidgetOwnerDelegate* owner_delegate() { return owner_delegate_; }
 
   // ScreenInfo exposed so it can be passed to subframe RenderWidgets.
-  blink::WebScreenInfo screen_info() const { return screen_info_; }
+  ScreenInfo screen_info() const { return screen_info_; }
 
   // Manage edit commands to be used for the next keyboard event.
   const EditCommands& edit_commands() const { return edit_commands_; }
@@ -179,16 +197,14 @@ class CONTENT_EXPORT RenderWidget
   void RegisterRenderFrame(RenderFrameImpl* frame);
   void UnregisterRenderFrame(RenderFrameImpl* frame);
 
-#if defined(VIDEO_HOLE)
-  void RegisterVideoHoleFrame(RenderFrameImpl* frame);
-  void UnregisterVideoHoleFrame(RenderFrameImpl* frame);
-#endif  // defined(VIDEO_HOLE)
-
   // IPC::Listener
   bool OnMessageReceived(const IPC::Message& msg) override;
 
   // IPC::Sender
   bool Send(IPC::Message* msg) override;
+
+  // Requests a BeginMainFrame callback from the compositor.
+  void SetNeedsMainFrame();
 
   // RenderWidgetCompositorDelegate
   void ApplyViewportDeltas(const gfx::Vector2dF& inner_delta,
@@ -197,10 +213,8 @@ class CONTENT_EXPORT RenderWidget
                            float page_scale,
                            float top_controls_delta) override;
   void BeginMainFrame(double frame_time_sec) override;
-  std::unique_ptr<cc::OutputSurface> CreateOutputSurface(
+  std::unique_ptr<cc::CompositorFrameSink> CreateCompositorFrameSink(
       bool fallback) override;
-  std::unique_ptr<cc::BeginFrameSource> CreateExternalBeginFrameSource()
-      override;
   void DidCommitAndDrawCompositorFrame() override;
   void DidCommitCompositorFrame() override;
   void DidCompletePageScaleAnimation() override;
@@ -379,6 +393,9 @@ class CONTENT_EXPORT RenderWidget
     return mouse_lock_dispatcher_.get();
   }
 
+  // TODO(ekaramad): The reference to the focused pepper plugin will be removed
+  // from RenderWidget. The purpose of having the reference here was to make IME
+  // work for OOPIF (https://crbug.com/643727).
   void set_focused_pepper_plugin(PepperPluginInstanceImpl* plugin) {
     focused_pepper_plugin_ = plugin;
   }
@@ -401,7 +418,7 @@ class CONTENT_EXPORT RenderWidget
 
   RenderWidget(CompositorDependencies* compositor_deps,
                blink::WebPopupType popup_type,
-               const blink::WebScreenInfo& screen_info,
+               const ScreenInfo& screen_info,
                bool swapped_out,
                bool hidden,
                bool never_visible);
@@ -476,9 +493,11 @@ class CONTENT_EXPORT RenderWidget
       const gfx::Range& replacement_range,
       int selection_start,
       int selection_end);
-  virtual void OnImeConfirmComposition(const base::string16& text,
-                                       const gfx::Range& replacement_range,
-                                       bool keep_selection);
+  virtual void OnImeCommitText(const base::string16& text,
+                               const gfx::Range& replacement_range,
+                               int relative_cursor_pos);
+  virtual void OnImeFinishComposingText(bool keep_selection);
+
   // Called when the device scale factor is changed, or the layer tree is
   // initialized.
   virtual void OnDeviceScaleFactorChanged();
@@ -491,7 +510,7 @@ class CONTENT_EXPORT RenderWidget
                            const gfx::Rect& window_screen_rect);
   void OnUpdateWindowScreenRect(const gfx::Rect& window_screen_rect);
   void OnShowImeIfNeeded();
-  void OnSetSurfaceClientId(uint32_t surface_id_namespace);
+  void OnSetFrameSinkId(const cc::FrameSinkId& frame_sink_id);
   void OnHandleCompositorProto(const std::vector<uint8_t>& proto);
 
 #if defined(OS_ANDROID)
@@ -600,9 +619,10 @@ class CONTENT_EXPORT RenderWidget
   // features.
   CompositorDependencies* const compositor_deps_;
 
+  // Use GetWebWidget() instead of using webwidget_internal_ directly.
   // We are responsible for destroying this object via its Close method.
   // May be NULL when the window is closing.
-  blink::WebWidget* webwidget_;
+  blink::WebWidget* webwidget_internal_;
 
   // The delegate of the owner of this object.
   RenderWidgetOwnerDelegate* owner_delegate_;
@@ -726,7 +746,7 @@ class CONTENT_EXPORT RenderWidget
   base::TimeDelta total_input_handling_time_this_frame_;
 
   // Properties of the screen hosting this RenderWidget instance.
-  blink::WebScreenInfo screen_info_;
+  ScreenInfo screen_info_;
 
   // The device scale factor. This value is computed from the DPI entries in
   // |screen_info_| on some platforms, and defaults to 1 on other platforms.
@@ -770,9 +790,6 @@ class CONTENT_EXPORT RenderWidget
   // Lists of RenderFrameProxy objects that need to be notified of
   // compositing-related events (e.g. DidCommitCompositorFrame).
   base::ObserverList<RenderFrameProxy> render_frame_proxies_;
-#if defined(VIDEO_HOLE)
-  base::ObserverList<RenderFrameImpl> video_hole_frames_;
-#endif  // defined(VIDEO_HOLE)
 
   // A list of RenderFrames associated with this RenderWidget. Notifications
   // are sent to each frame in the list for events such as changing
@@ -799,6 +816,12 @@ class CONTENT_EXPORT RenderWidget
 
   // Indicates whether this widget has focus.
   bool has_focus_;
+
+#if defined(OS_MACOSX)
+  // Responds to IPCs from TextInputClientMac regarding getting string at given
+  // position or range as well as finding character index at a given position.
+  std::unique_ptr<TextInputClientObserver> text_input_client_observer_;
+#endif
 
   // This reference is set by the RenderFrame and is used to query the IME-
   // related state from the plugin to later send to the browser.

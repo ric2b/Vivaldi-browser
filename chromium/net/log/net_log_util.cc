@@ -29,6 +29,11 @@
 #include "net/http/http_server_properties.h"
 #include "net/http/http_transaction_factory.h"
 #include "net/log/net_log.h"
+#include "net/log/net_log_capture_mode.h"
+#include "net/log/net_log_entry.h"
+#include "net/log/net_log_event_type.h"
+#include "net/log/net_log_parameters_callback.h"
+#include "net/log/net_log_with_source.h"
 #include "net/proxy/proxy_config.h"
 #include "net/proxy/proxy_retry_info.h"
 #include "net/proxy/proxy_service.h"
@@ -246,9 +251,9 @@ std::unique_ptr<base::DictionaryValue> GetNetConstants() {
   {
     std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
 
-    dict->SetInteger("PHASE_BEGIN", NetLog::PHASE_BEGIN);
-    dict->SetInteger("PHASE_END", NetLog::PHASE_END);
-    dict->SetInteger("PHASE_NONE", NetLog::PHASE_NONE);
+    dict->SetInteger("PHASE_BEGIN", static_cast<int>(NetLogEventPhase::BEGIN));
+    dict->SetInteger("PHASE_END", static_cast<int>(NetLogEventPhase::END));
+    dict->SetInteger("PHASE_NONE", static_cast<int>(NetLogEventPhase::NONE));
 
     constants_dict->Set("logEventPhase", std::move(dict));
   }
@@ -446,18 +451,6 @@ NET_EXPORT std::unique_ptr<base::DictionaryValue> GetNetInfo(
       status_dict->SetString("alpn_protos", next_protos_string);
     }
 
-    NextProtoVector npn_protos;
-    http_network_session->GetNpnProtos(&npn_protos);
-    if (!npn_protos.empty()) {
-      std::string next_protos_string;
-      for (NextProto proto : npn_protos) {
-        if (!next_protos_string.empty())
-          next_protos_string.append(",");
-        next_protos_string.append(SSLClientSocket::NextProtoToString(proto));
-      }
-      status_dict->SetString("npn_protos", next_protos_string);
-    }
-
     net_info_dict->Set(NetInfoSourceToString(NET_INFO_SPDY_STATUS),
                        status_dict);
   }
@@ -530,15 +523,15 @@ NET_EXPORT void CreateNetLogEntriesForActiveObjects(
 
   // Create fake events.
   for (auto* request : requests) {
-    NetLog::ParametersCallback callback =
+    NetLogParametersCallback callback =
         base::Bind(&GetRequestStateAsValue, base::Unretained(request));
 
     // Note that passing the hardcoded NetLogCaptureMode::Default() below is
     // fine, since GetRequestStateAsValue() ignores the capture mode.
-    NetLog::EntryData entry_data(
-        NetLog::TYPE_REQUEST_ALIVE, request->net_log().source(),
-        NetLog::PHASE_BEGIN, request->creation_time(), &callback);
-    NetLog::Entry entry(&entry_data, NetLogCaptureMode::Default());
+    NetLogEntryData entry_data(
+        NetLogEventType::REQUEST_ALIVE, request->net_log().source(),
+        NetLogEventPhase::BEGIN, request->creation_time(), &callback);
+    NetLogEntry entry(&entry_data, NetLogCaptureMode::Default());
     observer->OnAddEntry(entry);
   }
 }

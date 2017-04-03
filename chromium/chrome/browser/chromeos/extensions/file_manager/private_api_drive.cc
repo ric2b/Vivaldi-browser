@@ -83,6 +83,7 @@ void FillEntryPropertiesValueForDrive(const drive::ResourceEntry& entry_proto,
                                       EntryProperties* properties) {
   properties->shared_with_me.reset(new bool(shared_with_me));
   properties->shared.reset(new bool(entry_proto.shared()));
+  properties->starred.reset(new bool(entry_proto.starred()));
 
   const drive::PlatformFileInfoProto& file_info = entry_proto.file_info();
   properties->size.reset(new double(file_info.size()));
@@ -762,12 +763,12 @@ void FileManagerPrivateSearchDriveFunction::OnEntryDefinitionList(
   for (EntryDefinitionList::const_iterator it = entry_definition_list->begin();
        it != entry_definition_list->end();
        ++it) {
-    base::DictionaryValue* entry = new base::DictionaryValue();
+    auto entry = base::MakeUnique<base::DictionaryValue>();
     entry->SetString("fileSystemName", it->file_system_name);
     entry->SetString("fileSystemRoot", it->file_system_root_url);
     entry->SetString("fileFullPath", "/" + it->full_path.AsUTF8Unsafe());
     entry->SetBoolean("fileIsDirectory", it->is_directory);
-    entries->Append(entry);
+    entries->Append(std::move(entry));
   }
 
   std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue());
@@ -862,7 +863,7 @@ void FileManagerPrivateSearchDriveMetadataFunction::OnEntryDefinitionList(
   // file_manager_private_custom_bindings.js for how this is magically
   // converted to a FileEntry.
   for (size_t i = 0; i < entry_definition_list->size(); ++i) {
-    base::DictionaryValue* result_dict = new base::DictionaryValue();
+    auto result_dict = base::MakeUnique<base::DictionaryValue>();
 
     // FileEntry fields.
     base::DictionaryValue* entry = new base::DictionaryValue();
@@ -880,17 +881,19 @@ void FileManagerPrivateSearchDriveMetadataFunction::OnEntryDefinitionList(
     result_dict->SetString(
         "highlightedBaseName",
         search_result_info_list->at(i).highlighted_base_name);
-    results_list->Append(result_dict);
+    results_list->Append(std::move(result_dict));
   }
 
   SetResult(std::move(results_list));
   SendResponse(true);
 }
 
-bool FileManagerPrivateGetDriveConnectionStateFunction::RunSync() {
+ExtensionFunction::ResponseAction
+FileManagerPrivateGetDriveConnectionStateFunction::Run() {
   api::file_manager_private::DriveConnectionState result;
 
-  switch (drive::util::GetDriveConnectionStatus(GetProfile())) {
+  switch (drive::util::GetDriveConnectionStatus(
+      Profile::FromBrowserContext(browser_context()))) {
     case drive::util::DRIVE_DISCONNECTED_NOSERVICE:
       result.type = kDriveConnectionTypeOffline;
       result.reason.reset(new std::string(kDriveConnectionReasonNoService));
@@ -915,13 +918,14 @@ bool FileManagerPrivateGetDriveConnectionStateFunction::RunSync() {
       chromeos::NetworkHandler::Get()
           ->network_state_handler()
           ->FirstNetworkByType(chromeos::NetworkTypePattern::Mobile());
-  results_ = api::file_manager_private::GetDriveConnectionState::Results::
-      Create(result);
 
-  drive::EventLogger* logger = file_manager::util::GetLogger(GetProfile());
+  drive::EventLogger* logger = file_manager::util::GetLogger(
+      Profile::FromBrowserContext(browser_context()));
   if (logger)
     logger->Log(logging::LOG_INFO, "%s succeeded.", name());
-  return true;
+  return RespondNow(ArgumentList(
+      api::file_manager_private::GetDriveConnectionState::Results::Create(
+          result)));
 }
 
 bool FileManagerPrivateRequestAccessTokenFunction::RunAsync() {

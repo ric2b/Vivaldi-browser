@@ -4,11 +4,13 @@
 
 package org.chromium.chrome.browser.payments;
 
+import android.annotation.SuppressLint;
 import android.content.DialogInterface;
 import android.test.suitebuilder.annotation.MediumTest;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.autofill.AutofillTestHelper;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
@@ -43,6 +45,7 @@ public class PaymentRequestMetricsTest extends PaymentRequestTestBase {
      * Expect that the successful checkout funnel metrics are logged during a succesful checkout.
      */
     @MediumTest
+    @Feature({"Payments"})
     public void testSuccessCheckoutFunnel() throws InterruptedException, ExecutionException,
             TimeoutException {
         // Initiate a payment request.
@@ -77,6 +80,7 @@ public class PaymentRequestMetricsTest extends PaymentRequestTestBase {
      * Payment Request.
      */
     @MediumTest
+    @Feature({"Payments"})
     public void testAbortMetrics_AbortedByUser_CancelButton() throws InterruptedException,
             ExecutionException, TimeoutException {
         triggerUIAndWait("ccBuy", mReadyToPay);
@@ -102,6 +106,7 @@ public class PaymentRequestMetricsTest extends PaymentRequestTestBase {
      * the [X] button in the Payment Request dialog.
      */
     @MediumTest
+    @Feature({"Payments"})
     public void testAbortMetrics_AbortedByUser_XButton() throws InterruptedException,
             ExecutionException, TimeoutException {
         triggerUIAndWait("ccBuy", mReadyToPay);
@@ -120,6 +125,7 @@ public class PaymentRequestMetricsTest extends PaymentRequestTestBase {
      * the back button on their phone during a Payment Request.
      */
     @MediumTest
+    @Feature({"Payments"})
     public void testAbortMetrics_AbortedByUser_BackButton() throws InterruptedException,
             ExecutionException, TimeoutException {
         triggerUIAndWait("ccBuy", mReadyToPay);
@@ -145,6 +151,7 @@ public class PaymentRequestMetricsTest extends PaymentRequestTestBase {
      * the tab during a Payment Request.
      */
     @MediumTest
+    @Feature({"Payments"})
     public void testAbortMetrics_AbortedByUser_TabClosed() throws InterruptedException,
             ExecutionException, TimeoutException {
         triggerUIAndWait("ccBuy", mReadyToPay);
@@ -162,6 +169,7 @@ public class PaymentRequestMetricsTest extends PaymentRequestTestBase {
      * Request gets cancelled by the merchant.
      */
     @MediumTest
+    @Feature({"Payments"})
     public void testAbortMetrics_AbortedByMerchant() throws InterruptedException,
             ExecutionException, TimeoutException {
         triggerUIAndWait("ccBuy", mReadyToPay);
@@ -180,6 +188,7 @@ public class PaymentRequestMetricsTest extends PaymentRequestTestBase {
      * the merchant and the merchant does not accept credit cards.
      */
     @MediumTest
+    @Feature({"Payments"})
     public void testAbortMetrics_NoMatchingPaymentMethod() throws InterruptedException,
             ExecutionException, TimeoutException {
         // Android Pay is supported but no instruments are present.
@@ -197,6 +206,7 @@ public class PaymentRequestMetricsTest extends PaymentRequestTestBase {
      * support.
      */
     @MediumTest
+    @Feature({"Payments"})
     public void testAbortMetrics_NoSupportedPaymentMethod() throws InterruptedException,
             ExecutionException, TimeoutException {
         triggerUIAndWait("noSupported", mShowFailed);
@@ -211,6 +221,7 @@ public class PaymentRequestMetricsTest extends PaymentRequestTestBase {
      * "SelectedPaymentMethod" histogram when completing a Payment Request with a credit card.
      */
     @MediumTest
+    @Feature({"Payments"})
     public void testSelectedPaymentMethod_CreditCard() throws InterruptedException,
             ExecutionException, TimeoutException {
         // Complete a Payment Request with a credit card.
@@ -228,6 +239,7 @@ public class PaymentRequestMetricsTest extends PaymentRequestTestBase {
      * "SelectedPaymentMethod" histogram when completing a Payment Request with Android Pay.
      */
     @MediumTest
+    @Feature({"Payments"})
     public void testSelectedPaymentMethod_AndroidPay() throws InterruptedException,
             ExecutionException, TimeoutException {
         // Complete a Payment Request with Android Pay.
@@ -244,6 +256,8 @@ public class PaymentRequestMetricsTest extends PaymentRequestTestBase {
      *
      * @param abortReason The only bucket in the abort histogram that should have a record.
      */
+    // TODO(crbug.com/635567): Fix this properly.
+    @SuppressLint("DefaultLocale")
     private void assertOnlySpecificAbortMetricLogged(int abortReason) {
         for (int i = 0; i < PaymentRequestMetrics.ABORT_REASON_MAX; ++i) {
             assertEquals(String.format("Found %d instead of %d", i, abortReason),

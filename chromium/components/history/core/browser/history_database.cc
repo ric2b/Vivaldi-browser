@@ -15,7 +15,7 @@
 #include "base/command_line.h"
 #include "base/containers/hash_tables.h"
 #include "base/files/file_util.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/rand_util.h"
 #include "base/strings/string_util.h"
@@ -244,37 +244,6 @@ TopHostsList HistoryDatabase::TopHosts(size_t num_hosts) {
   for (IntermediateList::const_iterator it = top_hosts.begin(); it != middle;
        ++it)
     hosts.push_back(std::make_pair(it->second, -it->first));
-  return hosts;
-}
-
-TopUrlsPerDayList HistoryDatabase::TopUrlsPerDay(size_t num_hosts) {
-  sql::Statement url_sql(db_.GetUniqueStatement(
-    "SELECT date, url, visit_count, id FROM "
-    "  ( SELECT v.id, u.url, count(*) AS visit_count, "
-    "    strftime('%Y-%m-%d', datetime(v.visit_time / 1000000 + "
-    "      (strftime('%s', '1601-01-01')), 'unixepoch')) AS date "
-    "  FROM visits v "
-    "    JOIN urls u ON (v.url = u.id) "
-    "  GROUP BY date, u.url "
-    "  ORDER BY date DESC, visit_count DESC) g "
-    "  WHERE ( "
-    "    SELECT count(*) "
-    "      FROM (SELECT v.id, u.url, COUNT(*) AS visit_count, "
-    "        strftime('%Y-%m-%d', datetime(v.visit_time / 1000000 + "
-    "        (strftime('%s', '1601-01-01')), 'unixepoch')) AS date "
-    "          FROM visits v "
-    "            JOIN urls u ON (v.url = u.id) "
-    "              GROUP BY date, u.url) AS f "
-    "   WHERE g.id <= f.id AND f.date = g.date ) <= ? "
-    "    ORDER BY date DESC, visit_count DESC "));
-  url_sql.BindInt64(0, num_hosts);
-  TopUrlsPerDayList hosts;
-  while (url_sql.Step()) {
-    std::string date = url_sql.ColumnString(0);
-    GURL url(url_sql.ColumnString(1));
-    int64_t visit_count = url_sql.ColumnInt64(2);
-    hosts.push_back(UrlVisitCount(date, url, visit_count));
-  }
   return hosts;
 }
 

@@ -27,24 +27,11 @@ const base::TimeDelta kDeadlineFudgeFactor =
     base::TimeDelta::FromMicroseconds(1000);
 }
 
-std::unique_ptr<Scheduler> Scheduler::Create(
-    SchedulerClient* client,
-    const SchedulerSettings& settings,
-    int layer_tree_host_id,
-    base::SingleThreadTaskRunner* task_runner,
-    BeginFrameSource* begin_frame_source,
-    std::unique_ptr<CompositorTimingHistory> compositor_timing_history) {
-  return base::WrapUnique(new Scheduler(client, settings, layer_tree_host_id,
-                                        task_runner, begin_frame_source,
-                                        std::move(compositor_timing_history)));
-}
-
 Scheduler::Scheduler(
     SchedulerClient* client,
     const SchedulerSettings& settings,
     int layer_tree_host_id,
     base::SingleThreadTaskRunner* task_runner,
-    BeginFrameSource* begin_frame_source,
     std::unique_ptr<CompositorTimingHistory> compositor_timing_history)
     : settings_(settings),
       client_(client),
@@ -69,7 +56,6 @@ Scheduler::Scheduler(
   begin_impl_frame_deadline_closure_ = base::Bind(
       &Scheduler::OnBeginImplFrameDeadline, weak_factory_.GetWeakPtr());
 
-  SetBeginFrameSource(begin_frame_source);
   ProcessScheduledActions();
 }
 
@@ -82,11 +68,6 @@ base::TimeTicks Scheduler::Now() const {
   TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("cc.debug.scheduler.now"),
                "Scheduler::Now", "now", now);
   return now;
-}
-
-void Scheduler::SetEstimatedParentDrawTime(base::TimeDelta draw_time) {
-  DCHECK_GE(draw_time.ToInternalValue(), 0);
-  estimated_parent_draw_time_ = draw_time;
 }
 
 void Scheduler::SetVisible(bool visible) {
@@ -198,21 +179,21 @@ void Scheduler::DidPrepareTiles() {
   state_machine_.DidPrepareTiles();
 }
 
-void Scheduler::DidLoseOutputSurface() {
-  TRACE_EVENT0("cc", "Scheduler::DidLoseOutputSurface");
+void Scheduler::DidLoseCompositorFrameSink() {
+  TRACE_EVENT0("cc", "Scheduler::DidLoseCompositorFrameSink");
   begin_retro_frame_args_.clear();
   begin_retro_frame_task_.Cancel();
-  state_machine_.DidLoseOutputSurface();
+  state_machine_.DidLoseCompositorFrameSink();
   UpdateCompositorTimingHistoryRecordingEnabled();
   ProcessScheduledActions();
 }
 
-void Scheduler::DidCreateAndInitializeOutputSurface() {
-  TRACE_EVENT0("cc", "Scheduler::DidCreateAndInitializeOutputSurface");
+void Scheduler::DidCreateAndInitializeCompositorFrameSink() {
+  TRACE_EVENT0("cc", "Scheduler::DidCreateAndInitializeCompositorFrameSink");
   DCHECK(!observing_begin_frame_source_);
   DCHECK(begin_impl_frame_deadline_task_.IsCancelled());
-  state_machine_.DidCreateAndInitializeOutputSurface();
-  compositor_timing_history_->DidCreateAndInitializeOutputSurface();
+  state_machine_.DidCreateAndInitializeCompositorFrameSink();
+  compositor_timing_history_->DidCreateAndInitializeCompositorFrameSink();
   UpdateCompositorTimingHistoryRecordingEnabled();
   ProcessScheduledActions();
 }
@@ -284,12 +265,8 @@ bool Scheduler::OnBeginFrameDerivedImpl(const BeginFrameArgs& args) {
       TRACE_DISABLED_BY_DEFAULT("cc.debug.scheduler.frames"), "BeginFrameArgs",
       args.frame_time.ToInternalValue());
 
-  // TODO(brianderson): Adjust deadline in the DisplayScheduler.
-  BeginFrameArgs adjusted_args(args);
-  adjusted_args.deadline -= EstimatedParentDrawTime();
-
   if (settings_.using_synchronous_renderer_compositor) {
-    BeginImplFrameSynchronous(adjusted_args);
+    BeginImplFrameSynchronous(args);
     return true;
   }
 
@@ -297,8 +274,8 @@ bool Scheduler::OnBeginFrameDerivedImpl(const BeginFrameArgs& args) {
   // sent us the last BeginFrame we have missed. As we might not be able to
   // actually make rendering for this call, handle it like a "retro frame".
   // TODO(brainderson): Add a test for this functionality ASAP!
-  if (adjusted_args.type == BeginFrameArgs::MISSED) {
-    begin_retro_frame_args_.push_back(adjusted_args);
+  if (args.type == BeginFrameArgs::MISSED) {
+    begin_retro_frame_args_.push_back(args);
     PostBeginRetroFrameIfNeeded();
     return true;
   }
@@ -311,12 +288,12 @@ bool Scheduler::OnBeginFrameDerivedImpl(const BeginFrameArgs& args) {
        SchedulerStateMachine::BEGIN_IMPL_FRAME_STATE_IDLE);
 
   if (should_defer_begin_frame) {
-    begin_retro_frame_args_.push_back(adjusted_args);
+    begin_retro_frame_args_.push_back(args);
     TRACE_EVENT_INSTANT0("cc", "Scheduler::BeginFrame deferred",
                          TRACE_EVENT_SCOPE_THREAD);
     // Queuing the frame counts as "using it", so we need to return true.
   } else {
-    BeginImplFrameWithDeadline(adjusted_args);
+    BeginImplFrameWithDeadline(args);
   }
   return true;
 }
@@ -326,7 +303,7 @@ void Scheduler::SetVideoNeedsBeginFrames(bool video_needs_begin_frames) {
   ProcessScheduledActions();
 }
 
-void Scheduler::OnDrawForOutputSurface(bool resourceless_software_draw) {
+void Scheduler::OnDrawForCompositorFrameSink(bool resourceless_software_draw) {
   DCHECK(settings_.using_synchronous_renderer_compositor);
   DCHECK_EQ(state_machine_.begin_impl_frame_state(),
             SchedulerStateMachine::BEGIN_IMPL_FRAME_STATE_IDLE);
@@ -504,7 +481,7 @@ void Scheduler::BeginImplFrame(const BeginFrameArgs& args) {
   DCHECK_EQ(state_machine_.begin_impl_frame_state(),
             SchedulerStateMachine::BEGIN_IMPL_FRAME_STATE_IDLE);
   DCHECK(begin_impl_frame_deadline_task_.IsCancelled());
-  DCHECK(state_machine_.HasInitializedOutputSurface());
+  DCHECK(state_machine_.HasInitializedCompositorFrameSink());
 
   begin_impl_frame_tracker_.Start(args);
   state_machine_.OnBeginImplFrame();
@@ -592,11 +569,6 @@ void Scheduler::OnBeginImplFrameDeadline() {
   //     order to wait for more user-input before starting the next commit.
   // * Creating a new OuputSurface will not occur during the deadline in
   //     order to allow the state machine to "settle" first.
-
-  // TODO(robliao): Remove ScopedTracker below once crbug.com/461509 is fixed.
-  tracked_objects::ScopedTracker tracking_profile1(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "461509 Scheduler::OnBeginImplFrameDeadline1"));
   compositor_timing_history_->WillFinishImplFrame(
       state_machine_.needs_redraw());
   state_machine_.OnBeginImplFrameDeadline();
@@ -666,11 +638,6 @@ void Scheduler::ProcessScheduledActions() {
         client_->ScheduledActionSendBeginMainFrame(begin_main_frame_args_);
         break;
       case SchedulerStateMachine::ACTION_COMMIT: {
-        // TODO(robliao): Remove ScopedTracker below once crbug.com/461509 is
-        // fixed.
-        tracked_objects::ScopedTracker tracking_profile4(
-            FROM_HERE_WITH_EXPLICIT_FUNCTION(
-                "461509 Scheduler::ProcessScheduledActions4"));
         bool commit_has_no_updates = false;
         state_machine_.WillCommit(commit_has_no_updates);
         client_->ScheduledActionCommit();
@@ -682,15 +649,9 @@ void Scheduler::ProcessScheduledActions() {
         client_->ScheduledActionActivateSyncTree();
         compositor_timing_history_->DidActivate();
         break;
-      case SchedulerStateMachine::ACTION_DRAW_AND_SWAP_IF_POSSIBLE: {
-        // TODO(robliao): Remove ScopedTracker below once crbug.com/461509 is
-        // fixed.
-        tracked_objects::ScopedTracker tracking_profile6(
-            FROM_HERE_WITH_EXPLICIT_FUNCTION(
-                "461509 Scheduler::ProcessScheduledActions6"));
+      case SchedulerStateMachine::ACTION_DRAW_AND_SWAP_IF_POSSIBLE:
         DrawAndSwapIfPossible();
         break;
-      }
       case SchedulerStateMachine::ACTION_DRAW_AND_SWAP_FORCED:
         DrawAndSwapForced();
         break;
@@ -701,17 +662,17 @@ void Scheduler::ProcessScheduledActions() {
         compositor_timing_history_->DrawAborted();
         break;
       }
-      case SchedulerStateMachine::ACTION_BEGIN_OUTPUT_SURFACE_CREATION:
-        state_machine_.WillBeginOutputSurfaceCreation();
-        client_->ScheduledActionBeginOutputSurfaceCreation();
+      case SchedulerStateMachine::ACTION_BEGIN_COMPOSITOR_FRAME_SINK_CREATION:
+        state_machine_.WillBeginCompositorFrameSinkCreation();
+        client_->ScheduledActionBeginCompositorFrameSinkCreation();
         break;
       case SchedulerStateMachine::ACTION_PREPARE_TILES:
         state_machine_.WillPrepareTiles();
         client_->ScheduledActionPrepareTiles();
         break;
-      case SchedulerStateMachine::ACTION_INVALIDATE_OUTPUT_SURFACE: {
-        state_machine_.WillInvalidateOutputSurface();
-        client_->ScheduledActionInvalidateOutputSurface();
+      case SchedulerStateMachine::ACTION_INVALIDATE_COMPOSITOR_FRAME_SINK: {
+        state_machine_.WillInvalidateCompositorFrameSink();
+        client_->ScheduledActionInvalidateCompositorFrameSink();
         break;
       }
     }
@@ -732,10 +693,6 @@ Scheduler::AsValue() const {
   state->EndDictionary();
 
   state->BeginDictionary("scheduler_state");
-  state->SetBoolean("throttle_frame_production_",
-                    settings_.throttle_frame_production);
-  state->SetDouble("estimated_parent_draw_time_ms",
-                   estimated_parent_draw_time_.InMillisecondsF());
   state->SetBoolean("observing_begin_frame_source",
                     observing_begin_frame_source_);
   state->SetInteger("begin_retro_frame_args",
@@ -765,13 +722,17 @@ Scheduler::AsValue() const {
 
 void Scheduler::UpdateCompositorTimingHistoryRecordingEnabled() {
   compositor_timing_history_->SetRecordingEnabled(
-      state_machine_.HasInitializedOutputSurface() && state_machine_.visible());
+      state_machine_.HasInitializedCompositorFrameSink() &&
+      state_machine_.visible());
 }
 
 bool Scheduler::ShouldRecoverMainLatency(
     const BeginFrameArgs& args,
     bool can_activate_before_deadline) const {
   DCHECK(!settings_.using_synchronous_renderer_compositor);
+
+  if (!settings_.enable_latency_recovery)
+    return false;
 
   // The main thread is in a low latency mode and there's no need to recover.
   if (!state_machine_.main_thread_missed_last_deadline())
@@ -790,10 +751,13 @@ bool Scheduler::ShouldRecoverImplLatency(
     bool can_activate_before_deadline) const {
   DCHECK(!settings_.using_synchronous_renderer_compositor);
 
+  if (!settings_.enable_latency_recovery)
+    return false;
+
   // Disable impl thread latency recovery when using the unthrottled
   // begin frame source since we will always get a BeginFrame before
   // the swap ack and our heuristics below will not work.
-  if (!settings_.throttle_frame_production)
+  if (begin_frame_source_ && !begin_frame_source_->IsThrottled())
     return false;
 
   // If we are swap throttled at the BeginFrame, that means the impl thread is

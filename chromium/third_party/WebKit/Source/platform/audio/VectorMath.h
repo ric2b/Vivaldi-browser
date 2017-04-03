@@ -10,16 +10,17 @@
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
- * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+ * DAMAGE.
  */
 
 #ifndef VectorMath_h
@@ -29,33 +30,74 @@
 #include "wtf/build_config.h"
 #include <cstddef>
 
-// Defines the interface for several vector math functions whose implementation will ideally be optimized.
+// Defines the interface for several vector math functions whose implementation
+// will ideally be optimized.
 
 namespace blink {
 namespace VectorMath {
 
 // Vector scalar multiply and then add.
-PLATFORM_EXPORT void vsma(const float* sourceP, int sourceStride, const float* scale, float* destP, int destStride, size_t framesToProcess);
+PLATFORM_EXPORT void vsma(const float* sourceP,
+                          int sourceStride,
+                          const float* scale,
+                          float* destP,
+                          int destStride,
+                          size_t framesToProcess);
 
-PLATFORM_EXPORT void vsmul(const float* sourceP, int sourceStride, const float* scale, float* destP, int destStride, size_t framesToProcess);
-PLATFORM_EXPORT void vadd(const float* source1P, int sourceStride1, const float* source2P, int sourceStride2, float* destP, int destStride, size_t framesToProcess);
+PLATFORM_EXPORT void vsmul(const float* sourceP,
+                           int sourceStride,
+                           const float* scale,
+                           float* destP,
+                           int destStride,
+                           size_t framesToProcess);
+PLATFORM_EXPORT void vadd(const float* source1P,
+                          int sourceStride1,
+                          const float* source2P,
+                          int sourceStride2,
+                          float* destP,
+                          int destStride,
+                          size_t framesToProcess);
 
 // Finds the maximum magnitude of a float vector.
-PLATFORM_EXPORT void vmaxmgv(const float* sourceP, int sourceStride, float* maxP, size_t framesToProcess);
+PLATFORM_EXPORT void vmaxmgv(const float* sourceP,
+                             int sourceStride,
+                             float* maxP,
+                             size_t framesToProcess);
 
 // Sums the squares of a float vector's elements.
-PLATFORM_EXPORT void vsvesq(const float* sourceP, int sourceStride, float* sumP, size_t framesToProcess);
+PLATFORM_EXPORT void vsvesq(const float* sourceP,
+                            int sourceStride,
+                            float* sumP,
+                            size_t framesToProcess);
 
 // For an element-by-element multiply of two float vectors.
-PLATFORM_EXPORT void vmul(const float* source1P, int sourceStride1, const float* source2P, int sourceStride2, float* destP, int destStride, size_t framesToProcess);
+PLATFORM_EXPORT void vmul(const float* source1P,
+                          int sourceStride1,
+                          const float* source2P,
+                          int sourceStride2,
+                          float* destP,
+                          int destStride,
+                          size_t framesToProcess);
 
 // Multiplies two complex vectors.
-PLATFORM_EXPORT void zvmul(const float* real1P, const float* imag1P, const float* real2P, const float* imag2P, float* realDestP, float* imagDestP, size_t framesToProcess);
+PLATFORM_EXPORT void zvmul(const float* real1P,
+                           const float* imag1P,
+                           const float* real2P,
+                           const float* imag2P,
+                           float* realDestP,
+                           float* imagDestP,
+                           size_t framesToProcess);
 
 // Copies elements while clipping values to the threshold inputs.
-PLATFORM_EXPORT void vclip(const float* sourceP, int sourceStride, const float* lowThresholdP, const float* highThresholdP, float* destP, int destStride, size_t framesToProcess);
+PLATFORM_EXPORT void vclip(const float* sourceP,
+                           int sourceStride,
+                           const float* lowThresholdP,
+                           const float* highThresholdP,
+                           float* destP,
+                           int destStride,
+                           size_t framesToProcess);
 
-} // namespace VectorMath
-} // namespace blink
+}  // namespace VectorMath
+}  // namespace blink
 
-#endif // VectorMath_h
+#endif  // VectorMath_h

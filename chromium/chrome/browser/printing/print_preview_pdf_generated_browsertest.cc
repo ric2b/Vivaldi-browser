@@ -24,6 +24,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/md5.h"
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -213,7 +214,7 @@ class PrintPreviewObserver : public WebContentsObserver {
 
   // Saves the print preview settings to be sent to the print preview dialog.
   void SetPrintPreviewSettings(const PrintPreviewSettings& settings) {
-    settings_.reset(new PrintPreviewSettings(settings));
+    settings_ = base::MakeUnique<PrintPreviewSettings>(settings);
   }
 
   // Returns the setting that could not be set in the preview dialog.
@@ -466,8 +467,8 @@ class PrintPreviewPdfGeneratedBrowserTest : public InProcessBrowserTest {
         browser()->tab_strip_model()->GetActiveWebContents();
     ASSERT_TRUE(tab);
 
-    print_preview_observer_.reset(
-        new PrintPreviewObserver(browser(), tab, pdf_file_save_path_));
+    print_preview_observer_ = base::MakeUnique<PrintPreviewObserver>(
+        browser(), tab, pdf_file_save_path_);
     chrome::DuplicateTab(browser());
 
     WebContents* initiator =
@@ -505,7 +506,8 @@ class PrintPreviewPdfGeneratedBrowserTest : public InProcessBrowserTest {
     std::cout.flush();
 
     ASSERT_TRUE(tmp_dir_.CreateUniqueTempDir());
-    ASSERT_TRUE(base::CreateTemporaryFileInDir(tmp_dir_.path(), &stdin_path));
+    ASSERT_TRUE(
+        base::CreateTemporaryFileInDir(tmp_dir_.GetPath(), &stdin_path));
 
     // Redirects |std::cin| to the file |stdin_path|. |in| is not freed because
     // if it goes out of scope, |std::cin.rdbuf| will be freed, causing an
@@ -515,7 +517,7 @@ class PrintPreviewPdfGeneratedBrowserTest : public InProcessBrowserTest {
     std::cin.rdbuf(in->rdbuf());
 
     pdf_file_save_path_ =
-        tmp_dir_.path().Append(FILE_PATH_LITERAL("dummy.pdf"));
+        tmp_dir_.GetPath().Append(FILE_PATH_LITERAL("dummy.pdf"));
 
     // Send the file path to the layout test framework so that it can
     // communicate with this browser test.

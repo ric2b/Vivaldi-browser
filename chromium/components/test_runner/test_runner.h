@@ -18,6 +18,7 @@
 #include "components/test_runner/layout_test_runtime_flags.h"
 #include "components/test_runner/test_runner_export.h"
 #include "components/test_runner/web_test_runner.h"
+#include "third_party/WebKit/public/platform/WebEffectiveConnectionType.h"
 #include "third_party/WebKit/public/platform/WebImage.h"
 #include "v8/include/v8.h"
 
@@ -54,7 +55,7 @@ class WebTestDelegate;
 // 1. It implements |testRunner| javascript bindings for "global" / "ambient".
 //    Examples:
 //    - testRunner.dumpAsText (test flag affecting test behavior)
-//    - testRunner.setAllowDisplayOfInsecureContent (test flag affecting product
+//    - testRunner.setAllowRunningOfInsecureContent (test flag affecting product
 //      behavior)
 //    - testRunner.setTextSubpixelPositioning (directly interacts with product).
 //    Note that "per-view" (non-"global") bindings are handled by
@@ -167,6 +168,10 @@ class TestRunner : public WebTestRunner {
   void DidCloseChooser();
 
   bool ShouldDumpConsoleMessages() const;
+
+  blink::WebEffectiveConnectionType effective_connection_type() const {
+    return effective_connection_type_;
+  }
 
   // A single item in the work queue.
   class WorkItem {
@@ -405,7 +410,6 @@ class TestRunner : public WebTestRunner {
   void SetScriptsAllowed(bool allowed);
   void SetStorageAllowed(bool allowed);
   void SetPluginsAllowed(bool allowed);
-  void SetAllowDisplayOfInsecureContent(bool allowed);
   void SetAllowRunningOfInsecureContent(bool allowed);
   void SetAutoplayAllowed(bool allowed);
   void DumpPermissionClientCallbacks();
@@ -462,6 +466,12 @@ class TestRunner : public WebTestRunner {
   // Controls whether console messages produced by the page are dumped
   // to test output.
   void SetDumpConsoleMessages(bool value);
+
+  // Overrides the NetworkQualityEstimator's estimated network type. If |type|
+  // is TypeUnknown the NQE's value is used. Be sure to call this with
+  // TypeUnknown at the end of your test if you use this.
+  void SetEffectiveConnectionType(
+      blink::WebEffectiveConnectionType connection_type);
 
   // Controls whether the mock spell checker is enabled.
   void SetMockSpellCheckerEnabled(bool enabled);
@@ -532,11 +542,12 @@ class TestRunner : public WebTestRunner {
 
   // Credential Manager mock functions
   // TODO(mkwst): Support FederatedCredential.
-  void AddMockCredentialManagerResponse(const std::string& id,
+  void SetMockCredentialManagerResponse(const std::string& id,
                                         const std::string& name,
                                         const std::string& avatar,
                                         const std::string& password);
-  void AddMockCredentialManagerError(const std::string& error);
+  void ClearMockCredentialManagerResponse();
+  void SetMockCredentialManagerError(const std::string& error);
 
   // Takes care of notifying the delegate after a change to layout test runtime
   // flags.
@@ -640,6 +651,9 @@ class TestRunner : public WebTestRunner {
 
   // True if we run a test in LayoutTests/imported/{csswg-test,wpt}/.
   bool is_web_platform_tests_mode_;
+
+  // An effective connection type settable by layout tests.
+  blink::WebEffectiveConnectionType effective_connection_type_;
 
   base::WeakPtrFactory<TestRunner> weak_factory_;
 

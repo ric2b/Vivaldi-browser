@@ -4,8 +4,12 @@
 
 #include "remoting/base/auto_thread.h"
 
+#include <memory>
+
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/lazy_instance.h"
+#include "base/logging.h"
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/third_party/dynamic_annotations/dynamic_annotations.h"
@@ -13,6 +17,10 @@
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "remoting/base/auto_thread_task_runner.h"
+
+#if defined(OS_POSIX) && !defined(OS_NACL)
+#include "base/files/file_descriptor_watcher_posix.h"
+#endif
 
 #if defined(OS_WIN)
 #include "base/win/scoped_com_initializer.h"
@@ -99,6 +107,7 @@ AutoThread::AutoThread(const char* name)
     thread_(),
     name_(name),
     was_quit_properly_(false) {
+  thread_checker_.DetachFromThread();
 }
 
 AutoThread::AutoThread(const char* name, AutoThreadTaskRunner* joiner)
@@ -110,6 +119,7 @@ AutoThread::AutoThread(const char* name, AutoThreadTaskRunner* joiner)
     name_(name),
     was_quit_properly_(false),
     joiner_(joiner) {
+  thread_checker_.DetachFromThread();
 }
 
 AutoThread::~AutoThread() {
@@ -159,16 +169,10 @@ void AutoThread::SetComInitType(ComInitType com_init_type) {
 }
 #endif
 
-void AutoThread::QuitThread(
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
-  if (!task_runner->BelongsToCurrentThread()) {
-    task_runner->PostTask(FROM_HERE, base::Bind(&AutoThread::QuitThread,
-                                                base::Unretained(this),
-                                                task_runner));
-    return;
-  }
+void AutoThread::QuitThread(const base::Closure& quit_when_idle_closure) {
+  DCHECK(thread_checker_.CalledOnValidThread());
 
-  base::MessageLoop::current()->QuitWhenIdle();
+  quit_when_idle_closure.Run();
   was_quit_properly_ = true;
 
   if (joiner_.get()) {
@@ -183,8 +187,11 @@ void AutoThread::JoinAndDeleteThread() {
 }
 
 void AutoThread::ThreadMain() {
-  // The message loop for this thread.
+  // Bind |thread_checker_| to the current thread.
+  DCHECK(thread_checker_.CalledOnValidThread());
+
   base::MessageLoop message_loop(startup_data_->loop_type);
+  base::RunLoop run_loop;
 
   // Complete the initialization of our AutoThread object.
   base::PlatformThread::SetName(name_);
@@ -192,15 +199,24 @@ void AutoThread::ThreadMain() {
 
   // Return an AutoThreadTaskRunner that will cleanly quit this thread when
   // no more references to it remain.
-  startup_data_->task_runner =
-      new AutoThreadTaskRunner(message_loop.task_runner(),
-          base::Bind(&AutoThread::QuitThread,
-                     base::Unretained(this),
-                     message_loop.task_runner()));
+  startup_data_->task_runner = new AutoThreadTaskRunner(
+      message_loop.task_runner(),
+      base::Bind(&AutoThread::QuitThread, base::Unretained(this),
+                 run_loop.QuitWhenIdleClosure()));
 
   startup_data_->event.Signal();
   // startup_data_ can't be touched anymore since the starting thread is now
   // unlocked.
+
+#if defined(OS_POSIX) && !defined(OS_NACL)
+  // Allow threads running a MessageLoopForIO to use FileDescriptorWatcher.
+  std::unique_ptr<base::FileDescriptorWatcher> file_descriptor_watcher;
+  if (message_loop.type() == base::MessageLoop::TYPE_IO) {
+    DCHECK_EQ(&message_loop, base::MessageLoopForIO::current());
+    file_descriptor_watcher.reset(
+        new base::FileDescriptorWatcher(base::MessageLoopForIO::current()));
+  }
+#endif
 
 #if defined(OS_WIN)
   // Initialize COM on the thread, if requested.
@@ -208,7 +224,7 @@ void AutoThread::ThreadMain() {
       CreateComInitializer(com_init_type_));
 #endif
 
-  base::RunLoop().Run();
+  run_loop.Run();
 
   // Assert that MessageLoop::QuitWhenIdle was called by AutoThread::QuitThread.
   DCHECK(was_quit_properly_);

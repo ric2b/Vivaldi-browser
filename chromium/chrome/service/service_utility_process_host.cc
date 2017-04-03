@@ -32,7 +32,6 @@
 #include "content/public/common/result_codes.h"
 #include "content/public/common/sandbox_init.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
-#include "ipc/ipc_switches.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "mojo/edk/embedder/named_platform_channel_pair.h"
 #include "mojo/edk/embedder/platform_channel_pair.h"
@@ -145,7 +144,7 @@ class ServiceUtilityProcessHost::PdfToEmfState {
 
   base::File CreateTempFile() {
     base::FilePath path;
-    if (!base::CreateTemporaryFileInDir(temp_dir_.path(), &path))
+    if (!base::CreateTemporaryFileInDir(temp_dir_.GetPath(), &path))
       return base::File();
     return base::File(path,
                       base::File::FLAG_CREATE_ALWAYS |

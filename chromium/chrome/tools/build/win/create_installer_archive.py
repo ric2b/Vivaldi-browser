@@ -765,9 +765,6 @@ def _ParseOptions():
   if not options.output_dir:
     options.output_dir = options.build_dir
 
-  options.output_dir = options.output_dir.replace("\\","/")
-  options.build_dir = options.build_dir.replace("\\","/")
-
   if not options.resource_file_path:
     options.resource_file_path = os.path.join(options.build_dir,
                                               MINI_INSTALLER_INPUT_FILE)

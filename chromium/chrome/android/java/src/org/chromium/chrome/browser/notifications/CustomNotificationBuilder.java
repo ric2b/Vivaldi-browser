@@ -79,6 +79,7 @@ public class CustomNotificationBuilder extends NotificationBuilderBase {
     private final Context mContext;
 
     public CustomNotificationBuilder(Context context) {
+        super(context.getResources());
         mContext = context;
     }
 
@@ -120,7 +121,7 @@ public class CustomNotificationBuilder extends NotificationBuilderBase {
             view.setTextViewText(R.id.title, mTitle);
             view.setTextViewText(R.id.body, mBody);
             view.setTextViewText(R.id.origin, mOrigin);
-            view.setImageViewBitmap(R.id.icon, mLargeIcon);
+            view.setImageViewBitmap(R.id.icon, getNormalizedLargeIcon());
             view.setViewPadding(R.id.title, 0, scaledPadding, 0, 0);
             view.setViewPadding(R.id.body_container, 0, scaledPadding, 0, scaledPadding);
             addWorkProfileBadge(view);
@@ -153,13 +154,17 @@ public class CustomNotificationBuilder extends NotificationBuilderBase {
         builder.setContentTitle(mTitle);
         builder.setContentText(mBody);
         builder.setSubText(mOrigin);
-        builder.setLargeIcon(mLargeIcon);
+        builder.setLargeIcon(getNormalizedLargeIcon());
         setSmallIconOnBuilder(builder, mSmallIconId, mSmallIconBitmap);
         for (Action action : mActions) {
             addActionToBuilder(builder, action);
         }
         if (mSettingsAction != null) {
             addActionToBuilder(builder, mSettingsAction);
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            // Notification.Builder.setPublicVersion was added in Android L.
+            builder.setPublicVersion(createPublicNotification(mContext));
         }
 
         Notification notification = builder.build();

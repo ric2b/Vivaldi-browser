@@ -10,7 +10,8 @@
 #include "cc/quads/render_pass_draw_quad.h"
 #include "cc/quads/shared_quad_state.h"
 #include "cc/quads/surface_draw_quad.h"
-#include "services/ui/surfaces/display_compositor.h"
+#include "gpu/ipc/client/gpu_channel_host.h"
+#include "services/ui/surfaces/compositor_frame_sink.h"
 #include "services/ui/ws/frame_generator_delegate.h"
 #include "services/ui/ws/server_window.h"
 #include "services/ui/ws/server_window_surface.h"
@@ -20,10 +21,12 @@ namespace ui {
 
 namespace ws {
 
-FrameGenerator::FrameGenerator(FrameGeneratorDelegate* delegate,
-                               scoped_refptr<SurfacesState> surfaces_state)
+FrameGenerator::FrameGenerator(
+    FrameGeneratorDelegate* delegate,
+    scoped_refptr<DisplayCompositor> display_compositor)
     : delegate_(delegate),
-      surfaces_state_(surfaces_state),
+      display_compositor_(display_compositor),
+      frame_sink_id_(0, display_compositor->GenerateNextClientId()),
       draw_timer_(false, false),
       weak_factory_(this) {
   DCHECK(delegate_);
@@ -31,9 +34,20 @@ FrameGenerator::FrameGenerator(FrameGeneratorDelegate* delegate,
 
 FrameGenerator::~FrameGenerator() {
   // Invalidate WeakPtrs now to avoid callbacks back into the
-  // FrameGenerator during destruction of |display_compositor_|.
+  // FrameGenerator during destruction of |compositor_frame_sink_|.
   weak_factory_.InvalidateWeakPtrs();
-  display_compositor_.reset();
+  compositor_frame_sink_.reset();
+}
+
+void FrameGenerator::OnGpuChannelEstablished(
+    scoped_refptr<gpu::GpuChannelHost> channel) {
+  if (widget_ != gfx::kNullAcceleratedWidget) {
+    compositor_frame_sink_ = base::MakeUnique<surfaces::CompositorFrameSink>(
+        frame_sink_id_, base::ThreadTaskRunnerHandle::Get(), widget_,
+        std::move(channel), display_compositor_);
+  } else {
+    gpu_channel_ = std::move(channel);
+  }
 }
 
 void FrameGenerator::RequestRedraw(const gfx::Rect& redraw_region) {
@@ -43,16 +57,18 @@ void FrameGenerator::RequestRedraw(const gfx::Rect& redraw_region) {
 
 void FrameGenerator::OnAcceleratedWidgetAvailable(
     gfx::AcceleratedWidget widget) {
-  if (widget != gfx::kNullAcceleratedWidget) {
-    display_compositor_.reset(new DisplayCompositor(
-        base::ThreadTaskRunnerHandle::Get(), widget, surfaces_state_));
+  widget_ = widget;
+  if (gpu_channel_ && widget != gfx::kNullAcceleratedWidget) {
+    compositor_frame_sink_.reset(new surfaces::CompositorFrameSink(
+        frame_sink_id_, base::ThreadTaskRunnerHandle::Get(), widget_,
+        std::move(gpu_channel_), display_compositor_));
   }
 }
 
 void FrameGenerator::RequestCopyOfOutput(
     std::unique_ptr<cc::CopyOutputRequest> output_request) {
-  if (display_compositor_)
-    display_compositor_->RequestCopyOfOutput(std::move(output_request));
+  if (compositor_frame_sink_)
+    compositor_frame_sink_->RequestCopyOfOutput(std::move(output_request));
 }
 
 void FrameGenerator::WantToDraw() {
@@ -70,7 +86,7 @@ void FrameGenerator::Draw() {
     return;
 
   const ViewportMetrics& metrics = delegate_->GetViewportMetrics();
-  const gfx::Rect output_rect(metrics.bounds.size());
+  const gfx::Rect output_rect(metrics.pixel_size);
   dirty_rect_.Intersect(output_rect);
   // TODO(fsamuel): We should add a trace for generating a top level frame.
   cc::CompositorFrame frame(GenerateCompositorFrame(output_rect));
@@ -82,9 +98,9 @@ void FrameGenerator::Draw() {
       // is submitted 'soon'.
     }
   }
-  frame_pending_ = true;
-  if (display_compositor_) {
-    display_compositor_->SubmitCompositorFrame(
+  if (compositor_frame_sink_) {
+    frame_pending_ = true;
+    compositor_frame_sink_->SubmitCompositorFrame(
         std::move(frame),
         base::Bind(&FrameGenerator::DidDraw, weak_factory_.GetWeakPtr()));
   }
@@ -188,7 +204,7 @@ void FrameGenerator::DrawWindowTree(
     quad->SetAll(sqs, bounds_at_origin /* rect */,
                  gfx::Rect() /* opaque_rect */,
                  bounds_at_origin /* visible_rect */, true /* needs_blending*/,
-                 default_surface->id());
+                 default_surface->GetSurfaceId());
     if (default_surface->may_contain_video())
       *may_contain_video = true;
   }
@@ -212,7 +228,7 @@ void FrameGenerator::DrawWindowTree(
     quad->SetAll(sqs, bounds_at_origin /* rect */,
                  gfx::Rect() /* opaque_rect */,
                  bounds_at_origin /* visible_rect */, true /* needs_blending*/,
-                 underlay_surface->id());
+                 underlay_surface->GetSurfaceId());
     DCHECK(!underlay_surface->may_contain_video());
   }
 }

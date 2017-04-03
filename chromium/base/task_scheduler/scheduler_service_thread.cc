@@ -35,6 +35,11 @@ class ServiceThreadDelegate : public SchedulerWorker::Delegate {
     return nullptr;
   }
 
+  void DidRunTask(const Task* task, const TimeDelta& task_latency) override {
+    NOTREACHED()
+        << "GetWork() never returns a sequence so no task should ever run.";
+  }
+
   void ReEnqueueSequence(scoped_refptr<Sequence> sequence) override {
     NOTREACHED() <<
         "GetWork() never returns a sequence so there's nothing to reenqueue.";
@@ -71,12 +76,10 @@ SchedulerServiceThread::~SchedulerServiceThread() = default;
 // static
 std::unique_ptr<SchedulerServiceThread> SchedulerServiceThread::Create(
     TaskTracker* task_tracker, DelayedTaskManager* delayed_task_manager) {
-  std::unique_ptr<SchedulerWorker> worker =
-      SchedulerWorker::Create(
-          ThreadPriority::NORMAL,
-          WrapUnique(new ServiceThreadDelegate(delayed_task_manager)),
-          task_tracker,
-          SchedulerWorker::InitialState::ALIVE);
+  std::unique_ptr<SchedulerWorker> worker = SchedulerWorker::Create(
+      ThreadPriority::NORMAL,
+      MakeUnique<ServiceThreadDelegate>(delayed_task_manager), task_tracker,
+      SchedulerWorker::InitialState::ALIVE);
   if (!worker)
     return nullptr;
 

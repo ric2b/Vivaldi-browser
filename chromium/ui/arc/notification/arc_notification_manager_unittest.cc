@@ -10,7 +10,6 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "components/arc/instance_holder.h"
-#include "components/arc/test/fake_arc_bridge_instance.h"
 #include "components/arc/test/fake_arc_bridge_service.h"
 #include "components/arc/test/fake_notifications_instance.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -77,7 +76,7 @@ class NotificationsObserver
 class ArcNotificationManagerTest : public testing::Test {
  public:
   ArcNotificationManagerTest() {}
-  ~ArcNotificationManagerTest() override { loop_.RunUntilIdle(); }
+  ~ArcNotificationManagerTest() override { base::RunLoop().RunUntilIdle(); }
 
  protected:
   FakeArcBridgeService* service() { return service_.get(); }
@@ -127,7 +126,7 @@ class ArcNotificationManagerTest : public testing::Test {
     service_->notifications()->SetInstance(arc_notifications_instance_.get());
 
     while (!observer.IsReady())
-      loop_.RunUntilIdle();
+      base::RunLoop().RunUntilIdle();
 
     service_->notifications()->RemoveObserver(&observer);
   }

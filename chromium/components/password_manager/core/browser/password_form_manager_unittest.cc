@@ -119,7 +119,7 @@ MATCHER_P2(CheckUploadedAutofillTypesAndSignature,
            form_signature,
            expected_types,
            "Unexpected autofill types or form signature") {
-  if (form_signature != arg.FormSignature()) {
+  if (form_signature != arg.FormSignatureAsStr()) {
     // An unexpected form is uploaded.
     return false;
   }
@@ -156,10 +156,10 @@ MATCHER_P2(CheckUploadedGenerationTypesAndSignature,
            form_signature,
            expected_generation_types,
            "Unexpected generation types or form signature") {
-  if (form_signature != arg.FormSignature()) {
+  if (form_signature != arg.FormSignatureAsStr()) {
     // Unexpected form's signature.
     ADD_FAILURE() << "Expected form signature is " << form_signature
-                  << ", but found " << arg.FormSignature();
+                  << ", but found " << arg.FormSignatureAsStr();
     return false;
   }
   for (const autofill::AutofillField* field : arg) {
@@ -499,10 +499,10 @@ class PasswordFormManagerTest : public testing::Test {
     std::string expected_login_signature;
     autofill::FormStructure observed_structure(observed_form_data);
     autofill::FormStructure pending_structure(saved_match()->form_data);
-    if (observed_structure.FormSignature() !=
-            pending_structure.FormSignature() &&
+    if (observed_structure.FormSignatureAsStr() !=
+            pending_structure.FormSignatureAsStr() &&
         times_used == 0) {
-      expected_login_signature = observed_structure.FormSignature();
+      expected_login_signature = observed_structure.FormSignatureAsStr();
     }
     autofill::ServerFieldTypeSet expected_available_field_types;
     expected_available_field_types.insert(autofill::USERNAME);
@@ -522,11 +522,11 @@ class PasswordFormManagerTest : public testing::Test {
 
     if (field_type) {
       EXPECT_CALL(*client()->mock_driver()->mock_autofill_download_manager(),
-                  StartUploadRequest(
-                      CheckUploadedAutofillTypesAndSignature(
-                          pending_structure.FormSignature(), expected_types),
-                      false, expected_available_field_types,
-                      expected_login_signature, true));
+                  StartUploadRequest(CheckUploadedAutofillTypesAndSignature(
+                                         pending_structure.FormSignatureAsStr(),
+                                         expected_types),
+                                     false, expected_available_field_types,
+                                     expected_login_signature, true));
     } else {
       EXPECT_CALL(*client()->mock_driver()->mock_autofill_download_manager(),
                   StartUploadRequest(_, _, _, _, _))
@@ -592,12 +592,13 @@ class PasswordFormManagerTest : public testing::Test {
     expected_available_field_types.insert(field_type);
 
     std::string observed_form_signature =
-        autofill::FormStructure(observed_form()->form_data).FormSignature();
+        autofill::FormStructure(observed_form()->form_data)
+            .FormSignatureAsStr();
 
     std::string expected_login_signature;
     if (field_type == autofill::NEW_PASSWORD) {
       autofill::FormStructure pending_structure(saved_match()->form_data);
-      expected_login_signature = pending_structure.FormSignature();
+      expected_login_signature = pending_structure.FormSignatureAsStr();
     }
     EXPECT_CALL(*client()->mock_driver()->mock_autofill_download_manager(),
                 StartUploadRequest(CheckUploadedAutofillTypesAndSignature(
@@ -715,7 +716,7 @@ class PasswordFormManagerTest : public testing::Test {
         *client()->mock_driver()->mock_autofill_download_manager(),
         StartUploadRequest(
             CheckUploadedGenerationTypesAndSignature(
-                form_structure.FormSignature(), expected_generation_types),
+                form_structure.FormSignatureAsStr(), expected_generation_types),
             false, expected_available_field_types, std::string(), true));
 
     form_manager.ProvisionallySave(
@@ -882,6 +883,10 @@ TEST_F(PasswordFormManagerTest, TestBlacklistMatching) {
   blacklisted_not_match2.username_element = ASCIIToUTF16("Element");
   blacklisted_not_match2.blacklisted_by_user = true;
 
+  // Doesn't match because of different PasswordForm::Scheme.
+  PasswordForm blacklisted_not_match3 = *observed_form();
+  blacklisted_not_match3.scheme = PasswordForm::SCHEME_BASIC;
+
   // Matches because of same element names, despite different page
   PasswordForm blacklisted_match = *observed_form();
   blacklisted_match.origin = GURL("http://accounts.google.com/a/LoginAuth1234");
@@ -897,6 +902,7 @@ TEST_F(PasswordFormManagerTest, TestBlacklistMatching) {
   result.push_back(base::MakeUnique<PasswordForm>(blacklisted_psl));
   result.push_back(base::MakeUnique<PasswordForm>(blacklisted_not_match));
   result.push_back(base::MakeUnique<PasswordForm>(blacklisted_not_match2));
+  result.push_back(base::MakeUnique<PasswordForm>(blacklisted_not_match3));
   result.push_back(base::MakeUnique<PasswordForm>(blacklisted_match));
   result.push_back(base::MakeUnique<PasswordForm>(blacklisted_match2));
   result.push_back(base::MakeUnique<PasswordForm>(*saved_match()));
@@ -2761,10 +2767,10 @@ TEST_F(PasswordFormManagerTest,
   expected_available_field_types.insert(autofill::NEW_PASSWORD);
 
   std::string observed_form_signature =
-      autofill::FormStructure(observed_form()->form_data).FormSignature();
+      autofill::FormStructure(observed_form()->form_data).FormSignatureAsStr();
 
   std::string expected_login_signature =
-      autofill::FormStructure(saved_match()->form_data).FormSignature();
+      autofill::FormStructure(saved_match()->form_data).FormSignatureAsStr();
 
   EXPECT_CALL(*client()->mock_driver()->mock_autofill_download_manager(),
               StartUploadRequest(CheckUploadedAutofillTypesAndSignature(
@@ -2983,7 +2989,7 @@ TEST_F(PasswordFormManagerTest, ProbablyAccountCreationUpload) {
   EXPECT_CALL(*client()->mock_driver()->mock_autofill_download_manager(),
               StartUploadRequest(
                   CheckUploadedAutofillTypesAndSignature(
-                      pending_structure.FormSignature(), expected_types),
+                      pending_structure.FormSignatureAsStr(), expected_types),
                   false, expected_available_field_types, std::string(), true));
 
   form_manager.ProvisionallySave(
@@ -3014,6 +3020,63 @@ TEST_F(PasswordFormManagerTest, ReportProcessingUpdate) {
   EXPECT_EQ(0, tester.GetActionCount("PasswordManager_LoginFollowingAutofill"));
   form_manager()->Update(*saved_match());
   EXPECT_EQ(1, tester.GetActionCount("PasswordManager_LoginFollowingAutofill"));
+}
+
+// Sanity check for calling ProcessMatches with empty vector. Should not crash
+// or make sanitizers scream.
+TEST_F(PasswordFormManagerTest, ProcessMatches_Empty) {
+  static_cast<FormFetcher::Consumer*>(form_manager())
+      ->ProcessMatches(std::vector<const PasswordForm*>(), 0u);
+}
+
+// For all combinations of PasswordForm schemes, test that ProcessMatches
+// filters out forms with schemes not matching the observed form.
+TEST_F(PasswordFormManagerTest, RemoveResultsWithWrongScheme_ObservingHTML) {
+  for (int correct = 0; correct <= PasswordForm::SCHEME_LAST; ++correct) {
+    for (int wrong = 0; wrong <= PasswordForm::SCHEME_LAST; ++wrong) {
+      if (correct == wrong)
+        continue;
+
+      const PasswordForm::Scheme kCorrectScheme =
+          static_cast<PasswordForm::Scheme>(correct);
+      const PasswordForm::Scheme kWrongScheme =
+          static_cast<PasswordForm::Scheme>(wrong);
+      SCOPED_TRACE(testing::Message() << "Correct scheme = " << kCorrectScheme
+                                      << ", wrong scheme = " << kWrongScheme);
+
+      PasswordForm observed = *observed_form();
+      observed.scheme = kCorrectScheme;
+      PasswordFormManager form_manager(
+          password_manager(), client(),
+          (kCorrectScheme == PasswordForm::SCHEME_HTML ? client()->driver()
+                                                       : nullptr),
+          observed, base::MakeUnique<NiceMock<MockFormSaver>>());
+
+      PasswordForm match = *saved_match();
+      match.scheme = kCorrectScheme;
+
+      PasswordForm non_match = match;
+      non_match.scheme = kWrongScheme;
+
+      // First try putting the correct scheme first in returned matches.
+      std::vector<const PasswordForm*> all_matches = {&match, &non_match};
+      static_cast<FormFetcher::Consumer*>(&form_manager)
+          ->ProcessMatches(all_matches, 0u);
+
+      EXPECT_EQ(1u, form_manager.best_matches().size());
+      EXPECT_EQ(kCorrectScheme,
+                form_manager.best_matches().begin()->second->scheme);
+
+      // Now try putting the correct scheme last in returned matches.
+      all_matches = {&non_match, &match};
+      static_cast<FormFetcher::Consumer*>(&form_manager)
+          ->ProcessMatches(all_matches, 0u);
+
+      EXPECT_EQ(1u, form_manager.best_matches().size());
+      EXPECT_EQ(kCorrectScheme,
+                form_manager.best_matches().begin()->second->scheme);
+    }
+  }
 }
 
 }  // namespace password_manager

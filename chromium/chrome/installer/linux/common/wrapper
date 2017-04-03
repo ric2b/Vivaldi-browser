@@ -28,9 +28,15 @@ fi
 # Find libffmpeg.so with additional codecs.
 CHR_CODECS_CL="/usr/share/doc/chromium-codecs-ffmpeg-extra/changelog.Debian.gz"
 if [ -r "$CHR_CODECS_CL" ]; then
-  LIBFFMPEG_PATH="/usr/lib/chromium-browser/libs"
-  CHR_CODECS_VER=`gzip -cd "$CHR_CODECS_CL" |
-    sed -n '1s/^chromium-browser (\([0-9]\+\.\)\{2\}\([0-9]\+\)\.[0-9]\+-.*/\2/p'`
+  if [ -r "/usr/lib/chromium-browser/libs/libffmpeg.so" ]; then
+    LIBFFMPEG_PATH="/usr/lib/chromium-browser/libs"
+  elif [ -r "/usr/lib/chromium-browser/libffmpeg.so" ]; then
+    LIBFFMPEG_PATH="/usr/lib/chromium-browser"
+  fi
+  if [[ -n "$LIBFFMPEG_PATH" ]]; then
+    CHR_CODECS_VER=`gzip -cd "$CHR_CODECS_CL" |
+      sed -n '1s/^chromium-browser (\([0-9]\+\.\)\{2\}\([0-9]\+\)\.[0-9]\+-.*/\2/p'`
+  fi
 elif [ -r "/etc/os-release" ]; then
   # Check distro, to allow distro specific tests to locate a suitable libffmpeg.so
   . /etc/os-release
@@ -62,17 +68,14 @@ elif [ -r "/etc/os-release" ]; then
   fi
 fi
 if [[ -n "$CHR_CODECS_VER" ]] && [ "$CHR_CODECS_VER" -ge "2564" ]; then
-  # For OpenSUSE, SLES and derivatives, seperate libffmpeg.so from the rest of
-  # the libs, as we do not want to prefer the others to our own.
+  # Seperate libffmpeg.so from the rest of the libs, as we do not want to prefer
+  # the others to our own.
   VIVALDI_LOCAL_LIBS="$HOME/.local/lib/vivaldi"
-  if [[ "$ID_LIKE" =~ "suse" ]]; then
-    if [ ! -r "$VIVALDI_LOCAL_LIBS/libffmpeg.so" ]; then
-      mkdir -p "$VIVALDI_LOCAL_LIBS"
-      ln -fs "$LIBFFMPEG_PATH/libffmpeg.so" "$VIVALDI_LOCAL_LIBS/libffmpeg.so"
-    fi
-    LIBFFMPEG_PATH="$VIVALDI_LOCAL_LIBS"
+  if [ ! -r "$VIVALDI_LOCAL_LIBS/libffmpeg.so" ]; then
+    mkdir -p "$VIVALDI_LOCAL_LIBS"
+    ln -fs "$LIBFFMPEG_PATH/libffmpeg.so" "$VIVALDI_LOCAL_LIBS/libffmpeg.so"
   fi
-  FFMPEG_LD_LIBRARY_PATH=":$LIBFFMPEG_PATH"
+  FFMPEG_LD_LIBRARY_PATH=":$VIVALDI_LOCAL_LIBS"
 fi
 
 # Set LD_LIBRARY_PATH to prefer our libs, excluding $HERE/lib/libffmpeg.so if

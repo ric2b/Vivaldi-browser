@@ -38,7 +38,7 @@ class LazyNow;
 class RealTimeDomain;
 class TimeDomain;
 class TaskQueueManagerDelegate;
-class TaskTimeTracker;
+class TaskTimeObserver;
 
 // The task queue manager provides N task queues and a selector interface for
 // choosing which task queue to service next. Each task queue consists of two
@@ -53,7 +53,8 @@ class TaskTimeTracker;
 //    registered with the selector as input to the scheduling decision.
 //
 class BLINK_PLATFORM_EXPORT TaskQueueManager
-    : public internal::TaskQueueSelector::Observer {
+    : public internal::TaskQueueSelector::Observer,
+      public base::MessageLoop::NestingObserver {
  public:
   // Create a task queue manager where |delegate| identifies the thread
   // on which where the tasks are  eventually run. Category strings must have
@@ -83,17 +84,12 @@ class BLINK_PLATFORM_EXPORT TaskQueueManager
   // tasks posted to the main loop. The batch size is 1 by default.
   void SetWorkBatchSize(int work_batch_size);
 
-  // When given a non-null TaskTimeTracker, the TaskQueueManager calls its
-  // ReportTaskTime method for every top level task. The task_time_tracker must
-  // outlive this object, or be removed via SetTaskTimeTracker(nullptr).
-  void SetTaskTimeTracker(TaskTimeTracker* task_time_tracker) {
-    task_time_tracker_ = task_time_tracker;
-  }
-
   // These functions can only be called on the same thread that the task queue
   // manager executes its tasks on.
   void AddTaskObserver(base::MessageLoop::TaskObserver* task_observer);
   void RemoveTaskObserver(base::MessageLoop::TaskObserver* task_observer);
+  void AddTaskTimeObserver(TaskTimeObserver* task_time_observer);
+  void RemoveTaskTimeObserver(TaskTimeObserver* task_time_observer);
 
   // Returns true if any task from a monitored task queue was was run since the
   // last call to GetAndClearSystemIsQuiescentBit.
@@ -163,20 +159,18 @@ class BLINK_PLATFORM_EXPORT TaskQueueManager
   void OnTriedToSelectBlockedWorkQueue(
       internal::WorkQueue* work_queue) override;
 
+  // base::MessageLoop::NestingObserver implementation:
+  void OnBeginNestedMessageLoop() override;
+
   // Called by the task queue to register a new pending task.
   void DidQueueTask(const internal::TaskQueueImpl::Task& pending_task);
 
   // Use the selector to choose a pending task and run it.
   void DoWork(base::TimeTicks run_time, bool from_main_thread);
 
-  // Delayed Tasks with run_times <= Now() are enqueued onto the work queue.
-  // Reloads any empty work queues which have automatic pumping enabled and
-  // which are eligible to be auto pumped based on the |previous_task| which was
-  // run and |should_trigger_wakeup|. Call with an empty |previous_task| if no
-  // task was just run.
-  void UpdateWorkQueues(bool should_trigger_wakeup,
-                        const internal::TaskQueueImpl::Task* previous_task,
-                        LazyNow lazy_now);
+  // Delayed Tasks with run_times <= Now() are enqueued onto the work queue and
+  // reloads any empty work queues.
+  void UpdateWorkQueues(LazyNow lazy_now);
 
   // Chooses the next work queue to service. Returns true if |out_queue|
   // indicates the queue from which the next task should be run, false to
@@ -191,9 +185,7 @@ class BLINK_PLATFORM_EXPORT TaskQueueManager
     EXECUTED,
     TASK_QUEUE_MANAGER_DELETED
   };
-  ProcessTaskResult ProcessTaskFromWorkQueue(
-      internal::WorkQueue* work_queue,
-      internal::TaskQueueImpl::Task* out_previous_task);
+  ProcessTaskResult ProcessTaskFromWorkQueue(internal::WorkQueue* work_queue);
 
   bool RunsTasksOnCurrentThread() const;
   bool PostNonNestableDelayedTask(const tracked_objects::Location& from_here,
@@ -239,16 +231,16 @@ class BLINK_PLATFORM_EXPORT TaskQueueManager
   // the main thread and other threads.
   std::set<base::TimeTicks> main_thread_pending_wakeups_;
 
-  // Protects |other_thread_pending_wakeups_|.
+  // Protects |other_thread_pending_wakeup_|.
   mutable base::Lock other_thread_lock_;
-  std::set<base::TimeTicks> other_thread_pending_wakeups_;
+  bool other_thread_pending_wakeup_;
 
   int work_batch_size_;
   size_t task_count_;
 
   base::ObserverList<base::MessageLoop::TaskObserver> task_observers_;
 
-  TaskTimeTracker* task_time_tracker_;  // NOT OWNED
+  base::ObserverList<TaskTimeObserver> task_time_observers_;
 
   const char* tracing_category_;
   const char* disabled_by_default_tracing_category_;

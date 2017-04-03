@@ -127,17 +127,17 @@ class TestPrecacheCompletionCallback {
 
 class PrecacheManagerUnderTest : public PrecacheManager {
  public:
-  PrecacheManagerUnderTest(
-      content::BrowserContext* browser_context,
-      const sync_driver::SyncService* const sync_service,
-      const history::HistoryService* const history_service,
-      const base::FilePath& db_path,
-      std::unique_ptr<PrecacheDatabase> precache_database)
-      : PrecacheManager(
-          browser_context, sync_service, history_service,
-          db_path, std::move(precache_database)),
-        control_group_(false) {
-  }
+  PrecacheManagerUnderTest(content::BrowserContext* browser_context,
+                           const syncer::SyncService* const sync_service,
+                           const history::HistoryService* const history_service,
+                           const base::FilePath& db_path,
+                           std::unique_ptr<PrecacheDatabase> precache_database)
+      : PrecacheManager(browser_context,
+                        sync_service,
+                        history_service,
+                        db_path,
+                        std::move(precache_database)),
+        control_group_(false) {}
   bool IsInExperimentGroup() const override { return !control_group_; }
   bool IsInControlGroup() const override { return control_group_; }
   bool IsPrecachingAllowed() const override { return true; }
@@ -178,7 +178,7 @@ class PrecacheManagerTest : public testing::Test {
     precache_database_ = precache_database.get();
 
     ASSERT_TRUE(scoped_temp_dir_.CreateUniqueTempDir());
-    base::FilePath db_path = scoped_temp_dir_.path().Append(
+    base::FilePath db_path = scoped_temp_dir_.GetPath().Append(
         base::FilePath(FILE_PATH_LITERAL("precache_database")));
 
     // Make the fetch of the precache configuration settings fail. Precaching
@@ -556,6 +556,8 @@ TEST_F(PrecacheManagerTest, DeleteExpiredPrecacheHistory) {
                                          GURL(), base::TimeDelta(),
                                          kCurrentTime, info_, 1000);
   expected_histogram_count_map["Precache.CacheStatus.NonPrefetch"] += 2;
+  expected_histogram_count_map
+      ["Precache.CacheStatus.NonPrefetch.FromPrecache"] += 2;
   expected_histogram_count_map["Precache.Latency.NonPrefetch"] += 2;
   expected_histogram_count_map["Precache.Latency.NonPrefetch.NonTopHosts"] += 2;
   expected_histogram_count_map["Precache.Saved"] += 2;

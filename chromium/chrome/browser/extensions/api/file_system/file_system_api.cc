@@ -17,7 +17,6 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/linked_ptr.h"
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
@@ -319,10 +318,10 @@ void DispatchVolumeListChangeEvent(Profile* profile) {
       continue;
     event_router->DispatchEventToExtension(
         extension->id(),
-        base::WrapUnique(new Event(
+        base::MakeUnique<Event>(
             events::FILE_SYSTEM_ON_VOLUME_LIST_CHANGED,
             api::file_system::OnVolumeListChanged::kEventName,
-            api::file_system::OnVolumeListChanged::Create(event_args))));
+            api::file_system::OnVolumeListChanged::Create(event_args)));
   }
 }
 
@@ -441,7 +440,7 @@ void ConsentProviderDelegate::ShowDialog(
   }
 
   RequestFileSystemDialogView::ShowDialog(web_contents, extension, volume,
-                                          writable, base::Bind(callback));
+                                          writable, callback);
 }
 
 void ConsentProviderDelegate::ShowNotification(
@@ -475,21 +474,23 @@ bool ConsentProviderDelegate::IsWhitelistedComponent(
 using file_system_api::ConsentProvider;
 #endif
 
-bool FileSystemGetDisplayPathFunction::RunSync() {
+ExtensionFunction::ResponseAction FileSystemGetDisplayPathFunction::Run() {
   std::string filesystem_name;
   std::string filesystem_path;
   EXTENSION_FUNCTION_VALIDATE(args_->GetString(0, &filesystem_name));
   EXTENSION_FUNCTION_VALIDATE(args_->GetString(1, &filesystem_path));
 
   base::FilePath file_path;
+  std::string error;
   if (!app_file_handler_util::ValidateFileEntryAndGetPath(
           filesystem_name, filesystem_path,
-          render_frame_host()->GetProcess()->GetID(), &file_path, &error_))
-    return false;
+          render_frame_host()->GetProcess()->GetID(), &file_path, &error)) {
+    return RespondNow(Error(error));
+  }
 
   file_path = path_util::PrettifyPath(file_path);
-  SetResult(base::MakeUnique<base::StringValue>(file_path.value()));
-  return true;
+  return RespondNow(
+      OneArgument(base::MakeUnique<base::StringValue>(file_path.value())));
 }
 
 FileSystemEntryFunction::FileSystemEntryFunction()
@@ -612,17 +613,15 @@ void FileSystemGetWritableEntryFunction::SetIsDirectoryOnFileThread() {
   }
 }
 
-bool FileSystemIsWritableEntryFunction::RunSync() {
+ExtensionFunction::ResponseAction FileSystemIsWritableEntryFunction::Run() {
   std::string filesystem_name;
   std::string filesystem_path;
   EXTENSION_FUNCTION_VALIDATE(args_->GetString(0, &filesystem_name));
   EXTENSION_FUNCTION_VALIDATE(args_->GetString(1, &filesystem_path));
 
   std::string filesystem_id;
-  if (!storage::CrackIsolatedFileSystemName(filesystem_name, &filesystem_id)) {
-    error_ = app_file_handler_util::kInvalidParameters;
-    return false;
-  }
+  if (!storage::CrackIsolatedFileSystemName(filesystem_name, &filesystem_id))
+    return RespondNow(Error(app_file_handler_util::kInvalidParameters));
 
   content::ChildProcessSecurityPolicy* policy =
       content::ChildProcessSecurityPolicy::GetInstance();
@@ -630,8 +629,8 @@ bool FileSystemIsWritableEntryFunction::RunSync() {
   bool is_writable = policy->CanReadWriteFileSystem(renderer_id,
                                                     filesystem_id);
 
-  SetResult(base::MakeUnique<base::FundamentalValue>(is_writable));
-  return true;
+  return RespondNow(
+      OneArgument(base::MakeUnique<base::FundamentalValue>(is_writable)));
 }
 
 // Handles showing a dialog to the user to ask for the filename for a file to
@@ -1193,13 +1192,12 @@ void FileSystemRetainEntryFunction::RetainFileEntry(
   SendResponse(true);
 }
 
-bool FileSystemIsRestorableFunction::RunSync() {
+ExtensionFunction::ResponseAction FileSystemIsRestorableFunction::Run() {
   std::string entry_id;
   EXTENSION_FUNCTION_VALIDATE(args_->GetString(0, &entry_id));
-  SetResult(base::MakeUnique<base::FundamentalValue>(
-      SavedFilesService::Get(GetProfile())
-          ->IsRegistered(extension_->id(), entry_id)));
-  return true;
+  return RespondNow(OneArgument(base::MakeUnique<base::FundamentalValue>(
+      SavedFilesService::Get(Profile::FromBrowserContext(browser_context()))
+          ->IsRegistered(extension_->id(), entry_id))));
 }
 
 bool FileSystemRestoreEntryFunction::RunAsync() {
@@ -1230,22 +1228,19 @@ bool FileSystemRestoreEntryFunction::RunAsync() {
   return true;
 }
 
-bool FileSystemObserveDirectoryFunction::RunSync() {
+ExtensionFunction::ResponseAction FileSystemObserveDirectoryFunction::Run() {
   NOTIMPLEMENTED();
-  error_ = kUnknownIdError;
-  return false;
+  return RespondNow(Error(kUnknownIdError));
 }
 
-bool FileSystemUnobserveEntryFunction::RunSync() {
+ExtensionFunction::ResponseAction FileSystemUnobserveEntryFunction::Run() {
   NOTIMPLEMENTED();
-  error_ = kUnknownIdError;
-  return false;
+  return RespondNow(Error(kUnknownIdError));
 }
 
-bool FileSystemGetObservedEntriesFunction::RunSync() {
+ExtensionFunction::ResponseAction FileSystemGetObservedEntriesFunction::Run() {
   NOTIMPLEMENTED();
-  error_ = kUnknownIdError;
-  return false;
+  return RespondNow(Error(kUnknownIdError));
 }
 
 #if !defined(OS_CHROMEOS)
@@ -1335,13 +1330,11 @@ void FileSystemRequestFileSystemFunction::OnConsentReceived(
 
   switch (result) {
     case ConsentProvider::CONSENT_REJECTED:
-      SetError(kSecurityError);
-      SendResponse(false);
+      Respond(Error(kSecurityError));
       return;
 
     case ConsentProvider::CONSENT_IMPOSSIBLE:
-      SetError(kConsentImpossible);
-      SendResponse(false);
+      Respond(Error(kConsentImpossible));
       return;
 
     case ConsentProvider::CONSENT_GRANTED:
@@ -1349,8 +1342,7 @@ void FileSystemRequestFileSystemFunction::OnConsentReceived(
   }
 
   if (!volume.get()) {
-    SetError(kVolumeNotFoundError);
-    SendResponse(false);
+    Respond(Error(kVolumeNotFoundError));
     return;
   }
 
@@ -1365,8 +1357,7 @@ void FileSystemRequestFileSystemFunction::OnConsentReceived(
 
   base::FilePath virtual_path;
   if (!backend->GetVirtualPath(volume->mount_path(), &virtual_path)) {
-    SetError(kSecurityError);
-    SendResponse(false);
+    Respond(Error(kSecurityError));
     return;
   }
 
@@ -1389,8 +1380,7 @@ void FileSystemRequestFileSystemFunction::OnConsentReceived(
           std::string() /* file_system_id */, original_url.path(),
           &register_name);
   if (file_system_id.empty()) {
-    SetError(kSecurityError);
-    SendResponse(false);
+    Respond(Error(kSecurityError));
     return;
   }
 
@@ -1425,8 +1415,7 @@ void FileSystemRequestFileSystemFunction::OnConsentReceived(
   dict->SetString("file_system_id", file_system_id);
   dict->SetString("file_system_path", register_name);
 
-  SetResult(std::move(dict));
-  SendResponse(true);
+  Respond(OneArgument(std::move(dict)));
 }
 
 FileSystemGetVolumeListFunction::FileSystemGetVolumeListFunction()

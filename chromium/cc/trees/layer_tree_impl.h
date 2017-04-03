@@ -43,7 +43,6 @@ class LayerTreeDebugState;
 class LayerTreeImpl;
 class LayerTreeSettings;
 class MemoryHistory;
-class OutputSurface;
 class PageScaleAnimation;
 class PictureLayerImpl;
 class TaskRunnerProvider;
@@ -70,14 +69,14 @@ class CC_EXPORT LayerTreeImpl {
 
   void Shutdown();
   void ReleaseResources();
-  void RecreateResources();
+  void ReleaseTileResources();
+  void RecreateTileResources();
 
   // Methods called by the layer tree that pass-through or access LTHI.
   // ---------------------------------------------------------------------------
   const LayerTreeSettings& settings() const;
   const LayerTreeDebugState& debug_state() const;
   ContextProvider* context_provider() const;
-  OutputSurface* output_surface() const;
   ResourceProvider* resource_provider() const;
   TileManager* tile_manager() const;
   ImageDecodeController* image_decode_controller() const;
@@ -140,6 +139,8 @@ class CC_EXPORT LayerTreeImpl {
   void PushPropertiesTo(LayerTreeImpl* tree_impl);
 
   void MoveChangeTrackingToLayers();
+
+  void ForceRecalculateRasterScales();
 
   LayerImplList::const_iterator begin() const;
   LayerImplList::const_iterator end() const;
@@ -233,6 +234,11 @@ class CC_EXPORT LayerTreeImpl {
     return painted_device_scale_factor_;
   }
 
+  void SetDeviceColorSpace(const gfx::ColorSpace& device_color_space);
+  const gfx::ColorSpace& device_color_space() const {
+    return device_color_space_;
+  }
+
   SyncedElasticOverscroll* elastic_overscroll() {
     return elastic_overscroll_.get();
   }
@@ -252,7 +258,9 @@ class CC_EXPORT LayerTreeImpl {
   // Updates draw properties and render surface layer list, as well as tile
   // priorities. Returns false if it was unable to update.  Updating lcd
   // text may cause invalidations, so should only be done after a commit.
-  bool UpdateDrawProperties(bool update_lcd_text);
+  bool UpdateDrawProperties(
+      bool update_lcd_text,
+      bool force_skip_verify_visible_rect_calculations = false);
   void BuildPropertyTreesForTesting();
   void BuildLayerListAndPropertyTreesForTesting();
 
@@ -278,7 +286,7 @@ class CC_EXPORT LayerTreeImpl {
   }
   bool has_ever_been_drawn() const { return has_ever_been_drawn_; }
 
-  void set_ui_resource_request_queue(const UIResourceRequestQueue& queue);
+  void set_ui_resource_request_queue(UIResourceRequestQueue queue);
 
   const LayerImplList& RenderSurfaceLayerList() const;
   const Region& UnoccludedScreenSpaceRegion() const;
@@ -421,7 +429,7 @@ class CC_EXPORT LayerTreeImpl {
       std::unique_ptr<PendingPageScaleAnimation> pending_animation);
   std::unique_ptr<PendingPageScaleAnimation> TakePendingPageScaleAnimation();
 
-  void DidUpdateScrollOffset(int layer_id, int transform_id);
+  void DidUpdateScrollOffset(int layer_id);
   void DidUpdateScrollState(int layer_id);
 
   void ScrollAnimationAbort(bool needs_completion);
@@ -487,6 +495,7 @@ class CC_EXPORT LayerTreeImpl {
 
   float device_scale_factor_;
   float painted_device_scale_factor_;
+  gfx::ColorSpace device_color_space_;
 
   scoped_refptr<SyncedElasticOverscroll> elastic_overscroll_;
 

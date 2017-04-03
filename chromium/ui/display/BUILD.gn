@@ -23,16 +23,6 @@ component("display") {
     "chromeos/query_content_protection_task.h",
     "chromeos/update_display_configuration_task.cc",
     "chromeos/update_display_configuration_task.h",
-    "chromeos/x11/display_mode_x11.cc",
-    "chromeos/x11/display_mode_x11.h",
-    "chromeos/x11/display_snapshot_x11.cc",
-    "chromeos/x11/display_snapshot_x11.h",
-    "chromeos/x11/display_util_x11.cc",
-    "chromeos/x11/display_util_x11.h",
-    "chromeos/x11/native_display_delegate_x11.cc",
-    "chromeos/x11/native_display_delegate_x11.h",
-    "chromeos/x11/native_display_event_dispatcher_x11.cc",
-    "chromeos/x11/native_display_event_dispatcher_x11.h",
     "display.cc",
     "display.h",
     "display_change_notifier.cc",
@@ -40,10 +30,16 @@ component("display") {
     "display_export.h",
     "display_finder.cc",
     "display_finder.h",
+    "display_list.cc",
+    "display_list.h",
     "display_observer.cc",
     "display_observer.h",
     "display_switches.cc",
     "display_switches.h",
+    "fake_display_delegate.cc",
+    "fake_display_delegate.h",
+    "fake_display_snapshot.cc",
+    "fake_display_snapshot.h",
     "ios/screen_ios.mm",
     "mac/screen_mac.mm",
     "manager/display_layout.cc",
@@ -52,9 +48,15 @@ component("display") {
     "manager/display_layout_builder.h",
     "manager/display_layout_store.cc",
     "manager/display_layout_store.h",
+    "manager/display_manager_utilities.cc",
+    "manager/display_manager_utilities.h",
+    "manager/managed_display_info.cc",
+    "manager/managed_display_info.h",
     "screen.cc",
     "screen.h",
     "screen_aura.cc",
+    "screen_base.cc",
+    "screen_base.h",
     "win/display_info.cc",
     "win/display_info.h",
     "win/dpi.cc",
@@ -69,6 +71,10 @@ component("display") {
 
   defines = [ "DISPLAY_IMPLEMENTATION" ]
 
+  public_deps = [
+    "//ui/gfx:gfx",
+  ]
+
   deps = [
     "//base",
     "//ui/display/types",
@@ -78,22 +84,7 @@ component("display") {
   ]
 
   if (is_chromeos && use_x11) {
-    configs += [
-      "//build/config/linux:x11",
-      "//build/config/linux:xext",
-      "//build/config/linux:xi",
-      "//build/config/linux:xrandr",
-    ]
-    deps += [ "//ui/events/platform" ]
-  }
-
-  deps += []
-  if (use_x11) {
-    deps += [ "//ui/gfx/x" ]
-  }
-
-  if (is_chromeos && use_ozone) {
-    sources -= [
+    sources += [
       "chromeos/x11/display_mode_x11.cc",
       "chromeos/x11/display_mode_x11.h",
       "chromeos/x11/display_snapshot_x11.cc",
@@ -105,7 +96,21 @@ component("display") {
       "chromeos/x11/native_display_event_dispatcher_x11.cc",
       "chromeos/x11/native_display_event_dispatcher_x11.h",
     ]
+
+    configs += [
+      "//build/config/linux:x11",
+      "//build/config/linux:xext",
+      "//build/config/linux:xi",
+      "//build/config/linux:xrandr",
+    ]
+
+    deps += [ "//ui/events/platform" ]
   }
+
+  if (use_x11) {
+    deps += [ "//ui/gfx/x" ]
+  }
+
   if (!use_aura) {
     sources -= [ "screen_aura.cc" ]
   }
@@ -183,9 +188,12 @@ test("display_unittests") {
     "chromeos/x11/display_util_x11_unittest.cc",
     "chromeos/x11/native_display_event_dispatcher_x11_unittest.cc",
     "display_change_notifier_unittest.cc",
+    "display_list_unittest.cc",
     "display_unittest.cc",
     "manager/display_layout_builder_unittest.cc",
     "manager/display_layout_unittest.cc",
+    "manager/display_manager_utilities_unittest.cc",
+    "manager/managed_display_info_unittest.cc",
     "screen_unittest.cc",
     "util/display_util_unittest.cc",
     "util/edid_parser_unittest.cc",

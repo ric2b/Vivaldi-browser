@@ -20,6 +20,10 @@ source_set("lib") {
     "accelerators/accelerator_registrar_impl.h",
     "accessibility_delegate_mus.cc",
     "accessibility_delegate_mus.h",
+    "app_list_presenter_mus.cc",
+    "app_list_presenter_mus.h",
+    "bridge/immersive_handler_factory_mus.cc",
+    "bridge/immersive_handler_factory_mus.h",
     "bridge/mus_layout_manager_adapter.cc",
     "bridge/mus_layout_manager_adapter.h",
     "bridge/wm_lookup_mus.cc",
@@ -32,6 +36,8 @@ source_set("lib") {
     "bridge/wm_shell_mus.h",
     "bridge/wm_window_mus.cc",
     "bridge/wm_window_mus.h",
+    "bridge/workspace_event_handler_mus.cc",
+    "bridge/workspace_event_handler_mus.h",
     "container_ids.cc",
     "container_ids.h",
     "context_menu_mus.cc",
@@ -40,6 +46,13 @@ source_set("lib") {
     "disconnected_app_handler.h",
     "drag_window_resizer.cc",
     "drag_window_resizer.h",
+    "frame/custom_frame_view_mus.cc",
+    "frame/custom_frame_view_mus.h",
+    "frame/detached_title_area_renderer.cc",
+    "frame/detached_title_area_renderer.h",
+    "frame/detached_title_area_renderer_host.h",
+    "keyboard_ui_mus.cc",
+    "keyboard_ui_mus.h",
     "layout_manager.cc",
     "layout_manager.h",
     "move_event_handler.cc",
@@ -60,11 +73,12 @@ source_set("lib") {
     "shadow.h",
     "shadow_controller.cc",
     "shadow_controller.h",
-    "shelf_layout_manager.cc",
-    "shelf_layout_manager.h",
-    "shelf_layout_manager_delegate.h",
+    "shelf_delegate_mus.cc",
+    "shelf_delegate_mus.h",
     "shell_delegate_mus.cc",
     "shell_delegate_mus.h",
+    "wallpaper_delegate_mus.cc",
+    "wallpaper_delegate_mus.h",
     "window_manager.cc",
     "window_manager.h",
     "window_manager_application.cc",
@@ -76,8 +90,11 @@ source_set("lib") {
 
   deps = [
     "//components/user_manager",
-    "//mash/shelf/public/interfaces",
+    "//components/wallpaper",
     "//ui/app_list/presenter",
+    "//ui/app_list/presenter:mojom",
+    "//ui/keyboard",
+    "//ui/keyboard:mojom",
     "//ui/message_center",
   ]
 
@@ -85,6 +102,8 @@ source_set("lib") {
     "//ash",
     "//ash/public/interfaces",
     "//base",
+    "//base:i18n",
+    "//mash/public/interfaces",
     "//mash/session/public/interfaces",
     "//mojo/common:common_base",
     "//services/shell/public/cpp",
@@ -92,6 +111,7 @@ source_set("lib") {
     "//services/ui/common:mus_common",
     "//services/ui/public/cpp",
     "//services/ui/public/interfaces",
+    "//services/ui/public/interfaces/display",
     "//skia",
     "//ui/aura",
     "//ui/events",
@@ -102,13 +122,26 @@ source_set("lib") {
     "//ui/strings",
     "//ui/views",
     "//ui/views/mus:for_mojo_application",
+    "//ui/wm",
+  ]
+
+  data_deps = [
+    "//ash/touch_hud/mus:touch_hud",
   ]
 
   if (is_chromeos) {
+    sources += [
+      "system_tray_delegate_mus.cc",
+      "system_tray_delegate_mus.h",
+      "vpn_delegate_mus.cc",
+      "vpn_delegate_mus.h",
+    ]
+
     deps += [
       "//chromeos",
       "//chromeos:power_manager_proto",
       "//device/bluetooth",
+      "//ui/chromeos",
     ]
   }
 }
@@ -123,6 +156,7 @@ service("mus") {
   deps = [
     ":lib",
     ":resources",
+    ":resources_200",
     "//services/shell/public/cpp",
   ]
 
@@ -133,7 +167,10 @@ service("mus") {
     "//services/ui",
   ]
 
-  resources = [ "$root_out_dir/ash_mus_resources.pak" ]
+  resources = [
+    "$root_out_dir/ash_mus_resources.pak",
+    "$root_out_dir/ash_mus_resources_200.pak",
+  ]
 }
 
 service_manifest("manifest") {
@@ -141,7 +178,7 @@ service_manifest("manifest") {
   source = "manifest.json"
 }
 
-# TODO: Load resources at additional scales and load locale-specific strings.
+# TODO: Load locale-specific strings.
 # TODO: Avoid duplication between Mash and Chrome pak files: crbug.com/628715.
 repack("resources") {
   output = "$root_out_dir/ash_mus_resources.pak"
@@ -161,12 +198,43 @@ repack("resources") {
     "//ui/views/mus:resources",
     "//ui/views/resources",
   ]
+
+  if (is_chromeos) {
+    sources += [
+      "$root_gen_dir/ui/chromeos/resources/ui_chromeos_resources_100_percent.pak",
+      "$root_gen_dir/ui/chromeos/strings/ui_chromeos_strings_en-US.pak",
+    ]
+    deps += [
+      "//ui/chromeos/resources",
+      "//ui/chromeos/strings",
+    ]
+  }
+}
+
+repack("resources_200") {
+  output = "$root_out_dir/ash_mus_resources_200.pak"
+  sources = [
+    "$root_gen_dir/ash/resources/ash_resources_200_percent.pak",
+    "$root_gen_dir/ui/resources/ui_resources_200_percent.pak",
+    "$root_gen_dir/ui/views/resources/views_resources_200_percent.pak",
+  ]
+  deps = [
+    "//ash/resources",
+    "//ui/resources",
+    "//ui/views/resources",
+  ]
+
+  if (is_chromeos) {
+    sources += [ "$root_gen_dir/ui/chromeos/resources/ui_chromeos_resources_200_percent.pak" ]
+    deps += [ "//ui/chromeos/resources" ]
+  }
 }
 
 source_set("unittests") {
   testonly = true
 
   sources = [
+    "../common/wm_window_unittest.cc",
     "accelerators/accelerator_controller_registrar_test_api.cc",
     "accelerators/accelerator_controller_registrar_test_api.h",
     "accelerators/accelerator_controller_unittest.cc",
@@ -176,13 +244,14 @@ source_set("unittests") {
     "bridge/wm_window_mus_test_api.h",
     "layout_manager_unittest.cc",
     "root_window_controller_unittest.cc",
+    "test/ash_test_impl_mus.cc",
+    "test/ash_test_impl_mus.h",
     "test/wm_test_base.cc",
     "test/wm_test_base.h",
     "test/wm_test_helper.cc",
     "test/wm_test_helper.h",
-    "test/wm_test_screen.cc",
-    "test/wm_test_screen.h",
     "window_manager_unittest.cc",
+    "wm/container_finder_unittest.cc",
     "wm/mru_window_tracker_unittest.cc",
     "workspace/workspace_layout_manager_unittest.cc",
   ]
@@ -191,10 +260,11 @@ source_set("unittests") {
     ":lib",
     ":resources",
     "//ash",
-    "//ash:test_support",
+    "//ash:test_support_without_content",
     "//ash/public/interfaces",
     "//base",
     "//base/test:test_config",
+    "//base/test:test_support",
     "//mojo/public/cpp/system",
     "//services/shell/public/cpp:service_test_support",
     "//services/ui/common:mus_common",
@@ -214,6 +284,7 @@ source_set("unittests") {
     "//ui/gfx/geometry",
     "//ui/gfx/geometry/mojo",
     "//ui/message_center",
+    "//ui/views:test_support",
     "//ui/views/mus",
   ]
 
@@ -223,4 +294,9 @@ source_set("unittests") {
   ]
 
   defines = [ "NOTIMPLEMENTED_POLICY=5" ]
+
+  if (is_chromeos) {
+    sources +=
+        [ "../common/system/chromeos/brightness/tray_brightness_unittest.cc" ]
+  }
 }

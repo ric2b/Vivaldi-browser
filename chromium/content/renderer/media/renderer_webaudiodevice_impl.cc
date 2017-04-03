@@ -63,16 +63,21 @@ void RendererWebAudioDeviceImpl::start() {
       render_frame ? render_frame->GetRoutingID() : MSG_ROUTING_NONE,
       session_id_, std::string(), security_origin_);
 
+  // Specify the latency info to be passed to the browser side.
+  media::AudioParameters sink_params(params_);
+  sink_params.set_latency_tag(AudioDeviceFactory::GetSourceLatencyType(
+      AudioDeviceFactory::kSourceWebAudioInteractive));
+
 #if defined(OS_ANDROID)
   // Use the media thread instead of the render thread for fake Render() calls
   // since it has special connotations for Blink and garbage collection. Timeout
   // value chosen to be highly unlikely in the normal case.
   webaudio_suspender_.reset(new media::SilentSinkSuspender(
-      this, base::TimeDelta::FromSeconds(30), params_, sink_,
+      this, base::TimeDelta::FromSeconds(30), sink_params, sink_,
       RenderThreadImpl::current()->GetMediaThreadTaskRunner()));
-  sink_->Initialize(params_, webaudio_suspender_.get());
+  sink_->Initialize(sink_params, webaudio_suspender_.get());
 #else
-  sink_->Initialize(params_, this);
+  sink_->Initialize(sink_params, this);
 #endif
 
   sink_->Start();

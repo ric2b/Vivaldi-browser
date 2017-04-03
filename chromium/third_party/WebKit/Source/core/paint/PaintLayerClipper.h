@@ -25,7 +25,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
  *
  * Alternatively, the contents of this file may be used under the terms
  * of either the Mozilla Public License Version 1.1, found at
@@ -48,63 +48,83 @@
 #include "core/CoreExport.h"
 #include "core/layout/ClipRectsCache.h"
 #include "core/layout/ScrollEnums.h"
+
+#include "platform/graphics/paint/GeometryMapper.h"
+
 #include "wtf/Allocator.h"
 
 namespace blink {
 
 class PaintLayer;
 
-enum ShouldRespectOverflowClipType {
-    IgnoreOverflowClip,
-    RespectOverflowClip
-};
+enum ShouldRespectOverflowClipType { IgnoreOverflowClip, RespectOverflowClip };
 
 class ClipRectsContext {
-    STACK_ALLOCATED();
-public:
-    ClipRectsContext(const PaintLayer* root, ClipRectsCacheSlot slot, OverlayScrollbarClipBehavior overlayScrollbarClipBehavior = IgnoreOverlayScrollbarSize, const LayoutSize& accumulation = LayoutSize())
-        : rootLayer(root)
-        , overlayScrollbarClipBehavior(overlayScrollbarClipBehavior)
-        , m_cacheSlot(slot)
-        , subPixelAccumulation(accumulation)
-        , respectOverflowClip(slot == PaintingClipRectsIgnoringOverflowClip ? IgnoreOverflowClip : RespectOverflowClip)
-        , respectOverflowClipForViewport(slot == RootRelativeClipRectsIgnoringViewportClip ? IgnoreOverflowClip : RespectOverflowClip)
-    {
-    }
+  STACK_ALLOCATED();
 
-    void setIgnoreOverflowClip()
-    {
-        ASSERT(!usesCache() || m_cacheSlot == PaintingClipRects);
-        ASSERT(respectOverflowClip == RespectOverflowClip);
-        if (usesCache())
-            m_cacheSlot = PaintingClipRectsIgnoringOverflowClip;
-        respectOverflowClip = IgnoreOverflowClip;
-    }
+ public:
+  ClipRectsContext(const PaintLayer* root,
+                   ClipRectsCacheSlot slot,
+                   OverlayScrollbarClipBehavior overlayScrollbarClipBehavior =
+                       IgnoreOverlayScrollbarSize,
+                   const LayoutSize& accumulation = LayoutSize())
+      : rootLayer(root),
+        overlayScrollbarClipBehavior(overlayScrollbarClipBehavior),
+        m_cacheSlot(slot),
+        subPixelAccumulation(accumulation),
+        respectOverflowClip(slot == PaintingClipRectsIgnoringOverflowClip
+                                ? IgnoreOverflowClip
+                                : RespectOverflowClip),
+        respectOverflowClipForViewport(
+            slot == RootRelativeClipRectsIgnoringViewportClip
+                ? IgnoreOverflowClip
+                : RespectOverflowClip) {}
 
-    bool usesCache() const
-    {
-        return m_cacheSlot != UncachedClipRects;
-    }
+  void setIgnoreOverflowClip() {
+    DCHECK(!usesCache() || m_cacheSlot == PaintingClipRects);
+    DCHECK(respectOverflowClip == RespectOverflowClip);
+    if (usesCache())
+      m_cacheSlot = PaintingClipRectsIgnoringOverflowClip;
+    respectOverflowClip = IgnoreOverflowClip;
+  }
 
-    ClipRectsCacheSlot cacheSlot() const
-    {
-        return m_cacheSlot;
-    }
+  bool usesCache() const { return m_cacheSlot != UncachedClipRects; }
 
-    const PaintLayer* rootLayer;
-    const OverlayScrollbarClipBehavior overlayScrollbarClipBehavior;
+  ClipRectsCacheSlot cacheSlot() const { return m_cacheSlot; }
 
-private:
-    friend class PaintLayerClipper;
+  const PaintLayer* rootLayer;
+  const OverlayScrollbarClipBehavior overlayScrollbarClipBehavior;
 
-    ClipRectsCacheSlot m_cacheSlot;
-    LayoutSize subPixelAccumulation;
-    ShouldRespectOverflowClipType respectOverflowClip;
-    ShouldRespectOverflowClipType respectOverflowClipForViewport;
+ private:
+  friend class PaintLayerClipper;
+
+  ClipRectsCacheSlot m_cacheSlot;
+  LayoutSize subPixelAccumulation;
+  ShouldRespectOverflowClipType respectOverflowClip;
+  ShouldRespectOverflowClipType respectOverflowClipForViewport;
 };
 
 // PaintLayerClipper is responsible for computing and caching clip
 // rects.
+//
+// These clip rects have two types: background and foreground.
+//
+// The "background rect" for a PaintLayer is almost the same as its visual
+// rect in the space of some ancestor PaintLayer (specified by rootLayer on
+// ClipRectsContext).
+// The only differences are that:
+//   * The unclipped rect at the start is LayoutRect::infiniteIntRect,
+// rather than the local overflow bounds of the PaintLayer.
+//   * CSS clip, the extent of visualOverflowRect(), and SVG root viewport
+// clipping is applied.
+// Thus, for example if there are no clips then the background rect will be
+// infinite. Also, whether overflow clip of the ancestor should be applied is a
+// parameter.
+//
+// The "foreground rect" for a PaintLayer is its "background rect", intersected
+// with any clip applied by this PaintLayer to its children.
+
+// Motivation for this class:
 //
 // The main reason for this cache is that we compute the clip rects during
 // a layout tree walk but need them during a paint tree walk (see example
@@ -149,41 +169,69 @@ private:
 // clip #fixed. This is the reason why we compute the painting clip rects during
 // a layout tree walk and cache them for painting.
 class CORE_EXPORT PaintLayerClipper {
-    DISALLOW_NEW();
-public:
-    explicit PaintLayerClipper(const PaintLayer& layer) : m_layer(layer) { }
+  DISALLOW_NEW();
 
-    void clearClipRectsIncludingDescendants();
-    void clearClipRectsIncludingDescendants(ClipRectsCacheSlot);
+ public:
+  explicit PaintLayerClipper(const PaintLayer&, bool useGeometryMapper);
 
-    // Returns the background clip rect of the layer in the local coordinate space. Only looks for clips up to the given ancestor.
-    LayoutRect localClipRect(const PaintLayer* ancestorLayer) const;
+  void clearClipRectsIncludingDescendants();
+  void clearClipRectsIncludingDescendants(ClipRectsCacheSlot);
 
-    ClipRect backgroundClipRect(const ClipRectsContext&) const;
+  // Returns the background clip rect of the layer in the local coordinate
+  // space. Only looks for clips up to the given ancestor.
+  LayoutRect localClipRect(const PaintLayer* ancestorLayer) const;
 
-    // This method figures out our layerBounds in coordinates relative to
-    // |rootLayer|. It also computes our background and foreground clip rects
-    // for painting/event handling.
-    // Pass offsetFromRoot if known.
-    void calculateRects(const ClipRectsContext&, const LayoutRect& paintDirtyRect, LayoutRect& layerBounds,
-        ClipRect& backgroundRect, ClipRect& foregroundRect, const LayoutPoint* offsetFromRoot = 0) const;
+  // Computes the same thing as backgroundRect in calculateRects(), but skips
+  // apllying CSS clip and the visualOverflowRect() of |m_layer|.
+  ClipRect backgroundClipRect(const ClipRectsContext&) const;
 
-    ClipRects& paintingClipRects(const PaintLayer* rootLayer, ShouldRespectOverflowClipType, const LayoutSize& subpixelAccumulation) const;
+  // This method figures out our layerBounds in coordinates relative to
+  // |rootLayer|. It also computes our background and foreground clip rects
+  // for painting/event handling. Pass offsetFromRoot if known.
+  void calculateRects(const ClipRectsContext&,
+                      const LayoutRect& paintDirtyRect,
+                      LayoutRect& layerBounds,
+                      ClipRect& backgroundRect,
+                      ClipRect& foregroundRect,
+                      const LayoutPoint* offsetFromRoot = 0) const;
 
-private:
-    ClipRects& getClipRects(const ClipRectsContext&) const;
+  ClipRects& paintingClipRects(const PaintLayer* rootLayer,
+                               ShouldRespectOverflowClipType,
+                               const LayoutSize& subpixelAccumulation) const;
 
-    void calculateClipRects(const ClipRectsContext&, ClipRects&) const;
-    ClipRects* clipRectsIfCached(const ClipRectsContext&) const;
-    ClipRects& storeClipRectsInCache(const ClipRectsContext&, ClipRects* parentClipRects, const ClipRects&) const;
+ private:
+  ClipRects& getClipRects(const ClipRectsContext&) const;
 
-    void getOrCalculateClipRects(const ClipRectsContext&, ClipRects&) const;
+  void calculateClipRects(const ClipRectsContext&, ClipRects&) const;
+  ClipRects* clipRectsIfCached(const ClipRectsContext&) const;
+  ClipRects& storeClipRectsInCache(const ClipRectsContext&,
+                                   ClipRects* parentClipRects,
+                                   const ClipRects&) const;
 
-    bool shouldRespectOverflowClip(const ClipRectsContext&) const;
+  void getOrCalculateClipRects(const ClipRectsContext&, ClipRects&) const;
 
-    const PaintLayer& m_layer;
+  bool shouldRespectOverflowClip(const ClipRectsContext&) const;
+
+  ClipRect clipRectWithGeometryMapper(const ClipRectsContext&,
+                                      bool isForeground) const;
+  void mapLocalToRootWithGeometryMapper(const ClipRectsContext&,
+                                        LayoutRect& localRect) const;
+  void calculateRectsWithGeometryMapper(
+      const ClipRectsContext&,
+      const LayoutRect& paintDirtyRect,
+      LayoutRect& layerBounds,
+      ClipRect& backgroundRect,
+      ClipRect& foregroundRect,
+      const LayoutPoint* offsetFromRoot = 0) const;
+
+  ClipRect applyOverflowClipToBackgroundRectWithGeometryMapper(
+      const ClipRectsContext&,
+      const ClipRect&) const;
+
+  const PaintLayer& m_layer;
+  std::unique_ptr<GeometryMapper> m_geometryMapper;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // LayerClipper_h
+#endif  // LayerClipper_h

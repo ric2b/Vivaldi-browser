@@ -32,6 +32,7 @@ DesktopAutomationHandler = function(node) {
   /**
    * The object that speaks changes to an editable text field.
    * @type {editing.TextEditHandler}
+   * @private
    */
   this.textEditHandler_ = null;
 
@@ -45,15 +46,20 @@ DesktopAutomationHandler = function(node) {
   var e = EventType;
   this.addListener_(e.activedescendantchanged, this.onActiveDescendantChanged);
   this.addListener_(e.alert, this.onAlert);
-  this.addListener_(e.ariaAttributeChanged, this.onEventIfInRange);
+  this.addListener_(e.ariaAttributeChanged, this.onAriaAttributeChanged);
+  this.addListener_(e.autocorrectionOccured, this.onEventIfInRange);
   this.addListener_(e.checkedStateChanged, this.onCheckedStateChanged);
   this.addListener_(e.childrenChanged, this.onActiveDescendantChanged);
+  this.addListener_(e.expandedChanged, this.onEventIfInRange);
   this.addListener_(e.focus, this.onFocus);
   this.addListener_(e.hover, this.onHover);
+  this.addListener_(e.invalidStatusChanged, this.onEventIfInRange);
   this.addListener_(e.loadComplete, this.onLoadComplete);
   this.addListener_(e.menuEnd, this.onMenuEnd);
   this.addListener_(e.menuListItemSelected, this.onEventIfSelected);
   this.addListener_(e.menuStart, this.onMenuStart);
+  this.addListener_(e.rowCollapsed, this.onEventIfInRange);
+  this.addListener_(e.rowExpanded, this.onEventIfInRange);
   this.addListener_(e.scrollPositionChanged, this.onScrollPositionChanged);
   this.addListener_(e.selection, this.onSelection);
   this.addListener_(e.textChanged, this.onTextChanged);
@@ -67,7 +73,8 @@ DesktopAutomationHandler = function(node) {
 
       if (focus) {
         this.onFocus(
-            new chrome.automation.AutomationEvent(EventType.focus, focus));
+            new chrome.automation.AutomationEvent(
+                EventType.focus, focus, 'page'));
       }
     }).bind(this));
   }.bind(this));
@@ -78,6 +85,12 @@ DesktopAutomationHandler = function(node) {
  * @const {number}
  */
 DesktopAutomationHandler.VMIN_VALUE_CHANGE_DELAY_MS = 500;
+
+/**
+ * Controls announcement of non-user-initiated events.
+ * @type {boolean}
+ */
+DesktopAutomationHandler.announceActions = false;
 
 DesktopAutomationHandler.prototype = {
   __proto__: BaseAutomationHandler.prototype,
@@ -113,6 +126,10 @@ DesktopAutomationHandler.prototype = {
         ChromeVoxState.instance.currentRange.equals(prevRange))
       return;
 
+    // Decide whether to announce this event.
+    if (!DesktopAutomationHandler.announceActions && evt.eventFrom == 'action')
+      return;
+
     var output = new Output();
     output.withRichSpeech(
         ChromeVoxState.instance.currentRange, prevRange, evt.type);
@@ -135,8 +152,7 @@ DesktopAutomationHandler.prototype = {
       return;
 
     var prev = ChromeVoxState.instance.currentRange;
-    if (AutomationUtil.isDescendantOf(prev.start.node, evt.target) ||
-        AutomationUtil.isDescendantOf(evt.target, prev.start.node) ||
+    if (prev.contentEquals(cursors.Range.fromNode(evt.target)) ||
         evt.target.state.focused) {
       // Intentionally skip setting range.
       new Output()
@@ -159,8 +175,17 @@ DesktopAutomationHandler.prototype = {
    * @param {!AutomationEvent} evt
    */
   onEventWithFlushedOutput: function(evt) {
-    Output.flushNextSpeechUtterance();
+    Output.forceModeForNextSpeechUtterance(cvox.QueueMode.FLUSH);
     this.onEventDefault(evt);
+  },
+
+  /**
+   * @param {!AutomationEvent} evt
+   */
+  onAriaAttributeChanged: function(evt) {
+    if (evt.target.state.editable)
+      return;
+    this.onEventIfInRange(evt);
   },
 
   /**
@@ -170,7 +195,7 @@ DesktopAutomationHandler.prototype = {
     if (ChromeVoxState.instance.currentRange &&
         evt.target == ChromeVoxState.instance.currentRange.start.node)
       return;
-    Output.flushNextSpeechUtterance();
+    Output.forceModeForNextSpeechUtterance(cvox.QueueMode.FLUSH);
     this.onEventDefault(evt);
   },
 
@@ -182,7 +207,7 @@ DesktopAutomationHandler.prototype = {
     if (!evt.target.activeDescendant || !evt.target.state.focused)
       return;
     this.onEventDefault(new chrome.automation.AutomationEvent(
-        EventType.focus, evt.target.activeDescendant));
+        EventType.focus, evt.target.activeDescendant, evt.eventFrom));
   },
 
   /**
@@ -215,7 +240,7 @@ DesktopAutomationHandler.prototype = {
 
     this.onEventIfInRange(
         new chrome.automation.AutomationEvent(
-            EventType.checkedStateChanged, evt.target));
+            EventType.checkedStateChanged, evt.target, evt.eventFrom));
   },
 
   /**
@@ -228,20 +253,18 @@ DesktopAutomationHandler.prototype = {
 
     var node = evt.target;
 
-    // Discard focus events on embeddedObject and client nodes.
-    if (node.role == RoleType.embeddedObject || node.role == RoleType.client)
+    // Discard focus events on embeddedObject.
+    if (node.role == RoleType.embeddedObject)
       return;
 
     this.createTextEditHandlerIfNeeded_(evt.target);
 
-    // Since we queue output mostly for live regions support and there isn't a
-    // reliable way to know if this focus event resulted from a user's explicit
-    // action, only flush when the focused node is not web content.
-    if (node.root.role == RoleType.desktop)
-      Output.flushNextSpeechUtterance();
-
-    this.onEventDefault(
-        new chrome.automation.AutomationEvent(EventType.focus, node));
+    // Category flush speech triggered by events with no source. This includes
+    // views.
+    if (evt.eventFrom == '')
+      Output.forceModeForNextSpeechUtterance(cvox.QueueMode.CATEGORY_FLUSH);
+    this.onEventDefault(new chrome.automation.AutomationEvent(
+        EventType.focus, node, evt.eventFrom));
   },
 
   /**
@@ -317,7 +340,11 @@ DesktopAutomationHandler.prototype = {
         ChromeVoxState.instance.mode === ChromeVoxMode.CLASSIC)
       return;
 
-    if (!evt.target.state.focused)
+    var topRoot = AutomationUtil.getTopLevelRoot(evt.target);
+    if (!evt.target.state.focused ||
+        (topRoot &&
+            topRoot.parent &&
+            !topRoot.parent.state.focused))
       return;
 
     if (!ChromeVoxState.instance.currentRange) {
@@ -407,7 +434,7 @@ DesktopAutomationHandler.prototype = {
       var override = evt.target.role == RoleType.menuItem ||
           (evt.target.root == focus.root &&
               focus.root.role == RoleType.desktop);
-      Output.flushNextSpeechUtterance();
+      Output.forceModeForNextSpeechUtterance(cvox.QueueMode.FLUSH);
       if (override || AutomationUtil.isDescendantOf(evt.target, focus))
         this.onEventDefault(evt);
     }.bind(this));

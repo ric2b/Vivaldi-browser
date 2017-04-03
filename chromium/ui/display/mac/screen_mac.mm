@@ -12,12 +12,17 @@
 #include <memory>
 
 #include "base/logging.h"
+#include "base/mac/mac_util.h"
 #include "base/mac/sdk_forward_declarations.h"
 #include "base/macros.h"
 #include "base/timer/timer.h"
 #include "ui/display/display.h"
 #include "ui/display/display_change_notifier.h"
 #include "ui/gfx/mac/coordinate_conversion.h"
+
+extern "C" {
+Boolean CGDisplayUsesForceToGray(void);
+}
 
 namespace display {
 namespace {
@@ -71,6 +76,19 @@ Display GetDisplayForScreen(NSScreen* screen) {
     scale = Display::GetForcedDeviceScaleFactor();
 
   display.set_device_scale_factor(scale);
+
+  // On Sierra, we need to operate in a single screen's color space because
+  // IOSurfaces do not opt-out of color correction.
+  // https://crbug.com/654488
+  CGColorSpaceRef color_space = [[screen colorSpace] CGColorSpace];
+  if (base::mac::IsAtLeastOS10_12())
+    color_space = base::mac::GetSystemColorSpace();
+
+  display.set_icc_profile(gfx::ICCProfile::FromCGColorSpace(color_space));
+  display.set_color_depth(NSBitsPerPixelFromDepth([screen depth]));
+  display.set_depth_per_component(NSBitsPerSampleFromDepth([screen depth]));
+  display.set_is_monochrome(CGDisplayUsesForceToGray());
+
   // CGDisplayRotation returns a double. Display::SetRotationAsDegree will
   // handle the unexpected situations were the angle is not a multiple of 90.
   display.SetRotationAsDegree(static_cast<int>(CGDisplayRotation(display_id)));

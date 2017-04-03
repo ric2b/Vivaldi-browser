@@ -21,6 +21,7 @@
 #include "cc/quads/solid_color_draw_quad.h"
 #include "cc/quads/tile_draw_quad.h"
 #include "cc/quads/yuv_video_draw_quad.h"
+#include "ui/events/latency_info.h"
 #include "ui/gfx/geometry/quad_f.h"
 
 class SkBitmap;
@@ -58,7 +59,7 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
              int highp_threshold_min);
   ~GLRenderer() override;
 
-  void SwapBuffers(CompositorFrameMetadata metadata) override;
+  void SwapBuffers(std::vector<ui::LatencyInfo> latency_info) override;
   void SwapBuffersComplete() override;
 
   void DidReceiveTextureInUseResponses(
@@ -167,14 +168,16 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
       const RenderPassDrawQuad* quad,
       const gfx::Transform& contents_device_transform,
       const gfx::QuadF* clip_region,
-      bool use_aa);
+      bool use_aa,
+      gfx::Rect* unclipped_rect);
   std::unique_ptr<ScopedResource> GetBackdropTexture(
       const gfx::Rect& bounding_rect);
 
   static bool ShouldApplyBackgroundFilters(const RenderPassDrawQuad* quad);
   sk_sp<SkImage> ApplyBackgroundFilters(const RenderPassDrawQuad* quad,
                                         ScopedResource* background_texture,
-                                        const gfx::RectF& rect);
+                                        const gfx::RectF& rect,
+                                        const gfx::RectF& unclipped_rect);
 
   const TileDrawQuad* CanPassBeDrawnDirectly(const RenderPass* pass) override;
 

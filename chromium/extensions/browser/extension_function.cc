@@ -80,21 +80,9 @@ void LogUma(bool success,
 class ArgumentListResponseValue
     : public ExtensionFunction::ResponseValueObject {
  public:
-  ArgumentListResponseValue(const std::string& function_name,
-                            const char* title,
-                            ExtensionFunction* function,
-                            std::unique_ptr<base::ListValue> result)
-      : function_name_(function_name), title_(title) {
-    if (function->GetResultList()) {
-      DCHECK_EQ(function->GetResultList(), result.get())
-          << "The result set on this function (" << function_name_ << ") "
-          << "either by calling SetResult() or directly modifying |result_| is "
-          << "different to the one passed to " << title_ << "(). "
-          << "The best way to fix this problem is to exclusively use " << title_
-          << "(). SetResult() and |result_| are deprecated.";
-    } else {
-      function->SetResultList(std::move(result));
-    }
+  ArgumentListResponseValue(ExtensionFunction* function,
+                            std::unique_ptr<base::ListValue> result) {
+    SetFunctionResults(function, std::move(result));
     // It would be nice to DCHECK(error.empty()) but some legacy extension
     // function implementations... I'm looking at chrome.input.ime... do this
     // for some reason.
@@ -103,24 +91,15 @@ class ArgumentListResponseValue
   ~ArgumentListResponseValue() override {}
 
   bool Apply() override { return true; }
-
- private:
-  std::string function_name_;
-  const char* title_;
 };
 
 class ErrorWithArgumentsResponseValue : public ArgumentListResponseValue {
  public:
-  ErrorWithArgumentsResponseValue(const std::string& function_name,
-                                  const char* title,
-                                  ExtensionFunction* function,
+  ErrorWithArgumentsResponseValue(ExtensionFunction* function,
                                   std::unique_ptr<base::ListValue> result,
                                   const std::string& error)
-      : ArgumentListResponseValue(function_name,
-                                  title,
-                                  function,
-                                  std::move(result)) {
-    function->SetError(error);
+      : ArgumentListResponseValue(function, std::move(result)) {
+    SetFunctionError(function, error);
   }
 
   ~ErrorWithArgumentsResponseValue() override {}
@@ -133,7 +112,7 @@ class ErrorResponseValue : public ExtensionFunction::ResponseValueObject {
   ErrorResponseValue(ExtensionFunction* function, const std::string& error) {
     // It would be nice to DCHECK(!error.empty()) but too many legacy extension
     // function implementations don't set error but signal failure.
-    function->SetError(error);
+    SetFunctionError(function, error);
   }
 
   ~ErrorResponseValue() override {}
@@ -222,8 +201,27 @@ void UserGestureForTests::DecrementCount() {
 
 }  // namespace
 
+void ExtensionFunction::ResponseValueObject::SetFunctionResults(
+    ExtensionFunction* function,
+    std::unique_ptr<base::ListValue> results) {
+  DCHECK(!function->results_) << "Function " << function->name_
+                              << "already has results set.";
+  function->results_ = std::move(results);
+}
+
+void ExtensionFunction::ResponseValueObject::SetFunctionError(
+    ExtensionFunction* function,
+    const std::string& error) {
+  DCHECK(function->error_.empty()) << "Function " << function->name_
+                                   << "already has an error.";
+  function->error_ = error;
+}
+
 // static
 bool ExtensionFunction::ignore_all_did_respond_for_testing_do_not_use = false;
+
+// static
+const char* ExtensionFunction::kUnknownErrorDoNotUse = "Unknown error.";
 
 // static
 void ExtensionFunctionDeleteTraits::Destruct(const ExtensionFunction* x) {
@@ -305,7 +303,7 @@ bool ExtensionFunction::HasPermission() {
 
 void ExtensionFunction::OnQuotaExceeded(const std::string& violation_error) {
   error_ = violation_error;
-  SendResponse(false);
+  SendResponseImpl(false);
 }
 
 void ExtensionFunction::SetArgs(const base::ListValue* args) {
@@ -313,26 +311,12 @@ void ExtensionFunction::SetArgs(const base::ListValue* args) {
   args_ = args->CreateDeepCopy();
 }
 
-void ExtensionFunction::SetResult(std::unique_ptr<base::Value> result) {
-  results_.reset(new base::ListValue());
-  results_->Append(std::move(result));
-}
-
-void ExtensionFunction::SetResultList(
-    std::unique_ptr<base::ListValue> results) {
-  results_ = std::move(results);
-}
-
 const base::ListValue* ExtensionFunction::GetResultList() const {
   return results_.get();
 }
 
-std::string ExtensionFunction::GetError() const {
+const std::string& ExtensionFunction::GetError() const {
   return error_;
-}
-
-void ExtensionFunction::SetError(const std::string& error) {
-  error_ = error;
 }
 
 bool ExtensionFunction::user_gesture() const {
@@ -340,16 +324,15 @@ bool ExtensionFunction::user_gesture() const {
 }
 
 ExtensionFunction::ResponseValue ExtensionFunction::NoArguments() {
-  return ResponseValue(new ArgumentListResponseValue(
-      name(), "NoArguments", this, base::MakeUnique<base::ListValue>()));
+  return ResponseValue(
+      new ArgumentListResponseValue(this, base::MakeUnique<base::ListValue>()));
 }
 
 ExtensionFunction::ResponseValue ExtensionFunction::OneArgument(
     std::unique_ptr<base::Value> arg) {
   std::unique_ptr<base::ListValue> args(new base::ListValue());
   args->Append(std::move(arg));
-  return ResponseValue(new ArgumentListResponseValue(name(), "OneArgument",
-                                                     this, std::move(args)));
+  return ResponseValue(new ArgumentListResponseValue(this, std::move(args)));
 }
 
 ExtensionFunction::ResponseValue ExtensionFunction::TwoArguments(
@@ -358,14 +341,12 @@ ExtensionFunction::ResponseValue ExtensionFunction::TwoArguments(
   std::unique_ptr<base::ListValue> args(new base::ListValue());
   args->Append(std::move(arg1));
   args->Append(std::move(arg2));
-  return ResponseValue(new ArgumentListResponseValue(name(), "TwoArguments",
-                                                     this, std::move(args)));
+  return ResponseValue(new ArgumentListResponseValue(this, std::move(args)));
 }
 
 ExtensionFunction::ResponseValue ExtensionFunction::ArgumentList(
     std::unique_ptr<base::ListValue> args) {
-  return ResponseValue(new ArgumentListResponseValue(name(), "ArgumentList",
-                                                     this, std::move(args)));
+  return ResponseValue(new ArgumentListResponseValue(this, std::move(args)));
 }
 
 ExtensionFunction::ResponseValue ExtensionFunction::Error(
@@ -400,8 +381,8 @@ ExtensionFunction::ResponseValue ExtensionFunction::Error(
 ExtensionFunction::ResponseValue ExtensionFunction::ErrorWithArguments(
     std::unique_ptr<base::ListValue> args,
     const std::string& error) {
-  return ResponseValue(new ErrorWithArgumentsResponseValue(
-      name(), "ErrorWithArguments", this, std::move(args), error));
+  return ResponseValue(
+      new ErrorWithArgumentsResponseValue(this, std::move(args), error));
 }
 
 ExtensionFunction::ResponseValue ExtensionFunction::BadMessage() {
@@ -411,7 +392,8 @@ ExtensionFunction::ResponseValue ExtensionFunction::BadMessage() {
 ExtensionFunction::ResponseAction ExtensionFunction::RespondNow(
     ResponseValue result) {
   return ResponseAction(new RespondNowAction(
-      std::move(result), base::Bind(&ExtensionFunction::SendResponse, this)));
+      std::move(result),
+      base::Bind(&ExtensionFunction::SendResponseImpl, this)));
 }
 
 ExtensionFunction::ResponseAction ExtensionFunction::RespondLater() {
@@ -425,7 +407,7 @@ ExtensionFunction::ResponseAction ExtensionFunction::ValidationFailure(
 }
 
 void ExtensionFunction::Respond(ResponseValue result) {
-  SendResponse(result->Apply());
+  SendResponseImpl(result->Apply());
 }
 
 bool ExtensionFunction::PreRunValidation(std::string* error) {
@@ -452,30 +434,30 @@ bool ExtensionFunction::HasOptionalArgument(size_t index) {
 
 void ExtensionFunction::SendResponseImpl(bool success) {
   DCHECK(!response_callback_.is_null());
+  DCHECK(!did_respond_) << name_;
+  did_respond_ = true;
 
-  ResponseType type = success ? SUCCEEDED : FAILED;
+  ResponseType response = success ? SUCCEEDED : FAILED;
   if (bad_message_) {
-    type = BAD_MESSAGE;
+    response = BAD_MESSAGE;
     LOG(ERROR) << "Bad extension message " << name_;
   }
+  response_type_ = base::MakeUnique<ResponseType>(response);
 
   // If results were never set, we send an empty argument list.
   if (!results_)
     results_.reset(new base::ListValue());
 
-  response_callback_.Run(type, *results_, GetError(), histogram_value());
+  response_callback_.Run(response, *results_, GetError(), histogram_value());
   LogUma(success, timer_.Elapsed(), histogram_value_);
-}
 
-void ExtensionFunction::OnRespondingLater(ResponseValue value) {
-  SendResponse(value->Apply());
+  OnResponded();
 }
 
 UIThreadExtensionFunction::UIThreadExtensionFunction()
     : context_(nullptr),
       render_frame_host_(nullptr),
-      is_from_service_worker_(false),
-      delegate_(nullptr) {}
+      is_from_service_worker_(false) {}
 
 UIThreadExtensionFunction::~UIThreadExtensionFunction() {
   if (dispatcher() && render_frame_host())
@@ -487,9 +469,9 @@ UIThreadExtensionFunction::~UIThreadExtensionFunction() {
   // tricky because checking IsShuttingDown has to be called from the UI thread.
   extensions::ExtensionsBrowserClient* browser_client =
       extensions::ExtensionsBrowserClient::Get();
-  DCHECK(!browser_client || browser_client->IsShuttingDown() || did_respond_ ||
+  DCHECK(!browser_client || browser_client->IsShuttingDown() || did_respond() ||
          ignore_all_did_respond_for_testing_do_not_use)
-      << name_;
+      << name();
 }
 
 UIThreadExtensionFunction*
@@ -552,16 +534,8 @@ content::WebContents* UIThreadExtensionFunction::GetSenderWebContents() {
       content::WebContents::FromRenderFrameHost(render_frame_host_) : nullptr;
 }
 
-void UIThreadExtensionFunction::SendResponse(bool success) {
-  DCHECK(!did_respond_) << name_;
-  did_respond_ = true;
-  if (delegate_)
-    delegate_->OnSendResponse(this, success, bad_message_);
-  else
-    SendResponseImpl(success);
-
+void UIThreadExtensionFunction::OnResponded() {
   if (!transferred_blob_uuids_.empty()) {
-    DCHECK(!delegate_) << "Blob transfer not supported with test delegate.";
     render_frame_host_->Send(
         new ExtensionMsg_TransferBlobs(transferred_blob_uuids_));
   }
@@ -598,16 +572,28 @@ void IOThreadExtensionFunction::Destruct() const {
   BrowserThread::DeleteOnIOThread::Destruct(this);
 }
 
-void IOThreadExtensionFunction::SendResponse(bool success) {
-  DCHECK(!did_respond_) << name_;
-  did_respond_ = true;
-  SendResponseImpl(success);
-}
-
 AsyncExtensionFunction::AsyncExtensionFunction() {
 }
 
+void AsyncExtensionFunction::SetError(const std::string& error) {
+  error_ = error;
+}
+
+const std::string& AsyncExtensionFunction::GetError() const {
+  return error_.empty() ? UIThreadExtensionFunction::GetError() : error_;
+}
+
 AsyncExtensionFunction::~AsyncExtensionFunction() {
+}
+
+void AsyncExtensionFunction::SetResult(std::unique_ptr<base::Value> result) {
+  results_.reset(new base::ListValue());
+  results_->Append(std::move(result));
+}
+
+void AsyncExtensionFunction::SetResultList(
+    std::unique_ptr<base::ListValue> results) {
+  results_ = std::move(results);
 }
 
 ExtensionFunction::ScopedUserGestureForTests::ScopedUserGestureForTests() {
@@ -619,7 +605,10 @@ ExtensionFunction::ScopedUserGestureForTests::~ScopedUserGestureForTests() {
 }
 
 ExtensionFunction::ResponseAction AsyncExtensionFunction::Run() {
-  return RunAsync() ? RespondLater() : RespondNow(Error(error_));
+  if (RunAsync())
+    return RespondLater();
+  DCHECK(!results_);
+  return RespondNow(Error(error_));
 }
 
 // static
@@ -628,18 +617,13 @@ bool AsyncExtensionFunction::ValidationFailure(
   return false;
 }
 
-SyncExtensionFunction::SyncExtensionFunction() {
-}
-
-SyncExtensionFunction::~SyncExtensionFunction() {
-}
-
-ExtensionFunction::ResponseAction SyncExtensionFunction::Run() {
-  return RespondNow(RunSync() ? ArgumentList(std::move(results_))
-                              : Error(error_));
-}
-
-// static
-bool SyncExtensionFunction::ValidationFailure(SyncExtensionFunction* function) {
-  return false;
+void AsyncExtensionFunction::SendResponse(bool success) {
+  ResponseValue response;
+  if (success) {
+    response = ArgumentList(std::move(results_));
+  } else {
+    response = results_ ? ErrorWithArguments(std::move(results_), error_)
+                        : Error(error_);
+  }
+  Respond(std::move(response));
 }

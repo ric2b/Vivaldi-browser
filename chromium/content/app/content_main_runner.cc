@@ -65,7 +65,6 @@
 #include "content/renderer/in_process_renderer_thread.h"
 #include "content/utility/in_process_utility_thread.h"
 #include "ipc/ipc_descriptors.h"
-#include "ipc/ipc_switches.h"
 #include "media/base/media.h"
 #include "ui/base/ui_base_paths.h"
 #include "ui/base/ui_base_switches.h"
@@ -121,9 +120,6 @@ extern int PpapiBrokerMain(const MainFunctionParams&);
 #endif
 extern int RendererMain(const content::MainFunctionParams&);
 extern int UtilityMain(const MainFunctionParams&);
-#if defined(OS_ANDROID)
-extern int DownloadMain(const MainFunctionParams&);
-#endif
 }  // namespace content
 
 namespace content {
@@ -391,9 +387,6 @@ int RunNamedProcessTypeMain(
     { switches::kUtilityProcess,     UtilityMain },
     { switches::kRendererProcess,    RendererMain },
     { switches::kGpuProcess,         GpuMain },
-#if defined(OS_ANDROID)
-    { switches::kDownloadProcess,    DownloadMain},
-#endif
 #endif  // !CHROME_MULTIPLE_DLL_BROWSER
   };
 

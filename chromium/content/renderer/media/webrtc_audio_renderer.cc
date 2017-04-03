@@ -10,7 +10,7 @@
 #include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
@@ -668,6 +668,9 @@ void WebRtcAudioRenderer::PrepareSink() {
     sink_params_ = new_sink_params;
   }
 
+  // Specify the latency info to be passed to the browser side.
+  new_sink_params.set_latency_tag(AudioDeviceFactory::GetSourceLatencyType(
+      AudioDeviceFactory::AudioDeviceFactory::kSourceWebRtc));
   sink_->Initialize(new_sink_params, this);
 }
 

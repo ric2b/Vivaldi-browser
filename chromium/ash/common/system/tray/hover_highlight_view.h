@@ -24,6 +24,15 @@ class ViewClickListener;
 // maintain a fixed height.
 class HoverHighlightView : public ActionableView {
  public:
+  enum class AccessibilityState {
+    // The default accessibility view.
+    DEFAULT,
+    // This view is a checked checkbox.
+    CHECKED_CHECKBOX,
+    // This view is an unchecked checkbox.
+    UNCHECKED_CHECKBOX
+  };
+
   explicit HoverHighlightView(ViewClickListener* listener);
   ~HoverHighlightView() override;
 
@@ -79,6 +88,14 @@ class HoverHighlightView : public ActionableView {
   // just uses a bold font.
   void SetHighlight(bool hightlight);
 
+  // Set a custom height for the view. A value of 0 means that no custom height
+  // is set.
+  void set_custom_height(int custom_height) { custom_height_ = custom_height; }
+
+  // Changes the view's current accessibility state. This will fire an
+  // accessibility event if needed.
+  void SetAccessiblityState(AccessibilityState accessibility_state);
+
   void set_highlight_color(SkColor color) { highlight_color_ = color; }
   void set_default_color(SkColor color) { default_color_ = color; }
   void set_text_highlight_color(SkColor c) { text_highlight_color_ = c; }
@@ -128,8 +145,8 @@ class HoverHighlightView : public ActionableView {
   SkColor text_default_color_ = 0;
   bool hover_ = false;
   bool expandable_ = false;
-  bool checkable_ = false;
-  bool checked_ = false;
+  int custom_height_ = 0;
+  AccessibilityState accessibility_state_ = AccessibilityState::DEFAULT;
   base::string16 tooltip_;
 
   DISALLOW_COPY_AND_ASSIGN(HoverHighlightView);

@@ -5,106 +5,29 @@ import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//build/config/locales.gni")
 
+import("//vivaldi/app/deps_updates.gni")
+import("//vivaldi/browser/deps_updates.gni")
+import("//vivaldi/db/deps_updates.gni")
+import("//vivaldi/extensions/deps_updates.gni")
+import("//vivaldi/importer/deps_updates.gni")
+import("//vivaldi/third_party/deps_updates.gni")
+import("//vivaldi/vivapp/deps_updates.gni")
+
 post_process_target("//base:base") {
   deps += [ "//third_party/zlib:zlib" ]
-}
-
-foreach(_target,
-        [
-          "//media/cast:testing_tools",
-          "//mojo/edk/js:tests",
-          "//components/mus/gpu:tests",
-          "//components/mus/clipboard:tests",
-          "//components/mus/ws:tests",
-          "//mojo/edk/system:tests",
-          "//mojo/edk/test:public_tests",
-          "//services/shell/runner/host:host",
-          "//v8:gn_all",
-        ]) {
-  post_process_target(_target) {
-    deps = []
-  }
-}
-
-post_process_target("//components/bookmarks/browser:browser") {
-  deps += [
-    "//chrome:strings",
-    "//vivaldi/app:vivaldi_native_strings",
-    "//vivaldi/app:vivaldi_native_resources",
-    "//vivaldi/app:vivaldi_unscaled_native_resources",
-  ]
 }
 
 post_process_target("//content/common:common") {
   deps += [ "//components/version_info:generate_version_info" ]
 }
 
-post_process_template("//chrome/browser/extensions:extensions") {
-  deps += [
-    "//vivaldi/app:vivaldi_native_resources",
-    "//vivaldi/app:vivaldi_unscaled_native_resources",
+post_process_target("//third_party/WebKit/public:all_blink") {
+  public_deps -= [
+    "//third_party/WebKit/Source/platform/heap:blink_heap_unittests",
+    "//third_party/WebKit/Source/platform:blink_platform_unittests",
+    "//third_party/WebKit/Source/web:webkit_unit_tests",
+    "//third_party/WebKit/Source/wtf:wtf_unittests",
   ]
-}
-
-post_process_template("//chrome/browser:browser") {
-  deps += [ "//third_party/zlib:zlib" ]
-  public_deps += [
-    "//vivaldi/browser:browser",
-    "//vivaldi/extensions/schema:api",
-  ]
-  if (is_mac) {
-    libs += [ "$root_out_dir/Vivaldi.app/Contents/Frameworks/Sparkle.framework/Sparkle" ]
-    public_deps += [ "//vivaldi/third_party/:copy_sparkle_framework" ]
-  }
-}
-
-post_process_template("//chrome/browser/ui:ui") {
-  public_deps += [
-    "//components/sessions:sessions",
-    "//vivaldi/browser:browser",
-    "//vivaldi/extensions/schema:api",
-  ]
-}
-
-#post_process_target("//chrome/utility:utility") {
-#  deps += [
-#    "//vivaldi/importer",
-#  ]
-#}
-
-post_process_target("//chrome:chrome_initial") {
-  deps += [ "//vivaldi/browser:vivaldi_version_info" ]
-}
-
-post_process_target("//chrome:chrome_child") {
-  deps += [
-    #"//vivaldi/browser:browser",
-    "//vivaldi/importer",
-  ]
-}
-
-post_process_target("//chrome:main_dll") {
-  deps += [
-    "//chrome/utility:utility",
-    "//vivaldi/browser:browser",
-  ]
-}
-
-foreach(_target, [ "//chrome/common:common" ]) {
-  post_process_target(_target) {
-    public_deps += [ "//components/version_info:generate_version_info" ]
-  }
-}
-
-foreach(_target,
-        [
-          "//chrome/browser/ui:test_support",
-          "//apps:apps",
-          "//chrome/browser:test_support",
-        ]) {
-  post_process_target(_target) {
-    deps += [ "//components/version_info:generate_version_info" ]
-  }
 }
 
 if (is_component_build) {
@@ -117,123 +40,36 @@ if (is_component_build) {
   }
 }
 
+foreach(_target,
+        [
+          "//components/mus/clipboard:tests",
+          "//components/mus/gpu:tests",
+          "//components/mus/ws:tests",
+          "//media/cast:testing_tools",
+          "//mojo/edk/js:tests",
+          "//mojo/edk/system:tests",
+          "//mojo/edk/test:public_tests",
+          "//services/shell/runner/host:host",
+          "//v8:gn_all",
+        ]) {
+  post_process_target(_target) {
+    deps = []
+  }
+}
 
-post_process_template("//chrome:packed_extra_resources") {
-  sources += [
-    "$root_gen_dir/vivaldi/vivaldi_extension_resources.pak",
-    "$root_gen_dir/vivaldi/vivaldi_native_unscaled.pak",
-
-    #"$root_gen_dir/vivaldi/vivaldi_native_resources.pak",
-  ]
-  deps += [
-    #"//vivaldi/app:vivaldi_native_strings",
-    #"//vivaldi/app:vivaldi_native_resources",
-    "//vivaldi/app:vivaldi_unscaled_native_resources",
-    "//vivaldi/extensions:resources",
-  ]
+foreach(_target, [ "//chrome/common:common" ]) {
+  post_process_target(_target) {
+    public_deps += [ "//components/version_info:generate_version_info" ]
+  }
 }
 
 foreach(_target,
         [
-          "//chrome:repack_chrome_100_percent",
-          "//chrome:repack_chrome_200_percent",
+          "//apps:apps",
+          "//chrome/browser:test_support",
+          "//chrome/browser/ui:test_support",
         ]) {
-  post_process_template(_target + "_repack") {
-    sources += [ "$root_gen_dir/vivaldi/vivaldi_native_resources_${percent}_percent.pak" ]
-    deps += [ "//vivaldi/app:vivaldi_native_resources" ]
-  }
-}
-
-foreach(locale, locales) {
-  post_process_target("//chrome:repack_locales_pack_$locale") {
-    new_inputs = [
-      #"$root_gen_dir/vivaldi/vivaldi_extension_resources.pak",
-      #"$root_gen_dir/vivaldi/vivaldi_native_unscaled.pak",
-      "$root_gen_dir/vivaldi/vivaldi_native_strings_$locale.pak",
-      #"$root_gen_dir/vivaldi/vivaldi_native_resources.pak",
-    ]
-    inputs += new_inputs
-    args += rebase_path(new_inputs, root_build_dir)
-    deps += [
-      #"//vivaldi/extensions:resources",
-      "//vivaldi/app:vivaldi_native_strings",
-      #"//vivaldi/app:vivaldi_native_resources",
-      #"//vivaldi/app:vivaldi_unscaled_native_resources",
-    ]
-  }
-}
-
-foreach(locale, [ "fake-bidi" ]) {
-  post_process_target("//chrome:repack_pseudo_locales_pack_$locale") {
-    new_inputs = [
-      #"$root_gen_dir/vivaldi/vivaldi_extension_resources.pak",
-      #"$root_gen_dir/vivaldi/vivaldi_native_unscaled.pak",
-      "$root_gen_dir/vivaldi/vivaldi_native_strings_$locale.pak",
-      #"$root_gen_dir/vivaldi/vivaldi_native_resources.pak",
-    ]
-    inputs += new_inputs
-    args += rebase_path(new_inputs, root_build_dir)
-    deps += [
-      #"//vivaldi/extensions:resources",
-      #"//vivaldi/app:vivaldi_native_resources",
-      #"//vivaldi/app:vivaldi_unscaled_native_resources",
-      "//vivaldi/app:vivaldi_native_strings",
-    ]
-  }
-}
-
-post_process_target("//chrome:packed_resources") {
-  public_deps += [
-    "//vivaldi/app:vivaldi_native_resources",
-    "//vivaldi/app:vivaldi_native_strings",
-    "//vivaldi/app:vivaldi_unscaled_native_resources",
-    "//vivaldi/extensions:resources",
-  ]
-}
-
-post_process_target("//third_party/WebKit/public:all_blink") {
-  public_deps -= [
-    "//third_party/WebKit/Source/platform:blink_heap_unittests",
-    "//third_party/WebKit/Source/platform:blink_platform_unittests",
-    "//third_party/WebKit/Source/web:webkit_unit_tests",
-    "//third_party/WebKit/Source/wtf:wtf_unittests",
-  ]
-}
-
-post_process_target("//chrome:resources") {
-  public_deps += [
-    "//vivaldi/app:resources",
-    "//vivaldi/app:vivaldi_native_resources",
-    "//vivaldi/app:vivaldi_native_strings",
-    "//vivaldi/app:vivaldi_unscaled_native_resources",
-  ]
-}
-
-post_process_target("//components/guest_view/browser:browser") {
-  public_deps += [ "//vivaldi/extensions/helper:helper" ]
-}
-
-post_process_target("//components/history/core/browser:browser") {
-  deps += [ "//vivaldi/prefs:prefs" ]
-}
-
-post_process_target("//content/browser:browser") {
-  if (use_x11) {
-    public_deps += [ "//ui/events/keycodes:x11" ]
-  }
-  public_deps += [ "//vivaldi/browser:clipboard" ]
-}
-
-if (is_mac) {
-  post_process_target("//chrome:chrome_versioned_bundle_data") {
-    sources += [
-      "$root_out_dir/features.json"
-    ]
-    public_deps += [
-      "//vivaldi/vivapp:vivaldi_app",
-    ]
-  }
-  post_process_template("//chrome/:chrome_framework") {
-    deps += [ "//chrome:vivaldi_copy_widevine" ]
+  post_process_target(_target) {
+    deps += [ "//components/version_info:generate_version_info" ]
   }
 }

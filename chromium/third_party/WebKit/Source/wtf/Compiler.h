@@ -27,7 +27,8 @@
 #define WTF_Compiler_h
 
 /* COMPILER() - the compiler being used to build the project */
-#define COMPILER(WTF_FEATURE) (defined WTF_COMPILER_##WTF_FEATURE  && WTF_COMPILER_##WTF_FEATURE)
+#define COMPILER(WTF_FEATURE) \
+  (defined WTF_COMPILER_##WTF_FEATURE && WTF_COMPILER_##WTF_FEATURE)
 
 /* ==== COMPILER() - the compiler being used to build the project ==== */
 
@@ -36,23 +37,27 @@
 #define WTF_COMPILER_CLANG 1
 #endif
 
-/* COMPILER(MSVC) - Microsoft Visual C++ (and Clang when compiling for Windows). */
+/* COMPILER(MSVC) - Microsoft Visual C++ (and Clang when compiling for Windows).
+ */
 #if defined(_MSC_VER)
 #define WTF_COMPILER_MSVC 1
 #endif
 
-/* COMPILER(GCC) - GNU Compiler Collection (and Clang when compiling for platforms other than Windows). */
+/* COMPILER(GCC) - GNU Compiler Collection (and Clang when compiling for
+ * platforms other than Windows). */
 #if defined(__GNUC__)
 #define WTF_COMPILER_GCC 1
-#define GCC_VERSION (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__)
-#define GCC_VERSION_AT_LEAST(major, minor, patch) (GCC_VERSION >= (major * 10000 + minor * 100 + patch))
+#define GCC_VERSION \
+  (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__)
+#define GCC_VERSION_AT_LEAST(major, minor, patch) \
+  (GCC_VERSION >= (major * 10000 + minor * 100 + patch))
 #else
-/* Define this for !GCC compilers, just so we can write things like GCC_VERSION_AT_LEAST(4, 1, 0). */
+/* Define this for !GCC compilers, just so we can write things like
+ * GCC_VERSION_AT_LEAST(4, 1, 0). */
 #define GCC_VERSION_AT_LEAST(major, minor, patch) 0
 #endif
 
 /* ==== Compiler features ==== */
-
 
 /* ALWAYS_INLINE */
 
@@ -66,7 +71,6 @@
 #endif
 #endif
 
-
 /* NEVER_INLINE */
 
 #ifndef NEVER_INLINE
@@ -79,7 +83,6 @@
 #endif
 #endif
 
-
 /* UNLIKELY */
 
 #ifndef UNLIKELY
@@ -90,7 +93,6 @@
 #endif
 #endif
 
-
 /* LIKELY */
 
 #ifndef LIKELY
@@ -100,7 +102,6 @@
 #define LIKELY(x) (x)
 #endif
 #endif
-
 
 /* NO_RETURN */
 
@@ -114,20 +115,17 @@
 #endif
 #endif
 
-
 /* WARN_UNUSED_RETURN */
 
 #if COMPILER(GCC)
-#define WARN_UNUSED_RETURN __attribute__ ((warn_unused_result))
+#define WARN_UNUSED_RETURN __attribute__((warn_unused_result))
 #else
 #define WARN_UNUSED_RETURN
 #endif
 
-
 /* ALLOW_UNUSED_LOCAL */
 
 #define ALLOW_UNUSED_LOCAL(x) false ? (void)x : (void)0
-
 
 /* OBJC_CLASS */
 
@@ -138,7 +136,6 @@
 #define OBJC_CLASS class
 #endif
 #endif
-
 
 /* WTF_PRETTY_FUNCTION */
 
@@ -154,15 +151,17 @@
  * unrelated objects (-fsanitize=cfi-unrelated-cast or -fsanitize=vptr). */
 
 #if COMPILER(CLANG)
-#define NO_SANITIZE_UNRELATED_CAST __attribute__((no_sanitize("cfi-unrelated-cast", "vptr")))
+#define NO_SANITIZE_UNRELATED_CAST \
+  __attribute__((no_sanitize("cfi-unrelated-cast", "vptr")))
 #else
 #define NO_SANITIZE_UNRELATED_CAST
 #endif
 
-/* WTF_NON_EXPORTED_BASE; similar NON_EXPORTED_BASE in base/compiler_specific.h */
+/* WTF_NON_EXPORTED_BASE; similar NON_EXPORTED_BASE in base/compiler_specific.h
+ */
 
 #if COMPILER(MSVC)
-#define WTF_NON_EXPORTED_BASE(code) __pragma(warning(suppress:4275)) code
+#define WTF_NON_EXPORTED_BASE(code) __pragma(warning(suppress : 4275)) code
 #else
 #define WTF_NON_EXPORTED_BASE(code) code
 #endif

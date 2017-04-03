@@ -11,7 +11,7 @@
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "components/password_manager/core/browser/password_manager_constants.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
@@ -100,8 +100,8 @@ void AutoSigninFirstRunDialogAndroid::CancelDialog(JNIEnv* env, jobject obj) {}
 void AutoSigninFirstRunDialogAndroid::OnLinkClicked(JNIEnv* env, jobject obj) {
   web_contents_->OpenURL(content::OpenURLParams(
       GURL(password_manager::kPasswordManagerHelpCenterSmartLock),
-      content::Referrer(), NEW_FOREGROUND_TAB, ui::PAGE_TRANSITION_LINK,
-      false /* is_renderer_initiated */));
+      content::Referrer(), WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui::PAGE_TRANSITION_LINK, false /* is_renderer_initiated */));
 }
 
 void AutoSigninFirstRunDialogAndroid::WebContentsDestroyed() {

@@ -5,12 +5,10 @@
 #include "chrome/browser/permissions/permission_request_impl.h"
 
 #include "build/build_config.h"
-#include "chrome/browser/permissions/permission_decision_auto_blocker.h"
 #include "chrome/browser/permissions/permission_uma_util.h"
 #include "chrome/browser/permissions/permission_util.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/url_formatter/elide_url.h"
-#include "grit/theme_resources.h"
 #include "net/base/escape.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/vector_icons_public.h"
@@ -39,8 +37,7 @@ PermissionRequestImpl::~PermissionRequestImpl() {
   }
 }
 
-gfx::VectorIconId PermissionRequestImpl::GetVectorIconId() const {
-#if !defined(OS_MACOSX) && !defined(OS_ANDROID)
+PermissionRequest::IconId PermissionRequestImpl::GetIconId() const {
   switch (permission_type_) {
     case content::PermissionType::GEOLOCATION:
       return gfx::VectorIconId::LOCATION_ON;
@@ -56,36 +53,12 @@ gfx::VectorIconId PermissionRequestImpl::GetVectorIconId() const {
 #endif
     case content::PermissionType::MIDI_SYSEX:
       return gfx::VectorIconId::MIDI;
+    case content::PermissionType::FLASH:
+      return gfx::VectorIconId::EXTENSION;
     default:
       NOTREACHED();
       return gfx::VectorIconId::VECTOR_ICON_NONE;
   }
-#else  // !defined(OS_MACOSX) && !defined(OS_ANDROID)
-  return gfx::VectorIconId::VECTOR_ICON_NONE;
-#endif
-}
-
-int PermissionRequestImpl::GetIconId() const {
-  int icon_id = IDR_INFOBAR_WARNING;
-#if defined(OS_MACOSX) || defined(OS_ANDROID)
-  switch (permission_type_) {
-    case content::PermissionType::GEOLOCATION:
-      icon_id = IDR_INFOBAR_GEOLOCATION;
-      break;
-#if defined(ENABLE_NOTIFICATIONS)
-    case content::PermissionType::NOTIFICATIONS:
-    case content::PermissionType::PUSH_MESSAGING:
-      icon_id = IDR_INFOBAR_DESKTOP_NOTIFICATIONS;
-      break;
-#endif
-    case content::PermissionType::MIDI_SYSEX:
-      icon_id = IDR_ALLOWED_MIDI_SYSEX;
-      break;
-    default:
-      NOTREACHED();
-  }
-#endif
-  return icon_id;
 }
 
 base::string16 PermissionRequestImpl::GetMessageTextFragment() const {
@@ -108,6 +81,9 @@ base::string16 PermissionRequestImpl::GetMessageTextFragment() const {
       message_id = IDS_PROTECTED_MEDIA_IDENTIFIER_PERMISSION_FRAGMENT;
       break;
 #endif
+    case content::PermissionType::FLASH:
+      message_id = IDS_FLASH_PERMISSION_FRAGMENT;
+      break;
     default:
       NOTREACHED();
       return base::string16();
@@ -161,6 +137,8 @@ PermissionRequestType PermissionRequestImpl::GetPermissionRequestType()
     case content::PermissionType::PROTECTED_MEDIA_IDENTIFIER:
       return PermissionRequestType::PERMISSION_PROTECTED_MEDIA_IDENTIFIER;
 #endif
+    case content::PermissionType::FLASH:
+      return PermissionRequestType::PERMISSION_FLASH;
     default:
       NOTREACHED();
       return PermissionRequestType::UNKNOWN;

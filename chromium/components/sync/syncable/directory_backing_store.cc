@@ -5,15 +5,14 @@
 #include "components/sync/syncable/directory_backing_store.h"
 
 #include <stddef.h>
-#include <stdint.h>
 
 #include <limits>
 #include <unordered_set>
+#include <utility>
 
 #include "base/base64.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
@@ -26,12 +25,10 @@
 #include "components/sync/base/time.h"
 #include "components/sync/protocol/bookmark_specifics.pb.h"
 #include "components/sync/protocol/sync.pb.h"
-#include "components/sync/syncable/syncable-inl.h"
 #include "components/sync/syncable/syncable_columns.h"
+#include "components/sync/syncable/syncable_id.h"
 #include "components/sync/syncable/syncable_util.h"
-#include "sql/connection.h"
 #include "sql/error_delegate_util.h"
-#include "sql/statement.h"
 #include "sql/transaction.h"
 
 using std::string;
@@ -239,7 +236,7 @@ bool SaveEntryToDB(sql::Statement* save_statement, const EntryKernel& entry) {
 // copy for some entries which create by copy-on-write mechanism.
 // entries_counts : entry counts for each model type.
 void UploadModelTypeEntryCount(const int total_specifics_copies,
-                               const int(&entries_counts)[MODEL_TYPE_COUNT]) {
+                               const int (&entries_counts)[MODEL_TYPE_COUNT]) {
   int total_entry_counts = 0;
   for (int i = FIRST_REAL_MODEL_TYPE; i < MODEL_TYPE_COUNT; ++i) {
     std::string model_type;
@@ -331,8 +328,8 @@ bool DirectoryBackingStore::SaveChanges(
     return false;
 
   PrepareSaveEntryStatement(METAS_TABLE, &save_meta_statement_);
-  for (EntryKernelSet::const_iterator i = snapshot.dirty_metas.begin();
-       i != snapshot.dirty_metas.end(); ++i) {
+  for (auto i = snapshot.dirty_metas.begin(); i != snapshot.dirty_metas.end();
+       ++i) {
     DCHECK((*i)->is_dirty());
     if (!SaveEntryToDB(&save_meta_statement_, **i))
       return false;
@@ -343,7 +340,7 @@ bool DirectoryBackingStore::SaveChanges(
 
   PrepareSaveEntryStatement(DELETE_JOURNAL_TABLE,
                             &save_delete_journal_statement_);
-  for (EntryKernelSet::const_iterator i = snapshot.delete_journals.begin();
+  for (auto i = snapshot.delete_journals.begin();
        i != snapshot.delete_journals.end(); ++i) {
     if (!SaveEntryToDB(&save_delete_journal_statement_, **i))
       return false;
@@ -681,7 +678,7 @@ bool DirectoryBackingStore::LoadEntries(Directory::MetahandlesMap* handles_map,
         model_type = kernel->GetServerModelType();
       }
       ++model_type_entry_count[model_type];
-      (*handles_map)[handle] = kernel.release();
+      (*handles_map)[handle] = std::move(kernel);
     }
   }
 
@@ -701,8 +698,7 @@ bool DirectoryBackingStore::SafeToPurgeOnLoading(
   return false;
 }
 
-bool DirectoryBackingStore::LoadDeleteJournals(
-    JournalIndex* delete_journals) {
+bool DirectoryBackingStore::LoadDeleteJournals(JournalIndex* delete_journals) {
   string select;
   select.reserve(kUpdateStatementBufferSize);
   select.append("SELECT ");
@@ -713,11 +709,13 @@ bool DirectoryBackingStore::LoadDeleteJournals(
 
   while (s.Step()) {
     int total_entry_copies;
-    std::unique_ptr<EntryKernel> kernel = UnpackEntry(&s, &total_entry_copies);
+    std::unique_ptr<EntryKernel> kernel_ptr =
+        UnpackEntry(&s, &total_entry_copies);
     // A null kernel is evidence of external data corruption.
-    if (!kernel)
+    if (!kernel_ptr)
       return false;
-    delete_journals->insert(kernel.release());
+    EntryKernel* kernel = kernel_ptr.get();
+    (*delete_journals)[kernel] = std::move(kernel_ptr);
   }
   return s.Succeeded();
 }
@@ -1642,6 +1640,8 @@ bool DirectoryBackingStore::CreateShareInfoTableVersion71(
 
 // This function checks to see if the given list of Metahandles has any nodes
 // whose PARENT_ID values refer to ID values that do not actually exist.
+// This function also checks that a root node with the correct id exists in the
+// set.
 // Returns true on success.
 bool DirectoryBackingStore::VerifyReferenceIntegrity(
     const Directory::MetahandlesMap* handles_map) {
@@ -1651,23 +1651,24 @@ bool DirectoryBackingStore::VerifyReferenceIntegrity(
   IdsSet ids_set;
   bool is_ok = true;
 
-  for (Directory::MetahandlesMap::const_iterator it = handles_map->begin();
-       it != handles_map->end(); ++it) {
-    EntryKernel* entry = it->second;
+  for (auto it = handles_map->begin(); it != handles_map->end(); ++it) {
+    EntryKernel* entry = it->second.get();
     bool is_duplicate_id = !(ids_set.insert(entry->ref(ID).value()).second);
     is_ok = is_ok && !is_duplicate_id;
   }
 
   IdsSet::iterator end = ids_set.end();
-  for (Directory::MetahandlesMap::const_iterator it = handles_map->begin();
-       it != handles_map->end(); ++it) {
-    EntryKernel* entry = it->second;
+  for (auto it = handles_map->begin(); it != handles_map->end(); ++it) {
+    EntryKernel* entry = it->second.get();
     if (!entry->ref(PARENT_ID).IsNull()) {
       bool parent_exists = (ids_set.find(entry->ref(PARENT_ID).value()) != end);
       if (!parent_exists) {
         return false;
       }
     }
+  }
+  if (ids_set.find(Id::GetRoot().value()) == ids_set.end()) {
+    return false;
   }
   return is_ok;
 }

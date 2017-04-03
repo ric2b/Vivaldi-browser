@@ -22,8 +22,11 @@
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "net/base/completion_callback.h"
+#include "net/base/load_timing_info.h"
 #include "net/base/net_error_details.h"
+#include "net/base/net_export.h"
 #include "net/cert/ct_verify_result.h"
+#include "net/log/net_log_with_source.h"
 #include "net/proxy/proxy_server.h"
 #include "net/quic/chromium/quic_chromium_client_stream.h"
 #include "net/quic/chromium/quic_chromium_packet_reader.h"
@@ -40,6 +43,7 @@ namespace net {
 
 class CertVerifyResult;
 class DatagramClientSocket;
+class NetLog;
 class QuicCryptoClientStreamFactory;
 class QuicServerInfo;
 class QuicStreamFactory;
@@ -47,7 +51,8 @@ class SSLInfo;
 class TransportSecurityState;
 
 using TokenBindingSignatureMap =
-    base::MRUCache<std::string, std::vector<uint8_t>>;
+    base::MRUCache<std::pair<TokenBindingType, std::string>,
+                   std::vector<uint8_t>>;
 
 namespace test {
 class QuicChromiumClientSessionPeer;
@@ -56,20 +61,8 @@ class QuicChromiumClientSessionPeer;
 class NET_EXPORT_PRIVATE QuicChromiumClientSession
     : public QuicClientSessionBase,
       public QuicChromiumPacketReader::Visitor,
-      public QuicChromiumPacketWriter::WriteErrorObserver {
+      public QuicChromiumPacketWriter::Delegate {
  public:
-  // Reasons to disable QUIC, that is under certain pathological
-  // connection errors.  Note: these values must be kept in sync with
-  // the corresponding values of QuicDisabledReason in:
-  // tools/metrics/histograms/histograms.xml
-  enum QuicDisabledReason {
-    QUIC_DISABLED_NOT = 0,  // default, not disabled
-    QUIC_DISABLED_PUBLIC_RESET_POST_HANDSHAKE = 1,
-    QUIC_DISABLED_TIMEOUT_WITH_OPEN_STREAMS = 2,
-    QUIC_DISABLED_BAD_PACKET_LOSS_RATE = 3,
-    QUIC_DISABLED_MAX = 4,
-  };
-
   // An interface for observing events on a session.
   class NET_EXPORT_PRIVATE Observer {
    public:
@@ -133,6 +126,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
       const QuicConfig& config,
       QuicCryptoClientConfig* crypto_config,
       const char* const connection_description,
+      base::TimeTicks dns_resolution_start_time,
       base::TimeTicks dns_resolution_end_time,
       QuicClientPushPromiseIndex* push_promise_index,
       base::TaskRunner* task_runner,
@@ -158,9 +152,11 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   // Cancels the pending stream creation request.
   void CancelRequest(StreamRequest* request);
 
-  // QuicChromiumPacketWriter::WriteErrorObserver override.
-  int OnWriteError(int error_code,
-                   scoped_refptr<StringIOBuffer> last_packet) override;
+  // QuicChromiumPacketWriter::Delegate override.
+  int HandleWriteError(int error_code,
+                       scoped_refptr<StringIOBuffer> last_packet) override;
+  void OnWriteError(int error_code) override;
+  void OnWriteUnblocked() override;
 
   // QuicSpdySession methods:
   void OnHeadersHeadOfLineBlocking(QuicTime::Delta delta) override;
@@ -205,9 +201,11 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   // Gets the SSL connection information.
   bool GetSSLInfo(SSLInfo* ssl_info) const;
 
-  // Signs the exported keying material used for Token Binding using key |*key|
-  // and puts the signature in |*out|. Returns a net error code.
+  // Generates the signature used in Token Binding using key |*key| and for a
+  // Token Binding of type |tb_type|, putting the signature in |*out|. Returns a
+  // net error code.
   Error GetTokenBindingSignature(crypto::ECPrivateKey* key,
+                                 TokenBindingType tb_type,
                                  std::vector<uint8_t>* out);
 
   // Performs a crypto handshake with the server.
@@ -233,7 +231,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   std::unique_ptr<base::Value> GetInfoAsValue(
       const std::set<HostPortPair>& aliases);
 
-  const BoundNetLog& net_log() const { return net_log_; }
+  const NetLogWithSource& net_log() const { return net_log_; }
 
   base::WeakPtr<QuicChromiumClientSession> GetWeakPtr();
 
@@ -242,6 +240,10 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   // than the number of round-trips needed for the handshake.
   int GetNumSentClientHellos() const;
 
+  // Returns the stream id of the push stream if it is not claimed yet, or 0
+  // otherwise.
+  QuicStreamId GetStreamIdForPush(const GURL& pushed_url);
+
   // Returns true if |hostname| may be pooled onto this session.  If this
   // is a secure QUIC session, then |hostname| must match the certificate
   // presented during the handshake.
@@ -249,21 +251,38 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
 
   const QuicServerId& server_id() const { return server_id_; }
 
-  QuicDisabledReason disabled_reason() const { return disabled_reason_; }
+  // Attempts to migrate session when a write error is encountered.
+  void MigrateSessionOnWriteError();
+
+  // Helper method that writes a packet on the new socket after
+  // migration completes. If not null, the packet_ member is written,
+  // otherwise a PING packet is written.
+  void WriteToNewSocket();
 
   // Migrates session onto new socket, i.e., starts reading from
   // |socket| in addition to any previous sockets, and sets |writer|
   // to be the new default writer. Returns true if socket was
   // successfully added to the session and the session was
-  // successfully migrated to using the new socket. If not null,
-  // |packet| is sent on the new network, else a PING frame is
-  // sent. Returns true on successful migration, or false if number of
-  // migrations exceeds kMaxReadersPerQuicSession.  Takes ownership of
-  // |socket|, |reader|, and |writer|.
+  // successfully migrated to using the new socket. Returns true on
+  // successful migration, or false if number of migrations exceeds
+  // kMaxReadersPerQuicSession. Takes ownership of |socket|, |reader|,
+  // and |writer|.
   bool MigrateToSocket(std::unique_ptr<DatagramClientSocket> socket,
                        std::unique_ptr<QuicChromiumPacketReader> reader,
-                       std::unique_ptr<QuicChromiumPacketWriter> writer,
-                       scoped_refptr<StringIOBuffer> packet);
+                       std::unique_ptr<QuicChromiumPacketWriter> writer);
+
+  // Called when NetworkChangeNotifier notifies observers of a newly
+  // connected network. Migrates this session to the newly connected
+  // network if the session has a pending migration.
+  void OnNetworkConnected(NetworkChangeNotifier::NetworkHandle network,
+                          const NetLogWithSource& net_log);
+
+  // Schedules a migration alarm to wait for a new network.
+  void OnNoNewNetwork();
+
+  // Called when migration alarm fires. If migration has not occurred
+  // since alarm was set, closes session with error.
+  void OnMigrationTimeout(size_t num_sockets);
 
   // Populates network error details for this session.
   void PopulateNetErrorDetails(NetErrorDetails* details);
@@ -283,6 +302,8 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
                       const SpdyHeaderBlock& headers) override;
 
   void DeletePromised(QuicClientPromisedInfo* promised) override;
+
+  const LoadTimingInfo::ConnectTiming& GetConnectTiming();
 
  protected:
   // QuicSession methods:
@@ -348,25 +369,27 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   CompletionCallback callback_;
   size_t num_total_streams_;
   base::TaskRunner* task_runner_;
-  BoundNetLog net_log_;
+  NetLogWithSource net_log_;
   std::vector<std::unique_ptr<QuicChromiumPacketReader>> packet_readers_;
-  base::TimeTicks dns_resolution_end_time_;
-  base::TimeTicks handshake_start_;  // Time the handshake was started.
+  LoadTimingInfo::ConnectTiming connect_timing_;
   std::unique_ptr<QuicConnectionLogger> logger_;
   // True when the session is going away, and streams may no longer be created
   // on this session. Existing stream will continue to be processed.
   bool going_away_;
   // True when the session receives a go away from server due to port migration.
   bool port_migration_detected_;
-  QuicDisabledReason disabled_reason_;
   TokenBindingSignatureMap token_binding_signatures_;
   // UMA histogram counters for streams pushed to this session.
   int streams_pushed_count_;
   int streams_pushed_and_claimed_count_;
-  // Return value from packet rewrite packet on new socket. Used
-  // during connection migration on socket write error.
-  int error_code_from_rewrite_;
-  bool use_error_code_from_rewrite_;
+  // Stores packet that witnesses socket write error. This packet is
+  // written to a new socket after migration completes.
+  scoped_refptr<StringIOBuffer> packet_;
+  // TODO(jri): Replace use of migration_pending_ sockets_.size().
+  // When a task is posted for MigrateSessionOnError, pass in
+  // sockets_.size(). Then in MigrateSessionOnError, check to see if
+  // the current sockets_.size() == the passed in value.
+  bool migration_pending_;  // True while migration is underway.
   base::WeakPtrFactory<QuicChromiumClientSession> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicChromiumClientSession);

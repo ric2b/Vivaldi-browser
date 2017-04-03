@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "base/lazy_instance.h"
-#include "base/memory/linked_ptr.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -35,6 +34,7 @@
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/bookmarks/managed/managed_bookmark_service.h"
 #include "components/prefs/pref_service.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/undo/bookmark_undo_service.h"
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/render_view_host.h"
@@ -42,7 +42,6 @@
 #include "content/public/browser/web_ui.h"
 #include "extensions/browser/extension_function_dispatcher.h"
 #include "extensions/browser/view_type_utils.h"
-#include "grit/components_strings.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
@@ -190,8 +189,8 @@ void BookmarkManagerPrivateEventRouter::DispatchEvent(
     const std::string& event_name,
     std::unique_ptr<base::ListValue> event_args) {
   EventRouter::Get(browser_context_)
-      ->BroadcastEvent(base::WrapUnique(
-          new Event(histogram_value, event_name, std::move(event_args))));
+      ->BroadcastEvent(base::MakeUnique<Event>(histogram_value, event_name,
+                                               std::move(event_args)));
 }
 
 void BookmarkManagerPrivateEventRouter::BookmarkModelChanged() {}

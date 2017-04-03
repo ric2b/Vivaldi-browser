@@ -40,8 +40,10 @@ class WebIDBDatabaseImpl : public blink::WebIDBDatabase {
                          bool auto_increment) override;
   void deleteObjectStore(long long transaction_id,
                          long long object_store_id) override;
+  void renameObjectStore(long long transaction_id,
+                         long long object_store_id,
+                         const blink::WebString& new_name) override;
   void createTransaction(long long transaction_id,
-                         blink::WebIDBDatabaseCallbacks* callbacks,
                          const blink::WebVector<long long>& scope,
                          blink::WebIDBTransactionMode mode) override;
 
@@ -113,6 +115,10 @@ class WebIDBDatabaseImpl : public blink::WebIDBDatabase {
   void deleteIndex(long long transactionId,
                    long long objectStoreId,
                    long long indexId) override;
+  void renameIndex(long long transactionId,
+                   long long objectStoreId,
+                   long long indexId,
+                   const blink::WebString& new_name) override;
   void abort(long long transaction_id) override;
   void commit(long long transaction_id) override;
   void ackReceivedBlobs(

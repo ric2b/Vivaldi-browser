@@ -7,16 +7,21 @@
 
 #include "base/macros.h"
 #include "base/supports_user_data.h"
-#include "url/gurl.h"
+#include "ui/gfx/native_widget_types.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/scoped_java_ref.h"
 #endif
 
+namespace cc {
+class Layer;
+}  // namespace cc
+
 namespace blimp {
 namespace client {
 
 class BlimpContentsObserver;
+class BlimpContentsView;
 class BlimpNavigationController;
 
 // BlimpContents is the core class in blimp client which is responsible for
@@ -34,6 +39,14 @@ class BlimpContents : public base::SupportsUserData {
   // Enables adding and removing observers to this BlimpContents.
   virtual void AddObserver(BlimpContentsObserver* observer) = 0;
   virtual void RemoveObserver(BlimpContentsObserver* observer) = 0;
+
+  // Returns the view that holds the contents of this tab.
+  virtual BlimpContentsView* GetView() = 0;
+
+  // Will cause this BlimpContents and the remote contents to show and start or
+  // stop rendering content respectively.
+  virtual void Show() = 0;
+  virtual void Hide() = 0;
 
 #if defined(OS_ANDROID)
   // Returns a Java object of the type BlimpContents for the given

@@ -12,16 +12,26 @@
 
 namespace blink {
 
+class Document;
+
 class CORE_EXPORT CustomElementAdoptedCallbackReaction final
     : public CustomElementReaction {
-    WTF_MAKE_NONCOPYABLE(CustomElementAdoptedCallbackReaction);
-public:
-    CustomElementAdoptedCallbackReaction(CustomElementDefinition*);
+  WTF_MAKE_NONCOPYABLE(CustomElementAdoptedCallbackReaction);
 
-private:
-    void invoke(Element*) override;
+ public:
+  CustomElementAdoptedCallbackReaction(CustomElementDefinition*,
+                                       Document* oldOwner,
+                                       Document* newOwner);
+
+  DECLARE_VIRTUAL_TRACE();
+
+ private:
+  void invoke(Element*) override;
+
+  Member<Document> m_oldOwner;
+  Member<Document> m_newOwner;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // CustomElementAdoptedCallbackReaction_h
+#endif  // CustomElementAdoptedCallbackReaction_h

@@ -19,6 +19,7 @@
 #include "content/public/common/page_state.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/request_context_type.h"
+#include "content/public/common/resource_response.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 
@@ -38,8 +39,8 @@ enum LoFiState {
 
 // PlzNavigate
 // Helper function to determine if the navigation to |url| should make a request
-// to the network stack. A request should not be sent for data URLs, JavaScript
-// URLs or about:blank. In these cases, no request needs to be sent.
+// to the network stack. A request should not be sent for JavaScript URLs or
+// about:blank. In these cases, no request needs to be sent.
 bool CONTENT_EXPORT ShouldMakeNetworkRequestForURL(const GURL& url);
 
 // The following structures hold parameters used during a navigation. In
@@ -181,9 +182,6 @@ struct CONTENT_EXPORT BeginNavigationParams {
 struct CONTENT_EXPORT StartNavigationParams {
   StartNavigationParams();
   StartNavigationParams(const std::string& extra_headers,
-#if defined(OS_ANDROID)
-                        bool has_user_gesture,
-#endif
                         int transferred_request_child_id,
                         int transferred_request_request_id);
   StartNavigationParams(const StartNavigationParams& other);
@@ -191,10 +189,6 @@ struct CONTENT_EXPORT StartNavigationParams {
 
   // Extra headers (separated by \n) to send during the request.
   std::string extra_headers;
-
-#if defined(OS_ANDROID)
-  bool has_user_gesture;
-#endif
 
   // The following two members identify a previous request that has been
   // created before this navigation is being transferred to a new process.
@@ -236,7 +230,8 @@ struct CONTENT_EXPORT RequestNavigationParams {
                           int current_history_list_offset,
                           int current_history_list_length,
                           bool is_view_source,
-                          bool should_clear_history_list);
+                          bool should_clear_history_list,
+                          bool has_user_gesture);
   RequestNavigationParams(const RequestNavigationParams& other);
   ~RequestNavigationParams();
 
@@ -246,6 +241,9 @@ struct CONTENT_EXPORT RequestNavigationParams {
   // Any redirect URLs that occurred before |url|. Useful for cross-process
   // navigations; defaults to empty.
   std::vector<GURL> redirects;
+
+  // The ResourceResponseInfos received during redirects.
+  std::vector<ResourceResponseInfo> redirect_response;
 
   // Whether or not this url should be allowed to access local file://
   // resources.
@@ -328,6 +326,16 @@ struct CONTENT_EXPORT RequestNavigationParams {
   // PlzNavigate
   // Timing of navigation events.
   NavigationTiming navigation_timing;
+
+  // PlzNavigate
+  // The ServiceWorkerProviderHost ID used for navigations, if it was already
+  // created by the browser. Set to kInvalidServiceWorkerProviderId otherwise.
+  // This parameter is not used in the current navigation architecture, where
+  // it will always be equal to kInvalidServiceWorkerProviderId.
+  int service_worker_provider_id;
+
+  // True if the navigation originated due to a user gesture.
+  bool has_user_gesture;
 
 #if defined(OS_ANDROID)
   // The real content of the data: URL. Only used in Android WebView for

@@ -14,23 +14,24 @@ import android.text.TextUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.download.DownloadItem;
+import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.offlinepages.downloads.OfflinePageDownloadItem;
 import org.chromium.chrome.browser.widget.DateDividedAdapter.TimedItem;
 import org.chromium.ui.widget.Toast;
 
 import java.io.File;
-import java.util.Locale;
 
 /** Wraps different classes that contain information about downloads. */
 public abstract class DownloadHistoryItemWrapper implements TimedItem {
-    private static final String TAG = "download_ui";
-
     protected final BackendProvider mBackendProvider;
+    protected final ComponentName mComponentName;
     private Long mStableId;
 
-    private DownloadHistoryItemWrapper(BackendProvider provider) {
+    private DownloadHistoryItemWrapper(BackendProvider provider, ComponentName component) {
         mBackendProvider = provider;
+        mComponentName = component;
     }
 
     @Override
@@ -53,7 +54,7 @@ public abstract class DownloadHistoryItemWrapper implements TimedItem {
     abstract String getFilePath();
 
     /** @return The file where the download resides. */
-    abstract File getFile();
+    public abstract File getFile();
 
     /** @return String to display for the file. */
     abstract String getDisplayFileName();
@@ -62,13 +63,13 @@ public abstract class DownloadHistoryItemWrapper implements TimedItem {
     abstract long getFileSize();
 
     /** @return URL the file was downloaded from. */
-    abstract String getUrl();
+    public abstract String getUrl();
 
     /** @return {@link DownloadFilter} that represents the file type. */
-    abstract int getFilterType();
+    public abstract int getFilterType();
 
     /** @return The mime type or null if the item doesn't have one. */
-    abstract String getMimeType();
+    public abstract String getMimeType();
 
     /** Called when the user wants to open the file. */
     abstract void open();
@@ -86,6 +87,11 @@ public abstract class DownloadHistoryItemWrapper implements TimedItem {
      */
     abstract boolean hasBeenExternallyRemoved();
 
+    /**
+     * @return Whether this download is associated with the off the record profile.
+     */
+    abstract boolean isOffTheRecord();
+
     protected void recordOpenSuccess() {
         RecordHistogram.recordEnumeratedHistogram("Android.DownloadManager.Item.OpenSucceeded",
                 getFilterType(), DownloadFilter.FILTER_BOUNDARY);
@@ -97,18 +103,14 @@ public abstract class DownloadHistoryItemWrapper implements TimedItem {
     }
 
     /** Wraps a {@link DownloadItem}. */
-    static class DownloadItemWrapper extends DownloadHistoryItemWrapper {
-        private static final String MIMETYPE_VIDEO = "video";
-        private static final String MIMETYPE_AUDIO = "audio";
-        private static final String MIMETYPE_IMAGE = "image";
-        private static final String MIMETYPE_DOCUMENT = "text";
-
+    public static class DownloadItemWrapper extends DownloadHistoryItemWrapper {
         private final DownloadItem mItem;
         private final boolean mIsOffTheRecord;
         private File mFile;
 
-        DownloadItemWrapper(DownloadItem item, boolean isOffTheRecord, BackendProvider provider) {
-            super(provider);
+        DownloadItemWrapper(DownloadItem item, boolean isOffTheRecord, BackendProvider provider,
+                ComponentName component) {
+            super(provider, component);
             mItem = item;
             mIsOffTheRecord = isOffTheRecord;
         }
@@ -156,7 +158,7 @@ public abstract class DownloadHistoryItemWrapper implements TimedItem {
 
         @Override
         public int getFilterType() {
-            return convertMimeTypeToFilterType(getMimeType());
+            return DownloadFilter.fromMimeType(getMimeType());
         }
 
         @Override
@@ -167,6 +169,8 @@ public abstract class DownloadHistoryItemWrapper implements TimedItem {
         @Override
         public void open() {
             Context context = ContextUtils.getApplicationContext();
+            Intent viewIntent = DownloadUtils.createViewIntentForDownloadItem(
+                    Uri.fromFile(getFile()), getMimeType());
 
             if (mItem.hasBeenExternallyRemoved()) {
                 Toast.makeText(context, context.getString(R.string.download_cant_open_file),
@@ -174,21 +178,25 @@ public abstract class DownloadHistoryItemWrapper implements TimedItem {
                 return;
             }
 
-            String mimeType = Intent.normalizeMimeType(mItem.getDownloadInfo().getMimeType());
-            Uri fileUri = Uri.fromFile(getFile());
+            // Check if Chrome should open the file itself.
+            if (mBackendProvider.getDownloadDelegate().isDownloadOpenableInBrowser(
+                    mItem.getId(), mIsOffTheRecord, getMimeType())) {
+                // Share URIs use the content:// scheme when able, which looks bad when displayed
+                // in the URL bar.
+                Uri fileUri = Uri.fromFile(getFile());
+                Uri shareUri = DownloadUtils.getUriForItem(getFile());
+                String mimeType = Intent.normalizeMimeType(getMimeType());
+
+                Intent intent = DownloadUtils.getMediaViewerIntentForDownloadItem(
+                        fileUri, shareUri, mimeType);
+                IntentHandler.startActivityForTrustedIntent(intent, context);
+                recordOpenSuccess();
+                return;
+            }
 
             // Check if any apps can open the file.
-            Intent fileIntent = new Intent();
-            fileIntent.setAction(Intent.ACTION_VIEW);
-            if (TextUtils.isEmpty(mimeType)) {
-                fileIntent.setData(fileUri);
-            } else {
-                fileIntent.setDataAndType(fileUri, mimeType);
-            }
-            fileIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-
             try {
-                context.startActivity(fileIntent);
+                context.startActivity(viewIntent);
                 recordOpenSuccess();
             } catch (ActivityNotFoundException e) {
                 // Can't launch the Intent.
@@ -210,38 +218,21 @@ public abstract class DownloadHistoryItemWrapper implements TimedItem {
             return mItem.hasBeenExternallyRemoved();
         }
 
-        /** Identifies the type of file represented by the given MIME type string. */
-        private static int convertMimeTypeToFilterType(String mimeType) {
-            if (TextUtils.isEmpty(mimeType)) return DownloadFilter.FILTER_OTHER;
-
-            String[] pieces = mimeType.toLowerCase(Locale.getDefault()).split("/");
-            if (pieces.length != 2) return DownloadFilter.FILTER_OTHER;
-
-            if (MIMETYPE_VIDEO.equals(pieces[0])) {
-                return DownloadFilter.FILTER_VIDEO;
-            } else if (MIMETYPE_AUDIO.equals(pieces[0])) {
-                return DownloadFilter.FILTER_AUDIO;
-            } else if (MIMETYPE_IMAGE.equals(pieces[0])) {
-                return DownloadFilter.FILTER_IMAGE;
-            } else if (MIMETYPE_DOCUMENT.equals(pieces[0])) {
-                return DownloadFilter.FILTER_DOCUMENT;
-            } else {
-                return DownloadFilter.FILTER_OTHER;
-            }
+        @Override
+        boolean isOffTheRecord() {
+            return mIsOffTheRecord;
         }
     }
 
     /** Wraps a {@link OfflinePageDownloadItem}. */
-    static class OfflinePageItemWrapper extends DownloadHistoryItemWrapper {
+    public static class OfflinePageItemWrapper extends DownloadHistoryItemWrapper {
         private final OfflinePageDownloadItem mItem;
-        private final ComponentName mComponent;
         private File mFile;
 
         OfflinePageItemWrapper(OfflinePageDownloadItem item, BackendProvider provider,
                 ComponentName component) {
-            super(provider);
+            super(provider, component);
             mItem = item;
-            mComponent = component;
         }
 
         @Override
@@ -303,7 +294,7 @@ public abstract class DownloadHistoryItemWrapper implements TimedItem {
 
         @Override
         public void open() {
-            mBackendProvider.getOfflinePageBridge().openItem(getId(), mComponent);
+            mBackendProvider.getOfflinePageBridge().openItem(getId(), mComponentName);
             recordOpenSuccess();
         }
 
@@ -316,6 +307,11 @@ public abstract class DownloadHistoryItemWrapper implements TimedItem {
         @Override
         boolean hasBeenExternallyRemoved() {
             // We don't currently detect when offline pages have been removed externally.
+            return false;
+        }
+
+        @Override
+        boolean isOffTheRecord() {
             return false;
         }
     }

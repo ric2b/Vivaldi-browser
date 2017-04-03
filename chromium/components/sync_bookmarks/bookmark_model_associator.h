@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <set>
 #include <stack>
 #include <string>
@@ -21,8 +22,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "base/threading/thread_checker.h"
+#include "components/sync/api/data_type_error_handler.h"
 #include "components/sync/base/unrecoverable_error_handler.h"
-#include "components/sync/core/data_type_error_handler.h"
 #include "components/sync/driver/model_associator.h"
 
 class GURL;
@@ -35,23 +36,20 @@ class BookmarkNode;
 namespace syncer {
 class BaseNode;
 class BaseTransaction;
-struct UserShare;
-class WriteTransaction;
-}
-
-namespace sync_driver {
 class SyncClient;
+class WriteTransaction;
+struct UserShare;
 }
 
-namespace browser_sync {
+namespace sync_bookmarks {
 
 // Contains all model association related logic:
 // * Algorithm to associate bookmark model and sync model.
 // * Methods to get a bookmark node for a given sync node and vice versa.
 // * Persisting model associations and loading them back.
 class BookmarkModelAssociator
-    : public sync_driver::
-          PerDataTypeAssociatorInterface<bookmarks::BookmarkNode, int64_t> {
+    : public syncer::PerDataTypeAssociatorInterface<bookmarks::BookmarkNode,
+                                                    int64_t> {
  public:
   static syncer::ModelType model_type() { return syncer::BOOKMARKS; }
   // |expect_mobile_bookmarks_folder| controls whether or not we
@@ -59,9 +57,9 @@ class BookmarkModelAssociator
   // Should be set to true only by mobile clients.
   BookmarkModelAssociator(
       bookmarks::BookmarkModel* bookmark_model,
-      sync_driver::SyncClient* sync_client,
+      syncer::SyncClient* sync_client,
       syncer::UserShare* user_share,
-      syncer::DataTypeErrorHandler* unrecoverable_error_handler,
+      std::unique_ptr<syncer::DataTypeErrorHandler> unrecoverable_error_handler,
       bool expect_mobile_bookmarks_folder);
   ~BookmarkModelAssociator() override;
 
@@ -292,9 +290,9 @@ class BookmarkModelAssociator
 
   base::ThreadChecker thread_checker_;
   bookmarks::BookmarkModel* bookmark_model_;
-  sync_driver::SyncClient* sync_client_;
+  syncer::SyncClient* sync_client_;
   syncer::UserShare* user_share_;
-  syncer::DataTypeErrorHandler* unrecoverable_error_handler_;
+  std::unique_ptr<syncer::DataTypeErrorHandler> unrecoverable_error_handler_;
   const bool expect_mobile_bookmarks_folder_;
   BookmarkIdToSyncIdMap id_map_;
   SyncIdToBookmarkNodeMap id_map_inverse_;
@@ -309,6 +307,6 @@ class BookmarkModelAssociator
   DISALLOW_COPY_AND_ASSIGN(BookmarkModelAssociator);
 };
 
-}  // namespace browser_sync
+}  // namespace sync_bookmarks
 
 #endif  // COMPONENTS_SYNC_BOOKMARKS_BOOKMARK_MODEL_ASSOCIATOR_H_

@@ -14,7 +14,7 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -133,7 +133,7 @@ void ExternalPrefLoader::StartLoading() {
           PrefServiceSyncableFromProfile(profile_);
       DCHECK(prefs);
       syncable_pref_observer_.Add(prefs);
-      ProfileSyncService* service =
+      browser_sync::ProfileSyncService* service =
           ProfileSyncServiceFactory::GetForProfile(profile_);
       DCHECK(service);
       if (service->CanSyncStart() && (service->IsFirstSetupComplete() ||
@@ -155,7 +155,7 @@ void ExternalPrefLoader::OnIsSyncingChanged() {
 }
 
 void ExternalPrefLoader::OnStateChanged() {
-  ProfileSyncService* service =
+  browser_sync::ProfileSyncService* service =
       ProfileSyncServiceFactory::GetForProfile(profile_);
   DCHECK(service);
   if (!service->CanSyncStart()) {
@@ -184,7 +184,7 @@ void ExternalPrefLoader::PostLoadAndRemoveObservers() {
   DCHECK(prefs);
   syncable_pref_observer_.Remove(prefs);
 
-  ProfileSyncService* service =
+  browser_sync::ProfileSyncService* service =
       ProfileSyncServiceFactory::GetForProfile(profile_);
   DCHECK(service);
   service->RemoveObserver(this);

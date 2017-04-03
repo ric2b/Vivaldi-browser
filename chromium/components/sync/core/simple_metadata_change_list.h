@@ -6,15 +6,16 @@
 #define COMPONENTS_SYNC_CORE_SIMPLE_METADATA_CHANGE_LIST_H_
 
 #include <map>
+#include <memory>
 #include <string>
 
 #include "components/sync/api/metadata_change_list.h"
 #include "components/sync/api/model_type_store.h"
 #include "components/sync/core/non_blocking_sync_common.h"
-#include "components/sync/protocol/data_type_state.pb.h"
 #include "components/sync/protocol/entity_metadata.pb.h"
+#include "components/sync/protocol/model_type_state.pb.h"
 
-namespace syncer_v2 {
+namespace syncer {
 
 // A MetadataChangeList implementation that is meant to be used in combination
 // with a ModelTypeStore. It accumulates changes in member fields, and then when
@@ -28,9 +29,9 @@ class SimpleMetadataChangeList : public MetadataChangeList {
     sync_pb::EntityMetadata metadata;
   };
 
-  struct DataTypeStateChange {
+  struct ModelTypeStateChange {
     ChangeType type;
-    sync_pb::DataTypeState state;
+    sync_pb::ModelTypeState state;
   };
 
   typedef std::map<std::string, MetadataChange> MetadataChanges;
@@ -38,16 +39,16 @@ class SimpleMetadataChangeList : public MetadataChangeList {
   SimpleMetadataChangeList();
   ~SimpleMetadataChangeList() override;
 
-  void UpdateDataTypeState(
-      const sync_pb::DataTypeState& data_type_state) override;
-  void ClearDataTypeState() override;
+  void UpdateModelTypeState(
+      const sync_pb::ModelTypeState& model_type_state) override;
+  void ClearModelTypeState() override;
   void UpdateMetadata(const std::string& client_tag,
                       const sync_pb::EntityMetadata& metadata) override;
   void ClearMetadata(const std::string& client_tag) override;
 
   const MetadataChanges& GetMetadataChanges() const;
-  bool HasDataTypeStateChange() const;
-  const DataTypeStateChange& GetDataTypeStateChange() const;
+  bool HasModelTypeStateChange() const;
+  const ModelTypeStateChange& GetModelTypeStateChange() const;
 
   // Moves all currently accumulated changes into the write batch, clear out
   // local copies. Calling this multiple times will work, but should not be
@@ -57,9 +58,9 @@ class SimpleMetadataChangeList : public MetadataChangeList {
 
  private:
   MetadataChanges metadata_changes_;
-  std::unique_ptr<DataTypeStateChange> state_change_;
+  std::unique_ptr<ModelTypeStateChange> state_change_;
 };
 
-}  // namespace syncer_v2
+}  // namespace syncer
 
 #endif  // COMPONENTS_SYNC_CORE_SIMPLE_METADATA_CHANGE_LIST_H_

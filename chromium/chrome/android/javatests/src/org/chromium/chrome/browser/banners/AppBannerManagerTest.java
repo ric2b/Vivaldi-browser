@@ -23,6 +23,7 @@ import android.widget.TextView;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.infobar.AppBannerInfoBarAndroid;
@@ -33,6 +34,7 @@ import org.chromium.chrome.browser.infobar.InfoBarContainer.InfoBarAnimationList
 import org.chromium.chrome.browser.webapps.WebappDataStorage;
 import org.chromium.chrome.test.ChromeTabbedActivityTestBase;
 import org.chromium.chrome.test.util.browser.TabLoadObserver;
+import org.chromium.chrome.test.util.browser.WebappTestPage;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.TouchCommon;
@@ -68,8 +70,8 @@ public class AppBannerManagerTest extends ChromeTabbedActivityTestBase {
     private static final String WEB_APP_PATH =
             "/chrome/test/data/banners/manifest_test_page.html";
 
-    private static final String WEB_APP_SHORT_TITLE_PATH =
-            "/chrome/test/data/banners/manifest_short_name_only_test_page.html";
+    private static final String WEB_APP_SHORT_TITLE_MANIFEST =
+            "/chrome/test/data/banners/manifest_short_name_only.json";
 
     private static final String WEB_APP_TITLE = "Manifest test app";
 
@@ -129,14 +131,14 @@ public class AppBannerManagerTest extends ChromeTabbedActivityTestBase {
         public Bitmap mSplashImage;
 
         @Override
-        public WebappDataStorage create(final Context context, final String webappId) {
-            return new WebappDataStorageWrapper(context, webappId);
+        public WebappDataStorage create(final String webappId) {
+            return new WebappDataStorageWrapper(webappId);
         }
 
         private class WebappDataStorageWrapper extends WebappDataStorage {
 
-            public WebappDataStorageWrapper(Context context, String webappId) {
-                super(context, webappId);
+            public WebappDataStorageWrapper(String webappId) {
+                super(webappId);
             }
 
             @Override
@@ -333,6 +335,7 @@ public class AppBannerManagerTest extends ChromeTabbedActivityTestBase {
 
     @SmallTest
     @Feature({"AppBanners"})
+    @RetryOnFailure
     public void testFullNativeInstallPathwayFromId() throws Exception {
         runFullNativeInstallPathway(mNativeAppUrl, NATIVE_APP_BLANK_REFERRER);
     }
@@ -346,7 +349,8 @@ public class AppBannerManagerTest extends ChromeTabbedActivityTestBase {
 
     @MediumTest
     @Feature({"AppBanners"})
-    public void testBannerAppearsThenDoesNotAppearAgainForMonths() throws Exception {
+    @RetryOnFailure
+    public void testBannerAppearsThenDoesNotAppearAgainForWeeks() throws Exception {
         // Visit a site that requests a banner.
         new TabLoadObserver(getActivity().getActivityTab()).fullyLoadUrl(mNativeAppUrl);
         waitUntilAppDetailsRetrieved(1);
@@ -359,29 +363,29 @@ public class AppBannerManagerTest extends ChromeTabbedActivityTestBase {
         waitUntilAppBannerInfoBarAppears(NATIVE_APP_TITLE);
 
         // Revisit the page to make the banner go away, but don't explicitly dismiss it.
-        // This hides the banner for a few months.
+        // This hides the banner for two weeks.
         new TabLoadObserver(getActivity().getActivityTab()).fullyLoadUrl(mNativeAppUrl);
         waitUntilAppDetailsRetrieved(3);
         waitUntilNoInfoBarsExist();
 
-        // Wait a month until revisiting the page.
-        AppBannerManager.setTimeDeltaForTesting(31);
+        // Wait a week until revisiting the page.
+        AppBannerManager.setTimeDeltaForTesting(7);
         new TabLoadObserver(getActivity().getActivityTab()).fullyLoadUrl(mNativeAppUrl);
         waitUntilAppDetailsRetrieved(4);
         waitUntilNoInfoBarsExist();
 
-        AppBannerManager.setTimeDeltaForTesting(32);
+        AppBannerManager.setTimeDeltaForTesting(8);
         new TabLoadObserver(getActivity().getActivityTab()).fullyLoadUrl(mNativeAppUrl);
         waitUntilAppDetailsRetrieved(5);
         waitUntilNoInfoBarsExist();
 
-        // Wait two months until revisiting the page, which should pop up the banner.
-        AppBannerManager.setTimeDeltaForTesting(61);
+        // Wait two weeks until revisiting the page, which should pop up the banner.
+        AppBannerManager.setTimeDeltaForTesting(14);
         new TabLoadObserver(getActivity().getActivityTab()).fullyLoadUrl(mNativeAppUrl);
         waitUntilAppDetailsRetrieved(6);
         waitUntilNoInfoBarsExist();
 
-        AppBannerManager.setTimeDeltaForTesting(62);
+        AppBannerManager.setTimeDeltaForTesting(15);
         new TabLoadObserver(getActivity().getActivityTab()).fullyLoadUrl(mNativeAppUrl);
         waitUntilAppDetailsRetrieved(7);
         waitUntilAppBannerInfoBarAppears(NATIVE_APP_TITLE);
@@ -441,6 +445,7 @@ public class AppBannerManagerTest extends ChromeTabbedActivityTestBase {
 
     @MediumTest
     @Feature({"AppBanners"})
+    @RetryOnFailure
     public void testBitmapFetchersCanOverlapWithoutCrashing() throws Exception {
         // Visit a site that requests a banner rapidly and repeatedly.
         for (int i = 1; i <= 10; i++) {
@@ -459,18 +464,23 @@ public class AppBannerManagerTest extends ChromeTabbedActivityTestBase {
 
     @SmallTest
     @Feature({"AppBanners"})
+    @RetryOnFailure
     public void testWebAppBannerAppears() throws Exception {
         triggerWebAppBanner(mWebAppUrl, WEB_APP_TITLE);
     }
 
     @SmallTest
     @Feature({"AppBanners"})
+    @RetryOnFailure
     public void testBannerFallsBackToShortName() throws Exception {
-        triggerWebAppBanner(mTestServer.getURL(WEB_APP_SHORT_TITLE_PATH), WEB_APP_SHORT_TITLE);
+        triggerWebAppBanner(WebappTestPage.urlOfPageWithServiceWorkerAndManifest(
+                                    mTestServer, WEB_APP_SHORT_TITLE_MANIFEST),
+                WEB_APP_SHORT_TITLE);
     }
 
     @SmallTest
     @Feature({"AppBanners"})
+    @RetryOnFailure
     public void testWebAppSplashscreenIsDownloaded() throws Exception {
         // Sets the overriden factory to observer splash screen update.
         final TestDataStorageFactory dataStorageFactory = new TestDataStorageFactory();

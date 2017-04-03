@@ -589,11 +589,11 @@ std::string* MakeCheckOpString<std::string, std::string>(
   inline std::string* Check##name##Impl(const t1& v1, const t2& v2, \
                                         const char* names) { \
     if (v1 op v2) return NULL; \
-    else return MakeCheckOpString(v1, v2, names); \
+    else return ::logging::MakeCheckOpString(v1, v2, names);    \
   } \
   inline std::string* Check##name##Impl(int v1, int v2, const char* names) { \
     if (v1 op v2) return NULL; \
-    else return MakeCheckOpString(v1, v2, names); \
+    else return ::logging::MakeCheckOpString(v1, v2, names);    \
   }
 DEFINE_CHECK_OP_IMPL(EQ, ==)
 DEFINE_CHECK_OP_IMPL(NE, !=)
@@ -731,7 +731,7 @@ const LogSeverity LOG_DCHECK = LOG_INFO;
 // defined.
 //
 // You may append to the error message like so:
-//   DCHECK_NE(1, 2) << ": The world must be ending!";
+//   DCHECK_NE(1, 2) << "The world must be ending!";
 //
 // We are very careful to ensure that each argument is evaluated exactly
 // once, and that anything which is legal to pass as a function argument is

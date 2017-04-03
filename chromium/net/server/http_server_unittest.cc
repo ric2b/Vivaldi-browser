@@ -36,7 +36,8 @@
 #include "net/base/test_completion_callback.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_source.h"
+#include "net/log/net_log_with_source.h"
 #include "net/server/http_server_request_info.h"
 #include "net/socket/tcp_client_socket.h"
 #include "net/socket/tcp_server_socket.h"
@@ -83,7 +84,7 @@ class TestHttpClient {
 
   int ConnectAndWait(const IPEndPoint& address) {
     AddressList addresses(address);
-    NetLog::Source source;
+    NetLogSource source;
     socket_.reset(new TCPClientSocket(addresses, NULL, NULL, source));
 
     base::RunLoop run_loop;
@@ -131,6 +132,8 @@ class TestHttpClient {
     }
     return true;
   }
+
+  TCPClientSocket& socket() { return *socket_; }
 
  private:
   void OnConnect(const base::Closure& quit_loop, int result) {
@@ -192,13 +195,16 @@ class HttpServerTest : public testing::Test,
 
   void SetUp() override {
     std::unique_ptr<ServerSocket> server_socket(
-        new TCPServerSocket(NULL, NetLog::Source()));
+        new TCPServerSocket(NULL, NetLogSource()));
     server_socket->ListenWithAddressAndPort("127.0.0.1", 0, 1);
     server_.reset(new HttpServer(std::move(server_socket), this));
     ASSERT_THAT(server_->GetLocalAddress(&server_address_), IsOk());
   }
 
-  void OnConnect(int connection_id) override {}
+  void OnConnect(int connection_id) override {
+    DCHECK(connection_map_.find(connection_id) == connection_map_.end());
+    connection_map_[connection_id] = true;
+  }
 
   void OnHttpRequest(int connection_id,
                      const HttpServerRequestInfo& info) override {
@@ -216,7 +222,10 @@ class HttpServerTest : public testing::Test,
     NOTREACHED();
   }
 
-  void OnClose(int connection_id) override {}
+  void OnClose(int connection_id) override {
+    DCHECK(connection_map_.find(connection_id) != connection_map_.end());
+    connection_map_[connection_id] = false;
+  }
 
   bool RunUntilRequestsReceived(size_t count) {
     quit_after_request_count_ = count;
@@ -243,11 +252,15 @@ class HttpServerTest : public testing::Test,
     server_->HandleAcceptResult(OK);
   }
 
+  std::unordered_map<int, bool>& connection_map() { return connection_map_; }
+
  protected:
   std::unique_ptr<HttpServer> server_;
   IPEndPoint server_address_;
   base::Closure run_loop_quit_func_;
   std::vector<std::pair<HttpServerRequestInfo, int> > requests_;
+  std::unordered_map<int /* connection_id */, bool /* connected */>
+      connection_map_;
 
  private:
   size_t quit_after_request_count_;
@@ -472,6 +485,38 @@ TEST_F(HttpServerTest, SendRaw) {
   ASSERT_EQ(expected_response, response);
 }
 
+TEST_F(HttpServerTest, WrongProtocolRequest) {
+  const char* const kBadProtocolRequests[] = {
+      "GET /test HTTP/1.0\r\n\r\n",
+      "GET /test foo\r\n\r\n",
+      "GET /test \r\n\r\n",
+  };
+
+  for (size_t i = 0; i < arraysize(kBadProtocolRequests); ++i) {
+    TestHttpClient client;
+    ASSERT_THAT(client.ConnectAndWait(server_address_), IsOk());
+
+    client.Send(kBadProtocolRequests[i]);
+    ASSERT_FALSE(RunUntilRequestsReceived(1));
+
+    // Assert that the delegate was updated properly.
+    ASSERT_EQ(1u, connection_map().size());
+    ASSERT_FALSE(connection_map().begin()->second);
+
+    // Assert that the socket was opened...
+    ASSERT_TRUE(client.socket().WasEverUsed());
+
+    // ...then closed when the server disconnected. Verify that the socket was
+    // closed by checking that a Read() fails.
+    std::string response;
+    ASSERT_FALSE(client.Read(&response, 1u));
+    ASSERT_EQ(std::string(), response);
+
+    // Reset the state of the connection map.
+    connection_map().clear();
+  }
+}
+
 class MockStreamSocket : public StreamSocket {
  public:
   MockStreamSocket()
@@ -499,7 +544,7 @@ class MockStreamSocket : public StreamSocket {
   int GetLocalAddress(IPEndPoint* address) const override {
     return ERR_NOT_IMPLEMENTED;
   }
-  const BoundNetLog& NetLog() const override { return net_log_; }
+  const NetLogWithSource& NetLog() const override { return net_log_; }
   void SetSubresourceSpeculation() override {}
   void SetOmniboxSpeculation() override {}
   bool WasEverUsed() const override { return true; }
@@ -567,7 +612,7 @@ class MockStreamSocket : public StreamSocket {
   int read_buf_len_;
   CompletionCallback read_callback_;
   std::string pending_read_data_;
-  BoundNetLog net_log_;
+  NetLogWithSource net_log_;
 
   DISALLOW_COPY_AND_ASSIGN(MockStreamSocket);
 };
@@ -640,6 +685,7 @@ TEST_F(HttpServerTest, MultipleRequestsOnSameConnection) {
 class CloseOnConnectHttpServerTest : public HttpServerTest {
  public:
   void OnConnect(int connection_id) override {
+    HttpServerTest::OnConnect(connection_id);
     connection_ids_.push_back(connection_id);
     server_->Close(connection_id);
   }

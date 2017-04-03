@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_CHROMEOS_POLICY_ENROLLMENT_STATUS_CHROMEOS_H_
 #define CHROME_BROWSER_CHROMEOS_POLICY_ENROLLMENT_STATUS_CHROMEOS_H_
 
-#include "chrome/browser/chromeos/policy/enterprise_install_attributes.h"
+#include "chrome/browser/chromeos/settings/install_attributes.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
 #include "components/policy/core/common/cloud/cloud_policy_validator.h"
@@ -42,6 +42,7 @@ class EnrollmentStatus {
     STATUS_ATTRIBUTE_UPDATE_FAILED = 14,    // Device attribute update failed.
     STATUS_REGISTRATION_CERTIFICATE_FETCH_FAILED = 15,  // Cannot obtain
                                                         // registration cert.
+    STATUS_NO_MACHINE_IDENTIFICATION = 16,  // Machine model or serial missing.
   };
 
   // Helpers for constructing errors for relevant cases.
@@ -58,7 +59,7 @@ class EnrollmentStatus {
       CloudPolicyStore::Status store_error,
       CloudPolicyValidatorBase::Status validation_status);
   static EnrollmentStatus ForLockError(
-      EnterpriseInstallAttributes::LockResult lock_status);
+      chromeos::InstallAttributes::LockResult lock_status);
 
   Status status() const { return status_; }
   DeviceManagementStatus client_status() const { return client_status_; }
@@ -67,7 +68,7 @@ class EnrollmentStatus {
   CloudPolicyValidatorBase::Status validation_status() const {
     return validation_status_;
   }
-  EnterpriseInstallAttributes::LockResult lock_status() const {
+  chromeos::InstallAttributes::LockResult lock_status() const {
     return lock_status_;
   }
 
@@ -77,14 +78,14 @@ class EnrollmentStatus {
                    int http_status,
                    CloudPolicyStore::Status store_status,
                    CloudPolicyValidatorBase::Status validation_status,
-                   EnterpriseInstallAttributes::LockResult lock_status);
+                   chromeos::InstallAttributes::LockResult lock_status);
 
   Status status_;
   DeviceManagementStatus client_status_;
   int http_status_;
   CloudPolicyStore::Status store_status_;
   CloudPolicyValidatorBase::Status validation_status_;
-  EnterpriseInstallAttributes::LockResult lock_status_;
+  chromeos::InstallAttributes::LockResult lock_status_;
 };
 
 }  // namespace policy

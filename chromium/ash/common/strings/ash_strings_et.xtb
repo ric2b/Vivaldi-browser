@@ -47,7 +47,6 @@ Selle muutmiseks vajutage klahve Tõstuklahv + Alt.</translation>
 <translation id="2268813581635650749">Logi kõik kasutajad välja</translation>
 <translation id="2297568595583585744">Olekusalv</translation>
 <translation id="2303600792989757991">Akna ülevaate sisse- ja väljalülitamine</translation>
-<translation id="2372145515558759244">Rakenduste sünkroonimine ...</translation>
 <translation id="2391579633712104609">180°</translation>
 <translation id="2429753432712299108">Bluetoothi seade „<ph name="DEVICE_NAME" />” küsib luba sidumiseks. Enne nõustumist veenduge, et selles seadmes oleks kuvatud see parool: <ph name="PASSKEY" /></translation>
 <translation id="2475982808118771221">Tekkis viga</translation>
@@ -61,7 +60,6 @@ Selle muutmiseks vajutage klahve Tõstuklahv + Alt.</translation>
 <translation id="2727977024730340865">Ühendatud väikese energiakuluga laadijaga. Aku laadimine võib olla ebastabiilne.</translation>
 <translation id="2761704814324807722">Olekusalv, kellaaeg <ph name="TIME" />, <ph name="BATTERY" /></translation>
 <translation id="2792498699870441125">Alt + otsinguklahv</translation>
-<translation id="2805756323405976993">Rakendused</translation>
 <translation id="2819276065543622893">Teid logitakse nüüd välja.</translation>
 <translation id="2825619548187458965">Riiul</translation>
 <translation id="2844169650293029770">C-tüüpi USB-seade (eesmine vasakpoolne port)</translation>
@@ -97,7 +95,6 @@ Tühistamiseks vajutage otsinguklahvi või tõstuklahvi</translation>
 <translation id="3621712662352432595">Heliseaded</translation>
 <translation id="3625258641415618104">Ekraanipildid on keelatud</translation>
 <translation id="3626281679859535460">Eredus</translation>
-<translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079">Ekraani <ph name="DISPLAY_NAME" /> eraldusvõimeks määrati <ph name="RESOLUTION" /></translation>
 <translation id="370649949373421643">Luba WiFi</translation>
 <translation id="3709443003275901162">9+</translation>
@@ -111,6 +108,8 @@ Tühistamiseks vajutage otsinguklahvi või tõstuklahvi</translation>
 <translation id="3866182280516392520">IPv6 aadress</translation>
 <translation id="3891340733213178823">Väljalogimiseks vajutage kaks korda klahvikombinatsiooni Ctrl + tõstuklahv + Q.</translation>
 <translation id="3892641579809465218">Sisemine kuva</translation>
+<translation id="3893630138897523026">ChromeVox (kõnena esitatud tagasiside)</translation>
+<translation id="3899995891769452915">Häälsisend</translation>
 <translation id="3963445509666917109">Kõlar (sisemine)</translation>
 <translation id="3967919079500697218">Teie administraator on ekraanipiltide tegemise keelanud.</translation>
 <translation id="397105322502079400">Arvutamine ...</translation>
@@ -134,10 +133,8 @@ Tühistamiseks vajutage otsinguklahvi või tõstuklahvi</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl + Tõstuklahv + Tühik</translation>
 <translation id="5045002648206642691">Google Drive'i seaded ...</translation>
-<translation id="511445211639755999"><ph name="RESOLUTION" />, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">Ülekandeseadmed on saadaval</translation>
 <translation id="5170568018924773124">Kuva kaustas</translation>
-<translation id="5191140942132549112">KUVA KÜSIMUSED</translation>
 <translation id="5222676887888702881">Logi välja</translation>
 <translation id="5238774010593222950">Teisele kontole ei saa sisse logida.</translation>
 <translation id="532063867737390965">Administraator on selle võrguseade keelanud.</translation>
@@ -185,6 +182,7 @@ Selle muutmiseks vajutage klahve Tõstuklahv + Alt.</translation>
 <translation id="6459472438155181876">Ekraani laiendamine seadmesse <ph name="DISPLAY_NAME" /></translation>
 <translation id="6490471652906364588">C-tüüpi USB-seade (parempoolne port)</translation>
 <translation id="6501401484702599040">Ekraani ülekandmine seadmesse <ph name="RECEIVER_NAME" /></translation>
+<translation id="6521655319214113338">Käsitsikirjasisend</translation>
 <translation id="6537270692134705506">Jäädvusta ekraanikuva</translation>
 <translation id="6550675742724504774">Valikud</translation>
 <translation id="6585808820553845416">Seansi lõpuni on jäänud <ph name="SESSION_TIME_REMAINING" />.</translation>
@@ -194,7 +192,6 @@ Selle muutmiseks vajutage klahve Tõstuklahv + Alt.</translation>
 <translation id="6713285437468012787">Bluetoothi seade „<ph name="DEVICE_NAME" />” on nüüd seotud ja saadaval kõikidele kasutajatele. Võite sidumise tühistada jaotises Seaded.</translation>
 <translation id="6785414152754474415">Aku on <ph name="PERCENTAGE" />% täis ja seda laetakse.</translation>
 <translation id="683971173229319003">Otsing + L</translation>
-<translation id="68610848741840742">ChromeVox (kõnena esitatud tagasiside)</translation>
 <translation id="6911468394164995108">Liitu muu võrguga ...</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6979158407327259162">Google Drive</translation>
@@ -217,8 +214,10 @@ Tühistamiseks vajutage klahvikombinatsiooni Alt + otsinguklahv või tõstuklahv
 <translation id="743058460480092004">Kaamera ja mikrofon on kasutusel.</translation>
 <translation id="7510334386202674593">Ctrl + Tõstuklahv + L</translation>
 <translation id="7561014039265304140">Üksus <ph name="DISPLAY_NAME" /> ei toeta eraldusvõimet <ph name="SPECIFIED_RESOLUTION" />. Eraldusvõime muudeti tagasi väärtusele <ph name="FALLBACK_RESOLUTION" /></translation>
+<translation id="7562368315689366235">Emotikonide palett</translation>
 <translation id="7573962313813535744">Dokkimisrežiim</translation>
 <translation id="7580671184200851182">Esita sama heli kõigist kõlaritest (monoheli)</translation>
+<translation id="7581273696622423628">Osalege küsitluses</translation>
 <translation id="7593891976182323525">Otsinguklahv või tõstuklahv</translation>
 <translation id="7649070708921625228">Abi</translation>
 <translation id="7692480393933218409">Ühendatud C-tüüpi USB-seadmete laadimine</translation>

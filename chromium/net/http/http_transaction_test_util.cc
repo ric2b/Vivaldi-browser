@@ -25,6 +25,9 @@
 #include "net/http/http_request_info.h"
 #include "net/http/http_response_info.h"
 #include "net/http/http_transaction.h"
+#include "net/log/net_log.h"
+#include "net/log/net_log_source.h"
+#include "net/log/net_log_with_source.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace net {
@@ -163,7 +166,7 @@ TestTransactionConsumer::~TestTransactionConsumer() {
 }
 
 void TestTransactionConsumer::Start(const HttpRequestInfo* request,
-                                    const BoundNetLog& net_log) {
+                                    const NetLogWithSource& net_log) {
   state_ = STARTING;
   int result = trans_->Start(
       request, base::Bind(&TestTransactionConsumer::OnIOComplete,
@@ -231,7 +234,7 @@ MockNetworkTransaction::MockNetworkTransaction(RequestPriority priority,
       transaction_factory_(factory->AsWeakPtr()),
       received_bytes_(0),
       sent_bytes_(0),
-      socket_log_id_(NetLog::Source::kInvalidId),
+      socket_log_id_(NetLogSource::kInvalidId),
       done_reading_called_(false),
       weak_factory_(this) {}
 
@@ -239,7 +242,7 @@ MockNetworkTransaction::~MockNetworkTransaction() {}
 
 int MockNetworkTransaction::Start(const HttpRequestInfo* request,
                                   const CompletionCallback& callback,
-                                  const BoundNetLog& net_log) {
+                                  const NetLogWithSource& net_log) {
   if (request_)
     return ERR_FAILED;
 
@@ -266,12 +269,12 @@ int MockNetworkTransaction::RestartWithAuth(
     return ERR_FAILED;
 
   HttpRequestInfo auth_request_info = *request_;
-  auth_request_info.extra_headers.AddHeaderFromString("Authorization: Bar");
+  auth_request_info.extra_headers.SetHeader("Authorization", "Bar");
 
   // Let the MockTransactionHandler worry about this: the only way for this
   // test to succeed is by using an explicit handler for the transaction so
   // that server behavior can be simulated.
-  return StartInternal(&auth_request_info, callback, BoundNetLog());
+  return StartInternal(&auth_request_info, callback, NetLogWithSource());
 }
 
 void MockNetworkTransaction::PopulateNetErrorDetails(
@@ -352,17 +355,13 @@ LoadState MockNetworkTransaction::GetLoadState() const {
   return LOAD_STATE_IDLE;
 }
 
-UploadProgress MockNetworkTransaction::GetUploadProgress() const {
-  return UploadProgress();
-}
-
 void MockNetworkTransaction::SetQuicServerInfo(
     QuicServerInfo* quic_server_info) {
 }
 
 bool MockNetworkTransaction::GetLoadTimingInfo(
     LoadTimingInfo* load_timing_info) const {
-  if (socket_log_id_ != NetLog::Source::kInvalidId) {
+  if (socket_log_id_ != NetLogSource::kInvalidId) {
     // The minimal set of times for a request that gets a response, assuming it
     // gets a new socket.
     load_timing_info->socket_reused = false;
@@ -404,7 +403,7 @@ const int64_t MockNetworkTransaction::kTotalSentBytes = 100;
 
 int MockNetworkTransaction::StartInternal(const HttpRequestInfo* request,
                                           const CompletionCallback& callback,
-                                          const BoundNetLog& net_log) {
+                                          const NetLogWithSource& net_log) {
   const MockTransaction* t = FindMockTransaction(request->url);
   if (!t)
     return ERR_FAILED;

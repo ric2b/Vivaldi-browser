@@ -114,7 +114,7 @@ WebInspector.JavaScriptSourceFrame.prototype = {
         infobar.createDetailsRowMessage(WebInspector.UIString("The content of this file on the file system:\u00a0")).appendChild(
             WebInspector.linkifyURLAsNode(fileURL, fileURL, "source-frame-infobar-details-url", true));
 
-        var scriptURL = WebInspector.networkMapping.networkURL(this.uiSourceCode());
+        var scriptURL = this.uiSourceCode().url();
         infobar.createDetailsRowMessage(WebInspector.UIString("does not match the loaded script:\u00a0")).appendChild(
             WebInspector.linkifyURLAsNode(scriptURL, scriptURL, "source-frame-infobar-details-url", true));
 
@@ -146,8 +146,6 @@ WebInspector.JavaScriptSourceFrame.prototype = {
         var projectType = uiSourceCode.project().type();
         if (projectType === WebInspector.projectTypes.Snippets)
             return;
-        var networkURL = WebInspector.networkMapping.networkURL(uiSourceCode);
-        var url = projectType === WebInspector.projectTypes.Formatter ? uiSourceCode.url() : networkURL;
         if (!WebInspector.blackboxManager.isBlackboxedUISourceCode(uiSourceCode)) {
             this._hideBlackboxInfobar();
             return;
@@ -714,6 +712,7 @@ WebInspector.JavaScriptSourceFrame.prototype = {
 
         /** @type {!Map.<number, !Set<string>>} */
         var namesPerLine = new Map();
+        var skipObjectProperty = false;
         var tokenizer = new WebInspector.CodeMirrorUtils.TokenizerFactory().createTokenizer("text/javascript");
         tokenizer(this.textEditor.line(fromLine).substring(fromColumn), processToken.bind(this, fromLine));
         for (var i = fromLine + 1; i < toLine; ++i)
@@ -729,7 +728,7 @@ WebInspector.JavaScriptSourceFrame.prototype = {
          */
         function processToken(lineNumber, tokenValue, tokenType, column, newColumn)
         {
-            if (tokenType && this._isIdentifier(tokenType) && valuesMap.get(tokenValue)) {
+            if (!skipObjectProperty && tokenType && this._isIdentifier(tokenType) && valuesMap.get(tokenValue)) {
                 var names = namesPerLine.get(lineNumber);
                 if (!names) {
                     names = new Set();
@@ -737,6 +736,7 @@ WebInspector.JavaScriptSourceFrame.prototype = {
                 }
                 names.add(tokenValue);
             }
+            skipObjectProperty = tokenValue === ".";
         }
         this.textEditor.operation(this._renderDecorations.bind(this, valuesMap, namesPerLine, fromLine, toLine));
     },

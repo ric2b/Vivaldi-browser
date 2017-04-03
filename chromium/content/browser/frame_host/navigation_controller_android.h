@@ -60,9 +60,6 @@ class CONTENT_EXPORT NavigationControllerAndroid {
   void ReloadBypassingCache(JNIEnv* env,
                             const base::android::JavaParamRef<jobject>& obj,
                             jboolean check_for_repost);
-  void ReloadDisableLoFi(JNIEnv* env,
-                         const base::android::JavaParamRef<jobject>& obj,
-                         jboolean check_for_repost);
   void RequestRestoreLoad(JNIEnv* env,
                           const base::android::JavaParamRef<jobject>& obj);
   void CancelPendingReload(JNIEnv* env,
@@ -138,6 +135,16 @@ class CONTENT_EXPORT NavigationControllerAndroid {
                              const base::android::JavaParamRef<jobject>& obj,
                              jlong source_native_navigation_controller_android,
                              jboolean replace_entry);
+  base::android::ScopedJavaLocalRef<jstring> GetEntryExtraData(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jint index,
+      const base::android::JavaParamRef<jstring>& jkey);
+  void SetEntryExtraData(JNIEnv* env,
+                         const base::android::JavaParamRef<jobject>& obj,
+                         jint index,
+                         const base::android::JavaParamRef<jstring>& jkey,
+                         const base::android::JavaParamRef<jstring>& jvalue);
 
  private:
   NavigationControllerImpl* navigation_controller_;

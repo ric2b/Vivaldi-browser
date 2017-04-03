@@ -39,9 +39,6 @@
   "net/base/net_resources.grd": {
     "includes": [4000],
   },
-  "ash/mus/resources/ash_mus_resources.grd": {
-    "structures": [4400],
-  },
   "ui/resources/ui_unscaled_resources.grd": {
     "includes": [4500],
   },
@@ -143,20 +140,6 @@
     "includes": [22630],
     "structures": [22640],
   },
-  "cloud_print/virtual_driver/win/install/virtual_driver_setup_resources.grd": {
-    "messages": [22650],
-    "includes": [22700],
-  },
-  "cloud_print/service/win/service_resources.grd": {
-    "messages": [22750],
-    "includes": [22850],
-    "structures": [22900],
-  },
-  "cloud_print/gcp20/prototype/gcp20_device.grd": {
-    "messages": [22950],
-    "includes": [22980],
-    "structures": [22990],
-  },
   "chrome/browser/resources/quota_internals_resources.grd": {
     "includes": [22950],
   },
@@ -232,7 +215,7 @@
     "includes": [25500],
     "structures": [25600],
   },
-  "extensions/extensions_strings.grd": {
+  "extensions/strings/extensions_strings.grd": {
     "messages": [25650],
   },
   "extensions/shell/app_shell_resources.grd": {
@@ -272,6 +255,9 @@
   "components/components_strings.grd": {
     "messages": [28020],
   },
+  "chrome/browser/resources/task_scheduler_internals/resources.grd": {
+    "includes": [29000],
+  },
   # Chromium strings and Google Chrome strings must start at the same id.
   # We only use one file depending on whether we're building Chromium or
   # Google Chrome.
@@ -299,6 +285,12 @@
   },
   "headless/lib/resources/headless_lib_resources.grd": {
     "includes": [30670],
+  },
+  "blimp/engine/app/blimp_browser_resources.grd": {
+    "includes": [30680],
+  },
+  "chromecast/browser/cast_browser_resources.grd": {
+    "includes": [30690],
   },
 
   # Resource ids starting at 31000 are reserved for projects built on Chromium.

@@ -267,7 +267,7 @@ class OperaProfileImporterBrowserTest : public InProcessBrowserTest {
 protected:
   void SetUp() override {
     ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
-    base::FilePath temp = temp_dir.path().AppendASCII("OperaImportTest");
+    base::FilePath temp = temp_dir.GetPath().AppendASCII("OperaImportTest");
     base::DeleteFile(temp, true);
     base::CreateDirectory(temp);
     profile_dir = temp.AppendASCII("profile");

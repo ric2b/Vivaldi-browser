@@ -17,10 +17,8 @@ namespace media {
 
 MojoAudioDecoderService::MojoAudioDecoderService(
     base::WeakPtr<MojoCdmServiceContext> mojo_cdm_service_context,
-    std::unique_ptr<media::AudioDecoder> decoder,
-    mojo::InterfaceRequest<mojom::AudioDecoder> request)
-    : binding_(this, std::move(request)),
-      mojo_cdm_service_context_(mojo_cdm_service_context),
+    std::unique_ptr<media::AudioDecoder> decoder)
+    : mojo_cdm_service_context_(mojo_cdm_service_context),
       decoder_(std::move(decoder)),
       weak_factory_(this) {
   weak_this_ = weak_factory_.GetWeakPtr();
@@ -28,10 +26,11 @@ MojoAudioDecoderService::MojoAudioDecoderService(
 
 MojoAudioDecoderService::~MojoAudioDecoderService() {}
 
-void MojoAudioDecoderService::Initialize(mojom::AudioDecoderClientPtr client,
-                                         mojom::AudioDecoderConfigPtr config,
-                                         int32_t cdm_id,
-                                         const InitializeCallback& callback) {
+void MojoAudioDecoderService::Initialize(
+    mojom::AudioDecoderClientAssociatedPtrInfo client,
+    mojom::AudioDecoderConfigPtr config,
+    int32_t cdm_id,
+    const InitializeCallback& callback) {
   DVLOG(1) << __FUNCTION__ << " "
            << config.To<media::AudioDecoderConfig>().AsHumanReadableString();
 
@@ -60,7 +59,7 @@ void MojoAudioDecoderService::Initialize(mojom::AudioDecoderClientPtr client,
     }
   }
 
-  client_ = std::move(client);
+  client_.Bind(std::move(client));
 
   decoder_->Initialize(
       config.To<media::AudioDecoderConfig>(), cdm_context,

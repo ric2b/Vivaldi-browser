@@ -37,7 +37,8 @@ namespace testing {
 
 void runPendingTasks();
 
-// Wait for delayed task to complete or timers to fire for |delayMs| milliseconds.
+// Wait for delayed task to complete or timers to fire for |delayMs|
+// milliseconds.
 void runDelayedTasks(double delayMs);
 
 String blinkRootDir();
@@ -49,7 +50,7 @@ void exitRunLoop();
 
 void yieldCurrentThread();
 
-} // namespace testing
-} // namespace blink
+}  // namespace testing
+}  // namespace blink
 
 #endif

@@ -80,6 +80,34 @@ class StringSet {
   std::set<std::string> string_set_;
 };
 
+class ScopedPixelUnpackBufferOverride {
+ public:
+  explicit ScopedPixelUnpackBufferOverride(
+      bool is_es3_capable,
+      ContextType context_type,
+      GLuint binding_override)
+      : orig_binding_(-1) {
+    if (!(context_type == CONTEXT_TYPE_WEBGL1 ||
+          context_type == CONTEXT_TYPE_OPENGLES2) && is_es3_capable) {
+      GLint orig_binding;
+      glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &orig_binding);
+      if (static_cast<GLuint>(orig_binding) != binding_override) {
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, binding_override);
+        orig_binding_ = orig_binding;
+      }
+    }
+  }
+
+  ~ScopedPixelUnpackBufferOverride() {
+    if (orig_binding_ != -1) {
+      glBindBuffer(GL_PIXEL_UNPACK_BUFFER, static_cast<GLuint>(orig_binding_));
+    }
+  }
+
+ private:
+    GLint orig_binding_;
+};
+
 }  // anonymous namespace.
 
 FeatureInfo::FeatureFlags::FeatureFlags()
@@ -323,6 +351,11 @@ void FeatureInfo::InitializeFeatures() {
   gl_version_info_.reset(
       new gl::GLVersionInfo(version_str, renderer_str, extensions.GetImpl()));
 
+  // TODO(kainino): This call to IsES3Capable is sort of a hack to get some
+  // mocked tests working.
+  ScopedPixelUnpackBufferOverride scoped_pbo_override(
+      IsES3Capable(), context_type_, 0);
+
   AddExtensionString("GL_ANGLE_translated_shader_source");
   AddExtensionString("GL_CHROMIUM_async_pixel_transfers");
   AddExtensionString("GL_CHROMIUM_bind_uniform_location");
@@ -478,8 +511,11 @@ void FeatureInfo::InitializeFeatures() {
       (extensions.Contains("GL_ARB_depth_texture") ||
        extensions.Contains("GL_OES_depth_texture") ||
        extensions.Contains("GL_ANGLE_depth_texture") ||
-       gl_version_info_->is_es3 ||
        gl_version_info_->is_desktop_core_profile)) {
+    // Note that we don't expose depth_texture extenion on top of ES3 if
+    // the depth_texture extension isn't exposed by the ES3 driver.
+    // This is because depth textures are filterable under linear mode in
+    // ES2 + extension, but not in core ES3.
     enable_depth_texture = true;
     feature_flags_.angle_depth_texture =
         extensions.Contains("GL_ANGLE_depth_texture");
@@ -573,6 +609,34 @@ void FeatureInfo::InitializeFeatures() {
         GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING_EXT);
     validators_.texture_unsized_internal_format.AddValue(GL_SRGB_EXT);
     validators_.texture_unsized_internal_format.AddValue(GL_SRGB_ALPHA_EXT);
+  }
+
+  // On desktop, GL_EXT_texture_sRGB is required regardless of GL version,
+  // since the sRGB formats in OpenGL 3.0 Core do not support S3TC.
+  // TODO(kainino): Support GL_EXT_texture_compression_s3tc_srgb once ratified.
+  if ((gl_version_info_->is_es && extensions.Contains("GL_NV_sRGB_formats")) ||
+      (!gl_version_info_->is_es &&
+       extensions.Contains("GL_EXT_texture_sRGB") &&
+       extensions.Contains("GL_EXT_texture_compression_s3tc"))) {
+    AddExtensionString("GL_EXT_texture_compression_s3tc_srgb");
+
+    validators_.compressed_texture_format.AddValue(
+        GL_COMPRESSED_SRGB_S3TC_DXT1_EXT);
+    validators_.compressed_texture_format.AddValue(
+        GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT);
+    validators_.compressed_texture_format.AddValue(
+        GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT);
+    validators_.compressed_texture_format.AddValue(
+        GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT);
+
+    validators_.texture_internal_format_storage.AddValue(
+        GL_COMPRESSED_SRGB_S3TC_DXT1_EXT);
+    validators_.texture_internal_format_storage.AddValue(
+        GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT);
+    validators_.texture_internal_format_storage.AddValue(
+        GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT);
+    validators_.texture_internal_format_storage.AddValue(
+        GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT);
   }
 
   // Note: Only APPLE_texture_format_BGRA8888 extension allows BGRA8_EXT in
@@ -951,6 +1015,13 @@ void FeatureInfo::InitializeFeatures() {
     validators_.texture_internal_format_storage.AddValue(GL_ETC1_RGB8_OES);
   }
 
+  // TODO(kainino): Once we have a way to query whether ANGLE is exposing
+  // native support for ETC2 textures, require that here.
+  if (gl_version_info_->is_es3) {
+    AddExtensionString("GL_CHROMIUM_compressed_texture_es3_0");
+    validators_.UpdateES30CompressedTextureFormats();
+  }
+
   if (extensions.Contains("GL_AMD_compressed_ATC_texture")) {
     AddExtensionString("GL_AMD_compressed_ATC_texture");
     validators_.compressed_texture_format.AddValue(
@@ -1007,6 +1078,8 @@ void FeatureInfo::InitializeFeatures() {
   }
 
 #if defined(OS_MACOSX)
+  // TODO(dcastagna): Determine ycbcr_420v_image on CrOS at runtime
+  // querying minigbm. crbug.com/646148
   if (gl::GetGLImplementation() != gl::kGLImplementationOSMesaGL) {
     AddExtensionString("GL_CHROMIUM_ycbcr_420v_image");
     feature_flags_.chromium_image_ycbcr_420v = true;

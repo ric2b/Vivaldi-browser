@@ -87,8 +87,6 @@ component("ipc") {
     "ipc_platform_file_attachment_posix.cc",
     "ipc_platform_file_attachment_posix.h",
     "ipc_sender.h",
-    "ipc_switches.cc",
-    "ipc_switches.h",
     "ipc_sync_channel.cc",
     "ipc_sync_channel.h",
     "ipc_sync_message.cc",
@@ -231,11 +229,6 @@ if (!is_ios) {
       sources += [ "ipc_send_fds_test.cc" ]
     }
 
-    # TODO(brettw) hook up Android testing.
-    #if (is_android && gtest_target_type == "shared_library") {
-    #  deps += "/testing/android/native_test.gyp:native_testNative_code"
-    #}
-
     deps = [
       ":ipc",
       ":mojom",
@@ -262,11 +255,6 @@ if (!is_ios) {
       "ipc_perftests.cc",
       "run_all_perftests.cc",
     ]
-
-    # TODO(brettw) hook up Android testing.
-    #if (is_android && gtest_target_type == "shared_library") {
-    #  deps += "/testing/android/native_test.gyp:native_testNative_code"
-    #}
 
     deps = [
       ":ipc",

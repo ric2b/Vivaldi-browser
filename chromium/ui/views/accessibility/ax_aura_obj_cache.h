@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <vector>
 
 #include "base/macros.h"
@@ -39,6 +40,11 @@ class VIEWS_EXPORT AXAuraObjCache
   // Get the single instance of this class.
   static AXAuraObjCache* GetInstance();
 
+  class Delegate {
+   public:
+    virtual void OnChildWindowRemoved(AXAuraObjWrapper* parent) = 0;
+  };
+
   // Get or create an entry in the cache based on an Aura view.
   AXAuraObjWrapper* GetOrCreate(View* view);
   AXAuraObjWrapper* GetOrCreate(Widget* widget);
@@ -56,7 +62,10 @@ class VIEWS_EXPORT AXAuraObjCache
   // Removes an entry from this cache based on an Aura view.
   void Remove(View* view);
   void Remove(Widget* widget);
-  void Remove(aura::Window* window);
+
+  // Removes |window| and optionally notifies delegate by sending an event on
+  // the |parent| if provided.
+  void Remove(aura::Window* window, aura::Window* parent);
 
   // Removes a view and all of its descendants from the cache.
   void RemoveViewSubtree(View* view);
@@ -75,6 +84,8 @@ class VIEWS_EXPORT AXAuraObjCache
 
   // Indicates if this object's currently being destroyed.
   bool is_destroying() { return is_destroying_; }
+
+  void SetDelegate(Delegate* delegate) { delegate_ = delegate; }
 
  private:
   friend struct base::DefaultSingletonTraits<AXAuraObjCache>;
@@ -109,13 +120,15 @@ class VIEWS_EXPORT AXAuraObjCache
   std::map<views::Widget*, int32_t> widget_to_id_map_;
   std::map<aura::Window*, int32_t> window_to_id_map_;
 
-  std::map<int32_t, AXAuraObjWrapper*> cache_;
+  std::map<int32_t, std::unique_ptr<AXAuraObjWrapper>> cache_;
   int32_t current_id_;
 
   aura::client::FocusClient* focus_client_;
 
   // True immediately when entering this object's destructor.
   bool is_destroying_;
+
+  Delegate* delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(AXAuraObjCache);
 };

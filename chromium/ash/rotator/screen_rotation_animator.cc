@@ -8,7 +8,6 @@
 #include <utility>
 #include <vector>
 
-#include "ash/common/display/display_info.h"
 #include "ash/display/display_manager.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/rotator/screen_rotation_animation.h"
@@ -23,6 +22,7 @@
 #include "ui/compositor/layer_owner.h"
 #include "ui/compositor/layer_tree_owner.h"
 #include "ui/display/display.h"
+#include "ui/display/manager/managed_display_info.h"
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
@@ -169,7 +169,7 @@ void RotateScreen(int64_t display_id,
   const gfx::Tween::Type tween_type = gfx::Tween::FAST_OUT_LINEAR_IN;
 
   std::unique_ptr<ui::LayerTreeOwner> old_layer_tree =
-      ::wm::RecreateLayers(root_window, nullptr);
+      ::wm::RecreateLayers(root_window);
 
   // Add the cloned layer tree in to the root, so it will be rendered.
   root_window->layer()->Add(old_layer_tree->root());

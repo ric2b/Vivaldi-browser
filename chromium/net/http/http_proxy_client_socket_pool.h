@@ -27,6 +27,7 @@ namespace net {
 class HttpAuthCache;
 class HttpAuthHandlerFactory;
 class HttpProxyClientSocketWrapper;
+class NetLog;
 class ProxyDelegate;
 class SSLClientSocketPool;
 class SSLSocketParams;
@@ -154,12 +155,12 @@ class NET_EXPORT_PRIVATE HttpProxyClientSocketPool
                     RespectLimits respect_limits,
                     ClientSocketHandle* handle,
                     const CompletionCallback& callback,
-                    const BoundNetLog& net_log) override;
+                    const NetLogWithSource& net_log) override;
 
   void RequestSockets(const std::string& group_name,
                       const void* params,
                       int num_sockets,
-                      const BoundNetLog& net_log) override;
+                      const NetLogWithSource& net_log) override;
 
   void CancelRequest(const std::string& group_name,
                      ClientSocketHandle* handle) override;

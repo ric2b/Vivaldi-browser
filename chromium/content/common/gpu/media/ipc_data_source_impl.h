@@ -39,6 +39,7 @@ class IPCDataSourceImpl : public IPCDataSource {
             uint8_t* data,
             const ReadCB& read_cb) override;
   void Stop() override;
+  void Abort() override;
   bool GetSize(int64_t* size_out) override;
   bool IsStreaming() override;
   void SetBitrate(int bitrate) override;

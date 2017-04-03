@@ -13,12 +13,16 @@ static_library("arc") {
     "arc_bridge_host_impl.h",
     "arc_bridge_service_impl.cc",
     "arc_bridge_service_impl.h",
+    "arc_features.cc",
+    "arc_features.h",
     "arc_service_manager.cc",
     "arc_service_manager.h",
     "audio/arc_audio_bridge.cc",
     "audio/arc_audio_bridge.h",
     "bluetooth/arc_bluetooth_bridge.cc",
     "bluetooth/arc_bluetooth_bridge.h",
+    "bluetooth/bluetooth_struct_traits.cc",
+    "bluetooth/bluetooth_struct_traits.h",
     "bluetooth/bluetooth_type_converters.cc",
     "bluetooth/bluetooth_type_converters.h",
     "boot_phase_monitor/arc_boot_phase_monitor_bridge.cc",
@@ -55,15 +59,18 @@ static_library("arc") {
     "obb_mounter/arc_obb_mounter_bridge.h",
     "power/arc_power_bridge.cc",
     "power/arc_power_bridge.h",
-    "set_wallpaper_delegate.h",
     "storage_manager/arc_storage_manager.cc",
     "storage_manager/arc_storage_manager.h",
     "user_data/arc_user_data_service.cc",
     "user_data/arc_user_data_service.h",
   ]
 
-  deps = [
+  public_deps = [
     ":arc_base",
+    ":arc_bindings",
+  ]
+
+  deps = [
     "//ash:ash",
     "//base",
     "//chromeos",
@@ -90,10 +97,6 @@ static_library("arc") {
     "//ui/keyboard:keyboard",
     "//url:url",
   ]
-
-  public_deps = [
-    ":arc_bindings",
-  ]
 }
 
 static_library("arc_base") {
@@ -108,21 +111,6 @@ static_library("arc_base") {
   deps = [
     "//base",
     "//chromeos",
-  ]
-
-  public_deps = [
-    ":arc_bindings",
-  ]
-}
-
-static_library("arc_bitmap") {
-  sources = [
-    "bitmap/bitmap_type_converters.cc",
-    "bitmap/bitmap_type_converters.h",
-  ]
-
-  deps = [
-    "//skia",
   ]
 
   public_deps = [
@@ -159,9 +147,10 @@ mojom("arc_bindings") {
     "common/tts.mojom",
     "common/video.mojom",
     "common/video_accelerator.mojom",
+    "common/wallpaper.mojom",
   ]
 
-  deps = [
+  public_deps = [
     "//mojo/common:common_custom_types",
     "//ui/gfx/geometry/mojo",
   ]
@@ -176,8 +165,6 @@ static_library("arc_test_support") {
     "test/fake_app_instance.h",
     "test/fake_arc_bridge_bootstrap.cc",
     "test/fake_arc_bridge_bootstrap.h",
-    "test/fake_arc_bridge_instance.cc",
-    "test/fake_arc_bridge_instance.h",
     "test/fake_arc_bridge_service.cc",
     "test/fake_arc_bridge_service.h",
     "test/fake_bluetooth_instance.cc",
@@ -204,6 +191,7 @@ source_set("unit_tests") {
   sources = [
     "arc_bridge_service_unittest.cc",
     "bluetooth/arc_bluetooth_bridge_unittest.cc",
+    "bluetooth/bluetooth_struct_traits_unittest.cc",
     "bluetooth/bluetooth_type_converters_unittest.cc",
     "ime/arc_ime_service_unittest.cc",
     "intent_helper/activity_icon_loader_unittest.cc",
@@ -228,56 +216,5 @@ source_set("unit_tests") {
     "//ui/events",
     "//ui/events:dom_keycode_converter",
     "//url:url",
-  ]
-}
-
-static_library("arc_standalone_service") {
-  sources = [
-    "standalone/service_helper.cc",
-    "standalone/service_helper.h",
-  ]
-
-  deps = [
-    "//base",
-  ]
-}
-
-static_library("arc_standalone") {
-  sources = [
-    "standalone/arc_standalone_bridge_runner.cc",
-    "standalone/arc_standalone_bridge_runner.h",
-  ]
-
-  deps = [
-    ":arc",
-    ":arc_standalone_service",
-    "//base",
-    "//ipc:ipc",
-  ]
-}
-
-test("arc_standalone_service_unittests") {
-  sources = [
-    "standalone/service_helper_unittest.cc",
-  ]
-
-  deps = [
-    ":arc_standalone_service",
-    "//base/test:test_support",
-    "//testing/gtest",
-  ]
-}
-
-executable("arc_standalone_bridge") {
-  sources = [
-    "standalone/arc_standalone_bridge_main.cc",
-  ]
-
-  deps = [
-    ":arc_standalone",
-    ":arc_standalone_service",
-    "//base",
-    "//ipc:ipc",
-    "//mojo/edk/system",
   ]
 }

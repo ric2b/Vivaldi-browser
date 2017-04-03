@@ -40,6 +40,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_status_metrics_provider.h"
 #include "components/sync/device_info/device_count_metrics_provider.h"
+#include "components/translate/core/browser/translate_ranker_metrics_provider.h"
 #include "components/variations/variations_associated_data.h"
 #include "components/version_info/version_info.h"
 #include "ios/chrome/browser/application_context.h"
@@ -99,10 +100,6 @@ metrics::MetricsService* IOSChromeMetricsServiceClient::GetMetricsService() {
 void IOSChromeMetricsServiceClient::SetMetricsClientId(
     const std::string& client_id) {
   crash_keys::SetMetricsClientIdFromGUID(client_id);
-}
-
-bool IOSChromeMetricsServiceClient::IsOffTheRecordSessionActive() {
-  return ::IsOffTheRecordSessionActive();
 }
 
 int32_t IOSChromeMetricsServiceClient::GetProduct() {
@@ -236,8 +233,12 @@ void IOSChromeMetricsServiceClient::Initialize() {
 
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider>(
-          new sync_driver::DeviceCountMetricsProvider(
+          new syncer::DeviceCountMetricsProvider(
               base::Bind(&IOSChromeSyncClient::GetDeviceInfoTrackers))));
+
+  metrics_service_->RegisterMetricsProvider(
+      std::unique_ptr<metrics::MetricsProvider>(
+          new translate::TranslateRankerMetricsProvider()));
 }
 
 void IOSChromeMetricsServiceClient::OnInitTaskGotDriveMetrics() {

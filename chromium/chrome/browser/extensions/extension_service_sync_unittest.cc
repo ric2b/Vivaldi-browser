@@ -32,7 +32,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/sync_helper.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/crx_file/id_util.h"
 #include "components/sync/api/fake_sync_change_processor.h"
 #include "components/sync/api/sync_change_processor_wrapper_for_test.h"
@@ -163,8 +163,7 @@ class StatefulChangeProcessor : public syncer::FakeSyncChangeProcessor {
   // want to
   // give up ownership of a local change processor.
   std::unique_ptr<syncer::SyncChangeProcessor> GetWrapped() {
-    return base::WrapUnique(
-        new syncer::SyncChangeProcessorWrapperForTest(this));
+    return base::MakeUnique<syncer::SyncChangeProcessorWrapperForTest>(this);
   }
 
  protected:
@@ -192,8 +191,8 @@ class ExtensionServiceSyncTest
     ASSERT_TRUE(type == syncer::EXTENSIONS || type == syncer::APPS);
     extension_sync_service()->MergeDataAndStartSyncing(
         type, syncer::SyncDataList(),
-        base::WrapUnique(new syncer::FakeSyncChangeProcessor()),
-        base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+        base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
+        base::MakeUnique<syncer::SyncErrorFactoryMock>());
   }
 
  protected:
@@ -286,8 +285,8 @@ TEST_F(ExtensionServiceSyncTest, DeferredSyncStartupOnInstall) {
   // Once sync starts, flare should no longer be invoked.
   extension_sync_service()->MergeDataAndStartSyncing(
       syncer::EXTENSIONS, syncer::SyncDataList(),
-      base::WrapUnique(new syncer::FakeSyncChangeProcessor()),
-      base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
+      base::MakeUnique<syncer::SyncErrorFactoryMock>());
   path = data_dir().AppendASCII("page_action.crx");
   InstallCRX(path, INSTALL_NEW);
   EXPECT_FALSE(flare_was_called);
@@ -304,7 +303,7 @@ TEST_F(ExtensionServiceSyncTest, DisableExtensionFromSync) {
   InitializeInstalledExtensionService(pref_path, source_install_dir);
 
   // The user has enabled sync.
-  ProfileSyncService* sync_service =
+  browser_sync::ProfileSyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile());
   sync_service->SetFirstSetupComplete();
 
@@ -321,8 +320,8 @@ TEST_F(ExtensionServiceSyncTest, DisableExtensionFromSync) {
   // Sync starts up.
   extension_sync_service()->MergeDataAndStartSyncing(
       syncer::EXTENSIONS, syncer::SyncDataList(),
-      base::WrapUnique(new syncer::FakeSyncChangeProcessor()),
-      base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
+      base::MakeUnique<syncer::SyncErrorFactoryMock>());
 
   // Then sync data arrives telling us to disable |good0|.
   ExtensionSyncData disable_good_crx(*extension, false,
@@ -346,7 +345,7 @@ TEST_F(ExtensionServiceSyncTest, IgnoreSyncChangesWhenLocalStateIsMoreRecent) {
   InitializeInstalledExtensionService(pref_path, source_install_dir);
 
   // The user has enabled sync.
-  ProfileSyncService* sync_service =
+  browser_sync::ProfileSyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile());
   sync_service->SetFirstSetupComplete();
   // Make sure ExtensionSyncService is created, so it'll be notified of changes.
@@ -386,8 +385,8 @@ TEST_F(ExtensionServiceSyncTest, IgnoreSyncChangesWhenLocalStateIsMoreRecent) {
   sync_data.push_back(enable_good2.GetSyncData());
   extension_sync_service()->MergeDataAndStartSyncing(
       syncer::EXTENSIONS, sync_data,
-      base::WrapUnique(new syncer::FakeSyncChangeProcessor()),
-      base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
+      base::MakeUnique<syncer::SyncErrorFactoryMock>());
 
   // Both sync changes should be ignored, since the local state was changed
   // before sync started, and so the local state is considered more recent.
@@ -418,7 +417,7 @@ TEST_F(ExtensionServiceSyncTest, DontSelfNotify) {
       new syncer::FakeSyncChangeProcessor;
   extension_sync_service()->MergeDataAndStartSyncing(
       syncer::EXTENSIONS, syncer::SyncDataList(), base::WrapUnique(processor),
-      base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+      base::MakeUnique<syncer::SyncErrorFactoryMock>());
 
   processor->changes().clear();
 
@@ -497,8 +496,8 @@ TEST_F(ExtensionServiceSyncTest, GetSyncData) {
 
   extension_sync_service()->MergeDataAndStartSyncing(
       syncer::EXTENSIONS, syncer::SyncDataList(),
-      base::WrapUnique(new syncer::FakeSyncChangeProcessor()),
-      base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
+      base::MakeUnique<syncer::SyncErrorFactoryMock>());
 
   syncer::SyncDataList list =
       extension_sync_service()->GetAllSyncData(syncer::EXTENSIONS);
@@ -526,8 +525,8 @@ TEST_F(ExtensionServiceSyncTest, GetSyncDataDisableReasons) {
 
   extension_sync_service()->MergeDataAndStartSyncing(
       syncer::EXTENSIONS, syncer::SyncDataList(),
-      base::WrapUnique(new syncer::FakeSyncChangeProcessor()),
-      base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
+      base::MakeUnique<syncer::SyncErrorFactoryMock>());
 
   {
     syncer::SyncDataList list =
@@ -598,8 +597,8 @@ TEST_F(ExtensionServiceSyncTest, GetSyncDataTerminated) {
 
   extension_sync_service()->MergeDataAndStartSyncing(
       syncer::EXTENSIONS, syncer::SyncDataList(),
-      base::WrapUnique(new syncer::FakeSyncChangeProcessor()),
-      base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
+      base::MakeUnique<syncer::SyncErrorFactoryMock>());
 
   syncer::SyncDataList list =
       extension_sync_service()->GetAllSyncData(syncer::EXTENSIONS);
@@ -627,8 +626,8 @@ TEST_F(ExtensionServiceSyncTest, GetSyncDataFilter) {
 
   extension_sync_service()->MergeDataAndStartSyncing(
       syncer::APPS, syncer::SyncDataList(),
-      base::WrapUnique(new syncer::FakeSyncChangeProcessor()),
-      base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
+      base::MakeUnique<syncer::SyncErrorFactoryMock>());
 
   syncer::SyncDataList list =
       extension_sync_service()->GetAllSyncData(syncer::EXTENSIONS);
@@ -643,8 +642,8 @@ TEST_F(ExtensionServiceSyncTest, GetSyncExtensionDataUserSettings) {
 
   extension_sync_service()->MergeDataAndStartSyncing(
       syncer::EXTENSIONS, syncer::SyncDataList(),
-      base::WrapUnique(new syncer::FakeSyncChangeProcessor()),
-      base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
+      base::MakeUnique<syncer::SyncErrorFactoryMock>());
 
   {
     syncer::SyncDataList list =
@@ -712,8 +711,8 @@ TEST_F(ExtensionServiceSyncTest, SyncForUninstalledExternalExtension) {
 
   extension_sync_service()->MergeDataAndStartSyncing(
       syncer::EXTENSIONS, syncer::SyncDataList(),
-      base::WrapUnique(new syncer::FakeSyncChangeProcessor()),
-      base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
+      base::MakeUnique<syncer::SyncErrorFactoryMock>());
   StartSyncing(syncer::APPS);
 
   UninstallExtension(good_crx, false);
@@ -745,8 +744,8 @@ TEST_F(ExtensionServiceSyncTest, GetSyncAppDataUserSettings) {
 
   extension_sync_service()->MergeDataAndStartSyncing(
       syncer::APPS, syncer::SyncDataList(),
-      base::WrapUnique(new syncer::FakeSyncChangeProcessor()),
-      base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
+      base::MakeUnique<syncer::SyncErrorFactoryMock>());
 
   syncer::StringOrdinal initial_ordinal =
       syncer::StringOrdinal::CreateInitialOrdinal();
@@ -849,12 +848,12 @@ TEST_F(ExtensionServiceSyncTest, GetSyncDataList) {
 
   extension_sync_service()->MergeDataAndStartSyncing(
       syncer::APPS, syncer::SyncDataList(),
-      base::WrapUnique(new syncer::FakeSyncChangeProcessor()),
-      base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
+      base::MakeUnique<syncer::SyncErrorFactoryMock>());
   extension_sync_service()->MergeDataAndStartSyncing(
       syncer::EXTENSIONS, syncer::SyncDataList(),
-      base::WrapUnique(new syncer::FakeSyncChangeProcessor()),
-      base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
+      base::MakeUnique<syncer::SyncErrorFactoryMock>());
 
   service()->DisableExtension(page_action, Extension::DISABLE_USER_ACTION);
   TerminateExtension(theme2_crx);
@@ -868,8 +867,8 @@ TEST_F(ExtensionServiceSyncTest, ProcessSyncDataUninstall) {
   InitializeEmptyExtensionService();
   extension_sync_service()->MergeDataAndStartSyncing(
       syncer::EXTENSIONS, syncer::SyncDataList(),
-      base::WrapUnique(new syncer::FakeSyncChangeProcessor()),
-      base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
+      base::MakeUnique<syncer::SyncErrorFactoryMock>());
 
   sync_pb::EntitySpecifics specifics;
   sync_pb::ExtensionSpecifics* ext_specifics = specifics.mutable_extension();
@@ -942,8 +941,8 @@ TEST_F(ExtensionServiceSyncTest, ProcessSyncDataSettings) {
   InitializeEmptyExtensionService();
   extension_sync_service()->MergeDataAndStartSyncing(
       syncer::EXTENSIONS, syncer::SyncDataList(),
-      base::WrapUnique(new syncer::FakeSyncChangeProcessor()),
-      base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
+      base::MakeUnique<syncer::SyncErrorFactoryMock>());
 
   InstallCRX(data_dir().AppendASCII("good.crx"), INSTALL_NEW);
   EXPECT_TRUE(service()->IsExtensionEnabled(good_crx));
@@ -1039,8 +1038,8 @@ TEST_F(ExtensionServiceSyncTest, ProcessSyncDataNewExtension) {
   InitializeEmptyExtensionService();
   extension_sync_service()->MergeDataAndStartSyncing(
       syncer::EXTENSIONS, syncer::SyncDataList(),
-      base::WrapUnique(new syncer::FakeSyncChangeProcessor()),
-      base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
+      base::MakeUnique<syncer::SyncErrorFactoryMock>());
 
   const base::FilePath path = data_dir().AppendASCII("good.crx");
   const ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
@@ -1113,8 +1112,8 @@ TEST_F(ExtensionServiceSyncTest, ProcessSyncDataTerminatedExtension) {
   InitializeExtensionServiceWithUpdater();
   extension_sync_service()->MergeDataAndStartSyncing(
       syncer::EXTENSIONS, syncer::SyncDataList(),
-      base::WrapUnique(new syncer::FakeSyncChangeProcessor()),
-      base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
+      base::MakeUnique<syncer::SyncErrorFactoryMock>());
 
   InstallCRX(data_dir().AppendASCII("good.crx"), INSTALL_NEW);
   TerminateExtension(good_crx);
@@ -1143,8 +1142,8 @@ TEST_F(ExtensionServiceSyncTest, ProcessSyncDataVersionCheck) {
   InitializeExtensionServiceWithUpdater();
   extension_sync_service()->MergeDataAndStartSyncing(
       syncer::EXTENSIONS, syncer::SyncDataList(),
-      base::WrapUnique(new syncer::FakeSyncChangeProcessor()),
-      base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
+      base::MakeUnique<syncer::SyncErrorFactoryMock>());
 
   InstallCRX(data_dir().AppendASCII("good.crx"), INSTALL_NEW);
   EXPECT_TRUE(service()->IsExtensionEnabled(good_crx));
@@ -1225,8 +1224,8 @@ TEST_F(ExtensionServiceSyncTest, ProcessSyncDataNotInstalled) {
   InitializeExtensionServiceWithUpdater();
   extension_sync_service()->MergeDataAndStartSyncing(
       syncer::EXTENSIONS, syncer::SyncDataList(),
-      base::WrapUnique(new syncer::FakeSyncChangeProcessor()),
-      base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
+      base::MakeUnique<syncer::SyncErrorFactoryMock>());
 
   sync_pb::EntitySpecifics specifics;
   sync_pb::ExtensionSpecifics* ext_specifics = specifics.mutable_extension();
@@ -1259,8 +1258,8 @@ TEST_F(ExtensionServiceSyncTest, ProcessSyncDataEnableDisable) {
   InitializeEmptyExtensionService();
   extension_sync_service()->MergeDataAndStartSyncing(
       syncer::EXTENSIONS, syncer::SyncDataList(),
-      base::WrapUnique(new syncer::FakeSyncChangeProcessor()),
-      base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
+      base::MakeUnique<syncer::SyncErrorFactoryMock>());
 
   const ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
 
@@ -1361,8 +1360,8 @@ TEST_F(ExtensionServiceSyncTest, ProcessSyncDataDeferredEnable) {
   InitializeEmptyExtensionService();
   extension_sync_service()->MergeDataAndStartSyncing(
       syncer::EXTENSIONS, syncer::SyncDataList(),
-      base::WrapUnique(new syncer::FakeSyncChangeProcessor()),
-      base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
+      base::MakeUnique<syncer::SyncErrorFactoryMock>());
 
   base::FilePath base_path = data_dir().AppendASCII("permissions_increase");
   base::FilePath pem_path = base_path.AppendASCII("permissions.pem");
@@ -1411,8 +1410,8 @@ TEST_F(ExtensionServiceSyncTest, ProcessSyncDataPermissionApproval) {
   InitializeEmptyExtensionService();
   extension_sync_service()->MergeDataAndStartSyncing(
       syncer::EXTENSIONS, syncer::SyncDataList(),
-      base::WrapUnique(new syncer::FakeSyncChangeProcessor()),
-      base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
+      base::MakeUnique<syncer::SyncErrorFactoryMock>());
 
   const base::FilePath base_path =
       data_dir().AppendASCII("permissions_increase");
@@ -1422,9 +1421,9 @@ TEST_F(ExtensionServiceSyncTest, ProcessSyncDataPermissionApproval) {
 
   base::ScopedTempDir crx_dir;
   ASSERT_TRUE(crx_dir.CreateUniqueTempDir());
-  const base::FilePath crx_path_v1 = crx_dir.path().AppendASCII("temp1.crx");
+  const base::FilePath crx_path_v1 = crx_dir.GetPath().AppendASCII("temp1.crx");
   PackCRX(path_v1, pem_path, crx_path_v1);
-  const base::FilePath crx_path_v2 = crx_dir.path().AppendASCII("temp2.crx");
+  const base::FilePath crx_path_v2 = crx_dir.GetPath().AppendASCII("temp2.crx");
   PackCRX(path_v2, pem_path, crx_path_v2);
 
   const std::string v1("1");
@@ -1563,7 +1562,7 @@ class ExtensionServiceTestSupervised : public ExtensionServiceSyncTest,
                                        public SupervisedUserService::Delegate {
  public:
   ExtensionServiceTestSupervised()
-      : field_trial_list_(new base::MockEntropyProvider()) {}
+      : field_trial_list_(base::MakeUnique<base::MockEntropyProvider>()) {}
 
   void SetUp() override {
     ExtensionServiceSyncTest::SetUp();
@@ -1582,17 +1581,6 @@ class ExtensionServiceTestSupervised : public ExtensionServiceSyncTest,
   }
 
  protected:
-  void InitNeedCustodianApprovalFieldTrial(bool enabled) {
-    // Group name doesn't matter.
-    base::FieldTrialList::CreateFieldTrial(
-        "SupervisedUserExtensionPermissionIncrease", "group");
-    std::map<std::string, std::string> params;
-    params["legacy_supervised_user"] = enabled ? "true" : "false";
-    params["child_account"] = enabled ? "true" : "false";
-    variations::AssociateVariationParams(
-        "SupervisedUserExtensionPermissionIncrease", "group", params);
-  }
-
   void InitSupervisedUserInitiatedExtensionInstallFeature(bool enabled) {
     base::FeatureList::ClearInstanceForTesting();
     std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
@@ -2001,32 +1989,8 @@ TEST_F(ExtensionServiceTestSupervised, UpdateWithoutPermissionIncrease) {
   EXPECT_FALSE(IsPendingCustodianApproval(id));
 }
 
-TEST_F(ExtensionServiceTestSupervised, UpdateWithPermissionIncreaseNoApproval) {
-  InitNeedCustodianApprovalFieldTrial(false);
-
-  InitServices(true /* profile_is_supervised */);
-
-  MockPermissionRequestCreator* creator = new MockPermissionRequestCreator;
-  supervised_user_service()->AddPermissionRequestCreator(
-      base::WrapUnique(creator));
-
-  std::string id = InstallPermissionsTestExtension(true /* by_custodian */);
-
-  // Update to a new version with increased permissions.
-  // Since we don't require the custodian's approval, no permission request
-  // should be created.
-  const std::string version2("2");
-  EXPECT_CALL(*creator, CreateExtensionUpdateRequest(
-                            RequestId(id, version2), testing::_))
-      .Times(0);
-  UpdatePermissionsTestExtension(id, version2, DISABLED);
-  EXPECT_FALSE(IsPendingCustodianApproval(id));
-}
-
 TEST_F(ExtensionServiceTestSupervised,
        UpdateWithPermissionIncreaseApprovalOldVersion) {
-  InitNeedCustodianApprovalFieldTrial(true);
-
   InitServices(true /* profile_is_supervised */);
 
   MockPermissionRequestCreator* creator = new MockPermissionRequestCreator;
@@ -2077,8 +2041,6 @@ TEST_F(ExtensionServiceTestSupervised,
 
 TEST_F(ExtensionServiceTestSupervised,
        UpdateWithPermissionIncreaseApprovalMatchingVersion) {
-  InitNeedCustodianApprovalFieldTrial(true);
-
   InitServices(true /* profile_is_supervised */);
 
   MockPermissionRequestCreator* creator = new MockPermissionRequestCreator;
@@ -2116,8 +2078,6 @@ TEST_F(ExtensionServiceTestSupervised,
 
 TEST_F(ExtensionServiceTestSupervised,
        UpdateWithPermissionIncreaseApprovalNewVersion) {
-  InitNeedCustodianApprovalFieldTrial(true);
-
   InitServices(true /* profile_is_supervised */);
 
   MockPermissionRequestCreator* creator = new MockPermissionRequestCreator;
@@ -2164,7 +2124,6 @@ TEST_F(ExtensionServiceTestSupervised,
 }
 
 TEST_F(ExtensionServiceTestSupervised, SupervisedUserInitiatedInstalls) {
-  InitNeedCustodianApprovalFieldTrial(true);
   InitSupervisedUserInitiatedExtensionInstallFeature(true);
 
   InitServices(true /* profile_is_supervised */);
@@ -2205,7 +2164,6 @@ TEST_F(ExtensionServiceTestSupervised, SupervisedUserInitiatedInstalls) {
 
 TEST_F(ExtensionServiceTestSupervised,
        UpdateSUInitiatedInstallWithoutPermissionIncrease) {
-  InitNeedCustodianApprovalFieldTrial(true);
   InitSupervisedUserInitiatedExtensionInstallFeature(true);
 
   InitServices(true /* profile_is_supervised */);
@@ -2244,7 +2202,6 @@ TEST_F(ExtensionServiceTestSupervised,
 
 TEST_F(ExtensionServiceTestSupervised,
        UpdateSUInitiatedInstallWithPermissionIncrease) {
-  InitNeedCustodianApprovalFieldTrial(true);
   InitSupervisedUserInitiatedExtensionInstallFeature(true);
 
   InitServices(true /* profile_is_supervised */);
@@ -2290,7 +2247,6 @@ TEST_F(ExtensionServiceTestSupervised,
 
 TEST_F(ExtensionServiceTestSupervised,
        UpdateSUInitiatedInstallWithPermissionIncreaseApprovalArrivesFirst) {
-  InitNeedCustodianApprovalFieldTrial(true);
   InitSupervisedUserInitiatedExtensionInstallFeature(true);
 
   InitServices(true /* profile_is_supervised */);
@@ -2322,8 +2278,8 @@ TEST_F(ExtensionServiceSyncTest, SyncUninstallByCustodianSkipsPolicy) {
   InitializeEmptyExtensionService();
   extension_sync_service()->MergeDataAndStartSyncing(
       syncer::EXTENSIONS, syncer::SyncDataList(),
-      base::WrapUnique(new syncer::FakeSyncChangeProcessor()),
-      base::WrapUnique(new syncer::SyncErrorFactoryMock()));
+      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
+      base::MakeUnique<syncer::SyncErrorFactoryMock>());
 
   extensions::util::SetWasInstalledByCustodian(good2048, profile(), true);
   // Install two extensions.

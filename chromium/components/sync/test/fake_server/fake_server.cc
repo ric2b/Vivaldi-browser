@@ -4,15 +4,10 @@
 
 #include "components/sync/test/fake_server/fake_server.h"
 
-#include <stdint.h>
-
 #include <algorithm>
 #include <limits>
-#include <memory>
 #include <set>
-#include <string>
 #include <utility>
-#include <vector>
 
 #include "base/guid.h"
 #include "base/logging.h"
@@ -21,8 +16,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
-#include "components/sync/base/model_type.h"
-#include "components/sync/protocol/sync.pb.h"
 #include "components/sync/test/fake_server/bookmark_entity.h"
 #include "components/sync/test/fake_server/permanent_entity.h"
 #include "components/sync/test/fake_server/tombstone_entity.h"
@@ -32,7 +25,6 @@
 
 using std::string;
 using std::vector;
-
 using syncer::GetModelType;
 using syncer::GetModelTypeFromSpecifics;
 using syncer::ModelType;
@@ -100,7 +92,7 @@ class UpdateSieve {
     }
 
     ModelTypeToVersionMap::const_iterator it =
-        request_from_version_.find(entity.GetModelType());
+        request_from_version_.find(entity.model_type());
 
     return it == request_from_version_.end() ? false : it->second < version;
   }
@@ -232,7 +224,7 @@ void FakeServer::UpdateEntityVersion(FakeServerEntity* entity) {
 
 void FakeServer::SaveEntity(std::unique_ptr<FakeServerEntity> entity) {
   UpdateEntityVersion(entity.get());
-  entities_[entity->GetId()] = std::move(entity);
+  entities_[entity->id()] = std::move(entity);
 }
 
 void FakeServer::HandleCommand(const string& request,
@@ -368,7 +360,7 @@ bool FakeServer::HandleGetUpdatesRequest(
       max_response_version =
           std::max(max_response_version, response_entity->version());
 
-      if (entity.GetModelType() == syncer::NIGORI) {
+      if (entity.model_type() == syncer::NIGORI) {
         send_encryption_keys_based_on_nigori =
             response_entity->specifics().nigori().passphrase_type() ==
             sync_pb::NigoriSpecifics::KEYSTORE_PASSPHRASE;
@@ -399,7 +391,8 @@ string FakeServer::CommitEntity(
 
   std::unique_ptr<FakeServerEntity> entity;
   if (client_entity.deleted()) {
-    entity = TombstoneEntity::Create(client_entity.id_string());
+    entity = TombstoneEntity::Create(client_entity.id_string(),
+                                     client_entity.client_defined_unique_tag());
     DeleteChildren(client_entity.id_string());
   } else if (GetModelType(client_entity) == syncer::NIGORI) {
     // NIGORI is the only permanent item type that should be updated by the
@@ -427,7 +420,7 @@ string FakeServer::CommitEntity(
     return string();
   }
 
-  const std::string id = entity->GetId();
+  const std::string id = entity->id();
   SaveEntity(std::move(entity));
   BuildEntryResponseForSuccessfulCommit(id, entry_response);
   return id;
@@ -440,7 +433,7 @@ void FakeServer::BuildEntryResponseForSuccessfulCommit(
   CHECK(iter != entities_.end());
   const FakeServerEntity& entity = *iter->second;
   entry_response->set_response_type(sync_pb::CommitResponse::SUCCESS);
-  entry_response->set_id_string(entity.GetId());
+  entry_response->set_id_string(entity.id());
 
   if (entity.IsDeleted()) {
     entry_response->set_version(entity.GetVersion() + 1);
@@ -467,16 +460,17 @@ bool FakeServer::IsChild(const string& id, const string& potential_parent_id) {
 }
 
 void FakeServer::DeleteChildren(const string& id) {
-  std::set<string> tombstones_ids;
+  std::vector<std::unique_ptr<FakeServerEntity>> tombstones;
   // Find all the children of id.
-  for (auto& entity : entities_) {
+  for (const auto& entity : entities_) {
     if (IsChild(entity.first, id)) {
-      tombstones_ids.insert(entity.first);
+      tombstones.push_back(TombstoneEntity::Create(
+          entity.first, entity.second->client_defined_unique_tag()));
     }
   }
 
-  for (auto& tombstone_id : tombstones_ids) {
-    SaveEntity(TombstoneEntity::Create(tombstone_id));
+  for (auto& tombstone : tombstones) {
+    SaveEntity(std::move(tombstone));
   }
 }
 
@@ -512,7 +506,7 @@ bool FakeServer::HandleCommitRequest(const sync_pb::CommitMessage& commit,
 
     EntityMap::const_iterator iter = entities_.find(entity_id);
     CHECK(iter != entities_.end());
-    committed_model_types.Put(iter->second->GetModelType());
+    committed_model_types.Put(iter->second->model_type());
   }
 
   FOR_EACH_OBSERVER(Observer, observers_,
@@ -542,7 +536,7 @@ FakeServer::GetEntitiesAsDictionaryValue() {
       continue;
     }
     base::ListValue* list_value;
-    if (!dictionary->GetList(ModelTypeToString(entity.GetModelType()),
+    if (!dictionary->GetList(ModelTypeToString(entity.model_type()),
                              &list_value)) {
       return std::unique_ptr<base::DictionaryValue>();
     }
@@ -562,7 +556,7 @@ std::vector<sync_pb::SyncEntity> FakeServer::GetSyncEntitiesByModelType(
   for (EntityMap::const_iterator it = entities_.begin(); it != entities_.end();
        ++it) {
     const FakeServerEntity& entity = *it->second;
-    if (!IsDeletedOrPermanent(entity) && entity.GetModelType() == model_type) {
+    if (!IsDeletedOrPermanent(entity) && entity.model_type() == model_type) {
       sync_pb::SyncEntity sync_entity;
       entity.SerializeAsProto(&sync_entity);
       sync_entities.push_back(sync_entity);
@@ -581,7 +575,7 @@ bool FakeServer::ModifyEntitySpecifics(
     const sync_pb::EntitySpecifics& updated_specifics) {
   EntityMap::const_iterator iter = entities_.find(id);
   if (iter == entities_.end() ||
-      iter->second->GetModelType() !=
+      iter->second->model_type() !=
           GetModelTypeFromSpecifics(updated_specifics)) {
     return false;
   }
@@ -598,7 +592,7 @@ bool FakeServer::ModifyBookmarkEntity(
     const sync_pb::EntitySpecifics& updated_specifics) {
   EntityMap::const_iterator iter = entities_.find(id);
   if (iter == entities_.end() ||
-      iter->second->GetModelType() != syncer::BOOKMARKS ||
+      iter->second->model_type() != syncer::BOOKMARKS ||
       GetModelTypeFromSpecifics(updated_specifics) != syncer::BOOKMARKS) {
     return false;
   }
@@ -713,8 +707,8 @@ std::string FakeServer::GetBookmarkBarFolderId() const {
        ++it) {
     FakeServerEntity* entity = it->second.get();
     if (entity->GetName() == kBookmarkBarFolderName && entity->IsFolder() &&
-        entity->GetModelType() == syncer::BOOKMARKS) {
-      return entity->GetId();
+        entity->model_type() == syncer::BOOKMARKS) {
+      return entity->id();
     }
   }
   NOTREACHED() << "Bookmark Bar entity not found.";

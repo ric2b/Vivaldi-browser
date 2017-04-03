@@ -118,7 +118,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void ImeCompositionRangeChanged(
       const gfx::Range& range,
       const std::vector<gfx::Rect>& character_bounds) override;
-  void FocusedNodeChanged(bool is_editable_node) override;
+  void FocusedNodeChanged(bool is_editable_node,
+                          const gfx::Rect& node_bounds_in_screen) override;
   void RenderProcessGone(base::TerminationStatus status,
                          int error_code) override;
   void Destroy() override;
@@ -150,12 +151,12 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       BrowserAccessibilityDelegate* delegate, bool for_root_frame) override;
   bool LockMouse() override;
   void UnlockMouse() override;
-  void OnSwapCompositorFrame(uint32_t output_surface_id,
+  void OnSwapCompositorFrame(uint32_t compositor_frame_sink_id,
                              cc::CompositorFrame frame) override;
   void ClearCompositorFrame() override;
   void DidOverscroll(const ui::DidOverscrollParams& params) override;
   void DidStopFlinging() override;
-  uint32_t GetSurfaceClientId() override;
+  cc::FrameSinkId GetFrameSinkId() override;
   void ShowDisambiguationPopup(const gfx::Rect& rect_pixels,
                                const SkBitmap& zoomed_bitmap) override;
   std::unique_ptr<SyntheticGestureTarget> CreateSyntheticGestureTarget()
@@ -241,20 +242,18 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   void SynchronousFrameMetadata(cc::CompositorFrameMetadata frame_metadata);
 
-  void SetOverlayVideoMode(bool enabled);
-
   static void OnContextLost();
 
  private:
   void RunAckCallbacks();
 
-  void CheckOutputSurfaceChanged(uint32_t output_surface_id);
+  void CheckCompositorFrameSinkChanged(uint32_t compositor_frame_sink_id);
   void SubmitCompositorFrame(cc::CompositorFrame frame_data);
-  void SendReclaimCompositorResources(uint32_t output_surface_id,
+  void SendReclaimCompositorResources(uint32_t compositor_frame_sink_id,
                                       bool is_swap_ack);
 
-  void OnFrameMetadataUpdated(
-      const cc::CompositorFrameMetadata& frame_metadata);
+  void OnFrameMetadataUpdated(const cc::CompositorFrameMetadata& frame_metadata,
+                              bool is_transparent);
 
   void ShowInternal();
   void HideInternal();
@@ -262,15 +261,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void RemoveLayers();
 
   void UpdateBackgroundColor(SkColor color);
-
-  // Called after async screenshot task completes. Scales and crops the result
-  // of the copy.
-  static void PrepareTextureCopyOutputResult(
-      const gfx::Size& dst_size_in_pixel,
-      SkColorType color_type,
-      const base::TimeTicks& start_time,
-      const ReadbackRequestCallback& callback,
-      std::unique_ptr<cc::CopyOutputResult> result);
 
   // DevTools ScreenCast support for Android WebView.
   void SynchronousCopyContents(const gfx::Rect& src_subrect_in_pixel,
@@ -285,9 +275,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   // Drop any incoming frames from the renderer when there are locks on the
   // current frame.
-  void RetainFrame(uint32_t output_surface_id, cc::CompositorFrame frame);
+  void RetainFrame(uint32_t compositor_frame_sink_id,
+                   cc::CompositorFrame frame);
 
-  void InternalSwapCompositorFrame(uint32_t output_surface_id,
+  void InternalSwapCompositorFrame(uint32_t compositor_frame_sink_id,
                                    cc::CompositorFrame frame);
   void DestroyDelegatedContent();
   void OnLostResources();
@@ -341,8 +332,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   gfx::Size current_surface_size_;
 
   // The output surface id of the last received frame.
-  uint32_t last_output_surface_id_;
-
+  uint32_t last_compositor_frame_sink_id_;
 
   std::queue<base::Closure> ack_callbacks_;
 
@@ -360,8 +350,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   // This will always be NULL if |content_view_core_| is NULL.
   std::unique_ptr<ui::TouchSelectionController> selection_controller_;
 
-  // Size to use if we have no backing ContentViewCore
-  gfx::Size default_size_;
+  // Bounds to use if we have no backing ContentViewCore
+  gfx::Rect default_bounds_;
 
   const bool using_browser_compositor_;
   std::unique_ptr<SynchronousCompositorHost> sync_compositor_;
@@ -372,9 +362,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   bool observing_root_window_;
 
   struct LastFrameInfo {
-    LastFrameInfo(uint32_t output_id, cc::CompositorFrame output_frame);
+    LastFrameInfo(uint32_t compositor_frame_sink_id,
+                  cc::CompositorFrame output_frame);
     ~LastFrameInfo();
-    uint32_t output_surface_id;
+    uint32_t compositor_frame_sink_id;
     cc::CompositorFrame frame;
   };
 

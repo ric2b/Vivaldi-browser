@@ -27,6 +27,8 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+# pylint: disable=W0403
+
 """Compile an .idl file to Blink V8 bindings (.h and .cpp files).
 
 Design doc: http://www.chromium.org/developers/design-documents/idl-compiler
@@ -38,9 +40,14 @@ import os
 import cPickle as pickle
 import sys
 
-from code_generator_v8 import CodeGeneratorDictionaryImpl, CodeGeneratorV8, CodeGeneratorUnionType
+from code_generator_v8 import CodeGeneratorDictionaryImpl
+from code_generator_v8 import CodeGeneratorV8
+from code_generator_v8 import CodeGeneratorUnionType
+from code_generator_v8 import CodeGeneratorCallbackFunction
 from idl_reader import IdlReader
-from utilities import create_component_info_provider, read_idl_files_list_from_file, write_file, idl_filename_to_component
+from utilities import create_component_info_provider
+from utilities import read_idl_files_list_from_file
+from utilities import write_file
 
 
 def parse_options():
@@ -52,10 +59,11 @@ def parse_options():
     parser.add_option('--output-directory')
     parser.add_option('--impl-output-directory')
     parser.add_option('--info-dir')
-    parser.add_option('--write-file-only-if-changed', type='int')
     # FIXME: We should always explicitly specify --target-component and
     # remove the default behavior.
     parser.add_option('--target-component',
+                      type='choice',
+                      choices=['core', 'modules'],
                       help='target component to generate code, defaults to '
                       'component of input idl file')
     # ensure output comes last, so command line easy to parse via regexes
@@ -64,7 +72,6 @@ def parse_options():
     options, args = parser.parse_args()
     if options.output_directory is None:
         parser.error('Must specify output directory using --output-directory.')
-    options.write_file_only_if_changed = bool(options.write_file_only_if_changed)
     if len(args) != 1:
         parser.error('Must specify exactly 1 input file as argument, but %d given.' % len(args))
     idl_filename = os.path.realpath(args[0])
@@ -89,21 +96,18 @@ class IdlCompiler(object):
 
     def __init__(self, output_directory, cache_directory=None,
                  code_generator=None, info_provider=None,
-                 only_if_changed=False, target_component=None):
+                 target_component=None):
         """
         Args:
           output_directory: directory to put output files.
           cache_directory: directory which contains PLY caches.
           code_generator: code generator to be used.
           info_provider: component-specific information provider.
-          only_if_changed: True when the compiler should only write output files
-            when the contents are changed.
           target_component: component to be processed.
         """
         self.cache_directory = cache_directory
         self.code_generator = code_generator
         self.info_provider = info_provider
-        self.only_if_changed = only_if_changed
         self.output_directory = output_directory
         self.target_component = target_component
         self.reader = IdlReader(info_provider.interfaces_info, cache_directory)
@@ -111,12 +115,11 @@ class IdlCompiler(object):
     def compile_and_write(self, idl_filename):
         interface_name = idl_filename_to_interface_name(idl_filename)
         definitions = self.reader.read_idl_definitions(idl_filename)
-        target_component = self.target_component or idl_filename_to_component(idl_filename)
-        target_definitions = definitions[target_component]
+        target_definitions = definitions[self.target_component]
         output_code_list = self.code_generator.generate_code(
             target_definitions, interface_name)
         for output_path, output_code in output_code_list:
-            write_file(output_code, output_path, self.only_if_changed)
+            write_file(output_code, output_path)
 
     @abc.abstractmethod
     def compile_file(self, idl_filename):
@@ -151,7 +154,6 @@ def generate_bindings(options, input_filename):
         options.output_directory,
         cache_directory=options.cache_directory,
         info_provider=info_provider,
-        only_if_changed=options.write_file_only_if_changed,
         target_component=options.target_component)
     idl_compiler.compile_file(input_filename)
 
@@ -163,7 +165,7 @@ def generate_dictionary_impl(options, input_filename):
         options.impl_output_directory,
         cache_directory=options.cache_directory,
         info_provider=info_provider,
-        only_if_changed=options.write_file_only_if_changed)
+        target_component=options.target_component)
 
     idl_filenames = read_idl_files_list_from_file(input_filename,
                                                   is_gyp_format=True)
@@ -184,7 +186,20 @@ def generate_union_type_containers(options):
         options.target_component)
     output_code_list = generator.generate_code()
     for output_path, output_code in output_code_list:
-        write_file(output_code, output_path, options.write_file_only_if_changed)
+        write_file(output_code, output_path)
+
+
+def generate_callback_function_impl(options):
+    info_provider = create_component_info_provider(
+        options.info_dir, options.target_component)
+    generator = CodeGeneratorCallbackFunction(
+        info_provider,
+        options.cache_directory,
+        options.output_directory,
+        options.target_component)
+    output_code_list = generator.generate_code()
+    for output_path, output_code in output_code_list:
+        write_file(output_code, output_path)
 
 
 def main():
@@ -194,6 +209,7 @@ def main():
         # dictionary paths.
         generate_dictionary_impl(options, input_filename)
         generate_union_type_containers(options)
+        generate_callback_function_impl(options)
     else:
         # |input_filename| should be a path of an IDL file.
         generate_bindings(options, input_filename)

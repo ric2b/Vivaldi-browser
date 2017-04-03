@@ -16,7 +16,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "chrome/browser/media/media_capture_devices_dispatcher.h"
+#include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/prerender/prerender_config.h"
 #include "chrome/browser/prerender/prerender_contents.h"
 #include "chrome/browser/prerender/prerender_final_status.h"
@@ -60,6 +60,10 @@ class PrerenderAdapterTest;
 
 namespace prerender {
 
+namespace test_utils {
+class PrerenderInProcessBrowserTest;
+}
+
 class PrerenderHandle;
 class PrerenderHistory;
 class PrerenderLocalPredictor;
@@ -67,8 +71,7 @@ class PrerenderLocalPredictor;
 // PrerenderManager is responsible for initiating and keeping prerendered
 // views of web pages. All methods must be called on the UI thread unless
 // indicated otherwise.
-class PrerenderManager : public base::SupportsWeakPtr<PrerenderManager>,
-                         public content::NotificationObserver,
+class PrerenderManager : public content::NotificationObserver,
                          public content::RenderProcessHostObserver,
                          public KeyedService,
                          public MediaCaptureDevicesDispatcher::Observer {
@@ -199,9 +202,29 @@ class PrerenderManager : public base::SupportsWeakPtr<PrerenderManager>,
       double fraction_plt_elapsed_at_swap_in,
       const GURL& url);
 
+  // Called when a NoStatePrefetch request has received a response (including
+  // redirects). May be called several times per resource, in case of redirects.
+  void RecordPrefetchResponseReceived(Origin origin,
+                                      bool is_main_resource,
+                                      bool is_redirect,
+                                      bool is_no_store);
+
+  // Called when a NoStatePrefetch resource has been loaded. This is called only
+  // once per resource, when all redirects have been resolved.
+  void RecordPrefetchRedirectCount(Origin origin,
+                                   bool is_main_resource,
+                                   int redirect_count);
+
+  // Records the time to first contentful paint.
+  // Must not be called for prefetch loads (which are never rendered anyway).
+  // |is_no_store| must be true if the main resource has a "no-store" cache
+  // control HTTP header.
+  void RecordFirstContentfulPaint(const GURL& url,
+                                  bool is_no_store,
+                                  base::TimeDelta time);
+
   static PrerenderManagerMode GetMode();
   static void SetMode(PrerenderManagerMode mode);
-  static const char* GetModeString();
   static bool IsPrerenderingPossible();
   static bool ActuallyPrerendering();
   static bool IsControlGroup();
@@ -243,9 +266,6 @@ class PrerenderManager : public base::SupportsWeakPtr<PrerenderManager>,
 
   // Checks whether |url| has been recently navigated to.
   bool HasRecentlyBeenNavigatedTo(Origin origin, const GURL& url);
-
-  // Returns true iff the method given is valid for prerendering.
-  static bool IsValidHttpMethod(const std::string& method);
 
   // Returns true iff the scheme of the URL given is valid for prerendering.
   static bool DoesURLHaveValidScheme(const GURL& url);
@@ -321,6 +341,10 @@ class PrerenderManager : public base::SupportsWeakPtr<PrerenderManager>,
   void SetPrerenderContentsFactoryForTest(
       PrerenderContents::Factory* prerender_contents_factory);
 
+  bool IsPrerenderSilenceExperimentForTesting(Origin origin) const {
+    return IsPrerenderSilenceExperiment(origin);
+  }
+
  protected:
   class PrerenderData : public base::SupportsWeakPtr<PrerenderData> {
    public:
@@ -391,7 +415,7 @@ class PrerenderManager : public base::SupportsWeakPtr<PrerenderManager>,
   virtual bool IsLowEndDevice() const;
 
  private:
-  friend class PrerenderBrowserTest;
+  friend class test_utils::PrerenderInProcessBrowserTest;
   friend class PrerenderContents;
   friend class PrerenderHandle;
   friend class UnitTestPrerenderManager;
@@ -405,6 +429,10 @@ class PrerenderManager : public base::SupportsWeakPtr<PrerenderManager>,
 
   // Time window for which we record old navigations, in milliseconds.
   static const int kNavigationRecordWindowMs = 5000;
+
+  // Returns whether adding new prerenders should be disabled because of the
+  // experiment running.
+  bool IsPrerenderSilenceExperiment(Origin origin) const;
 
   // Returns whether prerendering is currently enabled or the reason why it is
   // disabled.
@@ -477,7 +505,8 @@ class PrerenderManager : public base::SupportsWeakPtr<PrerenderManager>,
   void DeleteOldWebContents();
 
   // Cleans up old NavigationRecord's.
-  void CleanUpOldNavigations();
+  void CleanUpOldNavigations(std::vector<NavigationRecord>* navigations,
+                             base::TimeDelta max_age);
 
   // Arrange for the given WebContents to be deleted asap. Delete |deleter| as
   // well.
@@ -527,6 +556,9 @@ class PrerenderManager : public base::SupportsWeakPtr<PrerenderManager>,
   // |navigate_time_|.
   std::vector<NavigationRecord> navigations_;
 
+  // List of recent prefetches, sorted by ascending navigate time.
+  std::vector<NavigationRecord> prefetches_;
+
   std::unique_ptr<PrerenderContents::Factory> prerender_contents_factory_;
 
   static PrerenderManagerMode mode_;
@@ -563,6 +595,8 @@ class PrerenderManager : public base::SupportsWeakPtr<PrerenderManager>,
   // Set of process hosts being prerendered.
   using PrerenderProcessSet = std::set<content::RenderProcessHost*>;
   PrerenderProcessSet prerender_process_hosts_;
+
+  base::WeakPtrFactory<PrerenderManager> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(PrerenderManager);
 };

@@ -12,6 +12,7 @@ import android.test.suitebuilder.annotation.SmallTest;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.DOMUtils;
@@ -23,6 +24,7 @@ import java.util.concurrent.Callable;
 /**
  * Tests for MediaSession.
  */
+@RetryOnFailure
 @CommandLineFlags.Add(ContentSwitches.DISABLE_GESTURE_REQUIREMENT_FOR_MEDIA_PLAYBACK)
 public class MediaSessionTest extends ContentShellTestBase {
     private static final String MEDIA_SESSION_TEST_URL =
@@ -143,6 +145,7 @@ public class MediaSessionTest extends ContentShellTestBase {
 
     @MediumTest
     @Feature({"MediaSession"})
+    @RetryOnFailure
     public void testShortVideoIsTransient() throws Exception {
         assertEquals(AudioManager.AUDIOFOCUS_LOSS, mAudioFocusChangeListener.getAudioFocusState());
         mAudioFocusChangeListener.requestAudioFocus(AudioManager.AUDIOFOCUS_GAIN);
@@ -351,6 +354,7 @@ public class MediaSessionTest extends ContentShellTestBase {
 
     @MediumTest
     @Feature({"MediaSession"})
+    @RetryOnFailure
     public void testMediaResumeAfterTransientFocusLoss() throws Exception {
         assertEquals(AudioManager.AUDIOFOCUS_LOSS, mAudioFocusChangeListener.getAudioFocusState());
         mAudioFocusChangeListener.requestAudioFocus(AudioManager.AUDIOFOCUS_GAIN);

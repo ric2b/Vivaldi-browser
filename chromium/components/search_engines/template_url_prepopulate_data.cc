@@ -10,7 +10,6 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
@@ -537,6 +536,12 @@ int CountryCharsToCountryIDWithUpdate(char c1, char c2) {
   return CountryCharsToCountryID(c1, c2);
 }
 
+int CountryStringToCountryID(const std::string& country) {
+  return (country.length() == 2)
+             ? CountryCharsToCountryIDWithUpdate(country[0], country[1])
+             : kCountryIDUnknown;
+}
+
 #if defined(OS_WIN)
 
 // For reference, a list of GeoIDs can be found at
@@ -610,14 +615,12 @@ int GetCountryIDFromPrefs(PrefService* prefs) {
   return prefs->GetInteger(prefs::kCountryIDAtInstall);
 }
 
-void GetPrepopulationSetFromCountryID(PrefService* prefs,
-                                      const PrepopulatedEngine*** engines,
-                                      size_t* num_engines) {
-  // NOTE: This function should ALWAYS set its outparams.
-
+std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulationSetFromCountryID(
+    int country_id) {
+  const PrepopulatedEngine** engines;
+  size_t num_engines;
   // If you add a new country make sure to update the unit test for coverage.
-  switch (GetCountryIDFromPrefs(prefs)) {
-
+  switch (country_id) {
 #define CHAR_A 'A'
 #define CHAR_B 'B'
 #define CHAR_C 'C'
@@ -651,9 +654,9 @@ void GetPrepopulationSetFromCountryID(PrefService* prefs,
 #define UNHANDLED_COUNTRY(code1, code2)\
     case CODE_TO_ID(code1, code2):
 #define END_UNHANDLED_COUNTRIES(code1, code2)\
-      *engines = engines_##code1##code2;\
-      *num_engines = arraysize(engines_##code1##code2);\
-      return;
+      engines = engines_##code1##code2;\
+      num_engines = arraysize(engines_##code1##code2);\
+      break;
 #define DECLARE_COUNTRY(code1, code2)\
     UNHANDLED_COUNTRY(code1, code2)\
     END_UNHANDLED_COUNTRIES(code1, code2)
@@ -966,6 +969,11 @@ void GetPrepopulationSetFromCountryID(PrefService* prefs,
     default:                // Unhandled location
     END_UNHANDLED_COUNTRIES(def, ault)
   }
+
+  std::vector<std::unique_ptr<TemplateURLData>> t_urls;
+  for (size_t i = 0; i < num_engines; ++i)
+    t_urls.push_back(MakeTemplateURLDataFromPrepopulatedEngine(*engines[i]));
+  return t_urls;
 }
 
 std::unique_ptr<TemplateURLData> MakePrepopulatedTemplateURLData(
@@ -1000,7 +1008,7 @@ std::unique_ptr<TemplateURLData> MakePrepopulatedTemplateURLData(
   data->suggestions_url_post_params = suggest_url_post_params.as_string();
   data->instant_url_post_params = instant_url_post_params.as_string();
   data->image_url_post_params = image_url_post_params.as_string();
-  data->favicon_url = GURL(favicon_url.as_string());
+  data->favicon_url = GURL(favicon_url);
   data->show_in_default_list = true;
   data->safe_for_autoreplace = true;
   data->input_encodings.push_back(encoding.as_string());
@@ -1017,9 +1025,9 @@ std::unique_ptr<TemplateURLData> MakePrepopulatedTemplateURLData(
   return data;
 }
 
-ScopedVector<TemplateURLData> GetPrepopulatedTemplateURLData(
+std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulatedTemplateURLData(
     PrefService* prefs) {
-  ScopedVector<TemplateURLData> t_urls;
+  std::vector<std::unique_ptr<TemplateURLData>> t_urls;
   if (!prefs)
     return t_urls;
 
@@ -1070,12 +1078,12 @@ ScopedVector<TemplateURLData> GetPrepopulatedTemplateURLData(
       engine->GetList("alternate_urls", &alternate_urls);
       engine->GetString("search_terms_replacement_key",
           &search_terms_replacement_key);
-      t_urls.push_back(MakePrepopulatedTemplateURLData(name, keyword,
-          search_url, suggest_url, instant_url, image_url, new_tab_url,
-          contextual_search_url, search_url_post_params,
+      t_urls.push_back(MakePrepopulatedTemplateURLData(
+          name, keyword, search_url, suggest_url, instant_url, image_url,
+          new_tab_url, contextual_search_url, search_url_post_params,
           suggest_url_post_params, instant_url_post_params,
           image_url_post_params, favicon_url, encoding, *alternate_urls,
-          search_terms_replacement_key, id).release());
+          search_terms_replacement_key, id));
     }
   }
   return t_urls;
@@ -1105,25 +1113,33 @@ int GetDataVersion(PrefService* prefs) {
       kCurrentDataVersion;
 }
 
-ScopedVector<TemplateURLData> GetPrepopulatedEngines(
+std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulatedEngines(
     PrefService* prefs,
     size_t* default_search_provider_index) {
   // If there is a set of search engines in the preferences file, it overrides
   // the built-in set.
   *default_search_provider_index = 0;
-  ScopedVector<TemplateURLData> t_urls = GetPrepopulatedTemplateURLData(prefs);
+  std::vector<std::unique_ptr<TemplateURLData>> t_urls =
+      GetPrepopulatedTemplateURLData(prefs);
   if (!t_urls.empty())
     return t_urls;
 
-  const PrepopulatedEngine** engines;
-  size_t num_engines;
-  GetPrepopulationSetFromCountryID(prefs, &engines, &num_engines);
-  for (size_t i = 0; i != num_engines; ++i) {
-    t_urls.push_back(
-        MakeTemplateURLDataFromPrepopulatedEngine(*engines[i]).release());
-  }
-  return t_urls;
+  return GetPrepopulationSetFromCountryID(GetCountryIDFromPrefs(prefs));
 }
+
+#if defined(OS_ANDROID)
+std::vector<std::unique_ptr<TemplateURLData>> GetLocalPrepopulatedEngines(
+    const std::string& locale,
+    PrefService* prefs) {
+  int country_id = CountryStringToCountryID(locale);
+  if (country_id == kCountryIDUnknown ||
+      country_id == GetCountryIDFromPrefs(prefs)) {
+    return std::vector<std::unique_ptr<TemplateURLData>>();
+  }
+
+  return GetPrepopulationSetFromCountryID(country_id);
+}
+#endif
 
 std::vector<const PrepopulatedEngine*> GetAllPrepopulatedEngines() {
   return std::vector<const PrepopulatedEngine*>(std::begin(kAllEngines),
@@ -1158,17 +1174,15 @@ void ClearPrepopulatedEnginesInPrefs(PrefService* prefs) {
 
 std::unique_ptr<TemplateURLData> GetPrepopulatedDefaultSearch(
     PrefService* prefs) {
-  std::unique_ptr<TemplateURLData> default_search_provider;
   size_t default_search_index;
   // This could be more efficient.  We are loading all the URLs to only keep
   // the first one.
-  ScopedVector<TemplateURLData> loaded_urls =
+  std::vector<std::unique_ptr<TemplateURLData>> loaded_urls =
       GetPrepopulatedEngines(prefs, &default_search_index);
-  if (default_search_index < loaded_urls.size()) {
-    default_search_provider.reset(loaded_urls[default_search_index]);
-    loaded_urls.weak_erase(loaded_urls.begin() + default_search_index);
-  }
-  return default_search_provider;
+
+  return (default_search_index < loaded_urls.size())
+             ? std::move(loaded_urls[default_search_index])
+             : nullptr;
 }
 
 SearchEngineType GetEngineType(const GURL& url) {
@@ -1203,9 +1217,7 @@ SearchEngineType GetEngineType(const GURL& url) {
 #if defined(OS_WIN)
 
 int GetCurrentCountryID() {
-  GEOID geo_id = GetUserGeoID(GEOCLASS_NATION);
-
-  return GeoIDToCountryID(geo_id);
+  return GeoIDToCountryID(GetUserGeoID(GEOCLASS_NATION));
 }
 
 #elif defined(OS_MACOSX)
@@ -1228,41 +1240,30 @@ int GetCurrentCountryID() {
 #elif defined(OS_ANDROID)
 
 int GetCurrentCountryID() {
-  const std::string& country_code = base::android::GetDefaultCountryCode();
-  return (country_code.size() == 2) ?
-      CountryCharsToCountryIDWithUpdate(country_code[0], country_code[1]) :
-      kCountryIDUnknown;
+  return CountryStringToCountryID(base::android::GetDefaultCountryCode());
 }
 
 #elif defined(OS_POSIX)
 
 int GetCurrentCountryID() {
   const char* locale = setlocale(LC_MESSAGES, NULL);
-
   if (!locale)
     return kCountryIDUnknown;
 
   // The format of a locale name is:
   // language[_territory][.codeset][@modifier], where territory is an ISO 3166
   // country code, which is what we want.
+
+  // First remove the language portion.
   std::string locale_str(locale);
-  size_t begin = locale_str.find('_');
-  if (begin == std::string::npos || locale_str.size() - begin < 3)
+  size_t territory_delim = locale_str.find('_');
+  if (territory_delim == std::string::npos)
     return kCountryIDUnknown;
+  locale_str.erase(0, territory_delim + 1);
 
-  ++begin;
-  size_t end = locale_str.find_first_of(".@", begin);
-  if (end == std::string::npos)
-    end = locale_str.size();
-
-  // The territory part must contain exactly two characters.
-  if (end - begin == 2) {
-    return CountryCharsToCountryIDWithUpdate(
-        base::ToUpperASCII(locale_str[begin]),
-        base::ToUpperASCII(locale_str[begin + 1]));
-  }
-
-  return kCountryIDUnknown;
+  // Next remove any codeset/modifier portion and uppercase.
+  return CountryStringToCountryID(
+      base::ToUpperASCII(locale_str.substr(0, locale_str.find_first_of(".@"))));
 }
 
 #endif  // OS_*

@@ -18,7 +18,6 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/metrics/histogram.h"
 #include "base/path_service.h"
 #include "base/stl_util.h"
 #include "base/strings/string_piece.h"
@@ -344,8 +343,6 @@ std::string ResourceBundle::LoadLocaleResources(
 
   std::unique_ptr<DataPack> data_pack(new DataPack(SCALE_FACTOR_100P));
   if (!data_pack->LoadFromPath(locale_file_path)) {
-    UMA_HISTOGRAM_ENUMERATION("ResourceBundle.LoadLocaleResourcesError",
-                              logging::GetLastSystemErrorCode(), 16000);
     LOG(ERROR) << "failed to load locale.pak";
     NOTREACHED();
     return std::string();
@@ -569,6 +566,22 @@ base::string16 ResourceBundle::GetLocalizedString(int message_id) {
     msg = base::UTF8ToUTF16(data);
   }
   return msg;
+}
+
+base::RefCountedMemory* ResourceBundle::LoadLocalizedResourceBytes(
+    int resource_id) {
+  {
+    base::AutoLock lock_scope(*locale_resources_data_lock_);
+    base::StringPiece data;
+    if (locale_resources_data_.get() &&
+        locale_resources_data_->GetStringPiece(
+            static_cast<uint16_t>(resource_id), &data) &&
+        !data.empty()) {
+      return new base::RefCountedStaticMemory(data.data(), data.length());
+    }
+  }
+  // Release lock_scope and fall back to main data pack.
+  return LoadDataResourceBytes(resource_id);
 }
 
 const gfx::FontList& ResourceBundle::GetFontListWithDelta(

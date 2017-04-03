@@ -5,15 +5,13 @@
 #include "ash/test/ash_test_helper.h"
 
 #include "ash/accelerators/accelerator_controller_delegate_aura.h"
-#include "ash/common/ash_switches.h"
-#include "ash/common/display/display_info.h"
 #include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/test/material_design_controller_test_api.h"
 #include "ash/common/wm_shell.h"
 #include "ash/shell.h"
 #include "ash/shell_init_params.h"
+#include "ash/test/ash_test_environment.h"
 #include "ash/test/ash_test_views_delegate.h"
-#include "ash/test/content/test_shell_content_state.h"
 #include "ash/test/display_manager_test_api.h"
 #include "ash/test/shell_test_api.h"
 #include "ash/test/test_screenshot_delegate.h"
@@ -21,7 +19,6 @@
 #include "ash/test/test_shell_delegate.h"
 #include "ash/test/test_system_tray_delegate.h"
 #include "base/run_loop.h"
-#include "content/public/browser/browser_thread.h"
 #include "ui/aura/env.h"
 #include "ui/aura/input_state_lookup.h"
 #include "ui/aura/test/env_test_helper.h"
@@ -31,6 +28,7 @@
 #include "ui/base/test/material_design_controller_test_api.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/compositor/test/context_factories_for_test.h"
+#include "ui/display/manager/managed_display_info.h"
 #include "ui/message_center/message_center.h"
 #include "ui/wm/core/capture_controller.h"
 #include "ui/wm/core/cursor_manager.h"
@@ -38,6 +36,7 @@
 #if defined(OS_CHROMEOS)
 #include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/dbus/bluez_dbus_manager.h"
 #endif
 
@@ -52,13 +51,10 @@
 namespace ash {
 namespace test {
 
-AshTestHelper::AshTestHelper(base::MessageLoopForUI* message_loop)
-    : message_loop_(message_loop),
+AshTestHelper::AshTestHelper(AshTestEnvironment* ash_test_environment)
+    : ash_test_environment_(ash_test_environment),
       test_shell_delegate_(nullptr),
-      test_screenshot_delegate_(nullptr),
-      content_state_(nullptr),
-      test_shell_content_state_(nullptr) {
-  CHECK(message_loop_);
+      test_screenshot_delegate_(nullptr) {
 #if defined(OS_CHROMEOS)
   dbus_thread_manager_initialized_ = false;
   bluez_dbus_manager_initialized_ = false;
@@ -73,8 +69,8 @@ AshTestHelper::~AshTestHelper() {}
 
 void AshTestHelper::SetUp(bool start_session,
                           MaterialDesignController::Mode material_mode) {
-  ResetDisplayIdForTest();
-  views_delegate_.reset(new AshTestViewsDelegate);
+  display::ResetDisplayIdForTest();
+  views_delegate_ = ash_test_environment_->CreateViewsDelegate();
 
   // Disable animations during tests.
   zero_duration_mode_.reset(new ui::ScopedAnimationDurationScaleMode(
@@ -96,15 +92,15 @@ void AshTestHelper::SetUp(bool start_session,
 #if defined(OS_CHROMEOS)
   // Create DBusThreadManager for testing.
   if (!chromeos::DBusThreadManager::IsInitialized()) {
-    chromeos::DBusThreadManager::Initialize();
+    chromeos::DBusThreadManager::Initialize(
+        chromeos::DBusThreadManager::PROCESS_ASH);
     dbus_thread_manager_initialized_ = true;
   }
 
   if (!bluez::BluezDBusManager::IsInitialized()) {
     bluez::BluezDBusManager::Initialize(
         chromeos::DBusThreadManager::Get()->GetSystemBus(),
-        chromeos::DBusThreadManager::Get()->IsUsingStub(
-            chromeos::DBusClientBundle::BLUETOOTH));
+        chromeos::DBusThreadManager::Get()->IsUsingFakes());
     bluez_dbus_manager_initialized_ = true;
   }
 
@@ -112,13 +108,7 @@ void AshTestHelper::SetUp(bool start_session,
   // created in AshTestBase tests.
   chromeos::CrasAudioHandler::InitializeForTesting();
 #endif
-  ShellContentState* content_state = content_state_;
-  if (!content_state) {
-    test_shell_content_state_ = new TestShellContentState;
-    content_state = test_shell_content_state_;
-  }
-  ShellContentState::SetInstance(content_state);
-
+  ash_test_environment_->SetUp();
   // Reset the global state for the cursor manager. This includes the
   // last cursor visibility state, etc.
   ::wm::CursorManager::ResetCursorVisibilityStateForTest();
@@ -136,7 +126,7 @@ void AshTestHelper::SetUp(bool start_session,
   ShellInitParams init_params;
   init_params.delegate = test_shell_delegate_;
   init_params.context_factory = context_factory;
-  init_params.blocking_pool = content::BrowserThread::GetBlockingPool();
+  init_params.blocking_pool = ash_test_environment_->GetBlockingPool();
   Shell::CreateInstance(init_params);
   aura::test::EnvTestHelper(aura::Env::GetInstance())
       .SetInputStateLookup(std::unique_ptr<aura::InputStateLookup>());
@@ -147,7 +137,8 @@ void AshTestHelper::SetUp(bool start_session,
     GetTestSessionStateDelegate()->SetHasActiveUser(true);
   }
 
-  test::DisplayManagerTestApi().DisableChangeDisplayUponHostResize();
+  test::DisplayManagerTestApi(Shell::GetInstance()->display_manager())
+      .DisableChangeDisplayUponHostResize();
   ShellTestApi(shell).DisableDisplayAnimator();
 
   test_screenshot_delegate_ = new TestScreenshotDelegate();
@@ -160,7 +151,7 @@ void AshTestHelper::TearDown() {
   Shell::DeleteInstance();
   material_design_state_.reset();
   test::MaterialDesignControllerTestAPI::Uninitialize();
-  ShellContentState::DestroyInstance();
+  ash_test_environment_->TearDown();
 
   test_screenshot_delegate_ = NULL;
 
@@ -170,6 +161,7 @@ void AshTestHelper::TearDown() {
 #if defined(OS_CHROMEOS)
   chromeos::CrasAudioHandler::Shutdown();
   if (bluez_dbus_manager_initialized_) {
+    device::BluetoothAdapterFactory::Shutdown();
     bluez::BluezDBusManager::Shutdown();
     bluez_dbus_manager_initialized_ = false;
   }
@@ -194,7 +186,6 @@ void AshTestHelper::TearDown() {
 }
 
 void AshTestHelper::RunAllPendingInMessageLoop() {
-  DCHECK(base::MessageLoopForUI::current() == message_loop_);
   base::RunLoop run_loop;
   run_loop.RunUntilIdle();
 }
@@ -216,15 +207,6 @@ aura::Window* AshTestHelper::CurrentContext() {
 
 // static
 bool AshTestHelper::SupportsMultipleDisplays() {
-#if defined(OS_WIN)
-  return false;
-#else
-  return true;
-#endif
-}
-
-// static
-bool AshTestHelper::SupportsHostWindowResize() {
 #if defined(OS_WIN)
   return false;
 #else

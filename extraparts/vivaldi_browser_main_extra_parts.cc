@@ -50,8 +50,18 @@ void VivaldiBrowserMainExtraParts::PostEarlyInitialization() {
 
     // NOTE(arnar): Can be removed once ResizeObserver is stable.
     // https://www.chromestatus.com/feature/5705346022637568
-    command_line->AppendSwitchASCII(
-      switches::kEnableBlinkFeatures, "ResizeObserver");
+    if (command_line->HasSwitch(switches::kEnableBlinkFeatures)) {
+      std::string enabledBlinkFeatures =
+          command_line->GetSwitchValueASCII(switches::kEnableBlinkFeatures);
+
+      if (enabledBlinkFeatures.find("ResizeObserver") == std::string::npos) {
+        std::string out = enabledBlinkFeatures.append(",ResizeObserver");
+        command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures, out);
+      }
+    } else {
+      command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
+                                      "ResizeObserver");
+    }
   }
 
 #if defined(OS_MACOSX)

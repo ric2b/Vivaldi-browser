@@ -6,7 +6,7 @@
 
 #include "third_party/skia/include/core/SkDrawLooper.h"
 #include "third_party/skia/include/core/SkPaint.h"
-#include "third_party/skia/include/core/SkPath.h"
+#include "third_party/skia/include/core/SkRRect.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
@@ -133,10 +133,12 @@ void RoundedRectangleLayerDelegate::OnPaintLayer(
 BorderShadowLayerDelegate::BorderShadowLayerDelegate(
     const std::vector<gfx::ShadowValue>& shadows,
     const gfx::Rect& shadowed_area_bounds,
+    SkColor fill_color,
     int corner_radius)
     : BasePaintedLayerDelegate(gfx::kPlaceholderColor),
       shadows_(shadows),
       bounds_(shadowed_area_bounds),
+      fill_color_(fill_color),
       corner_radius_(corner_radius) {}
 
 BorderShadowLayerDelegate::~BorderShadowLayerDelegate() {}
@@ -153,25 +155,24 @@ gfx::Vector2dF BorderShadowLayerDelegate::GetCenteringOffset() const {
 
 void BorderShadowLayerDelegate::OnPaintLayer(const ui::PaintContext& context) {
   SkPaint paint;
-  paint.setLooper(gfx::CreateShadowDrawLooperCorrectBlur(shadows_));
-  paint.setStyle(SkPaint::kStrokeAndFill_Style);
+  paint.setStyle(SkPaint::kFill_Style);
   paint.setAntiAlias(true);
-  paint.setColor(SK_ColorTRANSPARENT);
-  paint.setStrokeJoin(SkPaint::kRound_Join);
-  SkRect path_bounds = gfx::RectFToSkRect(
-      gfx::RectF(bounds_ - GetPaintedBounds().OffsetFromOrigin()));
+  paint.setColor(fill_color_);
 
+  gfx::RectF rrect_bounds =
+      gfx::RectF(bounds_ - GetPaintedBounds().OffsetFromOrigin());
+  SkRRect r_rect = SkRRect::MakeRectXY(gfx::RectFToSkRect(rrect_bounds),
+                                       corner_radius_, corner_radius_);
+
+  // First the fill color.
   ui::PaintRecorder recorder(context, GetPaintedBounds().size());
-  const SkScalar corner = SkFloatToScalar(corner_radius_);
-  SkPath path;
-  path.addRoundRect(path_bounds, corner, corner, SkPath::kCCW_Direction);
-  recorder.canvas()->DrawPath(path, paint);
+  recorder.canvas()->sk_canvas()->drawRRect(r_rect, paint);
 
-  SkPaint clear_paint;
-  clear_paint.setAntiAlias(true);
-  clear_paint.setXfermodeMode(SkXfermode::kClear_Mode);
-  recorder.canvas()->sk_canvas()->drawRoundRect(path_bounds, corner, corner,
-                                                clear_paint);
+  // Now the shadow.
+  paint.setLooper(gfx::CreateShadowDrawLooperCorrectBlur(shadows_));
+  recorder.canvas()->sk_canvas()->clipRRect(r_rect, SkRegion::kDifference_Op,
+                                            true);
+  recorder.canvas()->sk_canvas()->drawRRect(r_rect, paint);
 }
 
 }  // namespace views

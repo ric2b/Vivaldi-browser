@@ -7,10 +7,10 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/invalidations_message_handler.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/invalidations_resources.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/browser/web_ui_message_handler.h"
-#include "grit/invalidations_resources.h"
 
 content::WebUIDataSource* CreateInvalidationsHTMLSource() {
   // This is done once per opening of the page
@@ -19,6 +19,7 @@ content::WebUIDataSource* CreateInvalidationsHTMLSource() {
       content::WebUIDataSource::Create(chrome::kChromeUIInvalidationsHost);
   source->AddResourcePath("about_invalidations.js", IDR_ABOUT_INVALIDATIONS_JS);
   source->SetDefaultResource(IDR_ABOUT_INVALIDATIONS_HTML);
+  source->DisableI18nAndUseGzipForAllPaths();
   return source;
 }
 

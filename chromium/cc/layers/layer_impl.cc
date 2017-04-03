@@ -489,7 +489,7 @@ void LayerImpl::ResetChangeTracking() {
   damage_rect_.SetRect(0, 0, 0, 0);
 
   if (render_surface_)
-    render_surface_->ResetPropertyChangedFlag();
+    render_surface_->ResetPropertyChangedFlags();
 }
 
 int LayerImpl::num_copy_requests_in_target_subtree() {
@@ -542,81 +542,65 @@ gfx::ScrollOffset LayerImpl::ScrollOffsetForAnimation() const {
   return CurrentScrollOffset();
 }
 
-void LayerImpl::OnScrollOffsetAnimated(const gfx::ScrollOffset& scroll_offset) {
-  // Only layers in the active tree should need to do anything here, since
-  // layers in the pending tree will find out about these changes as a
-  // result of the shared SyncedProperty.
-  if (!IsActive())
-    return;
-
-  SetCurrentScrollOffset(ClampScrollOffsetToLimits(scroll_offset));
-
-  layer_tree_impl_->DidAnimateScrollOffset();
-}
-
-void LayerImpl::OnTransformIsCurrentlyAnimatingChanged(
-    bool is_currently_animating) {
+void LayerImpl::OnIsAnimatingChanged(const PropertyAnimationState& mask,
+                                     const PropertyAnimationState& state) {
   DCHECK(layer_tree_impl_);
   PropertyTrees* property_trees = layer_tree_impl()->property_trees();
-  if (!property_trees->IsInIdToIndexMap(PropertyTrees::TreeType::TRANSFORM,
-                                        id()))
-    return;
-  TransformNode* node = property_trees->transform_tree.Node(
-      property_trees->transform_id_to_index_map[id()]);
-  node->is_currently_animating = is_currently_animating;
-}
 
-void LayerImpl::OnTransformIsPotentiallyAnimatingChanged(
-    bool has_potential_animation) {
-  UpdatePropertyTreeTransformIsAnimated(has_potential_animation);
-  was_ever_ready_since_last_transform_animation_ = false;
-}
+  TransformNode* transform_node = nullptr;
+  if (property_trees->IsInIdToIndexMap(PropertyTrees::TreeType::TRANSFORM,
+                                       id())) {
+    transform_node = property_trees->transform_tree.Node(
+        property_trees->transform_id_to_index_map[id()]);
+  }
 
-void LayerImpl::OnOpacityIsCurrentlyAnimatingChanged(
-    bool is_currently_animating) {
-  DCHECK(layer_tree_impl_);
-  PropertyTrees* property_trees = layer_tree_impl()->property_trees();
-  if (!property_trees->IsInIdToIndexMap(PropertyTrees::TreeType::EFFECT, id()))
-    return;
-  EffectNode* node = property_trees->effect_tree.Node(
-      property_trees->effect_id_to_index_map[id()]);
+  EffectNode* effect_node = nullptr;
+  if (property_trees->IsInIdToIndexMap(PropertyTrees::TreeType::EFFECT, id())) {
+    effect_node = property_trees->effect_tree.Node(
+        property_trees->effect_id_to_index_map[id()]);
+  }
 
-  node->is_currently_animating_opacity = is_currently_animating;
-}
-
-void LayerImpl::OnOpacityIsPotentiallyAnimatingChanged(
-    bool has_potential_animation) {
-  DCHECK(layer_tree_impl_);
-  PropertyTrees* property_trees = layer_tree_impl()->property_trees();
-  if (!property_trees->IsInIdToIndexMap(PropertyTrees::TreeType::EFFECT, id()))
-    return;
-  EffectNode* node = property_trees->effect_tree.Node(
-      property_trees->effect_id_to_index_map[id()]);
-  node->has_potential_opacity_animation = has_potential_animation;
-  property_trees->effect_tree.set_needs_update(true);
-}
-
-void LayerImpl::OnFilterIsCurrentlyAnimatingChanged(
-    bool is_currently_animating) {
-  DCHECK(layer_tree_impl_);
-  PropertyTrees* property_trees = layer_tree_impl()->property_trees();
-  if (!property_trees->IsInIdToIndexMap(PropertyTrees::TreeType::EFFECT, id()))
-    return;
-  EffectNode* node = property_trees->effect_tree.Node(
-      property_trees->effect_id_to_index_map[id()]);
-
-  node->is_currently_animating_filter = is_currently_animating;
-}
-
-void LayerImpl::OnFilterIsPotentiallyAnimatingChanged(
-    bool has_potential_animation) {
-  DCHECK(layer_tree_impl_);
-  PropertyTrees* property_trees = layer_tree_impl()->property_trees();
-  if (!property_trees->IsInIdToIndexMap(PropertyTrees::TreeType::EFFECT, id()))
-    return;
-  EffectNode* node = property_trees->effect_tree.Node(
-      property_trees->effect_id_to_index_map[id()]);
-  node->has_potential_filter_animation = has_potential_animation;
+  for (int property = TargetProperty::FIRST_TARGET_PROPERTY;
+       property <= TargetProperty::LAST_TARGET_PROPERTY; ++property) {
+    switch (property) {
+      case TargetProperty::TRANSFORM:
+        if (transform_node) {
+          if (mask.currently_running[property])
+            transform_node->is_currently_animating =
+                state.currently_running[property];
+          if (mask.potentially_animating[property]) {
+            UpdatePropertyTreeTransformIsAnimated(
+                state.potentially_animating[property]);
+            was_ever_ready_since_last_transform_animation_ = false;
+          }
+        }
+        break;
+      case TargetProperty::OPACITY:
+        if (effect_node) {
+          if (mask.currently_running[property])
+            effect_node->is_currently_animating_opacity =
+                state.currently_running[property];
+          if (mask.potentially_animating[property]) {
+            effect_node->has_potential_opacity_animation =
+                state.potentially_animating[property];
+            property_trees->effect_tree.set_needs_update(true);
+          }
+        }
+        break;
+      case TargetProperty::FILTER:
+        if (effect_node) {
+          if (mask.currently_running[property])
+            effect_node->is_currently_animating_filter =
+                state.currently_running[property];
+          if (mask.potentially_animating[property])
+            effect_node->has_potential_filter_animation =
+                state.potentially_animating[property];
+        }
+        break;
+      default:
+        break;
+    }
+  }
 }
 
 bool LayerImpl::IsActive() const {
@@ -842,7 +826,7 @@ void LayerImpl::SetCurrentScrollOffset(const gfx::ScrollOffset& scroll_offset) {
   DCHECK(IsActive());
   if (layer_tree_impl()->property_trees()->scroll_tree.SetScrollOffset(
           id(), scroll_offset))
-    layer_tree_impl()->DidUpdateScrollOffset(id(), transform_tree_index());
+    layer_tree_impl()->DidUpdateScrollOffset(id());
 }
 
 gfx::ScrollOffset LayerImpl::CurrentScrollOffset() const {
@@ -874,8 +858,9 @@ void LayerImpl::DidBeginTracing() {}
 
 void LayerImpl::ReleaseResources() {}
 
-void LayerImpl::RecreateResources() {
-}
+void LayerImpl::ReleaseTileResources() {}
+
+void LayerImpl::RecreateTileResources() {}
 
 gfx::ScrollOffset LayerImpl::MaxScrollOffset() const {
   return layer_tree_impl()->property_trees()->scroll_tree.MaxScrollOffset(
@@ -1090,21 +1075,6 @@ bool LayerImpl::IsHidden() const {
   EffectTree& effect_tree = layer_tree_impl_->property_trees()->effect_tree;
   EffectNode* node = effect_tree.Node(effect_tree_index_);
   return node->screen_space_opacity == 0.f;
-}
-
-bool LayerImpl::InsideReplica() const {
-  // There are very few render targets so this should be cheap to do for each
-  // layer instead of something more complicated.
-  EffectTree& effect_tree = layer_tree_impl_->property_trees()->effect_tree;
-  EffectNode* node = effect_tree.Node(effect_tree_index_);
-
-  while (node->id > 0) {
-    if (node->replica_layer_id != EffectTree::kInvalidNodeId)
-      return true;
-    node = effect_tree.Node(node->target_id);
-  }
-
-  return false;
 }
 
 float LayerImpl::GetIdealContentsScale() const {

@@ -21,7 +21,6 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "components/autofill/content/common/autofill_messages.h"
 #include "components/autofill/content/renderer/form_autofill_util.h"
 #include "components/autofill/content/renderer/page_click_tracker.h"
 #include "components/autofill/content/renderer/password_autofill_agent.h"
@@ -38,7 +37,6 @@
 #include "components/autofill/core/common/password_form_fill_data.h"
 #include "components/autofill/core/common/save_password_progress_logger.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/ssl_status.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
@@ -558,7 +556,8 @@ void AutofillAgent::ShowInitialPasswordAccountSuggestions(
   std::vector<blink::WebInputElement> elements;
   std::unique_ptr<RendererSavePasswordProgressLogger> logger;
   if (password_autofill_agent_->logging_state_active()) {
-    logger.reset(new RendererSavePasswordProgressLogger(this, routing_id()));
+    logger.reset(new RendererSavePasswordProgressLogger(
+        GetPasswordManagerDriver().get()));
     logger->LogMessage(SavePasswordProgressLogger::
                            STRING_ON_SHOW_INITIAL_PASSWORD_ACCOUNT_SUGGESTIONS);
   }
@@ -781,12 +780,18 @@ void AutofillAgent::ajaxSucceeded() {
 }
 
 const mojom::AutofillDriverPtr& AutofillAgent::GetAutofillDriver() {
-  if (!mojo_autofill_driver_) {
+  if (!autofill_driver_) {
     render_frame()->GetRemoteInterfaces()->GetInterface(
-        mojo::GetProxy(&mojo_autofill_driver_));
+        mojo::GetProxy(&autofill_driver_));
   }
 
-  return mojo_autofill_driver_;
+  return autofill_driver_;
+}
+
+const mojom::PasswordManagerDriverPtr&
+AutofillAgent::GetPasswordManagerDriver() {
+  DCHECK(password_autofill_agent_);
+  return password_autofill_agent_->GetPasswordManagerDriver();
 }
 
 // LegacyAutofillAgent ---------------------------------------------------------

@@ -12,26 +12,28 @@ namespace blink {
 
 class Element;
 class ClientRect;
+class LayoutRect;
 class LayoutSize;
 
-class ResizeObserverEntry final : public GarbageCollected<ResizeObserverEntry>, public ScriptWrappable {
-    DEFINE_WRAPPERTYPEINFO();
+class ResizeObserverEntry final : public GarbageCollected<ResizeObserverEntry>,
+                                  public ScriptWrappable {
+  DEFINE_WRAPPERTYPEINFO();
 
-public:
-    explicit ResizeObserverEntry(Element* target);
+ public:
+  ResizeObserverEntry(Element* target, const LayoutRect& contentRect);
 
-    Element* target() const { return m_target; }
-    // FIXME(atotic): should return DOMRectReadOnly once https://crbug.com/388780 lands
-    ClientRect* contentRect() const { return m_contentRect; }
-    LayoutSize contentSize() const;
+  Element* target() const { return m_target; }
+  // FIXME(atotic): should return DOMRectReadOnly once https://crbug.com/388780
+  // lands
+  ClientRect* contentRect() const { return m_contentRect; }
 
-    DECLARE_VIRTUAL_TRACE();
+  DECLARE_VIRTUAL_TRACE();
 
-private:
-    Member<Element> m_target;
-    Member<ClientRect>  m_contentRect;
+ private:
+  Member<Element> m_target;
+  Member<ClientRect> m_contentRect;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // ResizeObserverEntry_h
+#endif  // ResizeObserverEntry_h

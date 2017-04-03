@@ -45,7 +45,7 @@ const int kMaxKeepAliveTimeMs = 200;
 GpuChannelManager::GpuChannelManager(
     const GpuPreferences& gpu_preferences,
     GpuChannelManagerDelegate* delegate,
-    GpuWatchdog* watchdog,
+    GpuWatchdogThread* watchdog,
     base::SingleThreadTaskRunner* task_runner,
     base::SingleThreadTaskRunner* io_task_runner,
     base::WaitableEvent* shutdown_event,
@@ -58,7 +58,7 @@ GpuChannelManager::GpuChannelManager(
       delegate_(delegate),
       watchdog_(watchdog),
       shutdown_event_(shutdown_event),
-      share_group_(new gl::GLShareGroup),
+      share_group_(new gl::GLShareGroup()),
       mailbox_manager_(gles2::MailboxManager::Create(gpu_preferences)),
       gpu_memory_manager_(this),
       sync_point_manager_(sync_point_manager),

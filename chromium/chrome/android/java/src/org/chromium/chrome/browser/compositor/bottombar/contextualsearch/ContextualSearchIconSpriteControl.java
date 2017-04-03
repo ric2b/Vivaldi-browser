@@ -22,38 +22,27 @@ public class ContextualSearchIconSpriteControl implements
         APPEARANCE
     }
 
-    /**
-     * Whether the search provider icon sprite is visible.
-     */
+    /** Whether the search provider icon sprite is visible. */
     private boolean mIsVisible;
 
-    /**
-     * Whether the appearance of the search provider icon sprite should be animated.
-     */
+    /** Whether the appearance of the search provider icon sprite should be animated. */
     private boolean mShouldAnimateAppearance;
-
-    /**
-     * Whether the appearance of the search provider icon sprite is disabled by a field trial.
-     */
-    private boolean mIsAnimationDisabledByTrial;
 
     /**
      * The completion percentage for the animation; used to calculate which sprite frame to display.
      */
     private float mCompletionPercentage;
 
-    /**
-     * The panel.
-     */
-    private ContextualSearchPanel mPanel;
+    /** The OverlayPanelAnimation used to add animations. */
+    private OverlayPanelAnimation mOverlayPanelAnimation;
 
     /**
-     * @param panel The panel.
+     * @param overlayPanelAnimation The OverlayPanelAnimation used to add animations.
      * @param context The Android Context used to retrieve resources.
      */
-    public ContextualSearchIconSpriteControl(
-            ContextualSearchPanel panel, Context context) {
-        mPanel = panel;
+    public ContextualSearchIconSpriteControl(OverlayPanelAnimation overlayPanelAnimation,
+            Context context) {
+        mOverlayPanelAnimation = overlayPanelAnimation;
     }
 
     /**
@@ -88,12 +77,9 @@ public class ContextualSearchIconSpriteControl implements
     /**
      * @param shouldAnimateAppearance Whether the appearance of the search provider icon sprite
      *                                should be animated.
-     * @param isAnimationDisabledByTrial Whether animating the search provider icon is disabled by a
-     *                                   field trial.
      */
-    public void setShouldAnimateAppearance(boolean shouldAnimateAppearance,
-            boolean isAnimationDisabledByTrial) {
-        if (shouldAnimateAppearance && !isAnimationDisabledByTrial) {
+    public void setShouldAnimateAppearance(boolean shouldAnimateAppearance) {
+        if (shouldAnimateAppearance) {
             // The search provider icon sprite should be hidden until the animation starts.
             mIsVisible = false;
             mCompletionPercentage = 0.f;
@@ -102,7 +88,6 @@ public class ContextualSearchIconSpriteControl implements
             mCompletionPercentage = 1.f;
         }
         mShouldAnimateAppearance = shouldAnimateAppearance;
-        mIsAnimationDisabledByTrial = isAnimationDisabledByTrial;
     }
 
      // ============================================================================================
@@ -116,12 +101,8 @@ public class ContextualSearchIconSpriteControl implements
     public void animateApperance() {
         // The search provider icon sprite should be visible once the animation starts.
         mIsVisible = true;
-        if (!mIsAnimationDisabledByTrial) {
-            mPanel.addToAnimation(this, AnimationType.APPEARANCE, 0.f, 1.f,
-                    OverlayPanelAnimation.MAXIMUM_ANIMATION_DURATION_MS, 0);
-        } else {
-            mCompletionPercentage = 1.f;
-        }
+        mOverlayPanelAnimation.addToAnimation(this, AnimationType.APPEARANCE, 0.f, 1.f,
+                OverlayPanelAnimation.MAXIMUM_ANIMATION_DURATION_MS, 0);
     }
 
     @Override

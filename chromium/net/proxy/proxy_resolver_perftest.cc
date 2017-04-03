@@ -14,6 +14,7 @@
 #include "base/test/perf_time_logger.h"
 #include "net/base/net_errors.h"
 #include "net/dns/mock_host_resolver.h"
+#include "net/log/net_log_with_source.h"
 #include "net/proxy/proxy_info.h"
 #include "net/proxy/proxy_resolver.h"
 #include "net/proxy/proxy_resolver_factory.h"
@@ -133,9 +134,9 @@ class PacPerfSuiteRunner {
     // the PAC script.
     {
       ProxyInfo proxy_info;
-      int result =
-          resolver->GetProxyForURL(GURL("http://www.warmup.com"), &proxy_info,
-                                   CompletionCallback(), NULL, BoundNetLog());
+      int result = resolver->GetProxyForURL(GURL("http://www.warmup.com"),
+                                            &proxy_info, CompletionCallback(),
+                                            NULL, NetLogWithSource());
       ASSERT_THAT(result, IsOk());
     }
 
@@ -149,9 +150,9 @@ class PacPerfSuiteRunner {
 
       // Resolve.
       ProxyInfo proxy_info;
-      int result =
-          resolver->GetProxyForURL(GURL(query.query_url), &proxy_info,
-                                   CompletionCallback(), NULL, BoundNetLog());
+      int result = resolver->GetProxyForURL(GURL(query.query_url), &proxy_info,
+                                            CompletionCallback(), NULL,
+                                            NetLogWithSource());
 
       // Check that the result was correct. Note that ToPacString() and
       // ASSERT_EQ() are fast, so they won't skew the results.
@@ -239,7 +240,7 @@ class ProxyResolverV8Wrapper : public ProxyResolver {
                      ProxyInfo* results,
                      const CompletionCallback& /*callback*/,
                      RequestHandle* /*request*/,
-                     const BoundNetLog& net_log) override {
+                     const NetLogWithSource& net_log) override {
     return resolver_->GetProxyForURL(url, results, bindings_.get());
   }
 

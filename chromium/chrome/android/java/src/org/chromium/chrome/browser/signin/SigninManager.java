@@ -10,20 +10,23 @@ import android.content.Context;
 import android.os.Handler;
 
 import org.chromium.base.ActivityState;
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.Callback;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.Promise;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
 import org.chromium.chrome.browser.externalauth.UserRecoverableErrorHandler;
 import org.chromium.chrome.browser.sync.SyncUserDataWiper;
-import org.chromium.components.sync.signin.AccountManagerHelper;
-import org.chromium.components.sync.signin.ChromeSigninController;
+import org.chromium.components.signin.AccountManagerHelper;
+import org.chromium.components.signin.ChromeSigninController;
+import org.chromium.components.sync.AndroidSyncSettings;
 
 import javax.annotation.Nullable;
 
@@ -232,8 +235,9 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
      * Returns true if signin can be started now.
      */
     public boolean isSignInAllowed() {
-        return mSigninAllowedByPolicy && !mFirstRunCheckIsPending && mSignInState == null
-                && ChromeSigninController.get(mContext).getSignedInUser() == null;
+        return !mFirstRunCheckIsPending && mSignInState == null && mSigninAllowedByPolicy
+                && ChromeSigninController.get(mContext).getSignedInUser() == null
+                && isSigninSupported();
     }
 
     /**
@@ -241,6 +245,15 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
      */
     public boolean isSigninDisabledByPolicy() {
         return !mSigninAllowedByPolicy;
+    }
+
+    /**
+     * @return Whether true if the current user is not demo user and the user has a reasonable
+     *         Google Play Services installed.
+     */
+    public boolean isSigninSupported() {
+        return !ApiCompatibilityUtils.isDemoUser(mContext)
+                && !ExternalAuthUtils.getInstance().isGooglePlayServicesMissing(mContext);
     }
 
     /**
@@ -434,6 +447,7 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
         // Cache the signed-in account name. This must be done after the native call, otherwise
         // sync tries to start without being signed in natively and crashes.
         ChromeSigninController.get(mContext).setSignedInAccountName(mSignInState.account.name);
+        AndroidSyncSettings.updateAccount(mContext, mSignInState.account);
 
         if (mSignInState.callback != null) {
             mSignInState.callback.onSignInComplete();
@@ -513,6 +527,7 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
         // http://crbug.com/589028
         nativeSignOut(mNativeSigninManagerAndroid);
         ChromeSigninController.get(mContext).setSignedInAccountName(null);
+        AndroidSyncSettings.updateAccount(mContext, null);
 
         if (wipeData) {
             wipeProfileData(wipeDataHooks);
@@ -638,6 +653,11 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
 
     public static String extractDomainName(String email) {
         return nativeExtractDomainName(email);
+    }
+
+    @VisibleForTesting
+    public static void setInstanceForTesting(SigninManager signinManager) {
+        sSigninManager = signinManager;
     }
 
     // Native methods.

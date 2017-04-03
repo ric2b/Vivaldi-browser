@@ -243,9 +243,10 @@ class ExtensionService
       const extensions::ExternalProviderInterface* provider) override;
   void OnExternalProviderUpdateComplete(
       const extensions::ExternalProviderInterface* provider,
-      const ScopedVector<extensions::ExternalInstallInfoUpdateUrl>&
+      const std::vector<
+          std::unique_ptr<extensions::ExternalInstallInfoUpdateUrl>>&
           external_update_url_extensions,
-      const ScopedVector<extensions::ExternalInstallInfoFile>&
+      const std::vector<std::unique_ptr<extensions::ExternalInstallInfoFile>>&
           external_file_extensions,
       const std::set<std::string>& removed_extensions) override;
 
@@ -430,9 +431,8 @@ class ExtensionService
   void ClearProvidersForTesting();
 
   // Adds an ExternalProviderInterface for the service to use during testing.
-  // Takes ownership of |test_provider|.
   void AddProviderForTesting(
-      extensions::ExternalProviderInterface* test_provider);
+      std::unique_ptr<extensions::ExternalProviderInterface> test_provider);
 
   // Simulate an extension being blacklisted for tests.
   void BlacklistExtensionForTest(const std::string& extension_id);
@@ -459,6 +459,9 @@ class ExtensionService
   }
 
  private:
+  // Loads extensions specified via a command line flag/switch.
+  void LoadExtensionsFromCommandLineFlag(const char* switch_name);
+
   // Reloads the specified extension, sending the onLaunched() event to it if it
   // currently has any window showing. |be_noisy| determines whether noisy
   // failures are allowed for unpacked extension installs.
@@ -595,6 +598,8 @@ class ExtensionService
       const base::FilePath& install_dir,
       const base::FilePath& extension_path);
 
+  const base::CommandLine* command_line_ = nullptr;
+
   // The normal profile associated with this ExtensionService.
   Profile* profile_ = nullptr;
 
@@ -617,6 +622,10 @@ class ExtensionService
   //
   // These extensions should appear in registry_.
   extensions::ExtensionSet greylist_;
+
+  // Set of whitelisted enabled extensions loaded from the
+  // --disable-extensions-except command line flag.
+  std::set<std::string> disable_flag_exempted_extensions_;
 
   // The list of extension installs delayed for various reasons.  The reason
   // for delayed install is stored in ExtensionPrefs. These are not part of

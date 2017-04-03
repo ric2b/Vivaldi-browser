@@ -104,11 +104,11 @@ public class MediaSessionTabHelper {
 
                 // The page's title is used as a placeholder if no title is specified in the
                 // metadata.
-                if (TextUtils.isEmpty(metadata.getTitle())) {
+                if (metadata == null || TextUtils.isEmpty(metadata.getTitle())) {
                     mFallbackMetadata = new MediaMetadata(
                             sanitizeMediaTitle(mTab.getTitle()),
-                            metadata.getArtist(),
-                            metadata.getAlbum());
+                            metadata == null ? "" : metadata.getArtist(),
+                            metadata == null ? "" : metadata.getAlbum());
                     metadata = mFallbackMetadata;
                 }
 
@@ -300,7 +300,7 @@ public class MediaSessionTabHelper {
                                         || icon.getHeight() < mFavicon.getHeight())) {
             return false;
         }
-        mFavicon = icon;
+        mFavicon = MediaNotificationManager.scaleIconForDisplay(icon);
         return true;
     }
 }

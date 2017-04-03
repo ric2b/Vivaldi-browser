@@ -15,7 +15,7 @@
 #include "base/mac/scoped_nsautorelease_pool.h"
 #include "base/mac/sdk_forward_declarations.h"
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
@@ -31,6 +31,7 @@
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #include "chrome/browser/ui/cocoa/drag_util.h"
 #import "chrome/browser/ui/cocoa/image_button_cell.h"
+#include "chrome/browser/ui/cocoa/l10n_util.h"
 #import "chrome/browser/ui/cocoa/new_tab_button.h"
 #import "chrome/browser/ui/cocoa/tab_contents/favicon_util_mac.h"
 #import "chrome/browser/ui/cocoa/tab_contents/tab_contents_controller.h"
@@ -49,6 +50,8 @@
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
+#include "components/grit/components_scaled_resources.h"
 #include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_match.h"
@@ -58,8 +61,6 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
-#include "grit/components_scaled_resources.h"
-#include "grit/theme_resources.h"
 #include "skia/ext/skia_utils_mac.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMNSAnimation+Duration.h"
 #include "ui/base/cocoa/animation_utils.h"
@@ -90,7 +91,6 @@ const CGFloat kLastPinnedTabSpacing = 2.0;
 
 // The amount by which the new tab button is offset (from the tabs).
 const CGFloat kNewTabButtonOffset = 10.0;
-const CGFloat kNewTabButtonOffsetNonMD = 8.0;
 
 // Time (in seconds) in which tabs animate to their final position.
 const NSTimeInterval kAnimationDuration = 0.125;
@@ -135,6 +135,12 @@ private:
   bool animate_;
   DISALLOW_COPY_AND_ASSIGN(ScopedNSAnimationContextGroup);
 };
+
+CGFloat FlipXInView(NSView* view, CGFloat width, CGFloat x) {
+  if (cocoa_l10n_util::ShouldDoExperimentalRTLLayout())
+    return [view frame].size.width - x - width;
+  return x;
+}
 
 }  // namespace
 
@@ -563,11 +569,6 @@ private:
   // will also invalidate parts of the tab to the left, and two tabs's
   // backgrounds need to be painted on each throbber frame instead of one.
   const CGFloat kTabOverlap = 18.0;
-  const CGFloat kTabOverlapNonMD = 19.0;
-
-  if (!ui::MaterialDesignController::IsModeMaterial()) {
-    return kTabOverlapNonMD;
-  }
   return kTabOverlap;
 }
 
@@ -924,14 +925,8 @@ private:
     availableSpace = NSWidth([tabStripView_ frame]);
 
     // Account for the width of the new tab button.
-    if (!ui::MaterialDesignController::IsModeMaterial()) {
-      availableSpace -=
-          NSWidth([newTabButton_ frame]) + kNewTabButtonOffsetNonMD -
-              kTabOverlap;
-    } else {
-      availableSpace -=
-          NSWidth([newTabButton_ frame]) + kNewTabButtonOffset - kTabOverlap;
-    }
+    availableSpace -=
+        NSWidth([newTabButton_ frame]) + kNewTabButtonOffset - kTabOverlap;
     // Account for the right-side controls if not in rapid closure mode.
     // (In rapid closure mode, the available width is set based on the
     // position of the rightmost tab, not based on the width of the tab strip,
@@ -999,7 +994,10 @@ private:
 
   BOOL visible = [[tabStripView_ window] isVisible];
 
-  CGFloat offset = [self leftIndentForControls];
+  CGFloat offset =
+      cocoa_l10n_util::ShouldDoExperimentalRTLLayout()
+          ? [self rightIndentForControls]
+          : [self leftIndentForControls];
   bool hasPlaceholderGap = false;
   // Whether or not the last tab processed by the loop was a pinned tab.
   BOOL isLastTabPinned = NO;
@@ -1108,6 +1106,9 @@ private:
       }
     }
 
+    tabFrame.origin.x =
+        FlipXInView(tabStripView_, tabFrame.size.width, tabFrame.origin.x);
+
     // Check the frame by identifier to avoid redundant calls to animator.
     id frameTarget = visible && animate ? [[tab view] animator] : [tab view];
     NSValue* identifier = [NSValue valueWithPointer:[tab view]];
@@ -1148,6 +1149,11 @@ private:
     // so we don't have to check it against the available space. We do need
     // to make sure we put it after any placeholder.
     CGFloat maxTabX = MAX(offset, NSMaxX(placeholderFrame_) - kTabOverlap);
+    if (cocoa_l10n_util::ShouldDoExperimentalRTLLayout()) {
+      maxTabX = FlipXInView(tabStripView_, [newTabButton_ frame].size.width,
+                            maxTabX) -
+                (2 * kNewTabButtonOffset);
+    }
     newTabNewFrame.origin = NSMakePoint(maxTabX + kNewTabButtonOffset, 0);
     if ([tabContentsArray_ count])
       [newTabButton_ setHidden:NO];
@@ -1548,16 +1554,14 @@ private:
     newHasIcon = true;
   } else if (contents->IsWaitingForResponse()) {
     newState = kTabWaiting;
-    if (ui::MaterialDesignController::IsModeMaterial() &&
-        [[[tabController view] window] hasDarkTheme]) {
+    if ([[[tabController view] window] hasDarkTheme]) {
       throbberImage = throbberWaitingIncognitoImage;
     } else {
       throbberImage = throbberWaitingImage;
     }
   } else if (contents->IsLoadingToDifferentDocument()) {
     newState = kTabLoading;
-    if (ui::MaterialDesignController::IsModeMaterial() &&
-        [[[tabController view] window] hasDarkTheme]) {
+    if ([[[tabController view] window] hasDarkTheme]) {
       throbberImage = throbberLoadingIncognitoImage;
     } else {
       throbberImage = throbberLoadingImage;
@@ -2018,7 +2022,7 @@ private:
     // Drop in a new tab to the left of tab |i|?
     if (point.x < (frame.origin.x + kLRProportion * frame.size.width)) {
       *index = i;
-      *disposition = NEW_FOREGROUND_TAB;
+      *disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
       return;
     }
 
@@ -2026,7 +2030,7 @@ private:
     if (point.x <= (frame.origin.x +
                        (1.0 - kLRProportion) * frame.size.width)) {
       *index = i;
-      *disposition = CURRENT_TAB;
+      *disposition = WindowOpenDisposition::CURRENT_TAB;
       return;
     }
 
@@ -2037,10 +2041,14 @@ private:
 
   // If we've made it here, we want to append a new tab to the end.
   *index = -1;
-  *disposition = NEW_FOREGROUND_TAB;
+  *disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
 }
 
 - (void)openURL:(GURL*)url inView:(NSView*)view at:(NSPoint)point {
+  // Security: Block JavaScript to prevent self-XSS.
+  if (url->SchemeIs(url::kJavaScriptScheme))
+    return;
+
   // Get the index and disposition.
   NSInteger index;
   WindowOpenDisposition disposition;
@@ -2050,7 +2058,7 @@ private:
 
   // Either insert a new tab or open in a current tab.
   switch (disposition) {
-    case NEW_FOREGROUND_TAB: {
+    case WindowOpenDisposition::NEW_FOREGROUND_TAB: {
       content::RecordAction(UserMetricsAction("Tab_DropURLBetweenTabs"));
       chrome::NavigateParams params(browser_, *url,
                                     ui::PAGE_TRANSITION_TYPED);
@@ -2061,10 +2069,10 @@ private:
       chrome::Navigate(&params);
       break;
     }
-    case CURRENT_TAB: {
+    case WindowOpenDisposition::CURRENT_TAB: {
       content::RecordAction(UserMetricsAction("Tab_DropURLOnTab"));
-      OpenURLParams params(
-          *url, Referrer(), CURRENT_TAB, ui::PAGE_TRANSITION_TYPED, false);
+      OpenURLParams params(*url, Referrer(), WindowOpenDisposition::CURRENT_TAB,
+                           ui::PAGE_TRANSITION_TYPED, false);
       tabStripModel_->GetWebContentsAt(index)->OpenURL(params);
       tabStripModel_->ActivateTabAt(index, true);
       break;
@@ -2129,18 +2137,18 @@ private:
   NSPoint arrowPos = NSMakePoint(0, arrowBaseY);
   if (index == -1) {
     // Append a tab at the end.
-    DCHECK(disposition == NEW_FOREGROUND_TAB);
+    DCHECK(disposition == WindowOpenDisposition::NEW_FOREGROUND_TAB);
     NSInteger lastIndex = [tabArray_ count] - 1;
     NSRect overRect = [[[tabArray_ objectAtIndex:lastIndex] view] frame];
     arrowPos.x = overRect.origin.x + overRect.size.width - kTabOverlap / 2.0;
   } else {
     NSRect overRect = [[[tabArray_ objectAtIndex:index] view] frame];
     switch (disposition) {
-      case NEW_FOREGROUND_TAB:
+      case WindowOpenDisposition::NEW_FOREGROUND_TAB:
         // Insert tab (to the left of the given tab).
         arrowPos.x = overRect.origin.x + kTabOverlap / 2.0;
         break;
-      case CURRENT_TAB:
+      case WindowOpenDisposition::CURRENT_TAB:
         // Overwrite the given tab.
         arrowPos.x = overRect.origin.x + overRect.size.width / 2.0;
         break;
@@ -2154,7 +2162,7 @@ private:
   [tabStripView_ setNeedsDisplay:YES];
 
   // Perform a delayed tab transition if hovering directly over a tab.
-  if (index != -1 && disposition == CURRENT_TAB) {
+  if (index != -1 && disposition == WindowOpenDisposition::CURRENT_TAB) {
     NSInteger modelIndex = [self modelIndexFromIndex:index];
     // Only start the transition if it has a valid model index (i.e. it's not
     // in the middle of closing).

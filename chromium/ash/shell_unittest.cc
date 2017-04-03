@@ -7,14 +7,15 @@
 #include <algorithm>
 #include <vector>
 
-#include "ash/common/ash_switches.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shelf/shelf_layout_manager.h"
 #include "ash/common/shelf/shelf_widget.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shell_window_ids.h"
+#include "ash/common/wallpaper/wallpaper_widget_controller.h"
+#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
-#include "ash/desktop_background/desktop_background_widget_controller.h"
+#include "ash/common/wm_window.h"
 #include "ash/display/mouse_cursor_event_filter.h"
 #include "ash/drag_drop/drag_drop_controller.h"
 #include "ash/root_window_controller.h"
@@ -57,8 +58,8 @@ aura::Window* GetAlwaysOnTopContainer() {
 // Expect ALL the containers!
 void ExpectAllContainers() {
   aura::Window* root_window = Shell::GetPrimaryRootWindow();
-  EXPECT_TRUE(Shell::GetContainer(root_window,
-                                  kShellWindowId_DesktopBackgroundContainer));
+  EXPECT_TRUE(
+      Shell::GetContainer(root_window, kShellWindowId_WallpaperContainer));
   EXPECT_TRUE(
       Shell::GetContainer(root_window, kShellWindowId_DefaultContainer));
   EXPECT_TRUE(
@@ -67,8 +68,8 @@ void ExpectAllContainers() {
   EXPECT_TRUE(Shell::GetContainer(root_window, kShellWindowId_ShelfContainer));
   EXPECT_TRUE(
       Shell::GetContainer(root_window, kShellWindowId_SystemModalContainer));
-  EXPECT_TRUE(Shell::GetContainer(
-      root_window, kShellWindowId_LockScreenBackgroundContainer));
+  EXPECT_TRUE(Shell::GetContainer(root_window,
+                                  kShellWindowId_LockScreenWallpaperContainer));
   EXPECT_TRUE(
       Shell::GetContainer(root_window, kShellWindowId_LockScreenContainer));
   EXPECT_TRUE(Shell::GetContainer(root_window,
@@ -95,7 +96,6 @@ class ModalWindow : public views::WidgetDelegateView {
   ~ModalWindow() override {}
 
   // Overridden from views::WidgetDelegate:
-  views::View* GetContentsView() override { return this; }
   bool CanResize() const override { return true; }
   base::string16 GetWindowTitle() const override {
     return base::ASCIIToUTF16("Modal Window");
@@ -346,8 +346,11 @@ TEST_F(ShellTest, LockScreenClosesActiveMenu) {
   std::unique_ptr<ui::SimpleMenuModel> menu_model(
       new ui::SimpleMenuModel(&menu_delegate));
   menu_model->AddItem(0, base::ASCIIToUTF16("Menu item"));
-  views::Widget* widget =
-      Shell::GetPrimaryRootWindowController()->wallpaper_controller()->widget();
+  views::Widget* widget = WmShell::Get()
+                              ->GetPrimaryRootWindow()
+                              ->GetRootWindowController()
+                              ->wallpaper_widget_controller()
+                              ->widget();
   std::unique_ptr<views::MenuRunner> menu_runner(
       new views::MenuRunner(menu_model.get(), views::MenuRunner::CONTEXT_MENU));
 
@@ -365,26 +368,23 @@ TEST_F(ShellTest, LockScreenClosesActiveMenu) {
 }
 
 TEST_F(ShellTest, ManagedWindowModeBasics) {
-  if (!SupportsHostWindowResize())
-    return;
-
   // We start with the usual window containers.
   ExpectAllContainers();
   // Shelf is visible.
-  ShelfWidget* shelf_widget = GetPrimaryShelf()->GetShelfWidgetForTesting();
+  ShelfWidget* shelf_widget = GetPrimaryShelf()->shelf_widget();
   EXPECT_TRUE(shelf_widget->IsVisible());
   // Shelf is at bottom-left of screen.
   EXPECT_EQ(0, shelf_widget->GetWindowBoundsInScreen().x());
   EXPECT_EQ(Shell::GetPrimaryRootWindow()->GetHost()->GetBounds().height(),
             shelf_widget->GetWindowBoundsInScreen().bottom());
-  // We have a desktop background but not a bare layer.
+  // We have a wallpaper but not a bare layer.
   // TODO (antrim): enable once we find out why it fails component build.
-  //  DesktopBackgroundWidgetController* background =
+  //  WallpaperWidgetController* wallpaper =
   //      Shell::GetPrimaryRootWindow()->
   //          GetProperty(kWindowDesktopComponent);
-  //  EXPECT_TRUE(background);
-  //  EXPECT_TRUE(background->widget());
-  //  EXPECT_FALSE(background->layer());
+  //  EXPECT_TRUE(wallpaper);
+  //  EXPECT_TRUE(wallpaper->widget());
+  //  EXPECT_FALSE(wallpaper->layer());
 
   // Create a normal window.  It is not maximized.
   views::Widget::InitParams widget_params(

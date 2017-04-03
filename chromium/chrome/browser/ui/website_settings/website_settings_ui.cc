@@ -5,11 +5,14 @@
 #include "chrome/browser/ui/website_settings/website_settings_ui.h"
 
 #include "base/macros.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/plugins/plugin_utils.h"
+#include "chrome/browser/plugins/plugins_field_trial.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/content_settings/core/browser/plugins_field_trial.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/strings/grit/components_strings.h"
-#include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image.h"
@@ -88,8 +91,8 @@ const PermissionsUIInfo kPermissionsUIInfo[] = {
     {CONTENT_SETTINGS_TYPE_POPUPS, IDS_WEBSITE_SETTINGS_TYPE_POPUPS,
      IDR_BLOCKED_POPUPS, IDR_ALLOWED_POPUPS},
 #if defined(ENABLE_PLUGINS)
-    {CONTENT_SETTINGS_TYPE_PLUGINS, IDS_WEBSITE_SETTINGS_TYPE_PLUGINS,
-     IDR_BLOCKED_POPUPS, IDR_ALLOWED_PLUGINS},
+    {CONTENT_SETTINGS_TYPE_PLUGINS, IDS_WEBSITE_SETTINGS_TYPE_FLASH,
+     IDR_BLOCKED_PLUGINS, IDR_ALLOWED_PLUGINS},
 #endif
     {CONTENT_SETTINGS_TYPE_GEOLOCATION, IDS_WEBSITE_SETTINGS_TYPE_LOCATION,
      IDR_BLOCKED_LOCATION, IDR_ALLOWED_LOCATION},
@@ -114,8 +117,19 @@ const PermissionsUIInfo kPermissionsUIInfo[] = {
     {CONTENT_SETTINGS_TYPE_BACKGROUND_SYNC,
      IDS_WEBSITE_SETTINGS_TYPE_BACKGROUND_SYNC, IDR_BLOCKED_BACKGROUND_SYNC,
      IDR_ALLOWED_BACKGROUND_SYNC},
+    // Autoplay is Android-only at the moment, and the Origin Info bubble in
+    // Android ignores these block/allow icon pairs, so we can specify 0 there.
+    {CONTENT_SETTINGS_TYPE_AUTOPLAY, IDS_WEBSITE_SETTINGS_TYPE_AUTOPLAY, 0, 0},
 };
 
+std::unique_ptr<WebsiteSettingsUI::SecurityDescription>
+CreateSecurityDescription(int summary_id, int details_id) {
+  std::unique_ptr<WebsiteSettingsUI::SecurityDescription> security_description(
+      new WebsiteSettingsUI::SecurityDescription());
+  security_description->summary = l10n_util::GetStringUTF16(summary_id);
+  security_description->details = l10n_util::GetStringUTF16(details_id);
+  return security_description;
+}
 }  // namespace
 
 WebsiteSettingsUI::CookieInfo::CookieInfo()
@@ -138,49 +152,50 @@ WebsiteSettingsUI::ChosenObjectInfo::~ChosenObjectInfo() {}
 
 WebsiteSettingsUI::IdentityInfo::IdentityInfo()
     : identity_status(WebsiteSettings::SITE_IDENTITY_STATUS_UNKNOWN),
-      cert_id(0),
       connection_status(WebsiteSettings::SITE_CONNECTION_STATUS_UNKNOWN),
       show_ssl_decision_revoke_button(false) {
 }
 
 WebsiteSettingsUI::IdentityInfo::~IdentityInfo() {}
 
-base::string16 WebsiteSettingsUI::IdentityInfo::GetSecuritySummary() const {
+std::unique_ptr<WebsiteSettingsUI::SecurityDescription>
+WebsiteSettingsUI::IdentityInfo::GetSecurityDescription() const {
+  std::unique_ptr<WebsiteSettingsUI::SecurityDescription> security_description(
+      new WebsiteSettingsUI::SecurityDescription());
+
   switch (identity_status) {
+    case WebsiteSettings::SITE_IDENTITY_STATUS_INTERNAL_PAGE:
+      return CreateSecurityDescription(IDS_WEBSITE_SETTINGS_INTERNAL_PAGE,
+                                       IDS_WEBSITE_SETTINGS_INTERNAL_PAGE);
     case WebsiteSettings::SITE_IDENTITY_STATUS_CERT:
     case WebsiteSettings::SITE_IDENTITY_STATUS_EV_CERT:
     case WebsiteSettings::SITE_IDENTITY_STATUS_CERT_REVOCATION_UNKNOWN:
+    case WebsiteSettings::SITE_IDENTITY_STATUS_CT_ERROR:
+    case WebsiteSettings::SITE_IDENTITY_STATUS_ADMIN_PROVIDED_CERT:
       switch (connection_status) {
         case WebsiteSettings::
-            SITE_CONNECTION_STATUS_INSECURE_PASSIVE_SUBRESOURCE:
-          return l10n_util::GetStringUTF16(
-              IDS_WEBSITE_SETTINGS_INSECURE_PASSIVE_CONTENT);
-        case WebsiteSettings::
             SITE_CONNECTION_STATUS_INSECURE_ACTIVE_SUBRESOURCE:
-          return l10n_util::GetStringUTF16(
-              IDS_WEBSITE_SETTINGS_INSECURE_ACTIVE_CONTENT);
+          return CreateSecurityDescription(
+              IDS_WEBSITE_SETTINGS_NOT_SECURE_SUMMARY,
+              IDS_WEBSITE_SETTINGS_NOT_SECURE_DETAILS);
+        case WebsiteSettings::
+            SITE_CONNECTION_STATUS_INSECURE_PASSIVE_SUBRESOURCE:
+          return CreateSecurityDescription(
+              IDS_WEBSITE_SETTINGS_MIXED_CONTENT_SUMMARY,
+              IDS_WEBSITE_SETTINGS_MIXED_CONTENT_DETAILS);
         default:
-          return l10n_util::GetStringUTF16(
-              IDS_WEBSITE_SETTINGS_SECURE_TRANSPORT);
+          return CreateSecurityDescription(IDS_WEBSITE_SETTINGS_SECURE_SUMMARY,
+                                           IDS_WEBSITE_SETTINGS_SECURE_DETAILS);
       }
     case WebsiteSettings::
         SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM_MINOR:
     case WebsiteSettings::
         SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM_MAJOR:
-      return l10n_util::GetStringUTF16(
-          IDS_WEBSITE_DEPRECATED_SIGNATURE_ALGORITHM);
-    case WebsiteSettings::SITE_IDENTITY_STATUS_ADMIN_PROVIDED_CERT:
-      return l10n_util::GetStringUTF16(IDS_CERT_POLICY_PROVIDED_CERT_HEADER);
     case WebsiteSettings::SITE_IDENTITY_STATUS_UNKNOWN:
-      return l10n_util::GetStringUTF16(IDS_WEBSITE_SETTINGS_UNKNOWN_TRANSPORT);
-    case WebsiteSettings::SITE_IDENTITY_STATUS_CT_ERROR:
-      return l10n_util::GetStringUTF16(IDS_WEBSITE_SETTINGS_CT_ERROR);
-    case WebsiteSettings::SITE_IDENTITY_STATUS_INTERNAL_PAGE:
-      return l10n_util::GetStringUTF16(IDS_WEBSITE_SETTINGS_INTERNAL_PAGE);
     case WebsiteSettings::SITE_IDENTITY_STATUS_NO_CERT:
     default:
-      return l10n_util::GetStringUTF16(
-          IDS_WEBSITE_SETTINGS_NON_SECURE_TRANSPORT);
+      return CreateSecurityDescription(IDS_WEBSITE_SETTINGS_NOT_SECURE_SUMMARY,
+                                       IDS_WEBSITE_SETTINGS_NOT_SECURE_DETAILS);
   }
 }
 
@@ -216,6 +231,7 @@ base::string16 WebsiteSettingsUI::PermissionValueToUIString(
 
 // static
 base::string16 WebsiteSettingsUI::PermissionActionToUIString(
+    Profile* profile,
     ContentSettingsType type,
     ContentSetting setting,
     ContentSetting default_setting,
@@ -225,9 +241,18 @@ base::string16 WebsiteSettingsUI::PermissionActionToUIString(
     effective_setting = default_setting;
 
 #if defined(ENABLE_PLUGINS)
-  effective_setting =
-      content_settings::PluginsFieldTrial::EffectiveContentSetting(
-          type, effective_setting);
+  HostContentSettingsMap* host_content_settings_map =
+      HostContentSettingsMapFactory::GetForProfile(profile);
+  effective_setting = PluginsFieldTrial::EffectiveContentSetting(
+      host_content_settings_map, type, effective_setting);
+
+  // Display the UI string for ASK instead of DETECT for HTML5 by Default.
+  // TODO(tommycli): Once HTML5 by Default is shipped and the feature flag
+  // is removed, just migrate the actual content setting to ASK.
+  if (PluginUtils::ShouldPreferHtmlOverPlugins(host_content_settings_map) &&
+      effective_setting == CONTENT_SETTING_DETECT_IMPORTANT_CONTENT) {
+    effective_setting = CONTENT_SETTING_ASK;
+  }
 #endif
 
   const int* button_text_ids = NULL;

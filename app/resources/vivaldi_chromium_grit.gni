@@ -1,5 +1,4 @@
 import("//vivaldi/gn/config/features.gni")
-import("//vivaldi/gn/deepcopy.gni")
 import("//vivaldi/app/resources/untranslated.gni")
 
 _default_main_resource_dir = "//chrome/app"
@@ -24,12 +23,13 @@ template("chromium_merge_grit_action") {
                            "translation_dir",
                            "target_filename",
                            "have_strings",
-                           "grit_resource_ids",
+                           "resource_ids",
                            "grit_flags",
                            "vivaldi_resource_path",
                            "extra_grit_defines",
                            "grit_defines",
                            "grit_additional_defines",
+                           "master_resource_ids",
                          ])
 
   if (!defined(main_resource_dir)) {
@@ -41,8 +41,11 @@ template("chromium_merge_grit_action") {
   if (!defined(translation_dir)) {
     translation_dir = "resources"
   }
-  if (!defined(grit_resource_ids)) {
-    grit_resource_ids = "$combined_target_dir/resource_ids"
+  if (!defined(resource_ids)) {
+    resource_ids = "$combined_target_dir/resource_ids"
+  }
+  if (!defined(master_resource_ids)) {
+    master_resource_ids = _default_grit_resource_ids
   }
   if (!defined(target_filename)) {
     target_filename = get_path_info(merge_main_file, "file")
@@ -90,12 +93,12 @@ template("chromium_merge_grit_action") {
   # before they are used by the other variables and actions.
   exec_script(_mergeid_tool_path,
               [
-                rebase_path(_default_grit_resource_ids, root_build_dir),
-                rebase_path(grit_resource_ids, root_build_dir),
+                rebase_path(master_resource_ids, root_build_dir),
+                rebase_path(resource_ids, root_build_dir),
                 rebase_path(main_resource_path, root_build_dir),
                 rebase_path(combined_target_file, root_build_dir),
                 rebase_path("//vivaldi",
-                            get_path_info(grit_resource_ids, "dir")),
+                            get_path_info(resource_ids, "dir")),
               ])
   exec_script(_merge_resources_cmd, [ "--setup" ] + command_parameters)
 
@@ -114,17 +117,18 @@ template("chromium_merge_grit_action") {
   action(resource_id_name) {
     script = _mergeid_tool_path
     inputs = [
-      _default_grit_resource_ids,
+      master_resource_ids,
     ]
+    #print("C $target_name $grit_resource_ids")
     outputs = [
-      grit_resource_ids,
+      resource_ids,
     ]
     args = [
-      rebase_path(_default_grit_resource_ids, root_build_dir),
-      rebase_path(grit_resource_ids, root_build_dir),
+      rebase_path(master_resource_ids, root_build_dir),
+      rebase_path(resource_ids, root_build_dir),
       rebase_path(main_resource_path, root_build_dir),
       rebase_path(combined_target_file, root_build_dir),
-      rebase_path("//vivaldi", get_path_info(grit_resource_ids, "dir")),
+      rebase_path("//vivaldi", get_path_info(resource_ids, "dir")),
     ]
   }
 
@@ -135,12 +139,13 @@ template("chromium_merge_grit_action") {
   action(merger_name) {
     script = _merge_resources_cmd
     inputs = [
-      grit_resource_ids,
+      resource_ids,
+      main_resource_path,
+      vivaldi_resource_path,
     ]
     deps = [
       ":" + resource_id_name,
     ]
-    inputs = []
     foreach(file,
             exec_script(_merge_resources_cmd,
                         [ "--list-main-sources" ] + command_parameters,

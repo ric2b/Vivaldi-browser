@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "content/public/browser/download_item.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/download_url_parameters.h"
@@ -29,8 +30,7 @@ struct DownloadCreateInfo;
 
 class MockDownloadManagerService : public DownloadManagerService {
  public:
-  MockDownloadManagerService()
-     : DownloadManagerService(base::android::AttachCurrentThread(), nullptr) {
+  MockDownloadManagerService() : DownloadManagerService() {
     ON_CALL(manager_, GetDownloadByGuid(_)).WillByDefault(
         ::testing::Invoke(this,
                           &MockDownloadManagerService::GetDownloadByGuid));
@@ -82,7 +82,7 @@ class DownloadManagerServiceTest : public testing::Test {
     EXPECT_FALSE(success_);
     service_->OnHistoryQueryComplete();
     while (!finished_)
-      message_loop_.RunUntilIdle();
+      base::RunLoop().RunUntilIdle();
   }
 
  protected:

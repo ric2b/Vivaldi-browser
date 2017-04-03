@@ -34,23 +34,26 @@ class CONTENT_EXPORT DevToolsAgentHostImpl : public DevToolsAgentHost,
   // Informs the hosted agent that a client host has detached.
   virtual void Detach() = 0;
 
-  // Opens the inspector for this host.
-  bool Inspect(BrowserContext* browser_context);
-
   // DevToolsAgentHost implementation.
   bool AttachClient(DevToolsAgentHostClient* client) override;
   void ForceAttachClient(DevToolsAgentHostClient* client) override;
   bool DetachClient(DevToolsAgentHostClient* client) override;
   bool DispatchProtocolMessage(DevToolsAgentHostClient* client,
                                const std::string& message) override;
-
   bool IsAttached() override;
   void InspectElement(DevToolsAgentHostClient* client, int x, int y) override;
   std::string GetId() override;
+  std::string GetParentId() override;
+  std::string GetDescription() override;
+  GURL GetFaviconURL() override;
+  std::string GetFrontendURL() override;
+  base::TimeTicks GetLastActivityTime() override;
   BrowserContext* GetBrowserContext() override;
   WebContents* GetWebContents() override;
   void DisconnectWebContents() override;
   void ConnectWebContents(WebContents* wc) override;
+
+  bool Inspect();
 
   // DevToolsProtocolDelegate implementation.
   void SendProtocolResponse(int session_id,
@@ -58,7 +61,7 @@ class CONTENT_EXPORT DevToolsAgentHostImpl : public DevToolsAgentHost,
   void SendProtocolNotification(const std::string& message) override;
 
  protected:
-  DevToolsAgentHostImpl();
+  DevToolsAgentHostImpl(const std::string& id);
   ~DevToolsAgentHostImpl() override;
 
   virtual bool DispatchProtocolMessage(const std::string& message) = 0;

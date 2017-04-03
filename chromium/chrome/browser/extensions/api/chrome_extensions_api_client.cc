@@ -8,10 +8,12 @@
 #include "base/files/file_path.h"
 #include "base/memory/ptr_util.h"
 #include "build/build_config.h"
+#include "chrome/browser/data_use_measurement/data_use_web_contents_observer.h"
 #include "chrome/browser/extensions/api/chrome_device_permissions_prompt.h"
 #include "chrome/browser/extensions/api/declarative_content/chrome_content_rules_registry.h"
 #include "chrome/browser/extensions/api/declarative_content/default_content_predicate_evaluators.h"
 #include "chrome/browser/extensions/api/management/chrome_management_api_delegate.h"
+#include "chrome/browser/extensions/api/metrics_private/chrome_metrics_private_delegate.h"
 #include "chrome/browser/extensions/api/storage/managed_value_store_cache.h"
 #include "chrome/browser/extensions/api/storage/sync_value_store_cache.h"
 #include "chrome/browser/extensions/api/web_request/chrome_extension_web_request_event_router_delegate.h"
@@ -80,6 +82,8 @@ void ChromeExtensionsAPIClient::AttachWebContentsHelpers(
       web_contents, std::unique_ptr<pdf::PDFWebContentsHelperClient>(
                         new ChromePDFWebContentsHelperClient()));
 
+  data_use_measurement::DataUseWebContentsObserver::CreateForWebContents(
+      web_contents);
   extensions::ChromeExtensionWebContentsObserver::CreateForWebContents(
       web_contents);
 }
@@ -98,13 +102,13 @@ ChromeExtensionsAPIClient::CreateExtensionOptionsGuestDelegate(
 std::unique_ptr<guest_view::GuestViewManagerDelegate>
 ChromeExtensionsAPIClient::CreateGuestViewManagerDelegate(
     content::BrowserContext* context) const {
-  return base::WrapUnique(new ChromeGuestViewManagerDelegate(context));
+  return base::MakeUnique<ChromeGuestViewManagerDelegate>(context);
 }
 
 std::unique_ptr<MimeHandlerViewGuestDelegate>
 ChromeExtensionsAPIClient::CreateMimeHandlerViewGuestDelegate(
     MimeHandlerViewGuest* guest) const {
-  return base::WrapUnique(new ChromeMimeHandlerViewGuestDelegate());
+  return base::MakeUnique<ChromeMimeHandlerViewGuestDelegate>();
 }
 
 WebViewGuestDelegate* ChromeExtensionsAPIClient::CreateWebViewGuestDelegate(
@@ -120,7 +124,7 @@ WebViewPermissionHelperDelegate* ChromeExtensionsAPIClient::
 
 std::unique_ptr<WebRequestEventRouterDelegate>
 ChromeExtensionsAPIClient::CreateWebRequestEventRouterDelegate() const {
-  return base::WrapUnique(new ChromeExtensionWebRequestEventRouterDelegate());
+  return base::MakeUnique<ChromeExtensionWebRequestEventRouterDelegate>();
 }
 
 scoped_refptr<ContentRulesRegistry>
@@ -138,13 +142,13 @@ ChromeExtensionsAPIClient::CreateContentRulesRegistry(
 std::unique_ptr<DevicePermissionsPrompt>
 ChromeExtensionsAPIClient::CreateDevicePermissionsPrompt(
     content::WebContents* web_contents) const {
-  return base::WrapUnique(new ChromeDevicePermissionsPrompt(web_contents));
+  return base::MakeUnique<ChromeDevicePermissionsPrompt>(web_contents);
 }
 
 std::unique_ptr<VirtualKeyboardDelegate>
 ChromeExtensionsAPIClient::CreateVirtualKeyboardDelegate() const {
 #if defined(OS_CHROMEOS)
-  return base::WrapUnique(new ChromeVirtualKeyboardDelegate());
+  return base::MakeUnique<ChromeVirtualKeyboardDelegate>();
 #else
   return nullptr;
 #endif
@@ -153,6 +157,12 @@ ChromeExtensionsAPIClient::CreateVirtualKeyboardDelegate() const {
 ManagementAPIDelegate* ChromeExtensionsAPIClient::CreateManagementAPIDelegate()
     const {
   return new ChromeManagementAPIDelegate;
+}
+
+MetricsPrivateDelegate* ChromeExtensionsAPIClient::GetMetricsPrivateDelegate() {
+  if (!metrics_private_delegate_)
+    metrics_private_delegate_.reset(new ChromeMetricsPrivateDelegate());
+  return metrics_private_delegate_.get();
 }
 
 }  // namespace extensions

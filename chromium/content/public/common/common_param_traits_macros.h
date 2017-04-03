@@ -12,7 +12,6 @@
 #include "content/public/common/console_message_level.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/security_style.h"
-#include "content/public/common/ssl_status.h"
 #include "content/public/common/web_preferences.h"
 #include "content/public/common/webplugininfo.h"
 #include "ipc/ipc_message_macros.h"
@@ -57,7 +56,7 @@ IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::PermissionStatus,
 IPC_ENUM_TRAITS_MAX_VALUE(content::EditingBehavior,
                           content::EDITING_BEHAVIOR_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(WindowOpenDisposition,
-                          WINDOW_OPEN_DISPOSITION_LAST)
+                          WindowOpenDisposition::MAX_VALUE)
 IPC_ENUM_TRAITS_MAX_VALUE(net::RequestPriority, net::MAXIMUM_PRIORITY)
 IPC_ENUM_TRAITS_MAX_VALUE(content::V8CacheOptions,
                           content::V8_CACHE_OPTIONS_LAST)
@@ -93,15 +92,6 @@ IPC_STRUCT_TRAITS_END()
 IPC_STRUCT_TRAITS_BEGIN(content::Referrer)
   IPC_STRUCT_TRAITS_MEMBER(url)
   IPC_STRUCT_TRAITS_MEMBER(policy)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(content::SSLStatus)
-  IPC_STRUCT_TRAITS_MEMBER(security_style)
-  IPC_STRUCT_TRAITS_MEMBER(cert_id)
-  IPC_STRUCT_TRAITS_MEMBER(cert_status)
-  IPC_STRUCT_TRAITS_MEMBER(security_bits)
-  IPC_STRUCT_TRAITS_MEMBER(connection_status)
-  IPC_STRUCT_TRAITS_MEMBER(content_status)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::WebPluginMimeType)
@@ -144,7 +134,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(plugins_enabled)
   IPC_STRUCT_TRAITS_MEMBER(dom_paste_enabled)
   IPC_STRUCT_TRAITS_MEMBER(shrinks_standalone_images_to_fit)
-  IPC_STRUCT_TRAITS_MEMBER(uses_universal_detector)
   IPC_STRUCT_TRAITS_MEMBER(text_areas_are_resizable)
   IPC_STRUCT_TRAITS_MEMBER(allow_scripts_to_close_windows)
   IPC_STRUCT_TRAITS_MEMBER(remote_fonts_enabled)
@@ -157,6 +146,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(databases_enabled)
   IPC_STRUCT_TRAITS_MEMBER(application_cache_enabled)
   IPC_STRUCT_TRAITS_MEMBER(tabs_to_links)
+  IPC_STRUCT_TRAITS_MEMBER(history_entry_requires_user_gesture)
   IPC_STRUCT_TRAITS_MEMBER(caret_browsing_enabled)
   IPC_STRUCT_TRAITS_MEMBER(hyperlink_auditing_enabled)
   IPC_STRUCT_TRAITS_MEMBER(allow_universal_access_from_file_urls)
@@ -173,6 +163,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(privileged_webgl_extensions_enabled)
   IPC_STRUCT_TRAITS_MEMBER(webgl_errors_to_console_enabled)
   IPC_STRUCT_TRAITS_MEMBER(mock_scrollbars_enabled)
+  IPC_STRUCT_TRAITS_MEMBER(hide_scrollbars)
   IPC_STRUCT_TRAITS_MEMBER(accelerated_2d_canvas_enabled)
   IPC_STRUCT_TRAITS_MEMBER(minimum_accelerated_2d_canvas_size)
   IPC_STRUCT_TRAITS_MEMBER(disable_2d_canvas_copy_on_write)
@@ -182,7 +173,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(accelerated_filters_enabled)
   IPC_STRUCT_TRAITS_MEMBER(deferred_filters_enabled)
   IPC_STRUCT_TRAITS_MEMBER(container_culling_enabled)
-  IPC_STRUCT_TRAITS_MEMBER(allow_displaying_insecure_content)
   IPC_STRUCT_TRAITS_MEMBER(allow_running_insecure_content)
   IPC_STRUCT_TRAITS_MEMBER(disable_reading_from_canvas)
   IPC_STRUCT_TRAITS_MEMBER(strict_mixed_content_checking)
@@ -250,6 +240,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(resue_global_for_unowned_main_frame)
   IPC_STRUCT_TRAITS_MEMBER(autoplay_muted_videos_enabled)
   IPC_STRUCT_TRAITS_MEMBER(progress_bar_completion)
+  IPC_STRUCT_TRAITS_MEMBER(spellcheck_enabled_by_default)
 #endif
   IPC_STRUCT_TRAITS_MEMBER(autoplay_experiment_mode)
   IPC_STRUCT_TRAITS_MEMBER(default_minimum_page_scale_factor)
@@ -284,6 +275,7 @@ IPC_ENUM_TRAITS_MAX_VALUE(ui::AXIntListAttribute,
                           ui::AX_INT_LIST_ATTRIBUTE_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(ui::AXStringAttribute, ui::AX_STRING_ATTRIBUTE_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(ui::AXTextAffinity, ui::AX_TEXT_AFFINITY_LAST)
+IPC_ENUM_TRAITS_MAX_VALUE(ui::AXEventFrom, ui::AX_EVENT_FROM_LAST)
 
 IPC_STRUCT_TRAITS_BEGIN(ui::AXRelativeBounds)
   IPC_STRUCT_TRAITS_MEMBER(offset_container_id)

@@ -8,13 +8,13 @@
 #include <vector>
 
 #include "ash/common/ash_switches.h"
-#include "ash/common/display/display_info.h"
 #include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/content/shell_content_state.h"
 #include "ash/display/display_manager.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/test/ash_test_environment_content.h"
 #include "ash/test/ash_test_helper.h"
 #include "ash/test/content/test_shell_content_state.h"
 #include "ash/test/display_manager_test_api.h"
@@ -29,6 +29,8 @@
 #include "third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationLockType.h"
 #include "ui/aura/window.h"
 #include "ui/display/display.h"
+#include "ui/display/display_switches.h"
+#include "ui/display/manager/managed_display_info.h"
 #include "ui/message_center/message_center.h"
 #include "ui/views/test/webview_test_helper.h"
 #include "ui/views/view.h"
@@ -42,8 +44,9 @@ namespace {
 const float kDegreesToRadians = 3.1415926f / 180.0f;
 const float kMeanGravity = -9.8066f;
 
-DisplayInfo CreateDisplayInfo(int64_t id, const gfx::Rect& bounds) {
-  DisplayInfo info(id, "dummy", false);
+display::ManagedDisplayInfo CreateDisplayInfo(int64_t id,
+                                              const gfx::Rect& bounds) {
+  display::ManagedDisplayInfo info(id, "dummy", false);
   info.SetBounds(bounds);
   return info;
 }
@@ -107,8 +110,10 @@ class ScreenOrientationControllerTest : public test::AshTestBase {
   ~ScreenOrientationControllerTest() override;
 
   content::ScreenOrientationDelegate* delegate() {
-    return ash_test_helper()
-        ->test_shell_content_state()
+    test::AshTestEnvironmentContent* test_environment_content =
+        static_cast<test::AshTestEnvironmentContent*>(
+            ash_test_helper()->ash_test_environment());
+    return test_environment_content->test_shell_content_state()
         ->screen_orientation_delegate();
   }
 
@@ -154,7 +159,7 @@ ScreenOrientationControllerTest::CreateSecondaryWebContents() {
 
 void ScreenOrientationControllerTest::SetUp() {
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kAshUseFirstDisplayAsInternal);
+      ::switches::kUseFirstDisplayAsInternal);
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kAshEnableTouchViewTesting);
   test::AshTestBase::SetUp();
@@ -409,15 +414,16 @@ TEST_F(ScreenOrientationControllerTest, RotationLockPreventsRotation) {
   EXPECT_EQ(display::Display::ROTATE_90, GetCurrentInternalDisplayRotation());
 }
 
-// The TrayDisplay class that is responsible for adding/updating MessageCenter
-// notifications is only added to the SystemTray on ChromeOS.
+// The ScreenLayoutObserver class that is responsible for adding/updating
+// MessageCenter notifications is only added to the SystemTray on ChromeOS.
 // Tests that the screen rotation notifications are suppressed when
 // triggered by the accelerometer.
 TEST_F(ScreenOrientationControllerTest, BlockRotationNotifications) {
   EnableMaximizeMode(true);
   test::TestSystemTrayDelegate* tray_delegate = GetSystemTrayDelegate();
   tray_delegate->set_should_show_display_notification(true);
-  test::DisplayManagerTestApi().SetFirstDisplayAsInternalDisplay();
+  test::DisplayManagerTestApi(display_manager())
+      .SetFirstDisplayAsInternalDisplay();
 
   message_center::MessageCenter* message_center =
       message_center::MessageCenter::Get();
@@ -469,7 +475,8 @@ TEST_F(ScreenOrientationControllerTest, BlockRotationNotifications) {
 // Tests that if a user has set a display rotation that it is restored upon
 // exiting maximize mode.
 TEST_F(ScreenOrientationControllerTest, ResetUserRotationUponExit) {
-  test::DisplayManagerTestApi().SetFirstDisplayAsInternalDisplay();
+  test::DisplayManagerTestApi(display_manager())
+      .SetFirstDisplayAsInternalDisplay();
 
   SetInternalDisplayRotation(display::Display::ROTATE_90);
   EnableMaximizeMode(true);
@@ -595,7 +602,8 @@ TEST_F(ScreenOrientationControllerTest, UserRotationLockDisallowsRotation) {
 // ready, that ScreenOrientationController still begins listening to events,
 // which require an internal display to be acted upon.
 TEST_F(ScreenOrientationControllerTest, InternalDisplayNotAvailableAtStartup) {
-  test::DisplayManagerTestApi().SetFirstDisplayAsInternalDisplay();
+  test::DisplayManagerTestApi(display_manager())
+      .SetFirstDisplayAsInternalDisplay();
 
   int64_t internal_display_id = display::Display::InternalDisplayId();
   display::Display::SetInternalDisplayId(display::Display::kInvalidDisplayID);
@@ -623,37 +631,37 @@ TEST_F(ScreenOrientationControllerTest, RotateInactiveDisplay) {
   const int64_t kExternalDisplayId = 10;
   const display::Display::Rotation kNewRotation = display::Display::ROTATE_180;
 
-  const DisplayInfo internal_display_info =
+  const display::ManagedDisplayInfo internal_display_info =
       CreateDisplayInfo(kInternalDisplayId, gfx::Rect(0, 0, 500, 500));
-  const DisplayInfo external_display_info =
+  const display::ManagedDisplayInfo external_display_info =
       CreateDisplayInfo(kExternalDisplayId, gfx::Rect(1, 1, 500, 500));
 
-  std::vector<DisplayInfo> display_info_list_two_active;
+  std::vector<display::ManagedDisplayInfo> display_info_list_two_active;
   display_info_list_two_active.push_back(internal_display_info);
   display_info_list_two_active.push_back(external_display_info);
 
-  std::vector<DisplayInfo> display_info_list_one_active;
+  std::vector<display::ManagedDisplayInfo> display_info_list_one_active;
   display_info_list_one_active.push_back(external_display_info);
 
-  // The DisplayInfo list with two active displays needs to be added first so
-  // that the DisplayManager can track the |internal_display_info| as inactive
-  // instead of non-existent.
-  DisplayManager* display_manager = Shell::GetInstance()->display_manager();
-  display_manager->UpdateDisplaysWith(display_info_list_two_active);
-  display_manager->UpdateDisplaysWith(display_info_list_one_active);
+  // The display::ManagedDisplayInfo list with two active displays needs to be
+  // added first so that the DisplayManager can track the
+  // |internal_display_info| as inactive instead of non-existent.
+  display_manager()->UpdateDisplaysWith(display_info_list_two_active);
+  display_manager()->UpdateDisplaysWith(display_info_list_one_active);
 
-  test::ScopedSetInternalDisplayId set_internal(kInternalDisplayId);
+  test::ScopedSetInternalDisplayId set_internal(display_manager(),
+                                                kInternalDisplayId);
 
-  ASSERT_NE(
-      kNewRotation,
-      display_manager->GetDisplayInfo(kInternalDisplayId).GetActiveRotation());
+  ASSERT_NE(kNewRotation, display_manager()
+                              ->GetDisplayInfo(kInternalDisplayId)
+                              .GetActiveRotation());
 
   Shell::GetInstance()->screen_orientation_controller()->SetDisplayRotation(
       kNewRotation, display::Display::ROTATION_SOURCE_ACTIVE);
 
-  EXPECT_EQ(
-      kNewRotation,
-      display_manager->GetDisplayInfo(kInternalDisplayId).GetActiveRotation());
+  EXPECT_EQ(kNewRotation, display_manager()
+                              ->GetDisplayInfo(kInternalDisplayId)
+                              .GetActiveRotation());
 }
 
 }  // namespace ash

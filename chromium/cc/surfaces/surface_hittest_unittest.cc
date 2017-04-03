@@ -20,10 +20,12 @@ namespace cc {
 
 namespace {
 
+static constexpr FrameSinkId kArbitraryFrameSinkId(1, 1);
+
 struct TestCase {
   SurfaceId input_surface_id;
   gfx::Point input_point;
-  SurfaceId expected_output_surface_id;
+  SurfaceId expected_compositor_frame_sink_id;
   gfx::Point expected_output_point;
 };
 
@@ -36,7 +38,7 @@ void RunTests(SurfaceHittestDelegate* delegate,
     const TestCase& test = tests[i];
     gfx::Point point(test.input_point);
     gfx::Transform transform;
-    EXPECT_EQ(test.expected_output_surface_id,
+    EXPECT_EQ(test.expected_compositor_frame_sink_id,
               hittest.GetTargetSurfaceAtPoint(test.input_surface_id, point,
                                               &transform));
     transform.TransformPoint(&point);
@@ -46,7 +48,7 @@ void RunTests(SurfaceHittestDelegate* delegate,
     // transform as returned by GetTargetSurfaceAtPoint.
     gfx::Transform target_transform;
     EXPECT_TRUE(hittest.GetTransformToTargetSurface(
-        test.input_surface_id, test.expected_output_surface_id,
+        test.input_surface_id, test.expected_compositor_frame_sink_id,
         &target_transform));
     EXPECT_EQ(transform, target_transform);
   }
@@ -61,7 +63,8 @@ using namespace test;
 TEST(SurfaceHittestTest, Hittest_BadCompositorFrameDoesNotCrash) {
   SurfaceManager manager;
   EmptySurfaceFactoryClient client;
-  SurfaceFactory factory(&manager, &client);
+  FrameSinkId root_frame_sink_id(kArbitraryFrameSinkId);
+  SurfaceFactory root_factory(root_frame_sink_id, &manager, &client);
 
   // Creates a root surface.
   gfx::Rect root_rect(300, 300);
@@ -69,7 +72,8 @@ TEST(SurfaceHittestTest, Hittest_BadCompositorFrameDoesNotCrash) {
   CompositorFrame root_frame = CreateCompositorFrame(root_rect, &root_pass);
 
   // Add a reference to a non-existant child surface on the root surface.
-  SurfaceId child_surface_id(3, 0xdeadbeef, 0);
+  SurfaceId child_surface_id(kArbitraryFrameSinkId,
+                             LocalFrameId(0xdeadbeef, 0));
   gfx::Rect child_rect(200, 200);
   CreateSurfaceDrawQuad(root_pass,
                         gfx::Transform(),
@@ -78,11 +82,12 @@ TEST(SurfaceHittestTest, Hittest_BadCompositorFrameDoesNotCrash) {
                         child_surface_id);
 
   // Submit the root frame.
-  SurfaceIdAllocator root_allocator(2);
-  SurfaceId root_surface_id = root_allocator.GenerateId();
-  factory.Create(root_surface_id);
-  factory.SubmitCompositorFrame(root_surface_id, std::move(root_frame),
-                                SurfaceFactory::DrawCallback());
+  SurfaceIdAllocator root_allocator;
+  LocalFrameId root_local_frame_id = root_allocator.GenerateId();
+  SurfaceId root_surface_id(root_frame_sink_id, root_local_frame_id);
+  root_factory.Create(root_local_frame_id);
+  root_factory.SubmitCompositorFrame(root_local_frame_id, std::move(root_frame),
+                                     SurfaceFactory::DrawCallback());
 
   {
     SurfaceHittest hittest(nullptr, &manager);
@@ -93,13 +98,16 @@ TEST(SurfaceHittestTest, Hittest_BadCompositorFrameDoesNotCrash) {
                   root_surface_id, gfx::Point(100, 100), &transform));
   }
 
-  factory.Destroy(root_surface_id);
+  root_factory.Destroy(root_local_frame_id);
 }
 
 TEST(SurfaceHittestTest, Hittest_SingleSurface) {
   SurfaceManager manager;
-  EmptySurfaceFactoryClient client;
-  SurfaceFactory factory(&manager, &client);
+
+  // Set up root FrameSink.
+  EmptySurfaceFactoryClient root_client;
+  FrameSinkId root_frame_sink_id(1, 1);
+  SurfaceFactory root_factory(root_frame_sink_id, &manager, &root_client);
 
   // Creates a root surface.
   gfx::Rect root_rect(300, 300);
@@ -107,11 +115,12 @@ TEST(SurfaceHittestTest, Hittest_SingleSurface) {
   CompositorFrame root_frame = CreateCompositorFrame(root_rect, &root_pass);
 
   // Submit the root frame.
-  SurfaceIdAllocator root_allocator(2);
-  SurfaceId root_surface_id = root_allocator.GenerateId();
-  factory.Create(root_surface_id);
-  factory.SubmitCompositorFrame(root_surface_id, std::move(root_frame),
-                                SurfaceFactory::DrawCallback());
+  SurfaceIdAllocator root_allocator;
+  LocalFrameId root_local_frame_id = root_allocator.GenerateId();
+  SurfaceId root_surface_id(root_frame_sink_id, root_local_frame_id);
+  root_factory.Create(root_local_frame_id);
+  root_factory.SubmitCompositorFrame(root_local_frame_id, std::move(root_frame),
+                                     SurfaceFactory::DrawCallback());
   TestCase tests[] = {
     {
       root_surface_id,
@@ -123,13 +132,21 @@ TEST(SurfaceHittestTest, Hittest_SingleSurface) {
 
   RunTests(nullptr, &manager, tests, arraysize(tests));
 
-  factory.Destroy(root_surface_id);
+  root_factory.Destroy(root_local_frame_id);
 }
 
 TEST(SurfaceHittestTest, Hittest_ChildSurface) {
   SurfaceManager manager;
-  EmptySurfaceFactoryClient client;
-  SurfaceFactory factory(&manager, &client);
+
+  // Set up root FrameSink.
+  EmptySurfaceFactoryClient root_client;
+  FrameSinkId root_frame_sink_id(1, 1);
+  SurfaceFactory root_factory(root_frame_sink_id, &manager, &root_client);
+
+  // Set up child FrameSink.
+  EmptySurfaceFactoryClient child_client;
+  FrameSinkId child_frame_sink_id(2, 2);
+  SurfaceFactory child_factory(child_frame_sink_id, &manager, &child_client);
 
   // Creates a root surface.
   gfx::Rect root_rect(300, 300);
@@ -137,8 +154,9 @@ TEST(SurfaceHittestTest, Hittest_ChildSurface) {
   CompositorFrame root_frame = CreateCompositorFrame(root_rect, &root_pass);
 
   // Add a reference to the child surface on the root surface.
-  SurfaceIdAllocator child_allocator(3);
-  SurfaceId child_surface_id = child_allocator.GenerateId();
+  SurfaceIdAllocator child_allocator;
+  LocalFrameId child_local_frame_id = child_allocator.GenerateId();
+  SurfaceId child_surface_id(child_frame_sink_id, child_local_frame_id);
   gfx::Rect child_rect(200, 200);
   CreateSurfaceDrawQuad(root_pass,
                         gfx::Transform(1.0f, 0.0f, 0.0f, 50.0f,
@@ -150,11 +168,12 @@ TEST(SurfaceHittestTest, Hittest_ChildSurface) {
                         child_surface_id);
 
   // Submit the root frame.
-  SurfaceIdAllocator root_allocator(2);
-  SurfaceId root_surface_id = root_allocator.GenerateId();
-  factory.Create(root_surface_id);
-  factory.SubmitCompositorFrame(root_surface_id, std::move(root_frame),
-                                SurfaceFactory::DrawCallback());
+  SurfaceIdAllocator root_allocator;
+  LocalFrameId root_local_frame_id = root_allocator.GenerateId();
+  SurfaceId root_surface_id(root_frame_sink_id, root_local_frame_id);
+  root_factory.Create(root_local_frame_id);
+  root_factory.SubmitCompositorFrame(root_local_frame_id, std::move(root_frame),
+                                     SurfaceFactory::DrawCallback());
 
   // Creates a child surface.
   RenderPass* child_pass = nullptr;
@@ -171,9 +190,10 @@ TEST(SurfaceHittestTest, Hittest_ChildSurface) {
       root_rect, child_solid_quad_rect);
 
   // Submit the frame.
-  factory.Create(child_surface_id);
-  factory.SubmitCompositorFrame(child_surface_id, std::move(child_frame),
-                                SurfaceFactory::DrawCallback());
+  child_factory.Create(child_local_frame_id);
+  child_factory.SubmitCompositorFrame(child_local_frame_id,
+                                      std::move(child_frame),
+                                      SurfaceFactory::DrawCallback());
 
   TestCase tests[] = {
     {
@@ -226,8 +246,8 @@ TEST(SurfaceHittestTest, Hittest_ChildSurface) {
                         root_rect,
                         child_rect,
                         child_surface_id);
-  factory.SubmitCompositorFrame(root_surface_id, std::move(root_frame),
-                                SurfaceFactory::DrawCallback());
+  root_factory.SubmitCompositorFrame(root_local_frame_id, std::move(root_frame),
+                                     SurfaceFactory::DrawCallback());
 
   // Verify that point (100, 100) no longer falls on the child surface.
   // Verify that the transform to the child surface's space has also shifted.
@@ -251,16 +271,24 @@ TEST(SurfaceHittestTest, Hittest_ChildSurface) {
     EXPECT_EQ(gfx::Point(25, 25), point_in_target_space);
   }
 
-  factory.Destroy(root_surface_id);
-  factory.Destroy(child_surface_id);
+  root_factory.Destroy(root_local_frame_id);
+  child_factory.Destroy(child_local_frame_id);
 }
 
 // This test verifies that hit testing will progress to the next quad if it
 // encounters an invalid RenderPassDrawQuad for whatever reason.
 TEST(SurfaceHittestTest, Hittest_InvalidRenderPassDrawQuad) {
   SurfaceManager manager;
-  EmptySurfaceFactoryClient client;
-  SurfaceFactory factory(&manager, &client);
+
+  // Set up root FrameSink.
+  EmptySurfaceFactoryClient root_client;
+  FrameSinkId root_frame_sink_id(1, 1);
+  SurfaceFactory root_factory(root_frame_sink_id, &manager, &root_client);
+
+  // Set up child FrameSink.
+  EmptySurfaceFactoryClient child_client;
+  FrameSinkId child_frame_sink_id(2, 2);
+  SurfaceFactory child_factory(child_frame_sink_id, &manager, &child_client);
 
   // Creates a root surface.
   gfx::Rect root_rect(300, 300);
@@ -275,8 +303,9 @@ TEST(SurfaceHittestTest, Hittest_InvalidRenderPassDrawQuad) {
                            RenderPassId(1337, 1337));
 
   // Add a reference to the child surface on the root surface.
-  SurfaceIdAllocator child_allocator(3);
-  SurfaceId child_surface_id = child_allocator.GenerateId();
+  SurfaceIdAllocator child_allocator;
+  LocalFrameId child_local_frame_id = child_allocator.GenerateId();
+  SurfaceId child_surface_id(child_frame_sink_id, child_local_frame_id);
   gfx::Rect child_rect(200, 200);
   CreateSurfaceDrawQuad(root_pass,
                         gfx::Transform(1.0f, 0.0f, 0.0f, 50.0f,
@@ -288,11 +317,12 @@ TEST(SurfaceHittestTest, Hittest_InvalidRenderPassDrawQuad) {
                         child_surface_id);
 
   // Submit the root frame.
-  SurfaceIdAllocator root_allocator(2);
-  SurfaceId root_surface_id = root_allocator.GenerateId();
-  factory.Create(root_surface_id);
-  factory.SubmitCompositorFrame(root_surface_id, std::move(root_frame),
-                                SurfaceFactory::DrawCallback());
+  SurfaceIdAllocator root_allocator;
+  LocalFrameId root_local_frame_id = root_allocator.GenerateId();
+  SurfaceId root_surface_id(root_frame_sink_id, root_local_frame_id);
+  root_factory.Create(root_local_frame_id);
+  root_factory.SubmitCompositorFrame(root_local_frame_id, std::move(root_frame),
+                                     SurfaceFactory::DrawCallback());
 
   // Creates a child surface.
   RenderPass* child_pass = nullptr;
@@ -309,9 +339,10 @@ TEST(SurfaceHittestTest, Hittest_InvalidRenderPassDrawQuad) {
                            child_solid_quad_rect);
 
   // Submit the frame.
-  factory.Create(child_surface_id);
-  factory.SubmitCompositorFrame(child_surface_id, std::move(child_frame),
-                                SurfaceFactory::DrawCallback());
+  child_factory.Create(child_local_frame_id);
+  child_factory.SubmitCompositorFrame(child_local_frame_id,
+                                      std::move(child_frame),
+                                      SurfaceFactory::DrawCallback());
 
   TestCase tests[] = {
     {
@@ -354,14 +385,15 @@ TEST(SurfaceHittestTest, Hittest_InvalidRenderPassDrawQuad) {
 
   RunTests(nullptr, &manager, tests, arraysize(tests));
 
-  factory.Destroy(root_surface_id);
-  factory.Destroy(child_surface_id);
+  root_factory.Destroy(root_local_frame_id);
+  child_factory.Destroy(child_local_frame_id);
 }
 
 TEST(SurfaceHittestTest, Hittest_RenderPassDrawQuad) {
   SurfaceManager manager;
   EmptySurfaceFactoryClient client;
-  SurfaceFactory factory(&manager, &client);
+  FrameSinkId root_frame_sink_id(kArbitraryFrameSinkId);
+  SurfaceFactory factory(root_frame_sink_id, &manager, &client);
 
   // Create a CompostiorFrame with two RenderPasses.
   gfx::Rect root_rect(300, 300);
@@ -406,10 +438,11 @@ TEST(SurfaceHittestTest, Hittest_RenderPassDrawQuad) {
                            child_solid_quad_rect);
 
   // Submit the root frame.
-  SurfaceIdAllocator root_allocator(1);
-  SurfaceId root_surface_id = root_allocator.GenerateId();
-  factory.Create(root_surface_id);
-  factory.SubmitCompositorFrame(root_surface_id, std::move(root_frame),
+  SurfaceIdAllocator root_allocator;
+  LocalFrameId root_local_frame_id = root_allocator.GenerateId();
+  SurfaceId root_surface_id(root_frame_sink_id, root_local_frame_id);
+  factory.Create(root_local_frame_id);
+  factory.SubmitCompositorFrame(root_local_frame_id, std::move(root_frame),
                                 SurfaceFactory::DrawCallback());
 
   TestCase tests[] = {
@@ -458,13 +491,21 @@ TEST(SurfaceHittestTest, Hittest_RenderPassDrawQuad) {
 
   RunTests(nullptr, &manager, tests, arraysize(tests));
 
-  factory.Destroy(root_surface_id);
+  factory.Destroy(root_local_frame_id);
 }
 
 TEST(SurfaceHittestTest, Hittest_SingleSurface_WithInsetsDelegate) {
   SurfaceManager manager;
-  EmptySurfaceFactoryClient client;
-  SurfaceFactory factory(&manager, &client);
+
+  // Set up root FrameSink.
+  EmptySurfaceFactoryClient root_client;
+  FrameSinkId root_frame_sink_id(1, 1);
+  SurfaceFactory root_factory(root_frame_sink_id, &manager, &root_client);
+
+  // Set up child FrameSink.
+  EmptySurfaceFactoryClient child_client;
+  FrameSinkId child_frame_sink_id(2, 2);
+  SurfaceFactory child_factory(child_frame_sink_id, &manager, &child_client);
 
   // Creates a root surface.
   gfx::Rect root_rect(300, 300);
@@ -472,8 +513,9 @@ TEST(SurfaceHittestTest, Hittest_SingleSurface_WithInsetsDelegate) {
   CompositorFrame root_frame = CreateCompositorFrame(root_rect, &root_pass);
 
   // Add a reference to the child surface on the root surface.
-  SurfaceIdAllocator child_allocator(3);
-  SurfaceId child_surface_id = child_allocator.GenerateId();
+  SurfaceIdAllocator child_allocator;
+  LocalFrameId child_local_frame_id = child_allocator.GenerateId();
+  SurfaceId child_surface_id(child_frame_sink_id, child_local_frame_id);
   gfx::Rect child_rect(200, 200);
   CreateSurfaceDrawQuad(
       root_pass,
@@ -484,11 +526,12 @@ TEST(SurfaceHittestTest, Hittest_SingleSurface_WithInsetsDelegate) {
       root_rect, child_rect, child_surface_id);
 
   // Submit the root frame.
-  SurfaceIdAllocator root_allocator(2);
-  SurfaceId root_surface_id = root_allocator.GenerateId();
-  factory.Create(root_surface_id);
-  factory.SubmitCompositorFrame(root_surface_id, std::move(root_frame),
-                                SurfaceFactory::DrawCallback());
+  SurfaceIdAllocator root_allocator;
+  LocalFrameId root_local_frame_id = root_allocator.GenerateId();
+  SurfaceId root_surface_id(root_frame_sink_id, root_local_frame_id);
+  root_factory.Create(root_local_frame_id);
+  root_factory.SubmitCompositorFrame(root_local_frame_id, std::move(root_frame),
+                                     SurfaceFactory::DrawCallback());
 
   // Creates a child surface.
   RenderPass* child_pass = nullptr;
@@ -503,9 +546,10 @@ TEST(SurfaceHittestTest, Hittest_SingleSurface_WithInsetsDelegate) {
       root_rect, child_solid_quad_rect);
 
   // Submit the frame.
-  factory.Create(child_surface_id);
-  factory.SubmitCompositorFrame(child_surface_id, std::move(child_frame),
-                                SurfaceFactory::DrawCallback());
+  child_factory.Create(child_local_frame_id);
+  child_factory.SubmitCompositorFrame(child_local_frame_id,
+                                      std::move(child_frame),
+                                      SurfaceFactory::DrawCallback());
 
   TestCase test_expectations_without_insets[] = {
       {root_surface_id, gfx::Point(55, 55), child_surface_id, gfx::Point(5, 5)},
@@ -584,7 +628,8 @@ TEST(SurfaceHittestTest, Hittest_SingleSurface_WithInsetsDelegate) {
   EXPECT_EQ(0, accept_delegate.reject_target_overrides());
   EXPECT_EQ(2, accept_delegate.accept_target_overrides());
 
-  factory.Destroy(root_surface_id);
+  root_factory.Destroy(root_local_frame_id);
+  child_factory.Destroy(child_local_frame_id);
 }
 
 }  // namespace cc

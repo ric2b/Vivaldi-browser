@@ -4,7 +4,6 @@
 
 #include "components/sync/core/attachments/attachment_uploader_impl.h"
 
-#include <string>
 #include <utility>
 #include <vector>
 
@@ -20,16 +19,13 @@
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
 #include "base/test/histogram_tester.h"
-#include "base/threading/non_thread_safe.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/sync/api/attachments/attachment.h"
-#include "components/sync/base/model_type.h"
 #include "components/sync/core/attachments/attachment_util.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "google_apis/gaia/fake_oauth2_token_service.h"
 #include "google_apis/gaia/gaia_constants.h"
-#include "google_apis/gaia/oauth2_token_service_request.h"
 #include "net/http/http_status_code.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
@@ -37,6 +33,8 @@
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+namespace syncer {
 
 namespace {
 
@@ -54,11 +52,9 @@ const char kBase64URLSafeStoreBirthday[] =
     "Rv_d4HQ6SP2dBpM8YY6lcAlZmQVhRiFhGwPTAmDNQVX-JhXXDA";
 const char kSyncStoreBirthdayHeader[] = "X-Sync-Store-Birthday";
 const char kSyncDataTypeIdHeader[] = "X-Sync-Data-Type-Id";
-const syncer::ModelType kModelType = syncer::ModelType::ARTICLES;
+const ModelType kModelType = ModelType::ARTICLES;
 
 }  // namespace
-
-namespace syncer {
 
 using net::test_server::BasicHttpResponse;
 using net::test_server::HttpRequest;

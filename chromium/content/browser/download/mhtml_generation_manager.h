@@ -53,7 +53,8 @@ class MHTMLGenerationManager {
       RenderFrameHostImpl* sender,
       int job_id,
       bool mhtml_generation_in_renderer_succeeded,
-      const std::set<std::string>& digests_of_uris_of_serialized_resources);
+      const std::set<std::string>& digests_of_uris_of_serialized_resources,
+      base::TimeDelta renderer_main_thread_time);
 
  private:
   friend struct base::DefaultSingletonTraits<MHTMLGenerationManager>;
@@ -77,9 +78,9 @@ class MHTMLGenerationManager {
   void OnFileClosed(int job_id, JobStatus job_status, int64_t file_size);
 
   // Creates and registers a new job.
-  int NewJob(WebContents* web_contents,
-             const MHTMLGenerationParams& params,
-             const GenerateMHTMLCallback& callback);
+  Job* NewJob(WebContents* web_contents,
+              const MHTMLGenerationParams& params,
+              const GenerateMHTMLCallback& callback);
 
   // Finds job by id.  Returns nullptr if no job with a given id was found.
   Job* FindJob(int job_id);

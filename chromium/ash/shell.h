@@ -10,8 +10,8 @@
 #include <vector>
 
 #include "ash/ash_export.h"
-#include "ash/common/shelf/shelf_types.h"
 #include "ash/metrics/user_metrics_recorder.h"
+#include "ash/public/cpp/shelf_types.h"
 #include "ash/wm/cursor_manager_chromeos.h"
 #include "ash/wm/system_modal_container_event_filter_delegate.h"
 #include "base/gtest_prod_util.h"
@@ -19,7 +19,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "ui/aura/window.h"
-#include "ui/base/ui_base_types.h"
 #include "ui/display/screen.h"
 #include "ui/events/event_target.h"
 #include "ui/gfx/geometry/insets.h"
@@ -36,17 +35,12 @@ class FocusClient;
 }
 }
 
-namespace base {
-class SequencedWorkerPool;
-}
-
 namespace chromeos {
 class AudioA11yController;
 }
 
 namespace gfx {
 class ImageSkia;
-class Point;
 class Rect;
 }
 
@@ -78,11 +72,9 @@ class AcceleratorControllerDelegateAura;
 class AshNativeCursorManager;
 class AutoclickController;
 class BluetoothNotificationController;
-class DesktopBackgroundController;
 class DisplayChangeObserver;
 class DisplayColorManager;
 class DisplayConfigurationController;
-class WindowTreeHostManager;
 class DisplayErrorObserver;
 class DisplayManager;
 class DragDropController;
@@ -115,24 +107,24 @@ class ScreenshotController;
 class ScreenPinningController;
 class ScreenPositionController;
 class SessionStateDelegate;
-class Shelf;
 class ShellDelegate;
 struct ShellInitParams;
 class SlowAnimationEventFilter;
 class StatusAreaWidget;
 class StickyKeysController;
-class StylusMetricsRecorder;
 class SystemGestureEventFilter;
 class SystemModalContainerEventFilter;
 class SystemTray;
 class ToplevelWindowEventHandler;
 class TouchTransformerController;
 class TouchObserverHUD;
+class ScreenLayoutObserver;
 class VirtualKeyboardController;
 class VideoActivityNotifier;
 class VideoDetector;
 class WebNotificationTray;
 class WindowPositioner;
+class WindowTreeHostManager;
 class WmShellAura;
 class WmWindow;
 
@@ -197,18 +189,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
                                     int container_id);
   static const aura::Window* GetContainer(const aura::Window* root_window,
                                           int container_id);
-
-  // Returns the list of containers that match |container_id| in
-  // all root windows. If |priority_root| is given, the container
-  // in the |priority_root| will be inserted at the top of the list.
-  static std::vector<aura::Window*> GetContainersFromAllRootWindows(
-      int container_id,
-      aura::Window* priority_root);
-
-  // Shows the context menu for the background and launcher at
-  // |location_in_screen| (in screen coordinates).
-  void ShowContextMenu(const gfx::Point& location_in_screen,
-                       ui::MenuSourceType source_type);
 
   // Creates a default views::NonClientFrameView for use by windows in the
   // Ash environment.
@@ -276,9 +256,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
     return tooltip_controller_.get();
   }
   OverlayEventFilter* overlay_filter() { return overlay_filter_.get(); }
-  DesktopBackgroundController* desktop_background_controller() {
-    return desktop_background_controller_.get();
-  }
   LinkHandlerModelFactory* link_handler_model_factory() {
     return link_handler_model_factory_;
   }
@@ -341,20 +318,9 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
     return activation_client_;
   }
 
-  base::SequencedWorkerPool* blocking_pool() { return blocking_pool_; }
-
   // Force the shelf to query for it's current visibility state.
   // TODO(jamescook): Move to Shelf.
   void UpdateShelfVisibility();
-
-  // Creates a modal background (a partially-opaque fullscreen window)
-  // on all displays for |window|.
-  void CreateModalBackground(aura::Window* window);
-
-  // Called when a modal window is removed. It will activate
-  // another modal window if any, or remove modal screens
-  // on all displays.
-  void OnModalWindowRemoved(aura::Window* removed);
 
   // Returns WebNotificationTray on the primary root window.
   WebNotificationTray* GetWebNotificationTray();
@@ -390,6 +356,10 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
     return display_error_observer_.get();
   }
 
+  ScreenLayoutObserver* screen_layout_observer() {
+    return screen_layout_observer_.get();
+  }
+
   ResolutionNotificationController* resolution_notification_controller() {
     return resolution_notification_controller_.get();
   }
@@ -416,10 +386,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   bool is_touch_hud_projection_enabled() const {
     return is_touch_hud_projection_enabled_;
   }
-
-  // TODO(sky): remove this. This was needed by sysui, but as sysui is going
-  // away it should no longer be needed.
-  bool in_mus() const { return in_mus_; }
 
 #if defined(OS_CHROMEOS)
   // Creates instance of FirstRunHelper. Caller is responsible for deleting
@@ -453,7 +419,7 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   typedef std::pair<aura::Window*, gfx::Rect> WindowAndBoundsPair;
 
   // Takes ownership of |delegate|.
-  Shell(ShellDelegate* delegate, base::SequencedWorkerPool* blocking_pool);
+  explicit Shell(ShellDelegate* delegate);
   ~Shell() override;
 
   void Init(const ShellInitParams& init_params);
@@ -463,9 +429,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
 
   // Initializes the root window so that it can host browser windows.
   void InitRootWindow(aura::Window* root_window);
-
-  // Prepares the shelf to be deleted.
-  void ShutdownShelf();
 
   // SystemModalContainerEventFilterDelegate:
   bool CanWindowReceiveEvents(aura::Window* window) override;
@@ -503,7 +466,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   std::unique_ptr<::wm::VisibilityController> visibility_controller_;
   std::unique_ptr<::wm::WindowModalityController> window_modality_controller_;
   std::unique_ptr<views::corewm::TooltipController> tooltip_controller_;
-  std::unique_ptr<DesktopBackgroundController> desktop_background_controller_;
   LinkHandlerModelFactory* link_handler_model_factory_;
   std::unique_ptr<PowerButtonController> power_button_controller_;
   std::unique_ptr<LockStateController> lock_state_controller_;
@@ -567,13 +529,12 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
 
   // Implements content::ScreenOrientationController for ChromeOS
   std::unique_ptr<ScreenOrientationController> screen_orientation_controller_;
+  std::unique_ptr<ScreenLayoutObserver> screen_layout_observer_;
 
   std::unique_ptr<TouchTransformerController> touch_transformer_controller_;
 
   std::unique_ptr<ui::EventHandler> magnifier_key_scroll_handler_;
   std::unique_ptr<ui::EventHandler> speech_feedback_handler_;
-  std::unique_ptr<StylusMetricsRecorder> stylus_metrics_recorder_;
-
   std::unique_ptr<LaserPointerController> laser_pointer_controller_;
   std::unique_ptr<PartialMagnificationController>
       partial_magnification_controller_;
@@ -596,10 +557,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   std::unique_ptr<GPUSupport> gpu_support_;
 
   std::unique_ptr<ImmersiveHandlerFactoryAsh> immersive_handler_factory_;
-
-  base::SequencedWorkerPool* blocking_pool_;
-
-  bool in_mus_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(Shell);
 };

@@ -103,42 +103,38 @@ BrowserInstantController::~BrowserInstantController() {
   instant_service->RemoveObserver(this);
 }
 
-bool BrowserInstantController::OpenInstant(WindowOpenDisposition disposition,
+void BrowserInstantController::OpenInstant(WindowOpenDisposition disposition,
                                            const GURL& url) {
   // Unsupported dispositions.
-  if (disposition == NEW_BACKGROUND_TAB || disposition == NEW_WINDOW ||
-      disposition == NEW_FOREGROUND_TAB)
-    return false;
+  if (disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB ||
+      disposition == WindowOpenDisposition::NEW_WINDOW ||
+      disposition == WindowOpenDisposition::NEW_FOREGROUND_TAB) {
+    return;
+  }
 
   // The omnibox currently doesn't use other dispositions, so we don't attempt
   // to handle them. If you hit this DCHECK file a bug and I'll (sky) add
   // support for the new disposition.
-  DCHECK(disposition == CURRENT_TAB) << disposition;
+  DCHECK(disposition == WindowOpenDisposition::CURRENT_TAB)
+      << static_cast<int>(disposition);
 
   const base::string16& search_terms =
       search::ExtractSearchTermsFromURL(profile(), url);
-  EmbeddedSearchRequestParams request_params(url);
   if (search_terms.empty())
-    return false;
+    return;
 
   InstantSearchPrerenderer* prerenderer =
       GetInstantSearchPrerenderer(profile());
-  if (prerenderer) {
-    if (prerenderer->CanCommitQuery(GetActiveWebContents(), search_terms)) {
-      // Submit query to render the prefetched results. Browser will swap the
-      // prerendered contents with the active tab contents.
-      prerenderer->Commit(search_terms, request_params);
-      return false;
-    } else {
-      prerenderer->Cancel();
-    }
-  }
+  if (!prerenderer)
+    return;
 
-  // If we will not be replacing search terms from this URL, don't send to
-  // InstantController.
-  if (!search::IsQueryExtractionAllowedForURL(profile(), url))
-    return false;
-  return instant_.SubmitQuery(search_terms, request_params);
+  if (prerenderer->CanCommitQuery(GetActiveWebContents(), search_terms)) {
+    // Submit query to render the prefetched results. Browser will swap the
+    // prerendered contents with the active tab contents.
+    prerenderer->Commit(search_terms, EmbeddedSearchRequestParams(url));
+  } else {
+    prerenderer->Cancel();
+  }
 }
 
 Profile* BrowserInstantController::profile() const {
@@ -169,9 +165,7 @@ void BrowserInstantController::ModelChanged(
     // Record some actions corresponding to the mode change. Note that to get
     // the full story, it's necessary to look at other UMA actions as well,
     // such as tab switches.
-    if (new_mode.is_search_results())
-      content::RecordAction(base::UserMetricsAction("InstantExtended.ShowSRP"));
-    else if (new_mode.is_ntp())
+    if (new_mode.is_ntp())
       content::RecordAction(base::UserMetricsAction("InstantExtended.ShowNTP"));
 
     instant_.SearchModeChanged(old_state.mode, new_mode);

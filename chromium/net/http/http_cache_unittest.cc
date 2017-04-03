@@ -43,6 +43,9 @@
 #include "net/http/http_transaction_test_util.h"
 #include "net/http/http_util.h"
 #include "net/http/mock_http_cache.h"
+#include "net/log/net_log_event_type.h"
+#include "net/log/net_log_source.h"
+#include "net/log/net_log_with_source.h"
 #include "net/log/test_net_log.h"
 #include "net/log/test_net_log_entry.h"
 #include "net/log/test_net_log_util.h"
@@ -71,7 +74,7 @@ namespace {
 // MockNetworkTransaction.
 void TestLoadTimingNetworkRequest(const LoadTimingInfo& load_timing_info) {
   EXPECT_FALSE(load_timing_info.socket_reused);
-  EXPECT_NE(NetLog::Source::kInvalidId, load_timing_info.socket_log_id);
+  EXPECT_NE(NetLogSource::kInvalidId, load_timing_info.socket_log_id);
 
   EXPECT_TRUE(load_timing_info.proxy_resolve_start.is_null());
   EXPECT_TRUE(load_timing_info.proxy_resolve_end.is_null());
@@ -92,7 +95,7 @@ void TestLoadTimingNetworkRequest(const LoadTimingInfo& load_timing_info) {
 // Tests the load timing values of a request that receives a cached response.
 void TestLoadTimingCachedResponse(const LoadTimingInfo& load_timing_info) {
   EXPECT_FALSE(load_timing_info.socket_reused);
-  EXPECT_EQ(NetLog::Source::kInvalidId, load_timing_info.socket_log_id);
+  EXPECT_EQ(NetLogSource::kInvalidId, load_timing_info.socket_log_id);
 
   EXPECT_TRUE(load_timing_info.proxy_resolve_start.is_null());
   EXPECT_TRUE(load_timing_info.proxy_resolve_end.is_null());
@@ -149,7 +152,7 @@ void RunTransactionTestBase(HttpCache* cache,
                             const MockTransaction& trans_info,
                             const MockHttpRequest& request,
                             HttpResponseInfo* response_info,
-                            const BoundNetLog& net_log,
+                            const NetLogWithSource& net_log,
                             LoadTimingInfo* load_timing_info,
                             int64_t* sent_bytes,
                             int64_t* received_bytes,
@@ -201,12 +204,13 @@ void RunTransactionTestWithRequest(HttpCache* cache,
                                    const MockHttpRequest& request,
                                    HttpResponseInfo* response_info) {
   RunTransactionTestBase(cache, trans_info, request, response_info,
-                         BoundNetLog(), nullptr, nullptr, nullptr, nullptr);
+                         NetLogWithSource(), nullptr, nullptr, nullptr,
+                         nullptr);
 }
 
 void RunTransactionTestAndGetTiming(HttpCache* cache,
                                     const MockTransaction& trans_info,
-                                    const BoundNetLog& log,
+                                    const NetLogWithSource& log,
                                     LoadTimingInfo* load_timing_info) {
   RunTransactionTestBase(cache, trans_info, MockHttpRequest(trans_info),
                          nullptr, log, load_timing_info, nullptr, nullptr,
@@ -216,7 +220,7 @@ void RunTransactionTestAndGetTiming(HttpCache* cache,
 void RunTransactionTestAndGetTimingAndConnectedSocketAddress(
     HttpCache* cache,
     const MockTransaction& trans_info,
-    const BoundNetLog& log,
+    const NetLogWithSource& log,
     LoadTimingInfo* load_timing_info,
     IPEndPoint* remote_endpoint) {
   RunTransactionTestBase(cache, trans_info, MockHttpRequest(trans_info),
@@ -225,12 +229,13 @@ void RunTransactionTestAndGetTimingAndConnectedSocketAddress(
 }
 
 void RunTransactionTest(HttpCache* cache, const MockTransaction& trans_info) {
-  RunTransactionTestAndGetTiming(cache, trans_info, BoundNetLog(), nullptr);
+  RunTransactionTestAndGetTiming(cache, trans_info, NetLogWithSource(),
+                                 nullptr);
 }
 
 void RunTransactionTestWithLog(HttpCache* cache,
                                const MockTransaction& trans_info,
-                               const BoundNetLog& log) {
+                               const NetLogWithSource& log) {
   RunTransactionTestAndGetTiming(cache, trans_info, log, nullptr);
 }
 
@@ -245,7 +250,7 @@ void RunTransactionTestWithResponseInfoAndGetTiming(
     HttpCache* cache,
     const MockTransaction& trans_info,
     HttpResponseInfo* response,
-    const BoundNetLog& log,
+    const NetLogWithSource& log,
     LoadTimingInfo* load_timing_info) {
   RunTransactionTestBase(cache, trans_info, MockHttpRequest(trans_info),
                          response, log, load_timing_info, nullptr, nullptr,
@@ -264,7 +269,7 @@ void RunTransactionTestWithResponseAndGetTiming(
     HttpCache* cache,
     const MockTransaction& trans_info,
     std::string* response_headers,
-    const BoundNetLog& log,
+    const NetLogWithSource& log,
     LoadTimingInfo* load_timing_info) {
   HttpResponseInfo response;
   RunTransactionTestBase(cache, trans_info, MockHttpRequest(trans_info),
@@ -592,16 +597,16 @@ class FakeWebSocketHandshakeStreamCreateHelper
 };
 
 // Returns true if |entry| is not one of the log types paid attention to in this
-// test. Note that TYPE_HTTP_CACHE_WRITE_INFO and TYPE_HTTP_CACHE_*_DATA are
+// test. Note that HTTP_CACHE_WRITE_INFO and HTTP_CACHE_*_DATA are
 // ignored.
 bool ShouldIgnoreLogEntry(const TestNetLogEntry& entry) {
   switch (entry.type) {
-    case NetLog::TYPE_HTTP_CACHE_GET_BACKEND:
-    case NetLog::TYPE_HTTP_CACHE_OPEN_ENTRY:
-    case NetLog::TYPE_HTTP_CACHE_CREATE_ENTRY:
-    case NetLog::TYPE_HTTP_CACHE_ADD_TO_ENTRY:
-    case NetLog::TYPE_HTTP_CACHE_DOOM_ENTRY:
-    case NetLog::TYPE_HTTP_CACHE_READ_INFO:
+    case NetLogEventType::HTTP_CACHE_GET_BACKEND:
+    case NetLogEventType::HTTP_CACHE_OPEN_ENTRY:
+    case NetLogEventType::HTTP_CACHE_CREATE_ENTRY:
+    case NetLogEventType::HTTP_CACHE_ADD_TO_ENTRY:
+    case NetLogEventType::HTTP_CACHE_DOOM_ENTRY:
+    case NetLogEventType::HTTP_CACHE_READ_INFO:
       return false;
     default:
       return true;
@@ -617,7 +622,7 @@ void FilterLogEntries(TestNetLogEntry::List* entries) {
 }
 
 bool LogContainsEventType(const BoundTestNetLog& log,
-                          NetLog::EventType expected) {
+                          NetLogEventType expected) {
   TestNetLogEntry::List entries;
   log.GetEntries(&entries);
   for (size_t i = 0; i < entries.size(); i++) {
@@ -685,18 +690,18 @@ TEST(HttpCache, SimpleGETNoDiskCache) {
   FilterLogEntries(&entries);
 
   EXPECT_EQ(6u, entries.size());
+  EXPECT_TRUE(LogContainsBeginEvent(entries, 0,
+                                    NetLogEventType::HTTP_CACHE_GET_BACKEND));
   EXPECT_TRUE(
-      LogContainsBeginEvent(entries, 0, NetLog::TYPE_HTTP_CACHE_GET_BACKEND));
+      LogContainsEndEvent(entries, 1, NetLogEventType::HTTP_CACHE_GET_BACKEND));
+  EXPECT_TRUE(LogContainsBeginEvent(entries, 2,
+                                    NetLogEventType::HTTP_CACHE_OPEN_ENTRY));
   EXPECT_TRUE(
-      LogContainsEndEvent(entries, 1, NetLog::TYPE_HTTP_CACHE_GET_BACKEND));
-  EXPECT_TRUE(
-      LogContainsBeginEvent(entries, 2, NetLog::TYPE_HTTP_CACHE_OPEN_ENTRY));
-  EXPECT_TRUE(
-      LogContainsEndEvent(entries, 3, NetLog::TYPE_HTTP_CACHE_OPEN_ENTRY));
-  EXPECT_TRUE(
-      LogContainsBeginEvent(entries, 4, NetLog::TYPE_HTTP_CACHE_CREATE_ENTRY));
-  EXPECT_TRUE(
-      LogContainsEndEvent(entries, 5, NetLog::TYPE_HTTP_CACHE_CREATE_ENTRY));
+      LogContainsEndEvent(entries, 3, NetLogEventType::HTTP_CACHE_OPEN_ENTRY));
+  EXPECT_TRUE(LogContainsBeginEvent(entries, 4,
+                                    NetLogEventType::HTTP_CACHE_CREATE_ENTRY));
+  EXPECT_TRUE(LogContainsEndEvent(entries, 5,
+                                  NetLogEventType::HTTP_CACHE_CREATE_ENTRY));
 
   EXPECT_EQ(1, cache.network_layer()->transaction_count());
   EXPECT_EQ(0, cache.disk_cache()->open_count());
@@ -734,7 +739,7 @@ TEST(HttpCache, ReleaseBuffer) {
   scoped_refptr<IOBuffer> buffer(new IOBuffer(kBufferSize));
   ReleaseBufferCompletionCallback cb(buffer.get());
 
-  int rv = trans->Start(&request, cb.callback(), BoundNetLog());
+  int rv = trans->Start(&request, cb.callback(), NetLogWithSource());
   EXPECT_THAT(cb.GetResult(rv), IsOk());
 
   rv = trans->Read(buffer.get(), kBufferSize, cb.callback());
@@ -772,7 +777,7 @@ TEST(HttpCache, SimpleGETWithDiskFailures2) {
   int rv = cache.CreateTransaction(&c->trans);
   ASSERT_THAT(rv, IsOk());
 
-  rv = c->trans->Start(&request, c->callback.callback(), BoundNetLog());
+  rv = c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   rv = c->callback.WaitForResult();
 
@@ -818,7 +823,7 @@ TEST(HttpCache, SimpleGETWithDiskFailures3) {
   ASSERT_THAT(rv, IsOk());
 
   MockHttpRequest request(kSimpleGET_Transaction);
-  rv = c->trans->Start(&request, c->callback.callback(), BoundNetLog());
+  rv = c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
   EXPECT_THAT(c->callback.GetResult(rv), IsOk());
 
   // Now verify that the entry was removed from the cache.
@@ -851,22 +856,22 @@ TEST(HttpCache, SimpleGET_LoadOnlyFromCache_Hit) {
   FilterLogEntries(&entries);
 
   EXPECT_EQ(8u, entries.size());
+  EXPECT_TRUE(LogContainsBeginEvent(entries, 0,
+                                    NetLogEventType::HTTP_CACHE_GET_BACKEND));
   EXPECT_TRUE(
-      LogContainsBeginEvent(entries, 0, NetLog::TYPE_HTTP_CACHE_GET_BACKEND));
+      LogContainsEndEvent(entries, 1, NetLogEventType::HTTP_CACHE_GET_BACKEND));
+  EXPECT_TRUE(LogContainsBeginEvent(entries, 2,
+                                    NetLogEventType::HTTP_CACHE_OPEN_ENTRY));
   EXPECT_TRUE(
-      LogContainsEndEvent(entries, 1, NetLog::TYPE_HTTP_CACHE_GET_BACKEND));
-  EXPECT_TRUE(
-      LogContainsBeginEvent(entries, 2, NetLog::TYPE_HTTP_CACHE_OPEN_ENTRY));
-  EXPECT_TRUE(
-      LogContainsEndEvent(entries, 3, NetLog::TYPE_HTTP_CACHE_OPEN_ENTRY));
-  EXPECT_TRUE(
-      LogContainsBeginEvent(entries, 4, NetLog::TYPE_HTTP_CACHE_CREATE_ENTRY));
-  EXPECT_TRUE(
-      LogContainsEndEvent(entries, 5, NetLog::TYPE_HTTP_CACHE_CREATE_ENTRY));
-  EXPECT_TRUE(
-      LogContainsBeginEvent(entries, 6, NetLog::TYPE_HTTP_CACHE_ADD_TO_ENTRY));
-  EXPECT_TRUE(
-      LogContainsEndEvent(entries, 7, NetLog::TYPE_HTTP_CACHE_ADD_TO_ENTRY));
+      LogContainsEndEvent(entries, 3, NetLogEventType::HTTP_CACHE_OPEN_ENTRY));
+  EXPECT_TRUE(LogContainsBeginEvent(entries, 4,
+                                    NetLogEventType::HTTP_CACHE_CREATE_ENTRY));
+  EXPECT_TRUE(LogContainsEndEvent(entries, 5,
+                                  NetLogEventType::HTTP_CACHE_CREATE_ENTRY));
+  EXPECT_TRUE(LogContainsBeginEvent(entries, 6,
+                                    NetLogEventType::HTTP_CACHE_ADD_TO_ENTRY));
+  EXPECT_TRUE(LogContainsEndEvent(entries, 7,
+                                  NetLogEventType::HTTP_CACHE_ADD_TO_ENTRY));
 
   TestLoadTimingNetworkRequest(load_timing_info);
 
@@ -884,22 +889,22 @@ TEST(HttpCache, SimpleGET_LoadOnlyFromCache_Hit) {
   FilterLogEntries(&entries);
 
   EXPECT_EQ(8u, entries.size());
+  EXPECT_TRUE(LogContainsBeginEvent(entries, 0,
+                                    NetLogEventType::HTTP_CACHE_GET_BACKEND));
   EXPECT_TRUE(
-      LogContainsBeginEvent(entries, 0, NetLog::TYPE_HTTP_CACHE_GET_BACKEND));
+      LogContainsEndEvent(entries, 1, NetLogEventType::HTTP_CACHE_GET_BACKEND));
+  EXPECT_TRUE(LogContainsBeginEvent(entries, 2,
+                                    NetLogEventType::HTTP_CACHE_OPEN_ENTRY));
   EXPECT_TRUE(
-      LogContainsEndEvent(entries, 1, NetLog::TYPE_HTTP_CACHE_GET_BACKEND));
+      LogContainsEndEvent(entries, 3, NetLogEventType::HTTP_CACHE_OPEN_ENTRY));
+  EXPECT_TRUE(LogContainsBeginEvent(entries, 4,
+                                    NetLogEventType::HTTP_CACHE_ADD_TO_ENTRY));
+  EXPECT_TRUE(LogContainsEndEvent(entries, 5,
+                                  NetLogEventType::HTTP_CACHE_ADD_TO_ENTRY));
   EXPECT_TRUE(
-      LogContainsBeginEvent(entries, 2, NetLog::TYPE_HTTP_CACHE_OPEN_ENTRY));
+      LogContainsBeginEvent(entries, 6, NetLogEventType::HTTP_CACHE_READ_INFO));
   EXPECT_TRUE(
-      LogContainsEndEvent(entries, 3, NetLog::TYPE_HTTP_CACHE_OPEN_ENTRY));
-  EXPECT_TRUE(
-      LogContainsBeginEvent(entries, 4, NetLog::TYPE_HTTP_CACHE_ADD_TO_ENTRY));
-  EXPECT_TRUE(
-      LogContainsEndEvent(entries, 5, NetLog::TYPE_HTTP_CACHE_ADD_TO_ENTRY));
-  EXPECT_TRUE(
-      LogContainsBeginEvent(entries, 6, NetLog::TYPE_HTTP_CACHE_READ_INFO));
-  EXPECT_TRUE(
-      LogContainsEndEvent(entries, 7, NetLog::TYPE_HTTP_CACHE_READ_INFO));
+      LogContainsEndEvent(entries, 7, NetLogEventType::HTTP_CACHE_READ_INFO));
 
   EXPECT_EQ(1, cache.network_layer()->transaction_count());
   EXPECT_EQ(1, cache.disk_cache()->open_count());
@@ -920,7 +925,7 @@ TEST(HttpCache, SimpleGET_LoadOnlyFromCache_Miss) {
   std::unique_ptr<HttpTransaction> trans;
   ASSERT_THAT(cache.CreateTransaction(&trans), IsOk());
 
-  int rv = trans->Start(&request, callback.callback(), BoundNetLog());
+  int rv = trans->Start(&request, callback.callback(), NetLogWithSource());
   if (rv == ERR_IO_PENDING)
     rv = callback.WaitForResult();
   ASSERT_THAT(rv, IsError(ERR_CACHE_MISS));
@@ -1038,7 +1043,7 @@ TEST(HttpCache, SimpleGET_CacheSignal_Failure) {
   int rv = cache.http_cache()->CreateTransaction(DEFAULT_PRIORITY, &trans);
   EXPECT_THAT(rv, IsOk());
   ASSERT_TRUE(trans.get());
-  rv = trans->Start(&request, callback.callback(), BoundNetLog());
+  rv = trans->Start(&request, callback.callback(), NetLogWithSource());
   EXPECT_THAT(callback.GetResult(rv), IsError(ERR_FAILED));
 
   const HttpResponseInfo* response_info = trans->GetResponseInfo();
@@ -1112,22 +1117,22 @@ TEST(HttpCache, SimpleGET_LoadBypassCache) {
   FilterLogEntries(&entries);
 
   EXPECT_EQ(8u, entries.size());
+  EXPECT_TRUE(LogContainsBeginEvent(entries, 0,
+                                    NetLogEventType::HTTP_CACHE_GET_BACKEND));
   EXPECT_TRUE(
-      LogContainsBeginEvent(entries, 0, NetLog::TYPE_HTTP_CACHE_GET_BACKEND));
+      LogContainsEndEvent(entries, 1, NetLogEventType::HTTP_CACHE_GET_BACKEND));
+  EXPECT_TRUE(LogContainsBeginEvent(entries, 2,
+                                    NetLogEventType::HTTP_CACHE_DOOM_ENTRY));
   EXPECT_TRUE(
-      LogContainsEndEvent(entries, 1, NetLog::TYPE_HTTP_CACHE_GET_BACKEND));
-  EXPECT_TRUE(
-      LogContainsBeginEvent(entries, 2, NetLog::TYPE_HTTP_CACHE_DOOM_ENTRY));
-  EXPECT_TRUE(
-      LogContainsEndEvent(entries, 3, NetLog::TYPE_HTTP_CACHE_DOOM_ENTRY));
-  EXPECT_TRUE(
-      LogContainsBeginEvent(entries, 4, NetLog::TYPE_HTTP_CACHE_CREATE_ENTRY));
-  EXPECT_TRUE(
-      LogContainsEndEvent(entries, 5, NetLog::TYPE_HTTP_CACHE_CREATE_ENTRY));
-  EXPECT_TRUE(
-      LogContainsBeginEvent(entries, 6, NetLog::TYPE_HTTP_CACHE_ADD_TO_ENTRY));
-  EXPECT_TRUE(
-      LogContainsEndEvent(entries, 7, NetLog::TYPE_HTTP_CACHE_ADD_TO_ENTRY));
+      LogContainsEndEvent(entries, 3, NetLogEventType::HTTP_CACHE_DOOM_ENTRY));
+  EXPECT_TRUE(LogContainsBeginEvent(entries, 4,
+                                    NetLogEventType::HTTP_CACHE_CREATE_ENTRY));
+  EXPECT_TRUE(LogContainsEndEvent(entries, 5,
+                                  NetLogEventType::HTTP_CACHE_CREATE_ENTRY));
+  EXPECT_TRUE(LogContainsBeginEvent(entries, 6,
+                                    NetLogEventType::HTTP_CACHE_ADD_TO_ENTRY));
+  EXPECT_TRUE(LogContainsEndEvent(entries, 7,
+                                  NetLogEventType::HTTP_CACHE_ADD_TO_ENTRY));
 
   EXPECT_EQ(2, cache.network_layer()->transaction_count());
   EXPECT_EQ(0, cache.disk_cache()->open_count());
@@ -1281,7 +1286,7 @@ TEST(HttpCache, SimpleGET_ManyReaders) {
     EXPECT_EQ(LOAD_STATE_IDLE, c->trans->GetLoadState());
 
     c->result =
-        c->trans->Start(&request, c->callback.callback(), BoundNetLog());
+        c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
   }
 
   // All requests are waiting for the active entry.
@@ -1351,8 +1356,8 @@ TEST(HttpCache, SimpleGET_RacingReaders) {
     if (i == 1 || i == 2)
       this_request = &reader_request;
 
-    c->result =
-        c->trans->Start(this_request, c->callback.callback(), BoundNetLog());
+    c->result = c->trans->Start(this_request, c->callback.callback(),
+                                NetLogWithSource());
   }
 
   // Allow all requests to move from the Create queue to the active entry.
@@ -1435,8 +1440,8 @@ TEST(HttpCache, SimpleGET_DoomWithPending) {
     if (i == 3)
       this_request = &writer_request;
 
-    c->result =
-        c->trans->Start(this_request, c->callback.callback(), BoundNetLog());
+    c->result = c->trans->Start(this_request, c->callback.callback(),
+                                NetLogWithSource());
   }
 
   // The first request should be a writer at this point, and the two subsequent
@@ -1479,7 +1484,7 @@ TEST(HttpCache, FastNoStoreGET_DoneWithPending) {
     ASSERT_THAT(c->result, IsOk());
 
     c->result =
-        c->trans->Start(&request, c->callback.callback(), BoundNetLog());
+        c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
   }
 
   // Allow all requests to move from the Create queue to the active entry.
@@ -1526,7 +1531,7 @@ TEST(HttpCache, SimpleGET_ManyWriters_CancelFirst) {
     ASSERT_THAT(c->result, IsOk());
 
     c->result =
-        c->trans->Start(&request, c->callback.callback(), BoundNetLog());
+        c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
   }
 
   // Allow all requests to move from the Create queue to the active entry.
@@ -1586,7 +1591,7 @@ TEST(HttpCache, SimpleGET_ManyWriters_CancelCreate) {
     ASSERT_THAT(c->result, IsOk());
 
     c->result =
-        c->trans->Start(&request, c->callback.callback(), BoundNetLog());
+        c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
   }
 
   // The first request should be creating the disk cache entry and the others
@@ -1636,7 +1641,8 @@ TEST(HttpCache, SimpleGET_CancelCreate) {
   c->result = cache.CreateTransaction(&c->trans);
   ASSERT_THAT(c->result, IsOk());
 
-  c->result = c->trans->Start(&request, c->callback.callback(), BoundNetLog());
+  c->result =
+      c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
   EXPECT_THAT(c->result, IsError(ERR_IO_PENDING));
 
   // Release the reference that the mock disk cache keeps for this entry, so
@@ -1666,7 +1672,7 @@ TEST(HttpCache, SimpleGET_ManyWriters_BypassCache) {
     ASSERT_THAT(c->result, IsOk());
 
     c->result =
-        c->trans->Start(&request, c->callback.callback(), BoundNetLog());
+        c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
   }
 
   // The first request should be deleting the disk cache entry and the others
@@ -1703,11 +1709,11 @@ TEST(HttpCache, SimpleGET_WriterTimeout) {
   MockHttpRequest request(kSimpleGET_Transaction);
   Context c1, c2;
   ASSERT_THAT(cache.CreateTransaction(&c1.trans), IsOk());
-  ASSERT_EQ(ERR_IO_PENDING,
-            c1.trans->Start(&request, c1.callback.callback(), BoundNetLog()));
+  ASSERT_EQ(ERR_IO_PENDING, c1.trans->Start(&request, c1.callback.callback(),
+                                            NetLogWithSource()));
   ASSERT_THAT(cache.CreateTransaction(&c2.trans), IsOk());
-  ASSERT_EQ(ERR_IO_PENDING,
-            c2.trans->Start(&request, c2.callback.callback(), BoundNetLog()));
+  ASSERT_EQ(ERR_IO_PENDING, c2.trans->Start(&request, c2.callback.callback(),
+                                            NetLogWithSource()));
 
   // The second request is queued after the first one.
 
@@ -1730,7 +1736,7 @@ TEST(HttpCache, SimpleGET_AbandonedCacheRead) {
 
   std::unique_ptr<HttpTransaction> trans;
   ASSERT_THAT(cache.CreateTransaction(&trans), IsOk());
-  int rv = trans->Start(&request, callback.callback(), BoundNetLog());
+  int rv = trans->Start(&request, callback.callback(), NetLogWithSource());
   if (rv == ERR_IO_PENDING)
     rv = callback.WaitForResult();
   ASSERT_THAT(rv, IsOk());
@@ -1767,7 +1773,7 @@ TEST(HttpCache, SimpleGET_ManyWriters_DeleteCache) {
     ASSERT_THAT(c->result, IsOk());
 
     c->result =
-        c->trans->Start(&request, c->callback.callback(), BoundNetLog());
+        c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
   }
 
   // The first request should be creating the disk cache entry and the others
@@ -1807,11 +1813,11 @@ TEST(HttpCache, SimpleGET_WaitForBackend) {
   }
 
   context_list[0]->result = context_list[0]->trans->Start(
-      &request0, context_list[0]->callback.callback(), BoundNetLog());
+      &request0, context_list[0]->callback.callback(), NetLogWithSource());
   context_list[1]->result = context_list[1]->trans->Start(
-      &request1, context_list[1]->callback.callback(), BoundNetLog());
+      &request1, context_list[1]->callback.callback(), NetLogWithSource());
   context_list[2]->result = context_list[2]->trans->Start(
-      &request2, context_list[2]->callback.callback(), BoundNetLog());
+      &request2, context_list[2]->callback.callback(), NetLogWithSource());
 
   // Just to make sure that everything is still pending.
   base::RunLoop().RunUntilIdle();
@@ -1853,11 +1859,11 @@ TEST(HttpCache, SimpleGET_WaitForBackend_CancelCreate) {
   }
 
   context_list[0]->result = context_list[0]->trans->Start(
-      &request0, context_list[0]->callback.callback(), BoundNetLog());
+      &request0, context_list[0]->callback.callback(), NetLogWithSource());
   context_list[1]->result = context_list[1]->trans->Start(
-      &request1, context_list[1]->callback.callback(), BoundNetLog());
+      &request1, context_list[1]->callback.callback(), NetLogWithSource());
   context_list[2]->result = context_list[2]->trans->Start(
-      &request2, context_list[2]->callback.callback(), BoundNetLog());
+      &request2, context_list[2]->callback.callback(), NetLogWithSource());
 
   // Just to make sure that everything is still pending.
   base::RunLoop().RunUntilIdle();
@@ -1898,7 +1904,7 @@ TEST(HttpCache, DeleteCacheWaitingForBackend) {
   c->result = cache->CreateTransaction(&c->trans);
   ASSERT_THAT(c->result, IsOk());
 
-  c->trans->Start(&request, c->callback.callback(), BoundNetLog());
+  c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
 
   // Just to make sure that everything is still pending.
   base::RunLoop().RunUntilIdle();
@@ -1936,7 +1942,7 @@ TEST(HttpCache, DeleteCacheWaitingForBackend2) {
   c->result = cache->CreateTransaction(&c->trans);
   ASSERT_THAT(c->result, IsOk());
 
-  c->trans->Start(&request, c->callback.callback(), BoundNetLog());
+  c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
 
   // And another direct backend request.
   TestCompletionCallback cb2;
@@ -2914,7 +2920,7 @@ TEST(HttpCache, SimplePOST_LoadOnlyFromCache_Miss) {
   ASSERT_THAT(cache.CreateTransaction(&trans), IsOk());
   ASSERT_TRUE(trans.get());
 
-  int rv = trans->Start(&request, callback.callback(), BoundNetLog());
+  int rv = trans->Start(&request, callback.callback(), NetLogWithSource());
   ASSERT_THAT(callback.GetResult(rv), IsError(ERR_CACHE_MISS));
 
   trans.reset();
@@ -2935,7 +2941,7 @@ TEST(HttpCache, SimplePOST_LoadOnlyFromCache_Hit) {
 
   std::vector<std::unique_ptr<UploadElementReader>> element_readers;
   element_readers.push_back(
-      base::WrapUnique(new UploadBytesElementReader("hello", 5)));
+      base::MakeUnique<UploadBytesElementReader>("hello", 5));
   ElementsUploadDataStream upload_data_stream(std::move(element_readers),
                                               kUploadId);
   MockHttpRequest request(transaction);
@@ -3169,7 +3175,7 @@ TEST(HttpCache, SimpleHEAD_LoadOnlyFromCache_Miss) {
   ASSERT_THAT(cache.CreateTransaction(&trans), IsOk());
   ASSERT_TRUE(trans.get());
 
-  int rv = trans->Start(&request, callback.callback(), BoundNetLog());
+  int rv = trans->Start(&request, callback.callback(), NetLogWithSource());
   ASSERT_THAT(callback.GetResult(rv), IsError(ERR_CACHE_MISS));
 
   trans.reset();
@@ -3797,7 +3803,7 @@ TEST(HttpCache, SimpleGET_DoesntLogHeaders) {
                             log.bound());
 
   EXPECT_FALSE(LogContainsEventType(
-      log, NetLog::TYPE_HTTP_CACHE_CALLER_REQUEST_HEADERS));
+      log, NetLogEventType::HTTP_CACHE_CALLER_REQUEST_HEADERS));
 }
 
 TEST(HttpCache, RangeGET_LogsHeaders) {
@@ -3808,7 +3814,7 @@ TEST(HttpCache, RangeGET_LogsHeaders) {
                             log.bound());
 
   EXPECT_TRUE(LogContainsEventType(
-      log, NetLog::TYPE_HTTP_CACHE_CALLER_REQUEST_HEADERS));
+      log, NetLogEventType::HTTP_CACHE_CALLER_REQUEST_HEADERS));
 }
 
 TEST(HttpCache, ExternalValidation_LogsHeaders) {
@@ -3820,7 +3826,7 @@ TEST(HttpCache, ExternalValidation_LogsHeaders) {
   RunTransactionTestWithLog(cache.http_cache(), transaction, log.bound());
 
   EXPECT_TRUE(LogContainsEventType(
-      log, NetLog::TYPE_HTTP_CACHE_CALLER_REQUEST_HEADERS));
+      log, NetLogEventType::HTTP_CACHE_CALLER_REQUEST_HEADERS));
 }
 
 TEST(HttpCache, SpecialHeaders_LogsHeaders) {
@@ -3832,7 +3838,7 @@ TEST(HttpCache, SpecialHeaders_LogsHeaders) {
   RunTransactionTestWithLog(cache.http_cache(), transaction, log.bound());
 
   EXPECT_TRUE(LogContainsEventType(
-      log, NetLog::TYPE_HTTP_CACHE_CALLER_REQUEST_HEADERS));
+      log, NetLogEventType::HTTP_CACHE_CALLER_REQUEST_HEADERS));
 }
 
 // Tests that receiving 206 for a regular request is handled correctly.
@@ -3948,7 +3954,7 @@ TEST(HttpCache, RangeGET_NoValidation_LogsRestart) {
                             log.bound());
 
   EXPECT_TRUE(LogContainsEventType(
-      log, NetLog::TYPE_HTTP_CACHE_RESTART_PARTIAL_REQUEST));
+      log, NetLogEventType::HTTP_CACHE_RESTART_PARTIAL_REQUEST));
 }
 
 // Tests that a failure to conditionalize a regular request (no range) with a
@@ -5172,7 +5178,7 @@ TEST(HttpCache, MAYBE_RangeGET_Cancel) {
   int rv = cache.CreateTransaction(&c->trans);
   ASSERT_THAT(rv, IsOk());
 
-  rv = c->trans->Start(&request, c->callback.callback(), BoundNetLog());
+  rv = c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
   if (rv == ERR_IO_PENDING)
     rv = c->callback.WaitForResult();
 
@@ -5217,7 +5223,7 @@ TEST(HttpCache, MAYBE_RangeGET_Cancel2) {
   int rv = cache.CreateTransaction(&c->trans);
   ASSERT_THAT(rv, IsOk());
 
-  rv = c->trans->Start(&request, c->callback.callback(), BoundNetLog());
+  rv = c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
   if (rv == ERR_IO_PENDING)
     rv = c->callback.WaitForResult();
 
@@ -5262,7 +5268,7 @@ TEST(HttpCache, RangeGET_Cancel3) {
   int rv = cache.CreateTransaction(&c->trans);
   ASSERT_THAT(rv, IsOk());
 
-  rv = c->trans->Start(&request, c->callback.callback(), BoundNetLog());
+  rv = c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   rv = c->callback.WaitForResult();
 
@@ -5289,7 +5295,7 @@ TEST(HttpCache, RangeGET_Cancel3) {
   rv = cache.CreateTransaction(&c->trans);
   ASSERT_THAT(rv, IsOk());
 
-  rv = c->trans->Start(&request, c->callback.callback(), BoundNetLog());
+  rv = c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   MockDiskEntry::IgnoreCallbacks(true);
@@ -5498,7 +5504,7 @@ TEST(HttpCache, RangeGET_FastFlakyServer) {
   EXPECT_EQ(1, cache.disk_cache()->open_count());
   EXPECT_EQ(1, cache.disk_cache()->create_count());
   EXPECT_TRUE(LogContainsEventType(
-      log, NetLog::TYPE_HTTP_CACHE_RE_SEND_PARTIAL_REQUEST));
+      log, NetLogEventType::HTTP_CACHE_RE_SEND_PARTIAL_REQUEST));
 }
 
 // Tests that when the server gives us less data than expected, we don't keep
@@ -5565,7 +5571,7 @@ TEST(HttpCache, RangeGET_OK_LoadOnlyFromCache) {
   EXPECT_THAT(rv, IsOk());
   ASSERT_TRUE(trans.get());
 
-  rv = trans->Start(&request, callback.callback(), BoundNetLog());
+  rv = trans->Start(&request, callback.callback(), NetLogWithSource());
   if (rv == ERR_IO_PENDING)
     rv = callback.WaitForResult();
   ASSERT_THAT(rv, IsError(ERR_CACHE_MISS));
@@ -5642,7 +5648,7 @@ TEST(HttpCache, DoomOnDestruction) {
   int rv = cache.CreateTransaction(&c->trans);
   ASSERT_THAT(rv, IsOk());
 
-  rv = c->trans->Start(&request, c->callback.callback(), BoundNetLog());
+  rv = c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
   if (rv == ERR_IO_PENDING)
     c->result = c->callback.WaitForResult();
 
@@ -5672,7 +5678,7 @@ TEST(HttpCache, DoomOnDestruction2) {
   int rv = cache.CreateTransaction(&c->trans);
   ASSERT_THAT(rv, IsOk());
 
-  rv = c->trans->Start(&request, c->callback.callback(), BoundNetLog());
+  rv = c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
   if (rv == ERR_IO_PENDING)
     rv = c->callback.WaitForResult();
 
@@ -5715,7 +5721,7 @@ TEST(HttpCache, DoomOnDestruction3) {
   int rv = cache.CreateTransaction(&c->trans);
   ASSERT_THAT(rv, IsOk());
 
-  rv = c->trans->Start(&request, c->callback.callback(), BoundNetLog());
+  rv = c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
   if (rv == ERR_IO_PENDING)
     rv = c->callback.WaitForResult();
 
@@ -5758,7 +5764,7 @@ TEST(HttpCache, SetTruncatedFlag) {
   int rv = cache.CreateTransaction(&c->trans);
   ASSERT_THAT(rv, IsOk());
 
-  rv = c->trans->Start(&request, c->callback.callback(), BoundNetLog());
+  rv = c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
   if (rv == ERR_IO_PENDING)
     rv = c->callback.WaitForResult();
 
@@ -5810,7 +5816,7 @@ TEST(HttpCache, DontSetTruncatedFlag) {
   int rv = cache.CreateTransaction(&c->trans);
   ASSERT_THAT(rv, IsOk());
 
-  rv = c->trans->Start(&request, c->callback.callback(), BoundNetLog());
+  rv = c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
   EXPECT_THAT(c->callback.GetResult(rv), IsOk());
 
   // Read everything.
@@ -5839,7 +5845,7 @@ TEST(HttpCache, RangeGET_DontTruncate) {
   EXPECT_THAT(rv, IsOk());
 
   TestCompletionCallback cb;
-  rv = trans->Start(request.get(), cb.callback(), BoundNetLog());
+  rv = trans->Start(request.get(), cb.callback(), NetLogWithSource());
   EXPECT_EQ(0, cb.GetResult(rv));
 
   scoped_refptr<IOBuffer> buf(new IOBuffer(10));
@@ -5866,7 +5872,7 @@ TEST(HttpCache, RangeGET_DontTruncate2) {
   EXPECT_THAT(rv, IsOk());
 
   TestCompletionCallback cb;
-  rv = trans->Start(request.get(), cb.callback(), BoundNetLog());
+  rv = trans->Start(request.get(), cb.callback(), NetLogWithSource());
   EXPECT_EQ(0, cb.GetResult(rv));
 
   scoped_refptr<IOBuffer> buf(new IOBuffer(10));
@@ -5993,10 +5999,10 @@ TEST(HttpCache, GET_IncompleteResource_Cancel) {
   Context* pending = new Context();
   ASSERT_THAT(cache.CreateTransaction(&pending->trans), IsOk());
 
-  rv = c->trans->Start(&request, c->callback.callback(), BoundNetLog());
+  rv = c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
   EXPECT_EQ(ERR_IO_PENDING,
             pending->trans->Start(&request, pending->callback.callback(),
-                                  BoundNetLog()));
+                                  NetLogWithSource()));
   EXPECT_THAT(c->callback.GetResult(rv), IsOk());
 
   // Make sure that the entry has some data stored.
@@ -6078,7 +6084,7 @@ TEST(HttpCache, GET_IncompleteResource3) {
   ASSERT_THAT(rv, IsOk());
 
   MockHttpRequest request(transaction);
-  rv = c->trans->Start(&request, c->callback.callback(), BoundNetLog());
+  rv = c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
   EXPECT_THAT(c->callback.GetResult(rv), IsOk());
 
   // We should have checked with the server before finishing Start().
@@ -6113,7 +6119,7 @@ TEST(HttpCache, GET_IncompleteResourceWithAuth) {
   ASSERT_THAT(rv, IsOk());
 
   MockHttpRequest request(transaction);
-  rv = c->trans->Start(&request, c->callback.callback(), BoundNetLog());
+  rv = c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
   EXPECT_THAT(c->callback.GetResult(rv), IsOk());
 
   const HttpResponseInfo* response = c->trans->GetResponseInfo();
@@ -6165,7 +6171,7 @@ TEST(HttpCache, TransactionRetryLimit) {
 
   MockHttpRequest request(transaction);
 
-  rv = c->trans->Start(&request, c->callback.callback(), BoundNetLog());
+  rv = c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
   if (rv == ERR_IO_PENDING)
     rv = c->callback.WaitForResult();
   std::string content;
@@ -6222,7 +6228,7 @@ TEST(HttpCache, GET_CancelIncompleteResource) {
   int rv = cache.CreateTransaction(&c->trans);
   ASSERT_THAT(rv, IsOk());
 
-  rv = c->trans->Start(&request, c->callback.callback(), BoundNetLog());
+  rv = c->trans->Start(&request, c->callback.callback(), NetLogWithSource());
   EXPECT_THAT(c->callback.GetResult(rv), IsOk());
 
   // Read 20 bytes from the cache, and 10 from the net.
@@ -6289,13 +6295,13 @@ TEST(HttpCache, SyncRead) {
       c2(DEFAULT_PRIORITY, cache.http_cache()),
       c3(DEFAULT_PRIORITY, cache.http_cache());
 
-  c1.Start(&r1, BoundNetLog());
+  c1.Start(&r1, NetLogWithSource());
 
   r2.load_flags |= LOAD_ONLY_FROM_CACHE;
-  c2.Start(&r2, BoundNetLog());
+  c2.Start(&r2, NetLogWithSource());
 
   r3.load_flags |= LOAD_ONLY_FROM_CACHE;
-  c3.Start(&r3, BoundNetLog());
+  c3.Start(&r3, NetLogWithSource());
 
   base::RunLoop().Run();
 
@@ -6341,7 +6347,7 @@ TEST(HttpCache, CachedRedirect) {
     std::unique_ptr<HttpTransaction> trans;
     ASSERT_THAT(cache.CreateTransaction(&trans), IsOk());
 
-    int rv = trans->Start(&request, callback.callback(), BoundNetLog());
+    int rv = trans->Start(&request, callback.callback(), NetLogWithSource());
     if (rv == ERR_IO_PENDING)
       rv = callback.WaitForResult();
     ASSERT_THAT(rv, IsOk());
@@ -6375,7 +6381,7 @@ TEST(HttpCache, CachedRedirect) {
     std::unique_ptr<HttpTransaction> trans;
     ASSERT_THAT(cache.CreateTransaction(&trans), IsOk());
 
-    int rv = trans->Start(&request, callback.callback(), BoundNetLog());
+    int rv = trans->Start(&request, callback.callback(), NetLogWithSource());
     if (rv == ERR_IO_PENDING)
       rv = callback.WaitForResult();
     ASSERT_THAT(rv, IsOk());
@@ -6556,7 +6562,7 @@ TEST(HttpCache, SimpleGET_SSLError) {
   std::unique_ptr<HttpTransaction> trans;
   ASSERT_THAT(cache.CreateTransaction(&trans), IsOk());
 
-  int rv = trans->Start(&request, callback.callback(), BoundNetLog());
+  int rv = trans->Start(&request, callback.callback(), NetLogWithSource());
   if (rv == ERR_IO_PENDING)
     rv = callback.WaitForResult();
   ASSERT_THAT(rv, IsError(ERR_CACHE_MISS));
@@ -6738,6 +6744,22 @@ TEST(HttpCache, WriteMetadata_Fail) {
   EXPECT_EQ(1, cache.disk_cache()->create_count());
 }
 
+TEST(HttpCache, InvalidLoadFlagCombination) {
+  MockHttpCache cache;
+
+  // Put the resource in the cache.
+  RunTransactionTest(cache.http_cache(), kSimpleGET_Transaction);
+
+  // Now try to fetch it again, but with a flag combination disallowing both
+  // cache and network access.
+  ScopedMockTransaction transaction(kSimpleGET_Transaction);
+  // DevTools relies on this combination of flags for "disable cache" mode
+  // when a resource is only supposed to be loaded from cache.
+  transaction.load_flags = LOAD_ONLY_FROM_CACHE | LOAD_BYPASS_CACHE;
+  transaction.return_code = ERR_CACHE_MISS;
+  RunTransactionTest(cache.http_cache(), transaction);
+}
+
 // Tests that we can read metadata after validating the entry and with READ mode
 // transactions.
 TEST(HttpCache, ReadMetadata) {
@@ -6811,7 +6833,7 @@ TEST(HttpCache, FilterCompletion) {
     ASSERT_THAT(cache.CreateTransaction(&trans), IsOk());
 
     MockHttpRequest request(kSimpleGET_Transaction);
-    int rv = trans->Start(&request, callback.callback(), BoundNetLog());
+    int rv = trans->Start(&request, callback.callback(), NetLogWithSource());
     EXPECT_THAT(callback.GetResult(rv), IsOk());
 
     scoped_refptr<IOBuffer> buf(new IOBuffer(256));
@@ -6847,7 +6869,7 @@ TEST(HttpCache, DoneReading) {
   ASSERT_THAT(cache.CreateTransaction(&trans), IsOk());
 
   MockHttpRequest request(transaction);
-  int rv = trans->Start(&request, callback.callback(), BoundNetLog());
+  int rv = trans->Start(&request, callback.callback(), NetLogWithSource());
   EXPECT_THAT(callback.GetResult(rv), IsOk());
 
   trans->DoneReading();
@@ -6874,7 +6896,7 @@ TEST(HttpCache, StopCachingDeletesEntry) {
     std::unique_ptr<HttpTransaction> trans;
     ASSERT_THAT(cache.CreateTransaction(&trans), IsOk());
 
-    int rv = trans->Start(&request, callback.callback(), BoundNetLog());
+    int rv = trans->Start(&request, callback.callback(), NetLogWithSource());
     EXPECT_THAT(callback.GetResult(rv), IsOk());
 
     scoped_refptr<IOBuffer> buf(new IOBuffer(256));
@@ -6912,7 +6934,7 @@ TEST(HttpCache, StopCachingThenDoneReadingDeletesEntry) {
     std::unique_ptr<HttpTransaction> trans;
     ASSERT_THAT(cache.CreateTransaction(&trans), IsOk());
 
-    int rv = trans->Start(&request, callback.callback(), BoundNetLog());
+    int rv = trans->Start(&request, callback.callback(), NetLogWithSource());
     EXPECT_THAT(callback.GetResult(rv), IsOk());
 
     scoped_refptr<IOBuffer> buf(new IOBuffer(256));
@@ -6955,7 +6977,7 @@ TEST(HttpCache, StopCachingWithAuthDeletesEntry) {
     std::unique_ptr<HttpTransaction> trans;
     ASSERT_THAT(cache.CreateTransaction(&trans), IsOk());
 
-    int rv = trans->Start(&request, callback.callback(), BoundNetLog());
+    int rv = trans->Start(&request, callback.callback(), NetLogWithSource());
     EXPECT_THAT(callback.GetResult(rv), IsOk());
 
     trans->StopCaching();
@@ -6994,7 +7016,7 @@ TEST(HttpCache, StopCachingSavesEntry) {
                                         "Content-Length: 42\n"
                                         "Etag: \"foo\"\n";
 
-    int rv = trans->Start(&request, callback.callback(), BoundNetLog());
+    int rv = trans->Start(&request, callback.callback(), NetLogWithSource());
     EXPECT_THAT(callback.GetResult(rv), IsOk());
 
     scoped_refptr<IOBuffer> buf(new IOBuffer(256));
@@ -7035,7 +7057,7 @@ TEST(HttpCache, StopCachingTruncatedEntry) {
     std::unique_ptr<HttpTransaction> trans;
     ASSERT_THAT(cache.CreateTransaction(&trans), IsOk());
 
-    int rv = trans->Start(&request, callback.callback(), BoundNetLog());
+    int rv = trans->Start(&request, callback.callback(), NetLogWithSource());
     EXPECT_THAT(callback.GetResult(rv), IsOk());
 
     scoped_refptr<IOBuffer> buf(new IOBuffer(256));
@@ -7290,7 +7312,7 @@ TEST_P(HttpCacheHugeResourceTest,
   }
 
   rv = http_transaction->Start(&request, callback.callback(),
-                               net::BoundNetLog());
+                               NetLogWithSource());
   rv = callback.GetResult(rv);
   ASSERT_EQ(net::OK, rv);
 
@@ -7388,7 +7410,7 @@ TEST(HttpCache, SetPriority) {
   info.url = GURL(kSimpleGET_Transaction.url);
   TestCompletionCallback callback;
   EXPECT_EQ(ERR_IO_PENDING,
-            trans->Start(&info, callback.callback(), BoundNetLog()));
+            trans->Start(&info, callback.callback(), NetLogWithSource()));
 
   EXPECT_TRUE(cache.network_layer()->last_transaction());
   if (cache.network_layer()->last_transaction()) {
@@ -7421,7 +7443,7 @@ TEST(HttpCache, SetWebSocketHandshakeStreamCreateHelper) {
   info.url = GURL(kSimpleGET_Transaction.url);
   TestCompletionCallback callback;
   EXPECT_EQ(ERR_IO_PENDING,
-            trans->Start(&info, callback.callback(), BoundNetLog()));
+            trans->Start(&info, callback.callback(), NetLogWithSource()));
 
   ASSERT_TRUE(cache.network_layer()->last_transaction());
   EXPECT_FALSE(cache.network_layer()->last_transaction()->
@@ -7460,7 +7482,7 @@ TEST(HttpCache, SetPriorityNewTransaction) {
   MockHttpRequest info(transaction);
   TestCompletionCallback callback;
   EXPECT_EQ(ERR_IO_PENDING,
-            trans->Start(&info, callback.callback(), BoundNetLog()));
+            trans->Start(&info, callback.callback(), NetLogWithSource()));
   EXPECT_THAT(callback.WaitForResult(), IsOk());
 
   EXPECT_EQ(MEDIUM, cache.network_layer()->last_create_transaction_priority());
@@ -7481,9 +7503,9 @@ void RunTransactionAndGetNetworkBytes(MockHttpCache& cache,
                                       const MockTransaction& trans_info,
                                       int64_t* sent_bytes,
                                       int64_t* received_bytes) {
-  RunTransactionTestBase(cache.http_cache(), trans_info,
-                         MockHttpRequest(trans_info), nullptr, BoundNetLog(),
-                         nullptr, sent_bytes, received_bytes, nullptr);
+  RunTransactionTestBase(
+      cache.http_cache(), trans_info, MockHttpRequest(trans_info), nullptr,
+      NetLogWithSource(), nullptr, sent_bytes, received_bytes, nullptr);
 }
 
 }  // namespace
@@ -7851,7 +7873,7 @@ TEST(HttpCache, RangeGET_MultipleRequests) {
   ASSERT_TRUE(trans.get());
 
   // Start our transaction.
-  trans->Start(&request, callback.callback(), BoundNetLog());
+  trans->Start(&request, callback.callback(), NetLogWithSource());
 
   // A second transaction on a different part of the file (the default
   // kRangeGET_TransactionOK requests 40-49) should not be blocked by
@@ -7878,8 +7900,8 @@ TEST(HttpCache, NoStoreResponseShouldNotBlockFollowingRequests) {
   first->result = cache.CreateTransaction(&first->trans);
   ASSERT_THAT(first->result, IsOk());
   EXPECT_EQ(LOAD_STATE_IDLE, first->trans->GetLoadState());
-  first->result =
-      first->trans->Start(&request, first->callback.callback(), BoundNetLog());
+  first->result = first->trans->Start(&request, first->callback.callback(),
+                                      NetLogWithSource());
   EXPECT_EQ(LOAD_STATE_WAITING_FOR_CACHE, first->trans->GetLoadState());
 
   base::RunLoop().RunUntilIdle();
@@ -7895,7 +7917,7 @@ TEST(HttpCache, NoStoreResponseShouldNotBlockFollowingRequests) {
   ASSERT_THAT(second->result, IsOk());
   EXPECT_EQ(LOAD_STATE_IDLE, second->trans->GetLoadState());
   second->result = second->trans->Start(&request, second->callback.callback(),
-                                        BoundNetLog());
+                                        NetLogWithSource());
 
   // Here the second transaction proceeds without reading the first body.
   EXPECT_EQ(LOAD_STATE_WAITING_FOR_CACHE, second->trans->GetLoadState());

@@ -9,9 +9,13 @@
 #import "ios/web/public/web_state/js/crw_js_injection_evaluator.h"
 #import "ios/web/public/web_state/js/crw_js_injection_manager.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 @implementation CRWJSInjectionReceiver {
   // Used to evaluate JavaScripts.
-  id<CRWJSInjectionEvaluator> _evaluator;
+  __weak id<CRWJSInjectionEvaluator> _evaluator;
 
   // Map from a CRWJSInjectionManager class to its instance created for this
   // receiver.
@@ -35,11 +39,6 @@
 
 #pragma mark -
 #pragma mark CRWJSInjectionEvaluatorMethods
-
-- (void)evaluateJavaScript:(NSString*)script
-       stringResultHandler:(web::JavaScriptCompletion)handler {
-  [_evaluator evaluateJavaScript:script stringResultHandler:handler];
-}
 
 - (void)executeJavaScript:(NSString*)script
         completionHandler:(web::JavaScriptResultBlock)completionHandler {

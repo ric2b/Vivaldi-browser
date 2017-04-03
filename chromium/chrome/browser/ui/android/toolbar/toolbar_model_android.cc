@@ -10,11 +10,10 @@
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
 #include "components/toolbar/toolbar_model_impl.h"
-#include "content/public/browser/cert_store.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/ssl_status.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_constants.h"
-#include "content/public/common/ssl_status.h"
 #include "jni/ToolbarModel_jni.h"
 #include "net/cert/x509_certificate.h"
 
@@ -47,7 +46,7 @@ content::WebContents* ToolbarModelAndroid::GetActiveWebContents() const {
     return NULL;
   ScopedJavaLocalRef<jobject> jweb_contents =
       Java_ToolbarModelDelegate_getActiveWebContents(env, jdelegate);
-  return content::WebContents::FromJavaWebContents(jweb_contents.obj());
+  return content::WebContents::FromJavaWebContents(jweb_contents);
 }
 
 // static

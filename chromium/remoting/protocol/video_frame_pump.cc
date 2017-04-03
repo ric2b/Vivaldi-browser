@@ -30,8 +30,6 @@ namespace protocol {
 // must be smaller than the minimum RTO used in PseudoTCP, which is 250ms.
 static const int kKeepAlivePacketIntervalMs = 200;
 
-static bool g_enable_timestamps = false;
-
 VideoFramePump::FrameTimestamps::FrameTimestamps() {}
 VideoFramePump::FrameTimestamps::~FrameTimestamps() {}
 
@@ -41,11 +39,6 @@ VideoFramePump::PacketWithTimestamps::PacketWithTimestamps(
     : packet(std::move(packet)), timestamps(std::move(timestamps)) {}
 
 VideoFramePump::PacketWithTimestamps::~PacketWithTimestamps() {}
-
-// static
-void VideoFramePump::EnableTimestampsForTests() {
-  g_enable_timestamps = true;
-}
 
 VideoFramePump::VideoFramePump(
     scoped_refptr<base::SingleThreadTaskRunner> encode_task_runner,
@@ -169,7 +162,7 @@ VideoFramePump::EncodeFrame(VideoEncoder* encoder,
   std::unique_ptr<VideoPacket> packet;
   // If |frame| is non-NULL then let the encoder process it.
   if (frame)
-    packet = encoder->Encode(*frame, 0);
+    packet = encoder->Encode(*frame);
 
   // If |frame| is NULL, or the encoder returned nothing, return an empty
   // packet.
@@ -208,12 +201,6 @@ void VideoFramePump::SendPacket(std::unique_ptr<PacketWithTimestamps> packet) {
   packet->timestamps->can_send_time = base::TimeTicks::Now();
   UpdateFrameTimers(packet->packet.get(), packet->timestamps.get());
 
-  if (observer_) {
-    observer_->OnVideoFrameSent(
-        this, packet->packet->frame_id(),
-        packet->timestamps->input_event_client_timestamp);
-  }
-
   send_pending_ = true;
   video_stub_->ProcessVideoPacket(std::move(packet->packet),
                                   base::Bind(&VideoFramePump::OnVideoPacketSent,
@@ -222,10 +209,6 @@ void VideoFramePump::SendPacket(std::unique_ptr<PacketWithTimestamps> packet) {
 
 void VideoFramePump::UpdateFrameTimers(VideoPacket* packet,
                                        FrameTimestamps* timestamps) {
-  if (g_enable_timestamps)
-    packet->set_timestamp(timestamps->capture_ended_time.ToInternalValue());
-
-
   if (!timestamps->input_event_received_time.is_null()) {
     packet->set_capture_pending_time_ms((timestamps->capture_started_time -
                                          timestamps->input_event_received_time)

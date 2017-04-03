@@ -942,7 +942,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest, DevToolsExtensionWithHttpIframe) {
                      http_iframe.spec() + "'></iframe>");
 
   // Install the extension.
-  const Extension* extension = LoadExtensionFromPath(dir->unpacked_path());
+  const Extension* extension = LoadExtensionFromPath(dir->UnpackedPath());
   ASSERT_TRUE(extension);
 
   // Open a devtools window.
@@ -1014,7 +1014,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest,
       "};\n"
       "xhr.send(null);\n");
   // Install the extension.
-  const Extension* extension = LoadExtensionFromPath(dir->unpacked_path());
+  const Extension* extension = LoadExtensionFromPath(dir->UnpackedPath());
   ASSERT_TRUE(extension);
 
   // Open a devtools window.
@@ -1065,6 +1065,13 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest,
                        TestContentScriptIsPresent) {
   LoadExtension("simple_content_script");
   RunTest("testContentScriptIsPresent", kPageWithContentScript);
+}
+
+// Tests that console selector shows correct context names.
+IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest,
+                       TestConsoleContextNames) {
+  LoadExtension("simple_content_script");
+  RunTest("testConsoleContextNames", kPageWithContentScript);
 }
 
 // Tests that scripts are not duplicated after Scripts Panel switch.
@@ -1262,7 +1269,7 @@ class DevToolsReattachAfterCrashTest : public DevToolsSanityTest {
     ui_test_utils::NavigateToURL(browser(), GURL(content::kChromeUICrashURL));
     crash_observer.Wait();
     content::TestNavigationObserver navigation_observer(GetInspectedTab(), 1);
-    chrome::Reload(browser(), CURRENT_TAB);
+    chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
     navigation_observer.Wait();
   }
 };
@@ -1377,9 +1384,9 @@ class DevToolsPixelOutputTests : public DevToolsSanityTest {
 };
 
 // This test enables switches::kUseGpuInTests which causes false positives
-// with MemorySanitizer.
+// with MemorySanitizer. This is also flakey on many configurations.
 #if defined(MEMORY_SANITIZER) || defined(ADDRESS_SANITIZER) || \
-    (defined(OS_CHROMEOS) && defined(OFFICIAL_BUILD))
+    defined(OS_WIN)|| (defined(OS_CHROMEOS) && defined(OFFICIAL_BUILD))
 #define MAYBE_TestScreenshotRecording DISABLED_TestScreenshotRecording
 #else
 #define MAYBE_TestScreenshotRecording TestScreenshotRecording
@@ -1447,10 +1454,10 @@ class StaticURLDataSource : public content::URLDataSource {
       : source_(source), content_(content) {}
 
   std::string GetSource() const override { return source_; }
-  void StartDataRequest(const std::string& path,
-                        int render_process_id,
-                        int render_frame_id,
-                        const GotDataCallback& callback) override {
+  void StartDataRequest(
+      const std::string& path,
+      const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
+      const GotDataCallback& callback) override {
     std::string data(content_);
     callback.Run(base::RefCountedString::TakeString(&data));
   }
@@ -1513,9 +1520,15 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest,
   chrome::DuplicateTab(browser());
   chrome::SelectPreviousTab(browser());
   ui_test_utils::NavigateToURL(browser(), GURL("about:blank"));
-  chrome::GoBack(browser(), CURRENT_TAB);
+  chrome::GoBack(browser(), WindowOpenDisposition::CURRENT_TAB);
   RunTestFunction(window, "testWindowInitializedOnNavigateBack");
 
   DevToolsWindowTesting::CloseDevToolsWindowSync(window);
   content::WebUIControllerFactory::UnregisterFactoryForTesting(&test_factory);
 }
+
+// Tests scripts panel showing.
+IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestDevToolsSharedWorker) {
+  RunTest("testDevToolsSharedWorker", url::kAboutBlankURL);
+}
+

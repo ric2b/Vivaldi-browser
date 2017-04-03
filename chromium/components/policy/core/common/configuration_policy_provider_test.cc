@@ -4,7 +4,6 @@
 
 #include "components/policy/core/common/configuration_policy_provider_test.h"
 
-#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -134,7 +133,12 @@ const char kKeyDictionary[] = "DictionaryPolicy";
 
 }  // namespace test_keys
 
-PolicyTestBase::PolicyTestBase() {}
+PolicyTestBase::PolicyTestBase()
+#if defined(OS_POSIX)
+    : file_descriptor_watcher_(&loop_)
+#endif
+{
+}
 
 PolicyTestBase::~PolicyTestBase() {}
 
@@ -359,7 +363,7 @@ TEST_P(ConfigurationPolicyProviderTest, RefreshPolicies) {
   bundle.Get(PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()))
       .Set(harness_->key_string(), harness_->policy_level(),
            harness_->policy_scope(), harness_->policy_source(),
-           base::WrapUnique(new base::StringValue("value")), nullptr);
+           base::MakeUnique<base::StringValue>("value"), nullptr);
   EXPECT_TRUE(provider_->policies().Equals(bundle));
   provider_->RemoveObserver(&observer);
 }

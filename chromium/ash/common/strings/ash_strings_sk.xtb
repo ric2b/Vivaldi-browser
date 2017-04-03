@@ -47,7 +47,6 @@
 <translation id="2268813581635650749">Odhlásiť všetkých</translation>
 <translation id="2297568595583585744">Stavový panel</translation>
 <translation id="2303600792989757991">Prepnúť prehľad okien</translation>
-<translation id="2372145515558759244">Prebieha synchronizácia aplikácií...</translation>
 <translation id="2391579633712104609">180 °</translation>
 <translation id="2429753432712299108">Zariadenie Bluetooth s názvom <ph name="DEVICE_NAME" /> žiada o povolenie párovania. Skôr ako žiadosti vyhoviete, overte, či sa na danom zariadení zobrazuje nasledujúci prístupový kľúč: <ph name="PASSKEY" /></translation>
 <translation id="2475982808118771221">Vyskytla sa chyba</translation>
@@ -61,7 +60,6 @@
 <translation id="2727977024730340865">Batéria je zapojená do nabíjačky s nízkym výkonom. Nabíjanie batérie nemusí byť spoľahlivé.</translation>
 <translation id="2761704814324807722">Stavový panel, čas <ph name="TIME" />, <ph name="BATTERY" /></translation>
 <translation id="2792498699870441125">Alt + Hľadať</translation>
-<translation id="2805756323405976993">Aplikácie</translation>
 <translation id="2819276065543622893">Teraz prebehne odhlásenie.</translation>
 <translation id="2825619548187458965">Polička</translation>
 <translation id="2844169650293029770">Zariadenie USB-C (port vľavo vpredu)</translation>
@@ -97,7 +95,6 @@ Ak ho chcete zrušiť, stlačte klávesy Hľadať alebo Shift.</translation>
 <translation id="3621712662352432595">Nastavenia zvuku</translation>
 <translation id="3625258641415618104">Snímky obrazovky sú zakázané</translation>
 <translation id="3626281679859535460">Jas</translation>
-<translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079">Rozlíšenie obrazovky <ph name="DISPLAY_NAME" /> bolo zmenené na <ph name="RESOLUTION" /></translation>
 <translation id="370649949373421643">Povoliť Wi-Fi</translation>
 <translation id="3709443003275901162">viac ako 9</translation>
@@ -111,6 +108,8 @@ Ak ho chcete zrušiť, stlačte klávesy Hľadať alebo Shift.</translation>
 <translation id="3866182280516392520">Adresa IPv6</translation>
 <translation id="3891340733213178823">Ak sa chcete odhlásiť, stlačte dvakrát kombináciu klávesov Ctrl+Shift+Q.</translation>
 <translation id="3892641579809465218">Interný displej</translation>
+<translation id="3893630138897523026">ChromeVox (hlasová spätná väzba)</translation>
+<translation id="3899995891769452915">Hlasový vstup</translation>
 <translation id="3963445509666917109">Reproduktor (vnútorný)</translation>
 <translation id="3967919079500697218">Váš správca zakázal zaznamenávanie snímok obrazovky.</translation>
 <translation id="397105322502079400">Prebieha výpočet...</translation>
@@ -134,10 +133,8 @@ Ak ho chcete zrušiť, stlačte klávesy Hľadať alebo Shift.</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl+Shift+Space</translation>
 <translation id="5045002648206642691">Nastavenia služby Disk Google...</translation>
-<translation id="511445211639755999"><ph name="RESOLUTION" />, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">Dostupné zariadenia na prenos</translation>
 <translation id="5170568018924773124">Zobraziť v priečinku</translation>
-<translation id="5191140942132549112">ZOBRAZIŤ OTÁZKY</translation>
 <translation id="5222676887888702881">Odhlásiť sa</translation>
 <translation id="5238774010593222950">Nie je možné prihlásiť sa do iného účtu.</translation>
 <translation id="532063867737390965">Toto nastavenie siete zakázal správca.</translation>
@@ -185,6 +182,7 @@ Ak ho chcete zrušiť, stlačte klávesy Hľadať alebo Shift.</translation>
 <translation id="6459472438155181876">Rozšírenie obrazovky na displej <ph name="DISPLAY_NAME" /></translation>
 <translation id="6490471652906364588">Zariadenie USB-C (port vpravo)</translation>
 <translation id="6501401484702599040">Prenášanie obrazovky do zariadenia <ph name="RECEIVER_NAME" /></translation>
+<translation id="6521655319214113338">Vstup ručného písania</translation>
 <translation id="6537270692134705506">Nasnímať obrazovku</translation>
 <translation id="6550675742724504774">Možnosti</translation>
 <translation id="6585808820553845416">Relácia sa skončí o <ph name="SESSION_TIME_REMAINING" /></translation>
@@ -194,7 +192,6 @@ Ak ho chcete zrušiť, stlačte klávesy Hľadať alebo Shift.</translation>
 <translation id="6713285437468012787">Zariadenie Bluetooth s názvom <ph name="DEVICE_NAME" /> bolo spárované a je k dispozícii pre všetkých používateľov. Párovanie môžete zrušiť pomocou ponuky Nastavenia.</translation>
 <translation id="6785414152754474415">Batéria je nabitá na <ph name="PERCENTAGE" /> % a nabíja sa.</translation>
 <translation id="683971173229319003">Hľadať+L</translation>
-<translation id="68610848741840742">ChromeVox (hlasová spätná väzba)</translation>
 <translation id="6911468394164995108">Pripojiť k ďalšej...</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6979158407327259162">Disk Google</translation>
@@ -217,8 +214,10 @@ Ak ho chcete zrušiť, stlačte klávesy Alt + Hľadať alebo Shift.</translatio
 <translation id="743058460480092004">Fotoaparát a mikrofón sa používajú.</translation>
 <translation id="7510334386202674593">Ctrl+Shift+L</translation>
 <translation id="7561014039265304140">Obrazovka <ph name="DISPLAY_NAME" /> nepodporuje rozlíšenie <ph name="SPECIFIED_RESOLUTION" />. Rozlíšenie bolo zmenené na <ph name="FALLBACK_RESOLUTION" /></translation>
+<translation id="7562368315689366235">Paleta emodži</translation>
 <translation id="7573962313813535744">Režim v doku</translation>
 <translation id="7580671184200851182">Prehrávajte rovnaký zvuk zo všetkých reproduktorov (monofónny zvuk)</translation>
+<translation id="7581273696622423628">Zúčastniť sa prieskumu</translation>
 <translation id="7593891976182323525">Hľadať alebo Shift</translation>
 <translation id="7649070708921625228">Pomocník</translation>
 <translation id="7692480393933218409">Nabíjajú sa pripojené zariadenia USB-C</translation>

@@ -214,9 +214,7 @@
     ],
     "scripts": [
         "InspectElementModeController.js",
-        "BezierUI.js",
         "ColorSwatchPopoverIcon.js",
-        "BezierEditor.js",
         "ComputedStyleModel.js",
         "ElementsBreadcrumbs.js",
         "ElementsSidebarPane.js",
@@ -235,11 +233,11 @@
         "ElementsTreeElementHighlighter.js"
     ],
     "resources": [
-        "bezierEditor.css",
         "breadcrumbs.css",
         "computedStyleSidebarPane.css",
         "elementsPanel.css",
         "elementsTreeOutline.css",
-        "platformFontsWidget.css"
+        "platformFontsWidget.css",
+        "stylesSectionTree.css"
     ]
 }

@@ -32,6 +32,7 @@
 #include "base/strings/string_piece.h"
 #include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
+#include "net/base/net_export.h"
 #include "net/quic/core/crypto/quic_decrypter.h"
 #include "net/quic/core/quic_alarm.h"
 #include "net/quic/core/quic_alarm_factory.h"
@@ -174,6 +175,9 @@ class NET_EXPORT_PRIVATE QuicConnectionDebugVisitor
                             TransmissionType transmission_type,
                             QuicTime sent_time) {}
 
+  // Called when an PING frame has been sent.
+  virtual void OnPingSent() {}
+
   // Called when a packet has been received, but before it is
   // validated or parsed.
   virtual void OnPacketReceived(const IPEndPoint& self_address,
@@ -296,6 +300,8 @@ class NET_EXPORT_PRIVATE QuicConnection
     SEND_ACK,
     // Bundle an ack with outgoing data.
     SEND_ACK_IF_PENDING,
+    // Do not send ack.
+    NO_ACK,
   };
 
   enum AckMode { TCP_ACKING, ACK_DECIMATION, ACK_DECIMATION_WITH_REORDERING };
@@ -481,6 +487,10 @@ class NET_EXPORT_PRIVATE QuicConnection
     debug_visitor_ = debug_visitor;
     sent_packet_manager_->SetDebugDelegate(debug_visitor);
   }
+  void set_ping_timeout(QuicTime::Delta ping_timeout) {
+    ping_timeout_ = ping_timeout;
+  }
+  const QuicTime::Delta ping_timeout() { return ping_timeout_; }
   // Used in Chromium, but not internally.
   void set_creator_debug_delegate(QuicPacketCreator::DebugDelegate* visitor) {
     packet_generator_.set_debug_delegate(visitor);
@@ -562,7 +572,7 @@ class NET_EXPORT_PRIVATE QuicConnection
   // SetNonceForPublicHeader sets the nonce that will be transmitted in the
   // public header of each packet encrypted at the initial encryption level
   // decrypted. This should only be called on the server side.
-  void SetDiversificationNonce(const DiversificationNonce nonce);
+  void SetDiversificationNonce(const DiversificationNonce& nonce);
 
   // SetDefaultEncryptionLevel sets the encryption level that will be applied
   // to new packets.
@@ -677,10 +687,18 @@ class NET_EXPORT_PRIVATE QuicConnection
     return packet_generator_;
   }
 
+  const QuicReceivedPacketManager& received_packet_manager() const {
+    return received_packet_manager_;
+  }
+
   EncryptionLevel encryption_level() const { return encryption_level_; }
 
   const IPEndPoint& last_packet_source_address() const {
     return last_packet_source_address_;
+  }
+
+  void set_largest_packet_size_supported(QuicByteCount size) {
+    largest_packet_size_supported_ = size;
   }
 
  protected:
@@ -724,9 +742,11 @@ class NET_EXPORT_PRIVATE QuicConnection
     return active_peer_migration_type_;
   }
 
-  // Sends the connection close packet to the peer.
+  // Sends the connection close packet to the peer. |ack_mode| determines
+  // whether ack frame will be bundled with the connection close packet.
   virtual void SendConnectionClosePacket(QuicErrorCode error,
-                                         const std::string& details);
+                                         const std::string& details,
+                                         AckBundling ack_mode);
 
  private:
   friend class test::QuicConnectionPeer;
@@ -828,9 +848,10 @@ class NET_EXPORT_PRIVATE QuicConnection
   // Set the size of the packet we are targeting while doing path MTU discovery.
   void SetMtuDiscoveryTarget(QuicByteCount target);
 
-  // Validates the potential maximum packet size, and reduces it if it exceeds
-  // the largest supported by the protocol or the packet writer.
-  QuicByteCount LimitMaxPacketSize(QuicByteCount suggested_max_packet_size);
+  // Returns |suggested_max_packet_size| clamped to any limits set by the
+  // underlying writer, connection, or protocol.
+  QuicByteCount GetLimitedMaxPacketSize(
+      QuicByteCount suggested_max_packet_size);
 
   // Called when |path_id| is considered as closed because either a PATH_CLOSE
   // frame is sent or received. Stops receiving packets on closed path. Drops
@@ -864,11 +885,6 @@ class NET_EXPORT_PRIVATE QuicConnection
   // Encryption level for new packets. Should only be changed via
   // SetDefaultEncryptionLevel().
   EncryptionLevel encryption_level_;
-  bool has_forward_secure_encrypter_;
-  // The packet number of the first packet which will be encrypted with the
-  // foward-secure encrypter, even if the peer has not started sending
-  // forward-secure packets.
-  QuicPacketNumber first_required_forward_secure_packet_;
   const QuicClock* clock_;
   QuicRandom* random_generator_;
 
@@ -894,8 +910,12 @@ class NET_EXPORT_PRIVATE QuicConnection
                                      // parsed or nullptr.
   EncryptionLevel last_decrypted_packet_level_;
   QuicPacketHeader last_header_;
+  // TODO(ianswett): Remove last_stop_waiting_frame_ once
+  // FLAGS_quic_receive_packet_once_decrypted is deprecated.
   QuicStopWaitingFrame last_stop_waiting_frame_;
   bool should_last_packet_instigate_acks_;
+  // Whether the most recent packet was missing before it was received.
+  bool was_last_packet_missing_;
 
   // Track some peer state so we can do less bookkeeping
   // Largest sequence sent by the peer which had an ack frame (latest ack info).
@@ -969,6 +989,9 @@ class NET_EXPORT_PRIVATE QuicConnection
   // If true, defer sending data in response to received packets to the
   // SendAlarm.
   bool defer_send_in_response_to_packets_;
+
+  // The timeout for PING.
+  QuicTime::Delta ping_timeout_;
 
   // Arena to store class implementations within the QuicConnection.
   QuicConnectionArena arena_;
@@ -1064,8 +1087,18 @@ class NET_EXPORT_PRIVATE QuicConnection
   // sent.
   QuicPacketNumber next_mtu_probe_at_;
 
+  // The value of the MTU regularly used by the connection. This is different
+  // from the value returned by max_packet_size(), as max_packet_size() returns
+  // the value of the MTU as currently used by the serializer, so if
+  // serialization of an MTU probe is in progress, those two values will be
+  // different.
+  QuicByteCount long_term_mtu_;
+
   // The size of the largest packet received from peer.
   QuicByteCount largest_received_packet_size_;
+
+  // The maximum allowed packet size.
+  QuicByteCount largest_packet_size_supported_;
 
   // Whether a GoAway has been sent.
   bool goaway_sent_;

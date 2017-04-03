@@ -394,6 +394,8 @@ cr.define('ntp', function() {
      * @private
      */
     onClick_: function(e) {
+      if (/** @type {MouseEvent} */(e).button > 1) return;
+
       var url = !this.appData_.is_webstore ? '' :
           appendParam(this.appData_.url,
                       'utm_source',

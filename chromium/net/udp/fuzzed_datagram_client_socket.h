@@ -13,7 +13,7 @@
 #include "net/base/completion_callback.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/network_change_notifier.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 
 namespace base {
 class FuzzedDataProvider;
@@ -44,7 +44,7 @@ class FuzzedDatagramClientSocket : public DatagramClientSocket {
   int GetPeerAddress(IPEndPoint* address) const override;
   int GetLocalAddress(IPEndPoint* address) const override;
   void UseNonBlockingIO() override;
-  const BoundNetLog& NetLog() const override;
+  const NetLogWithSource& NetLog() const override;
 
   // Socket implementation:
   int Read(IOBuffer* buf,
@@ -67,7 +67,7 @@ class FuzzedDatagramClientSocket : public DatagramClientSocket {
   bool read_pending_ = false;
   bool write_pending_ = false;
 
-  BoundNetLog net_log_;
+  NetLogWithSource net_log_;
 
   IPEndPoint remote_address_;
 

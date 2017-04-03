@@ -12,58 +12,60 @@
 namespace blink {
 
 ResizeObservation::ResizeObservation(Element* target, ResizeObserver* observer)
-    : m_target(target)
-    , m_observer(observer)
-    , m_observationSize(0, 0)
-    , m_elementSizeChanged(true)
-{
-    DCHECK(m_target);
-    m_observer->elementSizeChanged();
+    : m_target(target),
+      m_observer(observer),
+      m_observationSize(0, 0),
+      m_elementSizeChanged(true) {
+  DCHECK(m_target);
+  m_observer->elementSizeChanged();
 }
 
-void ResizeObservation::setObservationSize(const LayoutSize& size)
-{
-    m_observationSize = size;
-    m_elementSizeChanged = false;
+bool ResizeObservation::observationSizeOutOfSync() {
+  return m_elementSizeChanged && m_observationSize != computeTargetSize();
 }
 
-bool ResizeObservation::observationSizeOutOfSync() const
-{
-    return m_elementSizeChanged && m_observationSize != ResizeObservation::getTargetSize(m_target);
+void ResizeObservation::setObservationSize(const LayoutSize& observationSize) {
+  m_observationSize = observationSize;
+  m_elementSizeChanged = false;
 }
 
-size_t ResizeObservation::targetDepth()
-{
-    unsigned depth = 0;
-    for (Element* parent = m_target; parent; parent = parent->parentElement())
-        ++depth;
-    return depth;
+size_t ResizeObservation::targetDepth() {
+  unsigned depth = 0;
+  for (Element* parent = m_target; parent; parent = parent->parentElement())
+    ++depth;
+  return depth;
 }
 
-LayoutSize ResizeObservation::getTargetSize(Element* target) // static
-{
-    if (target) {
-        if (target->isSVGElement() && toSVGElement(target)->isSVGGraphicsElement()) {
-            SVGGraphicsElement& svg = toSVGGraphicsElement(*target);
-            return LayoutSize(svg.getBBox().size());
-        }
-        LayoutBox* layout = target->layoutBox();
-        if (layout)
-            return layout->contentSize();
+LayoutSize ResizeObservation::computeTargetSize() const {
+  if (m_target) {
+    if (m_target->isSVGElement() &&
+        toSVGElement(m_target)->isSVGGraphicsElement()) {
+      SVGGraphicsElement& svg = toSVGGraphicsElement(*m_target);
+      return LayoutSize(svg.getBBox().size());
     }
-    return LayoutSize();
+    LayoutBox* layout = m_target->layoutBox();
+    if (layout)
+      return layout->contentSize();
+  }
+  return LayoutSize();
 }
 
-void ResizeObservation::elementSizeChanged()
-{
-    m_elementSizeChanged = true;
-    m_observer->elementSizeChanged();
+LayoutPoint ResizeObservation::computeTargetLocation() const {
+  if (m_target && !m_target->isSVGElement()) {
+    if (LayoutBox* layout = m_target->layoutBox())
+      return LayoutPoint(layout->paddingLeft(), layout->paddingTop());
+  }
+  return LayoutPoint();
 }
 
-DEFINE_TRACE(ResizeObservation)
-{
-    visitor->trace(m_target);
-    visitor->trace(m_observer);
+void ResizeObservation::elementSizeChanged() {
+  m_elementSizeChanged = true;
+  m_observer->elementSizeChanged();
 }
 
-} // namespace blink
+DEFINE_TRACE(ResizeObservation) {
+  visitor->trace(m_target);
+  visitor->trace(m_observer);
+}
+
+}  // namespace blink

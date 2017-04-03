@@ -7,9 +7,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/policy_ui_handler.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/browser_resources.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_ui.h"
-#include "grit/browser_resources.h"
-#include "grit/components_strings.h"
 
 namespace {
 
@@ -20,6 +20,7 @@ content::WebUIDataSource* CreatePolicyUIHtmlSource() {
   source->AddLocalizedString("filterPlaceholder",
                              IDS_POLICY_FILTER_PLACEHOLDER);
   source->AddLocalizedString("reloadPolicies", IDS_POLICY_RELOAD_POLICIES);
+  source->AddLocalizedString("chromeForWork", IDS_POLICY_CHROME_FOR_WORK);
   source->AddLocalizedString("status", IDS_POLICY_STATUS);
   source->AddLocalizedString("statusDevice", IDS_POLICY_STATUS_DEVICE);
   source->AddLocalizedString("statusUser", IDS_POLICY_STATUS_USER);

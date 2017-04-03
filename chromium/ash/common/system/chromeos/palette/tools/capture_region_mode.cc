@@ -10,6 +10,7 @@
 #include "ash/common/system/toast/toast_data.h"
 #include "ash/common/system/toast/toast_manager.h"
 #include "ash/common/wm_shell.h"
+#include "ash/resources/vector_icons/vector_icons.h"
 #include "grit/ash_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -35,8 +36,8 @@ PaletteToolId CaptureRegionMode::GetToolId() const {
   return PaletteToolId::CAPTURE_REGION;
 }
 
-gfx::VectorIconId CaptureRegionMode::GetActiveTrayIcon() {
-  return gfx::VectorIconId::PALETTE_TRAY_ICON_CAPTURE_REGION;
+const gfx::VectorIcon& CaptureRegionMode::GetActiveTrayIcon() const {
+  return kPaletteTrayIconCaptureRegionIcon;
 }
 
 void CaptureRegionMode::OnEnable() {
@@ -65,8 +66,8 @@ views::View* CaptureRegionMode::CreateView() {
       l10n_util::GetStringUTF16(IDS_ASH_STYLUS_TOOLS_CAPTURE_REGION_ACTION));
 }
 
-gfx::VectorIconId CaptureRegionMode::GetPaletteIconId() {
-  return gfx::VectorIconId::PALETTE_ACTION_CAPTURE_REGION;
+const gfx::VectorIcon& CaptureRegionMode::GetPaletteIcon() const {
+  return kPaletteActionCaptureRegionIcon;
 }
 
 void CaptureRegionMode::OnScreenshotDone() {

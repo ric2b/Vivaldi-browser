@@ -47,7 +47,6 @@ Trykk på Shift + Alt for å bytte.</translation>
 <translation id="2268813581635650749">Logg alle av</translation>
 <translation id="2297568595583585744">Status-felt</translation>
 <translation id="2303600792989757991">Vis eller skjul vindusoversikten</translation>
-<translation id="2372145515558759244">Synkroniserer programmer …</translation>
 <translation id="2391579633712104609">180°</translation>
 <translation id="2429753432712299108">Bluetooth-enheten «<ph name="DEVICE_NAME" />» ber om tillatelse til å koble til. Før du godtar dette, må du bekrefte at denne tilgangskoden vises på den aktuelle enheten: <ph name="PASSKEY" /></translation>
 <translation id="2475982808118771221">Det oppstod en feil</translation>
@@ -61,7 +60,6 @@ Trykk på Shift + Alt for å bytte.</translation>
 <translation id="2727977024730340865">Tilkoblet laveffektslader. Batteriladingen kan være upålitelig.</translation>
 <translation id="2761704814324807722">Statusfelt, klokken <ph name="TIME" />, <ph name="BATTERY" /></translation>
 <translation id="2792498699870441125">Alt + Søk</translation>
-<translation id="2805756323405976993">Apper</translation>
 <translation id="2819276065543622893">Du blir nå logget av.</translation>
 <translation id="2825619548187458965">Hylle</translation>
 <translation id="2844169650293029770">USB-C-enhet (porten foran på venstre side)</translation>
@@ -97,7 +95,6 @@ Trykk på Søk eller Shift for å avbryte.</translation>
 <translation id="3621712662352432595">Lydinnstillinger</translation>
 <translation id="3625258641415618104">Skjermdumper er deaktivert</translation>
 <translation id="3626281679859535460">Lysstyrke</translation>
-<translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079">Oppløsningen for <ph name="DISPLAY_NAME" /> ble endret til <ph name="RESOLUTION" /></translation>
 <translation id="370649949373421643">Aktiver Wi-Fi</translation>
 <translation id="3709443003275901162">9+</translation>
@@ -112,6 +109,8 @@ Trykk på Søk eller Shift for å avbryte.</translation>
 <translation id="3866182280516392520">IPv6-adresse</translation>
 <translation id="3891340733213178823">Trykk på Control+Shift+Q to ganger for å logge av.</translation>
 <translation id="3892641579809465218">Innebygd skjerm</translation>
+<translation id="3893630138897523026">ChromeVox (muntlig tilbakemelding)</translation>
+<translation id="3899995891769452915">Taleinndata</translation>
 <translation id="3963445509666917109">Mikrofon (intern)</translation>
 <translation id="3967919079500697218">Muligheten til å ta skjermdumper er deaktivert av administratoren.</translation>
 <translation id="397105322502079400">Beregner …</translation>
@@ -135,10 +134,8 @@ Trykk på Søk eller Shift for å avbryte.</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl+Shift+Mellomrom</translation>
 <translation id="5045002648206642691">Innstillinger for Google Disk</translation>
-<translation id="511445211639755999"><ph name="RESOLUTION" />, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">Cast-enheter er tilgjengelige</translation>
 <translation id="5170568018924773124">Vis i mappen</translation>
-<translation id="5191140942132549112">SE SPØRSMÅLENE</translation>
 <translation id="5222676887888702881">Logg av</translation>
 <translation id="5238774010593222950">Du kan ikke logge på flere kontoer.</translation>
 <translation id="532063867737390965">Administratoren har slått av denne nettverksinnstillingen.</translation>
@@ -186,6 +183,7 @@ Trykk på Shift + Alt for å bytte.</translation>
 <translation id="6459472438155181876">Utvider skjermen til <ph name="DISPLAY_NAME" /></translation>
 <translation id="6490471652906364588">USB-C-enhet (porten på høyre side)</translation>
 <translation id="6501401484702599040">Caster skjermen til <ph name="RECEIVER_NAME" /></translation>
+<translation id="6521655319214113338">Håndskrift-inndata</translation>
 <translation id="6537270692134705506">Ta skjermdump av skjermen</translation>
 <translation id="6550675742724504774">Alternativer</translation>
 <translation id="6585808820553845416">Økten slutter om <ph name="SESSION_TIME_REMAINING" />.</translation>
@@ -195,7 +193,6 @@ Trykk på Shift + Alt for å bytte.</translation>
 <translation id="6713285437468012787">Nå er Bluetooth-enheten «<ph name="DEVICE_NAME" />» koblet til og tilgjengelig for alle brukere. Du kan oppheve denne tilkoblingen via Innstillinger.</translation>
 <translation id="6785414152754474415">Batteriet er <ph name="PERCENTAGE" /> % fullt og til lading.</translation>
 <translation id="683971173229319003">Søk+L</translation>
-<translation id="68610848741840742">ChromeVox (muntlig tilbakemelding)</translation>
 <translation id="6911468394164995108">Koble til annet</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6979158407327259162">Google Disk</translation>
@@ -217,8 +214,10 @@ Trykk på Alt + Søk eller Shift for å avbryte.</translation>
 <translation id="743058460480092004">Kameraet og mikrofonen er i bruk.</translation>
 <translation id="7510334386202674593">Ctrl+Shift+L</translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" /> støtter ikke <ph name="SPECIFIED_RESOLUTION" />. Oppløsningen ble endret til <ph name="FALLBACK_RESOLUTION" /></translation>
+<translation id="7562368315689366235">Emoji-palett</translation>
 <translation id="7573962313813535744">Dokket modus</translation>
 <translation id="7580671184200851182">Spill den samme lyden på alle høyttalere (monolyd)</translation>
+<translation id="7581273696622423628">Besvar undersøkelsen</translation>
 <translation id="7593891976182323525">Søk eller Shift</translation>
 <translation id="7649070708921625228">Hjelp</translation>
 <translation id="7692480393933218409">Lader de tilkoblede USB-C-enhetene</translation>

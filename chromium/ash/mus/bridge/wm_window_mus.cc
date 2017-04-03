@@ -4,7 +4,9 @@
 
 #include "ash/mus/bridge/wm_window_mus.h"
 
+#include "ash/common/shelf/shelf_item_types.h"
 #include "ash/common/wm/container_finder.h"
+#include "ash/common/wm/window_positioning_utils.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_layout_manager.h"
 #include "ash/common/wm_transient_window_observer.h"
@@ -23,6 +25,7 @@
 #include "ui/aura/window.h"
 #include "ui/base/hit_test.h"
 #include "ui/display/display.h"
+#include "ui/resources/grit/ui_resources.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -42,9 +45,8 @@ namespace mus {
 
 namespace {
 
-// This classes is used so that the WindowState constructor can be made
-// protected. GetWindowState() is the only place that should be creating
-// WindowState.
+// This class is used so that the WindowState constructor can be made protected.
+// GetWindowState() is the only place that should be creating WindowState.
 class WindowStateMus : public wm::WindowState {
  public:
   explicit WindowStateMus(WmWindow* window) : wm::WindowState(window) {}
@@ -98,6 +100,17 @@ ui::mojom::ShowState MojomWindowShowStateFromUI(ui::WindowShowState state) {
   return ui::mojom::ShowState::DEFAULT;
 }
 
+// Returns the WmWindowProperty enum value for the given ui::Window key name.
+WmWindowProperty WmWindowPropertyFromUI(const std::string& ui_window_key) {
+  if (ui_window_key == ui::mojom::WindowManager::kAlwaysOnTop_Property)
+    return WmWindowProperty::ALWAYS_ON_TOP;
+  if (ui_window_key == ui::mojom::WindowManager::kShelfIconResourceId_Property)
+    return WmWindowProperty::SHELF_ICON_RESOURCE_ID;
+  if (ui_window_key == ui::mojom::WindowManager::kShelfItemType_Property)
+    return WmWindowProperty::SHELF_ITEM_TYPE;
+  return WmWindowProperty::INVALID_PROPERTY;
+}
+
 }  // namespace
 
 WmWindowMus::WmWindowMus(ui::Window* window)
@@ -114,15 +127,16 @@ WmWindowMus::~WmWindowMus() {
 }
 
 // static
-WmWindowMus* WmWindowMus::Get(ui::Window* window) {
+const WmWindowMus* WmWindowMus::Get(const ui::Window* window) {
   if (!window)
     return nullptr;
 
-  WmWindowMus* wm_window = window->GetLocalProperty(kWmWindowKey);
+  const WmWindowMus* wm_window = window->GetLocalProperty(kWmWindowKey);
   if (wm_window)
     return wm_window;
   // WmWindowMus is owned by the ui::Window.
-  return new WmWindowMus(window);
+  // Unfortunately there isn't a good way to avoid the cast here.
+  return new WmWindowMus(const_cast<ui::Window*>(window));
 }
 
 // static
@@ -158,6 +172,13 @@ bool WmWindowMus::IsContainer() const {
   return GetShellWindowId() != kShellWindowId_Invalid;
 }
 
+void WmWindowMus::Destroy() {
+  // TODO(sky): to match aura behavior this should delete children.
+  // http://crbug.com/647513.
+  window_->Destroy();
+  // WARNING: this has been deleted.
+}
+
 const WmWindow* WmWindowMus::GetRootWindow() const {
   return Get(window_->GetRoot());
 }
@@ -186,6 +207,10 @@ std::string WmWindowMus::GetName() const {
              : std::string();
 }
 
+void WmWindowMus::SetTitle(const base::string16& title) {
+  SetWindowTitle(window_, title);
+}
+
 base::string16 WmWindowMus::GetTitle() const {
   return GetWindowTitle(window_);
 }
@@ -199,7 +224,22 @@ int WmWindowMus::GetShellWindowId() const {
 }
 
 ui::wm::WindowType WmWindowMus::GetType() const {
-  return GetWmWindowType(window_);
+  // If the WindowType was expicitly set, then it means |window_| was created
+  // by way of WmShellMus::NewWindow() and the type is locally defined. For
+  // windows created in other ways, say from the client, then we need to get
+  // the type from |window_| directly.
+  return is_wm_window_type_set_ ? wm_window_type_ : GetWmWindowType(window_);
+}
+
+int WmWindowMus::GetAppType() const {
+  // TODO: Need support for window property kAppType: http://crbug.com/651206.
+  NOTIMPLEMENTED();
+  return 0;
+}
+
+void WmWindowMus::SetAppType(int app_type) const {
+  // TODO: Need support for window property kAppType: http://crbug.com/651206.
+  NOTIMPLEMENTED();
 }
 
 bool WmWindowMus::IsBubble() {
@@ -207,9 +247,21 @@ bool WmWindowMus::IsBubble() {
 }
 
 ui::Layer* WmWindowMus::GetLayer() {
-  // TODO(sky): this function should be nuked entirely.
+  // TODO: http://crbug.com/652877.
   NOTIMPLEMENTED();
   return widget_ ? widget_->GetLayer() : nullptr;
+}
+
+bool WmWindowMus::GetLayerTargetVisibility() {
+  // TODO: http://crbug.com/652877.
+  NOTIMPLEMENTED();
+  return GetTargetVisibility();
+}
+
+bool WmWindowMus::GetLayerVisible() {
+  // TODO: http://crbug.com/652877.
+  NOTIMPLEMENTED();
+  return IsVisible();
 }
 
 display::Display WmWindowMus::GetDisplayNearestWindow() {
@@ -296,6 +348,12 @@ float WmWindowMus::GetTargetOpacity() const {
   return window_->opacity();
 }
 
+gfx::Rect WmWindowMus::GetMinimizeAnimationTargetBoundsInScreen() const {
+  // TODO: need animation support: http://crbug.com/615087.
+  NOTIMPLEMENTED();
+  return GetBoundsInScreen();
+}
+
 void WmWindowMus::SetTransform(const gfx::Transform& transform) {
   // TODO: mus needs to support transforms: http://crbug.com/615089.
   NOTIMPLEMENTED();
@@ -332,10 +390,66 @@ bool WmWindowMus::GetBoolProperty(WmWindowProperty key) {
   return false;
 }
 
-int WmWindowMus::GetIntProperty(WmWindowProperty key) {
-  if (key == WmWindowProperty::SHELF_ID) {
+SkColor WmWindowMus::GetColorProperty(WmWindowProperty key) {
+  if (key == WmWindowProperty::TOP_VIEW_COLOR) {
+    // TODO: need support for TOP_VIEW_COLOR: http://crbug.com/615100.
     NOTIMPLEMENTED();
     return 0;
+  }
+
+  NOTREACHED();
+  return 0;
+}
+
+void WmWindowMus::SetColorProperty(WmWindowProperty key, SkColor value) {
+  if (key == WmWindowProperty::TOP_VIEW_COLOR) {
+    // TODO: need support for TOP_VIEW_COLOR: http://crbug.com/615100.
+    NOTIMPLEMENTED();
+    return;
+  }
+
+  NOTREACHED();
+}
+
+int WmWindowMus::GetIntProperty(WmWindowProperty key) {
+  if (key == WmWindowProperty::MODAL_TYPE) {
+    // TODO: WindowTree::SetModalWindow() needs to route through WindowManager
+    // so wm can position. http://crbug.com/645996.
+    NOTIMPLEMENTED();
+    return static_cast<int>(ui::MODAL_TYPE_NONE);
+  }
+
+  if (key == WmWindowProperty::SHELF_ICON_RESOURCE_ID) {
+    if (window_->HasSharedProperty(
+            ui::mojom::WindowManager::kShelfIconResourceId_Property)) {
+      return window_->GetSharedProperty<int>(
+          ui::mojom::WindowManager::kShelfIconResourceId_Property);
+    }
+    // Mash provides a default shelf icon image.
+    // TODO(msw): Support icon resource ids and bitmaps:
+    // mojo::Array<uint8_t> app_icon = GetWindowAppIcon(window_);
+    return IDR_DEFAULT_FAVICON;
+  }
+
+  if (key == WmWindowProperty::SHELF_ID) {
+    if (window_->HasSharedProperty(
+            ui::mojom::WindowManager::kShelfId_Property)) {
+      return window_->GetSharedProperty<int>(
+          ui::mojom::WindowManager::kShelfId_Property);
+    }
+
+    return kInvalidShelfID;
+  }
+
+  if (key == WmWindowProperty::SHELF_ITEM_TYPE) {
+    if (window_->HasSharedProperty(
+            ui::mojom::WindowManager::kShelfItemType_Property)) {
+      return window_->GetSharedProperty<int>(
+          ui::mojom::WindowManager::kShelfItemType_Property);
+    }
+    // Mash provides a default shelf item type for non-ignored windows.
+    return GetWindowIgnoredByShelf(window_) ? TYPE_UNDEFINED
+                                            : TYPE_PLATFORM_APP;
   }
 
   if (key == WmWindowProperty::TOP_VIEW_INSET) {
@@ -349,8 +463,21 @@ int WmWindowMus::GetIntProperty(WmWindowProperty key) {
 }
 
 void WmWindowMus::SetIntProperty(WmWindowProperty key, int value) {
+  if (key == WmWindowProperty::SHELF_ICON_RESOURCE_ID) {
+    window_->SetSharedProperty<int>(
+        ui::mojom::WindowManager::kShelfIconResourceId_Property, value);
+    return;
+  }
+
   if (key == WmWindowProperty::SHELF_ID) {
-    NOTIMPLEMENTED();
+    window_->SetSharedProperty<int>(ui::mojom::WindowManager::kShelfId_Property,
+                                    value);
+    return;
+  }
+
+  if (key == WmWindowProperty::SHELF_ITEM_TYPE) {
+    window_->SetSharedProperty<int>(
+        ui::mojom::WindowManager::kShelfItemType_Property, value);
     return;
   }
 
@@ -361,19 +488,6 @@ void WmWindowMus::SetIntProperty(WmWindowProperty key, int value) {
   }
 
   NOTREACHED();
-}
-
-ShelfItemDetails* WmWindowMus::GetShelfItemDetails() {
-  NOTIMPLEMENTED();  // TODO: Add support; see crbug.com/634150
-  return nullptr;
-}
-
-void WmWindowMus::SetShelfItemDetails(const ShelfItemDetails& details) {
-  NOTIMPLEMENTED();  // TODO: Add support; see crbug.com/634150
-}
-
-void WmWindowMus::ClearShelfItemDetails() {
-  NOTIMPLEMENTED();  // TODO: Add support; see crbug.com/634150
 }
 
 const wm::WindowState* WmWindowMus::GetWindowState() const {
@@ -399,7 +513,11 @@ void WmWindowMus::AddChild(WmWindow* window) {
   window_->AddChild(GetMusWindow(window));
 }
 
-WmWindow* WmWindowMus::GetParent() {
+void WmWindowMus::RemoveChild(WmWindow* child) {
+  window_->RemoveChild(GetMusWindow(child));
+}
+
+const WmWindow* WmWindowMus::GetParent() const {
   return Get(window_->parent());
 }
 
@@ -424,6 +542,11 @@ void WmWindowMus::SetLayoutManager(
 WmLayoutManager* WmWindowMus::GetLayoutManager() {
   return layout_manager_adapter_ ? layout_manager_adapter_->layout_manager()
                                  : nullptr;
+}
+
+void WmWindowMus::SetVisibilityChangesAnimated() {
+  // TODO: need animation support: http://crbug.com/615087.
+  NOTIMPLEMENTED();
 }
 
 void WmWindowMus::SetVisibilityAnimationType(int type) {
@@ -501,10 +624,14 @@ void WmWindowMus::SetBoundsDirectCrossFade(const gfx::Rect& bounds) {
 
 void WmWindowMus::SetBoundsInScreen(const gfx::Rect& bounds_in_screen,
                                     const display::Display& dst_display) {
-  // TODO: SetBoundsInScreen isn't fully implemented yet,
-  // http://crbug.com/615552.
-  NOTIMPLEMENTED();
-  SetBounds(ConvertRectFromScreen(bounds_in_screen));
+  DCHECK(GetParent());  // Aura code assumed a parent, so this does too.
+  if (static_cast<const WmWindowMus*>(GetParent())
+          ->child_bounds_in_screen_behavior_ ==
+      BoundsInScreenBehavior::USE_LOCAL_COORDINATES) {
+    SetBounds(bounds_in_screen);
+    return;
+  }
+  wm::SetBoundsInScreen(this, bounds_in_screen, dst_display);
 }
 
 gfx::Rect WmWindowMus::GetBoundsInScreen() const {
@@ -522,15 +649,16 @@ gfx::Rect WmWindowMus::GetTargetBounds() {
 }
 
 void WmWindowMus::ClearRestoreBounds() {
-  restore_bounds_in_screen_.reset();
+  window_->ClearSharedProperty(
+      ui::mojom::WindowManager::kRestoreBounds_Property);
 }
 
 void WmWindowMus::SetRestoreBoundsInScreen(const gfx::Rect& bounds) {
-  restore_bounds_in_screen_.reset(new gfx::Rect(bounds));
+  SetRestoreBounds(window_, bounds);
 }
 
 gfx::Rect WmWindowMus::GetRestoreBoundsInScreen() const {
-  return *restore_bounds_in_screen_;
+  return GetRestoreBounds(window_);
 }
 
 bool WmWindowMus::Contains(const WmWindow* other) const {
@@ -560,8 +688,11 @@ void WmWindowMus::SetRestoreOverrides(
 }
 
 void WmWindowMus::SetLockedToRoot(bool value) {
-  // TODO(sky): there is no getter for this. Investigate where used.
-  NOTIMPLEMENTED();
+  locked_to_root_ = value;
+}
+
+bool WmWindowMus::IsLockedToRoot() const {
+  return locked_to_root_;
 }
 
 void WmWindowMus::SetCapture() {
@@ -577,7 +708,8 @@ void WmWindowMus::ReleaseCapture() {
 }
 
 bool WmWindowMus::HasRestoreBounds() const {
-  return restore_bounds_in_screen_.get() != nullptr;
+  return window_->HasSharedProperty(
+      ui::mojom::WindowManager::kRestoreBounds_Property);
 }
 
 bool WmWindowMus::CanMaximize() const {
@@ -620,6 +752,11 @@ void WmWindowMus::StackChildBelow(WmWindow* child, WmWindow* target) {
                                ui::mojom::OrderDirection::BELOW);
 }
 
+void WmWindowMus::SetPinned(bool trusted) {
+  // http://crbug.com/622486.
+  NOTIMPLEMENTED();
+}
+
 void WmWindowMus::SetAlwaysOnTop(bool value) {
   mus::SetAlwaysOnTop(window_, value);
 }
@@ -651,6 +788,10 @@ void WmWindowMus::CloseWidget() {
     window_->RequestClose();
   else
     widget_->Close();
+}
+
+void WmWindowMus::SetFocused() {
+  window_->SetFocus();
 }
 
 bool WmWindowMus::IsFocused() const {
@@ -732,9 +873,7 @@ void WmWindowMus::InstallResizeHandleWindowTargeter(
 
 void WmWindowMus::SetBoundsInScreenBehaviorForChildren(
     WmWindow::BoundsInScreenBehavior behavior) {
-  // TODO: SetBoundsInScreen isn't fully implemented yet,
-  // http://crbug.com/615552.
-  NOTIMPLEMENTED();
+  child_bounds_in_screen_behavior_ = behavior;
 }
 
 void WmWindowMus::SetSnapsChildrenToPhysicalPixelBoundary() {
@@ -758,12 +897,6 @@ void WmWindowMus::SnapToPixelBoundaryIfNecessary() {
 
 void WmWindowMus::SetChildrenUseExtendedHitRegion() {
   children_use_extended_hit_region_ = true;
-}
-
-void WmWindowMus::SetDescendantsStayInSameRootWindow(bool value) {
-  // TODO: this logic feeds into SetBoundsInScreen(), which is not implemented:
-  // http://crbug.com/615552.
-  NOTIMPLEMENTED();
 }
 
 std::unique_ptr<views::View> WmWindowMus::CreateViewWithRecreatedLayers() {
@@ -837,10 +970,16 @@ void WmWindowMus::OnWindowSharedPropertyChanged(
     GetWindowState()->OnWindowShowStateChanged();
     return;
   }
-  if (name == ui::mojom::WindowManager::kAlwaysOnTop_Property) {
-    FOR_EACH_OBSERVER(
-        WmWindowObserver, observers_,
-        OnWindowPropertyChanged(this, WmWindowProperty::ALWAYS_ON_TOP));
+  if (name == ui::mojom::WindowManager::kWindowTitle_Property) {
+    FOR_EACH_OBSERVER(WmWindowObserver, observers_, OnWindowTitleChanged(this));
+    return;
+  }
+
+  // Notify WmWindowObserver of certain white-listed property changes.
+  WmWindowProperty wm_property = WmWindowPropertyFromUI(name);
+  if (wm_property != WmWindowProperty::INVALID_PROPERTY) {
+    FOR_EACH_OBSERVER(WmWindowObserver, observers_,
+                      OnWindowPropertyChanged(this, wm_property));
     return;
   }
 
@@ -861,6 +1000,17 @@ void WmWindowMus::OnWindowDestroying(ui::Window* window) {
 
 void WmWindowMus::OnWindowDestroyed(ui::Window* window) {
   FOR_EACH_OBSERVER(WmWindowObserver, observers_, OnWindowDestroyed(this));
+}
+
+void WmWindowMus::OnWindowVisibilityChanging(ui::Window* window, bool visible) {
+  DCHECK_EQ(window_, window);
+  FOR_EACH_OBSERVER(WmWindowObserver, observers_,
+                    OnWindowVisibilityChanging(this, visible));
+}
+
+void WmWindowMus::OnWindowVisibilityChanged(ui::Window* window, bool visible) {
+  FOR_EACH_OBSERVER(WmWindowObserver, observers_,
+                    OnWindowVisibilityChanged(Get(window), visible));
 }
 
 void WmWindowMus::OnTransientChildAdded(ui::Window* window,

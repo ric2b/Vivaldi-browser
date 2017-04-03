@@ -35,7 +35,8 @@ class PrefixSelector;
 // Note on implementation. This implementation doesn't scale well. In particular
 // it does not store any row information, but instead calculates it as
 // necessary. But it's more than adequate for current uses.
-class VIEWS_EXPORT TreeView : public ui::TreeModelObserver,
+class VIEWS_EXPORT TreeView : public View,
+                              public ui::TreeModelObserver,
                               public TextfieldController,
                               public FocusChangeListener,
                               public PrefixDelegate {
@@ -335,7 +336,7 @@ class VIEWS_EXPORT TreeView : public ui::TreeModelObserver,
   void CollapseOrSelectParent();
 
   // If the selected node is collapsed, it's expanded. Otherwise the first child
-  // is seleected.
+  // is selected.
   void ExpandOrSelectChild();
 
   // Implementation of Expand(). Returns true if at least one node was expanded

@@ -88,13 +88,15 @@ class ServiceManager : public Service {
   // guaranteed and can lead to random flake.
   mojom::Resolver* GetResolver(const Identity& identity);
 
-  // Destroys all Service Manager-ends of connections established with Services.
-  // Services connected by this Service Manager will observe pipe errors and
-  // have a chance to shut down.
-  void TerminateServiceManagerConnections();
-
-  // Removes a Instance when it encounters an error.
+  // Called when |instance| encounters an error. Deletes |instance|.
   void OnInstanceError(Instance* instance);
+
+  // Called when |instance| becomes unreachable to new connections because it
+  // no longer has any pipes to the ServiceManager.
+  void OnInstanceUnreachable(Instance* instance);
+
+  // Called by an Instance as it's being destroyed.
+  void OnInstanceStopped(const Identity& identity);
 
   // Completes a connection between a source and target application as defined
   // by |params|, exchanging InterfaceProviders between them. If no existing
@@ -151,7 +153,18 @@ class ServiceManager : public Service {
 
   base::WeakPtr<ServiceManager> GetWeakPtr();
 
+  // Ownership of all root Instances. Non-root Instances are owned by their
+  // parent Instance.
+  using InstanceMap = std::map<Instance*, std::unique_ptr<Instance>>;
+  InstanceMap root_instances_;
+
+  // Maps service identities to reachable instances. Note that the Instance*
+  // values here are NOT owned by this map.
   std::map<Identity, Instance*> identity_to_instance_;
+
+  // Always points to the ServiceManager's own Instance. Note that this
+  // Instance still has an entry in |root_instances_|.
+  Instance* service_manager_instance_;
 
   // Tracks the names of instances that are allowed to field connection requests
   // from all users.

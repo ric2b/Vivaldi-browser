@@ -91,6 +91,10 @@ class ComponentInfoProvider(object):
     def include_path_for_union_types(self, union_type):
         return None
 
+    @property
+    def callback_functions(self):
+        return {}
+
 
 class ComponentInfoProviderCore(ComponentInfoProvider):
     def __init__(self, interfaces_info, component_info):
@@ -121,6 +125,10 @@ class ComponentInfoProviderCore(ComponentInfoProvider):
     def include_path_for_union_types(self, union_type):
         name = shorten_union_name(union_type)
         return 'bindings/core/v8/%s.h' % name
+
+    @property
+    def callback_functions(self):
+        return self._component_info['callback_functions']
 
     @property
     def specifier_for_export(self):
@@ -172,6 +180,11 @@ class ComponentInfoProviderModules(ComponentInfoProvider):
         if union_type.name in core_union_type_names:
             return 'bindings/core/v8/%s.h' % name
         return 'bindings/modules/v8/%s.h' % name
+
+    @property
+    def callback_functions(self):
+        return dict(self._component_info_core['callback_functions'].items() +
+                    self._component_info_modules['callback_functions'].items())
 
     @property
     def specifier_for_export(self):
@@ -290,11 +303,13 @@ def read_pickle_files(pickle_filenames):
             yield pickle.load(pickle_file)
 
 
-def write_file(new_text, destination_filename, only_if_changed):
-    if only_if_changed and os.path.isfile(destination_filename):
+def write_file(new_text, destination_filename):
+    # If |new_text| is same with the file content, we skip updating.
+    if os.path.isfile(destination_filename):
         with open(destination_filename) as destination_file:
             if destination_file.read() == new_text:
                 return
+
     destination_dirname = os.path.dirname(destination_filename)
     if not os.path.exists(destination_dirname):
         os.makedirs(destination_dirname)
@@ -302,8 +317,9 @@ def write_file(new_text, destination_filename, only_if_changed):
         destination_file.write(new_text)
 
 
-def write_pickle_file(pickle_filename, data, only_if_changed):
-    if only_if_changed and os.path.isfile(pickle_filename):
+def write_pickle_file(pickle_filename, data):
+    # If |data| is same with the file content, we skip updating.
+    if os.path.isfile(pickle_filename):
         with open(pickle_filename) as pickle_file:
             try:
                 if pickle.load(pickle_file) == data:
@@ -407,6 +423,46 @@ def shorten_union_name(union_type):
     return name
 
 
+def format_remove_duplicates(text, patterns):
+    """Removes duplicated line-basis patterns.
+
+    Based on simple pattern matching, removes duplicated lines in a block
+    of lines.  Lines that match with a same pattern are considered as
+    duplicates.
+
+    Designed to be used as a filter function for Jinja2.
+
+    Args:
+        text: A str of multi-line text.
+        patterns: A list of str where each str represents a simple
+            pattern.  The patterns are not considered as regexp, and
+            exact match is applied.
+
+    Returns:
+        A formatted str with duplicates removed.
+    """
+    pattern_founds = [False] * len(patterns)
+    output = []
+    for line in text.split('\n'):
+        to_be_removed = False
+        for i, pattern in enumerate(patterns):
+            if pattern not in line:
+                continue
+            if pattern_founds[i]:
+                to_be_removed = True
+            else:
+                pattern_founds[i] = True
+        if to_be_removed:
+            continue
+        output.append(line)
+
+    # Let |'\n'.join| emit the last newline.
+    if output:
+        output.append('')
+
+    return '\n'.join(output)
+
+
 def format_blink_cpp_source_code(text):
     """Formats C++ source code.
 
@@ -423,6 +479,7 @@ def format_blink_cpp_source_code(text):
     Returns:
         A formatted str of the source code.
     """
+    re_empty_line = re.compile(r'^\s*$')
     re_first_brace = re.compile(r'(?P<first>[{}])')
     re_last_brace = re.compile(r'.*(?P<last>[{}]).*?$')
     was_open_brace = True  # Trick to remove the empty lines at the beginning.
@@ -430,7 +487,7 @@ def format_blink_cpp_source_code(text):
     output = []
     for line in text.split('\n'):
         # Skip empty lines.
-        if not line:  # empty line
+        if re_empty_line.match(line):
             was_empty_line = True
             continue
 

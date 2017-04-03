@@ -18,36 +18,47 @@
 Polymer({
   is: 'settings-reset-page',
 
+  behaviors: [settings.RouteObserverBehavior],
+
   properties: {
+<if expr="chromeos">
+    /** @private */
+    showPowerwashDialog_: Boolean,
+</if>
+
+    /** @private */
     allowPowerwash_: {
       type: Boolean,
       value: cr.isChromeOS ? loadTimeData.getBoolean('allowPowerwash') : false
     },
   },
 
+  /** @protected */
+  currentRouteChanged: function() {
+    if (settings.getCurrentRoute() == settings.Route.RESET_DIALOG) {
+      this.$.resetProfileDialog.get().open();
+    }
+  },
+
   /** @private */
   onShowResetProfileDialog_: function() {
-    this.showDialog_('settings-reset-profile-dialog');
+    settings.navigateTo(settings.Route.RESET_DIALOG);
   },
 
   /** @private */
+  onResetProfileDialogClose_: function() {
+    settings.navigateToPreviousRoute();
+  },
+
+<if expr="chromeos">
+  /** @private */
   onShowPowerwashDialog_: function() {
-    this.showDialog_('settings-powerwash-dialog');
+    this.showPowerwashDialog_ = true;
   },
 
-
-  /**
-   * Creates and shows the specified dialog.
-   * @param {string} dialogName
-   * @private
-   */
-  showDialog_: function(dialogName) {
-    var dialog = document.createElement(dialogName);
-    this.shadowRoot.appendChild(dialog);
-    dialog.open();
-
-    dialog.addEventListener('close', function() {
-      dialog.remove();
-    });
+  /** @private */
+  onPowerwashDialogClose_: function() {
+    this.showPowerwashDialog_ = false;
   },
+</if>
 });

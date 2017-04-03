@@ -7,14 +7,12 @@
 #include <utility>
 
 #include "ash/common/accelerators/accelerator_controller.h"
-#include "ash/common/display/display_info.h"
 #include "ash/common/key_event_watcher.h"
-#include "ash/common/keyboard/keyboard_ui.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shell_delegate.h"
 #include "ash/common/shell_observer.h"
 #include "ash/common/shell_window_ids.h"
-#include "ash/common/system/tray/default_system_tray_delegate.h"
+#include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/wallpaper/wallpaper_delegate.h"
 #include "ash/common/wm/maximize_mode/maximize_mode_event_handler.h"
 #include "ash/common/wm/maximize_mode/scoped_disable_internal_mouse_and_keyboard.h"
@@ -24,10 +22,13 @@
 #include "ash/common/wm_activation_observer.h"
 #include "ash/mus/accelerators/accelerator_controller_delegate_mus.h"
 #include "ash/mus/accelerators/accelerator_controller_registrar.h"
+#include "ash/mus/bridge/immersive_handler_factory_mus.h"
 #include "ash/mus/bridge/wm_root_window_controller_mus.h"
 #include "ash/mus/bridge/wm_window_mus.h"
+#include "ash/mus/bridge/workspace_event_handler_mus.h"
 #include "ash/mus/container_ids.h"
 #include "ash/mus/drag_window_resizer.h"
+#include "ash/mus/keyboard_ui_mus.h"
 #include "ash/mus/root_window_controller.h"
 #include "ash/mus/window_manager.h"
 #include "ash/shared/immersive_fullscreen_controller.h"
@@ -36,6 +37,7 @@
 #include "services/ui/common/util.h"
 #include "services/ui/public/cpp/window.h"
 #include "services/ui/public/cpp/window_tree_client.h"
+#include "ui/display/manager/managed_display_info.h"
 #include "ui/display/screen.h"
 #include "ui/views/mus/pointer_watcher_event_router.h"
 
@@ -121,24 +123,25 @@ WmShellMus::WmShellMus(
       window_manager->GetNextAcceleratorNamespaceId(&accelerator_namespace_id);
   // WmShellMus is created early on, so that this should always succeed.
   DCHECK(add_result);
-  accelerator_controller_delegate_.reset(new AcceleratorControllerDelegateMus);
+  accelerator_controller_delegate_.reset(
+      new AcceleratorControllerDelegateMus(window_manager_->connector()));
   accelerator_controller_registrar_.reset(new AcceleratorControllerRegistrar(
       window_manager_, accelerator_namespace_id));
   SetAcceleratorController(base::MakeUnique<AcceleratorController>(
       accelerator_controller_delegate_.get(),
       accelerator_controller_registrar_.get()));
+  immersive_handler_factory_.reset(new ImmersiveHandlerFactoryMus);
 
   CreateMaximizeModeController();
 
   CreateMruWindowTracker();
 
-  SetSystemTrayDelegate(base::WrapUnique(new DefaultSystemTrayDelegate));
+  SetSystemTrayDelegate(
+      base::WrapUnique(delegate()->CreateSystemTrayDelegate()));
 
-  // TODO(jamescook): Port ash::sysui::KeyboardUIMus and use it here.
-  SetKeyboardUI(KeyboardUI::Create());
+  SetKeyboardUI(KeyboardUIMus::Create(window_manager_->connector()));
 
-  // TODO(msw): Port WallpaperDelegateMus and support this (crbug.com/629605):
-  // wallpaper_delegate()->InitializeWallpaper();
+  wallpaper_delegate()->InitializeWallpaper();
 }
 
 WmShellMus::~WmShellMus() {
@@ -200,8 +203,17 @@ WmRootWindowControllerMus* WmShellMus::GetRootWindowControllerWithDisplayId(
   return nullptr;
 }
 
-WmWindow* WmShellMus::NewContainerWindow() {
-  return WmWindowMus::Get(window_tree_client()->NewWindow());
+bool WmShellMus::IsRunningInMash() const {
+  return true;
+}
+
+WmWindow* WmShellMus::NewWindow(ui::wm::WindowType window_type,
+                                ui::LayerType layer_type) {
+  WmWindowMus* window = WmWindowMus::Get(window_tree_client()->NewWindow());
+  window->set_wm_window_type(window_type);
+  // TODO(sky): support layer_type.
+  NOTIMPLEMENTED();
+  return window;
 }
 
 WmWindow* WmShellMus::GetFocusedWindow() {
@@ -224,10 +236,11 @@ WmWindow* WmShellMus::GetRootWindowForDisplayId(int64_t display_id) {
   return GetRootWindowControllerWithDisplayId(display_id)->GetWindow();
 }
 
-const DisplayInfo& WmShellMus::GetDisplayInfo(int64_t display_id) const {
+const display::ManagedDisplayInfo& WmShellMus::GetDisplayInfo(
+    int64_t display_id) const {
   // TODO(mash): implement http://crbug.com/622480.
   NOTIMPLEMENTED();
-  static DisplayInfo fake_info;
+  static display::ManagedDisplayInfo fake_info;
   return fake_info;
 }
 
@@ -245,6 +258,13 @@ display::Display WmShellMus::GetFirstDisplay() const {
 
 bool WmShellMus::IsInUnifiedMode() const {
   // TODO(mash): implement http://crbug.com/622480.
+  NOTIMPLEMENTED();
+  return false;
+}
+
+bool WmShellMus::IsInUnifiedModeIgnoreMirroring() const {
+  // TODO(mash): implement http://crbug.com/622480.
+  NOTIMPLEMENTED();
   return false;
 }
 
@@ -255,7 +275,11 @@ bool WmShellMus::IsForceMaximizeOnFirstRun() {
 
 void WmShellMus::SetDisplayWorkAreaInsets(WmWindow* window,
                                           const gfx::Insets& insets) {
-  NOTIMPLEMENTED();
+  RootWindowController* root_window_controller =
+      GetRootWindowControllerWithDisplayId(
+          WmWindowMus::GetMusWindow(window)->display_id())
+          ->root_window_controller();
+  root_window_controller->SetWorkAreaInests(insets);
 }
 
 bool WmShellMus::IsPinned() {
@@ -310,12 +334,6 @@ void WmShellMus::RecordTaskSwitchMetric(TaskSwitchSource source) {
   NOTIMPLEMENTED();
 }
 
-void WmShellMus::ShowContextMenu(const gfx::Point& location_in_screen,
-                                 ui::MenuSourceType source_type) {
-  // TODO: http://crbug.com/640693.
-  NOTIMPLEMENTED();
-}
-
 std::unique_ptr<WindowResizer> WmShellMus::CreateDragWindowResizer(
     std::unique_ptr<WindowResizer> next_window_resizer,
     wm::WindowState* window_state) {
@@ -344,10 +362,15 @@ WmShellMus::CreateScopedDisableInternalMouseAndKeyboard() {
   return nullptr;
 }
 
+std::unique_ptr<WorkspaceEventHandler> WmShellMus::CreateWorkspaceEventHandler(
+    WmWindow* workspace_window) {
+  return base::MakeUnique<WorkspaceEventHandlerMus>(
+      WmWindowMus::GetMusWindow(workspace_window));
+}
+
 std::unique_ptr<ImmersiveFullscreenController>
 WmShellMus::CreateImmersiveFullscreenController() {
-  // TODO(sky): port ImmersiveFullscreenController, http://crbug.com/548435.
-  return nullptr;
+  return base::MakeUnique<ImmersiveFullscreenController>();
 }
 
 std::unique_ptr<KeyEventWatcher> WmShellMus::CreateKeyEventWatcher() {
@@ -386,8 +409,11 @@ void WmShellMus::RemoveDisplayObserver(WmDisplayObserver* observer) {
 }
 
 void WmShellMus::AddPointerWatcher(views::PointerWatcher* watcher,
-                                   bool wants_moves) {
-  pointer_watcher_event_router_->AddPointerWatcher(watcher, wants_moves);
+                                   views::PointerWatcherEventTypes events) {
+  // TODO: implement drags for mus pointer watcher, http://crbug.com/641164.
+  // NOTIMPLEMENTED drags for mus pointer watcher.
+  pointer_watcher_event_router_->AddPointerWatcher(
+      watcher, events == views::PointerWatcherEventTypes::MOVES);
 }
 
 void WmShellMus::RemovePointerWatcher(views::PointerWatcher* watcher) {

@@ -14,7 +14,9 @@
 #include "net/base/net_errors.h"
 #include "net/base/test_completion_callback.h"
 #include "net/dns/mock_host_resolver.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_event_type.h"
+#include "net/log/net_log_source.h"
+#include "net/log/net_log_with_source.h"
 #include "net/log/test_net_log.h"
 #include "net/log/test_net_log_entry.h"
 #include "net/log/test_net_log_util.h"
@@ -102,7 +104,7 @@ void TransportClientSocketTest::SetUp() {
   ::testing::TestWithParam<ClientSocketTestTypes>::SetUp();
 
   // Open a server socket on an ephemeral port.
-  listen_sock_.reset(new TCPServerSocket(NULL, NetLog::Source()));
+  listen_sock_.reset(new TCPServerSocket(NULL, NetLogSource()));
   IPEndPoint local_address(IPAddress::IPv4Localhost(), 0);
   ASSERT_THAT(listen_sock_->Listen(local_address, 1), IsOk());
   // Get the server's address (including the actual port number).
@@ -119,12 +121,12 @@ void TransportClientSocketTest::SetUp() {
   TestCompletionCallback callback;
   std::unique_ptr<HostResolver::Request> request;
   int rv = resolver->Resolve(info, DEFAULT_PRIORITY, &addr, callback.callback(),
-                             &request, BoundNetLog());
+                             &request, NetLogWithSource());
   CHECK_EQ(ERR_IO_PENDING, rv);
   rv = callback.WaitForResult();
   CHECK_EQ(rv, OK);
   sock_ = socket_factory_->CreateTransportClientSocket(addr, NULL, &net_log_,
-                                                       NetLog::Source());
+                                                       NetLogSource());
 }
 
 int TransportClientSocketTest::DrainClientSocket(
@@ -242,9 +244,9 @@ TEST_P(TransportClientSocketTest, Connect) {
   TestNetLogEntry::List net_log_entries;
   net_log_.GetEntries(&net_log_entries);
   EXPECT_TRUE(
-      LogContainsBeginEvent(net_log_entries, 0, NetLog::TYPE_SOCKET_ALIVE));
+      LogContainsBeginEvent(net_log_entries, 0, NetLogEventType::SOCKET_ALIVE));
   EXPECT_TRUE(
-      LogContainsBeginEvent(net_log_entries, 1, NetLog::TYPE_TCP_CONNECT));
+      LogContainsBeginEvent(net_log_entries, 1, NetLogEventType::TCP_CONNECT));
   // Now wait for the client socket to accept the connection.
   if (rv != OK) {
     ASSERT_EQ(rv, ERR_IO_PENDING);
@@ -255,7 +257,7 @@ TEST_P(TransportClientSocketTest, Connect) {
   EXPECT_TRUE(sock_->IsConnected());
   net_log_.GetEntries(&net_log_entries);
   EXPECT_TRUE(
-      LogContainsEndEvent(net_log_entries, -1, NetLog::TYPE_TCP_CONNECT));
+      LogContainsEndEvent(net_log_entries, -1, NetLogEventType::TCP_CONNECT));
 
   sock_->Disconnect();
   EXPECT_FALSE(sock_->IsConnected());

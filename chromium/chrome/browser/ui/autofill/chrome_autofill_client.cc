@@ -25,7 +25,6 @@
 #include "chrome/browser/ui/autofill/create_card_unmask_prompt_view.h"
 #include "chrome/browser/ui/autofill/credit_card_scanner_controller.h"
 #include "chrome/browser/ui/autofill/save_card_bubble_controller_impl.h"
-#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
@@ -39,7 +38,7 @@
 #include "components/autofill/core/browser/ui/card_unmask_prompt_view.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/autofill/core/common/autofill_switches.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/password_manager/content/browser/content_password_manager_driver.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/profile_identity_provider.h"
@@ -48,6 +47,7 @@
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/ssl_status.h"
 #include "ui/gfx/geometry/rect.h"
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
@@ -68,6 +68,8 @@
 #include "components/autofill/core/browser/autofill_save_card_infobar_mobile.h"
 #include "components/infobars/core/infobar.h"
 #include "content/public/browser/android/content_view_core.h"
+#else  // !OS_ANDROID
+#include "chrome/browser/ui/browser.h"
 #endif
 
 #if defined(OS_MACOSX)
@@ -128,7 +130,7 @@ PrefService* ChromeAutofillClient::GetPrefs() {
       ->GetPrefs();
 }
 
-sync_driver::SyncService* ChromeAutofillClient::GetSyncService() {
+syncer::SyncService* ChromeAutofillClient::GetSyncService() {
   Profile* profile =
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
   return ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile);
@@ -187,9 +189,9 @@ void ChromeAutofillClient::ConfirmSaveCreditCardLocally(
 #if defined(OS_ANDROID)
   InfoBarService::FromWebContents(web_contents())
       ->AddInfoBar(CreateSaveCardInfoBarMobile(
-          base::WrapUnique(new AutofillSaveCardInfoBarDelegateMobile(
+          base::MakeUnique<AutofillSaveCardInfoBarDelegateMobile>(
               false, card, std::unique_ptr<base::DictionaryValue>(nullptr),
-              callback))));
+              callback)));
 #else
   // Do lazy initialization of SaveCardBubbleControllerImpl.
   autofill::SaveCardBubbleControllerImpl::CreateForWebContents(
@@ -207,8 +209,8 @@ void ChromeAutofillClient::ConfirmSaveCreditCardToCloud(
 #if defined(OS_ANDROID)
   InfoBarService::FromWebContents(web_contents())
       ->AddInfoBar(CreateSaveCardInfoBarMobile(
-          base::WrapUnique(new AutofillSaveCardInfoBarDelegateMobile(
-              true, card, std::move(legal_message), callback))));
+          base::MakeUnique<AutofillSaveCardInfoBarDelegateMobile>(
+              true, card, std::move(legal_message), callback)));
 #else
   // Do lazy initialization of SaveCardBubbleControllerImpl.
   autofill::SaveCardBubbleControllerImpl::CreateForWebContents(web_contents());

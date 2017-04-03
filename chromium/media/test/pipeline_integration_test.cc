@@ -578,8 +578,8 @@ class MockMediaSource {
   }
 
   void SetMemoryLimits(size_t limit_bytes) {
-    chunk_demuxer_->SetMemoryLimits(DemuxerStream::AUDIO, limit_bytes);
-    chunk_demuxer_->SetMemoryLimits(DemuxerStream::VIDEO, limit_bytes);
+    chunk_demuxer_->SetMemoryLimitsForTest(DemuxerStream::AUDIO, limit_bytes);
+    chunk_demuxer_->SetMemoryLimitsForTest(DemuxerStream::VIDEO, limit_bytes);
   }
 
   void EvictCodedFrames(base::TimeDelta currentMediaTime, size_t newDataSize) {
@@ -628,7 +628,7 @@ class MockMediaSource {
     // 2. video/webm;codec="vorbis,vp8".
     size_t semicolon = mimetype_.find(";");
     std::string type = mimetype_;
-    std::vector<std::string> codecs;
+    std::string codecs_param = "";
     if (semicolon != std::string::npos) {
       type = mimetype_.substr(0, semicolon);
       size_t codecs_param_start = mimetype_.find("codecs=\"", semicolon);
@@ -641,13 +641,11 @@ class MockMediaSource {
 
       CHECK_NE(codecs_param_end, std::string::npos);
 
-      std::string codecs_param = mimetype_.substr(
-          codecs_param_start, codecs_param_end - codecs_param_start);
-      codecs = base::SplitString(codecs_param, ",", base::KEEP_WHITESPACE,
-                                 base::SPLIT_WANT_NONEMPTY);
+      codecs_param = mimetype_.substr(codecs_param_start,
+                                      codecs_param_end - codecs_param_start);
     }
 
-    return chunk_demuxer_->AddId(kSourceId, type, codecs);
+    return chunk_demuxer_->AddId(kSourceId, type, codecs_param);
   }
 
   void OnEncryptedMediaInitData(EmeInitDataType init_data_type,
@@ -708,7 +706,7 @@ class PipelineIntegrationTestHost : public shell::test::ServiceTest,
 
  protected:
   std::unique_ptr<Renderer> CreateRenderer() override {
-    connector()->ConnectToInterface("mojo:media", &media_service_factory_);
+    connector()->ConnectToInterface("service:media", &media_service_factory_);
 
     mojom::RendererPtr mojo_renderer;
     media_service_factory_->CreateRenderer(std::string(),
@@ -950,6 +948,10 @@ TEST_F(PipelineIntegrationTest, BasicPlaybackHashed) {
   EXPECT_TRUE(demuxer_->GetTimelineOffset().is_null());
 }
 
+base::TimeDelta TimestampMs(int milliseconds) {
+  return base::TimeDelta::FromMilliseconds(milliseconds);
+}
+
 TEST_F(PipelineIntegrationTest, PlaybackWithAudioTrackDisabledThenEnabled) {
   ASSERT_EQ(PIPELINE_OK, Start("bear-320x240.webm", kHashed));
 
@@ -962,7 +964,7 @@ TEST_F(PipelineIntegrationTest, PlaybackWithAudioTrackDisabledThenEnabled) {
   ASSERT_TRUE(Seek(base::TimeDelta()));
 
   Play();
-  const base::TimeDelta k500ms = base::TimeDelta::FromMilliseconds(500);
+  const base::TimeDelta k500ms = TimestampMs(500);
   ASSERT_TRUE(WaitUntilCurrentTimeIsAfter(k500ms));
   Pause();
 
@@ -1000,7 +1002,7 @@ TEST_F(PipelineIntegrationTest, PlaybackWithVideoTrackDisabledThenEnabled) {
   ResetVideoHash();
 
   Play();
-  const base::TimeDelta k500ms = base::TimeDelta::FromMilliseconds(500);
+  const base::TimeDelta k500ms = TimestampMs(500);
   ASSERT_TRUE(WaitUntilCurrentTimeIsAfter(k500ms));
   Pause();
 
@@ -1025,6 +1027,64 @@ TEST_F(PipelineIntegrationTest, PlaybackWithVideoTrackDisabledThenEnabled) {
 
   // Verify that video has been rendered after being enabled.
   EXPECT_HASH_EQ("fd59357dfd9c144ab4fb8181b2de32c3", GetVideoHash());
+}
+
+TEST_F(PipelineIntegrationTest, TrackStatusChangesAfterPipelineEnded) {
+  ASSERT_EQ(PIPELINE_OK, Start("bear-320x240.webm", kHashed));
+  Play();
+  ASSERT_TRUE(WaitUntilOnEnded());
+  std::vector<MediaTrack::Id> track_ids;
+  // Disable audio track.
+  pipeline_->OnEnabledAudioTracksChanged(track_ids);
+  // Re-enable audio track.
+  track_ids.push_back("2");
+  pipeline_->OnEnabledAudioTracksChanged(track_ids);
+  // Disable video track.
+  track_ids.clear();
+  pipeline_->OnSelectedVideoTrackChanged(track_ids);
+  // Re-enable video track.
+  track_ids.push_back("1");
+  pipeline_->OnSelectedVideoTrackChanged(track_ids);
+}
+
+TEST_F(PipelineIntegrationTest, TrackStatusChangesWhileSuspended) {
+  ASSERT_EQ(PIPELINE_OK, Start("bear-320x240.webm", kHashed));
+  Play();
+
+  ASSERT_TRUE(Suspend());
+
+  // These get triggered every time playback is resumed.
+  EXPECT_CALL(*this, OnVideoNaturalSizeChange(gfx::Size(320, 240)))
+      .Times(AnyNumber());
+  EXPECT_CALL(*this, OnVideoOpacityChange(true)).Times(AnyNumber());
+
+  std::vector<MediaTrack::Id> track_ids;
+
+  // Disable audio track.
+  pipeline_->OnEnabledAudioTracksChanged(track_ids);
+  ASSERT_TRUE(Resume(TimestampMs(100)));
+  ASSERT_TRUE(WaitUntilCurrentTimeIsAfter(TimestampMs(200)));
+  ASSERT_TRUE(Suspend());
+
+  // Re-enable audio track.
+  track_ids.push_back("2");
+  pipeline_->OnEnabledAudioTracksChanged(track_ids);
+  ASSERT_TRUE(Resume(TimestampMs(200)));
+  ASSERT_TRUE(WaitUntilCurrentTimeIsAfter(TimestampMs(300)));
+  ASSERT_TRUE(Suspend());
+
+  // Disable video track.
+  track_ids.clear();
+  pipeline_->OnSelectedVideoTrackChanged(track_ids);
+  ASSERT_TRUE(Resume(TimestampMs(300)));
+  ASSERT_TRUE(WaitUntilCurrentTimeIsAfter(TimestampMs(400)));
+  ASSERT_TRUE(Suspend());
+
+  // Re-enable video track.
+  track_ids.push_back("1");
+  pipeline_->OnSelectedVideoTrackChanged(track_ids);
+  ASSERT_TRUE(Resume(TimestampMs(400)));
+  ASSERT_TRUE(WaitUntilOnEnded());
 }
 
 TEST_F(PipelineIntegrationTest,
@@ -1489,6 +1549,24 @@ TEST_F(PipelineIntegrationTest,
   EXPECT_EQ(CHUNK_DEMUXER_ERROR_APPEND_FAILED, WaitUntilEndedOrError());
   source.Shutdown();
 }
+
+#if defined(ARCH_CPU_X86_FAMILY) && !defined(OS_ANDROID)
+TEST_F(PipelineIntegrationTest, BasicPlaybackHi10PVP9) {
+  ASSERT_EQ(PIPELINE_OK, Start("bear-320x180-hi10p-vp9.webm", kClockless));
+
+  Play();
+
+  ASSERT_TRUE(WaitUntilOnEnded());
+}
+
+TEST_F(PipelineIntegrationTest, BasicPlaybackHi12PVP9) {
+  ASSERT_EQ(PIPELINE_OK, Start("bear-320x180-hi12p-vp9.webm", kClockless));
+
+  Play();
+
+  ASSERT_TRUE(WaitUntilOnEnded());
+}
+#endif
 
 #if defined(USE_PROPRIETARY_CODECS) && defined(USE_SYSTEM_PROPRIETARY_CODECS)
 

@@ -26,7 +26,6 @@
 #include "net/http/http_request_info.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_response_info.h"
-#include "net/log/net_log.h"
 #include "net/socket/connection_attempts.h"
 
 namespace net {
@@ -35,6 +34,7 @@ class HttpRequestHeaders;
 class IOBuffer;
 class SSLPrivateKey;
 class X509Certificate;
+class NetLogWithSource;
 struct HttpRequestInfo;
 
 //-----------------------------------------------------------------------------
@@ -130,7 +130,7 @@ class TestTransactionConsumer {
                           HttpTransactionFactory* factory);
   virtual ~TestTransactionConsumer();
 
-  void Start(const HttpRequestInfo* request, const BoundNetLog& net_log);
+  void Start(const HttpRequestInfo* request, const NetLogWithSource& net_log);
 
   bool is_done() const { return state_ == DONE; }
   int error() const { return error_; }
@@ -185,7 +185,7 @@ class MockNetworkTransaction
 
   int Start(const HttpRequestInfo* request,
             const CompletionCallback& callback,
-            const BoundNetLog& net_log) override;
+            const NetLogWithSource& net_log) override;
 
   int RestartIgnoringLastError(const CompletionCallback& callback) override;
 
@@ -216,8 +216,6 @@ class MockNetworkTransaction
   const HttpResponseInfo* GetResponseInfo() const override;
 
   LoadState GetLoadState() const override;
-
-  UploadProgress GetUploadProgress() const override;
 
   void SetQuicServerInfo(QuicServerInfo* quic_server_info) override;
 
@@ -256,7 +254,7 @@ class MockNetworkTransaction
  private:
   int StartInternal(const HttpRequestInfo* request,
                     const CompletionCallback& callback,
-                    const BoundNetLog& net_log);
+                    const NetLogWithSource& net_log);
   void CallbackLater(const CompletionCallback& callback, int result);
   void RunCallback(const CompletionCallback& callback, int result);
 
@@ -275,7 +273,8 @@ class MockNetworkTransaction
   int64_t sent_bytes_;
 
   // NetLog ID of the fake / non-existent underlying socket used by the
-  // connection. Requires Start() be passed a BoundNetLog with a real NetLog to
+  // connection. Requires Start() be passed a NetLogWithSource with a real
+  // NetLog to
   // be initialized.
   unsigned int socket_log_id_;
 

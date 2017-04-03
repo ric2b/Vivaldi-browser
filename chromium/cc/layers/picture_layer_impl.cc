@@ -670,17 +670,17 @@ void PictureLayerImpl::ReleaseResources() {
   ResetRasterScale();
 }
 
-void PictureLayerImpl::RecreateResources() {
+void PictureLayerImpl::ReleaseTileResources() {
+  // All resources are tile resources.
+  ReleaseResources();
+}
+
+void PictureLayerImpl::RecreateTileResources() {
   tilings_ = CreatePictureLayerTilingSet();
   if (raster_source_) {
     raster_source_->set_image_decode_controller(
         layer_tree_impl()->image_decode_controller());
   }
-
-  // To avoid an edge case after lost context where the tree is up to date but
-  // the tilings have not been managed, request an update draw properties
-  // to force tilings to get managed.
-  layer_tree_impl()->set_needs_update_draw_properties();
 }
 
 Region PictureLayerImpl::GetInvalidationRegionForDebugging() {
@@ -835,9 +835,11 @@ void PictureLayerImpl::GetContentsResourceId(ResourceId* resource_id,
          bounds() == raster_source_->GetSize())
       << " bounds " << bounds().ToString() << " pile "
       << raster_source_->GetSize().ToString();
-  gfx::Rect content_rect(bounds());
+  float dest_scale = MaximumTilingContentsScale();
+  gfx::Rect content_rect =
+      gfx::ScaleToEnclosingRect(gfx::Rect(bounds()), dest_scale);
   PictureLayerTilingSet::CoverageIterator iter(
-      tilings_.get(), 1.f, content_rect, ideal_contents_scale_);
+      tilings_.get(), dest_scale, content_rect, ideal_contents_scale_);
 
   // Mask resource not ready yet.
   if (!iter || !*iter) {
@@ -924,11 +926,6 @@ bool PictureLayerImpl::ShouldAdjustRasterScale() const {
 
   if (was_screen_space_transform_animating_ !=
       draw_properties().screen_space_transform_is_animating)
-    return true;
-
-  if (draw_properties().screen_space_transform_is_animating &&
-      raster_contents_scale_ != ideal_contents_scale_ &&
-      ShouldAdjustRasterScaleDuringScaleAnimations())
     return true;
 
   bool is_pinching = layer_tree_impl()->PinchGestureActive();
@@ -1054,14 +1051,13 @@ void PictureLayerImpl::RecalculateRasterScales() {
         raster_contents_scale_ / raster_device_scale_ / raster_source_scale_;
   }
 
-  // If we're not re-rasterizing during animation, rasterize at the maximum
-  // scale that will occur during the animation, if the maximum scale is
-  // known. However we want to avoid excessive memory use. If the scale is
-  // smaller than what we would choose otherwise, then it's always better off
-  // for us memory-wise. But otherwise, we don't choose a scale at which this
-  // layer's rastered content would become larger than the viewport.
-  if (draw_properties().screen_space_transform_is_animating &&
-      !ShouldAdjustRasterScaleDuringScaleAnimations()) {
+  // We rasterize at the maximum scale that will occur during the animation, if
+  // the maximum scale is known. However we want to avoid excessive memory use.
+  // If the scale is smaller than what we would choose otherwise, then it's
+  // always better off for us memory-wise. But otherwise, we don't choose a
+  // scale at which this layer's rastered content would become larger than the
+  // viewport.
+  if (draw_properties().screen_space_transform_is_animating) {
     bool can_raster_at_maximum_scale = false;
     bool should_raster_at_starting_scale = false;
     CombinedAnimationScale animation_scales =
@@ -1235,10 +1231,6 @@ void PictureLayerImpl::SanityCheckTilingState() const {
 #endif
 }
 
-bool PictureLayerImpl::ShouldAdjustRasterScaleDuringScaleAnimations() const {
-  return layer_tree_impl()->use_gpu_rasterization();
-}
-
 float PictureLayerImpl::MaximumTilingContentsScale() const {
   float max_contents_scale = tilings_->GetMaximumContentsScale();
   return std::max(max_contents_scale, MinimumContentsScale());
@@ -1252,7 +1244,8 @@ PictureLayerImpl::CreatePictureLayerTilingSet() {
       layer_tree_impl()->use_gpu_rasterization()
           ? settings.gpu_rasterization_skewport_target_time_in_seconds
           : settings.skewport_target_time_in_seconds,
-      settings.skewport_extrapolation_limit_in_screen_pixels);
+      settings.skewport_extrapolation_limit_in_screen_pixels,
+      settings.max_preraster_distance_in_screen_pixels);
 }
 
 void PictureLayerImpl::UpdateIdealScales() {

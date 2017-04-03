@@ -31,7 +31,7 @@ public interface SuggestionsSource {
          * immediately. This event may be fired for a category or suggestion that does not
          * currently exist or has never existed and should be ignored in that case.
          */
-        void onSuggestionInvalidated(@CategoryInt int category, String suggestionId);
+        void onSuggestionInvalidated(@CategoryInt int category, String idWithinCategory);
     }
 
     /**
@@ -68,6 +68,11 @@ public interface SuggestionsSource {
      * Tells the source to dismiss the content suggestion.
      */
     void dismissSuggestion(SnippetArticle suggestion);
+
+    /**
+     * Tells the source to dismiss the category.
+     */
+    void dismissCategory(@CategoryInt int category);
 
     /**
      * Checks whether a content suggestion has been visited. The callback is never called

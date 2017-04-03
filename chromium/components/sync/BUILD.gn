@@ -22,10 +22,14 @@ static_library("sync") {
     "api/conflict_resolution.cc",
     "api/conflict_resolution.h",
     "api/data_batch.h",
+    "api/data_type_error_handler.h",
+    "api/data_type_error_handler_impl.cc",
+    "api/data_type_error_handler_impl.h",
     "api/entity_change.cc",
     "api/entity_change.h",
     "api/entity_data.cc",
     "api/entity_data.h",
+    "api/local_change_observer.h",
     "api/metadata_batch.cc",
     "api/metadata_batch.h",
     "api/metadata_change_list.h",
@@ -88,6 +92,8 @@ static_library("sync") {
     "base/node_ordinal.cc",
     "base/node_ordinal.h",
     "base/ordinal.h",
+    "base/passphrase_type.cc",
+    "base/passphrase_type.h",
     "base/progress_marker_map.cc",
     "base/progress_marker_map.h",
     "base/proto_value_ptr.h",
@@ -133,7 +139,6 @@ static_library("sync") {
     "core/data_type_association_stats.h",
     "core/data_type_debug_info_listener.cc",
     "core/data_type_debug_info_listener.h",
-    "core/data_type_error_handler.h",
     "core/delete_journal.cc",
     "core/delete_journal.h",
     "core/http_bridge.cc",
@@ -149,6 +154,8 @@ static_library("sync") {
     "core/model_type_connector.h",
     "core/model_type_processor.cc",
     "core/model_type_processor.h",
+    "core/model_type_processor_proxy.cc",
+    "core/model_type_processor_proxy.h",
     "core/model_type_store_backend.cc",
     "core/model_type_store_backend.h",
     "core/model_type_store_impl.cc",
@@ -282,12 +289,10 @@ static_library("sync") {
     "driver/model_association_manager.cc",
     "driver/model_association_manager.h",
     "driver/model_associator.h",
-    "driver/non_blocking_data_type_controller.cc",
-    "driver/non_blocking_data_type_controller.h",
+    "driver/model_type_controller.cc",
+    "driver/model_type_controller.h",
     "driver/non_ui_data_type_controller.cc",
     "driver/non_ui_data_type_controller.h",
-    "driver/non_ui_model_type_controller.cc",
-    "driver/non_ui_model_type_controller.h",
     "driver/pref_names.cc",
     "driver/pref_names.h",
     "driver/protocol_event_observer.cc",
@@ -328,8 +333,6 @@ static_library("sync") {
     "driver/system_encryptor.h",
     "driver/ui_data_type_controller.cc",
     "driver/ui_data_type_controller.h",
-    "driver/ui_model_type_controller.cc",
-    "driver/ui_model_type_controller.h",
     "driver/user_selectable_sync_type.h",
     "engine/commit_queue.cc",
     "engine/commit_queue.h",
@@ -504,7 +507,6 @@ static_library("sync") {
     "syncable/scoped_kernel_lock.h",
     "syncable/scoped_parent_child_index_updater.cc",
     "syncable/scoped_parent_child_index_updater.h",
-    "syncable/syncable-inl.h",
     "syncable/syncable_base_transaction.cc",
     "syncable/syncable_base_transaction.h",
     "syncable/syncable_base_write_transaction.cc",
@@ -596,7 +598,6 @@ static_library("sync") {
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
 }
 
-# GYP version: sync/sync_tests.gypi:test_support_sync_core
 static_library("test_support_sync_core") {
   testonly = true
   sources = [
@@ -667,11 +668,11 @@ static_library("test_support_sync_core") {
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
 }
 
-# GYP version: sync/sync_tests.gypi:test_support_sync_core_impl
 static_library("test_support_sync_core_impl") {
   testonly = true
   sources = [
-    "core/test/data_type_error_handler_mock.h",
+    "api/data_type_error_handler_mock.cc",
+    "api/data_type_error_handler_mock.h",
     "core/test/fake_model_type_connector.h",
     "core/test/fake_model_type_processor.h",
     "core/test/fake_sync_manager.h",
@@ -680,7 +681,6 @@ static_library("test_support_sync_core_impl") {
     "core/test/test_entry_factory.h",
     "core/test/test_internal_components_factory.h",
     "core/test/test_user_share.h",
-    "core_impl/test/data_type_error_handler_mock.cc",
     "core_impl/test/fake_model_type_connector.cc",
     "core_impl/test/fake_model_type_processor.cc",
     "core_impl/test/fake_sync_manager.cc",
@@ -704,7 +704,6 @@ static_library("test_support_sync_core_impl") {
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
 }
 
-# GYP version: sync/sync_tests.gypi:test_support_sync_api
 static_library("test_support_sync_api") {
   testonly = true
   sources = [
@@ -718,6 +717,8 @@ static_library("test_support_sync_api") {
     "api/fake_syncable_service.h",
     "api/mock_model_type_store.cc",
     "api/mock_model_type_store.h",
+    "api/stub_model_type_service.cc",
+    "api/stub_model_type_service.h",
     "api/sync_change_processor_wrapper_for_test.cc",
     "api/sync_change_processor_wrapper_for_test.h",
     "api/sync_error_factory_mock.cc",
@@ -730,6 +731,7 @@ static_library("test_support_sync_api") {
     "//base",
     "//components/sync",
     "//testing/gmock",
+    "//testing/gtest",
   ]
 }
 
@@ -839,7 +841,7 @@ source_set("unit_tests") {
     "device_info/device_info_service_unittest.cc",
     "device_info/device_info_sync_service_unittest.cc",
     "device_info/device_info_util_unittest.cc",
-    "device_info/local_device_info_provider_unittest.cc",
+    "device_info/local_device_info_provider_impl_unittest.cc",
     "driver/about_sync_util_unittest.cc",
     "driver/backend_migrator_unittest.cc",
     "driver/data_type_manager_impl_unittest.cc",
@@ -850,9 +852,8 @@ source_set("unit_tests") {
     "driver/glue/sync_backend_registrar_unittest.cc",
     "driver/glue/ui_model_worker_unittest.cc",
     "driver/model_association_manager_unittest.cc",
-    "driver/non_blocking_data_type_controller_unittest.cc",
+    "driver/model_type_controller_unittest.cc",
     "driver/non_ui_data_type_controller_unittest.cc",
-    "driver/non_ui_model_type_controller_unittest.cc",
     "driver/shared_change_processor_unittest.cc",
     "driver/startup_controller_unittest.cc",
     "driver/sync_prefs_unittest.cc",
@@ -860,7 +861,6 @@ source_set("unit_tests") {
     "driver/sync_util_unittest.cc",
     "driver/system_encryptor_unittest.cc",
     "driver/ui_data_type_controller_unittest.cc",
-    "driver/ui_model_type_controller_unittest.cc",
     "engine/cycle/sync_cycle_snapshot_unittest.cc",
     "engine/model_safe_worker_unittest.cc",
     "engine_impl/apply_control_data_updates_unittest.cc",
@@ -872,7 +872,7 @@ source_set("unit_tests") {
     "engine_impl/get_updates_processor_unittest.cc",
     "engine_impl/model_type_registry_unittest.cc",
     "engine_impl/model_type_worker_unittest.cc",
-    "engine_impl/sync_scheduler_unittest.cc",
+    "engine_impl/sync_scheduler_impl_unittest.cc",
     "engine_impl/syncer_proto_util_unittest.cc",
     "engine_impl/syncer_unittest.cc",
     "engine_impl/syncer_util_unittest.cc",
@@ -954,7 +954,6 @@ source_set("unit_tests") {
   defines = [ "SYNC_TEST" ]
 }
 
-# GYP version: sync/sync_tests.gypi:test_support_sync_fake_server
 static_library("test_support_sync_fake_server") {
   testonly = true
   sources = [
@@ -999,7 +998,6 @@ static_library("test_support_sync_fake_server") {
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
 }
 
-# GYP version: sync/sync_tests.gypi:test_support_sync_testserver
 static_library("test_support_sync_testserver") {
   testonly = true
   sources = [
@@ -1022,7 +1020,6 @@ static_library("test_support_sync_testserver") {
 }
 
 if (!is_ios) {
-  # GYP version: sync/sync_tests.gypi:run_sync_testserver
   executable("run_sync_testserver") {
     testonly = true
     sources = [
@@ -1044,7 +1041,6 @@ if (!is_ios) {
 if (is_android) {
   import("//build/config/android/rules.gni")
 
-  # GYP: //components/sync/sync_tests.gypi:fake_server_jni
   generate_jni("fake_server_jni") {
     testonly = true
     jni_package = "sync/test/fake_server"
@@ -1068,7 +1064,6 @@ if (is_android) {
     args += rebase_path(sync_protocol_sources, root_build_dir)
   }
 
-  # GYP: //components/sync/sync_tests.gypi:test_support_sync_proto_java
   proto_java_library("test_support_sync_proto_java") {
     proto_path = _test_support_sync_prepared_protos_dir
     sources = get_target_outputs(":test_support_sync_proto_java_prepare")
@@ -1077,24 +1072,15 @@ if (is_android) {
     ]
   }
 
-  # GYP: //components/sync/sync_tests.gypi:sync_java_test_support
   android_library("sync_java_test_support") {
     testonly = true
     deps = [
       "android:sync_java",
       "//base:base_java",
-      "//base:base_java_test_support",
-      "//third_party/jsr-305:jsr_305_javalib",
     ]
-    java_files = [
-      "test/android/javatests/src/org/chromium/components/sync/test/util/AccountHolder.java",
-      "test/android/javatests/src/org/chromium/components/sync/test/util/MockAccountManager.java",
-      "test/android/javatests/src/org/chromium/components/sync/test/util/MockSyncContentResolverDelegate.java",
-      "test/android/javatests/src/org/chromium/components/sync/test/util/SimpleFuture.java",
-    ]
+    java_files = [ "test/android/javatests/src/org/chromium/components/sync/test/util/MockSyncContentResolverDelegate.java" ]
   }
 
-  # GYP: //components/sync/sync_tests.gypi:test_support_sync_fake_server_android
   static_library("test_support_sync_fake_server_android") {
     testonly = true
     sources = [

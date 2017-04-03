@@ -16,7 +16,6 @@
 #include "chrome/browser/ui/search_engines/template_url_table_model.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/locale_settings.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "content/public/browser/user_metrics.h"
@@ -102,7 +101,7 @@ SearchEnginesHandler::GetSearchEnginesList() {
 
   // Build the first list (default search engines).
   std::unique_ptr<base::ListValue> defaults =
-      base::WrapUnique(new base::ListValue());
+      base::MakeUnique<base::ListValue>();
   int last_default_engine_index =
       list_controller_.table_model()->last_search_engine_index();
   for (int i = 0; i < last_default_engine_index; ++i) {
@@ -111,8 +110,7 @@ SearchEnginesHandler::GetSearchEnginesList() {
   }
 
   // Build the second list (other search engines).
-  std::unique_ptr<base::ListValue> others =
-      base::WrapUnique(new base::ListValue());
+  std::unique_ptr<base::ListValue> others = base::MakeUnique<base::ListValue>();
   int last_other_engine_index =
       list_controller_.table_model()->last_other_engine_index();
   for (int i = std::max(last_default_engine_index, 0);
@@ -122,7 +120,7 @@ SearchEnginesHandler::GetSearchEnginesList() {
 
   // Build the third list (omnibox extensions).
   std::unique_ptr<base::ListValue> extensions =
-      base::WrapUnique(new base::ListValue());
+      base::MakeUnique<base::ListValue>();
   int engine_count = list_controller_.table_model()->RowCount();
   for (int i = std::max(last_other_engine_index, 0); i < engine_count; ++i) {
     extensions->Append(CreateDictionaryForEngine(i, i == default_index));
@@ -186,7 +184,7 @@ SearchEnginesHandler::CreateDictionaryForEngine(int index, bool is_default) {
                    list_controller_.CanMakeDefault(template_url));
   dict->SetBoolean("default", is_default);
   dict->SetBoolean("canBeEdited", list_controller_.CanEdit(template_url));
-  TemplateURL::Type type = template_url->GetType();
+  TemplateURL::Type type = template_url->type();
   dict->SetBoolean("isOmniboxExtension",
                    type == TemplateURL::OMNIBOX_API_EXTENSION);
   if (type == TemplateURL::NORMAL_CONTROLLED_BY_EXTENSION ||

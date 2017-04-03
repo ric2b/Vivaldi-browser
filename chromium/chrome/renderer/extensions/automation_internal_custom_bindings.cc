@@ -13,6 +13,7 @@
 #include "base/macros.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
+#include "chrome/common/extensions/api/automation_api_constants.h"
 #include "chrome/common/extensions/chrome_extension_messages.h"
 #include "chrome/common/extensions/manifest_handlers/automation.h"
 #include "content/public/renderer/render_frame.h"
@@ -112,11 +113,13 @@ static gfx::RectF ComputeLocalNodeBounds(TreeCache* cache, ui::AXNode* node) {
   return bounds;
 }
 
-// Compute the bounding box of a node in global coordinates, walking up the
-// parent hierarchy to offset by frame offsets and scroll offsets.
-static gfx::Rect ComputeGlobalNodeBounds(TreeCache* cache, ui::AXNode* node) {
-  gfx::RectF bounds = ComputeLocalNodeBounds(cache, node);
-
+// Adjust the bounding box of a node from local to global coordinates,
+// walking up the parent hierarchy to offset by frame offsets and
+// scroll offsets.
+static gfx::Rect ComputeGlobalNodeBounds(TreeCache* cache,
+                                         ui::AXNode* node,
+                                         gfx::RectF local_bounds) {
+  gfx::RectF bounds = local_bounds;
   while (node) {
     if (node->data().transform)
       node->data().transform->TransformRect(&bounds);
@@ -134,7 +137,7 @@ static gfx::Rect ComputeGlobalNodeBounds(TreeCache* cache, ui::AXNode* node) {
     if (!container || container == node)
       break;
 
-    gfx::RectF container_bounds = ComputeLocalNodeBounds(cache, container);
+    gfx::RectF container_bounds = container->data().location;
     bounds.Offset(container_bounds.x(), container_bounds.y());
 
     int scroll_x = 0;
@@ -145,6 +148,17 @@ static gfx::Rect ComputeGlobalNodeBounds(TreeCache* cache, ui::AXNode* node) {
     }
 
     node = container;
+  }
+
+  // All trees other than the desktop tree are scaled by the device
+  // scale factor. Unscale them so they're all in consistent units.
+  if (cache->tree_id != api::automation::kDesktopTreeID) {
+    float scale_factor = cache->owner->context()
+                             ->GetRenderFrame()
+                             ->GetRenderView()
+                             ->GetDeviceScaleFactor();
+    if (scale_factor > 0)
+      bounds.Scale(1.0 / scale_factor);
   }
 
   return gfx::ToEnclosingRect(bounds);
@@ -523,9 +537,25 @@ AutomationInternalCustomBindings::AutomationInternalCustomBindings(
   RouteNodeIDFunction(
       "GetLocation", [](v8::Isolate* isolate, v8::ReturnValue<v8::Value> result,
                         TreeCache* cache, ui::AXNode* node) {
-        gfx::Rect location = ComputeGlobalNodeBounds(cache, node);
-        location.Offset(cache->location_offset);
-        result.Set(RectToV8Object(isolate, location));
+        gfx::RectF local_bounds = ComputeLocalNodeBounds(cache, node);
+        gfx::Rect global_bounds =
+            ComputeGlobalNodeBounds(cache, node, local_bounds);
+        global_bounds.Offset(cache->location_offset);
+        result.Set(RectToV8Object(isolate, global_bounds));
+      });
+  RouteNodeIDFunction(
+      "GetLineStartOffsets",
+      [](v8::Isolate* isolate, v8::ReturnValue<v8::Value> result,
+         TreeCache* cache, ui::AXNode* node) {
+        const std::vector<int> line_starts =
+            node->GetOrComputeLineStartOffsets();
+        v8::Local<v8::Array> array_result(
+            v8::Array::New(isolate, line_starts.size()));
+        for (size_t i = 0; i < line_starts.size(); ++i) {
+          array_result->Set(static_cast<uint32_t>(i),
+                            v8::Integer::New(isolate, line_starts[i]));
+        }
+        result.Set(array_result);
       });
   RouteNodeIDFunction("GetChildIDs", [](v8::Isolate* isolate,
                                         v8::ReturnValue<v8::Value> result,
@@ -546,40 +576,54 @@ AutomationInternalCustomBindings::AutomationInternalCustomBindings(
       "GetBoundsForRange",
       [](v8::Isolate* isolate, v8::ReturnValue<v8::Value> result,
          TreeCache* cache, ui::AXNode* node, int start, int end) {
-        gfx::Rect location = ComputeGlobalNodeBounds(cache, node);
-        location.Offset(cache->location_offset);
-        if (node->data().role == ui::AX_ROLE_INLINE_TEXT_BOX) {
-          std::string name = node->data().GetStringAttribute(ui::AX_ATTR_NAME);
-          std::vector<int> character_offsets =
-              node->data().GetIntListAttribute(ui::AX_ATTR_CHARACTER_OFFSETS);
-          int len =
-              static_cast<int>(std::min(name.size(), character_offsets.size()));
-          if (start >= 0 && start <= end && end <= len) {
-            int start_offset = start > 0 ? character_offsets[start - 1] : 0;
-            int end_offset = end > 0 ? character_offsets[end - 1] : 0;
+        gfx::RectF local_bounds = ComputeLocalNodeBounds(cache, node);
+        if (node->data().role != ui::AX_ROLE_INLINE_TEXT_BOX) {
+          gfx::Rect global_bounds =
+              ComputeGlobalNodeBounds(cache, node, local_bounds);
+          global_bounds.Offset(cache->location_offset);
+          result.Set(RectToV8Object(isolate, global_bounds));
+        }
 
-            switch (node->data().GetIntAttribute(ui::AX_ATTR_TEXT_DIRECTION)) {
-              case ui::AX_TEXT_DIRECTION_LTR:
-              default:
-                location.set_x(location.x() + start_offset);
-                location.set_width(end_offset - start_offset);
-                break;
-              case ui::AX_TEXT_DIRECTION_RTL:
-                location.set_x(location.x() + location.width() - end_offset);
-                location.set_width(end_offset - start_offset);
-                break;
-              case ui::AX_TEXT_DIRECTION_TTB:
-                location.set_y(location.y() + start_offset);
-                location.set_height(end_offset - start_offset);
-                break;
-              case ui::AX_TEXT_DIRECTION_BTT:
-                location.set_y(location.y() + location.height() - end_offset);
-                location.set_height(end_offset - start_offset);
-                break;
-            }
+        // Use character offsets to compute the local bounds of this subrange.
+        std::string name = node->data().GetStringAttribute(ui::AX_ATTR_NAME);
+        std::vector<int> character_offsets =
+            node->data().GetIntListAttribute(ui::AX_ATTR_CHARACTER_OFFSETS);
+        int len =
+            static_cast<int>(std::min(name.size(), character_offsets.size()));
+        if (start >= 0 && start <= end && end <= len) {
+          int start_offset = start > 0 ? character_offsets[start - 1] : 0;
+          int end_offset = end > 0 ? character_offsets[end - 1] : 0;
+
+          switch (node->data().GetIntAttribute(ui::AX_ATTR_TEXT_DIRECTION)) {
+            case ui::AX_TEXT_DIRECTION_LTR:
+            default:
+              local_bounds.set_x(local_bounds.x() + start_offset);
+              local_bounds.set_width(end_offset - start_offset);
+              break;
+            case ui::AX_TEXT_DIRECTION_RTL:
+              local_bounds.set_x(local_bounds.x() + local_bounds.width() -
+                                 end_offset);
+              local_bounds.set_width(end_offset - start_offset);
+              break;
+            case ui::AX_TEXT_DIRECTION_TTB:
+              local_bounds.set_y(local_bounds.y() + start_offset);
+              local_bounds.set_height(end_offset - start_offset);
+              break;
+            case ui::AX_TEXT_DIRECTION_BTT:
+              local_bounds.set_y(local_bounds.y() + local_bounds.height() -
+                                 end_offset);
+              local_bounds.set_height(end_offset - start_offset);
+              break;
           }
         }
-        result.Set(RectToV8Object(isolate, location));
+
+        // Convert from local to global coordinates second, after subsetting,
+        // because the local to global conversion might involve matrix
+        // transformations.
+        gfx::Rect global_bounds =
+            ComputeGlobalNodeBounds(cache, node, local_bounds);
+        global_bounds.Offset(cache->location_offset);
+        result.Set(RectToV8Object(isolate, global_bounds));
       });
 
   // Bindings that take a Tree ID and Node ID and string attribute name
@@ -1101,8 +1145,15 @@ void AutomationInternalCustomBindings::OnAccessibilityEvent(
   // Update the internal state whether it's the active profile or not.
   cache->location_offset = params.location_offset;
   deleted_node_ids_.clear();
+  v8::Isolate* isolate = GetIsolate();
+  v8::HandleScope handle_scope(isolate);
+  v8::Context::Scope context_scope(context()->v8_context());
+  v8::Local<v8::Array> args(v8::Array::New(GetIsolate(), 1U));
   if (!cache->tree.Unserialize(params.update)) {
     LOG(ERROR) << cache->tree.error();
+    args->Set(0U, v8::Number::New(isolate, tree_id));
+    context()->DispatchEvent(
+        "automationInternal.onAccessibilityTreeSerializationError", args);
     return;
   }
 
@@ -1113,10 +1164,6 @@ void AutomationInternalCustomBindings::OnAccessibilityEvent(
   SendNodesRemovedEvent(&cache->tree, deleted_node_ids_);
   deleted_node_ids_.clear();
 
-  v8::Isolate* isolate = GetIsolate();
-  v8::HandleScope handle_scope(isolate);
-  v8::Context::Scope context_scope(context()->v8_context());
-  v8::Local<v8::Array> args(v8::Array::New(GetIsolate(), 1U));
   v8::Local<v8::Object> event_params(v8::Object::New(GetIsolate()));
   event_params->Set(CreateV8String(isolate, "treeID"),
                     v8::Integer::New(GetIsolate(), params.tree_id));
@@ -1124,6 +1171,8 @@ void AutomationInternalCustomBindings::OnAccessibilityEvent(
                     v8::Integer::New(GetIsolate(), params.id));
   event_params->Set(CreateV8String(isolate, "eventType"),
                     CreateV8String(isolate, ToString(params.event_type)));
+  event_params->Set(CreateV8String(isolate, "eventFrom"),
+                    CreateV8String(isolate, ToString(params.event_from)));
   args->Set(0U, event_params);
   context()->DispatchEvent("automationInternal.onAccessibilityEvent", args);
 }
@@ -1170,8 +1219,27 @@ void AutomationInternalCustomBindings::OnSubtreeWillBeDeleted(
   // be needed for something.
 }
 
+void AutomationInternalCustomBindings::OnNodeWillBeReparented(
+    ui::AXTree* tree,
+    ui::AXNode* node) {
+  // Don't do anything here since the node will soon go away and be re-created.
+}
+
+void AutomationInternalCustomBindings::OnSubtreeWillBeReparented(
+    ui::AXTree* tree,
+    ui::AXNode* node) {
+  // Don't do anything here since the node will soon go away and be re-created.
+}
+
 void AutomationInternalCustomBindings::OnNodeCreated(ui::AXTree* tree,
                                                      ui::AXNode* node) {
+  // Not needed, this is called in the middle of an update so it's not
+  // safe to trigger JS from here. Wait for the notification in
+  // OnAtomicUpdateFinished instead.
+}
+
+void AutomationInternalCustomBindings::OnNodeReparented(ui::AXTree* tree,
+                                                        ui::AXNode* node) {
   // Not needed, this is called in the middle of an update so it's not
   // safe to trigger JS from here. Wait for the notification in
   // OnAtomicUpdateFinished instead.

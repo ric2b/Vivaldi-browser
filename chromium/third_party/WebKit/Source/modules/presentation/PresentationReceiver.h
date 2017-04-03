@@ -6,36 +6,56 @@
 #define PresentationReceiver_h
 
 #include "bindings/core/v8/ScriptPromise.h"
-#include "core/events/EventTarget.h"
+#include "bindings/core/v8/ScriptPromiseProperty.h"
+#include "bindings/core/v8/ScriptWrappable.h"
+#include "core/dom/DOMException.h"
 #include "core/frame/DOMWindowProperty.h"
+#include "modules/ModulesExport.h"
 #include "platform/heap/Handle.h"
 #include "platform/heap/Heap.h"
+#include "public/platform/modules/presentation/WebPresentationReceiver.h"
 
 namespace blink {
 
+class PresentationConnection;
+class PresentationConnectionList;
+class WebPresentationClient;
+class WebPresentationConnectionClient;
+
 // Implements the PresentationReceiver interface from the Presentation API from
 // which websites can implement the receiving side of a presentation session.
-class PresentationReceiver final
-    : public EventTargetWithInlineData
-    , DOMWindowProperty {
-    USING_GARBAGE_COLLECTED_MIXIN(PresentationReceiver);
-    DEFINE_WRAPPERTYPEINFO();
-public:
-    PresentationReceiver(LocalFrame*);
-    ~PresentationReceiver() = default;
+class MODULES_EXPORT PresentationReceiver final
+    : public GarbageCollectedFinalized<PresentationReceiver>,
+      public ScriptWrappable,
+      public DOMWindowProperty,
+      public WebPresentationReceiver {
+  USING_GARBAGE_COLLECTED_MIXIN(PresentationReceiver);
+  DEFINE_WRAPPERTYPEINFO();
+  using ConnectionListProperty =
+      ScriptPromiseProperty<Member<PresentationReceiver>,
+                            Member<PresentationConnectionList>,
+                            Member<DOMException>>;
 
-    // EventTarget implementation.
-    const AtomicString& interfaceName() const override;
-    ExecutionContext* getExecutionContext() const override;
+ public:
+  explicit PresentationReceiver(LocalFrame*, WebPresentationClient*);
+  ~PresentationReceiver() = default;
 
-    ScriptPromise getConnection(ScriptState*);
-    ScriptPromise getConnections(ScriptState*);
+  // PresentationReceiver.idl implementation
+  ScriptPromise connectionList(ScriptState*);
 
-    DEFINE_ATTRIBUTE_EVENT_LISTENER(connectionavailable);
+  // Implementation of WebPresentationController.
+  void onReceiverConnectionAvailable(WebPresentationConnectionClient*) override;
+  void registerConnection(PresentationConnection*);
 
-    DECLARE_VIRTUAL_TRACE();
+  DECLARE_VIRTUAL_TRACE();
+
+ private:
+  friend class PresentationReceiverTest;
+
+  Member<ConnectionListProperty> m_connectionListProperty;
+  Member<PresentationConnectionList> m_connectionList;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // PresentationReceiver_h
+#endif  // PresentationReceiver_h

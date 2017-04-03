@@ -35,7 +35,6 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
-#include "net/log/net_log.h"
 #include "net/socket/socket_test_util.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -179,7 +178,7 @@ TEST_F(DataReductionProxyBypassStatsTest, IsDataReductionProxyUnreachable) {
 
     bypass_stats->OnProxyFallback(fallback_proxy_server,
                                   net::ERR_PROXY_CONNECTION_FAILED);
-    bypass_stats->OnUrlRequestCompleted(url_request(), false);
+    bypass_stats->OnUrlRequestCompleted(url_request(), false, net::OK);
     RunUntilIdle();
 
     EXPECT_EQ(test_case.is_unreachable, IsUnreachable());
@@ -203,7 +202,7 @@ TEST_F(DataReductionProxyBypassStatsTest, ProxyUnreachableThenReachable) {
   EXPECT_TRUE(IsUnreachable());
 
   // proxy succeeds
-  bypass_stats->OnUrlRequestCompleted(url_request(), false);
+  bypass_stats->OnUrlRequestCompleted(url_request(), false, net::OK);
   RunUntilIdle();
   EXPECT_FALSE(IsUnreachable());
 }
@@ -219,7 +218,7 @@ TEST_F(DataReductionProxyBypassStatsTest, ProxyReachableThenUnreachable) {
       .WillRepeatedly(testing::Return(true));
 
   // Proxy succeeds.
-  bypass_stats->OnUrlRequestCompleted(url_request(), false);
+  bypass_stats->OnUrlRequestCompleted(url_request(), false, net::OK);
   RunUntilIdle();
   EXPECT_FALSE(IsUnreachable());
 
@@ -486,7 +485,7 @@ TEST_F(DataReductionProxyBypassStatsTest, SuccessfulRequestCompletion) {
     }
     if (test.is_main_frame) {
       fake_request->SetLoadFlags(fake_request->load_flags() |
-                                 net::LOAD_MAIN_FRAME);
+                                 net::LOAD_MAIN_FRAME_DEPRECATED);
     }
 
     if (test.net_error != net::OK)
@@ -499,7 +498,8 @@ TEST_F(DataReductionProxyBypassStatsTest, SuccessfulRequestCompletion) {
         .WillRepeatedly(testing::DoAll(testing::SetArgPointee<1>(proxy_info),
                                        Return(test.was_proxy_used)));
 
-    bypass_stats->OnUrlRequestCompleted(fake_request.get(), false);
+    bypass_stats->OnUrlRequestCompleted(fake_request.get(), false,
+                                        test.net_error);
 
     if (test.was_proxy_used && !test.is_load_bypass_proxy &&
         test.net_error == net::OK) {
@@ -894,6 +894,10 @@ TEST_F(DataReductionProxyBypassStatsEndToEndTest,
     CreateAndExecuteRequest(
         GURL("http://foo.com"), test_case.initial_response_headers,
         kErrorBody.c_str(), "HTTP/1.1 200 OK\r\n\r\n", kBody.c_str());
+
+    histogram_tester.ExpectUniqueSample(
+        "DataReductionProxy.ConfigService.HTTPRequests", 1, 1);
+
     // The first request caused the proxy to be marked as bad, so this second
     // request should not come through the proxy.
     CreateAndExecuteRequest(GURL("http://bar.com"), "HTTP/1.1 200 OK\r\n\r\n",
@@ -906,6 +910,11 @@ TEST_F(DataReductionProxyBypassStatsEndToEndTest,
                                        kNextBody.size(), 1);
     ExpectOtherBypassedBytesHistogramsEmpty(histogram_tester,
                                             test_case.histogram_name);
+
+    // "DataReductionProxy.ConfigService.HTTPRequests" should not be recorded
+    // for bypassed requests.
+    histogram_tester.ExpectUniqueSample(
+        "DataReductionProxy.ConfigService.HTTPRequests", 1, 1);
   }
 }
 

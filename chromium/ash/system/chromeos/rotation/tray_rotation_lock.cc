@@ -8,9 +8,11 @@
 #include "ash/common/system/tray/system_tray.h"
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/system/tray/tray_item_more.h"
+#include "ash/common/system/tray/tray_popup_item_style.h"
 #include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/display/screen_orientation_controller_chromeos.h"
+#include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
@@ -18,7 +20,6 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/display/display.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/gfx/vector_icons_public.h"
 
 namespace ash {
 
@@ -40,6 +41,10 @@ class RotationLockDefaultView : public TrayItemMore, public ShellObserver {
   void OnMaximizeModeStarted() override;
   void OnMaximizeModeEnded() override;
 
+ protected:
+  // TrayItemMore:
+  void UpdateStyle() override;
+
  private:
   void UpdateImage();
 
@@ -48,7 +53,6 @@ class RotationLockDefaultView : public TrayItemMore, public ShellObserver {
 
 RotationLockDefaultView::RotationLockDefaultView(SystemTrayItem* owner)
     : TrayItemMore(owner, false) {
-  UpdateImage();
   SetVisible(WmShell::Get()
                  ->maximize_mode_controller()
                  ->IsMaximizeModeWindowManagerEnabled());
@@ -77,14 +81,20 @@ void RotationLockDefaultView::OnMaximizeModeEnded() {
   SetVisible(false);
 }
 
+void RotationLockDefaultView::UpdateStyle() {
+  TrayItemMore::UpdateStyle();
+  UpdateImage();
+}
+
 void RotationLockDefaultView::UpdateImage() {
   const bool rotation_locked =
       Shell::GetInstance()->screen_orientation_controller()->rotation_locked();
   if (MaterialDesignController::UseMaterialDesignSystemIcons()) {
-    const gfx::VectorIconId icon_id =
-        rotation_locked ? gfx::VectorIconId::SYSTEM_MENU_ROTATION_LOCK_LOCKED
-                        : gfx::VectorIconId::SYSTEM_MENU_ROTATION_LOCK_AUTO;
-    SetImage(gfx::CreateVectorIcon(icon_id, kMenuIconSize, kMenuIconColor));
+    std::unique_ptr<TrayPopupItemStyle> style = CreateStyle();
+    SetImage(gfx::CreateVectorIcon(rotation_locked
+                                       ? kSystemMenuRotationLockLockedIcon
+                                       : kSystemMenuRotationLockAutoIcon,
+                                   kMenuIconSize, style->GetForegroundColor()));
   } else {
     ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
     const int resource_id = rotation_locked

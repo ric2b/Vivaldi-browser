@@ -7,18 +7,20 @@
 
 #include <algorithm>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/run_loop.h"
 #include "base/task_runner_util.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/arc/arc_support_host.h"
 #include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/policy/profile_policy_connector.h"
+#include "chrome/browser/policy/profile_policy_connector_factory.h"
 #include "chrome/browser/ui/app_list/app_list_test_util.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_icon.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_icon_loader.h"
@@ -40,6 +42,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_model.h"
+#include "ui/events/event_constants.h"
 #include "ui/gfx/geometry/safe_integer_conversions.h"
 #include "ui/gfx/image/image_skia.h"
 
@@ -97,6 +100,7 @@ class ArcAppModelBuilderTest : public AppListTestBase {
 
   void SetUp() override {
     AppListTestBase::SetUp();
+    OnBeforeArcTestSetup();
     arc_test_.SetUp(profile_.get());
     CreateBuilder();
 
@@ -110,6 +114,10 @@ class ArcAppModelBuilderTest : public AppListTestBase {
   }
 
  protected:
+  // Notifies that initial preparation is done, profile is ready and it is time
+  // to initialize Arc subsystem.
+  virtual void OnBeforeArcTestSetup() {}
+
   // Creates a new builder, destroying any existing one.
   void CreateBuilder() {
     ResetBuilder();  // Destroy any existing builder in the correct order.
@@ -355,31 +363,46 @@ class ArcDefaulAppTest : public ArcAppModelBuilderTest {
   ArcDefaulAppTest() {}
   ~ArcDefaulAppTest() override {}
 
-
-  void SetUp() override {
+ protected:
+  // ArcAppModelBuilderTest:
+  void OnBeforeArcTestSetup() override {
     ArcDefaultAppList::UseTestAppsDirectory();
-    ArcAppModelBuilderTest::SetUp();
   }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ArcDefaulAppTest);
 };
 
-class ArcPlayStoreAppTest : public ArcAppModelBuilderTest {
+class ArcDefaulAppForManagedUserTest : public ArcDefaulAppTest {
+ public:
+  ArcDefaulAppForManagedUserTest() {}
+  ~ArcDefaulAppForManagedUserTest() override {}
+
+ protected:
+  // ArcAppModelBuilderTest:
+  void OnBeforeArcTestSetup() override {
+    ArcDefaulAppTest::OnBeforeArcTestSetup();
+
+    policy::ProfilePolicyConnector* const connector =
+        policy::ProfilePolicyConnectorFactory::GetForBrowserContext(
+            profile());
+    connector->OverrideIsManagedForTesting(true);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ArcDefaulAppForManagedUserTest);
+};
+
+class ArcPlayStoreAppTest : public ArcDefaulAppTest {
  public:
   ArcPlayStoreAppTest() {}
   ~ArcPlayStoreAppTest() override {}
 
+ protected:
+  // ArcAppModelBuilderTest:
+  void OnBeforeArcTestSetup() override {
+    ArcDefaulAppTest::OnBeforeArcTestSetup();
 
-  void SetUp() override {
-    AppListTestBase::SetUp();
-    CreateArcHost();
-    arc_test()->SetUp(profile_.get());
-    CreateBuilder();
-  }
-
- private:
-  void CreateArcHost() {
     base::DictionaryValue manifest;
     manifest.SetString(extensions::manifest_keys::kName,
                        "Play Store");
@@ -399,11 +422,11 @@ class ArcPlayStoreAppTest : public ArcAppModelBuilderTest {
     extension_service->AddExtension(arc_support_host_.get());
   }
 
+ private:
   scoped_refptr<extensions::Extension> arc_support_host_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcPlayStoreAppTest);
 };
-
 
 TEST_F(ArcAppModelBuilderTest, ArcPackagePref) {
   ValidateHavePackages(std::vector<arc::mojom::ArcPackageInfo>());
@@ -603,8 +626,8 @@ TEST_F(ArcAppModelBuilderTest, LaunchApps) {
   item_last->Activate(0);
   item_first->Activate(0);
 
-  const ScopedVector<arc::FakeAppInstance::Request>& launch_requests =
-      app_instance()->launch_requests();
+  const std::vector<std::unique_ptr<arc::FakeAppInstance::Request>>&
+      launch_requests = app_instance()->launch_requests();
   ASSERT_EQ(3u, launch_requests.size());
   EXPECT_TRUE(launch_requests[0]->IsForApp(app_first));
   EXPECT_TRUE(launch_requests[1]->IsForApp(app_last));
@@ -639,7 +662,7 @@ TEST_F(ArcAppModelBuilderTest, LaunchShortcuts) {
   item_last->Activate(0);
   item_first->Activate(0);
 
-  const ScopedVector<mojo::String>& launch_intents =
+  const std::vector<std::unique_ptr<mojo::String>>& launch_intents =
       app_instance()->launch_intents();
   ASSERT_EQ(3u, launch_intents.size());
   EXPECT_EQ(app_first.intent_uri, *launch_intents[0]);
@@ -687,12 +710,13 @@ TEST_F(ArcAppModelBuilderTest, RequestIcons) {
   const size_t expected_size = scale_factors.size() * fake_apps().size();
 
   // At this moment we should receive all requests for icon loading.
-  const ScopedVector<arc::FakeAppInstance::IconRequest>& icon_requests =
-      app_instance()->icon_requests();
+  const std::vector<std::unique_ptr<arc::FakeAppInstance::IconRequest>>&
+      icon_requests = app_instance()->icon_requests();
   EXPECT_EQ(expected_size, icon_requests.size());
   std::map<std::string, uint32_t> app_masks;
   for (size_t i = 0; i < icon_requests.size(); ++i) {
-    const arc::FakeAppInstance::IconRequest* icon_request = icon_requests[i];
+    const arc::FakeAppInstance::IconRequest* icon_request =
+        icon_requests[i].get();
     const std::string id = ArcAppListPrefs::GetAppId(
         icon_request->package_name(), icon_request->activity());
     // Make sure no double requests.
@@ -741,13 +765,13 @@ TEST_F(ArcAppModelBuilderTest, RequestShortcutIcons) {
 
   // At this moment we should receive all requests for icon loading.
   const size_t expected_size = scale_factors.size();
-  const ScopedVector<arc::FakeAppInstance::ShortcutIconRequest>& icon_requests =
-      app_instance()->shortcut_icon_requests();
+  const std::vector<std::unique_ptr<arc::FakeAppInstance::ShortcutIconRequest>>&
+      icon_requests = app_instance()->shortcut_icon_requests();
   EXPECT_EQ(expected_size, icon_requests.size());
   uint32_t app_mask = 0;
   for (size_t i = 0; i < icon_requests.size(); ++i) {
     const arc::FakeAppInstance::ShortcutIconRequest* icon_request =
-        icon_requests[i];
+        icon_requests[i].get();
     EXPECT_EQ(shortcut.icon_resource_id, icon_request->icon_resource_id());
 
     // Make sure no double requests.
@@ -882,7 +906,7 @@ TEST_F(ArcAppModelBuilderTest, LastLaunchTime) {
   EXPECT_EQ(base::Time(), app_info->last_launch_time);
 
   base::Time time_before = base::Time::Now();
-  arc::LaunchApp(profile(), id2);
+  arc::LaunchApp(profile(), id2, ui::EF_NONE);
   base::Time time_after = base::Time::Now();
 
   app_info = prefs->GetApp(id2);
@@ -924,7 +948,7 @@ TEST_F(ArcPlayStoreAppTest, PlayStore) {
   ASSERT_TRUE(app_info);
   EXPECT_FALSE(app_info->ready);
 
-  arc::LaunchApp(profile(), arc::kPlayStoreAppId);
+  arc::LaunchApp(profile(), arc::kPlayStoreAppId, ui::EF_NONE);
   EXPECT_TRUE(arc_test()->arc_auth_service()->IsArcEnabled());
 }
 
@@ -1119,4 +1143,16 @@ TEST_F(ArcDefaulAppTest, DefaultApps) {
   all_apps = fake_default_apps();
   all_apps.erase(all_apps.begin());
   ValidateHaveApps(all_apps);
+}
+
+TEST_F(ArcDefaulAppForManagedUserTest, DefaultAppsForManagedUser) {
+  const ArcAppListPrefs* const prefs = ArcAppListPrefs::Get(profile_.get());
+  ASSERT_TRUE(prefs);
+
+  // There is no default app for managed users except Play Store
+  for (const auto& app : fake_default_apps()) {
+    const std::string app_id = ArcAppTest::GetAppId(app);
+    EXPECT_FALSE(prefs->IsRegistered(app_id));
+    EXPECT_FALSE(prefs->GetApp(app_id));
+  }
 }

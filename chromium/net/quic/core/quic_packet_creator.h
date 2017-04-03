@@ -20,6 +20,7 @@
 
 #include "base/macros.h"
 #include "base/strings/string_piece.h"
+#include "net/base/net_export.h"
 #include "net/quic/core/quic_framer.h"
 #include "net/quic/core/quic_protocol.h"
 
@@ -69,7 +70,7 @@ class NET_EXPORT_PRIVATE QuicPacketCreator {
   // SetDiversificationNonce sets the nonce that will be sent in each public
   // header of packets encrypted at the initial encryption level. Should only
   // be called by servers.
-  void SetDiversificationNonce(const DiversificationNonce nonce);
+  void SetDiversificationNonce(const DiversificationNonce& nonce);
 
   // Update the packet number length to use in future packets as soon as it
   // can be safely changed.
@@ -115,18 +116,16 @@ class NET_EXPORT_PRIVATE QuicPacketCreator {
   // to further process the SerializedPacket.
   void Flush();
 
-  // Optimized method to create a QuicStreamFrame, serialize it, and encrypt it
-  // into |encrypted_buffer|. Adds the QuicStreamFrame to the returned
-  // SerializedPacket.  Sets |num_bytes_consumed| to the number of bytes
-  // consumed to create the QuicStreamFrame.
+  // Optimized method to create a QuicStreamFrame and serialize it. Adds the
+  // QuicStreamFrame to the returned SerializedPacket.  Sets
+  // |num_bytes_consumed| to the number of bytes consumed to create the
+  // QuicStreamFrame.
   void CreateAndSerializeStreamFrame(QuicStreamId id,
                                      const QuicIOVector& iov,
                                      QuicStreamOffset iov_offset,
                                      QuicStreamOffset stream_offset,
                                      bool fin,
                                      QuicAckListenerInterface* listener,
-                                     char* encrypted_buffer,
-                                     size_t encrypted_buffer_len,
                                      size_t* num_bytes_consumed);
 
   // Returns true if there are frames pending to be serialized.
@@ -270,9 +269,6 @@ class NET_EXPORT_PRIVATE QuicPacketCreator {
                            size_t iov_offset,
                            size_t length,
                            char* buffer);
-
-  // Updates packet number length on packet boundary.
-  void MaybeUpdatePacketNumberLength();
 
   void FillPacketHeader(QuicPacketHeader* header);
 

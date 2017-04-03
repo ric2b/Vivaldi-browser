@@ -12,7 +12,7 @@ import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.FullCardRequestDelegate;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.mojom.payments.PaymentItem;
+import org.chromium.payments.mojom.PaymentItem;
 
 import org.json.JSONObject;
 
@@ -100,7 +100,6 @@ public class AutofillPaymentInstrument
             json.name("languageCode").value(ensureNotNull(mBillingAddress.getLanguageCode()));
             json.name("organization").value(ensureNotNull(mBillingAddress.getCompanyName()));
             json.name("recipient").value(ensureNotNull(mBillingAddress.getFullName()));
-            json.name("careOf").value("");
             json.name("phone").value(ensureNotNull(mBillingAddress.getPhoneNumber()));
 
             json.endObject();

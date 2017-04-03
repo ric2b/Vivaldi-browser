@@ -8,11 +8,9 @@
 #include <string>
 #include <utility>
 
-#include "base/feature_list.h"
 #include "base/i18n/time_formatting.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/rand_util.h"
@@ -34,6 +32,9 @@
 #include "net/url_request/url_request_context_getter.h"
 
 namespace network_time {
+
+const base::Feature kNetworkTimeServiceQuerying{
+    "NetworkTimeServiceQuerying", base::FEATURE_DISABLED_BY_DEFAULT};
 
 namespace {
 
@@ -94,10 +95,6 @@ const char kPrefNetworkTime[] = "network";
 const uint32_t kTimeServerMaxSkewSeconds = 10;
 
 const char kTimeServiceURL[] = "http://clients2.google.com/time/1/current";
-
-// Variations Service feature that enables network time service querying.
-const base::Feature kNetworkTimeServiceQuerying{
-    "NetworkTimeServiceQuerying", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const char kVariationsServiceCheckTimeIntervalSeconds[] =
     "CheckTimeIntervalSeconds";
@@ -189,7 +186,6 @@ NetworkTimeTracker::NetworkTimeTracker(
       max_response_size_(1024),
       backoff_(base::TimeDelta::FromMinutes(kBackoffMinutes)),
       getter_(std::move(getter)),
-      loop_(nullptr),
       clock_(std::move(clock)),
       tick_clock_(std::move(tick_clock)),
       pref_service_(pref_service) {
@@ -292,13 +288,15 @@ void NetworkTimeTracker::SetPublicKeyForTesting(const base::StringPiece& key) {
 
 bool NetworkTimeTracker::QueryTimeServiceForTesting() {
   CheckTime();
-  loop_ = base::MessageLoop::current();  // Gets Quit on completion.
   return time_fetcher_ != nullptr;
 }
 
 void NetworkTimeTracker::WaitForFetchForTesting(uint32_t nonce) {
   query_signer_->OverrideNonceForTesting(kKeyVersion, nonce);
-  base::RunLoop().Run();
+  base::RunLoop run_loop;
+  run_loop_for_testing_ = &run_loop;
+  run_loop.Run();
+  run_loop_for_testing_ = nullptr;
 }
 
 base::TimeDelta NetworkTimeTracker::GetTimerDelayForTesting() const {
@@ -306,12 +304,13 @@ base::TimeDelta NetworkTimeTracker::GetTimerDelayForTesting() const {
   return timer_.GetCurrentDelay();
 }
 
-bool NetworkTimeTracker::GetNetworkTime(base::Time* network_time,
-                                        base::TimeDelta* uncertainty) const {
+NetworkTimeTracker::NetworkTimeResult NetworkTimeTracker::GetNetworkTime(
+    base::Time* network_time,
+    base::TimeDelta* uncertainty) const {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(network_time);
   if (network_time_at_last_measurement_.is_null()) {
-    return false;
+    return NETWORK_TIME_NO_SYNC;
   }
   DCHECK(!ticks_at_last_measurement_.is_null());
   DCHECK(!time_at_last_measurement_.is_null());
@@ -320,23 +319,41 @@ bool NetworkTimeTracker::GetNetworkTime(base::Time* network_time,
   base::TimeDelta time_delta = clock_->Now() - time_at_last_measurement_;
   if (time_delta.InMilliseconds() < 0) {  // Has wall clock run backward?
     DVLOG(1) << "Discarding network time due to wall clock running backward";
+    UMA_HISTOGRAM_CUSTOM_TIMES(
+        "NetworkTimeTracker.WallClockRanBackwards", time_delta.magnitude(),
+        base::TimeDelta::FromSeconds(1), base::TimeDelta::FromDays(7), 50);
     network_time_at_last_measurement_ = base::Time();
-    return false;
+    return NETWORK_TIME_SYNC_LOST;
   }
   // Now we know that both |tick_delta| and |time_delta| are positive.
-  base::TimeDelta divergence = (tick_delta - time_delta).magnitude();
-  if (divergence > base::TimeDelta::FromSeconds(kClockDivergenceSeconds)) {
+  base::TimeDelta divergence = tick_delta - time_delta;
+  if (divergence.magnitude() >
+      base::TimeDelta::FromSeconds(kClockDivergenceSeconds)) {
     // Most likely either the machine has suspended, or the wall clock has been
     // reset.
     DVLOG(1) << "Discarding network time due to clocks diverging";
+
+    // The below histograms do not use |kClockDivergenceSeconds| as the
+    // lower-bound, so that |kClockDivergenceSeconds| can be changed
+    // without causing the buckets to change and making data from
+    // old/new clients incompatible.
+    if (divergence.InMilliseconds() < 0) {
+      UMA_HISTOGRAM_CUSTOM_TIMES(
+          "NetworkTimeTracker.ClockDivergence.Negative", divergence.magnitude(),
+          base::TimeDelta::FromSeconds(60), base::TimeDelta::FromDays(7), 50);
+    } else {
+      UMA_HISTOGRAM_CUSTOM_TIMES(
+          "NetworkTimeTracker.ClockDivergence.Positive", divergence.magnitude(),
+          base::TimeDelta::FromSeconds(60), base::TimeDelta::FromDays(7), 50);
+    }
     network_time_at_last_measurement_ = base::Time();
-    return false;
+    return NETWORK_TIME_SYNC_LOST;
   }
   *network_time = network_time_at_last_measurement_ + tick_delta;
   if (uncertainty) {
     *uncertainty = network_time_uncertainty_ + divergence;
   }
-  return true;
+  return NETWORK_TIME_AVAILABLE;
 }
 
 void NetworkTimeTracker::CheckTime() {
@@ -453,10 +470,8 @@ void NetworkTimeTracker::OnURLFetchComplete(const net::URLFetcher* source) {
   }
   QueueCheckTime(backoff_);
   time_fetcher_.reset();
-  if (loop_ != nullptr) {
-    loop_->QuitWhenIdle();
-    loop_ = nullptr;
-  }
+  if (run_loop_for_testing_ != nullptr)
+    run_loop_for_testing_->QuitWhenIdle();
 }
 
 void NetworkTimeTracker::QueueCheckTime(base::TimeDelta delay) {
@@ -469,10 +484,10 @@ bool NetworkTimeTracker::ShouldIssueTimeQuery() {
     return false;
   }
 
-  // If GetNetworkTime() returns false, synchronization has been lost
-  // and a query is needed.
+  // If GetNetworkTime() does not return NETWORK_TIME_AVAILABLE,
+  // synchronization has been lost and a query is needed.
   base::Time network_time;
-  if (!GetNetworkTime(&network_time, nullptr)) {
+  if (GetNetworkTime(&network_time, nullptr) != NETWORK_TIME_AVAILABLE) {
     return true;
   }
 

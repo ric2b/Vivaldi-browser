@@ -30,9 +30,9 @@ namespace blink {
 class WebFrame;
 class WebRTCAnswerOptions;
 class WebRTCDataChannelHandler;
+class WebRTCLegacyStats;
 class WebRTCOfferOptions;
 class WebRTCPeerConnectionHandlerClient;
-class WebRTCStats;
 }
 
 namespace content {
@@ -52,7 +52,7 @@ class CONTENT_EXPORT LocalRTCStatsResponse
   }
 
   virtual blink::WebRTCStatsResponse webKitStatsResponse() const;
-  virtual void addStats(const blink::WebRTCStats& stats);
+  virtual void addStats(const blink::WebRTCLegacyStats& stats);
 
  protected:
   ~LocalRTCStatsResponse() override {}
@@ -146,6 +146,8 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
                  const blink::WebMediaConstraints& options) override;
   void removeStream(const blink::WebMediaStream& stream) override;
   void getStats(const blink::WebRTCStatsRequest& request) override;
+  void getStats(
+      std::unique_ptr<blink::WebRTCStatsReportCallback> callback) override;
   blink::WebRTCDataChannelHandler* createDataChannel(
       const blink::WebString& label,
       const blink::WebRTCDataChannelInit& init) override;
@@ -165,7 +167,8 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
                 blink::WebMediaStreamSource::Type track_type);
 
   // Tells the |client_| to close RTCPeerConnection.
-  void CloseClientPeerConnection();
+  // Make it virtual for testing purpose.
+  virtual void CloseClientPeerConnection();
 
   // Start recording an event log.
   void StartEventLog(IPC::PlatformFileForTransit file,

@@ -16,6 +16,7 @@ import org.chromium.base.SysUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
@@ -34,6 +35,7 @@ import java.util.concurrent.Callable;
 /**
  * Contains tests for the brand color feature.
  */
+@RetryOnFailure
 public class BrandColorTest extends ChromeActivityTestCaseBase<ChromeActivity> {
 
     public BrandColorTest() {
@@ -135,6 +137,28 @@ public class BrandColorTest extends ChromeActivityTestCaseBase<ChromeActivity> {
     public void testBrandColorNoAlpha() throws InterruptedException {
         startMainActivityWithURL(getUrlWithBrandColor(BRAND_COLOR_1));
         checkForBrandColor(Color.parseColor(BRAND_COLOR_1));
+    }
+
+    /**
+     * Test for immediately setting the brand color.
+     */
+    @SmallTest
+    @Restriction(ChromeRestriction.RESTRICTION_TYPE_PHONE)
+    @Feature({"Omnibox"})
+    public void testImmediateColorChange() throws InterruptedException {
+        startMainActivityWithURL(getUrlWithBrandColor(BRAND_COLOR_1));
+        checkForBrandColor(Color.parseColor(BRAND_COLOR_1));
+
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                getActivity().getToolbarManager().updatePrimaryColor(mDefaultColor, false);
+                // Since the color should change instantly, there is no need to use the criteria
+                // helper.
+                assertEquals(mToolbarDataProvider.getPrimaryColor(),
+                        mToolbar.getBackgroundDrawable().getColor());
+            }
+        });
     }
 
     /**

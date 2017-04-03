@@ -34,23 +34,19 @@ namespace blink {
 // in shared memory between hardware polling threads and the rest of the
 // browser.
 class WebGamepads {
-public:
-    WebGamepads()
-        : length(0) { }
+ public:
+  WebGamepads() : length(0) {}
 
-    static const size_t itemsLengthCap = 4;
+  static const size_t itemsLengthCap = 4;
 
-    // Number of valid entries in the items array.
-    unsigned length;
+  // Number of valid entries in the items array.
+  unsigned length;
 
-    // Gamepad data for N separate gamepad devices.
-    WebGamepad items[itemsLengthCap];
+  // Gamepad data for N separate gamepad devices.
+  WebGamepad items[itemsLengthCap];
 };
 
-static_assert(sizeof(WebGamepads) == 2888, "WebGamepads has wrong size");
-
 #pragma pack(pop)
-
 }
 
-#endif // WebGamepads_h
+#endif  // WebGamepads_h

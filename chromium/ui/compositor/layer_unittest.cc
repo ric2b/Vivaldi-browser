@@ -22,6 +22,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
+#include "cc/animation/animation_player.h"
 #include "cc/layers/layer.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/output/copy_output_result.h"
@@ -770,6 +771,131 @@ TEST_F(LayerWithRealCompositorTest, HierarchyNoTexture) {
   EXPECT_FALSE(d2.painted());
   // |d3| should have received a paint notification.
   EXPECT_TRUE(d3.painted());
+}
+
+TEST_F(LayerWithDelegateTest, Cloning) {
+  std::unique_ptr<Layer> layer(CreateLayer(LAYER_SOLID_COLOR));
+
+  gfx::Transform transform;
+  transform.Scale(2, 1);
+  transform.Translate(10, 5);
+
+  layer->SetTransform(transform);
+  layer->SetColor(SK_ColorRED);
+  layer->SetLayerInverted(true);
+
+  auto clone = layer->Clone();
+
+  // Cloning preserves layer state.
+  EXPECT_EQ(transform, clone->GetTargetTransform());
+  EXPECT_EQ(SK_ColorRED, clone->background_color());
+  EXPECT_EQ(SK_ColorRED, clone->GetTargetColor());
+  EXPECT_TRUE(clone->layer_inverted());
+
+  layer->SetTransform(gfx::Transform());
+  layer->SetColor(SK_ColorGREEN);
+  layer->SetLayerInverted(false);
+
+  // The clone is an independent copy, so state changes do not propagate.
+  EXPECT_EQ(transform, clone->GetTargetTransform());
+  EXPECT_EQ(SK_ColorRED, clone->background_color());
+  EXPECT_EQ(SK_ColorRED, clone->GetTargetColor());
+  EXPECT_TRUE(clone->layer_inverted());
+
+  constexpr SkColor kTransparent = SK_ColorTRANSPARENT;
+  layer->SetColor(kTransparent);
+  layer->SetFillsBoundsOpaquely(false);
+  // Color and opaqueness targets should be preserved during cloning, even after
+  // switching away from solid color content.
+  layer->SwitchCCLayerForTest();
+
+  clone = layer->Clone();
+
+  // The clone is a copy of the latest state.
+  EXPECT_TRUE(clone->GetTargetTransform().IsIdentity());
+  EXPECT_EQ(kTransparent, clone->background_color());
+  EXPECT_EQ(kTransparent, clone->GetTargetColor());
+  EXPECT_FALSE(clone->layer_inverted());
+  EXPECT_FALSE(clone->fills_bounds_opaquely());
+
+  layer.reset(CreateLayer(LAYER_SOLID_COLOR));
+  layer->SetVisible(true);
+  layer->SetOpacity(1.0f);
+  layer->SetColor(SK_ColorRED);
+
+  ScopedLayerAnimationSettings settings(layer->GetAnimator());
+  layer->SetVisible(false);
+  layer->SetOpacity(0.0f);
+  layer->SetColor(SK_ColorGREEN);
+
+  EXPECT_TRUE(layer->visible());
+  EXPECT_EQ(1.0f, layer->opacity());
+  EXPECT_EQ(SK_ColorRED, layer->background_color());
+
+  clone = layer->Clone();
+
+  // Cloning copies animation targets.
+  EXPECT_FALSE(clone->visible());
+  EXPECT_EQ(0.0f, clone->opacity());
+  EXPECT_EQ(SK_ColorGREEN, clone->background_color());
+}
+
+TEST_F(LayerWithDelegateTest, Mirroring) {
+  std::unique_ptr<Layer> root(CreateNoTextureLayer(gfx::Rect(0, 0, 100, 100)));
+  std::unique_ptr<Layer> child(CreateLayer(LAYER_TEXTURED));
+
+  const gfx::Rect bounds(0, 0, 50, 50);
+  child->SetBounds(bounds);
+  child->SetVisible(true);
+
+  DrawTreeLayerDelegate delegate(child->bounds());
+  child->set_delegate(&delegate);
+
+  const auto mirror = child->Mirror();
+
+  // Bounds and visibility are preserved.
+  EXPECT_EQ(bounds, mirror->bounds());
+  EXPECT_TRUE(mirror->visible());
+
+  root->Add(child.get());
+  root->Add(mirror.get());
+
+  DrawTree(root.get());
+  EXPECT_TRUE(delegate.painted());
+  delegate.Reset();
+
+  // Both layers should be clean.
+  EXPECT_TRUE(child->damaged_region_for_testing().IsEmpty());
+  EXPECT_TRUE(mirror->damaged_region_for_testing().IsEmpty());
+
+  const gfx::Rect damaged_rect(10, 10, 20, 20);
+  EXPECT_TRUE(child->SchedulePaint(damaged_rect));
+  EXPECT_EQ(damaged_rect, child->damaged_region_for_testing().bounds());
+
+  DrawTree(root.get());
+  EXPECT_TRUE(delegate.painted());
+  delegate.Reset();
+
+  // Damage should be propagated to the mirror.
+  EXPECT_EQ(damaged_rect, mirror->damaged_region_for_testing().bounds());
+  EXPECT_TRUE(child->damaged_region_for_testing().IsEmpty());
+
+  DrawTree(root.get());
+  EXPECT_TRUE(delegate.painted());
+
+  // Mirror should be clean.
+  EXPECT_TRUE(mirror->damaged_region_for_testing().IsEmpty());
+
+  // Bounds are not synchronized by default.
+  const gfx::Rect new_bounds(10, 10, 10, 10);
+  child->SetBounds(new_bounds);
+  EXPECT_EQ(bounds, mirror->bounds());
+  child->SetBounds(bounds);
+
+  // Bounds should be synchronized if requested.
+  child->set_sync_bounds(true);
+  child->SetBounds(new_bounds);
+  EXPECT_EQ(new_bounds, mirror->bounds());
 }
 
 class LayerWithNullDelegateTest : public LayerWithDelegateTest {
@@ -1759,6 +1885,41 @@ TEST_F(LayerWithDelegateTest, ExternalContent) {
   EXPECT_NE(before.get(), child->cc_layer_for_testing());
 }
 
+TEST_F(LayerWithDelegateTest, ExternalContentMirroring) {
+  std::unique_ptr<Layer> layer(CreateLayer(LAYER_SOLID_COLOR));
+
+  const auto satisfy_callback = base::Bind(&FakeSatisfyCallback);
+  const auto require_callback = base::Bind(&FakeRequireCallback);
+
+  cc::SurfaceId surface_id(cc::FrameSinkId(0, 1), cc::LocalFrameId(2, 3));
+  layer->SetShowSurface(surface_id, satisfy_callback, require_callback,
+                        gfx::Size(10, 10), 1.0f, gfx::Size(10, 10));
+
+  const auto mirror = layer->Mirror();
+  auto* const cc_layer = mirror->cc_layer_for_testing();
+  const auto* surface = static_cast<cc::SurfaceLayer*>(cc_layer);
+
+  // Mirroring preserves surface state.
+  EXPECT_EQ(surface_id, surface->surface_id());
+  EXPECT_TRUE(satisfy_callback.Equals(surface->satisfy_callback()));
+  EXPECT_TRUE(require_callback.Equals(surface->require_callback()));
+  EXPECT_EQ(gfx::Size(10, 10), surface->surface_size());
+  EXPECT_EQ(1.0f, surface->surface_scale());
+
+  surface_id = cc::SurfaceId(cc::FrameSinkId(1, 2), cc::LocalFrameId(3, 4));
+  layer->SetShowSurface(surface_id, satisfy_callback, require_callback,
+                        gfx::Size(20, 20), 2.0f, gfx::Size(20, 20));
+
+  // A new cc::Layer should be created for the mirror.
+  EXPECT_NE(cc_layer, mirror->cc_layer_for_testing());
+  surface = static_cast<cc::SurfaceLayer*>(mirror->cc_layer_for_testing());
+
+  // Surface updates propagate to the mirror.
+  EXPECT_EQ(surface_id, surface->surface_id());
+  EXPECT_EQ(gfx::Size(20, 20), surface->surface_size());
+  EXPECT_EQ(2.0f, surface->surface_scale());
+}
+
 // Verifies that layer filters still attached after changing implementation
 // layer.
 TEST_F(LayerWithDelegateTest, LayerFiltersSurvival) {
@@ -1791,41 +1952,43 @@ TEST_F(LayerWithRealCompositorTest, AddRemoveThreadedAnimations) {
   l1->SetAnimator(LayerAnimator::CreateImplicitAnimator());
   l2->SetAnimator(LayerAnimator::CreateImplicitAnimator());
 
-  EXPECT_FALSE(l1->HasPendingThreadedAnimationsForTesting());
+  auto player1 = l1->GetAnimator()->GetAnimationPlayerForTesting();
+  auto player2 = l2->GetAnimator()->GetAnimationPlayerForTesting();
+
+  EXPECT_FALSE(player1->has_any_animation());
 
   // Trigger a threaded animation.
   l1->SetOpacity(0.5f);
 
-  EXPECT_TRUE(l1->HasPendingThreadedAnimationsForTesting());
+  EXPECT_TRUE(player1->has_any_animation());
 
   // Ensure we can remove a pending threaded animation.
   l1->GetAnimator()->StopAnimating();
 
-  EXPECT_FALSE(l1->HasPendingThreadedAnimationsForTesting());
+  EXPECT_FALSE(player1->has_any_animation());
 
   // Trigger another threaded animation.
   l1->SetOpacity(0.2f);
 
-  EXPECT_TRUE(l1->HasPendingThreadedAnimationsForTesting());
+  EXPECT_TRUE(player1->has_any_animation());
 
   root->Add(l1.get());
   GetCompositor()->SetRootLayer(root.get());
 
-  // Now that l1 is part of a tree, it should have dispatched the pending
-  // animation.
-  EXPECT_FALSE(l1->HasPendingThreadedAnimationsForTesting());
+  // Now l1 is part of a tree.
+  EXPECT_TRUE(player1->has_any_animation());
 
-  // Ensure that l1 no longer holds on to animations.
   l1->SetOpacity(0.1f);
-  EXPECT_FALSE(l1->HasPendingThreadedAnimationsForTesting());
+  // IMMEDIATELY_SET_NEW_TARGET is a default preemption strategy for conflicting
+  // animations.
+  EXPECT_FALSE(player1->has_any_animation());
 
-  // Ensure that adding a layer to an existing tree causes its pending
-  // animations to get dispatched.
+  // Adding a layer to an existing tree.
   l2->SetOpacity(0.5f);
-  EXPECT_TRUE(l2->HasPendingThreadedAnimationsForTesting());
+  EXPECT_TRUE(player2->has_any_animation());
 
   l1->Add(l2.get());
-  EXPECT_FALSE(l2->HasPendingThreadedAnimationsForTesting());
+  EXPECT_TRUE(player2->has_any_animation());
 }
 
 // Tests that in-progress threaded animations complete when a Layer's

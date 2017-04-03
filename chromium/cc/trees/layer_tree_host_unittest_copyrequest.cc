@@ -17,7 +17,7 @@
 #include "cc/test/fake_output_surface.h"
 #include "cc/test/fake_picture_layer.h"
 #include "cc/test/layer_tree_test.h"
-#include "cc/test/test_delegating_output_surface.h"
+#include "cc/test/test_compositor_frame_sink.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "gpu/GLES2/gl2extchromium.h"
 
@@ -60,7 +60,7 @@ class LayerTreeHostCopyRequestTestMultipleRequests
   }
 
   void NextStep() {
-    int frame = layer_tree_host()->source_frame_number();
+    int frame = layer_tree_host()->SourceFrameNumber();
     switch (frame) {
       case 1:
         child->RequestCopyOfOutput(CopyOutputRequest::CreateBitmapRequest(
@@ -119,7 +119,7 @@ class LayerTreeHostCopyRequestTestMultipleRequests
   }
 
   void CopyOutputCallback(size_t id, std::unique_ptr<CopyOutputResult> result) {
-    EXPECT_TRUE(layer_tree_host()->task_runner_provider()->IsMainThread());
+    EXPECT_TRUE(layer_tree_host()->GetTaskRunnerProvider()->IsMainThread());
     EXPECT_TRUE(result->HasBitmap());
     std::unique_ptr<SkBitmap> bitmap = result->TakeBitmap();
     EXPECT_EQ(result->size().ToString(),
@@ -214,7 +214,7 @@ class LayerTreeHostCopyRequestCompletionCausesCommit
   }
 
   void DidCommit() override {
-    int frame = layer_tree_host()->source_frame_number();
+    int frame = layer_tree_host()->SourceFrameNumber();
     switch (frame) {
       case 1:
         layer_->RequestCopyOfOutput(CopyOutputRequest::CreateBitmapRequest(
@@ -270,7 +270,7 @@ class LayerTreeHostCopyRequestTestLayerDestroyed
   }
 
   void DidCommit() override {
-    int frame = layer_tree_host()->source_frame_number();
+    int frame = layer_tree_host()->SourceFrameNumber();
     switch (frame) {
       case 1:
         main_destroyed_->RequestCopyOfOutput(
@@ -321,7 +321,7 @@ class LayerTreeHostCopyRequestTestLayerDestroyed
   }
 
   void CopyOutputCallback(std::unique_ptr<CopyOutputResult> result) {
-    EXPECT_TRUE(layer_tree_host()->task_runner_provider()->IsMainThread());
+    EXPECT_TRUE(layer_tree_host()->GetTaskRunnerProvider()->IsMainThread());
     EXPECT_TRUE(result->IsEmpty());
     ++callback_count_;
   }
@@ -379,7 +379,7 @@ class LayerTreeHostCopyRequestTestInHiddenSubtree
 
   void CopyOutputCallback(std::unique_ptr<CopyOutputResult> result) {
     ++callback_count_;
-    EXPECT_TRUE(layer_tree_host()->task_runner_provider()->IsMainThread());
+    EXPECT_TRUE(layer_tree_host()->GetTaskRunnerProvider()->IsMainThread());
     EXPECT_EQ(copy_layer_->bounds().ToString(), result->size().ToString())
         << callback_count_;
     switch (callback_count_) {
@@ -463,10 +463,10 @@ class LayerTreeHostTestHiddenSurfaceNotAllocatedForSubtreeCopyRequest
     client_.set_bounds(root_->bounds());
   }
 
-  std::unique_ptr<TestDelegatingOutputSurface> CreateDelegatingOutputSurface(
+  std::unique_ptr<TestCompositorFrameSink> CreateCompositorFrameSink(
       scoped_refptr<ContextProvider> compositor_context_provider,
       scoped_refptr<ContextProvider> worker_context_provider) override {
-    auto surface = LayerTreeHostCopyRequestTest::CreateDelegatingOutputSurface(
+    auto surface = LayerTreeHostCopyRequestTest::CreateCompositorFrameSink(
         std::move(compositor_context_provider),
         std::move(worker_context_provider));
     display_ = surface->display();
@@ -484,7 +484,7 @@ class LayerTreeHostTestHiddenSurfaceNotAllocatedForSubtreeCopyRequest
   }
 
   void CopyOutputCallback(std::unique_ptr<CopyOutputResult> result) {
-    EXPECT_TRUE(layer_tree_host()->task_runner_provider()->IsMainThread());
+    EXPECT_TRUE(layer_tree_host()->GetTaskRunnerProvider()->IsMainThread());
     EXPECT_EQ(copy_layer_->bounds().ToString(), result->size().ToString());
     EndTest();
   }
@@ -578,7 +578,7 @@ class LayerTreeHostCopyRequestTestClippedOut
   void CopyOutputCallback(std::unique_ptr<CopyOutputResult> result) {
     // We should still get the content even if the copy requested layer was
     // completely clipped away.
-    EXPECT_TRUE(layer_tree_host()->task_runner_provider()->IsMainThread());
+    EXPECT_TRUE(layer_tree_host()->GetTaskRunnerProvider()->IsMainThread());
     EXPECT_EQ(gfx::Size(10, 10).ToString(), result->size().ToString());
     EndTest();
   }
@@ -687,7 +687,7 @@ class LayerTreeHostTestAsyncTwoReadbacksWithoutDraw
   }
 
   void DidCommit() override {
-    if (layer_tree_host()->source_frame_number() == 1) {
+    if (layer_tree_host()->SourceFrameNumber() == 1) {
       // Allow drawing.
       layer_tree()->SetViewportSize(gfx::Size(root_->bounds()));
 
@@ -696,7 +696,7 @@ class LayerTreeHostTestAsyncTwoReadbacksWithoutDraw
   }
 
   void CopyOutputCallback(std::unique_ptr<CopyOutputResult> result) {
-    EXPECT_TRUE(layer_tree_host()->task_runner_provider()->IsMainThread());
+    EXPECT_TRUE(layer_tree_host()->GetTaskRunnerProvider()->IsMainThread());
 
     // The first frame can't be drawn.
     switch (callback_count_) {
@@ -754,7 +754,7 @@ class LayerTreeHostCopyRequestTestDeleteTexture
 
   void ReceiveCopyRequestOutputAndCommit(
       std::unique_ptr<CopyOutputResult> result) {
-    EXPECT_TRUE(layer_tree_host()->task_runner_provider()->IsMainThread());
+    EXPECT_TRUE(layer_tree_host()->GetTaskRunnerProvider()->IsMainThread());
     EXPECT_EQ(gfx::Size(10, 10).ToString(), result->size().ToString());
     EXPECT_TRUE(result->HasTexture());
 
@@ -852,7 +852,7 @@ class LayerTreeHostCopyRequestTestCountTextures
     // These tests expect the LayerTreeHostImpl to share a context with
     // the Display so that sync points are not needed and the texture counts
     // are visible together.
-    // Since this test does not override CreateDelegatingOutputSurface, the
+    // Since this test does not override CreateCompositorFrameSink, the
     // |compositor_context_provider| will be a TestContextProvider.
     display_context_provider_ =
         static_cast<TestContextProvider*>(compositor_context_provider.get());
@@ -888,7 +888,7 @@ class LayerTreeHostCopyRequestTestCountTextures
   virtual void RequestCopy(Layer* layer) = 0;
 
   void DidCommit() override {
-    switch (layer_tree_host()->source_frame_number()) {
+    switch (layer_tree_host()->SourceFrameNumber()) {
       case 1:
         // The layers have been pushed to the impl side and drawn. Any textures
         // that are created in that process will have been allocated.
@@ -1060,7 +1060,7 @@ class LayerTreeHostCopyRequestTestDestroyBeforeCopy
   }
 
   void DidActivate() {
-    switch (layer_tree_host()->source_frame_number()) {
+    switch (layer_tree_host()->SourceFrameNumber()) {
       case 1: {
         EXPECT_EQ(0, callback_count_);
         // Put a copy request on the layer, but then don't allow any
@@ -1136,7 +1136,7 @@ class LayerTreeHostCopyRequestTestShutdownBeforeCopy
   }
 
   void DidActivate() {
-    switch (layer_tree_host()->source_frame_number()) {
+    switch (layer_tree_host()->SourceFrameNumber()) {
       case 1: {
         EXPECT_EQ(0, callback_count_);
         // Put a copy request on the layer, but then don't allow any
@@ -1199,7 +1199,7 @@ class LayerTreeHostCopyRequestTestMultipleDrawsHiddenCopyRequest
 
   void DidCommit() override {
     // Send a copy request after the first commit.
-    if (layer_tree_host()->source_frame_number() == 1) {
+    if (layer_tree_host()->SourceFrameNumber() == 1) {
       child_->RequestCopyOfOutput(
           CopyOutputRequest::CreateBitmapRequest(base::Bind(
               &LayerTreeHostCopyRequestTestMultipleDrawsHiddenCopyRequest::
@@ -1244,7 +1244,8 @@ class LayerTreeHostCopyRequestTestMultipleDrawsHiddenCopyRequest
         EXPECT_TRUE(saw_root);
         EXPECT_TRUE(saw_child);
         // Make another draw happen after doing the copy request.
-        host_impl->SetNeedsRedrawRect(gfx::Rect(1, 1));
+        host_impl->SetViewportDamage(gfx::Rect(1, 1));
+        host_impl->SetNeedsRedraw();
         break;
       case 3:
         // If LayerTreeHostImpl does the wrong thing, it will try to draw the

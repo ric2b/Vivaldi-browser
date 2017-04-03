@@ -18,7 +18,8 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/field_trial.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/sys_info.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -73,15 +74,6 @@ namespace {
 
 // Time interval at which periodic cleanups are performed.
 const int kPeriodicCleanupIntervalMs = 1000;
-
-// Valid HTTP methods for prerendering.
-const char* const kValidHttpMethods[] = {
-  "GET",
-  "HEAD",
-  "OPTIONS",
-  "POST",
-  "TRACE",
-};
 
 // Length of prerender history, for display in chrome://net-internals
 const int kHistoryLength = 100;
@@ -144,24 +136,25 @@ PrerenderManager::PrerenderManagerMode PrerenderManager::mode_ =
     PRERENDER_MODE_ENABLED;
 
 struct PrerenderManager::NavigationRecord {
-  NavigationRecord(const GURL& url, base::TimeTicks time)
-      : url(url),
-        time(time) {
-  }
+  NavigationRecord(const GURL& url, base::TimeTicks time, Origin origin)
+      : url(url), time(time), origin(origin) {}
 
   GURL url;
   base::TimeTicks time;
+  Origin origin;
 };
 
 PrerenderManager::PrerenderManager(Profile* profile)
     : profile_(profile),
       prerender_contents_factory_(PrerenderContents::CreateFactory()),
-      last_prerender_start_time_(GetCurrentTimeTicks() -
+      last_prerender_start_time_(
+          GetCurrentTimeTicks() -
           base::TimeDelta::FromMilliseconds(kMinTimeBetweenPrerendersMs)),
       prerender_history_(new PrerenderHistory(kHistoryLength)),
       histograms_(new PrerenderHistograms()),
       profile_network_bytes_(0),
-      last_recorded_profile_network_bytes_(0) {
+      last_recorded_profile_network_bytes_(0),
+      weak_factory_(this) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   // Certain experiments override our default config_ values.
@@ -550,6 +543,48 @@ void PrerenderManager::RecordPerceivedPageLoadTime(
   }
 }
 
+void PrerenderManager::RecordPrefetchResponseReceived(Origin origin,
+                                                      bool is_main_resource,
+                                                      bool is_redirect,
+                                                      bool is_no_store) {
+  histograms_->RecordPrefetchResponseReceived(origin, is_main_resource,
+                                              is_redirect, is_no_store);
+}
+
+void PrerenderManager::RecordPrefetchRedirectCount(Origin origin,
+                                                   bool is_main_resource,
+                                                   int redirect_count) {
+  histograms_->RecordPrefetchRedirectCount(origin, is_main_resource,
+                                           redirect_count);
+}
+
+void PrerenderManager::RecordFirstContentfulPaint(const GURL& url,
+                                                  bool is_no_store,
+                                                  base::TimeDelta time) {
+  CleanUpOldNavigations(&prefetches_, base::TimeDelta::FromMinutes(30));
+
+  // Compute the prefetch age.
+  base::TimeDelta prefetch_age;
+  Origin origin = ORIGIN_NONE;
+  for (auto it = prefetches_.crbegin(); it != prefetches_.crend(); ++it) {
+    if (it->url == url) {
+      prefetch_age = GetCurrentTimeTicks() - it->time;
+      origin = it->origin;
+      break;
+    }
+  }
+
+  histograms_->RecordFirstContentfulPaint(origin, is_no_store, time,
+                                          prefetch_age);
+
+  // Loading a prefetched URL resets the revalidation bypass. Remove the url
+  // from the prefetch list for more accurate metrics.
+  prefetches_.erase(
+      std::remove_if(prefetches_.begin(), prefetches_.end(),
+                     [url](const NavigationRecord& r) { return r.url == url; }),
+      prefetches_.end());
+}
+
 // static
 PrerenderManager::PrerenderManagerMode PrerenderManager::GetMode() {
   return mode_;
@@ -558,32 +593,6 @@ PrerenderManager::PrerenderManagerMode PrerenderManager::GetMode() {
 // static
 void PrerenderManager::SetMode(PrerenderManagerMode mode) {
   mode_ = mode;
-}
-
-// static
-const char* PrerenderManager::GetModeString() {
-  switch (mode_) {
-    case PRERENDER_MODE_DISABLED:
-      return "_Disabled";
-    case PRERENDER_MODE_ENABLED:
-    case PRERENDER_MODE_EXPERIMENT_PRERENDER_GROUP:
-      return "_Enabled";
-    case PRERENDER_MODE_EXPERIMENT_CONTROL_GROUP:
-      return "_Control";
-    case PRERENDER_MODE_EXPERIMENT_MULTI_PRERENDER_GROUP:
-      return "_Multi";
-    case PRERENDER_MODE_EXPERIMENT_15MIN_TTL_GROUP:
-      return "_15MinTTL";
-    case PRERENDER_MODE_EXPERIMENT_NO_USE_GROUP:
-      return "_NoUse";
-    case PRERENDER_MODE_NOSTATE_PREFETCH:
-      return "_NoStatePrefetch";
-    case PRERENDER_MODE_MAX:
-    default:
-      NOTREACHED() << "Invalid PrerenderManager mode.";
-      break;
-  }
-  return "";
 }
 
 // static
@@ -702,26 +711,14 @@ bool PrerenderManager::HasRecentlyBeenNavigatedTo(Origin origin,
                                                   const GURL& url) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  CleanUpOldNavigations();
+  CleanUpOldNavigations(&navigations_, base::TimeDelta::FromMilliseconds(
+                                           kNavigationRecordWindowMs));
   for (auto it = navigations_.rbegin(); it != navigations_.rend(); ++it) {
     if (it->url == url) {
       base::TimeDelta delta = GetCurrentTimeTicks() - it->time;
       histograms_->RecordTimeSinceLastRecentVisit(origin, delta);
       return true;
     }
-  }
-
-  return false;
-}
-
-// static
-bool PrerenderManager::IsValidHttpMethod(const std::string& method) {
-  // method has been canonicalized to upper case at this point so we can just
-  // compare them.
-  DCHECK_EQ(method, base::ToUpperASCII(method));
-  for (size_t i = 0; i < arraysize(kValidHttpMethods); ++i) {
-    if (method.compare(kValidHttpMethods[i]) == 0)
-      return true;
   }
 
   return false;
@@ -786,8 +783,9 @@ void PrerenderManager::RecordFinalStatus(Origin origin,
 void PrerenderManager::RecordNavigation(const GURL& url) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  navigations_.push_back(NavigationRecord(url, GetCurrentTimeTicks()));
-  CleanUpOldNavigations();
+  navigations_.emplace_back(url, GetCurrentTimeTicks(), ORIGIN_NONE);
+  CleanUpOldNavigations(&navigations_, base::TimeDelta::FromMilliseconds(
+                                           kNavigationRecordWindowMs));
 }
 
 struct PrerenderManager::PrerenderData::OrderByExpiryTime {
@@ -882,6 +880,9 @@ std::unique_ptr<PrerenderHandle> PrerenderManager::AddPrerender(
     origin = ORIGIN_GWS_PRERENDER;
   }
 
+  if (IsPrerenderSilenceExperiment(origin))
+    return nullptr;
+
   GURL url = url_arg;
   GURL alias_url;
   if (IsControlGroup() && MaybeGetQueryStringBasedAliasURL(url, &alias_url))
@@ -964,6 +965,9 @@ std::unique_ptr<PrerenderHandle> PrerenderManager::AddPrerender(
   histograms_->RecordPrerenderStarted(origin);
   DCHECK(!prerender_contents_ptr->prerendering_has_started());
 
+  if (prerender_contents_ptr->prerender_mode() == PREFETCH_ONLY)
+    prefetches_.emplace_back(url, GetCurrentTimeTicks(), origin);
+
   std::unique_ptr<PrerenderHandle> prerender_handle =
       base::WrapUnique(new PrerenderHandle(active_prerenders_.back().get()));
   SortActivePrerenders();
@@ -1039,7 +1043,8 @@ void PrerenderManager::PeriodicCleanup() {
 void PrerenderManager::PostCleanupTask() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&PrerenderManager::PeriodicCleanup, AsWeakPtr()));
+      FROM_HERE, base::Bind(&PrerenderManager::PeriodicCleanup,
+                            weak_factory_.GetWeakPtr()));
 }
 
 base::TimeTicks PrerenderManager::GetExpiryTimeForNewPrerender(
@@ -1135,18 +1140,19 @@ void PrerenderManager::DeleteOldWebContents() {
   old_web_contents_list_.clear();
 }
 
-void PrerenderManager::CleanUpOldNavigations() {
+void PrerenderManager::CleanUpOldNavigations(
+    std::vector<NavigationRecord>* navigations,
+    base::TimeDelta max_age) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   // Cutoff. Navigations before this cutoff can be discarded.
-  base::TimeTicks cutoff = GetCurrentTimeTicks() -
-      base::TimeDelta::FromMilliseconds(kNavigationRecordWindowMs);
-  auto it = navigations_.begin();
-  for (; it != navigations_.end(); ++it) {
+  base::TimeTicks cutoff = GetCurrentTimeTicks() - max_age;
+  auto it = navigations->begin();
+  for (; it != navigations->end(); ++it) {
     if (it->time > cutoff)
       break;
   }
-  navigations_.erase(navigations_.begin(), it);
+  navigations->erase(navigations->begin(), it);
 }
 
 void PrerenderManager::ScheduleDeleteOldWebContents(
@@ -1238,6 +1244,36 @@ void PrerenderManager::RecordNetworkBytes(Origin origin,
   DCHECK_GE(recent_profile_bytes, 0);
   histograms_->RecordNetworkBytes(
       origin, used, prerender_bytes, recent_profile_bytes);
+}
+
+bool PrerenderManager::IsPrerenderSilenceExperiment(Origin origin) const {
+  if (origin == ORIGIN_OFFLINE)
+    return false;
+
+  // The group name should contain expiration time formatted as:
+  //   "ExperimentYes_expires_YYYY-MM-DDTHH:MM:SSZ".
+  std::string group_name =
+      base::FieldTrialList::FindFullName("PrerenderSilence");
+  const char kExperimentPrefix[] = "ExperimentYes";
+  if (!base::StartsWith(group_name, kExperimentPrefix,
+                        base::CompareCase::INSENSITIVE_ASCII)) {
+    return false;
+  }
+  const char kExperimentPrefixWithExpiration[] = "ExperimentYes_expires_";
+  if (!base::StartsWith(group_name, kExperimentPrefixWithExpiration,
+                        base::CompareCase::INSENSITIVE_ASCII)) {
+    // Without expiration day in the group name, behave as a normal experiment,
+    // i.e. sticky to the Chrome session.
+    return true;
+  }
+  base::Time expiration_time;
+  if (!base::Time::FromString(
+          group_name.c_str() + (arraysize(kExperimentPrefixWithExpiration) - 1),
+          &expiration_time)) {
+    DLOG(ERROR) << "Could not parse expiration date in group: " << group_name;
+    return false;
+  }
+  return GetCurrentTime() < expiration_time;
 }
 
 NetworkPredictionStatus PrerenderManager::GetPredictionStatus() const {

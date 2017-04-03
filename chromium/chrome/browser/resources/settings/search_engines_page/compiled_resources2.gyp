@@ -32,6 +32,7 @@
     {
       'target_name': 'search_engines_list',
       'dependencies': [
+        '<(DEPTH)/ui/webui/resources/cr_elements/compiled_resources2.gyp:cr_scrollable_behavior',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
         'search_engines_browser_proxy',
       ],
@@ -40,6 +41,7 @@
     {
       'target_name': 'search_engines_page',
       'dependencies': [
+        '<(DEPTH)/third_party/polymer/v1_0/components-chromium/iron-resizable-behavior/compiled_resources2.gyp:iron-resizable-behavior-extracted',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:load_time_data',
         'search_engines_browser_proxy',

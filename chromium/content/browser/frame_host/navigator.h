@@ -27,6 +27,7 @@ class FrameNavigationEntry;
 class FrameTreeNode;
 class NavigationControllerImpl;
 class NavigationEntryImpl;
+class NavigationHandleImpl;
 class NavigationRequest;
 class RenderFrameHostImpl;
 class ResourceRequestBodyImpl;
@@ -90,19 +91,20 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
   // TODO(nasko): Remove this method from the interface, since Navigator and
   // NavigationController know about each other. This will be possible once
   // initialization of Navigator and NavigationController is properly done.
-  virtual bool NavigateToPendingEntry(
-      FrameTreeNode* frame_tree_node,
-      const FrameNavigationEntry& frame_entry,
-      NavigationController::ReloadType reload_type,
-      bool is_same_document_history_load);
+  virtual bool NavigateToPendingEntry(FrameTreeNode* frame_tree_node,
+                                      const FrameNavigationEntry& frame_entry,
+                                      ReloadType reload_type,
+                                      bool is_same_document_history_load);
 
   // Called on a newly created subframe during a history navigation. The browser
   // process looks up the corresponding FrameNavigationEntry for the new frame
-  // based on |unique_name| and navigates it in the correct process. Returns
-  // false if the FrameNavigationEntry can't be found or the navigation fails.
-  // This is only used in OOPIF-enabled modes.
+  // navigates it in the correct process. Returns false if the
+  // FrameNavigationEntry can't be found or the navigation fails. This is only
+  // used in OOPIF-enabled modes.
+  // TODO(creis): Remove |default_url| once we have collected UMA stats on the
+  // cases that we use a different URL from history than the frame's src.
   virtual bool NavigateNewChildFrame(RenderFrameHostImpl* render_frame_host,
-                                     const std::string& unique_name);
+                                     const GURL& default_url);
 
   // Navigation requests -------------------------------------------------------
 
@@ -180,6 +182,18 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
   virtual void LogBeforeUnloadTime(
       const base::TimeTicks& renderer_before_unload_start_time,
       const base::TimeTicks& renderer_before_unload_end_time) {}
+
+  // Returns the NavigationHandle associated with a navigation in
+  // |render_frame_host|. Normally, each frame can have its own
+  // NavigationHandle. However, in the case of a navigation to an interstitial
+  // page, there's just one NavigationHandle for the whole page (since it's
+  // assumed to only have one RenderFrameHost and navigate once).
+  virtual NavigationHandleImpl* GetNavigationHandleForFrameHost(
+      RenderFrameHostImpl* render_frame_host);
+
+  // Called when a navigation has failed or the response is 204/205 to discard
+  // the pending entry in order to avoid url spoofs.
+  virtual void DiscardPendingEntryIfNeeded(NavigationHandleImpl* handle) {}
 
  protected:
   friend class base::RefCounted<Navigator>;

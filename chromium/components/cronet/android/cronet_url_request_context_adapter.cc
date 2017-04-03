@@ -292,9 +292,11 @@ class BasicNetworkDelegate : public net::NetworkDelegateImpl {
   void OnBeforeRedirect(net::URLRequest* request,
                         const GURL& new_location) override {}
 
-  void OnResponseStarted(net::URLRequest* request) override {}
+  void OnResponseStarted(net::URLRequest* request, int net_error) override {}
 
-  void OnCompleted(net::URLRequest* request, bool started) override {}
+  void OnCompleted(net::URLRequest* request,
+                   bool started,
+                   int net_error) override {}
 
   void OnURLRequestDestroyed(net::URLRequest* request) override {}
 
@@ -639,7 +641,7 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
         new net::SdchOwner(context_->sdch_manager(), context_.get()));
     if (json_pref_store_) {
       sdch_owner_->EnablePersistentStorage(
-          base::WrapUnique(new SdchOwnerPrefStorage(json_pref_store_.get())));
+          base::MakeUnique<SdchOwnerPrefStorage>(json_pref_store_.get()));
     }
   }
 
@@ -773,7 +775,7 @@ CronetURLRequestContextAdapter::GetNetworkTaskRunner() const {
   return network_thread_->task_runner();
 }
 
-void CronetURLRequestContextAdapter::StartNetLogToFile(
+bool CronetURLRequestContextAdapter::StartNetLogToFile(
     JNIEnv* env,
     const JavaParamRef<jobject>& jcaller,
     const JavaParamRef<jstring>& jfile_name,
@@ -781,14 +783,14 @@ void CronetURLRequestContextAdapter::StartNetLogToFile(
   base::AutoLock lock(write_to_file_observer_lock_);
   // Do nothing if already logging to a file.
   if (write_to_file_observer_)
-    return;
+    return true;
   std::string file_name =
       base::android::ConvertJavaStringToUTF8(env, jfile_name);
   base::FilePath file_path(file_name);
   base::ScopedFILE file(base::OpenFile(file_path, "w"));
   if (!file) {
     LOG(ERROR) << "Failed to open NetLog file for writing.";
-    return;
+    return false;
   }
 
   write_to_file_observer_.reset(new net::WriteToFileNetLogObserver());
@@ -799,6 +801,8 @@ void CronetURLRequestContextAdapter::StartNetLogToFile(
   write_to_file_observer_->StartObserving(
       g_net_log.Get().net_log(), std::move(file),
       /*constants=*/nullptr, /*url_request_context=*/nullptr);
+
+  return true;
 }
 
 void CronetURLRequestContextAdapter::StartNetLogToDisk(
@@ -996,9 +1000,9 @@ static void AddQuicHint(JNIEnv* env,
   URLRequestContextConfig* config =
       reinterpret_cast<URLRequestContextConfig*>(jurl_request_context_config);
   config->quic_hints.push_back(
-      base::WrapUnique(new URLRequestContextConfig::QuicHint(
+      base::MakeUnique<URLRequestContextConfig::QuicHint>(
           base::android::ConvertJavaStringToUTF8(env, jhost), jport,
-          jalternate_port)));
+          jalternate_port));
 }
 
 // Add a public key pin to URLRequestContextConfig.

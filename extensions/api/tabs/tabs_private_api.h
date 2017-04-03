@@ -6,6 +6,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include "base/memory/shared_memory_handle.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/extensions/api/tabs/tabs_api.h"
@@ -18,6 +19,10 @@
 #include "third_party/WebKit/public/platform/WebDragOperation.h"
 
 typedef std::map<base::string16, base::string16> TabDragDataCollection;
+typedef base::Callback<void(base::SharedMemoryHandle handle,
+                            const gfx::Size image_size,
+                            int callback_id,
+                            bool success)> CaptureTabDoneCallback;
 
 namespace favicon {
 class FaviconDriver;
@@ -140,6 +145,7 @@ class VivaldiPrivateTabObserver
   void RenderViewHostChanged(content::RenderViewHost* old_host,
                              content::RenderViewHost* new_host) override;
   void WebContentsDestroyed() override;
+  bool OnMessageReceived(const IPC::Message& message) override;
 
   void SetShowImages(bool show_images);
   void SetLoadFromCacheOnly(bool load_from_cache_only);
@@ -165,6 +171,19 @@ class VivaldiPrivateTabObserver
                         bool icon_url_changed,
                         const gfx::Image& image) override;
 
+  void CaptureTab(gfx::Size size,
+                  bool full_page,
+                  const CaptureTabDoneCallback& callback);
+
+  // Message handlers
+  void OnRequestThumbnailForFrameResponse(base::SharedMemoryHandle handle,
+                                          const gfx::Size image_size,
+                                          int callback_id,
+                                          bool success);
+
+  // Returns true if a capture is already underway for this WebContents.
+  bool IsCapturing();
+
  private:
   explicit VivaldiPrivateTabObserver(content::WebContents* web_contents);
   friend class content::WebContentsUserData<VivaldiPrivateTabObserver>;
@@ -186,6 +205,9 @@ class VivaldiPrivateTabObserver
 
   // Vivaldi tab zoom level
   double tab_zoom_level_ = 0;
+
+  // Callback to call when we get an capture response message from the renderer.
+  CaptureTabDoneCallback capture_callback_;
 
   ScopedObserver<favicon::FaviconDriver, VivaldiPrivateTabObserver>
       favicon_scoped_observer_;

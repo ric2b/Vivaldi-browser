@@ -12,7 +12,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
@@ -975,7 +975,7 @@ std::unique_ptr<base::DictionaryValue> ConvertProxyConfigToOncProxySettings(
         net::ProxyBypassRules bypass_rules;
         bypass_rules.ParseFromString(bypass_rules_string);
         std::unique_ptr<base::ListValue> exclude_domains(new base::ListValue);
-        for (const net::ProxyBypassRules::Rule* rule : bypass_rules.rules())
+        for (const auto& rule : bypass_rules.rules())
           exclude_domains->AppendString(rule->ToString());
         if (!exclude_domains->empty()) {
           proxy_settings->SetWithoutPathExpansion(::onc::proxy::kExcludeDomains,

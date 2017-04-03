@@ -11,22 +11,21 @@
 #include "components/sync/driver/non_ui_data_type_controller.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
-namespace sync_driver {
+namespace syncer {
 
 class NonUIDataTypeControllerMock : public NonUIDataTypeController {
  public:
   NonUIDataTypeControllerMock();
+  virtual ~NonUIDataTypeControllerMock();
 
   // DataTypeController mocks.
   MOCK_METHOD1(StartAssociating, void(const StartCallback& start_callback));
   MOCK_METHOD1(LoadModels, void(const ModelLoadCallback& model_load_callback));
   MOCK_METHOD0(Stop, void());
-  MOCK_CONST_METHOD0(type, syncer::ModelType());
+  MOCK_CONST_METHOD0(type, ModelType());
   MOCK_CONST_METHOD0(name, std::string());
-  MOCK_CONST_METHOD0(model_safe_group, syncer::ModelSafeGroup());
+  MOCK_CONST_METHOD0(model_safe_group, ModelSafeGroup());
   MOCK_CONST_METHOD0(state, State());
-  MOCK_METHOD1(OnSingleDataTypeUnrecoverableError,
-               void(const syncer::SyncError& error));
 
   // NonUIDataTypeController mocks.
   MOCK_METHOD0(StartModels, bool());
@@ -35,14 +34,11 @@ class NonUIDataTypeControllerMock : public NonUIDataTypeController {
                bool(const tracked_objects::Location&, const base::Closure&));
   MOCK_METHOD3(StartDone,
                void(DataTypeController::ConfigureResult result,
-                    const syncer::SyncMergeResult& local_merge_result,
-                    const syncer::SyncMergeResult& syncer_merge_result));
+                    const SyncMergeResult& local_merge_result,
+                    const SyncMergeResult& syncer_merge_result));
   MOCK_METHOD1(RecordStartFailure, void(ConfigureResult result));
-
- protected:
-  virtual ~NonUIDataTypeControllerMock();
 };
 
-}  // namespace sync_driver
+}  // namespace syncer
 
 #endif  // COMPONENTS_SYNC_DRIVER_NON_UI_DATA_TYPE_CONTROLLER_MOCK_H_

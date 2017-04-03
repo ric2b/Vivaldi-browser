@@ -32,9 +32,11 @@ import org.chromium.android_webview.test.util.VideoTestUtil;
 import org.chromium.android_webview.test.util.VideoTestWebServer;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.TestFileUtil;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.content.browser.test.util.CallbackHelper;
+import org.chromium.content.browser.test.util.DOMUtils;
 import org.chromium.content.browser.test.util.HistoryUtils;
 import org.chromium.content.browser.test.util.TestCallbackHelperContainer;
 import org.chromium.content_public.browser.WebContents;
@@ -2095,9 +2097,12 @@ public class AwSettingsTest extends AwTestBase {
             // to know whether Url is accessed.
             final String audioUrl = webServer.setResponse(httpPath, "1", null);
 
-            String pageHtml = "<html><body><audio controls src='" + audioUrl + "' "
+            String pageHtml = "<html><body><audio id=\"audio\" controls src='" + audioUrl + "' "
                     + "oncanplay=\"AudioEvent.onCanPlay();\" "
-                    + "onerror=\"AudioEvent.onError();\" /> </body></html>";
+                    + "onerror=\"AudioEvent.onError();\"></audio>"
+                    + "<button id=\"play\""
+                    + "onclick=\"document.getElementById('audio').play();\"></button>"
+                    + "</body></html>";
             // Actual test. Blocking should trigger onerror handler.
             awSettings.setBlockNetworkLoads(true);
             runTestOnUiThread(new Runnable() {
@@ -2109,6 +2114,7 @@ public class AwSettingsTest extends AwTestBase {
             int count = callback.getCallCount();
             loadDataSync(awContents, contentClient.getOnPageFinishedHelper(), pageHtml,
                     "text/html", false);
+            DOMUtils.clickNode(this, testContainer.getContentViewCore(), "play");
             callback.waitForCallback(count, 1);
             assertEquals(0, webServer.getRequestCount(httpPath));
 
@@ -2439,6 +2445,7 @@ public class AwSettingsTest extends AwTestBase {
 
     @SmallTest
     @Feature({"AndroidWebView", "Preferences", "AppCache"})
+    @RetryOnFailure
     public void testAppCacheWithTwoViews() throws Throwable {
         // We don't use the test helper here, because making sure that AppCache
         // is disabled takes a lot of time, so running through the usual drill
@@ -2638,6 +2645,7 @@ public class AwSettingsTest extends AwTestBase {
 
     @SmallTest
     @Feature({"AndroidWebView", "Preferences"})
+    @RetryOnFailure
     public void testForceZeroLayoutHeightViewportTagWithTwoViews() throws Throwable {
         ViewPair views = createViews();
         runPerViewSettingsTest(
@@ -2680,8 +2688,11 @@ public class AwSettingsTest extends AwTestBase {
                         views.getContainer1(), views.getClient1(), true));
     }
 
-    @SmallTest
-    @Feature({"AndroidWebView", "Preferences"})
+    /*
+     * @SmallTest
+     * @Feature({"AndroidWebView", "Preferences"})
+     */
+    @DisabledTest(message = "crbug.com/644894")
     public void testSetInitialScale() throws Throwable {
         final TestAwContentsClient contentClient = new TestAwContentsClient();
         final AwTestContainerView testContainerView =
@@ -2730,7 +2741,7 @@ public class AwSettingsTest extends AwTestBase {
     @LargeTest
     @Feature({"AndroidWebView", "Preferences"})
     public void testMediaPlaybackWithoutUserGesture() throws Throwable {
-        assertTrue(VideoTestUtil.runVideoTest(this, false, false, WAIT_TIMEOUT_MS));
+        assertTrue(VideoTestUtil.runVideoTest(this, false, WAIT_TIMEOUT_MS));
     }
 
     @DisableHardwareAccelerationForTest
@@ -2738,7 +2749,7 @@ public class AwSettingsTest extends AwTestBase {
     @Feature({"AndroidWebView", "Preferences"})
     public void testMediaPlaybackWithUserGesture() throws Throwable {
         // Wait for 5 second to see if video played.
-        assertFalse(VideoTestUtil.runVideoTest(this, true, false, scaleTimeout(5000)));
+        assertFalse(VideoTestUtil.runVideoTest(this, true, scaleTimeout(5000)));
     }
 
     @SmallTest

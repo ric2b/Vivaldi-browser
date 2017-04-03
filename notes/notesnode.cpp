@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include "base/base64.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "base/json/json_string_value_serializer.h"
@@ -47,7 +48,7 @@ base::Value *Notes_Node::WriteJSON() const {
     base::ListValue *children = new base::ListValue();
 
     for (int i = 0; i < child_count(); i++) {
-      children->Append(GetChild(i)->WriteJSON());
+      children->Append(base::WrapUnique(GetChild(i)->WriteJSON()));
     }
     value->Set("children", children);
   } else {
@@ -72,7 +73,7 @@ base::Value *Notes_Node::WriteJSON() const {
       std::vector<Notes_attachment>::const_iterator item;
       for (item = attachments_.begin(); item < attachments_.end(); item++) {
         base::Value *val = item->WriteJSON();
-        attachments->Append(val);
+        attachments->Append(base::WrapUnique(val));
       }
 
       value->Set("attachments", attachments);
@@ -156,11 +157,11 @@ bool Notes_Node::ReadJSON(base::DictionaryValue &input) {
       if (!children->GetDictionary(i, &item))
         return false;
 
-      Notes_Node *child = new Notes_Node(id_);
+      std::unique_ptr<Notes_Node> child = base::MakeUnique<Notes_Node>(id_);
 
       child->ReadJSON(*item);
 
-      Add(child, child_count());
+      Add(std::move(child), child_count());
     }
   }
   return true;

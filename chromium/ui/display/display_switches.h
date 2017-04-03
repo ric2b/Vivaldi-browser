@@ -11,11 +11,18 @@
 
 namespace switches {
 
+// Keep sorted.
+DISPLAY_EXPORT extern const char kEnableSoftwareMirroring[];
 DISPLAY_EXPORT extern const char kForceDeviceScaleFactor[];
+// TODO(kylechar): This overlaps with --screen-config. Unify flags and remove.
+DISPLAY_EXPORT extern const char kHostWindowBounds[];
+DISPLAY_EXPORT extern const char kScreenConfig[];
 DISPLAY_EXPORT extern const char kSecondaryDisplayLayout[];
+DISPLAY_EXPORT extern const char kUseFirstDisplayAsInternal[];
 
 #if defined(OS_CHROMEOS)
 DISPLAY_EXPORT extern const char kDisableDisplayColorCalibration[];
+DISPLAY_EXPORT extern const char kEnableUnifiedDesktop[];
 #endif
 
 }  // namespace switches

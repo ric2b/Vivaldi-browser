@@ -6,15 +6,17 @@
 #define COMPONENTS_SYNC_API_ENTITY_DATA_H_
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/macros.h"
 #include "base/time/time.h"
+#include "base/values.h"
 #include "components/sync/base/proto_value_ptr.h"
 #include "components/sync/protocol/sync.pb.h"
 
-namespace syncer_v2 {
+namespace syncer {
 
 struct EntityData;
 
@@ -24,7 +26,7 @@ struct EntityDataTraits {
   static const EntityData& DefaultValue();
 };
 
-typedef syncer::ProtoValuePtr<EntityData, EntityDataTraits> EntityDataPtr;
+typedef ProtoValuePtr<EntityData, EntityDataTraits> EntityDataPtr;
 typedef std::vector<EntityDataPtr> EntityDataList;
 typedef std::map<std::string, EntityDataPtr> EntityDataMap;
 
@@ -74,6 +76,9 @@ struct EntityData {
   // The return value must be assigned into another EntityDataPtr.
   EntityDataPtr PassToPtr() WARN_UNUSED_RESULT;
 
+  // Dumps all info into a DictionaryValue and returns it.
+  std::unique_ptr<base::DictionaryValue> ToDictionaryValue();
+
  private:
   friend struct EntityDataTraits;
   // Used to transfer the data without copying.
@@ -82,6 +87,6 @@ struct EntityData {
   DISALLOW_COPY_AND_ASSIGN(EntityData);
 };
 
-}  // namespace syncer_v2
+}  // namespace syncer
 
 #endif  // COMPONENTS_SYNC_API_ENTITY_DATA_H_

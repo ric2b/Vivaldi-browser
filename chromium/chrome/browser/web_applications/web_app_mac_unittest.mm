@@ -23,8 +23,8 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #import "chrome/common/mac/app_mode_common.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/version_info/version_info.h"
-#include "grit/theme_resources.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #import "testing/gtest_mac.h"
@@ -86,8 +86,8 @@ class WebAppShortcutCreatorTest : public testing::Test {
 
     EXPECT_TRUE(temp_app_data_dir_.CreateUniqueTempDir());
     EXPECT_TRUE(temp_destination_dir_.CreateUniqueTempDir());
-    app_data_dir_ = temp_app_data_dir_.path();
-    destination_dir_ = temp_destination_dir_.path();
+    app_data_dir_ = temp_app_data_dir_.GetPath();
+    destination_dir_ = temp_destination_dir_.GetPath();
 
     info_ = GetShortcutInfo();
     shim_base_name_ = base::FilePath(info_->profile_path.BaseName().value() +
@@ -158,7 +158,7 @@ TEST_F(WebAppShortcutCreatorTest, CreateShortcuts) {
 TEST_F(WebAppShortcutCreatorTest, UpdateShortcuts) {
   base::ScopedTempDir other_folder_temp_dir;
   EXPECT_TRUE(other_folder_temp_dir.CreateUniqueTempDir());
-  base::FilePath other_folder = other_folder_temp_dir.path();
+  base::FilePath other_folder = other_folder_temp_dir.GetPath();
   base::FilePath other_shim_path = other_folder.Append(shim_base_name_);
 
   NiceMock<WebAppShortcutCreatorMock> shortcut_creator(app_data_dir_,
@@ -195,7 +195,7 @@ TEST_F(WebAppShortcutCreatorTest, UpdateShortcuts) {
 TEST_F(WebAppShortcutCreatorTest, UpdateBookmarkAppShortcut) {
   base::ScopedTempDir other_folder_temp_dir;
   EXPECT_TRUE(other_folder_temp_dir.CreateUniqueTempDir());
-  base::FilePath other_folder = other_folder_temp_dir.path();
+  base::FilePath other_folder = other_folder_temp_dir.GetPath();
   base::FilePath other_shim_path = other_folder.Append(shim_base_name_);
   info_->from_bookmark = true;
 
@@ -228,7 +228,7 @@ TEST_F(WebAppShortcutCreatorTest, DeleteShortcuts) {
 
   base::ScopedTempDir other_folder_temp_dir;
   EXPECT_TRUE(other_folder_temp_dir.CreateUniqueTempDir());
-  base::FilePath other_folder = other_folder_temp_dir.path();
+  base::FilePath other_folder = other_folder_temp_dir.GetPath();
   base::FilePath other_shim_path = other_folder.Append(shim_base_name_);
 
   NiceMock<WebAppShortcutCreatorMock> shortcut_creator(app_data_dir_,

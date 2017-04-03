@@ -46,6 +46,7 @@
 #if defined(OS_WIN)
 #include "ui/display/win/screen_win.h"
 #endif  // defined(OS_WIN)
+#include "ui/vivaldi_ui_utils.h"
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(extensions::VivaldiPrivateTabObserver);
 
@@ -54,41 +55,6 @@ using content::WebContents;
 namespace extensions {
 
 namespace tabs_private = vivaldi::tabs_private;
-
-
-namespace {
-
-content::WebContents* GetWebContentsFromTabStrip(int tab_id, Profile *profile) {
-  content::WebContents *contents = nullptr;
-  bool include_incognito = true;
-  Browser* browser;
-  int tab_index;
-  extensions::ExtensionTabUtil::GetTabById(tab_id, profile, include_incognito,
-                                           &browser, NULL, &contents,
-                                           &tab_index);
-  return contents;
-}
-
-bool IsOutsideAppWindow(int screen_x, int screen_y, Profile* profile) {
-  gfx::Point screen_point(screen_x, screen_y);
-
-  AppWindowRegistry* app_window_registry =
-    AppWindowRegistry::Factory::GetForBrowserContext(profile, false);
-  AppWindowRegistry::AppWindowList list =
-    app_window_registry->GetAppWindowsForApp(::vivaldi::kVivaldiAppId);
-
-  bool outside = true;
-  for (auto& win : list) {
-    gfx::Rect rect = win->GetBaseWindow()->GetBounds();
-    if (rect.Contains(screen_point)) {
-      outside = false;
-      break;
-    }
-  }
-  return outside;
-}
-
-}  // namespace
 
 TabsPrivateAPI::TabsPrivateAPI(content::BrowserContext* context)
   : browser_context_(context) {
@@ -151,7 +117,8 @@ blink::WebDragOperationsMask TabsPrivateEventRouter::OnDragEnd(
     int screen_x, int screen_y, blink::WebDragOperationsMask ops,
     const TabDragDataCollection& data, bool cancelled) {
   vivaldi::tabs_private::DragData drag_data;
-  bool outside = IsOutsideAppWindow(screen_x, screen_y, profile_);
+  bool outside =
+      ::vivaldi::ui_tools::IsOutsideAppWindow(screen_x, screen_y, profile_);
   if (data.empty()) {
     // Drop happened before drop data was filled out in dragenter, get
     // the backup data as js has not been able to add to it.
@@ -387,6 +354,53 @@ void VivaldiPrivateTabObserver::SetZoomLevelForTab(double level) {
   }
 }
 
+bool VivaldiPrivateTabObserver::OnMessageReceived(
+  const IPC::Message& message) {
+  bool handled = true;
+  IPC_BEGIN_MESSAGE_MAP(VivaldiPrivateTabObserver, message)
+    IPC_MESSAGE_HANDLER(VivaldiViewHostMsg_RequestThumbnailForFrame_ACK,
+                        OnRequestThumbnailForFrameResponse)
+    IPC_MESSAGE_UNHANDLED(handled = false)
+  IPC_END_MESSAGE_MAP()
+  return handled;
+}
+
+void VivaldiPrivateTabObserver::CaptureTab(
+    gfx::Size size,
+    bool full_page,
+    const CaptureTabDoneCallback& callback) {
+  VivaldiViewMsg_RequestThumbnailForFrame_Params param;
+  gfx::Rect rect = web_contents()->GetViewBounds();
+
+  param.callback_id = SessionTabHelper::IdForTab(web_contents());
+  if (full_page) {
+    param.size = size;
+  } else {
+    param.size = rect.size();
+  }
+  capture_callback_ = callback;
+  param.full_page = full_page;
+
+  web_contents()->GetRenderViewHost()->Send(
+      new VivaldiViewMsg_RequestThumbnailForFrame(
+          web_contents()->GetRenderViewHost()->GetRoutingID(), param));
+}
+
+bool VivaldiPrivateTabObserver::IsCapturing() {
+  return capture_callback_.is_null() ? false : true;
+}
+
+void VivaldiPrivateTabObserver::OnRequestThumbnailForFrameResponse(
+    base::SharedMemoryHandle handle,
+    const gfx::Size image_size,
+    int callback_id,
+    bool success) {
+  if (!capture_callback_.is_null()) {
+    capture_callback_.Run(handle, image_size, callback_id, success);
+    capture_callback_.Reset();
+  }
+}
+
 TabsPrivateUpdateFunction::TabsPrivateUpdateFunction() {
 }
 
@@ -401,8 +415,8 @@ bool TabsPrivateUpdateFunction::RunAsync() {
   tabs_private::UpdateTabInfo* info = &params->tab_info;
   int tab_id = params->tab_id;
 
-  content::WebContents *tabstrip_contents =
-      GetWebContentsFromTabStrip(tab_id, GetProfile());
+  content::WebContents* tabstrip_contents =
+      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(tab_id, GetProfile());
   if (tabstrip_contents) {
     VivaldiPrivateTabObserver* tab_api =
         VivaldiPrivateTabObserver::FromWebContents(tabstrip_contents);
@@ -439,7 +453,7 @@ bool TabsPrivateGetFunction::RunAsync() {
   tabs_private::UpdateTabInfo info;
 
   content::WebContents *tabstrip_contents =
-      GetWebContentsFromTabStrip(tab_id, GetProfile());
+    ::vivaldi::ui_tools::GetWebContentsFromTabStrip(tab_id, GetProfile());
   if (tabstrip_contents) {
     VivaldiPrivateTabObserver* tab_api =
         VivaldiPrivateTabObserver::FromWebContents(tabstrip_contents);
@@ -500,8 +514,8 @@ bool TabsPrivateInsertTextFunction::RunAsync() {
 
   base::string16 text = base::UTF8ToUTF16(params->text);
 
-  content::WebContents *tabstrip_contents =
-    GetWebContentsFromTabStrip(tab_id, GetProfile());
+  content::WebContents* tabstrip_contents =
+      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(tab_id, GetProfile());
 
   content::RenderFrameHost* focused_frame =
     tabstrip_contents->GetFocusedFrame();

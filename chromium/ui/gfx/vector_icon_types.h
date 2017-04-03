@@ -44,6 +44,7 @@ enum CommandType {
   R_V_LINE_TO,
   CUBIC_TO,
   R_CUBIC_TO,
+  CUBIC_TO_SHORTHAND,
   CIRCLE,
   ROUND_RECT,
   CLOSE,
@@ -70,6 +71,17 @@ struct PathElement {
     CommandType type;
     SkScalar arg;
   };
+};
+
+struct VectorIcon {
+  VectorIcon() : path_(nullptr), path_1x_(nullptr) {}
+  VectorIcon(gfx::PathElement* path, gfx::PathElement* path_1x)
+      : path_(path), path_1x_(path_1x) {}
+
+  bool is_empty() const { return !path_; }
+
+  gfx::PathElement* path_;
+  gfx::PathElement* path_1x_;
 };
 
 // Returns an array of path commands and arguments, terminated by END.

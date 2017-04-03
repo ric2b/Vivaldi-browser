@@ -68,7 +68,6 @@ group("blimp_tests") {
 test("blimp_unittests") {
   deps = [
     "//blimp/client:app_unit_tests",
-    "//blimp/client:feature_unit_tests",
     "//blimp/client/core:unit_tests",
     "//blimp/common:unit_tests",
     "//blimp/net:unit_tests",
@@ -138,8 +137,10 @@ if (is_linux) {
     # "data_deps". Otherwise, GN assumes that the executable (and
     # everything it requires) is a build-time dependency only.
     data_deps = [
+      ":blimp_browsertests",
       ":blimp_unittests",
       "//base:base_unittests",
+      "//breakpad:generate_test_dump",
       "//content/test:content_unittests",
       "//ipc:ipc_tests",
       "//net:net_unittests",
@@ -167,6 +168,7 @@ if (is_linux) {
       _rebased_blimp_engine_env_tests_manifest,
     ]
     inputs = [
+      _rebased_blimp_engine_env_tests_blacklist,
       _blimp_engine_env_tests_runtime_deps,
     ]
     outputs = [

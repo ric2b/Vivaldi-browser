@@ -37,163 +37,156 @@
 
 namespace blink {
 
-void ExceptionState::clearException()
-{
-    m_code = 0;
+void ExceptionState::throwDOMException(const ExceptionCode& ec,
+                                       const String& message) {
+  // SecurityError is thrown via ::throwSecurityError, and _careful_
+  // consideration must be given to the data exposed to JavaScript via the
+  // 'sanitizedMessage'.
+  DCHECK(ec != SecurityError);
+
+  const String& processedMessage = addExceptionContext(message);
+  setException(ec, processedMessage, V8ThrowException::createDOMException(
+                                         m_isolate, ec, processedMessage));
+}
+
+void ExceptionState::throwRangeError(const String& message) {
+  setException(V8RangeError, message,
+               V8ThrowException::createRangeError(
+                   m_isolate, addExceptionContext(message)));
+}
+
+void ExceptionState::throwSecurityError(const String& sanitizedMessage,
+                                        const String& unsanitizedMessage) {
+  const String& finalSanitized = addExceptionContext(sanitizedMessage);
+  const String& finalUnsanitized = addExceptionContext(unsanitizedMessage);
+  setException(SecurityError, finalSanitized,
+               V8ThrowException::createDOMException(
+                   m_isolate, SecurityError, finalSanitized, finalUnsanitized));
+}
+
+void ExceptionState::throwTypeError(const String& message) {
+  setException(V8TypeError, message,
+               V8ThrowException::createTypeError(m_isolate,
+                                                 addExceptionContext(message)));
+}
+
+void ExceptionState::rethrowV8Exception(v8::Local<v8::Value> value) {
+  setException(kRethrownException, String(), value);
+}
+
+void ExceptionState::clearException() {
+  m_code = 0;
+  m_message = String();
+  m_exception.clear();
+}
+
+ScriptPromise ExceptionState::reject(ScriptState* scriptState) {
+  ScriptPromise promise = ScriptPromise::reject(scriptState, getException());
+  clearException();
+  return promise;
+}
+
+void ExceptionState::reject(ScriptPromiseResolver* resolver) {
+  resolver->reject(getException());
+  clearException();
+}
+
+void ExceptionState::setException(ExceptionCode ec,
+                                  const String& message,
+                                  v8::Local<v8::Value> exception) {
+  CHECK(ec);
+
+  m_code = ec;
+  m_message = message;
+  if (exception.IsEmpty()) {
     m_exception.clear();
-}
-
-ScriptPromise ExceptionState::reject(ScriptState* scriptState)
-{
-    ScriptPromise promise = ScriptPromise::reject(scriptState, m_exception.newLocal(scriptState->isolate()));
-    clearException();
-    return promise;
-}
-
-void ExceptionState::reject(ScriptPromiseResolver* resolver)
-{
-    resolver->reject(m_exception.newLocal(resolver->getScriptState()->isolate()));
-    clearException();
-}
-
-void ExceptionState::throwDOMException(const ExceptionCode& ec, const String& message)
-{
-    ASSERT(ec);
-    ASSERT(m_isolate);
-
-    // SecurityError is thrown via ::throwSecurityError, and _careful_ consideration must be given to the data exposed to JavaScript via the 'sanitizedMessage'.
-    ASSERT(ec != SecurityError);
-
-    m_code = ec;
-    String processedMessage = addExceptionContext(message);
-    m_message = processedMessage;
-    setException(V8ThrowException::createDOMException(m_isolate, ec, processedMessage));
-}
-
-void ExceptionState::throwSecurityError(const String& sanitizedMessage, const String& unsanitizedMessage)
-{
-    ASSERT(m_isolate);
-    m_code = SecurityError;
-    String finalSanitized = addExceptionContext(sanitizedMessage);
-    m_message = finalSanitized;
-    String finalUnsanitized = addExceptionContext(unsanitizedMessage);
-
-    setException(V8ThrowException::createDOMException(m_isolate, SecurityError, finalSanitized, finalUnsanitized));
-}
-
-void ExceptionState::setException(v8::Local<v8::Value> exception)
-{
-    // FIXME: Assert that exception is not empty?
-    if (exception.IsEmpty()) {
-        clearException();
-        return;
-    }
-
+  } else {
+    DCHECK(m_isolate);
     m_exception.set(m_isolate, exception);
+  }
 }
 
-void ExceptionState::throwException()
-{
-    ASSERT(!m_exception.isEmpty());
-    V8ThrowException::throwException(m_isolate, m_exception.newLocal(m_isolate));
+String ExceptionState::addExceptionContext(const String& message) const {
+  if (message.isEmpty())
+    return message;
+
+  String processedMessage = message;
+  if (propertyName() && interfaceName() && m_context != UnknownContext) {
+    if (m_context == DeletionContext)
+      processedMessage = ExceptionMessages::failedToDelete(
+          propertyName(), interfaceName(), message);
+    else if (m_context == ExecutionContext)
+      processedMessage = ExceptionMessages::failedToExecute(
+          propertyName(), interfaceName(), message);
+    else if (m_context == GetterContext)
+      processedMessage = ExceptionMessages::failedToGet(
+          propertyName(), interfaceName(), message);
+    else if (m_context == SetterContext)
+      processedMessage = ExceptionMessages::failedToSet(
+          propertyName(), interfaceName(), message);
+  } else if (!propertyName() && interfaceName()) {
+    if (m_context == ConstructionContext)
+      processedMessage =
+          ExceptionMessages::failedToConstruct(interfaceName(), message);
+    else if (m_context == EnumerationContext)
+      processedMessage =
+          ExceptionMessages::failedToEnumerate(interfaceName(), message);
+    else if (m_context == IndexedDeletionContext)
+      processedMessage =
+          ExceptionMessages::failedToDeleteIndexed(interfaceName(), message);
+    else if (m_context == IndexedGetterContext)
+      processedMessage =
+          ExceptionMessages::failedToGetIndexed(interfaceName(), message);
+    else if (m_context == IndexedSetterContext)
+      processedMessage =
+          ExceptionMessages::failedToSetIndexed(interfaceName(), message);
+  }
+  return processedMessage;
 }
 
-void ExceptionState::throwTypeError(const String& message)
-{
-    ASSERT(m_isolate);
-    m_code = V8TypeError;
-    m_message = message;
-    setException(V8ThrowException::createTypeError(m_isolate, addExceptionContext(message)));
+void NonThrowableExceptionState::throwDOMException(const ExceptionCode& ec,
+                                                   const String& message) {
+  NOTREACHED();
 }
 
-void ExceptionState::throwRangeError(const String& message)
-{
-    ASSERT(m_isolate);
-    m_code = V8RangeError;
-    m_message = message;
-    setException(V8ThrowException::createRangeError(m_isolate, addExceptionContext(message)));
+void NonThrowableExceptionState::throwRangeError(const String& message) {
+  NOTREACHED();
 }
 
-void NonThrowableExceptionState::throwDOMException(const ExceptionCode& ec, const String& message)
-{
-    ASSERT_NOT_REACHED();
-    m_code = ec;
-    m_message = message;
+void NonThrowableExceptionState::throwSecurityError(
+    const String& sanitizedMessage,
+    const String&) {
+  NOTREACHED();
 }
 
-void NonThrowableExceptionState::throwTypeError(const String& message)
-{
-    ASSERT_NOT_REACHED();
-    m_code = V8TypeError;
-    m_message = message;
+void NonThrowableExceptionState::throwTypeError(const String& message) {
+  NOTREACHED();
 }
 
-void NonThrowableExceptionState::throwSecurityError(const String& sanitizedMessage, const String&)
-{
-    ASSERT_NOT_REACHED();
-    m_code = SecurityError;
-    m_message = sanitizedMessage;
+void NonThrowableExceptionState::rethrowV8Exception(v8::Local<v8::Value>) {
+  NOTREACHED();
 }
 
-void NonThrowableExceptionState::throwRangeError(const String& message)
-{
-    ASSERT_NOT_REACHED();
-    m_code = V8RangeError;
-    m_message = message;
+void TrackExceptionState::throwDOMException(const ExceptionCode& ec,
+                                            const String& message) {
+  setException(ec, message, v8::Local<v8::Value>());
 }
 
-void TrackExceptionState::throwDOMException(const ExceptionCode& ec, const String& message)
-{
-    m_code = ec;
-    m_message = message;
+void TrackExceptionState::throwRangeError(const String& message) {
+  setException(V8RangeError, message, v8::Local<v8::Value>());
 }
 
-void TrackExceptionState::throwTypeError(const String& message)
-{
-    m_code = V8TypeError;
-    m_message = message;
+void TrackExceptionState::throwSecurityError(const String& sanitizedMessage,
+                                             const String&) {
+  setException(SecurityError, sanitizedMessage, v8::Local<v8::Value>());
 }
 
-void TrackExceptionState::throwSecurityError(const String& sanitizedMessage, const String&)
-{
-    m_code = SecurityError;
-    m_message = sanitizedMessage;
+void TrackExceptionState::throwTypeError(const String& message) {
+  setException(V8TypeError, message, v8::Local<v8::Value>());
 }
 
-void TrackExceptionState::throwRangeError(const String& message)
-{
-    m_code = V8RangeError;
-    m_message = message;
+void TrackExceptionState::rethrowV8Exception(v8::Local<v8::Value>) {
+  setException(kRethrownException, String(), v8::Local<v8::Value>());
 }
 
-String ExceptionState::addExceptionContext(const String& message) const
-{
-    if (message.isEmpty())
-        return message;
-
-    String processedMessage = message;
-    if (propertyName() && interfaceName() && m_context != UnknownContext) {
-        if (m_context == DeletionContext)
-            processedMessage = ExceptionMessages::failedToDelete(propertyName(), interfaceName(), message);
-        else if (m_context == ExecutionContext)
-            processedMessage = ExceptionMessages::failedToExecute(propertyName(), interfaceName(), message);
-        else if (m_context == GetterContext)
-            processedMessage = ExceptionMessages::failedToGet(propertyName(), interfaceName(), message);
-        else if (m_context == SetterContext)
-            processedMessage = ExceptionMessages::failedToSet(propertyName(), interfaceName(), message);
-    } else if (!propertyName() && interfaceName()) {
-        if (m_context == ConstructionContext)
-            processedMessage = ExceptionMessages::failedToConstruct(interfaceName(), message);
-        else if (m_context == EnumerationContext)
-            processedMessage = ExceptionMessages::failedToEnumerate(interfaceName(), message);
-        else if (m_context == IndexedDeletionContext)
-            processedMessage = ExceptionMessages::failedToDeleteIndexed(interfaceName(), message);
-        else if (m_context == IndexedGetterContext)
-            processedMessage = ExceptionMessages::failedToGetIndexed(interfaceName(), message);
-        else if (m_context == IndexedSetterContext)
-            processedMessage = ExceptionMessages::failedToSetIndexed(interfaceName(), message);
-    }
-    return processedMessage;
-}
-
-} // namespace blink
+}  // namespace blink

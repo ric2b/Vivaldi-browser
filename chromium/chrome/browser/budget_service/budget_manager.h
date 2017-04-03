@@ -5,23 +5,23 @@
 #ifndef CHROME_BROWSER_BUDGET_SERVICE_BUDGET_MANAGER_H_
 #define CHROME_BROWSER_BUDGET_SERVICE_BUDGET_MANAGER_H_
 
+#include <map>
 #include <memory>
-#include <string>
 
 #include "base/callback_forward.h"
 #include "base/gtest_prod_util.h"
+#include "chrome/browser/budget_service/budget_database.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "third_party/WebKit/public/platform/modules/budget_service/budget_service.mojom.h"
-#include "url/gurl.h"
 
 class Profile;
 
-namespace base {
-class Clock;
-}
-
 namespace user_prefs {
 class PrefRegistrySyncable;
+}
+
+namespace url {
+class Origin;
 }
 
 // A budget manager to help Chrome decide how much background work a service
@@ -38,30 +38,50 @@ class BudgetManager : public KeyedService {
   // Query for the base cost for any background processing.
   static double GetCost(blink::mojom::BudgetOperationType type);
 
-  using GetBudgetCallback = base::Callback<void(double budget)>;
+  using GetBudgetCallback = blink::mojom::BudgetService::GetBudgetCallback;
+  using ReserveCallback = blink::mojom::BudgetService::ReserveCallback;
+  using ConsumeCallback = base::Callback<void(bool success)>;
 
   // Get the budget associated with the origin. This is passed to the
-  // callback. Budget will be a value between 0.0 and
-  // SiteEngagementScore::kMaxPoints.
-  void GetBudget(const GURL& origin, const GetBudgetCallback& callback);
+  // callback. Budget will be a sequence of points describing the time and
+  // the budget at that time.
+  void GetBudget(const url::Origin& origin, const GetBudgetCallback& callback);
 
-  // Store the budget associated with the origin. Budget should be a value
-  // between 0.0 and SiteEngagementScore::kMaxPoints. closure will be called
-  // when the store completes.
-  void StoreBudget(const GURL& origin,
-                   double budget,
-                   const base::Closure& closure);
+  // Spend enough budget to cover the cost of the desired action and create
+  // a reservation for that action. If this returns true to the callback, then
+  // the next action will consume that reservation and not cost any budget.
+  void Reserve(const url::Origin& origin,
+               blink::mojom::BudgetOperationType type,
+               const ReserveCallback& callback);
+
+  // Spend budget, first consuming a reservation if one exists, or spend
+  // directly from the budget.
+  void Consume(const url::Origin& origin,
+               blink::mojom::BudgetOperationType type,
+               const ConsumeCallback& callback);
 
  private:
   friend class BudgetManagerTest;
 
-  // Used to allow tests to fast forward/reverse time.
-  void SetClockForTesting(std::unique_ptr<base::Clock> clock);
+  // Called as a callback from BudgetDatabase after it made a SpendBudget
+  // decision.
+  void DidConsume(const ConsumeCallback& callback,
+                  blink::mojom::BudgetServiceErrorType error,
+                  bool success);
 
-  // The clock used to vend times.
-  std::unique_ptr<base::Clock> clock_;
+  // Called as a callback from BudgetDatabase after it has made a reserve
+  // decision.
+  void DidReserve(const url::Origin& origin,
+                  const ReserveCallback& callback,
+                  blink::mojom::BudgetServiceErrorType error,
+                  bool success);
 
   Profile* profile_;
+  BudgetDatabase db_;
+
+  std::map<url::Origin, int> reservation_map_;
+  base::WeakPtrFactory<BudgetManager> weak_ptr_factory_;
+
   DISALLOW_COPY_AND_ASSIGN(BudgetManager);
 };
 

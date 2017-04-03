@@ -14,9 +14,12 @@
 #include "content/browser/media/media_web_contents_observer.h"
 #include "content/common/content_export.h"
 
+namespace media {
+enum class MediaContentType;
+}  // namespace media
+
 namespace content {
 
-class BrowserCdmManager;
 class BrowserMediaPlayerManager;
 class BrowserMediaSessionManager;
 class BrowserSurfaceViewManager;
@@ -62,14 +65,10 @@ class CONTENT_EXPORT MediaWebContentsObserverAndroid
                    int delegate_id,
                    bool has_audio,
                    bool is_remote,
-                   base::TimeDelta duration);
+                   media::MediaContentType media_content_type);
 
   void DisconnectMediaSession(RenderFrameHost* render_frame_host,
                               int delegate_id);
-
-#if defined(VIDEO_HOLE)
-  void OnFrameInfoUpdated();
-#endif  // defined(VIDEO_HOLE)
 
   // MediaWebContentsObserver overrides.
   void RenderFrameDeleted(RenderFrameHost* render_frame_host) override;
@@ -82,16 +81,8 @@ class CONTENT_EXPORT MediaWebContentsObserverAndroid
   bool OnMediaPlayerMessageReceived(const IPC::Message& message,
                                     RenderFrameHost* render_frame_host);
 
-  bool OnMediaPlayerSetCdmMessageReceived(const IPC::Message& message,
-                                          RenderFrameHost* render_frame_host);
-
-  bool OnMediaSessionMessageReceived(const IPC::Message& message,
-                                     RenderFrameHost* render_frame_host);
-
   bool OnSurfaceViewManagerMessageReceived(const IPC::Message& message,
                                      RenderFrameHost* render_frame_host);
-
-  void OnSetCdm(RenderFrameHost* render_frame_host, int player_id, int cdm_id);
 
   // Map from RenderFrameHost* to BrowserMediaPlayerManager.
   using MediaPlayerManagerMap =

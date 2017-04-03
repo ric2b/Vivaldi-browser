@@ -124,6 +124,11 @@
 #include "chrome/browser/supervised_user/supervised_user_settings_service_factory.h"
 #endif
 
+#if BUILDFLAG(ANDROID_JAVA_UI)
+#include "chrome/browser/android/offline_pages/offline_page_model_factory.h"
+#include "components/offline_pages/stub_offline_page_model.h"
+#endif
+
 using base::Time;
 using bookmarks::BookmarkModel;
 using content::BrowserThread;
@@ -194,10 +199,10 @@ class TestExtensionURLRequestContextGetter
 
 std::unique_ptr<KeyedService> BuildHistoryService(
     content::BrowserContext* context) {
-  return base::WrapUnique(new history::HistoryService(
-      base::WrapUnique(new ChromeHistoryClient(
-          BookmarkModelFactory::GetForBrowserContext(context))),
-      base::WrapUnique(new history::ContentVisitDelegate(context))));
+  return base::MakeUnique<history::HistoryService>(
+      base::MakeUnique<ChromeHistoryClient>(
+          BookmarkModelFactory::GetForBrowserContext(context)),
+      base::MakeUnique<history::ContentVisitDelegate>(context));
 }
 
 std::unique_ptr<KeyedService> BuildInMemoryURLIndex(
@@ -218,8 +223,8 @@ std::unique_ptr<KeyedService> BuildBookmarkModel(
     content::BrowserContext* context) {
   Profile* profile = Profile::FromBrowserContext(context);
   std::unique_ptr<BookmarkModel> bookmark_model(
-      new BookmarkModel(base::WrapUnique(new ChromeBookmarkClient(
-          profile, ManagedBookmarkServiceFactory::GetForProfile(profile)))));
+      new BookmarkModel(base::MakeUnique<ChromeBookmarkClient>(
+          profile, ManagedBookmarkServiceFactory::GetForProfile(profile))));
   bookmark_model->Load(profile->GetPrefs(), profile->GetPath(),
                        profile->GetIOTaskRunner(),
                        content::BrowserThread::GetTaskRunnerForThread(
@@ -236,13 +241,20 @@ void TestProfileErrorCallback(WebDataServiceWrapper::ErrorType error_type,
 std::unique_ptr<KeyedService> BuildWebDataService(
     content::BrowserContext* context) {
   const base::FilePath& context_path = context->GetPath();
-  return base::WrapUnique(new WebDataServiceWrapper(
+  return base::MakeUnique<WebDataServiceWrapper>(
       context_path, g_browser_process->GetApplicationLocale(),
       BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
       BrowserThread::GetTaskRunnerForThread(BrowserThread::DB),
       sync_start_util::GetFlareForSyncableService(context_path),
-      &TestProfileErrorCallback));
+      &TestProfileErrorCallback);
 }
+
+#if BUILDFLAG(ANDROID_JAVA_UI)
+std::unique_ptr<KeyedService> BuildOfflinePageModel(
+    content::BrowserContext* context) {
+  return base::MakeUnique<offline_pages::StubOfflinePageModel>();
+}
+#endif
 
 }  // namespace
 
@@ -268,7 +280,7 @@ TestingProfile::TestingProfile()
       delegate_(NULL),
       profile_name_(kTestingProfile) {
   CreateTempProfileDir();
-  profile_path_ = temp_dir_.path();
+  profile_path_ = temp_dir_.GetPath();
 
   Init();
   FinishInit();
@@ -351,7 +363,7 @@ TestingProfile::TestingProfile(
   // If no profile path was supplied, create one.
   if (profile_path_.empty()) {
     CreateTempProfileDir();
-    profile_path_ = temp_dir_.path();
+    profile_path_ = temp_dir_.GetPath();
   }
 
   // Set any testing factories prior to initializing the services.
@@ -610,6 +622,10 @@ void TestingProfile::CreateBookmarkModel(bool delete_file) {
     base::FilePath path = GetPath().Append(bookmarks::kBookmarksFileName);
     base::DeleteFile(path, false);
   }
+#if BUILDFLAG(ANDROID_JAVA_UI)
+  offline_pages::OfflinePageModelFactory::GetInstance()->SetTestingFactory(
+      this, BuildOfflinePageModel);
+#endif
   ManagedBookmarkServiceFactory::GetInstance()->SetTestingFactory(
       this, ManagedBookmarkServiceFactory::GetDefaultFactory());
   // This creates the BookmarkModel.
@@ -650,9 +666,9 @@ base::FilePath TestingProfile::GetPath() const {
 
 std::unique_ptr<content::ZoomLevelDelegate>
 TestingProfile::CreateZoomLevelDelegate(const base::FilePath& partition_path) {
-  return base::WrapUnique(new ChromeZoomLevelPrefs(
+  return base::MakeUnique<ChromeZoomLevelPrefs>(
       GetPrefs(), GetPath(), partition_path,
-      zoom::ZoomEventManager::GetForBrowserContext(this)->GetWeakPtr()));
+      zoom::ZoomEventManager::GetForBrowserContext(this)->GetWeakPtr());
 }
 
 scoped_refptr<base::SequencedTaskRunner> TestingProfile::GetIOTaskRunner() {
@@ -688,7 +704,8 @@ bool TestingProfile::IsOffTheRecord() const {
 
 void TestingProfile::SetOffTheRecordProfile(std::unique_ptr<Profile> profile) {
   DCHECK(!IsOffTheRecord());
-  DCHECK_EQ(this, profile->GetOriginalProfile());
+  if (profile)
+    DCHECK_EQ(this, profile->GetOriginalProfile());
   incognito_profile_ = std::move(profile);
 }
 
@@ -867,8 +884,11 @@ content::PushMessagingService* TestingProfile::GetPushMessagingService() {
   return NULL;
 }
 
-bool TestingProfile::IsSameProfile(Profile *p) {
-  return this == p;
+bool TestingProfile::IsSameProfile(Profile *profile) {
+  if (this == profile)
+    return true;
+  Profile* otr_profile = incognito_profile_.get();
+  return otr_profile && profile == otr_profile;
 }
 
 base::Time TestingProfile::GetStartTime() const {

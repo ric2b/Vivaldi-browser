@@ -15,7 +15,8 @@
 Polymer({
   is: 'settings-internet-detail-page',
 
-  behaviors: [CrPolicyNetworkBehavior, settings.RouteObserverBehavior],
+  behaviors:
+      [CrPolicyNetworkBehavior, settings.RouteObserverBehavior, I18nBehavior],
 
   properties: {
     /** The network GUID to display details for. */
@@ -31,32 +32,6 @@ Polymer({
     },
 
     /**
-     * The network AutoConnect state.
-     */
-    autoConnect: {
-      type: Boolean,
-      value: false,
-      observer: 'autoConnectChanged_',
-    },
-
-    /**
-     * The network preferred state.
-     */
-    preferNetwork: {
-      type: Boolean,
-      value: false,
-      observer: 'preferNetworkChanged_',
-    },
-
-    /**
-     * The network IP Address.
-     */
-    IPAddress: {
-      type: String,
-      value: '',
-    },
-
-    /**
      * Highest priority connected network or null.
      * @type {?CrOnc.NetworkStateProperties}
      */
@@ -65,13 +40,50 @@ Polymer({
       value: null,
     },
 
-    advancedExpanded: {type: Boolean},
+    /**
+     * Interface for networkingPrivate calls, passed from internet_page.
+     * @type {NetworkingPrivate}
+     */
+    networkingPrivate: Object,
+
+    /**
+     * The network AutoConnect state.
+     * @private
+     */
+    autoConnect_: {
+      type: Boolean,
+      value: false,
+      observer: 'autoConnectChanged_',
+    },
+
+    /**
+     * The network preferred state.
+     * @private
+     */
+    preferNetwork_: {
+      type: Boolean,
+      value: false,
+      observer: 'preferNetworkChanged_',
+    },
+
+    /**
+     * The network IP Address.
+     * @private
+     */
+    IPAddress_: {
+      type: String,
+      value: '',
+    },
+
+    /** @private */
+    advancedExpanded_: Boolean,
 
     /**
      * Object providing network type values for data binding.
      * @const
+     * @private
      */
-    NetworkType: {
+    NetworkType_: {
       type: Object,
       value: {
         CELLULAR: CrOnc.Type.CELLULAR,
@@ -82,12 +94,6 @@ Polymer({
       },
       readOnly: true
     },
-
-    /**
-     * Interface for networkingPrivate calls, passed from internet_page.
-     * @type {NetworkingPrivate}
-     */
-    networkingPrivate: {type: Object},
   },
 
   /**
@@ -141,20 +147,24 @@ Polymer({
 
     // Update autoConnect if it has changed. Default value is false.
     var autoConnect = CrOnc.getAutoConnect(this.networkProperties);
-    if (autoConnect != this.autoConnect)
-      this.autoConnect = autoConnect;
+    if (autoConnect != this.autoConnect_)
+      this.autoConnect_ = autoConnect;
 
     // Update preferNetwork if it has changed. Default value is false.
     var priority = /** @type {number} */ (
         CrOnc.getActiveValue(this.networkProperties.Priority) || 0);
     var preferNetwork = priority > 0;
-    if (preferNetwork != this.preferNetwork)
-      this.preferNetwork = preferNetwork;
+    if (preferNetwork != this.preferNetwork_)
+      this.preferNetwork_ = preferNetwork;
 
     // Set the IPAddress property to the IPV4 Address.
     var ipv4 =
         CrOnc.getIPConfigForType(this.networkProperties, CrOnc.IPType.IPV4);
-    this.IPAddress = (ipv4 && ipv4.IPAddress) || '';
+    this.IPAddress_ = (ipv4 && ipv4.IPAddress) || '';
+
+    // Update the detail page title.
+    this.parentNode.pageTitle =
+        CrOnc.getNetworkName(this.networkProperties, this);
   },
 
   /** @private */
@@ -162,7 +172,7 @@ Polymer({
     if (!this.networkProperties || !this.guid)
       return;
     var onc = this.getEmptyNetworkProperties_();
-    CrOnc.setTypeProperty(onc, 'AutoConnect', this.autoConnect);
+    CrOnc.setTypeProperty(onc, 'AutoConnect', this.autoConnect_);
     this.setNetworkProperties_(onc);
   },
 
@@ -171,7 +181,7 @@ Polymer({
     if (!this.networkProperties || !this.guid)
       return;
     var onc = this.getEmptyNetworkProperties_();
-    onc.Priority = this.preferNetwork ? 1 : 0;
+    onc.Priority = this.preferNetwork_ ? 1 : 0;
     this.setNetworkProperties_(onc);
   },
 
@@ -237,22 +247,11 @@ Polymer({
   },
 
   /**
-   * @return {string} The text to display for the network name.
-   * @private
-   */
-  getStateName_: function() {
-    return /** @type {string} */ (
-        CrOnc.getActiveValue(this.networkProperties.Name) || '');
-  },
-
-  /**
    * @return {string} The text to display for the network connection state.
    * @private
    */
   getStateText_: function() {
-    // TODO(stevenjb): Localize.
-    return (this.networkProperties && this.networkProperties.ConnectionState) ||
-        '';
+    return this.i18n('Onc' + this.networkProperties.ConnectionState);
   },
 
   /**
@@ -405,6 +404,9 @@ Polymer({
   /** @private */
   onForgetTap_: function() {
     this.networkingPrivate.forgetNetwork(this.guid);
+    // A forgotten WiFi network can still be configured, but not other types.
+    if (this.networkProperties.Type != CrOnc.Type.WI_FI)
+      this.close_();
   },
 
   /** @private */
@@ -430,7 +432,7 @@ Polymer({
   toggleAdvancedExpanded_: function(event) {
     if (event.target.id == 'expandButton')
       return;  // Already handled.
-    this.advancedExpanded = !this.advancedExpanded;
+    this.advancedExpanded_ = !this.advancedExpanded_;
   },
 
   /**
@@ -619,13 +621,16 @@ Polymer({
           'RestrictedConnectivity', 'Cellular.ServingOperator.Name');
     }
     if (this.networkProperties.Type == CrOnc.Type.VPN) {
-      fields.push('VPN.Host', 'VPN.Type');
-      if (this.networkProperties.VPN.Type == 'OpenVPN')
-        fields.push('VPN.OpenVPN.Username');
-      else if (this.networkProperties.VPN.Type == 'L2TP-IPsec')
-        fields.push('VPN.L2TP.Username');
-      else if (this.networkProperties.VPN.Type == 'ThirdPartyVPN')
+      let vpnType = CrOnc.getActiveValue(this.networkProperties.VPN.Type);
+      if (vpnType == 'ThirdPartyVPN') {
         fields.push('VPN.ThirdPartyVPN.ProviderName');
+      } else {
+        fields.push('VPN.Host', 'VPN.Type');
+        if (vpnType == 'OpenVPN')
+          fields.push('VPN.OpenVPN.Username');
+        else if (vpnType == 'L2TP-IPsec')
+          fields.push('VPN.L2TP.Username');
+      }
     }
     if (this.networkProperties.Type == CrOnc.Type.WI_FI)
       fields.push('RestrictedConnectivity');
@@ -679,8 +684,9 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  hasAdvancedOrDeviceFields_: function() {
-    return this.hasAdvancedFields_() || this.hasDeviceFields_();
+  showAdvanced_: function() {
+    return this.hasAdvancedFields_() || this.hasDeviceFields_() ||
+        this.isRememberedOrConnected_();
   },
 
   /**
@@ -697,6 +703,14 @@ Polymer({
    */
   hasDeviceFields_: function() {
     return this.hasVisibleFields_(this.getDeviceFields_());
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  hasAdvancedOrDeviceFields_: function() {
+    return this.hasAdvancedFields_() || this.hasDeviceFields_();
   },
 
   /**

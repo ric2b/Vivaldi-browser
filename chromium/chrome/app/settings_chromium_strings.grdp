@@ -10,7 +10,7 @@
       Get help with Chromium
     </message>
     <message name="IDS_SETTINGS_UPGRADE_UPDATING" desc="Status label: Updating Chromium">
-      Updating Chromium
+      Updating Chromium (<ph name="PROGRESS_PERCENT">$1<ex>90%</ex></ph>)
     </message>
     <message name="IDS_SETTINGS_UPGRADE_SUCCESSFUL_RELAUNCH" desc="Status label: Successfully updated Chromium">
       Nearly up to date! Relaunch Chromium to finish updating.
@@ -36,19 +36,16 @@
   <!-- Default Browser Page -->
   <if expr="not chromeos">
     <message name="IDS_SETTINGS_DEFAULT_BROWSER_DEFAULT" desc="The text displayed when Chrome is not the default browser">
-      Chromium is your default browser. Yay!
+      Chromium is your default browser. Cheers.
     </message>
     <message name="IDS_SETTINGS_DEFAULT_BROWSER_MAKE_DEFAULT" desc="Default browser checkbox label">
       Make Chromium the default browser
     </message>
-    <message name="IDS_SETTINGS_DEFAULT_BROWSER_UNKNOWN" desc="The text displayed when Chrome cannot determine or set the default browser">
+    <message name="IDS_SETTINGS_DEFAULT_BROWSER_ERROR" desc="The text displayed when Chrome cannot determine or set the default browser">
       Chromium cannot determine or set the default browser.
     </message>
     <message name="IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY" desc="The text displayed when Chromium is installed in side-by-side mode, which does not support setting as the default browser.">
       This is a secondary installation of Chromium, and cannot be made your default browser.
-    </message>
-    <message name="IDS_SETTINGS_DEFAULT_BROWSER_ERROR" desc="The text displayed when Chromium is unable to become the default browser after the user requests that it became the default browser.  This is a general error message.">
-      Chromium was not able to become the default browser.
     </message>
   </if>
 
@@ -70,9 +67,6 @@
 
   <!-- Languages Page -->
   <if expr="chromeos">
-    <message name="IDS_SETTINGS_LANGUAGES_CANNOT_BE_DISPLAYED_IN_THIS_LANGUAGE" desc="The label for a language that cannot be used as the UI display language.">
-      Chromium OS cannot be displayed in this language.
-    </message>
     <message name="IDS_SETTINGS_LANGUAGES_IS_DISPLAYED_IN_THIS_LANGUAGE" desc="The label for a language that is currently used as the UI display language.">
       Chromium OS is displayed in this language.
     </message>
@@ -81,9 +75,6 @@
     </message>
   </if>
   <if expr="not chromeos">
-    <message name="IDS_SETTINGS_LANGUAGES_CANNOT_BE_DISPLAYED_IN_THIS_LANGUAGE" desc="The label for a language that cannot be used as the UI display language.">
-      Chromium cannot be displayed in this language.
-    </message>
     <message name="IDS_SETTINGS_LANGUAGES_IS_DISPLAYED_IN_THIS_LANGUAGE" desc="The label for a language that is currently used as the UI display language.">
       Chromium is displayed in this language.
     </message>

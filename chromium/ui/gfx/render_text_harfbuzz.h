@@ -10,7 +10,6 @@
 
 #include <memory>
 
-#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "third_party/harfbuzz-ng/src/hb.h"
@@ -28,6 +27,7 @@ namespace gfx {
 
 class Range;
 class RangeF;
+class RenderTextHarfBuzz;
 
 namespace internal {
 
@@ -53,8 +53,7 @@ struct GFX_EXPORT TextRunHarfBuzz {
   void GetClusterAt(size_t pos, Range* chars, Range* glyphs) const;
 
   // Returns the grapheme bounds at |text_index|. Handles multi-grapheme glyphs.
-  RangeF GetGraphemeBounds(base::i18n::BreakIterator* grapheme_iterator,
-                           size_t text_index);
+  RangeF GetGraphemeBounds(RenderTextHarfBuzz* render_text, size_t text_index);
 
   // Returns whether the given shaped run contains any missing glyphs.
   bool HasMissingGlyphs() const;
@@ -158,6 +157,9 @@ class GFX_EXPORT RenderTextHarfBuzz : public RenderText {
   std::vector<FontSpan> GetFontSpansForTesting() override;
   Range GetGlyphBounds(size_t index) override;
 
+  // ICU grapheme iterator for the layout text. Can be null in case of an error.
+  base::i18n::BreakIterator* GetGraphemeIterator();
+
  protected:
   // RenderText:
   int GetDisplayTextBaseline() override;
@@ -178,26 +180,7 @@ class GFX_EXPORT RenderTextHarfBuzz : public RenderText {
 
  private:
   friend class test::RenderTextTestApi;
-
-  FRIEND_TEST_ALL_PREFIXES(RenderTextTest, Multiline_HorizontalAlignment);
-  FRIEND_TEST_ALL_PREFIXES(RenderTextTest, Multiline_NormalWidth);
-  FRIEND_TEST_ALL_PREFIXES(RenderTextTest, Multiline_WordWrapBehavior);
-  FRIEND_TEST_ALL_PREFIXES(RenderTextTest, HarfBuzz_RunDirection);
-  FRIEND_TEST_ALL_PREFIXES(RenderTextTest, HarfBuzz_HorizontalPositions);
-  FRIEND_TEST_ALL_PREFIXES(RenderTextTest,
-                           HarfBuzz_TextPositionWithFractionalSize);
-  FRIEND_TEST_ALL_PREFIXES(RenderTextTest, HarfBuzz_BreakRunsByUnicodeBlocks);
-  FRIEND_TEST_ALL_PREFIXES(RenderTextTest, HarfBuzz_BreakRunsByEmoji);
-  FRIEND_TEST_ALL_PREFIXES(RenderTextTest, HarfBuzz_BreakRunsByAscii);
-  FRIEND_TEST_ALL_PREFIXES(RenderTextTest, HarfBuzz_SubglyphGraphemeCases);
-  FRIEND_TEST_ALL_PREFIXES(RenderTextTest, HarfBuzz_SubglyphGraphemePartition);
-  FRIEND_TEST_ALL_PREFIXES(RenderTextTest, HarfBuzz_NonExistentFont);
-  FRIEND_TEST_ALL_PREFIXES(RenderTextTest, HarfBuzz_UniscribeFallback);
-  FRIEND_TEST_ALL_PREFIXES(RenderTextTest, HarfBuzz_UnicodeFallback);
-  FRIEND_TEST_ALL_PREFIXES(RenderTextTest, Multiline_LineBreakerBehavior);
-  FRIEND_TEST_ALL_PREFIXES(RenderTextTest,
-                           Multiline_SurrogatePairsOrCombiningChars);
-  FRIEND_TEST_ALL_PREFIXES(RenderTextTest, Multiline_ZeroWidthChars);
+  friend class RenderTextHarfBuzzTest;
 
   // Specify the width of a glyph for test. The width of glyphs is very
   // platform-dependent and environment-dependent. Otherwise multiline test
@@ -252,13 +235,14 @@ class GFX_EXPORT RenderTextHarfBuzz : public RenderText {
   // Makes sure that text runs for layout text are shaped.
   void EnsureLayoutRunList();
 
-  // ICU grapheme iterator for the layout text. Can be NULL in case of an error.
-  base::i18n::BreakIterator* GetGraphemeIterator();
-
   // Returns the current run list, |display_run_list_| if the text is
   // elided, or |layout_run_list_| otherwise.
   internal::TextRunList* GetRunList();
   const internal::TextRunList* GetRunList() const;
+
+  // RenderText:
+  bool GetDecoratedTextForRange(const Range& range,
+                                DecoratedText* decorated_text) override;
 
   // Text run list for |layout_text_| and |display_text_|.
   // |display_run_list_| is created only when the text is elided.

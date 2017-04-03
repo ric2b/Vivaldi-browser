@@ -38,13 +38,60 @@ class ErrorState;
 class FeatureInfo;
 class FramebufferManager;
 class MailboxManager;
+class ProgressReporter;
+class Texture;
 class TextureManager;
 class TextureRef;
+
+class GPU_EXPORT TextureBase {
+ public:
+  explicit TextureBase(GLuint service_id);
+  virtual ~TextureBase();
+
+  // The service side OpenGL id of the texture.
+  GLuint service_id() const { return service_id_; }
+
+ protected:
+  // The id of the texture.
+  GLuint service_id_;
+
+  void DeleteFromMailboxManager();
+
+ private:
+  friend class MailboxManagerSync;
+  friend class MailboxManagerImpl;
+
+  void SetMailboxManager(MailboxManager* mailbox_manager);
+
+  MailboxManager* mailbox_manager_;
+};
+
+// A ref-counted version of the TextureBase class that deletes the texture after
+// all references have been released.
+class TexturePassthrough final : public TextureBase,
+                                 public base::RefCounted<TexturePassthrough> {
+ public:
+  explicit TexturePassthrough(GLuint service_id);
+
+  // Notify the texture that the context is lost and it shouldn't delete the
+  // native GL texture in the destructor
+  void MarkContextLost();
+
+ protected:
+  ~TexturePassthrough() override;
+
+ private:
+  friend class base::RefCounted<TexturePassthrough>;
+
+  bool have_context_;
+
+  DISALLOW_COPY_AND_ASSIGN(TexturePassthrough);
+};
 
 // Info about Textures currently in the system.
 // This class wraps a real GL texture, keeping track of its meta-data. It is
 // jointly owned by possibly multiple TextureRef.
-class GPU_EXPORT Texture {
+class GPU_EXPORT Texture final : public TextureBase {
  public:
   enum ImageState {
     // If an image is associated with the texture and image state is UNBOUND,
@@ -140,11 +187,6 @@ class GPU_EXPORT Texture {
   uint32_t estimated_size() const { return estimated_size_; }
 
   bool CanRenderTo(const FeatureInfo* feature_info, GLint level) const;
-
-  // The service side OpenGL id of the texture.
-  GLuint service_id() const {
-    return service_id_;
-  }
 
   void SetServiceId(GLuint service_id) {
     DCHECK(service_id);
@@ -289,7 +331,7 @@ class GPU_EXPORT Texture {
   friend class TextureRef;
   friend class TextureTestHelper;
 
-  ~Texture();
+  ~Texture() override;
   void AddTextureRef(TextureRef* ref);
   void RemoveTextureRef(TextureRef* ref, bool have_context);
   MemoryTypeTracker* GetMemTracker();
@@ -480,8 +522,6 @@ class GPU_EXPORT Texture {
       const FeatureInfo* feature_info,
       GLenum target, GLint level, std::string* signature) const;
 
-  void SetMailboxManager(MailboxManager* mailbox_manager);
-
   // Updates the unsafe textures count in all the managers referencing this
   // texture.
   void UpdateSafeToRenderFrom(bool cleared);
@@ -527,8 +567,6 @@ class GPU_EXPORT Texture {
   GLenum GetCompatibilitySwizzleForChannel(GLenum channel);
   void SetCompatibilitySwizzle(const CompatibilitySwizzle* swizzle);
 
-  MailboxManager* mailbox_manager_;
-
   // Info about each face and level of texture.
   std::vector<FaceInfo> face_infos_;
 
@@ -539,9 +577,6 @@ class GPU_EXPORT Texture {
   // The single TextureRef that accounts for memory for this texture. Must be
   // one of refs_.
   TextureRef* memory_tracking_ref_;
-
-  // The id of the texture.
-  GLuint service_id_;
 
   // The id of the texture that we are responsible for deleting.  Normally, this
   // is the same as |service_id_|, unless a GLStreamTextureImage with its own
@@ -731,7 +766,8 @@ class GPU_EXPORT TextureManager : public base::trace_event::MemoryDumpProvider {
                  GLsizei max_rectangle_texture_size,
                  GLsizei max_3d_texture_size,
                  GLsizei max_array_texture_layers,
-                 bool use_default_textures);
+                 bool use_default_textures,
+                 ProgressReporter* progress_reporter);
   ~TextureManager() override;
 
   void set_framebuffer_manager(FramebufferManager* manager) {
@@ -1086,6 +1122,17 @@ class GPU_EXPORT TextureManager : public base::trace_event::MemoryDumpProvider {
   static GLenum AdjustTexFormat(const gles2::FeatureInfo* feature_info,
                                 GLenum format);
 
+  void WorkaroundCopyTexImageCubeMap(
+      DecoderTextureState* texture_state,
+      ContextState* state,
+      DecoderFramebufferState* framebuffer_state,
+      TextureRef* texture_ref,
+      const char* function_name,
+      const DoTexImageArguments& args) {
+    DoCubeMapWorkaround(texture_state, state, framebuffer_state,
+                        texture_ref, function_name, args);
+  }
+
  private:
   friend class Texture;
   friend class TextureRef;
@@ -1122,6 +1169,14 @@ class GPU_EXPORT TextureManager : public base::trace_event::MemoryDumpProvider {
                                        ContextState* state,
                                        const DoTexSubImageArguments& args,
                                        const PixelStoreParams& unpack_params);
+
+  void DoCubeMapWorkaround(
+      DecoderTextureState* texture_state,
+      ContextState* state,
+      DecoderFramebufferState* framebuffer_state,
+      TextureRef* texture_ref,
+      const char* function_name,
+      const DoTexImageArguments& args);
 
   void StartTracking(TextureRef* texture);
   void StopTracking(TextureRef* texture);
@@ -1181,6 +1236,11 @@ class GPU_EXPORT TextureManager : public base::trace_event::MemoryDumpProvider {
   std::vector<DestructionObserver*> destruction_observers_;
 
   uint32_t current_service_id_generation_;
+
+  // Used to notify the watchdog thread of progress during destruction,
+  // preventing time-outs when destruction takes a long time. May be null when
+  // using in-process command buffer.
+  ProgressReporter* progress_reporter_;
 
   DISALLOW_COPY_AND_ASSIGN(TextureManager);
 };

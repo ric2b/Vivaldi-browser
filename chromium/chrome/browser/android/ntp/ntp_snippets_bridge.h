@@ -54,13 +54,22 @@ class NTPSnippetsBridge
   void FetchSuggestionImage(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
-      const base::android::JavaParamRef<jstring>& suggestion_id,
+      jint category,
+      const base::android::JavaParamRef<jstring>& id_within_category,
       const base::android::JavaParamRef<jobject>& j_callback);
 
   void DismissSuggestion(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
-      const base::android::JavaParamRef<jstring>& suggestion_id);
+      const base::android::JavaParamRef<jstring>& jurl,
+      jint global_position,
+      jint category,
+      jint category_position,
+      const base::android::JavaParamRef<jstring>& id_within_category);
+
+  void DismissCategory(JNIEnv* env,
+                       const base::android::JavaParamRef<jobject>& obj,
+                       jint category);
 
   // Checks if the URL has been visited. The callback will not be called
   // synchronously.
@@ -120,12 +129,11 @@ class NTPSnippetsBridge
   void OnCategoryStatusChanged(
       ntp_snippets::Category category,
       ntp_snippets::CategoryStatus new_status) override;
-  void OnSuggestionInvalidated(ntp_snippets::Category category,
-                               const std::string& suggestion_id) override;
+  void OnSuggestionInvalidated(
+      const ntp_snippets::ContentSuggestion::ID& suggestion_id) override;
   void ContentSuggestionsServiceShutdown() override;
 
   void OnImageFetched(base::android::ScopedJavaGlobalRef<jobject> callback,
-                      const std::string& snippet_id,
                       const gfx::Image& image);
 
   ntp_snippets::Category CategoryFromIDValue(jint id);

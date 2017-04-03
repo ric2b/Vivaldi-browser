@@ -9,14 +9,14 @@
 #include "chrome/browser/sync/test/integration/autofill_helper.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/single_client_status_change_checker.h"
-#include "chrome/browser/sync/test/integration/sync_integration_test_util.h"
+#include "chrome/browser/sync/test/integration/sync_datatype_helper.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "chrome/browser/web_data_service_factory.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/test/fake_server/fake_server_entity.h"
@@ -24,7 +24,6 @@
 #include "content/public/browser/notification_service.h"
 
 using autofill_helper::GetPersonalDataManager;
-using sync_integration_test_util::AwaitCommitActivityCompletion;
 
 namespace {
 

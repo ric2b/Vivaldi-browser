@@ -7,10 +7,10 @@
 #include <string>
 #include <vector>
 
-#include "ash/common/ash_switches.h"
+#include "ash/common/wallpaper/wallpaper_controller.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm/wm_event.h"
-#include "ash/desktop_background/desktop_background_controller.h"
+#include "ash/common/wm_shell.h"
 #include "ash/shell.h"
 #include "ash/wm/lock_state_controller.h"
 #include "ash/wm/window_state_aura.h"
@@ -22,7 +22,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -430,10 +430,8 @@ void ScreenLocker::Show() {
   // visible while in fullscreen because the shelf makes it harder for a web
   // page or app to mimick the lock screen.
   ash::wm::WindowState* active_window_state = ash::wm::GetActiveWindowState();
-
   if (active_window_state && active_window_state->IsFullscreen() &&
-      active_window_state->shelf_mode_in_fullscreen() !=
-          ash::wm::WindowState::SHELF_AUTO_HIDE_VISIBLE) {
+      active_window_state->hide_shelf_when_fullscreen()) {
     const ash::wm::WMEvent event(ash::wm::WM_EVENT_TOGGLE_FULLSCREEN);
     active_window_state->OnWMEvent(&event);
   }
@@ -491,9 +489,8 @@ ScreenLocker::~ScreenLocker() {
     authenticator_->SetConsumer(NULL);
   ClearErrors();
 
-  VLOG(1) << "Moving desktop background to unlocked container";
-  ash::Shell::GetInstance()->
-      desktop_background_controller()->MoveDesktopToUnlockedContainer();
+  VLOG(1) << "Moving wallpaper to unlocked container";
+  ash::WmShell::Get()->wallpaper_controller()->MoveToUnlockedContainer();
 
   screen_locker_ = NULL;
   bool state = false;
@@ -523,9 +520,8 @@ void ScreenLocker::ScreenLockReady() {
           << delta.InSecondsF() << " second(s)";
   UMA_HISTOGRAM_TIMES("ScreenLocker.ScreenLockTime", delta);
 
-  VLOG(1) << "Moving desktop background to locked container";
-  ash::Shell::GetInstance()->
-      desktop_background_controller()->MoveDesktopToLockedContainer();
+  VLOG(1) << "Moving wallpaper to locked container";
+  ash::WmShell::Get()->wallpaper_controller()->MoveToLockedContainer();
 
   bool state = true;
   VLOG(1) << "Emitting SCREEN_LOCK_STATE_CHANGED with state=" << state;

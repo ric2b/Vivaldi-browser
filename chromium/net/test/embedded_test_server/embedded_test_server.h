@@ -20,7 +20,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_checker.h"
-#include "crypto/rsa_private_key.h"
 #include "net/base/address_list.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/ip_endpoint.h"
@@ -278,8 +277,7 @@ class EmbeddedTestServer {
   GURL base_url_;
   IPEndPoint local_endpoint_;
 
-  // Owns the HttpConnection objects.
-  std::map<StreamSocket*, HttpConnection*> connections_;
+  std::map<StreamSocket*, std::unique_ptr<HttpConnection>> connections_;
 
   // Vector of registered and default request handlers and monitors.
   std::vector<HandleRequestCallback> request_handlers_;

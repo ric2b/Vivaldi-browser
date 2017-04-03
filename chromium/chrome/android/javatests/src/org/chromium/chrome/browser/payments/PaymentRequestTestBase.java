@@ -12,6 +12,7 @@ import android.widget.EditText;
 import android.widget.Spinner;
 
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
@@ -31,7 +32,7 @@ import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.mojom.payments.PaymentItem;
+import org.chromium.payments.mojom.PaymentItem;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
@@ -46,6 +47,7 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * A base integration test for payments.
  */
+@RetryOnFailure
 abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeTabbedActivity>
         implements PaymentRequestObserverForTest, PaymentRequestServiceObserverForTest,
         CardUnmaskObserverForTest {
@@ -74,6 +76,7 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
     protected final CallbackHelper mUnableToAbort;
     protected final CallbackHelper mBillingAddressChangeProcessed;
     protected final CallbackHelper mShowFailed;
+    protected final CallbackHelper mExpirationMonthChange;
     protected PaymentRequestUI mUI;
 
     private final AtomicReference<ContentViewCore> mViewCoreRef;
@@ -95,6 +98,7 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         mDismissed = new CallbackHelper();
         mUnableToAbort = new CallbackHelper();
         mBillingAddressChangeProcessed = new CallbackHelper();
+        mExpirationMonthChange = new CallbackHelper();
         mShowFailed = new CallbackHelper();
         mViewCoreRef = new AtomicReference<>();
         mWebContentsRef = new AtomicReference<>();
@@ -141,6 +145,13 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         });
         assertWaitForPageScaleFactorMatch(1);
         clickNodeAndWait(nodeId, helper);
+    }
+
+    protected void reTriggerUIAndWait(
+            String nodeId, PaymentsCallbackHelper<PaymentRequestUI> helper)
+            throws InterruptedException, ExecutionException, TimeoutException {
+        clickNodeAndWait(nodeId, helper);
+        mUI = helper.getTarget();
     }
 
     /** Clicks on an HTML node. */
@@ -573,6 +584,12 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
     public void onPaymentRequestServiceBillingAddressChangeProcessed() {
         ThreadUtils.assertOnUiThread();
         mBillingAddressChangeProcessed.notifyCalled();
+    }
+
+    @Override
+    public void onPaymentRequestServiceExpirationMonthChange() {
+        ThreadUtils.assertOnUiThread();
+        mExpirationMonthChange.notifyCalled();
     }
 
     @Override

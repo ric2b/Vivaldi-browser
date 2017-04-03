@@ -30,10 +30,10 @@ var WEB_VIEW_API_METHODS = [
   'addToThumbnailService',
   'allowBlockedInsecureContent',
   'discardPage',
+  'getFocusedElementInfo',
   'getPageHistory',
   'getThumbnail',
   'getThumbnailFromService',
-  'isFocusedElementEditable',
   'setIsFullscreen',
   'setVisible',
   'showPageInfo',
@@ -105,18 +105,18 @@ WebViewImpl.prototype.discardPage = function () {
   WebViewPrivate.discardPage(this.guest.getId());
 };
 
-WebViewImpl.prototype.isFocusedElementEditable = function (callback) {
-  if (!this.guest.getId()) {
-    return;
-  }
-  WebViewPrivate.isFocusedElementEditable(this.guest.getId(), callback);
-};
-
 WebViewImpl.prototype.allowBlockedInsecureContent = function () {
   if (!this.guest.getId()) {
     return;
   }
   WebViewPrivate.allowBlockedInsecureContent(this.guest.getId());
+};
+
+WebViewImpl.prototype.getFocusedElementInfo = function (callback) {
+  if (!this.guest.getId()) {
+    return;
+  }
+  WebViewPrivate.getFocusedElementInfo(this.guest.getId(), callback);
 };
 
 // -----------------------------------------------------------------------------

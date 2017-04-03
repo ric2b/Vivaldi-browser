@@ -9,7 +9,6 @@
 #include "url/gurl.h"
 
 #if defined(ENABLE_EXTENSIONS)
-#include "chrome/browser/extensions/extension_service.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #endif

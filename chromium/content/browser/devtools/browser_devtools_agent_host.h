@@ -12,7 +12,6 @@ namespace content {
 class DevToolsProtocolHandler;
 
 namespace devtools {
-namespace browser { class BrowserHandler; }
 namespace io { class IOHandler; }
 namespace memory { class MemoryHandler; }
 namespace system_info { class SystemInfoHandler; }
@@ -33,14 +32,14 @@ class BrowserDevToolsAgentHost : public DevToolsAgentHostImpl {
   void Detach() override;
 
   // DevToolsAgentHost implementation.
-  Type GetType() override;
+  std::string GetType() override;
   std::string GetTitle() override;
   GURL GetURL() override;
   bool Activate() override;
+  void Reload() override;
   bool Close() override;
   bool DispatchProtocolMessage(const std::string& message) override;
 
-  std::unique_ptr<devtools::browser::BrowserHandler> browser_handler_;
   std::unique_ptr<devtools::io::IOHandler> io_handler_;
   std::unique_ptr<devtools::memory::MemoryHandler> memory_handler_;
   std::unique_ptr<devtools::system_info::SystemInfoHandler>

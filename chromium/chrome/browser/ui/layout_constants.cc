@@ -18,25 +18,18 @@ int GetLayoutConstant(LayoutConstant constant) {
   const int kLocationBarHeight[] = {27, 28, 32};
   const int kLocationBarHorizontalPadding[] = {3, 6, 6};
   const int kLocationBarVerticalPadding[] = {0, 1, 1};
-  const int kOmniboxDropdownBorderInterior[] = {6, 0, 0};
   const int kOmniboxFontPixelSize[] = {16, 14, 14};
-  const int kTabCloseButtonTrailingPaddingOverlap[] = {2, 0, 0};
   const int kTabFaviconTitleSpacing[] = {4, 6, 6};
   const int kTabHeight[] = {29, 29, 33};
   const int kTabPinnedContentWidth[] = {25, 23, 23};
 #if defined(OS_MACOSX)
-  const int kTabTopExclusionHeight[] = {0, 0, 0};
   const int kTabstripNewTabButtonOverlap[] = {8, 5, 6};
   const int kTabstripTabOverlap[] = {19, 16, 16};
 #else
-  const int kTabTopExclusionHeight[] = {2, 0, 0};
   const int kTabstripNewTabButtonOverlap[] = {11, 5, 6};
   const int kTabstripTabOverlap[] = {26, 16, 16};
 #endif
   const int kToolbarStandardSpacing[] = {3, 4, 8};
-  const int kTabstripToolbarOverlap[] = {3, 0, 0};
-  const int kToolbarContentShadowHeight[] = {0, 0, 0};
-  const int kToolbarContentShadowHeightAsh[] = {2, 0, 0};
   const int kToolbarElementPadding[] = {0, 0, 8};
   const int kToolbarLocationBarRightPadding[] = {0, 4, 8};
 
@@ -53,6 +46,8 @@ int GetLayoutConstant(LayoutConstant constant) {
     case LOCATION_BAR_BUBBLE_VERTICAL_PADDING:
       return kLocationBarBubbleVerticalPadding[mode];
     case LOCATION_BAR_BUBBLE_ANCHOR_VERTICAL_INSET:
+      if (ui::MaterialDesignController::IsSecondaryUiMaterial())
+        return 1;
       return kLocationBarBubbleAnchorVerticalInset[mode];
     case LOCATION_BAR_HEIGHT:
       return kLocationBarHeight[mode];
@@ -60,30 +55,18 @@ int GetLayoutConstant(LayoutConstant constant) {
       return kLocationBarHorizontalPadding[mode];
     case LOCATION_BAR_VERTICAL_PADDING:
       return kLocationBarVerticalPadding[mode];
-    case OMNIBOX_DROPDOWN_BORDER_INTERIOR:
-      return kOmniboxDropdownBorderInterior[mode];
     case OMNIBOX_FONT_PIXEL_SIZE:
       return kOmniboxFontPixelSize[mode];
     case TABSTRIP_NEW_TAB_BUTTON_OVERLAP:
       return kTabstripNewTabButtonOverlap[mode];
     case TABSTRIP_TAB_OVERLAP:
       return kTabstripTabOverlap[mode];
-    case TABSTRIP_TOOLBAR_OVERLAP:
-      return kTabstripToolbarOverlap[mode];
-    case TAB_CLOSE_BUTTON_TRAILING_PADDING_OVERLAP:
-      return kTabCloseButtonTrailingPaddingOverlap[mode];
     case TAB_FAVICON_TITLE_SPACING:
       return kTabFaviconTitleSpacing[mode];
     case TAB_HEIGHT:
       return kTabHeight[mode];
     case TAB_PINNED_CONTENT_WIDTH:
       return kTabPinnedContentWidth[mode];
-    case TAB_TOP_EXCLUSION_HEIGHT:
-      return kTabTopExclusionHeight[mode];
-    case TOOLBAR_CONTENT_SHADOW_HEIGHT:
-      return kToolbarContentShadowHeight[mode];
-    case TOOLBAR_CONTENT_SHADOW_HEIGHT_ASH:
-      return kToolbarContentShadowHeightAsh[mode];
     case TOOLBAR_ELEMENT_PADDING:
       return kToolbarElementPadding[mode];
     case TOOLBAR_LOCATION_BAR_RIGHT_PADDING:

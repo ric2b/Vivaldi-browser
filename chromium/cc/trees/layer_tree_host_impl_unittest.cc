@@ -44,12 +44,14 @@
 #include "cc/quads/solid_color_draw_quad.h"
 #include "cc/quads/texture_draw_quad.h"
 #include "cc/quads/tile_draw_quad.h"
+#include "cc/resources/ui_resource_bitmap.h"
+#include "cc/resources/ui_resource_manager.h"
 #include "cc/test/animation_test_common.h"
 #include "cc/test/begin_frame_args_test.h"
+#include "cc/test/fake_compositor_frame_sink.h"
 #include "cc/test/fake_layer_tree_host_impl.h"
 #include "cc/test/fake_mask_layer_impl.h"
 #include "cc/test/fake_output_surface.h"
-#include "cc/test/fake_output_surface_client.h"
 #include "cc/test/fake_picture_layer_impl.h"
 #include "cc/test/fake_raster_source.h"
 #include "cc/test/fake_video_frame_provider.h"
@@ -57,7 +59,7 @@
 #include "cc/test/gpu_rasterization_enabled_settings.h"
 #include "cc/test/layer_test_common.h"
 #include "cc/test/layer_tree_test.h"
-#include "cc/test/test_delegating_output_surface.h"
+#include "cc/test/test_compositor_frame_sink.h"
 #include "cc/test/test_gpu_memory_buffer_manager.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/test/test_task_graph_runner.h"
@@ -104,8 +106,7 @@ class LayerTreeHostImplTest : public testing::Test,
         did_request_next_frame_(false),
         did_request_prepare_tiles_(false),
         did_complete_page_scale_animation_(false),
-        reduce_memory_result_(true),
-        skip_draw_layers_in_on_draw_(false) {
+        reduce_memory_result_(true) {
     media::InitializeMediaLibrary();
   }
 
@@ -122,19 +123,16 @@ class LayerTreeHostImplTest : public testing::Test,
   }
 
   void SetUp() override {
-    CreateHostImpl(DefaultSettings(), CreateOutputSurface());
+    CreateHostImpl(DefaultSettings(), CreateCompositorFrameSink());
   }
 
   void TearDown() override {
     if (host_impl_)
-      host_impl_->ReleaseOutputSurface();
+      host_impl_->ReleaseCompositorFrameSink();
   }
 
-  void DidLoseOutputSurfaceOnImplThread() override {}
-  void CommitVSyncParameters(base::TimeTicks timebase,
-                             base::TimeDelta interval) override {}
+  void DidLoseCompositorFrameSinkOnImplThread() override {}
   void SetBeginFrameSource(BeginFrameSource* source) override {}
-  void SetEstimatedParentDrawTime(base::TimeDelta draw_time) override {}
   void DidSwapBuffersCompleteOnImplThread() override {}
   void OnCanDrawStateChanged(bool can_draw) override {
     on_can_draw_state_changed_called_ = true;
@@ -145,9 +143,6 @@ class LayerTreeHostImplTest : public testing::Test,
   }
   void NotifyReadyToDraw() override {}
   void SetNeedsRedrawOnImplThread() override { did_request_redraw_ = true; }
-  void SetNeedsRedrawRectOnImplThread(const gfx::Rect& damage_rect) override {
-    did_request_redraw_ = true;
-  }
   void SetNeedsOneBeginImplFrameOnImplThread() override {
     did_request_next_frame_ = true;
   }
@@ -171,16 +166,14 @@ class LayerTreeHostImplTest : public testing::Test,
   void DidCompletePageScaleAnimationOnImplThread() override {
     did_complete_page_scale_animation_ = true;
   }
-  void OnDrawForOutputSurface(bool resourceless_software_draw) override {
+  void OnDrawForCompositorFrameSink(bool resourceless_software_draw) override {
     std::unique_ptr<LayerTreeHostImpl::FrameData> frame(
         new LayerTreeHostImpl::FrameData);
     EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(frame.get()));
     last_on_draw_render_passes_.clear();
     RenderPass::CopyAll(frame->render_passes, &last_on_draw_render_passes_);
-    if (!skip_draw_layers_in_on_draw_)
-      host_impl_->DrawLayers(frame.get());
+    host_impl_->DrawLayers(frame.get());
     host_impl_->DidDrawAllLayers(*frame);
-    host_impl_->SwapBuffers(*frame);
     last_on_draw_frame_ = std::move(frame);
   }
 
@@ -188,26 +181,27 @@ class LayerTreeHostImplTest : public testing::Test,
     reduce_memory_result_ = reduce_memory_result;
   }
 
-  virtual bool CreateHostImpl(const LayerTreeSettings& settings,
-                              std::unique_ptr<OutputSurface> output_surface) {
+  virtual bool CreateHostImpl(
+      const LayerTreeSettings& settings,
+      std::unique_ptr<CompositorFrameSink> compositor_frame_sink) {
     return CreateHostImplWithTaskRunnerProvider(
-        settings, std::move(output_surface), &task_runner_provider_);
+        settings, std::move(compositor_frame_sink), &task_runner_provider_);
   }
 
   virtual bool CreateHostImplWithTaskRunnerProvider(
       const LayerTreeSettings& settings,
-      std::unique_ptr<OutputSurface> output_surface,
+      std::unique_ptr<CompositorFrameSink> compositor_frame_sink,
       TaskRunnerProvider* task_runner_provider) {
     if (host_impl_)
-      host_impl_->ReleaseOutputSurface();
+      host_impl_->ReleaseCompositorFrameSink();
     host_impl_ = LayerTreeHostImpl::Create(
         settings, this, task_runner_provider, &stats_instrumentation_,
         &shared_bitmap_manager_, &gpu_memory_buffer_manager_,
         &task_graph_runner_,
         AnimationHost::CreateForTesting(ThreadInstance::IMPL), 0);
-    output_surface_ = std::move(output_surface);
+    compositor_frame_sink_ = std::move(compositor_frame_sink);
     host_impl_->SetVisible(true);
-    bool init = host_impl_->InitializeRenderer(output_surface_.get());
+    bool init = host_impl_->InitializeRenderer(compositor_frame_sink_.get());
     host_impl_->SetViewportSize(gfx::Size(10, 10));
     host_impl_->active_tree()->PushPageScaleFromMainThread(1.f, 1.f, 1.f);
     // Set the BeginFrameArgs so that methods which use it are able to.
@@ -459,7 +453,6 @@ class LayerTreeHostImplTest : public testing::Test,
     EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
     host_impl_->DrawLayers(&frame);
     host_impl_->DidDrawAllLayers(frame);
-    host_impl_->SwapBuffers(frame);
   }
 
   void pinch_zoom_pan_viewport_forces_commit_redraw(float device_scale_factor);
@@ -473,8 +466,8 @@ class LayerTreeHostImplTest : public testing::Test,
   scoped_refptr<AnimationTimeline> timeline() { return timeline_; }
 
  protected:
-  virtual std::unique_ptr<OutputSurface> CreateOutputSurface() {
-    return FakeOutputSurface::CreateDelegating3d();
+  virtual std::unique_ptr<CompositorFrameSink> CreateCompositorFrameSink() {
+    return FakeCompositorFrameSink::Create3d();
   }
 
   void DrawOneFrame() {
@@ -489,8 +482,7 @@ class LayerTreeHostImplTest : public testing::Test,
             ->property_trees()
             ->scroll_tree.SetScrollOffsetDeltaForTesting(layer_impl->id(),
                                                          delta))
-      layer_impl->layer_tree_impl()->DidUpdateScrollOffset(
-          layer_impl->id(), layer_impl->transform_tree_index());
+      layer_impl->layer_tree_impl()->DidUpdateScrollOffset(layer_impl->id());
   }
 
   void BeginImplFrameAndAnimate(BeginFrameArgs begin_frame_args,
@@ -508,7 +500,7 @@ class LayerTreeHostImplTest : public testing::Test,
   TestSharedBitmapManager shared_bitmap_manager_;
   TestGpuMemoryBufferManager gpu_memory_buffer_manager_;
   TestTaskGraphRunner task_graph_runner_;
-  std::unique_ptr<OutputSurface> output_surface_;
+  std::unique_ptr<CompositorFrameSink> compositor_frame_sink_;
   std::unique_ptr<LayerTreeHostImpl> host_impl_;
   FakeRenderingStatsInstrumentation stats_instrumentation_;
   bool on_can_draw_state_changed_called_;
@@ -521,7 +513,6 @@ class LayerTreeHostImplTest : public testing::Test,
   bool reduce_memory_result_;
   base::Closure animation_task_;
   base::TimeDelta requested_animation_delay_;
-  bool skip_draw_layers_in_on_draw_;
   std::unique_ptr<LayerTreeHostImpl::FrameData> last_on_draw_frame_;
   RenderPassList last_on_draw_render_passes_;
   scoped_refptr<AnimationTimeline> timeline_;
@@ -531,7 +522,7 @@ class LayerTreeHostImplTest : public testing::Test,
 class LayerTreeHostImplTimelinesTest : public LayerTreeHostImplTest {
  public:
   void SetUp() override {
-    CreateHostImpl(DefaultSettings(), CreateOutputSurface());
+    CreateHostImpl(DefaultSettings(), CreateCompositorFrameSink());
   }
 };
 
@@ -573,8 +564,7 @@ TEST_F(LayerTreeHostImplTest, NotifyIfCanDrawChanged) {
 }
 
 TEST_F(LayerTreeHostImplTest, ResourcelessDrawWithEmptyViewport) {
-  CreateHostImpl(DefaultSettings(),
-                 FakeOutputSurface::CreateDelegatingSoftware());
+  CreateHostImpl(DefaultSettings(), FakeCompositorFrameSink::CreateSoftware());
   SetupScrollAndContentsLayers(gfx::Size(100, 100));
   host_impl_->active_tree()->BuildPropertyTreesForTesting();
 
@@ -582,16 +572,18 @@ TEST_F(LayerTreeHostImplTest, ResourcelessDrawWithEmptyViewport) {
   host_impl_->SetViewportSize(gfx::Size());
   EXPECT_FALSE(host_impl_->CanDraw());
 
-  FakeOutputSurface* fake_output_surface =
-      static_cast<FakeOutputSurface*>(host_impl_->output_surface());
-  EXPECT_EQ(fake_output_surface->num_sent_frames(), 0u);
+  FakeCompositorFrameSink* fake_compositor_frame_sink =
+      static_cast<FakeCompositorFrameSink*>(
+          host_impl_->compositor_frame_sink());
+  EXPECT_EQ(fake_compositor_frame_sink->num_sent_frames(), 0u);
   gfx::Transform identity;
   gfx::Rect viewport(100, 100);
   const bool resourceless_software_draw = true;
   host_impl_->OnDraw(identity, viewport, resourceless_software_draw);
-  ASSERT_EQ(fake_output_surface->num_sent_frames(), 1u);
-  EXPECT_EQ(gfx::SizeF(100.f, 100.f),
-            fake_output_surface->last_sent_frame()->metadata.root_layer_size);
+  ASSERT_EQ(fake_compositor_frame_sink->num_sent_frames(), 1u);
+  EXPECT_EQ(
+      gfx::SizeF(100.f, 100.f),
+      fake_compositor_frame_sink->last_sent_frame()->metadata.root_layer_size);
 }
 
 TEST_F(LayerTreeHostImplTest, ScrollDeltaNoLayers) {
@@ -738,7 +730,7 @@ TEST_F(LayerTreeHostImplTest, ScrollWithoutRenderer) {
   // Initialization will fail.
   EXPECT_FALSE(CreateHostImpl(
       DefaultSettings(),
-      FakeOutputSurface::CreateDelegating3d(std::move(context_owned))));
+      FakeCompositorFrameSink::Create3d(std::move(context_owned))));
 
   SetupScrollAndContentsLayers(gfx::Size(100, 100));
 
@@ -1196,37 +1188,6 @@ TEST_F(LayerTreeHostImplTest, ScrollByReturnsCorrectValue) {
           .did_scroll);
 }
 
-TEST_F(LayerTreeHostImplTest, ScrollVerticallyByPageReturnsCorrectValue) {
-  SetupScrollAndContentsLayers(gfx::Size(200, 2000));
-  host_impl_->SetViewportSize(gfx::Size(100, 1000));
-
-  DrawFrame();
-
-  EXPECT_EQ(InputHandler::SCROLL_ON_IMPL_THREAD,
-            host_impl_->ScrollBegin(BeginState(gfx::Point()).get(),
-                                    InputHandler::WHEEL)
-                .thread);
-
-  // Trying to scroll if not user_scrollable_vertical will fail.
-  host_impl_->InnerViewportScrollLayer()->set_user_scrollable_vertical(false);
-  host_impl_->active_tree()->BuildPropertyTreesForTesting();
-  DrawFrame();
-  EXPECT_FALSE(host_impl_->ScrollVerticallyByPage(
-      gfx::Point(), SCROLL_FORWARD));
-  EXPECT_FALSE(host_impl_->ScrollVerticallyByPage(
-      gfx::Point(), SCROLL_BACKWARD));
-
-  host_impl_->InnerViewportScrollLayer()->set_user_scrollable_vertical(true);
-  host_impl_->active_tree()->BuildPropertyTreesForTesting();
-  DrawFrame();
-  EXPECT_TRUE(host_impl_->ScrollVerticallyByPage(
-      gfx::Point(), SCROLL_FORWARD));
-  EXPECT_FLOAT_EQ(875.f,
-                  ScrollDelta(host_impl_->InnerViewportScrollLayer()).y());
-  EXPECT_TRUE(host_impl_->ScrollVerticallyByPage(
-      gfx::Point(), SCROLL_BACKWARD));
-}
-
 TEST_F(LayerTreeHostImplTest, ScrollWithUserUnscrollableLayers) {
   LayerImpl* scroll_layer = SetupScrollAndContentsLayers(gfx::Size(200, 200));
   host_impl_->SetViewportSize(gfx::Size(100, 100));
@@ -1317,6 +1278,7 @@ TEST_F(LayerTreeHostImplTest, AnimationSchedulingPendingTree) {
 
   AddAnimatedTransformToElementWithPlayer(child->element_id(), timeline(), 10.0,
                                           3, 0);
+  host_impl_->pending_tree()->BuildPropertyTreesForTesting();
 
   EXPECT_FALSE(did_request_next_frame_);
   EXPECT_FALSE(did_request_redraw_);
@@ -1367,7 +1329,6 @@ TEST_F(LayerTreeHostImplTest, AnimationSchedulingActiveTree) {
   child->SetBounds(gfx::Size(10, 10));
   child->draw_properties().visible_layer_rect = gfx::Rect(10, 10);
   child->SetDrawsContent(true);
-  host_impl_->active_tree()->BuildPropertyTreesForTesting();
   host_impl_->active_tree()->SetElementIdsForTesting();
 
   // Add a translate from 6,7 to 8,9.
@@ -1377,6 +1338,7 @@ TEST_F(LayerTreeHostImplTest, AnimationSchedulingActiveTree) {
   end.AppendTranslate(8.f, 9.f, 0.f);
   AddAnimatedTransformToElementWithPlayer(child->element_id(), timeline(), 4.0,
                                           start, end);
+  host_impl_->active_tree()->BuildPropertyTreesForTesting();
 
   base::TimeTicks now = base::TimeTicks::Now();
   host_impl_->WillBeginImplFrame(
@@ -1416,8 +1378,8 @@ TEST_F(LayerTreeHostImplTest, AnimationSchedulingActiveTree) {
 
 TEST_F(LayerTreeHostImplTest, AnimationSchedulingCommitToActiveTree) {
   FakeImplTaskRunnerProvider provider(nullptr);
-  CreateHostImplWithTaskRunnerProvider(DefaultSettings(), CreateOutputSurface(),
-                                       &provider);
+  CreateHostImplWithTaskRunnerProvider(DefaultSettings(),
+                                       CreateCompositorFrameSink(), &provider);
   EXPECT_TRUE(host_impl_->CommitToActiveTree());
 
   host_impl_->SetViewportSize(gfx::Size(50, 50));
@@ -1460,7 +1422,7 @@ TEST_F(LayerTreeHostImplTest, AnimationSchedulingCommitToActiveTree) {
   EXPECT_FALSE(did_request_commit_);
 
   // Delete the LayerTreeHostImpl before the TaskRunnerProvider goes away.
-  host_impl_->ReleaseOutputSurface();
+  host_impl_->ReleaseCompositorFrameSink();
   host_impl_ = nullptr;
 }
 
@@ -1479,7 +1441,6 @@ TEST_F(LayerTreeHostImplTest, AnimationSchedulingOnLayerDestruction) {
   child->draw_properties().visible_layer_rect = gfx::Rect(10, 10);
   child->SetDrawsContent(true);
 
-  host_impl_->active_tree()->BuildPropertyTreesForTesting();
   host_impl_->active_tree()->SetElementIdsForTesting();
 
   // Add a translate animation.
@@ -1489,6 +1450,7 @@ TEST_F(LayerTreeHostImplTest, AnimationSchedulingOnLayerDestruction) {
   end.AppendTranslate(8.f, 9.f, 0.f);
   AddAnimatedTransformToElementWithPlayer(child->element_id(), timeline(), 4.0,
                                           start, end);
+  host_impl_->active_tree()->BuildPropertyTreesForTesting();
 
   base::TimeTicks now = base::TimeTicks::Now();
   host_impl_->WillBeginImplFrame(
@@ -1556,7 +1518,6 @@ TEST_F(LayerTreeHostImplTest, AnimationMarksLayerNotReady) {
   child->SetBounds(gfx::Size(10, 10));
   child->draw_properties().visible_layer_rect = gfx::Rect(10, 10);
   child->SetDrawsContent(true);
-  host_impl_->active_tree()->BuildPropertyTreesForTesting();
 
   host_impl_->active_tree()->SetElementIdsForTesting();
 
@@ -1569,6 +1530,7 @@ TEST_F(LayerTreeHostImplTest, AnimationMarksLayerNotReady) {
   end.AppendTranslate(8.f, 9.f, 0.f);
   int animation_id = AddAnimatedTransformToElementWithPlayer(
       child->element_id(), timeline(), 4.0, start, end);
+  host_impl_->active_tree()->BuildPropertyTreesForTesting();
 
   base::TimeTicks now = base::TimeTicks::Now();
   host_impl_->WillBeginImplFrame(
@@ -1702,8 +1664,7 @@ TEST_F(LayerTreeHostImplTest, ImplPinchZoom) {
 
 TEST_F(LayerTreeHostImplTest, ViewportScrollOrder) {
   LayerTreeSettings settings = DefaultSettings();
-  CreateHostImpl(settings,
-                 CreateOutputSurface());
+  CreateHostImpl(settings, CreateCompositorFrameSink());
   host_impl_->active_tree()->PushPageScaleFromMainThread(1.f, 0.25f, 4.f);
 
   const gfx::Size content_size(1000, 1000);
@@ -1769,7 +1730,7 @@ TEST_F(LayerTreeHostImplTest, ViewportScrollOrder) {
 // dropped. crbug.com/539334.
 TEST_F(LayerTreeHostImplTest, ScrollViewportWithFractionalAmounts) {
   LayerTreeSettings settings = DefaultSettings();
-  CreateHostImpl(settings, CreateOutputSurface());
+  CreateHostImpl(settings, CreateCompositorFrameSink());
   host_impl_->active_tree()->PushPageScaleFromMainThread(1.f, 1.f, 2.f);
 
   const gfx::Size content_size(1000, 1000);
@@ -1823,8 +1784,7 @@ TEST_F(LayerTreeHostImplTest, ScrollViewportWithFractionalAmounts) {
 // to the outer viewport.
 TEST_F(LayerTreeHostImplTest, ScrollDuringPinchGesture) {
   LayerTreeSettings settings = DefaultSettings();
-  CreateHostImpl(settings,
-                 CreateOutputSurface());
+  CreateHostImpl(settings, CreateCompositorFrameSink());
   host_impl_->active_tree()->PushPageScaleFromMainThread(1.f, 1.f, 2.f);
 
   const gfx::Size content_size(1000, 1000);
@@ -1885,8 +1845,7 @@ TEST_F(LayerTreeHostImplTest, ScrollDuringPinchGesture) {
 // should assume the user means to scroll into the edge of the screen.
 TEST_F(LayerTreeHostImplTest, PinchZoomSnapsToScreenEdge) {
   LayerTreeSettings settings = DefaultSettings();
-  CreateHostImpl(settings,
-                 CreateOutputSurface());
+  CreateHostImpl(settings, CreateCompositorFrameSink());
   host_impl_->active_tree()->PushPageScaleFromMainThread(1.f, 1.f, 2.f);
 
   const gfx::Size content_size(1000, 1000);
@@ -2729,7 +2688,7 @@ class LayerTreeHostImplOverridePhysicalTime : public LayerTreeHostImpl {
 class LayerTreeHostImplTestScrollbarAnimation : public LayerTreeHostImplTest {
  protected:
   void SetupLayers(LayerTreeSettings settings) {
-    host_impl_->ReleaseOutputSurface();
+    host_impl_->ReleaseCompositorFrameSink();
     host_impl_ = nullptr;
 
     gfx::Size content_size(100, 100);
@@ -2739,9 +2698,9 @@ class LayerTreeHostImplTestScrollbarAnimation : public LayerTreeHostImplTest {
             settings, this, &task_runner_provider_, &shared_bitmap_manager_,
             &task_graph_runner_, &stats_instrumentation_);
     host_impl_ = base::WrapUnique(host_impl_override_time);
-    output_surface_ = CreateOutputSurface();
+    compositor_frame_sink_ = CreateCompositorFrameSink();
     host_impl_->SetVisible(true);
-    host_impl_->InitializeRenderer(output_surface_.get());
+    host_impl_->InitializeRenderer(compositor_frame_sink_.get());
 
     SetupScrollAndContentsLayers(content_size);
     host_impl_->active_tree()->PushPageScaleFromMainThread(1.f, 1.f, 4.f);
@@ -2878,8 +2837,7 @@ class LayerTreeHostImplTestScrollbarAnimation : public LayerTreeHostImplTest {
                 host_impl_->InnerViewportScrollLayer()->id(),
                 gfx::ScrollOffset(5, 5)))
       host_impl_->active_tree()->DidUpdateScrollOffset(
-          host_impl_->InnerViewportScrollLayer()->id(),
-          host_impl_->InnerViewportScrollLayer()->transform_tree_index());
+          host_impl_->InnerViewportScrollLayer()->id());
     EXPECT_FALSE(did_request_next_frame_);
     EXPECT_FALSE(did_request_redraw_);
     if (expecting_animations) {
@@ -2965,7 +2923,7 @@ class LayerTreeHostImplTestScrollbarOpacity : public LayerTreeHostImplTest {
     // If no animator is set, scrollbar won't show and no animation is expected.
     bool expecting_animations = animator != LayerTreeSettings::NO_ANIMATOR;
 
-    CreateHostImpl(settings, CreateOutputSurface());
+    CreateHostImpl(settings, CreateCompositorFrameSink());
     host_impl_->CreatePendingTree();
     CreateScrollAndContentsLayers(host_impl_->pending_tree(), content_size);
     std::unique_ptr<SolidColorScrollbarLayerImpl> scrollbar =
@@ -3054,7 +3012,7 @@ TEST_F(LayerTreeHostImplTestScrollbarOpacity, NoAnimator) {
 
 TEST_F(LayerTreeHostImplTest, ScrollbarInnerLargerThanOuter) {
   LayerTreeSettings settings = DefaultSettings();
-  CreateHostImpl(settings, CreateOutputSurface());
+  CreateHostImpl(settings, CreateCompositorFrameSink());
 
   gfx::Size inner_viewport_size(315, 200);
   gfx::Size outer_viewport_size(300, 200);
@@ -3091,7 +3049,7 @@ TEST_F(LayerTreeHostImplTest, ScrollbarRegistration) {
   settings.scrollbar_animator = LayerTreeSettings::LINEAR_FADE;
   settings.scrollbar_fade_delay_ms = 20;
   settings.scrollbar_fade_duration_ms = 20;
-  CreateHostImpl(settings, CreateOutputSurface());
+  CreateHostImpl(settings, CreateCompositorFrameSink());
 
   gfx::Size viewport_size(300, 200);
   gfx::Size content_size(1000, 1000);
@@ -3219,7 +3177,7 @@ void LayerTreeHostImplTest::SetupMouseMoveAtWithDeviceScale(
   gfx::Size content_size(1000, 1000);
   gfx::Size scrollbar_size(gfx::Size(15, viewport_size.height()));
 
-  CreateHostImpl(settings, CreateOutputSurface());
+  CreateHostImpl(settings, CreateCompositorFrameSink());
   host_impl_->active_tree()->SetDeviceScaleFactor(device_scale_factor);
   host_impl_->SetViewportSize(device_viewport_size);
 
@@ -3487,7 +3445,6 @@ TEST_F(LayerTreeHostImplTest, WillDrawReturningFalseDoesNotCall) {
     LayerTreeHostImpl::FrameData frame;
     EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
     host_impl_->DrawLayers(&frame);
-    host_impl_->SwapBuffers(frame);
     host_impl_->DidDrawAllLayers(frame);
 
     EXPECT_TRUE(layer->will_draw_called());
@@ -3505,7 +3462,6 @@ TEST_F(LayerTreeHostImplTest, WillDrawReturningFalseDoesNotCall) {
 
     EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
     host_impl_->DrawLayers(&frame);
-    host_impl_->SwapBuffers(frame);
     host_impl_->DidDrawAllLayers(frame);
 
     EXPECT_TRUE(layer->will_draw_called());
@@ -3539,7 +3495,6 @@ TEST_F(LayerTreeHostImplTest, DidDrawNotCalledOnHiddenLayer) {
 
   EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
   host_impl_->DrawLayers(&frame);
-  host_impl_->SwapBuffers(frame);
   host_impl_->DidDrawAllLayers(frame);
 
   EXPECT_FALSE(layer->will_draw_called());
@@ -3557,7 +3512,6 @@ TEST_F(LayerTreeHostImplTest, DidDrawNotCalledOnHiddenLayer) {
 
   EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
   host_impl_->DrawLayers(&frame);
-  host_impl_->SwapBuffers(frame);
   host_impl_->DidDrawAllLayers(frame);
 
   EXPECT_TRUE(layer->will_draw_called());
@@ -3600,7 +3554,6 @@ TEST_F(LayerTreeHostImplTest, WillDrawNotCalledOnOccludedLayer) {
 
   EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
   host_impl_->DrawLayers(&frame);
-  host_impl_->SwapBuffers(frame);
   host_impl_->DidDrawAllLayers(frame);
 
   EXPECT_FALSE(occluded_layer->will_draw_called());
@@ -3639,7 +3592,6 @@ TEST_F(LayerTreeHostImplTest, DidDrawCalledOnAllLayers) {
       *host_impl_->active_tree()->begin());
   EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
   host_impl_->DrawLayers(&frame);
-  host_impl_->SwapBuffers(frame);
   host_impl_->DidDrawAllLayers(frame);
 
   EXPECT_TRUE(root->did_draw_called());
@@ -3810,7 +3762,6 @@ TEST_F(LayerTreeHostImplTest, PrepareToDrawSucceedsAndFails) {
   EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
   host_impl_->DrawLayers(&frame);
   host_impl_->DidDrawAllLayers(frame);
-  host_impl_->SwapBuffers(frame);
 
   for (size_t i = 0; i < cases.size(); ++i) {
     // Clean up host_impl_ state.
@@ -3838,14 +3789,12 @@ TEST_F(LayerTreeHostImplTest, PrepareToDrawSucceedsAndFails) {
     EXPECT_EQ(testcase.expected_result, host_impl_->PrepareToDraw(&frame));
     host_impl_->DrawLayers(&frame);
     host_impl_->DidDrawAllLayers(frame);
-    host_impl_->SwapBuffers(frame);
   }
 }
 
 TEST_F(LayerTreeHostImplTest,
        PrepareToDrawWhenDrawAndSwapFullViewportEveryFrame) {
-  CreateHostImpl(DefaultSettings(),
-                 FakeOutputSurface::CreateDelegatingSoftware());
+  CreateHostImpl(DefaultSettings(), FakeCompositorFrameSink::CreateSoftware());
 
   const gfx::Transform external_transform;
   const gfx::Rect external_viewport;
@@ -3961,10 +3910,11 @@ class LayerTreeHostImplTopControlsTest : public LayerTreeHostImplTest {
                                clip_size_.height() + top_controls_height_);
   }
 
-  bool CreateHostImpl(const LayerTreeSettings& settings,
-                      std::unique_ptr<OutputSurface> output_surface) override {
+  bool CreateHostImpl(
+      const LayerTreeSettings& settings,
+      std::unique_ptr<CompositorFrameSink> compositor_frame_sink) override {
     bool init = LayerTreeHostImplTest::CreateHostImpl(
-        settings, std::move(output_surface));
+        settings, std::move(compositor_frame_sink));
     if (init) {
       host_impl_->active_tree()->set_top_controls_height(top_controls_height_);
       host_impl_->active_tree()->SetCurrentTopControlsShownRatio(1.f);
@@ -3978,7 +3928,7 @@ class LayerTreeHostImplTopControlsTest : public LayerTreeHostImplTest {
       const gfx::Size& outer_viewport_size,
       const gfx::Size& scroll_layer_size) {
     settings_ = DefaultSettings();
-    CreateHostImpl(settings_, CreateOutputSurface());
+    CreateHostImpl(settings_, CreateCompositorFrameSink());
     SetupTopControlsAndScrollLayerWithVirtualViewport(
         host_impl_->active_tree(), inner_viewport_size, outer_viewport_size,
         scroll_layer_size);
@@ -4389,7 +4339,7 @@ TEST_F(LayerTreeHostImplTopControlsTest, TopControlsScrollableSublayer) {
 // TreeImpl correctly affects the top controls manager and viewport bounds.
 TEST_F(LayerTreeHostImplTopControlsTest, PositionTopControlsExplicitly) {
   settings_ = DefaultSettings();
-  CreateHostImpl(settings_, CreateOutputSurface());
+  CreateHostImpl(settings_, CreateCompositorFrameSink());
   SetupTopControlsAndScrollLayerWithVirtualViewport(
       layer_size_, layer_size_, layer_size_);
   DrawFrame();
@@ -4422,7 +4372,7 @@ TEST_F(LayerTreeHostImplTopControlsTest, PositionTopControlsExplicitly) {
 // change after the activation.
 TEST_F(LayerTreeHostImplTopControlsTest, ApplyDeltaOnTreeActivation) {
   settings_ = DefaultSettings();
-  CreateHostImpl(settings_, CreateOutputSurface());
+  CreateHostImpl(settings_, CreateCompositorFrameSink());
   SetupTopControlsAndScrollLayerWithVirtualViewport(
       layer_size_, layer_size_, layer_size_);
   DrawFrame();
@@ -4471,7 +4421,7 @@ TEST_F(LayerTreeHostImplTopControlsTest, ApplyDeltaOnTreeActivation) {
 // the compositor to accommodate the top controls.
 TEST_F(LayerTreeHostImplTopControlsTest, TopControlsLayoutHeightChanged) {
   settings_ = DefaultSettings();
-  CreateHostImpl(settings_, CreateOutputSurface());
+  CreateHostImpl(settings_, CreateCompositorFrameSink());
   SetupTopControlsAndScrollLayerWithVirtualViewport(
       layer_size_, layer_size_, layer_size_);
   DrawFrame();
@@ -4703,7 +4653,7 @@ TEST_F(LayerTreeHostImplTopControlsTest, TopControlsScrollOuterViewport) {
 TEST_F(LayerTreeHostImplTopControlsTest,
        ScrollNonScrollableRootWithTopControls) {
   settings_ = DefaultSettings();
-  CreateHostImpl(settings_, CreateOutputSurface());
+  CreateHostImpl(settings_, CreateCompositorFrameSink());
   SetupTopControlsAndScrollLayerWithVirtualViewport(
       layer_size_, layer_size_, layer_size_);
   DrawFrame();
@@ -5966,7 +5916,7 @@ TEST_F(LayerTreeHostImplTest, RootLayerScrollOffsetDelegation) {
   EXPECT_EQ(gfx::SizeF(new_size), scroll_watcher.scrollable_size());
 
   // Tear down the LayerTreeHostImpl before the InputHandlerClient.
-  host_impl_->ReleaseOutputSurface();
+  host_impl_->ReleaseCompositorFrameSink();
   host_impl_ = nullptr;
 }
 
@@ -6261,7 +6211,7 @@ TEST_F(LayerTreeHostImplTest, OverscrollChildEventBubbling) {
 TEST_F(LayerTreeHostImplTest, OverscrollAlways) {
   InputHandlerScrollResult scroll_result;
   LayerTreeSettings settings = DefaultSettings();
-  CreateHostImpl(settings, CreateOutputSurface());
+  CreateHostImpl(settings, CreateCompositorFrameSink());
 
   LayerImpl* scroll_layer = SetupScrollAndContentsLayers(gfx::Size(50, 50));
   LayerImpl* clip_layer =
@@ -6355,7 +6305,7 @@ TEST_F(LayerTreeHostImplTest, NoOverscrollWhenNotAtEdge) {
 TEST_F(LayerTreeHostImplTest, OverscrollOnMainThread) {
   InputHandlerScrollResult scroll_result;
   LayerTreeSettings settings = DefaultSettings();
-  CreateHostImpl(settings, CreateOutputSurface());
+  CreateHostImpl(settings, CreateCompositorFrameSink());
 
   const gfx::Size content_size(50, 50);
   const gfx::Size viewport_size(50, 50);
@@ -6523,7 +6473,7 @@ TEST_F(LayerTreeHostImplTest, ScrollChainingWithReplacedOuterViewport) {
 TEST_F(LayerTreeHostImplTest, OverscrollOnImplThread) {
   InputHandlerScrollResult scroll_result;
   LayerTreeSettings settings = DefaultSettings();
-  CreateHostImpl(settings, CreateOutputSurface());
+  CreateHostImpl(settings, CreateCompositorFrameSink());
 
   const gfx::Size content_size(50, 50);
   const gfx::Size viewport_size(50, 50);
@@ -6668,7 +6618,6 @@ TEST_F(LayerTreeHostImplTest, BlendingOffWhenDrawingOpaqueLayers) {
   host_impl_->DrawLayers(&frame);
   EXPECT_TRUE(layer1->quads_appended());
   host_impl_->DidDrawAllLayers(frame);
-  host_impl_->SwapBuffers(frame);
 
   // Layer with translucent content and painting, so drawn with blending.
   layer1->SetContentsOpaque(false);
@@ -6677,7 +6626,6 @@ TEST_F(LayerTreeHostImplTest, BlendingOffWhenDrawingOpaqueLayers) {
   host_impl_->active_tree()->BuildPropertyTreesForTesting();
   EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
   host_impl_->DrawLayers(&frame);
-  host_impl_->SwapBuffers(frame);
   EXPECT_TRUE(layer1->quads_appended());
   host_impl_->DidDrawAllLayers(frame);
 
@@ -6690,7 +6638,6 @@ TEST_F(LayerTreeHostImplTest, BlendingOffWhenDrawingOpaqueLayers) {
   host_impl_->active_tree()->BuildPropertyTreesForTesting();
   EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
   host_impl_->DrawLayers(&frame);
-  host_impl_->SwapBuffers(frame);
   EXPECT_TRUE(layer1->quads_appended());
   host_impl_->DidDrawAllLayers(frame);
 
@@ -6703,7 +6650,6 @@ TEST_F(LayerTreeHostImplTest, BlendingOffWhenDrawingOpaqueLayers) {
   host_impl_->active_tree()->BuildPropertyTreesForTesting();
   EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
   host_impl_->DrawLayers(&frame);
-  host_impl_->SwapBuffers(frame);
   EXPECT_TRUE(layer1->quads_appended());
   host_impl_->DidDrawAllLayers(frame);
 
@@ -6727,7 +6673,6 @@ TEST_F(LayerTreeHostImplTest, BlendingOffWhenDrawingOpaqueLayers) {
   host_impl_->active_tree()->BuildPropertyTreesForTesting();
   EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
   host_impl_->DrawLayers(&frame);
-  host_impl_->SwapBuffers(frame);
   EXPECT_TRUE(layer1->quads_appended());
   EXPECT_TRUE(layer2->quads_appended());
   host_impl_->DidDrawAllLayers(frame);
@@ -6742,7 +6687,6 @@ TEST_F(LayerTreeHostImplTest, BlendingOffWhenDrawingOpaqueLayers) {
   host_impl_->active_tree()->BuildPropertyTreesForTesting();
   EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
   host_impl_->DrawLayers(&frame);
-  host_impl_->SwapBuffers(frame);
   EXPECT_TRUE(layer1->quads_appended());
   EXPECT_TRUE(layer2->quads_appended());
   host_impl_->DidDrawAllLayers(frame);
@@ -6758,7 +6702,6 @@ TEST_F(LayerTreeHostImplTest, BlendingOffWhenDrawingOpaqueLayers) {
   host_impl_->active_tree()->BuildPropertyTreesForTesting();
   EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
   host_impl_->DrawLayers(&frame);
-  host_impl_->SwapBuffers(frame);
   EXPECT_TRUE(layer1->quads_appended());
   EXPECT_TRUE(layer2->quads_appended());
   host_impl_->DidDrawAllLayers(frame);
@@ -6781,7 +6724,6 @@ TEST_F(LayerTreeHostImplTest, BlendingOffWhenDrawingOpaqueLayers) {
   host_impl_->active_tree()->BuildPropertyTreesForTesting();
   EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
   host_impl_->DrawLayers(&frame);
-  host_impl_->SwapBuffers(frame);
   EXPECT_TRUE(layer1->quads_appended());
   EXPECT_TRUE(layer2->quads_appended());
   host_impl_->DidDrawAllLayers(frame);
@@ -6802,7 +6744,6 @@ TEST_F(LayerTreeHostImplTest, BlendingOffWhenDrawingOpaqueLayers) {
   host_impl_->active_tree()->BuildPropertyTreesForTesting();
   EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
   host_impl_->DrawLayers(&frame);
-  host_impl_->SwapBuffers(frame);
   EXPECT_TRUE(layer1->quads_appended());
   EXPECT_TRUE(layer2->quads_appended());
   host_impl_->DidDrawAllLayers(frame);
@@ -6821,7 +6762,6 @@ TEST_F(LayerTreeHostImplTest, BlendingOffWhenDrawingOpaqueLayers) {
   host_impl_->active_tree()->BuildPropertyTreesForTesting();
   EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
   host_impl_->DrawLayers(&frame);
-  host_impl_->SwapBuffers(frame);
   EXPECT_TRUE(layer1->quads_appended());
   EXPECT_TRUE(layer2->quads_appended());
   host_impl_->DidDrawAllLayers(frame);
@@ -6841,7 +6781,6 @@ TEST_F(LayerTreeHostImplTest, BlendingOffWhenDrawingOpaqueLayers) {
   host_impl_->active_tree()->BuildPropertyTreesForTesting();
   EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
   host_impl_->DrawLayers(&frame);
-  host_impl_->SwapBuffers(frame);
   EXPECT_TRUE(layer1->quads_appended());
   EXPECT_TRUE(layer2->quads_appended());
   host_impl_->DidDrawAllLayers(frame);
@@ -6856,7 +6795,6 @@ TEST_F(LayerTreeHostImplTest, BlendingOffWhenDrawingOpaqueLayers) {
   host_impl_->active_tree()->BuildPropertyTreesForTesting();
   EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
   host_impl_->DrawLayers(&frame);
-  host_impl_->SwapBuffers(frame);
   EXPECT_TRUE(layer1->quads_appended());
   host_impl_->DidDrawAllLayers(frame);
 
@@ -6870,7 +6808,6 @@ TEST_F(LayerTreeHostImplTest, BlendingOffWhenDrawingOpaqueLayers) {
   host_impl_->active_tree()->BuildPropertyTreesForTesting();
   EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
   host_impl_->DrawLayers(&frame);
-  host_impl_->SwapBuffers(frame);
   EXPECT_TRUE(layer1->quads_appended());
   host_impl_->DidDrawAllLayers(frame);
 
@@ -6884,7 +6821,6 @@ TEST_F(LayerTreeHostImplTest, BlendingOffWhenDrawingOpaqueLayers) {
   host_impl_->active_tree()->BuildPropertyTreesForTesting();
   EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
   host_impl_->DrawLayers(&frame);
-  host_impl_->SwapBuffers(frame);
   EXPECT_TRUE(layer1->quads_appended());
   host_impl_->DidDrawAllLayers(frame);
 
@@ -6899,7 +6835,6 @@ TEST_F(LayerTreeHostImplTest, BlendingOffWhenDrawingOpaqueLayers) {
   host_impl_->active_tree()->BuildPropertyTreesForTesting();
   EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
   host_impl_->DrawLayers(&frame);
-  host_impl_->SwapBuffers(frame);
   EXPECT_TRUE(layer1->quads_appended());
   host_impl_->DidDrawAllLayers(frame);
 }
@@ -6909,7 +6844,6 @@ static bool MayContainVideoBitSetOnFrameData(LayerTreeHostImpl* host_impl) {
   LayerTreeHostImpl::FrameData frame;
   EXPECT_EQ(DRAW_SUCCESS, host_impl->PrepareToDraw(&frame));
   host_impl->DrawLayers(&frame);
-  host_impl->SwapBuffers(frame);
   host_impl->DidDrawAllLayers(frame);
   return frame.may_contain_video;
 }
@@ -6960,10 +6894,11 @@ class LayerTreeHostImplViewportCoveredTest : public LayerTreeHostImplTest {
       child_(NULL),
       did_activate_pending_tree_(false) {}
 
-  std::unique_ptr<OutputSurface> CreateFakeOutputSurface(bool software) {
+  std::unique_ptr<CompositorFrameSink> CreateFakeCompositorFrameSink(
+      bool software) {
     if (software)
-      return FakeOutputSurface::CreateDelegatingSoftware();
-    return FakeOutputSurface::CreateDelegating3d();
+      return FakeCompositorFrameSink::CreateSoftware();
+    return FakeCompositorFrameSink::Create3d();
   }
 
   void SetupActiveTreeLayers() {
@@ -7179,7 +7114,7 @@ TEST_F(LayerTreeHostImplViewportCoveredTest, ViewportCovered) {
   viewport_size_ = gfx::Size(1000, 1000);
 
   bool software = false;
-  CreateHostImpl(DefaultSettings(), CreateFakeOutputSurface(software));
+  CreateHostImpl(DefaultSettings(), CreateFakeCompositorFrameSink(software));
 
   host_impl_->SetViewportSize(DipSizeToPixelSize(viewport_size_));
   SetupActiveTreeLayers();
@@ -7193,7 +7128,7 @@ TEST_F(LayerTreeHostImplViewportCoveredTest, ViewportCoveredScaled) {
   viewport_size_ = gfx::Size(1000, 1000);
 
   bool software = false;
-  CreateHostImpl(DefaultSettings(), CreateFakeOutputSurface(software));
+  CreateHostImpl(DefaultSettings(), CreateFakeCompositorFrameSink(software));
 
   host_impl_->active_tree()->SetDeviceScaleFactor(2.f);
   host_impl_->SetViewportSize(DipSizeToPixelSize(viewport_size_));
@@ -7206,10 +7141,9 @@ TEST_F(LayerTreeHostImplViewportCoveredTest, ViewportCoveredScaled) {
 
 TEST_F(LayerTreeHostImplViewportCoveredTest, ActiveTreeGrowViewportInvalid) {
   viewport_size_ = gfx::Size(1000, 1000);
-  skip_draw_layers_in_on_draw_ = true;  // Resourceless can't draw tiled quads.
 
   bool software = true;
-  CreateHostImpl(DefaultSettings(), CreateFakeOutputSurface(software));
+  CreateHostImpl(DefaultSettings(), CreateFakeCompositorFrameSink(software));
 
   // Pending tree to force active_tree size invalid. Not used otherwise.
   host_impl_->CreatePendingTree();
@@ -7224,10 +7158,9 @@ TEST_F(LayerTreeHostImplViewportCoveredTest, ActiveTreeGrowViewportInvalid) {
 
 TEST_F(LayerTreeHostImplViewportCoveredTest, ActiveTreeShrinkViewportInvalid) {
   viewport_size_ = gfx::Size(1000, 1000);
-  skip_draw_layers_in_on_draw_ = true;  // Resourceless can't draw tiled quads.
 
   bool software = true;
-  CreateHostImpl(DefaultSettings(), CreateFakeOutputSurface(software));
+  CreateHostImpl(DefaultSettings(), CreateFakeCompositorFrameSink(software));
 
   // Set larger viewport and activate it to active tree.
   host_impl_->CreatePendingTree();
@@ -7268,9 +7201,10 @@ TEST_F(LayerTreeHostImplTest, PartialSwapReceivesDamageRect) {
   context_provider->BindToCurrentThread();
   context_provider->TestContext3d()->set_have_post_sub_buffer(true);
 
-  std::unique_ptr<FakeOutputSurface> output_surface(
-      FakeOutputSurface::CreateDelegating3d(context_provider));
-  FakeOutputSurface* fake_output_surface = output_surface.get();
+  std::unique_ptr<FakeCompositorFrameSink> compositor_frame_sink(
+      FakeCompositorFrameSink::Create3d(context_provider));
+  FakeCompositorFrameSink* fake_compositor_frame_sink =
+      compositor_frame_sink.get();
 
   // This test creates its own LayerTreeHostImpl, so
   // that we can force partial swap enabled.
@@ -7282,7 +7216,7 @@ TEST_F(LayerTreeHostImplTest, PartialSwapReceivesDamageRect) {
           &shared_bitmap_manager_, NULL, &task_graph_runner_,
           AnimationHost::CreateForTesting(ThreadInstance::IMPL), 0);
   layer_tree_host_impl->SetVisible(true);
-  layer_tree_host_impl->InitializeRenderer(output_surface.get());
+  layer_tree_host_impl->InitializeRenderer(compositor_frame_sink.get());
   layer_tree_host_impl->WillBeginImplFrame(
       CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE));
   layer_tree_host_impl->SetViewportSize(gfx::Size(500, 500));
@@ -7307,10 +7241,9 @@ TEST_F(LayerTreeHostImplTest, PartialSwapReceivesDamageRect) {
   EXPECT_EQ(DRAW_SUCCESS, layer_tree_host_impl->PrepareToDraw(&frame));
   layer_tree_host_impl->DrawLayers(&frame);
   layer_tree_host_impl->DidDrawAllLayers(frame);
-  layer_tree_host_impl->SwapBuffers(frame);
   gfx::Rect expected_swap_rect(500, 500);
   EXPECT_EQ(expected_swap_rect.ToString(),
-            fake_output_surface->last_swap_rect().ToString());
+            fake_compositor_frame_sink->last_swap_rect().ToString());
 
   // Second frame, only the damaged area should get swapped. Damage should be
   // the union of old and new child rects: gfx::Rect(26, 28).
@@ -7328,11 +7261,10 @@ TEST_F(LayerTreeHostImplTest, PartialSwapReceivesDamageRect) {
   EXPECT_EQ(DRAW_SUCCESS, layer_tree_host_impl->PrepareToDraw(&frame));
   layer_tree_host_impl->DrawLayers(&frame);
   host_impl_->DidDrawAllLayers(frame);
-  layer_tree_host_impl->SwapBuffers(frame);
 
   expected_swap_rect = gfx::Rect(26, 28);
   EXPECT_EQ(expected_swap_rect.ToString(),
-            fake_output_surface->last_swap_rect().ToString());
+            fake_compositor_frame_sink->last_swap_rect().ToString());
 
   layer_tree_host_impl->SetViewportSize(gfx::Size(10, 10));
   // This will damage everything.
@@ -7342,13 +7274,12 @@ TEST_F(LayerTreeHostImplTest, PartialSwapReceivesDamageRect) {
   EXPECT_EQ(DRAW_SUCCESS, layer_tree_host_impl->PrepareToDraw(&frame));
   layer_tree_host_impl->DrawLayers(&frame);
   host_impl_->DidDrawAllLayers(frame);
-  layer_tree_host_impl->SwapBuffers(frame);
 
   expected_swap_rect = gfx::Rect(10, 10);
   EXPECT_EQ(expected_swap_rect.ToString(),
-            fake_output_surface->last_swap_rect().ToString());
+            fake_compositor_frame_sink->last_swap_rect().ToString());
 
-  layer_tree_host_impl->ReleaseOutputSurface();
+  layer_tree_host_impl->ReleaseCompositorFrameSink();
 }
 
 TEST_F(LayerTreeHostImplTest, RootLayerDoesntCreateExtraSurface) {
@@ -7408,14 +7339,14 @@ static std::unique_ptr<LayerTreeHostImpl> SetupLayersForOpacity(
     SharedBitmapManager* manager,
     TaskGraphRunner* task_graph_runner,
     RenderingStatsInstrumentation* stats_instrumentation,
-    OutputSurface* output_surface) {
+    CompositorFrameSink* compositor_frame_sink) {
   settings.renderer_settings.partial_swap_enabled = partial_swap;
   std::unique_ptr<LayerTreeHostImpl> my_host_impl = LayerTreeHostImpl::Create(
       settings, client, task_runner_provider, stats_instrumentation, manager,
       nullptr, task_graph_runner,
       AnimationHost::CreateForTesting(ThreadInstance::IMPL), 0);
   my_host_impl->SetVisible(true);
-  my_host_impl->InitializeRenderer(output_surface);
+  my_host_impl->InitializeRenderer(compositor_frame_sink);
   my_host_impl->WillBeginImplFrame(
       CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE));
   my_host_impl->SetViewportSize(gfx::Size(100, 100));
@@ -7481,12 +7412,12 @@ TEST_F(LayerTreeHostImplTest, ContributingLayerEmptyScissorPartialSwap) {
   scoped_refptr<TestContextProvider> provider(TestContextProvider::Create());
   provider->BindToCurrentThread();
   provider->TestContext3d()->set_have_post_sub_buffer(true);
-  std::unique_ptr<OutputSurface> output_surface(
-      FakeOutputSurface::CreateDelegating3d(provider));
+  std::unique_ptr<CompositorFrameSink> compositor_frame_sink(
+      FakeCompositorFrameSink::Create3d(provider));
   std::unique_ptr<LayerTreeHostImpl> my_host_impl = SetupLayersForOpacity(
       DefaultSettings(), true, this, &task_runner_provider_,
       &shared_bitmap_manager, &task_graph_runner, &stats_instrumentation_,
-      output_surface.get());
+      compositor_frame_sink.get());
   {
     LayerTreeHostImpl::FrameData frame;
     EXPECT_EQ(DRAW_SUCCESS, my_host_impl->PrepareToDraw(&frame));
@@ -7503,7 +7434,7 @@ TEST_F(LayerTreeHostImplTest, ContributingLayerEmptyScissorPartialSwap) {
     my_host_impl->DrawLayers(&frame);
     my_host_impl->DidDrawAllLayers(frame);
   }
-  my_host_impl->ReleaseOutputSurface();
+  my_host_impl->ReleaseCompositorFrameSink();
 }
 
 TEST_F(LayerTreeHostImplTest, ContributingLayerEmptyScissorNoPartialSwap) {
@@ -7512,12 +7443,12 @@ TEST_F(LayerTreeHostImplTest, ContributingLayerEmptyScissorNoPartialSwap) {
   scoped_refptr<TestContextProvider> provider(TestContextProvider::Create());
   provider->BindToCurrentThread();
   provider->TestContext3d()->set_have_post_sub_buffer(true);
-  std::unique_ptr<OutputSurface> output_surface(
-      FakeOutputSurface::CreateDelegating3d(provider));
+  std::unique_ptr<CompositorFrameSink> compositor_frame_sink(
+      FakeCompositorFrameSink::Create3d(provider));
   std::unique_ptr<LayerTreeHostImpl> my_host_impl = SetupLayersForOpacity(
       DefaultSettings(), false, this, &task_runner_provider_,
       &shared_bitmap_manager, &task_graph_runner, &stats_instrumentation_,
-      output_surface.get());
+      compositor_frame_sink.get());
   {
     LayerTreeHostImpl::FrameData frame;
     EXPECT_EQ(DRAW_SUCCESS, my_host_impl->PrepareToDraw(&frame));
@@ -7534,16 +7465,16 @@ TEST_F(LayerTreeHostImplTest, ContributingLayerEmptyScissorNoPartialSwap) {
     my_host_impl->DrawLayers(&frame);
     my_host_impl->DidDrawAllLayers(frame);
   }
-  my_host_impl->ReleaseOutputSurface();
+  my_host_impl->ReleaseCompositorFrameSink();
 }
 
 TEST_F(LayerTreeHostImplTest, LayersFreeTextures) {
   std::unique_ptr<TestWebGraphicsContext3D> context =
       TestWebGraphicsContext3D::Create();
   TestWebGraphicsContext3D* context3d = context.get();
-  std::unique_ptr<OutputSurface> output_surface(
-      FakeOutputSurface::CreateDelegating3d(std::move(context)));
-  CreateHostImpl(DefaultSettings(), std::move(output_surface));
+  std::unique_ptr<CompositorFrameSink> compositor_frame_sink(
+      FakeCompositorFrameSink::Create3d(std::move(context)));
+  CreateHostImpl(DefaultSettings(), std::move(compositor_frame_sink));
 
   std::unique_ptr<LayerImpl> root_layer =
       LayerImpl::Create(host_impl_->active_tree(), 1);
@@ -7570,7 +7501,6 @@ TEST_F(LayerTreeHostImplTest, LayersFreeTextures) {
   EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
   host_impl_->DrawLayers(&frame);
   host_impl_->DidDrawAllLayers(frame);
-  host_impl_->SwapBuffers(frame);
 
   EXPECT_GT(context3d->NumTextures(), 0u);
 
@@ -7606,7 +7536,6 @@ TEST_F(LayerTreeHostImplTest, HasTransparentBackground) {
   }
   host_impl_->DrawLayers(&frame);
   host_impl_->DidDrawAllLayers(frame);
-  host_impl_->SwapBuffers(frame);
 
   // Cause damage so we would draw something if possible.
   host_impl_->SetFullViewportDamage();
@@ -7621,14 +7550,12 @@ TEST_F(LayerTreeHostImplTest, HasTransparentBackground) {
   }
   host_impl_->DrawLayers(&frame);
   host_impl_->DidDrawAllLayers(frame);
-  host_impl_->SwapBuffers(frame);
 }
 
-class LayerTreeHostImplTestWithDelegatingRenderer
-    : public LayerTreeHostImplTest {
+class LayerTreeHostImplTestDrawAndTestDamage : public LayerTreeHostImplTest {
  protected:
-  std::unique_ptr<OutputSurface> CreateOutputSurface() override {
-    return FakeOutputSurface::CreateDelegating3d();
+  std::unique_ptr<CompositorFrameSink> CreateCompositorFrameSink() override {
+    return FakeCompositorFrameSink::Create3d();
   }
 
   void DrawFrameAndTestDamage(const gfx::Rect& expected_damage) {
@@ -7665,13 +7592,12 @@ class LayerTreeHostImplTestWithDelegatingRenderer
                 root_render_pass->quad_list.ElementAt(1)->visible_rect);
     }
 
-    host_impl_->DrawLayers(&frame);
+    EXPECT_EQ(expect_to_draw, host_impl_->DrawLayers(&frame));
     host_impl_->DidDrawAllLayers(frame);
-    EXPECT_EQ(expect_to_draw, host_impl_->SwapBuffers(frame));
   }
 };
 
-TEST_F(LayerTreeHostImplTestWithDelegatingRenderer, FrameIncludesDamageRect) {
+TEST_F(LayerTreeHostImplTestDrawAndTestDamage, FrameIncludesDamageRect) {
   std::unique_ptr<SolidColorLayerImpl> root =
       SolidColorLayerImpl::Create(host_impl_->active_tree(), 1);
   root->SetPosition(gfx::PointF());
@@ -7833,7 +7759,7 @@ TEST_F(LayerTreeHostImplTest,
        ForcedDrawToSoftwareDeviceSkipsUnsupportedLayers) {
   set_reduce_memory_result(false);
   EXPECT_TRUE(CreateHostImpl(DefaultSettings(),
-                             FakeOutputSurface::CreateDelegatingSoftware()));
+                             FakeCompositorFrameSink::CreateSoftware()));
 
   const gfx::Transform external_transform;
   const gfx::Rect external_viewport;
@@ -7863,23 +7789,98 @@ TEST_F(LayerTreeHostImplTest,
             last_on_draw_frame_->will_draw_layers[0]);
 }
 
-// Checks that we have a non-0 default allocation if we pass a context that
-// doesn't support memory management extensions.
-TEST_F(LayerTreeHostImplTest, DefaultMemoryAllocation) {
-  host_impl_->ReleaseOutputSurface();
+// Checks that we use the memory limits provided.
+TEST_F(LayerTreeHostImplTest, MemoryLimits) {
+  host_impl_->ReleaseCompositorFrameSink();
   host_impl_ = nullptr;
 
+  const size_t kGpuByteLimit = 1234321;
+  const size_t kSoftwareByteLimit = 4321234;
+  const size_t kGpuResourceLimit = 2345432;
+  const size_t kSoftwareResourceLimit = 5432345;
+  const gpu::MemoryAllocation::PriorityCutoff kGpuCutoff =
+      gpu::MemoryAllocation::CUTOFF_ALLOW_EVERYTHING;
+  const gpu::MemoryAllocation::PriorityCutoff kSoftwareCutoff =
+      gpu::MemoryAllocation::CUTOFF_ALLOW_NICE_TO_HAVE;
+
+  const TileMemoryLimitPolicy kGpuTileCutoff =
+      ManagedMemoryPolicy::PriorityCutoffToTileMemoryLimitPolicy(kGpuCutoff);
+  const TileMemoryLimitPolicy kSoftwareTileCutoff =
+      ManagedMemoryPolicy::PriorityCutoffToTileMemoryLimitPolicy(
+          kSoftwareCutoff);
+  const TileMemoryLimitPolicy kNothingTileCutoff =
+      ManagedMemoryPolicy::PriorityCutoffToTileMemoryLimitPolicy(
+          gpu::MemoryAllocation::CUTOFF_ALLOW_NOTHING);
+  EXPECT_NE(kGpuTileCutoff, kNothingTileCutoff);
+  EXPECT_NE(kSoftwareTileCutoff, kNothingTileCutoff);
+
   LayerTreeSettings settings = DefaultSettings();
+  settings.gpu_memory_policy =
+      ManagedMemoryPolicy(kGpuByteLimit, kGpuCutoff, kGpuResourceLimit);
+  settings.software_memory_policy = ManagedMemoryPolicy(
+      kSoftwareByteLimit, kSoftwareCutoff, kSoftwareResourceLimit);
   host_impl_ = LayerTreeHostImpl::Create(
       settings, this, &task_runner_provider_, &stats_instrumentation_,
       &shared_bitmap_manager_, &gpu_memory_buffer_manager_, &task_graph_runner_,
       AnimationHost::CreateForTesting(ThreadInstance::IMPL), 0);
 
-  output_surface_ =
-      FakeOutputSurface::CreateDelegating3d(TestWebGraphicsContext3D::Create());
+  // Gpu compositing.
+  compositor_frame_sink_ =
+      FakeCompositorFrameSink::Create3d(TestWebGraphicsContext3D::Create());
   host_impl_->SetVisible(true);
-  host_impl_->InitializeRenderer(output_surface_.get());
-  EXPECT_LT(0ul, host_impl_->memory_allocation_limit_bytes());
+  host_impl_->InitializeRenderer(compositor_frame_sink_.get());
+  {
+    const auto& state = host_impl_->global_tile_state();
+    EXPECT_EQ(kGpuByteLimit, state.hard_memory_limit_in_bytes);
+    EXPECT_EQ(kGpuResourceLimit, state.num_resources_limit);
+    EXPECT_EQ(kGpuTileCutoff, state.memory_limit_policy);
+  }
+
+  // Not visible, drops to 0.
+  host_impl_->SetVisible(false);
+  {
+    const auto& state = host_impl_->global_tile_state();
+    EXPECT_EQ(0u, state.hard_memory_limit_in_bytes);
+    EXPECT_EQ(kGpuResourceLimit, state.num_resources_limit);
+    EXPECT_EQ(kNothingTileCutoff, state.memory_limit_policy);
+  }
+
+  // Visible, is the gpu limit again.
+  host_impl_->SetVisible(true);
+  {
+    const auto& state = host_impl_->global_tile_state();
+    EXPECT_EQ(kGpuByteLimit, state.hard_memory_limit_in_bytes);
+    EXPECT_EQ(kGpuResourceLimit, state.num_resources_limit);
+  }
+
+  // Software compositing.
+  host_impl_->ReleaseCompositorFrameSink();
+  compositor_frame_sink_ = FakeCompositorFrameSink::CreateSoftware();
+  host_impl_->InitializeRenderer(compositor_frame_sink_.get());
+  {
+    const auto& state = host_impl_->global_tile_state();
+    EXPECT_EQ(kSoftwareByteLimit, state.hard_memory_limit_in_bytes);
+    EXPECT_EQ(kSoftwareResourceLimit, state.num_resources_limit);
+    EXPECT_EQ(kSoftwareTileCutoff, state.memory_limit_policy);
+  }
+
+  // Not visible, drops to 0.
+  host_impl_->SetVisible(false);
+  {
+    const auto& state = host_impl_->global_tile_state();
+    EXPECT_EQ(0u, state.hard_memory_limit_in_bytes);
+    EXPECT_EQ(kSoftwareResourceLimit, state.num_resources_limit);
+    EXPECT_EQ(kNothingTileCutoff, state.memory_limit_policy);
+  }
+
+  // Visible, is the software limit again.
+  host_impl_->SetVisible(true);
+  {
+    const auto& state = host_impl_->global_tile_state();
+    EXPECT_EQ(kSoftwareByteLimit, state.hard_memory_limit_in_bytes);
+    EXPECT_EQ(kSoftwareResourceLimit, state.num_resources_limit);
+    EXPECT_EQ(kSoftwareTileCutoff, state.memory_limit_policy);
+  }
 }
 
 TEST_F(LayerTreeHostImplTest, RequireHighResWhenVisible) {
@@ -7939,9 +7940,9 @@ class LayerTreeHostImplTestPrepareTiles : public LayerTreeHostImplTest {
         new FakeLayerTreeHostImpl(LayerTreeSettings(), &task_runner_provider_,
                                   &shared_bitmap_manager_, &task_graph_runner_);
     host_impl_.reset(fake_host_impl_);
-    output_surface_ = CreateOutputSurface();
+    compositor_frame_sink_ = CreateCompositorFrameSink();
     host_impl_->SetVisible(true);
-    host_impl_->InitializeRenderer(output_surface_.get());
+    host_impl_->InitializeRenderer(compositor_frame_sink_.get());
     host_impl_->SetViewportSize(gfx::Size(10, 10));
   }
 
@@ -7960,9 +7961,9 @@ TEST_F(LayerTreeHostImplTest, UIResourceManagement) {
   std::unique_ptr<TestWebGraphicsContext3D> context =
       TestWebGraphicsContext3D::Create();
   TestWebGraphicsContext3D* context3d = context.get();
-  std::unique_ptr<FakeOutputSurface> output_surface =
-      FakeOutputSurface::CreateDelegating3d();
-  CreateHostImpl(DefaultSettings(), std::move(output_surface));
+  std::unique_ptr<FakeCompositorFrameSink> compositor_frame_sink =
+      FakeCompositorFrameSink::Create3d();
+  CreateHostImpl(DefaultSettings(), std::move(compositor_frame_sink));
 
   EXPECT_EQ(0u, context3d->NumTextures());
 
@@ -8004,7 +8005,7 @@ TEST_F(LayerTreeHostImplTest, CreateETC1UIResource) {
   std::unique_ptr<TestWebGraphicsContext3D> context =
       TestWebGraphicsContext3D::Create();
   TestWebGraphicsContext3D* context3d = context.get();
-  CreateHostImpl(DefaultSettings(), FakeOutputSurface::CreateDelegating3d());
+  CreateHostImpl(DefaultSettings(), FakeCompositorFrameSink::Create3d());
 
   EXPECT_EQ(0u, context3d->NumTextures());
 
@@ -8033,7 +8034,7 @@ TEST_F(LayerTreeHostImplTest, ShutdownReleasesContext) {
 
   CreateHostImpl(
       DefaultSettings(),
-      base::MakeUnique<TestDelegatingOutputSurface>(
+      base::MakeUnique<TestCompositorFrameSink>(
           context_provider, TestContextProvider::CreateWorker(),
           FakeOutputSurface::Create3d(context_provider), nullptr, nullptr,
           RendererSettings(), base::ThreadTaskRunnerHandle::Get().get(),
@@ -8052,14 +8053,13 @@ TEST_F(LayerTreeHostImplTest, ShutdownReleasesContext) {
   EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
   host_impl_->DrawLayers(&frame);
   host_impl_->DidDrawAllLayers(frame);
-  host_impl_->SwapBuffers(frame);
 
   // The CopyOutputResult's callback has a ref on the ContextProvider and a
   // texture in a texture mailbox.
   EXPECT_FALSE(context_provider->HasOneRef());
   EXPECT_EQ(1u, context_provider->TestContext3d()->NumTextures());
 
-  host_impl_->ReleaseOutputSurface();
+  host_impl_->ReleaseCompositorFrameSink();
   host_impl_ = nullptr;
 
   // The CopyOutputResult's callback was cancelled, the CopyOutputResult
@@ -8478,7 +8478,7 @@ TEST_F(LayerTreeHostImplTest, ScrollInvisibleScrollerWithVisibleScrollChild) {
 }
 
 // Make sure LatencyInfo carried by LatencyInfoSwapPromise are passed
-// to CompositorFrameMetadata after SwapBuffers();
+// in CompositorFrameMetadata.
 TEST_F(LayerTreeHostImplTest, LatencyInfoPassedToCompositorFrameMetadata) {
   std::unique_ptr<SolidColorLayerImpl> root =
       SolidColorLayerImpl::Create(host_impl_->active_tree(), 1);
@@ -8490,8 +8490,9 @@ TEST_F(LayerTreeHostImplTest, LatencyInfoPassedToCompositorFrameMetadata) {
   host_impl_->active_tree()->SetRootLayerForTesting(std::move(root));
   host_impl_->active_tree()->BuildPropertyTreesForTesting();
 
-  FakeOutputSurface* fake_output_surface =
-      static_cast<FakeOutputSurface*>(host_impl_->output_surface());
+  FakeCompositorFrameSink* fake_compositor_frame_sink =
+      static_cast<FakeCompositorFrameSink*>(
+          host_impl_->compositor_frame_sink());
 
   ui::LatencyInfo latency_info;
   latency_info.AddLatencyNumber(
@@ -8503,12 +8504,11 @@ TEST_F(LayerTreeHostImplTest, LatencyInfoPassedToCompositorFrameMetadata) {
   gfx::Rect full_frame_damage(host_impl_->DrawViewportSize());
   LayerTreeHostImpl::FrameData frame;
   EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
-  host_impl_->DrawLayers(&frame);
+  EXPECT_TRUE(host_impl_->DrawLayers(&frame));
   host_impl_->DidDrawAllLayers(frame);
-  EXPECT_TRUE(host_impl_->SwapBuffers(frame));
 
   const std::vector<ui::LatencyInfo>& metadata_latency_after =
-      fake_output_surface->last_sent_frame()->metadata.latency_info;
+      fake_compositor_frame_sink->last_sent_frame()->metadata.latency_info;
   EXPECT_EQ(1u, metadata_latency_after.size());
   EXPECT_TRUE(metadata_latency_after[0].FindLatency(
       ui::INPUT_EVENT_LATENCY_BEGIN_RWH_COMPONENT, 0, NULL));
@@ -8527,8 +8527,9 @@ TEST_F(LayerTreeHostImplTest, SelectionBoundsPassedToCompositorFrameMetadata) {
   host_impl_->active_tree()->BuildPropertyTreesForTesting();
 
   // Ensure the default frame selection bounds are empty.
-  FakeOutputSurface* fake_output_surface =
-      static_cast<FakeOutputSurface*>(host_impl_->output_surface());
+  FakeCompositorFrameSink* fake_compositor_frame_sink =
+      static_cast<FakeCompositorFrameSink*>(
+          host_impl_->compositor_frame_sink());
 
   // Plumb the layer-local selection bounds.
   gfx::Point selection_top(5, 0);
@@ -8547,13 +8548,12 @@ TEST_F(LayerTreeHostImplTest, SelectionBoundsPassedToCompositorFrameMetadata) {
   gfx::Rect full_frame_damage(host_impl_->DrawViewportSize());
   LayerTreeHostImpl::FrameData frame;
   EXPECT_EQ(DRAW_SUCCESS, host_impl_->PrepareToDraw(&frame));
-  host_impl_->DrawLayers(&frame);
+  EXPECT_TRUE(host_impl_->DrawLayers(&frame));
   host_impl_->DidDrawAllLayers(frame);
-  EXPECT_TRUE(host_impl_->SwapBuffers(frame));
 
   // Ensure the selection bounds have propagated to the frame metadata.
   const Selection<gfx::SelectionBound>& selection_after =
-      fake_output_surface->last_sent_frame()->metadata.selection;
+      fake_compositor_frame_sink->last_sent_frame()->metadata.selection;
   EXPECT_EQ(selection.start.type, selection_after.start.type());
   EXPECT_EQ(selection.end.type, selection_after.end.type());
   EXPECT_EQ(gfx::PointF(selection_bottom), selection_after.start.edge_bottom());
@@ -8569,7 +8569,10 @@ class SimpleSwapPromiseMonitor : public SwapPromiseMonitor {
                            int* set_needs_commit_count,
                            int* set_needs_redraw_count,
                            int* forward_to_main_count)
-      : SwapPromiseMonitor(layer_tree_host, layer_tree_host_impl),
+      : SwapPromiseMonitor(
+            (layer_tree_host ? layer_tree_host->GetSwapPromiseManager()
+                             : nullptr),
+            layer_tree_host_impl),
         set_needs_commit_count_(set_needs_commit_count),
         set_needs_redraw_count_(set_needs_redraw_count),
         forward_to_main_count_(forward_to_main_count) {}
@@ -8618,7 +8621,9 @@ TEST_F(LayerTreeHostImplTest, SimpleSwapPromiseMonitor) {
         new SimpleSwapPromiseMonitor(
             NULL, host_impl_.get(), &set_needs_commit_count,
             &set_needs_redraw_count, &forward_to_main_count));
-    host_impl_->SetNeedsRedrawRect(gfx::Rect(10, 10));
+    // Redraw with damage.
+    host_impl_->SetFullViewportDamage();
+    host_impl_->SetNeedsRedraw();
     EXPECT_EQ(0, set_needs_commit_count);
     EXPECT_EQ(2, set_needs_redraw_count);
     EXPECT_EQ(0, forward_to_main_count);
@@ -8629,17 +8634,18 @@ TEST_F(LayerTreeHostImplTest, SimpleSwapPromiseMonitor) {
         new SimpleSwapPromiseMonitor(
             NULL, host_impl_.get(), &set_needs_commit_count,
             &set_needs_redraw_count, &forward_to_main_count));
-    // Empty damage rect won't signal the monitor.
-    host_impl_->SetNeedsRedrawRect(gfx::Rect());
+    // Redraw without damage.
+    host_impl_->SetNeedsRedraw();
     EXPECT_EQ(0, set_needs_commit_count);
-    EXPECT_EQ(2, set_needs_redraw_count);
+    EXPECT_EQ(3, set_needs_redraw_count);
     EXPECT_EQ(0, forward_to_main_count);
   }
 
+  set_needs_commit_count = 0;
+  set_needs_redraw_count = 0;
+  forward_to_main_count = 0;
+
   {
-    set_needs_commit_count = 0;
-    set_needs_redraw_count = 0;
-    forward_to_main_count = 0;
     std::unique_ptr<SimpleSwapPromiseMonitor> swap_promise_monitor(
         new SimpleSwapPromiseMonitor(
             NULL, host_impl_.get(), &set_needs_commit_count,
@@ -8686,7 +8692,7 @@ class LayerTreeHostImplWithTopControlsTest : public LayerTreeHostImplTest {
  public:
   void SetUp() override {
     LayerTreeSettings settings = DefaultSettings();
-    CreateHostImpl(settings, CreateOutputSurface());
+    CreateHostImpl(settings, CreateCompositorFrameSink());
     host_impl_->active_tree()->set_top_controls_height(top_controls_height_);
     host_impl_->sync_tree()->set_top_controls_height(top_controls_height_);
     host_impl_->active_tree()->SetCurrentTopControlsShownRatio(1.f);
@@ -9593,7 +9599,7 @@ class LayerTreeHostImplWithImplicitLimitsTest : public LayerTreeHostImplTest {
   void SetUp() override {
     LayerTreeSettings settings = DefaultSettings();
     settings.max_memory_for_prepaint_percentage = 50;
-    CreateHostImpl(settings, CreateOutputSurface());
+    CreateHostImpl(settings, CreateCompositorFrameSink());
   }
 };
 
@@ -9698,8 +9704,8 @@ TEST_F(LayerTreeHostImplTest, OnDrawConstraintSetNeedsRedraw) {
 
 class ResourcelessSoftwareLayerTreeHostImplTest : public LayerTreeHostImplTest {
  protected:
-  std::unique_ptr<OutputSurface> CreateOutputSurface() override {
-    return FakeOutputSurface::CreateDelegating3d();
+  std::unique_ptr<CompositorFrameSink> CreateCompositorFrameSink() override {
+    return FakeCompositorFrameSink::Create3d();
   }
 };
 
@@ -9993,6 +9999,19 @@ TEST_F(LayerTreeHostImplTest, ScrollAnimated) {
   host_impl_->DidFinishImplFrame();
 }
 
+TEST_F(LayerTreeHostImplTest, SecondScrollAnimatedBeginNotIgnored) {
+  const gfx::Size content_size(1000, 1000);
+  const gfx::Size viewport_size(50, 100);
+  CreateBasicVirtualViewportLayers(viewport_size, content_size);
+
+  EXPECT_EQ(InputHandler::SCROLL_ON_IMPL_THREAD,
+            host_impl_->ScrollAnimatedBegin(gfx::Point()).thread);
+
+  // The second ScrollAnimatedBegin should not get ignored.
+  EXPECT_EQ(InputHandler::SCROLL_ON_IMPL_THREAD,
+            host_impl_->ScrollAnimatedBegin(gfx::Point()).thread);
+}
+
 // Verfify that a smooth scroll animation doesn't jump when UpdateTarget gets
 // called before the animation is started.
 TEST_F(LayerTreeHostImplTest, AnimatedScrollUpdateTargetBeforeStarting) {
@@ -10042,6 +10061,59 @@ TEST_F(LayerTreeHostImplTest, AnimatedScrollUpdateTargetBeforeStarting) {
   // Verify no jump.
   float y = scrolling_layer->CurrentScrollOffset().y();
   EXPECT_TRUE(y > 1 && y < 49);
+}
+
+TEST_F(LayerTreeHostImplTest, ScrollAnimatedWithDelay) {
+  const gfx::Size content_size(1000, 1000);
+  const gfx::Size viewport_size(50, 100);
+  CreateBasicVirtualViewportLayers(viewport_size, content_size);
+
+  DrawFrame();
+
+  base::TimeTicks start_time =
+      base::TimeTicks() + base::TimeDelta::FromMilliseconds(100);
+  BeginFrameArgs begin_frame_args =
+      CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE);
+
+  // Create animation with a 100ms delay.
+  EXPECT_EQ(InputHandler::SCROLL_ON_IMPL_THREAD,
+            host_impl_
+                ->ScrollAnimated(gfx::Point(), gfx::Vector2d(0, 100),
+                                 base::TimeDelta::FromMilliseconds(100))
+                .thread);
+  LayerImpl* scrolling_layer = host_impl_->CurrentlyScrollingLayer();
+  EXPECT_EQ(host_impl_->OuterViewportScrollLayer(), scrolling_layer);
+
+  // First tick, animation is started.
+  begin_frame_args.frame_time = start_time;
+  host_impl_->WillBeginImplFrame(begin_frame_args);
+  host_impl_->UpdateAnimationState(true);
+  EXPECT_EQ(gfx::ScrollOffset(), scrolling_layer->CurrentScrollOffset());
+  host_impl_->DidFinishImplFrame();
+
+  // Second tick after 50ms, animation should be half way done since
+  // the duration due to delay is 100ms.
+  begin_frame_args.frame_time =
+      start_time + base::TimeDelta::FromMilliseconds(50);
+  host_impl_->WillBeginImplFrame(begin_frame_args);
+  host_impl_->UpdateAnimationState(true);
+  EXPECT_EQ(50, scrolling_layer->CurrentScrollOffset().y());
+  host_impl_->DidFinishImplFrame();
+
+  // Update target.
+  EXPECT_EQ(InputHandler::SCROLL_ON_IMPL_THREAD,
+            host_impl_
+                ->ScrollAnimated(gfx::Point(), gfx::Vector2d(0, 100),
+                                 base::TimeDelta::FromMilliseconds(150))
+                .thread);
+
+  // Third tick after 100ms, should be at the target position since update
+  // target was called with a large value of jank.
+  begin_frame_args.frame_time =
+      start_time + base::TimeDelta::FromMilliseconds(100);
+  host_impl_->WillBeginImplFrame(begin_frame_args);
+  host_impl_->UpdateAnimationState(true);
+  EXPECT_LT(100, scrolling_layer->CurrentScrollOffset().y());
 }
 
 // Test that a smooth scroll offset animation is aborted when followed by a
@@ -10563,26 +10635,13 @@ TEST_F(LayerTreeHostImplTest, DidBecomeActive) {
   EXPECT_EQ(2u, raw_pending_layer->did_become_active_call_count());
   EXPECT_EQ(1u, raw_mask_layer->did_become_active_call_count());
 
-  std::unique_ptr<FakePictureLayerImpl> replica_layer =
-      FakePictureLayerImpl::Create(pending_tree, 12);
-  std::unique_ptr<FakePictureLayerImpl> replica_mask_layer =
-      FakePictureLayerImpl::Create(pending_tree, 13);
-  FakePictureLayerImpl* raw_replica_mask_layer = replica_mask_layer.get();
-  replica_layer->test_properties()->SetMaskLayer(std::move(replica_mask_layer));
-  raw_pending_layer->test_properties()->SetReplicaLayer(
-      std::move(replica_layer));
-  ASSERT_EQ(raw_replica_mask_layer, raw_pending_layer->test_properties()
-                                        ->replica_layer->test_properties()
-                                        ->mask_layer);
   pending_tree->BuildPropertyTreesForTesting();
 
   EXPECT_EQ(2u, raw_pending_layer->did_become_active_call_count());
   EXPECT_EQ(1u, raw_mask_layer->did_become_active_call_count());
-  EXPECT_EQ(0u, raw_replica_mask_layer->did_become_active_call_count());
   pending_tree->DidBecomeActive();
   EXPECT_EQ(3u, raw_pending_layer->did_become_active_call_count());
   EXPECT_EQ(2u, raw_mask_layer->did_become_active_call_count());
-  EXPECT_EQ(1u, raw_replica_mask_layer->did_become_active_call_count());
 }
 
 TEST_F(LayerTreeHostImplTest, WheelScrollWithPageScaleFactorOnInnerLayer) {
@@ -10627,7 +10686,9 @@ TEST_F(LayerTreeHostImplTest, WheelScrollWithPageScaleFactorOnInnerLayer) {
 class LayerTreeHostImplCountingLostSurfaces : public LayerTreeHostImplTest {
  public:
   LayerTreeHostImplCountingLostSurfaces() : num_lost_surfaces_(0) {}
-  void DidLoseOutputSurfaceOnImplThread() override { num_lost_surfaces_++; }
+  void DidLoseCompositorFrameSinkOnImplThread() override {
+    num_lost_surfaces_++;
+  }
 
  protected:
   int num_lost_surfaces_;
@@ -10638,9 +10699,9 @@ TEST_F(LayerTreeHostImplCountingLostSurfaces, TwiceLostSurface) {
   // we go from having a valid output surface to not having a valid output
   // surface.
   EXPECT_EQ(0, num_lost_surfaces_);
-  host_impl_->DidLoseOutputSurface();
+  host_impl_->DidLoseCompositorFrameSink();
   EXPECT_EQ(1, num_lost_surfaces_);
-  host_impl_->DidLoseOutputSurface();
+  host_impl_->DidLoseCompositorFrameSink();
   EXPECT_LE(1, num_lost_surfaces_);
 }
 
@@ -10875,9 +10936,8 @@ TEST_F(LayerTreeHostImplTest, GpuRasterizationStatusModes) {
 
   LayerTreeSettings msaaSettings = GpuRasterizationEnabledSettings();
   msaaSettings.gpu_rasterization_msaa_sample_count = 4;
-  EXPECT_TRUE(CreateHostImpl(
-      msaaSettings,
-      FakeOutputSurface::CreateDelegating3d(std::move(context_with_msaa))));
+  EXPECT_TRUE(CreateHostImpl(msaaSettings, FakeCompositorFrameSink::Create3d(
+                                               std::move(context_with_msaa))));
   host_impl_->SetHasGpuRasterizationTrigger(true);
   host_impl_->SetContentIsSuitableForGpuRasterization(false);
   host_impl_->CommitComplete();
@@ -10888,8 +10948,7 @@ TEST_F(LayerTreeHostImplTest, GpuRasterizationStatusModes) {
 
   LayerTreeSettings settings = DefaultSettings();
   settings.gpu_rasterization_enabled = false;
-  EXPECT_TRUE(
-      CreateHostImpl(settings, FakeOutputSurface::CreateDelegating3d()));
+  EXPECT_TRUE(CreateHostImpl(settings, FakeCompositorFrameSink::Create3d()));
   host_impl_->SetHasGpuRasterizationTrigger(true);
   host_impl_->SetContentIsSuitableForGpuRasterization(true);
   host_impl_->CommitComplete();
@@ -10898,8 +10957,7 @@ TEST_F(LayerTreeHostImplTest, GpuRasterizationStatusModes) {
   EXPECT_FALSE(host_impl_->use_gpu_rasterization());
 
   settings.gpu_rasterization_forced = true;
-  EXPECT_TRUE(
-      CreateHostImpl(settings, FakeOutputSurface::CreateDelegating3d()));
+  EXPECT_TRUE(CreateHostImpl(settings, FakeCompositorFrameSink::Create3d()));
 
   host_impl_->SetHasGpuRasterizationTrigger(false);
   host_impl_->SetContentIsSuitableForGpuRasterization(false);
@@ -10918,10 +10976,10 @@ class MsaaIsSlowLayerTreeHostImplTest : public LayerTreeHostImplTest {
     auto context_provider = TestContextProvider::Create();
     context_provider->UnboundTestContext3d()->SetMaxSamples(4);
     context_provider->UnboundTestContext3d()->set_msaa_is_slow(msaa_is_slow);
-    auto msaa_is_normal_output_surface =
-        FakeOutputSurface::CreateDelegating3d(context_provider);
-    EXPECT_TRUE(
-        CreateHostImpl(settings, std::move(msaa_is_normal_output_surface)));
+    auto msaa_is_normal_compositor_frame_sink =
+        FakeCompositorFrameSink::Create3d(context_provider);
+    EXPECT_TRUE(CreateHostImpl(
+        settings, std::move(msaa_is_normal_compositor_frame_sink)));
   }
 };
 
@@ -10948,12 +11006,11 @@ TEST_F(MsaaIsSlowLayerTreeHostImplTest, GpuRasterizationStatusMsaaIsSlow) {
 }
 
 // A mock output surface which lets us detect calls to ForceReclaimResources.
-class MockReclaimResourcesOutputSurface : public FakeOutputSurface {
+class MockReclaimResourcesCompositorFrameSink : public FakeCompositorFrameSink {
  public:
-  MockReclaimResourcesOutputSurface()
-      : FakeOutputSurface(TestContextProvider::Create(),
-                          TestContextProvider::CreateWorker(),
-                          true) {}
+  MockReclaimResourcesCompositorFrameSink()
+      : FakeCompositorFrameSink(TestContextProvider::Create(),
+                                TestContextProvider::CreateWorker()) {}
 
   MOCK_METHOD0(ForceReclaimResources, void());
 };
@@ -10963,12 +11020,14 @@ class MockReclaimResourcesOutputSurface : public FakeOutputSurface {
 // ensures that BeginCommit triggers ForceReclaimResources. See
 // crbug.com/489515.
 TEST_F(LayerTreeHostImplTest, BeginCommitReclaimsResources) {
-  auto output_surface = base::MakeUnique<MockReclaimResourcesOutputSurface>();
+  auto compositor_frame_sink =
+      base::MakeUnique<MockReclaimResourcesCompositorFrameSink>();
   // Hold an unowned pointer to the output surface to use for mock expectations.
-  MockReclaimResourcesOutputSurface* mock_output_surface = output_surface.get();
+  MockReclaimResourcesCompositorFrameSink* mock_compositor_frame_sink =
+      compositor_frame_sink.get();
 
-  CreateHostImpl(DefaultSettings(), std::move(output_surface));
-  EXPECT_CALL(*mock_output_surface, ForceReclaimResources()).Times(1);
+  CreateHostImpl(DefaultSettings(), std::move(compositor_frame_sink));
+  EXPECT_CALL(*mock_compositor_frame_sink, ForceReclaimResources()).Times(1);
   host_impl_->BeginCommit();
 }
 
@@ -11114,11 +11173,13 @@ TEST_F(LayerTreeHostImplTest, JitterTest) {
   }
 }
 
-// Checks that if we lose a GPU raster enabled OutputSurface and replace it
-// with a software OutputSurface, LayerTreeHostImpl correctly re-computes GPU
+// Checks that if we lose a GPU raster enabled CompositorFrameSink and replace
+// it
+// with a software CompositorFrameSink, LayerTreeHostImpl correctly re-computes
+// GPU
 // rasterization status.
-TEST_F(LayerTreeHostImplTest, RecomputeGpuRasterOnOutputSurfaceChange) {
-  host_impl_->ReleaseOutputSurface();
+TEST_F(LayerTreeHostImplTest, RecomputeGpuRasterOnCompositorFrameSinkChange) {
+  host_impl_->ReleaseCompositorFrameSink();
   host_impl_ = nullptr;
 
   LayerTreeSettings settings = DefaultSettings();
@@ -11131,14 +11192,14 @@ TEST_F(LayerTreeHostImplTest, RecomputeGpuRasterOnOutputSurfaceChange) {
   host_impl_->SetVisible(true);
 
   // InitializeRenderer with a gpu-raster enabled output surface.
-  auto gpu_raster_output_surface =
-      FakeOutputSurface::CreateDelegating3d(TestWebGraphicsContext3D::Create());
-  host_impl_->InitializeRenderer(gpu_raster_output_surface.get());
+  auto gpu_raster_compositor_frame_sink =
+      FakeCompositorFrameSink::Create3d(TestWebGraphicsContext3D::Create());
+  host_impl_->InitializeRenderer(gpu_raster_compositor_frame_sink.get());
   EXPECT_TRUE(host_impl_->use_gpu_rasterization());
 
   // Re-initialize with a software output surface.
-  output_surface_ = FakeOutputSurface::CreateDelegatingSoftware();
-  host_impl_->InitializeRenderer(output_surface_.get());
+  compositor_frame_sink_ = FakeCompositorFrameSink::CreateSoftware();
+  host_impl_->InitializeRenderer(compositor_frame_sink_.get());
   EXPECT_FALSE(host_impl_->use_gpu_rasterization());
 }
 

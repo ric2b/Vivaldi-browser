@@ -10,6 +10,7 @@
 #include "base/command_line.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
+#include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
@@ -26,6 +27,7 @@
 #include "components/translate/core/browser/translate_experiment.h"
 #include "components/translate/core/browser/translate_language_list.h"
 #include "components/translate/core/browser/translate_prefs.h"
+#include "components/translate/core/browser/translate_ranker.h"
 #include "components/translate/core/browser/translate_script.h"
 #include "components/translate/core/browser/translate_url_util.h"
 #include "components/translate/core/common/language_detection_details.h"
@@ -134,6 +136,8 @@ TranslateManager::TranslateManager(
       translate_driver_(translate_client_->GetTranslateDriver()),
       language_state_(translate_driver_),
       weak_method_factory_(this) {
+  if (TranslateRanker::IsEnabled())
+    TranslateRanker::GetInstance()->FetchModelData();  // Asynchronous.
 }
 
 base::WeakPtr<TranslateManager> TranslateManager::GetWeakPtr() {
@@ -141,6 +145,11 @@ base::WeakPtr<TranslateManager> TranslateManager::GetWeakPtr() {
 }
 
 void TranslateManager::InitiateTranslation(const std::string& page_lang) {
+  // TODO(rogerm): Remove ScopedTracker below once crbug.com/646711 is closed.
+  tracked_objects::ScopedTracker tracking_profile(
+      FROM_HERE_WITH_EXPLICIT_FUNCTION(
+          "646711 translate::TranslateManager::InitiateTranslation"));
+
   // Short-circuit out if not in a state where initiating translation makes
   // sense (this method may be called muhtiple times for a given page).
   if (!language_state_.page_needs_translation() ||
@@ -272,6 +281,16 @@ void TranslateManager::InitiateTranslation(const std::string& page_lang) {
     TranslateBrowserMetrics::ReportInitiationStatus(
         TranslateBrowserMetrics::INITIATION_STATUS_LANGUAGE_IN_ULP);
     return;
+  }
+
+  if (TranslateRanker::IsEnabled()) {
+    if (!TranslateRanker::GetInstance()->ShouldOfferTranslation(
+            *translate_client_->GetTranslatePrefs(), language_code,
+            target_lang)) {
+      TranslateBrowserMetrics::ReportInitiationStatus(
+          TranslateBrowserMetrics::INITIATION_STATUS_ABORTED_BY_RANKER);
+      return;
+    }
   }
 
   TranslateBrowserMetrics::ReportInitiationStatus(

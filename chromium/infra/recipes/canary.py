@@ -11,8 +11,8 @@ DEPS = [
 ]
 
 def RunSteps(api):
-  api.gclient.set_config('chromium', GIT_MODE=True)
-  api.bot_update.ensure_checkout(force=True)
+  api.gclient.set_config('chromium')
+  api.bot_update.ensure_checkout()
 
 def GenTests(api):
   yield api.test('basic') + api.properties.generic()

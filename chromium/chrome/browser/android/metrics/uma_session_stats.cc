@@ -7,7 +7,7 @@
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/command_line.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
@@ -65,7 +65,7 @@ void UmaSessionStats::UmaEndSession(JNIEnv* env,
     base::TimeDelta duration = base::TimeTicks::Now() - session_start_time_;
 
     // Note: This metric is recorded separately on desktop in
-    // DesktopEngagementService::EndSession.
+    // DesktopSessionDurationTracker::EndSession.
     UMA_HISTOGRAM_LONG_TIMES("Session.TotalDuration", duration);
 
     DCHECK(g_browser_process);

@@ -51,12 +51,13 @@ class GpuIntegrationTest(
             logging.warning("GpuIntegrationTest unable to take screenshot")
           raise
 
-  def _RestartBrowser(self, reason):
+  @classmethod
+  def _RestartBrowser(cls, reason):
     logging.warning('Restarting browser due to '+ reason)
-    self.StopBrowser()
-    self.SetBrowserOptions(self._finder_options)
-    self.StartBrowser()
-    self.tab = self.browser.tabs[0]
+    cls.StopBrowser()
+    cls.SetBrowserOptions(cls._finder_options)
+    cls.StartBrowser()
+    cls.tab = cls.browser.tabs[0]
 
   def _RunGpuTest(self, url, test_name, *args):
     temp_page = _EmulatedPage(url, test_name)
@@ -68,6 +69,12 @@ class GpuIntegrationTest(
       # aborts the control flow here.
       self.skipTest('SKIPPING TEST due to test expectations')
     try:
+      # TODO(nednguyen): For some reason the arguments are getting wrapped
+      # in another tuple sometimes (like in the WebGL extension tests).
+      # Perhaps only if multiple arguments are yielded in the test
+      # generator?
+      if len(args) == 1 and isinstance(args[0], tuple):
+        args = args[0]
       self.RunActualGpuTest(url, *args)
     except Exception:
       if expectation == 'pass':
@@ -152,12 +159,16 @@ class GpuIntegrationTest(
     # Do not call this directly. Call GetExpectations where necessary.
     raise NotImplementedError
 
-  def setUp(self):
+  @classmethod
+  def _EnsureTabIsAvailable(cls):
     try:
-      self.tab = self.browser.tabs[0]
+      cls.tab = cls.browser.tabs[0]
     except Exception:
       # restart the browser to make sure a failure in a test doesn't
       # propagate to the next test iteration.
       logging.exception("Failure during browser startup")
-      self._RestartBrowser('failure in setup')
+      cls._RestartBrowser('failure in setup')
       raise
+
+  def setUp(self):
+    self._EnsureTabIsAvailable()

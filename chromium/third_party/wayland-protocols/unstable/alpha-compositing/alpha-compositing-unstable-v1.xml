@@ -38,7 +38,7 @@
     reset.
   </description>
 
-  <interface name="zwp_alpha_compositing_v1" version="1">
+  <interface name="zcr_alpha_compositing_v1" version="1">
     <description summary="alpha_compositing">
       The global interface exposing compositing and blending capabilities is
       used to instantiate an interface extension for a wl_surface object.
@@ -67,14 +67,14 @@
 	is raised.
       </description>
 
-      <arg name="id" type="new_id" interface="zwp_blending_v1"
+      <arg name="id" type="new_id" interface="zcr_blending_v1"
 	   summary="the new blending interface id"/>
       <arg name="surface" type="object" interface="wl_surface"
 	   summary="the surface"/>
     </request>
   </interface>
 
-  <interface name="zwp_blending_v1" version="1">
+  <interface name="zcr_blending_v1" version="1">
     <description summary="blending interface to a wl_surface">
       An additional interface to a wl_surface object, which allows the
       client to specify the blending equation used for compositing and
@@ -125,6 +125,6 @@
       </description>
       <arg name="value" type="fixed" summary="the new alpha value"/>
     </request>
-
   </interface>
+
 </protocol>

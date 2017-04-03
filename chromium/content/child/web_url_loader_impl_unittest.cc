@@ -20,7 +20,6 @@
 #include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
 #include "content/child/request_extra_data.h"
-#include "content/child/request_info.h"
 #include "content/child/resource_dispatcher.h"
 #include "content/child/sync_load_response.h"
 #include "content/public/child/fixed_received_data.h"
@@ -67,24 +66,27 @@ class TestResourceDispatcher : public ResourceDispatcher {
 
   // TestDispatcher implementation:
 
-  void StartSync(const RequestInfo& request_info,
-                 ResourceRequestBodyImpl* request_body,
+  void StartSync(std::unique_ptr<ResourceRequest> request,
+                 int routing_id,
                  SyncLoadResponse* response,
                  blink::WebURLRequest::LoadingIPCType ipc_type,
                  mojom::URLLoaderFactory* url_loader_factory) override {
     *response = sync_load_response_;
   }
 
-  int StartAsync(const RequestInfo& request_info,
-                 ResourceRequestBodyImpl* request_body,
-                 std::unique_ptr<RequestPeer> peer,
-                 blink::WebURLRequest::LoadingIPCType ipc_type,
-                 mojom::URLLoaderFactory* url_loader_factory) override {
+  int StartAsync(
+      std::unique_ptr<ResourceRequest> request,
+      int routing_id,
+      scoped_refptr<base::SingleThreadTaskRunner> loading_task_runner,
+      const GURL& frame_origin,
+      std::unique_ptr<RequestPeer> peer,
+      blink::WebURLRequest::LoadingIPCType ipc_type,
+      mojom::URLLoaderFactory* url_loader_factory) override {
     EXPECT_FALSE(peer_);
     EXPECT_EQ(blink::WebURLRequest::LoadingIPCType::ChromeIPC, ipc_type);
     peer_ = std::move(peer);
-    url_ = request_info.url;
-    stream_url_ = request_info.resource_body_stream_url;
+    url_ = request->url;
+    stream_url_ = request->resource_body_stream_url;
     return 1;
   }
 
@@ -137,10 +139,10 @@ class TestWebURLLoaderClient : public blink::WebURLLoaderClient {
   ~TestWebURLLoaderClient() override {}
 
   // blink::WebURLLoaderClient implementation:
-  void willFollowRedirect(blink::WebURLLoader* loader,
-                          blink::WebURLRequest& newRequest,
-                          const blink::WebURLResponse& redirectResponse,
-                          int64_t encodedDataLength) override {
+  bool willFollowRedirect(
+      blink::WebURLLoader* loader,
+      blink::WebURLRequest& newRequest,
+      const blink::WebURLResponse& redirectResponse) override {
     EXPECT_TRUE(loader_);
     EXPECT_EQ(loader_.get(), loader);
 
@@ -153,6 +155,8 @@ class TestWebURLLoaderClient : public blink::WebURLLoaderClient {
 
     if (delete_on_receive_redirect_)
       loader_.reset();
+
+    return true;
   }
 
   void didSendData(blink::WebURLLoader* loader,
@@ -339,7 +343,7 @@ class WebURLLoaderImplTest : public testing::Test {
 
   void DoCompleteRequest() {
     EXPECT_FALSE(client()->did_finish());
-    peer()->OnCompletedRequest(net::OK, false, false, "", base::TimeTicks(),
+    peer()->OnCompletedRequest(net::OK, false, false, base::TimeTicks(),
                                strlen(kTestData));
     EXPECT_TRUE(client()->did_finish());
     // There should be no error.
@@ -349,7 +353,7 @@ class WebURLLoaderImplTest : public testing::Test {
 
   void DoFailRequest() {
     EXPECT_FALSE(client()->did_finish());
-    peer()->OnCompletedRequest(net::ERR_FAILED, false, false, "",
+    peer()->OnCompletedRequest(net::ERR_FAILED, false, false,
                                base::TimeTicks(), strlen(kTestData));
     EXPECT_FALSE(client()->did_finish());
     EXPECT_EQ(net::ERR_FAILED, client()->error().reason);
@@ -395,18 +399,6 @@ TEST_F(WebURLLoaderImplTest, Success) {
 TEST_F(WebURLLoaderImplTest, Redirect) {
   DoStartAsyncRequest();
   DoReceiveRedirect();
-  DoReceiveResponse();
-  DoReceiveData();
-  DoCompleteRequest();
-  EXPECT_FALSE(dispatcher()->canceled());
-  EXPECT_EQ(kTestData, client()->received_data());
-}
-
-// Tests that a redirect to an HTTPS URL with no security info does not
-// crash. Regression test for https://crbug.com/519120
-TEST_F(WebURLLoaderImplTest, RedirectToHTTPSWithEmptySecurityInfo) {
-  DoStartAsyncRequest();
-  DoReceiveHTTPSRedirect();
   DoReceiveResponse();
   DoReceiveData();
   DoCompleteRequest();
@@ -607,7 +599,7 @@ TEST_F(WebURLLoaderImplTest, FtpDeleteOnReceiveMoreData) {
   // Directory listings are only parsed once the request completes, so this will
   // cancel in DoReceiveDataFtp, before the request finishes.
   client()->set_delete_on_receive_data();
-  peer()->OnCompletedRequest(net::OK, false, false, "", base::TimeTicks(),
+  peer()->OnCompletedRequest(net::OK, false, false, base::TimeTicks(),
                               strlen(kTestData));
   EXPECT_FALSE(client()->did_finish());
 }
@@ -651,7 +643,7 @@ TEST_F(WebURLLoaderImplTest, BrowserSideNavigationCommit) {
 
   client()->loader()->loadAsynchronously(request, client());
 
-  // The stream url should have been added to the RequestInfo.
+  // The stream url should have been added to the ResourceRequest.
   ASSERT_TRUE(peer());
   EXPECT_EQ(kNavigationURL, dispatcher()->url());
   EXPECT_EQ(kStreamURL, dispatcher()->stream_url());

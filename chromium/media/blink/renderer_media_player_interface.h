@@ -20,7 +20,6 @@
 // Dictates which type of media playback is being initialized.
 enum MediaPlayerHostMsg_Initialize_Type {
   MEDIA_PLAYER_TYPE_URL,
-  MEDIA_PLAYER_TYPE_MEDIA_SOURCE,
   MEDIA_PLAYER_TYPE_REMOTE_ONLY,
   MEDIA_PLAYER_TYPE_LAST = MEDIA_PLAYER_TYPE_REMOTE_ONLY
 };
@@ -44,7 +43,6 @@ class RendererMediaPlayerInterface {
   virtual void OnTimeUpdate(base::TimeDelta current_timestamp,
                             base::TimeTicks current_time_ticks) = 0;
 
-  virtual void OnWaitingForDecryptionKey() = 0;
   virtual void OnPlayerReleased() = 0;
 
   // Functions called when media player status changes.
@@ -67,15 +65,6 @@ class RendererMediaPlayerInterface {
   // video and release the media player and surface texture when we switch tabs.
   // However, the actual GlTexture is not released to keep the video screenshot.
   virtual void SuspendAndReleaseResources() = 0;
-
-#if defined(VIDEO_HOLE)
-  // Calculate the boundary rectangle of the media player (i.e. location and
-  // size of the video frame).
-  // Returns true if the geometry has been changed since the last call.
-  virtual bool UpdateBoundaryRectangle() = 0;
-
-  virtual const gfx::RectF GetBoundaryRectangle() = 0;
-#endif
 };
 
 class RendererMediaPlayerManagerInterface {
@@ -85,11 +74,9 @@ class RendererMediaPlayerManagerInterface {
                           int player_id,
                           const GURL& url,
                           const GURL& first_party_for_cookies,
-                          int demuxer_client_id,
                           const GURL& frame_url,
                           bool allow_credentials,
-                          int delegate_id,
-                          int media_session_id) = 0;
+                          int delegate_id) = 0;
 
   // Starts the player.
   virtual void Start(int player_id) = 0;

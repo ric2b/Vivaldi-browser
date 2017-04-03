@@ -70,6 +70,7 @@ class TestDataSource : public IPCDataSource {
   }
 
   void Stop() override {}
+  void Abort() override {}
   bool GetSize(int64_t* size_out) override { return false; }
   bool IsStreaming() override { return false; }
   void SetBitrate(int bitrate) override {}
@@ -112,7 +113,7 @@ class DataRequestHandlerTest : public testing::Test {
   }
 
   ~DataRequestHandlerTest() override {
-    base::STLDeleteContainerPairSecondPointers(requests_.begin(), requests_.end());
+    requests_.clear();
   }
 
  protected:

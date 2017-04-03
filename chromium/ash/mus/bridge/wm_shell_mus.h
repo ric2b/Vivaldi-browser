@@ -32,6 +32,7 @@ namespace mus {
 
 class AcceleratorControllerDelegateMus;
 class AcceleratorControllerRegistrar;
+class ImmersiveHandlerFactoryMus;
 class WindowManager;
 class WmRootWindowControllerMus;
 class WmShellMusTestApi;
@@ -61,16 +62,20 @@ class WmShellMus : public WmShell, public ui::WindowTreeClientObserver {
   }
 
   // WmShell:
-  WmWindow* NewContainerWindow() override;
+  bool IsRunningInMash() const override;
+  WmWindow* NewWindow(ui::wm::WindowType window_type,
+                      ui::LayerType layer_type) override;
   WmWindow* GetFocusedWindow() override;
   WmWindow* GetActiveWindow() override;
   WmWindow* GetCaptureWindow() override;
   WmWindow* GetPrimaryRootWindow() override;
   WmWindow* GetRootWindowForDisplayId(int64_t display_id) override;
-  const DisplayInfo& GetDisplayInfo(int64_t display_id) const override;
+  const display::ManagedDisplayInfo& GetDisplayInfo(
+      int64_t display_id) const override;
   bool IsActiveDisplayId(int64_t display_id) const override;
   display::Display GetFirstDisplay() const override;
   bool IsInUnifiedMode() const override;
+  bool IsInUnifiedModeIgnoreMirroring() const override;
   bool IsForceMaximizeOnFirstRun() override;
   void SetDisplayWorkAreaInsets(WmWindow* window,
                                 const gfx::Insets& insets) override;
@@ -84,8 +89,6 @@ class WmShellMus : public WmShell, public ui::WindowTreeClientObserver {
   void RecordGestureAction(GestureActionType action) override;
   void RecordUserMetricsAction(UserMetricsAction action) override;
   void RecordTaskSwitchMetric(TaskSwitchSource source) override;
-  void ShowContextMenu(const gfx::Point& location_in_screen,
-                       ui::MenuSourceType source_type) override;
   std::unique_ptr<WindowResizer> CreateDragWindowResizer(
       std::unique_ptr<WindowResizer> next_window_resizer,
       wm::WindowState* window_state) override;
@@ -93,6 +96,8 @@ class WmShellMus : public WmShell, public ui::WindowTreeClientObserver {
       override;
   std::unique_ptr<wm::MaximizeModeEventHandler> CreateMaximizeModeEventHandler()
       override;
+  std::unique_ptr<WorkspaceEventHandler> CreateWorkspaceEventHandler(
+      WmWindow* workspace_window) override;
   std::unique_ptr<ScopedDisableInternalMouseAndKeyboard>
   CreateScopedDisableInternalMouseAndKeyboard() override;
   std::unique_ptr<ImmersiveFullscreenController>
@@ -106,7 +111,7 @@ class WmShellMus : public WmShell, public ui::WindowTreeClientObserver {
   void AddDisplayObserver(WmDisplayObserver* observer) override;
   void RemoveDisplayObserver(WmDisplayObserver* observer) override;
   void AddPointerWatcher(views::PointerWatcher* watcher,
-                         bool wants_moves) override;
+                         views::PointerWatcherEventTypes events) override;
   void RemovePointerWatcher(views::PointerWatcher* watcher) override;
   bool IsTouchDown() override;
 #if defined(OS_CHROMEOS)
@@ -137,6 +142,7 @@ class WmShellMus : public WmShell, public ui::WindowTreeClientObserver {
       accelerator_controller_delegate_;
   std::unique_ptr<AcceleratorControllerRegistrar>
       accelerator_controller_registrar_;
+  std::unique_ptr<ImmersiveHandlerFactoryMus> immersive_handler_factory_;
   std::unique_ptr<SessionStateDelegate> session_state_delegate_;
 
   base::ObserverList<WmActivationObserver> activation_observers_;

@@ -52,7 +52,7 @@ class VivaldiSessionService {
   bool Load(const base::FilePath &file_name, Browser *browser,
             SessionOptions &opts);
 
-private:
+ private:
   void ResetFile(const base::FilePath& file_name);
   base::File* OpenAndWriteHeader(const base::FilePath& path);
   bool AppendCommandsToFile(
@@ -61,7 +61,7 @@ private:
   bool Read(ScopedVector<sessions::SessionCommand>* commands);
   bool FillBuffer();
   Browser* ProcessSessionWindows(
-      std::vector<sessions::SessionWindow*>* windows,
+    std::vector<std::unique_ptr<sessions::SessionWindow>>* windows,
       SessionID::id_type active_window_id,
       std::vector<SessionRestoreDelegate::RestoredTab>* created_contents);
   void RestoreTabsToBrowser(
@@ -69,7 +69,7 @@ private:
       int initial_tab_count, int selected_tab_index,
       std::vector<SessionRestoreDelegate::RestoredTab>* created_contents);
   void RemoveUnusedRestoreWindows(
-      std::vector<sessions::SessionWindow*>* window_list);
+    std::vector<std::unique_ptr<sessions::SessionWindow>>* window_list);
   Browser* CreateRestoredBrowser(Browser::Type type, gfx::Rect bounds,
                                  ui::WindowShowState show_state,
                                  const std::string& app_name);

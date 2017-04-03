@@ -83,7 +83,9 @@ class CC_EXPORT PictureLayerTiling {
   PictureLayerTiling(WhichTree tree,
                      float contents_scale,
                      scoped_refptr<RasterSource> raster_source,
-                     PictureLayerTilingClient* client);
+                     PictureLayerTilingClient* client,
+                     float min_preraster_distance,
+                     float max_preraster_distance);
   ~PictureLayerTiling();
 
   PictureLayerTilingClient* client() const { return client_; }
@@ -210,6 +212,7 @@ class CC_EXPORT PictureLayerTiling {
 
    private:
     const PictureLayerTiling* tiling_;
+    gfx::Size dest_layer_bounds_;
     gfx::Rect dest_rect_;
     float dest_to_content_scale_;
 
@@ -324,6 +327,8 @@ class CC_EXPORT PictureLayerTiling {
   PictureLayerTilingClient* const client_;
   const WhichTree tree_;
   scoped_refptr<RasterSource> raster_source_;
+  const float min_preraster_distance_;
+  const float max_preraster_distance_;
   TileResolution resolution_;
   bool may_contain_low_resolution_tiles_;
 
@@ -342,6 +347,7 @@ class CC_EXPORT PictureLayerTiling {
   // Other properties used for tile iteration and prioritization.
   float current_content_to_screen_scale_;
   Occlusion current_occlusion_in_layer_space_;
+  float max_skewport_extent_in_screen_space_;
 
   bool has_visible_rect_tiles_;
   bool has_skewport_rect_tiles_;

@@ -47,7 +47,6 @@ Para cambiarlo, presiona Shift + Alt.</translation>
 <translation id="2268813581635650749">Salir de todo</translation>
 <translation id="2297568595583585744">Bandeja de estado</translation>
 <translation id="2303600792989757991">Activar vista general de ventanas</translation>
-<translation id="2372145515558759244">Sincronizando aplicaciones...</translation>
 <translation id="2391579633712104609">180°</translation>
 <translation id="2429753432712299108">El dispositivo Bluetooth "<ph name="DEVICE_NAME" />" solicita permiso para sincronizarse. Antes de aceptar, debes confirmar que aparece la siguiente clave de contraseña en el dispositivo: <ph name="PASSKEY" />.</translation>
 <translation id="2475982808118771221">Se ha producido un error</translation>
@@ -61,7 +60,6 @@ Para cambiarlo, presiona Shift + Alt.</translation>
 <translation id="2727977024730340865">Conexión a un cargador de baja potencia. Es posible que la carga de la batería no sea confiable.</translation>
 <translation id="2761704814324807722">Bandeja de estado, hora <ph name="TIME" />, <ph name="BATTERY" /></translation>
 <translation id="2792498699870441125">Alt+tecla de búsqueda</translation>
-<translation id="2805756323405976993">Aplicaciones</translation>
 <translation id="2819276065543622893">Saldrás de la sesión ahora.</translation>
 <translation id="2825619548187458965">Biblioteca</translation>
 <translation id="2844169650293029770">Dispositivo USB-C (puerto lateral izquierdo delantero)</translation>
@@ -97,7 +95,6 @@ Presiona Mayús o la tecla de búsqueda para cancelar la operación.</translatio
 <translation id="3621712662352432595">Configuración de audio</translation>
 <translation id="3625258641415618104">Capturas de pantalla inhabilitadas</translation>
 <translation id="3626281679859535460">Brillo</translation>
-<translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079">La resolución de <ph name="DISPLAY_NAME" /> se cambió por <ph name="RESOLUTION" />.</translation>
 <translation id="370649949373421643">Habilitar Wi-Fi</translation>
 <translation id="3709443003275901162">Más de 9</translation>
@@ -111,6 +108,8 @@ Presiona Mayús o la tecla de búsqueda para cancelar la operación.</translatio
 <translation id="3866182280516392520">Dirección IPv6</translation>
 <translation id="3891340733213178823">Presiona Ctrl + Mayús + Q dos veces para salir.</translation>
 <translation id="3892641579809465218">Pantalla interna</translation>
+<translation id="3893630138897523026">ChromeVox (comentarios por voz)</translation>
+<translation id="3899995891769452915">Entrada de voz</translation>
 <translation id="3963445509666917109">Altavoz (interno)</translation>
 <translation id="3967919079500697218">Tu administrador inhabilitó la función para realizar capturas de pantalla.</translation>
 <translation id="397105322502079400">Calculando...</translation>
@@ -134,10 +133,8 @@ Presiona Mayús o la tecla de búsqueda para cancelar la operación.</translatio
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl + mayúscula + espacio</translation>
 <translation id="5045002648206642691">Configuración de Google Drive...</translation>
-<translation id="511445211639755999"><ph name="RESOLUTION" />, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">Dispositivos de transmisión disponibles</translation>
 <translation id="5170568018924773124">Mostrar en carpeta</translation>
-<translation id="5191140942132549112">MOSTRAR PREGUNTAS</translation>
 <translation id="5222676887888702881">Salir</translation>
 <translation id="5238774010593222950">No se puede acceder a otra cuenta.</translation>
 <translation id="532063867737390965">El administrador inhabilitó esta configuración de red.</translation>
@@ -185,6 +182,7 @@ Para cambiarlo, presiona Shift + Alt.</translation>
 <translation id="6459472438155181876">Ampliando pantalla para <ph name="DISPLAY_NAME" /></translation>
 <translation id="6490471652906364588">Dispositivo USB-C (puerto derecho)</translation>
 <translation id="6501401484702599040">Transmitiendo pantalla a <ph name="RECEIVER_NAME" /></translation>
+<translation id="6521655319214113338">Entrada de escritura a mano</translation>
 <translation id="6537270692134705506">Captura total de pantalla</translation>
 <translation id="6550675742724504774">Opciones</translation>
 <translation id="6585808820553845416">La sesión terminará en <ph name="SESSION_TIME_REMAINING" />.</translation>
@@ -194,7 +192,6 @@ Para cambiarlo, presiona Shift + Alt.</translation>
 <translation id="6713285437468012787">El dispositivo Bluetooth "<ph name="DEVICE_NAME" />" se sincronizó y ahora está disponible para todos los usuarios. Puedes ir a Configuración para eliminar esta sincronización.</translation>
 <translation id="6785414152754474415">La batería tiene un <ph name="PERCENTAGE" /> % de carga y se está cargando.</translation>
 <translation id="683971173229319003">Tecla de búsqueda + L</translation>
-<translation id="68610848741840742">ChromeVox (comentarios por voz)</translation>
 <translation id="6911468394164995108">Conectarte a otra red...</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6979158407327259162">Google Drive</translation>
@@ -216,8 +213,10 @@ Presiona Alt y la tecla de búsqueda o Mayús para cancelar la operación.</tran
 <translation id="743058460480092004">Cámara y micrófono en uso</translation>
 <translation id="7510334386202674593">Ctrl + mayúscula + L</translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" /> no admite una resolución de <ph name="SPECIFIED_RESOLUTION" />. La resolución se cambió a <ph name="FALLBACK_RESOLUTION" />.</translation>
+<translation id="7562368315689366235">Paleta de emoji</translation>
 <translation id="7573962313813535744">Modo acoplado</translation>
 <translation id="7580671184200851182">Reproducir el mismo audio en todos los altavoces (sonido mono)</translation>
+<translation id="7581273696622423628">Responder encuesta</translation>
 <translation id="7593891976182323525">Tecla de búsqueda o Mayús</translation>
 <translation id="7649070708921625228">Ayuda</translation>
 <translation id="7692480393933218409">Cargando dispositivos USB-C conectados</translation>

@@ -3,8 +3,10 @@
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
  *           (C) 2001 Dirk Mueller (mueller@kde.org)
  *           (C) 2006 Alexey Proskuryakov (ap@webkit.org)
- * Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2012 Apple Inc. All rights reserved.
- * Copyright (C) 2008, 2009 Torch Mobile Inc. All rights reserved. (http://www.torchmobile.com/)
+ * Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2012 Apple Inc. All
+ * rights reserved.
+ * Copyright (C) 2008, 2009 Torch Mobile Inc. All rights reserved.
+ * (http://www.torchmobile.com/)
  * Copyright (C) 2010 Nokia Corporation and/or its subsidiary(-ies)
  * Copyright (C) 2013 Google Inc. All rights reserved.
  *
@@ -32,40 +34,40 @@
 
 namespace blink {
 
-DocumentStyleSheetCollector::DocumentStyleSheetCollector(HeapVector<Member<StyleSheet>>& sheetsForList, HeapVector<Member<CSSStyleSheet>>& activeList, HeapHashSet<Member<Document>>& visitedDocuments)
-    : m_styleSheetsForStyleSheetList(sheetsForList)
-    , m_activeAuthorStyleSheets(activeList)
-    , m_visitedDocuments(visitedDocuments)
-{
+DocumentStyleSheetCollector::DocumentStyleSheetCollector(
+    HeapVector<Member<StyleSheet>>& sheetsForList,
+    HeapVector<Member<CSSStyleSheet>>& activeList,
+    HeapHashSet<Member<Document>>& visitedDocuments)
+    : m_styleSheetsForStyleSheetList(sheetsForList),
+      m_activeAuthorStyleSheets(activeList),
+      m_visitedDocuments(visitedDocuments) {}
+
+DocumentStyleSheetCollector::~DocumentStyleSheetCollector() {}
+
+void DocumentStyleSheetCollector::appendActiveStyleSheets(
+    const HeapVector<Member<CSSStyleSheet>>& sheets) {
+  m_activeAuthorStyleSheets.appendVector(sheets);
 }
 
-DocumentStyleSheetCollector::~DocumentStyleSheetCollector()
-{
+void DocumentStyleSheetCollector::appendActiveStyleSheet(CSSStyleSheet* sheet) {
+  m_activeAuthorStyleSheets.append(sheet);
 }
 
-void DocumentStyleSheetCollector::appendActiveStyleSheets(const HeapVector<Member<CSSStyleSheet>>& sheets)
-{
-    m_activeAuthorStyleSheets.appendVector(sheets);
+void DocumentStyleSheetCollector::appendSheetForList(StyleSheet* sheet) {
+  m_styleSheetsForStyleSheetList.append(sheet);
 }
 
-void DocumentStyleSheetCollector::appendActiveStyleSheet(CSSStyleSheet* sheet)
-{
-    m_activeAuthorStyleSheets.append(sheet);
-}
+ActiveDocumentStyleSheetCollector::ActiveDocumentStyleSheetCollector(
+    StyleSheetCollection& collection)
+    : DocumentStyleSheetCollector(collection.m_styleSheetsForStyleSheetList,
+                                  collection.m_activeAuthorStyleSheets,
+                                  m_visitedDocuments) {}
 
-void DocumentStyleSheetCollector::appendSheetForList(StyleSheet* sheet)
-{
-    m_styleSheetsForStyleSheetList.append(sheet);
-}
+ImportedDocumentStyleSheetCollector::ImportedDocumentStyleSheetCollector(
+    DocumentStyleSheetCollector& collector,
+    HeapVector<Member<StyleSheet>>& sheetForList)
+    : DocumentStyleSheetCollector(sheetForList,
+                                  collector.m_activeAuthorStyleSheets,
+                                  collector.m_visitedDocuments) {}
 
-ActiveDocumentStyleSheetCollector::ActiveDocumentStyleSheetCollector(StyleSheetCollection& collection)
-    : DocumentStyleSheetCollector(collection.m_styleSheetsForStyleSheetList, collection.m_activeAuthorStyleSheets, m_visitedDocuments)
-{
-}
-
-ImportedDocumentStyleSheetCollector::ImportedDocumentStyleSheetCollector(DocumentStyleSheetCollector& collector, HeapVector<Member<StyleSheet>>& sheetForList)
-    : DocumentStyleSheetCollector(sheetForList, collector.m_activeAuthorStyleSheets, collector.m_visitedDocuments)
-{
-}
-
-} // namespace blink
+}  // namespace blink

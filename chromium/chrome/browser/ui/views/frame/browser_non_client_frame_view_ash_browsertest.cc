@@ -5,7 +5,6 @@
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view_ash.h"
 
 #include "ash/common/ash_constants.h"
-#include "ash/common/ash_switches.h"
 #include "ash/common/frame/caption_buttons/frame_caption_button_container_view.h"
 #include "ash/common/frame/header_painter.h"
 #include "ash/common/material_design/material_design_controller.h"
@@ -201,7 +200,7 @@ IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewAshTest, ImmersiveFullscreen) {
   // as full screen, i.e., no light bar and having an origin of (0,0). In
   // non-MD, immersive browser will show a 3 dp light bar on the top.
   revealed_lock.reset();
-  if (ash::MaterialDesignController::IsShelfMaterial()) {
+  if (ash::MaterialDesignController::IsImmersiveModeMaterial()) {
     EXPECT_FALSE(frame_view->ShouldPaint());
     EXPECT_FALSE(frame_view->UseImmersiveLightbarHeaderStyle());
     EXPECT_EQ(0, frame_view->header_painter_->GetHeaderHeightForPainting());

@@ -8,7 +8,7 @@
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/gfx/canvas.h"
 #include "ui/views/controls/button/checkbox.h"
-#include "ui/views/controls/button/label_button.h"
+#include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/button/radio_button.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -35,7 +35,6 @@ class WidgetsWindow : public views::WidgetDelegateView {
   gfx::Size GetPreferredSize() const override;
 
   // Overridden from views::WidgetDelegate:
-  views::View* GetContentsView() override;
   base::string16 GetWindowTitle() const override;
   bool CanResize() const override;
 
@@ -53,9 +52,11 @@ class WidgetsWindow : public views::WidgetDelegateView {
 };
 
 WidgetsWindow::WidgetsWindow()
-    : button_(new views::LabelButton(NULL, base::ASCIIToUTF16("Button"))),
+    : button_(
+          views::MdTextButton::Create(nullptr, base::ASCIIToUTF16("Button"))),
       disabled_button_(
-          new views::LabelButton(NULL, base::ASCIIToUTF16("Disabled button"))),
+          views::MdTextButton::Create(nullptr,
+                                      base::ASCIIToUTF16("Disabled button"))),
       checkbox_(new views::Checkbox(base::ASCIIToUTF16("Checkbox"))),
       checkbox_disabled_(
           new views::Checkbox(base::ASCIIToUTF16("Checkbox disabled"))),
@@ -74,10 +75,8 @@ WidgetsWindow::WidgetsWindow()
       radio_button_selected_disabled_(new views::RadioButton(
           base::ASCIIToUTF16("Radio button selected disabled"),
           1)) {
-  button_->SetStyle(views::Button::STYLE_BUTTON);
   AddChildView(button_);
   disabled_button_->SetEnabled(false);
-  disabled_button_->SetStyle(views::Button::STYLE_BUTTON);
   AddChildView(disabled_button_);
   AddChildView(checkbox_);
   checkbox_disabled_->SetEnabled(false);
@@ -117,10 +116,6 @@ void WidgetsWindow::Layout() {
 
 gfx::Size WidgetsWindow::GetPreferredSize() const {
   return gfx::Size(kWindowWidth, kWindowHeight);
-}
-
-views::View* WidgetsWindow::GetContentsView() {
-  return this;
 }
 
 base::string16 WidgetsWindow::GetWindowTitle() const {

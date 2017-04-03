@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 1999 Lars Knoll (knoll@kde.org)
- * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011 Apple Inc. All rights reserved.
+ * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011 Apple Inc.
+ * All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -30,28 +31,35 @@ namespace blink {
 class StyleRulePage;
 
 class PageRuleCollector {
-    STACK_ALLOCATED();
-public:
-    PageRuleCollector(const ComputedStyle* rootElementStyle, int pageIndex);
+  STACK_ALLOCATED();
 
-    void matchPageRules(RuleSet* rules);
-    const MatchResult& matchedResult() { return m_result; }
+ public:
+  PageRuleCollector(const ComputedStyle* rootElementStyle, int pageIndex);
 
-private:
-    bool isLeftPage(const ComputedStyle* rootElementStyle, int pageIndex) const;
-    bool isRightPage(const ComputedStyle* rootElementStyle, int pageIndex) const { return !isLeftPage(rootElementStyle, pageIndex); }
-    bool isFirstPage(int pageIndex) const;
-    String pageName(int pageIndex) const;
+  void matchPageRules(RuleSet* rules);
+  const MatchResult& matchedResult() { return m_result; }
 
-    void matchPageRulesForList(HeapVector<Member<StyleRulePage>>& matchedRules, const HeapVector<Member<StyleRulePage>>& rules, bool isLeftPage, bool isFirstPage, const String& pageName);
+ private:
+  bool isLeftPage(const ComputedStyle* rootElementStyle, int pageIndex) const;
+  bool isRightPage(const ComputedStyle* rootElementStyle, int pageIndex) const {
+    return !isLeftPage(rootElementStyle, pageIndex);
+  }
+  bool isFirstPage(int pageIndex) const;
+  String pageName(int pageIndex) const;
 
-    const bool m_isLeftPage;
-    const bool m_isFirstPage;
-    const String m_pageName;
+  void matchPageRulesForList(HeapVector<Member<StyleRulePage>>& matchedRules,
+                             const HeapVector<Member<StyleRulePage>>& rules,
+                             bool isLeftPage,
+                             bool isFirstPage,
+                             const String& pageName);
 
-    MatchResult m_result;
+  const bool m_isLeftPage;
+  const bool m_isFirstPage;
+  const String m_pageName;
+
+  MatchResult m_result;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // PageRuleCollector_h
+#endif  // PageRuleCollector_h

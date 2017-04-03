@@ -14,8 +14,13 @@
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/controls/button/button.h"
+#include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/widget/widget.h"
+
+namespace gfx {
+class SlideAnimation;
+}
 
 namespace views {
 class ImageButton;
@@ -44,6 +49,9 @@ class ASH_EXPORT WindowSelectorItem : public views::ButtonListener,
     // Makes sure that text is readable with |background_color|.
     void SetBackgroundColorHint(SkColor background_color);
 
+    // Resets the listener so that the listener can go out of scope.
+    void ResetListener() { listener_ = nullptr; }
+
     void set_padding(const gfx::Insets& padding) { padding_ = padding; }
 
    protected:
@@ -57,6 +65,21 @@ class ASH_EXPORT WindowSelectorItem : public views::ButtonListener,
     DISALLOW_COPY_AND_ASSIGN(OverviewLabelButton);
   };
 
+  // An image button with a close window icon.
+  class OverviewCloseButton : public views::ImageButton {
+   public:
+    explicit OverviewCloseButton(views::ButtonListener* listener);
+    ~OverviewCloseButton() override;
+
+    // Resets the listener so that the listener can go out of scope.
+    void ResetListener() { listener_ = nullptr; }
+
+   private:
+    gfx::ImageSkia icon_image_;
+
+    DISALLOW_COPY_AND_ASSIGN(OverviewCloseButton);
+  };
+
   WindowSelectorItem(WmWindow* window, WindowSelector* window_selector);
   ~WindowSelectorItem() override;
 
@@ -68,8 +91,11 @@ class ASH_EXPORT WindowSelectorItem : public views::ButtonListener,
   // Returns true if |target| is contained in this WindowSelectorItem.
   bool Contains(const WmWindow* target) const;
 
-  // Restores and animates the managed window to it's non overview mode state.
+  // Restores and animates the managed window to its non overview mode state.
   void RestoreWindow();
+
+  // Restores stacking of window captions above the windows, then fades out.
+  void Shutdown();
 
   // Forces the managed window to be shown (ie not hidden or minimized) when
   // calling RestoreWindow().
@@ -101,10 +127,6 @@ class ASH_EXPORT WindowSelectorItem : public views::ButtonListener,
   // with the selection widget.
   void SetSelected(bool selected);
 
-  // Recomputes the positions for the windows in this selection item. This is
-  // dispatched when the bounds of a window change.
-  void RecomputeWindowTransforms();
-
   // Sends an accessibility event indicating that this window became selected
   // so that it's highlighted and announced if accessibility features are
   // enabled.
@@ -113,14 +135,17 @@ class ASH_EXPORT WindowSelectorItem : public views::ButtonListener,
   // Closes |transform_window_|.
   void CloseWindow();
 
+  // Hides the original window header and sets shape or mask on a window.
+  // When masks are used, rounded corner |radius| can be specified.
+  // TODO(varkha): remove |radius|.
+  void HideHeaderAndSetShape(int radius);
+
   // Sets if the item is dimmed in the overview. Changing the value will also
   // change the visibility of the transform windows.
   void SetDimmed(bool dimmed);
   bool dimmed() const { return dimmed_; }
 
   const gfx::Rect& target_bounds() const { return target_bounds_; }
-  static void set_use_mask(bool use_mask) { use_mask_ = use_mask; }
-  static void set_use_shape(bool use_shape) { use_shape_ = use_shape; }
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
@@ -131,7 +156,14 @@ class ASH_EXPORT WindowSelectorItem : public views::ButtonListener,
 
  private:
   class CaptionContainerView;
+  class RoundedContainerView;
   friend class WindowSelectorTest;
+
+  enum class HeaderFadeInMode {
+    ENTER,
+    UPDATE,
+    EXIT,
+  };
 
   // Sets the bounds of this selector's items to |target_bounds| in
   // |root_window_|. The bounds change will be animated as specified
@@ -151,8 +183,11 @@ class ASH_EXPORT WindowSelectorItem : public views::ButtonListener,
 
   // Updates the close button's and title label's bounds. Any change in bounds
   // will be animated from the current bounds to the new bounds as per the
-  // |animation_type|.
-  void UpdateHeaderLayout(OverviewAnimationType animation_type);
+  // |animation_type|. |mode| allows distinguishing the first time update which
+  // allows setting the initial bounds properly or exiting overview to fade out
+  // gradually.
+  void UpdateHeaderLayout(HeaderFadeInMode mode,
+                          OverviewAnimationType animation_type);
 
   // Animates opacity of the |transform_window_| and its caption to |opacity|
   // using |animation_type|.
@@ -161,7 +196,11 @@ class ASH_EXPORT WindowSelectorItem : public views::ButtonListener,
   // Updates the close buttons accessibility name.
   void UpdateCloseButtonAccessibilityName();
 
-  static bool hide_header() { return use_mask_ || use_shape_; }
+  // Fades out a window caption when exiting overview mode.
+  void FadeOut(std::unique_ptr<views::Widget> widget);
+
+  // Allows a test to directly set animation state.
+  gfx::SlideAnimation* GetBackgroundViewAnimation();
 
   // True if the item is being shown in the overview, false if it's being
   // filtered.
@@ -181,6 +220,10 @@ class ASH_EXPORT WindowSelectorItem : public views::ButtonListener,
   // a window layer for display on another monitor.
   bool in_bounds_update_;
 
+  // True when |this| item is visually selected. Item header is made transparent
+  // when the item is selected.
+  bool selected_;
+
   // Label displaying its name (active tab for tabbed windows).
   // With Material Design this Widget owns |caption_container_view_| and is
   // shown above the |transform_window_|.
@@ -190,9 +233,6 @@ class ASH_EXPORT WindowSelectorItem : public views::ButtonListener,
   // Shadow around the item in overview.
   std::unique_ptr<::wm::Shadow> shadow_;
 
-  // Label background widget used to fade in opacity when moving selection.
-  std::unique_ptr<views::Widget> window_label_selector_;
-
   // Container view that owns |window_label_button_view_| and |close_button_|.
   // Only used with Material Design.
   CaptionContainerView* caption_container_view_;
@@ -200,27 +240,18 @@ class ASH_EXPORT WindowSelectorItem : public views::ButtonListener,
   // View for the label below the window or (with material design) above it.
   OverviewLabelButton* window_label_button_view_;
 
-  // The close buttons widget container. Not used with Material Design.
-  std::unique_ptr<views::Widget> close_button_widget_;
-
   // A close button for the window in this item. Owned by the
   // |caption_container_view_| with Material Design or by |close_button_widget_|
   // otherwise.
-  views::ImageButton* close_button_;
+  OverviewCloseButton* close_button_;
 
   // Pointer to the WindowSelector that owns the WindowGrid containing |this|.
   // Guaranteed to be non-null for the lifetime of |this|.
   WindowSelector* window_selector_;
 
-  // If true, mask the original window header while in overview and make corners
-  // rounded using a mask layer. This has performance implications so it can be
-  // disabled when there are many windows.
-  static bool use_mask_;
-
-  // If true, hide the original window header while in overview using alpha
-  // shape. This has performance implications so it can be disabled when there
-  // are many windows.
-  static bool use_shape_;
+  // Pointer to a view that covers the original header and has rounded top
+  // corners. This view can have its color and opacity animated.
+  RoundedContainerView* background_view_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowSelectorItem);
 };

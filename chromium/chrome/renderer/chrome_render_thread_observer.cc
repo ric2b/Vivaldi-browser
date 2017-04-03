@@ -37,6 +37,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/renderer/content_settings_observer.h"
 #include "chrome/renderer/security_filter_peer.h"
+#include "components/visitedlink/renderer/visitedlink_slave.h"
 #include "content/public/child/resource_dispatcher_delegate.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/render_view.h"
@@ -127,13 +128,9 @@ static const int kWaitForWorkersStatsTimeoutMS = 20;
 
 class ResourceUsageReporterImpl : public mojom::ResourceUsageReporter {
  public:
-  ResourceUsageReporterImpl(
-      base::WeakPtr<ChromeRenderThreadObserver> observer,
-      mojo::InterfaceRequest<mojom::ResourceUsageReporter> req)
-      : workers_to_go_(0),
-        binding_(this, std::move(req)),
-        observer_(observer),
-        weak_factory_(this) {}
+  explicit ResourceUsageReporterImpl(
+      base::WeakPtr<ChromeRenderThreadObserver> observer)
+      : workers_to_go_(0), observer_(observer), weak_factory_(this) {}
   ~ResourceUsageReporterImpl() override {}
 
  private:
@@ -216,7 +213,6 @@ class ResourceUsageReporterImpl : public mojom::ResourceUsageReporter {
   mojom::ResourceUsageDataPtr usage_data_;
   GetUsageDataCallback callback_;
   int workers_to_go_;
-  mojo::StrongBinding<mojom::ResourceUsageReporter> binding_;
   base::WeakPtr<ChromeRenderThreadObserver> observer_;
 
   base::WeakPtrFactory<ResourceUsageReporterImpl> weak_factory_;
@@ -227,7 +223,8 @@ class ResourceUsageReporterImpl : public mojom::ResourceUsageReporter {
 void CreateResourceUsageReporter(
     base::WeakPtr<ChromeRenderThreadObserver> observer,
     mojo::InterfaceRequest<mojom::ResourceUsageReporter> request) {
-  new ResourceUsageReporterImpl(observer, std::move(request));
+  mojo::MakeStrongBinding(base::MakeUnique<ResourceUsageReporterImpl>(observer),
+                          std::move(request));
 }
 
 }  // namespace
@@ -235,7 +232,9 @@ void CreateResourceUsageReporter(
 bool ChromeRenderThreadObserver::is_incognito_process_ = false;
 
 ChromeRenderThreadObserver::ChromeRenderThreadObserver()
-    : field_trial_syncer_(this), weak_factory_(this) {
+    : field_trial_syncer_(this),
+      visited_link_slave_(new visitedlink::VisitedLinkSlave),
+      weak_factory_(this) {
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
 
@@ -265,6 +264,9 @@ ChromeRenderThreadObserver::ChromeRenderThreadObserver()
   WebSecurityPolicy::registerURLSchemeAsNoAccess(native_scheme);
   WebSecurityPolicy::registerURLSchemeAsNotAllowingJavascriptURLs(
       native_scheme);
+
+  thread->GetInterfaceRegistry()->AddInterface(
+      visited_link_slave_->GetBindCallback());
 }
 
 ChromeRenderThreadObserver::~ChromeRenderThreadObserver() {}
@@ -281,6 +283,10 @@ bool ChromeRenderThreadObserver::OnControlMessageReceived(
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
+}
+
+void ChromeRenderThreadObserver::OnRenderProcessShutdown() {
+  visited_link_slave_.reset();
 }
 
 void ChromeRenderThreadObserver::OnFieldTrialGroupFinalized(

@@ -6,6 +6,7 @@
 
 #include "build/build_config.h"
 #include "ui/accessibility/ax_view_state.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/rect.h"
@@ -305,10 +306,15 @@ void BubbleDialogDelegateView::UpdateColorsFromTheme(
     const ui::NativeTheme* theme) {
   if (!color_explicitly_set_)
     color_ = theme->GetSystemColor(ui::NativeTheme::kColorId_BubbleBackground);
-  set_background(Background::CreateSolidBackground(color()));
   BubbleFrameView* frame_view = GetBubbleFrameView();
   if (frame_view)
     frame_view->bubble_border()->set_background_color(color());
+
+  // When there's an opaque layer, the bubble border background won't show
+  // through, so explicitly paint a background color.
+  set_background(layer() && layer()->fills_bounds_opaquely()
+                     ? Background::CreateSolidBackground(color())
+                     : nullptr);
 }
 
 void BubbleDialogDelegateView::HandleVisibilityChanged(Widget* widget,

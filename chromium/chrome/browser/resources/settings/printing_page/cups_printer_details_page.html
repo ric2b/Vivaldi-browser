@@ -6,8 +6,7 @@
 
 <dom-module id="settings-cups-printer-details-page">
   <template>
-    <style include="settings-shared"></style>
-    <style>
+    <style include="settings-shared">
       paper-input {
         width: 20em;
         --paper-input-container-input: {
@@ -37,7 +36,8 @@
     <!-- Advanced toggle -->
     <div class="settings-box" actionable on-tap="toggleAdvancedExpanded_">
       <div class="start">$i18n{printerDetailsAdvanced}</div>
-      <cr-expand-button id="expandButton" expanded="{{advancedExpanded}}">
+      <cr-expand-button id="expandButton" expanded="{{advancedExpanded}}"
+          alt="$i18n{printerDetailsA11yLabel}">
       </cr-expand-button>
     </div>
     <!-- Advanced section -->
@@ -52,7 +52,9 @@
         <div class="list-item setting-box two-line">
           <div class="start">
             <div>$i18n{printerProtocol}</div>
-            <div class="secondary">[[printer.printerProtocol]]</div>
+            <div class="secondary">
+              [[getPrinterProtocol_(printer.printerProtocol)]]
+            </div>
           </div>
         </div>
       </div>

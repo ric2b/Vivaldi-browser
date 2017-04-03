@@ -47,13 +47,15 @@ public class ContextualSearchBarControl
 
     /**
      * The opacity of the Bar's Search Context.
+     * This text control may not be initialized until the opacity is set beyond 0.
      */
-    private float mSearchBarContextOpacity = 1.f;
+    private float mSearchBarContextOpacity = 0.f;
 
     /**
      * The opacity of the Bar's Search Term.
+     * This text control may not be initialized until the opacity is set beyond 0.
      */
-    private float mSearchBarTermOpacity = 1.f;
+    private float mSearchBarTermOpacity = 0.f;
 
     /**
      * Constructs a new bottom bar control container by inflating views from XML.
@@ -80,30 +82,6 @@ public class ContextualSearchBarControl
         mContextControl.destroy();
         mSearchTermControl.destroy();
         mCaptionControl.destroy();
-    }
-
-    /**
-     * Updates this bar when in transition between closed to peeked states.
-     * @param percentage The percentage to the more opened state.
-     */
-    public void onUpdateFromCloseToPeek(float percentage) {
-        mCaptionControl.onUpdateFromCloseToPeek(percentage);
-    }
-
-    /**
-     * Updates this bar when in transition between peeked to expanded states.
-     * @param percentage The percentage to the more opened state.
-     */
-    public void onUpdateFromPeekToExpand(float percentage) {
-        mCaptionControl.onUpdateFromPeekToExpand(percentage);
-    }
-
-    /**
-     * Updates this bar when in transition between expanded and maximized states.
-     * @param percentage The percentage to the more opened state.
-     */
-    public void onUpdateFromExpandToMaximize(float percentage) {
-        mCaptionControl.onUpdateFromExpandToMaximize(percentage);
     }
 
     /**

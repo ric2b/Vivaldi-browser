@@ -12,6 +12,7 @@
 #include "ash/common/wm/overview/overview_animation_type.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/transform.h"
 
@@ -32,6 +33,7 @@ class WmWindow;
 // object.
 class ASH_EXPORT ScopedTransformOverviewWindow {
  public:
+  class OverviewContentMask;
   using ScopedAnimationSettings =
       std::vector<std::unique_ptr<ScopedOverviewAnimationSettings>>;
 
@@ -90,12 +92,15 @@ class ASH_EXPORT ScopedTransformOverviewWindow {
   gfx::Rect GetTargetBoundsInScreen() const;
 
   // Calculates the bounds of a |window_| after being transformed to the
-  // selector's space. With Material Design those bounds are a union of all
-  // regular (normal and panel) windows in the |window_|'s transient hierarchy.
-  // The returned Rect is in virtual screen coordinates. When |hide_header| is
-  // true the returned bounds are adjusted to allow the original |window_|'s
-  // header to be hidden.
-  gfx::Rect GetTransformedBounds(bool hide_header) const;
+  // selector's space. Those bounds are a union of all regular (normal and
+  // panel) windows in the |window_|'s transient hierarchy. The returned Rect is
+  // in virtual screen coordinates. The returned bounds are adjusted to allow
+  // the original |window_|'s header to be hidden.
+  gfx::Rect GetTransformedBounds() const;
+
+  // Returns TOP_VIEW_COLOR property of |window_| unless there are transient
+  // ancestors in which case returns SK_ColorTRANSPARENT.
+  SkColor GetTopColor() const;
 
   // Returns TOP_VIEW_INSET property of |window_| unless there are transient
   // ancestors in which case returns 0.
@@ -116,19 +121,19 @@ class ASH_EXPORT ScopedTransformOverviewWindow {
   void PrepareForOverview();
 
   // Applies the |transform| to the overview window and all of its transient
-  // children. With Material Design creates a mask layer with the bottom edge
-  // using rounded corners of |radius|. When |use_mask| is set, hides the
-  // original window header and uses rounded rectangle mask which may be
-  // resource-intensive. When |use_shape| is set and |use_mask| is not, uses
-  // SetAlphaShape to mask the header.
-  void SetTransform(WmWindow* root_window,
-                    const gfx::Transform& transform,
-                    bool use_mask,
-                    bool use_shape,
-                    float radius);
+  // children.
+  void SetTransform(WmWindow* root_window, const gfx::Transform& transform);
 
   // Set's the opacity of the managed windows.
   void SetOpacity(float opacity);
+
+  // Creates a mask layer with the bottom edge using rounded corners of
+  // |radius|. Uses SetAlphaShape to mask the header.
+  void HideHeaderAndSetShape(int radius);
+
+  // Restores original window shape and removes the mask if installed. Safe to
+  // call even if HideHeaderAndSetShape() has not been called.
+  void ShowHeaderAndResetShape();
 
   WmWindow* window() const { return window_; }
 
@@ -137,7 +142,6 @@ class ASH_EXPORT ScopedTransformOverviewWindow {
 
  private:
   friend class WindowSelectorTest;
-  class OverviewContentMask;
 
   enum OriginalVisibility {
     ORIGINALLY_VISIBLE,
@@ -156,9 +160,6 @@ class ASH_EXPORT ScopedTransformOverviewWindow {
 
   // A weak pointer to the real window in the overview.
   WmWindow* window_;
-
-  // Mask layer that hides the original window header.
-  std::unique_ptr<OverviewContentMask> mask_;
 
   // Original window shape, if it was set on a window.
   std::unique_ptr<SkRegion> original_window_shape_;

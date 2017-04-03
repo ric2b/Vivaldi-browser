@@ -41,31 +41,38 @@
 
 namespace blink {
 
-class CORE_EXPORT Performance final : public PerformanceBase, public DOMWindowProperty {
-    DEFINE_WRAPPERTYPEINFO();
-    USING_GARBAGE_COLLECTED_MIXIN(Performance);
-public:
-    static Performance* create(LocalFrame* frame)
-    {
-        return new Performance(frame);
-    }
-    ~Performance() override;
+class InspectorWebPerfAgent;
 
-    ExecutionContext* getExecutionContext() const override;
+class CORE_EXPORT Performance final : public PerformanceBase,
+                                      public DOMWindowProperty {
+  DEFINE_WRAPPERTYPEINFO();
+  USING_GARBAGE_COLLECTED_MIXIN(Performance);
+  friend class PerformanceTest;
 
-    MemoryInfo* memory();
-    PerformanceNavigation* navigation() const;
-    PerformanceTiming* timing() const override;
+ public:
+  static Performance* create(LocalFrame* frame) {
+    return new Performance(frame);
+  }
+  ~Performance() override;
 
-    DECLARE_VIRTUAL_TRACE();
+  ExecutionContext* getExecutionContext() const override;
 
-private:
-    explicit Performance(LocalFrame*);
+  MemoryInfo* memory();
+  PerformanceNavigation* navigation() const;
+  PerformanceTiming* timing() const override;
 
-    mutable Member<PerformanceNavigation> m_navigation;
-    mutable Member<PerformanceTiming> m_timing;
+  void updateLongTaskInstrumentation() override;
+
+  DECLARE_VIRTUAL_TRACE();
+
+ private:
+  explicit Performance(LocalFrame*);
+
+  mutable Member<PerformanceNavigation> m_navigation;
+  mutable Member<PerformanceTiming> m_timing;
+  mutable Member<InspectorWebPerfAgent> m_longTaskInspectorAgent;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // Performance_h
+#endif  // Performance_h

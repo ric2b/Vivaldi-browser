@@ -73,6 +73,7 @@
 #include "base/mac/foundation_util.h"
 #include "chrome/app/chrome_main_mac.h"
 #include "chrome/browser/mac/relauncher.h"
+#include "chrome/browser/shell_integration.h"
 #include "chrome/common/mac/cfbundle_blocker.h"
 #include "components/crash/content/app/crashpad.h"
 #include "components/crash/core/common/objc_zombie.h"
@@ -446,7 +447,9 @@ void InitLogging(const std::string& process_type) {
 #endif
 
 #if !defined(CHROME_MULTIPLE_DLL_CHILD)
-void RecordMainStartupMetrics() {
+void RecordMainStartupMetrics(base::TimeTicks exe_entry_point_ticks) {
+  if (!exe_entry_point_ticks.is_null())
+    startup_metric_utils::RecordExeMainEntryPointTicks(exe_entry_point_ticks);
 #if defined(OS_MACOSX) || defined(OS_WIN) || defined(OS_LINUX)
   // Record the startup process creation time on supported platforms.
   startup_metric_utils::RecordStartupProcessCreationTime(
@@ -466,13 +469,16 @@ void RecordMainStartupMetrics() {
 
 }  // namespace
 
-ChromeMainDelegate::ChromeMainDelegate() {
+ChromeMainDelegate::ChromeMainDelegate()
+    : ChromeMainDelegate(base::TimeTicks()) {}
+
+ChromeMainDelegate::ChromeMainDelegate(base::TimeTicks exe_entry_point_ticks) {
 #if !defined(CHROME_MULTIPLE_DLL_CHILD)
   // Record startup metrics in the browser process. For component builds, there
   // is no way to know the type of process (process command line is not yet
   // initialized), so the function below will also be called in renderers.
   // This doesn't matter as it simply sets global variables.
-  RecordMainStartupMetrics();
+  RecordMainStartupMetrics(exe_entry_point_ticks);
 #endif  // !defined(CHROME_MULTIPLE_DLL_CHILD)
 }
 
@@ -708,6 +714,18 @@ void ChromeMainDelegate::InitMacCrashReporter(
         << "Main application forbids --type, saw " << process_type;
   }
 }
+
+void ChromeMainDelegate::SetUpInstallerPreferences(
+    const base::CommandLine& command_line) {
+  const bool uma_setting = command_line.HasSwitch(switches::kEnableUserMetrics);
+  const bool default_browser_setting =
+      command_line.HasSwitch(switches::kMakeChromeDefault);
+
+  if (uma_setting)
+    crash_reporter::SetUploadConsent(uma_setting);
+  if (default_browser_setting)
+    shell_integration::SetAsDefaultBrowser();
+}
 #endif  // defined(OS_MACOSX)
 
 void ChromeMainDelegate::PreSandboxStartup() {
@@ -728,6 +746,7 @@ void ChromeMainDelegate::PreSandboxStartup() {
                         Append(chrome::kHelperProcessExecutablePath));
 
   InitMacCrashReporter(command_line, process_type);
+  SetUpInstallerPreferences(command_line);
 #endif
 
 #if defined(OS_WIN)
@@ -757,10 +776,6 @@ void ChromeMainDelegate::PreSandboxStartup() {
   component_updater::RegisterPathProvider(chrome::DIR_COMPONENTS,
                                           chrome::DIR_INTERNAL_PLUGINS,
                                           chrome::DIR_USER_DATA);
-
-  // Enable Message Loop related state asap.
-  if (command_line.HasSwitch(switches::kMessageLoopHistogrammer))
-    base::MessageLoop::EnableHistogrammer(true);
 
 #if !defined(OS_ANDROID) && !defined(OS_WIN)
   // Android does InitLogging when library is loaded. Skip here.

@@ -14,6 +14,7 @@
 #include "cc/output/copy_output_result.h"
 #include "cc/output/gl_renderer.h"
 #include "cc/output/output_surface_client.h"
+#include "cc/output/software_output_device.h"
 #include "cc/output/software_renderer.h"
 #include "cc/output/texture_mailbox_deleter.h"
 #include "cc/raster/raster_buffer_provider.h"
@@ -22,7 +23,6 @@
 #include "cc/test/fake_output_surface_client.h"
 #include "cc/test/paths.h"
 #include "cc/test/pixel_test_output_surface.h"
-#include "cc/test/pixel_test_software_output_device.h"
 #include "cc/test/pixel_test_utils.h"
 #include "cc/test/test_gpu_memory_buffer_manager.h"
 #include "cc/test/test_in_process_context_provider.h"
@@ -74,21 +74,15 @@ bool PixelTest::RunPixelTestWithReadbackTargetAndArea(
     request->set_area(*copy_rect);
   target->copy_requests.push_back(std::move(request));
 
-  float device_scale_factor = 1.f;
-  gfx::Rect device_viewport_rect =
-      gfx::Rect(device_viewport_size_) + external_device_viewport_offset_;
-  gfx::Rect device_clip_rect = external_device_clip_rect_.IsEmpty()
-                                   ? device_viewport_rect
-                                   : external_device_clip_rect_;
-
   if (software_renderer_) {
     software_renderer_->SetDisablePictureQuadImageFiltering(
         disable_picture_quad_image_filtering_);
   }
 
   renderer_->DecideRenderPassAllocationsForFrame(*pass_list);
+  float device_scale_factor = 1.f;
   renderer_->DrawFrame(pass_list, device_scale_factor, gfx::ColorSpace(),
-                       device_viewport_rect, device_clip_rect);
+                       device_viewport_size_);
 
   // Wait for the readback to complete.
   if (output_surface_->context_provider())
@@ -127,21 +121,22 @@ void PixelTest::SetUpGLRenderer(bool use_skia_gpu_backend,
                                 bool flipped_output_surface) {
   enable_pixel_output_.reset(new gl::DisableNullDrawGLBindings);
 
-  scoped_refptr<TestInProcessContextProvider> compositor(
+  scoped_refptr<TestInProcessContextProvider> context_provider(
       new TestInProcessContextProvider(nullptr));
-  scoped_refptr<TestInProcessContextProvider> worker(
-      new TestInProcessContextProvider(compositor.get()));
-  output_surface_.reset(new PixelTestOutputSurface(
-      std::move(compositor), std::move(worker), flipped_output_surface));
+  output_surface_.reset(new PixelTestOutputSurface(std::move(context_provider),
+                                                   flipped_output_surface));
   output_surface_->BindToClient(output_surface_client_.get());
 
   shared_bitmap_manager_.reset(new TestSharedBitmapManager);
   gpu_memory_buffer_manager_.reset(new TestGpuMemoryBufferManager);
+  // Not relevant for display compositor since it's not delegated.
+  bool delegated_sync_points_required = false;
   resource_provider_ = base::MakeUnique<ResourceProvider>(
       output_surface_->context_provider(), shared_bitmap_manager_.get(),
       gpu_memory_buffer_manager_.get(), main_thread_task_runner_.get(), 0, 1,
-      output_surface_->capabilities().delegated_sync_points_required,
+      delegated_sync_points_required,
       settings_.renderer_settings.use_gpu_memory_buffer_resources,
+      settings_.enable_color_correct_rendering,
       settings_.renderer_settings.buffer_to_texture_target_map);
 
   texture_mailbox_deleter_ = base::MakeUnique<TextureMailboxDeleter>(
@@ -154,33 +149,14 @@ void PixelTest::SetUpGLRenderer(bool use_skia_gpu_backend,
   renderer_->SetVisible(true);
 }
 
-void PixelTest::ForceExpandedViewport(const gfx::Size& surface_expansion) {
-  static_cast<PixelTestOutputSurface*>(output_surface_.get())
-      ->set_surface_expansion_size(surface_expansion);
-  SoftwareOutputDevice* device = output_surface_->software_device();
-  if (device) {
-    static_cast<PixelTestSoftwareOutputDevice*>(device)
-        ->set_surface_expansion_size(surface_expansion);
-  }
-}
-
-void PixelTest::ForceViewportOffset(const gfx::Vector2d& viewport_offset) {
-  external_device_viewport_offset_ = viewport_offset;
-}
-
-void PixelTest::ForceDeviceClip(const gfx::Rect& clip) {
-  external_device_clip_rect_ = clip;
-}
-
 void PixelTest::EnableExternalStencilTest() {
   static_cast<PixelTestOutputSurface*>(output_surface_.get())
       ->set_has_external_stencil_test(true);
 }
 
 void PixelTest::SetUpSoftwareRenderer() {
-  std::unique_ptr<SoftwareOutputDevice> device(
-      new PixelTestSoftwareOutputDevice());
-  output_surface_.reset(new PixelTestOutputSurface(std::move(device)));
+  output_surface_.reset(
+      new PixelTestOutputSurface(base::MakeUnique<SoftwareOutputDevice>()));
   output_surface_->BindToClient(output_surface_client_.get());
   shared_bitmap_manager_.reset(new TestSharedBitmapManager());
   bool delegated_sync_points_required = false;  // Meaningless for software.
@@ -188,6 +164,7 @@ void PixelTest::SetUpSoftwareRenderer() {
       nullptr, shared_bitmap_manager_.get(), gpu_memory_buffer_manager_.get(),
       main_thread_task_runner_.get(), 0, 1, delegated_sync_points_required,
       settings_.renderer_settings.use_gpu_memory_buffer_resources,
+      settings_.enable_color_correct_rendering,
       settings_.renderer_settings.buffer_to_texture_target_map);
   auto renderer = base::MakeUnique<SoftwareRenderer>(
       &settings_.renderer_settings, output_surface_.get(),

@@ -27,56 +27,63 @@ namespace WTF {
 // part of object.  If it has Members you need a trace method and the containing
 // object needs to call that trace method.
 //
-// DISALLOW_NEW_EXCEPT_PLACEMENT_NEW(): Allows only placement new operator.  This
+// DISALLOW_NEW_EXCEPT_PLACEMENT_NEW(): Allows only placement new operator. This
 // disallows general allocation of this object but allows to put the object as a
 // value object in collections.  If these have Members you need to have a trace
 // method. That trace method will be called automatically by the on-heap
 // collections.
 //
-#define DISALLOW_NEW()                                          \
-    private:                                                    \
-        void* operator new(size_t) = delete;                    \
-        void* operator new(size_t, NotNullTag, void*) = delete; \
-        void* operator new(size_t, void*) = delete;             \
-    public:
+#define DISALLOW_NEW()                                    \
+ private:                                                 \
+  void* operator new(size_t) = delete;                    \
+  void* operator new(size_t, NotNullTag, void*) = delete; \
+  void* operator new(size_t, void*) = delete;             \
+                                                          \
+ public:
 
-#define DISALLOW_NEW_EXCEPT_PLACEMENT_NEW()                                         \
-    public:                                                                         \
-        using IsAllowOnlyPlacementNew = int;                                        \
-        void* operator new(size_t, NotNullTag, void* location) { return location; } \
-        void* operator new(size_t, void* location) { return location; }             \
-    private:                                                                        \
-        void* operator new(size_t) = delete;                                        \
-    public:
+#define DISALLOW_NEW_EXCEPT_PLACEMENT_NEW()                                   \
+ public:                                                                      \
+  using IsAllowOnlyPlacementNew = int;                                        \
+  void* operator new(size_t, NotNullTag, void* location) { return location; } \
+  void* operator new(size_t, void* location) { return location; }             \
+                                                                              \
+ private:                                                                     \
+  void* operator new(size_t) = delete;                                        \
+                                                                              \
+ public:
 
-#define STATIC_ONLY(Type) \
-    private:              \
-        Type() = delete;  \
-        Type(const Type&) = delete;                             \
-        Type& operator=(const Type&) = delete;                  \
-        void* operator new(size_t) = delete;                    \
-        void* operator new(size_t, NotNullTag, void*) = delete; \
-        void* operator new(size_t, void*) = delete;             \
-    public:
+#define STATIC_ONLY(Type)                                 \
+ private:                                                 \
+  Type() = delete;                                        \
+  Type(const Type&) = delete;                             \
+  Type& operator=(const Type&) = delete;                  \
+  void* operator new(size_t) = delete;                    \
+  void* operator new(size_t, NotNullTag, void*) = delete; \
+  void* operator new(size_t, void*) = delete;             \
+                                                          \
+ public:
 
-#define IS_GARBAGE_COLLECTED_TYPE()                 \
-    public:                                         \
-        using IsGarbageCollectedTypeMarker = int;   \
-    private:
+#define IS_GARBAGE_COLLECTED_TYPE()         \
+ public:                                    \
+  using IsGarbageCollectedTypeMarker = int; \
+                                            \
+ private:
 
 #if COMPILER(CLANG)
-#define STACK_ALLOCATED()                                       \
-    private:                                                    \
-        __attribute__((annotate("blink_stack_allocated")))      \
-        void* operator new(size_t) = delete;                    \
-        void* operator new(size_t, NotNullTag, void*) = delete; \
-        void* operator new(size_t, void*) = delete;             \
-    public:
+#define STACK_ALLOCATED()                                                \
+ private:                                                                \
+  __attribute__((annotate("blink_stack_allocated"))) void* operator new( \
+      size_t) = delete;                                                  \
+  void* operator new(size_t, NotNullTag, void*) = delete;                \
+  void* operator new(size_t, void*) = delete;                            \
+                                                                         \
+ public:
 #else
 #define STACK_ALLOCATED() DISALLOW_NEW()
 #endif
 
-// Provides customizable overrides of fastMalloc/fastFree and operator new/delete
+// Provides customizable overrides of fastMalloc/fastFree and operator
+// new/delete
 //
 // Provided functionality:
 //    Macro: USING_FAST_MALLOC
@@ -94,41 +101,30 @@ namespace WTF {
 //    };
 //
 
-#define USING_FAST_MALLOC_INTERNAL(type, typeName) \
-public: \
-    void* operator new(size_t, void* p) { return p; } \
-    void* operator new[](size_t, void* p) { return p; } \
-    \
-    void* operator new(size_t size) \
-    { \
-        return ::WTF::Partitions::fastMalloc(size, typeName); \
-    } \
-    \
-    void operator delete(void* p) \
-    { \
-        ::WTF::Partitions::fastFree(p);         \
-    } \
-    \
-    void* operator new[](size_t size) \
-    { \
-        return ::WTF::Partitions::fastMalloc(size, typeName); \
-    } \
-    \
-    void operator delete[](void* p) \
-    { \
-        ::WTF::Partitions::fastFree(p);                   \
-    } \
-    void* operator new(size_t, NotNullTag, void* location) \
-    { \
-        ASSERT(location); \
-        return location; \
-    } \
-    static const char* classNameForAllocator() \
-    { \
-        return #type; \
-    } \
-private: \
-typedef int __thisIsHereToForceASemicolonAfterThisMacro
+#define USING_FAST_MALLOC_INTERNAL(type, typeName)                    \
+ public:                                                              \
+  void* operator new(size_t, void* p) { return p; }                   \
+  void* operator new[](size_t, void* p) { return p; }                 \
+                                                                      \
+  void* operator new(size_t size) {                                   \
+    return ::WTF::Partitions::fastMalloc(size, typeName);             \
+  }                                                                   \
+                                                                      \
+  void operator delete(void* p) { ::WTF::Partitions::fastFree(p); }   \
+                                                                      \
+  void* operator new[](size_t size) {                                 \
+    return ::WTF::Partitions::fastMalloc(size, typeName);             \
+  }                                                                   \
+                                                                      \
+  void operator delete[](void* p) { ::WTF::Partitions::fastFree(p); } \
+  void* operator new(size_t, NotNullTag, void* location) {            \
+    ASSERT(location);                                                 \
+    return location;                                                  \
+  }                                                                   \
+  static const char* classNameForAllocator() { return #type; }        \
+                                                                      \
+ private:                                                             \
+  typedef int __thisIsHereToForceASemicolonAfterThisMacro
 
 // Both of these macros enable fast malloc and provide type info to the heap
 // profiler. The regular macro does not provide type info in official builds,
@@ -136,9 +132,11 @@ typedef int __thisIsHereToForceASemicolonAfterThisMacro
 // variant provides type info unconditionally, so it should be used sparingly.
 // Furthermore, the |WITH_TYPE_NAME| variant does not work if |type| is a
 // template argument; |USING_FAST_MALLOC| does.
-#define USING_FAST_MALLOC(type) USING_FAST_MALLOC_INTERNAL(type, WTF_HEAP_PROFILER_TYPE_NAME(type))
-#define USING_FAST_MALLOC_WITH_TYPE_NAME(type) USING_FAST_MALLOC_INTERNAL(type, #type)
+#define USING_FAST_MALLOC(type) \
+  USING_FAST_MALLOC_INTERNAL(type, WTF_HEAP_PROFILER_TYPE_NAME(type))
+#define USING_FAST_MALLOC_WITH_TYPE_NAME(type) \
+  USING_FAST_MALLOC_INTERNAL(type, #type)
 
-} // namespace WTF
+}  // namespace WTF
 
 #endif /* WTF_Allocator_h */

@@ -19,34 +19,40 @@ class ResourceFetcher;
 class WorkletGlobalScopeProxy;
 class WorkletScriptLoader;
 
-class CORE_EXPORT Worklet : public GarbageCollectedFinalized<Worklet>, public ScriptWrappable, public ActiveDOMObject {
-    DEFINE_WRAPPERTYPEINFO();
-    USING_GARBAGE_COLLECTED_MIXIN(Worklet);
-    WTF_MAKE_NONCOPYABLE(Worklet);
-public:
-    virtual WorkletGlobalScopeProxy* workletGlobalScopeProxy() const = 0;
+class CORE_EXPORT Worklet : public GarbageCollectedFinalized<Worklet>,
+                            public ScriptWrappable,
+                            public ActiveDOMObject {
+  DEFINE_WRAPPERTYPEINFO();
+  USING_GARBAGE_COLLECTED_MIXIN(Worklet);
+  WTF_MAKE_NONCOPYABLE(Worklet);
 
-    // Worklet
-    ScriptPromise import(ScriptState*, const String& url);
+ public:
+  virtual void initialize() {}
+  virtual bool isInitialized() const { return true; }
 
-    void notifyFinished(WorkletScriptLoader*);
+  virtual WorkletGlobalScopeProxy* workletGlobalScopeProxy() const = 0;
 
-    // ActiveDOMObject
-    void stop() final;
+  // Worklet
+  ScriptPromise import(ScriptState*, const String& url);
 
-    DECLARE_VIRTUAL_TRACE();
+  void notifyFinished(WorkletScriptLoader*);
 
-protected:
-    // The Worklet inherits the url and userAgent from the frame->document().
-    explicit Worklet(LocalFrame*);
+  // ActiveDOMObject
+  void contextDestroyed() final;
 
-private:
-    ResourceFetcher* fetcher() const { return m_fetcher.get(); }
+  DECLARE_VIRTUAL_TRACE();
 
-    Member<ResourceFetcher> m_fetcher;
-    HeapHashSet<Member<WorkletScriptLoader>> m_scriptLoaders;
+ protected:
+  // The Worklet inherits the url and userAgent from the frame->document().
+  explicit Worklet(LocalFrame*);
+
+ private:
+  ResourceFetcher* fetcher() const { return m_fetcher.get(); }
+
+  Member<ResourceFetcher> m_fetcher;
+  HeapHashSet<Member<WorkletScriptLoader>> m_scriptLoaders;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // Worklet_h
+#endif  // Worklet_h

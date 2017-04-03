@@ -18,7 +18,7 @@
 #include "base/debug/alias.h"
 #include "base/debug/crash_logging.h"
 #include "base/location.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task_runner_util.h"
@@ -31,6 +31,8 @@
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/cdm_context.h"
 #include "media/base/limits.h"
+#include "media/base/media_content_type.h"
+#include "media/base/media_keys.h"
 #include "media/base/media_log.h"
 #include "media/base/media_switches.h"
 #include "media/base/text_renderer.h"
@@ -152,6 +154,11 @@ base::TimeDelta GetCurrentTimeInternal(WebMediaPlayerImpl* p_this) {
   return base::TimeDelta::FromSecondsD(p_this->currentTime());
 }
 
+// How much time must have elapsed since loading last progressed before the
+// player is eligible for idle suspension.
+constexpr base::TimeDelta kLoadingToIdleTimeout =
+    base::TimeDelta::FromSeconds(3);
+
 }  // namespace
 
 class BufferedDataSourceHostImpl;
@@ -231,7 +238,6 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
                                   ? params.compositor_task_runner()
                                   : base::ThreadTaskRunnerHandle::Get()),
       compositor_(new VideoFrameCompositor(compositor_task_runner_)),
-      is_cdm_attached_(false),
 #if defined(OS_ANDROID)  // WMPI_CAST
       cast_impl_(this, client_, params.context_3d_cb()),
 #endif
@@ -242,13 +248,19 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
       overlay_surface_id_(SurfaceManager::kNoSurfaceID),
       suppress_destruction_errors_(false),
       can_suspend_state_(CanSuspendState::UNKNOWN),
-      is_encrypted_(false) {
+      is_encrypted_(false),
+      underflow_count_(0) {
   DCHECK(!adjust_allocated_memory_cb_.is_null());
   DCHECK(renderer_factory_);
   DCHECK(client_);
 
+  tick_clock_.reset(new base::DefaultTickClock());
+
   force_video_overlays_ = base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kForceVideoOverlays);
+
+  disable_fullscreen_video_overlays_ =
+      !base::FeatureList::IsEnabled(media::kOverlayFullscreenVideo);
 
   if (delegate_)
     delegate_id_ = delegate_->AddObserver(this);
@@ -256,11 +268,8 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
   media_log_->AddEvent(
       media_log_->CreateEvent(MediaLogEvent::WEBMEDIAPLAYER_CREATED));
 
-  if (params.initial_cdm()) {
-    SetCdm(base::Bind(&IgnoreCdmAttached),
-           ToWebContentDecryptionModuleImpl(params.initial_cdm())
-               ->GetCdmContext());
-  }
+  if (params.initial_cdm())
+    SetCdm(params.initial_cdm());
 
   // TODO(xhwang): When we use an external Renderer, many methods won't work,
   // e.g. GetCurrentFrameFromCompositor(). See http://crbug.com/434861
@@ -347,12 +356,12 @@ void WebMediaPlayerImpl::DisableOverlay() {
 }
 
 void WebMediaPlayerImpl::enteredFullscreen() {
-  if (!force_video_overlays_)
+  if (!force_video_overlays_ && !disable_fullscreen_video_overlays_)
     EnableOverlay();
 }
 
 void WebMediaPlayerImpl::exitedFullscreen() {
-  if (!force_video_overlays_)
+  if (!force_video_overlays_ && !disable_fullscreen_video_overlays_)
     DisableOverlay();
 }
 
@@ -554,6 +563,10 @@ void WebMediaPlayerImpl::setVolume(double volume) {
   pipeline_.SetVolume(volume_ * volume_multiplier_);
   if (watch_time_reporter_)
     watch_time_reporter_->OnVolumeChange(volume);
+
+  // The play state is updated because the player might have left the autoplay
+  // muted state.
+  UpdatePlayState();
 }
 
 void WebMediaPlayerImpl::setSinkId(
@@ -789,17 +802,22 @@ bool WebMediaPlayerImpl::didLoadingProgress() {
     UpdatePlayState();
   }
 
+  if (did_loading_progress)
+    last_time_loading_progressed_ = tick_clock_->NowTicks();
+
   return did_loading_progress;
 }
 
 void WebMediaPlayerImpl::paint(blink::WebCanvas* canvas,
                                const blink::WebRect& rect,
-                               unsigned char alpha,
-                               SkXfermode::Mode mode) {
+                               SkPaint& paint) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   TRACE_EVENT0("media", "WebMediaPlayerImpl:paint");
 
-  if (is_cdm_attached_)
+  // TODO(sandersd): Move this check into GetCurrentFrameFromCompositor() when
+  // we have other ways to check if decoder owns video frame.
+  // See http://crbug.com/595716 and http://crbug.com/602708
+  if (cdm_)
     return;
 
   scoped_refptr<VideoFrame> video_frame = GetCurrentFrameFromCompositor();
@@ -815,7 +833,7 @@ void WebMediaPlayerImpl::paint(blink::WebCanvas* canvas,
       return;  // The context has been lost since and can't setup a GrContext.
   }
   skcanvas_video_renderer_.Paint(video_frame, canvas, gfx::RectF(gfx_rect),
-                                 alpha, mode, pipeline_metadata_.video_rotation,
+                                 paint, pipeline_metadata_.video_rotation,
                                  context_3d);
 }
 
@@ -870,10 +888,16 @@ bool WebMediaPlayerImpl::copyVideoTextureToPlatformTexture(
     unsigned int type,
     bool premultiply_alpha,
     bool flip_y) {
+  DCHECK(main_task_runner_->BelongsToCurrentThread());
   TRACE_EVENT0("media", "WebMediaPlayerImpl:copyVideoTextureToPlatformTexture");
 
-  scoped_refptr<VideoFrame> video_frame = GetCurrentFrameFromCompositor();
+  // TODO(sandersd): Move this check into GetCurrentFrameFromCompositor() when
+  // we have other ways to check if decoder owns video frame.
+  // See http://crbug.com/595716 and http://crbug.com/602708
+  if (cdm_)
+    return false;
 
+  scoped_refptr<VideoFrame> video_frame = GetCurrentFrameFromCompositor();
   if (!video_frame.get() || !video_frame->HasTextures()) {
     return false;
   }
@@ -914,8 +938,7 @@ void WebMediaPlayerImpl::setContentDecryptionModule(
   if (!was_encrypted && watch_time_reporter_)
     CreateWatchTimeReporter();
 
-  SetCdm(BIND_TO_RENDER_LOOP(&WebMediaPlayerImpl::OnCdmAttached),
-         ToWebContentDecryptionModuleImpl(cdm)->GetCdmContext());
+  SetCdm(cdm);
 }
 
 void WebMediaPlayerImpl::OnEncryptedMediaInitData(
@@ -965,29 +988,54 @@ void WebMediaPlayerImpl::OnFFmpegMediaTracksUpdated(
   }
 }
 
-void WebMediaPlayerImpl::SetCdm(const CdmAttachedCB& cdm_attached_cb,
-                                CdmContext* cdm_context) {
-  if (!cdm_context) {
-    cdm_attached_cb.Run(false);
+void WebMediaPlayerImpl::SetCdm(blink::WebContentDecryptionModule* cdm) {
+  DCHECK(main_task_runner_->BelongsToCurrentThread());
+  DCHECK(cdm);
+  scoped_refptr<MediaKeys> cdm_reference =
+      ToWebContentDecryptionModuleImpl(cdm)->GetCdm();
+  if (!cdm_reference) {
+    NOTREACHED();
+    OnCdmAttached(false);
     return;
   }
 
-  // If CDM initialization succeeded, tell the pipeline about it.
-  pipeline_.SetCdm(cdm_context, cdm_attached_cb);
+  CdmContext* cdm_context = cdm_reference->GetCdmContext();
+  if (!cdm_context) {
+    OnCdmAttached(false);
+    return;
+  }
+
+  // Keep the reference to the CDM, as it shouldn't be destroyed until
+  // after the pipeline is done with the |cdm_context|.
+  pending_cdm_ = std::move(cdm_reference);
+  pipeline_.SetCdm(cdm_context,
+                   base::Bind(&WebMediaPlayerImpl::OnCdmAttached, AsWeakPtr()));
 }
 
 void WebMediaPlayerImpl::OnCdmAttached(bool success) {
+  DCHECK(main_task_runner_->BelongsToCurrentThread());
+  DCHECK(pending_cdm_);
+
+  // If the CDM is set from the constructor there is no promise
+  // (|set_cdm_result_|) to fulfill.
   if (success) {
-    set_cdm_result_->complete();
-    set_cdm_result_.reset();
-    is_cdm_attached_ = true;
+    // This will release the previously attached CDM (if any).
+    cdm_ = std::move(pending_cdm_);
+    if (set_cdm_result_) {
+      set_cdm_result_->complete();
+      set_cdm_result_.reset();
+    }
+
     return;
   }
 
-  set_cdm_result_->completeWithError(
-      blink::WebContentDecryptionModuleExceptionNotSupportedError, 0,
-      "Unable to set MediaKeys object");
-  set_cdm_result_.reset();
+  pending_cdm_ = nullptr;
+  if (set_cdm_result_) {
+    set_cdm_result_->completeWithError(
+        blink::WebContentDecryptionModuleExceptionNotSupportedError, 0,
+        "Unable to set MediaKeys object");
+    set_cdm_result_.reset();
+  }
 }
 
 void WebMediaPlayerImpl::OnPipelineSeeked(bool time_updated) {
@@ -1009,6 +1057,10 @@ void WebMediaPlayerImpl::OnPipelineSeeked(bool time_updated) {
   }
   if (time_updated)
     should_notify_time_changed_ = true;
+
+  // Reset underflow count upon seek; this prevents looping videos and user
+  // actions from artificially inflating the underflow count.
+  underflow_count_ = 0;
 }
 
 void WebMediaPlayerImpl::OnPipelineSuspended() {
@@ -1120,6 +1172,15 @@ void WebMediaPlayerImpl::OnBufferingStateChange(BufferingState state) {
     return;
 
   if (state == BUFFERING_HAVE_ENOUGH) {
+    if (data_source_ &&
+        highest_ready_state_ < WebMediaPlayer::ReadyStateHaveEnoughData) {
+      DCHECK_EQ(underflow_count_, 0);
+      // Record a zero value for underflow histograms so that the histogram
+      // includes playbacks which never encounter an underflow event.
+      UMA_HISTOGRAM_COUNTS_100("Media.UnderflowCount", 0);
+      UMA_HISTOGRAM_TIMES("Media.UnderflowDuration", base::TimeDelta());
+    }
+
     // TODO(chcunningham): Monitor playback position vs buffered. Potentially
     // transition to HAVE_FUTURE_DATA here if not enough is buffered.
     SetReadyState(WebMediaPlayer::ReadyStateHaveEnoughData);
@@ -1136,9 +1197,27 @@ void WebMediaPlayerImpl::OnBufferingStateChange(BufferingState state) {
     // Once we have enough, start reporting the total memory usage. We'll also
     // report once playback starts.
     ReportMemoryUsage();
+
+    // Report the amount of time it took to leave the underflow state. Don't
+    // bother to report this for MSE playbacks since it's out of our control.
+    if (underflow_timer_ && data_source_) {
+      UMA_HISTOGRAM_TIMES("Media.UnderflowDuration",
+                          underflow_timer_->Elapsed());
+      underflow_timer_.reset();
+    }
   } else {
     // Buffering has underflowed.
     DCHECK_EQ(state, BUFFERING_HAVE_NOTHING);
+
+    // Report the number of times we've entered the underflow state. Only report
+    // for src= playback since for MSE it's out of our control. Ensure we only
+    // report the value when transitioning from HAVE_ENOUGH to HAVE_NOTHING.
+    if (data_source_ &&
+        ready_state_ == WebMediaPlayer::ReadyStateHaveEnoughData) {
+      UMA_HISTOGRAM_COUNTS_100("Media.UnderflowCount", ++underflow_count_);
+      underflow_timer_.reset(new base::ElapsedTimer());
+    }
+
     // It shouldn't be possible to underflow if we've not advanced past
     // HAVE_CURRENT_DATA.
     DCHECK_GT(highest_ready_state_, WebMediaPlayer::ReadyStateHaveCurrentData);
@@ -1246,15 +1325,37 @@ void WebMediaPlayerImpl::OnShown() {
   UpdatePlayState();
 }
 
-void WebMediaPlayerImpl::OnSuspendRequested(bool must_suspend) {
+bool WebMediaPlayerImpl::OnSuspendRequested(bool must_suspend) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
 
-  if (must_suspend)
+  if (must_suspend) {
     must_suspend_ = true;
-  else
-    is_idle_ = true;
+    UpdatePlayState();
+    return true;
+  }
 
-  UpdatePlayState();
+  // If we're beyond HaveFutureData, we can safely suspend at any time.
+  if (highest_ready_state_ >= WebMediaPlayer::ReadyStateHaveFutureData) {
+    is_idle_ = true;
+    UpdatePlayState();
+    return true;
+  }
+
+  // Before HaveFutureData blink will not call play(), so we must be careful to
+  // only suspend if we'll eventually receive an event that will trigger a
+  // resume. If the last time loading progressed was a while ago, and we still
+  // haven't reached HaveFutureData, we assume that we're waiting on more data
+  // to continue pre-rolling. When that data is loaded the pipeline will be
+  // resumed by didLoadingProgress().
+  if (last_time_loading_progressed_.is_null() ||
+      (tick_clock_->NowTicks() - last_time_loading_progressed_) >
+          kLoadingToIdleTimeout) {
+    is_idle_ = true;
+    UpdatePlayState();
+    return true;
+  }
+
+  return false;
 }
 
 void WebMediaPlayerImpl::OnPlay() {
@@ -1625,7 +1726,11 @@ static void GetCurrentFrameAndSignal(
 
 scoped_refptr<VideoFrame>
 WebMediaPlayerImpl::GetCurrentFrameFromCompositor() {
+  DCHECK(main_task_runner_->BelongsToCurrentThread());
   TRACE_EVENT0("media", "WebMediaPlayerImpl::GetCurrentFrameFromCompositor");
+
+  // Needed when the |main_task_runner_| and |compositor_task_runner_| are the
+  // same to avoid deadlock in the Wait() below.
   if (compositor_task_runner_->BelongsToCurrentThread())
     return compositor_->GetCurrentFrameAndUpdateIfStale();
 
@@ -1644,11 +1749,14 @@ WebMediaPlayerImpl::GetCurrentFrameFromCompositor() {
 }
 
 void WebMediaPlayerImpl::UpdatePlayState() {
+  DCHECK(main_task_runner_->BelongsToCurrentThread());
+
 #if defined(OS_ANDROID)  // WMPI_CAST
   bool is_remote = isRemote();
 #else
   bool is_remote = false;
 #endif
+
   bool is_suspended = pipeline_controller_.IsSuspended();
   bool is_backgrounded =
       IsBackgroundedSuspendEnabled() && delegate_ && delegate_->IsHidden();
@@ -1663,11 +1771,12 @@ void WebMediaPlayerImpl::SetDelegateState(DelegateState new_state) {
   if (!delegate_)
     return;
 
-  // Dedupe state changes in the general case, but make an exception for gone
-  // since the delegate will use that information to decide when the idle timer
-  // should be fired.
-  if (delegate_state_ == new_state && new_state != DelegateState::GONE)
-    return;
+  if (delegate_state_ == new_state) {
+    if (delegate_state_ != DelegateState::PLAYING ||
+        autoplay_muted_ == client_->isAutoplayingMuted()) {
+      return;
+    }
+  }
 
   delegate_state_ = new_state;
 
@@ -1675,10 +1784,14 @@ void WebMediaPlayerImpl::SetDelegateState(DelegateState new_state) {
     case DelegateState::GONE:
       delegate_->PlayerGone(delegate_id_);
       break;
-    case DelegateState::PLAYING:
-      delegate_->DidPlay(delegate_id_, hasVideo(), hasAudio(), false,
-                         pipeline_.GetMediaDuration());
+    case DelegateState::PLAYING: {
+      autoplay_muted_ = client_->isAutoplayingMuted();
+      bool has_audio = autoplay_muted_ ? false : hasAudio();
+      delegate_->DidPlay(
+          delegate_id_, hasVideo(), has_audio, false,
+          media::DurationToMediaContentType(pipeline_.GetMediaDuration()));
       break;
+    }
     case DelegateState::PAUSED:
       delegate_->DidPause(delegate_id_, false);
       break;
@@ -1706,6 +1819,8 @@ void WebMediaPlayerImpl::SetMemoryReportingState(
 }
 
 void WebMediaPlayerImpl::SetSuspendState(bool is_suspended) {
+  DCHECK(main_task_runner_->BelongsToCurrentThread());
+
   // Do not change the state after an error has occurred.
   // TODO(sandersd): Update PipelineController to remove the need for this.
   if (IsNetworkStateError(network_state_))
@@ -1753,7 +1868,8 @@ WebMediaPlayerImpl::UpdatePlayState_ComputePlayState(bool is_remote,
   // After HaveMetadata, we know which tracks are present and the duration.
   bool have_metadata = ready_state_ >= WebMediaPlayer::ReadyStateHaveMetadata;
 
-  // After HaveFutureData, Blink will call play() if the state is not paused.
+  // After HaveFutureData, Blink will call play() if the state is not paused;
+  // prior to this point |paused_| is not accurate.
   bool have_future_data =
       highest_ready_state_ >= WebMediaPlayer::ReadyStateHaveFutureData;
 
@@ -1768,8 +1884,13 @@ WebMediaPlayerImpl::UpdatePlayState_ComputePlayState(bool is_remote,
       delegate_ && delegate_->IsPlayingBackgroundVideo();
   bool background_suspended = is_backgrounded_video &&
                               !(can_play_backgrounded && is_background_playing);
-  bool background_pause_suspended = is_backgrounded && paused_;
+  bool background_pause_suspended =
+      is_backgrounded && paused_ && have_future_data;
 
+  // Idle suspension is allowed prior to have future data since there exist
+  // mechanisms to exit the idle state when the player is capable of reaching
+  // the have future data state; see didLoadingProgress().
+  //
   // TODO(sandersd): Make the delegate suspend idle players immediately when
   // hidden.
   bool idle_suspended = is_idle_ && paused_ && !seeking_ && !overlay_enabled_;

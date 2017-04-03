@@ -2,14 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/location.h"
 #include "components/sync/driver/data_type_manager_mock.h"
 
-namespace sync_driver {
+namespace syncer {
 
-DataTypeManagerMock::DataTypeManagerMock()
-    : result_(OK, syncer::ModelTypeSet()) {}
+DataTypeManagerMock::DataTypeManagerMock() : result_(OK, ModelTypeSet()) {}
 
 DataTypeManagerMock::~DataTypeManagerMock() {}
 
-}  // namespace sync_driver
+}  // namespace syncer

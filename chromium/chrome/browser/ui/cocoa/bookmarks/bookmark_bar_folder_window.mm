@@ -8,7 +8,9 @@
 #import "base/mac/scoped_nsobject.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_bar_constants.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_bar_folder_controller.h"
+#include "chrome/grit/generated_resources.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMNSColor+Luminance.h"
+#include "ui/base/l10n/l10n_util_mac.h"
 #include "ui/base/material_design/material_design_controller.h"
 
 using bookmarks::kBookmarkBarMenuCornerRadius;
@@ -19,6 +21,12 @@ namespace {
 const CGFloat kMDFolderWindowBackgroundColor = 237. / 255.;
 
 }  // namespace
+
+@interface BookmarkBarFolderWindow (Accessibility)
+
+- (NSString*)accessibilityTitle;
+
+@end
 
 @implementation BookmarkBarFolderWindow
 
@@ -48,13 +56,18 @@ const CGFloat kMDFolderWindowBackgroundColor = 237. / 255.;
 - (void)keyDown:(NSEvent *)theEvent {
 }
 
+// If the menu doesn't have a separate accessibleTitle, it will get announced as
+// its normal window title, which is "BmbPopUpWindow".
+- (NSString*)accessibilityTitle {
+  return l10n_util::GetNSString(IDS_ACCNAME_BOOKMARKS_MENU);
+}
+
 @end
 
 
 @implementation BookmarkBarFolderWindowContentView
 
 + (NSColor*)backgroundColor {
-  DCHECK(ui::MaterialDesignController::IsModeMaterial());
   static NSColor* backgroundColor =
       [[NSColor colorWithGenericGamma22White:kMDFolderWindowBackgroundColor
                                        alpha:1.0] retain];
@@ -67,25 +80,8 @@ const CGFloat kMDFolderWindowBackgroundColor = 237. / 255.;
       [NSBezierPath bezierPathWithRoundedRect:[self bounds]
                                       xRadius:kBookmarkBarMenuCornerRadius
                                       yRadius:kBookmarkBarMenuCornerRadius];
-  if (ui::MaterialDesignController::IsModeMaterial()) {
-    [[BookmarkBarFolderWindowContentView backgroundColor] set];
-    [bezier fill];
-  } else {
-    NSColor* startColor = [NSColor colorWithCalibratedWhite:0.91 alpha:1.0];
-    NSColor* midColor =
-        [startColor gtm_colorAdjustedFor:GTMColorationLightMidtone faded:YES];
-    NSColor* endColor =
-        [startColor gtm_colorAdjustedFor:GTMColorationLightPenumbra faded:YES];
-
-    base::scoped_nsobject<NSGradient> gradient(
-        [[NSGradient alloc] initWithColorsAndLocations:startColor, 0.0,
-                                                       midColor, 0.25,
-                                                       endColor, 0.5,
-                                                       midColor, 0.75,
-                                                       startColor, 1.0,
-                                                       nil]);
-    [gradient drawInBezierPath:bezier angle:0.0];
-  }
+  [[BookmarkBarFolderWindowContentView backgroundColor] set];
+  [bezier fill];
 }
 
 @end

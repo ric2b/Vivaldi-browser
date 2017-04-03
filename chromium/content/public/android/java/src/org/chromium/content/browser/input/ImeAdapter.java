@@ -346,6 +346,7 @@ public class ImeAdapter {
         if (nativeImeAdapter != 0) {
             createInputConnectionFactory();
         }
+        resetAndHideKeyboard();
     }
 
     /**
@@ -374,7 +375,14 @@ public class ImeAdapter {
         }
         // Detach input connection by returning null from onCreateInputConnection().
         if (mTextInputType == TextInputType.NONE && mInputConnection != null) {
-            restartInput();
+            ChromiumBaseInputConnection inputConnection = mInputConnection;
+            restartInput();  // resets mInputConnection
+            // crbug.com/666982: Restart input may not happen if view is detached from window, but
+            // we need to unblock in any case. We want to call this after restartInput() to
+            // ensure that there is no additional IME operation in the queue, except for
+            // moveCursorToSelectionEnd(), which block the IME thread unnecessarily and need
+            // refactoring anyways. (crbug.com/662908)
+            inputConnection.unblockOnUiThread();
         }
     }
 
@@ -426,6 +434,7 @@ public class ImeAdapter {
      * Call this when view is detached from window
      */
     public void onViewDetachedFromWindow() {
+        resetAndHideKeyboard();
         if (mInputConnectionFactory != null) {
             mInputConnectionFactory.onViewDetachedFromWindow();
         }
@@ -437,7 +446,6 @@ public class ImeAdapter {
      */
     public void onViewFocusChanged(boolean gainFocus) {
         if (DEBUG_LOGS) Log.w(TAG, "onViewFocusChanged: gainFocus [%b]", gainFocus);
-        if (!gainFocus) resetAndHideKeyboard();
         if (mInputConnectionFactory != null) {
             mInputConnectionFactory.onViewFocusChanged(gainFocus);
         }
@@ -566,7 +574,7 @@ public class ImeAdapter {
                 timestampMs, COMPOSITION_KEY_CODE, 0, false, unicodeFromKeyEvent);
 
         if (isCommit) {
-            nativeCommitText(mNativeImeAdapterAndroid, text.toString());
+            nativeCommitText(mNativeImeAdapterAndroid, text.toString(), newCursorPosition);
         } else {
             nativeSetComposingText(
                     mNativeImeAdapterAndroid, text, text.toString(), newCursorPosition);
@@ -768,7 +776,8 @@ public class ImeAdapter {
             int end, int backgroundColor);
     private native void nativeSetComposingText(long nativeImeAdapterAndroid, CharSequence text,
             String textStr, int newCursorPosition);
-    private native void nativeCommitText(long nativeImeAdapterAndroid, String textStr);
+    private native void nativeCommitText(
+            long nativeImeAdapterAndroid, String textStr, int newCursorPosition);
     private native void nativeFinishComposingText(long nativeImeAdapterAndroid);
     private native void nativeAttachImeAdapter(long nativeImeAdapterAndroid);
     private native void nativeSetEditableSelectionOffsets(long nativeImeAdapterAndroid,

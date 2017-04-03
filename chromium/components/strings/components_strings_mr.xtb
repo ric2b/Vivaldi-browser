@@ -15,6 +15,7 @@
 <translation id="1107591249535594099">चेक केल्यास, अधिक जलद फॉर्म भरण्यासाठी या डिव्हाइसवर Chrome आपल्या कार्डची एक प्रत संचयित करेल.</translation>
 <translation id="1111153019813902504">अलीकडील बुकमार्क</translation>
 <translation id="1113869188872983271">&amp;पुनर्क्रमित करा पूर्ववत करा</translation>
+<translation id="1126551341858583091">स्थानिक संचयावरील आकार <ph name="CRASH_SIZE" /> आहे.</translation>
 <translation id="112840717907525620">धोरण कॅशे ठीक</translation>
 <translation id="113188000913989374"><ph name="SITE" /> म्हणते:</translation>
 <translation id="1132774398110320017">Chrome स्वयंभरण सेटिंग्ज...</translation>
@@ -79,7 +80,6 @@
 <translation id="1871208020102129563">प्रॉक्सी निश्चित प्रॉक्सी सर्व्हर वापरण्‍यास सेट करण्‍यात आले आहे, .pac स्क्रिप्ट URL नव्हे.</translation>
 <translation id="1883255238294161206">सूची संकुचित करा</translation>
 <translation id="1898423065542865115">फिल्टर करणे</translation>
-<translation id="1911837502049945214"><ph name="HOST_NAME" /> नी आपले लॉग इन प्रमाणपत्र स्वीकारले नाही किंवा कदाचित आपले लॉग इन प्रमाणपत्र कालबाह्य झाले असावे.</translation>
 <translation id="194030505837763158"><ph name="LINK" /> दुव्याकडे जा</translation>
 <translation id="1962204205936693436"><ph name="DOMAIN" /> बुकमार्क</translation>
 <translation id="1973335181906896915">क्रमीकरण त्रुटी</translation>
@@ -172,10 +172,8 @@
 <translation id="2824775600643448204">पत्ता आणि शोध बार</translation>
 <translation id="2826760142808435982">कनेक्शन <ph name="CIPHER" /> वापरून आणि की विनिमय तंत्र म्हणून <ph name="KX" /> वापर कूटबद्ध आणि प्रमाणीकृत केले आहे.</translation>
 <translation id="2835170189407361413">फॉर्म क्लिअर करा</translation>
-<translation id="2837049386027881519">TLS किंवा SSL प्रोटॉकॉलची जुनी आवृत्ती वापरून कनेक्शन पुनर्प्रयत्न केला. असे विशेषकरून तेव्हाच होते जेव्हा सर्व्हर खूपच जुने सॉफ्टवेअर वापरत आहे आणि इतर सुरक्षितता समस्या येत असू शकतात.</translation>
 <translation id="284702764277384724"><ph name="HOST_NAME" /> वरील सर्व्हर प्रमाणपत्र खोटे असल्याचे दिसते.</translation>
 <translation id="2889159643044928134">रीलोड करु नका</translation>
-<translation id="2896499918916051536">हे प्लगिन समर्थित नाही.</translation>
 <translation id="2900469785430194048">हे वेबपृष्ठ प्रदर्शित करण्याचा प्रयत्न करताना Google Chrome ची मेमरी संपली आहे.</translation>
 <translation id="2909946352844186028">एक नेटवर्क बदल आढळला.</translation>
 <translation id="2922350208395188000">सर्व्हरचे प्रमाणपत्र तपासणे शक्य नाही.</translation>
@@ -217,8 +215,10 @@
 <translation id="3254409185687681395">या पृष्ठास बुकमार्क करा</translation>
 <translation id="3270847123878663523">&amp;पुनर्क्रमित करा पूर्ववत करा</translation>
 <translation id="3286538390144397061">त्वरित रीस्टार्ट करा</translation>
+<translation id="3303855915957856445">कोणतेही शोध परिणाम आढळले नाहीत</translation>
 <translation id="3305707030755673451">आपला डेटा आपल्या संकालन सांकेतिक वाक्यांशासह <ph name="TIME" /> वाजता कूटबद्ध केला होता. संकालन सुरु करण्यासाठी तो प्रविष्ट करा.</translation>
 <translation id="333371639341676808">अतिरिक्त संवाद तयार करण्यापासून या पृष्ठाला प्रतिबंधित करा.</translation>
+<translation id="3338095232262050444">सुरक्षित</translation>
 <translation id="3340978935015468852">सेटिंग्ज</translation>
 <translation id="3345135638360864351">या साइटवर प्रवेश करण्याची आपली विनंती <ph name="NAME" /> कडे पाठविली जाऊ शकली नाही. कृपया पुन्हा प्रयत्न करा.</translation>
 <translation id="3355823806454867987">प्रॉक्सी सेटिंग्ज बदला...</translation>
@@ -290,6 +290,7 @@
 <translation id="3963721102035795474">वाचक मोड</translation>
 <translation id="397105322502079400">गणना करत आहे...</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> अवरोधित केले आहे</translation>
+<translation id="40103911065039147">{URL_count,plural, =1{जवळपास 1 वेब पृष्‍ठ}one{जवळपास # वेब पृष्‍ठ}other{जवळपास # वेब पृष्ठे}}</translation>
 <translation id="4021036232240155012">DNS ही नेटवर्क सेवा आहे जी वेबसाइटचे नाव तिच्या इंटरनेट पत्त्यामध्‍ये भाषांतरित करते.</translation>
 <translation id="4030383055268325496">&amp;जोडा पूर्ववत करा</translation>
 <translation id="404928562651467259">चेतावणी:</translation>
@@ -320,11 +321,13 @@
 <translation id="4304224509867189079">लॉग इन</translation>
 <translation id="432290197980158659">सर्व्हरने प्रमाणपत्र सादर केले जे अंगभूत अपेक्षांशी जुळत नाही. या अपेक्षा आपल्याला संरक्षित करण्यासाठी विशिष्ट, उच्च-सुरक्षिततेच्या वेबसाइटसाठी समाविष्ट केल्या आहेत. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जाणून घ्या<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="4325863107915753736">लेख शोधण्यात अयशस्वी</translation>
+<translation id="4331708818696583467">सुरक्षित नाही</translation>
 <translation id="4372948949327679948">अपेक्षित <ph name="VALUE_TYPE" /> मूल्य.</translation>
 <translation id="4381091992796011497">वापरकर्ता नाव:</translation>
 <translation id="4394049700291259645">अक्षम करा</translation>
 <translation id="4395129973926795186"><ph name="START_DATE" /> ते <ph name="END_DATE" /></translation>
 <translation id="4406896451731180161">शोध परिणाम</translation>
+<translation id="4432688616882109544"><ph name="HOST_NAME" /> ने आपले लॉग इन प्रमाणपत्र स्वीकारले नाही किंवा कदाचित प्रदान केले गेले नसावे.</translation>
 <translation id="443673843213245140">प्रॉक्सीचा वापर अक्षम करण्‍यात आला आहे पण एक सुस्पष्‍ट प्रॉक्सी कॉन्‍फिगरेशन निर्दिष्‍ट करण्‍यात आले आहे.</translation>
 <translation id="4458874409874303848">SafeSites</translation>
 <translation id="4461847750548395463">आपल्याला हा संदेश दिसत आहे कारण Google SafeSites सक्षम केलेली आहे.</translation>
@@ -339,6 +342,7 @@
 <translation id="4589078953350245614">आपण <ph name="DOMAIN" /> येथे पोहोचण्याचा प्रयत्न केला, परंतु सर्व्हरने अवैध प्रमाणपत्र सादर केले. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जाणून घ्या<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="4592951414987517459">आपले <ph name="DOMAIN" /> वरील कनेक्शन आधुनिक सायफर सूट वापरून कूटबद्ध केलेले आहे.</translation>
 <translation id="4594403342090139922">&amp;हटवा पूर्ववत करा</translation>
+<translation id="4627442949885028695">दुसर्‍या डिव्हाइस वरून सुरु ठेवा</translation>
 <translation id="4668929960204016307">,</translation>
 <translation id="4670097147947922288">आपण एक विस्तार पृष्ठ पाहत आहात.</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
@@ -359,14 +363,15 @@
 <translation id="4880827082731008257">इतिहास शोध</translation>
 <translation id="4884656795097055129">योग्य वेळ असते तेव्हा आणखी लेख दिसतील.</translation>
 <translation id="4895877746940133817"><ph name="TYPE_1" />, <ph name="TYPE_2" />, <ph name="TYPE_3" /></translation>
+<translation id="4914479371620770914">{URL_count,plural, =1{आणि 1 आणखी वेब पृष्ठ}one{आणि # आणखी वेब पृष्‍ठ}other{आणि # आणखी वेब पृष्ठे}}</translation>
 <translation id="4923417429809017348">हे पृष्ठ अज्ञात भाषेतून <ph name="LANGUAGE_LANGUAGE" /> मध्ये अनुवादित करण्यात आले</translation>
 <translation id="4926049483395192435">निर्दिष्‍ट केले जाणे आवश्‍यक आहे.</translation>
 <translation id="4930497775425430760">आपल्याला हा संदेश दिसत आहे कारण नवीन साइटच्या आपल्या प्रथम भेटीवर आपल्या पालकाने मंजूरी देणे आवश्यक आहे.</translation>
 <translation id="495170559598752135">क्रिया</translation>
 <translation id="4958444002117714549">सूची विस्तृत करा</translation>
 <translation id="4962322354953122629">हा सर्व्हर हे <ph name="DOMAIN" /> असल्याचे सिद्ध करू शकला नाही; याचे सुरक्षा प्रमाणपत्र Chrome द्वारे विश्वसनीय नाही; हे कदाचित एका चुकीच्या कॉन्फिगरेशनमुळे किंवा आक्रमणकर्त्याने आपले कनेक्शन आंतरखंडित केल्यामुळे झाले असू शकते. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जाणून घ्या<ph name="END_LEARN_MORE_LINK" />.</translation>
-<translation id="4986920000862467124">सर्व वाचले</translation>
 <translation id="498957508165411911"><ph name="ORIGINAL_LANGUAGE" /> मधून <ph name="TARGET_LANGUAGE" /> मध्ये भाषांतरित करायचे?</translation>
+<translation id="4989809363548539747">हे प्लगिन समर्थित नाही</translation>
 <translation id="5002932099480077015">सक्षम केल्‍यास, Chrome जलदपणे फॉर्म भरण्‍यासाठी आपल्‍या कार्डची एक प्रत या डिव्‍हाइसवर संग्रहित करेल.</translation>
 <translation id="5019198164206649151">समर्थन संचयन खराब स्थितीत</translation>
 <translation id="5023310440958281426">आपल्या प्रशासकाची धोरणे तपासा</translation>
@@ -380,7 +385,6 @@
 <translation id="5089810972385038852">राज्य</translation>
 <translation id="5095208057601539847">प्रांत</translation>
 <translation id="5115563688576182185">(64-बिट)</translation>
-<translation id="5122371513570456792">'<ph name="SEARCH_STRING" />' साठी <ph name="NUMBER_OF_RESULTS" /> <ph name="SEARCH_RESULTS" /> आढळले.</translation>
 <translation id="5141240743006678641">आपल्या Google क्रेडेन्शियलसह संंकालित केलेले संकेतशब्द कूटबद्ध करा</translation>
 <translation id="5145883236150621069">धोरण प्रतिसादामध्ये त्रुटी कोड अस्तित्वात आहे</translation>
 <translation id="5171045022955879922">URL शोधा किंवा टाइप करा</translation>
@@ -388,8 +392,8 @@
 <translation id="5179510805599951267"><ph name="ORIGINAL_LANGUAGE" /> मध्ये नाही? या त्रुटीचा अहवाल नोंदवा</translation>
 <translation id="5190835502935405962">बुकमार्क बार</translation>
 <translation id="5199729219167945352">प्रयोग</translation>
-<translation id="52060377617855516">{URL_count,plural, =1{1 वेब पृष्ठ सापडले}one{# वेब पृष्‍ठ सापडले}other{# वेब पृष्ठे सापडली}}</translation>
 <translation id="5251803541071282808">मेघ</translation>
+<translation id="5277279256032773186">कार्यस्थानी Chrome वापरत आहात? व्यवसाय त्यांच्या कर्मचार्‍यांंसाठी Chrome सेटिंग्ज व्यवस्थापित करू शकतात. अधिक जाणनू घ्या</translation>
 <translation id="5299298092464848405">धोरण विश्लेषित करताना त्रुटी</translation>
 <translation id="5300589172476337783">दर्शवा</translation>
 <translation id="5308689395849655368">क्रॅश अहवाल अक्षम केला गेला आहे.</translation>
@@ -423,7 +427,6 @@
 <translation id="5622887735448669177">आपण ही साइट सोडू इच्छिता?</translation>
 <translation id="5629630648637658800">धोरण सेटिंग्ज लोड करण्यात अयशस्वी</translation>
 <translation id="5631439013527180824">अवैध डिव्हाइस व्यवस्थापन टोकन</translation>
-<translation id="5650551054760837876">शोध परिणाम आढळले नाहीत.</translation>
 <translation id="5677928146339483299">अवरोधित</translation>
 <translation id="5710435578057952990">या वेबसाइटची ओळख सत्यापित केली गेली नाही.</translation>
 <translation id="5720705177508910913">वर्तमान वापरकर्ता</translation>
@@ -463,7 +466,6 @@
 <translation id="6150607114729249911">अरेरे! या पृष्‍ठास भेट देणे ठीक आहे का ते आपल्‍या पालकांना विचारण्‍याची आपल्‍याला आवश्‍यकता आहे.</translation>
 <translation id="6151417162996330722">सर्व्हर प्रमाणपत्रास वैधता कालावधी आहे जो खूप मोठा आहे.</translation>
 <translation id="6165508094623778733">अधिक जाणून घ्या</translation>
-<translation id="6180780615171238625">हे प्रमाणपत्र निरस्त केले गेल्याने आपण याक्षणी <ph name="SITE" /> ला भेट देऊ शकत नाही. नेटवर्क त्रुटी आणि आक्रमणे सामान्यतः तात्पुरती असतात, यामुळे हे पृष्ठ कदाचित नंतर कार्य करेल. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जाणून घ्या<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="6203231073485539293">आपले इंटरनेट कनेक्शन तपासा</translation>
 <translation id="6218753634732582820">Chromium वरून पत्ता काढायचा?</translation>
 <translation id="6259156558325130047">&amp;पुनर्क्रमित करा पुन्हा करा</translation>
@@ -491,6 +493,7 @@
 <translation id="647261751007945333">डिव्हाइस धोरणे</translation>
 <translation id="6489534406876378309">क्रॅश अपलोड करणे प्रारंभ करा</translation>
 <translation id="6529602333819889595">&amp;पुन्हा करा हटवा</translation>
+<translation id="6534179046333460208">वास्तविक वेब सूचना</translation>
 <translation id="6550675742724504774">पर्याय</translation>
 <translation id="6593753688552673085"><ph name="UPPER_ESTIMATE" /> पेक्षा कमी</translation>
 <translation id="6596325263575161958">कूटबद्धता पर्याय</translation>
@@ -524,8 +527,10 @@
 <translation id="6970216967273061347">‍जिल्‍हा</translation>
 <translation id="6973656660372572881">निश्चित प्रॉक्सी सर्व्हर आणि .pac स्क्रिप्ट URL निर्दिष्‍ट करण्‍यात आले आहेत.</translation>
 <translation id="6989763994942163495">प्रगत सेटिंग्ज दर्शवा...</translation>
+<translation id="7000990526846637657">कोणत्याही इतिहास प्रविष्टी सापडल्या नाहीत</translation>
 <translation id="7009986207543992532">आपण <ph name="DOMAIN" /> येथे पोहोचण्याचा प्रयत्न केला, परंतु सर्व्हरने असे प्रमाणपत्र सादर केले ज्याचा वैधता कालावधी विश्वासार्हतेसाठी खूप मोठा आहे. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जाणून घ्या<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="7012363358306927923">China UnionPay</translation>
+<translation id="7012372675181957985">आपल्या Google खात्यात <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" /> वर ब्राउझिंग इतिहासाची अन्य स्वरूपे असू शकतात</translation>
 <translation id="7029809446516969842">संकेतशब्द</translation>
 <translation id="7087282848513945231">परगणा</translation>
 <translation id="7088615885725309056">थोडा जुना</translation>
@@ -551,6 +556,7 @@
 <translation id="7309308571273880165"><ph name="CRASH_TIME" /> वाजता क्रॅश अहवाल कॅप्चर केला (वापरकर्त्याने विनंती केलेले अपलोड, अद्याप अपलोड केलेले नाही)</translation>
 <translation id="7334320624316649418">&amp;पुनर्क्रमित करा पुन्हा करा</translation>
 <translation id="733923710415886693">प्रमाणपत्र पारदर्शकतेद्वारे सर्व्हरचे प्रमाणपत्र उघड केले नाही.</translation>
+<translation id="7351800657706554155">हे प्रमाणपत्र निरस्त केले गेल्याने आपण आत्ता <ph name="SITE" /> ला भेट देऊ शकत नाही. नेटवर्क त्रुटी आणि आक्रमणे सामान्यतः तात्पुरती असतात, त्यामुळे हे पृष्ठ कदाचित नंतर कार्य करेल. <ph name="BEGIN_LEARN_MORE_LINK" />अधिक जाणून घ्या<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="7353601530677266744">कमांड लाइन</translation>
 <translation id="7372973238305370288">शोध परिणाम</translation>
 <translation id="7377249249140280793"><ph name="RELATIVE_DATE" /> - <ph name="FULL_DATE" /></translation>
@@ -569,6 +575,7 @@
 <translation id="7469372306589899959">कार्डची पुष्टी करीत आहे</translation>
 <translation id="7481312909269577407">पुढील</translation>
 <translation id="7485870689360869515">डेटा आढळला नाही.</translation>
+<translation id="7508255263130623398">परत केलेला धोरण डिव्हाइस ID रिक्त आहे किंवा वर्तमान डिव्हाइस ID शी जुळत नाही</translation>
 <translation id="7514365320538308">डाउनलोड करा</translation>
 <translation id="7518003948725431193">या वेबपत्त्यासाठी वेबपृष्ठ आढळले नाही: <ph name="URL" /></translation>
 <translation id="7537536606612762813">अनिवार्य</translation>
@@ -578,6 +585,7 @@
 <translation id="7568593326407688803">हे पृष्ठ<ph name="ORIGINAL_LANGUAGE" />मध्ये आहे आपण याचा भाषांतर करु इच्छिता?</translation>
 <translation id="7569952961197462199">Chrome मधून क्रेडिट कार्ड काढायचे?</translation>
 <translation id="7578104083680115302">आपण Google सह जतन केलेल्या कार्डचा वापर करून डिव्‍हाइसेसवरून द्रुतपणे साइट आणि अॅप्सवर देय द्या.</translation>
+<translation id="7588950540487816470">भौतिक वेब</translation>
 <translation id="7592362899630581445">सर्व्हरचे प्रमाणपत्र नाव मर्यादांचे उल्लंघन करते.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> सध्या ही विनंती हाताळण्यात अक्षम आहे.</translation>
 <translation id="7600965453749440009">कधीही <ph name="LANGUAGE" /> चा भाषांतर करु नका</translation>
@@ -605,6 +613,7 @@
 <translation id="780301667611848630">नाही, धन्यवाद</translation>
 <translation id="7805768142964895445">स्थिती</translation>
 <translation id="7813600968533626083">Chrome मधून सूचना फॉर्म काढायचा?</translation>
+<translation id="7815407501681723534">'<ph name="SEARCH_STRING" />' साठी <ph name="NUMBER_OF_RESULTS" /> <ph name="SEARCH_RESULTS" /> सापडले</translation>
 <translation id="785549533363645510">तथापि, आपण अदृश्य नाही. गुप्त झाल्याने आपले ब्राउझिंग आपला नियोक्ता, आपला इंटरनेट सेवा प्रदाता, किंवा आपण भेट देता त्या वेबसाइटपासून लपत नाही.</translation>
 <translation id="7887683347370398519">आपले CVC तपासा आणि पुन्हा प्रयत्न करा</translation>
 <translation id="7894616681410591072">अरेरे, या पृष्ठावर प्रवेश करण्यासाठी <ph name="NAME" /> द्वारे आपल्याला परवानगी आवश्यक आहे.</translation>
@@ -620,7 +629,6 @@
 <translation id="7995512525968007366">निर्दिष्ट केलेले नाही</translation>
 <translation id="8012647001091218357">आम्ही याक्षणी आपल्या पालकांपर्यंत पोहोचू शकलो नाही. कृपया पुन्हा प्रयत्न करा.</translation>
 <translation id="8034522405403831421">हे पृष्‍ठ <ph name="SOURCE_LANGUAGE" /> मध्ये आहे. त्यास <ph name="TARGET_LANGUAGE" /> मध्ये भाषांतरीत करायचे?</translation>
-<translation id="8034955203865359138">कोणत्याही इतिहास प्रविष्ट्या आढळल्या नाहीत.</translation>
 <translation id="8088680233425245692">लेख पाहण्यात अयशस्वी.</translation>
 <translation id="8089520772729574115">1 MB पेक्षा कमी</translation>
 <translation id="8091372947890762290">सक्रियकरण सर्व्हरवर प्रलंबित आहे</translation>
@@ -646,6 +654,7 @@
 <translation id="8349305172487531364">बुकमार्क बार</translation>
 <translation id="8363502534493474904">विमान मोड बंद करा</translation>
 <translation id="8364627913115013041">सेट केलेले नाही.</translation>
+<translation id="8380941800586852976">धोकादायक</translation>
 <translation id="8412145213513410671">क्रॅश (<ph name="CRASH_COUNT" />)</translation>
 <translation id="8412392972487953978">आपण समान सांकेतिक वाक्यांश दोनदा प्रविष्ट करणे आवश्यक आहे.</translation>
 <translation id="8428213095426709021">सेटिंग्ज</translation>
@@ -672,7 +681,6 @@
 <translation id="8730621377337864115">पूर्ण झाले</translation>
 <translation id="8738058698779197622">एक सुरक्षित कनेक्‍शन स्‍थापित करण्‍यापूर्वी, आपले घड्‍याळ योग्यरित्या सेट केले असणे आवश्यक आहे. कारण वेबसाइट त्यांना स्‍वत:ला ओळखण्‍यासाठी वापरतात ती प्रमाणपत्रे केवळ निर्दिष्‍ट केलेल्‍या कालावधीसाठी वैध असतात. आपल्‍या डिव्‍हाइसचे घड्‍याळ चुकीचे असल्‍यामुळे, Chromium ही प्रमाणपत्रे सत्यापित करू शकत नाही.</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" />चा &lt;abbr id="dnsDefinition"&gt;DNS पत्ता&lt;/abbr&gt; शोधणे शक्य झाले नाही. समस्येचे निराकरण करीत आहे.</translation>
-<translation id="8741995161408053644">आपल्या Google खात्यात ब्राउझिंग इतिहासाची इतर स्वरूपे  <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" /> वर असू शकतात.</translation>
 <translation id="8790007591277257123">&amp;पुन्हा करा हटवा</translation>
 <translation id="8798099450830957504">डीफॉल्ट</translation>
 <translation id="8804164990146287819">गोपनीयता धोरण</translation>

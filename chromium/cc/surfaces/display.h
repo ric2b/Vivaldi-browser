@@ -13,6 +13,7 @@
 #include "cc/resources/returned_resource.h"
 #include "cc/scheduler/begin_frame_source.h"
 #include "cc/surfaces/display_scheduler.h"
+#include "cc/surfaces/frame_sink_id.h"
 #include "cc/surfaces/surface_aggregator.h"
 #include "cc/surfaces/surface_id.h"
 #include "cc/surfaces/surface_manager.h"
@@ -66,7 +67,7 @@ class CC_SURFACES_EXPORT Display : public DisplaySchedulerClient,
 
   void Initialize(DisplayClient* client,
                   SurfaceManager* surface_manager,
-                  uint32_t compositor_surface_namespace);
+                  const FrameSinkId& frame_sink_id);
 
   // device_scale_factor is used to communicate to the external window system
   // what scale this was rendered at.
@@ -74,8 +75,6 @@ class CC_SURFACES_EXPORT Display : public DisplaySchedulerClient,
   void SetVisible(bool visible);
   void Resize(const gfx::Size& new_size);
   void SetColorSpace(const gfx::ColorSpace& color_space);
-  void SetExternalClip(const gfx::Rect& clip);
-  void SetExternalViewport(const gfx::Rect& viewport);
   void SetOutputIsSecure(bool secure);
 
   const SurfaceId& CurrentSurfaceId();
@@ -84,8 +83,6 @@ class CC_SURFACES_EXPORT Display : public DisplaySchedulerClient,
   bool DrawAndSwap() override;
 
   // OutputSurfaceClient implementation.
-  void CommitVSyncParameters(base::TimeTicks timebase,
-                             base::TimeDelta interval) override;
   void SetBeginFrameSource(BeginFrameSource* source) override;
   void SetNeedsRedrawRect(const gfx::Rect& damage_rect) override;
   void DidSwapBuffersComplete() override;
@@ -120,15 +117,13 @@ class CC_SURFACES_EXPORT Display : public DisplaySchedulerClient,
 
   DisplayClient* client_ = nullptr;
   SurfaceManager* surface_manager_ = nullptr;
-  uint32_t compositor_surface_namespace_;
+  FrameSinkId frame_sink_id_;
   SurfaceId current_surface_id_;
   gfx::Size current_surface_size_;
   float device_scale_factor_ = 1.f;
   gfx::ColorSpace device_color_space_;
   bool visible_ = false;
   bool swapped_since_resize_ = false;
-  gfx::Rect external_clip_;
-  gfx::Rect external_viewport_;
   bool output_is_secure_ = false;
 
   // The begin_frame_source_ is often known by the output_surface_ and

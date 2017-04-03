@@ -4,9 +4,7 @@
 
 #include "components/sync/device_info/device_count_metrics_provider.h"
 
-#include <memory>
 #include <string>
-#include <vector>
 
 #include "base/bind.h"
 #include "base/test/histogram_tester.h"
@@ -14,7 +12,7 @@
 #include "components/sync/device_info/device_info_tracker.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace sync_driver {
+namespace syncer {
 
 namespace {
 
@@ -28,8 +26,8 @@ class FakeTracker : public DeviceInfoTracker {
       const std::string& client_id) const override {
     return std::unique_ptr<DeviceInfo>();
   }
-  ScopedVector<DeviceInfo> GetAllDeviceInfo() const override {
-    return ScopedVector<DeviceInfo>();
+  std::vector<std::unique_ptr<DeviceInfo>> GetAllDeviceInfo() const override {
+    return std::vector<std::unique_ptr<DeviceInfo>>();
   }
   void AddObserver(Observer* observer) override {}
   void RemoveObserver(Observer* observer) override {}
@@ -101,4 +99,4 @@ TEST_F(DeviceCountMetricsProviderTest, VeryLarge) {
 
 }  // namespace
 
-}  // namespace sync_driver
+}  // namespace syncer

@@ -771,7 +771,9 @@ class IPCChannelProxyMojoTest : public IPCChannelMojoTestBase {
     runner_.reset(new ChannelProxyRunner(TakeHandle(), true));
   }
   void CreateProxy(IPC::Listener* listener) { runner_->CreateProxy(listener); }
-  void RunProxy() { runner_->RunProxy(); }
+  void RunProxy() {
+    runner_->RunProxy();
+  }
   void DestroyProxy() {
     runner_.reset();
     base::RunLoop().RunUntilIdle();
@@ -807,10 +809,13 @@ class ListenerWithSimpleProxyAssociatedInterface
     DCHECK(received_quit_);
   }
 
-  void RegisterInterfaceFactory(IPC::ChannelProxy* proxy) {
-    proxy->AddAssociatedInterface(
-        base::Bind(&ListenerWithSimpleProxyAssociatedInterface::BindRequest,
-                   base::Unretained(this)));
+  void OnAssociatedInterfaceRequest(
+      const std::string& interface_name,
+      mojo::ScopedInterfaceEndpointHandle handle) override {
+    DCHECK_EQ(interface_name, IPC::mojom::SimpleTestDriver::Name_);
+    IPC::mojom::SimpleTestDriverAssociatedRequest request;
+    request.Bind(std::move(handle));
+    binding_.Bind(std::move(request));
   }
 
   bool received_all_messages() const {
@@ -857,7 +862,6 @@ TEST_F(IPCChannelProxyMojoTest, ProxyThreadAssociatedInterface) {
 
   ListenerWithSimpleProxyAssociatedInterface listener;
   CreateProxy(&listener);
-  listener.RegisterInterfaceFactory(proxy());
   RunProxy();
 
   base::RunLoop().Run();
@@ -919,6 +923,97 @@ DEFINE_IPC_CHANNEL_MOJO_TEST_CLIENT(ProxyThreadAssociatedInterfaceClient,
   }
   driver->RequestQuit(base::MessageLoop::QuitWhenIdleClosure());
   base::RunLoop().Run();
+
+  DestroyProxy();
+}
+
+class ListenerWithIndirectProxyAssociatedInterface
+    : public IPC::Listener,
+      public IPC::mojom::IndirectTestDriver,
+      public IPC::mojom::PingReceiver {
+ public:
+  ListenerWithIndirectProxyAssociatedInterface()
+      : driver_binding_(this), ping_receiver_binding_(this) {}
+  ~ListenerWithIndirectProxyAssociatedInterface() override {}
+
+  bool OnMessageReceived(const IPC::Message& message) override { return true; }
+
+  void RegisterInterfaceFactory(IPC::ChannelProxy* proxy) {
+    proxy->AddAssociatedInterface(
+        base::Bind(&ListenerWithIndirectProxyAssociatedInterface::BindRequest,
+                   base::Unretained(this)));
+  }
+
+  void set_ping_handler(const base::Closure& handler) {
+    ping_handler_ = handler;
+  }
+
+ private:
+  // IPC::mojom::IndirectTestDriver:
+  void GetPingReceiver(
+      IPC::mojom::PingReceiverAssociatedRequest request) override {
+    ping_receiver_binding_.Bind(std::move(request));
+  }
+
+  // IPC::mojom::PingReceiver:
+  void Ping(const PingCallback& callback) override {
+    callback.Run();
+    ping_handler_.Run();
+  }
+
+  void BindRequest(IPC::mojom::IndirectTestDriverAssociatedRequest request) {
+    DCHECK(!driver_binding_.is_bound());
+    driver_binding_.Bind(std::move(request));
+  }
+
+  mojo::AssociatedBinding<IPC::mojom::IndirectTestDriver> driver_binding_;
+  mojo::AssociatedBinding<IPC::mojom::PingReceiver> ping_receiver_binding_;
+
+  base::Closure ping_handler_;
+};
+
+TEST_F(IPCChannelProxyMojoTest, ProxyThreadAssociatedInterfaceIndirect) {
+  // Tests that we can pipeline interface requests and subsequent messages
+  // targeting proxy thread bindings, and the channel will still dispatch
+  // messages appropriately.
+
+  InitWithMojo("ProxyThreadAssociatedInterfaceIndirectClient");
+
+  ListenerWithIndirectProxyAssociatedInterface listener;
+  CreateProxy(&listener);
+  listener.RegisterInterfaceFactory(proxy());
+  RunProxy();
+
+  base::RunLoop loop;
+  listener.set_ping_handler(loop.QuitClosure());
+  loop.Run();
+
+  EXPECT_TRUE(WaitForClientShutdown());
+
+  DestroyProxy();
+}
+
+DEFINE_IPC_CHANNEL_MOJO_TEST_CLIENT(
+    ProxyThreadAssociatedInterfaceIndirectClient,
+    ChannelProxyClient) {
+  DummyListener listener;
+  CreateProxy(&listener);
+  RunProxy();
+
+  // Use an interface requested via another interface. On the remote end both
+  // interfaces are bound on the proxy thread. This ensures that the Ping
+  // message we send will still be dispatched properly even though the remote
+  // endpoint may not have been bound yet by the time the message is initially
+  // processed on the IO thread.
+  IPC::mojom::IndirectTestDriverAssociatedPtr driver;
+  IPC::mojom::PingReceiverAssociatedPtr ping_receiver;
+  proxy()->GetRemoteAssociatedInterface(&driver);
+  driver->GetPingReceiver(
+      mojo::GetProxy(&ping_receiver, driver.associated_group()));
+
+  base::RunLoop loop;
+  ping_receiver->Ping(loop.QuitClosure());
+  loop.Run();
 
   DestroyProxy();
 }
@@ -1159,6 +1254,96 @@ DEFINE_IPC_CHANNEL_MOJO_TEST_CLIENT(SyncAssociatedInterface,
   DestroyProxy();
 }
 
+TEST_F(IPCChannelProxyMojoTest, Pause) {
+  // Ensures that pausing a channel elicits the expected behavior when sending
+  // messages, unpausing, sending more messages, and then manually flushing.
+  // Specifically a sequence like:
+  //
+  //   Connect()
+  //   Send(A)
+  //   Pause()
+  //   Send(B)
+  //   Send(C)
+  //   Unpause(false)
+  //   Send(D)
+  //   Send(E)
+  //   Flush()
+  //
+  // must result in the other end receiving messages A, D, E, B, D; in that
+  // order.
+  //
+  // This behavior is required by some consumers of IPC::Channel, and it is not
+  // sufficient to leave this up to the consumer to implement since associated
+  // interface requests and messages also need to be queued according to the
+  // same policy.
+  InitWithMojo("CreatePausedClient");
+
+  DummyListener listener;
+  CreateProxy(&listener);
+  RunProxy();
+
+  // This message must be sent immediately since the channel is unpaused.
+  SendValue(proxy(), 1);
+
+  proxy()->Pause();
+
+  // These messages must be queued internally since the channel is paused.
+  SendValue(proxy(), 2);
+  SendValue(proxy(), 3);
+
+  proxy()->Unpause(false /* flush */);
+
+  // These messages must be sent immediately since the channel is unpaused.
+  SendValue(proxy(), 4);
+  SendValue(proxy(), 5);
+
+  // Now we flush the previously queued messages.
+  proxy()->Flush();
+
+  EXPECT_TRUE(WaitForClientShutdown());
+  DestroyProxy();
+}
+
+class ExpectValueSequenceListener : public IPC::Listener {
+ public:
+  explicit ExpectValueSequenceListener(std::queue<int32_t>* expected_values)
+      : expected_values_(expected_values) {}
+  ~ExpectValueSequenceListener() override {}
+
+  // IPC::Listener:
+  bool OnMessageReceived(const IPC::Message& message) override {
+    DCHECK(!expected_values_->empty());
+    base::PickleIterator iter(message);
+    int32_t should_be_expected;
+    EXPECT_TRUE(iter.ReadInt(&should_be_expected));
+    EXPECT_EQ(expected_values_->front(), should_be_expected);
+    expected_values_->pop();
+    if (expected_values_->empty())
+      base::MessageLoop::current()->QuitWhenIdle();
+    return true;
+  }
+
+ private:
+  std::queue<int32_t>* expected_values_;
+
+  DISALLOW_COPY_AND_ASSIGN(ExpectValueSequenceListener);
+};
+
+DEFINE_IPC_CHANNEL_MOJO_TEST_CLIENT(CreatePausedClient, ChannelProxyClient) {
+  std::queue<int32_t> expected_values;
+  ExpectValueSequenceListener listener(&expected_values);
+  CreateProxy(&listener);
+  expected_values.push(1);
+  expected_values.push(4);
+  expected_values.push(5);
+  expected_values.push(2);
+  expected_values.push(3);
+  RunProxy();
+  base::RunLoop().Run();
+  EXPECT_TRUE(expected_values.empty());
+  DestroyProxy();
+}
+
 #if defined(OS_POSIX)
 
 class ListenerThatExpectsFile : public IPC::Listener {
@@ -1193,7 +1378,7 @@ TEST_F(IPCChannelMojoTest, SendPlatformHandle) {
 
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
-  base::File file(HandleSendingHelper::GetSendingFilePath(temp_dir.path()),
+  base::File file(HandleSendingHelper::GetSendingFilePath(temp_dir.GetPath()),
                   base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE |
                       base::File::FLAG_READ);
   HandleSendingHelper::WriteFileThenSend(channel(), file);
@@ -1249,7 +1434,7 @@ TEST_F(IPCChannelMojoTest, SendPlatformHandleAndPipe) {
 
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
-  base::File file(HandleSendingHelper::GetSendingFilePath(temp_dir.path()),
+  base::File file(HandleSendingHelper::GetSendingFilePath(temp_dir.GetPath()),
                   base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE |
                       base::File::FLAG_READ);
   TestingMessagePipe pipe;

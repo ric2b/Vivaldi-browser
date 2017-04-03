@@ -11,6 +11,7 @@
 #include "base/time/time.h"
 #include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
+#include "net/log/net_log_with_source.h"
 #include "net/socket/next_proto.h"
 #include "net/socket/socket_test_util.h"
 #include "net/socket/stream_socket.h"
@@ -46,7 +47,7 @@ class FakeStreamSocket : public StreamSocket {
 
   int GetLocalAddress(IPEndPoint* address) const override { return ERR_FAILED; }
 
-  const BoundNetLog& NetLog() const override { return bound_net_log_; }
+  const NetLogWithSource& NetLog() const override { return net_log_; }
 
   void SetSubresourceSpeculation() override { return; }
   void SetOmniboxSpeculation() override { return; }
@@ -90,7 +91,7 @@ class FakeStreamSocket : public StreamSocket {
   int SetSendBufferSize(int32_t size) override { return ERR_FAILED; }
 
  private:
-  BoundNetLog bound_net_log_;
+  NetLogWithSource net_log_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeStreamSocket);
 };

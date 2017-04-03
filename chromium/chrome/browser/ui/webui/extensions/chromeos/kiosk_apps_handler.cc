@@ -10,6 +10,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -24,12 +25,12 @@
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/crx_file/id_util.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/grit/extensions_browser_resources.h"
-#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/webui/web_ui_util.h"
@@ -258,7 +259,7 @@ void KioskAppsHandler::SendKioskAppSettings() {
 
     std::unique_ptr<base::DictionaryValue> app_info(new base::DictionaryValue);
     PopulateAppDict(app_data, app_info.get());
-    apps_list->Append(app_info.release());
+    apps_list->Append(std::move(app_info));
   }
   settings.SetWithoutPathExpansion("apps", apps_list.release());
 

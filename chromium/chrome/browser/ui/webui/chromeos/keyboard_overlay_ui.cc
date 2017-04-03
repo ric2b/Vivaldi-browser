@@ -20,6 +20,7 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/browser_resources.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/chromeos_switches.h"
@@ -30,7 +31,6 @@
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/browser/web_ui_message_handler.h"
-#include "grit/browser_resources.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 
@@ -259,6 +259,8 @@ struct I18nContentToMessage {
   { "keyboardOverlayDisableCapsLock", IDS_KEYBOARD_OVERLAY_DISABLE_CAPS_LOCK },
   { "keyboardOverlayToggleChromevoxSpokenFeedback",
     IDS_KEYBOARD_OVERLAY_TOGGLE_CHROMEVOX_SPOKEN_FEEDBACK },
+  { "keyboardOverlayToggleHighContrastMode",
+    IDS_KEYBOARD_OVERLAY_TOGGLE_HIGH_CONTRAST_MODE},
   { "keyboardOverlayToggleProjectionTouchHud",
     IDS_KEYBOARD_OVERLAY_TOGGLE_PROJECTION_TOUCH_HUD },
   { "keyboardOverlayUndo", IDS_KEYBOARD_OVERLAY_UNDO },
@@ -407,11 +409,9 @@ void KeyboardOverlayHandler::GetLabelMap(const base::ListValue* args) {
 void KeyboardOverlayHandler::OpenLearnMorePage(const base::ListValue* args) {
   web_ui()->GetWebContents()->GetDelegate()->OpenURLFromTab(
       web_ui()->GetWebContents(),
-      content::OpenURLParams(GURL(kLearnMoreURL),
-                             content::Referrer(),
-                             NEW_FOREGROUND_TAB,
-                             ui::PAGE_TRANSITION_LINK,
-                             false));
+      content::OpenURLParams(GURL(kLearnMoreURL), content::Referrer(),
+                             WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                             ui::PAGE_TRANSITION_LINK, false));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

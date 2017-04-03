@@ -78,7 +78,7 @@ IN_PROC_BROWSER_TEST_F(WebBluetoothTest, WebBluetoothAfterCrash) {
   crash_observer.Wait();
 
   // Reload tab.
-  chrome::Reload(browser(), CURRENT_TAB);
+  chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
   content::WaitForLoadStop(
       browser()->tab_strip_model()->GetActiveWebContents());
 
@@ -132,16 +132,31 @@ IN_PROC_BROWSER_TEST_F(WebBluetoothTest, BlacklistShouldBlock) {
   EXPECT_CALL(*adapter, IsPresent()).WillRepeatedly(Return(true));
   device::BluetoothAdapterFactory::SetAdapterForTesting(adapter);
 
-  std::map<std::string, std::string> params;
-  params["blacklist_additions"] = "ee01:e";
-  variations::AssociateVariationParams("WebBluetoothBlacklist", "TestGroup",
-                                       params);
-  base::FieldTrialList::CreateFieldTrial("WebBluetoothBlacklist", "TestGroup");
+  if (base::FieldTrialList::TrialExists("WebBluetoothBlacklist")) {
+    LOG(INFO) << "WebBluetoothBlacklist field trial already configured.";
+    ASSERT_NE(variations::GetVariationParamValue("WebBluetoothBlacklist",
+                                                 "blacklist_additions")
+                  .find("ed5f25a4"),
+              std::string::npos)
+        << "ERROR: WebBluetoothBlacklist field trial being tested in\n"
+           "testing/variations/fieldtrial_testing_config_*.json must\n"
+           "include this test's random UUID 'ed5f25a4' in\n"
+           "blacklist_additions.\n";
+  } else {
+    LOG(INFO) << "Creating WebBluetoothBlacklist field trial for test.";
+    // Create a field trial with test parameter.
+    std::map<std::string, std::string> params;
+    params["blacklist_additions"] = "ed5f25a4:e";
+    variations::AssociateVariationParams("WebBluetoothBlacklist", "TestGroup",
+                                         params);
+    base::FieldTrialList::CreateFieldTrial("WebBluetoothBlacklist",
+                                           "TestGroup");
+  }
 
   std::string rejection;
   EXPECT_TRUE(content::ExecuteScriptAndExtractString(
       web_contents_,
-      "navigator.bluetooth.requestDevice({filters: [{services: [0xee01]}]})"
+      "navigator.bluetooth.requestDevice({filters: [{services: [0xed5f25a4]}]})"
       "  .then(() => { domAutomationController.send('Success'); },"
       "        reason => {"
       "      domAutomationController.send(reason.name + ': ' + reason.message);"

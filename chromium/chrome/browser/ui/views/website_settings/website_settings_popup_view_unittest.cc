@@ -5,13 +5,14 @@
 #include "chrome/browser/ui/views/website_settings/website_settings_popup_view.h"
 
 #include "base/macros.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
-#include "chrome/browser/ui/views/website_settings/chosen_object_view.h"
-#include "chrome/browser/ui/views/website_settings/permission_selector_view.h"
+#include "chrome/browser/ui/views/website_settings/chosen_object_row.h"
+#include "chrome/browser/ui/views/website_settings/permission_selector_row.h"
 #include "chrome/browser/usb/usb_chooser_context.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
 #include "chrome/test/base/testing_profile.h"
-#include "content/public/common/ssl_status.h"
+#include "content/public/browser/ssl_status.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_web_contents_factory.h"
 #include "device/core/mock_device_client.h"
@@ -52,11 +53,11 @@ class WebsiteSettingsPopupViewTestApi {
   }
 
   WebsiteSettingsPopupView* view() { return view_; }
-  views::View* permissions_content() { return view_->permissions_content_; }
+  views::View* permissions_view() { return view_->permissions_view_; }
 
-  PermissionSelectorView* GetPermissionSelectorAt(int index) {
-    return static_cast<PermissionSelectorView*>(
-        permissions_content()->child_at(index));
+  PermissionSelectorRow* GetPermissionSelectorAt(int index) {
+    return static_cast<PermissionSelectorRow*>(
+        permissions_view()->child_at(index));
   }
 
   base::string16 GetPermissionButtonTextAt(int index) {
@@ -69,7 +70,7 @@ class WebsiteSettingsPopupViewTestApi {
       return combobox->GetTextForRow(combobox->GetSelectedRow());
     } else {
       NOTREACHED() << "Unknown class " << view->GetClassName();
-      return base::ASCIIToUTF16("");
+      return base::string16();
     }
   }
 
@@ -151,8 +152,8 @@ class WebsiteSettingsPopupViewTest : public testing::Test {
 }  // namespace
 
 // TODO(ellyjones): re-enable this test for OSX.
-// This test exercises PermissionSelectorView in a way that it is not used in
-// practice. In practice, every setting in PermissionSelectorView starts off
+// This test exercises PermissionSelectorRow in a way that it is not used in
+// practice. In practice, every setting in PermissionSelectorRow starts off
 // "set", so there is always one option checked in the resulting MenuModel. This
 // test creates settings that are left at their defaults, leading to zero
 // checked options, and checks that the text on the MenuButtons is right. Since
@@ -175,13 +176,13 @@ TEST_F(WebsiteSettingsPopupViewTest, MAYBE_SetPermissionInfo) {
 
   const int kExpectedChildren =
       ExclusiveAccessManager::IsSimplifiedFullscreenUIEnabled() ? 11 : 13;
-  EXPECT_EQ(kExpectedChildren, api_->permissions_content()->child_count());
+  EXPECT_EQ(kExpectedChildren, api_->permissions_view()->child_count());
 
   list.back().setting = CONTENT_SETTING_ALLOW;
   api_->SetPermissionInfo(list);
-  EXPECT_EQ(kExpectedChildren, api_->permissions_content()->child_count());
+  EXPECT_EQ(kExpectedChildren, api_->permissions_view()->child_count());
 
-  PermissionSelectorView* selector = api_->GetPermissionSelectorAt(0);
+  PermissionSelectorRow* selector = api_->GetPermissionSelectorAt(0);
   EXPECT_EQ(3, selector->child_count());
 
   // Verify labels match the settings on the PermissionInfoList.
@@ -190,42 +191,38 @@ TEST_F(WebsiteSettingsPopupViewTest, MAYBE_SetPermissionInfo) {
             selector->child_at(kLabelIndex)->GetClassName());
   views::Label* label =
       static_cast<views::Label*>(selector->child_at(kLabelIndex));
-  EXPECT_EQ(base::ASCIIToUTF16("Location:"), label->text());
-  EXPECT_EQ(base::ASCIIToUTF16("Allowed by you"),
-            api_->GetPermissionButtonTextAt(0));
+  EXPECT_EQ(base::ASCIIToUTF16("Location"), label->text());
+  EXPECT_EQ(base::ASCIIToUTF16("Allow"), api_->GetPermissionButtonTextAt(0));
 
   // Verify calling SetPermisisonInfo() directly updates the UI.
   list.back().setting = CONTENT_SETTING_BLOCK;
   api_->SetPermissionInfo(list);
-  EXPECT_EQ(base::ASCIIToUTF16("Blocked by you"),
-            api_->GetPermissionButtonTextAt(0));
+  EXPECT_EQ(base::ASCIIToUTF16("Block"), api_->GetPermissionButtonTextAt(0));
 
   // Simulate a user selection via the UI. Note this will also cover logic in
   // WebsiteSettings to update the pref.
   list.back().setting = CONTENT_SETTING_ALLOW;
   api_->GetPermissionSelectorAt(0)->PermissionChanged(list.back());
-  EXPECT_EQ(kExpectedChildren, api_->permissions_content()->child_count());
-  EXPECT_EQ(base::ASCIIToUTF16("Allowed by you"),
-            api_->GetPermissionButtonTextAt(0));
+  EXPECT_EQ(kExpectedChildren, api_->permissions_view()->child_count());
+  EXPECT_EQ(base::ASCIIToUTF16("Allow"), api_->GetPermissionButtonTextAt(0));
 
   // Setting to the default via the UI should keep the button around.
   list.back().setting = CONTENT_SETTING_ASK;
   api_->GetPermissionSelectorAt(0)->PermissionChanged(list.back());
-  EXPECT_EQ(kExpectedChildren, api_->permissions_content()->child_count());
-  EXPECT_EQ(base::ASCIIToUTF16("Ask by you"),
-            api_->GetPermissionButtonTextAt(0));
+  EXPECT_EQ(kExpectedChildren, api_->permissions_view()->child_count());
+  EXPECT_EQ(base::ASCIIToUTF16("Ask"), api_->GetPermissionButtonTextAt(0));
 
   // However, since the setting is now default, recreating the dialog with those
   // settings should omit the permission from the UI.
   api_->SetPermissionInfo(list);
-  EXPECT_EQ(kExpectedChildren, api_->permissions_content()->child_count());
+  EXPECT_EQ(kExpectedChildren, api_->permissions_view()->child_count());
 }
 
 // Test UI construction and reconstruction with USB devices.
 TEST_F(WebsiteSettingsPopupViewTest, SetPermissionInfoWithUsbDevice) {
   const int kExpectedChildren =
       ExclusiveAccessManager::IsSimplifiedFullscreenUIEnabled() ? 11 : 13;
-  EXPECT_EQ(kExpectedChildren, api_->permissions_content()->child_count());
+  EXPECT_EQ(kExpectedChildren, api_->permissions_view()->child_count());
 
   const GURL origin = GURL(kUrl).GetOrigin();
   scoped_refptr<device::UsbDevice> device =
@@ -237,10 +234,10 @@ TEST_F(WebsiteSettingsPopupViewTest, SetPermissionInfoWithUsbDevice) {
 
   PermissionInfoList list;
   api_->SetPermissionInfo(list);
-  EXPECT_EQ(kExpectedChildren + 1, api_->permissions_content()->child_count());
+  EXPECT_EQ(kExpectedChildren + 1, api_->permissions_view()->child_count());
 
-  ChosenObjectView* object_view = static_cast<ChosenObjectView*>(
-      api_->permissions_content()->child_at(kExpectedChildren));
+  ChosenObjectRow* object_view = static_cast<ChosenObjectRow*>(
+      api_->permissions_view()->child_at(kExpectedChildren));
   EXPECT_EQ(3, object_view->child_count());
 
   const int kLabelIndex = 1;
@@ -258,6 +255,6 @@ TEST_F(WebsiteSettingsPopupViewTest, SetPermissionInfoWithUsbDevice) {
       static_cast<views::ButtonListener*>(object_view);
   button_listener->ButtonPressed(button, event);
   api_->SetPermissionInfo(list);
-  EXPECT_EQ(kExpectedChildren, api_->permissions_content()->child_count());
+  EXPECT_EQ(kExpectedChildren, api_->permissions_view()->child_count());
   EXPECT_FALSE(store->HasDevicePermission(origin, origin, device));
 }

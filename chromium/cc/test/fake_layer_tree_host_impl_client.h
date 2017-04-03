@@ -13,17 +13,13 @@ namespace cc {
 class FakeLayerTreeHostImplClient : public LayerTreeHostImplClient {
  public:
   // LayerTreeHostImplClient implementation.
-  void DidLoseOutputSurfaceOnImplThread() override {}
-  void CommitVSyncParameters(base::TimeTicks timebase,
-                             base::TimeDelta interval) override {}
+  void DidLoseCompositorFrameSinkOnImplThread() override {}
   void SetBeginFrameSource(BeginFrameSource* source) override {}
-  void SetEstimatedParentDrawTime(base::TimeDelta draw_time) override {}
   void DidSwapBuffersCompleteOnImplThread() override {}
   void OnCanDrawStateChanged(bool can_draw) override {}
   void NotifyReadyToActivate() override {}
   void NotifyReadyToDraw() override {}
   void SetNeedsRedrawOnImplThread() override {}
-  void SetNeedsRedrawRectOnImplThread(const gfx::Rect& damage_rect) override {}
   void SetNeedsOneBeginImplFrameOnImplThread() override {}
   void SetNeedsCommitOnImplThread() override {}
   void SetNeedsPrepareTilesOnImplThread() override {}
@@ -38,7 +34,7 @@ class FakeLayerTreeHostImplClient : public LayerTreeHostImplClient {
   void WillPrepareTiles() override {}
   void DidPrepareTiles() override {}
   void DidCompletePageScaleAnimationOnImplThread() override {}
-  void OnDrawForOutputSurface(bool resourceless_software_draw) override {}
+  void OnDrawForCompositorFrameSink(bool resourceless_software_draw) override {}
 };
 
 }  // namespace cc

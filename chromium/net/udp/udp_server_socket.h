@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "net/base/completion_callback.h"
+#include "net/base/net_export.h"
 #include "net/udp/datagram_server_socket.h"
 #include "net/udp/udp_socket.h"
 
@@ -16,12 +17,13 @@ namespace net {
 
 class IPAddress;
 class IPEndPoint;
-class BoundNetLog;
+class NetLog;
+struct NetLogSource;
 
 // A client socket that uses UDP as the transport layer.
 class NET_EXPORT UDPServerSocket : public DatagramServerSocket {
  public:
-  UDPServerSocket(net::NetLog* net_log, const net::NetLog::Source& source);
+  UDPServerSocket(net::NetLog* net_log, const net::NetLogSource& source);
   ~UDPServerSocket() override;
 
   // Implement DatagramServerSocket:
@@ -41,7 +43,7 @@ class NET_EXPORT UDPServerSocket : public DatagramServerSocket {
   int GetPeerAddress(IPEndPoint* address) const override;
   int GetLocalAddress(IPEndPoint* address) const override;
   void UseNonBlockingIO() override;
-  const BoundNetLog& NetLog() const override;
+  const NetLogWithSource& NetLog() const override;
   void AllowAddressReuse() override;
   void AllowBroadcast() override;
   int JoinGroup(const IPAddress& group_address) const override;

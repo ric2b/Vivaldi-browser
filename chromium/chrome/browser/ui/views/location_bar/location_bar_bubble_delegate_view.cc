@@ -62,6 +62,8 @@ LocationBarBubbleDelegateView::LocationBarBubbleDelegateView(
             browser->exclusive_access_manager()->fullscreen_controller()));
   }
   // Compensate for built-in vertical padding in the anchor view's image.
+  // In the case of Harmony, this is just compensating for the location bar's
+  // border thickness, as the bubble's top border should overlap it.
   set_anchor_view_insets(gfx::Insets(
       GetLayoutConstant(LOCATION_BAR_BUBBLE_ANCHOR_VERTICAL_INSET), 0));
 }
@@ -72,8 +74,7 @@ void LocationBarBubbleDelegateView::ShowForReason(DisplayReason reason) {
   if (reason == USER_GESTURE) {
     // In the USER_GESTURE case, the icon will be in an active state so the
     // bubble doesn't need an arrow.
-    if (ui::MaterialDesignController::IsModeMaterial())
-      SetArrowPaintType(views::BubbleBorder::PAINT_TRANSPARENT);
+    SetArrowPaintType(views::BubbleBorder::PAINT_TRANSPARENT);
     GetWidget()->Show();
   } else {
     GetWidget()->ShowInactive();

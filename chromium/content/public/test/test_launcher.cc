@@ -40,6 +40,10 @@
 #include "net/base/escape.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#if defined(OS_POSIX)
+#include "base/files/file_descriptor_watcher_posix.h"
+#endif
+
 #if defined(OS_WIN)
 #include "base/base_switches.h"
 #include "content/common/sandbox_win.h"
@@ -258,7 +262,7 @@ size_t WrapperTestLauncherDelegate::RunTests(
 
     if (!base::ContainsKey(user_data_dir_map_, full_name)) {
       base::FilePath temp_dir;
-      CHECK(base::CreateTemporaryDirInDir(temp_dir_.path(),
+      CHECK(base::CreateTemporaryDirInDir(temp_dir_.GetPath(),
                                           FILE_PATH_LITERAL("d"), &temp_dir));
       user_data_dir_map_[full_name] = temp_dir;
     }
@@ -316,7 +320,7 @@ size_t WrapperTestLauncherDelegate::RetryTests(
     std::string test_name_no_pre(RemoveAnyPrePrefixes(full_name));
     if (!base::ContainsKey(user_data_dir_map_, test_name_no_pre)) {
       base::FilePath temp_dir;
-      CHECK(base::CreateTemporaryDirInDir(temp_dir_.path(),
+      CHECK(base::CreateTemporaryDirInDir(temp_dir_.GetPath(),
                                           FILE_PATH_LITERAL("d"), &temp_dir));
       user_data_dir_map_[test_name_no_pre] = temp_dir;
     }
@@ -537,6 +541,9 @@ int LaunchTests(TestLauncherDelegate* launcher_delegate,
           "process mode).\n");
 
   base::MessageLoopForIO message_loop;
+#if defined(OS_POSIX)
+  base::FileDescriptorWatcher file_descriptor_watcher(&message_loop);
+#endif
 
   fprintf(stdout, "Default parallel jobs limit: %d.\n", default_jobs);
   // Allow the |launcher_delegate| to modify |default_jobs|.

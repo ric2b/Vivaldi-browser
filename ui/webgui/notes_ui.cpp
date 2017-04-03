@@ -21,9 +21,8 @@ std::string NotesUIHTMLSource::GetSource() const
 
 void NotesUIHTMLSource::StartDataRequest(
       const std::string& path,
-      int render_process_id,
-      int render_view_id,
-      const content::URLDataSource::GotDataCallback& callback)
+      const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
+      const GotDataCallback& callback)
 {
   NOTREACHED() << "We should never get here since the extension should have"
           << "been triggered";

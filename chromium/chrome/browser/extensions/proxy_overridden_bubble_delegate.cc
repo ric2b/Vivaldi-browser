@@ -4,7 +4,7 @@
 
 #include "chrome/browser/extensions/proxy_overridden_bubble_delegate.h"
 
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/settings_api_helpers.h"
@@ -12,10 +12,10 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/strings/grit/components_strings.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
-#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace extensions {
@@ -133,7 +133,6 @@ bool ProxyOverriddenBubbleDelegate::ShouldLimitToEnabledExtensions() const {
 }
 
 void ProxyOverriddenBubbleDelegate::LogExtensionCount(size_t count) {
-  UMA_HISTOGRAM_COUNTS_100("ProxyOverriddenBubble.ExtensionCount", count);
 }
 
 void ProxyOverriddenBubbleDelegate::LogAction(

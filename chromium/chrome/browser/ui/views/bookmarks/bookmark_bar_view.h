@@ -44,6 +44,10 @@ namespace content {
 class PageNavigator;
 }
 
+namespace gfx {
+class FontList;
+}
+
 namespace views {
 class CustomButton;
 class MenuButton;
@@ -142,19 +146,19 @@ class BookmarkBarView : public views::AccessiblePaneView,
   void StopThrobbing(bool immediate);
 
   // Returns the tooltip text for the specified url and title. The returned
-  // text is clipped to fit within the bounds of the monitor. |context| is
-  // used to determine which display::Screen is used to retrieve bounds.
+  // text is clipped to fit |max_tooltip_width|.
   //
   // Note that we adjust the direction of both the URL and the title based on
   // the locale so that pure LTR strings are displayed properly in RTL locales.
-  static base::string16 CreateToolTipForURLAndTitle(const views::Widget* widget,
-                                              const gfx::Point& screen_loc,
-                                              const GURL& url,
-                                              const base::string16& title, 
-                                              const base::string16 *nickname=NULL,
-                                              const base::string16 *description=NULL,
-                                              const base::Time *created_time=NULL, 
-                                              const base::Time *visited_time=NULL);
+  static base::string16 CreateToolTipForURLAndTitle(
+      int max_tooltip_width,
+      const gfx::FontList& font_list,
+      const GURL& url,
+      const base::string16& title, 
+      const base::string16 *nickname=NULL,
+      const base::string16 *description=NULL,
+      const base::Time *created_time=NULL, 
+      const base::Time *visited_time=NULL);
 
   // Returns true if Bookmarks Bar is currently detached from the Toolbar.
   bool IsDetached() const;
@@ -388,6 +392,8 @@ class BookmarkBarView : public views::AccessiblePaneView,
     Layout();
     SchedulePaint();
   }
+
+  int GetPreferredHeight() const;
 
   // Needed to react to kShowAppsShortcutInBookmarkBar changes.
   PrefChangeRegistrar profile_pref_registrar_;

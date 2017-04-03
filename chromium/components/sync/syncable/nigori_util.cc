@@ -7,12 +7,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <queue>
 #include <string>
 #include <vector>
 
 #include "base/json/json_writer.h"
 #include "components/sync/base/cryptographer.h"
+#include "components/sync/base/passphrase_type.h"
 #include "components/sync/syncable/directory.h"
 #include "components/sync/syncable/entry.h"
 #include "components/sync/syncable/mutable_entry.h"
@@ -225,6 +227,14 @@ bool UpdateEntryWithEncryption(BaseTransaction* const trans,
       bookmark_specifics->set_title(kEncryptedString);
     }
   }
+
+  if (type == PASSWORDS &&
+      IsExplicitPassphrase(nigori_handler->GetPassphraseType(trans))) {
+    sync_pb::PasswordSpecifics* password_specifics =
+        generated_specifics.mutable_password();
+    password_specifics->clear_unencrypted_metadata();
+  }
+
   entry->PutSpecifics(generated_specifics);
   DVLOG(1) << "Overwriting specifics of type " << ModelTypeToString(type)
            << " and marking for syncing.";
@@ -236,7 +246,7 @@ void UpdateNigoriFromEncryptedTypes(ModelTypeSet encrypted_types,
                                     bool encrypt_everything,
                                     sync_pb::NigoriSpecifics* nigori) {
   nigori->set_encrypt_everything(encrypt_everything);
-  static_assert(37 == MODEL_TYPE_COUNT, "update encrypted types");
+  static_assert(39 == MODEL_TYPE_COUNT, "update encrypted types");
   nigori->set_encrypt_bookmarks(encrypted_types.Has(BOOKMARKS));
   nigori->set_encrypt_preferences(encrypted_types.Has(PREFERENCES));
   nigori->set_encrypt_autofill_profile(encrypted_types.Has(AUTOFILL_PROFILE));
@@ -259,6 +269,8 @@ void UpdateNigoriFromEncryptedTypes(ModelTypeSet encrypted_types,
   nigori->set_encrypt_articles(encrypted_types.Has(ARTICLES));
   nigori->set_encrypt_app_list(encrypted_types.Has(APP_LIST));
   nigori->set_encrypt_arc_package(encrypted_types.Has(ARC_PACKAGE));
+  nigori->set_encrypt_printers(encrypted_types.Has(PRINTERS));
+  nigori->set_encrypt_reading_list(encrypted_types.Has(READING_LIST));
 }
 
 ModelTypeSet GetEncryptedTypesFromNigori(
@@ -267,7 +279,7 @@ ModelTypeSet GetEncryptedTypesFromNigori(
     return ModelTypeSet::All();
 
   ModelTypeSet encrypted_types;
-  static_assert(37 == MODEL_TYPE_COUNT, "update encrypted types");
+  static_assert(39 == MODEL_TYPE_COUNT, "update encrypted types");
   if (nigori.encrypt_bookmarks())
     encrypted_types.Put(BOOKMARKS);
   if (nigori.encrypt_preferences())
@@ -308,6 +320,10 @@ ModelTypeSet GetEncryptedTypesFromNigori(
     encrypted_types.Put(APP_LIST);
   if (nigori.encrypt_arc_package())
     encrypted_types.Put(ARC_PACKAGE);
+  if (nigori.encrypt_printers())
+    encrypted_types.Put(PRINTERS);
+  if (nigori.encrypt_reading_list())
+    encrypted_types.Put(READING_LIST);
   return encrypted_types;
 }
 

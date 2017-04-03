@@ -28,6 +28,10 @@
   DISABLE_MULTI(MediaTest, VideoBearHighBitDepthMp4)
   DISABLE(MediaTest, VideoBearRotated0)
   DISABLE(MediaTest, VideoBearRotated180)
+  DISABLE(MediaColorTest, Yuv420pHighBitDepth)
+  DISABLE(MediaColorTest, Yuv422pH264)
+  DISABLE(MediaColorTest, Yuv444pH264)
+  DISABLE(MediaColorTest, Yuvj420pH264)
 
   /*
   DISABLE(WebViewContextMenuInteractiveTest,

@@ -104,21 +104,21 @@ void ShortcutsBackendTest::SetSearchProvider() {
   data.SetShortName(base::UTF8ToUTF16("foo"));
   data.SetKeyword(base::UTF8ToUTF16("foo"));
 
-  TemplateURL* template_url = new TemplateURL(data);
-  // Takes ownership of |template_url|.
-  template_url_service_->Add(template_url);
+  TemplateURL* template_url =
+      template_url_service_->Add(base::MakeUnique<TemplateURL>(data));
   template_url_service_->SetUserSelectedDefaultSearchProvider(template_url);
 }
 
 void ShortcutsBackendTest::SetUp() {
   template_url_service_.reset(new TemplateURLService(nullptr, 0));
   if (profile_dir_.CreateUniqueTempDir())
-    history_service_ = history::CreateHistoryService(profile_dir_.path(), true);
+    history_service_ =
+        history::CreateHistoryService(profile_dir_.GetPath(), true);
   ASSERT_TRUE(history_service_);
 
   db_thread_.Start();
   base::FilePath shortcuts_database_path =
-      profile_dir_.path().Append(kShortcutsDatabaseName);
+      profile_dir_.GetPath().Append(kShortcutsDatabaseName);
   backend_ = new ShortcutsBackend(
       template_url_service_.get(), base::MakeUnique<SearchTermsData>(),
       history_service_.get(), db_thread_.task_runner(), shortcuts_database_path,

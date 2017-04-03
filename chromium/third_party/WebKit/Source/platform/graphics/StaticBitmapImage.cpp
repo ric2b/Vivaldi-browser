@@ -15,54 +15,57 @@
 
 namespace blink {
 
-PassRefPtr<StaticBitmapImage> StaticBitmapImage::create(PassRefPtr<SkImage> image)
-{
-    if (!image)
-        return nullptr;
-    if (image->isTextureBacked())
-        return AcceleratedStaticBitmapImage::create(image);
-    return adoptRef(new StaticBitmapImage(image));
+PassRefPtr<StaticBitmapImage> StaticBitmapImage::create(sk_sp<SkImage> image) {
+  if (!image)
+    return nullptr;
+  if (image->isTextureBacked())
+    return AcceleratedStaticBitmapImage::createFromSharedContextImage(
+        std::move(image));
+  return adoptRef(new StaticBitmapImage(std::move(image)));
 }
 
-StaticBitmapImage::StaticBitmapImage(PassRefPtr<SkImage> image) : m_image(image)
-{
-    ASSERT(m_image);
+StaticBitmapImage::StaticBitmapImage(sk_sp<SkImage> image)
+    : m_image(std::move(image)) {
+  ASSERT(m_image);
 }
 
-IntSize StaticBitmapImage::size() const
-{
-    return IntSize(m_image->width(), m_image->height());
+StaticBitmapImage::StaticBitmapImage() {}
+
+StaticBitmapImage::~StaticBitmapImage() {}
+
+IntSize StaticBitmapImage::size() const {
+  return IntSize(m_image->width(), m_image->height());
 }
 
-bool StaticBitmapImage::isTextureBacked()
-{
-    return m_image && m_image->isTextureBacked();
+bool StaticBitmapImage::isTextureBacked() {
+  return m_image && m_image->isTextureBacked();
 }
 
-bool StaticBitmapImage::currentFrameKnownToBeOpaque(MetadataMode)
-{
-    return m_image->isOpaque();
+bool StaticBitmapImage::currentFrameKnownToBeOpaque(MetadataMode) {
+  return m_image->isOpaque();
 }
 
-void StaticBitmapImage::draw(SkCanvas* canvas, const SkPaint& paint, const FloatRect& dstRect,
-    const FloatRect& srcRect, RespectImageOrientationEnum, ImageClampingMode clampMode)
-{
-    FloatRect adjustedSrcRect = srcRect;
-    adjustedSrcRect.intersect(SkRect::Make(m_image->bounds()));
+void StaticBitmapImage::draw(SkCanvas* canvas,
+                             const SkPaint& paint,
+                             const FloatRect& dstRect,
+                             const FloatRect& srcRect,
+                             RespectImageOrientationEnum,
+                             ImageClampingMode clampMode) {
+  FloatRect adjustedSrcRect = srcRect;
+  adjustedSrcRect.intersect(SkRect::Make(m_image->bounds()));
 
-    if (dstRect.isEmpty() || adjustedSrcRect.isEmpty())
-        return; // Nothing to draw.
+  if (dstRect.isEmpty() || adjustedSrcRect.isEmpty())
+    return;  // Nothing to draw.
 
-    canvas->drawImageRect(m_image.get(), adjustedSrcRect, dstRect, &paint,
-        WebCoreClampingModeToSkiaRectConstraint(clampMode));
+  canvas->drawImageRect(m_image.get(), adjustedSrcRect, dstRect, &paint,
+                        WebCoreClampingModeToSkiaRectConstraint(clampMode));
 
-    if (ImageObserver* observer = getImageObserver())
-        observer->didDraw(this);
+  if (ImageObserver* observer = getImageObserver())
+    observer->didDraw(this);
 }
 
-PassRefPtr<SkImage> StaticBitmapImage::imageForCurrentFrame()
-{
-    return m_image;
+sk_sp<SkImage> StaticBitmapImage::imageForCurrentFrame() {
+  return m_image;
 }
 
-} // namespace blink
+}  // namespace blink

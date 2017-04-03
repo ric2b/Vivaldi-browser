@@ -42,6 +42,11 @@ const char* kTestPage1ClientId = "1234";
 const char* kTestPage2ClientId = "5678";
 const char* kTestPage4ClientId = "9876";
 
+void BoolCallback(bool* actual_result, bool call_result) {
+  DCHECK(actual_result);
+  *actual_result = call_result;
+}
+
 }  // namespace
 
 class OfflinePageUtilsTest
@@ -64,15 +69,6 @@ class OfflinePageUtilsTest
   // OfflinePageTestArchiver::Observer implementation:
   void SetLastPathCreatedByArchiver(const base::FilePath& file_path) override;
 
-  // Offline page URL for the first page.
-  const GURL& offline_url_page_1() const { return offline_url_page_1_; }
-  // Offline page URL for the second page.
-  const GURL& offline_url_page_2() const { return offline_url_page_2_; }
-  // Offline page URL not related to any page.
-  const GURL& offline_url_missing() const { return offline_url_missing_; }
-  // Offline page URL for expired page.
-  const GURL& offline_url_expired() const { return offline_url_expired_; }
-
   TestingProfile* profile() { return &profile_; }
 
   int64_t offline_id() const { return offline_id_; }
@@ -82,11 +78,6 @@ class OfflinePageUtilsTest
   std::unique_ptr<OfflinePageTestArchiver> BuildArchiver(
       const GURL& url,
       const base::FilePath& file_name);
-
-  GURL offline_url_page_1_;
-  GURL offline_url_page_2_;
-  GURL offline_url_missing_;
-  GURL offline_url_expired_;
 
   int64_t offline_id_;
   GURL url_;
@@ -153,44 +144,30 @@ void OfflinePageUtilsTest::CreateOfflinePages() {
   std::unique_ptr<OfflinePageTestArchiver> archiver(BuildArchiver(
       kTestPage1Url, base::FilePath(FILE_PATH_LITERAL("page1.mhtml"))));
   offline_pages::ClientId client_id;
-  client_id.name_space = kBookmarkNamespace;
+  client_id.name_space = kDownloadNamespace;
   client_id.id = kTestPage1ClientId;
   model->SavePage(
-      kTestPage1Url, client_id, 0ul, std::move(archiver),
+      kTestPage1Url, client_id, 0l, std::move(archiver),
       base::Bind(&OfflinePageUtilsTest::OnSavePageDone, AsWeakPtr()));
   RunUntilIdle();
-  offline_url_page_1_ =
-      model->MaybeGetPageByOfflineId(offline_id())->GetOfflineURL();
 
   // Create page 2.
   archiver = BuildArchiver(kTestPage2Url,
                            base::FilePath(FILE_PATH_LITERAL("page2.mhtml")));
   client_id.id = kTestPage2ClientId;
   model->SavePage(
-      kTestPage2Url, client_id, 0ul, std::move(archiver),
+      kTestPage2Url, client_id, 0l, std::move(archiver),
       base::Bind(&OfflinePageUtilsTest::OnSavePageDone, AsWeakPtr()));
   RunUntilIdle();
-  offline_url_page_2_ =
-      model->MaybeGetPageByOfflineId(offline_id())->GetOfflineURL();
-
-  // Page 3 is not created, as it is missing.
-  // Create a file path that is not associated with any offline page.
-  offline_url_missing_ = net::FilePathToFileURL(
-      profile()
-          ->GetPath()
-          .Append(chrome::kOfflinePageArchivesDirname)
-          .Append(FILE_PATH_LITERAL("missing_file.mhtml")));
 
   // Create page 4 - expired page.
   archiver = BuildArchiver(kTestPage4Url,
                            base::FilePath(FILE_PATH_LITERAL("page4.mhtml")));
   client_id.id = kTestPage4ClientId;
   model->SavePage(
-      kTestPage4Url, client_id, 0ul, std::move(archiver),
+      kTestPage4Url, client_id, 0l, std::move(archiver),
       base::Bind(&OfflinePageUtilsTest::OnSavePageDone, AsWeakPtr()));
   RunUntilIdle();
-  const OfflinePageItem* page_4 = model->MaybeGetPageByOfflineId(offline_id());
-  offline_url_expired_ = page_4->GetOfflineURL();
   model->ExpirePages(
       std::vector<int64_t>({offline_id()}), base::Time::Now(),
       base::Bind(&OfflinePageUtilsTest::OnExpirePageDone, AsWeakPtr()));
@@ -207,38 +184,33 @@ std::unique_ptr<OfflinePageTestArchiver> OfflinePageUtilsTest::BuildArchiver(
   return archiver;
 }
 
-TEST_F(OfflinePageUtilsTest, MightBeOfflineURL) {
-  // URL is invalid.
-  EXPECT_FALSE(OfflinePageUtils::MightBeOfflineURL(GURL("/test.mhtml")));
-  // Scheme is not file.
-  EXPECT_FALSE(OfflinePageUtils::MightBeOfflineURL(GURL("http://test.com/")));
-  // Does not end with .mhtml.
-  EXPECT_FALSE(OfflinePageUtils::MightBeOfflineURL(GURL("file:///test.txt")));
-  // Might still be an offline page.
-  EXPECT_TRUE(OfflinePageUtils::MightBeOfflineURL(GURL("file:///test.mhtml")));
+TEST_F(OfflinePageUtilsTest, CheckExistenceOfPagesWithURL) {
+  bool page_exists = false;
+  // This page should be available.
+  OfflinePageUtils::CheckExistenceOfPagesWithURL(
+      profile(), kDownloadNamespace, kTestPage1Url,
+      base::Bind(&BoolCallback, base::Unretained(&page_exists)));
+  RunUntilIdle();
+  EXPECT_TRUE(page_exists);
+  // This one should be missing
+  OfflinePageUtils::CheckExistenceOfPagesWithURL(
+      profile(), kDownloadNamespace, kTestPage3Url,
+      base::Bind(&BoolCallback, base::Unretained(&page_exists)));
+  RunUntilIdle();
+  EXPECT_FALSE(page_exists);
 }
 
-TEST_F(OfflinePageUtilsTest, MaybeGetOnlineURLForOfflineURL) {
-  EXPECT_EQ(kTestPage1Url, OfflinePageUtils::MaybeGetOnlineURLForOfflineURL(
-                               profile(), offline_url_page_1()));
-  EXPECT_EQ(kTestPage2Url, OfflinePageUtils::MaybeGetOnlineURLForOfflineURL(
-                               profile(), offline_url_page_2()));
-  EXPECT_EQ(GURL::EmptyGURL(), OfflinePageUtils::MaybeGetOnlineURLForOfflineURL(
-                                   profile(), offline_url_missing()));
-  EXPECT_EQ(kTestPage4Url, OfflinePageUtils::MaybeGetOnlineURLForOfflineURL(
-                               profile(), offline_url_expired()));
-}
-
-TEST_F(OfflinePageUtilsTest, IsOfflinePage) {
-  EXPECT_TRUE(OfflinePageUtils::IsOfflinePage(profile(), offline_url_page_1()));
-  EXPECT_TRUE(OfflinePageUtils::IsOfflinePage(profile(), offline_url_page_2()));
-  EXPECT_FALSE(
-      OfflinePageUtils::IsOfflinePage(profile(), offline_url_missing()));
-  EXPECT_TRUE(
-      OfflinePageUtils::IsOfflinePage(profile(), offline_url_expired()));
-  EXPECT_FALSE(OfflinePageUtils::IsOfflinePage(profile(), kTestPage1Url));
-  EXPECT_FALSE(OfflinePageUtils::IsOfflinePage(profile(), kTestPage2Url));
-  EXPECT_FALSE(OfflinePageUtils::IsOfflinePage(profile(), kTestPage4Url));
+TEST_F(OfflinePageUtilsTest, EqualsIgnoringFragment) {
+  EXPECT_TRUE(OfflinePageUtils::EqualsIgnoringFragment(
+      GURL("http://example.com/"), GURL("http://example.com/")));
+  EXPECT_TRUE(OfflinePageUtils::EqualsIgnoringFragment(
+      GURL("http://example.com/"), GURL("http://example.com/#test")));
+  EXPECT_TRUE(OfflinePageUtils::EqualsIgnoringFragment(
+      GURL("http://example.com/#test"), GURL("http://example.com/")));
+  EXPECT_TRUE(OfflinePageUtils::EqualsIgnoringFragment(
+      GURL("http://example.com/#test"), GURL("http://example.com/#test2")));
+  EXPECT_FALSE(OfflinePageUtils::EqualsIgnoringFragment(
+      GURL("http://example.com/"), GURL("http://test.com/#test")));
 }
 
 }  // namespace offline_pages

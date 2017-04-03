@@ -34,123 +34,128 @@ namespace blink {
 
 using namespace HTMLNames;
 
-LayoutFieldset::LayoutFieldset(Element* element)
-    : LayoutBlockFlow(element)
-{
+LayoutFieldset::LayoutFieldset(Element* element) : LayoutBlockFlow(element) {}
+
+void LayoutFieldset::computePreferredLogicalWidths() {
+  LayoutBlockFlow::computePreferredLogicalWidths();
+  if (LayoutBox* legend = findInFlowLegend()) {
+    int legendMinWidth = legend->minPreferredLogicalWidth().toInt();
+
+    Length legendMarginLeft = legend->style()->marginLeft();
+    Length legendMarginRight = legend->style()->marginRight();
+
+    if (legendMarginLeft.isFixed())
+      legendMinWidth += legendMarginLeft.value();
+
+    if (legendMarginRight.isFixed())
+      legendMinWidth += legendMarginRight.value();
+
+    m_minPreferredLogicalWidth = max(m_minPreferredLogicalWidth,
+                                     legendMinWidth + borderAndPaddingWidth());
+  }
 }
 
-void LayoutFieldset::computePreferredLogicalWidths()
-{
-    LayoutBlockFlow::computePreferredLogicalWidths();
-    if (LayoutBox* legend = findInFlowLegend()) {
-        int legendMinWidth = legend->minPreferredLogicalWidth().toInt();
+LayoutObject* LayoutFieldset::layoutSpecialExcludedChild(bool relayoutChildren,
+                                                         SubtreeLayoutScope&) {
+  LayoutBox* legend = findInFlowLegend();
+  if (legend) {
+    LayoutRect oldLegendFrameRect = legend->frameRect();
 
-        Length legendMarginLeft = legend->style()->marginLeft();
-        Length legendMarginRight = legend->style()->marginRight();
+    if (relayoutChildren)
+      legend->setNeedsLayoutAndFullPaintInvalidation(
+          LayoutInvalidationReason::FieldsetChanged);
+    legend->layoutIfNeeded();
 
-        if (legendMarginLeft.isFixed())
-            legendMinWidth += legendMarginLeft.value();
-
-        if (legendMarginRight.isFixed())
-            legendMinWidth += legendMarginRight.value();
-
-        m_minPreferredLogicalWidth = max(m_minPreferredLogicalWidth, legendMinWidth + borderAndPaddingWidth());
+    LayoutUnit logicalLeft;
+    if (style()->isLeftToRightDirection()) {
+      switch (legend->style()->textAlign()) {
+        case CENTER:
+          logicalLeft = (logicalWidth() - logicalWidthForChild(*legend)) / 2;
+          break;
+        case RIGHT:
+          logicalLeft = logicalWidth() - borderEnd() - paddingEnd() -
+                        logicalWidthForChild(*legend);
+          break;
+        default:
+          logicalLeft =
+              borderStart() + paddingStart() + marginStartForChild(*legend);
+          break;
+      }
+    } else {
+      switch (legend->style()->textAlign()) {
+        case LEFT:
+          logicalLeft = borderStart() + paddingStart();
+          break;
+        case CENTER: {
+          // Make sure that the extra pixel goes to the end side in RTL (since it went to the end side
+          // in LTR).
+          LayoutUnit centeredWidth =
+              logicalWidth() - logicalWidthForChild(*legend);
+          logicalLeft = centeredWidth - centeredWidth / 2;
+          break;
+        }
+        default:
+          logicalLeft = logicalWidth() - borderStart() - paddingStart() -
+                        marginStartForChild(*legend) -
+                        logicalWidthForChild(*legend);
+          break;
+      }
     }
-}
 
-LayoutObject* LayoutFieldset::layoutSpecialExcludedChild(bool relayoutChildren, SubtreeLayoutScope&)
-{
-    LayoutBox* legend = findInFlowLegend();
-    if (legend) {
-        LayoutRect oldLegendFrameRect = legend->frameRect();
+    setLogicalLeftForChild(*legend, logicalLeft);
 
-        if (relayoutChildren)
-            legend->setNeedsLayoutAndFullPaintInvalidation(LayoutInvalidationReason::FieldsetChanged);
-        legend->layoutIfNeeded();
+    LayoutUnit fieldsetBorderBefore = LayoutUnit(borderBefore());
+    LayoutUnit legendLogicalHeight = logicalHeightForChild(*legend);
 
-        LayoutUnit logicalLeft;
-        if (style()->isLeftToRightDirection()) {
-            switch (legend->style()->textAlign()) {
-            case CENTER:
-                logicalLeft = (logicalWidth() - logicalWidthForChild(*legend)) / 2;
-                break;
-            case RIGHT:
-                logicalLeft = logicalWidth() - borderEnd() - paddingEnd() - logicalWidthForChild(*legend);
-                break;
-            default:
-                logicalLeft = borderStart() + paddingStart() + marginStartForChild(*legend);
-                break;
-            }
-        } else {
-            switch (legend->style()->textAlign()) {
-            case LEFT:
-                logicalLeft = borderStart() + paddingStart();
-                break;
-            case CENTER: {
-                // Make sure that the extra pixel goes to the end side in RTL (since it went to the end side
-                // in LTR).
-                LayoutUnit centeredWidth = logicalWidth() - logicalWidthForChild(*legend);
-                logicalLeft = centeredWidth - centeredWidth / 2;
-                break;
-            }
-            default:
-                logicalLeft = logicalWidth() - borderStart() - paddingStart() - marginStartForChild(*legend) - logicalWidthForChild(*legend);
-                break;
-            }
-        }
-
-        setLogicalLeftForChild(*legend, logicalLeft);
-
-        LayoutUnit fieldsetBorderBefore = LayoutUnit(borderBefore());
-        LayoutUnit legendLogicalHeight = logicalHeightForChild(*legend);
-
-        LayoutUnit legendLogicalTop;
-        LayoutUnit collapsedLegendExtent;
-        // FIXME: We need to account for the legend's margin before too.
-        if (fieldsetBorderBefore > legendLogicalHeight) {
-            // The <legend> is smaller than the associated fieldset before border
-            // so the latter determines positioning of the <legend>. The sizing depends
-            // on the legend's margins as we want to still follow the author's cues.
-            // Firefox completely ignores the margins in this case which seems wrong.
-            legendLogicalTop = (fieldsetBorderBefore - legendLogicalHeight) / 2;
-            collapsedLegendExtent = max<LayoutUnit>(fieldsetBorderBefore, legendLogicalTop + legendLogicalHeight + marginAfterForChild(*legend));
-        } else {
-            collapsedLegendExtent = legendLogicalHeight + marginAfterForChild(*legend);
-        }
-
-        setLogicalTopForChild(*legend, legendLogicalTop);
-        setLogicalHeight(paddingBefore() + collapsedLegendExtent);
-
-        if (legend->frameRect() != oldLegendFrameRect) {
-            // We need to invalidate the fieldset border if the legend's frame changed.
-            setShouldDoFullPaintInvalidation();
-        }
+    LayoutUnit legendLogicalTop;
+    LayoutUnit collapsedLegendExtent;
+    // FIXME: We need to account for the legend's margin before too.
+    if (fieldsetBorderBefore > legendLogicalHeight) {
+      // The <legend> is smaller than the associated fieldset before border
+      // so the latter determines positioning of the <legend>. The sizing depends
+      // on the legend's margins as we want to still follow the author's cues.
+      // Firefox completely ignores the margins in this case which seems wrong.
+      legendLogicalTop = (fieldsetBorderBefore - legendLogicalHeight) / 2;
+      collapsedLegendExtent = max<LayoutUnit>(
+          fieldsetBorderBefore, legendLogicalTop + legendLogicalHeight +
+                                    marginAfterForChild(*legend));
+    } else {
+      collapsedLegendExtent =
+          legendLogicalHeight + marginAfterForChild(*legend);
     }
-    return legend;
-}
 
-LayoutBox* LayoutFieldset::findInFlowLegend() const
-{
-    for (LayoutObject* legend = firstChild(); legend; legend = legend->nextSibling()) {
-        if (legend->isFloatingOrOutOfFlowPositioned())
-            continue;
+    setLogicalTopForChild(*legend, legendLogicalTop);
+    setLogicalHeight(paddingBefore() + collapsedLegendExtent);
 
-        if (isHTMLLegendElement(legend->node())) {
-            if (legend->isBox())
-                return toLayoutBox(legend);
-        }
+    if (legend->frameRect() != oldLegendFrameRect) {
+      // We need to invalidate the fieldset border if the legend's frame changed.
+      setShouldDoFullPaintInvalidation();
     }
-    return nullptr;
+  }
+  return legend;
 }
 
-void LayoutFieldset::paintBoxDecorationBackground(const PaintInfo& paintInfo, const LayoutPoint& paintOffset) const
-{
-    FieldsetPainter(*this).paintBoxDecorationBackground(paintInfo, paintOffset);
+LayoutBox* LayoutFieldset::findInFlowLegend() const {
+  for (LayoutObject* legend = firstChild(); legend;
+       legend = legend->nextSibling()) {
+    if (legend->isFloatingOrOutOfFlowPositioned())
+      continue;
+
+    if (isHTMLLegendElement(legend->node()))
+      return toLayoutBox(legend);
+  }
+  return nullptr;
 }
 
-void LayoutFieldset::paintMask(const PaintInfo& paintInfo, const LayoutPoint& paintOffset) const
-{
-    FieldsetPainter(*this).paintMask(paintInfo, paintOffset);
+void LayoutFieldset::paintBoxDecorationBackground(
+    const PaintInfo& paintInfo,
+    const LayoutPoint& paintOffset) const {
+  FieldsetPainter(*this).paintBoxDecorationBackground(paintInfo, paintOffset);
 }
 
-} // namespace blink
+void LayoutFieldset::paintMask(const PaintInfo& paintInfo,
+                               const LayoutPoint& paintOffset) const {
+  FieldsetPainter(*this).paintMask(paintInfo, paintOffset);
+}
+
+}  // namespace blink

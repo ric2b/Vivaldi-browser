@@ -26,6 +26,7 @@ import "process.mojom";
 import "storage_manager.mojom";
 import "tts.mojom";
 import "video.mojom";
+import "wallpaper.mojom";
 
 // Next MinVersion: 20
 // Deprecated method IDs: 101, 105
@@ -105,6 +106,9 @@ interface ArcBridgeHost {
 
   // Notifies Chrome that the VideoInstance interface is ready.
   [MinVersion=6] OnVideoInstanceReady@107(VideoInstance instance_ptr);
+
+  // Notifies Chrome that the WallpaperInstance interface is ready.
+  [MinVersion=18] OnWallpaperInstanceReady@124(WallpaperInstance instance_ptr);
 };
 
 interface ArcBridgeInstance {

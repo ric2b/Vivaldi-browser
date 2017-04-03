@@ -452,6 +452,10 @@ class AppWindow : public content::WebContentsDelegate,
   std::unique_ptr<content::BluetoothChooser> RunBluetoothChooser(
       content::RenderFrameHost* frame,
       const content::BluetoothChooser::EventHandler& event_handler) override;
+  void ContentsMouseEvent(content::WebContents* source,
+                          const gfx::Point& location,
+                          bool motion,
+                          bool exited) override;
 
   // content::WebContentsObserver implementation.
   void RenderViewCreated(content::RenderViewHost* render_view_host) override;
@@ -595,6 +599,10 @@ class AppWindow : public content::WebContentsDelegate,
 
   // Whether |show_in_shelf| was set in the CreateParams.
   bool show_in_shelf_;
+
+  // If the mouse has entered the app-window. Used for ContentsMouseEvent
+  // leaving and entering.
+  bool mouse_has_entered_ = false;
 
   // Icon URL to be used for setting the window icon. If not empty,
   // app_icon_ will be fetched and set using this URL and will have

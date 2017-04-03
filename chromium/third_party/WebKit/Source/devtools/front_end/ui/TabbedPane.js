@@ -40,12 +40,13 @@ WebInspector.TabbedPane = function()
     this.contentElement.classList.add("tabbed-pane-shadow");
     this.contentElement.tabIndex = -1;
     this._headerElement = this.contentElement.createChild("div", "tabbed-pane-header");
-    this._headerElement.createChild("content").select = ".tabbed-pane-header-before";
     this._headerContentsElement = this._headerElement.createChild("div", "tabbed-pane-header-contents");
+    this._headerContentsElement.setAttribute("aria-label", WebInspector.UIString("Panels"));
     this._tabSlider = createElementWithClass("div", "tabbed-pane-tab-slider");
-    this._headerElement.createChild("content").select = ".tabbed-pane-header-after";
     this._tabsElement = this._headerContentsElement.createChild("div", "tabbed-pane-header-tabs");
+    this._tabsElement.setAttribute("role", "tablist");
     this._contentElement = this.contentElement.createChild("div", "tabbed-pane-content");
+    this._contentElement.setAttribute("role", "tabpanel");
     this._contentElement.createChild("content");
     /** @type {!Array.<!WebInspector.TabbedPaneTab>} */
     this._tabs = [];
@@ -90,6 +91,15 @@ WebInspector.TabbedPane.prototype = {
     tabIds: function()
     {
         return this._tabs.map(tab => tab._id);
+    },
+
+    /**
+     * @param {string} tabId
+     * @return {number}
+     */
+    tabIndex: function(tabId)
+    {
+        return this._tabs.findIndex(tab => tab.id === tabId);
     },
 
     /**
@@ -402,14 +412,17 @@ WebInspector.TabbedPane.prototype = {
     /**
      * @param {string} id
      * @param {string} tabTitle
+     * @param {string=} tabTooltip
      */
-    changeTabTitle: function(id, tabTitle)
+    changeTabTitle: function(id, tabTitle, tabTooltip)
     {
         var tab = this._tabsById[id];
-        if (tab.title === tabTitle)
-            return;
-        tab.title = tabTitle;
-        this._updateTabElements();
+        if (tabTooltip !== undefined)
+            tab.tooltip = tabTooltip;
+        if (tab.title !== tabTitle) {
+            tab.title = tabTitle;
+            this._updateTabElements();
+        }
     },
 
     /**
@@ -767,6 +780,7 @@ WebInspector.TabbedPane.prototype = {
     _showTab: function(tab)
     {
         tab.tabElement.classList.add("selected");
+        tab.tabElement.setAttribute("aria-selected", "true");
         tab.view.showWidget(this.element);
         this._updateTabSlider();
     },
@@ -793,6 +807,7 @@ WebInspector.TabbedPane.prototype = {
     _hideTab: function(tab)
     {
         tab.tabElement.classList.remove("selected");
+        tab.tabElement.setAttribute("aria-selected", "false");
         tab.view.hideWidget();
     },
 
@@ -821,21 +836,27 @@ WebInspector.TabbedPane.prototype = {
     },
 
     /**
-     * @param {!Element} element
+     * @return {!WebInspector.Toolbar}
      */
-    insertBeforeTabStrip: function(element)
+    leftToolbar: function()
     {
-        element.classList.add("tabbed-pane-header-before");
-        this.element.appendChild(element);
+        if (!this._leftToolbar) {
+            this._leftToolbar = new WebInspector.Toolbar("tabbed-pane-left-toolbar");
+            this._headerElement.insertBefore(this._leftToolbar.element, this._headerElement.firstChild);
+        }
+        return this._leftToolbar;
     },
 
     /**
-     * @param {!Element} element
+     * @return {!WebInspector.Toolbar}
      */
-    appendAfterTabStrip: function(element)
+    rightToolbar: function()
     {
-        element.classList.add("tabbed-pane-header-after");
-        this.element.appendChild(element);
+        if (!this._rightToolbar) {
+            this._rightToolbar = new WebInspector.Toolbar("tabbed-pane-right-toolbar");
+            this._headerElement.appendChild(this._rightToolbar.element);
+        }
+        return this._rightToolbar;
     },
 
     renderWithNoHeaderBackground: function()
@@ -1038,6 +1059,8 @@ WebInspector.TabbedPaneTab.prototype = {
         var tabElement = createElementWithClass("div", "tabbed-pane-header-tab");
         tabElement.id = "tab-" + this._id;
         tabElement.tabIndex = -1;
+        tabElement.setAttribute("role", "tab");
+        tabElement.setAttribute("aria-selected", "false");
         tabElement.selectTabForTest = this._tabbedPane.selectTab.bind(this._tabbedPane, this.id, true);
 
         var titleElement = tabElement.createChild("span", "tabbed-pane-header-tab-title");

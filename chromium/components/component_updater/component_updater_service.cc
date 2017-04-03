@@ -267,7 +267,8 @@ bool CrxUpdateService::OnDemandUpdateWithCooldown(const std::string& id) {
   // Check if the request is too soon.
   const auto* component_state(GetComponentState(id));
   if (component_state) {
-    base::TimeDelta delta = base::Time::Now() - component_state->last_check;
+    base::TimeDelta delta =
+        base::TimeTicks::Now() - component_state->last_check;
     if (delta < base::TimeDelta::FromSeconds(config_->OnDemandDelay()))
       return false;
   }
@@ -456,8 +457,7 @@ std::unique_ptr<ComponentUpdateService> ComponentUpdateServiceFactory(
     const scoped_refptr<Configurator>& config) {
   DCHECK(config);
   auto update_client = update_client::UpdateClientFactory(config);
-  return base::WrapUnique(
-      new CrxUpdateService(config, std::move(update_client)));
+  return base::MakeUnique<CrxUpdateService>(config, std::move(update_client));
 }
 
 }  // namespace component_updater

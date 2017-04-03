@@ -23,12 +23,11 @@
 #include "cc/proto/compositor_message_to_impl.pb.h"
 #include "cc/test/animation_test_common.h"
 #include "cc/test/begin_frame_args_test.h"
-#include "cc/test/fake_external_begin_frame_source.h"
 #include "cc/test/fake_image_serialization_processor.h"
 #include "cc/test/fake_layer_tree_host_client.h"
 #include "cc/test/fake_output_surface.h"
+#include "cc/test/test_compositor_frame_sink.h"
 #include "cc/test/test_context_provider.h"
-#include "cc/test/test_delegating_output_surface.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/trees/layer_tree_host_client.h"
 #include "cc/trees/layer_tree_host_impl.h"
@@ -36,7 +35,6 @@
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/proxy_impl.h"
 #include "cc/trees/proxy_main.h"
-#include "cc/trees/remote_channel_impl.h"
 #include "cc/trees/single_thread_proxy.h"
 #include "cc/trees/threaded_channel.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -183,9 +181,10 @@ class LayerTreeHostImplForTesting : public LayerTreeHostImpl {
     return test_hooks_->PrepareToDrawOnThread(this, frame, draw_result);
   }
 
-  void DrawLayers(FrameData* frame) override {
-    LayerTreeHostImpl::DrawLayers(frame);
+  bool DrawLayers(FrameData* frame) override {
+    bool r = LayerTreeHostImpl::DrawLayers(frame);
     test_hooks_->DrawLayersOnThread(this);
+    return r;
   }
 
   void NotifyReadyToActivate() override {
@@ -227,8 +226,8 @@ class LayerTreeHostImplForTesting : public LayerTreeHostImpl {
     test_hooks_->DidActivateTreeOnThread(this);
   }
 
-  bool InitializeRenderer(OutputSurface* output_surface) override {
-    bool success = LayerTreeHostImpl::InitializeRenderer(output_surface);
+  bool InitializeRenderer(CompositorFrameSink* compositor_frame_sink) override {
+    bool success = LayerTreeHostImpl::InitializeRenderer(compositor_frame_sink);
     test_hooks_->InitializedRendererOnThread(this, success);
     return success;
   }
@@ -299,17 +298,17 @@ class LayerTreeHostClientForTesting : public LayerTreeHostClient,
                                      top_controls_delta);
   }
 
-  void RequestNewOutputSurface() override {
-    test_hooks_->RequestNewOutputSurface();
+  void RequestNewCompositorFrameSink() override {
+    test_hooks_->RequestNewCompositorFrameSink();
   }
 
-  void DidInitializeOutputSurface() override {
-    test_hooks_->DidInitializeOutputSurface();
+  void DidInitializeCompositorFrameSink() override {
+    test_hooks_->DidInitializeCompositorFrameSink();
   }
 
-  void DidFailToInitializeOutputSurface() override {
-    test_hooks_->DidFailToInitializeOutputSurface();
-    RequestNewOutputSurface();
+  void DidFailToInitializeCompositorFrameSink() override {
+    test_hooks_->DidFailToInitializeCompositorFrameSink();
+    RequestNewCompositorFrameSink();
   }
 
   void WillCommit() override { test_hooks_->WillCommit(); }
@@ -340,28 +339,24 @@ class LayerTreeHostClientForTesting : public LayerTreeHostClient,
 };
 
 // Adapts LayerTreeHost for test. Injects LayerTreeHostImplForTesting.
-class LayerTreeHostForTesting : public LayerTreeHost {
+class LayerTreeHostForTesting : public LayerTreeHostInProcess {
  public:
   static std::unique_ptr<LayerTreeHostForTesting> Create(
       TestHooks* test_hooks,
       CompositorMode mode,
       LayerTreeHostClientForTesting* client,
-      RemoteProtoChannel* remote_proto_channel,
       SharedBitmapManager* shared_bitmap_manager,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       TaskGraphRunner* task_graph_runner,
       const LayerTreeSettings& settings,
       scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
-      scoped_refptr<base::SingleThreadTaskRunner> impl_task_runner,
-      std::unique_ptr<BeginFrameSource> external_begin_frame_source,
-      ImageSerializationProcessor* image_serialization_processor) {
-    LayerTreeHost::InitParams params;
+      scoped_refptr<base::SingleThreadTaskRunner> impl_task_runner) {
+    LayerTreeHostInProcess::InitParams params;
     params.client = client;
     params.shared_bitmap_manager = shared_bitmap_manager;
     params.gpu_memory_buffer_manager = gpu_memory_buffer_manager;
     params.task_graph_runner = task_graph_runner;
     params.settings = &settings;
-    params.image_serialization_processor = image_serialization_processor;
 
     params.animation_host =
         AnimationHost::CreateForTesting(ThreadInstance::MAIN);
@@ -381,26 +376,10 @@ class LayerTreeHostForTesting : public LayerTreeHost {
                                           task_runner_provider.get());
         break;
       case CompositorMode::REMOTE:
-        DCHECK(!external_begin_frame_source);
-        // The Remote LayerTreeHost on the client has the impl task runner.
-        if (task_runner_provider->HasImplThread()) {
-          proxy = base::MakeUnique<RemoteChannelImpl>(
-              layer_tree_host.get(), remote_proto_channel,
-              task_runner_provider.get());
-        } else {
-          proxy = ProxyMain::CreateRemote(remote_proto_channel,
-                                          layer_tree_host.get(),
-                                          task_runner_provider.get());
-
-          // The LayerTreeHost on the server will never have an output surface.
-          // Set output_surface_lost_ to false by default.
-          layer_tree_host->SetOutputSurfaceLostForTesting(false);
-        }
-        break;
+        NOTREACHED();
     }
-    layer_tree_host->InitializeForTesting(
-        std::move(task_runner_provider), std::move(proxy),
-        std::move(external_begin_frame_source));
+    layer_tree_host->InitializeForTesting(std::move(task_runner_provider),
+                                          std::move(proxy));
     return layer_tree_host;
   }
 
@@ -408,9 +387,10 @@ class LayerTreeHostForTesting : public LayerTreeHost {
       LayerTreeHostImplClient* host_impl_client) override {
     std::unique_ptr<LayerTreeHostImpl> host_impl =
         LayerTreeHostImplForTesting::Create(
-            test_hooks_, settings(), host_impl_client, task_runner_provider(),
-            shared_bitmap_manager(), gpu_memory_buffer_manager(),
-            task_graph_runner(), rendering_stats_instrumentation());
+            test_hooks_, GetSettings(), host_impl_client,
+            GetTaskRunnerProvider(), shared_bitmap_manager(),
+            gpu_memory_buffer_manager(), task_graph_runner(),
+            rendering_stats_instrumentation());
     input_handler_weak_ptr_ = host_impl->AsWeakPtr();
     return host_impl;
   }
@@ -418,22 +398,22 @@ class LayerTreeHostForTesting : public LayerTreeHost {
   void SetNeedsCommit() override {
     if (!test_started_)
       return;
-    LayerTreeHost::SetNeedsCommit();
+    LayerTreeHostInProcess::SetNeedsCommit();
   }
 
   void SetNeedsUpdateLayers() override {
     if (!test_started_)
       return;
-    LayerTreeHost::SetNeedsUpdateLayers();
+    LayerTreeHostInProcess::SetNeedsUpdateLayers();
   }
 
   void set_test_started(bool started) { test_started_ = started; }
 
  private:
   LayerTreeHostForTesting(TestHooks* test_hooks,
-                          LayerTreeHost::InitParams* params,
+                          LayerTreeHostInProcess::InitParams* params,
                           CompositorMode mode)
-      : LayerTreeHost(params, mode),
+      : LayerTreeHostInProcess(params, mode),
         test_hooks_(test_hooks),
         test_started_(false) {}
 
@@ -441,13 +421,13 @@ class LayerTreeHostForTesting : public LayerTreeHost {
   bool test_started_;
 };
 
-class LayerTreeTestDelegatingOutputSurfaceClient
-    : public TestDelegatingOutputSurfaceClient {
+class LayerTreeTestCompositorFrameSinkClient
+    : public TestCompositorFrameSinkClient {
  public:
-  explicit LayerTreeTestDelegatingOutputSurfaceClient(TestHooks* hooks)
+  explicit LayerTreeTestCompositorFrameSinkClient(TestHooks* hooks)
       : hooks_(hooks) {}
 
-  // TestDelegatingOutputSurfaceClient implementation.
+  // TestCompositorFrameSinkClient implementation.
   void DisplayReceivedCompositorFrame(const CompositorFrame& frame) override {
     hooks_->DisplayReceivedCompositorFrameOnThread(frame);
   }
@@ -464,11 +444,8 @@ class LayerTreeTestDelegatingOutputSurfaceClient
 };
 
 LayerTreeTest::LayerTreeTest()
-    : remote_proto_channel_bridge_(this),
-      image_serialization_processor_(
-          base::WrapUnique(new FakeImageSerializationProcessor)),
-      delegating_output_surface_client_(
-          new LayerTreeTestDelegatingOutputSurfaceClient(this)),
+    : compositor_frame_sink_client_(
+          new LayerTreeTestCompositorFrameSinkClient(this)),
       weak_factory_(this) {
   main_thread_weak_ptr_ = weak_factory_.GetWeakPtr();
 
@@ -482,13 +459,6 @@ LayerTreeTest::LayerTreeTest()
 }
 
 LayerTreeTest::~LayerTreeTest() {}
-
-Proxy* LayerTreeTest::remote_client_proxy() const {
-  DCHECK(IsRemoteTest());
-  return remote_client_layer_tree_host_
-             ? remote_client_layer_tree_host_->proxy()
-             : nullptr;
-}
 
 bool LayerTreeTest::IsRemoteTest() const {
   return mode_ == CompositorMode::REMOTE;
@@ -607,22 +577,13 @@ void LayerTreeTest::PostNextCommitWaitsForActivationToMainThread() {
                  main_thread_weak_ptr_));
 }
 
-std::unique_ptr<OutputSurface>
-LayerTreeTest::ReleaseOutputSurfaceOnLayerTreeHost() {
-  if (IsRemoteTest()) {
-    DCHECK(remote_client_layer_tree_host_);
-    return remote_client_layer_tree_host_->ReleaseOutputSurface();
-  }
-  return layer_tree_host_->ReleaseOutputSurface();
+std::unique_ptr<CompositorFrameSink>
+LayerTreeTest::ReleaseCompositorFrameSinkOnLayerTreeHost() {
+  return layer_tree_host_->ReleaseCompositorFrameSink();
 }
 
 void LayerTreeTest::SetVisibleOnLayerTreeHost(bool visible) {
   layer_tree_host_->SetVisible(visible);
-
-  if (IsRemoteTest()) {
-    DCHECK(remote_client_layer_tree_host_);
-    remote_client_layer_tree_host_->SetVisible(visible);
-  }
 }
 
 void LayerTreeTest::WillBeginTest() {
@@ -633,30 +594,18 @@ void LayerTreeTest::DoBeginTest() {
   client_ = LayerTreeHostClientForTesting::Create(this);
 
   DCHECK(!impl_thread_ || impl_thread_->task_runner().get());
-
-  if (IsRemoteTest()) {
-    DCHECK(impl_thread_);
-    layer_tree_host_ = LayerTreeHostForTesting::Create(
-        this, mode_, client_.get(), &remote_proto_channel_bridge_.channel_main,
-        nullptr, nullptr, task_graph_runner_.get(), settings_,
-        base::ThreadTaskRunnerHandle::Get(), nullptr, nullptr,
-        image_serialization_processor_.get());
-    DCHECK(remote_proto_channel_bridge_.channel_main.HasReceiver());
-  } else {
-    layer_tree_host_ = LayerTreeHostForTesting::Create(
-        this, mode_, client_.get(), nullptr, shared_bitmap_manager_.get(),
-        gpu_memory_buffer_manager_.get(), task_graph_runner_.get(), settings_,
-        base::ThreadTaskRunnerHandle::Get(),
-        impl_thread_ ? impl_thread_->task_runner() : nullptr, nullptr,
-        image_serialization_processor_.get());
-  }
+  layer_tree_host_ = LayerTreeHostForTesting::Create(
+      this, mode_, client_.get(), shared_bitmap_manager_.get(),
+      gpu_memory_buffer_manager_.get(), task_graph_runner_.get(), settings_,
+      base::ThreadTaskRunnerHandle::Get(),
+      impl_thread_ ? impl_thread_->task_runner() : nullptr);
 
   ASSERT_TRUE(layer_tree_host_);
 
   main_task_runner_ =
-      layer_tree_host_->task_runner_provider()->MainThreadTaskRunner();
+      layer_tree_host_->GetTaskRunnerProvider()->MainThreadTaskRunner();
   impl_task_runner_ =
-      layer_tree_host_->task_runner_provider()->ImplThreadTaskRunner();
+      layer_tree_host_->GetTaskRunnerProvider()->ImplThreadTaskRunner();
   if (!impl_task_runner_) {
     // For tests, if there's no impl thread, make things easier by just giving
     // the main thread task runner.
@@ -709,15 +658,8 @@ void LayerTreeTest::Timeout() {
 void LayerTreeTest::RealEndTest() {
   // TODO(mithro): Make this method only end when not inside an impl frame.
   bool main_frame_will_happen;
-  if (IsRemoteTest()) {
-    main_frame_will_happen =
-        remote_client_layer_tree_host_
-            ? remote_client_proxy()->MainFrameWillHappenForTesting()
-            : false;
-  } else {
     main_frame_will_happen =
         layer_tree_host_ ? proxy()->MainFrameWillHappenForTesting() : false;
-  }
 
   if (main_frame_will_happen && !timed_out_) {
     main_task_runner_->PostTask(
@@ -809,15 +751,14 @@ void LayerTreeTest::RunTest(CompositorMode mode) {
   // mocked out.
   settings_.renderer_settings.refresh_rate = 200.0;
   settings_.background_animation_rate = 200.0;
+  // Disable latency recovery to make the scheduler more predictable in its
+  // actions and less dependent on timings to make decisions.
+  settings_.enable_latency_recovery = false;
   settings_.verify_clip_tree_calculations = true;
   settings_.verify_transform_tree_calculations = true;
   settings_.renderer_settings.buffer_to_texture_target_map =
       DefaultBufferToTextureTargetMapForTesting();
-  // The TestDelegatingOutputSurface will provide a BeginFrameSource.
-  settings_.use_output_surface_begin_frame_source = true;
   InitializeSettings(&settings_);
-  DCHECK(settings_.use_output_surface_begin_frame_source);
-  DCHECK(!settings_.use_external_begin_frame_source);
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
@@ -837,41 +778,36 @@ void LayerTreeTest::RunTest(CompositorMode mode) {
   AfterTest();
 }
 
-void LayerTreeTest::RequestNewOutputSurface() {
+void LayerTreeTest::RequestNewCompositorFrameSink() {
   scoped_refptr<TestContextProvider> shared_context_provider =
       TestContextProvider::Create();
   scoped_refptr<TestContextProvider> worker_context_provider =
       TestContextProvider::CreateWorker();
 
-  auto delegating_output_surface = CreateDelegatingOutputSurface(
+  auto compositor_frame_sink = CreateCompositorFrameSink(
       std::move(shared_context_provider), std::move(worker_context_provider));
-  delegating_output_surface->SetClient(delegating_output_surface_client_.get());
+  compositor_frame_sink->SetClient(compositor_frame_sink_client_.get());
 
-  if (IsRemoteTest()) {
-    DCHECK(remote_client_layer_tree_host_);
-    remote_client_layer_tree_host_->SetOutputSurface(
-        std::move(delegating_output_surface));
-  } else {
-    layer_tree_host_->SetOutputSurface(std::move(delegating_output_surface));
-  }
+    layer_tree_host_->SetCompositorFrameSink(std::move(compositor_frame_sink));
 }
 
-std::unique_ptr<TestDelegatingOutputSurface>
-LayerTreeTest::CreateDelegatingOutputSurface(
+std::unique_ptr<TestCompositorFrameSink>
+LayerTreeTest::CreateCompositorFrameSink(
     scoped_refptr<ContextProvider> compositor_context_provider,
     scoped_refptr<ContextProvider> worker_context_provider) {
   bool synchronous_composite =
       !HasImplThread() &&
-      !layer_tree_host()->settings().single_thread_proxy_scheduler;
+      !layer_tree_host()->GetSettings().single_thread_proxy_scheduler;
   // Disable reclaim resources by default to act like the Display lives
   // out-of-process.
   bool force_disable_reclaim_resources = true;
-  return base::MakeUnique<TestDelegatingOutputSurface>(
+  return base::MakeUnique<TestCompositorFrameSink>(
       compositor_context_provider, std::move(worker_context_provider),
       CreateDisplayOutputSurface(compositor_context_provider),
       shared_bitmap_manager(), gpu_memory_buffer_manager(),
-      layer_tree_host()->settings().renderer_settings, ImplThreadTaskRunner(),
-      synchronous_composite, force_disable_reclaim_resources);
+      layer_tree_host()->GetSettings().renderer_settings,
+      ImplThreadTaskRunner(), synchronous_composite,
+      force_disable_reclaim_resources);
 }
 
 std::unique_ptr<OutputSurface> LayerTreeTest::CreateDisplayOutputSurface(
@@ -884,57 +820,16 @@ void LayerTreeTest::DestroyLayerTreeHost() {
   if (layer_tree_host_ && layer_tree_host_->GetLayerTree()->root_layer())
     layer_tree_host_->GetLayerTree()->root_layer()->SetLayerTreeHost(NULL);
   layer_tree_host_ = nullptr;
-
-  DCHECK(!remote_proto_channel_bridge_.channel_main.HasReceiver());
-
-  // Destroying the LayerTreeHost should destroy the remote client
-  // LayerTreeHost.
-  DCHECK(!remote_client_layer_tree_host_);
-}
-
-void LayerTreeTest::DestroyRemoteClientHost() {
-  DCHECK(IsRemoteTest());
-  DCHECK(remote_client_layer_tree_host_);
-
-  remote_client_layer_tree_host_ = nullptr;
-  DCHECK(!remote_proto_channel_bridge_.channel_impl.HasReceiver());
-}
-
-void LayerTreeTest::CreateRemoteClientHost(
-    const proto::CompositorMessageToImpl& proto) {
-  DCHECK(IsRemoteTest());
-  DCHECK(!remote_client_layer_tree_host_);
-  DCHECK(impl_thread_);
-  DCHECK(proto.message_type() ==
-         proto::CompositorMessageToImpl::INITIALIZE_IMPL);
-
-  proto::InitializeImpl initialize_proto = proto.initialize_impl_message();
-  LayerTreeSettings settings;
-  settings.FromProtobuf(initialize_proto.layer_tree_settings());
-  settings.abort_commit_before_output_surface_creation = false;
-  remote_client_layer_tree_host_ = LayerTreeHostForTesting::Create(
-      this, mode_, client_.get(), &remote_proto_channel_bridge_.channel_impl,
-      nullptr, nullptr, task_graph_runner_.get(), settings,
-      base::ThreadTaskRunnerHandle::Get(), impl_thread_->task_runner(), nullptr,
-      image_serialization_processor_.get());
-
-  DCHECK(remote_proto_channel_bridge_.channel_impl.HasReceiver());
-  DCHECK(task_runner_provider()->HasImplThread());
 }
 
 TaskRunnerProvider* LayerTreeTest::task_runner_provider() const {
-  // All LayerTreeTests can use the task runner provider to access the impl
-  // thread. In the remote mode, the impl thread of the compositor lives on
-  // the client, so return the task runner provider owned by the remote client
-  // LayerTreeHost.
-  LayerTreeHost* host = IsRemoteTest() ? remote_client_layer_tree_host_.get()
-                                       : layer_tree_host_.get();
+  LayerTreeHost* host = layer_tree_host_.get();
 
   // If this fails, the test has ended and there is no task runners to find
   // anymore.
   DCHECK(host);
 
-  return host->task_runner_provider();
+  return host->GetTaskRunnerProvider();
 }
 
 LayerTreeHost* LayerTreeTest::layer_tree_host() {
@@ -943,11 +838,10 @@ LayerTreeHost* LayerTreeTest::layer_tree_host() {
   return layer_tree_host_.get();
 }
 
-LayerTreeHost* LayerTreeTest::remote_client_layer_tree_host() {
-  DCHECK(IsRemoteTest());
+LayerTreeHostInProcess* LayerTreeTest::layer_tree_host_in_process() {
   DCHECK(task_runner_provider()->IsMainThread() ||
          task_runner_provider()->IsMainThreadBlocked());
-  return remote_client_layer_tree_host_.get();
+  DCHECK(!IsRemoteTest());
+  return layer_tree_host_.get();
 }
-
 }  // namespace cc

@@ -17,10 +17,6 @@
 #include "content/public/browser/user_metrics.h"
 #include "url/origin.h"
 
-#if !defined(OS_ANDROID)
-#include "chrome/browser/ui/browser_finder.h"
-#endif
-
 namespace {
 
 class CancelledRequest : public PermissionRequest {
@@ -31,7 +27,7 @@ class CancelledRequest : public PermissionRequest {
         origin_(cancelled->GetOrigin()) {}
   ~CancelledRequest() override {}
 
-  int GetIconId() const override { return icon_; }
+  IconId GetIconId() const override { return icon_; }
   base::string16 GetMessageTextFragment() const override {
     return message_fragment_;
   }
@@ -45,7 +41,7 @@ class CancelledRequest : public PermissionRequest {
   void RequestFinished() override { delete this; }
 
  private:
-  int icon_;
+  IconId icon_;
   base::string16 message_fragment_;
   GURL origin_;
 };
@@ -245,7 +241,7 @@ void PermissionRequestManager::DisplayPendingRequests() {
   NOTREACHED();
   return;
 #else
-  view_ = view_factory_.Run(chrome::FindBrowserWithWebContents(web_contents()));
+  view_ = view_factory_.Run(web_contents());
   view_->SetDelegate(this);
 #endif
 

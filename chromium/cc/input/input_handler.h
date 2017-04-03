@@ -128,8 +128,12 @@ class CC_EXPORT InputHandler {
   virtual ScrollStatus ScrollAnimatedBegin(
       const gfx::Point& viewport_point) = 0;
 
+  // Returns SCROLL_ON_IMPL_THREAD if an animation is initiated on the impl
+  // thread. delayed_by is the delay that is taken into account when determining
+  // the duration of the animation.
   virtual ScrollStatus ScrollAnimated(const gfx::Point& viewport_point,
-                                      const gfx::Vector2dF& scroll_delta) = 0;
+                                      const gfx::Vector2dF& scroll_delta,
+                                      base::TimeDelta delayed_by) = 0;
 
   // Scroll the layer selected by |ScrollBegin| by given |scroll_state| delta.
   // Internally, the delta is transformed to local layer's coordinate space for
@@ -144,14 +148,13 @@ class CC_EXPORT InputHandler {
   // ScrollBegin() returned SCROLL_STARTED.
   virtual InputHandlerScrollResult ScrollBy(ScrollState* scroll_state) = 0;
 
-  virtual bool ScrollVerticallyByPage(const gfx::Point& viewport_point,
-                                      ScrollDirection direction) = 0;
-
   // Returns SCROLL_STARTED if a layer was actively being scrolled,
   // SCROLL_IGNORED if not.
   virtual ScrollStatus FlingScrollBegin() = 0;
 
   virtual void MouseMoveAt(const gfx::Point& mouse_position) = 0;
+  virtual void MouseDown() = 0;
+  virtual void MouseUp() = 0;
 
   // Stop scrolling the selected layer. Should only be called if ScrollBegin()
   // returned SCROLL_STARTED.
@@ -174,8 +177,8 @@ class CC_EXPORT InputHandler {
   // Request another callback to InputHandlerClient::Animate().
   virtual void SetNeedsAnimateInput() = 0;
 
-  // Returns true if there is an active scroll on the inner viewport layer.
-  virtual bool IsCurrentlyScrollingInnerViewport() const = 0;
+  // Returns true if there is an active scroll on the viewport.
+  virtual bool IsCurrentlyScrollingViewport() const = 0;
 
   // Whether the layer under |viewport_point| is the currently scrolling layer.
   virtual bool IsCurrentlyScrollingLayerAt(const gfx::Point& viewport_point,

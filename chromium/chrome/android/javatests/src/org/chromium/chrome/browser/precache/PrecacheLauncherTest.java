@@ -9,6 +9,7 @@ import android.test.suitebuilder.annotation.SmallTest;
 
 import com.google.android.gms.gcm.Task;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
@@ -81,6 +82,8 @@ public class PrecacheLauncherTest extends NativeLibraryTestBase {
     @Override
     protected void setUp() throws Exception {
         super.setUp();
+        ContextUtils.initApplicationContext(getTargetContext().getApplicationContext());
+
         // This is a PrecacheLauncher with a stubbed out nativeShouldRun so we can change that on
         // the fly without needing to set up a sync backend.
         mLauncher = new PrecacheLauncherUnderTest();

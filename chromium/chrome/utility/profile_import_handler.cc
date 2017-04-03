@@ -16,6 +16,7 @@
 #include "chrome/utility/importer/importer.h"
 #include "chrome/utility/importer/importer_creator.h"
 #include "content/public/utility/utility_thread.h"
+
 #include "importer/vivaldi_profile_import_process_messages.h"
 
 namespace {
@@ -71,7 +72,7 @@ void ProfileImportHandler::OnImportStart(
     ImporterCleanup();
   }
   import_thread_->task_runner()->PostTask(
-      FROM_HERE, base::Bind(&Importer::StartImport, importer_.get(),
+      FROM_HERE, base::Bind(&Importer::StartImport, importer_,
                             source_profile, import_config.imported_items,
                             base::RetainedRef(bridge_)));
 }

@@ -57,6 +57,7 @@ class TestWindowManagerDelegate : public WindowManagerDelegate {
       std::map<std::string, std::vector<uint8_t>>* properties) override {
     return nullptr;
   }
+  void OnWmDisplayRemoved(ui::Window* window) override {}
   void OnWmClientJankinessChanged(const std::set<Window*>& client_windows,
                                   bool janky) override {}
   void OnWmNewDisplay(Window* window,
@@ -267,7 +268,7 @@ class WindowServerTest : public WindowServerTestBase {
   // returned.
   EmbedResult Embed(Window* window) {
     DCHECK(!embed_details_);
-    embed_details_.reset(new EmbedDetails);
+    embed_details_ = base::MakeUnique<EmbedDetails>();
     window->Embed(ConnectAndGetWindowServerClient(),
                   base::Bind(&WindowServerTest::EmbedCallbackImpl,
                              base::Unretained(this)));
@@ -543,7 +544,7 @@ class VisibilityChangeObserver : public WindowObserver {
 
  private:
   // Overridden from WindowObserver:
-  void OnWindowVisibilityChanged(Window* window) override {
+  void OnWindowVisibilityChanged(Window* window, bool visible) override {
     EXPECT_EQ(window, window_);
     EXPECT_TRUE(WindowServerTestBase::QuitRunLoop());
   }
@@ -860,15 +861,13 @@ TEST_F(WindowServerTest, Activation) {
 
   WaitForTreeSizeToMatch(parent, 6);
 
-  // |child2| and |child3| are stacked about |child1|.
-  EXPECT_GT(ValidIndexOf(parent->children(), child2),
-            ValidIndexOf(parent->children(), child1));
-  EXPECT_GT(ValidIndexOf(parent->children(), child3),
-            ValidIndexOf(parent->children(), child1));
+  EXPECT_EQ(0, ValidIndexOf(parent->children(), child1));
+  // NOTE: |child3| is after |child1| as |child3| is a transient child of
+  // |child1|.
+  EXPECT_EQ(1, ValidIndexOf(parent->children(), child3));
+  EXPECT_EQ(2, ValidIndexOf(parent->children(), child2));
 
-  // Set focus on |child11|. This should activate |child1|, and raise it over
-  // |child2|. But |child3| should still be above |child1| because of
-  // transiency.
+  // Set focus on |child11|, order of windows should not change.
   child11->SetFocus();
   ASSERT_TRUE(WaitForWindowToHaveFocus(child11));
   ASSERT_TRUE(WaitForWindowToHaveFocus(
@@ -877,13 +876,12 @@ TEST_F(WindowServerTest, Activation) {
             server_id(window_manager()->GetFocusedWindow()));
   EXPECT_EQ(server_id(child11), server_id(embedded1->GetFocusedWindow()));
   EXPECT_EQ(nullptr, embedded2->GetFocusedWindow());
-  EXPECT_GT(ValidIndexOf(parent->children(), child1),
-            ValidIndexOf(parent->children(), child2));
-  EXPECT_GT(ValidIndexOf(parent->children(), child3),
-            ValidIndexOf(parent->children(), child1));
+  EXPECT_EQ(0, ValidIndexOf(parent->children(), child1));
+  EXPECT_EQ(1, ValidIndexOf(parent->children(), child3));
+  EXPECT_EQ(2, ValidIndexOf(parent->children(), child2));
 
-  // Set focus on |child21|. This should activate |child2|, and raise it over
-  // |child1|.
+  // Set focus on |child21|. This should activate |child2|. Again, order should
+  // not change.
   child21->SetFocus();
   ASSERT_TRUE(WaitForWindowToHaveFocus(child21));
   ASSERT_TRUE(WaitForWindowToHaveFocus(
@@ -893,10 +891,9 @@ TEST_F(WindowServerTest, Activation) {
   EXPECT_EQ(server_id(child21), server_id(embedded2->GetFocusedWindow()));
   EXPECT_TRUE(WaitForNoWindowToHaveFocus(embedded1));
   EXPECT_EQ(nullptr, embedded1->GetFocusedWindow());
-  EXPECT_GT(ValidIndexOf(parent->children(), child2),
-            ValidIndexOf(parent->children(), child1));
-  EXPECT_GT(ValidIndexOf(parent->children(), child3),
-            ValidIndexOf(parent->children(), child1));
+  EXPECT_EQ(0, ValidIndexOf(parent->children(), child1));
+  EXPECT_EQ(1, ValidIndexOf(parent->children(), child3));
+  EXPECT_EQ(2, ValidIndexOf(parent->children(), child2));
 }
 
 TEST_F(WindowServerTest, ActivationNext) {
@@ -917,13 +914,11 @@ TEST_F(WindowServerTest, ActivationNext) {
   Window* child31 = NewVisibleWindow(GetFirstRoot(embedded3), embedded3);
   WaitForTreeSizeToMatch(parent, 7);
 
-  Window* expecteds[] = { child3, child2, child1, child3, nullptr };
   Window* focused[] = { child31, child21, child11, child31, nullptr };
-  for (size_t index = 0; expecteds[index]; ++index) {
+  for (size_t index = 0; focused[index]; ++index) {
     window_manager_client()->ActivateNextWindow();
     WaitForWindowToHaveFocus(focused[index]);
     EXPECT_TRUE(focused[index]->HasFocus());
-    EXPECT_EQ(parent->children().back(), expecteds[index]);
   }
 }
 
@@ -931,10 +926,8 @@ namespace {
 
 class DestroyedChangedObserver : public WindowObserver {
  public:
-  DestroyedChangedObserver(WindowServerTestBase* test,
-                           Window* window,
-                           bool* got_destroy)
-      : test_(test), window_(window), got_destroy_(got_destroy) {
+  DestroyedChangedObserver(Window* window, bool* got_destroy)
+      : window_(window), got_destroy_(got_destroy) {
     window_->AddObserver(this);
   }
   ~DestroyedChangedObserver() override {
@@ -949,13 +942,8 @@ class DestroyedChangedObserver : public WindowObserver {
     window_->RemoveObserver(this);
     *got_destroy_ = true;
     window_ = nullptr;
-
-    // We should always get OnWindowDestroyed() before
-    // OnDidDestroyClient().
-    EXPECT_FALSE(test_->window_tree_client_destroyed());
   }
 
-  WindowServerTestBase* test_;
   Window* window_;
   bool* got_destroy_;
 
@@ -973,29 +961,9 @@ TEST_F(WindowServerTest, DeleteWindowServer) {
   WindowTreeClient* client = Embed(window).client;
   ASSERT_TRUE(client);
   bool got_destroy = false;
-  DestroyedChangedObserver observer(this, GetFirstRoot(client),
-                                    &got_destroy);
-  delete client;
-  EXPECT_TRUE(window_tree_client_destroyed());
+  DestroyedChangedObserver observer(GetFirstRoot(client), &got_destroy);
+  DeleteWindowTreeClient(client);
   EXPECT_TRUE(got_destroy);
-}
-
-// Verifies two Embed()s in the same window trigger deletion of the first
-// WindowServer.
-TEST_F(WindowServerTest, DisconnectTriggersDelete) {
-  Window* window = window_manager()->NewWindow();
-  ASSERT_NE(nullptr, window);
-  window->SetVisible(true);
-  GetFirstWMRoot()->AddChild(window);
-  WindowTreeClient* client = Embed(window).client;
-  EXPECT_NE(client, window_manager());
-  Window* embedded_window = client->NewWindow();
-  // Embed again, this should trigger disconnect and deletion of client.
-  bool got_destroy;
-  DestroyedChangedObserver observer(this, embedded_window, &got_destroy);
-  EXPECT_FALSE(window_tree_client_destroyed());
-  Embed(window);
-  EXPECT_TRUE(window_tree_client_destroyed());
 }
 
 class WindowRemovedFromParentObserver : public WindowObserver {
@@ -1043,10 +1011,8 @@ namespace {
 
 class DestroyObserver : public WindowObserver {
  public:
-  DestroyObserver(WindowServerTestBase* test,
-                  WindowTreeClient* client,
-                  bool* got_destroy)
-      : test_(test), got_destroy_(got_destroy) {
+  DestroyObserver(WindowTreeClient* client, bool* got_destroy)
+      : got_destroy_(got_destroy) {
     GetFirstRoot(client)->AddObserver(this);
   }
   ~DestroyObserver() override {}
@@ -1057,14 +1023,9 @@ class DestroyObserver : public WindowObserver {
     *got_destroy_ = true;
     window->RemoveObserver(this);
 
-    // We should always get OnWindowDestroyed() before
-    // OnWindowManagerDestroyed().
-    EXPECT_FALSE(test_->window_tree_client_destroyed());
-
     EXPECT_TRUE(WindowServerTestBase::QuitRunLoop());
   }
 
-  WindowServerTestBase* test_;
   bool* got_destroy_;
 
   DISALLOW_COPY_AND_ASSIGN(DestroyObserver);
@@ -1082,7 +1043,7 @@ TEST_F(WindowServerTest, WindowServerDestroyedAfterRootObserver) {
   WindowTreeClient* embedded_client = Embed(embed_window).client;
 
   bool got_destroy = false;
-  DestroyObserver observer(this, embedded_client, &got_destroy);
+  DestroyObserver observer(embedded_client, &got_destroy);
   // Delete the window |embedded_client| is embedded in. This is async,
   // but will eventually trigger deleting |embedded_client|.
   embed_window->Destroy();
@@ -1122,7 +1083,7 @@ class EstablishConnectionViaFactoryDelegate : public TestWindowManagerDelegate {
       return false;
 
     created_window_ = nullptr;
-    run_loop_.reset(new base::RunLoop);
+    run_loop_ = base::MakeUnique<base::RunLoop>();
     run_loop_->Run();
     run_loop_.reset();
     return created_window_ != nullptr;
@@ -1151,14 +1112,11 @@ class EstablishConnectionViaFactoryDelegate : public TestWindowManagerDelegate {
 TEST_F(WindowServerTest, EstablishConnectionViaFactory) {
   EstablishConnectionViaFactoryDelegate delegate(window_manager());
   set_window_manager_delegate(&delegate);
-  std::unique_ptr<WindowTreeClient> second_client(
-      new WindowTreeClient(this, nullptr, nullptr));
-  second_client->ConnectViaWindowTreeFactory(connector());
-  Window* window_in_second_client =
-      second_client->NewTopLevelWindow(nullptr);
+  WindowTreeClient second_client(this, nullptr, nullptr);
+  second_client.ConnectViaWindowTreeFactory(connector());
+  Window* window_in_second_client = second_client.NewTopLevelWindow(nullptr);
   ASSERT_TRUE(window_in_second_client);
-  ASSERT_TRUE(second_client->GetRoots().count(window_in_second_client) >
-              0);
+  ASSERT_TRUE(second_client.GetRoots().count(window_in_second_client) > 0);
   // Wait for the window to appear in the wm.
   ASSERT_TRUE(delegate.QuitOnCreate());
 

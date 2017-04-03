@@ -47,33 +47,6 @@ void STLDeleteContainerPointers(ForwardIterator begin, ForwardIterator end) {
   }
 }
 
-// For a range within a container of pairs, calls delete (non-array version) on
-// the FIRST item in the pairs.
-// NOTE: Like STLDeleteContainerPointers, deleting behind the iterator.
-template <class ForwardIterator>
-void STLDeleteContainerPairFirstPointers(ForwardIterator begin,
-                                         ForwardIterator end) {
-  while (begin != end) {
-    ForwardIterator temp = begin;
-    ++begin;
-    delete temp->first;
-  }
-}
-
-// For a range within a container of pairs, calls delete.
-// NOTE: Like STLDeleteContainerPointers, deleting behind the iterator.
-// Deleting the value does not always invalidate the iterator, but it may
-// do so if the key is a pointer into the value object.
-template <class ForwardIterator>
-void STLDeleteContainerPairSecondPointers(ForwardIterator begin,
-                                          ForwardIterator end) {
-  while (begin != end) {
-    ForwardIterator temp = begin;
-    ++begin;
-    delete temp->second;
-  }
-}
-
 // Counts the number of instances of val in a container.
 template <typename Container, typename T>
 typename std::iterator_traits<
@@ -108,10 +81,6 @@ inline char* string_as_array(std::string* str) {
 // and clear() methods.
 //
 // If container is NULL, this function is a no-op.
-//
-// As an alternative to calling STLDeleteElements() directly, consider
-// STLElementDeleter (defined below), which ensures that your container's
-// elements are deleted when the STLElementDeleter goes out of scope.
 template <class T>
 void STLDeleteElements(T* container) {
   if (!container)
@@ -127,45 +96,16 @@ template <class T>
 void STLDeleteValues(T* container) {
   if (!container)
     return;
-  STLDeleteContainerPairSecondPointers(container->begin(), container->end());
+
+  auto it = container->begin();
+  while (it != container->end()) {
+    auto temp = it;
+    ++it;
+    delete temp->second;
+  }
+
   container->clear();
 }
-
-
-// The following classes provide a convenient way to delete all elements or
-// values from STL containers when they goes out of scope.  This greatly
-// simplifies code that creates temporary objects and has multiple return
-// statements.  Example:
-//
-// vector<MyProto *> tmp_proto;
-// STLElementDeleter<vector<MyProto *> > d(&tmp_proto);
-// if (...) return false;
-// ...
-// return success;
-
-// Given a pointer to an STL container this class will delete all the element
-// pointers when it goes out of scope.
-template<class T>
-class STLElementDeleter {
- public:
-  STLElementDeleter<T>(T* container) : container_(container) {}
-  ~STLElementDeleter<T>() { STLDeleteElements(container_); }
-
- private:
-  T* container_;
-};
-
-// Given a pointer to an STL container this class will delete all the value
-// pointers when it goes out of scope.
-template<class T>
-class STLValueDeleter {
- public:
-  STLValueDeleter<T>(T* container) : container_(container) {}
-  ~STLValueDeleter<T>() { STLDeleteValues(container_); }
-
- private:
-  T* container_;
-};
 
 // Test to see if a set, map, hash_set or hash_map contains a particular key.
 // Returns true if the key is in the collection.

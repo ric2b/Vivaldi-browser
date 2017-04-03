@@ -11,18 +11,55 @@
 #ifndef GeneratedCodeHelper_h
 #define GeneratedCodeHelper_h
 
+#include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/V8Binding.h"
 #include "core/CoreExport.h"
 #include "wtf/PassRefPtr.h"
 #include <v8.h>
 
 namespace blink {
 
+class ScriptState;
 class SerializedScriptValue;
 
-CORE_EXPORT void v8ConstructorAttributeGetter(v8::Local<v8::Name> propertyName, const v8::PropertyCallbackInfo<v8::Value>&);
+CORE_EXPORT void v8ConstructorAttributeGetter(
+    v8::Local<v8::Name> propertyName,
+    const v8::PropertyCallbackInfo<v8::Value>&);
 
-CORE_EXPORT v8::Local<v8::Value> v8Deserialize(v8::Isolate*, PassRefPtr<SerializedScriptValue>);
+CORE_EXPORT v8::Local<v8::Value> v8Deserialize(
+    v8::Isolate*,
+    PassRefPtr<SerializedScriptValue>);
 
-} // namespace blink
+// ExceptionToRejectPromiseScope converts a possible exception to a reject
+// promise and returns the promise instead of throwing the exception.
+//
+// Promise-returning DOM operations are required to always return a promise
+// and to never throw an exception.
+// See also http://heycam.github.io/webidl/#es-operations
+class CORE_EXPORT ExceptionToRejectPromiseScope {
+  STACK_ALLOCATED();
 
-#endif // GeneratedCodeHelper_h
+ public:
+  ExceptionToRejectPromiseScope(const v8::FunctionCallbackInfo<v8::Value>& info,
+                                ExceptionState& exceptionState)
+      : m_info(info),
+        m_exceptionState(exceptionState) {}
+  ~ExceptionToRejectPromiseScope() {
+    if (!m_exceptionState.hadException())
+      return;
+
+    // As exceptions must always be created in the current realm, reject
+    // promises must also be created in the current realm while regular promises
+    // are created in the relevant realm of the context object.
+    ScriptState* scriptState = ScriptState::forFunctionObject(m_info);
+    v8SetReturnValue(m_info, m_exceptionState.reject(scriptState).v8Value());
+  }
+
+ private:
+  const v8::FunctionCallbackInfo<v8::Value>& m_info;
+  ExceptionState& m_exceptionState;
+};
+
+}  // namespace blink
+
+#endif  // GeneratedCodeHelper_h

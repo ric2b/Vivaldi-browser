@@ -17,6 +17,7 @@
 #include "content/common/dom_storage/dom_storage_types.h"
 #include "content/common/frame_messages.h"
 #include "content/common/input_messages.h"
+#include "content/common/renderer.mojom.h"
 #include "content/common/resize_params.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/common/view_messages.h"
@@ -36,7 +37,6 @@
 #include "content/test/mock_render_process.h"
 #include "content/test/test_content_client.h"
 #include "content/test/test_render_frame.h"
-#include "third_party/WebKit/public/platform/WebScreenInfo.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/platform/scheduler/renderer/renderer_scheduler.h"
@@ -288,7 +288,7 @@ void RenderViewTest::SetUp() {
   compositor_deps_.reset(new FakeCompositorDependencies);
   mock_process_.reset(new MockRenderProcess);
 
-  ViewMsg_New_Params view_params;
+  mojom::CreateViewParams view_params;
   view_params.opener_frame_route_id = MSG_ROUTING_NONE;
   view_params.window_was_created_with_opener = false;
   view_params.renderer_preferences = RendererPreferences();
@@ -364,6 +364,7 @@ void RenderViewTest::onLeakDetectionComplete(const Result& result) {
   EXPECT_EQ(0u, result.numberOfLiveScriptPromises);
   EXPECT_EQ(0u, result.numberOfLiveFrames);
   EXPECT_EQ(0u, result.numberOfLiveV8PerContextData);
+  EXPECT_EQ(0u, result.numberOfWorkerGlobalScopes);
 }
 
 void RenderViewTest::SendNativeKeyEvent(
@@ -529,7 +530,7 @@ void RenderViewTest::Resize(gfx::Size new_size,
                             gfx::Rect resizer_rect,
                             bool is_fullscreen_granted) {
   ResizeParams params;
-  params.screen_info = blink::WebScreenInfo();
+  params.screen_info = ScreenInfo();
   params.new_size = new_size;
   params.physical_backing_size = new_size;
   params.top_controls_height = 0.f;
@@ -616,9 +617,8 @@ void RenderViewTest::DidNavigateWithinPage(blink::WebLocalFrame* frame,
 
 blink::WebWidget* RenderViewTest::GetWebWidget() {
   RenderViewImpl* impl = static_cast<RenderViewImpl*>(view_);
-  return impl->webwidget();
+  return impl->GetWebWidget();
 }
-
 
 ContentClient* RenderViewTest::CreateContentClient() {
   return new TestContentClient;
@@ -633,7 +633,7 @@ ContentRendererClient* RenderViewTest::CreateContentRendererClient() {
 }
 
 std::unique_ptr<ResizeParams> RenderViewTest::InitialSizeParams() {
-  return base::WrapUnique(new ResizeParams());
+  return base::MakeUnique<ResizeParams>();
 }
 
 void RenderViewTest::GoToOffset(int offset,

@@ -12,7 +12,7 @@
 #include "ash/common/system/chromeos/palette/tools/laser_pointer_mode.h"
 #include "ash/common/system/chromeos/palette/tools/magnifier_mode.h"
 #include "base/memory/ptr_util.h"
-#include "ui/gfx/vector_icons_public.h"
+#include "ui/gfx/paint_vector_icon.h"
 
 namespace ash {
 
@@ -22,8 +22,7 @@ void PaletteTool::RegisterToolInstances(PaletteToolManager* tool_manager) {
   tool_manager->AddTool(base::MakeUnique<CaptureScreenAction>(tool_manager));
   tool_manager->AddTool(base::MakeUnique<CreateNoteAction>(tool_manager));
   tool_manager->AddTool(base::MakeUnique<LaserPointerMode>(tool_manager));
-  if (ArePaletteExperimentalFeaturesEnabled())
-    tool_manager->AddTool(base::MakeUnique<MagnifierMode>(tool_manager));
+  tool_manager->AddTool(base::MakeUnique<MagnifierMode>(tool_manager));
 }
 
 PaletteTool::PaletteTool(Delegate* delegate) : delegate_(delegate) {}
@@ -38,8 +37,8 @@ void PaletteTool::OnDisable() {
   enabled_ = false;
 }
 
-gfx::VectorIconId PaletteTool::GetActiveTrayIcon() {
-  return gfx::VectorIconId::VECTOR_ICON_NONE;
+const gfx::VectorIcon& PaletteTool::GetActiveTrayIcon() const {
+  return gfx::kNoneIcon;
 }
 
 }  // namespace ash

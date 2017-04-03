@@ -35,16 +35,14 @@ class CONTENT_EXPORT MediaStreamVideoCapturerSource
                                  RenderFrame* render_frame);
   ~MediaStreamVideoCapturerSource() override;
 
-  // Implements MediaStreamVideoSource.
-  void RequestRefreshFrame() override;
-
-  void SetCapturingLinkSecured(bool is_secure) override;
-
  private:
   friend class CanvasCaptureHandlerTest;
   friend class MediaStreamVideoCapturerSourceTest;
 
-  // Implements MediaStreamVideoSource.
+  // MediaStreamVideoSource overrides.
+  void RequestRefreshFrame() override;
+  void OnHasConsumers(bool has_consumers) override;
+  void OnCapturingLinkSecured(bool is_secure) override;
   void GetCurrentSupportedFormats(
       int max_requested_width,
       int max_requested_height,
@@ -60,12 +58,17 @@ class CONTENT_EXPORT MediaStreamVideoCapturerSource
   void OnDestruct() final {}
 
   // Method to bind as RunningCallback in VideoCapturerSource::StartCapture().
-  void OnStarted(bool result);
+  void OnRunStateChanged(bool is_running);
 
   const char* GetPowerLineFrequencyForTesting() const;
 
   // The source that provides video frames.
   const std::unique_ptr<media::VideoCapturerSource> source_;
+
+  // Indicates whether the capture is in starting. It is set to true by
+  // StartSourceImpl() when starting the capture, and is reset after starting
+  // is completed.
+  bool is_capture_starting_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(MediaStreamVideoCapturerSource);
 };

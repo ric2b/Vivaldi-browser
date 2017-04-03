@@ -9,6 +9,7 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_registrar.h"
 #include "base/android/jni_string.h"
+#include "base/android/library_loader/library_loader_hooks.h"
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
@@ -27,7 +28,9 @@
 #include "content/public/common/result_codes.h"
 #include "device/bluetooth/android/bluetooth_jni_registrar.h"
 #include "device/gamepad/android/gamepad_jni_registrar.h"
+#include "device/generic_sensor/android/sensors_jni_registrar.h"
 #include "device/geolocation/android/geolocation_jni_registrar.h"
+#include "device/time_zone_monitor/android/time_zone_monitor_jni_registrar.h"
 #include "device/usb/android/usb_jni_registrar.h"
 #include "media/base/android/media_jni_registrar.h"
 #include "media/capture/content/android/screen_capture_jni_registrar.h"
@@ -67,8 +70,11 @@ bool EnsureJniRegistered(JNIEnv* env) {
     if (!content::android::RegisterCommonJni(env))
       return false;
 
-    if (!content::android::RegisterBrowserJni(env))
-      return false;
+    if (base::android::GetLibraryProcessType(env) ==
+        base::android::PROCESS_BROWSER) {
+      if (!content::android::RegisterBrowserJni(env))
+        return false;
+    }
 
     if (!content::android::RegisterAppJni(env))
       return false;
@@ -80,6 +86,12 @@ bool EnsureJniRegistered(JNIEnv* env) {
       return false;
 
     if (!device::android::RegisterGeolocationJni(env))
+      return false;
+
+    if (!device::android::RegisterSensorsJni(env))
+      return false;
+
+    if (!device::android::RegisterTimeZoneMonitorJni(env))
       return false;
 
     if (!device::android::RegisterUsbJni(env))

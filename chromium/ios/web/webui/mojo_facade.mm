@@ -17,6 +17,10 @@
 #include "mojo/public/cpp/system/core.h"
 #include "services/shell/public/interfaces/interface_provider.mojom.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace web {
 
 namespace {
@@ -244,7 +248,8 @@ std::unique_ptr<base::Value> MojoFacade::HandleSupportWatch(
   int callback_id;
   CHECK(args->GetInteger("callbackId", &callback_id));
 
-  mojo::Watcher::ReadyCallback callback = base::BindBlock(^(MojoResult result) {
+  mojo::Watcher::ReadyCallback callback = base::BindBlockArc(^(
+      MojoResult result) {
     NSString* script =
         [NSString stringWithFormat:@"__crWeb.mojo.signalWatch(%d, %d)",
                                    callback_id, result];

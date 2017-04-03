@@ -44,30 +44,31 @@ class HTMLObjectElement;
 class WebLocalFrameImpl;
 class WebPluginContainerImpl;
 
-// Utility class to host helper plugins for media. Internally, it creates a detached
-// HTMLPluginElement to host the plugin and uses FrameLoaderClient::createPlugin() to instantiate
-// the requested plugin.
+// Utility class to host helper plugins for media. Internally, it creates a
+// detached HTMLPluginElement to host the plugin and uses
+// FrameLoaderClient::createPlugin() to instantiate the requested plugin.
 class WebHelperPluginImpl final : public WebHelperPlugin {
-    WTF_MAKE_NONCOPYABLE(WebHelperPluginImpl);
-    USING_FAST_MALLOC(WebHelperPluginImpl);
-public:
-    // WebHelperPlugin methods:
-    WebPlugin* getPlugin() override;
-    void destroy() override;
+  WTF_MAKE_NONCOPYABLE(WebHelperPluginImpl);
+  USING_FAST_MALLOC(WebHelperPluginImpl);
 
-private:
-    friend class WebHelperPlugin;
+ public:
+  // WebHelperPlugin methods:
+  WebPlugin* getPlugin() override;
+  void destroy() override;
 
-    WebHelperPluginImpl();
+ private:
+  friend class WebHelperPlugin;
 
-    bool initialize(const String& pluginType, WebLocalFrameImpl*);
-    void reallyDestroy(TimerBase*);
+  WebHelperPluginImpl();
 
-    Timer<WebHelperPluginImpl> m_destructionTimer;
-    Persistent<HTMLObjectElement> m_objectElement;
-    Persistent<WebPluginContainerImpl> m_pluginContainer;
+  bool initialize(const String& pluginType, WebLocalFrameImpl*);
+  void reallyDestroy(TimerBase*);
+
+  Timer<WebHelperPluginImpl> m_destructionTimer;
+  Persistent<HTMLObjectElement> m_objectElement;
+  Persistent<WebPluginContainerImpl> m_pluginContainer;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // WebHelperPluginImpl_h
+#endif  // WebHelperPluginImpl_h

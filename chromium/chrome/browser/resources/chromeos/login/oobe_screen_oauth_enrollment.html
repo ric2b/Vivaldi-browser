@@ -8,6 +8,10 @@
       <webview id="oauth-enroll-auth-view" name="oauth-enroll-auth-view">
       </webview>
     </div>
+    <div id="oauth-enroll-step-working">
+      <throbber-notice class="fit" i18n-values="text:oauthEnrollWorking">
+      </throbber-notice>
+    </div>
     <div id="oauth-enroll-step-error" role="alert">
       <notification-card id="oauth-enroll-error-card" type="fail"
           i18n-values="button-label:oauthEnrollRetry">
@@ -17,6 +21,11 @@
       <notification-card id="oauth-enroll-success-card" type="success"
           i18n-values="button-label:oauthEnrollDone"
           i18n-content="oauthEnrollSuccess">
+      </notification-card>
+    </div>
+    <div id="oauth-enroll-step-abe-success" role="alert">
+      <notification-card id="oauth-enroll-abe-success-card" type="success"
+          i18n-values="button-label:oauthEnrollDone">
       </notification-card>
     </div>
     <div id="oauth-enroll-step-attribute-prompt">
@@ -33,7 +42,7 @@
                   i18n-content="oauthEnrollAttributeExplanation"></span>
             <a href="#" id="oauth-enroll-learn-more-link"
                class="oauth-enroll-link"
-               i18n-content="oauthEnrollExplaneAttributeLink"></a>
+               i18n-content="oauthEnrollExplainAttributeLink"></a>
             <gaia-input-form id="oauth-enroll-attribute-input"
                              i18n-values="button-text:oauthEnrollNextBtn">
               <gaia-input id="oauth-enroll-asset-id" type="text"

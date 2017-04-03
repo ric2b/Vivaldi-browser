@@ -3,7 +3,8 @@
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
  *           (C) 2001 Peter Kelly (pmk@post.com)
  *           (C) 2001 Dirk Mueller (mueller@kde.org)
- * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009 Apple Inc. All rights reserved.
+ * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009 Apple Inc. All rights
+ * reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -32,63 +33,69 @@
 namespace blink {
 
 class CORE_EXPORT Attr final : public Node {
-    DEFINE_WRAPPERTYPEINFO();
-public:
-    static Attr* create(Element&, const QualifiedName&);
-    static Attr* create(Document&, const QualifiedName&, const AtomicString& value);
-    ~Attr() override;
+  DEFINE_WRAPPERTYPEINFO();
 
-    String name() const { return m_name.toString(); }
-    bool specified() const { return true; }
-    Element* ownerElement() const { return m_element; }
+ public:
+  static Attr* create(Element&, const QualifiedName&);
+  static Attr* create(Document&,
+                      const QualifiedName&,
+                      const AtomicString& value);
+  ~Attr() override;
 
-    const AtomicString& value() const;
-    void setValue(const AtomicString&);
+  String name() const { return m_name.toString(); }
+  bool specified() const { return true; }
+  Element* ownerElement() const { return m_element; }
 
-    const AtomicString& valueForBindings() const;
-    void setValueForBindings(const AtomicString&);
+  const AtomicString& value() const;
+  void setValue(const AtomicString&);
 
-    const QualifiedName getQualifiedName() const;
+  const AtomicString& valueForBindings() const;
+  void setValueForBindings(const AtomicString&);
 
-    void attachToElement(Element*, const AtomicString&);
-    void detachFromElementWithValue(const AtomicString&);
+  const QualifiedName getQualifiedName() const;
 
-    const AtomicString& localName() const { return m_name.localName(); }
-    const AtomicString& namespaceURI() const { return m_name.namespaceURI(); }
-    const AtomicString& prefix() const { return m_name.prefix(); }
+  void attachToElement(Element*, const AtomicString&);
+  void detachFromElementWithValue(const AtomicString&);
 
-    DECLARE_VIRTUAL_TRACE();
+  const AtomicString& localName() const { return m_name.localName(); }
+  const AtomicString& namespaceURI() const { return m_name.namespaceURI(); }
+  const AtomicString& prefix() const { return m_name.prefix(); }
 
-    DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  DECLARE_VIRTUAL_TRACE();
 
-private:
-    Attr(Element&, const QualifiedName&);
-    Attr(Document&, const QualifiedName&, const AtomicString& value);
+  DECLARE_VIRTUAL_TRACE_WRAPPERS();
 
-    bool isElementNode() const = delete; // This will catch anyone doing an unnecessary check.
+ private:
+  Attr(Element&, const QualifiedName&);
+  Attr(Document&, const QualifiedName&, const AtomicString& value);
 
-    String nodeName() const override { return name(); }
-    NodeType getNodeType() const override { return kAttributeNode; }
+  bool isElementNode() const =
+      delete;  // This will catch anyone doing an unnecessary check.
 
-    String nodeValue() const override { return value(); }
-    void setNodeValue(const String&) override;
-    Node* cloneNode(bool deep) override;
+  String nodeName() const override { return name(); }
+  NodeType getNodeType() const override { return kAttributeNode; }
 
-    bool isAttributeNode() const override { return true; }
+  String nodeValue() const override { return value(); }
+  void setNodeValue(const String&) override;
+  Node* cloneNode(bool deep) override;
 
-    // Attr wraps either an element/name, or a name/value pair (when it's a standalone Node.)
-    // Note that m_name is always set, but m_element/m_standaloneValue may be null.
-    Member<Element> m_element;
-    QualifiedName m_name;
-    // Holds the value if it is a standalone Node, or the local name of the
-    // attribute it is attached to on an Element. The latter may (letter case)
-    // differ from m_name's local name. As these two modes are non-overlapping,
-    // use a single field.
-    AtomicString m_standaloneValueOrAttachedLocalName;
+  bool isAttributeNode() const override { return true; }
+
+  // Attr wraps either an element/name, or a name/value pair (when it's a
+  // standalone Node.)
+  // Note that m_name is always set, but m_element/m_standaloneValue may be
+  // null.
+  Member<Element> m_element;
+  QualifiedName m_name;
+  // Holds the value if it is a standalone Node, or the local name of the
+  // attribute it is attached to on an Element. The latter may (letter case)
+  // differ from m_name's local name. As these two modes are non-overlapping,
+  // use a single field.
+  AtomicString m_standaloneValueOrAttachedLocalName;
 };
 
 DEFINE_NODE_TYPE_CASTS(Attr, isAttributeNode());
 
-} // namespace blink
+}  // namespace blink
 
-#endif // Attr_h
+#endif  // Attr_h

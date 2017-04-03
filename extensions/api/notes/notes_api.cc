@@ -113,8 +113,9 @@ NoteAttachment* CreateNoteAttachment(Notes_attachment* attachment) {
   return note_attachment;
 }
 
-NoteTreeNode* CreateTreeNode(Notes_Node* node) {
-  NoteTreeNode* notes_tree_node = new NoteTreeNode;
+std::unique_ptr<NoteTreeNode> CreateTreeNode(Notes_Node* node) {
+  std::unique_ptr<NoteTreeNode> notes_tree_node =
+      base::MakeUnique<NoteTreeNode>();
 
   notes_tree_node->id = base::Int64ToString(node->id());
 
@@ -258,7 +259,8 @@ bool NotesCreateFunction::RunAsync() {
   Notes_Node* parent = NULL;
 
   int64_t id = model->GetNewIndex();
-  Notes_Node* newnode = new Notes_Node(id);
+  std::unique_ptr<Notes_Node> newnode = base::MakeUnique<Notes_Node>(id);
+  Notes_Node *newnode_ptr = newnode.get();
   // Lots of optionals, make sure to check for the contents.
   if (params->note.title.get()) {
     base::string16 title;
@@ -319,26 +321,27 @@ bool NotesCreateFunction::RunAsync() {
         newIndex = maxIndex;
       }
     }
-    model->AddNode(parent, newIndex, newnode);
+    model->AddNode(parent, newIndex, std::move(newnode));
   } else {
     int64_t newIndex = parent->child_count();
     if (params->note.index.get()) {
       newIndex = *params->note.index.get();
     }
-    model->AddNode(parent, newIndex, newnode);
+    model->AddNode(parent, newIndex, std::move(newnode));
   }
 
-  std::unique_ptr<vivaldi::notes::NoteTreeNode> treenode(CreateTreeNode(newnode));
+  std::unique_ptr<vivaldi::notes::NoteTreeNode> treenode(
+      CreateTreeNode(newnode_ptr));
 
   results_ = vivaldi::notes::Create::Results::Create(*treenode.get());
 
-  SendResponse(true);
-
   std::unique_ptr<base::ListValue> args = vivaldi::notes::OnCreated::Create(
-            base::Int64ToString(newnode->id()), *std::move(treenode));
+            base::Int64ToString(newnode_ptr->id()), *std::move(treenode));
 
   BroadcastEvent(vivaldi::notes::OnCreated::kEventName, std::move(args),
                  context_);
+
+  SendResponse(true);
   return true;
 }
 

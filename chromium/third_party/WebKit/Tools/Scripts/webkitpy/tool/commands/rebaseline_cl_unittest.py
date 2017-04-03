@@ -2,25 +2,26 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import optparse
 import json
+import optparse
 
 from webkitpy.common.net.buildbot import Build
 from webkitpy.common.net.rietveld import Rietveld
 from webkitpy.common.net.web_mock import MockWeb
 from webkitpy.common.net.git_cl import GitCL
 from webkitpy.common.system.executive_mock import MockExecutive2
-from webkitpy.common.system.outputcapture import OutputCapture
+from webkitpy.common.system.logtesting import LoggingTestCase
 from webkitpy.layout_tests.builder_list import BuilderList
 from webkitpy.tool.commands.rebaseline_cl import RebaselineCL
 from webkitpy.tool.commands.rebaseline_unittest import BaseTestCase
 
 
-class RebaselineCLTest(BaseTestCase):
+class RebaselineCLTest(BaseTestCase, LoggingTestCase):
     command_constructor = RebaselineCL
 
     def setUp(self):
-        super(RebaselineCLTest, self).setUp()
+        BaseTestCase.setUp(self)
+        LoggingTestCase.setUp(self)
         web = MockWeb(urls={
             'https://codereview.chromium.org/api/11112222': json.dumps({
                 'patchsets': [1, 2],
@@ -56,6 +57,21 @@ class RebaselineCLTest(BaseTestCase):
         })
         self.command.rietveld = Rietveld(web)
 
+        # Write to the mock filesystem so that these tests are considered to exist.
+        port = self.mac_port
+        tests = [
+            'fast/dom/prototype-taco.html',
+            'fast/dom/prototype-inheritance.html',
+            'svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html',
+        ]
+        for test in tests:
+            # pylint: disable=protected-access
+            self._write(port.host.filesystem.join(port.layout_tests_dir(), test), 'contents')
+
+    def tearDown(self):
+        BaseTestCase.tearDown(self)
+        LoggingTestCase.tearDown(self)
+
     @staticmethod
     def command_options(**kwargs):
         options = {
@@ -71,115 +87,86 @@ class RebaselineCLTest(BaseTestCase):
         return optparse.Values(dict(**options))
 
     def test_execute_with_issue_number_given(self):
-        oc = OutputCapture()
-        try:
-            oc.capture_output()
-            self.command.execute(self.command_options(issue=11112222), [], self.tool)
-        finally:
-            _, _, logs = oc.restore_output()
-        self.assertMultiLineEqual(
-            logs,
-            ('Tests to rebaseline:\n'
-             '  svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html: MOCK Try Win (5000)\n'
-             '  fast/dom/prototype-inheritance.html: MOCK Try Win (5000)\n'
-             '  fast/dom/prototype-taco.html: MOCK Try Win (5000)\n'
-             'Rebaselining fast/dom/prototype-inheritance.html\n'
-             'Rebaselining fast/dom/prototype-taco.html\n'
-             'Rebaselining svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html\n'))
+        self.command.execute(self.command_options(issue=11112222), [], self.tool)
+        print self._log.messages()
+        self.assertLog([
+            'INFO: Tests to rebaseline:\n',
+            'INFO:   svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html: MOCK Try Win (5000)\n',
+            'INFO:   fast/dom/prototype-inheritance.html: MOCK Try Win (5000)\n',
+            'INFO:   fast/dom/prototype-taco.html: MOCK Try Win (5000)\n',
+            'INFO: Rebaselining fast/dom/prototype-inheritance.html\n',
+            'INFO: Rebaselining fast/dom/prototype-taco.html\n',
+            'INFO: Rebaselining svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html\n',
+        ])
 
     def test_execute_with_no_issue_number(self):
-        oc = OutputCapture()
-        try:
-            oc.capture_output()
-            self.command.execute(self.command_options(), [], self.tool)
-        finally:
-            _, _, logs = oc.restore_output()
-        self.assertTrue(logs.startswith('No issue number given and no issue for current branch.'))
+        self.command.execute(self.command_options(), [], self.tool)
+        self.assertLog(['ERROR: No issue number given and no issue for current branch. This tool requires a CL\n'
+                        'to operate on; please run `git cl upload` on this branch first, or use the --issue\n'
+                        'option to download baselines for another existing CL.\n'])
 
     def test_execute_with_issue_number_from_branch(self):
         git_cl = GitCL(MockExecutive2())
         git_cl.get_issue_number = lambda: '11112222'
         self.command.git_cl = lambda: git_cl
-        oc = OutputCapture()
-        try:
-            oc.capture_output()
-            self.command.execute(self.command_options(), [], self.tool)
-        finally:
-            _, _, logs = oc.restore_output()
-        self.assertMultiLineEqual(
-            logs,
-            ('Tests to rebaseline:\n'
-             '  svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html: MOCK Try Win (5000)\n'
-             '  fast/dom/prototype-inheritance.html: MOCK Try Win (5000)\n'
-             '  fast/dom/prototype-taco.html: MOCK Try Win (5000)\n'
-             'Rebaselining fast/dom/prototype-inheritance.html\n'
-             'Rebaselining fast/dom/prototype-taco.html\n'
-             'Rebaselining svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html\n'))
+        self.command.execute(self.command_options(), [], self.tool)
+        self.assertLog([
+            'INFO: Tests to rebaseline:\n',
+            'INFO:   svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html: MOCK Try Win (5000)\n',
+            'INFO:   fast/dom/prototype-inheritance.html: MOCK Try Win (5000)\n',
+            'INFO:   fast/dom/prototype-taco.html: MOCK Try Win (5000)\n',
+            'INFO: Rebaselining fast/dom/prototype-inheritance.html\n',
+            'INFO: Rebaselining fast/dom/prototype-taco.html\n',
+            'INFO: Rebaselining svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html\n',
+        ])
 
     def test_execute_with_only_changed_tests_option(self):
-        oc = OutputCapture()
-        try:
-            oc.capture_output()
-            self.command.execute(self.command_options(issue=11112222, only_changed_tests=True), [], self.tool)
-        finally:
-            _, _, logs = oc.restore_output()
+        self.command.execute(self.command_options(issue=11112222, only_changed_tests=True), [], self.tool)
         # svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html
         # is in the list of failed tests, but not in the list of files modified
         # in the given CL; it should be included because all_tests is set to True.
-        self.assertMultiLineEqual(
-            logs,
-            ('Tests to rebaseline:\n'
-             '  fast/dom/prototype-inheritance.html: MOCK Try Win (5000)\n'
-             '  fast/dom/prototype-taco.html: MOCK Try Win (5000)\n'
-             'Rebaselining fast/dom/prototype-inheritance.html\n'
-             'Rebaselining fast/dom/prototype-taco.html\n'))
+        self.assertLog([
+            'INFO: Tests to rebaseline:\n',
+            'INFO:   fast/dom/prototype-inheritance.html: MOCK Try Win (5000)\n',
+            'INFO:   fast/dom/prototype-taco.html: MOCK Try Win (5000)\n',
+            'INFO: Rebaselining fast/dom/prototype-inheritance.html\n',
+            'INFO: Rebaselining fast/dom/prototype-taco.html\n',
+        ])
+
+    def test_execute_with_nonexistent_test(self):
+        self.command.execute(self.command_options(issue=11112222), ['some/non/existent/test.html'], self.tool)
+        self.assertLog([
+            'WARNING: /test.checkout/LayoutTests/some/non/existent/test.html not found, removing from list.\n',
+            'INFO: No tests to rebaseline; exiting.\n',
+        ])
 
     def test_execute_with_trigger_jobs_option(self):
-        oc = OutputCapture()
-        try:
-            oc.capture_output()
-            self.command.execute(self.command_options(issue=11112222, trigger_jobs=True), [], self.tool)
-        finally:
-            _, _, logs = oc.restore_output()
+        self.command.execute(self.command_options(issue=11112222, trigger_jobs=True), [], self.tool)
         # A message is printed showing that some try jobs are triggered.
-        self.assertMultiLineEqual(
-            logs,
-            ('Triggering try jobs for:\n'
-             '  MOCK Try Linux\n'
-             'Tests to rebaseline:\n'
-             '  svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html: MOCK Try Win (5000)\n'
-             '  fast/dom/prototype-inheritance.html: MOCK Try Win (5000)\n'
-             '  fast/dom/prototype-taco.html: MOCK Try Win (5000)\n'
-             'Rebaselining fast/dom/prototype-inheritance.html\n'
-             'Rebaselining fast/dom/prototype-taco.html\n'
-             'Rebaselining svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html\n'))
+        self.assertLog([
+            'INFO: Triggering try jobs for:\n',
+            'INFO:   MOCK Try Linux\n',
+            'INFO: Tests to rebaseline:\n',
+            'INFO:   svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html: MOCK Try Win (5000)\n',
+            'INFO:   fast/dom/prototype-inheritance.html: MOCK Try Win (5000)\n',
+            'INFO:   fast/dom/prototype-taco.html: MOCK Try Win (5000)\n',
+            'INFO: Rebaselining fast/dom/prototype-inheritance.html\n',
+            'INFO: Rebaselining fast/dom/prototype-taco.html\n',
+            'INFO: Rebaselining svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html\n',
+        ])
         # The first executive call, before the rebaseline calls, is triggering try jobs.
-        self.assertEqual(
-            self.tool.executive.calls,
-            [
-                ['git', 'cl', 'try', '-b', 'MOCK Try Linux'],
-                [
-                    ['python', 'echo', 'optimize-baselines', '--no-modify-scm', '--suffixes', 'png',
-                     'svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html'],
-                    ['python', 'echo', 'optimize-baselines', '--no-modify-scm', '--suffixes', 'txt',
-                     'fast/dom/prototype-inheritance.html'],
-                    ['python', 'echo', 'optimize-baselines', '--no-modify-scm', '--suffixes', 'txt',
-                     'fast/dom/prototype-taco.html']
-                ]
-            ])
+        self.assertEqual(self.tool.executive.calls[0], ['git', 'cl', 'try', '-b', 'MOCK Try Linux'])
 
     def test_rebaseline_calls(self):
         """Tests the list of commands that are invoked when rebaseline is called."""
         # First write test contents to the mock filesystem so that
         # fast/dom/prototype-taco.html is considered a real test to rebaseline.
-        # TODO(qyearsley): Change this to avoid accessing protected methods.
-        # pylint: disable=protected-access
         port = self.tool.port_factory.get('test-win-win7')
         self._write(
-            port._filesystem.join(port.layout_tests_dir(), 'fast/dom/prototype-taco.html'),
+            port.host.filesystem.join(port.layout_tests_dir(), 'fast/dom/prototype-taco.html'),
             'test contents')
 
-        self.command._rebaseline(
+        self.command.rebaseline(
             self.command_options(issue=11112222),
             {"fast/dom/prototype-taco.html": {Build("MOCK Try Win", 5000): ["txt", "png"]}})
 
@@ -187,7 +174,7 @@ class RebaselineCLTest(BaseTestCase):
             self.tool.executive.calls,
             [
                 [['python', 'echo', 'copy-existing-baselines-internal', '--suffixes', 'txt',
-                  '--builder', 'MOCK Try Win', '--test', 'fast/dom/prototype-taco.html', '--build-number', '5000']],
+                  '--builder', 'MOCK Try Win', '--test', 'fast/dom/prototype-taco.html']],
                 [['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt',
                   '--builder', 'MOCK Try Win', '--test', 'fast/dom/prototype-taco.html', '--build-number', '5000']],
                 [['python', 'echo', 'optimize-baselines', '--no-modify-scm', '--suffixes', 'txt', 'fast/dom/prototype-taco.html']]

@@ -7,17 +7,26 @@
 
 .bubble {
   -webkit-transition: opacity 200ms ease-in-out;
-  background: white;
-  border: 1px solid rgba(0, 0, 0, 0.25);
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 2px;
+  color: rgba(255, 255, 255, 0.87);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   font-size: 12px;
   margin: 2px;
   max-width: 250px;
-  padding: 16px;
+  padding: 8px;
   position: absolute;
 }
 
-.bubble::before {
+/* --- oldstyle begin --- */
+
+.bubble[oldstyle] {
+  background: white;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  color: unset;
+}
+
+.bubble[oldstyle]::before {
   border-style: solid;
   border-width: 8px;
   content: '';
@@ -65,7 +74,7 @@ html[dir=rtl] .bubble-right::before {
   top: 17px;
 }
 
-.bubble::after {
+.bubble[oldstyle]::after {
   border-style: solid;
   border-width: 8px;
   content: '';
@@ -113,10 +122,35 @@ html[dir=rtl] .bubble-right::after {
   top: 17px;
 }
 
+/* --- oldstyle end --- */
+
+.error-message-bubble::before {
+  -webkit-mask-image: url(../../ui/webui/resources/images/warning.svg);
+  -webkit-mask-position: left top;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: 20px;
+  background-color: rgb(255,255,255);
+  content: '';
+  display: block;
+  height: 20px;
+  left: 8px;
+  position: absolute;
+  top: 8px;
+  width: 20px;
+}
+
 .error-message-bubble {
-  -webkit-padding-start: 30px;
-  background: url(chrome://theme/IDR_WARNING) left top no-repeat;
-  background-size: 24px;
+  -webkit-padding-start: 20px;
+}
+
+.bubble[match-width] .error-message-bubble {
+  -webkit-padding-start: unset;
+  padding-top: 20px;
+}
+
+.bubble a {
+  color: #7baaf7;
+  text-decoration: none;
 }
 
 .error-message-bubble-padding {

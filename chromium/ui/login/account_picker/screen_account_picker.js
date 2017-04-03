@@ -14,6 +14,13 @@ login.createScreen('AccountPickerScreen', 'account-picker', function() {
    */
   var MAX_LOGIN_ATTEMPTS_IN_POD = 3;
 
+  /**
+   * Distance between error bubble and user POD.
+   * @type {number}
+   * @const
+   */
+   var BUBBLE_POD_OFFSET = 4;
+
   return {
     EXTERNAL_API: [
       'loadUsers',
@@ -179,52 +186,97 @@ login.createScreen('AccountPickerScreen', 'account-picker', function() {
         }
         // Update the pod row display if incorrect password.
         $('pod-row').setFocusedPodErrorDisplay(true);
-        // We want bubble's arrow to point to the first letter of input.
-        /** @const */ var BUBBLE_OFFSET = 7;
-        /** @const */ var BUBBLE_PADDING = 4;
 
-        // We want the bubble to point to where the input is after it is done
-        // tranisitioning.
-        var showBottomCallback = function() {
+        /** @const */ var BUBBLE_OFFSET = 25;
+        // -8 = 4(BUBBLE_POD_OFFSET) - 2(bubble margin)
+        //      - 10(internal bubble adjustment)
+        var bubblePositioningPadding = -8;
+
+        var bubbleAnchor;
+        var attachment;
+        if (activatedPod.pinContainer) {
+          // Anchor the bubble to the input field.
+          bubbleAnchor = (
+              activatedPod.getElementsByClassName('auth-container'))[0];
+          if (!bubbleAnchor) {
+            console.error('auth-container not found!');
+            bubbleAnchor = activatedPod.mainInput;
+          }
+          attachment = cr.ui.Bubble.Attachment.RIGHT;
+        } else {
+          // Anchor the bubble to the pod instead of the input.
+          bubbleAnchor = activatedPod;
+          attachment = cr.ui.Bubble.Attachment.BOTTOM;
+        }
+
+        var bubble = $('bubble');
+
+        // Cannot use cr.ui.LoginUITools.get* on bubble until it is attached to
+        // the element. getMaxHeight/Width rely on the correct up/left element
+        // side positioning that doesn't happen until bubble is attached.
+        var maxHeight =
+            cr.ui.LoginUITools.getMaxHeightBeforeShelfOverlapping(bubbleAnchor)
+          - bubbleAnchor.offsetHeight - BUBBLE_POD_OFFSET;
+        var maxWidth = cr.ui.LoginUITools.getMaxWidthToFit(bubbleAnchor)
+          - bubbleAnchor.offsetWidth - BUBBLE_POD_OFFSET;
+
+        // Change bubble visibility temporary to calculate height.
+        var bubbleVisibility = bubble.style.visibility;
+        bubble.style.visibility = 'hidden';
+        bubble.hidden = false;
+        // Now we need the bubble to have the new content before calculating
+        // size.
+        bubble.replaceContent(error);
+        // Get bubble size.
+        var bubbleOffsetHeight = parseInt(bubble.offsetHeight);
+        var bubbleOffsetWidth = parseInt(bubble.offsetWidth);
+        // Restore attributes.
+        bubble.style.visibility = bubbleVisibility;
+        bubble.hidden = true;
+
+        if (attachment == cr.ui.Bubble.Attachment.BOTTOM) {
+          // Move error bubble if it overlaps the shelf.
+          if (maxHeight < bubbleOffsetHeight)
+            attachment = cr.ui.Bubble.Attachment.TOP;
+        } else {
+          // Move error bubble if it doesn't fit screen.
+          if (maxWidth < bubbleOffsetWidth) {
+            bubblePositioningPadding = 2;
+            attachment = cr.ui.Bubble.Attachment.LEFT;
+          }
+        }
+        var showBubbleCallback = function() {
           activatedPod.removeEventListener("webkitTransitionEnd",
-              showBottomCallback);
-          $('bubble').showContentForElement(activatedPod.mainInput,
-                                            cr.ui.Bubble.Attachment.BOTTOM,
+              showBubbleCallback);
+          $('bubble').showContentForElement(bubbleAnchor,
+                                            attachment,
                                             error,
-                                            BUBBLE_OFFSET, BUBBLE_PADDING);
+                                            BUBBLE_OFFSET,
+                                            bubblePositioningPadding, true);
         };
         activatedPod.addEventListener("webkitTransitionEnd",
-            showBottomCallback);
+                                      showBubbleCallback);
         ensureTransitionEndEvent(activatedPod);
-
-        // Move error bubble up if it overlaps the shelf.
-        var maxHeight =
-            cr.ui.LoginUITools.getMaxHeightBeforeShelfOverlapping($('bubble'));
-        if (maxHeight < $('bubble').offsetHeight) {
-          var showTopCallback = function() {
-            activatedPod.removeEventListener("webkitTransitionEnd",
-                showTopCallback);
-            $('bubble').showContentForElement(activatedPod.mainInput,
-                                              cr.ui.Bubble.Attachment.TOP,
-                                              error,
-                                              BUBBLE_OFFSET, BUBBLE_PADDING);
-          };
-          activatedPod.addEventListener("webkitTransitionEnd", showTopCallback);
-          ensureTransitionEndEvent(activatedPod);
-        }
       }
     },
 
     /**
-     * Loads the PIN keyboard if any of the users can login with a PIN.
+     * Loads the PIN keyboard if any of the users can login with a PIN. Disables
+     * the PIN keyboard for users who are not allowed to use PIN unlock.
      * @param {array} users Array of user instances.
      */
-    loadPinKeyboardIfNeeded_: function(users) {
+    initializePinKeyboardStateForUsers_: function(users) {
       for (var i = 0; i < users.length; ++i) {
         var user = users[i];
         if (user.showPin) {
           showPinKeyboardAsync();
-          return;
+        } else {
+          // Disable pin for users who cannot authenticate with PIN. For
+          // example, users who have not set up PIN or users who have not
+          // entered their account recently. Otherwise, the PIN keyboard will
+          // will appear for any user if there is at least one user who has PIN
+          // enabled.
+          this.disablePinKeyboardForUser(user.username);
         }
       }
     },
@@ -241,7 +293,7 @@ login.createScreen('AccountPickerScreen', 'account-picker', function() {
       if (Oobe.getInstance().displayType == DISPLAY_TYPE.DESKTOP_USER_MANAGER)
         $('login-header-bar').classList.toggle('shadow', users.length > 8);
 
-      this.loadPinKeyboardIfNeeded_(users);
+      this.initializePinKeyboardStateForUsers_(users);
     },
 
     /**

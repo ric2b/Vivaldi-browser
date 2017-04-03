@@ -6,8 +6,8 @@
 
 #include <vector>
 
-#include "ash/desktop_background/desktop_background_controller.h"
-#include "ash/shell.h"
+#include "ash/common/wallpaper/wallpaper_controller.h"
+#include "ash/common/wm_shell.h"
 #include "base/command_line.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
@@ -228,7 +228,7 @@ class CustomizationWallpaperDownloaderBrowserTest
   ~CustomizationWallpaperDownloaderBrowserTest() override {}
 
   void SetUpOnMainThread() override {
-    controller_ = ash::Shell::GetInstance()->desktop_background_controller();
+    controller_ = ash::WmShell::Get()->wallpaper_controller();
     local_state_ = g_browser_process->local_state();
   }
 
@@ -247,7 +247,7 @@ class CustomizationWallpaperDownloaderBrowserTest
         *cmdline_wallpaper_dir_, &wallpaper_manager_command_line_);
   }
 
-  ash::DesktopBackgroundController* controller_;
+  ash::WallpaperController* controller_;
   PrefService* local_state_;
   std::unique_ptr<base::CommandLine> wallpaper_manager_command_line_;
 

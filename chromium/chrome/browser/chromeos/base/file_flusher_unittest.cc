@@ -51,7 +51,7 @@ class FileFlusherTest : public testing::Test {
       for (size_t j = 1; j <= kNumFiles; ++j) {
         const std::string path = base::StringPrintf("dir%zu/file%zu", i, j);
         const std::string content = base::StringPrintf("content %zu %zu", i, j);
-        WriteStringToFile(temp_dir_.path().AppendASCII(path), content);
+        WriteStringToFile(temp_dir_.GetPath().AppendASCII(path), content);
       }
     }
   }
@@ -73,7 +73,7 @@ class FileFlusherTest : public testing::Test {
     if (path.IsAbsolute())
       return path;
 
-    return temp_dir_.path().Append(path);
+    return temp_dir_.GetPath().Append(path);
   }
 
   void OnFlush(const base::FilePath& path) { ++flush_counts_[path]; }
@@ -136,10 +136,12 @@ TEST_F(FileFlusherTest, Exclude) {
 TEST_F(FileFlusherTest, DuplicateRequests) {
   std::unique_ptr<FileFlusher> flusher(CreateFileFlusher());
   base::RunLoop run_loop;
+  flusher->PauseForTest();
   flusher->RequestFlush(GetTestFilePath("dir1"), std::vector<base::FilePath>(),
                         base::Closure());
   flusher->RequestFlush(GetTestFilePath("dir1"), std::vector<base::FilePath>(),
                         run_loop.QuitClosure());
+  flusher->ResumeForTest();
   run_loop.Run();
 
   EXPECT_EQ(1, GetFlushCount("dir1/file1"));

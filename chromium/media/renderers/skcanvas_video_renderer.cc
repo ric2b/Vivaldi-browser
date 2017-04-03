@@ -332,27 +332,25 @@ SkCanvasVideoRenderer::~SkCanvasVideoRenderer() {
 void SkCanvasVideoRenderer::Paint(const scoped_refptr<VideoFrame>& video_frame,
                                   SkCanvas* canvas,
                                   const gfx::RectF& dest_rect,
-                                  uint8_t alpha,
-                                  SkXfermode::Mode mode,
+                                  SkPaint& paint,
                                   VideoRotation video_rotation,
                                   const Context3D& context_3d) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  if (alpha == 0) {
+  if (paint.getAlpha() == 0) {
     return;
   }
 
   SkRect dest;
   dest.set(dest_rect.x(), dest_rect.y(), dest_rect.right(), dest_rect.bottom());
 
-  SkPaint paint;
-  paint.setAlpha(alpha);
-
   // Paint black rectangle if there isn't a frame available or the
   // frame has an unexpected format.
   if (!video_frame.get() || video_frame->natural_size().IsEmpty() ||
       !(media::IsYuvPlanar(video_frame->format()) ||
         video_frame->HasTextures())) {
-    canvas->drawRect(dest, paint);
+    SkPaint blackWithAlphaPaint;
+    blackWithAlphaPaint.setAlpha(paint.getAlpha());
+    canvas->drawRect(dest, blackWithAlphaPaint);
     canvas->flush();
     return;
   }
@@ -361,8 +359,13 @@ void SkCanvasVideoRenderer::Paint(const scoped_refptr<VideoFrame>& video_frame,
   if (!UpdateLastImage(video_frame, context_3d))
     return;
 
-  paint.setXfermodeMode(mode);
-  paint.setFilterQuality(kLow_SkFilterQuality);
+  SkPaint videoPaint;
+  videoPaint.setAlpha(paint.getAlpha());
+  SkXfermode::Mode mode;
+  if (!SkXfermode::AsMode(paint.getXfermode(), &mode))
+    mode = SkXfermode::kSrcOver_Mode;
+  videoPaint.setXfermodeMode(mode);
+  videoPaint.setFilterQuality(paint.getFilterQuality());
 
   const bool need_rotation = video_rotation != VIDEO_ROTATION_0;
   const bool need_scaling =
@@ -412,9 +415,9 @@ void SkCanvasVideoRenderer::Paint(const scoped_refptr<VideoFrame>& video_frame,
   // threads. (skbug.com/4321).
   if (canvas->imageInfo().colorType() == kUnknown_SkColorType) {
     sk_sp<SkImage> swImage = last_image_->makeNonTextureImage();
-    canvas->drawImage(swImage, 0, 0, &paint);
+    canvas->drawImage(swImage, 0, 0, &videoPaint);
   } else {
-    canvas->drawImage(last_image_.get(), 0, 0, &paint);
+    canvas->drawImage(last_image_.get(), 0, 0, &videoPaint);
   }
 
   if (need_transform)
@@ -432,8 +435,11 @@ void SkCanvasVideoRenderer::Paint(const scoped_refptr<VideoFrame>& video_frame,
 void SkCanvasVideoRenderer::Copy(const scoped_refptr<VideoFrame>& video_frame,
                                  SkCanvas* canvas,
                                  const Context3D& context_3d) {
-  Paint(video_frame, canvas, gfx::RectF(video_frame->visible_rect()), 0xff,
-        SkXfermode::kSrc_Mode, media::VIDEO_ROTATION_0, context_3d);
+  SkPaint paint;
+  paint.setXfermodeMode(SkXfermode::kSrc_Mode);
+  paint.setFilterQuality(kLow_SkFilterQuality);
+  Paint(video_frame, canvas, gfx::RectF(video_frame->visible_rect()), paint,
+        media::VIDEO_ROTATION_0, context_3d);
 }
 
 namespace {
@@ -445,19 +451,48 @@ scoped_refptr<VideoFrame> DownShiftHighbitVideoFrame(
   VideoPixelFormat format;
   int shift = 1;
   switch (video_frame->format()) {
-    case PIXEL_FORMAT_YUV420P10:
-      shift = 2;
-    case PIXEL_FORMAT_YUV420P9:
+    case PIXEL_FORMAT_YUV420P12:
+      shift = 4;
       format = PIXEL_FORMAT_I420;
       break;
-    case PIXEL_FORMAT_YUV422P10:
+
+    case PIXEL_FORMAT_YUV420P10:
       shift = 2;
-    case PIXEL_FORMAT_YUV422P9:
+      format = PIXEL_FORMAT_I420;
+      break;
+
+    case PIXEL_FORMAT_YUV420P9:
+      shift = 1;
+      format = PIXEL_FORMAT_I420;
+      break;
+
+    case PIXEL_FORMAT_YUV422P12:
+      shift = 4;
       format = PIXEL_FORMAT_YV16;
       break;
+
+    case PIXEL_FORMAT_YUV422P10:
+      shift = 2;
+      format = PIXEL_FORMAT_YV16;
+      break;
+
+    case PIXEL_FORMAT_YUV422P9:
+      shift = 1;
+      format = PIXEL_FORMAT_YV16;
+      break;
+
+    case PIXEL_FORMAT_YUV444P12:
+      shift = 4;
+      format = PIXEL_FORMAT_YV24;
+      break;
+
     case PIXEL_FORMAT_YUV444P10:
       shift = 2;
+      format = PIXEL_FORMAT_YV24;
+      break;
+
     case PIXEL_FORMAT_YUV444P9:
+      shift = 1;
       format = PIXEL_FORMAT_YV24;
       break;
 
@@ -471,9 +506,7 @@ scoped_refptr<VideoFrame> DownShiftHighbitVideoFrame(
 
   // Copy all metadata.
   // (May be enough to copy color space)
-  base::DictionaryValue tmp;
-  video_frame->metadata()->MergeInternalValuesInto(&tmp);
-  ret->metadata()->MergeInternalValuesFrom(tmp);
+  ret->metadata()->MergeMetadataFrom(video_frame->metadata());
 
   for (int plane = VideoFrame::kYPlane; plane <= VideoFrame::kVPlane; ++plane) {
     int width = ret->row_bytes(plane);
@@ -586,7 +619,10 @@ void SkCanvasVideoRenderer::ConvertVideoFrameToRGBPixels(
     case PIXEL_FORMAT_YUV444P9:
     case PIXEL_FORMAT_YUV420P10:
     case PIXEL_FORMAT_YUV422P10:
-    case PIXEL_FORMAT_YUV444P10: {
+    case PIXEL_FORMAT_YUV444P10:
+    case PIXEL_FORMAT_YUV420P12:
+    case PIXEL_FORMAT_YUV422P12:
+    case PIXEL_FORMAT_YUV444P12: {
       scoped_refptr<VideoFrame> temporary_frame =
           DownShiftHighbitVideoFrame(video_frame);
       ConvertVideoFrameToRGBPixels(temporary_frame.get(), rgb_pixels,
@@ -604,6 +640,12 @@ void SkCanvasVideoRenderer::ConvertVideoFrameToRGBPixels(
     case PIXEL_FORMAT_RGB32:
     case PIXEL_FORMAT_MJPEG:
     case PIXEL_FORMAT_MT21:
+    // TODO(dshwang): Use either I400ToARGB or J400ToARGB depending if we want
+    // BT.601 constrained range of 16 to 240, or JPEG full range BT.601
+    // coefficients. Implement it when Y8/16 foramt is supported.
+    // crbug.com/624436
+    case PIXEL_FORMAT_Y8:
+    case PIXEL_FORMAT_Y16:
     case PIXEL_FORMAT_UNKNOWN:
       NOTREACHED();
   }
@@ -745,6 +787,7 @@ bool SkCanvasVideoRenderer::UpdateLastImage(
       auto* video_generator = new VideoImageGenerator(video_frame);
       last_image_ = SkImage::MakeFromGenerator(video_generator);
     }
+    CorrectLastImageDimensions(gfx::RectToSkIRect(video_frame->visible_rect()));
     if (!last_image_)  // Couldn't create the SkImage.
       return false;
     last_timestamp_ = video_frame->timestamp();
@@ -752,6 +795,21 @@ bool SkCanvasVideoRenderer::UpdateLastImage(
   last_image_deleting_timer_.Reset();
   DCHECK(!!last_image_);
   return true;
+}
+
+void SkCanvasVideoRenderer::CorrectLastImageDimensions(
+    const SkIRect& visible_rect) {
+  last_image_dimensions_for_testing_ = visible_rect.size();
+  if (!last_image_)
+    return;
+  if (last_image_->dimensions() != visible_rect.size() &&
+      last_image_->bounds().contains(visible_rect)) {
+    last_image_ = last_image_->makeSubset(visible_rect);
+  }
+}
+
+SkISize SkCanvasVideoRenderer::LastImageDimensionsForTesting() {
+  return last_image_dimensions_for_testing_;
 }
 
 }  // namespace media

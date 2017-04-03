@@ -14,7 +14,8 @@
 #include "base/threading/thread_checker.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_event_storage_delegate.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_event_type.h"
+#include "net/log/net_log_parameters_callback.h"
 
 class GURL;
 
@@ -24,8 +25,9 @@ class Value;
 }
 
 namespace net {
-class BoundNetLog;
+class NetLogWithSource;
 class ProxyServer;
+class NetLog;
 }
 
 namespace data_reduction_proxy {
@@ -56,7 +58,7 @@ class DataReductionProxyEventCreator {
 
   // Adds a DATA_REDUCTION_PROXY_BYPASS_REQUESTED event to the event store
   // when the bypass reason is initiated by the data reduction proxy.
-  void AddBypassActionEvent(const net::BoundNetLog& net_log,
+  void AddBypassActionEvent(const net::NetLogWithSource& net_log,
                             DataReductionProxyBypassAction bypass_action,
                             const std::string& request_method,
                             const GURL& gurl,
@@ -66,7 +68,7 @@ class DataReductionProxyEventCreator {
   // Adds a DATA_REDUCTION_PROXY_BYPASS_REQUESTED event to the event store
   // when the bypass reason is not initiated by the data reduction proxy, such
   // as HTTP errors.
-  void AddBypassTypeEvent(const net::BoundNetLog& net_log,
+  void AddBypassTypeEvent(const net::NetLogWithSource& net_log,
                           DataReductionProxyBypassType bypass_type,
                           const std::string& request_method,
                           const GURL& gurl,
@@ -81,22 +83,24 @@ class DataReductionProxyEventCreator {
 
   // Adds a DATA_REDUCTION_PROXY_CANARY_REQUEST event to the event store
   // when the secure proxy request has started.
-  void BeginSecureProxyCheck(const net::BoundNetLog& net_log, const GURL& gurl);
+  void BeginSecureProxyCheck(const net::NetLogWithSource& net_log,
+                             const GURL& gurl);
 
   // Adds a DATA_REDUCTION_PROXY_CANARY_REQUEST event to the event store
   // when the secure proxy request has ended.
-  void EndSecureProxyCheck(const net::BoundNetLog& net_log,
+  void EndSecureProxyCheck(const net::NetLogWithSource& net_log,
                            int net_error,
                            int http_response_code,
                            bool succeeded);
 
   // Adds a DATA_REDUCTION_PROXY_CONFIG_REQUEST event to the event store
   // when the config request has started.
-  void BeginConfigRequest(const net::BoundNetLog& net_log, const GURL& url);
+  void BeginConfigRequest(const net::NetLogWithSource& net_log,
+                          const GURL& url);
 
   // Adds a DATA_REDUCTION_PROXY_CONFIG_REQUEST event to the event store
   // when the config request has ended.
-  void EndConfigRequest(const net::BoundNetLog& net_log,
+  void EndConfigRequest(const net::NetLogWithSource& net_log,
                         int net_error,
                         int http_response_code,
                         int failure_count,
@@ -108,41 +112,41 @@ class DataReductionProxyEventCreator {
   // Prepare and post a generic Data Reduction Proxy event with no additional
   // parameters.
   void PostEvent(net::NetLog* net_log,
-                 net::NetLog::EventType type,
-                 const net::NetLog::ParametersCallback& callback);
+                 net::NetLogEventType type,
+                 const net::NetLogParametersCallback& callback);
 
   // Prepare and post enabling/disabling proxy events for the event store on the
   // a net::NetLog.
   void PostEnabledEvent(net::NetLog* net_log,
-                        net::NetLog::EventType type,
+                        net::NetLogEventType type,
                         bool enable,
-                        const net::NetLog::ParametersCallback& callback);
+                        const net::NetLogParametersCallback& callback);
 
   // Prepare and post a Data Reduction Proxy bypass event for the event store
-  // on a BoundNetLog.
-  void PostBoundNetLogBypassEvent(
-      const net::BoundNetLog& net_log,
-      net::NetLog::EventType type,
-      net::NetLog::EventPhase phase,
+  // on a NetLogWithSource.
+  void PostNetLogWithSourceBypassEvent(
+      const net::NetLogWithSource& net_log,
+      net::NetLogEventType type,
+      net::NetLogEventPhase phase,
       int64_t expiration_ticks,
-      const net::NetLog::ParametersCallback& callback);
+      const net::NetLogParametersCallback& callback);
 
   // Prepare and post a secure proxy check event for the event store on a
-  // BoundNetLog.
-  void PostBoundNetLogSecureProxyCheckEvent(
-      const net::BoundNetLog& net_log,
-      net::NetLog::EventType type,
-      net::NetLog::EventPhase phase,
+  // NetLogWithSource.
+  void PostNetLogWithSourceSecureProxyCheckEvent(
+      const net::NetLogWithSource& net_log,
+      net::NetLogEventType type,
+      net::NetLogEventPhase phase,
       DataReductionProxyEventStorageDelegate::SecureProxyCheckState state,
-      const net::NetLog::ParametersCallback& callback);
+      const net::NetLogParametersCallback& callback);
 
   // Prepare and post a config request event for the event store on a
-  // BoundNetLog.
-  void PostBoundNetLogConfigRequestEvent(
-      const net::BoundNetLog& net_log,
-      net::NetLog::EventType type,
-      net::NetLog::EventPhase phase,
-      const net::NetLog::ParametersCallback& callback);
+  // NetLogWithSource.
+  void PostNetLogWithSourceConfigRequestEvent(
+      const net::NetLogWithSource& net_log,
+      net::NetLogEventType type,
+      net::NetLogEventPhase phase,
+      const net::NetLogParametersCallback& callback);
 
   // Must outlive |this|. Used for posting calls to the UI thread.
   DataReductionProxyEventStorageDelegate* storage_delegate_;

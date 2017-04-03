@@ -15,39 +15,49 @@ namespace blink {
 
 class ExceptionState;
 class PerformanceBase;
-class PerformanceObserverCallback;
 class PerformanceObserver;
+class PerformanceObserverCallback;
 class PerformanceObserverInit;
+class ScriptState;
 
 using PerformanceEntryVector = HeapVector<Member<PerformanceEntry>>;
 
-class CORE_EXPORT PerformanceObserver final : public GarbageCollected<PerformanceObserver>, public ScriptWrappable {
-    DEFINE_WRAPPERTYPEINFO();
-    friend class PerformanceBase;
-    friend class PerformanceObserverTest;
-public:
-    static PerformanceObserver* create(PerformanceBase*, PerformanceObserverCallback*);
-    static void resumeSuspendedObservers();
+class CORE_EXPORT PerformanceObserver final
+    : public GarbageCollectedFinalized<PerformanceObserver>,
+      public ScriptWrappable {
+  DEFINE_WRAPPERTYPEINFO();
+  friend class PerformanceBase;
+  friend class PerformanceBaseTest;
+  friend class PerformanceObserverTest;
 
-    void observe(const PerformanceObserverInit&, ExceptionState&);
-    void disconnect();
-    void enqueuePerformanceEntry(PerformanceEntry&);
-    PerformanceEntryTypeMask filterOptions() const { return m_filterOptions; }
+ public:
+  static PerformanceObserver* create(ScriptState*,
+                                     PerformanceBase*,
+                                     PerformanceObserverCallback*);
+  static void resumeSuspendedObservers();
 
-    DECLARE_TRACE();
+  void observe(const PerformanceObserverInit&, ExceptionState&);
+  void disconnect();
+  void enqueuePerformanceEntry(PerformanceEntry&);
+  PerformanceEntryTypeMask filterOptions() const { return m_filterOptions; }
 
-private:
-    explicit PerformanceObserver(PerformanceBase*, PerformanceObserverCallback*);
-    void deliver();
-    bool shouldBeSuspended() const;
+  DECLARE_TRACE();
 
-    Member<PerformanceObserverCallback> m_callback;
-    WeakMember<PerformanceBase> m_performance;
-    PerformanceEntryVector m_performanceEntries;
-    PerformanceEntryTypeMask m_filterOptions;
-    bool m_isRegistered;
+ private:
+  PerformanceObserver(ScriptState*,
+                      PerformanceBase*,
+                      PerformanceObserverCallback*);
+  void deliver();
+  bool shouldBeSuspended() const;
+
+  RefPtr<ScriptState> m_scriptState;
+  Member<PerformanceObserverCallback> m_callback;
+  WeakMember<PerformanceBase> m_performance;
+  PerformanceEntryVector m_performanceEntries;
+  PerformanceEntryTypeMask m_filterOptions;
+  bool m_isRegistered;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // PerformanceObserver_h
+#endif  // PerformanceObserver_h

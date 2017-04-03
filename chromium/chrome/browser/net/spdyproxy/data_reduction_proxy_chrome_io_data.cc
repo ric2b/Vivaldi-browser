@@ -11,6 +11,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/net/spdyproxy/chrome_data_use_group_provider.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings.h"
+#include "chrome/browser/previews/previews_infobar_delegate.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_content_client.h"
 #include "chrome/common/pref_names.h"
@@ -25,7 +26,6 @@
 
 #if defined(OS_ANDROID)
 #include "base/android/build_info.h"
-#include "chrome/browser/android/tab_android.h"
 #endif
 
 namespace content {
@@ -36,18 +36,11 @@ using data_reduction_proxy::DataReductionProxyParams;
 
 namespace {
 
-// For Android builds, notifies the TabAndroid associated with |web_contents|
-// that a Lo-Fi response has been received. The TabAndroid then handles showing
-// Lo-Fi UI if this is the first Lo-Fi response for a page load. |is_preview|
-// indicates whether the response was a Lo-Fi preview response.
-void OnLoFiResponseReceivedOnUI(content::WebContents* web_contents,
-                                bool is_preview) {
+// If this is the first Lo-Fi response for a page load, a
+// PreviewsInfoBarDelegate is created, which handles showing Lo-Fi UI.
+void OnLoFiResponseReceivedOnUI(content::WebContents* web_contents) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-#if defined(OS_ANDROID)
-  TabAndroid* tab = TabAndroid::FromWebContents(web_contents);
-  if (tab)
-    tab->OnLoFiResponseReceived(is_preview);
-#endif
+  PreviewsInfoBarDelegate::Create(web_contents, PreviewsInfoBarDelegate::LOFI);
 }
 
 } // namespace
@@ -85,12 +78,12 @@ CreateDataReductionProxyChromeIOData(
               version_info::GetChannelString(chrome::GetChannel())));
 
   data_reduction_proxy_io_data->set_lofi_decider(
-      base::WrapUnique(new data_reduction_proxy::ContentLoFiDecider()));
+      base::MakeUnique<data_reduction_proxy::ContentLoFiDecider>());
   data_reduction_proxy_io_data->set_lofi_ui_service(
-      base::WrapUnique(new data_reduction_proxy::ContentLoFiUIService(
-          ui_task_runner, base::Bind(&OnLoFiResponseReceivedOnUI))));
+      base::MakeUnique<data_reduction_proxy::ContentLoFiUIService>(
+          ui_task_runner, base::Bind(&OnLoFiResponseReceivedOnUI)));
   data_reduction_proxy_io_data->set_data_usage_source_provider(
-      base::WrapUnique(new ChromeDataUseGroupProvider()));
+      base::MakeUnique<ChromeDataUseGroupProvider>());
 
   return data_reduction_proxy_io_data;
 }

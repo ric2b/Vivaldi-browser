@@ -10,6 +10,7 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "net/base/net_export.h"
 #include "net/quic/core/quic_header_list.h"
 #include "net/quic/core/quic_headers_stream.h"
 #include "net/quic/core/quic_session.h"
@@ -109,6 +110,12 @@ class NET_EXPORT_PRIVATE QuicSpdySession : public QuicSession {
 
   bool force_hol_blocking() const { return force_hol_blocking_; }
 
+  bool server_push_enabled() const { return server_push_enabled_; }
+
+  // Called by |QuicHeadersStream::UpdateEnableServerPush()| with
+  // value from SETTINGS_ENABLE_PUSH.
+  void set_server_push_enabled(bool enable) { server_push_enabled_ = enable; }
+
  protected:
   // Override CreateIncomingDynamicStream() and CreateOutgoingDynamicStream()
   // with QuicSpdyStream return type to make sure that all data streams are
@@ -134,6 +141,10 @@ class NET_EXPORT_PRIVATE QuicSpdySession : public QuicSession {
   // simulate forced HOL blocking between streams as happens in
   // HTTP/2 over TCP.
   bool force_hol_blocking_;
+
+  // Set during handshake. If true, resources in x-associated-content and link
+  // headers will be pushed.
+  bool server_push_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicSpdySession);
 };

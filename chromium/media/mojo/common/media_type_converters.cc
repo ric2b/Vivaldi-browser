@@ -21,6 +21,7 @@
 #include "media/base/demuxer_stream.h"
 #include "media/base/encryption_scheme.h"
 #include "media/base/media_keys.h"
+#include "media/base/subsample_entry.h"
 #include "media/base/video_decoder_config.h"
 #include "media/base/video_frame.h"
 #include "media/mojo/common/mojo_shared_buffer_video_frame.h"
@@ -185,6 +186,17 @@ ASSERT_ENUM_EQ_RAW(VideoPixelFormat,
 ASSERT_ENUM_EQ_RAW(VideoPixelFormat,
                    PIXEL_FORMAT_YUV444P10,
                    VideoFormat::YUV444P10);
+ASSERT_ENUM_EQ_RAW(VideoPixelFormat,
+                   PIXEL_FORMAT_YUV420P12,
+                   VideoFormat::YUV420P12);
+ASSERT_ENUM_EQ_RAW(VideoPixelFormat,
+                   PIXEL_FORMAT_YUV422P12,
+                   VideoFormat::YUV422P12);
+ASSERT_ENUM_EQ_RAW(VideoPixelFormat,
+                   PIXEL_FORMAT_YUV444P12,
+                   VideoFormat::YUV444P12);
+ASSERT_ENUM_EQ_RAW(VideoPixelFormat, PIXEL_FORMAT_Y8, VideoFormat::Y8);
+ASSERT_ENUM_EQ_RAW(VideoPixelFormat, PIXEL_FORMAT_Y16, VideoFormat::Y16);
 ASSERT_ENUM_EQ_RAW(VideoPixelFormat, PIXEL_FORMAT_MAX, VideoFormat::FORMAT_MAX);
 
 // ColorSpace.
@@ -317,6 +329,7 @@ ASSERT_CDM_KEY_STATUS(EXPIRED);
 ASSERT_CDM_KEY_STATUS(OUTPUT_RESTRICTED);
 ASSERT_CDM_KEY_STATUS(OUTPUT_DOWNSCALED);
 ASSERT_CDM_KEY_STATUS(KEY_STATUS_PENDING);
+ASSERT_CDM_KEY_STATUS(RELEASED);
 
 // CDM Message Type
 #define ASSERT_CDM_MESSAGE_TYPE(value)                                       \
@@ -382,24 +395,6 @@ TypeConverter<media::EncryptionScheme, media::mojom::EncryptionSchemePtr>::
 }
 
 // static
-media::mojom::SubsampleEntryPtr
-TypeConverter<media::mojom::SubsampleEntryPtr, media::SubsampleEntry>::Convert(
-    const media::SubsampleEntry& input) {
-  media::mojom::SubsampleEntryPtr mojo_subsample_entry(
-      media::mojom::SubsampleEntry::New());
-  mojo_subsample_entry->clear_bytes = input.clear_bytes;
-  mojo_subsample_entry->cypher_bytes = input.cypher_bytes;
-  return mojo_subsample_entry;
-}
-
-// static
-media::SubsampleEntry
-TypeConverter<media::SubsampleEntry, media::mojom::SubsampleEntryPtr>::Convert(
-    const media::mojom::SubsampleEntryPtr& input) {
-  return media::SubsampleEntry(input->clear_bytes, input->cypher_bytes);
-}
-
-// static
 media::mojom::DecryptConfigPtr
 TypeConverter<media::mojom::DecryptConfigPtr, media::DecryptConfig>::Convert(
     const media::DecryptConfig& input) {
@@ -408,7 +403,8 @@ TypeConverter<media::mojom::DecryptConfigPtr, media::DecryptConfig>::Convert(
   mojo_decrypt_config->key_id = input.key_id();
   mojo_decrypt_config->iv = input.iv();
   mojo_decrypt_config->subsamples =
-      Array<media::mojom::SubsampleEntryPtr>::From(input.subsamples());
+      Array<media::SubsampleEntry>::From(input.subsamples());
+
   return mojo_decrypt_config;
 }
 

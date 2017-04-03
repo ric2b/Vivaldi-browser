@@ -8,9 +8,9 @@
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
-#include "cc/output/compositor_frame.h"
 #include "cc/output/context_provider.h"
 #include "cc/output/output_surface_client.h"
+#include "cc/output/output_surface_frame.h"
 #include "cc/scheduler/begin_frame_source.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -20,7 +20,7 @@ namespace ui {
 DirectOutputSurface::DirectOutputSurface(
     scoped_refptr<SurfacesContextProvider> context_provider,
     cc::SyntheticBeginFrameSource* synthetic_begin_frame_source)
-    : cc::OutputSurface(context_provider, nullptr, nullptr),
+    : cc::OutputSurface(context_provider),
       synthetic_begin_frame_source_(synthetic_begin_frame_source),
       weak_ptr_factory_(this) {
   context_provider->SetDelegate(this);
@@ -39,24 +39,23 @@ bool DirectOutputSurface::BindToClient(cc::OutputSurfaceClient* client) {
   return true;
 }
 
-void DirectOutputSurface::OnVSyncParametersUpdated(
-    const base::TimeTicks& timebase,
-    const base::TimeDelta& interval) {
-  // TODO(brianderson): We should not be receiving 0 intervals.
-  synthetic_begin_frame_source_->OnUpdateVSyncParameters(
-      timebase,
-      interval.is_zero() ? cc::BeginFrameArgs::DefaultInterval() : interval);
+void DirectOutputSurface::EnsureBackbuffer() {}
+
+void DirectOutputSurface::DiscardBackbuffer() {
+  context_provider()->ContextGL()->DiscardBackbufferCHROMIUM();
 }
 
-void DirectOutputSurface::SwapBuffers(cc::CompositorFrame frame) {
+void DirectOutputSurface::BindFramebuffer() {
+  context_provider()->ContextGL()->BindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void DirectOutputSurface::SwapBuffers(cc::OutputSurfaceFrame frame) {
   DCHECK(context_provider_);
-  DCHECK(frame.gl_frame_data);
-  if (frame.gl_frame_data->sub_buffer_rect ==
-      gfx::Rect(frame.gl_frame_data->size)) {
+  if (frame.sub_buffer_rect == gfx::Rect(frame.size)) {
     context_provider_->ContextSupport()->Swap();
   } else {
     context_provider_->ContextSupport()->PartialSwapBuffers(
-        frame.gl_frame_data->sub_buffer_rect);
+        frame.sub_buffer_rect);
   }
 
   gpu::gles2::GLES2Interface* gl = context_provider_->ContextGL();
@@ -67,7 +66,7 @@ void DirectOutputSurface::SwapBuffers(cc::CompositorFrame frame) {
   gl->GenUnverifiedSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
 
   context_provider_->ContextSupport()->SignalSyncToken(
-      sync_token, base::Bind(&OutputSurface::OnSwapBuffersComplete,
+      sync_token, base::Bind(&DirectOutputSurface::OnSwapBuffersComplete,
                              weak_ptr_factory_.GetWeakPtr()));
 }
 
@@ -75,6 +74,42 @@ uint32_t DirectOutputSurface::GetFramebufferCopyTextureFormat() {
   // TODO(danakj): What attributes are used for the default framebuffer here?
   // Can it have alpha? SurfacesContextProvider doesn't take any attributes.
   return GL_RGB;
+}
+
+cc::OverlayCandidateValidator*
+DirectOutputSurface::GetOverlayCandidateValidator() const {
+  return nullptr;
+}
+
+bool DirectOutputSurface::IsDisplayedAsOverlayPlane() const {
+  return false;
+}
+
+unsigned DirectOutputSurface::GetOverlayTextureId() const {
+  return 0;
+}
+
+bool DirectOutputSurface::SurfaceIsSuspendForRecycle() const {
+  return false;
+}
+
+bool DirectOutputSurface::HasExternalStencilTest() const {
+  return false;
+}
+
+void DirectOutputSurface::ApplyExternalStencil() {}
+
+void DirectOutputSurface::OnVSyncParametersUpdated(
+    const base::TimeTicks& timebase,
+    const base::TimeDelta& interval) {
+  // TODO(brianderson): We should not be receiving 0 intervals.
+  synthetic_begin_frame_source_->OnUpdateVSyncParameters(
+      timebase,
+      interval.is_zero() ? cc::BeginFrameArgs::DefaultInterval() : interval);
+}
+
+void DirectOutputSurface::OnSwapBuffersComplete() {
+  client_->DidSwapBuffersComplete();
 }
 
 }  // namespace ui

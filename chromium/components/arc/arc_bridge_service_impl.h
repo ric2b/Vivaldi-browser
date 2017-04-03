@@ -25,14 +25,27 @@ namespace arc {
 
 // Real IPC based ArcBridgeService that is used in production.
 class ArcBridgeServiceImpl : public ArcBridgeService,
-                             public ArcBridgeBootstrap::Delegate {
+                             public ArcBridgeBootstrap::Observer {
  public:
-  explicit ArcBridgeServiceImpl(std::unique_ptr<ArcBridgeBootstrap> bootstrap);
+  // This is the factory interface to inject ArcBridgeBootstrap instance
+  // for testing purpose.
+  using ArcBridgeBootstrapFactory =
+      base::Callback<std::unique_ptr<ArcBridgeBootstrap>()>;
+
+  ArcBridgeServiceImpl();
   ~ArcBridgeServiceImpl() override;
 
   void HandleStartup() override;
 
   void Shutdown() override;
+
+  // Inject a factory to create ArcBridgeBootstrap instance for testing
+  // purpose. |factory| must not be null.
+  void SetArcBridgeBootstrapFactoryForTesting(
+      const ArcBridgeBootstrapFactory& factory);
+
+  // Returns the current bootstrap instance for testing purpose.
+  ArcBridgeBootstrap* GetBootstrapForTesting() { return bootstrap_.get(); }
 
   // Normally, reconnecting after connection shutdown happens after a short
   // delay. When testing, however, we'd like it to happen immediately to avoid
@@ -52,8 +65,8 @@ class ArcBridgeServiceImpl : public ArcBridgeService,
   // Stops the running instance.
   void StopInstance();
 
-  // ArcBridgeBootstrap::Delegate:
-  void OnConnectionEstablished(mojom::ArcBridgeInstancePtr instance) override;
+  // ArcBridgeBootstrap::Observer:
+  void OnReady() override;
   void OnStopped(StopReason reason) override;
 
   std::unique_ptr<ArcBridgeBootstrap> bootstrap_;
@@ -61,16 +74,15 @@ class ArcBridgeServiceImpl : public ArcBridgeService,
   // If the user's session has started.
   bool session_started_;
 
-  // Mojo endpoint.
-  // TODO(hidehiko): Move this to ArcBridgeBootstrap.
-  std::unique_ptr<mojom::ArcBridgeHost> arc_bridge_host_;
-
   // If the instance had already been started but the connection to it was
   // lost. This should make the instance restart.
   bool reconnect_ = false;
 
   // Delay the reconnection.
   bool use_delay_before_reconnecting_ = true;
+
+  // Factory to inject a fake ArcBridgeBootstrap instance for testing.
+  ArcBridgeBootstrapFactory factory_;
 
   // WeakPtrFactory to use callbacks.
   base::WeakPtrFactory<ArcBridgeServiceImpl> weak_factory_;

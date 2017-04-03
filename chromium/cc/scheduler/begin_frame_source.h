@@ -112,15 +112,20 @@ class CC_EXPORT BeginFrameSource {
   // should shut down its timers, disable vsync, etc.
   virtual void AddObserver(BeginFrameObserver* obs) = 0;
   virtual void RemoveObserver(BeginFrameObserver* obs) = 0;
+
+  // Returns false if the begin frame source will just continue to produce
+  // begin frames without waiting.
+  virtual bool IsThrottled() const = 0;
 };
 
 // A BeginFrameSource that does nothing.
-class StubBeginFrameSource : public BeginFrameSource {
+class CC_EXPORT StubBeginFrameSource : public BeginFrameSource {
  public:
   void DidFinishFrame(BeginFrameObserver* obs,
                       size_t remaining_frames) override {}
   void AddObserver(BeginFrameObserver* obs) override {}
   void RemoveObserver(BeginFrameObserver* obs) override {}
+  bool IsThrottled() const override;
 };
 
 // A frame source which ticks itself independently.
@@ -148,6 +153,7 @@ class CC_EXPORT BackToBackBeginFrameSource : public SyntheticBeginFrameSource,
   void RemoveObserver(BeginFrameObserver* obs) override;
   void DidFinishFrame(BeginFrameObserver* obs,
                       size_t remaining_frames) override;
+  bool IsThrottled() const override;
 
   // SyntheticBeginFrameSource implementation.
   void OnUpdateVSyncParameters(base::TimeTicks timebase,
@@ -180,6 +186,7 @@ class CC_EXPORT DelayBasedBeginFrameSource : public SyntheticBeginFrameSource,
   void RemoveObserver(BeginFrameObserver* obs) override;
   void DidFinishFrame(BeginFrameObserver* obs,
                       size_t remaining_frames) override {}
+  bool IsThrottled() const override;
 
   // SyntheticBeginFrameSource implementation.
   void OnUpdateVSyncParameters(base::TimeTicks timebase,
@@ -199,6 +206,42 @@ class CC_EXPORT DelayBasedBeginFrameSource : public SyntheticBeginFrameSource,
   base::TimeDelta authoritative_interval_;
 
   DISALLOW_COPY_AND_ASSIGN(DelayBasedBeginFrameSource);
+};
+
+class CC_EXPORT ExternalBeginFrameSourceClient {
+ public:
+  // Only called when changed.  Assumed false by default.
+  virtual void OnNeedsBeginFrames(bool needs_begin_frames) = 0;
+};
+
+// A BeginFrameSource that is only ticked manually.  Usually the endpoint
+// of messages from some other thread/process that send OnBeginFrame and
+// receive SetNeedsBeginFrame messages.  This turns such messages back into
+// an observable BeginFrameSource.
+class CC_EXPORT ExternalBeginFrameSource : public BeginFrameSource {
+ public:
+  // Client lifetime must be preserved by owner past the lifetime of this class.
+  explicit ExternalBeginFrameSource(ExternalBeginFrameSourceClient* client);
+  ~ExternalBeginFrameSource() override;
+
+  // BeginFrameSource implementation.
+  void AddObserver(BeginFrameObserver* obs) override;
+  void RemoveObserver(BeginFrameObserver* obs) override;
+  void DidFinishFrame(BeginFrameObserver* obs,
+                      size_t remaining_frames) override {}
+  bool IsThrottled() const override;
+
+  void OnSetBeginFrameSourcePaused(bool paused);
+  void OnBeginFrame(const BeginFrameArgs& args);
+
+ protected:
+  BeginFrameArgs missed_begin_frame_args_;
+  std::unordered_set<BeginFrameObserver*> observers_;
+  ExternalBeginFrameSourceClient* client_;
+  bool paused_ = false;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ExternalBeginFrameSource);
 };
 
 }  // namespace cc

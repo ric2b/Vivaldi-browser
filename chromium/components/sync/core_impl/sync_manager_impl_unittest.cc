@@ -8,10 +8,7 @@
 
 #include "components/sync/core_impl/sync_manager_impl.h"
 
-#include <stdint.h>
-
 #include <cstddef>
-#include <map>
 #include <memory>
 #include <utility>
 
@@ -28,12 +25,10 @@
 #include "base/values.h"
 #include "components/sync/base/attachment_id_proto.h"
 #include "components/sync/base/cancelation_signal.h"
-#include "components/sync/base/cryptographer.h"
 #include "components/sync/base/extensions_activity.h"
 #include "components/sync/base/fake_encryptor.h"
 #include "components/sync/base/mock_unrecoverable_error_handler.h"
 #include "components/sync/base/model_type_test_util.h"
-#include "components/sync/base/time.h"
 #include "components/sync/core/change_record.h"
 #include "components/sync/core/http_post_provider_factory.h"
 #include "components/sync/core/http_post_provider_interface.h"
@@ -44,14 +39,12 @@
 #include "components/sync/core/test/test_user_share.h"
 #include "components/sync/core/write_node.h"
 #include "components/sync/core/write_transaction.h"
-#include "components/sync/core_impl/sync_encryption_handler_impl.h"
 #include "components/sync/core_impl/syncapi_internal.h"
 #include "components/sync/engine/events/protocol_event.h"
 #include "components/sync/engine/model_safe_worker.h"
 #include "components/sync/engine/polling_constants.h"
 #include "components/sync/engine_impl/cycle/sync_cycle.h"
 #include "components/sync/engine_impl/sync_scheduler.h"
-#include "components/sync/js/js_backend.h"
 #include "components/sync/js/js_event_handler.h"
 #include "components/sync/js/js_test_util.h"
 #include "components/sync/protocol/bookmark_specifics.pb.h"
@@ -221,6 +214,10 @@ int GetTotalNodeCount(UserShare* share, int64_t root) {
   return node.GetTotalNodeCount();
 }
 
+const char kUrl[] = "example.com";
+const char kPasswordValue[] = "secret";
+const char kClientTag[] = "tag";
+
 }  // namespace
 
 class SyncApiTest : public testing::Test {
@@ -254,6 +251,7 @@ class SyncApiTest : public testing::Test {
   UserShare* user_share();
   syncable::Directory* dir();
   SyncEncryptionHandler* encryption_handler();
+  PassphraseType GetPassphraseType(BaseTransaction* trans);
 
  private:
   base::MessageLoop message_loop_;
@@ -272,6 +270,10 @@ SyncEncryptionHandler* SyncApiTest::encryption_handler() {
   return test_user_share_.encryption_handler();
 }
 
+PassphraseType SyncApiTest::GetPassphraseType(BaseTransaction* trans) {
+  return dir()->GetNigoriHandler()->GetPassphraseType(trans->GetWrappedTrans());
+}
+
 bool SyncApiTest::ReloadDir() {
   return test_user_share_.Reload();
 }
@@ -280,29 +282,29 @@ void SyncApiTest::CreateEntryWithAttachmentMetadata(
     const ModelType& model_type,
     const std::string& client_tag,
     const sync_pb::AttachmentMetadata& attachment_metadata) {
-  syncer::WriteTransaction trans(FROM_HERE, user_share());
-  syncer::ReadNode root_node(&trans);
+  WriteTransaction trans(FROM_HERE, user_share());
+  ReadNode root_node(&trans);
   root_node.InitByRootLookup();
-  syncer::WriteNode node(&trans);
+  WriteNode node(&trans);
   ASSERT_EQ(node.InitUniqueByCreation(model_type, root_node, client_tag),
-            syncer::WriteNode::INIT_SUCCESS);
+            WriteNode::INIT_SUCCESS);
   node.SetAttachmentMetadata(attachment_metadata);
 }
 
 BaseNode::InitByLookupResult SyncApiTest::LookupEntryByClientTag(
     const ModelType& model_type,
     const std::string& client_tag) {
-  syncer::ReadTransaction trans(FROM_HERE, user_share());
-  syncer::ReadNode node(&trans);
+  ReadTransaction trans(FROM_HERE, user_share());
+  ReadNode node(&trans);
   return node.InitByClientTagLookup(model_type, client_tag);
 }
 
 void SyncApiTest::ReplaceWithTombstone(const ModelType& model_type,
                                        const std::string& client_tag) {
-  syncer::WriteTransaction trans(FROM_HERE, user_share());
-  syncer::WriteNode node(&trans);
+  WriteTransaction trans(FROM_HERE, user_share());
+  WriteNode node(&trans);
   ASSERT_EQ(node.InitByClientTagLookup(model_type, client_tag),
-            syncer::WriteNode::INIT_OK);
+            WriteNode::INIT_OK);
   node.Tombstone();
 }
 
@@ -512,10 +514,10 @@ TEST_F(SyncApiTest, WriteAndReadPassword) {
 
     WriteNode password_node(&trans);
     WriteNode::InitUniqueByCreationResult result =
-        password_node.InitUniqueByCreation(PASSWORDS, root_node, "foo");
+        password_node.InitUniqueByCreation(PASSWORDS, root_node, kClientTag);
     EXPECT_EQ(WriteNode::INIT_SUCCESS, result);
     sync_pb::PasswordSpecificsData data;
-    data.set_password_value("secret");
+    data.set_password_value(kPasswordValue);
     password_node.SetPasswordSpecifics(data);
   }
   {
@@ -523,10 +525,14 @@ TEST_F(SyncApiTest, WriteAndReadPassword) {
 
     ReadNode password_node(&trans);
     EXPECT_EQ(BaseNode::INIT_OK,
-              password_node.InitByClientTagLookup(PASSWORDS, "foo"));
+              password_node.InitByClientTagLookup(PASSWORDS, kClientTag));
     const sync_pb::PasswordSpecificsData& data =
         password_node.GetPasswordSpecifics();
-    EXPECT_EQ("secret", data.password_value());
+    EXPECT_EQ(kPasswordValue, data.password_value());
+    // Check that nothing has appeared in the unencrypted field.
+    EXPECT_FALSE(password_node.GetEntitySpecifics()
+                     .password()
+                     .has_unencrypted_metadata());
   }
 }
 
@@ -689,7 +695,7 @@ TEST_F(SyncApiTest, GetTotalNodeCountMultipleChildren) {
 TEST_F(SyncApiTest, AttachmentLinking) {
   // Add an entry with an attachment.
   std::string tag1("some tag");
-  syncer::AttachmentId attachment_id(syncer::AttachmentId::Create(0, 0));
+  AttachmentId attachment_id(AttachmentId::Create(0, 0));
   sync_pb::AttachmentMetadata attachment_metadata;
   sync_pb::AttachmentMetadataRecord* record = attachment_metadata.add_record();
   *record->mutable_id() = attachment_id.GetProto();
@@ -707,7 +713,7 @@ TEST_F(SyncApiTest, AttachmentLinking) {
   ASSERT_TRUE(dir()->IsAttachmentLinked(attachment_id.GetProto()));
 
   // Tombstone the first entry.
-  ReplaceWithTombstone(syncer::PREFERENCES, tag1);
+  ReplaceWithTombstone(PREFERENCES, tag1);
 
   // See that the attachment is still considered linked because the entry hasn't
   // been purged from the Directory.
@@ -716,7 +722,7 @@ TEST_F(SyncApiTest, AttachmentLinking) {
   // Save changes and see that the entry is truly gone.
   ASSERT_TRUE(dir()->SaveChanges());
   ASSERT_EQ(LookupEntryByClientTag(PREFERENCES, tag1),
-            syncer::WriteNode::INIT_FAILED_ENTRY_NOT_GOOD);
+            WriteNode::INIT_FAILED_ENTRY_NOT_GOOD);
 
   // However, the attachment is still linked.
   ASSERT_TRUE(dir()->IsAttachmentLinked(attachment_id.GetProto()));
@@ -726,10 +732,10 @@ TEST_F(SyncApiTest, AttachmentLinking) {
   ASSERT_TRUE(dir()->IsAttachmentLinked(attachment_id.GetProto()));
 
   // Tombstone the second entry, save changes, see that it's truly gone.
-  ReplaceWithTombstone(syncer::PREFERENCES, tag2);
+  ReplaceWithTombstone(PREFERENCES, tag2);
   ASSERT_TRUE(dir()->SaveChanges());
   ASSERT_EQ(LookupEntryByClientTag(PREFERENCES, tag2),
-            syncer::WriteNode::INIT_FAILED_ENTRY_NOT_GOOD);
+            WriteNode::INIT_FAILED_ENTRY_NOT_GOOD);
 
   // Finally, the attachment is no longer linked.
   ASSERT_FALSE(dir()->IsAttachmentLinked(attachment_id.GetProto()));
@@ -898,11 +904,11 @@ class SyncManagerObserverMock : public SyncManager::Observer {
                void(const WeakHandle<JsBackend>&,
                     const WeakHandle<DataTypeDebugInfoListener>&,
                     bool,
-                    syncer::ModelTypeSet));                         // NOLINT
+                    ModelTypeSet));                                 // NOLINT
   MOCK_METHOD1(OnConnectionStatusChange, void(ConnectionStatus));   // NOLINT
   MOCK_METHOD1(OnUpdatedToken, void(const std::string&));           // NOLINT
   MOCK_METHOD1(OnActionableError, void(const SyncProtocolError&));  // NOLINT
-  MOCK_METHOD1(OnMigrationRequested, void(syncer::ModelTypeSet));   // NOLINT
+  MOCK_METHOD1(OnMigrationRequested, void(ModelTypeSet));           // NOLINT
   MOCK_METHOD1(OnProtocolEvent, void(const ProtocolEvent&));        // NOLINT
 };
 
@@ -973,7 +979,7 @@ class SyncManagerTest : public testing::Test,
     workers.push_back(worker);
 
     SyncManager::InitArgs args;
-    args.database_location = temp_dir_.path();
+    args.database_location = temp_dir_.GetPath();
     args.service_url = GURL("https://example.com/");
     args.post_factory = std::unique_ptr<HttpPostProviderFactory>(
         new TestHttpPostProviderFactory());
@@ -1126,6 +1132,16 @@ class SyncManagerTest : public testing::Test,
         trans->GetWrappedTrans());
   }
 
+  PassphraseType GetPassphraseType() {
+    ReadTransaction trans(FROM_HERE, sync_manager_.GetUserShare());
+    return GetPassphraseTypeWithTrans(&trans);
+  }
+
+  PassphraseType GetPassphraseTypeWithTrans(BaseTransaction* trans) {
+    return trans->GetDirectory()->GetNigoriHandler()->GetPassphraseType(
+        trans->GetWrappedTrans());
+  }
+
   void SimulateInvalidatorEnabledForTest(bool is_enabled) {
     DCHECK(sync_manager_.thread_checker_.CalledOnValidThread());
     sync_manager_.SetInvalidatorEnabled(is_enabled);
@@ -1154,17 +1170,15 @@ class SyncManagerTest : public testing::Test,
   void SetImplicitPassphraseAndCheck(const std::string& passphrase) {
     sync_manager_.GetEncryptionHandler()->SetEncryptionPassphrase(passphrase,
                                                                   false);
-    EXPECT_EQ(IMPLICIT_PASSPHRASE,
-              sync_manager_.GetEncryptionHandler()->GetPassphraseType());
+    EXPECT_EQ(PassphraseType::IMPLICIT_PASSPHRASE, GetPassphraseType());
   }
 
   void SetCustomPassphraseAndCheck(const std::string& passphrase) {
     EXPECT_CALL(encryption_observer_,
-                OnPassphraseTypeChanged(CUSTOM_PASSPHRASE, _));
+                OnPassphraseTypeChanged(PassphraseType::CUSTOM_PASSPHRASE, _));
     sync_manager_.GetEncryptionHandler()->SetEncryptionPassphrase(passphrase,
                                                                   true);
-    EXPECT_EQ(CUSTOM_PASSPHRASE,
-              sync_manager_.GetEncryptionHandler()->GetPassphraseType());
+    EXPECT_EQ(PassphraseType::CUSTOM_PASSPHRASE, GetPassphraseType());
   }
 
   bool HasUnrecoverableError() {
@@ -1192,23 +1206,6 @@ class SyncManagerTest : public testing::Test,
   InternalComponentsFactory::StorageOption storage_used_;
   MockUnrecoverableErrorHandler mock_unrecoverable_error_handler_;
 };
-
-TEST_F(SyncManagerTest, GetAllNodesForTypeTest) {
-  ModelSafeRoutingInfo routing_info;
-  GetModelSafeRoutingInfo(&routing_info);
-  sync_manager_.StartSyncingNormally(routing_info, base::Time());
-
-  std::unique_ptr<base::ListValue> node_list(
-      sync_manager_.GetAllNodesForType(syncer::PREFERENCES));
-
-  // Should have one node: the type root node.
-  ASSERT_EQ(1U, node_list->GetSize());
-
-  const base::DictionaryValue* first_result;
-  ASSERT_TRUE(node_list->GetDictionary(0, &first_result));
-  EXPECT_TRUE(first_result->HasKey("ID"));
-  EXPECT_TRUE(first_result->HasKey("NON_UNIQUE_NAME"));
-}
 
 TEST_F(SyncManagerTest, RefreshEncryptionReady) {
   EXPECT_TRUE(SetUpEncryption(WRITE_TO_NIGORI, DEFAULT_ENCRYPTION));
@@ -1497,8 +1494,7 @@ TEST_F(SyncManagerTest, SupplyPendingGAIAPass) {
               OnBootstrapTokenUpdated(_, PASSPHRASE_BOOTSTRAP_TOKEN));
   ExpectPassphraseAcceptance();
   sync_manager_.GetEncryptionHandler()->SetDecryptionPassphrase("passphrase2");
-  EXPECT_EQ(IMPLICIT_PASSPHRASE,
-            sync_manager_.GetEncryptionHandler()->GetPassphraseType());
+  EXPECT_EQ(PassphraseType::IMPLICIT_PASSPHRASE, GetPassphraseType());
   EXPECT_FALSE(IsEncryptEverythingEnabledForTest());
   {
     ReadTransaction trans(FROM_HERE, sync_manager_.GetUserShare());
@@ -1615,7 +1611,7 @@ TEST_F(SyncManagerTest, SupplyPendingExplicitPass) {
   }
   EXPECT_CALL(encryption_observer_, OnCryptographerStateChanged(_));
   EXPECT_CALL(encryption_observer_,
-              OnPassphraseTypeChanged(CUSTOM_PASSPHRASE, _));
+              OnPassphraseTypeChanged(PassphraseType::CUSTOM_PASSPHRASE, _));
   EXPECT_CALL(encryption_observer_, OnPassphraseRequired(_, _));
   EXPECT_CALL(encryption_observer_, OnEncryptedTypesChanged(_, false));
   sync_manager_.GetEncryptionHandler()->Init();
@@ -1623,8 +1619,7 @@ TEST_F(SyncManagerTest, SupplyPendingExplicitPass) {
               OnBootstrapTokenUpdated(_, PASSPHRASE_BOOTSTRAP_TOKEN));
   ExpectPassphraseAcceptance();
   sync_manager_.GetEncryptionHandler()->SetDecryptionPassphrase("explicit");
-  EXPECT_EQ(CUSTOM_PASSPHRASE,
-            sync_manager_.GetEncryptionHandler()->GetPassphraseType());
+  EXPECT_EQ(PassphraseType::CUSTOM_PASSPHRASE, GetPassphraseType());
   EXPECT_FALSE(IsEncryptEverythingEnabledForTest());
   {
     ReadTransaction trans(FROM_HERE, sync_manager_.GetUserShare());
@@ -2049,24 +2044,27 @@ TEST_F(SyncManagerTest, UpdatePasswordSetPasswordSpecifics) {
 }
 
 // Passwords have their own handling for encryption. Verify setting a new
-// passphrase updates the data.
+// passphrase updates the data and clears the unencrypted metadta for passwords.
 TEST_F(SyncManagerTest, UpdatePasswordNewPassphrase) {
-  std::string client_tag = "title";
   EXPECT_TRUE(SetUpEncryption(WRITE_TO_NIGORI, DEFAULT_ENCRYPTION));
   sync_pb::EntitySpecifics entity_specifics;
   {
     ReadTransaction trans(FROM_HERE, sync_manager_.GetUserShare());
     Cryptographer* cryptographer = trans.GetCryptographer();
     sync_pb::PasswordSpecificsData data;
-    data.set_password_value("secret");
+    data.set_password_value(kPasswordValue);
+    entity_specifics.mutable_password()
+        ->mutable_unencrypted_metadata()
+        ->set_url(kUrl);
     cryptographer->Encrypt(
         data, entity_specifics.mutable_password()->mutable_encrypted());
   }
-  MakeServerNode(sync_manager_.GetUserShare(), PASSWORDS, client_tag,
-                 syncable::GenerateSyncableHash(PASSWORDS, client_tag),
+  EXPECT_TRUE(entity_specifics.password().has_unencrypted_metadata());
+  MakeServerNode(sync_manager_.GetUserShare(), PASSWORDS, kClientTag,
+                 syncable::GenerateSyncableHash(PASSWORDS, kClientTag),
                  entity_specifics);
   // New node shouldn't start off unsynced.
-  EXPECT_FALSE(ResetUnsyncedEntry(PASSWORDS, client_tag));
+  EXPECT_FALSE(ResetUnsyncedEntry(PASSWORDS, kClientTag));
 
   // Set a new passphrase. Should set is_unsynced.
   testing::Mock::VerifyAndClearExpectations(&encryption_observer_);
@@ -2074,7 +2072,21 @@ TEST_F(SyncManagerTest, UpdatePasswordNewPassphrase) {
               OnBootstrapTokenUpdated(_, PASSPHRASE_BOOTSTRAP_TOKEN));
   ExpectPassphraseAcceptance();
   SetCustomPassphraseAndCheck("new_passphrase");
-  EXPECT_TRUE(ResetUnsyncedEntry(PASSWORDS, client_tag));
+  {
+    ReadTransaction trans(FROM_HERE, sync_manager_.GetUserShare());
+    Cryptographer* cryptographer = trans.GetCryptographer();
+    EXPECT_TRUE(cryptographer->is_ready());
+    ReadNode password_node(&trans);
+    EXPECT_EQ(BaseNode::INIT_OK,
+              password_node.InitByClientTagLookup(PASSWORDS, kClientTag));
+    const sync_pb::PasswordSpecificsData& data =
+        password_node.GetPasswordSpecifics();
+    EXPECT_EQ(kPasswordValue, data.password_value());
+    EXPECT_FALSE(password_node.GetEntitySpecifics()
+                     .password()
+                     .has_unencrypted_metadata());
+  }
+  EXPECT_TRUE(ResetUnsyncedEntry(PASSWORDS, kClientTag));
 }
 
 // Passwords have their own handling for encryption. Verify it does not result

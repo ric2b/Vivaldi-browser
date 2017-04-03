@@ -277,16 +277,6 @@ void InterstitialPageImpl::Hide() {
     // already showing. That would result in bad things (unparented HWND on
     // Windows for example) happening.
     old_view->Show();
-
-    // TODO(andre@vivaldi.com): Added this _hack_ after a couple of days of
-    //          beating around trying to add layout, force invalidate rect etc.
-    //          to the renderwidget, but it all failed. This is a hack that must
-    //          be revisited in due time for release, but it is a beta-thing.
-    //          Note; this was bug # VB-8279
-    const gfx::Rect rect = old_view->GetViewBounds();
-    old_view->SetSize(gfx::Size(rect.width() + 1, rect.height()));
-    old_view->SetSize(gfx::Size(rect.width() , rect.height()));
-
   }
 
   // If the focus was on the interstitial, let's keep it to the page.
@@ -762,7 +752,7 @@ void InterstitialPageImpl::CreateNewWindow(
     int32_t route_id,
     int32_t main_frame_route_id,
     int32_t main_frame_widget_route_id,
-    const ViewHostMsg_CreateWindow_Params& params,
+    const mojom::CreateNewWindowParams& params,
     SessionStorageNamespace* session_storage_namespace) {
   NOTREACHED() << "InterstitialPage does not support showing popups yet.";
 }
@@ -965,7 +955,7 @@ TextInputManager* InterstitialPageImpl::GetTextInputManager() {
                                         ->GetTextInputManager();
 }
 
-void InterstitialPageImpl::GetScreenInfo(blink::WebScreenInfo* screen_info) {
+void InterstitialPageImpl::GetScreenInfo(ScreenInfo* screen_info) {
   WebContentsImpl* web_contents_impl =
       static_cast<WebContentsImpl*>(web_contents_);
   if (!web_contents_impl) {

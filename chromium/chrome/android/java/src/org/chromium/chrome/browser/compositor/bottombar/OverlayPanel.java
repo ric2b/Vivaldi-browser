@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.compositor.bottombar;
 
 import android.app.Activity;
 import android.content.Context;
-import android.view.View;
 import android.view.View.MeasureSpec;
 
 import org.chromium.base.ActivityState;
@@ -28,7 +27,6 @@ import org.chromium.chrome.browser.compositor.overlays.SceneOverlay;
 import org.chromium.chrome.browser.compositor.scene_layer.SceneOverlayLayer;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.content.browser.ContentVideoViewEmbedder;
 import org.chromium.content.browser.ContentViewClient;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content_public.common.TopControlsState;
@@ -123,6 +121,13 @@ public class OverlayPanel extends OverlayPanelAnimation implements ActivityState
 
     /** This is used to make sure there is one show request to one close request. */
     private boolean mPanelShown;
+
+    /**
+     * Cache the viewport width and height of the screen to filter SceneOverlay#onSizeChanged
+     * events.
+     */
+    private float mViewportWidth;
+    private float mViewportHeight;
 
     // ============================================================================================
     // Constructor
@@ -405,27 +410,7 @@ public class OverlayPanel extends OverlayPanelAnimation implements ActivityState
                             MeasureSpec.EXACTLY);
                 }
             }
-
-            @Override
-            public ContentVideoViewEmbedder getContentVideoViewEmbedder() {
-                // TODO(mdjones): Possibly enable fullscreen video in overlay panels rather than
-                // passing an empty implementation.
-                return new ContentVideoViewEmbedder() {
-                    @Override
-                    public void enterFullscreenVideo(View view, boolean isVideoLoaded) {}
-
-                    @Override
-                    public void fullscreenVideoLoaded() {}
-
-                    @Override
-                    public void exitFullscreenVideo() {}
-
-                    @Override
-                    public void setSystemUiVisibility(boolean enterFullscreen) {}
-                };
-            }
         });
-
         return content;
     }
 
@@ -813,8 +798,15 @@ public class OverlayPanel extends OverlayPanelAnimation implements ActivityState
     @Override
     public void onSizeChanged(float width, float height, float visibleViewportOffsetY,
             int orientation) {
-        resizePanelContentViewCore(width, height);
-        onLayoutChanged(width, height, visibleViewportOffsetY);
+        // Filter events that don't change the viewport width or height.
+        if (height != mViewportHeight || width != mViewportWidth) {
+          // We only care if the orientation is changing or we're shifting in/out of multi-window.
+          // In either case the screen's viewport width or height will certainly change.
+            mViewportWidth = width;
+            mViewportHeight = height;
+            resizePanelContentViewCore(width, height);
+            onLayoutChanged(width, height, visibleViewportOffsetY);
+        }
     }
 
     /**

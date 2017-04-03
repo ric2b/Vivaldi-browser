@@ -94,8 +94,6 @@ static int ToMessageID(WebLocalizedString::Name name) {
       return IDS_AX_CALENDAR_WEEK_DESCRIPTION;
     case WebLocalizedString::AXCheckedCheckBoxActionVerb:
       return IDS_AX_CHECKED_CHECK_BOX_ACTION_VERB;
-    case WebLocalizedString::AXDateTimeFieldEmptyValueText:
-      return IDS_AX_DATE_TIME_FIELD_EMPTY_VALUE_TEXT;
     case WebLocalizedString::AXDayOfMonthFieldText:
       return IDS_AX_DAY_OF_MONTH_FIELD_TEXT;
     case WebLocalizedString::AXDefaultActionVerb:
@@ -144,10 +142,14 @@ static int ToMessageID(WebLocalizedString::Name name) {
       return IDS_AX_MEDIA_SHOW_CLOSED_CAPTIONS_BUTTON;
     case WebLocalizedString::AXMediaHideClosedCaptionsButton:
       return IDS_AX_MEDIA_HIDE_CLOSED_CAPTIONS_BUTTON;
-    case WebLocalizedString::AxMediaCastOffButton:
+    case WebLocalizedString::AXMediaCastOffButton:
       return IDS_AX_MEDIA_CAST_OFF_BUTTON;
-    case WebLocalizedString::AxMediaCastOnButton:
+    case WebLocalizedString::AXMediaCastOnButton:
       return IDS_AX_MEDIA_CAST_ON_BUTTON;
+    case WebLocalizedString::AXMediaDownloadButton:
+      return IDS_AX_MEDIA_DOWNLOAD_BUTTON;
+    case WebLocalizedString::AXMediaOverflowButton:
+      return IDS_AX_MEDIA_OVERFLOW_BUTTON;
     case WebLocalizedString::AXMediaAudioElementHelp:
       return IDS_AX_MEDIA_AUDIO_ELEMENT_HELP;
     case WebLocalizedString::AXMediaVideoElementHelp:
@@ -180,10 +182,12 @@ static int ToMessageID(WebLocalizedString::Name name) {
       return IDS_AX_MEDIA_SHOW_CLOSED_CAPTIONS_BUTTON_HELP;
     case WebLocalizedString::AXMediaHideClosedCaptionsButtonHelp:
       return IDS_AX_MEDIA_HIDE_CLOSED_CAPTIONS_BUTTON_HELP;
-    case WebLocalizedString::AxMediaCastOffButtonHelp:
+    case WebLocalizedString::AXMediaCastOffButtonHelp:
       return IDS_AX_MEDIA_CAST_OFF_BUTTON_HELP;
-    case WebLocalizedString::AxMediaCastOnButtonHelp:
+    case WebLocalizedString::AXMediaCastOnButtonHelp:
       return IDS_AX_MEDIA_CAST_ON_BUTTON_HELP;
+    case WebLocalizedString::AXMediaOverflowButtonHelp:
+      return IDS_AX_MEDIA_OVERFLOW_BUTTON_HELP;
     case WebLocalizedString::AXMillisecondFieldText:
       return IDS_AX_MILLISECOND_FIELD_TEXT;
     case WebLocalizedString::AXMinuteFieldText:
@@ -246,6 +250,26 @@ static int ToMessageID(WebLocalizedString::Name name) {
       return IDS_FORM_OTHER_TIME_LABEL;
     case WebLocalizedString::OtherWeekLabel:
       return IDS_FORM_OTHER_WEEK_LABEL;
+    case WebLocalizedString::OverflowMenuCaptions:
+      return IDS_MEDIA_OVERFLOW_MENU_CLOSED_CAPTIONS;
+    case WebLocalizedString::OverflowMenuCast:
+      return IDS_MEDIA_OVERFLOW_MENU_CAST;
+    case WebLocalizedString::OverflowMenuEnterFullscreen:
+      return IDS_MEDIA_OVERFLOW_MENU_ENTER_FULLSCREEN;
+    case WebLocalizedString::OverflowMenuExitFullscreen:
+      return IDS_MEDIA_OVERFLOW_MENU_EXIT_FULLSCREEN;
+    case WebLocalizedString::OverflowMenuStopCast:
+      return IDS_MEDIA_OVERFLOW_MENU_STOP_CAST;
+    case WebLocalizedString::OverflowMenuMute:
+      return IDS_MEDIA_OVERFLOW_MENU_MUTE;
+    case WebLocalizedString::OverflowMenuUnmute:
+      return IDS_MEDIA_OVERFLOW_MENU_UNMUTE;
+    case WebLocalizedString::OverflowMenuPlay:
+      return IDS_MEDIA_OVERFLOW_MENU_PLAY;
+    case WebLocalizedString::OverflowMenuPause:
+      return IDS_MEDIA_OVERFLOW_MENU_PAUSE;
+    case WebLocalizedString::OverflowMenuDownload:
+      return IDS_MEDIA_OVERFLOW_MENU_DOWNLOAD;
     case WebLocalizedString::PlaceholderForDayOfMonthField:
       return IDS_FORM_PLACEHOLDER_FOR_DAY_OF_MONTH_FIELD;
     case WebLocalizedString::PlaceholderForMonthField:
@@ -628,6 +652,12 @@ const DataResource kDataResources[] = {
     {"mediaplayerSubtitlesIconNew",
      IDR_MEDIAPLAYER_SUBTITLES_ICON_NEW,
      ui::SCALE_FACTOR_100P},
+    {"mediaplayerOverflowMenu",
+     IDR_MEDIAPLAYER_OVERFLOW_MENU_ICON,
+     ui::SCALE_FACTOR_100P},
+    {"mediaplayerDownloadIcon",
+     IDR_MEDIAPLAYER_DOWNLOAD_ICON,
+     ui::SCALE_FACTOR_100P},
     {"searchCancel", IDR_SEARCH_CANCEL, ui::SCALE_FACTOR_100P},
     {"searchCancelPressed", IDR_SEARCH_CANCEL_PRESSED, ui::SCALE_FACTOR_100P},
     {"textAreaResizeCorner", IDR_TEXTAREA_RESIZER, ui::SCALE_FACTOR_100P},
@@ -639,25 +669,26 @@ const DataResource kDataResources[] = {
     {"html.css", IDR_UASTYLE_HTML_CSS, ui::SCALE_FACTOR_NONE},
     {"quirks.css", IDR_UASTYLE_QUIRKS_CSS, ui::SCALE_FACTOR_NONE},
     {"view-source.css", IDR_UASTYLE_VIEW_SOURCE_CSS, ui::SCALE_FACTOR_NONE},
-#if defined(OS_ANDROID)
+    // Not limited to Android since it's used for mobile layouts in inspector.
     {"themeChromiumAndroid.css",
      IDR_UASTYLE_THEME_CHROMIUM_ANDROID_CSS,
      ui::SCALE_FACTOR_NONE},
+    // Not limited to Android since it's used for mobile layouts in inspector.
     {"fullscreenAndroid.css",
       IDR_UASTYLE_FULLSCREEN_ANDROID_CSS,
       ui::SCALE_FACTOR_NONE},
+    // Not limited to Android since it's used for mobile layouts in inspector.
     {"mediaControlsAndroid.css",
      IDR_UASTYLE_MEDIA_CONTROLS_ANDROID_CSS,
      ui::SCALE_FACTOR_NONE},
+    // Not limited to Android since it's used for mobile layouts in inspector.
     {"mediaControlsAndroidNew.css",
      IDR_UASTYLE_MEDIA_CONTROLS_ANDROID_NEW_CSS,
      ui::SCALE_FACTOR_NONE},
-#endif
-#if !defined(OS_WIN)
+    // Not limited to Linux since it's used for mobile layouts in inspector.
     {"themeChromiumLinux.css",
      IDR_UASTYLE_THEME_CHROMIUM_LINUX_CSS,
      ui::SCALE_FACTOR_NONE},
-#endif
     {"themeInputMultipleFields.css",
      IDR_UASTYLE_THEME_INPUT_MULTIPLE_FIELDS_CSS,
      ui::SCALE_FACTOR_NONE},

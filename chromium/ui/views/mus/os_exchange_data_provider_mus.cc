@@ -4,8 +4,14 @@
 
 #include "ui/views/mus/os_exchange_data_provider_mus.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "base/stl_util.h"
 #include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "mojo/common/common_type_converters.h"
 #include "net/base/filename_util.h"
@@ -50,6 +56,9 @@ void AddString16ToVector(const base::string16& str,
 }  // namespace
 
 OSExchangeDataProviderMus::OSExchangeDataProviderMus() {}
+
+OSExchangeDataProviderMus::OSExchangeDataProviderMus(Data data)
+    : mime_data_(std::move(data)) {}
 
 OSExchangeDataProviderMus::~OSExchangeDataProviderMus() {}
 
@@ -250,7 +259,6 @@ bool OSExchangeDataProviderMus::HasCustomFormat(
 void OSExchangeDataProviderMus::SetFileContents(
     const base::FilePath& filename,
     const std::string& file_contents) {
-
 }
 #endif
 

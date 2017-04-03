@@ -47,6 +47,12 @@ class DEVICE_BLUETOOTH_EXPORT FakeBluetoothLEAdvertisingManagerClient
       const base::Closure& callback,
       const ErrorCallback& error_callback) override;
 
+  void SetAdvertisingInterval(const dbus::ObjectPath& manager_object_path,
+                              uint16_t min_interval_ms,
+                              uint16_t max_interval_ms,
+                              const base::Closure& callback,
+                              const ErrorCallback& error_callback) override;
+
   // Register, unregister and retrieve pointers to profile server providers.
   void RegisterAdvertisementServiceProvider(
       FakeBluetoothLEAdvertisementServiceProvider* service_provider);
@@ -55,8 +61,9 @@ class DEVICE_BLUETOOTH_EXPORT FakeBluetoothLEAdvertisingManagerClient
   FakeBluetoothLEAdvertisementServiceProvider* GetAdvertisementServiceProvider(
       const std::string& uuid);
 
-  // Advertising manager path that we simulate.
-  static const char kAdvertisingManagerPath[];
+  int currently_registered() { return currently_registered_.size(); }
+
+  enum : size_t { kMaxBluezAdvertisements = 5 };
 
  private:
   // Map of a D-Bus object path to the FakeBluetoothAdvertisementServiceProvider
@@ -68,9 +75,8 @@ class DEVICE_BLUETOOTH_EXPORT FakeBluetoothLEAdvertisingManagerClient
       ServiceProviderMap;
   ServiceProviderMap service_provider_map_;
 
-  // Holds the currently registered advertisement. If there is no advertisement
-  // registered, this path is empty.
-  dbus::ObjectPath currently_registered_;
+  // Holds currently registered advertisements.
+  std::vector<dbus::ObjectPath> currently_registered_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeBluetoothLEAdvertisingManagerClient);
 };

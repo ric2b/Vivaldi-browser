@@ -7,12 +7,14 @@
 #include <tuple>
 #include <utility>
 
+#include "base/guid.h"
 #include "base/lazy_instance.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/devtools/devtools_frame_trace_recorder.h"
+#include "content/browser/devtools/devtools_manager.h"
 #include "content/browser/devtools/devtools_protocol_handler.h"
 #include "content/browser/devtools/page_navigation_throttle.h"
 #include "content/browser/devtools/protocol/browser_handler.h"
@@ -27,6 +29,7 @@
 #include "content/browser/devtools/protocol/security_handler.h"
 #include "content/browser/devtools/protocol/service_worker_handler.h"
 #include "content/browser/devtools/protocol/storage_handler.h"
+#include "content/browser/devtools/protocol/target_handler.h"
 #include "content/browser/devtools/protocol/tracing_handler.h"
 #include "content/browser/frame_host/navigation_handle_impl.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
@@ -371,7 +374,8 @@ RenderFrameDevToolsAgentHost::CreateThrottleForNavigation(
 
 RenderFrameDevToolsAgentHost::RenderFrameDevToolsAgentHost(
     RenderFrameHostImpl* host)
-    : browser_handler_(new devtools::browser::BrowserHandler()),
+    : DevToolsAgentHostImpl(base::GenerateGUID()),
+      browser_handler_(new devtools::browser::BrowserHandler()),
       dom_handler_(new devtools::dom::DOMHandler()),
       input_handler_(new devtools::input::InputHandler()),
       inspector_handler_(new devtools::inspector::InspectorHandler()),
@@ -383,6 +387,7 @@ RenderFrameDevToolsAgentHost::RenderFrameDevToolsAgentHost(
       service_worker_handler_(
           new devtools::service_worker::ServiceWorkerHandler()),
       storage_handler_(new devtools::storage::StorageHandler()),
+      target_handler_(new devtools::target::TargetHandler()),
       tracing_handler_(new devtools::tracing::TracingHandler(
           devtools::tracing::TracingHandler::Renderer,
           host->GetFrameTreeNodeId(),
@@ -404,6 +409,7 @@ RenderFrameDevToolsAgentHost::RenderFrameDevToolsAgentHost(
   dispatcher->SetSchemaHandler(schema_handler_.get());
   dispatcher->SetServiceWorkerHandler(service_worker_handler_.get());
   dispatcher->SetStorageHandler(storage_handler_.get());
+  dispatcher->SetTargetHandler(target_handler_.get());
   dispatcher->SetTracingHandler(tracing_handler_.get());
 
   if (!host->GetParent()) {
@@ -537,11 +543,13 @@ void RenderFrameDevToolsAgentHost::OnClientDetached() {
 #if defined(OS_ANDROID)
   power_save_blocker_.reset();
 #endif
+  browser_handler_->Detached();
   if (emulation_handler_)
     emulation_handler_->Detached();
   if (page_handler_)
     page_handler_->Detached();
   service_worker_handler_->Detached();
+  target_handler_->Detached();
   tracing_handler_->Detached();
   frame_trace_recorder_.reset();
   in_navigation_protocol_message_buffer_.clear();
@@ -612,7 +620,7 @@ void RenderFrameDevToolsAgentHost::DidFinishNavigation(
 
   DCHECK(CheckConsistency());
   if (navigation_handle->HasCommitted())
-    service_worker_handler_->UpdateHosts();
+    target_handler_->UpdateServiceWorkers();
 }
 
 void RenderFrameDevToolsAgentHost::AboutToNavigateRenderFrame(
@@ -651,6 +659,8 @@ void RenderFrameDevToolsAgentHost::AboutToNavigate(
 void RenderFrameDevToolsAgentHost::RenderFrameHostChanged(
     RenderFrameHost* old_host,
     RenderFrameHost* new_host) {
+  target_handler_->UpdateFrames();
+
   if (IsBrowserSideNavigationEnabled())
     return;
 
@@ -722,10 +732,8 @@ void RenderFrameDevToolsAgentHost::CreatePowerSaveBlocker() {
       BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
       BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE)));
   if (web_contents()->GetNativeView()) {
-    view_weak_factory_.reset(new base::WeakPtrFactory<ui::ViewAndroid>(
-        web_contents()->GetNativeView()));
     power_save_blocker_->InitDisplaySleepBlocker(
-        view_weak_factory_->GetWeakPtr());
+        web_contents()->GetNativeView());
   }
 #endif
 }
@@ -813,7 +821,7 @@ void RenderFrameDevToolsAgentHost::DidCommitProvisionalLoadForFrame(
   if (pending_ && pending_->host() == render_frame_host)
     CommitPending();
   DCHECK(CheckConsistency());
-  service_worker_handler_->UpdateHosts();
+  target_handler_->UpdateServiceWorkers();
 }
 
 void RenderFrameDevToolsAgentHost::DidFailProvisionalLoad(
@@ -827,12 +835,6 @@ void RenderFrameDevToolsAgentHost::DidFailProvisionalLoad(
   if (pending_ && pending_->host() == render_frame_host)
     DiscardPending();
   DCHECK(CheckConsistency());
-}
-
-void RenderFrameDevToolsAgentHost::WebContentsDestroyed() {
-#if defined(OS_ANDROID)
-  view_weak_factory_.reset();
-#endif
 }
 
 void RenderFrameDevToolsAgentHost::WasShown() {
@@ -876,6 +878,7 @@ void RenderFrameDevToolsAgentHost::UpdateProtocolHandlers(
     security_handler_->SetRenderFrameHost(host);
   if (storage_handler_)
     storage_handler_->SetRenderFrameHost(host);
+  target_handler_->SetRenderFrameHost(host);
 }
 
 void RenderFrameDevToolsAgentHost::DisconnectWebContents() {
@@ -904,15 +907,50 @@ void RenderFrameDevToolsAgentHost::ConnectWebContents(WebContents* wc) {
   WebContentsObserver::Observe(WebContents::FromRenderFrameHost(host));
 }
 
-DevToolsAgentHost::Type RenderFrameDevToolsAgentHost::GetType() {
-  return IsChildFrame() ? TYPE_FRAME : TYPE_WEB_CONTENTS;
+std::string RenderFrameDevToolsAgentHost::GetParentId() {
+  if (IsChildFrame() && current_) {
+    RenderFrameHostImpl* frame_host = current_->host()->GetParent();
+    while (frame_host && !ShouldCreateDevToolsFor(frame_host))
+      frame_host = frame_host->GetParent();
+    if (frame_host)
+      return DevToolsAgentHost::GetOrCreateFor(frame_host)->GetId();
+  }
+
+  WebContentsImpl* contents = static_cast<WebContentsImpl*>(web_contents());
+  if (!contents)
+    return "";
+  contents = contents->GetOuterWebContents();
+  if (contents)
+    return DevToolsAgentHost::GetOrCreateFor(contents)->GetId();
+  return "";
+}
+
+std::string RenderFrameDevToolsAgentHost::GetType() {
+  DevToolsManager* manager = DevToolsManager::GetInstance();
+  if (manager->delegate())
+    return manager->delegate()->GetTargetType(current_->host());
+  if (IsChildFrame())
+    return kTypeFrame;
+  return kTypePage;
 }
 
 std::string RenderFrameDevToolsAgentHost::GetTitle() {
-  if (IsChildFrame())
-    return GetURL().spec();
-  if (WebContents* web_contents = GetWebContents())
-    return base::UTF16ToUTF8(web_contents->GetTitle());
+  DevToolsManager* manager = DevToolsManager::GetInstance();
+  std::string result;
+  if (manager->delegate())
+    result = manager->delegate()->GetTargetTitle(current_->host());
+  if (!result.empty())
+    return result;
+  content::WebContents* web_contents = GetWebContents();
+  if (web_contents)
+    result = base::UTF16ToUTF8(web_contents->GetTitle());
+  return GetURL().spec();
+}
+
+std::string RenderFrameDevToolsAgentHost::GetDescription() {
+  DevToolsManager* manager = DevToolsManager::GetInstance();
+  if (manager->delegate())
+    return manager->delegate()->GetTargetDescription(current_->host());
   return "";
 }
 
@@ -928,6 +966,16 @@ GURL RenderFrameDevToolsAgentHost::GetURL() {
   return GURL();
 }
 
+GURL RenderFrameDevToolsAgentHost::GetFaviconURL() {
+  WebContents* wc = web_contents();
+  if (!wc)
+    return GURL();
+  NavigationEntry* entry = wc->GetController().GetLastCommittedEntry();
+  if (entry)
+    return entry->GetFavicon().url;
+  return GURL();
+}
+
 bool RenderFrameDevToolsAgentHost::Activate() {
   WebContentsImpl* wc = static_cast<WebContentsImpl*>(web_contents());
   if (wc) {
@@ -937,12 +985,24 @@ bool RenderFrameDevToolsAgentHost::Activate() {
   return false;
 }
 
+void RenderFrameDevToolsAgentHost::Reload() {
+  WebContentsImpl* wc = static_cast<WebContentsImpl*>(web_contents());
+  if (wc)
+    wc->GetController().Reload(true);
+}
+
 bool RenderFrameDevToolsAgentHost::Close() {
   if (web_contents()) {
     web_contents()->ClosePage();
     return true;
   }
   return false;
+}
+
+base::TimeTicks RenderFrameDevToolsAgentHost::GetLastActivityTime() {
+  if (content::WebContents* contents = web_contents())
+    return contents->GetLastActiveTime();
+  return base::TimeTicks();
 }
 
 void RenderFrameDevToolsAgentHost::OnSwapCompositorFrame(
@@ -999,8 +1059,7 @@ void RenderFrameDevToolsAgentHost::OnRequestNewWindow(
   if (IsAttached() && sender->GetRoutingID() != new_routing_id && frame_host) {
     scoped_refptr<DevToolsAgentHost> agent =
         DevToolsAgentHost::GetOrCreateFor(frame_host);
-    success = static_cast<DevToolsAgentHostImpl*>(agent.get())->
-        Inspect(agent->GetBrowserContext());
+    success = static_cast<DevToolsAgentHostImpl*>(agent.get())->Inspect();
   }
 
   sender->Send(new DevToolsAgentMsg_RequestNewWindow_ACK(

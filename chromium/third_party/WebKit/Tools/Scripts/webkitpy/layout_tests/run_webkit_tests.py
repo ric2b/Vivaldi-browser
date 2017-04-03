@@ -30,7 +30,6 @@
 
 import logging
 import optparse
-import os
 import sys
 import traceback
 
@@ -333,12 +332,12 @@ def parse_args(args):
                 "--order",
                 action="store",
                 default="natural",
-                help=("determine the order in which the test cases will be run. "
+                help=("Determine the order in which the test cases will be run. "
                       "'none' == use the order in which the tests were listed "
                       "either in arguments or test list, "
                       "'natural' == use the natural order (default), "
-                      "'random-seeded' == randomize the test order using a fixed seed, "
-                      "'random' == randomize the test order.")),
+                      "'random' == pseudo-random order. Seed can be specified "
+                      "via --seed, otherwise a default seed will be used.")),
             optparse.make_option(
                 "--profile",
                 action="store_true",
@@ -381,6 +380,12 @@ def parse_args(args):
                 action="store_true",
                 default=False,
                 help="DEPRECATED, same as --batch-size=1 --verbose"),
+            optparse.make_option(
+                "--seed",
+                type="int",
+                default=4,  # http://xkcd.com/221/
+                help=("Seed to use for random test order (default: %default). "
+                      "Only applicable in combination with --order=random.")),
             optparse.make_option(
                 "--skipped",
                 action="store",
@@ -536,6 +541,11 @@ def _set_up_derived_options(port, options, args):
 
     if not options.skipped:
         options.skipped = 'default'
+
+    if 'GTEST_SHARD_INDEX' in port.host.environ and 'GTEST_TOTAL_SHARDS' in port.host.environ:
+        shard_index = int(port.host.environ['GTEST_SHARD_INDEX']) + 1
+        total_shards = int(port.host.environ['GTEST_TOTAL_SHARDS']) + 1
+        options.run_part = '{0}:{1}'.format(shard_index, total_shards)
 
 
 def _run_tests(port, options, args, printer):

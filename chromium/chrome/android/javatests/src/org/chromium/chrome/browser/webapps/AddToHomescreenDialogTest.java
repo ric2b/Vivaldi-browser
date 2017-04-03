@@ -4,14 +4,17 @@
 
 package org.chromium.chrome.browser.webapps;
 
+import android.app.Activity;
 import android.content.DialogInterface;
 import android.support.v7.app.AlertDialog;
 import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
 
 /**
@@ -19,10 +22,20 @@ import org.chromium.chrome.test.ChromeActivityTestCaseBase;
  * that the calling the show() method actually shows the dialog and checks that
  * some expected elements inside the dialog are present.
  *
- * This is mostly intended as a smoke test because the dialog isn't used in
- * Chromium for the moment.
+ * This is mostly intended as a smoke test.
  */
 public class AddToHomescreenDialogTest extends ChromeActivityTestCaseBase<ChromeActivity> {
+    private static class MockAddToHomescreenManager extends AddToHomescreenManager {
+        public MockAddToHomescreenManager(Activity activity, Tab tab) {
+            super(activity, tab);
+        }
+
+        @Override
+        public void addShortcut(String userRequestedTitle) {}
+        @Override
+        public void onDismissed() {}
+    }
+
     public AddToHomescreenDialogTest() {
         super(ChromeActivity.class);
     }
@@ -34,23 +47,26 @@ public class AddToHomescreenDialogTest extends ChromeActivityTestCaseBase<Chrome
 
     @SmallTest
     @Feature("{Webapp}")
+    @RetryOnFailure
     public void testSmoke() throws InterruptedException {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                assertNull(AddToHomescreenDialog.getCurrentDialogForTest());
+                AddToHomescreenDialog dialog =
+                        new AddToHomescreenDialog(new MockAddToHomescreenManager(
+                                getActivity(), getActivity().getActivityTab()));
+                dialog.show(getActivity());
 
-                AddToHomescreenDialog.show(getActivity(), getActivity().getActivityTab());
-                AlertDialog dialog = AddToHomescreenDialog.getCurrentDialogForTest();
-                assertNotNull(dialog);
+                AlertDialog alertDialog = dialog.getAlertDialogForTesting();
+                assertNotNull(alertDialog);
 
-                assertTrue(dialog.isShowing());
+                assertTrue(alertDialog.isShowing());
 
-                assertNotNull(dialog.findViewById(R.id.spinny));
-                assertNotNull(dialog.findViewById(R.id.icon));
-                assertNotNull(dialog.findViewById(R.id.text));
-                assertNotNull(dialog.getButton(DialogInterface.BUTTON_POSITIVE));
-                assertNotNull(dialog.getButton(DialogInterface.BUTTON_NEGATIVE));
+                assertNotNull(alertDialog.findViewById(R.id.spinny));
+                assertNotNull(alertDialog.findViewById(R.id.icon));
+                assertNotNull(alertDialog.findViewById(R.id.text));
+                assertNotNull(alertDialog.getButton(DialogInterface.BUTTON_POSITIVE));
+                assertNotNull(alertDialog.getButton(DialogInterface.BUTTON_NEGATIVE));
             }
         });
     }

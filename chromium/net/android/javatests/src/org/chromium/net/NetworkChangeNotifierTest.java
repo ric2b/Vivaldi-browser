@@ -10,14 +10,16 @@ import static android.net.NetworkCapabilities.TRANSPORT_VPN;
 import static android.net.NetworkCapabilities.TRANSPORT_WIFI;
 
 import android.annotation.SuppressLint;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.ContextWrapper;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.net.ConnectivityManager;
 import android.net.ConnectivityManager.NetworkCallback;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
-import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.telephony.TelephonyManager;
 import android.test.InstrumentationTestCase;
@@ -31,6 +33,7 @@ import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.test.util.Feature;
 import org.chromium.net.NetworkChangeNotifierAutoDetect.ConnectivityManagerDelegate;
 import org.chromium.net.NetworkChangeNotifierAutoDetect.NetworkState;
+import org.chromium.net.NetworkChangeNotifierAutoDetect.WifiManagerDelegate;
 import org.chromium.net.test.util.NetworkChangeNotifierTestUtil;
 
 import java.lang.reflect.Constructor;
@@ -145,7 +148,7 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
         }
 
         // List of networks we're pretending are currently connected.
-        private final ArrayList<MockNetwork> mMockNetworks = new ArrayList<MockNetwork>();
+        private final ArrayList<MockNetwork> mMockNetworks = new ArrayList<>();
 
         private boolean mActiveNetworkExists;
         private int mNetworkType;
@@ -153,8 +156,11 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
         private NetworkCallback mLastRegisteredNetworkCallback;
 
         @Override
-        public NetworkState getNetworkState() {
-            return new NetworkState(mActiveNetworkExists, mNetworkType, mNetworkSubtype);
+        public NetworkState getNetworkState(WifiManagerDelegate wifiManagerDelegate) {
+            return new NetworkState(mActiveNetworkExists, mNetworkType, mNetworkSubtype,
+                    mNetworkType == ConnectivityManager.TYPE_WIFI
+                            ? wifiManagerDelegate.getWifiSsid()
+                            : null);
         }
 
         @Override
@@ -196,8 +202,8 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
         }
 
         @Override
-        public NetworkState getNetworkState(Network network) {
-            return new NetworkState(false, -1, -1);
+        public int getConnectionType(Network network) {
+            return ConnectionType.CONNECTION_NONE;
         }
 
         @Override
@@ -255,27 +261,16 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
     /**
      * Mocks out calls to the WifiManager.
      */
-    private static class MockWifiManagerDelegate
-            extends NetworkChangeNotifierAutoDetect.WifiManagerDelegate {
+    private static class MockWifiManagerDelegate extends WifiManagerDelegate {
         private String mWifiSSID;
-        private int mLinkSpeedMbps;
 
         @Override
-        public String getWifiSSID() {
+        public String getWifiSsid() {
             return mWifiSSID;
         }
 
         public void setWifiSSID(String wifiSSID) {
             mWifiSSID = wifiSSID;
-        }
-
-        @Override
-        public int getLinkSpeedInMbps() {
-            return mLinkSpeedMbps;
-        }
-
-        public void setLinkSpeedInMbps(int linkSpeedInMbps) {
-            mLinkSpeedMbps = linkSpeedInMbps;
         }
     }
 
@@ -315,7 +310,7 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
     private static class TestNetworkChangeNotifierAutoDetectObserver
             implements NetworkChangeNotifierAutoDetect.Observer {
         // The list of network changes that have been witnessed.
-        final ArrayList<ChangeInfo> mChanges = new ArrayList<ChangeInfo>();
+        final ArrayList<ChangeInfo> mChanges = new ArrayList<>();
 
         @Override
         public void onConnectionTypeChanged(int newConnectionType) {}
@@ -379,7 +374,22 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
      *            it is in the foreground.
      */
     private void createTestNotifier(WatchForChanges watchForChanges) {
-        Context context = getInstrumentation().getTargetContext();
+        Context context = new ContextWrapper(getInstrumentation().getTargetContext()) {
+            // Mock out to avoid unintended system interaction.
+            @Override
+            public Intent registerReceiver(BroadcastReceiver receiver, IntentFilter filter) {
+                return null;
+            }
+
+            @Override
+            public void unregisterReceiver(BroadcastReceiver receiver) {}
+
+            // Don't allow escaping the mock via the application context.
+            @Override
+            public Context getApplicationContext() {
+                return this;
+            }
+        };
         mNotifier = new TestNetworkChangeNotifier(context);
         NetworkChangeNotifier.resetInstanceForTests(mNotifier);
         if (watchForChanges == WatchForChanges.ALWAYS) {
@@ -409,7 +419,7 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
     private int getCurrentConnectionType() {
         final NetworkChangeNotifierAutoDetect.NetworkState networkState =
                 mReceiver.getCurrentNetworkState();
-        return mReceiver.getCurrentConnectionType(networkState);
+        return NetworkChangeNotifierAutoDetect.convertToConnectionType(networkState);
     }
 
     // Create Network object given a NetID.
@@ -424,13 +434,13 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
     @Override
     protected void setUp() throws Exception {
         super.setUp();
-        LibraryLoader.get(LibraryProcessType.PROCESS_BROWSER)
-                .ensureInitialized(getInstrumentation().getTargetContext());
+        LibraryLoader.get(LibraryProcessType.PROCESS_BROWSER).ensureInitialized();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             // Find Network.Network(int netId) using reflection.
             mNetworkConstructor = Network.class.getConstructor(Integer.TYPE);
         }
         ThreadUtils.postOnUiThread(new Runnable() {
+            @Override
             public void run() {
                 createTestNotifier(WatchForChanges.ONLY_WHEN_APP_IN_FOREGROUND);
             }
@@ -493,37 +503,6 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
     }
 
     /**
-     * Tests that changing the RSSI_CHANGED_ACTION intent updates MaxBandwidth.
-     */
-    @UiThreadTest
-    @MediumTest
-    @Feature({"Android-AppBase"})
-    public void testNetworkChangeNotifierRSSIEventUpdatesMaxBandwidthForWiFi()
-            throws InterruptedException {
-        NetworkChangeNotifier notifier = NetworkChangeNotifier.getInstance();
-        mConnectivityDelegate.setNetworkType(ConnectivityManager.TYPE_WIFI);
-        mWifiDelegate.setLinkSpeedInMbps(42);
-        Intent intent = new Intent(WifiManager.RSSI_CHANGED_ACTION);
-        mReceiver.onReceive(getInstrumentation().getTargetContext(), intent);
-
-        assertEquals(42.0, notifier.getCurrentMaxBandwidthInMbps());
-
-        // Changing the link speed has no effect until the intent fires.
-        mWifiDelegate.setLinkSpeedInMbps(80);
-        assertEquals(42.0, notifier.getCurrentMaxBandwidthInMbps());
-
-        // Fire the intent.
-        mReceiver.onReceive(getInstrumentation().getTargetContext(), intent);
-        assertEquals(80.0, notifier.getCurrentMaxBandwidthInMbps());
-
-        // Firing a network type change intent also causes max bandwidth to update.
-        mWifiDelegate.setLinkSpeedInMbps(20);
-        intent = new Intent(ConnectivityManager.CONNECTIVITY_ACTION);
-        mReceiver.onReceive(getInstrumentation().getTargetContext(), intent);
-        assertEquals(20.0, notifier.getCurrentMaxBandwidthInMbps());
-    }
-
-    /**
      * Tests that changing the network type changes the maxBandwidth.
      */
     @UiThreadTest
@@ -540,11 +519,10 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
     @MediumTest
     @Feature({"Android-AppBase"})
     public void testNetworkChangeNotifierMaxBandwidthWifi() throws InterruptedException {
-        // Test that for wifi types the link speed is read from the WifiManager.
-        mWifiDelegate.setLinkSpeedInMbps(42);
+        // Show that for WiFi the link speed is unknown (+Infinity).
         mConnectivityDelegate.setNetworkType(ConnectivityManager.TYPE_WIFI);
         assertEquals(ConnectionType.CONNECTION_WIFI, getCurrentConnectionType());
-        assertEquals(42.0, getCurrentMaxBandwidthInMbps());
+        assertEquals(Double.POSITIVE_INFINITY, getCurrentMaxBandwidthInMbps());
     }
 
     @UiThreadTest
@@ -648,7 +626,6 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
         // Initialize the NetworkChangeNotifier with a connection.
         mConnectivityDelegate.setActiveNetworkExists(true);
         mConnectivityDelegate.setNetworkType(ConnectivityManager.TYPE_WIFI);
-        mWifiDelegate.setLinkSpeedInMbps(1);
         Intent connectivityIntent = new Intent(ConnectivityManager.CONNECTIVITY_ACTION);
         mReceiver.onReceive(getInstrumentation().getTargetContext(), connectivityIntent);
         assertTrue(mNotifier.hasReceivedMaxBandwidthNotification());
@@ -659,12 +636,6 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
         NetworkChangeNotifier.addConnectionTypeObserver(observer);
         mReceiver.onReceive(getInstrumentation().getTargetContext(), connectivityIntent);
         assertFalse(mNotifier.hasReceivedMaxBandwidthNotification());
-
-        // We should be notified if the bandwidth changed but not the connection type.
-        mWifiDelegate.setLinkSpeedInMbps(2);
-        mReceiver.onReceive(getInstrumentation().getTargetContext(), connectivityIntent);
-        assertTrue(mNotifier.hasReceivedMaxBandwidthNotification());
-        mNotifier.resetHasReceivedMaxBandwidthNotification();
 
         // We should be notified if bandwidth and connection type changed.
         mConnectivityDelegate.setNetworkType(ConnectivityManager.TYPE_ETHERNET);
@@ -710,18 +681,16 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
     public void testConnectivityManagerDelegateDoesNotCrash() {
         ConnectivityManagerDelegate delegate =
                 new ConnectivityManagerDelegate(getInstrumentation().getTargetContext());
-        delegate.getNetworkState();
+        delegate.getNetworkState(new WifiManagerDelegate(getInstrumentation().getTargetContext()));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            // getNetworkState(Network) doesn't crash upon invalid Network argument.
+            // getConnectionType(Network) doesn't crash upon invalid Network argument.
             Network invalidNetwork = netIdToNetwork(NetId.INVALID);
-            NetworkState invalidNetworkState = delegate.getNetworkState(invalidNetwork);
-            assertFalse(invalidNetworkState.isConnected());
-            assertEquals(-1, invalidNetworkState.getNetworkType());
-            assertEquals(-1, invalidNetworkState.getNetworkSubType());
+            assertEquals(
+                    ConnectionType.CONNECTION_NONE, delegate.getConnectionType(invalidNetwork));
 
             Network[] networks = delegate.getAllNetworksUnfiltered();
             if (networks.length >= 1) {
-                delegate.getNetworkState(networks[0]);
+                delegate.getConnectionType(networks[0]);
             }
             delegate.getDefaultNetId();
             NetworkCallback networkCallback = new NetworkCallback();
@@ -796,8 +765,8 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
             }
 
             @Override
-            public NetworkState getNetworkState(Network network) {
-                return new NetworkState(false, -1, -1);
+            public int getConnectionType(Network network) {
+                return ConnectionType.CONNECTION_NONE;
             }
         });
 
@@ -831,6 +800,7 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
                 new TestNetworkChangeNotifierAutoDetectObserver();
         Callable<NetworkChangeNotifierAutoDetect> callable =
                 new Callable<NetworkChangeNotifierAutoDetect>() {
+                    @Override
                     public NetworkChangeNotifierAutoDetect call() {
                         return new NetworkChangeNotifierAutoDetect(
                                 observer, context, new RegistrationPolicyApplicationStatus() {
@@ -846,8 +816,7 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
                                 });
                     }
                 };
-        FutureTask<NetworkChangeNotifierAutoDetect> task =
-                new FutureTask<NetworkChangeNotifierAutoDetect>(callable);
+        FutureTask<NetworkChangeNotifierAutoDetect> task = new FutureTask<>(callable);
         ThreadUtils.postOnUiThread(task);
         NetworkChangeNotifierAutoDetect ncn = task.get();
 

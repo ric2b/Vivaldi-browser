@@ -71,9 +71,9 @@ class ComponentCloudPolicyStoreTest : public testing::Test {
  protected:
   void SetUp() override {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
-    cache_.reset(new ResourceCache(
-        temp_dir_.path(),
-        make_scoped_refptr(new base::TestSimpleTaskRunner)));
+    cache_.reset(
+        new ResourceCache(temp_dir_.GetPath(),
+                          make_scoped_refptr(new base::TestSimpleTaskRunner)));
     store_.reset(new ComponentCloudPolicyStore(&store_delegate_, cache_.get()));
     store_->SetCredentials(ComponentPolicyBuilder::kFakeUsername,
                            ComponentPolicyBuilder::kFakeToken);
@@ -88,10 +88,10 @@ class ComponentCloudPolicyStoreTest : public testing::Test {
     PolicyMap& policy = expected_bundle_.Get(ns);
     policy.Set("Name", POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
                POLICY_SOURCE_CLOUD,
-               base::WrapUnique(new base::StringValue("disabled")), nullptr);
+               base::MakeUnique<base::StringValue>("disabled"), nullptr);
     policy.Set("Second", POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_USER,
                POLICY_SOURCE_CLOUD,
-               base::WrapUnique(new base::StringValue("maybe")), nullptr);
+               base::MakeUnique<base::StringValue>("maybe"), nullptr);
   }
 
   // Returns true if the policy exposed by the |store_| is empty.
@@ -101,7 +101,7 @@ class ComponentCloudPolicyStoreTest : public testing::Test {
 
   std::unique_ptr<em::PolicyFetchResponse> CreateResponse() {
     builder_.Build();
-    return base::WrapUnique(new em::PolicyFetchResponse(builder_.policy()));
+    return base::MakeUnique<em::PolicyFetchResponse>(builder_.policy());
   }
 
   std::string CreateSerializedResponse() {

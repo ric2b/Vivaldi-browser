@@ -19,6 +19,7 @@ class ChooserController;
 @interface ChooserContentViewCocoa : NSView {
  @private
   base::scoped_nsobject<NSTextField> titleView_;
+  base::scoped_nsobject<NSButton> adapterOffHelpButton_;
   base::scoped_nsobject<NSScrollView> scrollView_;
   base::scoped_nsobject<NSTableColumn> tableColumn_;
   base::scoped_nsobject<NSTableView> tableView_;
@@ -71,7 +72,7 @@ class ChooserController;
 - (base::scoped_nsobject<NSTextField>)createChooserTitle:(NSString*)title;
 
 // Creates a table row view for the chooser.
-- (base::scoped_nsobject<NSView>)createTableRowView:(NSInteger)rowIndex;
+- (base::scoped_nsobject<NSView>)createTableRowView:(NSInteger)row;
 
 // The height of a table row view.
 - (CGFloat)tableRowViewHeight:(NSInteger)row;
@@ -87,9 +88,6 @@ class ChooserController;
 
 // Creates the separator.
 - (base::scoped_nsobject<NSBox>)createSeparator;
-
-// Creates a text field with |text|.
-- (base::scoped_nsobject<NSTextField>)createTextField:(NSString*)text;
 
 // Creates a hyperlink button with |text|.
 - (base::scoped_nsobject<NSButton>)createHyperlinkButtonWithText:
@@ -112,6 +110,9 @@ class ChooserController;
 
 // Updates the origin and size of the view.
 - (void)updateView;
+
+// Gets the adapter off help button.
+- (NSButton*)adapterOffHelpButton;
 
 // Gets the table view for the chooser.
 - (NSTableView*)tableView;
@@ -152,17 +153,27 @@ class ChooserController;
 // Called when the chooser is closed.
 - (void)close;
 
+// Called when the adapter off help button is pressed.
+- (void)onAdapterOffHelp:(id)sender;
+
 // Called when "Re-scan" button is pressed.
 - (void)onRescan:(id)sender;
 
 // Called when the "Get help" button is pressed.
 - (void)onHelpPressed:(id)sender;
 
-// Gets the image from table row view. For testing only.
+// Update the color of the image and text in the table row view.
+- (void)updateContentRowColor;
+
+// Gets the image from table row view. For testing and internal use only.
 - (NSImageView*)tableRowViewImage:(NSInteger)row;
 
-// Gets the text from table row view. For testing only.
+// Gets the text from table row view. For testing and internal use only.
 - (NSTextField*)tableRowViewText:(NSInteger)row;
+
+// Gets the paired status from table row view. For testing and internal use
+// only.
+- (NSTextField*)tableRowViewPairedStatus:(NSInteger)row;
 
 @end
 

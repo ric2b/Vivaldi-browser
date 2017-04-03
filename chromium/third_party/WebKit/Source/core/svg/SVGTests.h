@@ -22,7 +22,6 @@
 #define SVGTests_h
 
 #include "core/CoreExport.h"
-#include "core/svg/SVGStaticStringList.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
@@ -30,29 +29,31 @@ namespace blink {
 class Document;
 class QualifiedName;
 class SVGElement;
+class SVGStaticStringList;
+class SVGStringListTearOff;
 
 class CORE_EXPORT SVGTests : public GarbageCollectedMixin {
-public:
-    // JS API
-    SVGStringListTearOff* requiredFeatures() { return m_requiredFeatures->tearOff(); }
-    SVGStringListTearOff* requiredExtensions() { return m_requiredExtensions->tearOff(); }
-    SVGStringListTearOff* systemLanguage() { return m_systemLanguage->tearOff(); }
+ public:
+  // JS API
+  SVGStringListTearOff* requiredFeatures();
+  SVGStringListTearOff* requiredExtensions();
+  SVGStringListTearOff* systemLanguage();
 
-    bool isValid() const;
+  bool isValid() const;
 
-    bool isKnownAttribute(const QualifiedName&);
+  bool isKnownAttribute(const QualifiedName&);
 
-    DECLARE_VIRTUAL_TRACE();
+  DECLARE_VIRTUAL_TRACE();
 
-protected:
-    explicit SVGTests(SVGElement* contextElement);
+ protected:
+  explicit SVGTests(SVGElement* contextElement);
 
-private:
-    Member<SVGStaticStringList> m_requiredFeatures;
-    Member<SVGStaticStringList> m_requiredExtensions;
-    Member<SVGStaticStringList> m_systemLanguage;
+ private:
+  Member<SVGStaticStringList> m_requiredFeatures;
+  Member<SVGStaticStringList> m_requiredExtensions;
+  Member<SVGStaticStringList> m_systemLanguage;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // SVGTests_h
+#endif  // SVGTests_h

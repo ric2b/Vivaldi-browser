@@ -1,11 +1,11 @@
 include_rules = [
     "+bindings",
     "+core",
-    "+heap",
     "-modules",
     "+modules/EventModules.h",
     "+modules/EventTargetModules.h",
     "+modules/ModulesExport.h",
+    "+modules/permissions",
     "+modules/webmidi",
     "+platform",
     "+public/platform",

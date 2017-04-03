@@ -4,10 +4,9 @@
 
 #include "chrome/browser/ui/views/frame/immersive_mode_controller_ash.h"
 
-#include "ash/common/ash_switches.h"
 #include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/shelf/shelf_layout_manager.h"
-#include "ash/common/shelf/shelf_types.h"
+#include "ash/public/cpp/shelf_types.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
@@ -135,7 +134,7 @@ TEST_F(ImmersiveModeControllerAshTest, Layout) {
   // For MD, the browser's top chrome is completely hidden in immersive
   // fullscreen mode.
   bool is_using_material_design =
-      ash::MaterialDesignController::IsShelfMaterial();
+      ash::MaterialDesignController::IsImmersiveModeMaterial();
   if (is_using_material_design) {
     EXPECT_FALSE(tabstrip->visible());
   } else {
@@ -262,13 +261,13 @@ TEST_F(ImmersiveModeControllerAshTest, TabAndBrowserFullscreen) {
   ToggleFullscreen();
   ASSERT_TRUE(controller()->IsEnabled());
   EXPECT_EQ(ash::SHELF_AUTO_HIDE, shelf->visibility_state());
-  if (!ash::MaterialDesignController::IsShelfMaterial())
+  if (!ash::MaterialDesignController::IsImmersiveModeMaterial())
     EXPECT_FALSE(controller()->ShouldHideTabIndicators());
 
   SetTabFullscreen(true);
   ASSERT_TRUE(controller()->IsEnabled());
   EXPECT_EQ(ash::SHELF_HIDDEN, shelf->visibility_state());
-  if (!ash::MaterialDesignController::IsShelfMaterial())
+  if (!ash::MaterialDesignController::IsImmersiveModeMaterial())
     EXPECT_TRUE(controller()->ShouldHideTabIndicators());
 
   // 2) Test that exiting tab fullscreen shows the tab indicators and autohides
@@ -276,7 +275,7 @@ TEST_F(ImmersiveModeControllerAshTest, TabAndBrowserFullscreen) {
   SetTabFullscreen(false);
   ASSERT_TRUE(controller()->IsEnabled());
   EXPECT_EQ(ash::SHELF_AUTO_HIDE, shelf->visibility_state());
-  if (!ash::MaterialDesignController::IsShelfMaterial())
+  if (!ash::MaterialDesignController::IsImmersiveModeMaterial())
     EXPECT_FALSE(controller()->ShouldHideTabIndicators());
 
   // 3) Test that exiting tab fullscreen and immersive fullscreen
@@ -286,7 +285,7 @@ TEST_F(ImmersiveModeControllerAshTest, TabAndBrowserFullscreen) {
   ToggleFullscreen();
   ASSERT_FALSE(controller()->IsEnabled());
   EXPECT_EQ(ash::SHELF_VISIBLE, shelf->visibility_state());
-  if (!ash::MaterialDesignController::IsShelfMaterial())
+  if (!ash::MaterialDesignController::IsImmersiveModeMaterial())
     EXPECT_TRUE(controller()->ShouldHideTabIndicators());
 }
 

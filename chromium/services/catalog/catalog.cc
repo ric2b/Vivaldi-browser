@@ -14,10 +14,12 @@
 #include "components/filesystem/directory_impl.h"
 #include "components/filesystem/lock_table.h"
 #include "components/filesystem/public/interfaces/types.mojom.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/catalog/constants.h"
 #include "services/catalog/instance.h"
 #include "services/catalog/reader.h"
 #include "services/shell/public/cpp/connection.h"
+#include "services/shell/public/cpp/names.h"
 #include "services/shell/public/cpp/service_context.h"
 
 namespace catalog {
@@ -37,19 +39,21 @@ bool IsPathNameValid(const std::string& name) {
 
 base::FilePath GetPathForApplicationName(const std::string& application_name) {
   std::string path = application_name;
-  const bool is_mojo =
-      base::StartsWith(path, "mojo:", base::CompareCase::INSENSITIVE_ASCII);
+  const bool is_service =
+      base::StartsWith(path, "service:", base::CompareCase::INSENSITIVE_ASCII);
   const bool is_exe =
-      !is_mojo &&
+      !is_service &&
       base::StartsWith(path, "exe:", base::CompareCase::INSENSITIVE_ASCII);
-  if (!is_mojo && !is_exe)
+  if (!is_service && !is_exe)
     return base::FilePath();
   if (path.find('.') != std::string::npos)
     return base::FilePath();
-  if (is_mojo)
-    path.erase(path.begin(), path.begin() + 5);
-  else
-    path.erase(path.begin(), path.begin() + 4);
+  if (is_service) {
+    path.erase(path.begin(),
+      path.begin() + strlen(shell::kNameType_Service) + 1);
+  } else {
+    path.erase(path.begin(), path.begin() + strlen(shell::kNameType_Exe) + 1);
+  }
   base::TrimString(path, "/", &path);
   size_t end_of_name = path.find('/');
   if (end_of_name != std::string::npos)
@@ -130,9 +134,11 @@ void Catalog::Create(const shell::Identity& remote_identity,
     lock_table_ = new filesystem::LockTable;
   base::FilePath resources_path =
       GetPathForApplicationName(remote_identity.name());
-  new filesystem::DirectoryImpl(std::move(request), resources_path,
-                                scoped_refptr<filesystem::SharedTempDir>(),
-                                lock_table_);
+  mojo::MakeStrongBinding(
+      base::MakeUnique<filesystem::DirectoryImpl>(
+          resources_path, scoped_refptr<filesystem::SharedTempDir>(),
+          lock_table_),
+      std::move(request));
 }
 
 Instance* Catalog::GetInstanceForUserId(const std::string& user_id) {

@@ -24,22 +24,22 @@ class InterfaceProvider;
 namespace media {
 
 class AudioDecoder;
+class AudioRendererSink;
 class CdmFactory;
 class MediaLog;
-class Renderer;
+class RendererFactory;
 class VideoDecoder;
+class VideoRendererSink;
 
 class MEDIA_MOJO_EXPORT MojoMediaClient {
  public:
+  // Called before the host application is scheduled to quit.
+  // The application message loop is still valid at this point, so all clean
+  // up tasks requiring the message loop must be completed before returning.
   virtual ~MojoMediaClient();
 
   // Called exactly once before any other method.
   virtual void Initialize();
-
-  // Called before the host application is scheduled to quit.
-  // The application message loop is still valid at this point, so all clean
-  // up tasks requiring the message loop must be completed before returning.
-  virtual void WillQuit();
 
   virtual std::unique_ptr<AudioDecoder> CreateAudioDecoder(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
@@ -47,14 +47,19 @@ class MEDIA_MOJO_EXPORT MojoMediaClient {
   virtual std::unique_ptr<VideoDecoder> CreateVideoDecoder(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
-  // TODO(xhwang): Consider creating CDM directly in the client
-  // instead of creating factories. See http://crbug.com/586211
-
-  // Creates and returns a Renderer.
-  virtual std::unique_ptr<Renderer> CreateRenderer(
-      scoped_refptr<base::SingleThreadTaskRunner> media_task_runner,
-      scoped_refptr<MediaLog> media_log,
+  // Returns the output sink used for rendering audio on |audio_device_id|.
+  // May be null if the RendererFactory doesn't need an audio sink.
+  virtual scoped_refptr<AudioRendererSink> CreateAudioRendererSink(
       const std::string& audio_device_id);
+
+  // Returns the output sink used for rendering video.
+  // May be null if the RendererFactory doesn't need a video sink.
+  virtual std::unique_ptr<VideoRendererSink> CreateVideoRendererSink(
+      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner);
+
+  // Returns the RendererFactory to be used by MojoRendererService.
+  virtual std::unique_ptr<RendererFactory> CreateRendererFactory(
+      const scoped_refptr<MediaLog>& media_log);
 
   // Returns the CdmFactory to be used by MojoCdmService.
   virtual std::unique_ptr<CdmFactory> CreateCdmFactory(

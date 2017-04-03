@@ -13,8 +13,9 @@
 <translation id="1103124106085518534">Готово</translation>
 <translation id="1103523840287552314">Завжди перекладати з такої мови: <ph name="LANGUAGE" /></translation>
 <translation id="1107591249535594099">Якщо вибрати цю опцію, Chrome зберігатиме копію даних вашої картки на цьому пристрої для швидшого заповнення форм.</translation>
-<translation id="1111153019813902504">Останні закладки.</translation>
+<translation id="1111153019813902504">Останні закладки</translation>
 <translation id="1113869188872983271">&amp;Відмінити перевпорядкування</translation>
+<translation id="1126551341858583091">Обсяг локальної пам’яті – <ph name="CRASH_SIZE" />.</translation>
 <translation id="112840717907525620">Кеш-пам’ять правила не пошкоджено</translation>
 <translation id="113188000913989374">Повідомлення із сайту <ph name="SITE" />:</translation>
 <translation id="1132774398110320017">Налаштування автозаповнення Chrome…</translation>
@@ -79,7 +80,6 @@
 <translation id="1871208020102129563">Проксі-сервер налаштовано на використання фіксованих проксі-серверів, а не URL-адреси сценарію .pac.</translation>
 <translation id="1883255238294161206">Згорнути список</translation>
 <translation id="1898423065542865115">Фільтрування</translation>
-<translation id="1911837502049945214">Хост <ph name="HOST_NAME" /> не прийняв ваш сертифікат входу або термін дії сертифіката закінчився.</translation>
 <translation id="194030505837763158">Перейдіть за адресою <ph name="LINK" /></translation>
 <translation id="1962204205936693436">Закладки <ph name="DOMAIN" /></translation>
 <translation id="1973335181906896915">Помилка серіалізації</translation>
@@ -172,10 +172,8 @@
 <translation id="2824775600643448204">Адресний і пошуковий рядок</translation>
 <translation id="2826760142808435982">З’єднання зашифровано й автентифіковано з використанням шифру <ph name="CIPHER" /> і використовує механізм обміну ключами <ph name="KX" />.</translation>
 <translation id="2835170189407361413">Очистити форму</translation>
-<translation id="2837049386027881519">Потрібно повторити спробу з'єднання за допомогою старішої версії протоколу TLS або SSL. Переважно це означає, що сервер використовує дуже застаріле програмне забезпечення та може мати й інші проблеми безпеки.</translation>
 <translation id="284702764277384724">Схоже, сертифікат сервера на хості <ph name="HOST_NAME" /> підроблено.</translation>
 <translation id="2889159643044928134">Не оновлювати</translation>
-<translation id="2896499918916051536">Цей плагін не підтримується.</translation>
 <translation id="2900469785430194048">Недостатньо пам’яті Google Chrome, щоб показати цю веб-сторінку.</translation>
 <translation id="2909946352844186028">Виявлено зміну в мережі.</translation>
 <translation id="2922350208395188000">Сертифікат сервера неможливо перевірити.</translation>
@@ -217,8 +215,10 @@
 <translation id="3254409185687681395">Додати цю сторінку до закладок</translation>
 <translation id="3270847123878663523">&amp;Відмінити перевпорядкування</translation>
 <translation id="3286538390144397061">Перезапустити зараз</translation>
+<translation id="3303855915957856445">Немає результатів</translation>
 <translation id="3305707030755673451">Ваші дані було зашифровано <ph name="TIME" /> за допомогою парольної фрази для синхронізації. Введіть її, щоб почати синхронізацію.</translation>
 <translation id="333371639341676808">Заборонити створення додаткових діалогових вікон цією сторінкою.</translation>
+<translation id="3338095232262050444">Надійне</translation>
 <translation id="3340978935015468852">налаштування</translation>
 <translation id="3345135638360864351">Не вдалося надіслати запит на доступ до цього сайту користувачеві <ph name="NAME" />. Повторіть спробу.</translation>
 <translation id="3355823806454867987">Змінити налаштування проксі...</translation>
@@ -290,6 +290,7 @@
 <translation id="3963721102035795474">Режим перегляду</translation>
 <translation id="397105322502079400">Обчислення...</translation>
 <translation id="3973234410852337861">Хост <ph name="HOST_NAME" /> заблокований</translation>
+<translation id="40103911065039147">{URL_count,plural, =1{1 веб-сторінка поруч}one{# веб-сторінка поруч}few{# веб-сторінки поруч}many{# веб-сторінок поруч}other{# веб-сторінки поруч}}</translation>
 <translation id="4021036232240155012">DNS – це мережева служба, яка перетворює назву веб-сайту на його інтернет-адресу.</translation>
 <translation id="4030383055268325496">&amp;Відмінити додавання</translation>
 <translation id="404928562651467259">ЗАСТЕРЕЖЕННЯ</translation>
@@ -320,11 +321,13 @@
 <translation id="4304224509867189079">Вхід</translation>
 <translation id="432290197980158659">Сервер надав сертифікат, який не відповідає очікуваним вбудованим параметрам. Ці очікувані параметри включено для певних веб-сайтів із високим рівнем безпеки, щоб захистити вас. <ph name="BEGIN_LEARN_MORE_LINK" />Докладніше<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="4325863107915753736">Статтю не знайдено</translation>
+<translation id="4331708818696583467">Ненадійне</translation>
 <translation id="4372948949327679948">Очікуване значення: <ph name="VALUE_TYPE" />.</translation>
 <translation id="4381091992796011497">Ім’я користувача:</translation>
 <translation id="4394049700291259645">Вимкнути</translation>
 <translation id="4395129973926795186"><ph name="START_DATE" /> – <ph name="END_DATE" /></translation>
 <translation id="4406896451731180161">результати пошуку</translation>
+<translation id="4432688616882109544">Хост <ph name="HOST_NAME" /> не прийняв ваш сертифікат входу або ви не надали цей сертифікат.</translation>
 <translation id="443673843213245140">Використання проксі-сервера вимкнено, але чітко вказано налаштування проксі-сервера.</translation>
 <translation id="4458874409874303848">SafeSites</translation>
 <translation id="4461847750548395463">Ви бачите це повідомлення, оскільки ввімкнено Google SafeSites.</translation>
@@ -339,6 +342,7 @@
 <translation id="4589078953350245614">Ви намагалися зв’язатися з доменом <ph name="DOMAIN" />, але сервер надав недійсний сертифікат. <ph name="BEGIN_LEARN_MORE_LINK" />Докладніше<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="4592951414987517459">З’єднання з доменом <ph name="DOMAIN" /> шифрується за допомогою сучасного набору шифрів.</translation>
 <translation id="4594403342090139922">&amp;Відмінити видалення</translation>
+<translation id="4627442949885028695">Продовжити на іншому пристрої</translation>
 <translation id="4668929960204016307">,</translation>
 <translation id="4670097147947922288">Ви переглядаєте сторінку розширень.</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
@@ -359,14 +363,15 @@
 <translation id="4880827082731008257">Пошук в історії</translation>
 <translation id="4884656795097055129">Згодом тут з’являться інші статті.</translation>
 <translation id="4895877746940133817"><ph name="TYPE_1" />, <ph name="TYPE_2" />, <ph name="TYPE_3" /></translation>
+<translation id="4914479371620770914">{URL_count,plural, =1{і ще 1 веб-сторінка}one{і ще # веб-сторінка}few{і ще # веб-сторінки}many{і ще # веб-сторінок}other{і ще # веб-сторінки}}</translation>
 <translation id="4923417429809017348">Цю сторінку перекладено з невідомої мови оригіналу такою мовою: <ph name="LANGUAGE_LANGUAGE" /></translation>
 <translation id="4926049483395192435">Потрібно вказати.</translation>
 <translation id="4930497775425430760">Ви бачите це повідомлення, оскільки один із ваших батьків має схвалити сайти, які ви відвідуєте вперше.</translation>
 <translation id="495170559598752135">Дії</translation>
 <translation id="4958444002117714549">Розгорнути список</translation>
 <translation id="4962322354953122629">Не вдалося підтвердити, що це сервер <ph name="DOMAIN" />. Chrome вважає його сертифікат безпеки ненадійним. Імовірні причини: сервер налаштовано неправильно або хтось намагається перехопити ваше з’єднання. <ph name="BEGIN_LEARN_MORE_LINK" />Докладніше<ph name="END_LEARN_MORE_LINK" />.</translation>
-<translation id="4986920000862467124">Усе прочитано</translation>
 <translation id="498957508165411911">Перекласти цю мовну пару: <ph name="ORIGINAL_LANGUAGE" /> – <ph name="TARGET_LANGUAGE" />?</translation>
+<translation id="4989809363548539747">Цей плагін не підтримується</translation>
 <translation id="5002932099480077015">Коли цю функцію ввімкнено, Chrome зберігає копію даних вашої картки на пристрої, щоб ви могли швидше заповнювати форми.</translation>
 <translation id="5019198164206649151">Резервний носій пошкоджено</translation>
 <translation id="5023310440958281426">Перегляньте правила свого адміністратора</translation>
@@ -380,7 +385,6 @@
 <translation id="5089810972385038852">Штат</translation>
 <translation id="5095208057601539847">Провінція чи область</translation>
 <translation id="5115563688576182185">(64-розрядна версія)</translation>
-<translation id="5122371513570456792">Знайдено результатів за запитом "<ph name="SEARCH_STRING" />": <ph name="NUMBER_OF_RESULTS" /> <ph name="SEARCH_RESULTS" />.</translation>
 <translation id="5141240743006678641">Шифрувати синхронізовані паролі за допомогою облікових даних Google</translation>
 <translation id="5145883236150621069">Відповідь правила містить код помилки</translation>
 <translation id="5171045022955879922">Знайдіть або введіть URL-адресу</translation>
@@ -388,8 +392,8 @@
 <translation id="5179510805599951267">Це не <ph name="ORIGINAL_LANGUAGE" />? Повідомте про помилку</translation>
 <translation id="5190835502935405962">Панель закладок</translation>
 <translation id="5199729219167945352">Експерименти</translation>
-<translation id="52060377617855516">{URL_count,plural, =1{Знайдено 1 веб-сторінку}one{Знайдено # веб-сторінку}few{Знайдено # веб-сторінки}many{Знайдено # веб-сторінок}other{Знайдено # веб-сторінки}}</translation>
 <translation id="5251803541071282808">Хмара</translation>
+<translation id="5277279256032773186">Користуєтеся Chrome на роботі? Компанії можуть налаштовувати Chrome для своїх працівників. Докладніше</translation>
 <translation id="5299298092464848405">Помилка аналізу правила</translation>
 <translation id="5300589172476337783">Показати</translation>
 <translation id="5308689395849655368">Повідомлення про аварійне завершення роботи вимкнено.</translation>
@@ -423,7 +427,6 @@
 <translation id="5622887735448669177">Покинути цей сайт?</translation>
 <translation id="5629630648637658800">Помилка завантаження налаштувань правила</translation>
 <translation id="5631439013527180824">Недійсний маркер керування пристрою</translation>
-<translation id="5650551054760837876">Результаті пошуку відсутні.</translation>
 <translation id="5677928146339483299">Заблоковано</translation>
 <translation id="5710435578057952990">Ідентифікаційну інформацію цього веб-сайта не було перевірено.</translation>
 <translation id="5720705177508910913">Поточний користувач</translation>
@@ -462,7 +465,6 @@
 <translation id="6150607114729249911">Щоб відвідати цю сторінку, потрібен дозвіл батьків.</translation>
 <translation id="6151417162996330722">Сертифікат сервера має задовгий термін дії.</translation>
 <translation id="6165508094623778733">Докладніше</translation>
-<translation id="6180780615171238625">Зараз не можна перейти на сторінку <ph name="SITE" />, оскільки цей сертифікат відкликано. Помилки мережі й атаки зазвичай тимчасові, тому ця сторінка, скоріш за все, запрацює пізніше. <ph name="BEGIN_LEARN_MORE_LINK" />Докладніше<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="6203231073485539293">Перевірте з’єднання з Інтернетом</translation>
 <translation id="6218753634732582820">Видалити адресу з Chromium?</translation>
 <translation id="6259156558325130047">&amp;Повторити перевпорядкування</translation>
@@ -490,6 +492,7 @@
 <translation id="647261751007945333">Правила пристрою</translation>
 <translation id="6489534406876378309">Почати завантаження даних про аварійне завершення роботи</translation>
 <translation id="6529602333819889595">&amp;Повторити видалення</translation>
+<translation id="6534179046333460208">Пропозиції сервісу "Інтернет навколо нас"</translation>
 <translation id="6550675742724504774">Параметри</translation>
 <translation id="6593753688552673085">менше <ph name="UPPER_ESTIMATE" /></translation>
 <translation id="6596325263575161958">Параметри шифрування</translation>
@@ -523,8 +526,10 @@
 <translation id="6970216967273061347">Район або округ</translation>
 <translation id="6973656660372572881">Указано фіксовані проксі-сервери та URL-адреса сценарію .pac.</translation>
 <translation id="6989763994942163495">Показати розширені налаштування...</translation>
+<translation id="7000990526846637657">Немає записів в історії</translation>
 <translation id="7009986207543992532">Ви намагалися зв’язатися з доменом <ph name="DOMAIN" />, але сервер надав сертифікат із задовгим терміном дії. <ph name="BEGIN_LEARN_MORE_LINK" />Докладніше<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="7012363358306927923">China UnionPay</translation>
+<translation id="7012372675181957985">Історія веб-перегляду також може зберігатися у вашому обліковому записі Google на сторінці <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" /></translation>
 <translation id="7029809446516969842">Паролі</translation>
 <translation id="7087282848513945231">Округ або графство</translation>
 <translation id="7088615885725309056">Давніше</translation>
@@ -550,6 +555,7 @@
 <translation id="7309308571273880165">Звіт про аварійне завершення роботи створено <ph name="CRASH_TIME" /> (ще не завантажено)</translation>
 <translation id="7334320624316649418">&amp;Повторити перевпорядкування</translation>
 <translation id="733923710415886693">Сертифікат сервера не надав інформацію про перевірку.</translation>
+<translation id="7351800657706554155">Зараз не можна перейти на сторінку <ph name="SITE" />, оскільки її сертифікат відкликано. Помилки мережі й атаки зазвичай тимчасові, тому ця сторінка, скоріш за все, запрацює пізніше. <ph name="BEGIN_LEARN_MORE_LINK" />Докладніше<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="7353601530677266744">Командний рядок</translation>
 <translation id="7372973238305370288">результат пошуку</translation>
 <translation id="7377249249140280793"><ph name="RELATIVE_DATE" /> - <ph name="FULL_DATE" /></translation>
@@ -568,6 +574,7 @@
 <translation id="7469372306589899959">Підтвердження даних картки</translation>
 <translation id="7481312909269577407">Переслати</translation>
 <translation id="7485870689360869515">Даних не знайдено.</translation>
+<translation id="7508255263130623398">Отриманий ідентифікатор правил пристрою порожній або не збігається з поточним ідентифікатором пристрою</translation>
 <translation id="7514365320538308">Завантажити</translation>
 <translation id="7518003948725431193">Не знайдено веб-сторінок для веб-адреси <ph name="URL" /></translation>
 <translation id="7537536606612762813">Обов’язкове</translation>
@@ -577,6 +584,7 @@
 <translation id="7568593326407688803">Мова цієї сторінки:<ph name="ORIGINAL_LANGUAGE" />Перекласти її?</translation>
 <translation id="7569952961197462199">Видалити дані кредитної картки з Chrome?</translation>
 <translation id="7578104083680115302">Зберігайте картки в Google, щоб швидко платити на сайтах і в додатках на всіх своїх пристроях.</translation>
+<translation id="7588950540487816470">Інтернет навколо нас</translation>
 <translation id="7592362899630581445">Сертифікат сервера порушує обмежувальні умови щодо імен.</translation>
 <translation id="759889825892636187">Хост <ph name="HOST_NAME" /> зараз не може обробити цей запит.</translation>
 <translation id="7600965453749440009">Ніколи не перекладати з такої мови: <ph name="LANGUAGE" /></translation>
@@ -604,6 +612,7 @@
 <translation id="780301667611848630">Ні, дякую</translation>
 <translation id="7805768142964895445">Статус</translation>
 <translation id="7813600968533626083">Видалити дані для автозаповнення форм із Chrome?</translation>
+<translation id="7815407501681723534">Знайдено результатів за запитом "<ph name="SEARCH_STRING" />": <ph name="NUMBER_OF_RESULTS" /> <ph name="SEARCH_RESULTS" /></translation>
 <translation id="785549533363645510">Навіть у режимі анонімного перегляду ваш роботодавець, постачальник послуг Інтернету чи веб-сайти, які ви відвідуєте, можуть бачити, що ви переглядаєте.</translation>
 <translation id="7887683347370398519">Перевірте код CVC й повторіть спробу</translation>
 <translation id="7894616681410591072">Щоб отримати доступ до цієї сторінки, <ph name="NAME" /> має надати вам дозвіл.</translation>
@@ -619,7 +628,6 @@
 <translation id="7995512525968007366">Не вказано</translation>
 <translation id="8012647001091218357">Не вдалося зв’язатися з вашими батьками. Повторіть спробу.</translation>
 <translation id="8034522405403831421">Мова цієї сторінки: <ph name="SOURCE_LANGUAGE" />. Перекласти її такою мовою: <ph name="TARGET_LANGUAGE" />?</translation>
-<translation id="8034955203865359138">Записи в історії не знайдено.</translation>
 <translation id="8088680233425245692">Не вдалося переглянути статтю.</translation>
 <translation id="8089520772729574115">менше 1 Мб</translation>
 <translation id="8091372947890762290">Активація очікує на сервері</translation>
@@ -645,6 +653,7 @@
 <translation id="8349305172487531364">Панель закладок</translation>
 <translation id="8363502534493474904">вимкнути режим польоту</translation>
 <translation id="8364627913115013041">Не встановлено.</translation>
+<translation id="8380941800586852976">Небезпечна</translation>
 <translation id="8412145213513410671">Аварійне завершення роботи (<ph name="CRASH_COUNT" />)</translation>
 <translation id="8412392972487953978">Потрібно двічі ввести однакову парольну фразу.</translation>
 <translation id="8428213095426709021">Налаштування</translation>
@@ -671,7 +680,6 @@
 <translation id="8730621377337864115">Готово</translation>
 <translation id="8738058698779197622">Щоб установити безпечне з’єднання, потрібно правильно вказати час, оскільки сертифікати, які веб-сайти використовують для самоідентифікації дійсні лише протягом певного періоду часу. Час на вашому пристрої неправильний, тому Chromium не може перевірити сертифікати.</translation>
 <translation id="8740359287975076522">&lt;abbr id="dnsDefinition"&gt;Адресу DNS&lt;/abbr&gt; хосту <ph name="HOST_NAME" /> не знайдено. Діагностика проблеми.</translation>
-<translation id="8741995161408053644">У вашому обліковому записі Google на сторінці <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" /> можуть бути інші форми історії веб-перегляду.</translation>
 <translation id="8790007591277257123">&amp;Повторити видалення</translation>
 <translation id="8798099450830957504">За умовчанням</translation>
 <translation id="8804164990146287819">Політика конфіденційності</translation>

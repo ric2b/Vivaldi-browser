@@ -65,15 +65,19 @@ class V4UpdateProtocolManagerTest : public PlatformTest {
     }
   }
 
-  std::unique_ptr<V4UpdateProtocolManager> CreateProtocolManager(
-      const std::vector<ListUpdateResponse>& expected_lurs) {
+  V4ProtocolConfig GetProtocolConfig() {
     V4ProtocolConfig config;
     config.client_name = kClient;
     config.version = kAppVer;
     config.key_param = kKeyParam;
     config.disable_auto_update = false;
+    return config;
+  }
+
+  std::unique_ptr<V4UpdateProtocolManager> CreateProtocolManager(
+      const std::vector<ListUpdateResponse>& expected_lurs) {
     return V4UpdateProtocolManager::Create(
-        NULL, config,
+        NULL, GetProtocolConfig(),
         base::Bind(&V4UpdateProtocolManagerTest::ValidateGetUpdatesResults,
                    base::Unretained(this), expected_lurs));
   }
@@ -81,14 +85,13 @@ class V4UpdateProtocolManagerTest : public PlatformTest {
   void SetupStoreStates() {
     store_state_map_ = base::MakeUnique<StoreStateMap>();
 
-    UpdateListIdentifier win_url_malware(WINDOWS_PLATFORM, URL, MALWARE_THREAT);
+    ListIdentifier win_url_malware(WINDOWS_PLATFORM, URL, MALWARE_THREAT);
     store_state_map_->insert({win_url_malware, "initial_state_1"});
 
-    UpdateListIdentifier win_url_uws(WINDOWS_PLATFORM, URL, UNWANTED_SOFTWARE);
+    ListIdentifier win_url_uws(WINDOWS_PLATFORM, URL, UNWANTED_SOFTWARE);
     store_state_map_->insert({win_url_uws, "initial_state_2"});
 
-    UpdateListIdentifier win_exe_uws(WINDOWS_PLATFORM, EXECUTABLE,
-                                     UNWANTED_SOFTWARE);
+    ListIdentifier win_exe_uws(WINDOWS_PLATFORM, EXECUTABLE, UNWANTED_SOFTWARE);
     store_state_map_->insert({win_exe_uws, "initial_state_3"});
   }
 
@@ -141,7 +144,6 @@ class V4UpdateProtocolManagerTest : public PlatformTest {
   std::unique_ptr<StoreStateMap> store_state_map_;
 };
 
-// TODO(vakh): Add many more tests.
 TEST_F(V4UpdateProtocolManagerTest, TestGetUpdatesErrorHandlingNetwork) {
   scoped_refptr<base::TestSimpleTaskRunner> runner(
       new base::TestSimpleTaskRunner());
@@ -302,28 +304,20 @@ TEST_F(V4UpdateProtocolManagerTest, TestBase64EncodingUsesUrlEncoding) {
   // NOTE(vakh): I handpicked this value for state by generating random strings
   // and picked the one that leads to a '-' in the base64 url encoded request
   // output.
-  std::string state_minus = "z-R~3ruViQH";
-  StoreStateMap store_state_map_minus{
-      {UpdateListIdentifier(LINUX_PLATFORM, URL, MALWARE_THREAT), state_minus}};
-  std::string encoded_request_with_minus =
-      V4UpdateProtocolManager::GetBase64SerializedUpdateRequestProto(
-          store_state_map_minus);
-  EXPECT_EQ("GhkIARACGgt6LVJ-M3J1VmlRSCIEIAEgAigB", encoded_request_with_minus);
+  store_state_map_->clear();
+  (*store_state_map_)[ListIdentifier(LINUX_PLATFORM, URL, MALWARE_THREAT)] =
+      "h8xfYqY>:R";
+  std::unique_ptr<V4UpdateProtocolManager> pm(
+      CreateProtocolManager(std::vector<ListUpdateResponse>({})));
+  pm->store_state_map_ = std::move(store_state_map_);
 
-  // NOTE(vakh): Same process for chosing this string. I am representing it
-  // in base64 encoded form because the actual state value contains non-ASCII
-  // characters.
-  std::string base64_encoded_state_underscore = "VTFfITBf4lBM";
-  std::string state_underscore;
-  base::Base64Decode(base64_encoded_state_underscore, &state_underscore);
-  StoreStateMap store_state_map_underscore{
-      {UpdateListIdentifier(LINUX_PLATFORM, URL, MALWARE_THREAT),
-       state_underscore}};
-  std::string encoded_request_with_underscore =
-      V4UpdateProtocolManager::GetBase64SerializedUpdateRequestProto(
-          store_state_map_underscore);
-  EXPECT_EQ("GhcIARACGglVMV8hMF_iUEwiBCABIAIoAQ==",
-            encoded_request_with_underscore);
+  std::string encoded_request_with_minus =
+      pm->GetBase64SerializedUpdateRequestProto();
+  EXPECT_EQ("Cg8KCHVuaXR0ZXN0EgMxLjAaGAgBEAIaCmg4eGZZcVk-OlIiBCABIAIoAQ==",
+            encoded_request_with_minus);
+
+  // TODO(vakh): Add a similar test for underscore for completeness, although
+  // the '-' case is sufficient to prove that we are using URL encoding.
 }
 
 }  // namespace safe_browsing

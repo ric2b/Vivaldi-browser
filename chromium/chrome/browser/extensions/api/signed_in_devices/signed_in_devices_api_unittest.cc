@@ -17,7 +17,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/profile_sync_test_util.h"
-#include "components/browser_sync/browser/profile_sync_service_mock.h"
+#include "components/browser_sync/profile_sync_service_mock.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/device_info/device_info.h"
 #include "components/sync/device_info/device_info_tracker.h"
@@ -26,8 +26,8 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using sync_driver::DeviceInfo;
-using sync_driver::DeviceInfoTracker;
+using syncer::DeviceInfo;
+using syncer::DeviceInfoTracker;
 using testing::Return;
 
 namespace extensions {
@@ -44,23 +44,19 @@ class MockDeviceInfoTracker : public DeviceInfoTracker {
     return std::unique_ptr<DeviceInfo>();
   }
 
-  static DeviceInfo* CloneDeviceInfo(const DeviceInfo* device_info) {
-    return new DeviceInfo(device_info->guid(),
-                          device_info->client_name(),
-                          device_info->chrome_version(),
-                          device_info->sync_user_agent(),
-                          device_info->device_type(),
-                          device_info->signin_scoped_device_id());
+  static std::unique_ptr<DeviceInfo> CloneDeviceInfo(
+      const DeviceInfo& device_info) {
+    return base::MakeUnique<DeviceInfo>(
+        device_info.guid(), device_info.client_name(),
+        device_info.chrome_version(), device_info.sync_user_agent(),
+        device_info.device_type(), device_info.signin_scoped_device_id());
   }
 
-  ScopedVector<DeviceInfo> GetAllDeviceInfo() const override {
-    ScopedVector<DeviceInfo> list;
+  std::vector<std::unique_ptr<DeviceInfo>> GetAllDeviceInfo() const override {
+    std::vector<std::unique_ptr<DeviceInfo>> list;
 
-    for (std::vector<const DeviceInfo*>::const_iterator iter = devices_.begin();
-         iter != devices_.end();
-         ++iter) {
-      list.push_back(CloneDeviceInfo(*iter));
-    }
+    for (const DeviceInfo* device : devices_)
+      list.push_back(CloneDeviceInfo(*device));
 
     return list;
   }
@@ -109,7 +105,7 @@ TEST(SignedInDevicesAPITest, GetSignedInDevices) {
   device_tracker.Add(&device_info1);
   device_tracker.Add(&device_info2);
 
-  ScopedVector<DeviceInfo> output1 = GetAllSignedInDevices(
+  std::vector<std::unique_ptr<DeviceInfo>> output1 = GetAllSignedInDevices(
       extension_test->id(), &device_tracker, extension_prefs.prefs());
 
   std::string public_id1 = output1[0]->public_id();
@@ -130,7 +126,7 @@ TEST(SignedInDevicesAPITest, GetSignedInDevices) {
 
   device_tracker.Add(&device_info3);
 
-  ScopedVector<DeviceInfo> output2 = GetAllSignedInDevices(
+  std::vector<std::unique_ptr<DeviceInfo>> output2 = GetAllSignedInDevices(
       extension_test->id(), &device_tracker, extension_prefs.prefs());
 
   EXPECT_EQ(output2[0]->public_id(), public_id1);
@@ -142,8 +138,8 @@ TEST(SignedInDevicesAPITest, GetSignedInDevices) {
   EXPECT_NE(public_id3, public_id2);
 }
 
-class ProfileSyncServiceMockForExtensionTests:
-    public ProfileSyncServiceMock {
+class ProfileSyncServiceMockForExtensionTests
+    : public browser_sync::ProfileSyncServiceMock {
  public:
   explicit ProfileSyncServiceMockForExtensionTests(Profile* p)
       : ProfileSyncServiceMock(CreateProfileSyncServiceParamsForTest(p)) {}
@@ -155,8 +151,8 @@ class ProfileSyncServiceMockForExtensionTests:
 
 std::unique_ptr<KeyedService> CreateProfileSyncServiceMock(
     content::BrowserContext* context) {
-  return base::WrapUnique(new ProfileSyncServiceMockForExtensionTests(
-      Profile::FromBrowserContext(context)));
+  return base::MakeUnique<ProfileSyncServiceMockForExtensionTests>(
+      Profile::FromBrowserContext(context));
 }
 
 class ExtensionSignedInDevicesTest : public ExtensionApiUnittest {
@@ -254,8 +250,8 @@ TEST_F(ExtensionSignedInDevicesTest, DeviceInfoTrackerNotInitialized) {
       .WillOnce(Return(&device_tracker));
   EXPECT_CALL(*pss_mock, Shutdown());
 
-  ScopedVector<DeviceInfo> output = GetAllSignedInDevices(
-      extension()->id(), profile());
+  std::vector<std::unique_ptr<DeviceInfo>> output =
+      GetAllSignedInDevices(extension()->id(), profile());
 
   EXPECT_TRUE(output.empty());
 }

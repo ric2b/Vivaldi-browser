@@ -11,6 +11,7 @@
 #include "ash/ash_export.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/compositor/layer_animation_element.h"
 #include "ui/wm/core/window_animations.h"
@@ -40,7 +41,6 @@ class Widget;
 namespace ash {
 
 class ImmersiveFullscreenController;
-struct ShelfItemDetails;
 class WmLayoutManager;
 class WmRootWindowController;
 class WmShell;
@@ -64,6 +64,8 @@ class ASH_EXPORT WmWindow {
 
   using Windows = std::vector<WmWindow*>;
 
+  virtual void Destroy() = 0;
+
   WmWindow* GetRootWindow() {
     return const_cast<WmWindow*>(
         const_cast<const WmWindow*>(this)->GetRootWindow());
@@ -78,6 +80,7 @@ class ASH_EXPORT WmWindow {
   virtual void SetName(const char* name) = 0;
   virtual std::string GetName() const = 0;
 
+  virtual void SetTitle(const base::string16& title) = 0;
   virtual base::string16 GetTitle() const = 0;
 
   // See shell_window_ids.h for list of known ids.
@@ -86,11 +89,16 @@ class ASH_EXPORT WmWindow {
   virtual WmWindow* GetChildByShellWindowId(int id) = 0;
 
   virtual ui::wm::WindowType GetType() const = 0;
+  virtual int GetAppType() const = 0;
+  virtual void SetAppType(int app_type) const = 0;
 
   virtual bool IsBubble() = 0;
 
-  // TODO(sky): seems like this shouldn't be exposed.
   virtual ui::Layer* GetLayer() = 0;
+
+  // TODO(sky): these are temporary until GetLayer() always returns non-null.
+  virtual bool GetLayerTargetVisibility() = 0;
+  virtual bool GetLayerVisible() = 0;
 
   virtual display::Display GetDisplayNearestWindow() = 0;
 
@@ -117,19 +125,18 @@ class ASH_EXPORT WmWindow {
   virtual void SetOpacity(float opacity) = 0;
   virtual float GetTargetOpacity() const = 0;
 
+  virtual gfx::Rect GetMinimizeAnimationTargetBoundsInScreen() const = 0;
+
   virtual void SetTransform(const gfx::Transform& transform) = 0;
   virtual gfx::Transform GetTargetTransform() const = 0;
 
   virtual bool IsSystemModal() const = 0;
 
   virtual bool GetBoolProperty(WmWindowProperty key) = 0;
+  virtual SkColor GetColorProperty(WmWindowProperty key) = 0;
+  virtual void SetColorProperty(WmWindowProperty key, SkColor value) = 0;
   virtual int GetIntProperty(WmWindowProperty key) = 0;
   virtual void SetIntProperty(WmWindowProperty key, int value) = 0;
-
-  // Returns null if there are no details.
-  virtual ShelfItemDetails* GetShelfItemDetails() = 0;
-  virtual void SetShelfItemDetails(const ShelfItemDetails& details) = 0;
-  virtual void ClearShelfItemDetails() = 0;
 
   wm::WindowState* GetWindowState() {
     return const_cast<wm::WindowState*>(
@@ -147,8 +154,13 @@ class ASH_EXPORT WmWindow {
   virtual void SetParentUsingContext(WmWindow* context,
                                      const gfx::Rect& screen_bounds) = 0;
   virtual void AddChild(WmWindow* window) = 0;
+  virtual void RemoveChild(WmWindow* child) = 0;
 
-  virtual WmWindow* GetParent() = 0;
+  WmWindow* GetParent() {
+    return const_cast<WmWindow*>(
+        const_cast<const WmWindow*>(this)->GetParent());
+  }
+  virtual const WmWindow* GetParent() const = 0;
 
   WmWindow* GetTransientParent() {
     return const_cast<WmWindow*>(
@@ -161,6 +173,9 @@ class ASH_EXPORT WmWindow {
       std::unique_ptr<WmLayoutManager> layout_manager) = 0;
   virtual WmLayoutManager* GetLayoutManager() = 0;
 
+  // See wm::SetWindowVisibilityChangesAnimated() for details on what this
+  // does.
+  virtual void SetVisibilityChangesAnimated() = 0;
   // |type| is WindowVisibilityAnimationType. Has to be an int to match aura.
   virtual void SetVisibilityAnimationType(int type) = 0;
   virtual void SetVisibilityAnimationDuration(base::TimeDelta delta) = 0;
@@ -190,7 +205,7 @@ class ASH_EXPORT WmWindow {
   //   This is the default.
   // USE_SCREEN_COORDINATES: the bounds are actual screen bounds and converted
   //   from the display. In this case the window may move to a different
-  //   display if allowed (see SetDescendantsStayInSameRootWindow()).
+  //   display if allowed (see SetLockedToRoot()).
   virtual void SetBoundsInScreen(const gfx::Rect& bounds_in_screen,
                                  const display::Display& dst_display) = 0;
   virtual gfx::Rect GetBoundsInScreen() const = 0;
@@ -218,12 +233,16 @@ class ASH_EXPORT WmWindow {
   // If |value| is true the window can not be moved to another root, regardless
   // of the bounds set on it.
   virtual void SetLockedToRoot(bool value) = 0;
+  virtual bool IsLockedToRoot() const = 0;
 
   virtual void SetCapture() = 0;
   virtual bool HasCapture() = 0;
   virtual void ReleaseCapture() = 0;
 
   virtual bool HasRestoreBounds() const = 0;
+
+  // See ScreenPinningController::SetPinnedWindow() for details.
+  virtual void SetPinned(bool trusted) = 0;
 
   virtual void SetAlwaysOnTop(bool value) = 0;
   virtual bool IsAlwaysOnTop() const = 0;
@@ -240,6 +259,7 @@ class ASH_EXPORT WmWindow {
   // forward to an associated widget.
   virtual void CloseWidget() = 0;
 
+  virtual void SetFocused() = 0;
   virtual bool IsFocused() const = 0;
 
   virtual bool IsActive() const = 0;
@@ -289,10 +309,6 @@ class ASH_EXPORT WmWindow {
   // Makes the hit region for children slightly larger for easier resizing.
   virtual void SetChildrenUseExtendedHitRegion() = 0;
 
-  // Sets whether descendants of this should not be moved to a different
-  // container. This is used by SetBoundsInScreen().
-  virtual void SetDescendantsStayInSameRootWindow(bool value) = 0;
-
   // Returns a View that renders the contents of this window's layers.
   virtual std::unique_ptr<views::View> CreateViewWithRecreatedLayers() = 0;
 
@@ -309,6 +325,8 @@ class ASH_EXPORT WmWindow {
   // this window handles the events itself; the handler does not recieve events
   // from embedded windows. This only supports windows with internal widgets;
   // see GetInternalWidget(). Ownership of the handler is not transferred.
+  //
+  // Also note that the target of these events is always an aura::Window.
   virtual void AddLimitedPreTargetHandler(ui::EventHandler* handler) = 0;
   virtual void RemoveLimitedPreTargetHandler(ui::EventHandler* handler) = 0;
 

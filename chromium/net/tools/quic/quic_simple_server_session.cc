@@ -24,7 +24,7 @@ QuicSimpleServerSession::QuicSimpleServerSession(
     const QuicConfig& config,
     QuicConnection* connection,
     QuicServerSessionBase::Visitor* visitor,
-    QuicServerSessionBase::Helper* helper,
+    QuicCryptoServerStream::Helper* helper,
     const QuicCryptoServerConfig* crypto_config,
     QuicCompressedCertsCache* compressed_certs_cache)
     : QuicServerSessionBase(config,
@@ -45,7 +45,7 @@ QuicSimpleServerSession::CreateQuicCryptoServerStream(
     QuicCompressedCertsCache* compressed_certs_cache) {
   return new QuicCryptoServerStream(crypto_config, compressed_certs_cache,
                                     FLAGS_enable_quic_stateless_reject_support,
-                                    this);
+                                    this, stream_helper());
 }
 
 void QuicSimpleServerSession::StreamDraining(QuicStreamId id) {
@@ -177,7 +177,7 @@ void QuicSimpleServerSession::SendPushPromise(QuicStreamId original_stream_id,
   DVLOG(1) << "stream " << original_stream_id
            << " send PUSH_PROMISE for promised stream " << promised_stream_id;
   headers_stream()->WritePushPromise(original_stream_id, promised_stream_id,
-                                     std::move(headers), nullptr);
+                                     std::move(headers));
 }
 
 void QuicSimpleServerSession::HandlePromisedPushRequests() {

@@ -4,6 +4,7 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/path_service.h"
@@ -33,7 +34,7 @@ namespace keys = manifest_keys;
 class UnpackerTest : public testing::Test {
  public:
   ~UnpackerTest() override {
-    VLOG(1) << "Deleting temp dir: " << temp_dir_.path().LossyDisplayName();
+    VLOG(1) << "Deleting temp dir: " << temp_dir_.GetPath().LossyDisplayName();
     VLOG(1) << temp_dir_.Delete();
   }
 
@@ -47,13 +48,14 @@ class UnpackerTest : public testing::Test {
     // a temp folder to play in.
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
 
-    base::FilePath unzipped_dir = temp_dir_.path().AppendASCII("unzipped");
+    base::FilePath unzipped_dir = temp_dir_.GetPath().AppendASCII("unzipped");
     ASSERT_TRUE(zip::Unzip(crx_path, unzipped_dir))
         << "Failed to unzip " << crx_path.value() << " to "
         << unzipped_dir.value();
 
-    unpacker_.reset(new Unpacker(temp_dir_.path(), unzipped_dir, std::string(),
-                                 Manifest::INTERNAL, Extension::NO_FLAGS));
+    unpacker_.reset(new Unpacker(temp_dir_.GetPath(), unzipped_dir,
+                                 std::string(), Manifest::INTERNAL,
+                                 Extension::NO_FLAGS));
   }
 
  protected:
@@ -193,6 +195,69 @@ TEST_F(UnpackerTest, ImageDecodingError) {
                                base::CompareCase::INSENSITIVE_ASCII))
       << "Expected prefix: \"" << kExpected << "\", actual error: \""
       << unpacker_->error_message() << "\"";
+}
+
+struct UnzipFileFilterTestCase {
+  const base::FilePath::CharType* input;
+  const bool should_unzip;
+};
+
+void RunZipFileFilterTest(const std::vector<UnzipFileFilterTestCase>& cases,
+                          base::Callback<bool(const base::FilePath&)>& filter) {
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+
+  for (size_t i = 0; i < cases.size(); ++i) {
+    base::FilePath input(cases[i].input);
+    bool observed = filter.Run(input);
+    EXPECT_EQ(cases[i].should_unzip, observed) << "i: " << i
+                                               << ", input: " << input.value();
+  }
+}
+
+TEST_F(UnpackerTest, NonTheme_FileExtractionFilter) {
+  const std::vector<UnzipFileFilterTestCase> cases = {
+      {FILE_PATH_LITERAL("foo"), true},
+      {FILE_PATH_LITERAL("foo.nexe"), true},
+      {FILE_PATH_LITERAL("foo.dll"), true},
+      {FILE_PATH_LITERAL("foo.jpg.exe"), false},
+      {FILE_PATH_LITERAL("foo.exe"), false},
+      {FILE_PATH_LITERAL("foo.EXE"), false},
+      {FILE_PATH_LITERAL("file_without_extension"), true},
+  };
+  base::Callback<bool(const base::FilePath&)> filter =
+      base::Bind(&Unpacker::ShouldExtractFile, false);
+  RunZipFileFilterTest(cases, filter);
+}
+
+TEST_F(UnpackerTest, Theme_FileExtractionFilter) {
+  const std::vector<UnzipFileFilterTestCase> cases = {
+      {FILE_PATH_LITERAL("image.jpg"), true},
+      {FILE_PATH_LITERAL("IMAGE.JPEG"), true},
+      {FILE_PATH_LITERAL("test/image.bmp"), true},
+      {FILE_PATH_LITERAL("test/IMAGE.gif"), true},
+      {FILE_PATH_LITERAL("test/image.WEBP"), true},
+      {FILE_PATH_LITERAL("test/dir/file.image.png"), true},
+      {FILE_PATH_LITERAL("manifest.json"), true},
+      {FILE_PATH_LITERAL("other.html"), false},
+      {FILE_PATH_LITERAL("file_without_extension"), true},
+  };
+  base::Callback<bool(const base::FilePath&)> filter =
+      base::Bind(&Unpacker::ShouldExtractFile, true);
+  RunZipFileFilterTest(cases, filter);
+}
+
+TEST_F(UnpackerTest, ManifestExtractionFilter) {
+  const std::vector<UnzipFileFilterTestCase> cases = {
+      {FILE_PATH_LITERAL("manifest.json"), true},
+      {FILE_PATH_LITERAL("MANIFEST.JSON"), true},
+      {FILE_PATH_LITERAL("test/manifest.json"), false},
+      {FILE_PATH_LITERAL("manifest.json/test"), false},
+      {FILE_PATH_LITERAL("other.file"), false},
+  };
+  base::Callback<bool(const base::FilePath&)> filter =
+      base::Bind(&Unpacker::IsManifestFile);
+  RunZipFileFilterTest(cases, filter);
 }
 
 }  // namespace extensions

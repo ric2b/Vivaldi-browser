@@ -19,7 +19,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -71,10 +71,12 @@
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/remove_user_delegate.h"
+#include "components/user_manager/user.h"
 #include "components/user_manager/user_image/user_image.h"
 #include "components/user_manager/user_type.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
+#include "extensions/common/features/feature_session_type.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/chromeos/resources/grit/ui_chromeos_resources.h"
@@ -143,6 +145,19 @@ bool GetUserLockAttributes(const user_manager::User* user,
         prefs->GetString(prefs::kMultiProfileUserBehavior);
   }
   return true;
+}
+
+extensions::FeatureSessionType GetFeatureSessionTypeForUser(
+    const user_manager::User* user) {
+  switch (user->GetType()) {
+    case user_manager::USER_TYPE_REGULAR:
+      return extensions::FeatureSessionType::REGULAR;
+    case user_manager::USER_TYPE_KIOSK_APP:
+      return extensions::FeatureSessionType::KIOSK;
+    default:
+      // The rest of user types is not used by extensions features.
+      return extensions::FeatureSessionType::UNKNOWN;
+  }
 }
 
 }  // namespace
@@ -698,8 +713,7 @@ void ChromeUserManagerImpl::RetrieveTrustedDevicePolicies() {
         changed = true;
       } else {
         if ((*it)->GetType() != user_manager::USER_TYPE_PUBLIC_ACCOUNT)
-          prefs_users_update->Append(
-              new base::StringValue(account_id.GetUserEmail()));
+          prefs_users_update->AppendString(account_id.GetUserEmail());
         ++it;
       }
     }
@@ -781,8 +795,8 @@ void ChromeUserManagerImpl::SupervisedUserLoggedIn(
 
   // Add the user to the front of the user list.
   ListPrefUpdate prefs_users_update(GetLocalState(), kRegularUsers);
-  prefs_users_update->Insert(0,
-                             new base::StringValue(account_id.GetUserEmail()));
+  prefs_users_update->Insert(
+      0, base::MakeUnique<base::StringValue>(account_id.GetUserEmail()));
   users_.insert(users_.begin(), active_user_);
 
   // Now that user is in the list, save display name.
@@ -1222,7 +1236,7 @@ bool ChromeUserManagerImpl::ShouldReportUser(const std::string& user_id) const {
 void ChromeUserManagerImpl::AddReportingUser(const AccountId& account_id) {
   ListPrefUpdate users_update(GetLocalState(), kReportingUsers);
   users_update->AppendIfNotPresent(
-      new base::StringValue(account_id.GetUserEmail()));
+      base::MakeUnique<base::StringValue>(account_id.GetUserEmail()));
 }
 
 void ChromeUserManagerImpl::RemoveReportingUser(const AccountId& account_id) {
@@ -1237,6 +1251,11 @@ void ChromeUserManagerImpl::UpdateLoginState(
     bool is_current_user_owner) const {
   chrome_user_manager_util::UpdateLoginState(active_user, primary_user,
                                              is_current_user_owner);
+  // If a user is logged in, update session type as seen by extensions system.
+  if (active_user) {
+    extensions::SetCurrentFeatureSessionType(
+        GetFeatureSessionTypeForUser(active_user));
+  }
 }
 
 bool ChromeUserManagerImpl::GetPlatformKnownUserId(

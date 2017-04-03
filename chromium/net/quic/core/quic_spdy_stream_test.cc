@@ -840,7 +840,7 @@ TEST_P(QuicSpdyStreamTest, ReceivingTrailersWithOffset) {
   EXPECT_EQ(trailers, decompressed_trailers);
   // Consuming the trailers erases them from the stream.
   stream_->MarkTrailersConsumed(decompressed_trailers.size());
-  stream_->MarkTrailersDelivered();
+  stream_->MarkTrailersConsumed();
   EXPECT_EQ("", stream_->decompressed_trailers());
 
   EXPECT_FALSE(stream_->IsDoneReading());
@@ -971,9 +971,6 @@ TEST_P(QuicSpdyStreamTest, WritingTrailersWithQueuedBytes) {
     EXPECT_FALSE(stream_->write_side_closed());
   }
 
-  if (!FLAGS_quic_close_stream_after_writing_queued_data) {
-    return;
-  }
   // Writing the queued bytes will close the write side of the stream.
   EXPECT_CALL(*session_, WritevData(_, _, _, _, _, _))
       .WillOnce(Return(QuicConsumedData(1, false)));

@@ -38,6 +38,9 @@ const size_t kMinTimeoutsBeforePathDegrading = 2;
 // This limits the tenth retransmitted packet to 10s after the initial CHLO.
 static const int64_t kMinHandshakeTimeoutMs = 10;
 
+// Ensure the handshake timer isnt't faster than 25ms.
+static const int64_t kConservativeMinHandshakeTimeoutMs = kMaxDelayedAckTimeMs;
+
 // Sends up to two tail loss probes before firing an RTO,
 // per draft RFC draft-dukkipati-tcpm-tcp-loss-probe.
 static const size_t kDefaultMaxTailLossProbes = 2;
@@ -85,6 +88,7 @@ QuicSentPacketManager::QuicSentPacketManager(
       using_pacing_(false),
       use_new_rto_(false),
       undo_pending_retransmits_(false),
+      conservative_handshake_retransmits_(false),
       largest_newly_acked_(0),
       largest_mtu_acked_(0),
       handshake_confirmed_(false) {
@@ -148,9 +152,12 @@ void QuicSentPacketManager::SetFromConfig(const QuicConfig& config) {
       ContainsQuicTag(config.ReceivedConnectionOptions(), kATIM)) {
     general_loss_algorithm_.SetLossDetectionType(kAdaptiveTime);
   }
-  if (FLAGS_quic_loss_recovery_use_largest_acked &&
-      config.HasClientSentConnectionOption(kUNDO, perspective_)) {
+  if (config.HasClientSentConnectionOption(kUNDO, perspective_)) {
     undo_pending_retransmits_ = true;
+  }
+  if (FLAGS_quic_conservative_handshake_retransmits &&
+      config.HasClientSentConnectionOption(kCONH, perspective_)) {
+    conservative_handshake_retransmits_ = true;
   }
   send_algorithm_->SetFromConfig(config, perspective_);
 
@@ -305,8 +312,8 @@ void QuicSentPacketManager::HandleAckForSentPackets(
     // packet, then inform the caller.
     if (it->in_flight) {
       packets_acked_.push_back(std::make_pair(packet_number, it->bytes_sent));
-    } else if (FLAGS_quic_loss_recovery_use_largest_acked &&
-               !it->is_unackable) {
+    } else if (!it->is_unackable) {
+      // Packets are marked unackable after they've been acked once.
       largest_newly_acked_ = packet_number;
     }
     MarkPacketHandled(packet_number, &(*it), ack_delay_time);
@@ -507,17 +514,14 @@ void QuicSentPacketManager::MarkPacketHandled(QuicPacketNumber packet_number,
     }
   }
 
-  if (FLAGS_quic_no_mtu_discovery_ack_listener &&
-      network_change_visitor_ != nullptr &&
+  if (network_change_visitor_ != nullptr &&
       info->bytes_sent > largest_mtu_acked_) {
     largest_mtu_acked_ = info->bytes_sent;
     network_change_visitor_->OnPathMtuIncreased(largest_mtu_acked_);
   }
   unacked_packets_.RemoveFromInFlight(info);
   unacked_packets_.RemoveRetransmittability(info);
-  if (FLAGS_quic_loss_recovery_use_largest_acked) {
-    info->is_unackable = true;
-  }
+  info->is_unackable = true;
 }
 
 bool QuicSentPacketManager::HasUnackedPackets() const {
@@ -636,9 +640,6 @@ bool QuicSentPacketManager::MaybeRetransmitTailLossProbe() {
     if (!it->in_flight || it->retransmittable_frames.empty()) {
       continue;
     }
-    if (!handshake_confirmed_) {
-      DCHECK(!it->has_crypto_handshake);
-    }
     MarkForRetransmission(packet_number, TLP_RETRANSMISSION);
     return true;
   }
@@ -700,13 +701,13 @@ QuicSentPacketManager::GetRetransmissionMode() const {
 }
 
 void QuicSentPacketManager::InvokeLossDetection(QuicTime time) {
-  if (FLAGS_quic_loss_recovery_use_largest_acked && !packets_acked_.empty()) {
+  if (!packets_acked_.empty()) {
     DCHECK_LE(packets_acked_.front().first, packets_acked_.back().first);
     largest_newly_acked_ = packets_acked_.back().first;
   }
   loss_algorithm_->DetectLosses(unacked_packets_, time, rtt_stats_,
                                 largest_newly_acked_, &packets_lost_);
-  for (const pair<QuicPacketNumber, QuicByteCount>& pair : packets_lost_) {
+  for (const auto& pair : packets_lost_) {
     ++stats_->packets_lost;
     if (debug_delegate_ != nullptr) {
       debug_delegate_->OnPacketLoss(pair.first, LOSS_RETRANSMISSION, time);
@@ -747,7 +748,8 @@ bool QuicSentPacketManager::MaybeUpdateRTT(const QuicAckFrame& ack_frame,
 
   QuicTime::Delta send_delta = ack_receive_time - transmission_info.sent_time;
   const int kMaxSendDeltaSeconds = 30;
-  if (send_delta.ToSeconds() > kMaxSendDeltaSeconds) {
+  if (!FLAGS_quic_allow_large_send_deltas &&
+      send_delta.ToSeconds() > kMaxSendDeltaSeconds) {
     // send_delta can be very high if local clock is changed mid-connection.
     LOG(WARNING) << "Excessive send delta: " << send_delta.ToSeconds()
                  << ", setting to: " << kMaxSendDeltaSeconds
@@ -822,11 +824,17 @@ const QuicTime::Delta QuicSentPacketManager::GetCryptoRetransmissionDelay()
   // This is equivalent to the TailLossProbeDelay, but slightly more aggressive
   // because crypto handshake messages don't incur a delayed ack time.
   QuicTime::Delta srtt = rtt_stats_.smoothed_rtt();
+  int64_t delay_ms;
   if (srtt.IsZero()) {
     srtt = QuicTime::Delta::FromMicroseconds(rtt_stats_.initial_rtt_us());
   }
-  int64_t delay_ms = max(kMinHandshakeTimeoutMs,
-                         static_cast<int64_t>(1.5 * srtt.ToMilliseconds()));
+  if (conservative_handshake_retransmits_) {
+    delay_ms = max(kConservativeMinHandshakeTimeoutMs,
+                   static_cast<int64_t>(2 * srtt.ToMilliseconds()));
+  } else {
+    delay_ms = max(kMinHandshakeTimeoutMs,
+                   static_cast<int64_t>(1.5 * srtt.ToMilliseconds()));
+  }
   return QuicTime::Delta::FromMilliseconds(
       delay_ms << consecutive_crypto_retransmission_count_);
 }
@@ -851,14 +859,18 @@ const QuicTime::Delta QuicSentPacketManager::GetTailLossProbeDelay() const {
 }
 
 const QuicTime::Delta QuicSentPacketManager::GetRetransmissionDelay() const {
-  QuicTime::Delta retransmission_delay = send_algorithm_->RetransmissionDelay();
-  if (retransmission_delay.IsZero()) {
+  QuicTime::Delta retransmission_delay = QuicTime::Delta::Zero();
+  if (rtt_stats_.smoothed_rtt().IsZero()) {
     // We are in the initial state, use default timeout values.
     retransmission_delay =
         QuicTime::Delta::FromMilliseconds(kDefaultRetransmissionTimeMs);
-  } else if (retransmission_delay.ToMilliseconds() < kMinRetransmissionTimeMs) {
+  } else {
     retransmission_delay =
-        QuicTime::Delta::FromMilliseconds(kMinRetransmissionTimeMs);
+        rtt_stats_.smoothed_rtt() + 4 * rtt_stats_.mean_deviation();
+    if (retransmission_delay.ToMilliseconds() < kMinRetransmissionTimeMs) {
+      retransmission_delay =
+          QuicTime::Delta::FromMilliseconds(kMinRetransmissionTimeMs);
+    }
   }
 
   // Calculate exponential back off.
@@ -948,10 +960,6 @@ void QuicSentPacketManager::OnConnectionMigration(QuicPathId,
   consecutive_tlp_count_ = 0;
   rtt_stats_.OnConnectionMigration();
   send_algorithm_->OnConnectionMigration();
-}
-
-bool QuicSentPacketManager::IsHandshakeConfirmed() const {
-  return handshake_confirmed_;
 }
 
 void QuicSentPacketManager::SetDebugDelegate(DebugDelegate* debug_delegate) {

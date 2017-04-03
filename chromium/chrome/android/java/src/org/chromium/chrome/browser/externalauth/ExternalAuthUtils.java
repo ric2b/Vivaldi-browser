@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.externalauth;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -74,6 +75,8 @@ public class ExternalAuthUtils {
      * @param packageName The package name to inquire about.
      */
     @VisibleForTesting
+    // TODO(crbug.com/635567): Fix this properly.
+    @SuppressLint("WrongConstant")
     public boolean isSystemBuild(PackageManager pm, String packageName) {
         try {
             ApplicationInfo info = pm.getApplicationInfo(packageName, ApplicationInfo.FLAG_SYSTEM);
@@ -160,6 +163,21 @@ public class ExternalAuthUtils {
      */
     public boolean isCallerValid(Context context, int authRequirements) {
         return isCallerValid(context, authRequirements, "");
+    }
+
+    /**
+     * @return Whether the current device lacks proper Google Play Services. This will return true
+     *         if the service is not authentic or it is totally missing. Return false otherwise.
+     *         Note this method returns false if the service is only temporarily disabled, such as
+     *         when it is updating.
+     */
+    public boolean isGooglePlayServicesMissing(final Context context) {
+        final int resultCode = checkGooglePlayServicesAvailable(context);
+        if (resultCode == ConnectionResult.SERVICE_MISSING
+                || resultCode == ConnectionResult.SERVICE_INVALID) {
+            return true;
+        }
+        return false;
     }
 
     /**

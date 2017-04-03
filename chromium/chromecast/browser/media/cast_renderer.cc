@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/single_thread_task_runner.h"
 #include "chromecast/base/task_runner_impl.h"
+#include "chromecast/browser/media/video_resolution_policy.h"
 #include "chromecast/media/cdm/cast_cdm_context.h"
 #include "chromecast/media/cma/base/balanced_media_task_runner_factory.h"
 #include "chromecast/media/cma/base/cma_logging.h"
@@ -33,21 +34,31 @@ const base::TimeDelta kMaxDeltaFetcher(base::TimeDelta::FromMilliseconds(2000));
 CastRenderer::CastRenderer(
     const CreateMediaPipelineBackendCB& create_backend_cb,
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
-    const std::string& audio_device_id)
+    const std::string& audio_device_id,
+    VideoResolutionPolicy* video_resolution_policy,
+    MediaResourceTracker* media_resource_tracker)
     : create_backend_cb_(create_backend_cb),
       task_runner_(task_runner),
       audio_device_id_(audio_device_id),
+      video_resolution_policy_(video_resolution_policy),
+      media_resource_tracker_(media_resource_tracker),
       client_(nullptr),
       cast_cdm_context_(nullptr),
       media_task_runner_factory_(
           new BalancedMediaTaskRunnerFactory(kMaxDeltaFetcher)),
       weak_factory_(this) {
   CMALOG(kLogControl) << __FUNCTION__ << ": " << this;
+
+  if (video_resolution_policy_)
+    video_resolution_policy_->AddObserver(this);
 }
 
 CastRenderer::~CastRenderer() {
   CMALOG(kLogControl) << __FUNCTION__ << ": " << this;
   DCHECK(task_runner_->BelongsToCurrentThread());
+
+  if (video_resolution_policy_)
+    video_resolution_policy_->RemoveObserver(this);
 }
 
 void CastRenderer::Initialize(
@@ -58,6 +69,8 @@ void CastRenderer::Initialize(
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   // Create pipeline backend.
+  media_resource_usage_.reset(
+      new MediaResourceTracker::ScopedUsage(media_resource_tracker_));
   backend_task_runner_.reset(new TaskRunnerImpl());
   // TODO(erickung): crbug.com/443956. Need to provide right LoadType.
   LoadType load_type = kLoadTypeMediaSource;
@@ -206,6 +219,15 @@ bool CastRenderer::HasVideo() {
   return pipeline_->HasVideo();
 }
 
+void CastRenderer::OnVideoResolutionPolicyChanged() {
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  if (!video_resolution_policy_)
+    return;
+
+  if (video_resolution_policy_->ShouldBlock(video_res_))
+    OnError(::media::PIPELINE_ERROR_DECODE);
+}
+
 void CastRenderer::OnError(::media::PipelineStatus status) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   client_->OnError(status);
@@ -240,6 +262,9 @@ void CastRenderer::OnWaitingForDecryptionKey() {
 void CastRenderer::OnVideoNaturalSizeChange(const gfx::Size& size) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   client_->OnVideoNaturalSizeChange(size);
+
+  video_res_ = size;
+  OnVideoResolutionPolicyChanged();
 }
 
 void CastRenderer::OnVideoOpacityChange(bool opaque) {

@@ -16,13 +16,14 @@
 #include "base/time/time.h"
 #include "crypto/ec_private_key.h"
 #include "net/base/net_error_details.h"
+#include "net/base/net_export.h"
 #include "net/base/request_priority.h"
 #include "net/http/http_auth.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_response_info.h"
 #include "net/http/http_stream_factory.h"
 #include "net/http/http_transaction.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 #include "net/proxy/proxy_service.h"
 #include "net/socket/connection_attempts.h"
 #include "net/ssl/channel_id_service.h"
@@ -59,7 +60,7 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
   // HttpTransaction methods:
   int Start(const HttpRequestInfo* request_info,
             const CompletionCallback& callback,
-            const BoundNetLog& net_log) override;
+            const NetLogWithSource& net_log) override;
   int RestartIgnoringLastError(const CompletionCallback& callback) override;
   int RestartWithCertificate(X509Certificate* client_cert,
                              SSLPrivateKey* client_private_key,
@@ -78,7 +79,6 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
   void DoneReading() override;
   const HttpResponseInfo* GetResponseInfo() const override;
   LoadState GetLoadState() const override;
-  UploadProgress GetUploadProgress() const override;
   void SetQuicServerInfo(QuicServerInfo* quic_server_info) override;
   bool GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const override;
   bool GetRemoteEndpoint(IPEndPoint* endpoint) const override;
@@ -294,9 +294,6 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
   // Returns true if this transaction is for a WebSocket handshake
   bool ForWebSocketHandshake() const;
 
-  // Debug helper.
-  static std::string DescribeState(State state);
-
   void SetStream(HttpStream* stream);
 
   void CopyConnectionAttemptsFromStreamRequest();
@@ -314,7 +311,7 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
 
   HttpNetworkSession* session_;
 
-  BoundNetLog net_log_;
+  NetLogWithSource net_log_;
   const HttpRequestInfo* request_;
   RequestPriority priority_;
   HttpResponseInfo response_;

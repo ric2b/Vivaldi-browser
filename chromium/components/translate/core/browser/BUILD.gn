@@ -6,6 +6,8 @@ import("//build/config/ui.gni")
 
 static_library("browser") {
   sources = [
+    "language_model.cc",
+    "language_model.h",
     "language_state.cc",
     "language_state.h",
     "page_translated_details.h",
@@ -28,6 +30,10 @@ static_library("browser") {
     "translate_manager.h",
     "translate_prefs.cc",
     "translate_prefs.h",
+    "translate_ranker.cc",
+    "translate_ranker.h",
+    "translate_ranker_metrics_provider.cc",
+    "translate_ranker_metrics_provider.h",
     "translate_script.cc",
     "translate_script.h",
     "translate_step.h",
@@ -43,11 +49,14 @@ static_library("browser") {
     "//base",
     "//base:i18n",
     "//components/data_use_measurement/core",
+    "//components/keyed_service/core",
     "//components/language_usage_metrics",
+    "//components/metrics",
     "//components/pref_registry",
     "//components/prefs",
     "//components/resources:components_resources",
     "//components/strings",
+    "//components/translate/core/browser/proto",
     "//components/translate/core/common",
     "//components/variations",
     "//google_apis",
@@ -76,6 +85,7 @@ static_library("browser") {
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "language_model_unittest.cc",
     "language_state_unittest.cc",
     "mock_translate_driver.cc",
     "mock_translate_driver.h",
@@ -83,6 +93,7 @@ source_set("unit_tests") {
     "translate_language_list_unittest.cc",
     "translate_manager_unittest.cc",
     "translate_prefs_unittest.cc",
+    "translate_ranker_unittest.cc",
     "translate_script_unittest.cc",
     "translate_ui_delegate_unittest.cc",
   ]
@@ -92,6 +103,8 @@ source_set("unit_tests") {
     "//components/infobars/core",
     "//components/pref_registry:test_support",
     "//components/prefs",
+    "//components/prefs:test_support",
+    "//components/translate/core/browser/proto",
     "//components/translate/core/common",
     "//components/variations",
     "//net:test_support",

@@ -12,7 +12,6 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "components/toolbar/toolbar_model.h"
 #include "content/public/browser/navigation_entry.h"
-#include "grit/ash_resources.h"
 #include "ui/gfx/vector_icons_public.h"
 #include "ui/views/layout/box_layout.h"
 
@@ -93,7 +92,8 @@ void WebAppLeftHeaderView::ShowWebsiteSettings() const {
       ChromeSecurityStateModelClient::FromWebContents(tab);
   DCHECK(security_model_client);
 
+  security_state::SecurityStateModel::SecurityInfo security_info;
+  security_model_client->GetSecurityInfo(&security_info);
   chrome::ShowWebsiteSettings(browser_view_->browser(), tab,
-                              nav_entry->GetVirtualURL(),
-                              security_model_client->GetSecurityInfo());
+                              nav_entry->GetVirtualURL(), security_info);
 }

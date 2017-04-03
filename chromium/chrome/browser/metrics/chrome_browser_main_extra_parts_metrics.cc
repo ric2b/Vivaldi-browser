@@ -10,7 +10,7 @@
 #include "base/command_line.h"
 #include "base/cpu.h"
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/sys_info.h"
 #include "base/threading/sequenced_worker_pool.h"
@@ -35,6 +35,10 @@
 #if defined(OS_ANDROID) && defined(__arm__)
 #include <cpu-features.h>
 #endif  // defined(OS_ANDROID) && defined(__arm__)
+
+#if !defined(OS_ANDROID)
+#include "chrome/browser/metrics/tab_usage_recorder.h"
+#endif  // !defined(OS_ANDROID)
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 #include <gnu/libc-version.h>
@@ -170,7 +174,7 @@ void RecordStartupMetricsOnBlockingPool() {
 
 void RecordLinuxGlibcVersion() {
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-  Version version(gnu_get_libc_version());
+  base::Version version(gnu_get_libc_version());
 
   UMALinuxGlibcVersion glibc_version_result = UMA_LINUX_GLIBC_NOT_PARSEABLE;
   if (version.IsValid() && version.components().size() == 2) {
@@ -319,9 +323,9 @@ void ChromeBrowserMainExtraPartsMetrics::PreProfileInit() {
 }
 
 void ChromeBrowserMainExtraPartsMetrics::PreBrowserStart() {
-  flags_ui::PrefServiceFlagsStorage flags_storage_(
+  flags_ui::PrefServiceFlagsStorage flags_storage(
       g_browser_process->local_state());
-  about_flags::RecordUMAStatistics(&flags_storage_);
+  about_flags::RecordUMAStatistics(&flags_storage);
 }
 
 void ChromeBrowserMainExtraPartsMetrics::PostBrowserStart() {
@@ -369,6 +373,7 @@ void ChromeBrowserMainExtraPartsMetrics::PostBrowserStart() {
 
 #if !defined(OS_ANDROID)
   FirstWebContentsProfiler::Start();
+  metrics::TabUsageRecorder::Initialize();
 #endif  // !defined(OS_ANDROID)
 }
 

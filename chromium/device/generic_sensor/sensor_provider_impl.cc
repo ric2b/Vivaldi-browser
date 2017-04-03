@@ -8,6 +8,7 @@
 
 #include "device/generic_sensor/platform_sensor_provider.h"
 #include "device/generic_sensor/sensor_impl.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 
 namespace device {
 
@@ -16,23 +17,37 @@ namespace {
 uint64_t GetBufferOffset(mojom::SensorType type) {
   return (static_cast<uint64_t>(mojom::SensorType::LAST) -
           static_cast<uint64_t>(type)) *
-         mojom::SensorReadBuffer::kReadBufferSize;
+         mojom::SensorInitParams::kReadBufferSize;
+}
+
+void RunCallback(mojom::SensorInitParamsPtr init_params,
+                 SensorImpl* sensor,
+                 const SensorProviderImpl::GetSensorCallback& callback) {
+  callback.Run(std::move(init_params), sensor->GetClient());
+}
+
+void NotifySensorCreated(
+    mojom::SensorInitParamsPtr init_params,
+    SensorImpl* sensor,
+    const SensorProviderImpl::GetSensorCallback& callback) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::Bind(RunCallback, base::Passed(&init_params), sensor, callback));
 }
 
 }  // namespace
 
 // static
-void SensorProviderImpl::Create(
-    mojo::InterfaceRequest<mojom::SensorProvider> request) {
+void SensorProviderImpl::Create(mojom::SensorProviderRequest request) {
   PlatformSensorProvider* provider = PlatformSensorProvider::GetInstance();
-  if (provider)
-    new SensorProviderImpl(std::move(request), provider);
+  if (provider) {
+    mojo::MakeStrongBinding(base::WrapUnique(new SensorProviderImpl(provider)),
+                            std::move(request));
+  }
 }
 
-SensorProviderImpl::SensorProviderImpl(
-    mojo::InterfaceRequest<mojom::SensorProvider> request,
-    PlatformSensorProvider* provider)
-    : binding_(this, std::move(request)), provider_(provider) {
+SensorProviderImpl::SensorProviderImpl(PlatformSensorProvider* provider)
+    : provider_(provider), weak_ptr_factory_(this) {
   DCHECK(provider_);
 }
 
@@ -43,29 +58,47 @@ void SensorProviderImpl::GetSensor(mojom::SensorType type,
                                    const GetSensorCallback& callback) {
   auto cloned_handle = provider_->CloneSharedBufferHandle();
   if (!cloned_handle.is_valid()) {
-    callback.Run(nullptr, nullptr);
+    NotifySensorCreated(nullptr, nullptr, callback);
     return;
   }
 
   scoped_refptr<PlatformSensor> sensor = provider_->GetSensor(type);
   if (!sensor) {
-    sensor = provider_->CreateSensor(
-        type, mojom::SensorReadBuffer::kReadBufferSize, GetBufferOffset(type));
-  }
-
-  if (!sensor) {
-    callback.Run(nullptr, nullptr);
+    PlatformSensorProviderBase::CreateSensorCallback cb = base::Bind(
+        &SensorProviderImpl::SensorCreated, weak_ptr_factory_.GetWeakPtr(),
+        type, base::Passed(&cloned_handle), base::Passed(&sensor_request),
+        callback);
+    provider_->CreateSensor(type, mojom::SensorInitParams::kReadBufferSize,
+                            GetBufferOffset(type), cb);
     return;
   }
 
-  auto sensor_impl = new SensorImpl(std::move(sensor_request), sensor);
+  SensorCreated(type, std::move(cloned_handle), std::move(sensor_request),
+                callback, std::move(sensor));
+}
 
-  auto sensor_read_buffer = mojom::SensorReadBuffer::New();
-  sensor_read_buffer->memory = std::move(cloned_handle);
-  sensor_read_buffer->offset = GetBufferOffset(type);
-  sensor_read_buffer->mode = sensor->GetReportingMode();
+void SensorProviderImpl::SensorCreated(
+    mojom::SensorType type,
+    mojo::ScopedSharedBufferHandle cloned_handle,
+    mojom::SensorRequest sensor_request,
+    const GetSensorCallback& callback,
+    scoped_refptr<PlatformSensor> sensor) {
+  if (!sensor) {
+    NotifySensorCreated(nullptr, nullptr, callback);
+    return;
+  }
 
-  callback.Run(std::move(sensor_read_buffer), sensor_impl->GetClient());
+  auto sensor_impl = base::MakeUnique<SensorImpl>(sensor);
+
+  auto init_params = mojom::SensorInitParams::New();
+  init_params->memory = std::move(cloned_handle);
+  init_params->buffer_offset = GetBufferOffset(type);
+  init_params->mode = sensor->GetReportingMode();
+  init_params->default_configuration = sensor->GetDefaultConfiguration();
+
+  NotifySensorCreated(std::move(init_params), sensor_impl.get(), callback);
+
+  mojo::MakeStrongBinding(std::move(sensor_impl), std::move(sensor_request));
 }
 
 }  // namespace device

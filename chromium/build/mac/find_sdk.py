@@ -37,6 +37,7 @@ def main():
   parser.add_option("--print_sdk_path",
                     action="store_true", dest="print_sdk_path", default=False,
                     help="Additionaly print the path the SDK (appears first).")
+  parser.add_option("--use-sdk", dest="use_sdk")
   options, args = parser.parse_args()
   if len(args) != 1:
     parser.error('Please specify a minimum SDK version')
@@ -61,7 +62,12 @@ def main():
           if parse_version(s) >= parse_version(min_sdk_version)]
   if not sdks:
     raise Exception('No %s+ SDK found' % min_sdk_version)
-  best_sdk = sorted(sdks, key=parse_version)[-1]
+  if options.use_sdk:
+    best_sdk = options.use_sdk
+    if best_sdk not in sdks:
+      raise Exception('SDK %s not found' % best_sdk)
+  else:
+    best_sdk = sorted(sdks, key=parse_version)[-1]
 
   if options.verify and best_sdk < min_sdk_version and not options.sdk_path:
     print >> sys.stderr, ''

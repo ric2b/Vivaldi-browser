@@ -7,18 +7,18 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "chrome/grit/theme_resources.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/infobars/core/infobar.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "content/public/browser/web_contents.h"
-#include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/origin.h"
 
@@ -28,7 +28,7 @@ void SavePasswordInfoBarDelegate::Create(
     std::unique_ptr<password_manager::PasswordFormManager> form_to_save) {
   Profile* profile =
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
-  sync_driver::SyncService* sync_service =
+  syncer::SyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile);
   bool is_smartlock_branding_enabled =
       password_bubble_experiment::IsSmartLockBrandingSavePromptEnabled(

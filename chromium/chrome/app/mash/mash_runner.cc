@@ -4,8 +4,6 @@
 
 #include "chrome/app/mash/mash_runner.h"
 
-#include "ash/mus/window_manager_application.h"
-#include "ash/touch_hud/mus/touch_hud_application.h"
 #include "base/at_exit.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -15,14 +13,12 @@
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/process/launch.h"
+#include "base/run_loop.h"
 #include "base/trace_event/trace_event.h"
 #include "components/tracing/common/trace_to_console.h"
 #include "components/tracing/common/tracing_switches.h"
 #include "content/public/common/content_switches.h"
-#include "mash/app_driver/app_driver.h"
-#include "mash/quick_launch/quick_launch.h"
-#include "mash/session/session.h"
-#include "mash/task_viewer/task_viewer.h"
+#include "mash/package/mash_packaged_service.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/shell/background/background_shell.h"
 #include "services/shell/native_runner_delegate.h"
@@ -33,11 +29,9 @@
 #include "services/shell/public/interfaces/service_factory.mojom.h"
 #include "services/shell/runner/common/switches.h"
 #include "services/shell/runner/host/child_process_base.h"
-#include "services/ui/service.h"
-
-#if defined(OS_LINUX)
-#include "components/font_service/font_service_app.h"
-#endif
+#include "ui/base/resource/resource_bundle.h"
+#include "ui/base/ui_base_paths.h"
+#include "ui/base/ui_base_switches.h"
 
 using shell::mojom::ServiceFactory;
 
@@ -46,80 +40,21 @@ namespace {
 // kProcessType used to identify child processes.
 const char* kMashChild = "mash-child";
 
-// Service responsible for starting the appropriate app.
-class DefaultService : public shell::Service,
-                       public ServiceFactory,
-                       public shell::InterfaceFactory<ServiceFactory> {
- public:
-  DefaultService() {}
-  ~DefaultService() override {}
-
-  // shell::Service:
-  bool OnConnect(const shell::Identity& remote_identity,
-                 shell::InterfaceRegistry* registry) override {
-    registry->AddInterface<ServiceFactory>(this);
-    return true;
-  }
-
-  // shell::InterfaceFactory<ServiceFactory>
-  void Create(const shell::Identity& remote_identity,
-              mojo::InterfaceRequest<ServiceFactory> request) override {
-    service_factory_bindings_.AddBinding(this, std::move(request));
-  }
-
-  // ServiceFactory:
-  void CreateService(shell::mojom::ServiceRequest request,
-                     const std::string& mojo_name) override {
-    if (service_) {
-      LOG(ERROR) << "request to create additional service " << mojo_name;
-      return;
-    }
-    service_ = CreateService(mojo_name);
-    if (service_) {
-      service_->set_context(base::MakeUnique<shell::ServiceContext>(
-          service_.get(), std::move(request)));
-      return;
-    }
-    LOG(ERROR) << "unknown name " << mojo_name;
-    NOTREACHED();
-  }
-
- private:
-  // TODO(sky): move this into mash.
-  std::unique_ptr<shell::Service> CreateService(
-      const std::string& name) {
-    if (name == "mojo:ash")
-      return base::WrapUnique(new ash::mus::WindowManagerApplication);
-    if (name == "mojo:touch_hud")
-      return base::WrapUnique(new ash::touch_hud::TouchHudApplication);
-    if (name == "mojo:mash_session")
-      return base::WrapUnique(new mash::session::Session);
-    if (name == "mojo:ui")
-      return base::WrapUnique(new ui::Service);
-    if (name == "mojo:quick_launch")
-      return base::WrapUnique(new mash::quick_launch::QuickLaunch);
-    if (name == "mojo:task_viewer")
-      return base::WrapUnique(new mash::task_viewer::TaskViewer);
-#if defined(OS_LINUX)
-    if (name == "mojo:font_service")
-      return base::WrapUnique(new font_service::FontServiceApp);
-#endif
-    if (name == "mojo:app_driver")
-      return base::WrapUnique(new mash::app_driver::AppDriver);
-    return nullptr;
-  }
-
-  mojo::BindingSet<ServiceFactory> service_factory_bindings_;
-  std::unique_ptr<shell::Service> service_;
-
-  DISALLOW_COPY_AND_ASSIGN(DefaultService);
-};
-
 bool IsChild() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
              switches::kProcessType) &&
          base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
              switches::kProcessType) == kMashChild;
+}
+
+void InitializeResources() {
+  ui::RegisterPathProvider();
+  const std::string locale =
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          switches::kLang);
+  // This loads the Chrome's resources (chrome_100_percent.pak etc.)
+  ui::ResourceBundle::InitSharedInstanceWithLocale(
+      locale, nullptr, ui::ResourceBundle::LOAD_COMMON_RESOURCES);
 }
 
 // Convert the command line program from chrome_mash to chrome. This is
@@ -188,28 +123,32 @@ void MashRunner::RunMain() {
       new shell::BackgroundShell::InitParams);
   init_params->native_runner_delegate = &native_runner_delegate;
   background_shell.Init(std::move(init_params));
-  service_.reset(new DefaultService);
+  service_.reset(new mash::MashPackagedService);
   service_->set_context(base::MakeUnique<shell::ServiceContext>(
       service_.get(),
       background_shell.CreateServiceRequest("exe:chrome_mash")));
-  service_->connector()->Connect("mojo:mash_session");
-  base::MessageLoop::current()->Run();
+  service_->connector()->Connect("service:mash_session");
+  base::RunLoop().Run();
 }
 
 void MashRunner::RunChild() {
   base::i18n::InitializeICU();
+  InitializeResources();
   shell::ChildProcessMainWithCallback(
       base::Bind(&MashRunner::StartChildApp, base::Unretained(this)));
 }
 
 void MashRunner::StartChildApp(
     shell::mojom::ServiceRequest service_request) {
-  // TODO(sky): use MessagePumpMojo.
+  // TODO(sad): Normally, this would be a TYPE_DEFAULT message loop. However,
+  // TYPE_UI is needed for mojo:ui. But it is not known whether the child app is
+  // going to be mojo:ui at this point. So always create a TYPE_UI message loop
+  // for now.
   base::MessageLoop message_loop(base::MessageLoop::TYPE_UI);
-  service_.reset(new DefaultService);
+  service_.reset(new mash::MashPackagedService);
   service_->set_context(base::MakeUnique<shell::ServiceContext>(
       service_.get(), std::move(service_request)));
-  message_loop.Run();
+  base::RunLoop().Run();
 }
 
 int MashMain() {
@@ -226,7 +165,6 @@ int MashMain() {
                        true,   // Timestamp
                        true);  // Tick count
 
-  // TODO(sky): use MessagePumpMojo.
   std::unique_ptr<base::MessageLoop> message_loop;
 #if defined(OS_LINUX)
   base::AtExitManager exit_manager;

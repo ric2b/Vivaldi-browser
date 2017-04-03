@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/guid.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -52,6 +53,8 @@ const char kLoadFileError[] = "Failed to load file: \"*\". ";
 const char kViewInstanceIdError[] = "view_instance_id is missing.";
 const char kDuplicatedContentScriptNamesError[] =
     "The given content script name already exists.";
+
+const char kGeneratedScriptFilePrefix[] = "generated_script_file:";
 
 uint32_t MaskForKey(const char* key) {
   if (strcmp(key, kAppCacheKey) == 0)
@@ -109,9 +112,11 @@ void ParseScriptFiles(const GURL& owner_base_url,
   }
   // code:
   if (items.code) {
+    GURL url = owner_base_url.Resolve(base::StringPrintf(
+        "%s%s", kGeneratedScriptFilePrefix, base::GenerateGUID().c_str()));
     std::unique_ptr<extensions::UserScript::File> file(
         new extensions::UserScript::File(base::FilePath(), base::FilePath(),
-                                         GURL()));
+                                         url));
     file->set_content(*items.code);
     list->push_back(std::move(file));
   }
@@ -517,11 +522,12 @@ WebViewInternalAddContentScriptsFunction::Run() {
   HostID host_id = GenerateHostIDFromEmbedder(extension(), sender_web_contents);
   bool incognito_enabled = browser_context()->IsOffTheRecord();
 
+  std::string error;
   std::unique_ptr<UserScriptList> result =
       ParseContentScripts(params->content_script_list, extension(), host_id,
-                          incognito_enabled, owner_base_url, &error_);
+                          incognito_enabled, owner_base_url, &error);
   if (!result)
-    return RespondNow(Error(error_));
+    return RespondNow(Error(error));
 
   WebViewContentScriptManager* manager =
       WebViewContentScriptManager::Get(browser_context());
@@ -784,11 +790,12 @@ WebViewInternalLoadDataWithBaseUrlFunction::Run() {
   std::string virtual_url =
       params->virtual_url ? *params->virtual_url : params->data_url;
 
+  std::string error;
   bool successful = guest_->LoadDataWithBaseURL(
-      params->data_url, params->base_url, virtual_url, &error_);
+      params->data_url, params->base_url, virtual_url, &error);
   if (successful)
     return RespondNow(NoArguments());
-  return RespondNow(Error(error_));
+  return RespondNow(Error(error));
 }
 
 WebViewInternalGoFunction::WebViewInternalGoFunction() {

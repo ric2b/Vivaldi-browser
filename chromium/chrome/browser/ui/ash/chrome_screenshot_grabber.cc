@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include "ash/common/strings/grit/ash_strings.h"
 #include "ash/common/system/system_notifier.h"
 #include "ash/shell.h"
 #include "base/base64.h"
@@ -29,13 +30,12 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/grit/theme_resources.h"
 #include "chromeos/login/login_state.h"
 #include "components/drive/chromeos/file_system_interface.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/user_metrics.h"
-#include "grit/ash_strings.h"
-#include "grit/theme_resources.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -136,8 +136,10 @@ class ScreenshotGrabberNotificationDelegate : public NotificationDelegate {
         break;
       }
       case BUTTON_ANNOTATE: {
-        if (chromeos::IsNoteTakingAppAvailable(profile_))
+        if (chromeos::IsNoteTakingAppAvailable(profile_)) {
           chromeos::LaunchNoteTakingAppForNewNote(profile_, screenshot_path_);
+          content::RecordAction(base::UserMetricsAction("Screenshot_Annotate"));
+        }
         break;
       }
       default:

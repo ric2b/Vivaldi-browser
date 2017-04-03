@@ -27,7 +27,6 @@
 #include <string>
 #include <utility>
 
-#include "ash/common/display/display_info.h"
 #include "ash/common/shell_observer.h"
 #include "ash/common/shell_window_ids.h"
 #include "ash/shell.h"
@@ -67,6 +66,7 @@
 #include "ui/base/hit_test.h"
 #include "ui/compositor/compositor_vsync_manager.h"
 #include "ui/display/display_observer.h"
+#include "ui/display/manager/managed_display_info.h"
 #include "ui/display/screen.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/gfx/buffer_format_util.h"
@@ -473,6 +473,7 @@ const struct drm_supported_format {
     {WL_DRM_FORMAT_ABGR8888, gfx::BufferFormat::RGBA_8888},
     {WL_DRM_FORMAT_XRGB8888, gfx::BufferFormat::BGRX_8888},
     {WL_DRM_FORMAT_ARGB8888, gfx::BufferFormat::BGRA_8888},
+    {WL_DRM_FORMAT_NV12, gfx::BufferFormat::YUV_420_BIPLANAR},
     {WL_DRM_FORMAT_YVU420, gfx::BufferFormat::YVU_420}};
 
 void drm_authenticate(wl_client* client, wl_resource* resource, uint32_t id) {
@@ -535,9 +536,9 @@ void drm_create_prime_buffer(wl_client* client,
   }
 
   std::vector<gfx::NativePixmapPlane> planes;
-  planes.emplace_back(stride0, offset0, 0);
-  planes.emplace_back(stride1, offset1, 0);
-  planes.emplace_back(stride2, offset2, 0);
+  planes.emplace_back(stride0, offset0, 0, 0);
+  planes.emplace_back(stride1, offset1, 0, 0);
+  planes.emplace_back(stride2, offset2, 0, 0);
   std::vector<base::ScopedFD> fds;
 
   size_t num_planes =
@@ -693,7 +694,7 @@ void linux_buffer_params_create(wl_client* client,
       return;
     }
     LinuxBufferParams::Plane& plane = plane_it->second;
-    planes.emplace_back(plane.stride, plane.offset, 0);
+    planes.emplace_back(plane.stride, plane.offset, 0, 0);
     if (plane.fd.is_valid())
       fds.push_back(std::move(plane.fd));
   }
@@ -734,7 +735,7 @@ void linux_dmabuf_create_params(wl_client* client,
                                 wl_resource* resource,
                                 uint32_t id) {
   std::unique_ptr<LinuxBufferParams> linux_buffer_params =
-      base::WrapUnique(new LinuxBufferParams(GetUserDataAs<Display>(resource)));
+      base::MakeUnique<LinuxBufferParams>(GetUserDataAs<Display>(resource));
 
   wl_resource* linux_buffer_params_resource =
       wl_resource_create(client, &zwp_linux_buffer_params_v1_interface, 1, id);
@@ -1074,7 +1075,7 @@ class WaylandPrimaryDisplayObserver : public display::DisplayObserver {
     display::Display display =
         display::Screen::GetScreen()->GetPrimaryDisplay();
 
-    const ash::DisplayInfo& info =
+    const display::ManagedDisplayInfo& info =
         WMHelper::GetInstance()->GetDisplayInfo(display.id());
 
     const float kInchInMm = 25.4f;
@@ -1117,9 +1118,8 @@ void bind_output(wl_client* client, void* data, uint32_t version, uint32_t id) {
   wl_resource* resource = wl_resource_create(
       client, &wl_output_interface, std::min(version, output_version), id);
 
-  SetImplementation(
-      resource, nullptr,
-      base::WrapUnique(new WaylandPrimaryDisplayObserver(resource)));
+  SetImplementation(resource, nullptr,
+                    base::MakeUnique<WaylandPrimaryDisplayObserver>(resource));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1459,34 +1459,6 @@ void remote_surface_set_scale(wl_client* client,
   GetUserDataAs<ShellSurface>(resource)->SetScale(wl_fixed_to_double(scale));
 }
 
-void remote_surface_fullscreen(wl_client* client, wl_resource* resource) {
-  GetUserDataAs<ShellSurface>(resource)->SetFullscreen(true);
-}
-
-void remote_surface_maximize(wl_client* client, wl_resource* resource) {
-  GetUserDataAs<ShellSurface>(resource)->Maximize();
-}
-
-void remote_surface_minimize(wl_client* client, wl_resource* resource) {
-  GetUserDataAs<ShellSurface>(resource)->Minimize();
-}
-
-void remote_surface_restore(wl_client* client, wl_resource* resource) {
-  GetUserDataAs<ShellSurface>(resource)->Restore();
-}
-
-void remote_surface_pin(wl_client* client, wl_resource* resource) {
-  GetUserDataAs<ShellSurface>(resource)->SetPinned(true);
-}
-
-void remote_surface_unpin(wl_client* client, wl_resource* resource) {
-  GetUserDataAs<ShellSurface>(resource)->SetPinned(false);
-}
-
-void remote_surface_unfullscreen(wl_client* client, wl_resource* resource) {
-  GetUserDataAs<ShellSurface>(resource)->SetFullscreen(false);
-}
-
 void remote_surface_set_rectangular_shadow(wl_client* client,
                                            wl_resource* resource,
                                            int32_t x,
@@ -1495,6 +1467,14 @@ void remote_surface_set_rectangular_shadow(wl_client* client,
                                            int32_t height) {
   GetUserDataAs<ShellSurface>(resource)->SetRectangularShadow(
       gfx::Rect(x, y, width, height));
+}
+
+void remote_surface_set_rectangular_shadow_background_opacity(
+    wl_client* client,
+    wl_resource* resource,
+    wl_fixed_t opacity) {
+  GetUserDataAs<ShellSurface>(resource)->SetRectangularShadowBackgroundOpacity(
+      wl_fixed_to_double(opacity));
 }
 
 void remote_surface_set_title(wl_client* client,
@@ -1510,6 +1490,42 @@ void remote_surface_set_top_inset(wl_client* client,
   GetUserDataAs<ShellSurface>(resource)->SetTopInset(height);
 }
 
+void remote_surface_activate(wl_client* client,
+                             wl_resource* resource,
+                             uint32_t serial) {
+  GetUserDataAs<ShellSurface>(resource)->Activate();
+}
+
+void remote_surface_maximize(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<ShellSurface>(resource)->Maximize();
+}
+
+void remote_surface_minimize(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<ShellSurface>(resource)->Minimize();
+}
+
+void remote_surface_restore(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<ShellSurface>(resource)->Restore();
+}
+
+void remote_surface_fullscreen(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<ShellSurface>(resource)->SetFullscreen(true);
+}
+
+void remote_surface_unfullscreen(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<ShellSurface>(resource)->SetFullscreen(false);
+}
+
+void remote_surface_pin(wl_client* client,
+                        wl_resource* resource,
+                        int32_t trusted) {
+  GetUserDataAs<ShellSurface>(resource)->SetPinned(true, trusted);
+}
+
+void remote_surface_unpin(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<ShellSurface>(resource)->SetPinned(false, /* trusted */ false);
+}
+
 void remote_surface_set_system_modal(wl_client* client, wl_resource* resource) {
   GetUserDataAs<ShellSurface>(resource)->SetSystemModal(true);
 }
@@ -1519,39 +1535,25 @@ void remote_surface_unset_system_modal(wl_client* client,
   GetUserDataAs<ShellSurface>(resource)->SetSystemModal(false);
 }
 
-void remote_surface_set_rectangular_shadow_background_opacity(
-    wl_client* client,
-    wl_resource* resource,
-    wl_fixed_t opacity) {
-  GetUserDataAs<ShellSurface>(resource)->SetRectangularShadowBackgroundOpacity(
-      wl_fixed_to_double(opacity));
-}
-
-void remote_surface_activate(wl_client* client,
-                             wl_resource* resource,
-                             uint32_t serial) {
-  GetUserDataAs<ShellSurface>(resource)->Activate();
-}
-
-const struct zwp_remote_surface_v1_interface remote_surface_implementation = {
+const struct zcr_remote_surface_v1_interface remote_surface_implementation = {
     remote_surface_destroy,
     remote_surface_set_app_id,
     remote_surface_set_window_geometry,
     remote_surface_set_scale,
-    remote_surface_fullscreen,
+    remote_surface_set_rectangular_shadow,
+    remote_surface_set_rectangular_shadow_background_opacity,
+    remote_surface_set_title,
+    remote_surface_set_top_inset,
+    remote_surface_activate,
     remote_surface_maximize,
     remote_surface_minimize,
     remote_surface_restore,
+    remote_surface_fullscreen,
+    remote_surface_unfullscreen,
     remote_surface_pin,
     remote_surface_unpin,
-    remote_surface_unfullscreen,
-    remote_surface_set_rectangular_shadow,
-    remote_surface_set_title,
-    remote_surface_set_top_inset,
     remote_surface_set_system_modal,
-    remote_surface_unset_system_modal,
-    remote_surface_set_rectangular_shadow_background_opacity,
-    remote_surface_activate};
+    remote_surface_unset_system_modal};
 
 ////////////////////////////////////////////////////////////////////////////////
 // notification_surface_interface:
@@ -1560,7 +1562,7 @@ void notification_surface_destroy(wl_client* client, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
 
-const struct zwp_notification_surface_v1_interface
+const struct zcr_notification_surface_v1_interface
     notification_surface_implementation = {notification_surface_destroy};
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1572,8 +1574,7 @@ class WaylandRemoteShell : public WMHelper::MaximizeModeObserver,
                            public WMHelper::ActivationObserver,
                            public display::DisplayObserver {
  public:
-  WaylandRemoteShell(Display* display,
-                     wl_resource* remote_shell_resource)
+  WaylandRemoteShell(Display* display, wl_resource* remote_shell_resource)
       : display_(display),
         remote_shell_resource_(remote_shell_resource),
         weak_ptr_factory_(this) {
@@ -1583,8 +1584,8 @@ class WaylandRemoteShell : public WMHelper::MaximizeModeObserver,
     display::Screen::GetScreen()->AddObserver(this);
 
     layout_mode_ = helper->IsMaximizeModeWindowManagerEnabled()
-                       ? ZWP_REMOTE_SHELL_V1_LAYOUT_MODE_TABLET
-                       : ZWP_REMOTE_SHELL_V1_LAYOUT_MODE_WINDOWED;
+                       ? ZCR_REMOTE_SHELL_V1_LAYOUT_MODE_TABLET
+                       : ZCR_REMOTE_SHELL_V1_LAYOUT_MODE_WINDOWED;
 
     SendPrimaryDisplayMetrics();
     SendActivated(helper->GetActiveWindow(), nullptr);
@@ -1623,13 +1624,11 @@ class WaylandRemoteShell : public WMHelper::MaximizeModeObserver,
          DISPLAY_METRIC_ROTATION | DISPLAY_METRIC_WORK_AREA)) {
       SendDisplayMetrics(display);
     }
-    SendConfigure_DEPRECATED(display);
   }
 
   // Overridden from WMHelper::MaximizeModeObserver:
   void OnMaximizeModeStarted() override {
-    layout_mode_ = ZWP_REMOTE_SHELL_V1_LAYOUT_MODE_TABLET;
-    SendLayoutModeChange_DEPRECATED();
+    layout_mode_ = ZCR_REMOTE_SHELL_V1_LAYOUT_MODE_TABLET;
 
     send_configure_after_layout_change_ = true;
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
@@ -1638,8 +1637,7 @@ class WaylandRemoteShell : public WMHelper::MaximizeModeObserver,
         base::TimeDelta::FromMilliseconds(kConfigureDelayAfterLayoutSwitchMs));
   }
   void OnMaximizeModeEnded() override {
-    layout_mode_ = ZWP_REMOTE_SHELL_V1_LAYOUT_MODE_WINDOWED;
-    SendLayoutModeChange_DEPRECATED();
+    layout_mode_ = ZCR_REMOTE_SHELL_V1_LAYOUT_MODE_WINDOWED;
     send_configure_after_layout_change_ = true;
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE, base::Bind(&WaylandRemoteShell::MaybeSendConfigure,
@@ -1648,9 +1646,8 @@ class WaylandRemoteShell : public WMHelper::MaximizeModeObserver,
   }
 
   // Overridden from WMHelper::ActivationObserver:
-  void OnWindowActivated(
-      aura::Window* gained_active,
-      aura::Window* lost_active) override {
+  void OnWindowActivated(aura::Window* gained_active,
+                         aura::Window* lost_active) override {
     SendActivated(gained_active, lost_active);
   }
 
@@ -1659,7 +1656,6 @@ class WaylandRemoteShell : public WMHelper::MaximizeModeObserver,
     const display::Display primary =
         display::Screen::GetScreen()->GetPrimaryDisplay();
 
-    SendConfigure_DEPRECATED(primary);
     SendDisplayMetrics(primary);
   }
 
@@ -1671,40 +1667,14 @@ class WaylandRemoteShell : public WMHelper::MaximizeModeObserver,
   void SendDisplayMetrics(const display::Display& display) {
     send_configure_after_layout_change_ = false;
 
-    if (wl_resource_get_version(remote_shell_resource_) < 9)
-      return;
-
     const gfx::Insets& work_area_insets = display.GetWorkAreaInsets();
 
-    zwp_remote_shell_v1_send_configuration_changed(
+    zcr_remote_shell_v1_send_configuration_changed(
         remote_shell_resource_, display.size().width(), display.size().height(),
         OutputTransform(display.rotation()),
         wl_fixed_from_double(display.device_scale_factor()),
         work_area_insets.left(), work_area_insets.top(),
         work_area_insets.right(), work_area_insets.bottom(), layout_mode_);
-
-    wl_client_flush(wl_resource_get_client(remote_shell_resource_));
-  }
-
-  void SendConfigure_DEPRECATED(const display::Display& display) {
-    send_configure_after_layout_change_ = false;
-
-    if (wl_resource_get_version(remote_shell_resource_) >= 9)
-      return;
-
-    const gfx::Insets& work_area_insets = display.GetWorkAreaInsets();
-    zwp_remote_shell_v1_send_configure(
-        remote_shell_resource_, display.size().width(), display.size().height(),
-        work_area_insets.left(), work_area_insets.top(),
-        work_area_insets.right(), work_area_insets.bottom());
-    wl_client_flush(wl_resource_get_client(remote_shell_resource_));
-  }
-
-  void SendLayoutModeChange_DEPRECATED() {
-    if (wl_resource_get_version(remote_shell_resource_) < 8)
-      return;
-    zwp_remote_shell_v1_send_layout_mode_changed(remote_shell_resource_,
-                                                 layout_mode_);
     wl_client_flush(wl_resource_get_client(remote_shell_resource_));
   }
 
@@ -1735,7 +1705,7 @@ class WaylandRemoteShell : public WMHelper::MaximizeModeObserver,
       lost_active_surface_resource = nullptr;
     }
 
-    zwp_remote_shell_v1_send_activated(remote_shell_resource_,
+    zcr_remote_shell_v1_send_activated(remote_shell_resource_,
                                        gained_active_surface_resource,
                                        lost_active_surface_resource);
     wl_client_flush(client);
@@ -1749,7 +1719,7 @@ class WaylandRemoteShell : public WMHelper::MaximizeModeObserver,
 
   bool send_configure_after_layout_change_ = false;
 
-  int layout_mode_ = ZWP_REMOTE_SHELL_V1_LAYOUT_MODE_WINDOWED;
+  int layout_mode_ = ZCR_REMOTE_SHELL_V1_LAYOUT_MODE_WINDOWED;
 
   base::WeakPtrFactory<WaylandRemoteShell> weak_ptr_factory_;
 
@@ -1762,9 +1732,9 @@ void remote_shell_destroy(wl_client* client, wl_resource* resource) {
 
 int RemoteSurfaceContainer(uint32_t container) {
   switch (container) {
-    case ZWP_REMOTE_SHELL_V1_CONTAINER_DEFAULT:
+    case ZCR_REMOTE_SHELL_V1_CONTAINER_DEFAULT:
       return ash::kShellWindowId_DefaultContainer;
-    case ZWP_REMOTE_SHELL_V1_CONTAINER_OVERLAY:
+    case ZCR_REMOTE_SHELL_V1_CONTAINER_OVERLAY:
       return ash::kShellWindowId_SystemModalContainer;
     default:
       DLOG(WARNING) << "Unsupported container: " << container;
@@ -1773,7 +1743,7 @@ int RemoteSurfaceContainer(uint32_t container) {
 }
 
 void HandleRemoteSurfaceCloseCallback(wl_resource* resource) {
-  zwp_remote_surface_v1_send_close(resource);
+  zcr_remote_surface_v1_send_close(resource);
   wl_client_flush(wl_resource_get_client(resource));
 }
 
@@ -1783,54 +1753,28 @@ void HandleRemoteSurfaceStateChangedCallback(
     ash::wm::WindowStateType new_state_type) {
   DCHECK_NE(old_state_type, new_state_type);
 
-  switch (old_state_type) {
-    case ash::wm::WINDOW_STATE_TYPE_MINIMIZED:
-      if (wl_resource_get_version(resource) >= 2)
-        zwp_remote_surface_v1_send_unset_minimized(resource);
-      break;
-    case ash::wm::WINDOW_STATE_TYPE_MAXIMIZED:
-      if (wl_resource_get_version(resource) >= 2)
-        zwp_remote_surface_v1_send_unset_maximized(resource);
-      break;
-    case ash::wm::WINDOW_STATE_TYPE_FULLSCREEN:
-      zwp_remote_surface_v1_send_unset_fullscreen(resource);
-      break;
-    case ash::wm::WINDOW_STATE_TYPE_PINNED:
-      if (wl_resource_get_version(resource) >= 3)
-        zwp_remote_surface_v1_send_unset_pinned(resource);
-      break;
-    default:
-      break;
-  }
-
-  uint32_t state_type = ZWP_REMOTE_SHELL_V1_STATE_TYPE_NORMAL;
+  uint32_t state_type = ZCR_REMOTE_SHELL_V1_STATE_TYPE_NORMAL;
   switch (new_state_type) {
     case ash::wm::WINDOW_STATE_TYPE_MINIMIZED:
-      state_type = ZWP_REMOTE_SHELL_V1_STATE_TYPE_MINIMIZED;
-      if (wl_resource_get_version(resource) >= 2)
-        zwp_remote_surface_v1_send_set_minimized(resource);
+      state_type = ZCR_REMOTE_SHELL_V1_STATE_TYPE_MINIMIZED;
       break;
     case ash::wm::WINDOW_STATE_TYPE_MAXIMIZED:
-      state_type = ZWP_REMOTE_SHELL_V1_STATE_TYPE_MAXIMIZED;
-      if (wl_resource_get_version(resource) >= 2)
-        zwp_remote_surface_v1_send_set_maximized(resource);
+      state_type = ZCR_REMOTE_SHELL_V1_STATE_TYPE_MAXIMIZED;
       break;
     case ash::wm::WINDOW_STATE_TYPE_FULLSCREEN:
-      state_type = ZWP_REMOTE_SHELL_V1_STATE_TYPE_FULLSCREEN;
-      zwp_remote_surface_v1_send_set_fullscreen(resource);
+      state_type = ZCR_REMOTE_SHELL_V1_STATE_TYPE_FULLSCREEN;
       break;
     case ash::wm::WINDOW_STATE_TYPE_PINNED:
-      state_type = ZWP_REMOTE_SHELL_V1_STATE_TYPE_PINNED;
-      if (wl_resource_get_version(resource) >= 3)
-        zwp_remote_surface_v1_send_set_pinned(resource);
+      state_type = ZCR_REMOTE_SHELL_V1_STATE_TYPE_PINNED;
+      break;
+    case ash::wm::WINDOW_STATE_TYPE_TRUSTED_PINNED:
+      state_type = ZCR_REMOTE_SHELL_V1_STATE_TYPE_TRUSTED_PINNED;
       break;
     default:
       break;
   }
 
-  if (wl_resource_get_version(resource) >= 7)
-    zwp_remote_surface_v1_send_state_type_changed(resource, state_type);
-
+  zcr_remote_surface_v1_send_state_type_changed(resource, state_type);
   wl_client_flush(wl_resource_get_client(resource));
 }
 
@@ -1843,13 +1787,13 @@ void remote_shell_get_remote_surface(wl_client* client,
       GetUserDataAs<WaylandRemoteShell>(resource)->CreateShellSurface(
           GetUserDataAs<Surface>(surface), RemoteSurfaceContainer(container));
   if (!shell_surface) {
-    wl_resource_post_error(resource, ZWP_REMOTE_SHELL_V1_ERROR_ROLE,
+    wl_resource_post_error(resource, ZCR_REMOTE_SHELL_V1_ERROR_ROLE,
                            "surface has already been assigned a role");
     return;
   }
 
   wl_resource* remote_surface_resource =
-      wl_resource_create(client, &zwp_remote_surface_v1_interface,
+      wl_resource_create(client, &zcr_remote_surface_v1_interface,
                          wl_resource_get_version(resource), id);
 
   shell_surface->set_close_callback(
@@ -1869,7 +1813,7 @@ void remote_shell_get_notification_surface(wl_client* client,
                                            wl_resource* surface,
                                            const char* notification_id) {
   if (GetUserDataAs<Surface>(surface)->HasSurfaceDelegate()) {
-    wl_resource_post_error(resource, ZWP_REMOTE_SHELL_V1_ERROR_ROLE,
+    wl_resource_post_error(resource, ZCR_REMOTE_SHELL_V1_ERROR_ROLE,
                            "surface has already been assigned a role");
     return;
   }
@@ -1879,40 +1823,40 @@ void remote_shell_get_notification_surface(wl_client* client,
           GetUserDataAs<Surface>(surface), std::string(notification_id));
   if (!notification_surface) {
     wl_resource_post_error(resource,
-                           ZWP_REMOTE_SHELL_V1_ERROR_INVALID_NOTIFICATION_ID,
+                           ZCR_REMOTE_SHELL_V1_ERROR_INVALID_NOTIFICATION_ID,
                            "invalid notification id");
     return;
   }
 
   wl_resource* notification_surface_resource =
-      wl_resource_create(client, &zwp_notification_surface_v1_interface,
+      wl_resource_create(client, &zcr_notification_surface_v1_interface,
                          wl_resource_get_version(resource), id);
   SetImplementation(notification_surface_resource,
                     &notification_surface_implementation,
                     std::move(notification_surface));
 }
 
-const struct zwp_remote_shell_v1_interface remote_shell_implementation = {
+const struct zcr_remote_shell_v1_interface remote_shell_implementation = {
     remote_shell_destroy, remote_shell_get_remote_surface,
     remote_shell_get_notification_surface};
 
-const uint32_t remote_shell_version = 10;
+const uint32_t remote_shell_version = 1;
 
 void bind_remote_shell(wl_client* client,
                        void* data,
                        uint32_t version,
                        uint32_t id) {
   wl_resource* resource =
-      wl_resource_create(client, &zwp_remote_shell_v1_interface,
+      wl_resource_create(client, &zcr_remote_shell_v1_interface,
                          std::min(version, remote_shell_version), id);
 
   SetImplementation(resource, &remote_shell_implementation,
-                    base::WrapUnique(new WaylandRemoteShell(
-                        static_cast<Display*>(data), resource)));
+                    base::MakeUnique<WaylandRemoteShell>(
+                        static_cast<Display*>(data), resource));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// zwp_vsync_timing_v1_interface:
+// vsync_timing_interface:
 
 // Implements VSync timing interface by monitoring a compositor for updates
 // to VSync parameters.
@@ -1954,7 +1898,7 @@ class VSyncTiming : public ui::CompositorVSyncManager::Observer {
         return;
     }
 
-    zwp_vsync_timing_v1_send_update(timing_resource_, timebase_us & 0xffffffff,
+    zcr_vsync_timing_v1_send_update(timing_resource_, timebase_us & 0xffffffff,
                                     timebase_us >> 32, interval_us & 0xffffffff,
                                     interval_us >> 32);
     wl_client_flush(wl_resource_get_client(timing_resource_));
@@ -1984,11 +1928,11 @@ void vsync_timing_destroy(wl_client* client, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
 
-const struct zwp_vsync_timing_v1_interface vsync_timing_implementation = {
+const struct zcr_vsync_timing_v1_interface vsync_timing_implementation = {
     vsync_timing_destroy};
 
 ////////////////////////////////////////////////////////////////////////////////
-// zwp_vsync_feedback_v1_interface:
+// vsync_feedback_interface:
 
 void vsync_feedback_destroy(wl_client* client, wl_resource* resource) {
   wl_resource_destroy(resource);
@@ -1999,7 +1943,7 @@ void vsync_feedback_get_vsync_timing(wl_client* client,
                                      uint32_t id,
                                      wl_resource* output) {
   wl_resource* timing_resource =
-      wl_resource_create(client, &zwp_vsync_timing_v1_interface, 1, id);
+      wl_resource_create(client, &zcr_vsync_timing_v1_interface, 1, id);
 
   // TODO(reveman): Multi-display support.
   ui::Compositor* compositor =
@@ -2009,7 +1953,7 @@ void vsync_feedback_get_vsync_timing(wl_client* client,
                     VSyncTiming::Create(compositor, timing_resource));
 }
 
-const struct zwp_vsync_feedback_v1_interface vsync_feedback_implementation = {
+const struct zcr_vsync_feedback_v1_interface vsync_feedback_implementation = {
     vsync_feedback_destroy, vsync_feedback_get_vsync_timing};
 
 void bind_vsync_feedback(wl_client* client,
@@ -2017,7 +1961,7 @@ void bind_vsync_feedback(wl_client* client,
                          uint32_t version,
                          uint32_t id) {
   wl_resource* resource =
-      wl_resource_create(client, &zwp_vsync_feedback_v1_interface, 1, id);
+      wl_resource_create(client, &zcr_vsync_feedback_v1_interface, 1, id);
 
   wl_resource_set_implementation(resource, &vsync_feedback_implementation,
                                  nullptr, nullptr);
@@ -2457,9 +2401,9 @@ void seat_get_pointer(wl_client* client, wl_resource* resource, uint32_t id) {
   wl_resource* pointer_resource = wl_resource_create(
       client, &wl_pointer_interface, wl_resource_get_version(resource), id);
 
-  SetImplementation(pointer_resource, &pointer_implementation,
-                    base::WrapUnique(new Pointer(
-                        new WaylandPointerDelegate(pointer_resource))));
+  SetImplementation(
+      pointer_resource, &pointer_implementation,
+      base::MakeUnique<Pointer>(new WaylandPointerDelegate(pointer_resource)));
 }
 
 void seat_get_keyboard(wl_client* client, wl_resource* resource, uint32_t id) {
@@ -2469,8 +2413,8 @@ void seat_get_keyboard(wl_client* client, wl_resource* resource, uint32_t id) {
       wl_resource_create(client, &wl_keyboard_interface, version, id);
 
   SetImplementation(keyboard_resource, &keyboard_implementation,
-                    base::WrapUnique(new Keyboard(
-                        new WaylandKeyboardDelegate(keyboard_resource))));
+                    base::MakeUnique<Keyboard>(
+                        new WaylandKeyboardDelegate(keyboard_resource)));
 
   // TODO(reveman): Keep repeat info synchronized with chromium and the host OS.
   if (version >= WL_KEYBOARD_REPEAT_INFO_SINCE_VERSION)
@@ -2486,7 +2430,7 @@ void seat_get_touch(wl_client* client, wl_resource* resource, uint32_t id) {
 
   SetImplementation(
       touch_resource, &touch_implementation,
-      base::WrapUnique(new Touch(new WaylandTouchDelegate(touch_resource))));
+      base::MakeUnique<Touch>(new WaylandTouchDelegate(touch_resource)));
 }
 
 void seat_release(wl_client* client, wl_resource* resource) {
@@ -2631,7 +2575,7 @@ void viewporter_get_viewport(wl_client* client,
       client, &wp_viewport_interface, wl_resource_get_version(resource), id);
 
   SetImplementation(viewport_resource, &viewport_implementation,
-                    base::WrapUnique(new Viewport(surface)));
+                    base::MakeUnique<Viewport>(surface));
 }
 
 const struct wp_viewporter_interface viewporter_implementation = {
@@ -2695,7 +2639,7 @@ void security_only_visible_on_secure_output(wl_client* client,
   GetUserDataAs<Security>(resource)->OnlyVisibleOnSecureOutput();
 }
 
-const struct zwp_security_v1_interface security_implementation = {
+const struct zcr_security_v1_interface security_implementation = {
     security_destroy, security_only_visible_on_secure_output};
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2711,19 +2655,19 @@ void secure_output_get_security(wl_client* client,
                                 wl_resource* surface_resource) {
   Surface* surface = GetUserDataAs<Surface>(surface_resource);
   if (surface->GetProperty(kSurfaceHasSecurityKey)) {
-    wl_resource_post_error(resource, ZWP_SECURE_OUTPUT_V1_ERROR_SECURITY_EXISTS,
+    wl_resource_post_error(resource, ZCR_SECURE_OUTPUT_V1_ERROR_SECURITY_EXISTS,
                            "a security object for that surface already exists");
     return;
   }
 
   wl_resource* security_resource =
-      wl_resource_create(client, &zwp_security_v1_interface, 1, id);
+      wl_resource_create(client, &zcr_security_v1_interface, 1, id);
 
   SetImplementation(security_resource, &security_implementation,
-                    base::WrapUnique(new Security(surface)));
+                    base::MakeUnique<Security>(surface));
 }
 
-const struct zwp_secure_output_v1_interface secure_output_implementation = {
+const struct zcr_secure_output_v1_interface secure_output_implementation = {
     secure_output_destroy, secure_output_get_security};
 
 void bind_secure_output(wl_client* client,
@@ -2731,7 +2675,7 @@ void bind_secure_output(wl_client* client,
                         uint32_t version,
                         uint32_t id) {
   wl_resource* resource =
-      wl_resource_create(client, &zwp_secure_output_v1_interface, 1, id);
+      wl_resource_create(client, &zcr_secure_output_v1_interface, 1, id);
 
   wl_resource_set_implementation(resource, &secure_output_implementation, data,
                                  nullptr);
@@ -2789,14 +2733,14 @@ void blending_set_blending(wl_client* client,
                            wl_resource* resource,
                            uint32_t equation) {
   switch (equation) {
-    case ZWP_BLENDING_V1_BLENDING_EQUATION_NONE:
+    case ZCR_BLENDING_V1_BLENDING_EQUATION_NONE:
       GetUserDataAs<Blending>(resource)->SetBlendMode(SkXfermode::kSrc_Mode);
       break;
-    case ZWP_BLENDING_V1_BLENDING_EQUATION_PREMULT:
+    case ZCR_BLENDING_V1_BLENDING_EQUATION_PREMULT:
       GetUserDataAs<Blending>(resource)->SetBlendMode(
           SkXfermode::kSrcOver_Mode);
       break;
-    case ZWP_BLENDING_V1_BLENDING_EQUATION_COVERAGE:
+    case ZCR_BLENDING_V1_BLENDING_EQUATION_COVERAGE:
       NOTIMPLEMENTED();
       break;
     default:
@@ -2811,7 +2755,7 @@ void blending_set_alpha(wl_client* client,
   GetUserDataAs<Blending>(resource)->SetAlpha(wl_fixed_to_double(alpha));
 }
 
-const struct zwp_blending_v1_interface blending_implementation = {
+const struct zcr_blending_v1_interface blending_implementation = {
     blending_destroy, blending_set_blending, blending_set_alpha};
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2828,19 +2772,19 @@ void alpha_compositing_get_blending(wl_client* client,
   Surface* surface = GetUserDataAs<Surface>(surface_resource);
   if (surface->GetProperty(kSurfaceHasBlendingKey)) {
     wl_resource_post_error(resource,
-                           ZWP_ALPHA_COMPOSITING_V1_ERROR_BLENDING_EXISTS,
+                           ZCR_ALPHA_COMPOSITING_V1_ERROR_BLENDING_EXISTS,
                            "a blending object for that surface already exists");
     return;
   }
 
   wl_resource* blending_resource =
-      wl_resource_create(client, &zwp_blending_v1_interface, 1, id);
+      wl_resource_create(client, &zcr_blending_v1_interface, 1, id);
 
   SetImplementation(blending_resource, &blending_implementation,
-                    base::WrapUnique(new Blending(surface)));
+                    base::MakeUnique<Blending>(surface));
 }
 
-const struct zwp_alpha_compositing_v1_interface
+const struct zcr_alpha_compositing_v1_interface
     alpha_compositing_implementation = {alpha_compositing_destroy,
                                         alpha_compositing_get_blending};
 
@@ -2849,7 +2793,7 @@ void bind_alpha_compositing(wl_client* client,
                             uint32_t version,
                             uint32_t id) {
   wl_resource* resource =
-      wl_resource_create(client, &zwp_alpha_compositing_v1_interface, 1, id);
+      wl_resource_create(client, &zcr_alpha_compositing_v1_interface, 1, id);
 
   wl_resource_set_implementation(resource, &alpha_compositing_implementation,
                                  data, nullptr);
@@ -2872,23 +2816,23 @@ class WaylandGamepadDelegate : public GamepadDelegate {
            wl_resource_get_client(surface_resource) == client();
   }
   void OnStateChange(bool connected) override {
-    uint32_t status = connected ? ZWP_GAMEPAD_V1_GAMEPAD_STATE_ON
-                                : ZWP_GAMEPAD_V1_GAMEPAD_STATE_OFF;
-    zwp_gamepad_v1_send_state_change(gamepad_resource_, status);
+    uint32_t status = connected ? ZCR_GAMEPAD_V1_GAMEPAD_STATE_ON
+                                : ZCR_GAMEPAD_V1_GAMEPAD_STATE_OFF;
+    zcr_gamepad_v1_send_state_change(gamepad_resource_, status);
     wl_client_flush(client());
   }
   void OnAxis(int axis, double value) override {
-    zwp_gamepad_v1_send_axis(gamepad_resource_, NowInMilliseconds(), axis,
+    zcr_gamepad_v1_send_axis(gamepad_resource_, NowInMilliseconds(), axis,
                              wl_fixed_from_double(value));
   }
   void OnButton(int button, bool pressed, double value) override {
-    uint32_t state = pressed ? ZWP_GAMEPAD_V1_BUTTON_STATE_PRESSED
-                             : ZWP_GAMEPAD_V1_BUTTON_STATE_RELEASED;
-    zwp_gamepad_v1_send_button(gamepad_resource_, NowInMilliseconds(), button,
+    uint32_t state = pressed ? ZCR_GAMEPAD_V1_BUTTON_STATE_PRESSED
+                             : ZCR_GAMEPAD_V1_BUTTON_STATE_RELEASED;
+    zcr_gamepad_v1_send_button(gamepad_resource_, NowInMilliseconds(), button,
                                state, wl_fixed_from_double(value));
   }
   void OnFrame() override {
-    zwp_gamepad_v1_send_frame(gamepad_resource_, NowInMilliseconds());
+    zcr_gamepad_v1_send_frame(gamepad_resource_, NowInMilliseconds());
     wl_client_flush(client());
   }
 
@@ -2908,7 +2852,7 @@ void gamepad_destroy(wl_client* client, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
 
-const struct zwp_gamepad_v1_interface gamepad_implementation = {
+const struct zcr_gamepad_v1_interface gamepad_implementation = {
     gamepad_destroy};
 
 void gaming_input_get_gamepad(wl_client* client,
@@ -2916,17 +2860,17 @@ void gaming_input_get_gamepad(wl_client* client,
                               uint32_t id,
                               wl_resource* seat) {
   wl_resource* gamepad_resource = wl_resource_create(
-      client, &zwp_gamepad_v1_interface, wl_resource_get_version(resource), id);
+      client, &zcr_gamepad_v1_interface, wl_resource_get_version(resource), id);
 
   base::Thread* gaming_input_thread = GetUserDataAs<base::Thread>(resource);
 
   SetImplementation(
       gamepad_resource, &gamepad_implementation,
-      base::WrapUnique(new Gamepad(new WaylandGamepadDelegate(gamepad_resource),
-                                   gaming_input_thread->task_runner().get())));
+      base::MakeUnique<Gamepad>(new WaylandGamepadDelegate(gamepad_resource),
+                                gaming_input_thread->task_runner().get()));
 }
 
-const struct zwp_gaming_input_v1_interface gaming_input_implementation = {
+const struct zcr_gaming_input_v1_interface gaming_input_implementation = {
     gaming_input_get_gamepad};
 
 void bind_gaming_input(wl_client* client,
@@ -2934,7 +2878,7 @@ void bind_gaming_input(wl_client* client,
                        uint32_t version,
                        uint32_t id) {
   wl_resource* resource =
-      wl_resource_create(client, &zwp_gaming_input_v1_interface, version, id);
+      wl_resource_create(client, &zcr_gaming_input_v1_interface, version, id);
 
   std::unique_ptr<base::Thread> gaming_input_thread(
       new base::Thread("Exo gaming input polling thread."));
@@ -2960,20 +2904,20 @@ class WaylandPointerStylusDelegate : public PointerStylusDelegate {
   }
   void OnPointerDestroying(Pointer* pointer) override { pointer_ = nullptr; }
   void OnPointerToolChange(ui::EventPointerType type) override {
-    uint wayland_type = ZWP_POINTER_STYLUS_V1_TOOL_TYPE_MOUSE;
+    uint wayland_type = ZCR_POINTER_STYLUS_V1_TOOL_TYPE_MOUSE;
     if (type == ui::EventPointerType::POINTER_TYPE_PEN)
-      wayland_type = ZWP_POINTER_STYLUS_V1_TOOL_TYPE_PEN;
+      wayland_type = ZCR_POINTER_STYLUS_V1_TOOL_TYPE_PEN;
     else if (type == ui::EventPointerType::POINTER_TYPE_ERASER)
-      wayland_type = ZWP_POINTER_STYLUS_V1_TOOL_TYPE_ERASER;
-    zwp_pointer_stylus_v1_send_tool_change(resource_, wayland_type);
+      wayland_type = ZCR_POINTER_STYLUS_V1_TOOL_TYPE_ERASER;
+    zcr_pointer_stylus_v1_send_tool_change(resource_, wayland_type);
   }
   void OnPointerForce(base::TimeTicks time_stamp, float force) override {
-    zwp_pointer_stylus_v1_send_force(resource_,
+    zcr_pointer_stylus_v1_send_force(resource_,
                                      TimeTicksToMilliseconds(time_stamp),
                                      wl_fixed_from_double(force));
   }
   void OnPointerTilt(base::TimeTicks time_stamp, gfx::Vector2dF tilt) override {
-    zwp_pointer_stylus_v1_send_tilt(
+    zcr_pointer_stylus_v1_send_tilt(
         resource_, TimeTicksToMilliseconds(time_stamp),
         wl_fixed_from_double(tilt.x()), wl_fixed_from_double(tilt.y()));
   }
@@ -2992,7 +2936,7 @@ void pointer_stylus_destroy(wl_client* client, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
 
-const struct zwp_pointer_stylus_v1_interface pointer_stylus_implementation = {
+const struct zcr_pointer_stylus_v1_interface pointer_stylus_implementation = {
     pointer_stylus_destroy};
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3005,19 +2949,19 @@ void stylus_get_pointer_stylus(wl_client* client,
   Pointer* pointer = GetUserDataAs<Pointer>(pointer_resource);
 
   wl_resource* stylus_resource =
-      wl_resource_create(client, &zwp_pointer_stylus_v1_interface, 1, id);
+      wl_resource_create(client, &zcr_pointer_stylus_v1_interface, 1, id);
 
-  SetImplementation(stylus_resource, &pointer_stylus_implementation,
-                    base::WrapUnique(new WaylandPointerStylusDelegate(
-                        stylus_resource, pointer)));
+  SetImplementation(
+      stylus_resource, &pointer_stylus_implementation,
+      base::MakeUnique<WaylandPointerStylusDelegate>(stylus_resource, pointer));
 }
 
-const struct zwp_stylus_v1_interface stylus_implementation = {
+const struct zcr_stylus_v1_interface stylus_implementation = {
     stylus_get_pointer_stylus};
 
 void bind_stylus(wl_client* client, void* data, uint32_t version, uint32_t id) {
   wl_resource* resource =
-      wl_resource_create(client, &zwp_stylus_v1_interface, version, id);
+      wl_resource_create(client, &zcr_stylus_v1_interface, version, id);
   wl_resource_set_implementation(resource, &stylus_implementation, data,
                                  nullptr);
 }
@@ -3046,7 +2990,7 @@ Server::Server(Display* display)
                    display_, bind_output);
   wl_global_create(wl_display_.get(), &xdg_shell_interface, 1, display_,
                    bind_xdg_shell);
-  wl_global_create(wl_display_.get(), &zwp_vsync_feedback_v1_interface, 1,
+  wl_global_create(wl_display_.get(), &zcr_vsync_feedback_v1_interface, 1,
                    display_, bind_vsync_feedback);
   wl_global_create(wl_display_.get(), &wl_data_device_manager_interface, 1,
                    display_, bind_data_device_manager);
@@ -3054,15 +2998,15 @@ Server::Server(Display* display)
                    display_, bind_seat);
   wl_global_create(wl_display_.get(), &wp_viewporter_interface, 1, display_,
                    bind_viewporter);
-  wl_global_create(wl_display_.get(), &zwp_secure_output_v1_interface, 1,
+  wl_global_create(wl_display_.get(), &zcr_secure_output_v1_interface, 1,
                    display_, bind_secure_output);
-  wl_global_create(wl_display_.get(), &zwp_alpha_compositing_v1_interface, 1,
+  wl_global_create(wl_display_.get(), &zcr_alpha_compositing_v1_interface, 1,
                    display_, bind_alpha_compositing);
-  wl_global_create(wl_display_.get(), &zwp_remote_shell_v1_interface,
+  wl_global_create(wl_display_.get(), &zcr_remote_shell_v1_interface,
                    remote_shell_version, display_, bind_remote_shell);
-  wl_global_create(wl_display_.get(), &zwp_gaming_input_v1_interface, 1,
+  wl_global_create(wl_display_.get(), &zcr_gaming_input_v1_interface, 1,
                    display_, bind_gaming_input);
-  wl_global_create(wl_display_.get(), &zwp_stylus_v1_interface, 1, display_,
+  wl_global_create(wl_display_.get(), &zcr_stylus_v1_interface, 1, display_,
                    bind_stylus);
 }
 

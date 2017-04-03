@@ -21,7 +21,7 @@
 #include "base/i18n/rtl.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/scoped_native_library.h"
 #include "base/strings/string_number_conversions.h"
@@ -496,7 +496,7 @@ bool ChromeBrowserMainPartsWin::CheckMachineLevelInstall() {
   // TODO(tommi): Check if using the default distribution is always the right
   // thing to do.
   BrowserDistribution* dist = BrowserDistribution::GetDistribution();
-  Version version;
+  base::Version version;
   InstallUtil::GetChromeVersion(dist, true, &version);
   if (version.IsValid()) {
     base::FilePath exe_path;

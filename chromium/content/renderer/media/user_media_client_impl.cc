@@ -187,7 +187,7 @@ UserMediaClientImpl::~UserMediaClientImpl() {
   // Force-close all outstanding user media requests and local sources here,
   // before the outstanding WeakPtrs are invalidated, to ensure a clean
   // shutdown.
-  FrameWillClose();
+  WillCommitProvisionalLoad();
 }
 
 void UserMediaClientImpl::requestUserMedia(
@@ -330,16 +330,6 @@ void UserMediaClientImpl::requestMediaDevices(
       security_origin);
 }
 
-void UserMediaClientImpl::cancelMediaDevicesRequest(
-    const blink::WebMediaDevicesRequest& media_devices_request) {
-  DCHECK(CalledOnValidThread());
-  MediaDevicesRequestInfo* request =
-      FindMediaDevicesRequestInfo(media_devices_request);
-  if (!request)
-    return;
-  CancelAndDeleteMediaDevicesRequest(request);
-}
-
 void UserMediaClientImpl::requestSources(
     const blink::WebMediaStreamTrackSourcesRequest& sources_request) {
   // We don't call UpdateWebRTCMethodCount() here to track the API count in UMA
@@ -467,10 +457,6 @@ void UserMediaClientImpl::OnStreamGeneratedForCancelledRequest(
 
 void UserMediaClientImpl::FinalizeEnumerateDevices(
     MediaDevicesRequestInfo* request) {
-  // All devices are ready for copying. We use a hashed audio output device id
-  // as the group id for input and output audio devices. If an input device
-  // doesn't have an associated output device, we use the input device's own id.
-  // We don't support group id for video devices, that's left empty.
   blink::WebVector<blink::WebMediaDeviceInfo>
       devices(request->audio_input_devices.size() +
               request->video_input_devices.size() +
@@ -479,19 +465,10 @@ void UserMediaClientImpl::FinalizeEnumerateDevices(
     const MediaStreamDevice& device = request->audio_input_devices[i].device;
     DCHECK_EQ(device.type, MEDIA_DEVICE_AUDIO_CAPTURE);
 
-    // We add an arbitrary character to the device ID in order to avoid the same
-    // group ID for the input and output devices that share the same ID but are
-    // not in the same physical device. This may happen with the default and
-    // communication devices.
-    std::string group_id = base::UintToString(base::Hash(
-        device.matched_output_device_id.empty() ?
-            device.id + "i" :
-            device.matched_output_device_id));
-    devices[i].initialize(
-        blink::WebString::fromUTF8(device.id),
-        blink::WebMediaDeviceInfo::MediaDeviceKindAudioInput,
-        blink::WebString::fromUTF8(device.name),
-        blink::WebString::fromUTF8(group_id));
+    devices[i].initialize(blink::WebString::fromUTF8(device.id),
+                          blink::WebMediaDeviceInfo::MediaDeviceKindAudioInput,
+                          blink::WebString::fromUTF8(device.name),
+                          blink::WebString::fromUTF8(device.group_id));
   }
   size_t offset = request->audio_input_devices.size();
   for (size_t i = 0; i  < request->video_input_devices.size(); ++i) {
@@ -511,7 +488,7 @@ void UserMediaClientImpl::FinalizeEnumerateDevices(
         blink::WebString::fromUTF8(device.id),
         blink::WebMediaDeviceInfo::MediaDeviceKindAudioOutput,
         blink::WebString::fromUTF8(device.name),
-        blink::WebString::fromUTF8(base::UintToString(base::Hash(device.id))));
+        blink::WebString::fromUTF8(device.group_id));
   }
 
   EnumerateDevicesSucceded(&request->media_devices_request, devices);
@@ -1051,7 +1028,7 @@ void UserMediaClientImpl::CancelAndDeleteMediaDevicesRequest(
   NOTREACHED();
 }
 
-void UserMediaClientImpl::FrameWillClose() {
+void UserMediaClientImpl::WillCommitProvisionalLoad() {
   // Cancel all outstanding UserMediaRequests.
   DeleteAllUserMediaRequests();
 

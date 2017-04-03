@@ -24,6 +24,7 @@ using base::android::AttachCurrentThread;
 using base::android::ConvertJavaStringToUTF8;
 using base::android::AppendJavaStringArrayToStringVector;
 using base::android::JavaParamRef;
+using base::android::JavaRef;
 
 namespace {
 // The poll interval in ms when there is no active discovery. This
@@ -42,12 +43,13 @@ namespace device {
 base::WeakPtr<BluetoothAdapter> BluetoothAdapter::CreateAdapter(
     const InitCallback& init_callback) {
   return BluetoothAdapterAndroid::Create(
-      BluetoothAdapterWrapper_CreateWithDefaultAdapter().obj());
+      BluetoothAdapterWrapper_CreateWithDefaultAdapter());
 }
 
 // static
 base::WeakPtr<BluetoothAdapterAndroid> BluetoothAdapterAndroid::Create(
-    jobject bluetooth_adapter_wrapper) {  // Java Type: bluetoothAdapterWrapper
+    const JavaRef<jobject>&
+        bluetooth_adapter_wrapper) {  // Java Type: bluetoothAdapterWrapper
   BluetoothAdapterAndroid* adapter = new BluetoothAdapterAndroid();
 
   adapter->j_adapter_.Reset(Java_ChromeBluetoothAdapter_create(
@@ -145,17 +147,10 @@ void BluetoothAdapterAndroid::CreateL2capService(
   error_callback.Run("Not Implemented");
 }
 
-void BluetoothAdapterAndroid::RegisterAudioSink(
-    const BluetoothAudioSink::Options& options,
-    const AcquiredCallback& callback,
-    const BluetoothAudioSink::ErrorCallback& error_callback) {
-  error_callback.Run(BluetoothAudioSink::ERROR_UNSUPPORTED_PLATFORM);
-}
-
 void BluetoothAdapterAndroid::RegisterAdvertisement(
     std::unique_ptr<BluetoothAdvertisement::Data> advertisement_data,
     const CreateAdvertisementCallback& callback,
-    const CreateAdvertisementErrorCallback& error_callback) {
+    const AdvertisementErrorCallback& error_callback) {
   error_callback.Run(BluetoothAdvertisement::ERROR_UNSUPPORTED_PLATFORM);
 }
 

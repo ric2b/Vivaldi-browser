@@ -66,7 +66,8 @@ class Notes_Model : public content::NotificationObserver, public KeyedService {
                       const base::string16 &subject, const GURL &url,
                       const base::string16 &content);
 
-  Notes_Node *AddNode(Notes_Node *parent, int index, Notes_Node *node);
+  Notes_Node *AddNode(Notes_Node *parent, int index,
+                      std::unique_ptr<Notes_Node> node);
 
   Notes_Node *AddNote(const Notes_Node *parent, int index, bool is_folder,
                       const ImportedNotesEntry &node);

@@ -193,11 +193,11 @@ void GLES2DecoderTestBase::InitDecoderWithCommandLine(
     feature_info = new FeatureInfo(*command_line, gpu_driver_bug_workaround);
   }
 
-  group_ = scoped_refptr<ContextGroup>(
-      new ContextGroup(gpu_preferences_, NULL, memory_tracker_,
-                       new ShaderTranslatorCache(gpu_preferences_),
-                       new FramebufferCompletenessCache, feature_info,
-                       normalized_init.bind_generates_resource, nullptr));
+  group_ = scoped_refptr<ContextGroup>(new ContextGroup(
+      gpu_preferences_, NULL, memory_tracker_,
+      new ShaderTranslatorCache(gpu_preferences_),
+      new FramebufferCompletenessCache, feature_info,
+      normalized_init.bind_generates_resource, nullptr, nullptr));
   bool use_default_textures = normalized_init.bind_generates_resource;
 
   InSequence sequence;
@@ -219,6 +219,7 @@ void GLES2DecoderTestBase::InitDecoderWithCommandLine(
       DisallowedFeatures(),
       normalized_init.extensions.c_str(),
       normalized_init.gl_version.c_str(),
+      init.context_type,
       normalized_init.bind_generates_resource);
 
   // We initialize the ContextGroup with a MockGLES2Decoder so that
@@ -831,9 +832,8 @@ void GLES2DecoderTestBase::SetupExpectationsForFramebufferClearingMulti(
     EXPECT_CALL(*gl_, ClearStencil(0))
         .Times(1)
         .RetiresOnSaturation();
-    EXPECT_CALL(*gl_, StencilMask(static_cast<GLuint>(-1)))
-        .Times(1)
-        .RetiresOnSaturation();
+    SetupExpectationsForStencilMask(static_cast<GLuint>(-1),
+                                    static_cast<GLuint>(-1));
   }
   if ((clear_bits & GL_DEPTH_BUFFER_BIT) != 0) {
     EXPECT_CALL(*gl_, ClearDepth(1.0f))
@@ -1384,20 +1384,26 @@ void GLES2DecoderTestBase::DoFramebufferRenderbuffer(
         renderbuffer_service_id))
         .Times(1)
         .RetiresOnSaturation();
+    EXPECT_CALL(*gl_, GetError())
+        .WillOnce(Return(error))
+        .RetiresOnSaturation();
     EXPECT_CALL(*gl_, FramebufferRenderbufferEXT(
         target, GL_STENCIL_ATTACHMENT, renderbuffer_target,
         renderbuffer_service_id))
         .Times(1)
+        .RetiresOnSaturation();
+    EXPECT_CALL(*gl_, GetError())
+        .WillOnce(Return(error))
         .RetiresOnSaturation();
   } else {
     EXPECT_CALL(*gl_, FramebufferRenderbufferEXT(
         target, attachment, renderbuffer_target, renderbuffer_service_id))
         .Times(1)
         .RetiresOnSaturation();
+    EXPECT_CALL(*gl_, GetError())
+        .WillOnce(Return(error))
+        .RetiresOnSaturation();
   }
-  EXPECT_CALL(*gl_, GetError())
-      .WillOnce(Return(error))
-      .RetiresOnSaturation();
   cmds::FramebufferRenderbuffer cmd;
   cmd.Init(target, attachment, renderbuffer_target, renderbuffer_client_id);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));

@@ -8,6 +8,7 @@ import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertNull;
 
 import android.content.ComponentName;
+import android.graphics.Bitmap;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
@@ -78,6 +79,12 @@ public class StubbedProvider implements BackendProvider {
                 }
             });
         }
+
+        @Override
+        public boolean isDownloadOpenableInBrowser(
+                String guid, boolean isOffTheRecord, String mimeType) {
+            return false;
+        }
     }
 
     /** Stubs out the OfflinePageDownloadBridge. */
@@ -136,18 +143,34 @@ public class StubbedProvider implements BackendProvider {
         @Override public void destroy() { }
     }
 
+    /** Stubs out all attempts to get thumbnails for files. */
+    public static class StubbedThumbnailProvider implements ThumbnailProvider {
+        @Override
+        public void destroy() {}
+
+        @Override
+        public Bitmap getThumbnail(ThumbnailRequest request) {
+            return null;
+        }
+
+        @Override
+        public void cancelRetrieval(ThumbnailRequest request) {}
+    }
+
     private static final long ONE_GIGABYTE = 1024L * 1024L * 1024L;
 
     private final Handler mHandler;
     private final StubbedDownloadDelegate mDownloadDelegate;
     private final StubbedOfflinePageDelegate mOfflineDelegate;
     private final SelectionDelegate<DownloadHistoryItemWrapper> mSelectionDelegate;
+    private final StubbedThumbnailProvider mStubbedThumbnailProvider;
 
     public StubbedProvider() {
         mHandler = new Handler(Looper.getMainLooper());
         mDownloadDelegate = new StubbedDownloadDelegate();
         mOfflineDelegate = new StubbedOfflinePageDelegate();
         mSelectionDelegate = new SelectionDelegate<>();
+        mStubbedThumbnailProvider = new StubbedThumbnailProvider();
     }
 
     @Override
@@ -164,6 +187,14 @@ public class StubbedProvider implements BackendProvider {
     public SelectionDelegate<DownloadHistoryItemWrapper> getSelectionDelegate() {
         return mSelectionDelegate;
     }
+
+    @Override
+    public StubbedThumbnailProvider getThumbnailProvider() {
+        return mStubbedThumbnailProvider;
+    }
+
+    @Override
+    public void destroy() {}
 
     /** Creates a new DownloadItem with pre-defined values. */
     public static DownloadItem createDownloadItem(int which, String date) throws Exception {
@@ -238,6 +269,16 @@ public class StubbedProvider implements BackendProvider {
                     .setFileName("sleep.pdf")
                     .setFilePath("/storage/fake_path/Downloads/sleep.pdf")
                     .setDownloadGuid("eighth_guid")
+                    .setMimeType("application/pdf")
+                    .build());
+        } else if (which == 8) {
+            // This is a duplicate of item 7 above.
+            item = new DownloadItem(false, new DownloadInfo.Builder()
+                    .setUrl("https://sleepy.com")
+                    .setContentLength(ONE_GIGABYTE / 2)
+                    .setFileName("sleep.pdf")
+                    .setFilePath("/storage/fake_path/Downloads/sleep.pdf")
+                    .setDownloadGuid("ninth_guid")
                     .setMimeType("application/pdf")
                     .build());
         } else {

@@ -10,16 +10,16 @@
  *     notice, this list of conditions and the following disclaimer in the
  *     documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
- * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #ifndef WebRTCDataChannelHandlerClient_h
@@ -32,24 +32,24 @@
 namespace blink {
 
 class WebRTCDataChannelHandlerClient {
-public:
-    enum ReadyState {
-        ReadyStateConnecting = 0,
-        ReadyStateOpen = 1,
-        ReadyStateClosing = 2,
-        ReadyStateClosed = 3,
-    };
+ public:
+  enum ReadyState {
+    ReadyStateConnecting = 0,
+    ReadyStateOpen = 1,
+    ReadyStateClosing = 2,
+    ReadyStateClosed = 3,
+  };
 
-    virtual ~WebRTCDataChannelHandlerClient() { }
+  virtual ~WebRTCDataChannelHandlerClient() {}
 
-    virtual void didChangeReadyState(ReadyState) = 0;
-    // TODO(bemasc): Make this pure virtual once Chromium unit tests are updated
-    virtual void didDecreaseBufferedAmount(unsigned) { };
-    virtual void didReceiveStringData(const WebString&) = 0;
-    virtual void didReceiveRawData(const char*, size_t) = 0;
-    virtual void didDetectError() = 0;
+  virtual void didChangeReadyState(ReadyState) = 0;
+  // TODO(bemasc): Make this pure virtual once Chromium unit tests are updated
+  virtual void didDecreaseBufferedAmount(unsigned){};
+  virtual void didReceiveStringData(const WebString&) = 0;
+  virtual void didReceiveRawData(const char*, size_t) = 0;
+  virtual void didDetectError() = 0;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // WebRTCDataChannelHandlerClient_h
+#endif  // WebRTCDataChannelHandlerClient_h

@@ -32,9 +32,7 @@ class _PageCyclerV2(perf_benchmark.PerfBenchmark):
     cat_filter.AddIncludedCategory('navigation')
     cat_filter.AddIncludedCategory('blink.user_timing')
 
-    # Below categories are needed for first-meaningful-paint computation.
-    cat_filter.AddDisabledByDefault('disabled-by-default-blink.debug.layout')
-    cat_filter.AddIncludedCategory('devtools.timeline')
+    # "loading" is needed for first-meaningful-paint computation.
     cat_filter.AddIncludedCategory('loading')
 
     # "toplevel" category is used to capture TaskQueueManager events
@@ -57,6 +55,13 @@ class _PageCyclerV2(perf_benchmark.PerfBenchmark):
         possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X' or
         possible_browser.platform.GetDeviceTypeName() == 'AOSP on BullHead'):
       return True
+
+    # crbug.com/651188
+    if ((possible_browser.platform.GetDeviceTypeName() == 'Nexus 6' or
+         possible_browser.platform.GetDeviceTypeName() == 'AOSP on Shamu') and
+        possible_browser.browser_type == 'android-webview'):
+      return True
+
     return False
 
 

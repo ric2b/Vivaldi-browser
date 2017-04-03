@@ -6,7 +6,6 @@
 
 #include <stddef.h>
 
-#include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/json/string_escape.h"
@@ -15,7 +14,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
-#include "components/devtools_http_handler/devtools_http_handler.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -27,7 +25,6 @@
 #include "content/shell/browser/shell_browser_main_parts.h"
 #include "content/shell/browser/shell_content_browser_client.h"
 #include "content/shell/browser/shell_devtools_manager_delegate.h"
-#include "content/shell/common/shell_switches.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_response_headers.h"
@@ -52,7 +49,7 @@ class ResponseWriter : public net::URLFetcherResponseWriter {
   int Write(net::IOBuffer* buffer,
             int num_bytes,
             const net::CompletionCallback& callback) override;
-  int Finish(const net::CompletionCallback& callback) override;
+  int Finish(int net_error, const net::CompletionCallback& callback) override;
 
  private:
   base::WeakPtr<ShellDevToolsFrontend> shell_devtools_;
@@ -93,8 +90,15 @@ int ResponseWriter::Write(net::IOBuffer* buffer,
   return num_bytes;
 }
 
-int ResponseWriter::Finish(const net::CompletionCallback& callback) {
+int ResponseWriter::Finish(int net_error,
+                           const net::CompletionCallback& callback) {
   return net::OK;
+}
+
+static GURL GetFrontendURL() {
+  int port = ShellDevToolsManagerDelegate::GetHttpHandlerPort();
+  return GURL(
+      base::StringPrintf("http://127.0.0.1:%d/devtools/inspector.html", port));
 }
 
 }  // namespace
@@ -113,13 +117,7 @@ ShellDevToolsFrontend* ShellDevToolsFrontend::Show(
   ShellDevToolsFrontend* devtools_frontend = new ShellDevToolsFrontend(
       shell,
       inspected_contents);
-
-  devtools_http_handler::DevToolsHttpHandler* http_handler =
-      ShellContentBrowserClient::Get()
-          ->shell_browser_main_parts()
-          ->devtools_http_handler();
-  shell->LoadURL(http_handler->GetFrontendURL("/devtools/inspector.html"));
-
+  shell->LoadURL(GetFrontendURL());
   return devtools_frontend;
 }
 

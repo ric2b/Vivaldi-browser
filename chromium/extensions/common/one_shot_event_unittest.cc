@@ -23,6 +23,23 @@ TEST(OneShotEventTest, RecordsSignal) {
   EXPECT_TRUE(event.is_signaled());
 }
 
+TEST(OneShotEventTest, CallsQueueAsDistinctTask) {
+  OneShotEvent event;
+  scoped_refptr<base::TestSimpleTaskRunner> runner(
+      new base::TestSimpleTaskRunner);
+  int i = 0;
+  event.Post(FROM_HERE, base::Bind(&Increment, &i), runner);
+  event.Post(FROM_HERE, base::Bind(&Increment, &i), runner);
+  EXPECT_EQ(0U, runner->NumPendingTasks());
+  event.Signal();
+
+  auto pending_tasks = runner->TakePendingTasks();
+  ASSERT_EQ(2U, pending_tasks.size());
+  EXPECT_NE(pending_tasks[0].location.line_number(),
+            pending_tasks[1].location.line_number())
+      << "Make sure FROM_HERE is propagated.";
+}
+
 TEST(OneShotEventTest, CallsQueue) {
   OneShotEvent event;
   scoped_refptr<base::TestSimpleTaskRunner> runner(
@@ -30,12 +47,10 @@ TEST(OneShotEventTest, CallsQueue) {
   int i = 0;
   event.Post(FROM_HERE, base::Bind(&Increment, &i), runner);
   event.Post(FROM_HERE, base::Bind(&Increment, &i), runner);
-  EXPECT_EQ(0U, runner->GetPendingTasks().size());
+  EXPECT_EQ(0U, runner->NumPendingTasks());
   event.Signal();
-  ASSERT_EQ(2U, runner->GetPendingTasks().size());
-  EXPECT_NE(runner->GetPendingTasks()[0].location.line_number(),
-            runner->GetPendingTasks()[1].location.line_number())
-      << "Make sure FROM_HERE is propagated.";
+  ASSERT_EQ(2U, runner->NumPendingTasks());
+
   EXPECT_EQ(0, i);
   runner->RunPendingTasks();
   EXPECT_EQ(2, i);
@@ -49,7 +64,7 @@ TEST(OneShotEventTest, CallsAfterSignalDontRunInline) {
 
   event.Signal();
   event.Post(FROM_HERE, base::Bind(&Increment, &i), runner);
-  EXPECT_EQ(1U, runner->GetPendingTasks().size());
+  EXPECT_EQ(1U, runner->NumPendingTasks());
   EXPECT_EQ(0, i);
   runner->RunPendingTasks();
   EXPECT_EQ(1, i);
@@ -66,7 +81,7 @@ TEST(OneShotEventTest, PostDefaultsToCurrentMessageLoop) {
   event.Post(FROM_HERE, base::Bind(&Increment, &runner_i), runner);
   event.Post(FROM_HERE, base::Bind(&Increment, &loop_i));
   event.Signal();
-  EXPECT_EQ(1U, runner->GetPendingTasks().size());
+  EXPECT_EQ(1U, runner->NumPendingTasks());
   EXPECT_EQ(0, runner_i);
   runner->RunPendingTasks();
   EXPECT_EQ(1, runner_i);
@@ -96,15 +111,15 @@ TEST(OneShotEventTest, IsSignaledAndPostsFromCallbackWork) {
   event.Signal();
 
   // CheckSignaledAndPostIncrement is queued on |runner|.
-  EXPECT_EQ(1U, runner->GetPendingTasks().size());
+  EXPECT_EQ(1U, runner->NumPendingTasks());
   EXPECT_EQ(0, i);
   runner->RunPendingTasks();
   // Increment is queued on |runner|.
-  EXPECT_EQ(1U, runner->GetPendingTasks().size());
+  EXPECT_EQ(1U, runner->NumPendingTasks());
   EXPECT_EQ(0, i);
   runner->RunPendingTasks();
   // Increment has run.
-  EXPECT_EQ(0U, runner->GetPendingTasks().size());
+  EXPECT_EQ(0U, runner->NumPendingTasks());
   EXPECT_EQ(1, i);
 }
 

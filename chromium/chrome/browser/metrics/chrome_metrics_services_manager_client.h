@@ -9,6 +9,7 @@
 
 #include "base/feature_list.h"
 #include "base/macros.h"
+#include "base/metrics/field_trial.h"
 #include "base/threading/thread_checker.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "components/metrics_services_manager/metrics_services_manager_client.h"
@@ -18,6 +19,10 @@ class PrefService;
 namespace metrics {
 class EnabledStateProvider;
 class MetricsStateManager;
+}
+
+namespace version_info {
+enum class Channel;
 }
 
 // Provides a //chrome-specific implementation of MetricsServicesManagerClient.
@@ -32,8 +37,10 @@ class ChromeMetricsServicesManagerClient
   // provided. This is expected to occur on first-run on platforms that don't
   // have first-run variations support. This should only be called when there is
   // no existing field trial controlling the sampling feature, and on the
-  // correct platform and channel.
-  static void CreateFallbackSamplingTrial(base::FeatureList* feature_list);
+  // correct platform. |channel| will affect the sampling rates that are
+  // applied. Stable will be sampled at 10%, other channels at 99%.
+  static void CreateFallbackSamplingTrial(version_info::Channel channel,
+                                          base::FeatureList* feature_list);
 
   // Determines if this client is eligible to send metrics. If they are, and
   // there was user consent, then metrics and crashes would be reported.
@@ -58,6 +65,8 @@ class ChromeMetricsServicesManagerClient
       override;
   std::unique_ptr<metrics::MetricsServiceClient> CreateMetricsServiceClient()
       override;
+  std::unique_ptr<const base::FieldTrial::EntropyProvider>
+  CreateEntropyProvider() override;
   net::URLRequestContextGetter* GetURLRequestContext() override;
   bool IsSafeBrowsingEnabled(const base::Closure& on_update_callback) override;
   bool IsMetricsReportingEnabled() override;

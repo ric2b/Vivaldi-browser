@@ -68,7 +68,8 @@ class ScriptErrorTest(unittest.TestCase):
 def never_ending_command():
     """Arguments for a command that will never end (useful for testing process
     killing). It should be a process that is unlikely to already be running
-    because all instances will be killed."""
+    because all instances will be killed.
+    """
     if sys.platform == 'win32':
         return ['wmic']
     return ['yes']
@@ -127,7 +128,8 @@ class ExecutiveTest(unittest.TestCase):
     def test_run_command_with_unicode(self):
         """Validate that it is safe to pass unicode() objects
         to Executive.run* methods, and they will return unicode()
-        objects by default unless decode_output=False"""
+        objects by default unless decode_output=False
+        """
         unicode_tor_input = u"WebKit \u2661 Tor Arne Vestb\u00F8!"
         if sys.platform == 'win32':
             encoding = 'mbcs'
@@ -165,6 +167,22 @@ class ExecutiveTest(unittest.TestCase):
         # Killing again should fail silently.
         executive.kill_process(process.pid)
 
+    def test_timeout_exceeded(self):
+        executive = Executive()
+
+        def timeout():
+            executive.run_command(command_line('sleep', 'infinity'), timeout_seconds=0.01)
+        self.assertRaises(ScriptError, timeout)
+
+    def test_timeout_exceeded_exit_code(self):
+        executive = Executive()
+        exit_code = executive.run_command(command_line('sleep', 'infinity'), timeout_seconds=0.01, return_exit_code=True)
+        self.assertNotEqual(exit_code, 0)
+
+    def test_timeout_satisfied(self):
+        executive = Executive()
+        executive.run_command(command_line('sleep', '0'), timeout_seconds=1000)
+
     def _assert_windows_image_name(self, name, expected_windows_name):
         executive = Executive()
         windows_name = executive._windows_image_name(name)
@@ -182,8 +200,9 @@ class ExecutiveTest(unittest.TestCase):
     def test_check_running_pid(self):
         executive = Executive()
         self.assertTrue(executive.check_running_pid(os.getpid()))
-        # Maximum pid number on Linux is 32768 by default
-        self.assertFalse(executive.check_running_pid(100000))
+        # According to the proc(5) man page, on 64-bit linux systems,
+        # pid_max can be set to any value up to 2^22 (approximately 4 million).
+        self.assertFalse(executive.check_running_pid(5000000))
 
     def test_running_pids(self):
         executive = Executive()

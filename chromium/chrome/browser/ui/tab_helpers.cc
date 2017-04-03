@@ -4,11 +4,14 @@
 
 #include "chrome/browser/ui/tab_helpers.h"
 
+#include <memory>
+#include <utility>
+
 #include "base/command_line.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/content_settings/chrome_content_settings_client.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
+#include "chrome/browser/data_use_measurement/data_use_web_contents_observer.h"
 #include "chrome/browser/engagement/site_engagement_helper.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
 #include "chrome/browser/external_protocol/external_protocol_observer.h"
@@ -16,7 +19,7 @@
 #include "chrome/browser/history/history_tab_helper.h"
 #include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/infobars/infobar_service.h"
-#include "chrome/browser/metrics/desktop_engagement/desktop_engagement_observer.h"
+#include "chrome/browser/metrics/desktop_session_duration/desktop_session_duration_observer.h"
 #include "chrome/browser/net/net_error_tab_helper.h"
 #include "chrome/browser/net/predictor_tab_helper.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_initialize.h"
@@ -24,6 +27,7 @@
 #include "chrome/browser/predictors/resource_prefetch_predictor_factory.h"
 #include "chrome/browser/predictors/resource_prefetch_predictor_tab_helper.h"
 #include "chrome/browser/prerender/prerender_tab_helper.h"
+#include "chrome/browser/previews/previews_infobar_tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ssl/chrome_security_state_model_client.h"
@@ -34,11 +38,13 @@
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/blocked_content/popup_blocker_tab_helper.h"
 #include "chrome/browser/ui/find_bar/find_tab_helper.h"
+#include "chrome/browser/ui/javascript_dialogs/javascript_dialog_tab_helper.h"
 #include "chrome/browser/ui/navigation_correction_tab_observer.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/pdf/chrome_pdf_web_contents_helper_client.h"
 #include "chrome/browser/ui/prefs/prefs_tab_helper.h"
 #include "chrome/browser/ui/search/search_tab_helper.h"
+#include "chrome/browser/ui/search_engines/search_engine_tab_helper.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/common/chrome_switches.h"
@@ -75,7 +81,6 @@
 #include "chrome/browser/ui/bookmarks/bookmark_tab_helper.h"
 #include "chrome/browser/ui/hung_plugin_tab_helper.h"
 #include "chrome/browser/ui/sad_tab_helper.h"
-#include "chrome/browser/ui/search_engines/search_engine_tab_helper.h"
 #include "chrome/browser/ui/sync/tab_contents_synced_tab_delegate.h"
 #include "components/pdf/browser/pdf_web_contents_helper.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
@@ -156,7 +161,6 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
       autofill::AutofillManager::ENABLE_AUTOFILL_DOWNLOAD_MANAGER);
   chrome_browser_net::NetErrorTabHelper::CreateForWebContents(web_contents);
   chrome_browser_net::PredictorTabHelper::CreateForWebContents(web_contents);
-  ChromeContentSettingsClient::CreateForWebContents(web_contents);
   ChromePasswordManagerClient::CreateForWebContentsWithAutofillClient(
       web_contents,
       autofill::ChromeAutofillClient::FromWebContents(web_contents));
@@ -164,6 +168,8 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   ChromeTranslateClient::CreateForWebContents(web_contents);
   }
   CoreTabHelper::CreateForWebContents(web_contents);
+  data_use_measurement::DataUseWebContentsObserver::CreateForWebContents(
+      web_contents);
   ExternalProtocolObserver::CreateForWebContents(web_contents);
   favicon::CreateContentFaviconDriverForWebContents(web_contents);
   FindTabHelper::CreateForWebContents(web_contents);
@@ -173,6 +179,7 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
                             web_contents->GetBrowserContext())).get());
   HistoryTabHelper::CreateForWebContents(web_contents);
   InfoBarService::CreateForWebContents(web_contents);
+  JavaScriptDialogTabHelper::CreateForWebContents(web_contents);
   NavigationCorrectionTabObserver::CreateForWebContents(web_contents);
   NavigationMetricsRecorder::CreateForWebContents(web_contents);
 
@@ -183,10 +190,13 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   }
   PopupBlockerTabHelper::CreateForWebContents(web_contents);
   PrefsTabHelper::CreateForWebContents(web_contents);
-  vivaldi::InitHelpers(web_contents);
   prerender::PrerenderTabHelper::CreateForWebContents(web_contents);
+  PreviewsInfoBarTabHelper::CreateForWebContents(web_contents);
   if(!vivaldi::IsVivaldiRunning() || vivaldi::IsDebuggingVivaldi()) {
   SearchTabHelper::CreateForWebContents(web_contents);
+  }
+  if(!vivaldi::IsVivaldiRunning()) {
+  SearchEngineTabHelper::CreateForWebContents(web_contents);
   }
   ChromeSecurityStateModelClient::CreateForWebContents(web_contents);
   if (SiteEngagementService::IsEnabled())
@@ -230,9 +240,6 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   PluginObserver::CreateForWebContents(web_contents);
   SadTabHelper::CreateForWebContents(web_contents);
   safe_browsing::SafeBrowsingTabObserver::CreateForWebContents(web_contents);
-  if (!vivaldi::IsVivaldiRunning()) {
-  SearchEngineTabHelper::CreateForWebContents(web_contents);
-  }
   TabContentsSyncedTabDelegate::CreateForWebContents(web_contents);
   TabDialogs::CreateForWebContents(web_contents);
   if (!vivaldi::IsVivaldiRunning()) {
@@ -246,7 +253,7 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
 
 #if defined(OS_WIN) || defined(OS_MACOSX) || \
     (defined(OS_LINUX) && !defined(OS_CHROMEOS))
-  metrics::DesktopEngagementObserver::CreateForWebContents(web_contents);
+  metrics::DesktopSessionDurationObserver::CreateForWebContents(web_contents);
 #endif
 // --- Feature tab helpers behind flags ---
 

@@ -1333,65 +1333,6 @@ TEST(TransformOperationTest, BlendedBoundsForSequence) {
             bounds.ToString());
 }
 
-TEST(TransformOperationTest, AffectsScaleWithSingleOperation) {
-  TransformOperations empty_operations;
-  EXPECT_FALSE(empty_operations.AffectsScale());
-
-  TransformOperations identity;
-  identity.AppendIdentity();
-  EXPECT_FALSE(identity.AffectsScale());
-
-  TransformOperations translate;
-  translate.AppendTranslate(1.f, 2.f, 3.f);
-  EXPECT_FALSE(translate.AffectsScale());
-
-  TransformOperations rotate;
-  rotate.AppendRotate(1.f, 2.f, 3.f, 4.f);
-  EXPECT_FALSE(rotate.AffectsScale());
-
-  TransformOperations scale;
-  scale.AppendScale(1.f, 2.f, 3.f);
-  EXPECT_TRUE(scale.AffectsScale());
-
-  TransformOperations skew;
-  skew.AppendSkew(1.f, 2.f);
-  EXPECT_FALSE(skew.AffectsScale());
-
-  TransformOperations perspective;
-  perspective.AppendPerspective(1.f);
-  EXPECT_FALSE(perspective.AffectsScale());
-
-  TransformOperations identity_matrix;
-  identity_matrix.AppendMatrix(gfx::Transform());
-  EXPECT_FALSE(identity_matrix.AffectsScale());
-
-  TransformOperations translation_matrix;
-  gfx::Transform translation_transform;
-  translation_transform.Translate3d(1.f, 2.f, 3.f);
-  translation_matrix.AppendMatrix(translation_transform);
-  EXPECT_FALSE(translation_matrix.AffectsScale());
-
-  TransformOperations scaling_matrix;
-  gfx::Transform scaling_transform;
-  scaling_transform.Scale(2.f, 2.f);
-  scaling_matrix.AppendMatrix(scaling_transform);
-  EXPECT_TRUE(scaling_matrix.AffectsScale());
-}
-
-TEST(TransformOperationTest, AffectsScaleWithMultipleOperations) {
-  TransformOperations operations1;
-  operations1.AppendSkew(1.f, 2.f);
-  operations1.AppendTranslate(1.f, 2.f, 3.f);
-  operations1.AppendIdentity();
-  EXPECT_FALSE(operations1.AffectsScale());
-
-  TransformOperations operations2;
-  operations2.AppendPerspective(2.f);
-  operations2.AppendScale(1.f, 2.f, 3.f);
-  operations2.AppendTranslate(3.f, 2.f, 1.f);
-  EXPECT_TRUE(operations2.AffectsScale());
-}
-
 TEST(TransformOperationTest, IsTranslationWithSingleOperation) {
   TransformOperations empty_operations;
   EXPECT_TRUE(empty_operations.IsTranslation());
@@ -1454,82 +1395,123 @@ TEST(TransformOperationTest, IsTranslationWithMultipleOperations) {
 }
 
 TEST(TransformOperationTest, ScaleComponent) {
-  gfx::Vector3dF scale;
+  SkMScalar scale;
 
   // Scale.
   TransformOperations operations1;
   operations1.AppendScale(-3.f, 2.f, 5.f);
   EXPECT_TRUE(operations1.ScaleComponent(&scale));
-  EXPECT_EQ(gfx::Vector3dF(-3.f, 2.f, 5.f), scale);
+  EXPECT_EQ(5.f, scale);
 
-  // Translate + Scale.
-  TransformOperations operations5;
-  operations5.AppendTranslate(1.f, 2.f, 3.f);
-  operations5.AppendScale(2.f, 5.f, 4.f);
-  EXPECT_TRUE(operations5.ScaleComponent(&scale));
-  EXPECT_EQ(gfx::Vector3dF(2.f, 5.f, 4.f), scale);
-
-  // Translate + Scale + Matrix with translate.
-  gfx::Transform translation_transform;
-  translation_transform.Translate3d(1.f, 2.f, 3.f);
-  operations5.AppendMatrix(translation_transform);
-  EXPECT_TRUE(operations5.ScaleComponent(&scale));
-  EXPECT_EQ(gfx::Vector3dF(2.f, 5.f, 4.f), scale);
-}
-
-TEST(TransformOperationTest, ScaleComponentCannotBeComputed) {
-  gfx::Vector3dF scale;
-
-  // Scale can.
-  TransformOperations operations1;
-  operations1.AppendScale(2.f, 2.f, 2.f);
-  EXPECT_TRUE(operations1.ScaleComponent(&scale));
-  EXPECT_EQ(gfx::Vector3dF(2.f, 2.f, 2.f), scale);
-
-  // Translate can.
+  // Translate.
   TransformOperations operations2;
   operations2.AppendTranslate(1.f, 2.f, 3.f);
   EXPECT_TRUE(operations2.ScaleComponent(&scale));
-  EXPECT_EQ(gfx::Vector3dF(1.f, 1.f, 1.f), scale);
+  EXPECT_EQ(1.f, scale);
 
-  // Scale + translate can.
+  // Rotate.
   TransformOperations operations3;
-  operations3.AppendScale(2.f, 3.f, 2.f);
-  operations3.AppendTranslate(1.f, 2.f, 3.f);
+  operations3.AppendRotate(1.f, 2.f, 3.f, 4.f);
   EXPECT_TRUE(operations3.ScaleComponent(&scale));
-  EXPECT_EQ(gfx::Vector3dF(2.f, 3.f, 2.f), scale);
+  EXPECT_EQ(1.f, scale);
 
-  // Two Scales can't.
+  // Matrix that's only a translation.
   TransformOperations operations4;
-  operations4.AppendScale(2.f, 3.f, 2.f);
-  operations4.AppendScale(3.f, 2.f, 3.f);
-  EXPECT_FALSE(operations4.ScaleComponent(&scale));
+  gfx::Transform translation_transform;
+  translation_transform.Translate3d(1.f, 2.f, 3.f);
+  operations4.AppendMatrix(translation_transform);
+  EXPECT_TRUE(operations4.ScaleComponent(&scale));
+  EXPECT_EQ(1.f, scale);
 
-  // Matrix can't.
+  // Matrix that includes scale.
   TransformOperations operations5;
-  operations5.AppendScale(2.f, 2.f, 2.f);
+  gfx::Transform matrix;
+  matrix.RotateAboutZAxis(30.0);
+  matrix.Scale(-7.f, 6.f);
+  matrix.Translate3d(gfx::Vector3dF(3.f, 7.f, 1.f));
+  operations5.AppendMatrix(matrix);
+  EXPECT_TRUE(operations5.ScaleComponent(&scale));
+  EXPECT_EQ(7.f, scale);
+
+  // Matrix with perspective.
+  TransformOperations operations6;
+  matrix.ApplyPerspectiveDepth(2000.f);
+  operations6.AppendMatrix(matrix);
+  EXPECT_FALSE(operations6.ScaleComponent(&scale));
+
+  // Skew.
+  TransformOperations operations7;
+  operations7.AppendSkew(30.f, 60.f);
+  EXPECT_TRUE(operations7.ScaleComponent(&scale));
+  EXPECT_EQ(2.f, scale);
+
+  // Perspective.
+  TransformOperations operations8;
+  operations8.AppendPerspective(500.f);
+  EXPECT_FALSE(operations8.ScaleComponent(&scale));
+
+  // Translate + Scale.
+  TransformOperations operations9;
+  operations9.AppendTranslate(1.f, 2.f, 3.f);
+  operations9.AppendScale(2.f, 5.f, 4.f);
+  EXPECT_TRUE(operations9.ScaleComponent(&scale));
+  EXPECT_EQ(5.f, scale);
+
+  // Translate + Scale + Matrix with translate.
+  operations9.AppendMatrix(translation_transform);
+  EXPECT_TRUE(operations9.ScaleComponent(&scale));
+  EXPECT_EQ(5.f, scale);
+
+  // Scale + translate.
+  TransformOperations operations10;
+  operations10.AppendScale(2.f, 3.f, 2.f);
+  operations10.AppendTranslate(1.f, 2.f, 3.f);
+  EXPECT_TRUE(operations10.ScaleComponent(&scale));
+  EXPECT_EQ(3.f, scale);
+
+  // Two Scales.
+  TransformOperations operations11;
+  operations11.AppendScale(2.f, 3.f, 2.f);
+  operations11.AppendScale(-3.f, -2.f, -3.f);
+  EXPECT_TRUE(operations11.ScaleComponent(&scale));
+  EXPECT_EQ(9.f, scale);
+
+  // Scale + Matrix.
+  TransformOperations operations12;
+  operations12.AppendScale(2.f, 2.f, 2.f);
   gfx::Transform scaling_transform;
   scaling_transform.Scale(2.f, 2.f);
-  operations5.AppendMatrix(scaling_transform);
-  EXPECT_FALSE(operations5.ScaleComponent(&scale));
+  operations12.AppendMatrix(scaling_transform);
+  EXPECT_TRUE(operations12.ScaleComponent(&scale));
+  EXPECT_EQ(4.f, scale);
 
-  // Scale + Rotate can't.
-  TransformOperations operations7;
-  operations7.AppendScale(2.f, 2.f, 2.f);
-  operations7.AppendRotate(1.f, 2.f, 3.f, 4.f);
-  EXPECT_FALSE(operations7.ScaleComponent(&scale));
+  // Scale + Rotate.
+  TransformOperations operations13;
+  operations13.AppendScale(2.f, 2.f, 2.f);
+  operations13.AppendRotate(1.f, 2.f, 3.f, 4.f);
+  EXPECT_TRUE(operations13.ScaleComponent(&scale));
+  EXPECT_EQ(2.f, scale);
 
-  // Scale + Skew can't.
-  TransformOperations operations9;
-  operations9.AppendScale(2.f, 2.f, 2.f);
-  operations9.AppendSkew(1.f, 2.f);
-  EXPECT_FALSE(operations9.ScaleComponent(&scale));
+  // Scale + Skew.
+  TransformOperations operations14;
+  operations14.AppendScale(2.f, 2.f, 2.f);
+  operations14.AppendSkew(60.f, 45.f);
+  EXPECT_TRUE(operations14.ScaleComponent(&scale));
+  EXPECT_EQ(4.f, scale);
 
-  // Scale + Perspective can't.
-  TransformOperations operations11;
-  operations11.AppendScale(2.f, 2.f, 2.f);
-  operations11.AppendPerspective(1.f);
-  EXPECT_FALSE(operations11.ScaleComponent(&scale));
+  // Scale + Perspective.
+  TransformOperations operations15;
+  operations15.AppendScale(2.f, 2.f, 2.f);
+  operations15.AppendPerspective(1.f);
+  EXPECT_FALSE(operations15.ScaleComponent(&scale));
+
+  // Matrix with skew.
+  TransformOperations operations16;
+  gfx::Transform skew_transform;
+  skew_transform.Skew(50.f, 60.f);
+  operations16.AppendMatrix(skew_transform);
+  EXPECT_TRUE(operations16.ScaleComponent(&scale));
+  EXPECT_EQ(2.f, scale);
 }
 
 }  // namespace

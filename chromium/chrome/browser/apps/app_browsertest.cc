@@ -231,9 +231,9 @@ class PlatformAppWithFileBrowserTest: public PlatformAppBrowserTest {
       return false;
     }
 
-    AppLaunchParams params(browser()->profile(), extension,
-                           extensions::LAUNCH_CONTAINER_NONE, NEW_WINDOW,
-                           extensions::SOURCE_TEST);
+    AppLaunchParams params(
+        browser()->profile(), extension, extensions::LAUNCH_CONTAINER_NONE,
+        WindowOpenDisposition::NEW_WINDOW, extensions::SOURCE_TEST);
     params.command_line = command_line;
     params.current_directory = test_data_dir_;
     OpenApplication(params);
@@ -614,11 +614,9 @@ IN_PROC_BROWSER_TEST_F(PlatformAppWithFileBrowserTest,
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
   base::FilePath test_file;
-  ASSERT_TRUE(CopyTestDataAndGetTestFilePath(
-      test_data_dir_.AppendASCII(kTestFilePath),
-      temp_dir.path(),
-      "test.",
-      &test_file));
+  ASSERT_TRUE(
+      CopyTestDataAndGetTestFilePath(test_data_dir_.AppendASCII(kTestFilePath),
+                                     temp_dir.GetPath(), "test.", &test_file));
   ASSERT_TRUE(RunPlatformAppTestWithFile(
       "platform_apps/launch_file_with_no_extension", test_file)) << message_;
 }
@@ -630,11 +628,9 @@ IN_PROC_BROWSER_TEST_F(PlatformAppWithFileBrowserTest,
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
   base::FilePath test_file;
-  ASSERT_TRUE(CopyTestDataAndGetTestFilePath(
-      test_data_dir_.AppendASCII(kTestFilePath),
-      temp_dir.path(),
-      "test.",
-      &test_file));
+  ASSERT_TRUE(
+      CopyTestDataAndGetTestFilePath(test_data_dir_.AppendASCII(kTestFilePath),
+                                     temp_dir.GetPath(), "test.", &test_file));
   ASSERT_TRUE(RunPlatformAppTestWithFile(
       "platform_apps/launch_file_with_any_extension", test_file)) << message_;
 }
@@ -741,7 +737,8 @@ IN_PROC_BROWSER_TEST_F(PlatformAppWithFileBrowserTest, LaunchNewFile) {
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
   ASSERT_TRUE(RunPlatformAppTestWithFile(
       "platform_apps/launch_new_file",
-      temp_dir.path().AppendASCII("new_file.txt"))) << message_;
+      temp_dir.GetPath().AppendASCII("new_file.txt")))
+      << message_;
 }
 
 #endif  // !defined(OS_CHROMEOS)
@@ -880,9 +877,9 @@ void PlatformAppDevToolsBrowserTest::RunTestWithDevTools(
     content::WindowedNotificationObserver app_loaded_observer(
         content::NOTIFICATION_LOAD_COMPLETED_MAIN_FRAME,
         content::NotificationService::AllSources());
-    OpenApplication(AppLaunchParams(browser()->profile(), extension,
-                                    LAUNCH_CONTAINER_NONE, NEW_WINDOW,
-                                    extensions::SOURCE_TEST));
+    OpenApplication(AppLaunchParams(
+        browser()->profile(), extension, LAUNCH_CONTAINER_NONE,
+        WindowOpenDisposition::NEW_WINDOW, extensions::SOURCE_TEST));
     app_loaded_observer.Wait();
     window = GetFirstAppWindow();
     ASSERT_TRUE(window);
@@ -1011,9 +1008,9 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest,
   ASSERT_TRUE(should_install.seen());
 
   ExtensionTestMessageListener launched_listener("Launched", false);
-  OpenApplication(AppLaunchParams(browser()->profile(), extension,
-                                  LAUNCH_CONTAINER_NONE, NEW_WINDOW,
-                                  extensions::SOURCE_TEST));
+  OpenApplication(AppLaunchParams(
+      browser()->profile(), extension, LAUNCH_CONTAINER_NONE,
+      WindowOpenDisposition::NEW_WINDOW, extensions::SOURCE_TEST));
 
   ASSERT_TRUE(launched_listener.WaitUntilSatisfied());
 }
@@ -1034,9 +1031,9 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest,
   ASSERT_TRUE(extension);
 
   ExtensionTestMessageListener launched_listener("Launched", false);
-  OpenApplication(AppLaunchParams(browser()->profile(), extension,
-                                  LAUNCH_CONTAINER_NONE, NEW_WINDOW,
-                                  extensions::SOURCE_TEST));
+  OpenApplication(AppLaunchParams(
+      browser()->profile(), extension, LAUNCH_CONTAINER_NONE,
+      WindowOpenDisposition::NEW_WINDOW, extensions::SOURCE_TEST));
 
   ASSERT_TRUE(launched_listener.WaitUntilSatisfied());
   ASSERT_FALSE(should_not_install.seen());
@@ -1072,9 +1069,9 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, ComponentAppBackgroundPage) {
   ASSERT_TRUE(should_install.seen());
 
   ExtensionTestMessageListener launched_listener("Launched", false);
-  OpenApplication(AppLaunchParams(browser()->profile(), extension,
-                                  LAUNCH_CONTAINER_NONE, NEW_WINDOW,
-                                  extensions::SOURCE_TEST));
+  OpenApplication(AppLaunchParams(
+      browser()->profile(), extension, LAUNCH_CONTAINER_NONE,
+      WindowOpenDisposition::NEW_WINDOW, extensions::SOURCE_TEST));
 
   ASSERT_TRUE(launched_listener.WaitUntilSatisfied());
 }
@@ -1097,9 +1094,9 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest,
 
   {
     ExtensionTestMessageListener launched_listener("Launched", false);
-    OpenApplication(AppLaunchParams(browser()->profile(), extension,
-                                    LAUNCH_CONTAINER_NONE, NEW_WINDOW,
-                                    extensions::SOURCE_TEST));
+    OpenApplication(AppLaunchParams(
+        browser()->profile(), extension, LAUNCH_CONTAINER_NONE,
+        WindowOpenDisposition::NEW_WINDOW, extensions::SOURCE_TEST));
     ASSERT_TRUE(launched_listener.WaitUntilSatisfied());
   }
 
@@ -1244,8 +1241,8 @@ IN_PROC_BROWSER_TEST_F(PlatformAppIncognitoBrowserTest, IncognitoComponentApp) {
   registry->AddObserver(this);
 
   OpenApplication(CreateAppLaunchParamsUserContainer(
-      incognito_profile, file_manager, NEW_FOREGROUND_TAB,
-      extensions::SOURCE_TEST));
+      incognito_profile, file_manager,
+      WindowOpenDisposition::NEW_FOREGROUND_TAB, extensions::SOURCE_TEST));
 
   while (!base::ContainsKey(opener_app_ids_, file_manager->id())) {
     content::RunAllPendingInMessageLoop();

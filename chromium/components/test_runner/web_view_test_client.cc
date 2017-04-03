@@ -13,11 +13,12 @@
 #include "components/test_runner/event_sender.h"
 #include "components/test_runner/mock_web_speech_recognizer.h"
 #include "components/test_runner/test_common.h"
+#include "components/test_runner/test_interfaces.h"
 #include "components/test_runner/test_runner.h"
 #include "components/test_runner/test_runner_for_specific_view.h"
-#include "components/test_runner/web_task.h"
 #include "components/test_runner/web_test_delegate.h"
 #include "components/test_runner/web_view_test_proxy.h"
+#include "components/test_runner/web_widget_test_proxy.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
@@ -29,11 +30,8 @@
 namespace test_runner {
 
 WebViewTestClient::WebViewTestClient(
-    TestRunner* test_runner,
     WebViewTestProxyBase* web_view_test_proxy_base)
-    : test_runner_(test_runner),
-      web_view_test_proxy_base_(web_view_test_proxy_base) {
-  DCHECK(test_runner);
+    : web_view_test_proxy_base_(web_view_test_proxy_base) {
   DCHECK(web_view_test_proxy_base);
 }
 
@@ -44,18 +42,19 @@ void WebViewTestClient::startDragging(blink::WebLocalFrame* frame,
                                       blink::WebDragOperationsMask mask,
                                       const blink::WebImage& image,
                                       const blink::WebPoint& point) {
-  test_runner_->setDragImage(image);
+  test_runner()->setDragImage(image);
 
   // When running a test, we need to fake a drag drop operation otherwise
   // Windows waits for real mouse events to know when the drag is over.
-  web_view_test_proxy_base_->event_sender()->DoDragDrop(data, mask);
+  delegate()->GetWebWidgetTestProxyBase(frame)->event_sender()->DoDragDrop(
+      data, mask);
 }
 
 // The output from these methods in layout test mode should match that
 // expected by the layout tests. See EditingDelegate.m in DumpRenderTree.
 
 void WebViewTestClient::didChangeContents() {
-  if (test_runner_->shouldDumpEditingCallbacks())
+  if (test_runner()->shouldDumpEditingCallbacks())
     delegate()->PrintMessage(
         "EDITING DELEGATE: webViewDidChange:WebViewDidChangeNotification\n");
 }
@@ -67,15 +66,15 @@ blink::WebView* WebViewTestClient::createView(
     const blink::WebString& frame_name,
     blink::WebNavigationPolicy policy,
     bool suppress_opener) {
-  if (test_runner_->shouldDumpNavigationPolicy()) {
+  if (test_runner()->shouldDumpNavigationPolicy()) {
     delegate()->PrintMessage("Default policy for createView for '" +
                              URLDescription(request.url()) + "' is '" +
                              WebNavigationPolicyToString(policy) + "'\n");
   }
 
-  if (!test_runner_->canOpenWindows())
+  if (!test_runner()->canOpenWindows())
     return nullptr;
-  if (test_runner_->shouldDumpCreateView())
+  if (test_runner()->shouldDumpCreateView())
     delegate()->PrintMessage(std::string("createView(") +
                              URLDescription(request.url()) + ")\n");
 
@@ -87,7 +86,7 @@ blink::WebView* WebViewTestClient::createView(
 }
 
 void WebViewTestClient::setStatusText(const blink::WebString& text) {
-  if (!test_runner_->shouldDumpStatusCallbacks())
+  if (!test_runner()->shouldDumpStatusCallbacks())
     return;
   delegate()->PrintMessage(
       std::string("UI DELEGATE STATUS CALLBACK: setStatusText:") +
@@ -110,6 +109,9 @@ void WebViewTestClient::showValidationMessage(
     blink::WebTextDirection main_message_hint,
     const blink::WebString& sub_message,
     blink::WebTextDirection sub_message_hint) {
+  if (test_runner()->is_web_platform_tests_mode())
+    return;
+
   base::string16 wrapped_main_text = main_message;
   base::string16 wrapped_sub_text = sub_message;
 
@@ -136,11 +138,11 @@ void WebViewTestClient::showValidationMessage(
 }
 
 blink::WebSpeechRecognizer* WebViewTestClient::speechRecognizer() {
-  return test_runner_->getMockWebSpeechRecognizer();
+  return test_runner()->getMockWebSpeechRecognizer();
 }
 
 blink::WebString WebViewTestClient::acceptLanguages() {
-  return blink::WebString::fromUTF8(test_runner_->GetAcceptLanguages());
+  return blink::WebString::fromUTF8(test_runner()->GetAcceptLanguages());
 }
 
 WebTestDelegate* WebViewTestClient::delegate() {
@@ -148,7 +150,11 @@ WebTestDelegate* WebViewTestClient::delegate() {
 }
 
 void WebViewTestClient::didFocus() {
-  test_runner_->SetFocus(web_view_test_proxy_base_->web_view(), true);
+  test_runner()->SetFocus(web_view_test_proxy_base_->web_view(), true);
+}
+
+TestRunner* WebViewTestClient::test_runner() {
+  return web_view_test_proxy_base_->test_interfaces()->GetTestRunner();
 }
 
 }  // namespace test_runner

@@ -43,7 +43,6 @@ using net::test::QuicSessionPeer;
 using net::test::QuicSpdySessionPeer;
 using net::test::QuicSustainedBandwidthRecorderPeer;
 using net::test::SupportedVersions;
-using net::test::ValueRestore;
 using net::test::kClientDataStreamId1;
 using net::test::kClientDataStreamId2;
 using net::test::kClientDataStreamId3;
@@ -71,16 +70,14 @@ class MockQuicHeadersStream : public QuicHeadersStream {
   // mocked directly.
   size_t WritePushPromise(QuicStreamId original_stream_id,
                           QuicStreamId promised_stream_id,
-                          SpdyHeaderBlock headers,
-                          QuicAckListenerInterface* ack_listener) override {
-    return WritePushPromiseMock(original_stream_id, promised_stream_id, headers,
-                                ack_listener);
+                          SpdyHeaderBlock headers) override {
+    return WritePushPromiseMock(original_stream_id, promised_stream_id,
+                                headers);
   }
-  MOCK_METHOD4(WritePushPromiseMock,
+  MOCK_METHOD3(WritePushPromiseMock,
                size_t(QuicStreamId original_stream_id,
                       QuicStreamId promised_stream_id,
-                      const SpdyHeaderBlock& headers,
-                      QuicAckListenerInterface* ack_listener));
+                      const SpdyHeaderBlock& headers));
 
   size_t WriteHeaders(QuicStreamId stream_id,
                       SpdyHeaderBlock headers,
@@ -102,11 +99,13 @@ class MockQuicCryptoServerStream : public QuicCryptoServerStream {
   explicit MockQuicCryptoServerStream(
       const QuicCryptoServerConfig* crypto_config,
       QuicCompressedCertsCache* compressed_certs_cache,
-      QuicServerSessionBase* session)
+      QuicServerSessionBase* session,
+      QuicCryptoServerStream::Helper* helper)
       : QuicCryptoServerStream(crypto_config,
                                compressed_certs_cache,
                                FLAGS_enable_quic_stateless_reject_support,
-                               session) {}
+                               session,
+                               helper) {}
   ~MockQuicCryptoServerStream() override {}
 
   MOCK_METHOD1(SendServerConfigUpdate,
@@ -194,9 +193,9 @@ class QuicSimpleServerSessionTest
     connection_ = new StrictMock<MockQuicConnectionWithSendStreamData>(
         &helper_, &alarm_factory_, Perspective::IS_SERVER,
         SupportedVersions(GetParam()));
-    session_.reset(new QuicSimpleServerSession(
-        config_, connection_, &owner_, &session_helper_, &crypto_config_,
-        &compressed_certs_cache_));
+    session_.reset(new QuicSimpleServerSession(config_, connection_, &owner_,
+                                               &stream_helper_, &crypto_config_,
+                                               &compressed_certs_cache_));
     MockClock clock;
     handshake_message_.reset(crypto_config_.AddDefaultConfig(
         QuicRandom::GetInstance(), &clock,
@@ -209,8 +208,9 @@ class QuicSimpleServerSessionTest
     session_->OnConfigNegotiated();
   }
 
+  QuicFlagSaver flags_;  // Save/restore all QUIC flag values.
   StrictMock<MockQuicServerSessionVisitor> owner_;
-  StrictMock<MockQuicServerSessionHelper> session_helper_;
+  StrictMock<MockQuicCryptoServerStreamHelper> stream_helper_;
   MockQuicConnectionHelper helper_;
   MockAlarmFactory alarm_factory_;
   StrictMock<MockQuicConnectionWithSendStreamData>* connection_;
@@ -358,8 +358,9 @@ TEST_P(QuicSimpleServerSessionTest, CreateOutgoingDynamicStreamUptoLimit) {
   EXPECT_EQ(0u, session_->GetNumOpenOutgoingStreams());
 
   // Assume encryption already established.
-  MockQuicCryptoServerStream* crypto_stream = new MockQuicCryptoServerStream(
-      &crypto_config_, &compressed_certs_cache_, session_.get());
+  MockQuicCryptoServerStream* crypto_stream =
+      new MockQuicCryptoServerStream(&crypto_config_, &compressed_certs_cache_,
+                                     session_.get(), &stream_helper_);
   crypto_stream->set_encryption_established(true);
   QuicSimpleServerSessionPeer::SetCryptoStream(session_.get(), crypto_stream);
 
@@ -432,9 +433,9 @@ class QuicSimpleServerSessionServerPushTest
     connection_ = new StrictMock<MockQuicConnectionWithSendStreamData>(
         &helper_, &alarm_factory_, Perspective::IS_SERVER,
         SupportedVersions(GetParam()));
-    session_.reset(new QuicSimpleServerSession(
-        config_, connection_, &owner_, &session_helper_, &crypto_config_,
-        &compressed_certs_cache_));
+    session_.reset(new QuicSimpleServerSession(config_, connection_, &owner_,
+                                               &stream_helper_, &crypto_config_,
+                                               &compressed_certs_cache_));
     session_->Initialize();
     // Needed to make new session flow control window and server push work.
     session_->OnConfigNegotiated();
@@ -445,7 +446,9 @@ class QuicSimpleServerSessionServerPushTest
 
     // Assume encryption already established.
     MockQuicCryptoServerStream* crypto_stream = new MockQuicCryptoServerStream(
-        &crypto_config_, &compressed_certs_cache_, session_.get());
+        &crypto_config_, &compressed_certs_cache_, session_.get(),
+        &stream_helper_);
+
     crypto_stream->set_encryption_established(true);
     QuicSimpleServerSessionPeer::SetCryptoStream(session_.get(), crypto_stream);
   }
@@ -481,9 +484,8 @@ class QuicSimpleServerSessionServerPushTest
       push_resources.push_back(QuicInMemoryCache::ServerPushInfo(
           resource_url, SpdyHeaderBlock(), kDefaultPriority, body));
       // PUSH_PROMISED are sent for all the resources.
-      EXPECT_CALL(
-          *headers_stream_,
-          WritePushPromiseMock(kClientDataStreamId1, stream_id, _, nullptr));
+      EXPECT_CALL(*headers_stream_,
+                  WritePushPromiseMock(kClientDataStreamId1, stream_id, _));
       if (i <= kMaxStreamsForTest) {
         // |kMaxStreamsForTest| promised responses should be sent.
         EXPECT_CALL(

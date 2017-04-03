@@ -95,6 +95,10 @@ class BrowserNonClientFrameView : public views::NonClientFrameView,
     return profile_indicator_icon_;
   }
 
+  // views::NonClientFrameView:
+  bool DoesIntersectRect(const views::View* target,
+                         const gfx::Rect& rect) const override;
+
  private:
   // views::NonClientFrameView:
   void ViewHierarchyChanged(

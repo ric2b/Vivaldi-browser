@@ -23,6 +23,7 @@ void CompileShader(GLuint shader, const char* shader_source) {
 }  // anonymous namespace
 
 namespace gpu {
+namespace gles2 {
 
 CopyTexImageResourceManager::CopyTexImageResourceManager(
     const gles2::FeatureInfo* feature_info)
@@ -40,7 +41,7 @@ void CopyTexImageResourceManager::Initialize(
 
   blit_program_ = glCreateProgram();
 
-  // Compile the fragment shader
+  // Compile the vertex shader
   const char* vs_source =
       "#version 150\n"
       "out vec2 v_texcoord;\n"
@@ -68,7 +69,7 @@ void CopyTexImageResourceManager::Initialize(
   glAttachShader(blit_program_, vs);
   glDeleteShader(vs);
 
-  // Compile the vertex shader
+  // Compile the fragment shader
   const char* fs_source =
       "#version 150\n"
       "uniform sampler2D u_source_texture;\n"
@@ -276,4 +277,5 @@ bool CopyTexImageResourceManager::CopyTexImageRequiresBlit(
   return false;
 }
 
+}  // namespace gles2
 }  // namespace gpu

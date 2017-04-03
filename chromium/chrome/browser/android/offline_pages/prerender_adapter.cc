@@ -6,7 +6,6 @@
 
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
-#include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/gfx/geometry/size.h"
@@ -38,18 +37,21 @@ bool PrerenderAdapter::StartPrerender(
   DCHECK(!IsActive());
   DCHECK(CanPrerender());
 
-  Profile* profile = Profile::FromBrowserContext(browser_context);
   prerender::PrerenderManager* manager =
-      prerender::PrerenderManagerFactory::GetForProfile(profile);
+      prerender::PrerenderManagerFactory::GetForBrowserContext(browser_context);
   DCHECK(manager);
 
-  // Start prerendering the url and capture the handle for the prerendering.
+  // AddPrerenderForOffline() triggers the start event, and it is before the
+  // observer is set.
   active_handle_ =
       manager->AddPrerenderForOffline(url, session_storage_namespace, size);
   if (!active_handle_)
     return false;
+  DCHECK(active_handle_->contents());
+  DCHECK(active_handle_->contents()->prerendering_has_started());
 
   active_handle_->SetObserver(this);
+
   return true;
 }
 
@@ -82,8 +84,8 @@ void PrerenderAdapter::DestroyActive() {
 }
 
 void PrerenderAdapter::OnPrerenderStart(prerender::PrerenderHandle* handle) {
-  DCHECK_EQ(active_handle_.get(), handle);
-  observer_->OnPrerenderStart();
+  // Not expected as the start event will happen before the observer is set.
+  NOTREACHED();
 }
 
 void PrerenderAdapter::OnPrerenderStopLoading(

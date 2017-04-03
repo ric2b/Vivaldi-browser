@@ -12,6 +12,7 @@
 #import "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
 #import "base/mac/sdk_forward_declarations.h"
+#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/accelerated_widget_mac/window_resize_helper_mac.h"
 #import "ui/base/cocoa/constrained_window/constrained_window_animation.h"
@@ -571,6 +572,20 @@ void BridgedNativeWidget::SetVisibilityState(WindowVisibilityState new_state) {
     return;
   }
 
+  // Non-modal windows are not animated. Hence opaque non-modal windows can
+  // appear with a "flash" if they are made visible before the frame from the
+  // compositor arrives. To get around this, set the alpha value of the window
+  // to 0, till we receive the correct frame from the compositor. Also, ignore
+  // mouse clicks till then.
+  // TODO(karandeepb): Investigate whether similar technique is needed for other
+  // dialog types.
+  if (layer() && [window_ isOpaque] &&
+      !native_widget_mac_->GetWidget()->IsModal()) {
+    initial_visibility_suppressed_ = true;
+    [window_ setAlphaValue:0.0];
+    [window_ setIgnoresMouseEvents:YES];
+  }
+
   if (new_state == SHOW_AND_ACTIVATE_WINDOW) {
     [window_ makeKeyAndOrderFront:nil];
     [NSApp activateIgnoringOtherApps:YES];
@@ -693,8 +708,10 @@ void BridgedNativeWidget::OnWindowWillClose() {
     parent_->RemoveChildWindow(this);
     parent_ = nullptr;
   }
-  [window_ setDelegate:nil];
   [[NSNotificationCenter defaultCenter] removeObserver:window_delegate_];
+  // Note this also clears the NSWindow delegate, after informing Widget
+  // delegates about the closure. NativeWidgetMac then deletes |this| before
+  // returning.
   native_widget_mac_->OnWindowWillClose();
 }
 
@@ -782,7 +799,7 @@ void BridgedNativeWidget::OnSizeChanged() {
   // We don't update the window mask during a live resize, instead it is done
   // after the resize is completed in viewDidEndLiveResize: in
   // BridgedContentView.
-  if (base::mac::IsOSMavericks() && ![window_ inLiveResize])
+  if (base::mac::IsOS10_9() && ![window_ inLiveResize])
     [bridged_view_ updateWindowMask];
 }
 
@@ -826,6 +843,11 @@ void BridgedNativeWidget::OnVisibilityChanged() {
   if (layer()) {
     layer()->SetVisible(window_visible_);
     layer()->SchedulePaint(gfx::Rect(GetClientAreaSize()));
+
+    // For translucent windows which are made visible, recalculate shadow when
+    // the frame from the compositor arrives.
+    if (![window_ isOpaque])
+      invalidate_shadow_on_frame_swap_ = window_visible_;
   }
 
   NotifyVisibilityChangeDown();
@@ -955,7 +977,7 @@ void BridgedNativeWidget::CreateLayer(ui::LayerType layer_type,
   CreateCompositor();
   DCHECK(compositor_);
 
-  SetLayer(new ui::Layer(layer_type));
+  SetLayer(base::MakeUnique<ui::Layer>(layer_type));
   // Note, except for controls, this will set the layer to be hidden, since it
   // is only called during Init().
   layer()->SetVisible(window_visible_);
@@ -979,7 +1001,7 @@ void BridgedNativeWidget::CreateLayer(ui::LayerType layer_type,
     // to generate a window shadow from the composited CALayer. To get around
     // this, let the window background remain opaque and clip the window
     // boundary in drawRect method of BridgedContentView. See crbug.com/543671.
-    if (base::mac::IsOSYosemiteOrLater())
+    if (base::mac::IsAtLeastOS10_10())
       [window_ setBackgroundColor:[NSColor clearColor]];
   }
 
@@ -1099,6 +1121,12 @@ void BridgedNativeWidget::AcceleratedWidgetSwapCompleted() {
   // should arrive soon.
   if (!compositor_widget_->HasFrameOfSize(GetClientAreaSize()))
     return;
+
+  if (initial_visibility_suppressed_) {
+    initial_visibility_suppressed_ = false;
+    [window_ setAlphaValue:1.0];
+    [window_ setIgnoresMouseEvents:NO];
+  }
 
   if (invalidate_shadow_on_frame_swap_) {
     invalidate_shadow_on_frame_swap_ = false;
@@ -1270,7 +1298,7 @@ void BridgedNativeWidget::AddCompositorSuperview() {
   if (widget_type_ == Widget::InitParams::TYPE_MENU) {
     // Giving the canvas opacity messes up subpixel font rendering, so use a
     // solid background, but make the CALayer transparent.
-    if (base::mac::IsOSYosemiteOrLater()) {
+    if (base::mac::IsAtLeastOS10_10()) {
       [background_layer setOpacity:kYosemiteMenuOpacity];
       CGSSetWindowBackgroundBlurRadius(
           _CGSDefaultConnection(), [window_ windowNumber], kYosemiteMenuBlur);

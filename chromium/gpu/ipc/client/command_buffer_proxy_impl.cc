@@ -233,7 +233,6 @@ bool CommandBufferProxyImpl::Initialize(
   }
 
   channel_ = std::move(channel);
-  capabilities_.image = true;
   callback_thread_ = std::move(task_runner);
 
   return true;
@@ -265,7 +264,6 @@ void CommandBufferProxyImpl::Flush(int32_t put_offset) {
     const uint32_t flush_id = channel_->OrderingBarrier(
         route_id_, stream_id_, put_offset, ++flush_count_, latency_info_,
         put_offset_changed, true, &highest_verified_flush_id);
-    UpdateVerifiedReleases(highest_verified_flush_id);
     if (put_offset_changed) {
       DCHECK(flush_id);
       const uint64_t fence_sync_release = next_fence_sync_release_ - 1;
@@ -275,6 +273,7 @@ void CommandBufferProxyImpl::Flush(int32_t put_offset) {
             std::make_pair(fence_sync_release, flush_id));
       }
     }
+    CleanupFlushedReleases(highest_verified_flush_id);
   }
 
   if (put_offset_changed)
@@ -297,7 +296,6 @@ void CommandBufferProxyImpl::OrderingBarrier(int32_t put_offset) {
     const uint32_t flush_id = channel_->OrderingBarrier(
         route_id_, stream_id_, put_offset, ++flush_count_, latency_info_,
         put_offset_changed, false, &highest_verified_flush_id);
-    UpdateVerifiedReleases(highest_verified_flush_id);
 
     if (put_offset_changed) {
       DCHECK(flush_id);
@@ -308,6 +306,7 @@ void CommandBufferProxyImpl::OrderingBarrier(int32_t put_offset) {
             std::make_pair(fence_sync_release, flush_id));
       }
     }
+    CleanupFlushedReleases(highest_verified_flush_id);
   }
 
   if (put_offset_changed)
@@ -745,6 +744,18 @@ void CommandBufferProxyImpl::UpdateVerifiedReleases(uint32_t verified_flush) {
   }
 }
 
+void CommandBufferProxyImpl::CleanupFlushedReleases(
+    uint32_t highest_verified_flush_id) {
+  DCHECK(channel_);
+  static const uint32_t kMaxUnverifiedFlushes = 1000;
+  if (flushed_release_flush_id_.size() > kMaxUnverifiedFlushes) {
+    // Prevent list of unverified flushes from growing indefinitely.
+    highest_verified_flush_id =
+        channel_->ValidateFlushIDReachedServer(stream_id_, false);
+  }
+  UpdateVerifiedReleases(highest_verified_flush_id);
+}
+
 gpu::CommandBufferSharedState* CommandBufferProxyImpl::shared_state() const {
   return reinterpret_cast<gpu::CommandBufferSharedState*>(
       shared_state_shm_->memory());
@@ -754,7 +765,6 @@ void CommandBufferProxyImpl::OnSwapBuffersCompleted(
     const GpuCommandBufferMsg_SwapBuffersCompleted_Params& params) {
 #if defined(OS_MACOSX)
   gpu::GpuProcessHostedCALayerTreeParamsMac params_mac;
-  params_mac.surface_handle = params.surface_handle;
   params_mac.ca_context_id = params.ca_context_id;
   params_mac.fullscreen_low_power_ca_context_valid =
       params.fullscreen_low_power_ca_context_valid;

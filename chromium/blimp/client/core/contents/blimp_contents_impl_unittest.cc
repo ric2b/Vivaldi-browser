@@ -6,11 +6,20 @@
 
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "blimp/client/core/compositor/blimp_compositor_dependencies.h"
 #include "blimp/client/core/contents/fake_navigation_feature.h"
+#include "blimp/client/core/contents/ime_feature.h"
 #include "blimp/client/core/contents/tab_control_feature.h"
+#include "blimp/client/core/render_widget/render_widget_feature.h"
 #include "blimp/client/public/contents/blimp_contents_observer.h"
+#include "blimp/client/test/compositor/mock_compositor_dependencies.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/native_widget_types.h"
+
+#if defined(OS_ANDROID)
+#include "ui/android/window_android.h"
+#endif  // defined(OS_ANDROID)
 
 namespace blimp {
 namespace client {
@@ -18,7 +27,7 @@ namespace {
 
 const char kExampleURL[] = "https://www.example.com/";
 const char kOtherExampleURL[] = "https://www.otherexample.com/";
-const int kDummyTabId = 0;
+const int kDummyBlimpContentsId = 0;
 
 class MockBlimpContentsObserver : public BlimpContentsObserver {
  public:
@@ -42,15 +51,36 @@ class MockTabControlFeature : public TabControlFeature {
   DISALLOW_COPY_AND_ASSIGN(MockTabControlFeature);
 };
 
-TEST(BlimpContentsImplTest, LoadURLAndNotifyObservers) {
+class BlimpContentsImplTest : public testing::Test {
+ public:
+  BlimpContentsImplTest() = default;
+
+#if defined(OS_ANDROID)
+  void SetUp() override { window_ = ui::WindowAndroid::CreateForTesting(); }
+
+  void TearDown() override { window_->DestroyForTesting(); }
+#endif  // defined(OS_ANDROID)
+
+ protected:
+  gfx::NativeWindow window_ = nullptr;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(BlimpContentsImplTest);
+};
+
+TEST_F(BlimpContentsImplTest, LoadURLAndNotifyObservers) {
   base::MessageLoop loop;
-  BlimpContentsImpl blimp_contents(kDummyTabId, nullptr);
+  ImeFeature ime_feature;
+  FakeNavigationFeature navigation_feature;
+  RenderWidgetFeature render_widget_feature;
+  BlimpCompositorDependencies compositor_deps(
+      base::MakeUnique<MockCompositorDependencies>());
+  BlimpContentsImpl blimp_contents(
+      kDummyBlimpContentsId, window_, &compositor_deps, &ime_feature,
+      &navigation_feature, &render_widget_feature, nullptr);
 
   BlimpNavigationControllerImpl& navigation_controller =
       blimp_contents.GetNavigationController();
-  FakeNavigationFeature feature;
-  feature.SetDelegate(1, &navigation_controller);
-  navigation_controller.SetNavigationFeatureForTesting(&feature);
 
   testing::StrictMock<MockBlimpContentsObserver> observer1(&blimp_contents);
   testing::StrictMock<MockBlimpContentsObserver> observer2(&blimp_contents);
@@ -72,14 +102,20 @@ TEST(BlimpContentsImplTest, LoadURLAndNotifyObservers) {
   EXPECT_EQ(kOtherExampleURL, navigation_controller.GetURL().spec());
 }
 
-TEST(BlimpContentsImplTest, SetSizeAndScaleThroughTabControlFeature) {
+TEST_F(BlimpContentsImplTest, SetSizeAndScaleThroughTabControlFeature) {
   int width = 10;
   int height = 15;
   float dp_to_px = 1.23f;
 
+  ImeFeature ime_feature;
+  RenderWidgetFeature render_widget_feature;
   MockTabControlFeature tab_control_feature;
   base::MessageLoop loop;
-  BlimpContentsImpl blimp_contents(kDummyTabId, &tab_control_feature);
+  BlimpCompositorDependencies compositor_deps(
+      base::MakeUnique<MockCompositorDependencies>());
+  BlimpContentsImpl blimp_contents(
+      kDummyBlimpContentsId, window_, &compositor_deps, &ime_feature, nullptr,
+      &render_widget_feature, &tab_control_feature);
 
   EXPECT_CALL(tab_control_feature,
               SetSizeAndScale(gfx::Size(width, height), dp_to_px)).Times(1);

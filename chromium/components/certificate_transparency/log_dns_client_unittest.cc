@@ -5,6 +5,7 @@
 #include "components/certificate_transparency/log_dns_client.h"
 
 #include <memory>
+#include <numeric>
 #include <string>
 #include <utility>
 #include <vector>
@@ -19,7 +20,6 @@
 #include "net/dns/dns_client.h"
 #include "net/dns/dns_config_service.h"
 #include "net/dns/dns_protocol.h"
-#include "net/log/net_log.h"
 #include "net/test/gtest_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -123,7 +123,8 @@ class LogDnsClientTest : public ::testing::TestWithParam<net::IoMode> {
   void QueryLeafIndex(base::StringPiece log_domain,
                       base::StringPiece leaf_hash,
                       MockLeafIndexCallback* callback) {
-    LogDnsClient log_client(mock_dns_.CreateDnsClient(), net::BoundNetLog());
+    LogDnsClient log_client(mock_dns_.CreateDnsClient(),
+                            net::NetLogWithSource());
     log_client.QueryLeafIndex(log_domain, leaf_hash, callback->AsCallback());
     callback->WaitUntilRun();
   }
@@ -132,7 +133,8 @@ class LogDnsClientTest : public ::testing::TestWithParam<net::IoMode> {
                        uint64_t leaf_index,
                        uint64_t tree_size,
                        MockAuditProofCallback* callback) {
-    LogDnsClient log_client(mock_dns_.CreateDnsClient(), net::BoundNetLog());
+    LogDnsClient log_client(mock_dns_.CreateDnsClient(),
+                            net::NetLogWithSource());
     log_client.QueryAuditProof(log_domain, leaf_index, tree_size,
                                callback->AsCallback());
     callback->WaitUntilRun();
@@ -151,7 +153,7 @@ class LogDnsClientTest : public ::testing::TestWithParam<net::IoMode> {
 TEST_P(LogDnsClientTest, QueryLeafIndex) {
   mock_dns_.ExpectLeafIndexRequestAndResponse(
       "D4S6DSV2J743QJZEQMH4UYHEYK7KRQ5JIQOCPMFUHZVJNFGHXACA.hash.ct.test.",
-      "123456");
+      123456);
 
   MockLeafIndexCallback callback;
   QueryLeafIndex("ct.test", kLeafHash, &callback);
@@ -197,10 +199,36 @@ TEST_P(LogDnsClientTest, QueryLeafIndexReportsServerRefusal) {
 }
 
 TEST_P(LogDnsClientTest,
-       QueryLeafIndexReportsMalformedResponseIfLeafIndexIsNotNumeric) {
-  mock_dns_.ExpectLeafIndexRequestAndResponse(
+       QueryLeafIndexReportsMalformedResponseIfContainsNoStrings) {
+  mock_dns_.ExpectRequestAndResponse(
       "D4S6DSV2J743QJZEQMH4UYHEYK7KRQ5JIQOCPMFUHZVJNFGHXACA.hash.ct.test.",
-      "foo");
+      std::vector<base::StringPiece>());
+
+  MockLeafIndexCallback callback;
+  QueryLeafIndex("ct.test", kLeafHash, &callback);
+  ASSERT_TRUE(callback.called());
+  EXPECT_THAT(callback.net_error(), IsError(net::ERR_DNS_MALFORMED_RESPONSE));
+  EXPECT_THAT(callback.leaf_index(), 0);
+}
+
+TEST_P(LogDnsClientTest,
+       QueryLeafIndexReportsMalformedResponseIfContainsMoreThanOneString) {
+  mock_dns_.ExpectRequestAndResponse(
+      "D4S6DSV2J743QJZEQMH4UYHEYK7KRQ5JIQOCPMFUHZVJNFGHXACA.hash.ct.test.",
+      {"123456", "7"});
+
+  MockLeafIndexCallback callback;
+  QueryLeafIndex("ct.test", kLeafHash, &callback);
+  ASSERT_TRUE(callback.called());
+  EXPECT_THAT(callback.net_error(), IsError(net::ERR_DNS_MALFORMED_RESPONSE));
+  EXPECT_THAT(callback.leaf_index(), 0);
+}
+
+TEST_P(LogDnsClientTest,
+       QueryLeafIndexReportsMalformedResponseIfLeafIndexIsNotNumeric) {
+  mock_dns_.ExpectRequestAndResponse(
+      "D4S6DSV2J743QJZEQMH4UYHEYK7KRQ5JIQOCPMFUHZVJNFGHXACA.hash.ct.test.",
+      {"foo"});
 
   MockLeafIndexCallback callback;
   QueryLeafIndex("ct.test", kLeafHash, &callback);
@@ -211,9 +239,9 @@ TEST_P(LogDnsClientTest,
 
 TEST_P(LogDnsClientTest,
        QueryLeafIndexReportsMalformedResponseIfLeafIndexIsFloatingPoint) {
-  mock_dns_.ExpectLeafIndexRequestAndResponse(
+  mock_dns_.ExpectRequestAndResponse(
       "D4S6DSV2J743QJZEQMH4UYHEYK7KRQ5JIQOCPMFUHZVJNFGHXACA.hash.ct.test.",
-      "123456.0");
+      {"123456.0"});
 
   MockLeafIndexCallback callback;
   QueryLeafIndex("ct.test", kLeafHash, &callback);
@@ -224,8 +252,9 @@ TEST_P(LogDnsClientTest,
 
 TEST_P(LogDnsClientTest,
        QueryLeafIndexReportsMalformedResponseIfLeafIndexIsEmpty) {
-  mock_dns_.ExpectLeafIndexRequestAndResponse(
-      "D4S6DSV2J743QJZEQMH4UYHEYK7KRQ5JIQOCPMFUHZVJNFGHXACA.hash.ct.test.", "");
+  mock_dns_.ExpectRequestAndResponse(
+      "D4S6DSV2J743QJZEQMH4UYHEYK7KRQ5JIQOCPMFUHZVJNFGHXACA.hash.ct.test.",
+      {""});
 
   MockLeafIndexCallback callback;
   QueryLeafIndex("ct.test", kLeafHash, &callback);
@@ -236,9 +265,9 @@ TEST_P(LogDnsClientTest,
 
 TEST_P(LogDnsClientTest,
        QueryLeafIndexReportsMalformedResponseIfLeafIndexHasNonNumericPrefix) {
-  mock_dns_.ExpectLeafIndexRequestAndResponse(
+  mock_dns_.ExpectRequestAndResponse(
       "D4S6DSV2J743QJZEQMH4UYHEYK7KRQ5JIQOCPMFUHZVJNFGHXACA.hash.ct.test.",
-      "foo123456");
+      {"foo123456"});
 
   MockLeafIndexCallback callback;
   QueryLeafIndex("ct.test", kLeafHash, &callback);
@@ -249,9 +278,9 @@ TEST_P(LogDnsClientTest,
 
 TEST_P(LogDnsClientTest,
        QueryLeafIndexReportsMalformedResponseIfLeafIndexHasNonNumericSuffix) {
-  mock_dns_.ExpectLeafIndexRequestAndResponse(
+  mock_dns_.ExpectRequestAndResponse(
       "D4S6DSV2J743QJZEQMH4UYHEYK7KRQ5JIQOCPMFUHZVJNFGHXACA.hash.ct.test.",
-      "123456foo");
+      {"123456foo"});
 
   MockLeafIndexCallback callback;
   QueryLeafIndex("ct.test", kLeafHash, &callback);
@@ -415,6 +444,40 @@ TEST_P(LogDnsClientTest, QueryAuditProofReportsServerRefusal) {
 }
 
 TEST_P(LogDnsClientTest,
+       QueryAuditProofReportsResponseMalformedIfContainsNoStrings) {
+  mock_dns_.ExpectRequestAndResponse("0.123456.999999.tree.ct.test.",
+                                     std::vector<base::StringPiece>());
+
+  MockAuditProofCallback callback;
+  QueryAuditProof("ct.test", 123456, 999999, &callback);
+  ASSERT_TRUE(callback.called());
+  EXPECT_THAT(callback.net_error(), IsError(net::ERR_DNS_MALFORMED_RESPONSE));
+  EXPECT_THAT(callback.proof(), IsNull());
+}
+
+TEST_P(LogDnsClientTest,
+       QueryAuditProofReportsResponseMalformedIfContainsMoreThanOneString) {
+  // The CT-over-DNS draft RFC states that the response will contain "exactly
+  // one character-string."
+  const std::vector<std::string> audit_proof = GetSampleAuditProof(10);
+
+  std::string first_chunk_of_proof = std::accumulate(
+      audit_proof.begin(), audit_proof.begin() + 7, std::string());
+  std::string second_chunk_of_proof = std::accumulate(
+      audit_proof.begin() + 7, audit_proof.end(), std::string());
+
+  mock_dns_.ExpectRequestAndResponse(
+      "0.123456.999999.tree.ct.test.",
+      {first_chunk_of_proof, second_chunk_of_proof});
+
+  MockAuditProofCallback callback;
+  QueryAuditProof("ct.test", 123456, 999999, &callback);
+  ASSERT_TRUE(callback.called());
+  EXPECT_THAT(callback.net_error(), IsError(net::ERR_DNS_MALFORMED_RESPONSE));
+  EXPECT_THAT(callback.proof(), IsNull());
+}
+
+TEST_P(LogDnsClientTest,
        QueryAuditProofReportsResponseMalformedIfNodeTooShort) {
   // node is shorter than a SHA-256 hash (31 vs 32 bytes)
   const std::vector<std::string> audit_proof(1, std::string(31, 'a'));
@@ -514,7 +577,7 @@ TEST_P(LogDnsClientTest, QueryAuditProofReportsTimeout) {
 TEST_P(LogDnsClientTest, AdoptsLatestDnsConfigIfValid) {
   std::unique_ptr<net::DnsClient> tmp = mock_dns_.CreateDnsClient();
   net::DnsClient* dns_client = tmp.get();
-  LogDnsClient log_client(std::move(tmp), net::BoundNetLog());
+  LogDnsClient log_client(std::move(tmp), net::NetLogWithSource());
 
   // Get the current DNS config, modify it and broadcast the update.
   net::DnsConfig config(*dns_client->GetConfig());
@@ -530,7 +593,7 @@ TEST_P(LogDnsClientTest, AdoptsLatestDnsConfigIfValid) {
 TEST_P(LogDnsClientTest, IgnoresLatestDnsConfigIfInvalid) {
   std::unique_ptr<net::DnsClient> tmp = mock_dns_.CreateDnsClient();
   net::DnsClient* dns_client = tmp.get();
-  LogDnsClient log_client(std::move(tmp), net::BoundNetLog());
+  LogDnsClient log_client(std::move(tmp), net::NetLogWithSource());
 
   // Get the current DNS config, modify it and broadcast the update.
   net::DnsConfig config(*dns_client->GetConfig());

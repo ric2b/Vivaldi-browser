@@ -15,6 +15,7 @@
 #include "base/containers/mru_cache.h"
 #include "base/hash.h"
 #include "base/memory/discardable_memory_allocator.h"
+#include "base/memory/memory_coordinator_client.h"
 #include "base/memory/ref_counted.h"
 #include "base/numerics/safe_math.h"
 #include "base/threading/thread_checker.h"
@@ -25,6 +26,7 @@
 #include "cc/resources/resource_format.h"
 #include "cc/tiles/image_decode_controller.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace cc {
 
@@ -101,7 +103,8 @@ struct ImageDecodeControllerKeyHash {
 
 class CC_EXPORT SoftwareImageDecodeController
     : public ImageDecodeController,
-      public base::trace_event::MemoryDumpProvider {
+      public base::trace_event::MemoryDumpProvider,
+      public base::MemoryCoordinatorClient {
  public:
   using ImageKey = ImageDecodeControllerKey;
   using ImageKeyHash = ImageDecodeControllerKeyHash;
@@ -263,6 +266,9 @@ class CC_EXPORT SoftwareImageDecodeController
                                const char* cache_name,
                                base::trace_event::ProcessMemoryDump* pmd) const;
 
+  // Overriden from base::MemoryCoordinatorClient.
+  void OnMemoryStateChange(base::MemoryState state) override;
+
   std::unordered_map<ImageKey, scoped_refptr<TileTask>, ImageKeyHash>
       pending_image_tasks_;
 
@@ -282,6 +288,7 @@ class CC_EXPORT SoftwareImageDecodeController
   MemoryBudget locked_images_budget_;
 
   ResourceFormat format_;
+  size_t max_items_in_cache_;
 
   // Used to uniquely identify DecodedImages for memory traces.
   base::AtomicSequenceNumber next_tracing_id_;

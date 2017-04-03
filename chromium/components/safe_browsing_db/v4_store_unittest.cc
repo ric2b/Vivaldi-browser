@@ -29,7 +29,7 @@ class V4StoreTest : public PlatformTest {
     PlatformTest::SetUp();
 
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
-    store_path_ = temp_dir_.path().AppendASCII("V4StoreTest.store");
+    store_path_ = temp_dir_.GetPath().AppendASCII("V4StoreTest.store");
     DVLOG(1) << "store_path_: " << store_path_.value();
   }
 
@@ -708,8 +708,9 @@ TEST_F(V4StoreTest, TestAdditionsWithRiceEncodingFailsWithInvalidInput) {
   addition->set_compression_type(RICE);
   addition->mutable_rice_hashes()->set_num_entries(-1);
   HashPrefixMap additions_map;
-  EXPECT_EQ(RICE_DECODING_FAILURE, V4Store::UpdateHashPrefixMapFromAdditions(
-                                       additions, &additions_map));
+  EXPECT_EQ(RICE_DECODING_FAILURE,
+            V4Store(task_runner_, store_path_)
+                .UpdateHashPrefixMapFromAdditions(additions, &additions_map));
 }
 #endif
 
@@ -728,8 +729,9 @@ TEST_F(V4StoreTest, TestAdditionsWithRiceEncodingSucceeds) {
   rice_hashes->set_encoded_data(
       "\xbf\xa8\x3f\xfb\xf\xf\x5e\x27\xe6\xc3\x1d\xc6\x38");
   HashPrefixMap additions_map;
-  EXPECT_EQ(APPLY_UPDATE_SUCCESS, V4Store::UpdateHashPrefixMapFromAdditions(
-                                      additions, &additions_map));
+  EXPECT_EQ(APPLY_UPDATE_SUCCESS,
+            V4Store(task_runner_, store_path_)
+                .UpdateHashPrefixMapFromAdditions(additions, &additions_map));
   EXPECT_EQ(1u, additions_map.size());
   EXPECT_EQ(std::string("\x5\0\0\0\fL\x93\xADV\x7F\xF6o\xCEo1\x81", 16),
             additions_map[4]);

@@ -24,6 +24,7 @@
 #include "components/os_crypt/os_crypt_mocker.h"
 #include "components/password_manager/core/browser/login_database.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
+#include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
 #include "components/password_manager/core/browser/password_store_origin_unittest.h"
 #include "content/public/test/test_browser_thread.h"
@@ -235,7 +236,7 @@ void PasswordStoreMacTestDelegate::ClosePasswordStore() {
 }
 
 base::FilePath PasswordStoreMacTestDelegate::test_login_db_file_path() const {
-  return db_dir_.path().Append(FILE_PATH_LITERAL("login.db"));
+  return db_dir_.GetPath().Append(FILE_PATH_LITERAL("login.db"));
 }
 
 }  // namespace
@@ -513,8 +514,6 @@ TEST_F(PasswordStoreMacInternalsTest, TestKeychainSearch) {
         internal_keychain_helpers::ExtractPasswordsMergeableWithForm(
             *keychain_, item_form_pairs, *query_form);
     EXPECT_EQ(test_data[i].expected_merge_matches, matching_items.size());
-    base::STLDeleteContainerPairSecondPointers(item_form_pairs.begin(),
-                                               item_form_pairs.end());
     for (std::vector<SecKeychainItemRef>::iterator i = keychain_items.begin();
          i != keychain_items.end(); ++i) {
       keychain_->Free(*i);
@@ -1366,7 +1365,7 @@ class PasswordStoreMacTest : public testing::Test {
   }
 
   base::FilePath test_login_db_file_path() const {
-    return db_dir_.path().Append(FILE_PATH_LITERAL("login.db"));
+    return db_dir_.GetPath().Append(FILE_PATH_LITERAL("login.db"));
   }
 
   password_manager::LoginDatabase* login_db() const {
@@ -2002,7 +2001,7 @@ TEST_F(PasswordStoreMacTest, ImportFromKeychain) {
 
   ASSERT_TRUE(base::PostTaskAndReplyWithResult(
       thread_->task_runner().get(), FROM_HERE,
-      base::Bind(&PasswordStoreMac::ImportFromKeychain, store()),
+      base::Bind(&PasswordStoreMac::ImportFromKeychain, login_db(), keychain()),
       base::Bind(&CheckMigrationResult, PasswordStoreMac::MIGRATION_OK)));
   FinishAsyncProcessing();
 
@@ -2043,7 +2042,7 @@ TEST_F(PasswordStoreMacTest, ImportFederatedFromLockedKeychain) {
   FinishAsyncProcessing();
   ASSERT_TRUE(base::PostTaskAndReplyWithResult(
       thread_->task_runner().get(), FROM_HERE,
-      base::Bind(&PasswordStoreMac::ImportFromKeychain, store()),
+      base::Bind(&PasswordStoreMac::ImportFromKeychain, login_db(), keychain()),
       base::Bind(&CheckMigrationResult, PasswordStoreMac::MIGRATION_OK)));
   FinishAsyncProcessing();
 
@@ -2075,23 +2074,45 @@ TEST_F(PasswordStoreMacTest, ImportFromLockedKeychainError) {
   keychain()->set_locked(true);
   ASSERT_TRUE(base::PostTaskAndReplyWithResult(
       thread_->task_runner().get(), FROM_HERE,
-      base::Bind(&PasswordStoreMac::ImportFromKeychain, store()),
-      base::Bind(&CheckMigrationResult, PasswordStoreMac::KEYCHAIN_BLOCKED)));
+      base::Bind(&PasswordStoreMac::ImportFromKeychain, login_db(), keychain()),
+      base::Bind(&CheckMigrationResult, PasswordStoreMac::MIGRATION_PARTIAL)));
   FinishAsyncProcessing();
 
   std::vector<std::unique_ptr<PasswordForm>> matching_items;
   EXPECT_TRUE(
       login_db()->GetLogins(PasswordStore::FormDigest(form1), &matching_items));
-  ASSERT_EQ(1u, matching_items.size());
-  EXPECT_EQ(base::string16(), matching_items[0]->password_value);
+  EXPECT_EQ(0u, matching_items.size());
 
   histogram_tester_->ExpectUniqueSample(
       "PasswordManager.KeychainMigration.NumPasswordsOnFailure", 1, 1);
   histogram_tester_->ExpectUniqueSample(
       "PasswordManager.KeychainMigration.NumFailedPasswords", 1, 1);
-  histogram_tester_->ExpectUniqueSample(
-      "PasswordManager.KeychainMigration.NumChromeOwnedInaccessiblePasswords",
-      2, 1);
   // Don't test the encryption key access.
   histogram_tester_.reset();
+}
+
+// Delete the Chrome-owned password from the Keychain.
+TEST_F(PasswordStoreMacTest, CleanUpKeychain) {
+  MockAppleKeychain::KeychainTestData data1 = { kSecAuthenticationTypeHTMLForm,
+     "some.domain.com", kSecProtocolTypeHTTP, NULL, 0, NULL, "20020601171500Z",
+     "joe_user", "sekrit", false};
+  keychain()->AddTestItem(data1);
+
+  MacKeychainPasswordFormAdapter keychain_adapter(keychain());
+  PasswordFormData data2 = { PasswordForm::SCHEME_HTML, "http://web.site.com/",
+      "http://web.site.com/path/to/page.html", NULL, NULL, NULL, NULL,
+      L"anonymous", L"knock-knock", false, 0 };
+  keychain_adapter.AddPassword(*CreatePasswordFormFromDataForTesting(data2));
+  std::vector<std::unique_ptr<autofill::PasswordForm>> passwords =
+      password_manager_util::ConvertScopedVector(
+          keychain_adapter.GetAllPasswordFormPasswords());
+  EXPECT_EQ(2u, passwords.size());
+
+  // Delete everyhting but only the Chrome-owned item should be affected.
+  PasswordStoreMac::CleanUpKeychain(keychain(), passwords);
+  passwords = password_manager_util::ConvertScopedVector(
+      keychain_adapter.GetAllPasswordFormPasswords());
+  ASSERT_EQ(1u, passwords.size());
+  EXPECT_EQ("http://some.domain.com/", passwords[0]->signon_realm);
+  EXPECT_EQ(ASCIIToUTF16("sekrit"), passwords[0]->password_value);
 }

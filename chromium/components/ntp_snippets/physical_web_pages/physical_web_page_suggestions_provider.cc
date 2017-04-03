@@ -8,6 +8,8 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_task_runner_handle.h"
+#include "ui/gfx/image/image.h"
 
 namespace ntp_snippets {
 
@@ -18,8 +20,8 @@ const size_t kMaxSuggestionsCount = 10;
 }  // namespace
 
 // TODO(vitaliii): remove when Physical Web C++ interface is provided.
-UrlInfo::UrlInfo() {}
-UrlInfo::~UrlInfo() {}
+UrlInfo::UrlInfo() = default;
+UrlInfo::~UrlInfo() = default;
 UrlInfo::UrlInfo(const UrlInfo& other) = default;
 
 PhysicalWebPageSuggestionsProvider::PhysicalWebPageSuggestionsProvider(
@@ -32,7 +34,8 @@ PhysicalWebPageSuggestionsProvider::PhysicalWebPageSuggestionsProvider(
   observer->OnCategoryStatusChanged(this, provided_category_, category_status_);
 }
 
-PhysicalWebPageSuggestionsProvider::~PhysicalWebPageSuggestionsProvider() {}
+PhysicalWebPageSuggestionsProvider::~PhysicalWebPageSuggestionsProvider() =
+    default;
 
 void PhysicalWebPageSuggestionsProvider::OnDisplayableUrlsChanged(
     const std::vector<UrlInfo>& urls) {
@@ -42,9 +45,8 @@ void PhysicalWebPageSuggestionsProvider::OnDisplayableUrlsChanged(
   for (const UrlInfo& url_info : urls) {
     if (suggestions.size() >= kMaxSuggestionsCount) break;
 
-    ContentSuggestion suggestion(
-        MakeUniqueID(provided_category_, url_info.site_url.spec()),
-        url_info.site_url);
+    ContentSuggestion suggestion(provided_category_, url_info.site_url.spec(),
+                                 url_info.site_url);
 
     suggestion.set_title(base::UTF8ToUTF16(url_info.title));
     suggestion.set_snippet_text(base::UTF8ToUTF16(url_info.description));
@@ -72,14 +74,17 @@ CategoryInfo PhysicalWebPageSuggestionsProvider::GetCategoryInfo(
 }
 
 void PhysicalWebPageSuggestionsProvider::DismissSuggestion(
-    const std::string& suggestion_id) {
+    const ContentSuggestion::ID& suggestion_id) {
   // TODO(vitaliii): Implement this and then
   // ClearDismissedSuggestionsForDebugging.
 }
 
 void PhysicalWebPageSuggestionsProvider::FetchSuggestionImage(
-    const std::string& suggestion_id, const ImageFetchedCallback& callback) {
+    const ContentSuggestion::ID& suggestion_id,
+    const ImageFetchedCallback& callback) {
   // TODO(vitaliii): Implement.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(callback, gfx::Image()));
 }
 
 void PhysicalWebPageSuggestionsProvider::ClearHistory(

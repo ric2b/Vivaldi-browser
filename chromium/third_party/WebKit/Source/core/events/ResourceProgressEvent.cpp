@@ -28,29 +28,23 @@
 
 namespace blink {
 
-ResourceProgressEvent::ResourceProgressEvent()
-{
+ResourceProgressEvent::ResourceProgressEvent(const AtomicString& type,
+                                             bool lengthComputable,
+                                             unsigned long long loaded,
+                                             unsigned long long total,
+                                             const String& url)
+    : ProgressEvent(type, lengthComputable, loaded, total), m_url(url) {}
+
+const String& ResourceProgressEvent::url() const {
+  return m_url;
 }
 
-ResourceProgressEvent::ResourceProgressEvent(const AtomicString& type, bool lengthComputable, unsigned long long loaded, unsigned long long total, const String& url)
-    : ProgressEvent(type, lengthComputable, loaded, total)
-    , m_url(url)
-{
+const AtomicString& ResourceProgressEvent::interfaceName() const {
+  return EventNames::ResourceProgressEvent;
 }
 
-const String& ResourceProgressEvent::url() const
-{
-    return m_url;
+DEFINE_TRACE(ResourceProgressEvent) {
+  ProgressEvent::trace(visitor);
 }
 
-const AtomicString& ResourceProgressEvent::interfaceName() const
-{
-    return EventNames::ResourceProgressEvent;
-}
-
-DEFINE_TRACE(ResourceProgressEvent)
-{
-    ProgressEvent::trace(visitor);
-}
-
-} // namespace blink
+}  // namespace blink

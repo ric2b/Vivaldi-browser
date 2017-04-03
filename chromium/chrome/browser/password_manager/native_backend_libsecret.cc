@@ -16,7 +16,7 @@
 #include <vector>
 
 #include "base/logging.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -164,8 +164,8 @@ std::string GetProfileSpecificAppString(LocalProfileId id) {
 }  // namespace
 
 NativeBackendLibsecret::NativeBackendLibsecret(LocalProfileId id)
-    : app_string_(GetProfileSpecificAppString(id)) {
-}
+    : app_string_(GetProfileSpecificAppString(id)),
+      ensured_keyring_unlocked_(false) {}
 
 NativeBackendLibsecret::~NativeBackendLibsecret() {
 }
@@ -307,6 +307,11 @@ bool NativeBackendLibsecret::GetLogins(
 bool NativeBackendLibsecret::AddUpdateLoginSearch(
     const autofill::PasswordForm& lookup_form,
     ScopedVector<autofill::PasswordForm>* forms) {
+  if (!ensured_keyring_unlocked_) {
+    LibsecretLoader::EnsureKeyringUnlocked();
+    ensured_keyring_unlocked_ = true;
+  }
+
   LibsecretAttributesBuilder attrs;
   attrs.Append("origin_url", lookup_form.origin.spec());
   attrs.Append("username_element", UTF16ToUTF8(lookup_form.username_element));
@@ -318,7 +323,8 @@ bool NativeBackendLibsecret::AddUpdateLoginSearch(
   GError* error = nullptr;
   GList* found = LibsecretLoader::secret_service_search_sync(
       nullptr,  // default secret service
-      &kLibsecretSchema, attrs.Get(), SECRET_SEARCH_ALL,
+      &kLibsecretSchema, attrs.Get(),
+      static_cast<SecretSearchFlags>(SECRET_SEARCH_ALL | SECRET_SEARCH_UNLOCK),
       nullptr,  // no cancellable ojbect
       &error);
   if (error) {
@@ -407,6 +413,11 @@ bool NativeBackendLibsecret::GetLoginsList(
     const PasswordStore::FormDigest* lookup_form,
     GetLoginsListOptions options,
     ScopedVector<autofill::PasswordForm>* forms) {
+  if (!ensured_keyring_unlocked_) {
+    LibsecretLoader::EnsureKeyringUnlocked();
+    ensured_keyring_unlocked_ = true;
+  }
+
   LibsecretAttributesBuilder attrs;
   attrs.Append("application", app_string_);
   if (options != ALL_LOGINS)
@@ -421,7 +432,8 @@ bool NativeBackendLibsecret::GetLoginsList(
   GError* error = nullptr;
   GList* found = LibsecretLoader::secret_service_search_sync(
       nullptr,  // default secret service
-      &kLibsecretSchema, attrs.Get(), SECRET_SEARCH_ALL,
+      &kLibsecretSchema, attrs.Get(),
+      static_cast<SecretSearchFlags>(SECRET_SEARCH_ALL | SECRET_SEARCH_UNLOCK),
       nullptr,  // no cancellable ojbect
       &error);
   if (error) {

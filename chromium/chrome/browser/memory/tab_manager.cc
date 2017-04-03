@@ -17,7 +17,7 @@
 #include "base/macros.h"
 #include "base/memory/memory_pressure_monitor.h"
 #include "base/metrics/field_trial.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
 #include "base/process/process.h"
 #include "base/strings/string16.h"
@@ -29,9 +29,8 @@
 #include "base/time/tick_clock.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/media/media_capture_devices_dispatcher.h"
-#include "chrome/browser/media/media_stream_capture_indicator.h"
-#include "chrome/browser/extensions/extension_tab_util.h"
+#include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
+#include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 #include "chrome/browser/memory/oom_memory_details.h"
 #include "chrome/browser/memory/tab_manager_observer.h"
 #include "chrome/browser/memory/tab_manager_web_contents_data.h"
@@ -63,6 +62,7 @@
 #endif
 
 #include "app/vivaldi_apptools.h"
+#include "chrome/browser/extensions/extension_tab_util.h"
 
 using base::TimeDelta;
 using base::TimeTicks;
@@ -138,6 +138,7 @@ TabManager::TabManager()
     : discard_count_(0),
       recent_tab_discard_(false),
       discard_once_(false),
+      minimum_protection_time_(base::TimeDelta::FromMinutes(10)),
       browser_tab_strip_tracker_(this, nullptr, nullptr),
       test_tick_clock_(nullptr),
       under_memory_pressure_(false),
@@ -160,12 +161,15 @@ TabManager::~TabManager() {
 
 void TabManager::Start() {
 #if defined(OS_WIN) || defined(OS_MACOSX)
-  // If the feature is not enabled, do nothing.
+  // Note that discarding is now enabled by default. This check is kept as a
+  // kill switch.
+  // TODO(georgesak): remote this when deemed not needed anymore.
   if (!base::FeatureList::IsEnabled(features::kAutomaticTabDiscarding))
     return;
 
   // Check the variation parameter to see if a tab is to be protected for an
-  // amount of time after being backgrounded. The value is in seconds.
+  // amount of time after being backgrounded. The value is in seconds. Default
+  // is 10 minutes if the variation is absent.
   std::string minimum_protection_time_string =
       variations::GetVariationParamValue(features::kAutomaticTabDiscarding.name,
                                          "MinimumProtectionTime");
@@ -804,7 +808,8 @@ void TabManager::ActiveTabChanged(content::WebContents* old_contents,
     GetWebContentsData(old_contents)->SetLastInactiveTime(NowTicks());
 }
 
-void TabManager::TabInsertedAt(content::WebContents* contents,
+void TabManager::TabInsertedAt(TabStripModel* tab_strip_model,
+                               content::WebContents* contents,
                                int index,
                                bool foreground) {
   // Only interested in background tabs, as foreground tabs get taken care of by

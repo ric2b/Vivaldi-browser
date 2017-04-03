@@ -147,18 +147,13 @@ class ScopedSetBoundsNotifier {
   DISALLOW_COPY_AND_ASSIGN(ScopedSetBoundsNotifier);
 };
 
-// Some operations are only permitted in the client that created the window.
-bool OwnsWindow(WindowTreeClient* client, Window* window) {
-  return !client || client->OwnsWindow(window);
-}
-
 bool IsClientRoot(Window* window) {
   return window->window_tree() &&
          window->window_tree()->GetRoots().count(window) > 0;
 }
 
-bool OwnsWindowOrIsRoot(Window* window) {
-  return OwnsWindow(window->window_tree(), window) || IsClientRoot(window);
+bool WasCreatedByThisClientOrIsRoot(Window* window) {
+  return window->WasCreatedByThisClient() || IsClientRoot(window);
 }
 
 void EmptyEmbedCallback(bool result) {}
@@ -169,14 +164,14 @@ void EmptyEmbedCallback(bool result) {}
 // Window, public:
 
 void Window::Destroy() {
-  if (!OwnsWindowOrIsRoot(this))
+  if (!WasCreatedByThisClientOrIsRoot(this))
     return;
 
   if (client_)
     client_->DestroyWindow(this);
   while (!children_.empty()) {
     Window* child = children_.front();
-    if (!OwnsWindow(client_, child)) {
+    if (!child->WasCreatedByThisClient()) {
       WindowPrivate(child).ClearParent();
       children_.erase(children_.begin());
     } else {
@@ -188,8 +183,12 @@ void Window::Destroy() {
   LocalDestroy();
 }
 
+bool Window::WasCreatedByThisClient() const {
+  return !client_ || client_->WasCreatedByThisClient(this);
+}
+
 void Window::SetBounds(const gfx::Rect& bounds) {
-  if (!OwnsWindowOrIsRoot(this))
+  if (!WasCreatedByThisClientOrIsRoot(this))
     return;
   if (bounds_ == bounds)
     return;
@@ -208,7 +207,7 @@ gfx::Rect Window::GetBoundsInRoot() const {
 void Window::SetClientArea(
     const gfx::Insets& client_area,
     const std::vector<gfx::Rect>& additional_client_areas) {
-  if (!OwnsWindowOrIsRoot(this))
+  if (!WasCreatedByThisClientOrIsRoot(this))
     return;
 
   if (client_)
@@ -218,7 +217,7 @@ void Window::SetClientArea(
 }
 
 void Window::SetHitTestMask(const gfx::Rect& mask) {
-  if (!OwnsWindowOrIsRoot(this))
+  if (!WasCreatedByThisClientOrIsRoot(this))
     return;
 
   if (hit_test_mask_ && *hit_test_mask_ == mask)
@@ -230,7 +229,7 @@ void Window::SetHitTestMask(const gfx::Rect& mask) {
 }
 
 void Window::ClearHitTestMask() {
-  if (!OwnsWindowOrIsRoot(this))
+  if (!WasCreatedByThisClientOrIsRoot(this))
     return;
 
   if (!hit_test_mask_)
@@ -447,6 +446,14 @@ void Window::SetCanFocus(bool can_focus) {
     client_->SetCanFocus(server_id_, can_focus);
 }
 
+void Window::SetCanAcceptDrops(WindowDropTarget* drop_target) {
+  if (drop_target_ == drop_target)
+    return;
+  drop_target_ = drop_target;
+  if (client_)
+    client_->SetCanAcceptDrops(server_id_, !!drop_target_);
+}
+
 void Window::SetCanAcceptEvents(bool can_accept_events) {
   if (can_accept_events_ == can_accept_events)
     return;
@@ -471,6 +478,20 @@ void Window::Embed(ui::mojom::WindowTreeClientPtr client,
 void Window::RequestClose() {
   if (client_)
     client_->RequestClose(this);
+}
+
+void Window::PerformDragDrop(
+    const std::map<std::string, std::vector<uint8_t>>& drag_data,
+    int drag_operation,
+    const gfx::Point& cursor_location,
+    const SkBitmap& bitmap,
+    const base::Callback<void(bool, uint32_t)>& callback) {
+  client_->PerformDragDrop(this, drag_data, drag_operation, cursor_location,
+                           bitmap, callback);
+}
+
+void Window::CancelDragDrop() {
+  client_->CancelDragDrop(this);
 }
 
 void Window::PerformWindowMove(mojom::MoveLoopSource source,
@@ -568,7 +589,7 @@ Window::Window(WindowTreeClient* client, Id id)
 
 void Window::SetSharedPropertyInternal(const std::string& name,
                                        const std::vector<uint8_t>* value) {
-  if (!OwnsWindowOrIsRoot(this))
+  if (!WasCreatedByThisClientOrIsRoot(this))
     return;
 
   if (client_) {
@@ -667,7 +688,7 @@ void Window::LocalSetBounds(const gfx::Rect& old_bounds,
                             const gfx::Rect& new_bounds) {
   // If this client owns the window, then it should be the only one to change
   // the bounds.
-  DCHECK(!OwnsWindow(client_, this) || old_bounds == bounds_);
+  DCHECK(!WasCreatedByThisClient() || old_bounds == bounds_);
   ScopedSetBoundsNotifier notifier(this, old_bounds, new_bounds);
   bounds_ = new_bounds;
 }
@@ -711,9 +732,14 @@ void Window::LocalSetVisible(bool visible) {
     return;
 
   FOR_EACH_OBSERVER(WindowObserver, observers_,
-                    OnWindowVisibilityChanging(this));
+                    OnWindowVisibilityChanging(this, visible));
   visible_ = visible;
-  NotifyWindowVisibilityChanged(this);
+  if (parent_) {
+    FOR_EACH_OBSERVER(WindowObserver, parent_->observers_,
+                      OnChildWindowVisibilityChanged(this, visible));
+  }
+
+  NotifyWindowVisibilityChanged(this, visible);
 }
 
 void Window::LocalSetOpacity(float opacity) {
@@ -776,26 +802,27 @@ void Window::NotifyWindowStackingChanged() {
                               &ReorderWithoutNotification);
 }
 
-void Window::NotifyWindowVisibilityChanged(Window* target) {
-  if (!NotifyWindowVisibilityChangedDown(target)) {
+void Window::NotifyWindowVisibilityChanged(Window* target, bool visible) {
+  if (!NotifyWindowVisibilityChangedDown(target, visible))
     return;  // |this| has been deleted.
-  }
-  NotifyWindowVisibilityChangedUp(target);
+
+  NotifyWindowVisibilityChangedUp(target, visible);
 }
 
-bool Window::NotifyWindowVisibilityChangedAtReceiver(Window* target) {
+bool Window::NotifyWindowVisibilityChangedAtReceiver(Window* target,
+                                                     bool visible) {
   // |this| may be deleted during a call to OnWindowVisibilityChanged() on one
   // of the observers. We create an local observer for that. In that case we
   // exit without further access to any members.
   WindowTracker tracker;
   tracker.Add(this);
   FOR_EACH_OBSERVER(WindowObserver, observers_,
-                    OnWindowVisibilityChanged(target));
+                    OnWindowVisibilityChanged(target, visible));
   return tracker.Contains(this);
 }
 
-bool Window::NotifyWindowVisibilityChangedDown(Window* target) {
-  if (!NotifyWindowVisibilityChangedAtReceiver(target))
+bool Window::NotifyWindowVisibilityChangedDown(Window* target, bool visible) {
+  if (!NotifyWindowVisibilityChangedAtReceiver(target, visible))
     return false;  // |this| was deleted.
   std::set<const Window*> child_already_processed;
   bool child_destroyed = false;
@@ -805,7 +832,7 @@ bool Window::NotifyWindowVisibilityChangedDown(Window* target) {
          it != children_.end(); ++it) {
       if (!child_already_processed.insert(*it).second)
         continue;
-      if (!(*it)->NotifyWindowVisibilityChangedDown(target)) {
+      if (!(*it)->NotifyWindowVisibilityChangedDown(target, visible)) {
         // |*it| was deleted, |it| is invalid and |children_| has changed.  We
         // exit the current for-loop and enter a new one.
         child_destroyed = true;
@@ -816,17 +843,17 @@ bool Window::NotifyWindowVisibilityChangedDown(Window* target) {
   return true;
 }
 
-void Window::NotifyWindowVisibilityChangedUp(Window* target) {
+void Window::NotifyWindowVisibilityChangedUp(Window* target, bool visible) {
   // Start with the parent as we already notified |this|
   // in NotifyWindowVisibilityChangedDown.
   for (Window* window = parent(); window; window = window->parent()) {
-    bool ret = window->NotifyWindowVisibilityChangedAtReceiver(target);
+    bool ret = window->NotifyWindowVisibilityChangedAtReceiver(target, visible);
     DCHECK(ret);
   }
 }
 
 bool Window::PrepareForEmbed() {
-  if (!OwnsWindow(client_, this))
+  if (!WasCreatedByThisClient())
     return false;
 
   while (!children_.empty())
@@ -859,7 +886,6 @@ void Window::ReorderWithoutNotification(Window* window,
 }
 
 // static
-// Returns true if the order actually changed.
 bool Window::ReorderImpl(Window* window,
                          Window* relative,
                          mojom::OrderDirection direction,

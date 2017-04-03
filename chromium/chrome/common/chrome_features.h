@@ -35,6 +35,10 @@ extern const base::Feature kBlockSmallContent;
 
 extern const base::Feature kBrowserHangFixesExperiment;
 
+#if defined(OS_WIN)
+extern const base::Feature kDisableFirstRunAutoImportWin;
+#endif  // defined(OS_WIN)
+
 extern const base::Feature kDisplayPersistenceToggleInPermissionPrompts;
 
 extern const base::Feature kExpectCTReporting;
@@ -57,7 +61,9 @@ extern const base::Feature kMaterialDesignHistory;
 
 extern const base::Feature kMaterialDesignSettings;
 
+#if defined(ENABLE_PLUGINS)
 extern const base::Feature kPreferHtmlOverPlugins;
+#endif
 
 extern const base::Feature kOverrideYouTubeFlashEmbed;
 
@@ -67,9 +73,17 @@ extern const base::Feature kPushMessagingBackgroundMode;
 extern const base::Feature kRuntimeMemoryLeakDetector;
 #endif  // defined(OS_CHROMEOS)
 
+#if defined(ENABLE_PLUGINS)
+extern const base::Feature kRunAllFlashInAllowMode;
+#endif
+
 extern const base::Feature kSafeSearchUrlReporting;
 
 extern const base::Feature kSimplifiedFullscreenUI;
+
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+extern const base::Feature kSecurityChip;
+#endif
 
 #if defined(SYZYASAN)
 extern const base::Feature kSyzyasanDeferredFree;
@@ -79,6 +93,8 @@ extern const base::Feature kSyzyasanDeferredFree;
 extern const base::Feature kOptInImeMenu;
 
 extern const base::Feature kQuickUnlockPin;
+
+extern const base::Feature kEHVInputOnImeMenu;
 #endif  // defined(OS_CHROMEOS)
 
 // DON'T ADD RANDOM STUFF HERE. Put it in the main section above in

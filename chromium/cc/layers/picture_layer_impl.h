@@ -45,9 +45,11 @@ class CC_EXPORT PictureLayerImpl
   void AppendQuads(RenderPass* render_pass,
                    AppendQuadsData* append_quads_data) override;
   void NotifyTileStateChanged(const Tile* tile) override;
+  void ResetRasterScale();
   void DidBeginTracing() override;
   void ReleaseResources() override;
-  void RecreateResources() override;
+  void ReleaseTileResources() override;
+  void RecreateTileResources() override;
   Region GetInvalidationRegionForDebugging() override;
 
   // PictureLayerTilingClient overrides.
@@ -108,12 +110,10 @@ class CC_EXPORT PictureLayerImpl
       const std::vector<PictureLayerTiling*>& used_tilings);
   float MinimumContentsScale() const;
   float MaximumContentsScale() const;
-  void ResetRasterScale();
   void UpdateViewportRectForTilePriorityInContentSpace();
   PictureLayerImpl* GetRecycledTwinLayer() const;
 
   void SanityCheckTilingState() const;
-  bool ShouldAdjustRasterScaleDuringScaleAnimations() const;
 
   void GetDebugBorderProperties(SkColor* color, float* width) const override;
   void GetAllPrioritizedTilesForTracing(

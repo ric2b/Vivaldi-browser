@@ -82,7 +82,7 @@ class TestDirectoryURLRequestDelegate : public TestDelegate {
 
   ~TestDirectoryURLRequestDelegate() override {}
 
-  void OnResponseStarted(URLRequest* request) override {
+  void OnResponseStarted(URLRequest* request, int net_error) override {
     got_response_started_ = true;
   }
 
@@ -109,11 +109,11 @@ TEST_F(URLRequestFileDirTest, ListCompletionOnNoPending) {
   // It is necessary to pass an existing directory to UrlRequest object,
   // but it will be deleted for testing purpose after request is started.
   ASSERT_TRUE(directory.CreateUniqueTempDir());
-  TestJobFactory factory(directory.path());
+  TestJobFactory factory(directory.GetPath());
   context_.set_job_factory(&factory);
   std::unique_ptr<URLRequest> request(context_.CreateRequest(
       FilePathToFileURL(
-          directory.path().AppendASCII("this_path_does_not_exist")),
+          directory.GetPath().AppendASCII("this_path_does_not_exist")),
       DEFAULT_PRIORITY, &delegate_));
 
   request->Start();
@@ -125,13 +125,12 @@ TEST_F(URLRequestFileDirTest, ListCompletionOnNoPending) {
   base::RunLoop().RunUntilIdle();
   ASSERT_TRUE(delegate_.got_response_started());
 
-  int bytes_read = 0;
-  EXPECT_FALSE(request->Read(buffer_.get(), kBufferSize, &bytes_read));
+  int bytes_read = request->Read(buffer_.get(), kBufferSize);
 
   // The URLRequestFileDirJobShould return the cached read error synchronously.
   // If it's not returned synchronously, the code path this is intended to test
   // was not executed.
-  EXPECT_THAT(request->status().ToNetError(), IsError(ERR_FILE_NOT_FOUND));
+  EXPECT_THAT(bytes_read, IsError(ERR_FILE_NOT_FOUND));
 }
 
 // Test the case where reading the response completes synchronously.
@@ -139,9 +138,9 @@ TEST_F(URLRequestFileDirTest, DirectoryWithASingleFileSync) {
   base::ScopedTempDir directory;
   ASSERT_TRUE(directory.CreateUniqueTempDir());
   base::FilePath path;
-  base::CreateTemporaryFileInDir(directory.path(), &path);
+  base::CreateTemporaryFileInDir(directory.GetPath(), &path);
 
-  TestJobFactory factory(directory.path());
+  TestJobFactory factory(directory.GetPath());
   context_.set_job_factory(&factory);
 
   std::unique_ptr<URLRequest> request(context_.CreateRequest(
@@ -154,17 +153,14 @@ TEST_F(URLRequestFileDirTest, DirectoryWithASingleFileSync) {
   // entire directory listing and cached it.
   base::RunLoop().RunUntilIdle();
 
-  int bytes_read = 0;
   // This will complete synchronously, since the URLRequetsFileDirJob had
   // directory listing cached in memory.
-  EXPECT_TRUE(request->Read(buffer_.get(), kBufferSize, &bytes_read));
-
-  EXPECT_EQ(URLRequestStatus::SUCCESS, request->status().status());
+  int bytes_read = request->Read(buffer_.get(), kBufferSize);
 
   ASSERT_GT(bytes_read, 0);
   ASSERT_LE(bytes_read, kBufferSize);
   std::string data(buffer_->data(), bytes_read);
-  EXPECT_TRUE(data.find(directory.path().BaseName().MaybeAsASCII()) !=
+  EXPECT_TRUE(data.find(directory.GetPath().BaseName().MaybeAsASCII()) !=
               std::string::npos);
   EXPECT_TRUE(data.find(path.BaseName().MaybeAsASCII()) != std::string::npos);
 }
@@ -174,9 +170,9 @@ TEST_F(URLRequestFileDirTest, DirectoryWithASingleFileAsync) {
   base::ScopedTempDir directory;
   ASSERT_TRUE(directory.CreateUniqueTempDir());
   base::FilePath path;
-  base::CreateTemporaryFileInDir(directory.path(), &path);
+  base::CreateTemporaryFileInDir(directory.GetPath(), &path);
 
-  TestJobFactory factory(directory.path());
+  TestJobFactory factory(directory.GetPath());
   context_.set_job_factory(&factory);
 
   TestDelegate delegate;
@@ -190,7 +186,7 @@ TEST_F(URLRequestFileDirTest, DirectoryWithASingleFileAsync) {
   ASSERT_GT(delegate.bytes_received(), 0);
   ASSERT_LE(delegate.bytes_received(), kBufferSize);
   EXPECT_TRUE(delegate.data_received().find(
-                  directory.path().BaseName().MaybeAsASCII()) !=
+                  directory.GetPath().BaseName().MaybeAsASCII()) !=
               std::string::npos);
   EXPECT_TRUE(delegate.data_received().find(path.BaseName().MaybeAsASCII()) !=
               std::string::npos);
@@ -201,14 +197,14 @@ TEST_F(URLRequestFileDirTest, DirectoryWithAFileAndSubdirectory) {
   ASSERT_TRUE(directory.CreateUniqueTempDir());
 
   base::FilePath sub_dir;
-  CreateTemporaryDirInDir(directory.path(),
+  CreateTemporaryDirInDir(directory.GetPath(),
                           FILE_PATH_LITERAL("CreateNewSubDirectoryInDirectory"),
                           &sub_dir);
 
   base::FilePath path;
-  base::CreateTemporaryFileInDir(directory.path(), &path);
+  base::CreateTemporaryFileInDir(directory.GetPath(), &path);
 
-  TestJobFactory factory(directory.path());
+  TestJobFactory factory(directory.GetPath());
   context_.set_job_factory(&factory);
 
   TestDelegate delegate;
@@ -222,7 +218,7 @@ TEST_F(URLRequestFileDirTest, DirectoryWithAFileAndSubdirectory) {
   ASSERT_GT(delegate.bytes_received(), 0);
   ASSERT_LE(delegate.bytes_received(), kBufferSize);
   EXPECT_TRUE(delegate.data_received().find(
-                  directory.path().BaseName().MaybeAsASCII()) !=
+                  directory.GetPath().BaseName().MaybeAsASCII()) !=
               std::string::npos);
   EXPECT_TRUE(delegate.data_received().find(
                   sub_dir.BaseName().MaybeAsASCII()) != std::string::npos);
@@ -234,12 +230,12 @@ TEST_F(URLRequestFileDirTest, EmptyDirectory) {
   base::ScopedTempDir directory;
   ASSERT_TRUE(directory.CreateUniqueTempDir());
 
-  TestJobFactory factory(directory.path());
+  TestJobFactory factory(directory.GetPath());
   context_.set_job_factory(&factory);
 
   TestDelegate delegate;
   std::unique_ptr<URLRequest> request(context_.CreateRequest(
-      FilePathToFileURL(directory.path()), DEFAULT_PRIORITY, &delegate));
+      FilePathToFileURL(directory.GetPath()), DEFAULT_PRIORITY, &delegate));
   request->Start();
   EXPECT_TRUE(request->is_pending());
 
@@ -248,7 +244,7 @@ TEST_F(URLRequestFileDirTest, EmptyDirectory) {
   ASSERT_GT(delegate.bytes_received(), 0);
   ASSERT_LE(delegate.bytes_received(), kBufferSize);
   EXPECT_TRUE(delegate.data_received().find(
-                  directory.path().BaseName().MaybeAsASCII()) !=
+                  directory.GetPath().BaseName().MaybeAsASCII()) !=
               std::string::npos);
 }
 

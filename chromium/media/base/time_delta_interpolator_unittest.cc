@@ -11,7 +11,9 @@ namespace media {
 
 class TimeDeltaInterpolatorTest : public ::testing::Test {
  public:
-  TimeDeltaInterpolatorTest() : interpolator_(&test_tick_clock_) {}
+  TimeDeltaInterpolatorTest() : interpolator_(&test_tick_clock_) {
+    interpolator_.SetPlaybackRate(1.0);
+  }
 
  protected:
   void AdvanceSystemTime(base::TimeDelta delta) {
@@ -127,9 +129,11 @@ TEST_F(TimeDeltaInterpolatorTest, SetBounds_Stopped) {
   const base::TimeDelta kSecondTime = base::TimeDelta::FromSeconds(16);
   const base::TimeDelta kArbitraryMaxTime = base::TimeDelta::FromSeconds(100);
 
-  interpolator_.SetBounds(kFirstTime, kArbitraryMaxTime);
+  interpolator_.SetBounds(kFirstTime, kArbitraryMaxTime,
+                          test_tick_clock_.NowTicks());
   EXPECT_EQ(kFirstTime, interpolator_.GetInterpolatedTime());
-  interpolator_.SetBounds(kSecondTime, kArbitraryMaxTime);
+  interpolator_.SetBounds(kSecondTime, kArbitraryMaxTime,
+                          test_tick_clock_.NowTicks());
   EXPECT_EQ(kSecondTime, interpolator_.GetInterpolatedTime());
 }
 
@@ -145,7 +149,8 @@ TEST_F(TimeDeltaInterpolatorTest, SetBounds_Started) {
   EXPECT_EQ(kZero, interpolator_.StartInterpolating());
   AdvanceSystemTime(kPlayDuration);
 
-  interpolator_.SetBounds(kUpdatedTime, kArbitraryMaxTime);
+  interpolator_.SetBounds(kUpdatedTime, kArbitraryMaxTime,
+                          test_tick_clock_.NowTicks());
   AdvanceSystemTime(kPlayDuration);
   EXPECT_EQ(kExpected, interpolator_.GetInterpolatedTime());
 }

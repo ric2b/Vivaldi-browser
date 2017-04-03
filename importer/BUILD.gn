@@ -43,7 +43,12 @@ static_library("importer") {
     ]
   }
   deps = [
+    "//base:base",
     "//chrome/app:generated_resources",
+    "//chrome/common:common",
+    "//components/bookmarks/browser:browser",
+    "//ui/base:base",
+    "//url:url",
     "//vivaldi/app:resources",
     "//vivaldi/app:vivaldi_native_strings",
     "//vivaldi/app:vivaldi_native_resources",

@@ -7,9 +7,9 @@
 #include <algorithm>
 
 #include "ash/common/system/chromeos/palette/palette_tool.h"
+#include "ash/resources/vector_icons/vector_icons.h"
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
-#include "ui/gfx/vector_icons_public.h"
 
 namespace ash {
 
@@ -73,10 +73,11 @@ PaletteToolId PaletteToolManager::GetActiveTool(PaletteGroup group) {
   return active_tool ? active_tool->GetToolId() : PaletteToolId::NONE;
 }
 
-gfx::VectorIconId PaletteToolManager::GetActiveTrayIcon(PaletteToolId tool_id) {
+const gfx::VectorIcon& PaletteToolManager::GetActiveTrayIcon(
+    PaletteToolId tool_id) const {
   PaletteTool* tool = FindToolById(tool_id);
   if (!tool)
-    return gfx::VectorIconId::PALETTE_TRAY_ICON_DEFAULT;
+    return kPaletteTrayIconDefaultIcon;
 
   return tool->GetActiveTrayIcon();
 }
@@ -123,6 +124,10 @@ void PaletteToolManager::HidePalette() {
   delegate_->HidePalette();
 }
 
+void PaletteToolManager::HidePaletteImmediately() {
+  delegate_->HidePaletteImmediately();
+}
+
 WmWindow* PaletteToolManager::GetWindow() {
   return delegate_->GetWindow();
 }
@@ -136,8 +141,8 @@ void PaletteToolManager::RecordPaletteModeCancellation(
   return delegate_->RecordPaletteModeCancellation(type);
 }
 
-PaletteTool* PaletteToolManager::FindToolById(PaletteToolId tool_id) {
-  for (std::unique_ptr<PaletteTool>& tool : tools_) {
+PaletteTool* PaletteToolManager::FindToolById(PaletteToolId tool_id) const {
+  for (const std::unique_ptr<PaletteTool>& tool : tools_) {
     if (tool->GetToolId() == tool_id)
       return tool.get();
   }

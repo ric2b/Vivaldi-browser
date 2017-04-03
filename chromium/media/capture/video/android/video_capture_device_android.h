@@ -87,7 +87,8 @@ class CAPTURE_EXPORT VideoCaptureDeviceAndroid : public VideoCaptureDevice {
                             jint uv_pixel_stride,
                             jint width,
                             jint height,
-                            jint rotation);
+                            jint rotation,
+                            jlong timestamp);
 
   // Implement org.chromium.media.VideoCapture.nativeOnError.
   void OnError(JNIEnv* env,
@@ -99,6 +100,8 @@ class CAPTURE_EXPORT VideoCaptureDeviceAndroid : public VideoCaptureDevice {
                     const base::android::JavaParamRef<jobject>& obj,
                     jlong callback_id,
                     const base::android::JavaParamRef<jbyteArray>& data);
+
+  void ConfigureForTesting();
 
  private:
   enum InternalState {
@@ -130,7 +133,6 @@ class CAPTURE_EXPORT VideoCaptureDeviceAndroid : public VideoCaptureDevice {
   std::list<base::Closure> photo_requests_queue_;
 
   base::TimeTicks expected_next_frame_time_;
-  base::TimeTicks first_ref_time_;
   base::TimeDelta frame_interval_;
 
   // List of |photo_callbacks_| in flight, being served in Java side.

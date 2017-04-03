@@ -46,25 +46,20 @@ enum class ChangeType;
 
 // Manages the connection with mus.
 //
-// WindowTreeClient is deleted by any of the following:
-// . If all the roots of the connection are destroyed and the connection is
-//   configured to delete when there are no roots (true if the WindowTreeClient
-//   is created with a mojom::WindowTreeClientRequest). This happens
-//   if the owner of the roots Embed()s another app in all the roots, or all
-//   the roots are explicitly deleted.
-// . The connection to mus is lost.
-// . Explicitly by way of calling delete.
+// WindowTreeClient is owned by the creator. Generally when the delegate gets
+// one of OnEmbedRootDestroyed() or OnLostConnection() it should delete the
+// WindowTreeClient.
 //
 // When WindowTreeClient is deleted all windows are deleted (and observers
-// notified). This is followed by calling
-// WindowTreeClientDelegate::OnDidDestroyClient().
+// notified).
 class WindowTreeClient : public mojom::WindowTreeClient,
                          public mojom::WindowManager,
                          public WindowManagerClient {
  public:
-  WindowTreeClient(WindowTreeClientDelegate* delegate,
-                   WindowManagerDelegate* window_manager_delegate,
-                   mojom::WindowTreeClientRequest request);
+  explicit WindowTreeClient(
+      WindowTreeClientDelegate* delegate,
+      WindowManagerDelegate* window_manager_delegate = nullptr,
+      mojom::WindowTreeClientRequest request = nullptr);
   ~WindowTreeClient() override;
 
   // Establishes the connection by way of the WindowTreeFactory.
@@ -99,7 +94,7 @@ class WindowTreeClient : public mojom::WindowTreeClient,
                mojom::OrderDirection direction);
 
   // Returns true if the specified window was created by this client.
-  bool OwnsWindow(Window* window) const;
+  bool WasCreatedByThisClient(const Window* window) const;
 
   void SetBounds(Window* window,
                  const gfx::Rect& old_bounds,
@@ -113,6 +108,7 @@ class WindowTreeClient : public mojom::WindowTreeClient,
   void ClearHitTestMask(Id window_id);
   void SetFocus(Window* window);
   void SetCanFocus(Id window_id, bool can_focus);
+  void SetCanAcceptDrops(Id window_id, bool can_accept_drops);
   void SetCanAcceptEvents(Id window_id, bool can_accept_events);
   void SetPredefinedCursor(Id window_id, ui::mojom::Cursor cursor_id);
   void SetVisible(Window* window, bool visible);
@@ -156,10 +152,6 @@ class WindowTreeClient : public mojom::WindowTreeClient,
 
   Window* GetWindowByServerId(Id id);
 
-  // Sets whether this is deleted when there are no roots. The default is to
-  // delete when there are no roots.
-  void SetDeleteOnNoRoots(bool value);
-
   // Returns the root of this connection.
   const std::set<Window*>& GetRoots();
 
@@ -183,6 +175,18 @@ class WindowTreeClient : public mojom::WindowTreeClient,
   // will be ignored.
   void StartPointerWatcher(bool want_moves);
   void StopPointerWatcher();
+
+  void PerformDragDrop(
+      Window* window,
+      const std::map<std::string, std::vector<uint8_t>>& drag_data,
+      int drag_operation,
+      const gfx::Point& cursor_location,
+      const SkBitmap& bitmap,
+      const base::Callback<void(bool, uint32_t)>& callback);
+
+  // Cancels a in progress drag drop. (If no drag is in progress, does
+  // nothing.)
+  void CancelDragDrop(Window* window);
 
   // Performs a window move. |callback| will be asynchronously called with the
   // whether the move loop completed successfully.
@@ -216,6 +220,8 @@ class WindowTreeClient : public mojom::WindowTreeClient,
  private:
   friend class WindowTreeClientPrivate;
 
+  struct CurrentDragState;
+
   enum class NewWindowType {
     CHILD,
     TOP_LEVEL,
@@ -237,6 +243,11 @@ class WindowTreeClient : public mojom::WindowTreeClient,
   // if there is no InFlightChange matching |change|.
   // See InFlightChange for details on how InFlightChanges are used.
   bool ApplyServerChangeToExistingInFlightChange(const InFlightChange& change);
+
+  static Id server_id(const Window* window) { return window->server_id(); }
+
+  Window* BuildWindowTree(const mojo::Array<mojom::WindowDataPtr>& windows,
+                          Window* initial_parent);
 
   Window* NewWindowImpl(NewWindowType type,
                         const Window::SharedProperties* properties);
@@ -317,6 +328,28 @@ class WindowTreeClient : public mojom::WindowTreeClient,
   void OnWindowFocused(Id focused_window_id) override;
   void OnWindowPredefinedCursorChanged(Id window_id,
                                        mojom::Cursor cursor) override;
+  void OnDragDropStart(
+      mojo::Map<mojo::String, mojo::Array<uint8_t>> mime_data) override;
+  void OnDragEnter(Id window_id,
+                   uint32_t event_flags,
+                   const gfx::Point& position,
+                   uint32_t effect_bitmask,
+                   const OnDragEnterCallback& callback) override;
+  void OnDragOver(Id window_id,
+                  uint32_t event_flags,
+                  const gfx::Point& position,
+                  uint32_t effect_bitmask,
+                  const OnDragOverCallback& callback) override;
+  void OnDragLeave(Id window_id) override;
+  void OnCompleteDrop(Id window_id,
+                      uint32_t event_flags,
+                      const gfx::Point& position,
+                      uint32_t effect_bitmask,
+                      const OnCompleteDropCallback& callback) override;
+  void OnPerformDragDropCompleted(uint32_t window,
+                                  bool success,
+                                  uint32_t action_taken) override;
+  void OnDragDropDone() override;
   void OnChangeCompleted(uint32_t change_id, bool success) override;
   void RequestClose(uint32_t window_id) override;
   void GetWindowManager(
@@ -327,6 +360,7 @@ class WindowTreeClient : public mojom::WindowTreeClient,
   void WmNewDisplayAdded(const display::Display& display,
                          mojom::WindowDataPtr root_data,
                          bool parent_drawn) override;
+  void WmDisplayRemoved(int64_t display_id) override;
   void WmSetBounds(uint32_t change_id,
                    Id window_id,
                    const gfx::Rect& transit_bounds) override;
@@ -402,7 +436,8 @@ class WindowTreeClient : public mojom::WindowTreeClient,
   // directly set this.
   mojom::WindowTree* tree_;
 
-  bool delete_on_no_roots_;
+  // Set to true if OnEmbed() was received.
+  bool is_from_embed_ = false;
 
   bool in_destructor_;
 
@@ -421,13 +456,26 @@ class WindowTreeClient : public mojom::WindowTreeClient,
   // The current change id for the client.
   uint32_t current_move_loop_change_ = 0u;
 
+  // Callback executed when a move loop initiated by PerformWindowMove() is
+  // completed.
+  base::Callback<void(bool)> on_current_move_finished_;
+
   // The current change id for the window manager.
   uint32_t current_wm_move_loop_change_ = 0u;
   Id current_wm_move_loop_window_id_ = 0u;
 
-  // Callback executed when a move loop initiated by PerformWindowMove() is
-  // completed.
-  base::Callback<void(bool)> on_current_move_finished_;
+  // State related to being the initiator of a drag started with
+  // PerformDragDrop().
+  std::unique_ptr<CurrentDragState> current_drag_state_;
+
+  // The mus server sends the mime drag data once per connection; we cache this
+  // and are responsible for sending it to all of our windows.
+  mojo::Map<mojo::String, mojo::Array<uint8_t>> mime_drag_data_;
+
+  // A set of window ids for windows that we received an OnDragEnter() message
+  // for. We maintain this set so we know who to send OnDragFinish() messages
+  // at the end of the drag.
+  std::set<Id> drag_entered_windows_;
 
   base::WeakPtrFactory<WindowTreeClient> weak_factory_;
 

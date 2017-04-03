@@ -94,15 +94,18 @@ class TestBluetoothAdapter : public BluetoothAdapter {
       const CreateServiceCallback& callback,
       const CreateServiceErrorCallback& error_callback) override {}
 
-  void RegisterAudioSink(
-      const BluetoothAudioSink::Options& options,
-      const AcquiredCallback& callback,
-      const BluetoothAudioSink::ErrorCallback& error_callback) override {}
-
   void RegisterAdvertisement(
       std::unique_ptr<BluetoothAdvertisement::Data> advertisement_data,
       const CreateAdvertisementCallback& callback,
-      const CreateAdvertisementErrorCallback& error_callback) override {}
+      const AdvertisementErrorCallback& error_callback) override {}
+
+#if defined(OS_CHROMEOS) || defined(OS_LINUX)
+  void SetAdvertisingInterval(
+      const base::TimeDelta& min,
+      const base::TimeDelta& max,
+      const base::Closure& callback,
+      const AdvertisementErrorCallback& error_callback) override {}
+#endif
 
   BluetoothLocalGattService* GetGattService(
       const std::string& identifier) const override {

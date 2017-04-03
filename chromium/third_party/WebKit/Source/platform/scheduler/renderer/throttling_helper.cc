@@ -40,7 +40,7 @@ ThrottlingHelper::~ThrottlingHelper() {
   for (const TaskQueueMap::value_type& map_entry : throttled_queues_) {
     TaskQueue* task_queue = map_entry.first;
     task_queue->SetTimeDomain(renderer_scheduler_->real_time_domain());
-    task_queue->SetPumpPolicy(TaskQueue::PumpPolicy::AUTO);
+    task_queue->RemoveFence();
   }
 
   renderer_scheduler_->UnregisterTimeDomain(time_domain_.get());
@@ -76,7 +76,7 @@ void ThrottlingHelper::IncreaseThrottleRefCount(TaskQueue* task_queue) {
   if (insert_result.second) {
     // The insert was succesful so we need to throttle the queue.
     task_queue->SetTimeDomain(time_domain_.get());
-    task_queue->SetPumpPolicy(TaskQueue::PumpPolicy::MANUAL);
+    task_queue->RemoveFence();
     task_queue->SetQueueEnabled(false);
 
     if (!task_queue->IsEmpty()) {
@@ -105,9 +105,13 @@ void ThrottlingHelper::DecreaseThrottleRefCount(TaskQueue* task_queue) {
     throttled_queues_.erase(iter);
 
     task_queue->SetTimeDomain(renderer_scheduler_->real_time_domain());
-    task_queue->SetPumpPolicy(TaskQueue::PumpPolicy::AUTO);
+    task_queue->RemoveFence();
     task_queue->SetQueueEnabled(enabled);
   }
+}
+
+bool ThrottlingHelper::IsThrottled(TaskQueue* task_queue) const {
+  return throttled_queues_.find(task_queue) != throttled_queues_.end();
 }
 
 void ThrottlingHelper::UnregisterTaskQueue(TaskQueue* task_queue) {
@@ -142,24 +146,22 @@ void ThrottlingHelper::PumpThrottledTasks() {
   TRACE_EVENT0(tracing_category_, "ThrottlingHelper::PumpThrottledTasks");
   pending_pump_throttled_tasks_runtime_ = base::TimeTicks();
 
-  LazyNow lazy_low(tick_clock_);
   for (const TaskQueueMap::value_type& map_entry : throttled_queues_) {
     TaskQueue* task_queue = map_entry.first;
-    if (task_queue->IsEmpty())
+    if (!map_entry.second.enabled || task_queue->IsEmpty())
       continue;
 
-    task_queue->SetQueueEnabled(map_entry.second.enabled);
-    task_queue->PumpQueue(&lazy_low, false);
+    task_queue->SetQueueEnabled(true);
+    task_queue->InsertFence();
   }
-  // Make sure NextScheduledRunTime gives us an up-to date result.
-  time_domain_->ClearExpiredWakeups();
 
   base::TimeTicks next_scheduled_delayed_task;
   // Maybe schedule a call to ThrottlingHelper::PumpThrottledTasks if there is
   // a pending delayed task. NOTE posting a non-delayed task in the future will
   // result in ThrottlingHelper::OnTimeDomainHasImmediateWork being called.
   if (time_domain_->NextScheduledRunTime(&next_scheduled_delayed_task)) {
-    MaybeSchedulePumpThrottledTasksLocked(FROM_HERE, lazy_low.Now(),
+    LazyNow lazy_now(tick_clock_);
+    MaybeSchedulePumpThrottledTasksLocked(FROM_HERE, lazy_now.Now(),
                                           next_scheduled_delayed_task);
   }
 }
@@ -212,7 +214,7 @@ void ThrottlingHelper::EnableVirtualTime() {
     throttled_queues_.erase(throttled_queues_.begin());
 
     task_queue->SetTimeDomain(renderer_scheduler_->GetVirtualTimeDomain());
-    task_queue->SetPumpPolicy(TaskQueue::PumpPolicy::AUTO);
+    task_queue->RemoveFence();
     task_queue->SetQueueEnabled(enabled);
   }
 }

@@ -20,7 +20,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/favicon/core/favicon_service.h"
 #include "components/favicon/core/favicon_util.h"
 #include "components/favicon_base/favicon_util.h"
@@ -192,12 +192,12 @@ ScopedJavaLocalRef<jobject> FaviconHelper::GetSyncedFaviconImageForURL(
 
   std::string page_url = ConvertJavaStringToUTF8(env, j_page_url);
 
-  ProfileSyncService* sync_service =
+  browser_sync::ProfileSyncService* sync_service =
       ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile);
   DCHECK(sync_service);
 
   scoped_refptr<base::RefCountedMemory> favicon_png;
-  sync_driver::OpenTabsUIDelegate* open_tabs =
+  sync_sessions::OpenTabsUIDelegate* open_tabs =
       sync_service->GetOpenTabsUIDelegate();
   DCHECK(open_tabs);
 

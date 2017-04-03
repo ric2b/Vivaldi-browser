@@ -11,6 +11,7 @@ import android.test.suitebuilder.annotation.SmallTest;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.AdvancedMockContext;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.RetryOnFailure;
 
 import java.util.concurrent.Semaphore;
 
@@ -62,6 +63,7 @@ public class BackgroundSyncLauncherTest extends InstrumentationTestCase {
 
     @SmallTest
     @Feature({"BackgroundSync"})
+    @RetryOnFailure
     public void testHasInstance() {
         assertTrue(BackgroundSyncLauncher.hasInstance());
         mLauncher.destroy();
@@ -76,6 +78,7 @@ public class BackgroundSyncLauncherTest extends InstrumentationTestCase {
 
     @SmallTest
     @Feature({"BackgroundSync"})
+    @RetryOnFailure
     public void testSetLaunchWhenNextOnline() {
         assertFalse(shouldLaunchBrowserIfStoppedSync());
         mLauncher.launchBrowserIfStopped(mContext, true, 0);
@@ -86,6 +89,7 @@ public class BackgroundSyncLauncherTest extends InstrumentationTestCase {
 
     @SmallTest
     @Feature({"BackgroundSync"})
+    @RetryOnFailure
     public void testNewLauncherDisablesNextOnline() {
         mLauncher.launchBrowserIfStopped(mContext, true, 0);
         assertTrue(shouldLaunchBrowserIfStoppedSync());

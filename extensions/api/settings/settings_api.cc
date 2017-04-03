@@ -87,6 +87,10 @@ struct PrefsMapping kPrefsValues[] {
   // Used to store active feature flags (experimental features).
   { vivaldiprefs::kVivaldiExperiments, arrayPreftype },
 
+#if defined(USE_AURA)
+  { vivaldiprefs::kHideMouseCursorInFullscreen, booleanPreftype },
+#endif //USE_AURA
+
 #if defined(OS_MACOSX)
   { vivaldiprefs::kAppleKeyboardUIMode, numberPreftype },
   { vivaldiprefs::kAppleMiniaturizeOnDoubleClick, booleanPreftype },

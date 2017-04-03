@@ -24,7 +24,7 @@
     DEALINGS IN THE SOFTWARE.
   </copyright>
 
-  <interface name="zwp_gaming_input_v1" version="1">
+  <interface name="zcr_gaming_input_v1" version="1">
     <description summary="extends wl_seat with gaming input devices">
       A global interface to provide gaming input devices for a given seat.
 
@@ -42,16 +42,16 @@
 
     <request name="get_gamepad">
       <description summary="get gamepad device assigned to seat">
-        Create gamepad object. See zwp_gamepad_v1 interface for details.
+        Create gamepad object. See zcr_gamepad_v1 interface for details.
       </description>
-      <arg name="id" type="new_id" interface="zwp_gamepad_v1"/>
+      <arg name="id" type="new_id" interface="zcr_gamepad_v1"/>
       <arg name="seat" type="object" interface="wl_seat"/>
     </request>
   </interface>
 
-  <interface name="zwp_gamepad_v1" version="1">
+  <interface name="zcr_gamepad_v1" version="1">
     <description summary="gamepad input device">
-      The zwp_gamepad_v1 interface represents one or more gamepad input devices,
+      The zcr_gamepad_v1 interface represents one or more gamepad input devices,
       which are reported as a normalized 'Standard Gamepad' as it is specified
       by the W3C Gamepad API at: https://w3c.github.io/gamepad/#remapping
     </description>
@@ -123,4 +123,5 @@
       <arg name="time" type="uint" summary="timestamp with millisecond granularity"/>
     </event>
   </interface>
+
 </protocol>

@@ -18,6 +18,7 @@
 #include "base/json/json_reader.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -32,7 +33,6 @@
 #include "chrome/browser/devtools/device/tcp_device_provider.h"
 #include "chrome/browser/devtools/device/usb/usb_device_provider.h"
 #include "chrome/browser/devtools/devtools_protocol.h"
-#include "chrome/browser/devtools/devtools_target_impl.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/devtools/remote_debugging_server.h"
 #include "chrome/browser/profiles/profile.h"
@@ -55,6 +55,7 @@
 #endif
 
 using content::BrowserThread;
+using content::DevToolsAgentHost;
 
 namespace {
 
@@ -70,15 +71,21 @@ const char kPageReloadCommand[] = "Page.reload";
 
 const char kWebViewSocketPrefix[] = "webview_devtools_remote";
 
+const char kChromeDiscoveryURL[] = "localhost:9222";
+const char kNodeDiscoveryURL[] = "localhost:9229";
+
 bool BrowserIdFromString(const std::string& browser_id_str,
-                         DevToolsAndroidBridge::BrowserId* browser_id) {
+                         std::string* serial,
+                         std::string* browser_id) {
   size_t colon_pos = browser_id_str.find(':');
   if (colon_pos == std::string::npos)
     return false;
-  browser_id->first = browser_id_str.substr(0, colon_pos);
-  browser_id->second = browser_id_str.substr(colon_pos + 1);
+  *serial = browser_id_str.substr(0, colon_pos);
+  *browser_id = browser_id_str.substr(colon_pos + 1);
   return true;
 }
+
+static void NoOp(int, const std::string&) {}
 
 }  // namespace
 
@@ -101,7 +108,8 @@ class DevToolsAndroidBridge::DiscoveryRequest
   void ReceivedVersion(scoped_refptr<RemoteBrowser>,
                        int result,
                        const std::string& response);
-  void ReceivedPages(scoped_refptr<RemoteBrowser>,
+  void ReceivedPages(scoped_refptr<AndroidDeviceManager::Device> device,
+                     scoped_refptr<RemoteBrowser>,
                      int result,
                      const std::string& response);
 
@@ -148,7 +156,7 @@ void DevToolsAndroidBridge::DiscoveryRequest::ReceivedDeviceInfo(
     device->SendJsonRequest(
         (*it)->socket(),
         kPageListRequest,
-        base::Bind(&DiscoveryRequest::ReceivedPages, this, *it));
+        base::Bind(&DiscoveryRequest::ReceivedPages, this, device, *it));
   }
 }
 
@@ -181,6 +189,7 @@ void DevToolsAndroidBridge::DiscoveryRequest::ReceivedVersion(
 }
 
 void DevToolsAndroidBridge::DiscoveryRequest::ReceivedPages(
+    scoped_refptr<AndroidDeviceManager::Device> device,
     scoped_refptr<RemoteBrowser> browser,
     int result,
     const std::string& response) {
@@ -193,7 +202,8 @@ void DevToolsAndroidBridge::DiscoveryRequest::ReceivedPages(
     for (const auto& page_value : *list_value) {
       base::DictionaryValue* dict;
       if (page_value->GetAsDictionary(&dict))
-        browser->pages_.push_back(new RemotePage(browser->browser_id_, *dict));
+        browser->pages_.push_back(
+            new RemotePage(device, browser->browser_id_, *dict));
     }
   }
 }
@@ -289,101 +299,211 @@ class DevToolsAndroidBridge::AgentHostDelegate
       public AndroidDeviceManager::AndroidWebSocket::Delegate {
  public:
   static scoped_refptr<content::DevToolsAgentHost> GetOrCreateAgentHost(
-      DevToolsAndroidBridge* bridge,
-      const std::string& id,
-      const BrowserId& browser_id,
-      const std::string& target_path);
+      scoped_refptr<AndroidDeviceManager::Device> device,
+      const std::string& browser_id,
+      const std::string& local_id,
+      const std::string& target_path,
+      const std::string& type,
+      base::DictionaryValue* value);
+  ~AgentHostDelegate() override;
 
  private:
   AgentHostDelegate(
-      DevToolsAndroidBridge* bridge,
-      const std::string& id,
-      const BrowserId& browser_id,
-      const std::string& target_path);
-  ~AgentHostDelegate() override;
+      scoped_refptr<AndroidDeviceManager::Device> device,
+      const std::string& browser_id,
+      const std::string& local_id,
+      const std::string& target_path,
+      const std::string& type,
+      base::DictionaryValue* value);
+  // DevToolsExternalAgentProxyDelegate overrides.
   void Attach(content::DevToolsExternalAgentProxy* proxy) override;
   void Detach() override;
+  std::string GetType() override;
+  std::string GetTitle() override;
+  std::string GetDescription() override;
+  GURL GetURL() override;
+  GURL GetFaviconURL() override;
+  std::string GetFrontendURL() override;
+  bool Activate() override;
+  void Reload() override;
+  bool Close() override;
   void SendMessageToBackend(const std::string& message) override;
+
   void OnSocketOpened() override;
   void OnFrameRead(const std::string& message) override;
   void OnSocketClosed() override;
 
-  std::string id_;
-  base::WeakPtr<DevToolsAndroidBridge> bridge_;
-  BrowserId browser_id_;
+  void SendProtocolCommand(const std::string& target_path,
+                           const std::string& method,
+                           std::unique_ptr<base::DictionaryValue> params,
+                           const base::Closure callback);
+
+  scoped_refptr<AndroidDeviceManager::Device> device_;
+  std::string browser_id_;
+  std::string local_id_;
   std::string target_path_;
+  std::string remote_type_;
+  std::string remote_id_;
+  std::string frontend_url_;
+  std::string title_;
+  std::string description_;
+  GURL url_;
+  GURL favicon_url_;
   bool socket_opened_;
   std::vector<std::string> pending_messages_;
-  scoped_refptr<AndroidDeviceManager::Device> device_;
   std::unique_ptr<AndroidDeviceManager::AndroidWebSocket> web_socket_;
   content::DevToolsAgentHost* agent_host_;
   content::DevToolsExternalAgentProxy* proxy_;
   DISALLOW_COPY_AND_ASSIGN(AgentHostDelegate);
 };
 
+static std::string GetStringProperty(base::DictionaryValue* value,
+                                     const std::string& name) {
+  std::string result;
+  value->GetString(name, &result);
+  return result;
+}
+
+static std::string BuildUniqueTargetId(
+    const std::string& serial,
+    const std::string& browser_id,
+    base::DictionaryValue* value) {
+  return base::StringPrintf("%s:%s:%s", serial.c_str(),
+      browser_id.c_str(), GetStringProperty(value, "id").c_str());
+}
+
+static std::string GetFrontendURLFromValue(base::DictionaryValue* value) {
+  std::string frontend_url = GetStringProperty(value, "devtoolsFrontendUrl");
+  size_t ws_param = frontend_url.find("?ws");
+  if (ws_param != std::string::npos)
+    frontend_url = frontend_url.substr(0, ws_param);
+  if (base::StartsWith(frontend_url, "http:", base::CompareCase::SENSITIVE))
+    frontend_url = "https:" + frontend_url.substr(5);
+  return frontend_url;
+}
+
+static std::string GetTargetPath(base::DictionaryValue* value) {
+  std::string target_path = GetStringProperty(value, "webSocketDebuggerUrl");
+
+  if (base::StartsWith(target_path, "ws://", base::CompareCase::SENSITIVE)) {
+    size_t pos = target_path.find("/", 5);
+    if (pos == std::string::npos)
+      pos = 5;
+    target_path = target_path.substr(pos);
+  } else {
+    target_path = std::string();
+  }
+  return target_path;
+}
+
 // static
 scoped_refptr<content::DevToolsAgentHost>
 DevToolsAndroidBridge::AgentHostDelegate::GetOrCreateAgentHost(
-    DevToolsAndroidBridge* bridge,
-    const std::string& id,
-    const BrowserId& browser_id,
-    const std::string& target_path) {
+    scoped_refptr<AndroidDeviceManager::Device> device,
+    const std::string& browser_id,
+    const std::string& local_id,
+    const std::string& target_path,
+    const std::string& type,
+    base::DictionaryValue* value) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  AgentHostDelegates::iterator it = bridge->host_delegates_.find(id);
-  if (it != bridge->host_delegates_.end())
-    return it->second->agent_host_;
+  scoped_refptr<DevToolsAgentHost> result =
+      DevToolsAgentHost::GetForId(local_id);
+  if (result)
+    return result;
 
-  AgentHostDelegate* delegate =
-      new AgentHostDelegate(bridge, id, browser_id, target_path);
-  scoped_refptr<content::DevToolsAgentHost> result =
-      content::DevToolsAgentHost::Create(delegate);
+  AgentHostDelegate* delegate = new AgentHostDelegate(
+      device, browser_id, local_id, target_path, type, value);
+  result = content::DevToolsAgentHost::Forward(
+      local_id, base::WrapUnique(delegate));
   delegate->agent_host_ = result.get();
   return result;
 }
 
 DevToolsAndroidBridge::AgentHostDelegate::AgentHostDelegate(
-    DevToolsAndroidBridge* bridge,
-    const std::string& id,
-    const BrowserId& browser_id,
-    const std::string& target_path)
-    : id_(id),
-      bridge_(bridge->AsWeakPtr()),
+    scoped_refptr<AndroidDeviceManager::Device> device,
+    const std::string& browser_id,
+    const std::string& local_id,
+    const std::string& target_path,
+    const std::string& type,
+    base::DictionaryValue* value)
+    : device_(device),
       browser_id_(browser_id),
+      local_id_(local_id),
       target_path_(target_path),
+      remote_type_(type),
+      remote_id_(value ? GetStringProperty(value, "id") : ""),
+      frontend_url_(value ? GetFrontendURLFromValue(value) : ""),
+      title_(value ? base::UTF16ToUTF8(net::UnescapeForHTML(base::UTF8ToUTF16(
+          GetStringProperty(value, "title")))) : ""),
+      description_(value ? GetStringProperty(value, "description") : ""),
+      url_(GURL(value ? GetStringProperty(value, "url") : "")),
+      favicon_url_(GURL(value ? GetStringProperty(value, "faviconUrl") : "")),
       socket_opened_(false),
-      agent_host_(NULL),
-      proxy_(NULL) {
-  bridge_->host_delegates_[id] = this;
+      agent_host_(nullptr),
+      proxy_(nullptr) {
 }
 
 DevToolsAndroidBridge::AgentHostDelegate::~AgentHostDelegate() {
-  if (bridge_)
-    bridge_->host_delegates_.erase(id_);
 }
 
 void DevToolsAndroidBridge::AgentHostDelegate::Attach(
     content::DevToolsExternalAgentProxy* proxy) {
   proxy_ = proxy;
   content::RecordAction(
-      base::StartsWith(browser_id_.second, kWebViewSocketPrefix,
+      base::StartsWith(browser_id_, kWebViewSocketPrefix,
                        base::CompareCase::SENSITIVE)
           ? base::UserMetricsAction("DevTools_InspectAndroidWebView")
           : base::UserMetricsAction("DevTools_InspectAndroidPage"));
-
-  // Retain the device so it's not released until AgentHost is detached.
-  if (bridge_)
-    device_ = bridge_->FindDevice(browser_id_.first);
-  if (!device_.get())
-    return;
-
   web_socket_.reset(
-      device_->CreateWebSocket(browser_id_.second, target_path_, this));
+      device_->CreateWebSocket(browser_id_, target_path_, this));
 }
 
 void DevToolsAndroidBridge::AgentHostDelegate::Detach() {
   web_socket_.reset();
-  device_ = nullptr;
   proxy_ = nullptr;
+}
+
+std::string DevToolsAndroidBridge::AgentHostDelegate::GetType() {
+  return remote_type_;
+}
+
+std::string DevToolsAndroidBridge::AgentHostDelegate::GetTitle() {
+  return title_;
+}
+
+std::string DevToolsAndroidBridge::AgentHostDelegate::GetDescription() {
+  return description_;
+}
+
+GURL DevToolsAndroidBridge::AgentHostDelegate::GetURL() {
+  return url_;
+}
+
+GURL DevToolsAndroidBridge::AgentHostDelegate::GetFaviconURL() {
+  return favicon_url_;
+}
+
+std::string DevToolsAndroidBridge::AgentHostDelegate::GetFrontendURL() {
+  return frontend_url_;
+}
+
+bool DevToolsAndroidBridge::AgentHostDelegate::Activate() {
+  std::string request = base::StringPrintf(kActivatePageRequest,
+                                           remote_id_.c_str());
+  device_->SendJsonRequest(browser_id_, request, base::Bind(&NoOp));
+  return true;
+}
+
+void DevToolsAndroidBridge::AgentHostDelegate::Reload() {
+  SendProtocolCommand(target_path_, kPageReloadCommand, nullptr,
+                      base::Closure());
+}
+
+bool DevToolsAndroidBridge::AgentHostDelegate::Close() {
+  std::string request = base::StringPrintf(kClosePageRequest,
+                                           remote_id_.c_str());
+  device_->SendJsonRequest(browser_id_, request, base::Bind(&NoOp));
+  return true;
 }
 
 void DevToolsAndroidBridge::AgentHostDelegate::SendMessageToBackend(
@@ -421,157 +541,44 @@ void DevToolsAndroidBridge::AgentHostDelegate::OnSocketClosed() {
   }
 }
 
-//// RemotePageTarget ----------------------------------------------
-
-class DevToolsAndroidBridge::RemotePageTarget : public DevToolsTargetImpl {
- public:
-  RemotePageTarget(DevToolsAndroidBridge* bridge,
-                   const BrowserId& browser_id,
-                   const base::DictionaryValue& value);
-  ~RemotePageTarget() override;
-
-  // DevToolsTargetImpl overrides.
-  std::string GetId() const override;
-  bool IsAttached() const override;
-  bool Activate() const override;
-  bool Close() const override;
-  void Inspect(Profile* profile) const override;
-  void Reload() const override;
-
- private:
-  base::WeakPtr<DevToolsAndroidBridge> bridge_;
-  BrowserId browser_id_;
-  std::string target_path_;
-  std::string frontend_url_;
-  std::string remote_id_;
-  std::string remote_type_;
-  std::string local_id_;
-  DISALLOW_COPY_AND_ASSIGN(RemotePageTarget);
-};
-
-static std::string GetStringProperty(const base::DictionaryValue& value,
-                                     const std::string& name) {
-  std::string result;
-  value.GetString(name, &result);
-  return result;
-}
-
-static std::string BuildUniqueTargetId(
-    const DevToolsAndroidBridge::BrowserId& browser_id,
-    const base::DictionaryValue& value) {
-  return base::StringPrintf("%s:%s:%s", browser_id.first.c_str(),
-      browser_id.second.c_str(), GetStringProperty(value, "id").c_str());
-}
-
-static std::string GetFrontendURL(const base::DictionaryValue& value) {
-  std::string frontend_url = GetStringProperty(value, "devtoolsFrontendUrl");
-  size_t ws_param = frontend_url.find("?ws");
-  if (ws_param != std::string::npos)
-    frontend_url = frontend_url.substr(0, ws_param);
-  if (base::StartsWith(frontend_url, "http:", base::CompareCase::SENSITIVE))
-    frontend_url = "https:" + frontend_url.substr(5);
-  return frontend_url;
-}
-
-static std::string GetTargetPath(const base::DictionaryValue& value) {
-  std::string target_path = GetStringProperty(value, "webSocketDebuggerUrl");
-
-  if (base::StartsWith(target_path, "ws://", base::CompareCase::SENSITIVE)) {
-    size_t pos = target_path.find("/", 5);
-    if (pos == std::string::npos)
-      pos = 5;
-    target_path = target_path.substr(pos);
-  } else {
-    target_path = std::string();
-  }
-  return target_path;
-}
-
-DevToolsAndroidBridge::RemotePageTarget::RemotePageTarget(
-    DevToolsAndroidBridge* bridge,
-    const BrowserId& browser_id,
-    const base::DictionaryValue& value)
-    : DevToolsTargetImpl(AgentHostDelegate::GetOrCreateAgentHost(
-                             bridge,
-                             BuildUniqueTargetId(browser_id, value),
-                             browser_id,
-                             GetTargetPath(value))),
-      bridge_(bridge->AsWeakPtr()),
-      browser_id_(browser_id),
-      target_path_(GetTargetPath(value)),
-      frontend_url_(GetFrontendURL(value)),
-      remote_id_(GetStringProperty(value, "id")),
-      remote_type_(GetStringProperty(value, "type")),
-      local_id_(BuildUniqueTargetId(browser_id, value)) {
-  set_type("adb_page");
-  set_url(GURL(GetStringProperty(value, "url")));
-  set_title(base::UTF16ToUTF8(net::UnescapeForHTML(base::UTF8ToUTF16(
-      GetStringProperty(value, "title")))));
-  set_description(GetStringProperty(value, "description"));
-  set_favicon_url(GURL(GetStringProperty(value, "faviconUrl")));
-  target_path_ = GetTargetPath(value);
-}
-
-DevToolsAndroidBridge::RemotePageTarget::~RemotePageTarget() {
-}
-
-std::string DevToolsAndroidBridge::RemotePageTarget::GetId() const {
-  return local_id_;
-}
-
-bool DevToolsAndroidBridge::RemotePageTarget::IsAttached() const {
-  return target_path_.empty();
-}
-
-static void NoOp(int, const std::string&) {}
-
-void DevToolsAndroidBridge::RemotePageTarget::Inspect(Profile* profile) const {
-  Activate();
-  bool is_worker = remote_type_ == kTargetTypeWorker ||
-                   remote_type_ == kTargetTypeServiceWorker;
-  bool is_v8_only = remote_type_ == kTargetTypeNode;
-  DevToolsWindow::OpenExternalFrontend(profile, frontend_url_, GetAgentHost(),
-                                       is_worker, is_v8_only);
-}
-
-bool DevToolsAndroidBridge::RemotePageTarget::Activate() const {
-  if (!bridge_)
-    return false;
-
-  std::string request = base::StringPrintf(kActivatePageRequest,
-                                           remote_id_.c_str());
-  bridge_->SendJsonRequest(browser_id_, request, base::Bind(&NoOp));
-  return true;
-}
-
-bool DevToolsAndroidBridge::RemotePageTarget::Close() const {
-  if (!bridge_)
-    return false;
-
-  std::string request = base::StringPrintf(kClosePageRequest,
-                                           remote_id_.c_str());
-  bridge_->SendJsonRequest(browser_id_, request, base::Bind(&NoOp));
-  return true;
-}
-
-void DevToolsAndroidBridge::RemotePageTarget::Reload() const {
-  if (!bridge_)
+void DevToolsAndroidBridge::AgentHostDelegate::SendProtocolCommand(
+    const std::string& target_path,
+    const std::string& method,
+    std::unique_ptr<base::DictionaryValue> params,
+    const base::Closure callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  if (target_path.empty())
     return;
-
-  bridge_->SendProtocolCommand(browser_id_, target_path_, kPageReloadCommand,
-                               NULL, base::Closure());
+  new ProtocolCommand(
+      device_, browser_id_, target_path,
+      DevToolsProtocol::SerializeCommand(1, method, std::move(params)),
+      callback);
 }
 
 // DevToolsAndroidBridge::RemotePage ------------------------------------------
 
-DevToolsAndroidBridge::RemotePage::RemotePage(const BrowserId& browser_id,
-                                              const base::DictionaryValue& dict)
-    : browser_id_(browser_id),
-      frontend_url_(GetFrontendURL(dict)),
+DevToolsAndroidBridge::RemotePage::RemotePage(
+    scoped_refptr<AndroidDeviceManager::Device> device,
+    const std::string& browser_id,
+    const base::DictionaryValue& dict)
+    : device_(device),
+      browser_id_(browser_id),
       dict_(dict.DeepCopy()) {
 }
 
 DevToolsAndroidBridge::RemotePage::~RemotePage() {
+}
+
+scoped_refptr<content::DevToolsAgentHost>
+DevToolsAndroidBridge::RemotePage::CreateTarget() {
+  std::string local_id = BuildUniqueTargetId(device_->serial(),
+                                             browser_id_,
+                                             dict_.get());
+  std::string target_path = GetTargetPath(dict_.get());
+  std::string type = GetStringProperty(dict_.get(), "type");
+
+  return AgentHostDelegate::GetOrCreateAgentHost(
+      device_, browser_id_, local_id, target_path, type, dict_.get());
 }
 
 // DevToolsAndroidBridge::RemoteBrowser ---------------------------------------
@@ -579,7 +586,8 @@ DevToolsAndroidBridge::RemotePage::~RemotePage() {
 DevToolsAndroidBridge::RemoteBrowser::RemoteBrowser(
     const std::string& serial,
     const AndroidDeviceManager::BrowserInfo& browser_info)
-    : browser_id_(std::make_pair(serial, browser_info.socket_name)),
+    : serial_(serial),
+      browser_id_(browser_info.socket_name),
       display_name_(browser_info.display_name),
       user_(browser_info.user),
       type_(browser_info.type) {
@@ -606,71 +614,36 @@ DevToolsAndroidBridge::RemoteBrowser::GetParsedVersion() {
   return result;
 }
 
-DevToolsTargetImpl*
-DevToolsAndroidBridge::CreatePageTarget(scoped_refptr<RemotePage> page) {
-  return new RemotePageTarget(this, page->browser_id_, *page->dict_);
-}
-
-void DevToolsAndroidBridge::SendJsonRequest(
-    const BrowserId& browser_id,
-    const std::string& request,
-    const JsonRequestCallback& callback) {
-  scoped_refptr<AndroidDeviceManager::Device> device(
-      FindDevice(browser_id.first));
-  if (!device.get()) {
-    callback.Run(net::ERR_FAILED, std::string());
-    return;
-  }
-  device->SendJsonRequest(browser_id.second, request, callback);
-}
-
-void DevToolsAndroidBridge::SendProtocolCommand(
-    const BrowserId& browser_id,
-    const std::string& target_path,
-    const std::string& method,
-    std::unique_ptr<base::DictionaryValue> params,
-    const base::Closure callback) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (target_path.empty())
-    return;
-  scoped_refptr<AndroidDeviceManager::Device> device(
-      FindDevice(browser_id.first));
-  if (!device.get()) {
-    callback.Run();
-    return;
-  }
-  new ProtocolCommand(
-      device, browser_id.second, target_path,
-      DevToolsProtocol::SerializeCommand(1, method, std::move(params)),
-      callback);
-}
-
 scoped_refptr<content::DevToolsAgentHost>
 DevToolsAndroidBridge::GetBrowserAgentHost(
     scoped_refptr<RemoteBrowser> browser) {
+  DeviceMap::iterator it = device_map_.find(browser->serial());
+  if (it == device_map_.end())
+    return nullptr;
+
   return AgentHostDelegate::GetOrCreateAgentHost(
-      this,
-      "adb:" + browser->serial() + ":" + browser->socket(),
+      it->second,
       browser->browser_id_,
-      kBrowserTargetSocket);
+      "adb:" + browser->serial() + ":" + browser->socket(),
+      kBrowserTargetSocket, DevToolsAgentHost::kTypeBrowser, nullptr);
 }
 
 void DevToolsAndroidBridge::SendJsonRequest(
     const std::string& browser_id_str,
     const std::string& url,
     const JsonRequestCallback& callback) {
-  BrowserId browser_id;
-  if (!BrowserIdFromString(browser_id_str, &browser_id)) {
+  std::string serial;
+  std::string browser_id;
+  if (!BrowserIdFromString(browser_id_str, &serial, &browser_id)) {
     callback.Run(net::ERR_FAILED, std::string());
     return;
   }
-  SendJsonRequest(browser_id, url, callback);
-}
-
-scoped_refptr<AndroidDeviceManager::Device> DevToolsAndroidBridge::FindDevice(
-    const std::string& serial) {
   DeviceMap::iterator it = device_map_.find(serial);
-  return it == device_map_.end() ? nullptr : it->second;
+  if (it == device_map_.end()) {
+    callback.Run(net::ERR_FAILED, std::string());
+    return;
+  }
+  it->second->SendJsonRequest(browser_id, url, callback);
 }
 
 void DevToolsAndroidBridge::OpenRemotePage(scoped_refptr<RemoteBrowser> browser,
@@ -688,7 +661,7 @@ void DevToolsAndroidBridge::OpenRemotePage(scoped_refptr<RemoteBrowser> browser,
   std::string query = net::EscapeQueryParamValue(url, false /* use_plus */);
   std::string request =
       base::StringPrintf(kNewPageRequestWithURL, query.c_str());
-  SendJsonRequest(browser->browser_id_, request, base::Bind(&NoOp));
+  SendJsonRequest(browser->GetId(), request, base::Bind(&NoOp));
 }
 
 DevToolsAndroidBridge::RemoteBrowser::~RemoteBrowser() {
@@ -716,21 +689,36 @@ DevToolsAndroidBridge::RemoteDevice::~RemoteDevice() {
 
 // DevToolsAndroidBridge ------------------------------------------------------
 
+// static
+void DevToolsAndroidBridge::QueryCompleteDevices(
+    AndroidDeviceManager* device_manager,
+    const DeviceListCallback& callback) {
+  new DiscoveryRequest(device_manager, callback);
+}
+
 DevToolsAndroidBridge::DevToolsAndroidBridge(
     Profile* profile)
     : profile_(profile),
       device_manager_(AndroidDeviceManager::Create()),
       task_scheduler_(base::Bind(&DevToolsAndroidBridge::ScheduleTaskDefault)),
-      port_forwarding_controller_(new PortForwardingController(profile, this)),
+      port_forwarding_controller_(new PortForwardingController(profile)),
       weak_factory_(this) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   pref_change_registrar_.Init(profile_->GetPrefs());
   pref_change_registrar_.Add(prefs::kDevToolsDiscoverUsbDevicesEnabled,
       base::Bind(&DevToolsAndroidBridge::CreateDeviceProviders,
                  base::Unretained(this)));
-  pref_change_registrar_.Add(prefs::kDevToolsTargetDiscoveryConfig,
+  pref_change_registrar_.Add(prefs::kDevToolsTCPDiscoveryConfig,
       base::Bind(&DevToolsAndroidBridge::CreateDeviceProviders,
                  base::Unretained(this)));
+  pref_change_registrar_.Add(prefs::kDevToolsDiscoverTCPTargetsEnabled,
+      base::Bind(&DevToolsAndroidBridge::CreateDeviceProviders,
+                 base::Unretained(this)));
+  base::ListValue* target_discovery = new base::ListValue();
+  target_discovery->AppendString(kChromeDiscoveryURL);
+  target_discovery->AppendString(kNodeDiscoveryURL);
+  profile->GetPrefs()->SetDefaultPrefValue(
+      prefs::kDevToolsTCPDiscoveryConfig, target_discovery);
   CreateDeviceProviders();
 }
 
@@ -792,11 +780,6 @@ void DevToolsAndroidBridge::RemovePortForwardingListener(
     StopDeviceListPolling();
 }
 
-bool DevToolsAndroidBridge::HasDevToolsWindow(const std::string& agent_id) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return host_delegates_.find(agent_id) != host_delegates_.end();
-}
-
 DevToolsAndroidBridge::~DevToolsAndroidBridge() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(device_list_listeners_.empty());
@@ -813,6 +796,7 @@ void DevToolsAndroidBridge::StartDeviceListPolling() {
 void DevToolsAndroidBridge::StopDeviceListPolling() {
   device_list_callback_.Cancel();
   device_map_.clear();
+  port_forwarding_controller_->CloseAllConnections();
 }
 
 bool DevToolsAndroidBridge::NeedsDeviceListPolling() {
@@ -846,7 +830,7 @@ void DevToolsAndroidBridge::ReceivedDeviceList(
     (*it)->DeviceListChanged(remote_devices);
 
   ForwardingStatus status =
-      port_forwarding_controller_->DeviceListChanged(remote_devices);
+      port_forwarding_controller_->DeviceListChanged(complete_devices);
   PortForwardingListeners forwarding_listeners(port_forwarding_listeners_);
   for (PortForwardingListeners::iterator it = forwarding_listeners.begin();
        it != forwarding_listeners.end(); ++it) {
@@ -954,7 +938,9 @@ void DevToolsAndroidBridge::CreateDeviceProviders() {
   AndroidDeviceManager::DeviceProviders device_providers;
   PrefService* service = profile_->GetPrefs();
   const base::ListValue* targets =
-      service->GetList(prefs::kDevToolsTargetDiscoveryConfig);
+      service->GetBoolean(prefs::kDevToolsDiscoverTCPTargetsEnabled)
+          ? service->GetList(prefs::kDevToolsTCPDiscoveryConfig)
+          : nullptr;
   scoped_refptr<TCPDeviceProvider> provider = CreateTCPDeviceProvider(targets);
   if (tcp_provider_callback_)
     tcp_provider_callback_.Run(provider);

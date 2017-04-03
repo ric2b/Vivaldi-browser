@@ -16,6 +16,7 @@
 #include "google_apis/gcm/protocol/mcs.pb.h"
 #include "net/base/backoff_entry.h"
 #include "net/base/network_change_notifier.h"
+#include "net/log/net_log_with_source.h"
 #include "net/proxy/proxy_info.h"
 #include "net/proxy/proxy_service.h"
 #include "net/socket/client_socket_handle.h"
@@ -146,7 +147,7 @@ class GCM_EXPORT ConnectionFactoryImpl :
   // credentials. If nullptr, is ignored.
   net::HttpNetworkSession* http_network_session_;
   // Net log to use in connection attempts.
-  net::BoundNetLog bound_net_log_;
+  net::NetLogWithSource net_log_;
   // The current PAC request, if one exists. Owned by the proxy service.
   net::ProxyService::PacRequest* pac_request_;
   // The current proxy info.

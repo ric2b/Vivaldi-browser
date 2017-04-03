@@ -4,11 +4,11 @@
 
 #include "components/sync/driver/ui_data_type_controller.h"
 
-#include <memory>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -25,8 +25,20 @@ using testing::Invoke;
 using testing::InvokeWithoutArgs;
 using testing::Return;
 
-namespace sync_driver {
+namespace syncer {
 namespace {
+
+class UIDataTypeControllerFake : public UIDataTypeController {
+ public:
+  UIDataTypeControllerFake(ModelType type,
+                           const base::Closure& dump_stack,
+                           SyncClient* sync_client)
+      : UIDataTypeController(type, dump_stack, sync_client) {}
+
+  void OnUnrecoverableError(const SyncError& error) {
+    CreateErrorHandler()->OnUnrecoverableError(error);
+  }
+};
 
 // TODO(zea): Expand this to make the dtc type paramterizable. This will let us
 // test the basic functionality of all UIDataTypeControllers. We'll need to have
@@ -36,17 +48,17 @@ class SyncUIDataTypeControllerTest : public testing::Test,
                                      public FakeSyncClient {
  public:
   SyncUIDataTypeControllerTest()
-      : type_(syncer::PREFERENCES), change_processor_(NULL) {}
+      : type_(PREFERENCES), change_processor_(NULL) {}
 
   // FakeSyncClient overrides.
-  base::WeakPtr<syncer::SyncableService> GetSyncableServiceForType(
-      syncer::ModelType type) override {
+  base::WeakPtr<SyncableService> GetSyncableServiceForType(
+      ModelType type) override {
     return syncable_service_.AsWeakPtr();
   }
 
   void SetUp() override {
-    preference_dtc_ = new UIDataTypeController(
-        base::ThreadTaskRunnerHandle::Get(), base::Closure(), type_, this);
+    preference_dtc_ = base::MakeUnique<UIDataTypeControllerFake>(
+        type_, base::Closure(), this);
     SetStartExpectations();
   }
 
@@ -78,13 +90,13 @@ class SyncUIDataTypeControllerTest : public testing::Test,
 
   void PumpLoop() { base::RunLoop().RunUntilIdle(); }
 
-  base::MessageLoopForUI message_loop_;
-  const syncer::ModelType type_;
+  base::MessageLoop message_loop_;
+  const ModelType type_;
   StartCallbackMock start_callback_;
   ModelLoadCallbackMock model_load_callback_;
-  scoped_refptr<UIDataTypeController> preference_dtc_;
   FakeGenericChangeProcessor* change_processor_;
-  syncer::FakeSyncableService syncable_service_;
+  FakeSyncableService syncable_service_;
+  std::unique_ptr<UIDataTypeControllerFake> preference_dtc_;
 };
 
 // Start the DTC. Verify that the callback is called with OK, the
@@ -121,7 +133,8 @@ TEST_F(SyncUIDataTypeControllerTest, StartStopBeforeAssociation) {
   EXPECT_EQ(DataTypeController::NOT_RUNNING, preference_dtc_->state());
   EXPECT_FALSE(syncable_service_.syncing());
   message_loop_.task_runner()->PostTask(
-      FROM_HERE, base::Bind(&UIDataTypeController::Stop, preference_dtc_));
+      FROM_HERE, base::Bind(&UIDataTypeController::Stop,
+                            base::AsWeakPtr(preference_dtc_.get())));
   Start();
   EXPECT_EQ(DataTypeController::NOT_RUNNING, preference_dtc_->state());
   EXPECT_FALSE(syncable_service_.syncing());
@@ -149,8 +162,8 @@ TEST_F(SyncUIDataTypeControllerTest, StartStopFirstRun) {
 TEST_F(SyncUIDataTypeControllerTest, StartAssociationFailed) {
   EXPECT_CALL(start_callback_,
               Run(DataTypeController::ASSOCIATION_FAILED, _, _));
-  syncable_service_.set_merge_data_and_start_syncing_error(syncer::SyncError(
-      FROM_HERE, syncer::SyncError::DATATYPE_ERROR, "Error", type_));
+  syncable_service_.set_merge_data_and_start_syncing_error(
+      SyncError(FROM_HERE, SyncError::DATATYPE_ERROR, "Error", type_));
 
   EXPECT_EQ(DataTypeController::NOT_RUNNING, preference_dtc_->state());
   EXPECT_FALSE(syncable_service_.syncing());
@@ -190,10 +203,10 @@ TEST_F(SyncUIDataTypeControllerTest, OnSingleDatatypeUnrecoverableError) {
 
   testing::Mock::VerifyAndClearExpectations(&start_callback_);
   EXPECT_CALL(model_load_callback_, Run(_, _));
-  syncer::SyncError error(FROM_HERE, syncer::SyncError::DATATYPE_ERROR, "error",
-                          syncer::PREFERENCES);
-  preference_dtc_->OnSingleDataTypeUnrecoverableError(error);
+  SyncError error(FROM_HERE, SyncError::DATATYPE_ERROR, "error", PREFERENCES);
+  preference_dtc_->OnUnrecoverableError(error);
+  PumpLoop();
 }
 
 }  // namespace
-}  // namespace sync_driver
+}  // namespace syncer

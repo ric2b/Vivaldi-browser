@@ -7,6 +7,7 @@
 #include "base/memory/ptr_util.h"
 #include "components/offline_pages/background/save_page_request.h"
 #include "components/offline_pages/client_namespace_constants.h"
+#include "components/offline_pages/client_policy_controller.h"
 #include "components/offline_pages/downloads/offline_page_download_notifier.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -112,6 +113,7 @@ class DownloadNotifyingObserverTest : public testing::Test {
  private:
   TestNotifier* notifier_;
   std::unique_ptr<DownloadNotifyingObserver> observer_;
+  std::unique_ptr<ClientPolicyController> policy_controller_;
 };
 
 DownloadNotifyingObserverTest::DownloadNotifyingObserverTest() {}
@@ -120,8 +122,10 @@ DownloadNotifyingObserverTest::~DownloadNotifyingObserverTest() {}
 
 void DownloadNotifyingObserverTest::SetUp() {
   std::unique_ptr<TestNotifier> notifier(new TestNotifier);
+  policy_controller_.reset(new ClientPolicyController());
   notifier_ = notifier.get();
-  observer_.reset(new DownloadNotifyingObserver(std::move(notifier)));
+  observer_.reset(new DownloadNotifyingObserver(std::move(notifier),
+                                                policy_controller_.get()));
 }
 
 TEST_F(DownloadNotifyingObserverTest, OnAdded) {
@@ -162,7 +166,8 @@ TEST_F(DownloadNotifyingObserverTest, OnChangedToAvailable) {
 TEST_F(DownloadNotifyingObserverTest, OnCompletedSuccess) {
   SavePageRequest request(kTestOfflineId, GURL(kTestUrl), kTestClientId,
                           kTestCreationTime, kTestUserRequested);
-  observer()->OnCompleted(request, RequestNotifier::SavePageStatus::SUCCESS);
+  observer()->OnCompleted(request,
+                          RequestNotifier::BackgroundSavePageResult::SUCCESS);
   EXPECT_EQ(LastNotificationType::DOWNLOAD_SUCCESSFUL,
             notifier()->last_notification_type());
   EXPECT_EQ(kTestGuid, notifier()->download_item()->guid);
@@ -173,7 +178,8 @@ TEST_F(DownloadNotifyingObserverTest, OnCompletedSuccess) {
 TEST_F(DownloadNotifyingObserverTest, OnCompletedCanceled) {
   SavePageRequest request(kTestOfflineId, GURL(kTestUrl), kTestClientId,
                           kTestCreationTime, kTestUserRequested);
-  observer()->OnCompleted(request, RequestNotifier::SavePageStatus::REMOVED);
+  observer()->OnCompleted(request,
+                          RequestNotifier::BackgroundSavePageResult::REMOVED);
   EXPECT_EQ(LastNotificationType::DOWNLOAD_CANCELED,
             notifier()->last_notification_type());
   EXPECT_EQ(kTestGuid, notifier()->download_item()->guid);
@@ -184,34 +190,8 @@ TEST_F(DownloadNotifyingObserverTest, OnCompletedCanceled) {
 TEST_F(DownloadNotifyingObserverTest, OnCompletedFailure) {
   SavePageRequest request(kTestOfflineId, GURL(kTestUrl), kTestClientId,
                           kTestCreationTime, kTestUserRequested);
-  observer()->OnCompleted(request,
-                          RequestNotifier::SavePageStatus::PRERENDER_FAILURE);
-  EXPECT_EQ(LastNotificationType::DOWNLOAD_FAILED,
-            notifier()->last_notification_type());
-  EXPECT_EQ(kTestGuid, notifier()->download_item()->guid);
-  EXPECT_EQ(GURL(kTestUrl), notifier()->download_item()->url);
-  EXPECT_EQ(kTestCreationTime, notifier()->download_item()->start_time);
-
-  notifier()->Reset();
-  observer()->OnCompleted(request,
-                          RequestNotifier::SavePageStatus::FOREGROUND_CANCELED);
-  EXPECT_EQ(LastNotificationType::DOWNLOAD_FAILED,
-            notifier()->last_notification_type());
-  EXPECT_EQ(kTestGuid, notifier()->download_item()->guid);
-  EXPECT_EQ(GURL(kTestUrl), notifier()->download_item()->url);
-  EXPECT_EQ(kTestCreationTime, notifier()->download_item()->start_time);
-
-  notifier()->Reset();
-  observer()->OnCompleted(request,
-                          RequestNotifier::SavePageStatus::SAVE_FAILED);
-  EXPECT_EQ(LastNotificationType::DOWNLOAD_FAILED,
-            notifier()->last_notification_type());
-  EXPECT_EQ(kTestGuid, notifier()->download_item()->guid);
-  EXPECT_EQ(GURL(kTestUrl), notifier()->download_item()->url);
-  EXPECT_EQ(kTestCreationTime, notifier()->download_item()->start_time);
-
-  notifier()->Reset();
-  observer()->OnCompleted(request, RequestNotifier::SavePageStatus::EXPIRED);
+  observer()->OnCompleted(
+      request, RequestNotifier::BackgroundSavePageResult::PRERENDER_FAILURE);
   EXPECT_EQ(LastNotificationType::DOWNLOAD_FAILED,
             notifier()->last_notification_type());
   EXPECT_EQ(kTestGuid, notifier()->download_item()->guid);
@@ -220,7 +200,34 @@ TEST_F(DownloadNotifyingObserverTest, OnCompletedFailure) {
 
   notifier()->Reset();
   observer()->OnCompleted(
-      request, RequestNotifier::SavePageStatus::RETRY_COUNT_EXCEEDED);
+      request, RequestNotifier::BackgroundSavePageResult::FOREGROUND_CANCELED);
+  EXPECT_EQ(LastNotificationType::DOWNLOAD_FAILED,
+            notifier()->last_notification_type());
+  EXPECT_EQ(kTestGuid, notifier()->download_item()->guid);
+  EXPECT_EQ(GURL(kTestUrl), notifier()->download_item()->url);
+  EXPECT_EQ(kTestCreationTime, notifier()->download_item()->start_time);
+
+  notifier()->Reset();
+  observer()->OnCompleted(
+      request, RequestNotifier::BackgroundSavePageResult::SAVE_FAILED);
+  EXPECT_EQ(LastNotificationType::DOWNLOAD_FAILED,
+            notifier()->last_notification_type());
+  EXPECT_EQ(kTestGuid, notifier()->download_item()->guid);
+  EXPECT_EQ(GURL(kTestUrl), notifier()->download_item()->url);
+  EXPECT_EQ(kTestCreationTime, notifier()->download_item()->start_time);
+
+  notifier()->Reset();
+  observer()->OnCompleted(request,
+                          RequestNotifier::BackgroundSavePageResult::EXPIRED);
+  EXPECT_EQ(LastNotificationType::DOWNLOAD_FAILED,
+            notifier()->last_notification_type());
+  EXPECT_EQ(kTestGuid, notifier()->download_item()->guid);
+  EXPECT_EQ(GURL(kTestUrl), notifier()->download_item()->url);
+  EXPECT_EQ(kTestCreationTime, notifier()->download_item()->start_time);
+
+  notifier()->Reset();
+  observer()->OnCompleted(
+      request, RequestNotifier::BackgroundSavePageResult::RETRY_COUNT_EXCEEDED);
   EXPECT_EQ(LastNotificationType::DOWNLOAD_FAILED,
             notifier()->last_notification_type());
   EXPECT_EQ(kTestGuid, notifier()->download_item()->guid);
@@ -229,9 +236,8 @@ TEST_F(DownloadNotifyingObserverTest, OnCompletedFailure) {
 }
 
 TEST_F(DownloadNotifyingObserverTest, NamespacesNotVisibleInUI) {
-  std::vector<std::string> name_spaces = {
-      kBookmarkNamespace, kLastNNamespace, kCCTNamespace,
-      kNTPSuggestionsNamespace, kDefaultNamespace};
+  std::vector<std::string> name_spaces = {kBookmarkNamespace, kLastNNamespace,
+                                          kCCTNamespace, kDefaultNamespace};
 
   for (auto name_space : name_spaces) {
     ClientId invisible_client_id(name_space, kTestGuid);

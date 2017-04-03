@@ -28,7 +28,8 @@ MojoRenderer::MojoRenderer(
       video_overlay_factory_(std::move(video_overlay_factory)),
       video_renderer_sink_(video_renderer_sink),
       remote_renderer_info_(remote_renderer.PassInterface()),
-      binding_(this) {
+      client_binding_(this),
+      media_time_interpolator_(&media_clock_) {
   DVLOG(1) << __FUNCTION__;
 }
 
@@ -103,11 +104,14 @@ void MojoRenderer::InitializeRendererFromStreams(
 
   BindRemoteRendererIfNeeded();
 
+  mojom::RendererClientAssociatedPtrInfo client_ptr_info;
+  client_binding_.Bind(&client_ptr_info, remote_renderer_.associated_group());
+
   // Using base::Unretained(this) is safe because |this| owns
   // |remote_renderer_|, and the callback won't be dispatched if
   // |remote_renderer_| is destroyed.
   remote_renderer_->Initialize(
-      binding_.CreateInterfacePtrAndBind(), std::move(audio_stream),
+      std::move(client_ptr_info), std::move(audio_stream),
       std::move(video_stream), base::nullopt,
       base::Bind(&MojoRenderer::OnInitialized, base::Unretained(this), client));
 }
@@ -118,11 +122,14 @@ void MojoRenderer::InitializeRendererFromUrl(media::RendererClient* client) {
 
   BindRemoteRendererIfNeeded();
 
+  mojom::RendererClientAssociatedPtrInfo client_ptr_info;
+  client_binding_.Bind(&client_ptr_info, remote_renderer_.associated_group());
+
   // Using base::Unretained(this) is safe because |this| owns
   // |remote_renderer_|, and the callback won't be dispatched if
   // |remote_renderer_| is destroyed.
   remote_renderer_->Initialize(
-      binding_.CreateInterfacePtrAndBind(), mojom::DemuxerStreamPtr(),
+      std::move(client_ptr_info), mojom::DemuxerStreamPtr(),
       mojom::DemuxerStreamPtr(), demuxer_stream_provider_->GetUrl(),
       base::Bind(&MojoRenderer::OnInitialized, base::Unretained(this), client));
 }
@@ -167,34 +174,46 @@ void MojoRenderer::Flush(const base::Closure& flush_cb) {
     return;
   }
 
+  {
+    base::AutoLock auto_lock(lock_);
+    if (media_time_interpolator_.interpolating())
+      media_time_interpolator_.StopInterpolating();
+  }
+
   flush_cb_ = flush_cb;
   remote_renderer_->Flush(
       base::Bind(&MojoRenderer::OnFlushed, base::Unretained(this)));
 }
 
 void MojoRenderer::StartPlayingFrom(base::TimeDelta time) {
-  DVLOG(2) << __FUNCTION__;
+  DVLOG(2) << __FUNCTION__ << "(" << time << ")";
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(remote_renderer_.is_bound());
 
   {
     base::AutoLock auto_lock(lock_);
-    time_ = time;
+    media_time_interpolator_.SetBounds(time, time, media_clock_.NowTicks());
+    media_time_interpolator_.StartInterpolating();
   }
 
   remote_renderer_->StartPlayingFrom(time);
 }
 
 void MojoRenderer::SetPlaybackRate(double playback_rate) {
-  DVLOG(2) << __FUNCTION__;
+  DVLOG(2) << __FUNCTION__ << "(" << playback_rate << ")";
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(remote_renderer_.is_bound());
 
   remote_renderer_->SetPlaybackRate(playback_rate);
+
+  {
+    base::AutoLock auto_lock(lock_);
+    media_time_interpolator_.SetPlaybackRate(playback_rate);
+  }
 }
 
 void MojoRenderer::SetVolume(float volume) {
-  DVLOG(2) << __FUNCTION__;
+  DVLOG(2) << __FUNCTION__ << "(" << volume << ")";
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(remote_renderer_.is_bound());
 
@@ -203,8 +222,7 @@ void MojoRenderer::SetVolume(float volume) {
 
 base::TimeDelta MojoRenderer::GetMediaTime() {
   base::AutoLock auto_lock(lock_);
-  DVLOG(3) << __FUNCTION__ << ": " << time_.InMilliseconds() << " ms";
-  return time_;
+  return media_time_interpolator_.GetInterpolatedTime();
 }
 
 bool MojoRenderer::HasAudio() {
@@ -234,12 +252,14 @@ bool MojoRenderer::HasVideo() {
 }
 
 void MojoRenderer::OnTimeUpdate(base::TimeDelta time,
-                                base::TimeDelta max_time) {
-  DVLOG(3) << __FUNCTION__ << ": " << time << ", " << max_time;
+                                base::TimeDelta max_time,
+                                base::TimeTicks capture_time) {
+  DVLOG(4) << __FUNCTION__ << "(" << time << ", " << max_time << ", "
+           << capture_time << ")";
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   base::AutoLock auto_lock(lock_);
-  time_ = time;
+  media_time_interpolator_.SetBounds(time, max_time, capture_time);
 }
 
 void MojoRenderer::OnBufferingStateChange(mojom::BufferingState state) {
@@ -252,6 +272,13 @@ void MojoRenderer::OnEnded() {
   DVLOG(1) << __FUNCTION__;
   DCHECK(task_runner_->BelongsToCurrentThread());
   client_->OnEnded();
+}
+
+void MojoRenderer::InitiateScopedSurfaceRequest(
+    const ReceiveSurfaceRequestTokenCB& receive_request_token_cb) {
+  DVLOG(1) << __FUNCTION__;
+
+  remote_renderer_->InitiateScopedSurfaceRequest(receive_request_token_cb);
 }
 
 void MojoRenderer::OnError() {

@@ -82,7 +82,8 @@ class MaximizeModeControllerTest : public test::AshTestBase {
 
     // Set the first display to be the internal display for the accelerometer
     // screen rotation tests.
-    test::DisplayManagerTestApi().SetFirstDisplayAsInternalDisplay();
+    test::DisplayManagerTestApi(Shell::GetInstance()->display_manager())
+        .SetFirstDisplayAsInternalDisplay();
   }
 
   void TearDown() override {
@@ -489,7 +490,8 @@ TEST_F(MaximizeModeControllerTest, NoMaximizeModeWithDisabledInternalDisplay) {
   DisplayManager* display_manager = Shell::GetInstance()->display_manager();
   UpdateDisplay("200x200, 200x200");
   const int64_t internal_display_id =
-      test::DisplayManagerTestApi().SetFirstDisplayAsInternalDisplay();
+      test::DisplayManagerTestApi(Shell::GetInstance()->display_manager())
+          .SetFirstDisplayAsInternalDisplay();
   ASSERT_FALSE(IsMaximizeModeStarted());
 
   OpenLidToAngle(270.0f);
@@ -497,7 +499,7 @@ TEST_F(MaximizeModeControllerTest, NoMaximizeModeWithDisabledInternalDisplay) {
   EXPECT_TRUE(AreEventsBlocked());
 
   // Deactivate internal display to simulate Docked Mode.
-  std::vector<DisplayInfo> secondary_only;
+  std::vector<display::ManagedDisplayInfo> secondary_only;
   secondary_only.push_back(
       display_manager->GetDisplayInfo(display_manager->GetDisplayAt(1).id()));
   display_manager->OnNativeDisplaysChanged(secondary_only);

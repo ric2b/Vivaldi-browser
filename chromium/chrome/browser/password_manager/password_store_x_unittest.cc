@@ -331,11 +331,11 @@ class PasswordStoreXTestDelegate {
 PasswordStoreXTestDelegate::PasswordStoreXTestDelegate(BackendType backend_type)
     : backend_type_(backend_type) {
   SetupTempDir();
-  store_ = new PasswordStoreX(
-      base::ThreadTaskRunnerHandle::Get(), base::ThreadTaskRunnerHandle::Get(),
-      base::WrapUnique(
-          new password_manager::LoginDatabase(test_login_db_file_path())),
-      GetBackend(backend_type_));
+  store_ = new PasswordStoreX(base::ThreadTaskRunnerHandle::Get(),
+                              base::ThreadTaskRunnerHandle::Get(),
+                              base::MakeUnique<password_manager::LoginDatabase>(
+                                  test_login_db_file_path()),
+                              GetBackend(backend_type_));
   store_->Init(syncer::SyncableService::StartSyncFlare());
 }
 
@@ -353,7 +353,7 @@ void PasswordStoreXTestDelegate::SetupTempDir() {
 }
 
 base::FilePath PasswordStoreXTestDelegate::test_login_db_file_path() const {
-  return temp_dir_.path().Append(FILE_PATH_LITERAL("login_test"));
+  return temp_dir_.GetPath().Append(FILE_PATH_LITERAL("login_test"));
 }
 
 class PasswordStoreXNoBackendTestDelegate : public PasswordStoreXTestDelegate {
@@ -391,7 +391,7 @@ class PasswordStoreXTest : public testing::TestWithParam<BackendType> {
   void TearDown() override { base::RunLoop().RunUntilIdle(); }
 
   base::FilePath test_login_db_file_path() const {
-    return temp_dir_.path().Append(FILE_PATH_LITERAL("login_test"));
+    return temp_dir_.GetPath().Append(FILE_PATH_LITERAL("login_test"));
   }
 
   content::TestBrowserThreadBundle thread_bundle_;

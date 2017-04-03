@@ -53,13 +53,13 @@ class FakeConnectionToClient : public ConnectionToClient {
 
   std::unique_ptr<VideoStream> StartVideoStream(
       std::unique_ptr<webrtc::DesktopCapturer> desktop_capturer) override;
+  std::unique_ptr<AudioStream> StartAudioStream(
+      std::unique_ptr<AudioSource> audio_source) override;
 
-  AudioStub* audio_stub() override;
   ClientStub* client_stub() override;
   void Disconnect(ErrorCode disconnect_error) override;
 
   Session* session() override;
-  void OnInputEventReceived(int64_t timestamp) override;
 
   void set_clipboard_stub(ClipboardStub* clipboard_stub) override;
   void set_host_stub(HostStub* host_stub) override;
@@ -69,7 +69,6 @@ class FakeConnectionToClient : public ConnectionToClient {
     return last_video_stream_;
   }
 
-  void set_audio_stub(AudioStub* audio_stub) { audio_stub_ = audio_stub; }
   void set_client_stub(ClientStub* client_stub) { client_stub_ = client_stub; }
   void set_video_stub(VideoStub* video_stub) { video_stub_ = video_stub; }
   void set_video_encode_task_runner(
@@ -93,7 +92,6 @@ class FakeConnectionToClient : public ConnectionToClient {
 
   base::WeakPtr<FakeVideoStream> last_video_stream_;
 
-  AudioStub* audio_stub_ = nullptr;
   ClientStub* client_stub_ = nullptr;
 
   ClipboardStub* clipboard_stub_ = nullptr;

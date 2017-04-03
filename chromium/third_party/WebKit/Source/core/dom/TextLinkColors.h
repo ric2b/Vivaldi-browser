@@ -3,8 +3,10 @@
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
  *           (C) 2001 Dirk Mueller (mueller@kde.org)
  *           (C) 2006 Alexey Proskuryakov (ap@webkit.org)
- * Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2012 Apple Inc. All rights reserved.
- * Copyright (C) 2008, 2009 Torch Mobile Inc. All rights reserved. (http://www.torchmobile.com/)
+ * Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2012 Apple Inc. All
+ * rights reserved.
+ * Copyright (C) 2008, 2009 Torch Mobile Inc. All rights reserved.
+ * (http://www.torchmobile.com/)
  * Copyright (C) 2010 Nokia Corporation and/or its subsidiary(-ies)
  * Copyright (C) 2013 Google Inc. All rights reserved.
  *
@@ -37,32 +39,35 @@ namespace blink {
 class CSSValue;
 
 class TextLinkColors {
-    DISALLOW_NEW();
-    WTF_MAKE_NONCOPYABLE(TextLinkColors);
-public:
-    TextLinkColors();
+  DISALLOW_NEW();
+  WTF_MAKE_NONCOPYABLE(TextLinkColors);
 
-    void setTextColor(const Color& color) { m_textColor = color; }
-    Color textColor() const { return m_textColor; }
+ public:
+  TextLinkColors();
 
-    const Color& linkColor() const { return m_linkColor; }
-    const Color& visitedLinkColor() const { return m_visitedLinkColor; }
-    const Color& activeLinkColor() const { return m_activeLinkColor; }
-    void setLinkColor(const Color& color) { m_linkColor = color; }
-    void setVisitedLinkColor(const Color& color) { m_visitedLinkColor = color; }
-    void setActiveLinkColor(const Color& color) { m_activeLinkColor = color; }
-    void resetLinkColor();
-    void resetVisitedLinkColor();
-    void resetActiveLinkColor();
-    Color colorFromCSSValue(const CSSValue&, Color currentColor, bool forVisitedLink = false) const;
-private:
+  void setTextColor(const Color& color) { m_textColor = color; }
+  Color textColor() const { return m_textColor; }
 
-    Color m_textColor;
-    Color m_linkColor;
-    Color m_visitedLinkColor;
-    Color m_activeLinkColor;
+  const Color& linkColor() const { return m_linkColor; }
+  const Color& visitedLinkColor() const { return m_visitedLinkColor; }
+  const Color& activeLinkColor() const { return m_activeLinkColor; }
+  void setLinkColor(const Color& color) { m_linkColor = color; }
+  void setVisitedLinkColor(const Color& color) { m_visitedLinkColor = color; }
+  void setActiveLinkColor(const Color& color) { m_activeLinkColor = color; }
+  void resetLinkColor();
+  void resetVisitedLinkColor();
+  void resetActiveLinkColor();
+  Color colorFromCSSValue(const CSSValue&,
+                          Color currentColor,
+                          bool forVisitedLink = false) const;
+
+ private:
+  Color m_textColor;
+  Color m_linkColor;
+  Color m_visitedLinkColor;
+  Color m_activeLinkColor;
 };
 
-} // namespace blink
+}  // namespace blink
 
 #endif

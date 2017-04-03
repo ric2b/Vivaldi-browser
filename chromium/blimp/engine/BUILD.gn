@@ -12,6 +12,7 @@ import("//tools/grit/grit_rule.gni")
 
 repack("pak") {
   sources = [
+    "$root_gen_dir/blimp/engine/blimp_browser_resources.pak",
     "$root_gen_dir/blink/public/resources/blink_image_resources_100_percent.pak",
     "$root_gen_dir/blink/public/resources/blink_resources.pak",
     "$root_gen_dir/content/app/resources/content_resources_100_percent.pak",
@@ -26,6 +27,7 @@ repack("pak") {
   ]
 
   deps = [
+    ":resources",
     "//content:resources",
     "//content/app/resources",
     "//content/app/strings",
@@ -46,6 +48,17 @@ repack("pak") {
   output = "$root_out_dir/blimp_engine.pak"
 }
 
+grit("resources") {
+  visibility = [ ":*" ]
+  source = "app/blimp_browser_resources.grd"
+  use_qualified_include = true
+  output_dir = "$root_gen_dir/blimp/engine"
+  outputs = [
+    "grit/blimp_browser_resources.h",
+    "blimp_browser_resources.pak",
+  ]
+}
+
 source_set("app") {
   sources = [
     "app/blimp_browser_main_parts.cc",
@@ -58,6 +71,8 @@ source_set("app") {
 
   public_deps = [
     ":app_metrics",
+    "//device/geolocation",
+    "//device/geolocation/public/interfaces",
   ]
 
   deps = [
@@ -71,6 +86,7 @@ source_set("app") {
     ":crash",
     ":feature",
     ":renderer",
+    ":resources",
     ":session",
     "//base",
     "//blimp/common",
@@ -84,8 +100,9 @@ source_set("app") {
     "//content/public/common",
     "//content/public/renderer",
     "//content/public/utility",
-    "//device/geolocation:device_geolocation",
+    "//device/geolocation",
     "//net",
+    "//ui/base:base",
   ]
 }
 
@@ -280,7 +297,7 @@ source_set("feature") {
     "//blimp/net",
     "//content/public/browser",
     "//content/public/common",
-    "//device/geolocation:device_geolocation",
+    "//device/geolocation",
     "//net",
     "//ui/base",
     "//ui/base/ime",
@@ -343,7 +360,7 @@ source_set("session") {
     "//blimp/common/proto",
     "//blimp/net",
     "//content/public/browser",
-    "//device/geolocation:device_geolocation",
+    "//device/geolocation",
     "//net",
     "//ui/aura",
     "//ui/base/ime",
@@ -468,7 +485,7 @@ source_set("feature_unit_tests") {
     "//blimp/net:test_support",
     "//content",
     "//content/public/browser",
-    "//device/geolocation:device_geolocation",
+    "//device/geolocation",
     "//net",
     "//net:test_support",
     "//testing/gmock",
@@ -670,20 +687,28 @@ source_set("browser_tests") {
   sources = [
     "browser_tests/blimp_browser_test.cc",
     "browser_tests/blimp_browser_test.h",
+    "browser_tests/blimp_contents_view_readback_helper.cc",
+    "browser_tests/blimp_contents_view_readback_helper.h",
     "browser_tests/blimp_test_launcher.cc",
-    "browser_tests/engine_browsertest.cc",
+    "browser_tests/input_browsertest.cc",
+    "browser_tests/integration_test.cc",
+    "browser_tests/navigation_browsertest.cc",
+    "browser_tests/waitable_content_pump.cc",
+    "browser_tests/waitable_content_pump.h",
   ]
 
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
 
   deps = [
     "//base",
-    "//blimp/client:feature",
     "//blimp/client:session",
     "//blimp/client:test_support",
-    "//blimp/client/core:switches",
     "//blimp/client/core/contents:test_support",
+    "//blimp/client/core/context",
+    "//blimp/client/core/render_widget:test_support",
     "//blimp/client/core/session",
+    "//blimp/client/core/switches",
+    "//blimp/client/test",
     "//blimp/common",
     "//blimp/engine:app",
     "//blimp/engine:app_config",

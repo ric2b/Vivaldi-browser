@@ -21,29 +21,28 @@
 #ifndef SVGSymbolElement_h
 #define SVGSymbolElement_h
 
-#include "core/svg/SVGAnimatedBoolean.h"
 #include "core/svg/SVGElement.h"
 #include "core/svg/SVGFitToViewBox.h"
 
 namespace blink {
 
-class SVGSymbolElement final : public SVGElement,
-                               public SVGFitToViewBox {
-    DEFINE_WRAPPERTYPEINFO();
-    USING_GARBAGE_COLLECTED_MIXIN(SVGSymbolElement);
-public:
-    DECLARE_NODE_FACTORY(SVGSymbolElement);
+class SVGSymbolElement final : public SVGElement, public SVGFitToViewBox {
+  DEFINE_WRAPPERTYPEINFO();
+  USING_GARBAGE_COLLECTED_MIXIN(SVGSymbolElement);
 
-    DECLARE_VIRTUAL_TRACE();
+ public:
+  DECLARE_NODE_FACTORY(SVGSymbolElement);
 
-private:
-    explicit SVGSymbolElement(Document&);
+  DECLARE_VIRTUAL_TRACE();
 
-    void svgAttributeChanged(const QualifiedName&) override;
+ private:
+  explicit SVGSymbolElement(Document&);
 
-    LayoutObject* createLayoutObject(const ComputedStyle&) override;
+  void svgAttributeChanged(const QualifiedName&) override;
+
+  LayoutObject* createLayoutObject(const ComputedStyle&) override;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // SVGSymbolElement_h
+#endif  // SVGSymbolElement_h

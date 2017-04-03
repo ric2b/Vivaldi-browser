@@ -207,9 +207,6 @@ class WebStateImpl;
 // Executes |script| in the web view, registering user interaction.
 - (void)executeUserJavaScript:(NSString*)script
             completionHandler:(web::JavaScriptResultBlock)completion;
-// Evaluates the user-entered |script| in the web view.
-// DEPRECATED. TODO(crbug.com/595761): Remove this API.
-- (void)evaluateUserJavaScript:(NSString*)script;
 
 // Dismisses the soft keyboard.
 - (void)dismissKeyboard;
@@ -241,11 +238,6 @@ class WebStateImpl;
 // TODO(stuartmorgan): This is public only temporarily; once refactoring is
 // complete it will be handled internally.
 - (void)restoreStateFromHistory;
-
-// Asynchronously checks whether the element at the location of
-// |gestureRecognizer| is a link.
-- (void)checkLinkPresenceUnderGesture:(UIGestureRecognizer*)gestureRecognizer
-                    completionHandler:(void (^)(BOOL))completionHandler;
 
 // Notifies the CRWWebController that it has been shown.
 - (void)wasShown;
@@ -321,6 +313,9 @@ class WebStateImpl;
 
 // Returns the header height.
 - (CGFloat)headerHeight;
+
+// Loads the HTML into the page at the given URL.
+- (void)loadHTML:(NSString*)HTML forURL:(const GURL&)URL;
 
 // Caches request POST data in the given session entry.  Exposed for testing.
 - (void)cachePOSTDataForRequest:(NSURLRequest*)request

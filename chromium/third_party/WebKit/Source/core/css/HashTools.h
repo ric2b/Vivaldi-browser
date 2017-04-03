@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2010 Andras Becsi <abecsi@inf.u-szeged.hu>, University of Szeged
+ * Copyright (C) 2010 Andras Becsi <abecsi@inf.u-szeged.hu>, University of
+ * Szeged
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -25,20 +26,20 @@
 namespace blink {
 
 struct Property {
-    DISALLOW_NEW();
-    int nameOffset;
-    int id;
+  DISALLOW_NEW();
+  int nameOffset;
+  int id;
 };
 
 struct Value {
-    DISALLOW_NEW();
-    int nameOffset;
-    int id;
+  DISALLOW_NEW();
+  int nameOffset;
+  int id;
 };
 
 const Property* findProperty(register const char* str, register unsigned len);
 const Value* findValue(register const char* str, register unsigned len);
 
-} // namespace blink
+}  // namespace blink
 
-#endif // HashTools_h
+#endif  // HashTools_h

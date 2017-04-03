@@ -6,6 +6,8 @@
 
 namespace offline_pages {
 
+template class StoreUpdateResult<OfflinePageItem>;
+
 OfflinePageMetadataStore::OfflinePageMetadataStore() {
 }
 

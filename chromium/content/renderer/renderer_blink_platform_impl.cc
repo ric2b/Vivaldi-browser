@@ -14,7 +14,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -23,6 +23,7 @@
 #include "build/build_config.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/child/blob_storage/webblobregistry_impl.h"
+#include "content/child/child_gpu_memory_buffer_manager.h"
 #include "content/child/child_shared_bitmap_manager.h"
 #include "content/child/database_util.h"
 #include "content/child/file_info_util.h"
@@ -63,7 +64,6 @@
 #include "content/renderer/media/media_recorder_handler.h"
 #include "content/renderer/media/renderer_webaudiodevice_impl.h"
 #include "content/renderer/media/renderer_webmidiaccessor_impl.h"
-#include "content/renderer/media/rtc_certificate_generator.h"
 #include "content/renderer/mojo/blink_interface_provider_impl.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/renderer_clipboard_delegate.h"
@@ -71,7 +71,6 @@
 #include "content/renderer/webclipboard_impl.h"
 #include "content/renderer/webgraphicscontext3d_provider_impl.h"
 #include "content/renderer/webpublicsuffixlist_impl.h"
-#include "content/renderer/websockethandle_impl.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
@@ -138,6 +137,7 @@
 #endif
 
 #if defined(ENABLE_WEBRTC)
+#include "content/renderer/media/rtc_certificate_generator.h"
 #include "content/renderer/media/webrtc/peer_connection_dependency_factory.h"
 #endif
 
@@ -279,6 +279,8 @@ RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
     sync_message_filter_ = ChildThreadImpl::current()->sync_message_filter();
     thread_safe_sender_ = ChildThreadImpl::current()->thread_safe_sender();
     quota_message_filter_ = ChildThreadImpl::current()->quota_message_filter();
+    shared_bitmap_manager_ =
+        ChildThreadImpl::current()->shared_bitmap_manager();
     blob_registry_.reset(new WebBlobRegistryImpl(
         RenderThreadImpl::current()->GetIOTaskRunner().get(),
         base::ThreadTaskRunnerHandle::Get(), thread_safe_sender_.get()));
@@ -294,6 +296,7 @@ RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
 RendererBlinkPlatformImpl::~RendererBlinkPlatformImpl() {
   WebFileSystemImpl::DeleteThreadSpecificInstance();
   renderer_scheduler_->SetTopLevelBlameContext(nullptr);
+  shared_bitmap_manager_ = nullptr;
 }
 
 void RendererBlinkPlatformImpl::Shutdown() {
@@ -397,10 +400,6 @@ void RendererBlinkPlatformImpl::createMessageChannel(
     blink::WebMessagePortChannel** channel2) {
   WebMessagePortChannelImpl::CreatePair(
       default_task_runner_, channel1, channel2);
-}
-
-blink::WebSocketHandle* RendererBlinkPlatformImpl::createWebSocketHandle() {
-  return new WebSocketHandleImpl(loading_task_runner_);
 }
 
 blink::WebPrescientNetworking*
@@ -692,6 +691,12 @@ bool RendererBlinkPlatformImpl::isThreadedCompositingEnabled() {
   return thread && thread->compositor_task_runner().get();
 }
 
+bool RendererBlinkPlatformImpl::isGPUCompositingEnabled() {
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  return !command_line.HasSwitch(switches::kDisableGpuCompositing);
+}
+
 bool RendererBlinkPlatformImpl::isThreadedAnimationEnabled() {
   RenderThreadImpl* thread = RenderThreadImpl::current();
   return thread ? thread->IsThreadedAnimationEnabled() : true;
@@ -805,12 +810,14 @@ blink::WebMIDIAccessor* RendererBlinkPlatformImpl::createMIDIAccessor(
 
 void RendererBlinkPlatformImpl::getPluginList(
     bool refresh,
+    const blink::WebSecurityOrigin& mainFrameOrigin,
     blink::WebPluginListBuilder* builder) {
 #if defined(ENABLE_PLUGINS)
   std::vector<WebPluginInfo> plugins;
   if (!plugin_refresh_allowed_)
     refresh = false;
-  RenderThread::Get()->Send(new FrameHostMsg_GetPlugins(refresh, &plugins));
+  RenderThread::Get()->Send(
+      new FrameHostMsg_GetPlugins(refresh, mainFrameOrigin, &plugins));
   for (const WebPluginInfo& plugin : plugins) {
     builder->addPlugin(
         plugin.name, plugin.desc,
@@ -857,7 +864,7 @@ blink::WebScrollbarBehavior* RendererBlinkPlatformImpl::scrollbarBehavior() {
 
 //------------------------------------------------------------------------------
 
-WebBlobRegistry* RendererBlinkPlatformImpl::blobRegistry() {
+WebBlobRegistry* RendererBlinkPlatformImpl::getBlobRegistry() {
   // blob_registry_ can be NULL when running some tests.
   return blob_registry_.get();
 }
@@ -971,6 +978,7 @@ void RendererBlinkPlatformImpl::createHTMLVideoElementCapturer(
 void RendererBlinkPlatformImpl::createHTMLAudioElementCapturer(
     WebMediaStream* web_media_stream,
     WebMediaPlayer* web_media_player) {
+#if defined(ENABLE_WEBRTC)
   DCHECK(web_media_stream);
   DCHECK(web_media_player);
 
@@ -993,6 +1001,7 @@ void RendererBlinkPlatformImpl::createHTMLAudioElementCapturer(
 
   media_stream_source->ConnectToTrack(web_media_stream_track);
   web_media_stream->addTrack(web_media_stream_track);
+#endif
 }
 
 //------------------------------------------------------------------------------
@@ -1148,10 +1157,16 @@ RendererBlinkPlatformImpl::createSharedOffscreenGraphicsContext3DProvider() {
 
 //------------------------------------------------------------------------------
 
+gpu::GpuMemoryBufferManager*
+RendererBlinkPlatformImpl::getGpuMemoryBufferManager() {
+  return RenderThreadImpl::current()->GetGpuMemoryBufferManager();
+}
+
+//------------------------------------------------------------------------------
+
 std::unique_ptr<cc::SharedBitmap>
 RendererBlinkPlatformImpl::allocateSharedBitmap(const blink::WebSize& size) {
-  return ChildThreadImpl::current()
-      ->shared_bitmap_manager()
+  return shared_bitmap_manager_
       ->AllocateSharedBitmap(gfx::Size(size.width, size.height));
 }
 

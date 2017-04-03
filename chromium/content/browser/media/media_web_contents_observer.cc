@@ -34,9 +34,6 @@ MediaWebContentsObserver::~MediaWebContentsObserver() {}
 
 void MediaWebContentsObserver::WebContentsDestroyed() {
   g_audible_metrics.Get().UpdateAudibleWebContentsState(web_contents(), false);
-#if defined(OS_ANDROID)
-  view_weak_factory_.reset();
-#endif
 }
 
 void MediaWebContentsObserver::RenderFrameDeleted(
@@ -127,7 +124,7 @@ void MediaWebContentsObserver::OnMediaPlaying(
     bool has_video,
     bool has_audio,
     bool is_remote,
-    base::TimeDelta duration) {
+    media::MediaContentType media_content_type) {
   // Ignore the videos playing remotely and don't hold the wake lock for the
   // screen. TODO(dalecurtis): Is this correct? It means observers will not
   // receive play and pause messages.
@@ -157,7 +154,7 @@ void MediaWebContentsObserver::OnMediaPlaying(
   }
 
   if (!session_controllers_manager_.RequestPlay(
-      id, has_audio, is_remote, duration)) {
+          id, has_audio, is_remote, media_content_type)) {
     return;
   }
 
@@ -200,10 +197,8 @@ void MediaWebContentsObserver::CreateVideoPowerSaveBlocker() {
       BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE)));
 #if defined(OS_ANDROID)
   if (web_contents()->GetNativeView()) {
-    view_weak_factory_.reset(new base::WeakPtrFactory<ui::ViewAndroid>(
-        web_contents()->GetNativeView()));
     video_power_save_blocker_.get()->InitDisplaySleepBlocker(
-        view_weak_factory_->GetWeakPtr());
+        web_contents()->GetNativeView());
   }
 #endif
 }

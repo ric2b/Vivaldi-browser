@@ -12,7 +12,7 @@
 
 #include "base/i18n/number_formatting.h"
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -30,6 +30,7 @@
 #include "chrome/browser/ui/views/toolbar/app_menu_observer.h"
 #include "chrome/browser/ui/views/toolbar/extension_toolbar_menu_view.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/zoom/page_zoom.h"
 #include "components/zoom/zoom_controller.h"
@@ -42,13 +43,11 @@
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/common/feature_switch.h"
-#include "grit/theme_resources.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/layout.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/font_list.h"
@@ -159,12 +158,13 @@ class InMenuButtonBackground : public views::Background {
         button ? button->state() : views::Button::STATE_NORMAL;
     int h = view->height();
 
-    // Draw leading border where needed. This is along the left edge unless the
-    // layout is RTL and the button isn't mirroring itself.
+    // Draw leading border if desired.
     gfx::Rect bounds(view->GetLocalBounds());
     if (type_ == LEADING_BORDER) {
+      // We need to flip the canvas for RTL iff the button is not auto-flipping
+      // already, so we end up flipping exactly once.
       gfx::ScopedRTLFlipCanvas scoped_canvas(
-          canvas, view->width(), view->flip_canvas_on_paint_for_rtl_ui());
+          canvas, view->width(), !view->flip_canvas_on_paint_for_rtl_ui());
       canvas->FillRect(gfx::Rect(0, 0, 1, h),
                        BorderColor(view, views::Button::STATE_NORMAL));
       bounds.Inset(gfx::Insets(0, 1, 0, 0));
@@ -195,14 +195,12 @@ class InMenuButtonBackground : public views::Background {
                                  views::Button::ButtonState state) {
     const ui::NativeTheme* theme = view->GetNativeTheme();
     switch (state) {
-      case views::Button::STATE_HOVERED:
-        // Hovered should be handled in DrawBackground.
-        NOTREACHED();
-        return theme->GetSystemColor(
-            ui::NativeTheme::kColorId_HoverMenuItemBackgroundColor);
       case views::Button::STATE_PRESSED:
         return theme->GetSystemColor(
             ui::NativeTheme::kColorId_FocusedMenuItemBackgroundColor);
+      case views::Button::STATE_HOVERED:
+        // Hovered should be handled in DrawBackground.
+        NOTREACHED();
       default:
         return theme->GetSystemColor(
             ui::NativeTheme::kColorId_MenuBackgroundColor);
@@ -732,12 +730,6 @@ class AppMenu::RecentTabsMenuModelDelegate : public ui::MenuModelDelegate {
     return model_->GetLabelFontListAt(index);
   }
 
-  bool GetShouldUseDisabledEmphasizedForegroundColor(int index) const {
-    // The items for which we get a font list, should be shown in the bolded
-    // color.
-    return GetLabelFontListAt(index) ? true : false;
-  }
-
   // ui::MenuModelDelegate implementation:
 
   void OnIconChanged(int index) override {
@@ -863,14 +855,8 @@ const gfx::FontList* AppMenu::GetLabelFontList(int command_id) const {
   return NULL;
 }
 
-bool AppMenu::GetShouldUseDisabledEmphasizedForegroundColor(
-    int command_id) const {
-  if (IsRecentTabsCommand(command_id)) {
-    return recent_tabs_menu_model_delegate_->
-        GetShouldUseDisabledEmphasizedForegroundColor(
-            ModelIndexFromCommandId(command_id));
-  }
-  return false;
+bool AppMenu::GetShouldUseNormalForegroundColor(int command_id) const {
+  return IsRecentTabsCommand(command_id);
 }
 
 base::string16 AppMenu::GetTooltipText(int command_id,
@@ -1116,13 +1102,10 @@ void AppMenu::PopulateMenu(MenuItemView* parent, MenuModel* model) {
       case IDC_EXTENSIONS_OVERFLOW_MENU: {
         std::unique_ptr<ExtensionToolbarMenuView> extension_toolbar(
             new ExtensionToolbarMenuView(browser_, this, item));
-        if (ui::MaterialDesignController::IsModeMaterial()) {
-          for (int i = 0; i < extension_toolbar->contents()->child_count();
-               ++i) {
-            View* action_view = extension_toolbar->contents()->child_at(i);
-            action_view->set_background(new InMenuButtonBackground(
-                InMenuButtonBackground::ROUNDED_BUTTON));
-          }
+        for (int i = 0; i < extension_toolbar->contents()->child_count(); ++i) {
+          View* action_view = extension_toolbar->contents()->child_at(i);
+          action_view->set_background(new InMenuButtonBackground(
+              InMenuButtonBackground::ROUNDED_BUTTON));
         }
         extension_toolbar_ = extension_toolbar.get();
         item->AddChildView(extension_toolbar.release());

@@ -12,7 +12,7 @@
 #include "services/shell/public/cpp/connector.h"
 #include "services/ui/public/cpp/property_type_converters.h"
 #include "ui/views/background.h"
-#include "ui/views/controls/button/label_button.h"
+#include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/mus/aura_init.h"
 #include "ui/views/mus/native_widget_mus.h"
 #include "ui/views/mus/window_manager_connection.h"
@@ -28,16 +28,14 @@ class ScreenlockView : public views::WidgetDelegateView,
   explicit ScreenlockView(shell::Connector* connector)
       : connector_(connector),
         unlock_button_(
-            new views::LabelButton(this, base::ASCIIToUTF16("Unlock"))) {
+            views::MdTextButton::Create(this, base::ASCIIToUTF16("Unlock"))) {
     set_background(views::Background::CreateSolidBackground(SK_ColorYELLOW));
-    unlock_button_->SetStyle(views::Button::STYLE_BUTTON);
     AddChildView(unlock_button_);
   }
   ~ScreenlockView() override {}
 
  private:
   // Overridden from views::WidgetDelegate:
-  views::View* GetContentsView() override { return this; }
   base::string16 GetWindowTitle() const override {
     // TODO(beng): use resources.
     return base::ASCIIToUTF16("Screenlock");
@@ -60,12 +58,12 @@ class ScreenlockView : public views::WidgetDelegateView,
   void ButtonPressed(views::Button* sender, const ui::Event& event) override {
     DCHECK_EQ(sender, unlock_button_);
     mash::session::mojom::SessionPtr session;
-    connector_->ConnectToInterface("mojo:mash_session", &session);
+    connector_->ConnectToInterface("service:mash_session", &session);
     session->UnlockScreen();
   }
 
   shell::Connector* connector_;
-  views::LabelButton* unlock_button_;
+  views::MdTextButton* unlock_button_;
 
   DISALLOW_COPY_AND_ASSIGN(ScreenlockView);
 };
@@ -79,7 +77,7 @@ void Screenlock::OnStart(const shell::Identity& identity) {
   tracing_.Initialize(connector(), identity.name());
 
   mash::session::mojom::SessionPtr session;
-  connector()->ConnectToInterface("mojo:mash_session", &session);
+  connector()->ConnectToInterface("service:mash_session", &session);
   session->AddScreenlockStateListener(
       bindings_.CreateInterfacePtrAndBind(this));
 

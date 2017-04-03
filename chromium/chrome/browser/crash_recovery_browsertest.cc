@@ -16,6 +16,8 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/web_contents.h"
@@ -39,9 +41,9 @@ void SimulateRendererCrash(Browser* browser) {
   content::WindowedNotificationObserver observer(
       content::NOTIFICATION_WEB_CONTENTS_DISCONNECTED,
       content::NotificationService::AllSources());
-  browser->OpenURL(OpenURLParams(
-      GURL(content::kChromeUICrashURL), Referrer(), CURRENT_TAB,
-      ui::PAGE_TRANSITION_TYPED, false));
+  browser->OpenURL(OpenURLParams(GURL(content::kChromeUICrashURL), Referrer(),
+                                 WindowOpenDisposition::CURRENT_TAB,
+                                 ui::PAGE_TRANSITION_TYPED, false));
   observer.Wait();
 }
 
@@ -99,7 +101,7 @@ IN_PROC_BROWSER_TEST_F(CrashRecoveryBrowserTest, Reload) {
   ASSERT_TRUE(ui_test_utils::GetCurrentTabTitle(browser(),
                                                 &title_before_crash));
   SimulateRendererCrash(browser());
-  chrome::Reload(browser(), CURRENT_TAB);
+  chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
   content::WaitForLoadStop(GetActiveWebContents());
   ASSERT_TRUE(ui_test_utils::GetCurrentTabTitle(browser(),
                                                 &title_after_crash));
@@ -125,7 +127,7 @@ IN_PROC_BROWSER_TEST_F(CrashRecoveryBrowserTest, ReloadCacheRevalidate) {
   ASSERT_TRUE(ui_test_utils::GetCurrentTabTitle(browser(),
                                                 &title_before_crash));
   SimulateRendererCrash(browser());
-  chrome::Reload(browser(), CURRENT_TAB);
+  chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
   content::WaitForLoadStop(GetActiveWebContents());
   ASSERT_TRUE(ui_test_utils::GetCurrentTabTitle(browser(),
                                                 &title_after_crash));
@@ -140,10 +142,10 @@ IN_PROC_BROWSER_TEST_F(CrashRecoveryBrowserTest, LoadInNewTab) {
   const base::FilePath::CharType kTitle2File[] =
       FILE_PATH_LITERAL("title2.html");
 
-  ui_test_utils::NavigateToURL(
-      browser(), ui_test_utils::GetTestUrl(
-                     base::FilePath(base::FilePath::kCurrentDirectory),
-                     base::FilePath(kTitle2File)));
+  GURL url(ui_test_utils::GetTestUrl(
+      base::FilePath(base::FilePath::kCurrentDirectory),
+      base::FilePath(kTitle2File)));
+  ui_test_utils::NavigateToURL(browser(), url);
 
   base::string16 title_before_crash;
   base::string16 title_after_crash;
@@ -151,7 +153,10 @@ IN_PROC_BROWSER_TEST_F(CrashRecoveryBrowserTest, LoadInNewTab) {
   ASSERT_TRUE(ui_test_utils::GetCurrentTabTitle(browser(),
                                                 &title_before_crash));
   SimulateRendererCrash(browser());
-  chrome::Reload(browser(), CURRENT_TAB);
+  ASSERT_EQ(GURL(content::kChromeUICrashURL),
+            GetActiveWebContents()->GetController().GetVisibleEntry()->
+                GetVirtualURL());
+  chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
   content::WaitForLoadStop(GetActiveWebContents());
   ASSERT_TRUE(ui_test_utils::GetCurrentTabTitle(browser(),
                                                 &title_after_crash));
@@ -167,13 +172,25 @@ IN_PROC_BROWSER_TEST_F(CrashRecoveryBrowserTest, DoubleReloadWithError) {
 
   SimulateRendererCrash(browser());
 
-  chrome::Reload(browser(), CURRENT_TAB);
+  chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
   content::WaitForLoadStop(GetActiveWebContents());
   ASSERT_EQ(url, GetActiveWebContents()->GetVisibleURL());
 
-  chrome::Reload(browser(), CURRENT_TAB);
+  chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
   content::WaitForLoadStop(GetActiveWebContents());
   ASSERT_EQ(url, GetActiveWebContents()->GetVisibleURL());
+}
+
+// Tests that a beforeunload handler doesn't run if user navigates to
+// chrome::crash.
+IN_PROC_BROWSER_TEST_F(CrashRecoveryBrowserTest, BeforeUnloadNotRun) {
+  const char* kBeforeUnloadHTML =
+    "<html><body>"
+    "<script>window.onbeforeunload=function(e){return 'foo'}</script>"
+    "</body></html>";
+  GURL url(std::string("data:text/html,") + kBeforeUnloadHTML);
+  ui_test_utils::NavigateToURL(browser(), url);
+  SimulateRendererCrash(browser());
 }
 
 }  // namespace

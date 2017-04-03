@@ -4,6 +4,8 @@
 
 #include "device/geolocation/location_provider_android.h"
 
+#include <memory>
+
 #include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "device/geolocation/geoposition.h"
@@ -21,7 +23,13 @@ LocationProviderAndroid::~LocationProviderAndroid() {
 void LocationProviderAndroid::NotifyNewGeoposition(
     const Geoposition& position) {
   last_position_ = position;
-  NotifyCallback(last_position_);
+  if (!callback_.is_null())
+    callback_.Run(this, position);
+}
+
+void LocationProviderAndroid::SetUpdateCallback(
+    const LocationProviderUpdateCallback& callback) {
+  callback_ = callback;
 }
 
 bool LocationProviderAndroid::StartProvider(bool high_accuracy) {
@@ -32,12 +40,8 @@ void LocationProviderAndroid::StopProvider() {
   AndroidLocationApiAdapter::GetInstance()->Stop();
 }
 
-void LocationProviderAndroid::GetPosition(Geoposition* position) {
-  *position = last_position_;
-}
-
-void LocationProviderAndroid::RequestRefresh() {
-  // Nothing to do here, android framework will call us back on new position.
+const Geoposition& LocationProviderAndroid::GetPosition() {
+  return last_position_;
 }
 
 void LocationProviderAndroid::OnPermissionGranted() {

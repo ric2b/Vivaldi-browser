@@ -5,37 +5,50 @@
 #include "modules/compositorworker/AnimationWorklet.h"
 
 #include "bindings/core/v8/V8Binding.h"
+#include "core/dom/Document.h"
 #include "core/frame/LocalFrame.h"
-#include "core/workers/ThreadedWorkletGlobalScopeProxy.h"
+#include "modules/compositorworker/AnimationWorkletMessagingProxy.h"
+#include "modules/compositorworker/AnimationWorkletThread.h"
 
 namespace blink {
 
 // static
-AnimationWorklet* AnimationWorklet::create(LocalFrame* frame)
-{
-    AnimationWorklet* worklet = new AnimationWorklet(frame);
-    worklet->suspendIfNeeded();
-    return worklet;
+AnimationWorklet* AnimationWorklet::create(LocalFrame* frame) {
+  AnimationWorklet* worklet = new AnimationWorklet(frame);
+  worklet->suspendIfNeeded();
+  return worklet;
 }
 
 AnimationWorklet::AnimationWorklet(LocalFrame* frame)
-    : Worklet(frame)
-    , m_workletGlobalScopeProxy(new ThreadedWorkletGlobalScopeProxy())
-{
+    : Worklet(frame), m_workletMessagingProxy(nullptr) {}
+
+AnimationWorklet::~AnimationWorklet() {
+  if (m_workletMessagingProxy)
+    m_workletMessagingProxy->parentObjectDestroyed();
 }
 
-AnimationWorklet::~AnimationWorklet()
-{
+void AnimationWorklet::initialize() {
+  AnimationWorkletThread::ensureSharedBackingThread();
+
+  DCHECK(!m_workletMessagingProxy);
+  DCHECK(getExecutionContext());
+
+  m_workletMessagingProxy =
+      new AnimationWorkletMessagingProxy(getExecutionContext());
+  m_workletMessagingProxy->initialize();
 }
 
-WorkletGlobalScopeProxy* AnimationWorklet::workletGlobalScopeProxy() const
-{
-    return m_workletGlobalScopeProxy.get();
+bool AnimationWorklet::isInitialized() const {
+  return m_workletMessagingProxy;
 }
 
-DEFINE_TRACE(AnimationWorklet)
-{
-    Worklet::trace(visitor);
+WorkletGlobalScopeProxy* AnimationWorklet::workletGlobalScopeProxy() const {
+  DCHECK(m_workletMessagingProxy);
+  return m_workletMessagingProxy;
 }
 
-} // namespace blink
+DEFINE_TRACE(AnimationWorklet) {
+  Worklet::trace(visitor);
+}
+
+}  // namespace blink

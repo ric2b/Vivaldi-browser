@@ -11,7 +11,10 @@
 #include "build/build_config.h"
 #include "content/common/text_input_client_messages.h"
 #include "content/renderer/pepper/pepper_plugin_instance_impl.h"
+#include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_view_impl.h"
+#include "content/renderer/render_widget.h"
+#include "ipc/ipc_message.h"
 #include "third_party/WebKit/public/platform/WebPoint.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/platform/WebString.h"
@@ -22,13 +25,8 @@
 
 namespace content {
 
-TextInputClientObserver::TextInputClientObserver(RenderViewImpl* render_view)
-#if defined(ENABLE_PLUGINS)
-    : RenderViewObserver(render_view), render_view_impl_(render_view) {
-#else
-    : RenderViewObserver(render_view) {
-#endif
-}
+TextInputClientObserver::TextInputClientObserver(RenderWidget* render_widget)
+    : render_widget_(render_widget) {}
 
 TextInputClientObserver::~TextInputClientObserver() {
 }
@@ -48,24 +46,63 @@ bool TextInputClientObserver::OnMessageReceived(const IPC::Message& message) {
   return handled;
 }
 
-void TextInputClientObserver::OnDestruct() {
-  delete this;
+bool TextInputClientObserver::Send(IPC::Message* message) {
+  return render_widget_->Send(message);
 }
 
-blink::WebView* TextInputClientObserver::webview() {
-  return render_view()->GetWebView();
+blink::WebFrameWidget* TextInputClientObserver::GetWebFrameWidget() const {
+  blink::WebWidget* widget = render_widget_->GetWebWidget();
+  if (!widget->isWebFrameWidget()) {
+    // When a page navigation occurs, for a brief period
+    // RenderViewImpl::GetWebWidget() will return a WebViewImpl instead of a
+    // WebViewFrameWidget. Therefore, casting to WebFrameWidget is invalid and
+    // could cause crashes. Also, WebView::mainFrame() could be a remote frame
+    // which will yield a nullptr for localRoot() (https://crbug.com/664890).
+    return nullptr;
+  }
+  return static_cast<blink::WebFrameWidget*>(widget);
 }
+
+blink::WebLocalFrame* TextInputClientObserver::GetFocusedFrame() const {
+  if (auto* frame_widget = GetWebFrameWidget()) {
+    blink::WebLocalFrame* localRoot = frame_widget->localRoot();
+    RenderFrameImpl* render_frame = RenderFrameImpl::FromWebFrame(localRoot);
+    if (!render_frame) {
+      // TODO(ekaramad): Can this ever be nullptr? (https://crbug.com/664890).
+      return nullptr;
+    }
+    blink::WebLocalFrame* focused =
+        render_frame->render_view()->webview()->focusedFrame();
+    return focused->localRoot() == localRoot ? focused : nullptr;
+  }
+  return nullptr;
+}
+
+#if defined(ENABLE_PLUGINS)
+PepperPluginInstanceImpl* TextInputClientObserver::GetFocusedPepperPlugin()
+    const {
+  blink::WebLocalFrame* focusedFrame = GetFocusedFrame();
+  return focusedFrame
+             ? RenderFrameImpl::FromWebFrame(focusedFrame)
+                   ->focused_pepper_plugin()
+             : nullptr;
+}
+#endif
 
 void TextInputClientObserver::OnStringAtPoint(gfx::Point point) {
 #if defined(OS_MACOSX)
   blink::WebPoint baselinePoint;
-  NSAttributedString* string = blink::WebSubstringUtil::attributedWordAtPoint(
-      webview(), point, baselinePoint);
+  NSAttributedString* string = nil;
+
+  if (auto* frame_widget = GetWebFrameWidget()) {
+    string = blink::WebSubstringUtil::attributedWordAtPoint(frame_widget, point,
+                                                   baselinePoint);
+  }
 
   std::unique_ptr<const mac::AttributedStringCoder::EncodedString> encoded(
       mac::AttributedStringCoder::Encode(string));
   Send(new TextInputClientReplyMsg_GotStringAtPoint(
-      routing_id(), *encoded.get(), baselinePoint));
+      render_widget_->routing_id(), *encoded.get(), baselinePoint));
 #else
   NOTIMPLEMENTED();
 #endif
@@ -73,21 +110,24 @@ void TextInputClientObserver::OnStringAtPoint(gfx::Point point) {
 
 void TextInputClientObserver::OnCharacterIndexForPoint(gfx::Point point) {
   blink::WebPoint web_point(point);
-  uint32_t index = static_cast<uint32_t>(
-      webview()->focusedFrame()->characterIndexForPoint(web_point));
-  Send(new TextInputClientReplyMsg_GotCharacterIndexForPoint(routing_id(),
-      index));
+  uint32_t index = 0U;
+  if (auto* frame = GetFocusedFrame())
+    index = static_cast<uint32_t>(frame->characterIndexForPoint(web_point));
+
+  Send(new TextInputClientReplyMsg_GotCharacterIndexForPoint(
+      render_widget_->routing_id(), index));
 }
 
 void TextInputClientObserver::OnFirstRectForCharacterRange(gfx::Range range) {
   gfx::Rect rect;
 #if defined(ENABLE_PLUGINS)
-  if (render_view_impl_->GetFocusedPepperPlugin()) {
-    rect = render_view_impl_->GetFocusedPepperPlugin()->GetCaretBounds();
+  PepperPluginInstanceImpl* focused_plugin = GetFocusedPepperPlugin();
+  if (focused_plugin) {
+    rect = focused_plugin->GetCaretBounds();
   } else
 #endif
   {
-    blink::WebLocalFrame* frame = webview()->focusedFrame();
+    blink::WebLocalFrame* frame = GetFocusedFrame();
     // TODO(yabinh): Null check should not be necessary.
     // See crbug.com/304341
     if (frame) {
@@ -97,14 +137,15 @@ void TextInputClientObserver::OnFirstRectForCharacterRange(gfx::Range range) {
       rect = web_rect;
     }
   }
-  Send(new TextInputClientReplyMsg_GotFirstRectForRange(routing_id(), rect));
+  Send(new TextInputClientReplyMsg_GotFirstRectForRange(
+      render_widget_->routing_id(), rect));
 }
 
 void TextInputClientObserver::OnStringForRange(gfx::Range range) {
 #if defined(OS_MACOSX)
   blink::WebPoint baselinePoint;
   NSAttributedString* string = nil;
-  blink::WebLocalFrame* frame = webview()->focusedFrame();
+  blink::WebLocalFrame* frame = GetFocusedFrame();
   // TODO(yabinh): Null check should not be necessary.
   // See crbug.com/304341
   if (frame) {
@@ -113,8 +154,8 @@ void TextInputClientObserver::OnStringForRange(gfx::Range range) {
   }
   std::unique_ptr<const mac::AttributedStringCoder::EncodedString> encoded(
       mac::AttributedStringCoder::Encode(string));
-  Send(new TextInputClientReplyMsg_GotStringForRange(routing_id(),
-      *encoded.get(), baselinePoint));
+  Send(new TextInputClientReplyMsg_GotStringForRange(
+      render_widget_->routing_id(), *encoded.get(), baselinePoint));
 #else
   NOTIMPLEMENTED();
 #endif

@@ -6,25 +6,25 @@
 
 #include "base/logging.h"
 #include "third_party/WebKit/public/platform/WebString.h"
+#include "third_party/WebKit/public/platform/WebURL.h"
 
 namespace content {
 
 PresentationConnectionClient::PresentationConnectionClient(
     blink::mojom::PresentationSessionInfoPtr session_info)
-    : url_(blink::WebString::fromUTF8(session_info->url)),
+    : url_(session_info->url),
       id_(blink::WebString::fromUTF8(session_info->id)) {}
 
 PresentationConnectionClient::PresentationConnectionClient(
-    const mojo::String& url,
+    const GURL& url,
     const mojo::String& id)
-    : url_(blink::WebString::fromUTF8(url)),
-      id_(blink::WebString::fromUTF8(id)) {
-}
+    : url_(url),
+      id_(blink::WebString::fromUTF8(id)) {}
 
 PresentationConnectionClient::~PresentationConnectionClient() {
 }
 
-blink::WebString PresentationConnectionClient::getUrl() {
+blink::WebURL PresentationConnectionClient::getUrl() {
     return url_;
 }
 

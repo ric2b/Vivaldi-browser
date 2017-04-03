@@ -9,9 +9,14 @@ package org.chromium.chrome.browser.contextualsearch;
  * Handles logging of results seen and activation.
  */
 public class RecentScrollTapSuppression extends ContextualSearchHeuristic {
-    private final int mExperiementThresholdMs;
+    // TODO(twellington): Use this condition rather than an experiment threshold for suppression
+    // once feature is enabled by default.
+    private static final int DEFAULT_RECENT_SCROLL_SUPPRESSION_DURATION_MS = 300;
+
+    private final int mExperimentThresholdMs;
     private final int mDurationSinceRecentScrollMs;
     private final boolean mIsConditionSatisfied;
+    private final boolean mIsEnabled;
 
     /**
      * Constructs a Tap suppression heuristic that handles a Tap after a recent scroll.
@@ -28,24 +33,26 @@ public class RecentScrollTapSuppression extends ContextualSearchHeuristic {
         } else {
             mDurationSinceRecentScrollMs = 0;
         }
-        mExperiementThresholdMs = ContextualSearchFieldTrial.getRecentScrollSuppressionDurationMs();
+
+        mExperimentThresholdMs = ContextualSearchFieldTrial.getRecentScrollSuppressionDurationMs();
+
         // If the configured threshold is 0, then suppression is not enabled.
-        if (mExperiementThresholdMs > 0) {
-            mIsConditionSatisfied = mDurationSinceRecentScrollMs > 0
-                    && mDurationSinceRecentScrollMs < mExperiementThresholdMs;
-        } else {
-            mIsConditionSatisfied = false;
-        }
+        mIsEnabled = mExperimentThresholdMs > 0;
+
+        int conditionThreshold = mIsEnabled ? mExperimentThresholdMs
+                : DEFAULT_RECENT_SCROLL_SUPPRESSION_DURATION_MS;
+        mIsConditionSatisfied = mDurationSinceRecentScrollMs > 0
+                && mDurationSinceRecentScrollMs < conditionThreshold;
     }
 
     @Override
-    protected boolean isConditionSatisfied() {
-        return mIsConditionSatisfied;
+    protected boolean isConditionSatisfiedAndEnabled() {
+        return mIsEnabled && mIsConditionSatisfied;
     }
 
     @Override
     protected void logConditionState() {
-        if (mExperiementThresholdMs > 0) {
+        if (mIsEnabled) {
             ContextualSearchUma.logRecentScrollSuppression(mIsConditionSatisfied);
         }
     }
@@ -57,5 +64,15 @@ public class RecentScrollTapSuppression extends ContextualSearchHeuristic {
             ContextualSearchUma.logRecentScrollDuration(
                     mDurationSinceRecentScrollMs, wasSearchContentViewSeen);
         }
+    }
+
+    @Override
+    protected boolean shouldAggregateLogForTapSuppression() {
+        return true;
+    }
+
+    @Override
+    protected boolean isConditionSatisfiedForAggregateLogging() {
+        return !mIsEnabled && mIsConditionSatisfied;
     }
 }

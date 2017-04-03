@@ -24,14 +24,15 @@
 #include "chrome/browser/extensions/api/web_navigation/web_navigation_api.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/loader/chrome_resource_dispatcher_host_delegate.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
-#include "chrome/browser/renderer_host/chrome_resource_dispatcher_host_delegate.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -188,7 +189,7 @@ class DelayLoadStartAndExecuteJavascript
         script_(script),
         has_user_gesture_(false),
         script_was_executed_(false),
-        rvh_(NULL) {
+        rfh_(nullptr) {
     registrar_.Add(this,
                    chrome::NOTIFICATION_TAB_ADDED,
                    content::NotificationService::AllSources());
@@ -208,35 +209,34 @@ class DelayLoadStartAndExecuteJavascript
     registrar_.RemoveAll();
   }
 
-  void DidStartProvisionalLoadForFrame(
-      content::RenderFrameHost* render_frame_host,
-      const GURL& validated_url,
-      bool is_error_page,
-      bool is_iframe_srcdoc) override {
-    if (validated_url != delay_url_ || !rvh_)
+  void DidStartNavigation(
+      content::NavigationHandle* navigation_handle) override {
+    if (navigation_handle->GetURL() != delay_url_ || !rfh_)
       return;
 
     if (has_user_gesture_) {
-      rvh_->GetMainFrame()->ExecuteJavaScriptWithUserGestureForTests(
+      rfh_->ExecuteJavaScriptWithUserGestureForTests(
           base::UTF8ToUTF16(script_));
     } else {
-      rvh_->GetMainFrame()->ExecuteJavaScriptForTests(
-          base::UTF8ToUTF16(script_));
+      rfh_->ExecuteJavaScriptForTests(base::UTF8ToUTF16(script_));
     }
     script_was_executed_ = true;
   }
 
-  void DidCommitProvisionalLoadForFrame(
-      content::RenderFrameHost* render_frame_host,
-      const GURL& url,
-      ui::PageTransition transition_type) override {
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override {
+    if (!navigation_handle->HasCommitted() || navigation_handle->IsErrorPage())
+      return;
+
     if (script_was_executed_ &&
-        base::EndsWith(url.spec(), until_url_suffix_,
+        base::EndsWith(navigation_handle->GetURL().spec(), until_url_suffix_,
                        base::CompareCase::SENSITIVE)) {
       content::WebContentsObserver::Observe(NULL);
       test_navigation_listener_->ResumeAll();
     }
-    rvh_ = render_frame_host->GetRenderViewHost();
+
+    if (navigation_handle->IsInMainFrame())
+      rfh_ = navigation_handle->GetRenderFrameHost();
   }
 
   void set_has_user_gesture(bool has_user_gesture) {
@@ -253,7 +253,7 @@ class DelayLoadStartAndExecuteJavascript
   std::string script_;
   bool has_user_gesture_;
   bool script_was_executed_;
-  content::RenderViewHost* rvh_;
+  content::RenderFrameHost* rfh_;
 
   DISALLOW_COPY_AND_ASSIGN(DelayLoadStartAndExecuteJavascript);
 };
@@ -416,7 +416,7 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, Download) {
   ASSERT_TRUE(download_directory.CreateUniqueTempDir());
   DownloadPrefs* download_prefs =
       DownloadPrefs::FromBrowserContext(browser()->profile());
-  download_prefs->SetDownloadPath(download_directory.path());
+  download_prefs->SetDownloadPath(download_directory.GetPath());
 
   DownloadTestObserverNotInProgress download_observer(
       content::BrowserContext::GetDownloadManager(profile()), 1);
@@ -505,6 +505,7 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, FilteredTest) {
 }
 
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, UserAction) {
+  content::IsolateAllSitesForTesting(base::CommandLine::ForCurrentProcess());
   ASSERT_TRUE(StartEmbeddedTestServer());
 
   // Wait for the extension to set itself up and return control to us.
@@ -519,7 +520,8 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, UserAction) {
       browser()->profile())->extension_service();
   const extensions::Extension* extension =
       service->GetExtensionById(last_loaded_extension_id(), false);
-  GURL url = extension->GetResourceURL("a.html");
+  GURL url = extension->GetResourceURL(
+      "a.html?" + base::IntToString(embedded_test_server()->port()));
 
   ui_test_utils::NavigateToURL(browser(), url);
 
@@ -530,7 +532,13 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, UserAction) {
   params.page_url = url;
   params.link_url = extension->GetResourceURL("b.html");
 
-  TestRenderViewContextMenu menu(tab->GetMainFrame(), params);
+  // Get the child frame, which will be the one associated with the context
+  // menu.
+  std::vector<content::RenderFrameHost*> frames = tab->GetAllFrames();
+  EXPECT_EQ(2UL, frames.size());
+  EXPECT_TRUE(frames[1]->GetParent());
+
+  TestRenderViewContextMenu menu(frames[1], params);
   menu.Init();
   menu.ExecuteCommand(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB, 0);
 

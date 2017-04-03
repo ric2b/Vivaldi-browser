@@ -105,7 +105,7 @@ ChromeAppCacheServiceTest::CreateAppCacheServiceImpl(
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::Bind(&ChromeAppCacheService::InitializeOnIOThread,
-                 appcache_service.get(), appcache_path,
+                 appcache_service, appcache_path,
                  browser_context_.GetResourceContext(),
                  base::RetainedRef(mock_request_context_getter), mock_policy));
   // Steps needed to initialize the storage of AppCache data.
@@ -141,7 +141,7 @@ void ChromeAppCacheServiceTest::InsertDataIntoAppCache(
 TEST_F(ChromeAppCacheServiceTest, KeepOnDestruction) {
   ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
   base::FilePath appcache_path =
-      temp_dir_.path().Append(kTestingAppCacheDirname);
+      temp_dir_.GetPath().Append(kTestingAppCacheDirname);
 
   // Create a ChromeAppCacheService and insert data into it
   scoped_refptr<ChromeAppCacheService> appcache_service =
@@ -178,7 +178,7 @@ TEST_F(ChromeAppCacheServiceTest, KeepOnDestruction) {
 TEST_F(ChromeAppCacheServiceTest, SaveSessionState) {
   ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
   base::FilePath appcache_path =
-      temp_dir_.path().Append(kTestingAppCacheDirname);
+      temp_dir_.GetPath().Append(kTestingAppCacheDirname);
 
   // Create a ChromeAppCacheService and insert data into it
   scoped_refptr<ChromeAppCacheService> appcache_service =

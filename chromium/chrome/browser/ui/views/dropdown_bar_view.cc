@@ -9,7 +9,7 @@
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "grit/theme_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkRect.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -104,6 +104,6 @@ void DropdownBarView::SetBorderFromIds(int left_border_image_id,
   int border_image_ids[3] = {left_border_image_id, middle_border_image_id,
       right_border_image_id};
   SetBorder(views::Border::CreateBorderPainter(
-      base::WrapUnique(new views::HorizontalPainter(border_image_ids)),
+      base::MakeUnique<views::HorizontalPainter>(border_image_ids),
       gfx::Insets()));
 }

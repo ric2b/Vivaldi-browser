@@ -17,7 +17,7 @@
 #include "chrome/browser/ui/android/tab_model/tab_model_list.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/sync_sessions/open_tabs_ui_delegate.h"
@@ -34,14 +34,14 @@ using base::android::AttachCurrentThread;
 using base::android::ConvertUTF16ToJavaString;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::ConvertJavaStringToUTF8;
-using sync_driver::OpenTabsUIDelegate;
-using sync_driver::SyncedSession;
+using sync_sessions::OpenTabsUIDelegate;
+using sync_sessions::SyncedSession;
 
 namespace {
 
 OpenTabsUIDelegate* GetOpenTabsUIDelegate(Profile* profile) {
-  ProfileSyncService* service = ProfileSyncServiceFactory::GetInstance()->
-      GetForProfile(profile);
+  browser_sync::ProfileSyncService* service =
+      ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile);
 
   // Only return the delegate if it exists and it is done syncing sessions.
   if (!service || !service->IsSyncActive())
@@ -65,19 +65,17 @@ bool ShouldSkipTab(const sessions::SessionTab& session_tab) {
 }
 
 bool ShouldSkipWindow(const sessions::SessionWindow& window) {
-  for (std::vector<sessions::SessionTab*>::const_iterator tab_it =
-           window.tabs.begin(); tab_it != window.tabs.end(); ++tab_it) {
-    const sessions::SessionTab &session_tab = **tab_it;
+  for (const auto& tab_ptr : window.tabs) {
+    const sessions::SessionTab& session_tab = *(tab_ptr.get());
     if (!ShouldSkipTab(session_tab))
       return false;
   }
   return true;
 }
 
-bool ShouldSkipSession(const sync_driver::SyncedSession& session) {
-  for (SyncedSession::SyncedWindowMap::const_iterator it =
-      session.windows.begin(); it != session.windows.end(); ++it) {
-    const sessions::SessionWindow  &window = *(it->second);
+bool ShouldSkipSession(const SyncedSession& session) {
+  for (const auto& window_pair : session.windows) {
+    const sessions::SessionWindow& window = *(window_pair.second.get());
     if (!ShouldSkipWindow(window))
       return false;
   }
@@ -107,9 +105,8 @@ void CopyWindowToJava(
     JNIEnv* env,
     const sessions::SessionWindow& window,
     ScopedJavaLocalRef<jobject>& j_window) {
-  for (std::vector<sessions::SessionTab*>::const_iterator tab_it =
-           window.tabs.begin(); tab_it != window.tabs.end(); ++tab_it) {
-    const sessions::SessionTab &session_tab = **tab_it;
+  for (const auto& tab_ptr : window.tabs) {
+    const sessions::SessionTab& session_tab = *(tab_ptr.get());
 
     if (ShouldSkipTab(session_tab))
       return;
@@ -122,9 +119,8 @@ void CopySessionToJava(
     JNIEnv* env,
     const SyncedSession& session,
     ScopedJavaLocalRef<jobject>& j_session) {
-  for (SyncedSession::SyncedWindowMap::const_iterator it =
-      session.windows.begin(); it != session.windows.end(); ++it) {
-    const sessions::SessionWindow &window = *(it->second);
+  for (const auto& window_pair : session.windows) {
+    const sessions::SessionWindow& window = *(window_pair.second.get());
 
     if (ShouldSkipWindow(window))
       continue;
@@ -149,8 +145,8 @@ static jlong Init(JNIEnv* env,
 
 ForeignSessionHelper::ForeignSessionHelper(Profile* profile)
     : profile_(profile), scoped_observer_(this) {
-  ProfileSyncService* service = ProfileSyncServiceFactory::GetInstance()->
-      GetForProfile(profile);
+  browser_sync::ProfileSyncService* service =
+      ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile);
 
   // NOTE: The ProfileSyncService can be null in tests.
   if (service)
@@ -168,16 +164,16 @@ void ForeignSessionHelper::Destroy(JNIEnv* env,
 jboolean ForeignSessionHelper::IsTabSyncEnabled(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
-  ProfileSyncService* service = ProfileSyncServiceFactory::GetInstance()->
-      GetForProfile(profile_);
+  browser_sync::ProfileSyncService* service =
+      ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile_);
   return service && service->GetActiveDataTypes().Has(syncer::PROXY_TABS);
 }
 
 void ForeignSessionHelper::TriggerSessionSync(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
-  ProfileSyncService* service = ProfileSyncServiceFactory::GetInstance()->
-      GetForProfile(profile_);
+  browser_sync::ProfileSyncService* service =
+      ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile_);
   if (!service)
     return;
 
@@ -216,7 +212,7 @@ jboolean ForeignSessionHelper::GetForeignSessions(
   if (!open_tabs)
     return false;
 
-  std::vector<const sync_driver::SyncedSession*> sessions;
+  std::vector<const SyncedSession*> sessions;
   if (!open_tabs->GetAllForeignSessions(&sessions))
     return false;
 
@@ -234,7 +230,7 @@ jboolean ForeignSessionHelper::GetForeignSessions(
 
   // Note: we don't own the SyncedSessions themselves.
   for (size_t i = 0; i < sessions.size(); ++i) {
-    const sync_driver::SyncedSession& session = *(sessions[i]);
+    const SyncedSession& session = *(sessions[i]);
     if (ShouldSkipSession(session))
       continue;
 

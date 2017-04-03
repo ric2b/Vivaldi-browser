@@ -15,6 +15,7 @@
 #include "base/macros.h"
 #include "base/process/kill.h"
 #include "base/rand_util.h"
+#include "base/strings/pattern.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
@@ -408,6 +409,30 @@ void AppendGzippedResource(const base::RefCountedMemory& encoded,
   } while (status != net::Filter::FILTER_DONE);
 }
 
+// Queries for video input devices on the current system using the getSources
+// API.
+//
+// This does not guarantee that a getUserMedia with video will succeed, as the
+// camera could be busy for instance.
+//
+// Returns has-video-input-device to the test if there is a webcam available,
+// no-video-input-devices otherwise.
+const char kHasVideoInputDeviceOnSystem[] =
+    "(function() {"
+      "navigator.mediaDevices.enumerateDevices()"
+      ".then(function(devices) {"
+        "devices.forEach(function(device) {"
+          "if (device.kind == 'video-input') {"
+            "window.domAutomationController.send('has-video-input-device');"
+            "return;"
+          "}"
+        "});"
+        "window.domAutomationController.send('no-video-input-devices');"
+      "});"
+    "})()";
+
+const char kHasVideoInputDevice[] = "has-video-input-device";
+
 }  // namespace
 
 bool NavigateIframeToURL(WebContents* web_contents,
@@ -740,6 +765,13 @@ void SimulateKeyPress(WebContents* web_contents,
   }
 
   ASSERT_EQ(modifiers, 0);
+}
+
+bool IsWebcamAvailableOnSystem(WebContents* web_contents) {
+  std::string result;
+  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
+      web_contents, kHasVideoInputDeviceOnSystem, &result));
+  return result == kHasVideoInputDevice;
 }
 
 RenderFrameHost* ConvertToRenderFrameHost(WebContents* web_contents) {
@@ -1693,6 +1725,34 @@ bool TestNavigationManager::ShouldMonitorNavigation(NavigationHandle* handle) {
   if (handled_navigation_)
     return false;
   return true;
+}
+
+ConsoleObserverDelegate::ConsoleObserverDelegate(WebContents* web_contents,
+                                                 const std::string& filter)
+    : web_contents_(web_contents),
+      filter_(filter),
+      message_loop_runner_(new MessageLoopRunner) {}
+
+ConsoleObserverDelegate::~ConsoleObserverDelegate() {}
+
+void ConsoleObserverDelegate::Wait() {
+  message_loop_runner_->Run();
+}
+
+bool ConsoleObserverDelegate::AddMessageToConsole(
+    WebContents* source,
+    int32_t level,
+    const base::string16& message,
+    int32_t line_no,
+    const base::string16& source_id) {
+  DCHECK(source == web_contents_);
+
+  std::string ascii_message = base::UTF16ToASCII(message);
+  if (base::MatchPattern(ascii_message, filter_)) {
+    message_ = ascii_message;
+    message_loop_runner_->Quit();
+  }
+  return false;
 }
 
 }  // namespace content

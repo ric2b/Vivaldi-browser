@@ -92,7 +92,7 @@ def GetImageList(
   if filename_expansion_function:
     filename = filename_expansion_function(filename)
   filename = util.PathSearcher.LocatePath(filename, base_path)
-  filepath = os.path.join(base_path, filename)
+  filepath = util.normpath(os.path.join(base_path, filename))
   images = [('1x', filename)]
 
   for scale_factor in scale_factors:
@@ -342,8 +342,6 @@ class ChromeHtml(interface.GathererBase):
     filename = self.GetInputPath()
     if self.filename_expansion_function:
       filename = self.filename_expansion_function(filename)
-    filename = util.PathSearcher.LocatePath(filename,
-                       self.grd_node.GetRoot().GetBaseDir())
     # Hack: some unit tests supply an absolute path and no root node.
     if not os.path.isabs(filename):
       filename = self.grd_node.ToRealPath(filename)

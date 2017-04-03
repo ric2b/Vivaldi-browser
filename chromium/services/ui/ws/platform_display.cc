@@ -9,10 +9,12 @@
 #include "cc/ipc/quads.mojom.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/output/delegated_frame_data.h"
+#include "gpu/ipc/client/gpu_channel_host.h"
 #include "services/shell/public/cpp/connection.h"
 #include "services/shell/public/cpp/connector.h"
+#include "services/ui/display/platform_screen.h"
+#include "services/ui/surfaces/compositor_frame_sink.h"
 #include "services/ui/surfaces/display_compositor.h"
-#include "services/ui/surfaces/surfaces_state.h"
 #include "services/ui/ws/platform_display_factory.h"
 #include "services/ui/ws/platform_display_init_params.h"
 #include "services/ui/ws/server_window.h"
@@ -54,30 +56,37 @@ PlatformDisplay* PlatformDisplay::Create(
 DefaultPlatformDisplay::DefaultPlatformDisplay(
     const PlatformDisplayInitParams& init_params)
     : id_(init_params.display_id),
-      platform_screen_(init_params.platform_screen),
 #if !defined(OS_ANDROID)
       cursor_loader_(ui::CursorLoader::Create()),
 #endif
-      frame_generator_(new FrameGenerator(this, init_params.surfaces_state)) {
-  metrics_.bounds = init_params.display_bounds;
+      frame_generator_(
+          new FrameGenerator(this, init_params.display_compositor)),
+      metrics_(init_params.metrics) {
 }
 
 void DefaultPlatformDisplay::Init(PlatformDisplayDelegate* delegate) {
   delegate_ = delegate;
 
+  DCHECK(!metrics_.pixel_size.IsEmpty());
+
+  // TODO(kylechar): The origin here isn't right if any displays have
+  // scale_factor other than 1.0 but will prevent windows from being stacked.
+  gfx::Rect bounds(metrics_.bounds.origin(), metrics_.pixel_size);
 #if defined(OS_WIN)
-  platform_window_.reset(new ui::WinWindow(this, metrics_.bounds));
+  platform_window_ = base::MakeUnique<ui::WinWindow>(this, bounds);
 #elif defined(USE_X11)
-  platform_window_.reset(new ui::X11Window(this));
+  platform_window_ = base::MakeUnique<ui::X11Window>(this);
 #elif defined(OS_ANDROID)
-  platform_window_.reset(new ui::PlatformWindowAndroid(this));
+  platform_window_ = base::MakeUnique<ui::PlatformWindowAndroid>(this);
 #elif defined(USE_OZONE)
-  platform_window_ = ui::OzonePlatform::GetInstance()->CreatePlatformWindow(
-      this, metrics_.bounds);
+  platform_window_ =
+      ui::OzonePlatform::GetInstance()->CreatePlatformWindow(this, bounds);
 #else
   NOTREACHED() << "Unsupported platform";
 #endif
-  platform_window_->SetBounds(metrics_.bounds);
+  delegate_->CreateRootWindow(metrics_.bounds.size());
+
+  platform_window_->SetBounds(bounds);
   platform_window_->Show();
 }
 
@@ -124,14 +133,14 @@ void DefaultPlatformDisplay::ReleaseCapture() {
   platform_window_->ReleaseCapture();
 }
 
-void DefaultPlatformDisplay::SetCursorById(int32_t cursor_id) {
+void DefaultPlatformDisplay::SetCursorById(mojom::Cursor cursor_id) {
 #if !defined(OS_ANDROID)
   // TODO(erg): This still isn't sufficient, and will only use native cursors
   // that chrome would use, not custom image cursors. For that, we should
   // delegate to the window manager to load images from resource packs.
   //
   // We probably also need to deal with different DPIs.
-  ui::Cursor cursor(cursor_id);
+  ui::Cursor cursor(static_cast<int32_t>(cursor_id));
   cursor_loader_->SetPlatformCursor(&cursor);
   platform_window_->SetCursor(cursor.platform());
 #endif
@@ -168,24 +177,26 @@ gfx::Rect DefaultPlatformDisplay::GetBounds() const {
 }
 
 bool DefaultPlatformDisplay::IsPrimaryDisplay() const {
-  return platform_screen_->GetPrimaryDisplayId() == id_;
+  return display::PlatformScreen::GetInstance()->GetPrimaryDisplayId() == id_;
+}
+
+void DefaultPlatformDisplay::OnGpuChannelEstablished(
+    scoped_refptr<gpu::GpuChannelHost> channel) {
+  frame_generator_->OnGpuChannelEstablished(channel);
 }
 
 void DefaultPlatformDisplay::UpdateMetrics(const gfx::Rect& bounds,
+                                           const gfx::Size& pixel_size,
                                            float device_scale_factor) {
-  if (display::Display::HasForceDeviceScaleFactor())
-    device_scale_factor = display::Display::GetForcedDeviceScaleFactor();
-
   // We don't care about the origin of the platform window, as that may not be
   // related to the origin of the display in our screen space.
-  if (metrics_.bounds.size() == bounds.size() &&
+  if (metrics_.bounds == bounds && metrics_.pixel_size == pixel_size &&
       metrics_.device_scale_factor == device_scale_factor)
     return;
 
-  // TODO(kylechar): If the window size is updated then we may need to update
-  // the origin for any other windows.
   ViewportMetrics old_metrics = metrics_;
-  metrics_.bounds.set_size(bounds.size());
+  metrics_.bounds = bounds;
+  metrics_.pixel_size = pixel_size;
   metrics_.device_scale_factor = device_scale_factor;
   delegate_->OnViewportMetricsChanged(old_metrics, metrics_);
 }
@@ -197,7 +208,12 @@ void DefaultPlatformDisplay::UpdateEventRootLocation(ui::LocatedEvent* event) {
 }
 
 void DefaultPlatformDisplay::OnBoundsChanged(const gfx::Rect& new_bounds) {
-  UpdateMetrics(new_bounds, metrics_.device_scale_factor);
+  // TODO(kylechar): We're updating the bounds assuming that the device scale
+  // factor is 1 here. The correct thing to do is let PlatformSreen know the
+  // display size has changed and let it update the display.
+  gfx::Size pixel_size = new_bounds.size();
+  gfx::Rect bounds = gfx::Rect(metrics_.bounds.origin(), pixel_size);
+  UpdateMetrics(bounds, pixel_size, metrics_.device_scale_factor);
 }
 
 void DefaultPlatformDisplay::OnDamageRect(const gfx::Rect& damaged_region) {
@@ -211,8 +227,9 @@ void DefaultPlatformDisplay::DispatchEvent(ui::Event* event) {
   if (event->IsScrollEvent()) {
     // TODO(moshayedi): crbug.com/602859. Dispatch scroll events as
     // they are once we have proper support for scroll events.
-    delegate_->OnEvent(ui::MouseWheelEvent(*event->AsScrollEvent()));
-  } else if (event->IsMouseEvent() && !event->IsMouseWheelEvent()) {
+    delegate_->OnEvent(
+        ui::PointerEvent(ui::MouseWheelEvent(*event->AsScrollEvent())));
+  } else if (event->IsMouseEvent()) {
     delegate_->OnEvent(ui::PointerEvent(*event->AsMouseEvent()));
   } else if (event->IsTouchEvent()) {
     delegate_->OnEvent(ui::PointerEvent(*event->AsTouchEvent()));
@@ -248,13 +265,10 @@ void DefaultPlatformDisplay::DispatchEvent(ui::Event* event) {
 }
 
 void DefaultPlatformDisplay::OnCloseRequest() {
-  platform_window_->Close();
+  display::PlatformScreen::GetInstance()->RequestCloseDisplay(GetId());
 }
 
-void DefaultPlatformDisplay::OnClosed() {
-  if (delegate_)
-    delegate_->OnDisplayClosed();
-}
+void DefaultPlatformDisplay::OnClosed() {}
 
 void DefaultPlatformDisplay::OnWindowStateChanged(
     ui::PlatformWindowState new_state) {}
@@ -267,7 +281,6 @@ void DefaultPlatformDisplay::OnAcceleratedWidgetAvailable(
     gfx::AcceleratedWidget widget,
     float device_scale_factor) {
   frame_generator_->OnAcceleratedWidgetAvailable(widget);
-  UpdateMetrics(metrics_.bounds, device_scale_factor);
 }
 
 void DefaultPlatformDisplay::OnAcceleratedWidgetDestroyed() {

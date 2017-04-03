@@ -31,6 +31,12 @@ declare_args() {
   root_extra_deps = []
 }
 
+if (is_official_build) {
+  # An official (maximally optimized!) component (optimized for build times)
+  # build doesn't make sense and usually doesn't work.
+  assert(!is_component_build)
+}
+
 # This file defines the following five main targets:
 #
 # "both_gn_and_gyp" should list every root target (target that nothing else
@@ -112,7 +118,6 @@ if (is_win) {
     ]
 
     if (target_cpu == "x86") {
-      deps += [ "//chrome/tools/disable_outdated_build_detector" ]
       if (is_clang) {
         deps += [ "//courgette(//build/toolchain/win:clang_x64)" ]
       } else {
@@ -147,10 +152,19 @@ if (is_win) {
   }
 
   group("All_syzygy") {
-    if (is_syzyasan || syzygy_optimize) {
+    if (is_syzyasan) {
       deps = [
         "//chrome/installer/mini_installer:mini_installer",
         "//chrome/installer/mini_installer:mini_installer_syzygy",
+      ]
+    }
+  }
+
+  if (is_syzyasan) {
+    group("chrome_official_syzyasan_builder") {
+      deps = [
+        ":All_syzygy",
+        ":chrome_official_builder_no_unittests",
       ]
     }
   }
@@ -288,8 +302,10 @@ group("both_gn_and_gyp") {
       "//mojo/edk/test:mojo_public_system_unittests",
       "//net:net_perftests",
       "//services/shell/public/cpp",
-      "//third_party/WebKit/Source/platform:blink_heap_unittests",
+      "//third_party/angle/src/tests:angle_end2end_tests",
+      "//third_party/angle/src/tests:angle_unittests",
       "//third_party/WebKit/Source/platform:blink_platform_unittests",
+      "//third_party/WebKit/Source/platform/heap:blink_heap_unittests",
       "//third_party/WebKit/Source/web:webkit_unit_tests",
       "//third_party/WebKit/Source/wtf:wtf_unittests",
       "//third_party/catapult/telemetry:bitmaptools($host_toolchain)",
@@ -329,6 +345,7 @@ group("both_gn_and_gyp") {
 
   if (use_aura) {
     deps += [
+      "//ash:ash_content_unittests",
       "//ash:ash_shell_with_content",
       "//ash:ash_unittests",
       "//ui/app_list:app_list_unittests",
@@ -495,6 +512,10 @@ group("both_gn_and_gyp") {
     ]
   }
 
+  if (is_win) {
+    deps += [ "//third_party/swiftshader" ]
+  }
+
   # TODO(GYP): Figure out which of these should (and can) build
   # for chromeos/ios.
   if (!is_chromeos && !is_ios) {
@@ -514,8 +535,6 @@ group("both_gn_and_gyp") {
       "//ipc:ipc_perftests",
       "//media:media_perftests",
       "//net:dump_cache",
-      "//third_party/angle/src/tests:angle_end2end_tests",
-      "//third_party/angle/src/tests:angle_unittests",
       "//third_party/codesighs:maptsvdifftool",
       "//third_party/libphonenumber:libphonenumber_unittests",
       "//ui/compositor:compositor_unittests",
@@ -627,6 +646,11 @@ group("both_gn_and_gyp") {
     deps += [
       "//breakpad:crash_inspector",
       "//breakpad:dump_syms",
+
+      # XPC service is in developement and guarded against the
+      # enable_xpc_notifications, in the meantime however we still
+      # need compile coverage in the bots.
+      "//chrome/browser/ui/cocoa/notifications:alert_notification_xpc_service",
       "//third_party/apple_sample_code",
       "//third_party/molokocacao",
     ]
@@ -707,11 +731,10 @@ group("gn_only") {
   }
 
   if (!is_android && !is_ios && !is_chromeos) {
-    deps += [ "//components/proximity_auth:proximity_auth_unittests" ]
-  }
-
-  if (is_win && target_cpu == "x86") {
-    deps += [ "//chrome/tools/disable_outdated_build_detector" ]
+    deps += [
+      "//components/proximity_auth:proximity_auth_unittests",
+      "//media/remoting:media_remoting_unittests",
+    ]
   }
 
   if (is_win || is_linux) {
@@ -818,6 +841,12 @@ group("gn_only") {
       "//testing/libfuzzer/tests:libfuzzer_tests",
       "//third_party/icu/fuzzers",
     ]
+
+    # TODO(miu): Remove this dependency once the build configuration in
+    # chrome/browser/BUILD.gn is migrated to chrome/browser/media/BUILD.gn.
+    # This dependency here only exists to allow GN to discover the
+    # fuzzer_test target there.
+    deps += [ "//chrome/browser/media:cast_remoting_connector_fuzzer" ]
   }
 
   if (enable_nacl) {
@@ -896,7 +925,7 @@ if (!is_ios) {
         "//breakpad:minidump_dump",
         "//breakpad:minidump_stackwalk",
         "//breakpad:symupload",
-        "//tools/android/forwarder",
+        "//tools/android/forwarder2",
       ]
     }
 
@@ -912,10 +941,7 @@ if (!is_ios) {
     }
 
     if (is_mac) {
-      deps += [
-        "//breakpad:dump_syms($host_toolchain)",
-        "//components/test_runner:layout_test_helper",
-      ]
+      deps += [ "//breakpad:dump_syms($host_toolchain)" ]
     }
 
     if (is_linux) {
@@ -937,37 +963,38 @@ group("chromium_builder_perf") {
   testonly = true
 
   if (!is_ios && !is_android && !is_chromecast) {
-    deps = [
+    data_deps = [
       "//cc:cc_perftests",
       "//chrome/test:load_library_perf_tests",
+      "//chrome/test:telemetry_perf_tests",
       "//gpu:gpu_perftests",
       "//media:media_perftests",
       "//tools/perf/chrome_telemetry_build:telemetry_chrome_test",
     ]
 
     if (!is_chromeos) {
-      deps += [ "//chrome/test:performance_browser_tests" ]
+      data_deps += [ "//chrome/test:performance_browser_tests" ]
     }
     if (is_linux && !is_chromeos) {
       if (is_official_build) {
         # In GN builds, this is controlled by the 'linux_dump_symbols'
         # flag, which defaults to 1 for official builds. For now,
         # we skip the separate flag and just key off of is_official_build.
-        deps += [ "//chrome:linux_symbols" ]
+        data_deps += [ "//chrome:linux_symbols" ]
       }
 
       if (!is_chromeos) {
-        deps += [ "//tools/perf/clear_system_cache" ]
+        data_deps += [ "//tools/perf/clear_system_cache" ]
       }
     }
 
     if (is_win) {
-      deps += [
+      data_deps += [
         "//chrome/installer/mini_installer:mini_installer",
         "//third_party/angle/src/tests:angle_perftests",
       ]
     } else {
-      deps += [ "//breakpad:minidump_stackwalk($host_toolchain)" ]
+      data_deps += [ "//breakpad:minidump_stackwalk($host_toolchain)" ]
     }
   }
 }
@@ -1114,8 +1141,8 @@ if (is_win) {
       "//remoting:remoting_unittests",
       "//skia:skia_unittests",
       "//sql:sql_unittests",
-      "//third_party/WebKit/Source/platform:blink_heap_unittests",
       "//third_party/WebKit/Source/platform:blink_platform_unittests",
+      "//third_party/WebKit/Source/platform/heap:blink_heap_unittests",
       "//third_party/angle/src/tests:angle_unittests",
       "//third_party/cacheinvalidation:cacheinvalidation_unittests",
       "//third_party/leveldatabase:env_chromium_unittests",

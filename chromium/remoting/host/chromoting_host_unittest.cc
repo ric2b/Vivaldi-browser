@@ -62,7 +62,8 @@ class ChromotingHostTest : public testing::Test {
     task_runner_ = new AutoThreadTaskRunner(message_loop_.task_runner(),
                                             base::Bind(&base::DoNothing));
 
-    desktop_environment_factory_.reset(new FakeDesktopEnvironmentFactory());
+    desktop_environment_factory_.reset(
+        new FakeDesktopEnvironmentFactory(message_loop_.task_runner()));
     session_manager_ = new protocol::MockSessionManager();
 
     host_.reset(new ChromotingHost(
@@ -127,8 +128,7 @@ class ChromotingHostTest : public testing::Test {
         (connection_index == 0) ? owned_connection1_ : owned_connection2_);
     protocol::ConnectionToClient* connection_ptr = connection.get();
     std::unique_ptr<ClientSession> client(new ClientSession(
-        host_.get(), task_runner_ /* audio_task_runner */,
-        std::move(connection), desktop_environment_factory_.get(),
+        host_.get(), std::move(connection), desktop_environment_factory_.get(),
         base::TimeDelta(), nullptr, std::vector<HostExtension*>()));
     ClientSession* client_ptr = client.get();
 
@@ -139,12 +139,11 @@ class ChromotingHostTest : public testing::Test {
     host_->clients_.push_back(client.release());
 
     if (authenticate) {
-      client_ptr->OnConnectionAuthenticated(connection_ptr);
+      client_ptr->OnConnectionAuthenticated();
       if (!reject)
-        client_ptr->OnConnectionChannelsConnected(connection_ptr);
+        client_ptr->OnConnectionChannelsConnected();
     } else {
-      client_ptr->OnConnectionClosed(connection_ptr,
-                                 protocol::AUTHENTICATION_FAILED);
+      client_ptr->OnConnectionClosed(protocol::AUTHENTICATION_FAILED);
     }
   }
 
@@ -283,7 +282,7 @@ TEST_F(ChromotingHostTest, Reconnect) {
 
   // Disconnect first client.
   ExpectClientDisconnected(0);
-  client1_->OnConnectionClosed(connection1_, protocol::OK);
+  client1_->OnConnectionClosed(protocol::OK);
 
   // Connect second client.
   ExpectClientConnected(1);
@@ -291,7 +290,7 @@ TEST_F(ChromotingHostTest, Reconnect) {
 
   // Disconnect second client.
   ExpectClientDisconnected(1);
-  client2_->OnConnectionClosed(connection2_, protocol::OK);
+  client2_->OnConnectionClosed(protocol::OK);
 }
 
 TEST_F(ChromotingHostTest, ConnectWhenAnotherClientIsConnected) {
@@ -311,7 +310,7 @@ TEST_F(ChromotingHostTest, ConnectWhenAnotherClientIsConnected) {
 
   // Disconnect second client.
   ExpectClientDisconnected(1);
-  client2_->OnConnectionClosed(connection2_, protocol::OK);
+  client2_->OnConnectionClosed(protocol::OK);
 }
 
 TEST_F(ChromotingHostTest, IncomingSessionAccepted) {

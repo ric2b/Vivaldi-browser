@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "components/sync/engine/sync_string_conversions.h"
+#include "components/sync/base/passphrase_type.h"
 
 #define ENUM_CASE(x) \
   case x:            \
@@ -35,10 +36,10 @@ const char* PassphraseRequiredReasonToString(PassphraseRequiredReason reason) {
 
 const char* PassphraseTypeToString(PassphraseType type) {
   switch (type) {
-    ENUM_CASE(IMPLICIT_PASSPHRASE);
-    ENUM_CASE(KEYSTORE_PASSPHRASE);
-    ENUM_CASE(FROZEN_IMPLICIT_PASSPHRASE);
-    ENUM_CASE(CUSTOM_PASSPHRASE);
+    ENUM_CASE(PassphraseType::IMPLICIT_PASSPHRASE);
+    ENUM_CASE(PassphraseType::KEYSTORE_PASSPHRASE);
+    ENUM_CASE(PassphraseType::FROZEN_IMPLICIT_PASSPHRASE);
+    ENUM_CASE(PassphraseType::CUSTOM_PASSPHRASE);
     default:
       NOTREACHED();
       return "INVALID_PASSPHRASE_TYPE";

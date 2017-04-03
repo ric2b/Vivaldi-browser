@@ -48,7 +48,7 @@ void AppendPrintersAndRunCallbackIfDone(base::ListValue* printers_out,
     EXPECT_TRUE(printers.GetDictionary(i, &printer))
         << "Found invalid printer value at index " << i << ": " << printers;
     if (printer)
-      printers_out->Append(printer->DeepCopy());
+      printers_out->Append(printer->CreateDeepCopy());
   }
   if (done && !callback.is_null())
     callback.Run();
@@ -352,7 +352,7 @@ class PrinterProviderApiTest : public ShellApiTest {
     if (!data_dir_.IsValid() && !data_dir_.CreateUniqueTempDir())
       return false;
 
-    *path = data_dir_.path().AppendASCII("data.pwg");
+    *path = data_dir_.GetPath().AppendASCII("data.pwg");
     int written = base::WriteFile(*path, data, size);
     if (written != size)
       return false;

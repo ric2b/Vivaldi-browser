@@ -3,6 +3,10 @@
 // found in the LICENSE file.
 
 #include "ui/accessibility/ax_node.h"
+
+#include <algorithm>
+
+#include "base/strings/string16.h"
 #include "ui/gfx/transform.h"
 
 namespace ui {
@@ -49,6 +53,42 @@ bool AXNode::IsDescendantOf(AXNode* ancestor) {
     return parent()->IsDescendantOf(ancestor);
 
   return false;
+}
+
+std::vector<int> AXNode::GetOrComputeLineStartOffsets() {
+  std::vector<int> line_offsets;
+  if (data().GetIntListAttribute(AX_ATTR_CACHED_LINE_STARTS, &line_offsets))
+    return line_offsets;
+
+  int start_offset = 0;
+  ComputeLineStartOffsets(&line_offsets, &start_offset);
+  data_.AddIntListAttribute(AX_ATTR_CACHED_LINE_STARTS, line_offsets);
+  return line_offsets;
+}
+
+void AXNode::ComputeLineStartOffsets(std::vector<int>* line_offsets,
+                                     int* start_offset) const {
+  DCHECK(line_offsets);
+  DCHECK(start_offset);
+  for (const AXNode* child : children()) {
+    DCHECK(child);
+    if (child->child_count()) {
+      child->ComputeLineStartOffsets(line_offsets, start_offset);
+      continue;
+    }
+
+    // Don't report if the first piece of text starts a new line or not.
+    if (*start_offset &&
+        !child->data().HasIntAttribute(ui::AX_ATTR_PREVIOUS_ON_LINE_ID)) {
+      // If there are multiple objects with an empty accessible label at the
+      // start of a line, only include a single line start offset.
+      if (line_offsets->empty() || line_offsets->back() != *start_offset)
+        line_offsets->push_back(*start_offset);
+    }
+
+    base::string16 text = child->data().GetString16Attribute(ui::AX_ATTR_NAME);
+    *start_offset += static_cast<int>(text.length());
+  }
 }
 
 }  // namespace ui

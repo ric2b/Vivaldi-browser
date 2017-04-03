@@ -14,22 +14,22 @@
 #include "build/build_config.h"
 #include "chromecast/base/pref_names.h"
 #include "chromecast/browser/cast_browser_process.h"
-#include "chromecast/browser/devtools/cast_dev_tools_delegate.h"
+#include "chromecast/browser/devtools/cast_devtools_delegate.h"
 #include "chromecast/common/cast_content_client.h"
-#include "components/devtools_http_handler/devtools_http_handler.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/devtools_agent_host.h"
+#include "content/public/browser/devtools_socket_factory.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/user_agent.h"
 #include "net/base/net_errors.h"
+#include "net/log/net_log_source.h"
 #include "net/socket/tcp_server_socket.h"
 
 #if defined(OS_ANDROID)
 #include "content/public/browser/android/devtools_auth.h"
 #include "net/socket/unix_domain_server_socket_posix.h"
 #endif  // defined(OS_ANDROID)
-
-using devtools_http_handler::DevToolsHttpHandler;
 
 namespace chromecast {
 namespace shell {
@@ -43,14 +43,13 @@ const uint16_t kDefaultRemoteDebuggingPort = 9222;
 const int kBackLog = 10;
 
 #if defined(OS_ANDROID)
-class UnixDomainServerSocketFactory
-    : public DevToolsHttpHandler::ServerSocketFactory {
+class UnixDomainServerSocketFactory : public content::DevToolsSocketFactory {
  public:
   explicit UnixDomainServerSocketFactory(const std::string& socket_name)
       : socket_name_(socket_name) {}
 
  private:
-  // devtools_http_handler::DevToolsHttpHandler::ServerSocketFactory.
+  // content::DevToolsSocketFactory.
   std::unique_ptr<net::ServerSocket> CreateForHttpServer() override {
     std::unique_ptr<net::UnixDomainServerSocket> socket(
         new net::UnixDomainServerSocket(
@@ -62,26 +61,35 @@ class UnixDomainServerSocketFactory
     return std::move(socket);
   }
 
+  std::unique_ptr<net::ServerSocket> CreateForTethering(
+      std::string* name) override {
+    return nullptr;
+  }
+
   std::string socket_name_;
 
   DISALLOW_COPY_AND_ASSIGN(UnixDomainServerSocketFactory);
 };
 #else
-class TCPServerSocketFactory
-    : public DevToolsHttpHandler::ServerSocketFactory {
+class TCPServerSocketFactory : public content::DevToolsSocketFactory {
  public:
   TCPServerSocketFactory(const std::string& address, uint16_t port)
       : address_(address), port_(port) {}
 
  private:
-  // devtools_http_handler::DevToolsHttpHandler::ServerSocketFactory.
+  // content::DevToolsSocketFactory.
   std::unique_ptr<net::ServerSocket> CreateForHttpServer() override {
     std::unique_ptr<net::ServerSocket> socket(
-        new net::TCPServerSocket(nullptr, net::NetLog::Source()));
+        new net::TCPServerSocket(nullptr, net::NetLogSource()));
     if (socket->ListenWithAddressAndPort(address_, port_, kBackLog) != net::OK)
       return std::unique_ptr<net::ServerSocket>();
 
     return socket;
+  }
+
+  std::unique_ptr<net::ServerSocket> CreateForTethering(
+      std::string* name) override {
+    return nullptr;
   }
 
   std::string address_;
@@ -91,7 +99,7 @@ class TCPServerSocketFactory
 };
 #endif
 
-std::unique_ptr<DevToolsHttpHandler::ServerSocketFactory> CreateSocketFactory(
+std::unique_ptr<content::DevToolsSocketFactory> CreateSocketFactory(
     uint16_t port) {
 #if defined(OS_ANDROID)
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -100,10 +108,10 @@ std::unique_ptr<DevToolsHttpHandler::ServerSocketFactory> CreateSocketFactory(
     socket_name = command_line->GetSwitchValueASCII(
         switches::kRemoteDebuggingSocketName);
   }
-  return std::unique_ptr<DevToolsHttpHandler::ServerSocketFactory>(
+  return std::unique_ptr<content::DevToolsSocketFactory>(
       new UnixDomainServerSocketFactory(socket_name));
 #else
-  return std::unique_ptr<DevToolsHttpHandler::ServerSocketFactory>(
+  return std::unique_ptr<content::DevToolsSocketFactory>(
       new TCPServerSocketFactory("0.0.0.0", port));
 #endif
 }
@@ -115,7 +123,8 @@ std::string GetFrontendUrl() {
 }  // namespace
 
 RemoteDebuggingServer::RemoteDebuggingServer(bool start_immediately)
-    : port_(kDefaultRemoteDebuggingPort) {
+    : port_(kDefaultRemoteDebuggingPort),
+      is_started_(false) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   pref_enabled_.Init(prefs::kEnableRemoteDebugging,
                      CastBrowserProcess::GetInstance()->pref_service(),
@@ -147,19 +156,19 @@ RemoteDebuggingServer::~RemoteDebuggingServer() {
 
 void RemoteDebuggingServer::OnEnabledChanged() {
   bool enabled = *pref_enabled_ && port_ != 0;
-  if (enabled && !devtools_http_handler_) {
-    devtools_http_handler_.reset(new DevToolsHttpHandler(
+  if (enabled && !is_started_) {
+    content::DevToolsAgentHost::StartRemoteDebuggingServer(
         CreateSocketFactory(port_),
         GetFrontendUrl(),
-        new CastDevToolsDelegate(),
         base::FilePath(),
         base::FilePath(),
         std::string(),
-        GetUserAgent()));
+        GetUserAgent());
     LOG(INFO) << "Devtools started: port=" << port_;
-  } else if (!enabled && devtools_http_handler_) {
+  } else if (!enabled && is_started_) {
     LOG(INFO) << "Stop devtools: port=" << port_;
-    devtools_http_handler_.reset();
+    is_started_ = false;
+    content::DevToolsAgentHost::StopRemoteDebuggingServer();
   }
 }
 

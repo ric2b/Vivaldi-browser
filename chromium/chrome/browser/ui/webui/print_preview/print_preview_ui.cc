@@ -11,7 +11,7 @@
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -27,20 +27,27 @@
 #include "chrome/browser/ui/webui/print_preview/print_preview_handler.h"
 #include "chrome/browser/ui/webui/theme_source.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/browser_resources.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/printing/common/print_messages.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui_data_source.h"
-#include "grit/browser_resources.h"
-#include "grit/components_strings.h"
 #include "printing/page_size_margins.h"
 #include "printing/print_job_constants.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/web_dialogs/web_dialog_delegate.h"
 #include "ui/web_dialogs/web_dialog_ui.h"
+
+#if defined(OS_CHROMEOS)
+#include "base/command_line.h"
+#include "base/feature_list.h"
+#include "chrome/common/chrome_features.h"
+#include "chrome/common/chrome_switches.h"
+#endif
 
 using content::WebContents;
 using printing::PageSizeMargins;
@@ -393,6 +400,15 @@ content::WebUIDataSource* CreatePrintPreviewUISource() {
   source->OverrideContentSecurityPolicyObjectSrc("object-src 'self';");
   source->AddLocalizedString("moreOptionsLabel", IDS_MORE_OPTIONS_LABEL);
   source->AddLocalizedString("lessOptionsLabel", IDS_LESS_OPTIONS_LABEL);
+#if defined(OS_CHROMEOS)
+  bool cups_and_md_settings_enabled =
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          ::switches::kEnableNativeCups) &&
+      base::FeatureList::IsEnabled(features::kMaterialDesignSettings);
+  source->AddBoolean("showLocalManageButton", cups_and_md_settings_enabled);
+#else
+  source->AddBoolean("showLocalManageButton", true);
+#endif
   return source;
 }
 

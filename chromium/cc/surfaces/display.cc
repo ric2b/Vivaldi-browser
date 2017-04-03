@@ -68,12 +68,12 @@ Display::~Display() {
 
 void Display::Initialize(DisplayClient* client,
                          SurfaceManager* surface_manager,
-                         uint32_t compositor_surface_namespace) {
+                         const FrameSinkId& frame_sink_id) {
   DCHECK(client);
   DCHECK(surface_manager);
   client_ = client;
   surface_manager_ = surface_manager;
-  compositor_surface_namespace_ = compositor_surface_namespace;
+  frame_sink_id_ = frame_sink_id;
 
   surface_manager_->AddObserver(this);
 
@@ -81,7 +81,7 @@ void Display::Initialize(DisplayClient* client,
   // they are ready to receive a BeginFrameSource.
   if (begin_frame_source_) {
     surface_manager_->RegisterBeginFrameSource(begin_frame_source_.get(),
-                                               compositor_surface_namespace_);
+                                               frame_sink_id_);
   }
 
   bool ok = output_surface_->BindToClient(this);
@@ -92,7 +92,7 @@ void Display::Initialize(DisplayClient* client,
 }
 
 void Display::SetSurfaceId(const SurfaceId& id, float device_scale_factor) {
-  DCHECK_EQ(id.client_id(), compositor_surface_namespace_);
+  DCHECK(id.frame_sink_id() == frame_sink_id_);
   if (current_surface_id_ == id && device_scale_factor_ == device_scale_factor)
     return;
 
@@ -146,14 +146,6 @@ void Display::SetColorSpace(const gfx::ColorSpace& color_space) {
   device_color_space_ = color_space;
 }
 
-void Display::SetExternalClip(const gfx::Rect& clip) {
-  external_clip_ = clip;
-}
-
-void Display::SetExternalViewport(const gfx::Rect& viewport) {
-  external_viewport_ = viewport;
-}
-
 void Display::SetOutputIsSecure(bool secure) {
   if (secure == output_is_secure_)
     return;
@@ -168,13 +160,14 @@ void Display::SetOutputIsSecure(bool secure) {
 }
 
 void Display::InitializeRenderer() {
+  // Not relevant for display compositor since it's not delegated.
+  bool delegated_sync_points_required = false;
   resource_provider_.reset(new ResourceProvider(
       output_surface_->context_provider(), bitmap_manager_,
       gpu_memory_buffer_manager_, nullptr, settings_.highp_threshold_min,
       settings_.texture_id_allocation_chunk_size,
-      output_surface_->capabilities().delegated_sync_points_required,
-      settings_.use_gpu_memory_buffer_resources,
-      settings_.buffer_to_texture_target_map));
+      delegated_sync_points_required, settings_.use_gpu_memory_buffer_resources,
+      false, settings_.buffer_to_texture_target_map));
 
   if (output_surface_->context_provider()) {
     DCHECK(texture_mailbox_deleter_);
@@ -296,12 +289,6 @@ bool Display::DrawAndSwap() {
   client_->DisplayWillDrawAndSwap(should_draw, frame_data->render_pass_list);
 
   if (should_draw) {
-    gfx::Rect device_viewport_rect = external_viewport_.IsEmpty()
-                                         ? gfx::Rect(current_surface_size_)
-                                         : external_viewport_;
-    gfx::Rect device_clip_rect =
-        external_clip_.IsEmpty() ? device_viewport_rect : external_clip_;
-
     bool disable_image_filtering =
         frame.metadata.is_resourceless_software_draw_with_scroll_or_animation;
     if (software_renderer_) {
@@ -315,8 +302,7 @@ bool Display::DrawAndSwap() {
     renderer_->DecideRenderPassAllocationsForFrame(
         frame_data->render_pass_list);
     renderer_->DrawFrame(&frame_data->render_pass_list, device_scale_factor_,
-                         device_color_space_, device_viewport_rect,
-                         device_clip_rect);
+                         device_color_space_, current_surface_size_);
   } else {
     TRACE_EVENT_INSTANT0("cc", "Draw skipped.", TRACE_EVENT_SCOPE_THREAD);
   }
@@ -325,13 +311,14 @@ bool Display::DrawAndSwap() {
   if (should_swap) {
     swapped_since_resize_ = true;
     for (auto& latency : frame.metadata.latency_info) {
-      TRACE_EVENT_WITH_FLOW1("input,benchmark", "LatencyInfo.Flow",
+      TRACE_EVENT_WITH_FLOW1(
+          "input,benchmark", "LatencyInfo.Flow",
           TRACE_ID_DONT_MANGLE(latency.trace_id()),
-          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT,
-          "step", "Display::DrawAndSwap");
+          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "step",
+          "Display::DrawAndSwap");
     }
     benchmark_instrumentation::IssueDisplayRenderingStatsEvent();
-    renderer_->SwapBuffers(std::move(frame.metadata));
+    renderer_->SwapBuffers(std::move(frame.metadata.latency_info));
     if (scheduler_)
       scheduler_->DidSwapBuffers();
   } else {
@@ -358,12 +345,6 @@ void Display::DidSwapBuffersComplete() {
     renderer_->SwapBuffersComplete();
 }
 
-void Display::CommitVSyncParameters(base::TimeTicks timebase,
-                                    base::TimeDelta interval) {
-  // Display uses a BeginFrameSource instead.
-  NOTREACHED();
-}
-
 void Display::DidReceiveTextureInUseResponses(
     const gpu::TextureInUseResponses& responses) {
   if (renderer_)
@@ -377,7 +358,8 @@ void Display::SetBeginFrameSource(BeginFrameSource* source) {
 }
 
 void Display::SetMemoryPolicy(const ManagedMemoryPolicy& policy) {
-  client_->DisplaySetMemoryPolicy(policy);
+  // This is only for LayerTreeHostImpl.
+  NOTREACHED();
 }
 
 void Display::OnDraw(const gfx::Transform& transform,

@@ -4,10 +4,8 @@
 
 #include "components/sync/device_info/device_info_service.h"
 
-#include <map>
-#include <memory>
+#include <algorithm>
 #include <set>
-#include <string>
 #include <utility>
 
 #include "base/bind.h"
@@ -16,42 +14,25 @@
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "components/sync/api/data_batch.h"
+#include "components/sync/api/data_type_error_handler_mock.h"
 #include "components/sync/api/entity_data.h"
 #include "components/sync/api/fake_model_type_change_processor.h"
 #include "components/sync/api/metadata_batch.h"
-#include "components/sync/api/model_type_store.h"
 #include "components/sync/base/time.h"
-#include "components/sync/core/test/data_type_error_handler_mock.h"
 #include "components/sync/core/test/model_type_store_test_util.h"
 #include "components/sync/device_info/local_device_info_provider_mock.h"
-#include "components/sync/protocol/data_type_state.pb.h"
+#include "components/sync/protocol/model_type_state.pb.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace sync_driver_v2 {
+namespace syncer {
 
 using base::Time;
 using base::TimeDelta;
-using syncer::SyncError;
-using syncer_v2::DataBatch;
-using syncer_v2::EntityChange;
-using syncer_v2::EntityChangeList;
-using syncer_v2::EntityData;
-using syncer_v2::EntityDataMap;
-using syncer_v2::EntityDataPtr;
-using syncer_v2::MetadataBatch;
-using syncer_v2::MetadataChangeList;
-using syncer_v2::ModelTypeChangeProcessor;
-using syncer_v2::ModelTypeService;
-using syncer_v2::ModelTypeStore;
-using syncer_v2::ModelTypeStoreTestUtil;
-using syncer_v2::KeyAndData;
-using sync_driver::DeviceInfo;
-using sync_driver::DeviceInfoTracker;
-using sync_driver::LocalDeviceInfoProviderMock;
-using sync_pb::DataTypeState;
 using sync_pb::DeviceInfoSpecifics;
 using sync_pb::EntitySpecifics;
+using sync_pb::ModelTypeState;
 
+using DeviceInfoList = std::vector<std::unique_ptr<DeviceInfo>>;
 using StorageKeyList = ModelTypeService::StorageKeyList;
 using RecordList = ModelTypeStore::RecordList;
 using Result = ModelTypeStore::Result;
@@ -139,8 +120,7 @@ std::string PushBackEntityChangeAdd(const DeviceInfoSpecifics& specifics,
 // in members that can then be accessed. TODO(skym): If this ends up being
 // useful for other model type unittests it should be moved out to a shared
 // location.
-class RecordingModelTypeChangeProcessor
-    : public syncer_v2::FakeModelTypeChangeProcessor {
+class RecordingModelTypeChangeProcessor : public FakeModelTypeChangeProcessor {
  public:
   RecordingModelTypeChangeProcessor() {}
   ~RecordingModelTypeChangeProcessor() override {}
@@ -156,7 +136,7 @@ class RecordingModelTypeChangeProcessor
     delete_set_.insert(storage_key);
   }
 
-  void OnMetadataLoaded(syncer::SyncError error,
+  void OnMetadataLoaded(SyncError error,
                         std::unique_ptr<MetadataBatch> batch) override {
     std::swap(metadata_, batch);
   }
@@ -197,7 +177,7 @@ class DeviceInfoServiceTest : public testing::Test,
   void OnDeviceInfoChange() override { change_count_++; }
 
   std::unique_ptr<ModelTypeChangeProcessor> CreateModelTypeChangeProcessor(
-      syncer::ModelType type,
+      ModelType type,
       ModelTypeService* service) {
     processor_ = new RecordingModelTypeChangeProcessor();
     return base::WrapUnique(processor_);
@@ -217,7 +197,8 @@ class DeviceInfoServiceTest : public testing::Test,
   }
 
   void OnSyncStarting() {
-    service()->OnSyncStarting(&error_handler_, StartCallback());
+    service()->OnSyncStarting(base::MakeUnique<DataTypeErrorHandlerMock>(),
+                              StartCallback());
   }
 
   // Creates the service and runs any outstanding tasks. This will typically
@@ -323,9 +304,6 @@ class DeviceInfoServiceTest : public testing::Test,
 
   std::unique_ptr<LocalDeviceInfoProviderMock> local_device_;
 
-  // Mock error handler passed to the processor.
-  syncer::DataTypeErrorHandlerMock error_handler_;
-
   // Not initialized immediately (upon test's constructor). This allows each
   // test case to modify the dependencies the service will be constructed with.
   std::unique_ptr<DeviceInfoService> service_;
@@ -345,7 +323,7 @@ TEST_F(DeviceInfoServiceTest, EmptyDataReconciliation) {
   InitializeAndPump();
   ASSERT_EQ(0u, service()->GetAllDeviceInfo().size());
   OnSyncStarting();
-  ScopedVector<DeviceInfo> all_device_info(service()->GetAllDeviceInfo());
+  DeviceInfoList all_device_info(service()->GetAllDeviceInfo());
   ASSERT_EQ(1u, all_device_info.size());
   ASSERT_TRUE(
       local_device()->GetLocalDeviceInfo()->Equals(*all_device_info[0]));
@@ -356,7 +334,7 @@ TEST_F(DeviceInfoServiceTest, EmptyDataReconciliationSlowLoad) {
   OnSyncStarting();
   ASSERT_EQ(0u, service()->GetAllDeviceInfo().size());
   base::RunLoop().RunUntilIdle();
-  ScopedVector<DeviceInfo> all_device_info(service()->GetAllDeviceInfo());
+  DeviceInfoList all_device_info(service()->GetAllDeviceInfo());
   ASSERT_EQ(1u, all_device_info.size());
   ASSERT_TRUE(
       local_device()->GetLocalDeviceInfo()->Equals(*all_device_info[0]));
@@ -370,7 +348,7 @@ TEST_F(DeviceInfoServiceTest, LocalProviderSubscription) {
   local_device()->Initialize(CreateDeviceInfo());
   base::RunLoop().RunUntilIdle();
 
-  ScopedVector<DeviceInfo> all_device_info(service()->GetAllDeviceInfo());
+  DeviceInfoList all_device_info(service()->GetAllDeviceInfo());
   ASSERT_EQ(1u, all_device_info.size());
   ASSERT_TRUE(
       local_device()->GetLocalDeviceInfo()->Equals(*all_device_info[0]));
@@ -387,7 +365,7 @@ TEST_F(DeviceInfoServiceTest, LocalProviderInitRace) {
   local_device()->Initialize(CreateDeviceInfo());
   base::RunLoop().RunUntilIdle();
 
-  ScopedVector<DeviceInfo> all_device_info(service()->GetAllDeviceInfo());
+  DeviceInfoList all_device_info(service()->GetAllDeviceInfo());
   ASSERT_EQ(1u, all_device_info.size());
   ASSERT_TRUE(
       local_device()->GetLocalDeviceInfo()->Equals(*all_device_info[0]));
@@ -424,7 +402,7 @@ TEST_F(DeviceInfoServiceTest, TestWithLocalData) {
 
   InitializeAndPump();
 
-  ScopedVector<DeviceInfo> all_device_info(service()->GetAllDeviceInfo());
+  DeviceInfoList all_device_info(service()->GetAllDeviceInfo());
   ASSERT_EQ(1u, all_device_info.size());
   AssertEqual(specifics, *all_device_info[0]);
   AssertEqual(specifics,
@@ -433,13 +411,13 @@ TEST_F(DeviceInfoServiceTest, TestWithLocalData) {
 
 TEST_F(DeviceInfoServiceTest, TestWithLocalMetadata) {
   std::unique_ptr<WriteBatch> batch = store()->CreateWriteBatch();
-  DataTypeState state;
+  ModelTypeState state;
   state.set_encryption_key_name("ekn");
   store()->WriteGlobalMetadata(batch.get(), state.SerializeAsString());
   store()->CommitWriteBatch(std::move(batch),
                             base::Bind(&AssertResultIsSuccess));
   InitializeAndPump();
-  ScopedVector<DeviceInfo> all_device_info(service()->GetAllDeviceInfo());
+  DeviceInfoList all_device_info(service()->GetAllDeviceInfo());
   ASSERT_EQ(1u, all_device_info.size());
   ASSERT_TRUE(
       local_device()->GetLocalDeviceInfo()->Equals(*all_device_info[0]));
@@ -451,7 +429,7 @@ TEST_F(DeviceInfoServiceTest, TestWithLocalDataAndMetadata) {
   DeviceInfoSpecifics specifics(GenerateTestSpecifics());
   store()->WriteData(batch.get(), specifics.cache_guid(),
                      specifics.SerializeAsString());
-  DataTypeState state;
+  ModelTypeState state;
   state.set_encryption_key_name("ekn");
   store()->WriteGlobalMetadata(batch.get(), state.SerializeAsString());
   store()->CommitWriteBatch(std::move(batch),
@@ -459,13 +437,13 @@ TEST_F(DeviceInfoServiceTest, TestWithLocalDataAndMetadata) {
 
   InitializeAndPump();
 
-  ScopedVector<DeviceInfo> all_device_info(service()->GetAllDeviceInfo());
+  DeviceInfoList all_device_info(service()->GetAllDeviceInfo());
   ASSERT_EQ(2u, all_device_info.size());
   AssertEqual(specifics,
               *service()->GetDeviceInfo(specifics.cache_guid()).get());
   ASSERT_TRUE(processor()->metadata());
   ASSERT_EQ(state.encryption_key_name(),
-            processor()->metadata()->GetDataTypeState().encryption_key_name());
+            processor()->metadata()->GetModelTypeState().encryption_key_name());
 }
 
 TEST_F(DeviceInfoServiceTest, GetData) {
@@ -568,11 +546,11 @@ TEST_F(DeviceInfoServiceTest, ApplySyncChangesStore) {
   DeviceInfoSpecifics specifics = GenerateTestSpecifics();
   EntityChangeList data_changes;
   PushBackEntityChangeAdd(specifics, &data_changes);
-  DataTypeState state;
+  ModelTypeState state;
   state.set_encryption_key_name("ekn");
   std::unique_ptr<MetadataChangeList> metadata_changes(
       service()->CreateMetadataChangeList());
-  metadata_changes->UpdateDataTypeState(state);
+  metadata_changes->UpdateModelTypeState(state);
 
   const SyncError error =
       service()->ApplySyncChanges(std::move(metadata_changes), data_changes);
@@ -588,7 +566,7 @@ TEST_F(DeviceInfoServiceTest, ApplySyncChangesStore) {
 
   EXPECT_TRUE(processor()->metadata());
   EXPECT_EQ(state.encryption_key_name(),
-            processor()->metadata()->GetDataTypeState().encryption_key_name());
+            processor()->metadata()->GetModelTypeState().encryption_key_name());
 }
 
 TEST_F(DeviceInfoServiceTest, ApplySyncChangesWithLocalGuid) {
@@ -607,12 +585,11 @@ TEST_F(DeviceInfoServiceTest, ApplySyncChangesWithLocalGuid) {
       service()->GetDeviceInfo(local_device()->GetLocalDeviceInfo()->guid()));
   EXPECT_EQ(1, change_count());
   // Ensure |last_updated| is about now, plus or minus a little bit.
-  Time last_updated(
-      syncer::ProtoTimeToTime(processor()
-                                  ->put_map()
-                                  .begin()
-                                  ->second->specifics.device_info()
-                                  .last_updated_timestamp()));
+  Time last_updated(ProtoTimeToTime(processor()
+                                        ->put_map()
+                                        .begin()
+                                        ->second->specifics.device_info()
+                                        .last_updated_timestamp()));
   EXPECT_LT(Time::Now() - TimeDelta::FromMinutes(1), last_updated);
   EXPECT_GT(Time::Now() + TimeDelta::FromMinutes(1), last_updated);
 
@@ -680,11 +657,11 @@ TEST_F(DeviceInfoServiceTest, MergeWithData) {
       SpecificsToEntity(conflict_remote);
   remote_input[unique_remote.cache_guid()] = SpecificsToEntity(unique_remote);
 
-  DataTypeState state;
+  ModelTypeState state;
   state.set_encryption_key_name("ekn");
   std::unique_ptr<MetadataChangeList> metadata_changes(
       service()->CreateMetadataChangeList());
-  metadata_changes->UpdateDataTypeState(state);
+  metadata_changes->UpdateModelTypeState(state);
 
   const SyncError error =
       service()->MergeSyncData(std::move(metadata_changes), remote_input);
@@ -708,14 +685,14 @@ TEST_F(DeviceInfoServiceTest, MergeWithData) {
 
   RestartService();
   ASSERT_EQ(state.encryption_key_name(),
-            processor()->metadata()->GetDataTypeState().encryption_key_name());
+            processor()->metadata()->GetModelTypeState().encryption_key_name());
 }
 
 TEST_F(DeviceInfoServiceTest, MergeLocalGuid) {
   const DeviceInfo* local_device_info = local_device()->GetLocalDeviceInfo();
   std::unique_ptr<DeviceInfoSpecifics> specifics(
       CopyToSpecifics(*local_device_info));
-  specifics->set_last_updated_timestamp(syncer::TimeToProtoTime(Time::Now()));
+  specifics->set_last_updated_timestamp(TimeToProtoTime(Time::Now()));
   const std::string guid = local_device_info->guid();
 
   std::unique_ptr<WriteBatch> batch = store()->CreateWriteBatch();
@@ -742,7 +719,7 @@ TEST_F(DeviceInfoServiceTest, GetLastUpdateTime) {
 
   DeviceInfoSpecifics specifics1(GenerateTestSpecifics());
   DeviceInfoSpecifics specifics2(GenerateTestSpecifics());
-  specifics2.set_last_updated_timestamp(syncer::TimeToProtoTime(time1));
+  specifics2.set_last_updated_timestamp(TimeToProtoTime(time1));
 
   EXPECT_EQ(Time(), GetLastUpdateTime(specifics1));
   EXPECT_EQ(time1, GetLastUpdateTime(specifics2));
@@ -761,7 +738,7 @@ TEST_F(DeviceInfoServiceTest, CountActiveDevices) {
   EXPECT_EQ(0, service()->CountActiveDevices());
 
   change_list.clear();
-  specifics.set_last_updated_timestamp(syncer::TimeToProtoTime(Time::Now()));
+  specifics.set_last_updated_timestamp(TimeToProtoTime(Time::Now()));
   PushBackEntityChangeAdd(specifics, &change_list);
   service()->ApplySyncChanges(service()->CreateMetadataChangeList(),
                               change_list);
@@ -777,4 +754,4 @@ TEST_F(DeviceInfoServiceTest, CountActiveDevices) {
 
 }  // namespace
 
-}  // namespace sync_driver_v2
+}  // namespace syncer

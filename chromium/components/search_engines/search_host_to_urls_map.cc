@@ -16,7 +16,7 @@ SearchHostToURLsMap::~SearchHostToURLsMap() {
 }
 
 void SearchHostToURLsMap::Init(
-    const TemplateURLService::TemplateURLVector& template_urls,
+    const TemplateURLService::OwnedTemplateURLVector& template_urls,
     const SearchTermsData& search_terms_data) {
   DCHECK(!initialized_);
   initialized_ = true;  // Set here so Add doesn't assert.
@@ -27,7 +27,7 @@ void SearchHostToURLsMap::Add(TemplateURL* template_url,
                               const SearchTermsData& search_terms_data) {
   DCHECK(initialized_);
   DCHECK(template_url);
-  DCHECK_NE(TemplateURL::OMNIBOX_API_EXTENSION, template_url->GetType());
+  DCHECK_NE(TemplateURL::OMNIBOX_API_EXTENSION, template_url->type());
 
   const GURL url(template_url->GenerateSearchURL(search_terms_data));
   if (!url.is_valid() || !url.has_host())
@@ -39,7 +39,7 @@ void SearchHostToURLsMap::Add(TemplateURL* template_url,
 void SearchHostToURLsMap::Remove(TemplateURL* template_url) {
   DCHECK(initialized_);
   DCHECK(template_url);
-  DCHECK_NE(TemplateURL::OMNIBOX_API_EXTENSION, template_url->GetType());
+  DCHECK_NE(TemplateURL::OMNIBOX_API_EXTENSION, template_url->type());
 
   for (HostToURLsMap::iterator i = host_to_urls_map_.begin();
        i != host_to_urls_map_.end(); ++i) {
@@ -76,9 +76,8 @@ SearchHostToURLsMap::TemplateURLSet* SearchHostToURLsMap::GetURLsForHost(
 }
 
 void SearchHostToURLsMap::Add(
-    const TemplateURLService::TemplateURLVector& template_urls,
+    const TemplateURLService::OwnedTemplateURLVector& template_urls,
     const SearchTermsData& search_terms_data) {
-  for (TemplateURLService::TemplateURLVector::const_iterator i(
-       template_urls.begin()); i != template_urls.end(); ++i)
-    Add(*i, search_terms_data);
+  for (const auto& turl : template_urls)
+    Add(turl.get(), search_terms_data);
 }

@@ -13,8 +13,10 @@
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/histogram_tester.h"
 #include "net/base/chunked_upload_data_stream.h"
 #include "net/base/test_completion_callback.h"
+#include "net/base/test_proxy_delegate.h"
 #include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/mock_cert_verifier.h"
 #include "net/cert/multi_log_ct_verifier.h"
@@ -27,6 +29,7 @@
 #include "net/http/http_stream_factory.h"
 #include "net/http/http_transaction_test_util.h"
 #include "net/http/transport_security_state.h"
+#include "net/log/net_log_event_type.h"
 #include "net/log/test_net_log.h"
 #include "net/log/test_net_log_entry.h"
 #include "net/log/test_net_log_util.h"
@@ -34,6 +37,7 @@
 #include "net/proxy/proxy_resolver.h"
 #include "net/proxy/proxy_service.h"
 #include "net/quic/chromium/crypto/proof_verifier_chromium.h"
+#include "net/quic/chromium/mock_network_change_notifier.h"
 #include "net/quic/chromium/mock_quic_data.h"
 #include "net/quic/core/crypto/quic_decrypter.h"
 #include "net/quic/core/crypto/quic_encrypter.h"
@@ -57,6 +61,9 @@
 #include "net/test/cert_test_util.h"
 #include "net/test/gtest_util.h"
 #include "net/test/test_data_directory.h"
+#include "net/url_request/url_request.h"
+#include "net/url_request/url_request_job_factory_impl.h"
+#include "net/url_request/url_request_test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
@@ -482,7 +489,7 @@ class QuicNetworkTransactionTest
     ASSERT_TRUE(response->headers.get() != nullptr);
     EXPECT_EQ("HTTP/1.1 200 OK", response->headers->GetStatusLine());
     EXPECT_TRUE(response->was_fetched_via_spdy);
-    EXPECT_TRUE(response->was_npn_negotiated);
+    EXPECT_TRUE(response->was_alpn_negotiated);
     EXPECT_EQ(HttpResponseInfo::CONNECTION_INFO_QUIC1_SPDY3,
               response->connection_info);
   }
@@ -499,7 +506,7 @@ class QuicNetworkTransactionTest
     ASSERT_TRUE(response->headers.get() != nullptr);
     EXPECT_EQ("HTTP/1.1 200 OK", response->headers->GetStatusLine());
     EXPECT_FALSE(response->was_fetched_via_spdy);
-    EXPECT_FALSE(response->was_npn_negotiated);
+    EXPECT_FALSE(response->was_alpn_negotiated);
     EXPECT_EQ(HttpResponseInfo::CONNECTION_INFO_HTTP1_1,
               response->connection_info);
   }
@@ -523,6 +530,26 @@ class QuicNetworkTransactionTest
     RunTransaction(&trans);
     CheckWasHttpResponse(&trans);
     CheckResponseData(&trans, expected);
+  }
+
+  void SendRequestAndExpectHttpResponseFromProxy(const std::string& expected,
+                                                 bool used_proxy,
+                                                 uint16_t port) {
+    HttpNetworkTransaction trans(DEFAULT_PRIORITY, session_.get());
+    HeadersHandler headers_handler;
+    trans.SetBeforeHeadersSentCallback(
+        base::Bind(&HeadersHandler::OnBeforeHeadersSent,
+                   base::Unretained(&headers_handler)));
+    RunTransaction(&trans);
+    CheckWasHttpResponse(&trans);
+    CheckResponsePort(&trans, port);
+    CheckResponseData(&trans, expected);
+    EXPECT_EQ(used_proxy, headers_handler.was_proxied());
+    if (used_proxy) {
+      EXPECT_TRUE(trans.GetResponseInfo()->proxy_server.is_https());
+    } else {
+      EXPECT_TRUE(trans.GetResponseInfo()->proxy_server.is_direct());
+    }
   }
 
   void SendRequestAndExpectQuicResponse(const std::string& expected) {
@@ -584,6 +611,72 @@ class QuicNetworkTransactionTest
     socket_factory_.AddSSLSocketDataProvider(&ssl_data_);
   }
 
+  // Fetches two non-cryptographic URL requests via a HTTPS proxy with a QUIC
+  // alternative proxy. Verifies that if the alternative proxy job returns
+  // |error_code|, the request is fetched successfully by the main job.
+  void TestAlternativeProxy(int error_code) {
+    // Use a non-cryptographic scheme for the request URL since this request
+    // will be fetched via proxy with QUIC as the alternative service.
+    request_.url = GURL("http://example.org/");
+    // Data for the alternative proxy server job.
+    MockWrite quic_writes[] = {MockWrite(SYNCHRONOUS, error_code, 1)};
+    MockRead quic_reads[] = {
+        MockRead(SYNCHRONOUS, error_code, 0),
+    };
+
+    SequencedSocketData quic_data(quic_reads, arraysize(quic_reads),
+                                  quic_writes, arraysize(quic_writes));
+    socket_factory_.AddSocketDataProvider(&quic_data);
+
+    // Main job succeeds and the alternative job fails.
+    // Add data for two requests that will be read by the main job.
+    MockRead http_reads_1[] = {
+        MockRead("HTTP/1.1 200 OK\r\n\r\n"), MockRead("hello from http"),
+        MockRead(SYNCHRONOUS, ERR_TEST_PEER_CLOSE_AFTER_NEXT_MOCK_READ),
+        MockRead(ASYNC, OK)};
+
+    MockRead http_reads_2[] = {
+        MockRead("HTTP/1.1 200 OK\r\n\r\n"), MockRead("hello from http"),
+        MockRead(SYNCHRONOUS, ERR_TEST_PEER_CLOSE_AFTER_NEXT_MOCK_READ),
+        MockRead(ASYNC, OK)};
+
+    StaticSocketDataProvider http_data_1(http_reads_1, arraysize(http_reads_1),
+                                         nullptr, 0);
+    StaticSocketDataProvider http_data_2(http_reads_2, arraysize(http_reads_2),
+                                         nullptr, 0);
+    socket_factory_.AddSocketDataProvider(&http_data_1);
+    socket_factory_.AddSocketDataProvider(&http_data_2);
+    socket_factory_.AddSSLSocketDataProvider(&ssl_data_);
+    socket_factory_.AddSSLSocketDataProvider(&ssl_data_);
+
+    TestProxyDelegate test_proxy_delegate;
+    // Proxy URL is different from the request URL.
+    test_proxy_delegate.set_alternative_proxy_server(
+        ProxyServer::FromPacString("QUIC myproxy.org:443"));
+
+    params_.proxy_delegate = &test_proxy_delegate;
+    proxy_service_ =
+        ProxyService::CreateFixedFromPacResult("HTTPS myproxy.org:443");
+
+    CreateSession();
+    EXPECT_TRUE(test_proxy_delegate.alternative_proxy_server().is_valid());
+
+    // The first request should be fetched via the HTTPS proxy.
+    SendRequestAndExpectHttpResponseFromProxy("hello from http", true, 443);
+
+    // Even through the alternative proxy server job failed, the proxy should
+    // not be marked as bad since the main job succeeded.
+    EXPECT_TRUE(session_->proxy_service()->proxy_retry_info().empty());
+
+    // The alternative proxy server should no longer be in use.
+    EXPECT_FALSE(test_proxy_delegate.alternative_proxy_server().is_valid());
+
+    // Verify that the second request completes successfully, and the
+    // alternative proxy server job is not started.
+    SendRequestAndExpectHttpResponseFromProxy("hello from http", true, 443);
+  }
+
+  QuicFlagSaver flags_;  // Save/restore all QUIC flag values.
   MockClock* clock_;  // Owned by QuicStreamFactory after CreateSession.
   QuicTestPacketMaker client_maker_;
   QuicTestPacketMaker server_maker_;
@@ -623,6 +716,11 @@ class QuicNetworkTransactionTest
     CheckResponsePort(&trans, port);
     CheckResponseData(&trans, expected);
     EXPECT_EQ(used_proxy, headers_handler.was_proxied());
+    if (used_proxy) {
+      EXPECT_TRUE(trans.GetResponseInfo()->proxy_server.is_quic());
+    } else {
+      EXPECT_TRUE(trans.GetResponseInfo()->proxy_server.is_direct());
+    }
   }
 };
 
@@ -662,15 +760,15 @@ TEST_P(QuicNetworkTransactionTest, ForceQuic) {
 
   // Check that we logged a QUIC_SESSION_PACKET_RECEIVED.
   int pos = ExpectLogContainsSomewhere(
-      entries, 0, NetLog::TYPE_QUIC_SESSION_PACKET_RECEIVED,
-      NetLog::PHASE_NONE);
+      entries, 0, NetLogEventType::QUIC_SESSION_PACKET_RECEIVED,
+      NetLogEventPhase::NONE);
   EXPECT_LT(0, pos);
 
   // ... and also a TYPE_QUIC_SESSION_UNAUTHENTICATED_PACKET_HEADER_RECEIVED.
   pos = ExpectLogContainsSomewhere(
       entries, 0,
-      NetLog::TYPE_QUIC_SESSION_UNAUTHENTICATED_PACKET_HEADER_RECEIVED,
-      NetLog::PHASE_NONE);
+      NetLogEventType::QUIC_SESSION_UNAUTHENTICATED_PACKET_HEADER_RECEIVED,
+      NetLogEventPhase::NONE);
   EXPECT_LT(0, pos);
 
   std::string packet_number;
@@ -679,14 +777,14 @@ TEST_P(QuicNetworkTransactionTest, ForceQuic) {
 
   // ... and also a TYPE_QUIC_SESSION_PACKET_AUTHENTICATED.
   pos = ExpectLogContainsSomewhere(
-      entries, 0, NetLog::TYPE_QUIC_SESSION_PACKET_AUTHENTICATED,
-      NetLog::PHASE_NONE);
+      entries, 0, NetLogEventType::QUIC_SESSION_PACKET_AUTHENTICATED,
+      NetLogEventPhase::NONE);
   EXPECT_LT(0, pos);
 
   // ... and also a QUIC_SESSION_STREAM_FRAME_RECEIVED.
   pos = ExpectLogContainsSomewhere(
-      entries, 0, NetLog::TYPE_QUIC_SESSION_STREAM_FRAME_RECEIVED,
-      NetLog::PHASE_NONE);
+      entries, 0, NetLogEventType::QUIC_SESSION_STREAM_FRAME_RECEIVED,
+      NetLogEventPhase::NONE);
   EXPECT_LT(0, pos);
 
   int log_stream_id;
@@ -1204,6 +1302,74 @@ TEST_P(QuicNetworkTransactionTest, UseExistingAlternativeServiceForQuic) {
   SendRequestAndExpectQuicResponse("hello!");
 }
 
+// Check that an existing QUIC connection to an alternative proxy server is
+// used.
+TEST_P(QuicNetworkTransactionTest, UseExistingQUICAlternativeProxy) {
+  base::HistogramTester histogram_tester;
+
+  QuicStreamOffset request_header_offset = 0;
+  QuicStreamOffset response_header_offset = 0;
+  // First QUIC request data.
+  // Open a session to foo.example.org:443 using the first entry of the
+  // alternative service list.
+  MockQuicData mock_quic_data;
+  mock_quic_data.AddWrite(ConstructClientRequestHeadersPacket(
+      1, kClientDataStreamId1, true, true,
+      GetRequestHeaders("GET", "http", "/"), &request_header_offset));
+
+  std::string alt_svc_list;
+  mock_quic_data.AddRead(ConstructServerResponseHeadersPacket(
+      1, kClientDataStreamId1, false, false,
+      GetResponseHeaders("200 OK", alt_svc_list), &response_header_offset));
+  mock_quic_data.AddRead(ConstructServerDataPacket(2, kClientDataStreamId1,
+                                                   false, true, 0, "hello!"));
+  mock_quic_data.AddWrite(ConstructClientAckPacket(2, 1));
+
+  // Second QUIC request data.
+  // Connection pooling, using existing session, no need to include version
+  // as version negotiation has been completed.
+  mock_quic_data.AddWrite(ConstructClientRequestHeadersPacket(
+      3, kClientDataStreamId2, false, true,
+      GetRequestHeaders("GET", "http", "/"), &request_header_offset));
+  mock_quic_data.AddRead(ConstructServerResponseHeadersPacket(
+      3, kClientDataStreamId2, false, false, GetResponseHeaders("200 OK"),
+      &response_header_offset));
+  mock_quic_data.AddRead(ConstructServerDataPacket(4, kClientDataStreamId2,
+                                                   false, true, 0, "hello!"));
+  mock_quic_data.AddWrite(
+      ConstructClientAckAndConnectionClosePacket(4, 4, 3, 1));
+  mock_quic_data.AddRead(ASYNC, ERR_IO_PENDING);  // No more data to read
+  mock_quic_data.AddRead(ASYNC, 0);               // EOF
+
+  mock_quic_data.AddSocketDataToFactory(&socket_factory_);
+
+  AddHangingNonAlternateProtocolSocketData();
+
+  TestProxyDelegate test_proxy_delegate;
+
+  proxy_service_ =
+      ProxyService::CreateFixedFromPacResult("HTTPS mail.example.org:443");
+
+  test_proxy_delegate.set_alternative_proxy_server(
+      ProxyServer::FromPacString("QUIC mail.example.org:443"));
+  params_.proxy_delegate = &test_proxy_delegate;
+
+  request_.url = GURL("http://mail.example.org/");
+
+  CreateSession();
+
+  SendRequestAndExpectQuicResponseFromProxyOnPort("hello!", 443);
+  histogram_tester.ExpectUniqueSample("Net.QuicAlternativeProxy.Usage",
+                                      1 /* ALTERNATIVE_PROXY_USAGE_WON_RACE */,
+                                      1);
+
+  SendRequestAndExpectQuicResponseFromProxyOnPort("hello!", 443);
+  histogram_tester.ExpectTotalCount("Net.QuicAlternativeProxy.Usage", 2);
+  histogram_tester.ExpectBucketCount("Net.QuicAlternativeProxy.Usage",
+                                     0 /* ALTERNATIVE_PROXY_USAGE_NO_RACE */,
+                                     1);
+}
+
 // Pool to existing session with matching QuicServerId
 // even if alternative service destination is different.
 TEST_P(QuicNetworkTransactionTest, PoolByOrigin) {
@@ -1539,6 +1705,57 @@ TEST_P(QuicNetworkTransactionTest, UseAlternativeServiceForQuicForHttps) {
 
   // TODO(rtenneti): Test QUIC over HTTPS, GetSSLInfo().
   SendRequestAndExpectHttpResponse("hello world");
+}
+
+// Tests that the connection to an HTTPS proxy is raced with an available
+// alternative proxy server.
+TEST_P(QuicNetworkTransactionTest, QuicProxyWithRacing) {
+  base::HistogramTester histogram_tester;
+  proxy_service_ =
+      ProxyService::CreateFixedFromPacResult("HTTPS mail.example.org:443");
+
+  MockQuicData mock_quic_data;
+  mock_quic_data.AddWrite(ConstructClientRequestHeadersPacket(
+      1, kClientDataStreamId1, true, true,
+      GetRequestHeaders("GET", "http", "/")));
+  mock_quic_data.AddRead(ConstructServerResponseHeadersPacket(
+      1, kClientDataStreamId1, false, false, GetResponseHeaders("200 OK")));
+  mock_quic_data.AddRead(ConstructServerDataPacket(2, kClientDataStreamId1,
+                                                   false, true, 0, "hello!"));
+  mock_quic_data.AddWrite(ConstructClientAckPacket(2, 1));
+  mock_quic_data.AddRead(ASYNC, ERR_IO_PENDING);  // No more data to read
+  mock_quic_data.AddRead(ASYNC, 0);               // EOF
+
+  mock_quic_data.AddSocketDataToFactory(&socket_factory_);
+
+  // There is no need to set up main job, because no attempt will be made to
+  // speak to the proxy over TCP.
+  request_.url = GURL("http://mail.example.org/");
+  params_.enable_quic_alternative_service_with_different_host = false;
+  TestProxyDelegate test_proxy_delegate;
+  const HostPortPair host_port_pair("mail.example.org", 443);
+
+  test_proxy_delegate.set_alternative_proxy_server(
+      ProxyServer::FromPacString("QUIC mail.example.org:443"));
+  params_.proxy_delegate = &test_proxy_delegate;
+  CreateSession();
+  EXPECT_TRUE(test_proxy_delegate.alternative_proxy_server().is_quic());
+
+  // The main job needs to hang in order to guarantee that the alternative
+  // proxy server job will "win".
+  AddHangingNonAlternateProtocolSocketData();
+
+  SendRequestAndExpectQuicResponseFromProxyOnPort("hello!", 443);
+
+  // Verify that the alternative proxy server is not marked as broken.
+  EXPECT_TRUE(test_proxy_delegate.alternative_proxy_server().is_quic());
+
+  // Verify that the proxy server is not marked as broken.
+  EXPECT_TRUE(session_->proxy_service()->proxy_retry_info().empty());
+
+  histogram_tester.ExpectUniqueSample("Net.QuicAlternativeProxy.Usage",
+                                      1 /* ALTERNATIVE_PROXY_USAGE_WON_RACE */,
+                                      1);
 }
 
 TEST_P(QuicNetworkTransactionTest, HungAlternativeService) {
@@ -1886,7 +2103,7 @@ TEST_P(QuicNetworkTransactionTest, RstSteamErrorHandling) {
   ASSERT_TRUE(response->headers.get() != nullptr);
   EXPECT_EQ("HTTP/1.1 200 OK", response->headers->GetStatusLine());
   EXPECT_TRUE(response->was_fetched_via_spdy);
-  EXPECT_TRUE(response->was_npn_negotiated);
+  EXPECT_TRUE(response->was_alpn_negotiated);
   EXPECT_EQ(HttpResponseInfo::CONNECTION_INFO_QUIC1_SPDY3,
             response->connection_info);
 
@@ -2154,6 +2371,83 @@ TEST_P(QuicNetworkTransactionTest, ConnectionCloseDuringConnect) {
   SendRequestAndExpectHttpResponse("hello world");
 }
 
+// For an alternative proxy that supports QUIC, test that the request is
+// successfully fetched by the main job when the alternate proxy job encounters
+// an error.
+TEST_P(QuicNetworkTransactionTest, BrokenAlternativeProxySocketNotConnected) {
+  TestAlternativeProxy(ERR_SOCKET_NOT_CONNECTED);
+}
+TEST_P(QuicNetworkTransactionTest, BrokenAlternativeProxyConnectionFailed) {
+  TestAlternativeProxy(ERR_CONNECTION_FAILED);
+}
+TEST_P(QuicNetworkTransactionTest, BrokenAlternativeProxyConnectionTimedOut) {
+  TestAlternativeProxy(ERR_CONNECTION_TIMED_OUT);
+}
+TEST_P(QuicNetworkTransactionTest, BrokenAlternativeProxyConnectionRefused) {
+  TestAlternativeProxy(ERR_CONNECTION_REFUSED);
+}
+TEST_P(QuicNetworkTransactionTest, BrokenAlternativeProxyQuicHandshakeFailed) {
+  TestAlternativeProxy(ERR_QUIC_HANDSHAKE_FAILED);
+}
+TEST_P(QuicNetworkTransactionTest, BrokenAlternativeProxyQuicProtocolError) {
+  TestAlternativeProxy(ERR_QUIC_PROTOCOL_ERROR);
+}
+TEST_P(QuicNetworkTransactionTest, BrokenAlternativeProxyIOPending) {
+  TestAlternativeProxy(ERR_IO_PENDING);
+}
+TEST_P(QuicNetworkTransactionTest, BrokenAlternativeProxyAddressUnreachable) {
+  TestAlternativeProxy(ERR_ADDRESS_UNREACHABLE);
+}
+
+TEST_P(QuicNetworkTransactionTest, ConnectionCloseDuringConnectProxy) {
+  MockQuicData mock_quic_data;
+  mock_quic_data.AddSynchronousRead(ConstructServerConnectionClosePacket(1));
+  mock_quic_data.AddWrite(ConstructClientRequestHeadersPacket(
+      1, kClientDataStreamId1, true, true,
+      GetRequestHeaders("GET", "https", "/")));
+  mock_quic_data.AddWrite(ConstructClientAckPacket(2, 1));
+  mock_quic_data.AddSocketDataToFactory(&socket_factory_);
+
+  // When the QUIC connection fails, we will try the request again over HTTP.
+  MockRead http_reads[] = {
+      MockRead("HTTP/1.1 200 OK\r\n"), MockRead(kQuicAlternativeServiceHeader),
+      MockRead("hello world"),
+      MockRead(SYNCHRONOUS, ERR_TEST_PEER_CLOSE_AFTER_NEXT_MOCK_READ),
+      MockRead(ASYNC, OK)};
+
+  StaticSocketDataProvider http_data(http_reads, arraysize(http_reads), nullptr,
+                                     0);
+  socket_factory_.AddSocketDataProvider(&http_data);
+  socket_factory_.AddSSLSocketDataProvider(&ssl_data_);
+
+  TestProxyDelegate test_proxy_delegate;
+  const HostPortPair host_port_pair("myproxy.org", 443);
+  test_proxy_delegate.set_alternative_proxy_server(
+      ProxyServer::FromPacString("QUIC myproxy.org:443"));
+  EXPECT_TRUE(test_proxy_delegate.alternative_proxy_server().is_quic());
+
+  params_.proxy_delegate = &test_proxy_delegate;
+  proxy_service_ =
+      ProxyService::CreateFixedFromPacResult("HTTPS myproxy.org:443");
+  request_.url = GURL("http://mail.example.org/");
+
+  // In order for a new QUIC session to be established via alternate-protocol
+  // without racing an HTTP connection, we need the host resolution to happen
+  // synchronously.
+  host_resolver_.set_synchronous_mode(true);
+  host_resolver_.rules()->AddIPLiteralRule("myproxy.org", "192.168.0.1", "");
+  HostResolver::RequestInfo info(HostPortPair("myproxy.org", 443));
+  AddressList address;
+  std::unique_ptr<HostResolver::Request> request;
+  host_resolver_.Resolve(info, DEFAULT_PRIORITY, &address, CompletionCallback(),
+                         &request, net_log_.bound());
+
+  CreateSession();
+  SendRequestAndExpectHttpResponseFromProxy("hello world", true, 443);
+  EXPECT_FALSE(test_proxy_delegate.alternative_proxy_server().is_valid());
+  EXPECT_TRUE(session_->proxy_service()->proxy_retry_info().empty());
+}
+
 TEST_P(QuicNetworkTransactionTest, SecureResourceOverSecureQuic) {
   client_maker_.set_hostname("www.example.org");
   EXPECT_FALSE(
@@ -2177,6 +2471,53 @@ TEST_P(QuicNetworkTransactionTest, SecureResourceOverSecureQuic) {
   SendRequestAndExpectQuicResponse("hello!");
   EXPECT_TRUE(
       test_socket_performance_watcher_factory_.rtt_notification_received());
+}
+
+TEST_P(QuicNetworkTransactionTest, QuicUploadToAlternativeProxyServer) {
+  base::HistogramTester histogram_tester;
+  proxy_service_ =
+      ProxyService::CreateFixedFromPacResult("HTTPS mail.example.org:443");
+
+  TestProxyDelegate test_proxy_delegate;
+
+  test_proxy_delegate.set_alternative_proxy_server(
+      ProxyServer::FromPacString("QUIC mail.example.org:443"));
+  params_.proxy_delegate = &test_proxy_delegate;
+
+  request_.url = GURL("http://mail.example.org/");
+
+  MockRead reads[] = {MockRead(SYNCHRONOUS, ERR_IO_PENDING, 0)};
+  MockWrite writes[] = {MockWrite(SYNCHRONOUS, ERR_FAILED, 1)};
+  SequencedSocketData socket_data(reads, arraysize(reads), writes,
+                                  arraysize(writes));
+  socket_factory_.AddSocketDataProvider(&socket_data);
+
+  // The non-alternate protocol job needs to hang in order to guarantee that
+  // the alternate-protocol job will "win".
+  AddHangingNonAlternateProtocolSocketData();
+
+  CreateSession();
+  request_.method = "POST";
+  ChunkedUploadDataStream upload_data(0);
+  upload_data.AppendData("1", 1, true);
+
+  request_.upload_data_stream = &upload_data;
+
+  HttpNetworkTransaction trans(DEFAULT_PRIORITY, session_.get());
+  TestCompletionCallback callback;
+  int rv = trans.Start(&request_, callback.callback(), net_log_.bound());
+  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
+  EXPECT_NE(OK, callback.WaitForResult());
+
+  // Verify that the alternative proxy server is not marked as broken.
+  EXPECT_TRUE(test_proxy_delegate.alternative_proxy_server().is_quic());
+
+  // Verify that the proxy server is not marked as broken.
+  EXPECT_TRUE(session_->proxy_service()->proxy_retry_info().empty());
+
+  histogram_tester.ExpectUniqueSample("Net.QuicAlternativeProxy.Usage",
+                                      1 /* ALTERNATIVE_PROXY_USAGE_WON_RACE */,
+                                      1);
 }
 
 TEST_P(QuicNetworkTransactionTest, QuicUpload) {
@@ -2207,6 +2548,54 @@ TEST_P(QuicNetworkTransactionTest, QuicUpload) {
   EXPECT_NE(OK, callback.WaitForResult());
 }
 
+TEST_P(QuicNetworkTransactionTest, QuicUploadWriteError) {
+  ScopedMockNetworkChangeNotifier network_change_notifier;
+  MockNetworkChangeNotifier* mock_ncn =
+      network_change_notifier.mock_network_change_notifier();
+  mock_ncn->ForceNetworkHandlesSupported();
+  mock_ncn->SetConnectedNetworksList(
+      {kDefaultNetworkForTests, kNewNetworkForTests});
+
+  params_.origins_to_force_quic_on.insert(
+      HostPortPair::FromString("mail.example.org:443"));
+  params_.quic_migrate_sessions_on_network_change = true;
+
+  MockQuicData socket_data;
+  socket_data.AddRead(SYNCHRONOUS, ERR_IO_PENDING);
+  QuicStreamOffset offset = 0;
+  socket_data.AddWrite(ConstructClientRequestHeadersPacket(
+      1, kClientDataStreamId1, true, false,
+      GetRequestHeaders("POST", "https", "/"), &offset));
+  socket_data.AddWrite(SYNCHRONOUS, ERR_FAILED);
+  socket_data.AddSocketDataToFactory(&socket_factory_);
+
+  MockQuicData socket_data2;
+  socket_data2.AddConnect(SYNCHRONOUS, ERR_ADDRESS_INVALID);
+  socket_data2.AddSocketDataToFactory(&socket_factory_);
+
+  // The non-alternate protocol job needs to hang in order to guarantee that
+  // the alternate-protocol job will "win".
+  AddHangingNonAlternateProtocolSocketData();
+
+  CreateSession();
+  request_.method = "POST";
+  ChunkedUploadDataStream upload_data(0);
+
+  request_.upload_data_stream = &upload_data;
+
+  HttpNetworkTransaction trans(DEFAULT_PRIORITY, session_.get());
+  TestCompletionCallback callback;
+  int rv = trans.Start(&request_, callback.callback(), net_log_.bound());
+  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
+
+  base::RunLoop().RunUntilIdle();
+  upload_data.AppendData("1", 1, true);
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_NE(OK, callback.WaitForResult());
+  session_.reset();
+}
+
 // Adds coverage to catch regression such as https://crbug.com/622043
 TEST_P(QuicNetworkTransactionTest, QuicServerPush) {
   params_.origins_to_force_quic_on.insert(
@@ -2233,8 +2622,8 @@ TEST_P(QuicNetworkTransactionTest, QuicServerPush) {
   mock_quic_data.AddWrite(ConstructClientAckPacket(3, 4, 3, 1));
   mock_quic_data.AddRead(ConstructServerDataPacket(
       5, kServerDataStreamId1, false, true, 0, "and hello!"));
-  mock_quic_data.AddWrite(
-      ConstructClientAckAndRstPacket(4, 4, QUIC_RST_ACKNOWLEDGEMENT, 5, 5, 1));
+  mock_quic_data.AddWrite(ConstructClientAckAndRstPacket(
+      4, kServerDataStreamId1, QUIC_RST_ACKNOWLEDGEMENT, 5, 5, 1));
   mock_quic_data.AddRead(ASYNC, ERR_IO_PENDING);  // No more data to read
   mock_quic_data.AddRead(ASYNC, 0);               // EOF
   mock_quic_data.AddSocketDataToFactory(&socket_factory_);
@@ -2258,14 +2647,14 @@ TEST_P(QuicNetworkTransactionTest, QuicServerPush) {
 
   // Check that we logged a QUIC_HTTP_STREAM_ADOPTED_PUSH_STREAM
   int pos = ExpectLogContainsSomewhere(
-      entries, 0, NetLog::TYPE_QUIC_HTTP_STREAM_ADOPTED_PUSH_STREAM,
-      NetLog::PHASE_NONE);
+      entries, 0, NetLogEventType::QUIC_HTTP_STREAM_ADOPTED_PUSH_STREAM,
+      NetLogEventPhase::NONE);
   EXPECT_LT(0, pos);
 }
 
 TEST_P(QuicNetworkTransactionTest, QuicForceHolBlocking) {
   FLAGS_quic_enable_version_35 = true;
-  FLAGS_quic_enable_version_36 = true;
+  FLAGS_quic_enable_version_36_v2 = true;
   params_.quic_force_hol_blocking = true;
   params_.origins_to_force_quic_on.insert(
       HostPortPair::FromString("mail.example.org:443"));
@@ -2311,6 +2700,163 @@ TEST_P(QuicNetworkTransactionTest, QuicForceHolBlocking) {
   request_.upload_data_stream = &upload_data;
 
   SendRequestAndExpectQuicResponse("hello!");
+}
+
+class QuicURLRequestContext : public URLRequestContext {
+ public:
+  QuicURLRequestContext(std::unique_ptr<HttpNetworkSession> session,
+                        MockClientSocketFactory* socket_factory)
+      : storage_(this) {
+    socket_factory_ = socket_factory;
+    storage_.set_host_resolver(
+        std::unique_ptr<HostResolver>(new MockHostResolver));
+    storage_.set_cert_verifier(base::WrapUnique(new MockCertVerifier));
+    storage_.set_transport_security_state(
+        base::WrapUnique(new TransportSecurityState));
+    storage_.set_proxy_service(ProxyService::CreateDirect());
+    storage_.set_ssl_config_service(new SSLConfigServiceDefaults);
+    storage_.set_http_auth_handler_factory(
+        HttpAuthHandlerFactory::CreateDefault(host_resolver()));
+    storage_.set_http_server_properties(
+        std::unique_ptr<HttpServerProperties>(new HttpServerPropertiesImpl()));
+    storage_.set_job_factory(base::WrapUnique(new URLRequestJobFactoryImpl()));
+    storage_.set_http_network_session(std::move(session));
+    storage_.set_http_transaction_factory(base::WrapUnique(
+        new HttpCache(storage_.http_network_session(),
+                      HttpCache::DefaultBackend::InMemory(0), false)));
+  }
+
+  ~QuicURLRequestContext() override { AssertNoURLRequests(); }
+
+  MockClientSocketFactory& socket_factory() { return *socket_factory_; }
+
+ private:
+  MockClientSocketFactory* socket_factory_;
+  URLRequestContextStorage storage_;
+};
+
+TEST_P(QuicNetworkTransactionTest, RawHeaderSizeSuccessfullRequest) {
+  params_.origins_to_force_quic_on.insert(
+      HostPortPair::FromString("mail.example.org:443"));
+
+  MockQuicData mock_quic_data;
+  SpdyHeaderBlock headers(GetRequestHeaders("GET", "https", "/"));
+  headers["user-agent"] = "";
+  headers["accept-encoding"] = "gzip, deflate";
+  mock_quic_data.AddWrite(ConstructClientRequestHeadersPacket(
+      1, kClientDataStreamId1, true, true, std::move(headers)));
+
+  QuicStreamOffset expected_raw_header_response_size = 0;
+  mock_quic_data.AddRead(ConstructServerResponseHeadersPacket(
+      1, kClientDataStreamId1, false, false, GetResponseHeaders("200 OK"),
+      &expected_raw_header_response_size));
+
+  mock_quic_data.AddRead(ConstructServerDataPacket(
+      2, kClientDataStreamId1, false, true, 0, "Main Resource Data"));
+  mock_quic_data.AddWrite(ConstructClientAckPacket(2, 1));
+
+  mock_quic_data.AddRead(ASYNC, 0);  // EOF
+
+  CreateSession();
+
+  TestDelegate delegate;
+  QuicURLRequestContext quic_url_request_context(std::move(session_),
+                                                 &socket_factory_);
+
+  mock_quic_data.AddSocketDataToFactory(
+      &quic_url_request_context.socket_factory());
+  TestNetworkDelegate network_delegate;
+  quic_url_request_context.set_network_delegate(&network_delegate);
+
+  std::unique_ptr<URLRequest> request(quic_url_request_context.CreateRequest(
+      GURL("https://mail.example.org/"), DEFAULT_PRIORITY, &delegate));
+  quic_url_request_context.socket_factory().AddSSLSocketDataProvider(
+      &ssl_data_);
+
+  request->Start();
+  base::RunLoop().Run();
+
+  EXPECT_LT(0, request->GetTotalSentBytes());
+  EXPECT_LT(0, request->GetTotalReceivedBytes());
+  EXPECT_EQ(network_delegate.total_network_bytes_sent(),
+            request->GetTotalSentBytes());
+  EXPECT_EQ(network_delegate.total_network_bytes_received(),
+            request->GetTotalReceivedBytes());
+  EXPECT_EQ(static_cast<int>(expected_raw_header_response_size),
+            request->raw_header_size());
+  EXPECT_TRUE(mock_quic_data.AllReadDataConsumed());
+  EXPECT_TRUE(mock_quic_data.AllWriteDataConsumed());
+}
+
+TEST_P(QuicNetworkTransactionTest, RawHeaderSizeSuccessfullPushHeadersFirst) {
+  params_.origins_to_force_quic_on.insert(
+      HostPortPair::FromString("mail.example.org:443"));
+
+  MockQuicData mock_quic_data;
+  SpdyHeaderBlock headers(GetRequestHeaders("GET", "https", "/"));
+  headers["user-agent"] = "";
+  headers["accept-encoding"] = "gzip, deflate";
+  mock_quic_data.AddWrite(ConstructClientRequestHeadersPacket(
+      1, kClientDataStreamId1, true, true, std::move(headers)));
+
+  QuicStreamOffset server_header_offset = 0;
+  QuicStreamOffset expected_raw_header_response_size = 0;
+
+  mock_quic_data.AddRead(ConstructServerPushPromisePacket(
+      1, kClientDataStreamId1, kServerDataStreamId1, false,
+      GetRequestHeaders("GET", "https", "/pushed.jpg"), &server_header_offset,
+      &server_maker_));
+
+  expected_raw_header_response_size = server_header_offset;
+  mock_quic_data.AddRead(ConstructServerResponseHeadersPacket(
+      2, kClientDataStreamId1, false, false, GetResponseHeaders("200 OK"),
+      &server_header_offset));
+  expected_raw_header_response_size =
+      server_header_offset - expected_raw_header_response_size;
+
+  mock_quic_data.AddWrite(ConstructClientAckPacket(2, 2, 1, 1));
+
+  mock_quic_data.AddRead(ConstructServerResponseHeadersPacket(
+      3, kServerDataStreamId1, false, false, GetResponseHeaders("200 OK"),
+      &server_header_offset));
+  mock_quic_data.AddRead(ConstructServerDataPacket(
+      4, kServerDataStreamId1, false, true, 0, "Pushed Resource Data"));
+
+  mock_quic_data.AddWrite(ConstructClientAckPacket(3, 4, 3, 1));
+  mock_quic_data.AddRead(ConstructServerDataPacket(
+      5, kClientDataStreamId1, false, true, 0, "Main Resource Data"));
+
+  mock_quic_data.AddRead(ConstructServerConnectionClosePacket(6));
+
+  CreateSession();
+
+  TestDelegate delegate;
+  QuicURLRequestContext quic_url_request_context(std::move(session_),
+                                                 &socket_factory_);
+
+  mock_quic_data.AddSocketDataToFactory(
+      &quic_url_request_context.socket_factory());
+  TestNetworkDelegate network_delegate;
+  quic_url_request_context.set_network_delegate(&network_delegate);
+
+  std::unique_ptr<URLRequest> request(quic_url_request_context.CreateRequest(
+      GURL("https://mail.example.org/"), DEFAULT_PRIORITY, &delegate));
+  quic_url_request_context.socket_factory().AddSSLSocketDataProvider(
+      &ssl_data_);
+
+  request->Start();
+  base::RunLoop().Run();
+
+  EXPECT_LT(0, request->GetTotalSentBytes());
+  EXPECT_LT(0, request->GetTotalReceivedBytes());
+  EXPECT_EQ(network_delegate.total_network_bytes_sent(),
+            request->GetTotalSentBytes());
+  EXPECT_EQ(network_delegate.total_network_bytes_received(),
+            request->GetTotalReceivedBytes());
+  EXPECT_EQ(static_cast<int>(expected_raw_header_response_size),
+            request->raw_header_size());
+  EXPECT_TRUE(mock_quic_data.AllReadDataConsumed());
+  EXPECT_TRUE(mock_quic_data.AllWriteDataConsumed());
 }
 
 class QuicNetworkTransactionWithDestinationTest
@@ -2506,7 +3052,7 @@ class QuicNetworkTransactionWithDestinationTest
     ASSERT_TRUE(response->headers.get() != nullptr);
     EXPECT_EQ("HTTP/1.1 200 OK", response->headers->GetStatusLine());
     EXPECT_TRUE(response->was_fetched_via_spdy);
-    EXPECT_TRUE(response->was_npn_negotiated);
+    EXPECT_TRUE(response->was_alpn_negotiated);
     EXPECT_EQ(HttpResponseInfo::CONNECTION_INFO_QUIC1_SPDY3,
               response->connection_info);
     EXPECT_EQ(443, response->socket_address.port());

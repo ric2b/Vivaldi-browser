@@ -19,7 +19,6 @@ class Border;
 class FocusableBorder;
 class Label;
 class LabelButton;
-class LabelButtonBorder;
 class ScrollBar;
 
 // Cross-platform API for providing platform-specific styling for toolkit-views.
@@ -53,6 +52,9 @@ class VIEWS_EXPORT PlatformStyle {
   // label for that row.
   static const bool kTreeViewSelectionPaintsEntireRow;
 
+  // Whether ripples should be used for visual feedback on control activation.
+  static const bool kUseRipples;
+
   // Creates an ImageSkia containing the image to use for the combobox arrow.
   // The |is_enabled| argument is true if the control the arrow is for is
   // enabled, and false if the control is disabled. The |style| argument is the
@@ -66,11 +68,6 @@ class VIEWS_EXPORT PlatformStyle {
   // Creates the appropriate background for a Combobox.
   static std::unique_ptr<Background> CreateComboboxBackground(
       int shoulder_width);
-
-  // Creates the default label button border for the given |style|. Used when a
-  // custom default border is not provided for a particular LabelButton class.
-  static std::unique_ptr<LabelButtonBorder> CreateLabelButtonBorder(
-      Button::ButtonStyle style);
 
   // Creates the default scrollbar for the given orientation.
   static std::unique_ptr<ScrollBar> CreateScrollBar(bool is_horizontal);
@@ -88,6 +85,10 @@ class VIEWS_EXPORT PlatformStyle {
   // Applies the current system theme to the default border created by |button|.
   static std::unique_ptr<Border> CreateThemedLabelButtonBorder(
       LabelButton* button);
+
+  // Called whenever a textfield keypress is unhandled for any reason. Gives
+  // visual/audio feedback about the unhandled key if platform-appropriate.
+  static void OnTextfieldKeypressUnhandled();
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(PlatformStyle);

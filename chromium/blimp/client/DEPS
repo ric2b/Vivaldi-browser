@@ -6,12 +6,15 @@ include_rules = [
   "+components/safe_json",
   "+components/url_formatter",
   "+components/version_info",
+  "+components/signin/core/browser/android",
   "-content",
+  "+device/geolocation",
   "+google_apis/gaia",
   "+gpu",
   "+jni",
   "+net",
   "+third_party/WebKit/public/web/WebInputEvent.h",
+  "+ui/android",
   "+ui/base/ime/text_input_type.h",
   "+ui/events",
   "+ui/events/android",
@@ -22,7 +25,4 @@ include_rules = [
   "+ui/gl",
   "+ui/platform_window",
   "+url",
-
-  # TODO(dtrainor): Remove this once Toast uses are removed from Java.
-  "!ui/android",
 ]

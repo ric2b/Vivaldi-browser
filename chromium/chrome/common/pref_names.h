@@ -67,7 +67,6 @@ extern const char kOwnerLocale[];
 
 extern const char kDefaultCharset[];
 extern const char kAcceptLanguages[];
-extern const char kStaticEncodings[];
 extern const char kWebKitCommonScript[];
 extern const char kWebKitStandardFontFamily[];
 extern const char kWebKitFixedFontFamily[];
@@ -139,10 +138,8 @@ extern const char kWebKitJavascriptCanOpenWindowsAutomatically[];
 extern const char kWebKitLoadsImagesAutomatically[];
 extern const char kWebKitPluginsEnabled[];
 extern const char kWebKitDomPasteEnabled[];
-extern const char kWebKitUsesUniversalDetector[];
 extern const char kWebKitTextAreasAreResizable[];
 extern const char kWebkitTabsToLinks[];
-extern const char kWebKitAllowDisplayingInsecureContent[];
 extern const char kWebKitAllowRunningInsecureContent[];
 #if defined(OS_ANDROID)
 extern const char kWebKitFontScaleFactor[];
@@ -305,16 +302,16 @@ extern const char kEolNotificationDismissed[];
 extern const char kQuickUnlockFeatureNotificationShown[];
 #endif  // defined(OS_CHROMEOS)
 extern const char kShowHomeButton[];
-extern const char kRecentlySelectedEncoding[];
 extern const char kSpeechRecognitionFilterProfanities[];
 extern const char kSavingBrowserHistoryDisabled[];
 extern const char kAllowDeletingBrowserHistory[];
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+extern const char kMdHistoryMenuPromoShown[];
+#endif
 extern const char kForceGoogleSafeSearch[];
-extern const char kForceYouTubeSafetyMode[];
+extern const char kForceYouTubeRestrict[];
 extern const char kForceSessionSync[];
 extern const char kAllowedDomainsForApps[];
-extern const char kLastClearBrowsingDataTime[];
-extern const char kClearBrowsingDataHistoryNoticeShownTimes[];
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 extern const char kUsesSystemTheme[];
 #endif
@@ -332,6 +329,7 @@ extern const char kPluginsPluginsList[];
 extern const char kPluginsDisabledPlugins[];
 extern const char kPluginsDisabledPluginsExceptions[];
 extern const char kPluginsEnabledPlugins[];
+extern const char kPluginsAlwaysOpenPdfExternally[];
 #if defined(ENABLE_PLUGINS)
 extern const char kPluginsShowDetails[];
 #endif
@@ -452,9 +450,8 @@ extern const char kGpuDriverInfoShaderVersion[];
 extern const char kGpuDriverInfoBuildFingerPrint[];
 #endif
 
-// Android has it's own metric / crash reporting implemented in Android
-// Java code so kMetricsReportingEnabled doesn't make sense. We use this
-// to inform crashes_ui that we have enabled crash reporting.
+// Deprecated preference for metric / crash reporting on Android. Use
+// kMetricsReportingEnabled instead.
 #if BUILDFLAG(ANDROID_JAVA_UI)
 extern const char kCrashReportingEnabled[];
 #endif
@@ -550,7 +547,8 @@ extern const char kDevToolsPortForwardingEnabled[];
 extern const char kDevToolsPortForwardingDefaultSet[];
 extern const char kDevToolsPortForwardingConfig[];
 extern const char kDevToolsPreferences[];
-extern const char kDevToolsTargetDiscoveryConfig[];
+extern const char kDevToolsDiscoverTCPTargetsEnabled[];
+extern const char kDevToolsTCPDiscoveryConfig[];
 #if defined(OS_ANDROID)
 extern const char kDevToolsRemoteEnabled[];
 #endif
@@ -622,7 +620,6 @@ extern const char kCarrierDealPromoShown[];
 extern const char kShouldAutoEnroll[];
 extern const char kAutoEnrollmentPowerLimit[];
 extern const char kDeviceActivityTimes[];
-extern const char kDeviceLocation[];
 extern const char kExternalStorageDisabled[];
 extern const char kExternalStorageReadOnly[];
 extern const char kOwnerPrimaryMouseButtonRight[];
@@ -640,6 +637,7 @@ extern const char kCachedMultiProfileUserBehavior[];
 extern const char kInitialLocale[];
 extern const char kOobeComplete[];
 extern const char kOobeScreenPending[];
+extern const char kOobeMdMode[];
 extern const char kOobeControllerDetected[];
 extern const char kCanShowOobeGoodiesPage[];
 extern const char kDeviceRegistered[];
@@ -649,6 +647,8 @@ extern const char kServerBackedDeviceState[];
 extern const char kCustomizationDefaultWallpaperURL[];
 extern const char kLogoutStartedLast[];
 extern const char kConsumerManagementStage[];
+extern const char kIsBootstrappingSlave[];
+extern const char kReportArcStatusEnabled[];
 #endif  // defined(OS_CHROMEOS)
 
 extern const char kClearPluginLSODataEnabled[];
@@ -794,6 +794,7 @@ extern const char kQuickCheckEnabled[];
 extern const char kPacHttpsUrlStrippingEnabled[];
 extern const char kBrowserGuestModeEnabled[];
 extern const char kBrowserAddPersonEnabled[];
+extern const char kForceBrowserSignin[];
 
 extern const char kEasyUnlockDeviceId[];
 extern const char kEasyUnlockHardlockState[];

@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/macros.h"
+#include "net/base/net_export.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/socket/stream_socket.h"
 
@@ -22,6 +23,7 @@ class HttpResponseInfo;
 class HttpRequestHeaders;
 struct HttpRequestInfo;
 class HttpAuthController;
+class NetLogWithSource;
 
 class NET_EXPORT_PRIVATE ProxyClientSocket : public StreamSocket {
  public:
@@ -68,7 +70,7 @@ class NET_EXPORT_PRIVATE ProxyClientSocket : public StreamSocket {
   // construction/ this method should be called.
   static int HandleProxyAuthChallenge(HttpAuthController* auth,
                                       HttpResponseInfo* response,
-                                      const BoundNetLog& net_log);
+                                      const NetLogWithSource& net_log);
 
   // Logs (to the log and in a histogram) a blocked CONNECT response.
   static void LogBlockedTunnelResponse(int http_response_code,

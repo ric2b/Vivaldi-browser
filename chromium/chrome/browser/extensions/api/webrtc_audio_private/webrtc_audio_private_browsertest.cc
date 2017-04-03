@@ -23,7 +23,7 @@
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_function_test_utils.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
-#include "chrome/browser/media/webrtc_log_uploader.h"
+#include "chrome/browser/media/webrtc/webrtc_log_uploader.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -377,12 +377,12 @@ IN_PROC_BROWSER_TEST_F(WebrtcAudioPrivateTest, MAYBE_TriggerEvent) {
       WebrtcAudioPrivateEventService::GetFactoryInstance()->Get(profile());
 
   // Just trigger, without any extension listening.
-  service->OnDevicesChanged(base::SystemMonitor::DEVTYPE_AUDIO_CAPTURE);
+  service->OnDevicesChanged(base::SystemMonitor::DEVTYPE_AUDIO);
 
   // Now load our test extension and do it again.
   const extensions::Extension* extension = LoadExtension(
       test_data_dir_.AppendASCII("webrtc_audio_private_event_listener"));
-  service->OnDevicesChanged(base::SystemMonitor::DEVTYPE_AUDIO_CAPTURE);
+  service->OnDevicesChanged(base::SystemMonitor::DEVTYPE_AUDIO);
 
   // Check that the extension got the notification.
   std::string result = ExecuteScriptInBackgroundPage(extension->id(),

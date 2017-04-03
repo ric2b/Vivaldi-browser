@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010 Apple Inc. All rights reserved.
+ * Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010 Apple Inc. All rights
+ * reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,32 +31,34 @@
 
 namespace blink {
 
-class DragCaretController final : public GarbageCollectedFinalized<DragCaretController> {
-    WTF_MAKE_NONCOPYABLE(DragCaretController);
-public:
-    static DragCaretController* create();
+class DragCaretController final
+    : public GarbageCollectedFinalized<DragCaretController> {
+  WTF_MAKE_NONCOPYABLE(DragCaretController);
 
-    void paintDragCaret(LocalFrame*, GraphicsContext&, const LayoutPoint&) const;
+ public:
+  static DragCaretController* create();
 
-    bool hasCaretIn(const LayoutBlock&) const;
-    bool isContentRichlyEditable() const;
+  void paintDragCaret(LocalFrame*, GraphicsContext&, const LayoutPoint&) const;
 
-    bool hasCaret() const { return m_position.isNotNull(); }
-    const VisiblePosition& caretPosition() { return m_position; }
-    void setCaretPosition(const PositionWithAffinity&);
-    void clear() { setCaretPosition(PositionWithAffinity()); }
+  bool hasCaretIn(const LayoutBlock&) const;
+  bool isContentRichlyEditable() const;
 
-    void nodeWillBeRemoved(Node&);
+  bool hasCaret() const { return m_position.isNotNull(); }
+  const PositionWithAffinity& caretPosition() { return m_position; }
+  void setCaretPosition(const PositionWithAffinity&);
+  void clear() { setCaretPosition(PositionWithAffinity()); }
 
-    DECLARE_TRACE();
+  void nodeWillBeRemoved(Node&);
 
-private:
-    DragCaretController();
+  DECLARE_TRACE();
 
-    VisiblePosition m_position;
-    const Member<CaretBase> m_caretBase;
+ private:
+  DragCaretController();
+
+  PositionWithAffinity m_position;
+  const Member<CaretBase> m_caretBase;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // DragCaretController_h
+#endif  // DragCaretController_h

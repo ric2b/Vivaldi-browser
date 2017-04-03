@@ -32,7 +32,9 @@ class FakeSessionManagerClient : public SessionManagerClient {
   bool HasObserver(const Observer* observer) const override;
   bool IsScreenLocked() const override;
   void EmitLoginPromptVisible() override;
-  void RestartJob(const std::vector<std::string>& argv) override;
+  void RestartJob(int socket_fd,
+                  const std::vector<std::string>& argv,
+                  const VoidDBusMethodCallback& callback) override;
   void StartSession(const cryptohome::Identification& cryptohome_id) override;
   void StopSession() override;
   void NotifySupervisedUserCreationStarted() override;
@@ -65,9 +67,11 @@ class FakeSessionManagerClient : public SessionManagerClient {
 
   void CheckArcAvailability(const ArcCallback& callback) override;
   void StartArcInstance(const cryptohome::Identification& cryptohome_id,
+                        bool disable_boot_completed_broadcast,
                         const ArcCallback& callback) override;
   void StopArcInstance(const ArcCallback& callback) override;
   void PrioritizeArcInstance(const ArcCallback& callback) override;
+  void EmitArcBooted() override;
   void GetArcStartTime(const GetArcStartTimeCallback& callback) override;
   void RemoveArcData(const cryptohome::Identification& cryptohome_id,
                      const ArcCallback& callback) override;

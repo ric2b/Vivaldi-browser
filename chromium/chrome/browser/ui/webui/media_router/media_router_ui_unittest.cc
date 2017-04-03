@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/media_router/media_router_ui.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -37,7 +39,7 @@ using testing::Return;
 namespace media_router {
 
 class PresentationRequestCallbacks {
-public:
+ public:
   explicit PresentationRequestCallbacks(
       const content::PresentationError& expected_error)
       : expected_error_(expected_error) {}
@@ -50,7 +52,7 @@ public:
     EXPECT_EQ(expected_error_.message, error.message);
   }
 
-private:
+ private:
   content::PresentationError expected_error_;
 };
 
@@ -93,6 +95,13 @@ class MediaRouterUITest : public ::testing::Test {
     message_handler_->SetWebUIForTest(&web_ui_);
   }
 
+  MediaSink CreateSinkCompatibleWithAllSources() {
+    MediaSink sink("sinkId", "sinkName", MediaSink::GENERIC);
+    for (auto* observer : media_sinks_observers_)
+      observer->OnSinksUpdated({sink}, std::vector<GURL>());
+    return sink;
+  }
+
  protected:
   MockMediaRouter mock_router_;
   content::TestBrowserThreadBundle thread_bundle_;
@@ -113,7 +122,8 @@ TEST_F(MediaRouterUITest, RouteCreationTimeoutForTab) {
       mock_router_,
       CreateRoute(_, _, _, _, _, base::TimeDelta::FromSeconds(60), false))
       .WillOnce(SaveArg<4>(&callbacks));
-  media_router_ui_->CreateRoute("sinkId", MediaCastMode::TAB_MIRROR);
+  media_router_ui_->CreateRoute(CreateSinkCompatibleWithAllSources().id(),
+                                MediaCastMode::TAB_MIRROR);
 
   std::string expected_title = l10n_util::GetStringUTF8(
       IDS_MEDIA_ROUTER_ISSUE_CREATE_ROUTE_TIMEOUT_FOR_TAB);
@@ -131,7 +141,8 @@ TEST_F(MediaRouterUITest, RouteCreationTimeoutForDesktop) {
       mock_router_,
       CreateRoute(_, _, _, _, _, base::TimeDelta::FromSeconds(120), false))
       .WillOnce(SaveArg<4>(&callbacks));
-  media_router_ui_->CreateRoute("sinkId", MediaCastMode::DESKTOP_MIRROR);
+  media_router_ui_->CreateRoute(CreateSinkCompatibleWithAllSources().id(),
+                                MediaCastMode::DESKTOP_MIRROR);
 
   std::string expected_title = l10n_util::GetStringUTF8(
       IDS_MEDIA_ROUTER_ISSUE_CREATE_ROUTE_TIMEOUT_FOR_DESKTOP);
@@ -145,7 +156,7 @@ TEST_F(MediaRouterUITest, RouteCreationTimeoutForDesktop) {
 TEST_F(MediaRouterUITest, RouteCreationTimeoutForPresentation) {
   CreateMediaRouterUI(&profile_);
   PresentationRequest presentation_request(RenderFrameHostId(0, 0),
-                                           "https://presentationurl.fakeurl",
+                                           {"https://presentationurl.fakeurl"},
                                            GURL("https://frameurl.fakeurl"));
   media_router_ui_->OnDefaultPresentationChanged(presentation_request);
   std::vector<MediaRouteResponseCallback> callbacks;
@@ -153,7 +164,8 @@ TEST_F(MediaRouterUITest, RouteCreationTimeoutForPresentation) {
       mock_router_,
       CreateRoute(_, _, _, _, _, base::TimeDelta::FromSeconds(20), false))
       .WillOnce(SaveArg<4>(&callbacks));
-  media_router_ui_->CreateRoute("sinkId", MediaCastMode::DEFAULT);
+  media_router_ui_->CreateRoute(CreateSinkCompatibleWithAllSources().id(),
+                                MediaCastMode::DEFAULT);
 
   std::string expected_title =
       l10n_util::GetStringFUTF8(IDS_MEDIA_ROUTER_ISSUE_CREATE_ROUTE_TIMEOUT,
@@ -184,13 +196,14 @@ TEST_F(MediaRouterUITest, RouteRequestFromIncognito) {
   CreateMediaRouterUI(profile_.GetOffTheRecordProfile());
 
   PresentationRequest presentation_request(
-      RenderFrameHostId(0, 0), "https://fooUrl", GURL("https://frameUrl"));
+      RenderFrameHostId(0, 0), {"https://fooUrl"}, GURL("https://frameUrl"));
   media_router_ui_->OnDefaultPresentationChanged(presentation_request);
 
   EXPECT_CALL(
       mock_router_,
       CreateRoute(_, _, _, _, _, base::TimeDelta::FromSeconds(20), true));
-  media_router_ui_->CreateRoute("sinkId", MediaCastMode::DEFAULT);
+  media_router_ui_->CreateRoute(CreateSinkCompatibleWithAllSources().id(),
+                                MediaCastMode::DEFAULT);
 }
 
 TEST_F(MediaRouterUITest, SortedSinks) {
@@ -220,6 +233,41 @@ TEST_F(MediaRouterUITest, SortedSinks) {
   EXPECT_EQ(sink_name2, sorted_sinks[0].sink.name());
   EXPECT_EQ(sink_id3, sorted_sinks[1].sink.id());
   EXPECT_EQ(sink_id1, sorted_sinks[2].sink.id());
+}
+
+TEST_F(MediaRouterUITest, SortSinksByIconType) {
+  CreateMediaRouterUI(&profile_);
+  std::vector<MediaSinkWithCastModes> unsorted_sinks;
+
+  MediaSinkWithCastModes sink1(
+      MediaSink("id1", "sink", MediaSink::IconType::HANGOUT));
+  unsorted_sinks.push_back(sink1);
+  MediaSinkWithCastModes sink2(
+      MediaSink("id2", "B sink", MediaSink::IconType::CAST_AUDIO_GROUP));
+  unsorted_sinks.push_back(sink2);
+  MediaSinkWithCastModes sink3(
+      MediaSink("id3", "sink", MediaSink::IconType::GENERIC));
+  unsorted_sinks.push_back(sink3);
+  MediaSinkWithCastModes sink4(
+      MediaSink("id4", "A sink", MediaSink::IconType::CAST_AUDIO_GROUP));
+  unsorted_sinks.push_back(sink4);
+  MediaSinkWithCastModes sink5(
+      MediaSink("id5", "sink", MediaSink::IconType::CAST_AUDIO));
+  unsorted_sinks.push_back(sink5);
+  MediaSinkWithCastModes sink6(
+      MediaSink("id6", "sink", MediaSink::IconType::CAST));
+  unsorted_sinks.push_back(sink6);
+
+  // Sorted order is CAST, CAST_AUDIO_GROUP "A", CAST_AUDIO_GROUP "B",
+  // CAST_AUDIO, HANGOUT, GENERIC.
+  media_router_ui_->OnResultsUpdated(unsorted_sinks);
+  const auto& sorted_sinks = media_router_ui_->sinks_;
+  EXPECT_EQ(sink6.sink.id(), sorted_sinks[0].sink.id());
+  EXPECT_EQ(sink4.sink.id(), sorted_sinks[1].sink.id());
+  EXPECT_EQ(sink2.sink.id(), sorted_sinks[2].sink.id());
+  EXPECT_EQ(sink5.sink.id(), sorted_sinks[3].sink.id());
+  EXPECT_EQ(sink1.sink.id(), sorted_sinks[4].sink.id());
+  EXPECT_EQ(sink3.sink.id(), sorted_sinks[5].sink.id());
 }
 
 TEST_F(MediaRouterUITest, UIMediaRoutesObserverFiltersNonDisplayRoutes) {
@@ -402,7 +450,7 @@ TEST_F(MediaRouterUITest, GetExtensionNameExtensionPresent) {
   std::string id = "extensionid";
   GURL url = GURL("chrome-extension://" + id);
   std::unique_ptr<extensions::ExtensionRegistry> registry =
-      base::WrapUnique(new extensions::ExtensionRegistry(nullptr));
+      base::MakeUnique<extensions::ExtensionRegistry>(nullptr);
   scoped_refptr<extensions::Extension> app =
       extensions::test_util::BuildApp(extensions::ExtensionBuilder())
           .MergeManifest(extensions::DictionaryBuilder()
@@ -420,7 +468,7 @@ TEST_F(MediaRouterUITest, GetExtensionNameEmptyWhenNotInstalled) {
   std::string id = "extensionid";
   GURL url = GURL("chrome-extension://" + id);
   std::unique_ptr<extensions::ExtensionRegistry> registry =
-      base::WrapUnique(new extensions::ExtensionRegistry(nullptr));
+      base::MakeUnique<extensions::ExtensionRegistry>(nullptr);
 
   EXPECT_EQ("", MediaRouterUI::GetExtensionName(url, registry.get()));
 }
@@ -428,7 +476,7 @@ TEST_F(MediaRouterUITest, GetExtensionNameEmptyWhenNotInstalled) {
 TEST_F(MediaRouterUITest, GetExtensionNameEmptyWhenNotExtensionURL) {
   GURL url = GURL("https://www.google.com");
   std::unique_ptr<extensions::ExtensionRegistry> registry =
-      base::WrapUnique(new extensions::ExtensionRegistry(nullptr));
+      base::MakeUnique<extensions::ExtensionRegistry>(nullptr);
 
   EXPECT_EQ("", MediaRouterUI::GetExtensionName(url, registry.get()));
 }

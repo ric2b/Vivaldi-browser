@@ -30,11 +30,10 @@ ContentSuggestionsService::ContentSuggestionsService(
     history_service_observer_.Add(history_service);
 }
 
-ContentSuggestionsService::~ContentSuggestionsService() {}
+ContentSuggestionsService::~ContentSuggestionsService() = default;
 
 void ContentSuggestionsService::Shutdown() {
   ntp_snippets_service_ = nullptr;
-  id_category_map_.clear();
   suggestions_by_category_.clear();
   providers_by_category_.clear();
   categories_.clear();
@@ -73,24 +72,17 @@ ContentSuggestionsService::GetSuggestionsForCategory(Category category) const {
 }
 
 void ContentSuggestionsService::FetchSuggestionImage(
-    const std::string& suggestion_id,
+    const ContentSuggestion::ID& suggestion_id,
     const ImageFetchedCallback& callback) {
-  if (!id_category_map_.count(suggestion_id)) {
-    LOG(WARNING) << "Requested image for unknown suggestion " << suggestion_id;
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(callback, suggestion_id, gfx::Image()));
-    return;
-  }
-  Category category = id_category_map_.at(suggestion_id);
-  if (!providers_by_category_.count(category)) {
+  if (!providers_by_category_.count(suggestion_id.category())) {
     LOG(WARNING) << "Requested image for suggestion " << suggestion_id
-                 << " for unavailable category " << category;
+                 << " for unavailable category " << suggestion_id.category();
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(callback, suggestion_id, gfx::Image()));
+        FROM_HERE, base::Bind(callback, gfx::Image()));
     return;
   }
-  providers_by_category_[category]->FetchSuggestionImage(suggestion_id,
-                                                         callback);
+  providers_by_category_[suggestion_id.category()]->FetchSuggestionImage(
+      suggestion_id, callback);
 }
 
 void ContentSuggestionsService::ClearHistory(
@@ -104,7 +96,6 @@ void ContentSuggestionsService::ClearHistory(
 
 void ContentSuggestionsService::ClearAllCachedSuggestions() {
   suggestions_by_category_.clear();
-  id_category_map_.clear();
   for (const auto& category_provider_pair : providers_by_category_) {
     category_provider_pair.second->ClearCachedSuggestions(
         category_provider_pair.first);
@@ -113,12 +104,7 @@ void ContentSuggestionsService::ClearAllCachedSuggestions() {
   }
 }
 
-void ContentSuggestionsService::ClearCachedSuggestions(
-    Category category) {
-  for (const ContentSuggestion& suggestion :
-       suggestions_by_category_[category]) {
-    id_category_map_.erase(suggestion.id());
-  }
+void ContentSuggestionsService::ClearCachedSuggestions(Category category) {
   suggestions_by_category_[category].clear();
   auto iterator = providers_by_category_.find(category);
   if (iterator != providers_by_category_.end())
@@ -143,24 +129,30 @@ void ContentSuggestionsService::ClearDismissedSuggestionsForDebugging(
 }
 
 void ContentSuggestionsService::DismissSuggestion(
-    const std::string& suggestion_id) {
-  if (!id_category_map_.count(suggestion_id)) {
-    LOG(WARNING) << "Dismissed unknown suggestion " << suggestion_id;
-    return;
-  }
-  Category category = id_category_map_.at(suggestion_id);
-  if (!providers_by_category_.count(category)) {
+    const ContentSuggestion::ID& suggestion_id) {
+  if (!providers_by_category_.count(suggestion_id.category())) {
     LOG(WARNING) << "Dismissed suggestion " << suggestion_id
-                 << " for unavailable category " << category;
+                 << " for unavailable category " << suggestion_id.category();
     return;
   }
-  providers_by_category_[category]->DismissSuggestion(suggestion_id);
+  providers_by_category_[suggestion_id.category()]->DismissSuggestion(
+      suggestion_id);
 
   // Remove the suggestion locally.
-  bool removed = RemoveSuggestionByID(category, suggestion_id);
+  bool removed = RemoveSuggestionByID(suggestion_id);
   DCHECK(removed) << "The dismissed suggestion " << suggestion_id
                   << " has already been removed. Providers must not call"
                   << " OnNewSuggestions in response to DismissSuggestion.";
+}
+
+void ContentSuggestionsService::DismissCategory(Category category) {
+  auto providers_it = providers_by_category_.find(category);
+  if (providers_it == providers_by_category_.end())
+    return;
+
+  providers_by_category_.erase(providers_it);
+  categories_.erase(
+      std::find(categories_.begin(), categories_.end(), category));
 }
 
 void ContentSuggestionsService::AddObserver(Observer* observer) {
@@ -183,22 +175,17 @@ void ContentSuggestionsService::RegisterProvider(
 void ContentSuggestionsService::OnNewSuggestions(
     ContentSuggestionsProvider* provider,
     Category category,
-    std::vector<ContentSuggestion> new_suggestions) {
+    std::vector<ContentSuggestion> suggestions) {
   if (RegisterCategoryIfRequired(provider, category))
     NotifyCategoryStatusChanged(category);
 
-  if (!IsCategoryStatusAvailable(provider->GetCategoryStatus(category)))
+  if (!IsCategoryStatusAvailable(provider->GetCategoryStatus(category))) {
+    // A provider shouldn't send us suggestions while it's not available.
+    DCHECK(suggestions.empty());
     return;
-
-  for (const ContentSuggestion& suggestion :
-       suggestions_by_category_[category]) {
-    id_category_map_.erase(suggestion.id());
   }
 
-  for (const ContentSuggestion& suggestion : new_suggestions)
-    id_category_map_.insert(std::make_pair(suggestion.id(), category));
-
-  suggestions_by_category_[category] = std::move(new_suggestions);
+  suggestions_by_category_[category] = std::move(suggestions);
 
   // The positioning of the bookmarks category depends on whether it's empty.
   // TODO(treib): Remove this temporary hack, crbug.com/640568.
@@ -213,19 +200,13 @@ void ContentSuggestionsService::OnCategoryStatusChanged(
     Category category,
     CategoryStatus new_status) {
   if (!IsCategoryStatusAvailable(new_status)) {
-    for (const ContentSuggestion& suggestion :
-         suggestions_by_category_[category]) {
-      id_category_map_.erase(suggestion.id());
-    }
     suggestions_by_category_.erase(category);
   }
   if (new_status == CategoryStatus::NOT_PROVIDED) {
-    auto providers_it = providers_by_category_.find(category);
-    DCHECK(providers_it != providers_by_category_.end());
-    DCHECK_EQ(provider, providers_it->second);
-    providers_by_category_.erase(providers_it);
-    categories_.erase(
-        std::find(categories_.begin(), categories_.end(), category));
+    DCHECK(providers_by_category_.find(category) !=
+           providers_by_category_.end());
+    DCHECK_EQ(provider, providers_by_category_.find(category)->second);
+    DismissCategory(category);
   } else {
     RegisterCategoryIfRequired(provider, category);
     DCHECK_EQ(new_status, provider->GetCategoryStatus(category));
@@ -235,11 +216,10 @@ void ContentSuggestionsService::OnCategoryStatusChanged(
 
 void ContentSuggestionsService::OnSuggestionInvalidated(
     ContentSuggestionsProvider* provider,
-    Category category,
-    const std::string& suggestion_id) {
-  RemoveSuggestionByID(category, suggestion_id);
+    const ContentSuggestion::ID& suggestion_id) {
+  RemoveSuggestionByID(suggestion_id);
   FOR_EACH_OBSERVER(Observer, observers_,
-                    OnSuggestionInvalidated(category, suggestion_id));
+                    OnSuggestionInvalidated(suggestion_id));
 }
 
 // history::HistoryServiceObserver implementation.
@@ -308,11 +288,9 @@ bool ContentSuggestionsService::RegisterCategoryIfRequired(
 }
 
 bool ContentSuggestionsService::RemoveSuggestionByID(
-    Category category,
-    const std::string& suggestion_id) {
-  id_category_map_.erase(suggestion_id);
+    const ContentSuggestion::ID& suggestion_id) {
   std::vector<ContentSuggestion>* suggestions =
-      &suggestions_by_category_[category];
+      &suggestions_by_category_[suggestion_id.category()];
   auto position =
       std::find_if(suggestions->begin(), suggestions->end(),
                    [&suggestion_id](const ContentSuggestion& suggestion) {
@@ -324,7 +302,7 @@ bool ContentSuggestionsService::RemoveSuggestionByID(
 
   // The positioning of the bookmarks category depends on whether it's empty.
   // TODO(treib): Remove this temporary hack, crbug.com/640568.
-  if (category.IsKnownCategory(KnownCategories::BOOKMARKS))
+  if (suggestion_id.category().IsKnownCategory(KnownCategories::BOOKMARKS))
     SortCategories();
 
   return true;

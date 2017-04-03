@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "content/browser/android/scoped_surface_request_manager.h"
 #include "content/browser/media/android/media_resource_getter_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -25,7 +26,9 @@ MediaPlayerRenderer::MediaPlayerRenderer(RenderFrameHost* render_frame_host)
       has_error_(false),
       weak_factory_(this) {}
 
-MediaPlayerRenderer::~MediaPlayerRenderer() {}
+MediaPlayerRenderer::~MediaPlayerRenderer() {
+  CancelScopedSurfaceRequest();
+}
 
 void MediaPlayerRenderer::Initialize(
     media::DemuxerStreamProvider* demuxer_stream_provider,
@@ -54,11 +57,7 @@ void MediaPlayerRenderer::Initialize(
       this, base::Bind(&MediaPlayerRenderer::OnDecoderResourcesReleased,
                        weak_factory_.GetWeakPtr()),
       GURL(),  // frame_url
-      false,   // allow_crendentials
-      0));     // media_session_id
-
-  // TODO(tguilbert): Register and Send the proper surface ID. See
-  // crbug.com/627658
+      false));   // allow_crendentials
 
   media_player_->Initialize();
   init_cb.Run(media::PIPELINE_OK);
@@ -98,6 +97,26 @@ void MediaPlayerRenderer::SetPlaybackRate(double playback_rate) {
     // but is not currently exposed in the MediaPlayerBridge interface.
     // Investigate wether or not we want to add variable playback speed.
   }
+}
+
+void MediaPlayerRenderer::OnScopedSurfaceRequestCompleted(
+    gl::ScopedJavaSurface surface) {
+  DCHECK(surface_request_token_);
+  surface_request_token_ = base::UnguessableToken();
+  media_player_->SetVideoSurface(std::move(surface));
+}
+
+base::UnguessableToken MediaPlayerRenderer::InitiateScopedSurfaceRequest() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  CancelScopedSurfaceRequest();
+
+  surface_request_token_ =
+      ScopedSurfaceRequestManager::GetInstance()->RegisterScopedSurfaceRequest(
+          base::Bind(&MediaPlayerRenderer::OnScopedSurfaceRequestCompleted,
+                     weak_factory_.GetWeakPtr()));
+
+  return surface_request_token_;
 }
 
 void MediaPlayerRenderer::SetVolume(float volume) {
@@ -195,10 +214,6 @@ void MediaPlayerRenderer::OnVideoSizeChanged(int player_id,
   renderer_client_->OnVideoNaturalSizeChange(video_size_);
 }
 
-void MediaPlayerRenderer::OnWaitingForDecryptionKey(int player_id) {
-  NOTREACHED();
-}
-
 media::MediaPlayerAndroid* MediaPlayerRenderer::GetFullscreenPlayer() {
   NOTREACHED();
   return nullptr;
@@ -223,6 +238,15 @@ void MediaPlayerRenderer::OnDecoderResourcesReleased(int player_id) {
 
   // TODO(tguilbert): Throttle requests, via exponential backoff.
   // See crbug.com/636615.
+}
+
+void MediaPlayerRenderer::CancelScopedSurfaceRequest() {
+  if (!surface_request_token_)
+    return;
+
+  ScopedSurfaceRequestManager::GetInstance()->UnregisterScopedSurfaceRequest(
+      surface_request_token_);
+  surface_request_token_ = base::UnguessableToken();
 }
 
 }  // namespace content

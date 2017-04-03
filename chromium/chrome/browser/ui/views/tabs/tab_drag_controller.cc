@@ -40,21 +40,21 @@
 #include "ui/views/widget/widget.h"
 
 #if defined(USE_ASH)
-#include "ash/common/accelerators/accelerator_commands.h"
-#include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
-#include "ash/common/wm/window_state.h"
-#include "ash/common/wm_shell.h"
-#include "ash/wm/window_state_aura.h"
-#include "ui/wm/core/coordinate_conversion.h"
+#include "ash/common/accelerators/accelerator_commands.h"  // nogncheck
+#include "ash/common/wm/maximize_mode/maximize_mode_controller.h"  // nogncheck
+#include "ash/common/wm/window_state.h"  // nogncheck
+#include "ash/common/wm_shell.h"  // nogncheck
+#include "ash/wm/window_state_aura.h"  // nogncheck
+#include "ui/wm/core/coordinate_conversion.h"  // nogncheck
 #endif
 
 #if defined(USE_AURA)
-#include "chrome/browser/ui/views/tabs/window_finder_mus.h"
-#include "content/public/common/mojo_shell_connection.h"
-#include "services/shell/runner/common/client_util.h"
-#include "ui/aura/env.h"
-#include "ui/aura/window.h"
-#include "ui/wm/core/window_modality_controller.h"
+#include "chrome/browser/ui/views/tabs/window_finder_mus.h"  // nogncheck
+#include "content/public/common/service_manager_connection.h"  // nogncheck
+#include "services/shell/runner/common/client_util.h"  // nogncheck
+#include "ui/aura/env.h"  // nogncheck
+#include "ui/aura/window.h"  // nogncheck
+#include "ui/wm/core/window_modality_controller.h"  // nogncheck
 #endif
 
 using base::UserMetricsAction;
@@ -229,9 +229,9 @@ TabDragController::TabDragController()
   instance_ = this;
 
 #if defined(USE_AURA)
-  content::MojoShellConnection* mojo_shell_connection =
-      content::MojoShellConnection::GetForProcess();
-  if (mojo_shell_connection && shell::ShellIsRemote())
+  content::ServiceManagerConnection* service_manager_connection =
+      content::ServiceManagerConnection::GetForProcess();
+  if (service_manager_connection && shell::ShellIsRemote())
     window_finder_.reset(new WindowFinderMus);
   else
 #endif

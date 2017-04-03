@@ -12,7 +12,7 @@
 #include "base/hash.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_math.h"
 #include "base/path_service.h"
 #include "base/process/process_metrics.h"
@@ -20,6 +20,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
 #include "base/third_party/dynamic_annotations/dynamic_annotations.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/common/child_process_messages.h"
 #include "content/public/common/child_process_host_delegate.h"
@@ -172,20 +173,11 @@ void ChildProcessHostImpl::CreateChannelMojo() {
   DCHECK(initialized);
 }
 
-std::string ChildProcessHostImpl::CreateChannel() {
-  DCHECK(channel_id_.empty());
-  channel_id_ = IPC::Channel::GenerateVerifiedChannelID(std::string());
-  channel_ = IPC::Channel::CreateServer(channel_id_, this);
-  if (!channel_ || !InitChannel())
-    return std::string();
-
-  return channel_id_;
-}
-
 bool ChildProcessHostImpl::InitChannel() {
 #if USE_ATTACHMENT_BROKER
+  DCHECK(base::MessageLoopForIO::IsCurrent());
   IPC::AttachmentBroker::GetGlobal()->RegisterCommunicationChannel(
-      channel_.get(), base::MessageLoopForIO::current()->task_runner());
+      channel_.get(), base::ThreadTaskRunnerHandle::Get());
 #endif
   if (!channel_->Connect()) {
 #if USE_ATTACHMENT_BROKER

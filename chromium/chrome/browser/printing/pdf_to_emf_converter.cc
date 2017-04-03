@@ -17,6 +17,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/common/chrome_utility_messages.h"
 #include "chrome/common/chrome_utility_printing_messages.h"
@@ -47,7 +48,7 @@ class RefCountedTempDir
  public:
   RefCountedTempDir() { ignore_result(temp_dir_.CreateUniqueTempDir()); }
   bool IsValid() const { return temp_dir_.IsValid(); }
-  const base::FilePath& GetPath() const { return temp_dir_.path(); }
+  const base::FilePath& GetPath() const { return temp_dir_.GetPath(); }
 
  private:
   friend struct BrowserThread::DeleteOnThread<BrowserThread::FILE>;
@@ -411,7 +412,7 @@ void PdfToEmfUtilityProcessHostClient::OnPageDone(bool success,
     ScopedTempFile temp_emf = data.TakeEmf();
     if (!temp_emf)  // Unexpected message from utility process.
       return OnFailed();
-    emf.reset(new LazyEmf(temp_dir_, std::move(temp_emf)));
+    emf = base::MakeUnique<LazyEmf>(temp_dir_, std::move(temp_emf));
   }
 
   BrowserThread::PostTask(BrowserThread::UI,

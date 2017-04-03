@@ -46,18 +46,24 @@ class ASH_EXPORT WmWindowAura : public WmWindow,
   const aura::Window* aura_window() const { return window_; }
 
   // WmWindow:
+  void Destroy() override;
   const WmWindow* GetRootWindow() const override;
   WmRootWindowController* GetRootWindowController() override;
   WmShell* GetShell() const override;
   void SetName(const char* name) override;
   std::string GetName() const override;
+  void SetTitle(const base::string16& title) override;
   base::string16 GetTitle() const override;
   void SetShellWindowId(int id) override;
   int GetShellWindowId() const override;
   WmWindow* GetChildByShellWindowId(int id) override;
   ui::wm::WindowType GetType() const override;
+  int GetAppType() const override;
+  void SetAppType(int app_type) const override;
   bool IsBubble() override;
   ui::Layer* GetLayer() override;
+  bool GetLayerTargetVisibility() override;
+  bool GetLayerVisible() override;
   display::Display GetDisplayNearestWindow() override;
   bool HasNonClientArea() override;
   int GetNonClientComponent(const gfx::Point& location) override;
@@ -73,27 +79,29 @@ class ASH_EXPORT WmWindowAura : public WmWindow,
   bool IsVisible() const override;
   void SetOpacity(float opacity) override;
   float GetTargetOpacity() const override;
+  gfx::Rect GetMinimizeAnimationTargetBoundsInScreen() const override;
   void SetTransform(const gfx::Transform& transform) override;
   gfx::Transform GetTargetTransform() const override;
   bool IsSystemModal() const override;
   bool GetBoolProperty(WmWindowProperty key) override;
+  SkColor GetColorProperty(WmWindowProperty key) override;
+  void SetColorProperty(WmWindowProperty key, SkColor value) override;
   int GetIntProperty(WmWindowProperty key) override;
   void SetIntProperty(WmWindowProperty key, int value) override;
-  ShelfItemDetails* GetShelfItemDetails() override;
-  void SetShelfItemDetails(const ShelfItemDetails& details) override;
-  void ClearShelfItemDetails() override;
   const wm::WindowState* GetWindowState() const override;
   WmWindow* GetToplevelWindow() override;
   WmWindow* GetToplevelWindowForFocus() override;
   void SetParentUsingContext(WmWindow* context,
                              const gfx::Rect& screen_bounds) override;
   void AddChild(WmWindow* window) override;
-  WmWindow* GetParent() override;
+  void RemoveChild(WmWindow* child) override;
+  const WmWindow* GetParent() const override;
   const WmWindow* GetTransientParent() const override;
   std::vector<WmWindow*> GetTransientChildren() override;
   void SetLayoutManager(
       std::unique_ptr<WmLayoutManager> layout_manager) override;
   WmLayoutManager* GetLayoutManager() override;
+  void SetVisibilityChangesAnimated() override;
   void SetVisibilityAnimationType(int type) override;
   void SetVisibilityAnimationDuration(base::TimeDelta delta) override;
   void SetVisibilityAnimationTransition(
@@ -124,6 +132,7 @@ class ASH_EXPORT WmWindowAura : public WmWindow,
   void SetRestoreOverrides(const gfx::Rect& bounds_override,
                            ui::WindowShowState window_state_override) override;
   void SetLockedToRoot(bool value) override;
+  bool IsLockedToRoot() const override;
   void SetCapture() override;
   bool HasCapture() override;
   void ReleaseCapture() override;
@@ -136,12 +145,14 @@ class ASH_EXPORT WmWindowAura : public WmWindow,
   void StackChildAtBottom(WmWindow* child) override;
   void StackChildAbove(WmWindow* child, WmWindow* target) override;
   void StackChildBelow(WmWindow* child, WmWindow* target) override;
+  void SetPinned(bool trusted) override;
   void SetAlwaysOnTop(bool value) override;
   bool IsAlwaysOnTop() const override;
   void Hide() override;
   void Show() override;
   views::Widget* GetInternalWidget() override;
   void CloseWidget() override;
+  void SetFocused() override;
   bool IsFocused() const override;
   bool IsActive() const override;
   void Activate() override;
@@ -161,7 +172,6 @@ class ASH_EXPORT WmWindowAura : public WmWindow,
   void SetSnapsChildrenToPhysicalPixelBoundary() override;
   void SnapToPixelBoundaryIfNecessary() override;
   void SetChildrenUseExtendedHitRegion() override;
-  void SetDescendantsStayInSameRootWindow(bool value) override;
   std::unique_ptr<views::View> CreateViewWithRecreatedLayers() override;
   void AddObserver(WmWindowObserver* observer) override;
   void RemoveObserver(WmWindowObserver* observer) override;

@@ -50,7 +50,6 @@ from v8_utilities import (cpp_name_or_partial, cpp_name, has_extended_attribute_
 
 
 INTERFACE_H_INCLUDES = frozenset([
-    'bindings/core/v8/GeneratedCodeHelper.h',
     'bindings/core/v8/ScriptWrappable.h',
     'bindings/core/v8/ToV8.h',
     'bindings/core/v8/V8Binding.h',
@@ -60,6 +59,7 @@ INTERFACE_H_INCLUDES = frozenset([
 ])
 INTERFACE_CPP_INCLUDES = frozenset([
     'bindings/core/v8/ExceptionState.h',
+    'bindings/core/v8/GeneratedCodeHelper.h',
     'bindings/core/v8/V8DOMConfiguration.h',
     'bindings/core/v8/V8ObjectConstructor.h',
     'core/dom/Document.h',
@@ -132,7 +132,18 @@ def origin_trial_features(interface, constants, attributes, methods):
     return sorted(features)
 
 
-def interface_context(interface):
+def interface_context(interface, interfaces):
+    """Creates a Jinja template context for an interface.
+
+    Args:
+        interface: An interface to create the context for
+        interfaces: A dict which maps an interface name to the definition
+            which can be referred if needed
+
+    Returns:
+        A Jinja template context for |interface|
+    """
+
     includes.clear()
     includes.update(INTERFACE_CPP_INCLUDES)
     header_includes = set(INTERFACE_H_INCLUDES)
@@ -210,8 +221,10 @@ def interface_context(interface):
         set_wrapper_reference_to['idl_type'].add_includes_for_type()
 
     # [Custom=VisitDOMWrapper]
-    has_visit_dom_wrapper = (
-        has_extended_attribute_value(interface, 'Custom', 'VisitDOMWrapper') or
+    has_visit_dom_wrapper_custom = (
+        has_extended_attribute_value(interface, 'Custom', 'VisitDOMWrapper'))
+
+    has_visit_dom_wrapper = (has_visit_dom_wrapper_custom or
         set_wrapper_reference_from or set_wrapper_reference_to)
 
     wrapper_class_id = ('NodeClassId' if inherits_interface(interface.name, 'Node') else 'ObjectClassId')
@@ -237,6 +250,7 @@ def interface_context(interface):
         'has_custom_legacy_call_as_function': has_extended_attribute_value(interface, 'Custom', 'LegacyCallAsFunction'),  # [Custom=LegacyCallAsFunction]
         'has_partial_interface': len(interface.partial_interfaces) > 0,
         'has_visit_dom_wrapper': has_visit_dom_wrapper,
+        'has_visit_dom_wrapper_custom': has_visit_dom_wrapper_custom,
         'header_includes': header_includes,
         'interface_name': interface.name,
         'is_array_buffer_or_view': is_array_buffer_or_view,
@@ -277,10 +291,19 @@ def interface_context(interface):
             number_of_required_arguments(constructor),
     } for constructor in interface.custom_constructors]
 
+    # [HTMLConstructor]
+    has_html_constructor = 'HTMLConstructor' in extended_attributes
+    # https://html.spec.whatwg.org/multipage/dom.html#html-element-constructors
+    if has_html_constructor:
+        if ('Constructor' in extended_attributes) or ('NoInterfaceObject' in extended_attributes):
+            raise Exception('[Constructor] and [NoInterfaceObject] MUST NOT be'
+                            ' specified with [HTMLConstructor]: '
+                            '%s' % interface.name)
+
     # [NamedConstructor]
     named_constructor = named_constructor_context(interface)
 
-    if constructors or custom_constructors or named_constructor:
+    if constructors or custom_constructors or has_html_constructor or named_constructor:
         if interface.is_partial:
             raise Exception('[Constructor] and [NamedConstructor] MUST NOT be'
                             ' specified on partial interface definitions: '
@@ -292,14 +315,14 @@ def interface_context(interface):
         raise Exception('[Measure] or [MeasureAs] specified for interface without a constructor: '
                         '%s' % interface.name)
 
-    # [Unscopeable] attributes and methods
-    unscopeables = []
+    # [Unscopable] attributes and methods
+    unscopables = []
     for attribute in interface.attributes:
-        if 'Unscopeable' in attribute.extended_attributes:
-            unscopeables.append((attribute.name, v8_utilities.runtime_enabled_function_name(attribute)))
+        if 'Unscopable' in attribute.extended_attributes:
+            unscopables.append((attribute.name, v8_utilities.runtime_enabled_function_name(attribute)))
     for method in interface.operations:
-        if 'Unscopeable' in method.extended_attributes:
-            unscopeables.append((method.name, v8_utilities.runtime_enabled_function_name(method)))
+        if 'Unscopable' in method.extended_attributes:
+            unscopables.append((method.name, v8_utilities.runtime_enabled_function_name(method)))
 
     # [CEReactions]
     setter_or_deleters = (
@@ -316,11 +339,12 @@ def interface_context(interface):
     context.update({
         'constructors': constructors,
         'has_custom_constructor': bool(custom_constructors),
+        'has_html_constructor': has_html_constructor,
         'interface_length':
             interface_length(constructors + custom_constructors),
         'is_constructor_raises_exception': extended_attributes.get('RaisesException') == 'Constructor',  # [RaisesException=Constructor]
         'named_constructor': named_constructor,
-        'unscopeables': sorted(unscopeables),
+        'unscopables': sorted(unscopables),
     })
 
     # Constants
@@ -330,7 +354,7 @@ def interface_context(interface):
     })
 
     # Attributes
-    attributes = [v8_attributes.attribute_context(interface, attribute)
+    attributes = [v8_attributes.attribute_context(interface, attribute, interfaces)
                   for attribute in interface.attributes]
 
     has_conditional_attributes = any(attribute['exposed_test'] for attribute in attributes)
@@ -423,10 +447,14 @@ def interface_context(interface):
                 extended_attributes=used_extended_attributes,
                 implemented_as=implemented_as)
 
-        if interface.iterable or interface.maplike or interface.setlike or 'Iterable' in extended_attributes:
+        if interface.has_indexed_elements:
+            # Window.idl in Blink has indexed properties, but the spec says
+            # Window interface doesn't have indexed properties, instead
+            # the WindowProxy exotic object has indexed properties.  Thus,
+            # Window interface must not support iterators.
+            has_array_iterator = (interface.name != 'Window')
+        elif interface.iterable or interface.maplike or interface.setlike or 'Iterable' in extended_attributes:
             iterator_method = generated_iterator_method('iterator', implemented_as='iterator')
-        elif interface.has_indexed_elements:
-            has_array_iterator = True
 
         if interface.iterable or interface.maplike or interface.setlike:
             implicit_methods = [
@@ -563,15 +591,10 @@ def interface_context(interface):
     })
 
     # Conditionally enabled members
-    has_conditional_attributes_on_instance = any(
-        (attribute['exposed_test'] or attribute['secure_context_test']) and attribute['on_instance']
-        for attribute in attributes)
     has_conditional_attributes_on_prototype = any(
         (attribute['exposed_test'] or attribute['secure_context_test']) and attribute['on_prototype']
         for attribute in attributes)
     context.update({
-        'has_conditional_attributes_on_instance':
-            has_conditional_attributes_on_instance,
         'has_conditional_attributes_on_prototype':
             has_conditional_attributes_on_prototype,
     })
@@ -581,7 +604,7 @@ def interface_context(interface):
         'indexed_property_setter': property_setter(interface.indexed_property_setter, interface),
         'indexed_property_deleter': property_deleter(interface.indexed_property_deleter),
         'is_override_builtins': 'OverrideBuiltins' in extended_attributes,
-        'named_property_getter': property_getter(interface.named_property_getter, ['propertyName']),
+        'named_property_getter': property_getter(interface.named_property_getter, ['name']),
         'named_property_setter': property_setter(interface.named_property_setter, interface),
         'named_property_deleter': property_deleter(interface.named_property_deleter),
     })

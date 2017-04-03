@@ -7,15 +7,15 @@
 #include "ash/aura/wm_window_aura.h"
 #include "ash/common/shelf/shelf_layout_manager.h"
 #include "ash/common/shelf/shelf_model.h"
-#include "ash/common/shelf/shelf_types.h"
 #include "ash/common/shelf/shelf_widget.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm/wm_event.h"
 #include "ash/common/wm_shell.h"
+#include "ash/common/wm_window_property.h"
+#include "ash/public/cpp/shelf_types.h"
 #include "ash/root_window_controller.h"
-#include "ash/shelf/shelf_util.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/cursor_manager_test_api.h"
@@ -134,7 +134,8 @@ class PanelWindowResizerTest : public test::AshTestBase {
     for (std::vector<aura::Window *>::const_iterator
              iter = window_order.begin();
          iter != window_order.end(); ++iter, ++panel_index) {
-      ShelfID id = GetShelfIDForWindow(*iter);
+      ShelfID id =
+          WmWindowAura::Get(*iter)->GetIntProperty(WmWindowProperty::SHELF_ID);
       EXPECT_EQ(id, model_->items()[panel_index].id);
     }
   }
@@ -227,26 +228,17 @@ class PanelWindowResizerTransientTest
 // Verifies a window can be dragged from the panel and detached and then
 // reattached.
 TEST_F(PanelWindowResizerTest, PanelDetachReattachBottom) {
-  if (!SupportsHostWindowResize())
-    return;
-
   std::unique_ptr<aura::Window> window(CreatePanelWindow(gfx::Point(0, 0)));
   DetachReattachTest(window.get(), 0, -1);
 }
 
 TEST_F(PanelWindowResizerTest, PanelDetachReattachLeft) {
-  if (!SupportsHostWindowResize())
-    return;
-
   GetPrimaryShelf()->SetAlignment(SHELF_ALIGNMENT_LEFT);
   std::unique_ptr<aura::Window> window(CreatePanelWindow(gfx::Point(0, 0)));
   DetachReattachTest(window.get(), 1, 0);
 }
 
 TEST_F(PanelWindowResizerTest, PanelDetachReattachRight) {
-  if (!SupportsHostWindowResize())
-    return;
-
   GetPrimaryShelf()->SetAlignment(SHELF_ALIGNMENT_RIGHT);
   std::unique_ptr<aura::Window> window(CreatePanelWindow(gfx::Point(0, 0)));
   DetachReattachTest(window.get(), -1, 0);
@@ -255,8 +247,6 @@ TEST_F(PanelWindowResizerTest, PanelDetachReattachRight) {
 // Tests that a drag continues when the shelf is hidden. This occurs as part of
 // the animation when switching profiles. http://crbug.com/393047.
 TEST_F(PanelWindowResizerTest, DetachThenHideShelf) {
-  if (!SupportsHostWindowResize())
-    return;
   std::unique_ptr<aura::Window> window(CreatePanelWindow(gfx::Point(0, 0)));
   wm::WindowState* state = wm::GetWindowState(window.get());
   gfx::Rect expected_bounds = window->GetBoundsInScreen();
@@ -476,16 +466,10 @@ TEST_F(PanelWindowResizerTest, DragMovesToPanelLayer) {
 }
 
 TEST_P(PanelWindowResizerTextDirectionTest, DragReordersPanelsHorizontal) {
-  if (!SupportsHostWindowResize())
-    return;
-
   DragAlongShelfReorder(base::i18n::IsRTL() ? 1 : -1, 0);
 }
 
 TEST_F(PanelWindowResizerTest, DragReordersPanelsVertical) {
-  if (!SupportsHostWindowResize())
-    return;
-
   GetPrimaryShelf()->SetAlignment(SHELF_ALIGNMENT_LEFT);
   DragAlongShelfReorder(0, -1);
 }
@@ -493,9 +477,6 @@ TEST_F(PanelWindowResizerTest, DragReordersPanelsVertical) {
 // Tests that panels can have transient children of different types.
 // The transient children should be reparented in sync with the panel.
 TEST_P(PanelWindowResizerTransientTest, PanelWithTransientChild) {
-  if (!SupportsHostWindowResize())
-    return;
-
   std::unique_ptr<aura::Window> window(CreatePanelWindow(gfx::Point(0, 0)));
   std::unique_ptr<aura::Window> child(
       CreateTestWindowInShellWithDelegateAndType(

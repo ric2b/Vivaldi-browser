@@ -10,7 +10,7 @@
 #include "net/base/completion_callback.h"
 #include "net/base/net_export.h"
 #include "net/http/http_auth.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 
 namespace net {
 
@@ -35,7 +35,7 @@ class NET_EXPORT_PRIVATE HttpAuthHandler {
                          HttpAuth::Target target,
                          const SSLInfo& ssl_info,
                          const GURL& origin,
-                         const BoundNetLog& net_log);
+                         const NetLogWithSource& net_log);
 
   // Determines how the previous authorization attempt was received.
   //
@@ -190,7 +190,7 @@ class NET_EXPORT_PRIVATE HttpAuthHandler {
   // A bitmask of the properties of the authentication scheme.
   int properties_;
 
-  BoundNetLog net_log_;
+  NetLogWithSource net_log_;
 
  private:
   void OnGenerateAuthTokenComplete(int rv);

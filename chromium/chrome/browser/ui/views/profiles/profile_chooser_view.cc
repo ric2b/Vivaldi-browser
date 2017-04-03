@@ -28,6 +28,7 @@
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/chrome_pages.h"
+#include "chrome/browser/ui/profile_chooser_constants.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/user_manager.h"
 #include "chrome/browser/ui/views/profiles/signin_view_controller_delegate_views.h"
@@ -38,7 +39,8 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "chrome/grit/theme_resources.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_error_controller.h"
@@ -48,7 +50,6 @@
 #include "components/sync/driver/sync_error_controller.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/user_metrics.h"
-#include "grit/theme_resources.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/material_design/material_design_controller.h"
@@ -220,8 +221,7 @@ class BackgroundColorHoverButton : public views::LabelButton {
   void OnPaint(gfx::Canvas* canvas) override {
     if ((state() == STATE_PRESSED) ||
         (state() == STATE_HOVERED)) {
-      canvas->DrawColor(GetNativeTheme()->GetSystemColor(
-          ui::NativeTheme::kColorId_ButtonHoverBackgroundColor));
+      canvas->DrawColor(profiles::kHoverColor);
     }
     LabelButton::OnPaint(canvas);
   }
@@ -698,14 +698,18 @@ void ProfileChooserView::ShowBubble(
     signin_metrics::AccessPoint access_point,
     views::View* anchor_view,
     Browser* browser) {
+  if (switches::IsMaterialDesignUserMenu()) {
+    // The Material Design User Menu doesn't have a fast user switcher on
+    // right-click. To ease up the transition for users, show the regular user
+    // menu when right-clicking instead of doing nothing.
+    view_mode = profiles::BUBBLE_VIEW_MODE_PROFILE_CHOOSER;
+  }
+
   // Don't start creating the view if it would be an empty fast user switcher.
   // It has to happen here to prevent the view system from creating an empty
   // container.
-  // Same for material design user menu since fast profile switcher will be
-  // migrated to the left-click menu.
   if (view_mode == profiles::BUBBLE_VIEW_MODE_FAST_PROFILE_CHOOSER &&
-      (!profiles::HasProfileSwitchTargets(browser->profile()) ||
-       switches::IsMaterialDesignUserMenu())) {
+      !profiles::HasProfileSwitchTargets(browser->profile())) {
     return;
   }
 
@@ -1027,7 +1031,8 @@ void ProfileChooserView::ButtonPressed(views::Button* sender,
     chrome::OpenUpdateChromeDialog(browser_);
   } else if (sender == sync_error_signin_again_button_) {
     if (ProfileSyncServiceFactory::GetForProfile(browser_->profile()))
-      ProfileSyncService::SyncEvent(ProfileSyncService::STOP_FROM_OPTIONS);
+      browser_sync::ProfileSyncService::SyncEvent(
+          browser_sync::ProfileSyncService::STOP_FROM_OPTIONS);
     SigninManagerFactory::GetForProfile(browser_->profile())
         ->SignOut(signin_metrics::USER_CLICKED_SIGNOUT_SETTINGS,
                   signin_metrics::SignoutDelete::IGNORE_METRIC);
@@ -1101,8 +1106,8 @@ void ProfileChooserView::ButtonPressed(views::Button* sender,
         open_other_profile_indexes_map_.find(sender);
     if (profile_match != open_other_profile_indexes_map_.end()) {
       avatar_menu_->SwitchToProfile(
-          profile_match->second,
-          ui::DispositionFromEventFlags(event.flags()) == NEW_WINDOW,
+          profile_match->second, ui::DispositionFromEventFlags(event.flags()) ==
+                                     WindowOpenDisposition::NEW_WINDOW,
           ProfileMetrics::SWITCH_PROFILE_ICON);
     } else {
       // This was a profile accounts button.
@@ -1657,10 +1662,11 @@ views::View* ProfileChooserView::CreateCurrentProfileView(
       layout->StartRow(1, 0);
       layout->AddView(promo);
 
-      signin_current_profile_button_ = new views::BlueButton(
-          this, l10n_util::GetStringFUTF16(
-                    IDS_SYNC_START_SYNC_BUTTON_LABEL,
-                    l10n_util::GetStringUTF16(IDS_SHORT_PRODUCT_NAME)));
+      signin_current_profile_button_ =
+          views::MdTextButton::CreateSecondaryUiBlueButton(
+              this, l10n_util::GetStringFUTF16(
+                        IDS_SYNC_START_SYNC_BUTTON_LABEL,
+                        l10n_util::GetStringUTF16(IDS_SHORT_PRODUCT_NAME)));
       layout->StartRowWithPadding(1, 0, 0,
                                   views::kRelatedControlVerticalSpacing);
       layout->StartRow(1, 0);
@@ -1723,6 +1729,9 @@ views::View* ProfileChooserView::CreateMaterialDesignCurrentProfileView(
     return view;
   }
 
+  const base::string16 profile_name =
+      profiles::GetAvatarNameForProfile(browser_->profile()->GetPath());
+
   // The available links depend on the type of profile that is active.
   if (avatar_item.signed_in) {
     if (switches::IsEnableAccountConsistency()) {
@@ -1749,6 +1758,12 @@ views::View* ProfileChooserView::CreateMaterialDesignCurrentProfileView(
           gfx::Insets(name_container_v_spacing, 0));
       profile_name_container->AddChildView(email_label);
     }
+
+    current_profile_card_->SetAccessibleName(
+        l10n_util::GetStringFUTF16(
+            IDS_PROFILES_EDIT_SIGNED_IN_PROFILE_ACCESSIBLE_NAME,
+            profile_name,
+            avatar_item.username));
     return view;
   }
 
@@ -1781,6 +1796,9 @@ views::View* ProfileChooserView::CreateMaterialDesignCurrentProfileView(
     view->AddChildView(extra_links_view);
   }
 
+  current_profile_card_->SetAccessibleName(
+      l10n_util::GetStringFUTF16(
+          IDS_PROFILES_EDIT_PROFILE_ACCESSIBLE_NAME, profile_name));
   return view;
 }
 
@@ -2076,7 +2094,7 @@ void ProfileChooserView::CreateAccountButton(views::GridLayout* layout,
 
 views::View* ProfileChooserView::CreateGaiaSigninView(
     views::View** signin_content_view) {
-  views::WebView* web_view =
+  std::unique_ptr<views::WebView> web_view =
       SigninViewControllerDelegateViews::CreateGaiaWebView(
           this, view_mode_, browser_, access_point_);
 
@@ -2098,13 +2116,13 @@ views::View* ProfileChooserView::CreateGaiaSigninView(
   }
 
   if (signin_content_view)
-    *signin_content_view = web_view;
+    *signin_content_view = web_view.get();
 
   TitleCard* title_card = new TitleCard(l10n_util::GetStringUTF16(message_id),
                                         this,
                                         &gaia_signin_cancel_button_);
   return TitleCard::AddPaddedTitleCard(
-      web_view, title_card, kPasswordCombinedFixedGaiaViewWidth);
+      web_view.release(), title_card, kPasswordCombinedFixedGaiaViewWidth);
 }
 
 views::View* ProfileChooserView::CreateAccountRemovalView() {
@@ -2153,7 +2171,7 @@ views::View* ProfileChooserView::CreateAccountRemovalView() {
 
   // Adds button.
   if (!is_primary_account) {
-    remove_account_button_ = new views::BlueButton(
+    remove_account_button_ = views::MdTextButton::CreateSecondaryUiBlueButton(
         this, l10n_util::GetStringUTF16(IDS_PROFILES_ACCOUNT_REMOVAL_BUTTON));
     remove_account_button_->SetHorizontalAlignment(
         gfx::ALIGN_CENTER);

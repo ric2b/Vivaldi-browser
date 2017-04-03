@@ -13,22 +13,34 @@
 namespace blink {
 
 class Document;
+class DOMWindow;
 
 class PerformanceLongTaskTiming final : public PerformanceEntry {
-    DEFINE_WRAPPERTYPEINFO();
-public:
-    static PerformanceLongTaskTiming* create(double startTime, double endTime, String frameContextUrl)
-    {
-        return new PerformanceLongTaskTiming(startTime, endTime, frameContextUrl);
-    }
+  DEFINE_WRAPPERTYPEINFO();
 
-    DECLARE_VIRTUAL_TRACE();
+ public:
+  static PerformanceLongTaskTiming* create(double startTime,
+                                           double endTime,
+                                           String name,
+                                           DOMWindow* culpritWindow) {
+    return new PerformanceLongTaskTiming(startTime, endTime, name,
+                                         culpritWindow);
+  }
 
-private:
-    PerformanceLongTaskTiming(double startTime, double endTime, String frameContextUrl);
-    ~PerformanceLongTaskTiming() override;
+  DOMWindow* culpritWindow() const;
+
+  DECLARE_VIRTUAL_TRACE();
+
+ private:
+  PerformanceLongTaskTiming(double startTime,
+                            double endTime,
+                            String name,
+                            DOMWindow* culpritWindow);
+  ~PerformanceLongTaskTiming() override;
+
+  Member<DOMWindow> m_culpritWindow;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // PerformanceLongTaskTiming_h
+#endif  // PerformanceLongTaskTiming_h

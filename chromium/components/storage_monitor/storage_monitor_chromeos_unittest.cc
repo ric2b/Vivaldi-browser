@@ -19,7 +19,7 @@
 #include "components/storage_monitor/mock_removable_storage_observer.h"
 #include "components/storage_monitor/removable_device_constants.h"
 #include "components/storage_monitor/storage_info.h"
-#include "components/storage_monitor/test_media_transfer_protocol_manager_linux.h"
+#include "components/storage_monitor/test_media_transfer_protocol_manager_chromeos.h"
 #include "components/storage_monitor/test_storage_monitor.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -68,7 +68,7 @@ class TestStorageMonitorCros : public StorageMonitorCros {
 
   void Init() override {
     SetMediaTransferProtocolManagerForTest(
-        new TestMediaTransferProtocolManagerLinux());
+        new TestMediaTransferProtocolManagerChromeOS());
     StorageMonitorCros::Init();
   }
 
@@ -237,7 +237,7 @@ uint64_t StorageMonitorCrosTest::GetDeviceStorageSize(
 
 base::FilePath StorageMonitorCrosTest::CreateMountPoint(
     const std::string& dir, bool with_dcim_dir) {
-  base::FilePath return_path(scoped_temp_dir_.path());
+  base::FilePath return_path(scoped_temp_dir_.GetPath());
   return_path = return_path.AppendASCII(dir);
   base::FilePath path(return_path);
   if (with_dcim_dir)
@@ -257,7 +257,7 @@ void StorageMonitorCrosTest::PostQuitToUIThread() {
 void StorageMonitorCrosTest::WaitForFileThread() {
   BrowserThread::PostTask(BrowserThread::FILE, FROM_HERE,
                           base::Bind(&PostQuitToUIThread));
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 }
 
 void StorageMonitorCrosTest::EjectNotify(StorageMonitor::EjectStatus status) {

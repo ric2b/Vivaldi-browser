@@ -22,7 +22,6 @@
 #include "chrome/browser/ui/passwords/password_dialog_prompts.h"
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/grit/generated_resources.h"
 #include "components/password_manager/core/browser/browser_save_password_progress_logger.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "components/password_manager/core/browser/password_form_manager.h"
@@ -30,7 +29,6 @@
 #include "components/password_manager/core/browser/statistics_table.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
 #include "content/public/browser/navigation_details.h"
-#include "ui/base/l10n/l10n_util.h"
 
 using password_manager::PasswordFormManager;
 
@@ -120,6 +118,8 @@ bool ManagePasswordsUIController::OnChooseCredentials(
     const GURL& origin,
     const ManagePasswordsState::CredentialsCallback& callback) {
   DCHECK(!local_credentials.empty() || !federated_credentials.empty());
+  if (!HasBrowserWindow())
+    return false;
   PasswordDialogController::FormsVector locals =
       CopyFormVector(local_credentials);
   PasswordDialogController::FormsVector federations =
@@ -347,7 +347,7 @@ void ManagePasswordsUIController::NavigateToExternalPasswordManager() {
       chrome::FindBrowserWithWebContents(web_contents()),
       GURL(password_manager::kPasswordManagerAccountDashboardURL),
       ui::PAGE_TRANSITION_LINK);
-  params.disposition = NEW_FOREGROUND_TAB;
+  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   chrome::Navigate(&params);
 }
 
@@ -355,7 +355,7 @@ void ManagePasswordsUIController::NavigateToSmartLockHelpPage() {
   chrome::NavigateParams params(
       chrome::FindBrowserWithWebContents(web_contents()),
       GURL(chrome::kSmartLockHelpPage), ui::PAGE_TRANSITION_LINK);
-  params.disposition = NEW_FOREGROUND_TAB;
+  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   chrome::Navigate(&params);
 }
 
@@ -431,6 +431,10 @@ AccountChooserPrompt* ManagePasswordsUIController::CreateAccountChooser(
 AutoSigninFirstRunPrompt* ManagePasswordsUIController::CreateAutoSigninPrompt(
     PasswordDialogController* controller) {
   return CreateAutoSigninPromptView(controller, web_contents());
+}
+
+bool ManagePasswordsUIController::HasBrowserWindow() const {
+  return chrome::FindBrowserWithWebContents(web_contents()) != nullptr;
 }
 
 void ManagePasswordsUIController::DidNavigateMainFrame(

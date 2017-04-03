@@ -32,12 +32,14 @@
 #include "ui/base/ime/input_method.h"
 #include "ui/base/x/x11_util.h"
 #include "ui/base/x/x11_util_internal.h"
+#include "ui/base/x/x11_window_event_manager.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/events/devices/x11/device_data_manager_x11.h"
 #include "ui/events/devices/x11/device_list_cache_x11.h"
 #include "ui/events/devices/x11/touch_factory_x11.h"
 #include "ui/events/event_utils.h"
+#include "ui/events/null_event_targeter.h"
 #include "ui/events/platform/platform_event_source.h"
 #include "ui/events/platform/x11/x11_event_source.h"
 #include "ui/gfx/geometry/insets.h"
@@ -92,6 +94,7 @@ const char* kAtomsToCache[] = {
   "UTF8_STRING",
   "WM_DELETE_WINDOW",
   "WM_PROTOCOLS",
+  "_NET_ACTIVE_WINDOW",
   "_NET_FRAME_EXTENTS",
   "_NET_WM_CM_S0",
   "_NET_WM_DESKTOP",
@@ -156,6 +159,24 @@ std::vector<::Window> GetParentsList(XDisplay* xdisplay, ::Window window) {
   return result;
 }
 
+int XI2ModeToXMode(int xi2_mode) {
+  switch (xi2_mode) {
+    case XINotifyNormal:
+      return NotifyNormal;
+    case XINotifyGrab:
+    case XINotifyPassiveGrab:
+      return NotifyGrab;
+    case XINotifyUngrab:
+    case XINotifyPassiveUngrab:
+      return NotifyUngrab;
+    case XINotifyWhileGrabbed:
+      return NotifyWhileGrabbed;
+    default:
+      NOTREACHED();
+      return NotifyNormal;
+  }
+}
+
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -182,9 +203,14 @@ DesktopWindowTreeHostX11::DesktopWindowTreeHostX11(
       window_parent_(NULL),
       custom_window_shape_(false),
       urgency_hint_set_(false),
+      has_pointer_grab_(false),
       activatable_(true),
-      close_widget_factory_(this) {
-}
+      has_pointer_(false),
+      has_window_focus_(false),
+      has_pointer_focus_(false),
+      modal_dialog_xid_(0),
+      close_widget_factory_(this),
+      weak_factory_(this) {}
 
 DesktopWindowTreeHostX11::~DesktopWindowTreeHostX11() {
   window()->ClearProperty(kHostForRootWindow);
@@ -231,20 +257,147 @@ gfx::Rect DesktopWindowTreeHostX11::GetX11RootWindowOuterBounds() const {
   return window_shape_.get();
 }
 
-void DesktopWindowTreeHostX11::HandleNativeWidgetActivationChanged(
-    bool active) {
-  if (active) {
+void DesktopWindowTreeHostX11::BeforeActivationStateChanged() {
+  was_active_ = IsActive();
+  had_pointer_ = has_pointer_;
+  had_pointer_grab_ = has_pointer_grab_;
+  had_window_focus_ = has_window_focus_;
+}
+
+void DesktopWindowTreeHostX11::AfterActivationStateChanged() {
+  if (had_pointer_grab_ && !has_pointer_grab_)
+    dispatcher()->OnHostLostMouseGrab();
+
+  bool had_pointer_capture = had_pointer_ || had_pointer_grab_;
+  bool has_pointer_capture = has_pointer_ || has_pointer_grab_;
+  if (had_pointer_capture && !has_pointer_capture)
+    OnHostLostWindowCapture();
+
+  if (!was_active_ && IsActive()) {
     FlashFrame(false);
     OnHostActivated();
+    // TODO(thomasanderson): Remove this window shuffling and use XWindowCache
+    // instead.
     open_windows().remove(xwindow_);
     open_windows().insert(open_windows().begin(), xwindow_);
-  } else {
-    ReleaseCapture();
   }
 
-  desktop_native_widget_aura_->HandleActivationChanged(active);
+  if (was_active_ != IsActive()) {
+    desktop_native_widget_aura_->HandleActivationChanged(IsActive());
+    native_widget_delegate_->AsWidget()->GetRootView()->SchedulePaint();
+  }
+}
 
-  native_widget_delegate_->AsWidget()->GetRootView()->SchedulePaint();
+void DesktopWindowTreeHostX11::OnCrossingEvent(bool enter,
+                                               bool focus_in_window_or_ancestor,
+                                               int mode,
+                                               int detail) {
+  // NotifyInferior on a crossing event means the pointer moved into or out of a
+  // child window, but the pointer is still within |xwindow_|.
+  if (detail == NotifyInferior)
+    return;
+
+  BeforeActivationStateChanged();
+
+  if (mode == NotifyGrab)
+    has_pointer_grab_ = enter;
+  else if (mode == NotifyUngrab)
+    has_pointer_grab_ = false;
+
+  has_pointer_ = enter;
+  if (focus_in_window_or_ancestor && !has_window_focus_) {
+    // If we reach this point, we know the focus is in an ancestor or the
+    // pointer root.  The definition of |has_pointer_focus_| is (An ancestor
+    // window or the PointerRoot is focused) && |has_pointer_|.  Therefore, we
+    // can just use |has_pointer_| in the assignment.  The transitions for when
+    // the focus changes are handled in OnFocusEvent().
+    has_pointer_focus_ = has_pointer_;
+  }
+
+  AfterActivationStateChanged();
+}
+
+void DesktopWindowTreeHostX11::OnFocusEvent(bool focus_in,
+                                            int mode,
+                                            int detail) {
+  // NotifyInferior on a focus event means the focus moved into or out of a
+  // child window, but the focus is still within |xwindow_|.
+  if (detail == NotifyInferior)
+    return;
+
+  bool notify_grab = mode == NotifyGrab || mode == NotifyUngrab;
+
+  BeforeActivationStateChanged();
+
+  // For every focus change, the X server sends normal focus events which are
+  // useful for tracking |has_window_focus_|, but supplements these events with
+  // NotifyPointer events which are only useful for tracking pointer focus.
+
+  // For |has_pointer_focus_| and |has_window_focus_|, we continue tracking
+  // state during a grab, but ignore grab/ungrab events themselves.
+  if (!notify_grab && detail != NotifyPointer)
+    has_window_focus_ = focus_in;
+
+  if (!notify_grab && has_pointer_) {
+    switch (detail) {
+      case NotifyAncestor:
+      case NotifyVirtual:
+        // If we reach this point, we know |has_pointer_| was true before and
+        // after this event.  Since the definition of |has_pointer_focus_| is
+        // (An ancestor window or the PointerRoot is focused) && |has_pointer_|,
+        // we only need to worry about transitions on the first conjunct.
+        // Therefore, |has_pointer_focus_| will become true when:
+        // 1. Focus moves from |xwindow_| to an ancestor
+        //    (FocusOut with NotifyAncestor)
+        // 2. Focus moves from a decendant of |xwindow_| to an ancestor
+        //    (FocusOut with NotifyVirtual)
+        // |has_pointer_focus_| will become false when:
+        // 1. Focus moves from an ancestor to |xwindow_|
+        //    (FocusIn with NotifyAncestor)
+        // 2. Focus moves from an ancestor to a child of |xwindow_|
+        //    (FocusIn with NotifyVirtual)
+        has_pointer_focus_ = !focus_in;
+        break;
+      case NotifyPointer:
+        // The remaining cases for |has_pointer_focus_| becoming true are:
+        // 3. Focus moves from |xwindow_| to the PointerRoot
+        // 4. Focus moves from a decendant of |xwindow_| to the PointerRoot
+        // 5. Focus moves from None to the PointerRoot
+        // 6. Focus moves from Other to the PointerRoot
+        // 7. Focus moves from None to an ancestor of |xwindow_|
+        // 8. Focus moves from Other to an ancestor fo |xwindow_|
+        // In each case, we will get a FocusIn with a detail of NotifyPointer.
+        // The remaining cases for |has_pointer_focus_| becoming false are:
+        // 3. Focus moves from the PointerRoot to |xwindow_|
+        // 4. Focus moves from the PointerRoot to a decendant of |xwindow|
+        // 5. Focus moves from the PointerRoot to None
+        // 6. Focus moves from an ancestor of |xwindow_| to None
+        // 7. Focus moves from the PointerRoot to Other
+        // 8. Focus moves from an ancestor of |xwindow_| to Other
+        // In each case, we will get a FocusOut with a detail of NotifyPointer.
+        has_pointer_focus_ = focus_in;
+        break;
+      case NotifyNonlinear:
+      case NotifyNonlinearVirtual:
+        // We get Nonlinear(Virtual) events when
+        // 1. Focus moves from Other to |xwindow_|
+        //    (FocusIn with NotifyNonlinear)
+        // 2. Focus moves from Other to a decendant of |xwindow_|
+        //    (FocusIn with NotifyNonlinearVirtual)
+        // 3. Focus moves from |xwindow_| to Other
+        //    (FocusOut with NotifyNonlinear)
+        // 4. Focus moves from a decendant of |xwindow_| to Other
+        //    (FocusOut with NotifyNonlinearVirtual)
+        // |has_pointer_focus_| should be false before and after this event.
+        has_pointer_focus_ = false;
+      default:
+        break;
+    }
+  }
+
+  ignore_keyboard_input_ = false;
+
+  AfterActivationStateChanged();
 }
 
 void DesktopWindowTreeHostX11::AddObserver(
@@ -309,8 +462,8 @@ void DesktopWindowTreeHostX11::OnNativeWidgetCreated(
   window()->SetProperty(kViewsWindowForRootWindow, content_window_);
   window()->SetProperty(kHostForRootWindow, this);
 
-  // Ensure that the X11DesktopHandler exists so that it dispatches activation
-  // messages to us.
+  // Ensure that the X11DesktopHandler exists so that it tracks create/destroy
+  // notify events.
   X11DesktopHandler::get();
 
   // TODO(erg): Unify this code once the other consumer goes away.
@@ -407,7 +560,7 @@ void DesktopWindowTreeHostX11::ShowWindowWithState(
     ui::WindowShowState show_state) {
   if (compositor())
     compositor()->SetVisible(true);
-  if (!window_mapped_)
+  if (!IsVisible())
     MapWindow(show_state);
 
   switch (show_state) {
@@ -424,14 +577,6 @@ void DesktopWindowTreeHostX11::ShowWindowWithState(
       break;
   }
 
-  // Makes the window activated by default if the state is not INACTIVE or
-  // MINIMIZED.
-  if (show_state != ui::SHOW_STATE_INACTIVE &&
-      show_state != ui::SHOW_STATE_MINIMIZED &&
-      activatable_) {
-    Activate();
-  }
-
   native_widget_delegate_->AsWidget()->SetInitialFocus(show_state);
 }
 
@@ -444,7 +589,7 @@ void DesktopWindowTreeHostX11::ShowMaximizedWithBounds(
 }
 
 bool DesktopWindowTreeHostX11::IsVisible() const {
-  return window_mapped_;
+  return window_mapped_ && !wait_for_unmap_;
 }
 
 void DesktopWindowTreeHostX11::SetSize(const gfx::Size& requested_size) {
@@ -615,22 +760,81 @@ void DesktopWindowTreeHostX11::SetShape(
 }
 
 void DesktopWindowTreeHostX11::Activate() {
-  if (!window_mapped_)
+  if (!IsVisible() || !activatable_)
     return;
 
-  X11DesktopHandler::get()->ActivateWindow(xwindow_);
+  BeforeActivationStateChanged();
+
+  ignore_keyboard_input_ = false;
+
+  // wmii says that it supports _NET_ACTIVE_WINDOW but does not.
+  // https://code.google.com/p/wmii/issues/detail?id=266
+  static bool wm_supports_active_window =
+      ui::GuessWindowManager() != ui::WM_WMII &&
+      ui::WmSupportsHint(atom_cache_.GetAtom("_NET_ACTIVE_WINDOW"));
+
+  Time timestamp = ui::X11EventSource::GetInstance()->GetTimestamp();
+
+  if (wm_supports_active_window) {
+    XEvent xclient;
+    memset(&xclient, 0, sizeof(xclient));
+    xclient.type = ClientMessage;
+    xclient.xclient.window = xwindow_;
+    xclient.xclient.message_type = atom_cache_.GetAtom("_NET_ACTIVE_WINDOW");
+    xclient.xclient.format = 32;
+    xclient.xclient.data.l[0] = 1;  // Specified we are an app.
+    xclient.xclient.data.l[1] = timestamp;
+    // TODO(thomasanderson): if another chrome window is active, specify that in
+    // data.l[2].  The EWMH spec claims this may make the WM more likely to
+    // service our _NET_ACTIVE_WINDOW request.
+    xclient.xclient.data.l[2] = None;
+    xclient.xclient.data.l[3] = 0;
+    xclient.xclient.data.l[4] = 0;
+
+    XSendEvent(xdisplay_, x_root_window_, False,
+               SubstructureRedirectMask | SubstructureNotifyMask, &xclient);
+  } else {
+    XRaiseWindow(xdisplay_, xwindow_);
+    // Directly ask the X server to give focus to the window. Note that the call
+    // will raise an X error if the window is not mapped.
+    XSetInputFocus(xdisplay_, xwindow_, RevertToParent, timestamp);
+    // At this point, we know we will receive focus, and some tests depend on a
+    // window being IsActive() immediately after an Activate(), so just set this
+    // state now.
+    has_pointer_focus_ = false;
+    has_window_focus_ = true;
+  }
+  AfterActivationStateChanged();
 }
 
 void DesktopWindowTreeHostX11::Deactivate() {
-  if (!IsActive())
-    return;
+  BeforeActivationStateChanged();
+
+  // Ignore future input events.
+  ignore_keyboard_input_ = true;
 
   ReleaseCapture();
-  X11DesktopHandler::get()->DeactivateWindow(xwindow_);
+  XLowerWindow(xdisplay_, xwindow_);
+
+  AfterActivationStateChanged();
 }
 
 bool DesktopWindowTreeHostX11::IsActive() const {
-  return X11DesktopHandler::get()->IsActiveWindow(xwindow_);
+  // Focus and stacking order are independent in X11.  Since we cannot guarantee
+  // a window is topmost iff it has focus, just use the focus state to determine
+  // if a window is active.  Note that Activate() and Deactivate() change the
+  // stacking order in addition to changing the focus state.
+  bool is_active =
+      (has_window_focus_ || has_pointer_focus_) && !ignore_keyboard_input_;
+
+  // is_active => window_mapped_
+  // !window_mapped_ => !is_active
+  DCHECK(!is_active || window_mapped_);
+
+  // |has_window_focus_| and |has_pointer_focus_| are mutually exclusive.
+  DCHECK(!has_window_focus_ || !has_pointer_focus_);
+
+  return is_active;
 }
 
 void DesktopWindowTreeHostX11::Maximize() {
@@ -651,7 +855,7 @@ void DesktopWindowTreeHostX11::Maximize() {
 
   // Some WMs do not respect maximization hints on unmapped windows, so we
   // save this one for later too.
-  should_maximize_after_map_ = !window_mapped_;
+  should_maximize_after_map_ = !IsVisible();
 
   // When we are in the process of requesting to maximize a window, we can
   // accurately keep track of our restored bounds instead of relying on the
@@ -972,7 +1176,7 @@ void DesktopWindowTreeHostX11::SizeConstraintsChanged() {
 
 gfx::Transform DesktopWindowTreeHostX11::GetRootTransform() const {
   display::Display display = display::Screen::GetScreen()->GetPrimaryDisplay();
-  if (window_mapped_) {
+  if (IsVisible()) {
     aura::Window* win = const_cast<aura::Window*>(window());
     display = display::Screen::GetScreen()->GetDisplayNearestWindow(win);
   }
@@ -997,9 +1201,8 @@ void DesktopWindowTreeHostX11::ShowImpl() {
 }
 
 void DesktopWindowTreeHostX11::HideImpl() {
-  if (window_mapped_) {
+  if (IsVisible()) {
     XWithdrawWindow(xdisplay_, xwindow_, 0);
-    window_mapped_ = false;
     wait_for_unmap_ = true;
   }
   native_widget_delegate_->OnNativeWidgetVisibilityChanged(false);
@@ -1087,7 +1290,9 @@ void DesktopWindowTreeHostX11::SetCapture() {
   if (old_capturer)
     old_capturer->OnHostLostWindowCapture();
 
-  GrabPointer(xwindow_, true, None);
+  // If the pointer is already in |xwindow_|, we will not get a crossing event
+  // with a mode of NotifyGrab, so we must record the grab state manually.
+  has_pointer_grab_ |= !GrabPointer(xwindow_, true, None);
 }
 
 void DesktopWindowTreeHostX11::ReleaseCapture() {
@@ -1097,6 +1302,7 @@ void DesktopWindowTreeHostX11::ReleaseCapture() {
     // asynchronous is likely inconsequential.
     g_current_capture = NULL;
     UngrabPointer();
+    has_pointer_grab_ = false;
 
     OnHostLostWindowCapture();
   }
@@ -1166,24 +1372,33 @@ void DesktopWindowTreeHostX11::InitX11Window(
   if (swa.override_redirect)
     attribute_mask |= CWOverrideRedirect;
 
-  Visual* visual;
-  int depth;
-  ui::ChooseVisualForWindow(true, &visual, &depth);
-  if (depth == 32) {
-    attribute_mask |= CWColormap;
-    swa.colormap =
-        XCreateColormap(xdisplay_, x_root_window_, visual, AllocNone);
-
-    // x.org will BadMatch if we don't set a border when the depth isn't the
-    // same as the parent depth.
-    attribute_mask |= CWBorderPixel;
-    swa.border_pixel = 0;
-
-    // A compositing manager is required to support transparency.
-    use_argb_visual_ =
-        XGetSelectionOwner(xdisplay_, atom_cache_.GetAtom("_NET_WM_CM_S0")) !=
-        None;
+  bool enable_transparent_visuals;
+  switch (params.opacity) {
+    case Widget::InitParams::OPAQUE_WINDOW:
+      enable_transparent_visuals = false;
+      break;
+    case Widget::InitParams::TRANSLUCENT_WINDOW:
+      enable_transparent_visuals = true;
+      break;
+    case Widget::InitParams::INFER_OPACITY:
+    default:
+      enable_transparent_visuals = params.type == Widget::InitParams::TYPE_DRAG;
   }
+
+  Visual* visual = CopyFromParent;
+  int depth = CopyFromParent;
+  Colormap colormap = CopyFromParent;
+  ui::XVisualManager::GetInstance()->ChooseVisualForWindow(
+      enable_transparent_visuals, &visual, &depth, &colormap,
+      &use_argb_visual_);
+
+  attribute_mask |= CWColormap;
+  swa.colormap = colormap;
+
+  // x.org will BadMatch if we don't set a border when the depth isn't the
+  // same as the parent depth.
+  attribute_mask |= CWBorderPixel;
+  swa.border_pixel = 0;
 
   bounds_in_pixels_ = ToPixelRect(params.bounds);
   bounds_in_pixels_.set_size(AdjustSize(bounds_in_pixels_.size()));
@@ -1204,7 +1419,7 @@ void DesktopWindowTreeHostX11::InitX11Window(
                     ExposureMask | VisibilityChangeMask |
                     StructureNotifyMask | PropertyChangeMask |
                     PointerMotionMask;
-  XSelectInput(xdisplay_, xwindow_, event_mask);
+  xwindow_events_.reset(new ui::XScopedEventSelector(xwindow_, event_mask));
   XFlush(xdisplay_);
 
   if (ui::IsXInput2Available())
@@ -1434,7 +1649,7 @@ void DesktopWindowTreeHostX11::OnFrameExtentsUpdated() {
 }
 
 void DesktopWindowTreeHostX11::UpdateMinAndMaxSize() {
-  if (!window_mapped_)
+  if (!IsVisible())
     return;
 
   gfx::Size minimum_in_pixels =
@@ -1490,7 +1705,6 @@ void DesktopWindowTreeHostX11::UpdateWMUserTime(
                     PropModeReplace,
                     reinterpret_cast<const unsigned char *>(&wm_user_time_ms),
                     1);
-    X11DesktopHandler::get()->set_wm_user_time_ms(wm_user_time_ms);
   }
 }
 
@@ -1594,7 +1808,8 @@ void DesktopWindowTreeHostX11::DispatchTouchEvent(ui::TouchEvent* event) {
 }
 
 void DesktopWindowTreeHostX11::DispatchKeyEvent(ui::KeyEvent* event) {
-  GetInputMethod()->DispatchKeyEvent(event);
+  if (native_widget_delegate_->AsWidget()->IsActive())
+    GetInputMethod()->DispatchKeyEvent(event);
 }
 
 void DesktopWindowTreeHostX11::ConvertEventToDifferentHost(
@@ -1707,17 +1922,16 @@ void DesktopWindowTreeHostX11::MapWindow(ui::WindowShowState show_state) {
   // If SHOW_STATE_INACTIVE, tell the window manager not to focus the window
   // when mapping. This is done by setting the _NET_WM_USER_TIME to 0. See e.g.
   // http://standards.freedesktop.org/wm-spec/latest/ar01s05.html
-  unsigned long wm_user_time_ms = (show_state == ui::SHOW_STATE_INACTIVE) ?
-      0 : X11DesktopHandler::get()->wm_user_time_ms();
+  ignore_keyboard_input_ = show_state == ui::SHOW_STATE_INACTIVE;
+  unsigned long wm_user_time_ms =
+      ignore_keyboard_input_
+          ? 0
+          : ui::X11EventSource::GetInstance()->GetTimestamp();
   if (show_state == ui::SHOW_STATE_INACTIVE || wm_user_time_ms != 0) {
-    XChangeProperty(xdisplay_,
-                    xwindow_,
-                    atom_cache_.GetAtom("_NET_WM_USER_TIME"),
-                    XA_CARDINAL,
-                    32,
-                    PropModeReplace,
-                    reinterpret_cast<const unsigned char *>(&wm_user_time_ms),
-                    1);
+    XChangeProperty(
+        xdisplay_, xwindow_, atom_cache_.GetAtom("_NET_WM_USER_TIME"),
+        XA_CARDINAL, 32, PropModeReplace,
+        reinterpret_cast<const unsigned char*>(&wm_user_time_ms), 1);
   }
 
   ui::X11EventSource* event_source = ui::X11EventSource::GetInstance();
@@ -1779,15 +1993,15 @@ uint32_t DesktopWindowTreeHostX11::DispatchEvent(
   switch (xev->type) {
     case EnterNotify:
     case LeaveNotify: {
+      OnCrossingEvent(xev->type == EnterNotify, xev->xcrossing.focus,
+                      xev->xcrossing.mode, xev->xcrossing.detail);
+
       // Ignore EventNotify and LeaveNotify events from children of |xwindow_|.
       // NativeViewGLSurfaceGLX adds a child to |xwindow_|.
-      // TODO(pkotwicz|tdanderson): Figure out whether the suppression is
-      // necessary. crbug.com/385716
-      if (xev->xcrossing.detail == NotifyInferior)
-        break;
-
-      ui::MouseEvent mouse_event(xev);
-      DispatchMouseEvent(&mouse_event);
+      if (xev->xcrossing.detail != NotifyInferior) {
+        ui::MouseEvent mouse_event(xev);
+        DispatchMouseEvent(&mouse_event);
+      }
       break;
     }
     case Expose: {
@@ -1803,8 +2017,7 @@ uint32_t DesktopWindowTreeHostX11::DispatchEvent(
     }
     case KeyRelease: {
       // There is no way to deactivate a window in X11 so ignore input if
-      // window is supposed to be 'inactive'. See comments in
-      // X11DesktopHandler::DeactivateWindow() for more details.
+      // window is supposed to be 'inactive'.
       if (!IsActive() && !HasCapture())
         break;
 
@@ -1835,17 +2048,10 @@ uint32_t DesktopWindowTreeHostX11::DispatchEvent(
       }
       break;
     }
-    case FocusOut:
-      if (xev->xfocus.mode != NotifyGrab) {
-        ReleaseCapture();
-        OnHostLostWindowCapture();
-        X11DesktopHandler::get()->ProcessXEvent(xev);
-      } else {
-        dispatcher()->OnHostLostMouseGrab();
-      }
-      break;
     case FocusIn:
-      X11DesktopHandler::get()->ProcessXEvent(xev);
+    case FocusOut:
+      OnFocusEvent(xev->type == FocusIn, event->xfocus.mode,
+                   event->xfocus.detail);
       break;
     case ConfigureNotify: {
       DCHECK_EQ(xwindow_, xev->xconfigure.window);
@@ -1885,6 +2091,23 @@ uint32_t DesktopWindowTreeHostX11::DispatchEvent(
       ui::TouchFactory* factory = ui::TouchFactory::GetInstance();
       if (!factory->ShouldProcessXI2Event(xev))
         break;
+
+      XIEnterEvent* enter_event = static_cast<XIEnterEvent*>(xev->xcookie.data);
+      switch (static_cast<XIEvent*>(xev->xcookie.data)->evtype) {
+        case XI_Enter:
+        case XI_Leave:
+          OnCrossingEvent(enter_event->evtype == XI_Enter, enter_event->focus,
+                          XI2ModeToXMode(enter_event->mode),
+                          enter_event->detail);
+          return ui::POST_DISPATCH_STOP_PROPAGATION;
+        case XI_FocusIn:
+        case XI_FocusOut:
+          OnFocusEvent(enter_event->evtype == XI_FocusIn,
+                       XI2ModeToXMode(enter_event->mode), enter_event->detail);
+          return ui::POST_DISPATCH_STOP_PROPAGATION;
+        default:
+          break;
+      }
 
       ui::EventType type = ui::EventTypeFromNative(xev);
       XEvent last_event;
@@ -1967,7 +2190,12 @@ uint32_t DesktopWindowTreeHostX11::DispatchEvent(
       break;
     }
     case UnmapNotify: {
+      window_mapped_ = false;
       wait_for_unmap_ = false;
+      has_pointer_ = false;
+      has_pointer_grab_ = false;
+      has_pointer_focus_ = false;
+      has_window_focus_ = false;
       FOR_EACH_OBSERVER(DesktopWindowTreeHostObserverX11,
                         observer_list_,
                         OnWindowUnmapped(xwindow_));
@@ -2101,6 +2329,31 @@ gfx::Rect DesktopWindowTreeHostX11::ToPixelRect(
   gfx::RectF rect_in_pixels = gfx::RectF(rect_in_dip);
   GetRootTransform().TransformRect(&rect_in_pixels);
   return gfx::ToEnclosingRect(rect_in_pixels);
+}
+
+XID DesktopWindowTreeHostX11::GetModalDialog() {
+  return modal_dialog_xid_;
+}
+
+std::unique_ptr<base::Closure>
+    DesktopWindowTreeHostX11::DisableEventListening(XID dialog) {
+  DCHECK(dialog);
+  DCHECK(!modal_dialog_xid_);
+  modal_dialog_xid_ = dialog;
+  // ScopedWindowTargeter is used to temporarily replace the event-targeter
+  // with NullEventTargeter to make |dialog| modal.
+  targeter_for_modal_.reset(new aura::ScopedWindowTargeter(window(),
+      std::unique_ptr<ui::EventTargeter>(new ui::NullEventTargeter)));
+
+  return base::MakeUnique<base::Closure>(base::Bind(
+      &DesktopWindowTreeHostX11::EnableEventListening,
+      weak_factory_.GetWeakPtr()));
+}
+
+void DesktopWindowTreeHostX11::EnableEventListening() {
+  DCHECK(modal_dialog_xid_);
+  modal_dialog_xid_ = 0;
+  targeter_for_modal_.reset();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

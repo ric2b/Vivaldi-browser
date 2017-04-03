@@ -8,7 +8,6 @@
 
 #include "ash/display/display_manager.h"
 #include "ash/display/display_pref_util.h"
-#include "ash/display/display_util.h"
 #include "ash/display/json_converter.h"
 #include "ash/shell.h"
 #include "base/strings/string16.h"
@@ -26,6 +25,7 @@
 #include "third_party/cros_system_api/dbus/service_constants.h"
 #include "ui/display/display.h"
 #include "ui/display/manager/display_layout_store.h"
+#include "ui/display/manager/display_manager_utilities.h"
 #include "ui/gfx/geometry/insets.h"
 #include "url/url_canon.h"
 #include "url/url_util.h"
@@ -135,7 +135,7 @@ void LoadDisplayLayouts() {
         ids.push_back(id);
       }
       display::DisplayIdList list =
-          ash::GenerateDisplayIdList(ids.begin(), ids.end());
+          display::GenerateDisplayIdList(ids.begin(), ids.end());
       layout_store->RegisterLayoutForDisplayIdList(list, std::move(layout));
     }
   }
@@ -214,7 +214,7 @@ void LoadDisplayRotationState() {
 
 void StoreDisplayLayoutPref(const display::DisplayIdList& list,
                             const display::DisplayLayout& display_layout) {
-  std::string name = ash::DisplayIdListToString(list);
+  std::string name = display::DisplayIdListToString(list);
 
   PrefService* local_state = g_browser_process->local_state();
   DictionaryPrefUpdate update(local_state, prefs::kSecondaryDisplays);
@@ -253,7 +253,7 @@ void StoreCurrentDisplayProperties() {
   for (size_t i = 0; i < num; ++i) {
     const display::Display& display = display_manager->GetDisplayAt(i);
     int64_t id = display.id();
-    ash::DisplayInfo info = display_manager->GetDisplayInfo(id);
+    display::ManagedDisplayInfo info = display_manager->GetDisplayInfo(id);
 
     std::unique_ptr<base::DictionaryValue> property_value(
         new base::DictionaryValue());
@@ -267,7 +267,7 @@ void StoreCurrentDisplayProperties() {
     property_value->SetInteger(
         "ui-scale", static_cast<int>(info.configured_ui_scale() * 1000));
 
-    scoped_refptr<ash::ManagedDisplayMode> mode =
+    scoped_refptr<display::ManagedDisplayMode> mode =
         display_manager->GetSelectedModeForDisplayId(id);
     if (!display.IsInternal() && mode && !mode->native()) {
       property_value->SetInteger("width", mode->size().width());

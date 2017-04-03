@@ -4,12 +4,17 @@
 
 #include "components/exo/shell_surface.h"
 
+#include <algorithm>
+
 #include "ash/aura/wm_window_aura.h"
+#include "ash/common/accessibility_delegate.h"
+#include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shell_window_ids.h"
+#include "ash/common/system/tray/system_tray_notifier.h"
 #include "ash/common/wm/window_resizer.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm/window_state_delegate.h"
-#include "ash/shell.h"
+#include "ash/common/wm_shell.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/logging.h"
@@ -36,6 +41,10 @@
 #include "ui/wm/core/shadow_types.h"
 #include "ui/wm/core/window_util.h"
 
+#if defined(OS_CHROMEOS)
+#include "chromeos/audio/chromeos_sounds.h"
+#endif
+
 DECLARE_WINDOW_PROPERTY_TYPE(std::string*)
 
 namespace exo {
@@ -53,9 +62,9 @@ const struct Accelerator {
 void UpdateShelfStateForFullscreenChange(views::Widget* widget) {
   ash::wm::WindowState* window_state =
       ash::wm::GetWindowState(widget->GetNativeWindow());
-  window_state->set_shelf_mode_in_fullscreen(
-      ash::wm::WindowState::SHELF_AUTO_HIDE_INVISIBLE);
-  ash::Shell::GetInstance()->UpdateShelfVisibility();
+  window_state->set_hide_shelf_when_fullscreen(false);
+  for (ash::WmWindow* root_window : ash::WmShell::Get()->GetAllRootWindows())
+    ash::WmShelf::ForWindow(root_window)->UpdateVisibilityState();
 }
 
 class CustomFrameView : public views::NonClientFrameView {
@@ -86,7 +95,7 @@ class CustomFrameView : public views::NonClientFrameView {
 
 class CustomWindowTargeter : public aura::WindowTargeter {
  public:
-  CustomWindowTargeter() {}
+  CustomWindowTargeter(views::Widget* widget) : widget_(widget) {}
   ~CustomWindowTargeter() override {}
 
   // Overridden from aura::WindowTargeter:
@@ -97,6 +106,20 @@ class CustomWindowTargeter : public aura::WindowTargeter {
       return false;
 
     gfx::Point local_point = event.location();
+
+    // If there is an underlay, test against it's bounds instead since it will
+    // be equal or larger than the surface's bounds.
+    aura::Window* shadow_underlay =
+        static_cast<ShellSurface*>(
+            widget_->widget_delegate()->GetContentsView())
+            ->shadow_underlay();
+    if (shadow_underlay) {
+      if (window->parent())
+        aura::Window::ConvertPointToTarget(window->parent(), shadow_underlay,
+                                           &local_point);
+      return gfx::Rect(shadow_underlay->layer()->size()).Contains(local_point);
+    }
+
     if (window->parent())
       aura::Window::ConvertPointToTarget(window->parent(), window,
                                          &local_point);
@@ -105,7 +128,29 @@ class CustomWindowTargeter : public aura::WindowTargeter {
     return surface->HitTestRect(gfx::Rect(local_point, gfx::Size(1, 1)));
   }
 
+  ui::EventTarget* FindTargetForEvent(ui::EventTarget* root,
+                                      ui::Event* event) override {
+    aura::Window* window = static_cast<aura::Window*>(root);
+    Surface* surface = ShellSurface::GetMainSurface(window);
+
+    // Send events which are outside of the surface's bounds to the underlay.
+    aura::Window* shadow_underlay =
+        static_cast<ShellSurface*>(
+            widget_->widget_delegate()->GetContentsView())
+            ->shadow_underlay();
+    if (surface && event->IsLocatedEvent() && shadow_underlay) {
+      gfx::Point local_point = event->AsLocatedEvent()->location();
+      aura::Window::ConvertPointToTarget(window, surface->window(),
+                                         &local_point);
+      if (!surface->HitTestRect(gfx::Rect(local_point, gfx::Size(1, 1))))
+        return shadow_underlay;
+    }
+    return aura::WindowTargeter::FindTargetForEvent(root, event);
+  }
+
  private:
+  views::Widget* const widget_;
+
   DISALLOW_COPY_AND_ASSIGN(CustomWindowTargeter);
 };
 
@@ -163,6 +208,42 @@ class ShellSurfaceWidget : public views::Widget {
   ShellSurface* const shell_surface_;
 
   DISALLOW_COPY_AND_ASSIGN(ShellSurfaceWidget);
+};
+
+class ShadowUnderlayEventHandler : public ui::EventHandler {
+ public:
+  ShadowUnderlayEventHandler() {}
+  ~ShadowUnderlayEventHandler() override {}
+
+  // Overridden from ui::EventHandler:
+  void OnEvent(ui::Event* event) override {
+    // If the event is targeted at the underlay, it means the user has made an
+    // interaction that is outside the surface's bounds and we want to capture
+    // it (usually when in spoken feedback mode). Handle the event (to prevent
+    // behind-windows from receiving it) and play an earcon to notify the user.
+    if (event->IsLocatedEvent()) {
+#if defined(OS_CHROMEOS)
+      const ui::EventType kEarconEventTypes[] = {ui::ET_MOUSE_PRESSED,
+                                                 ui::ET_MOUSEWHEEL,
+                                                 ui::ET_TOUCH_PRESSED,
+                                                 ui::ET_POINTER_DOWN,
+                                                 ui::ET_POINTER_WHEEL_CHANGED,
+                                                 ui::ET_GESTURE_BEGIN,
+                                                 ui::ET_SCROLL,
+                                                 ui::ET_SCROLL_FLING_START};
+      bool is_earcon_event_type =
+          std::find(std::begin(kEarconEventTypes), std::end(kEarconEventTypes),
+                    event->type()) != std::end(kEarconEventTypes);
+      if (is_earcon_event_type)
+        ash::WmShell::Get()->accessibility_delegate()->PlayEarcon(
+            chromeos::SOUND_VOLUME_ADJUST);
+#endif
+      event->SetHandled();
+    }
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ShadowUnderlayEventHandler);
 };
 
 }  // namespace
@@ -301,6 +382,8 @@ ShellSurface::~ShellSurface() {
     surface_->SetSurfaceDelegate(nullptr);
     surface_->RemoveSurfaceObserver(this);
   }
+  ash::WmShell::Get()->system_tray_notifier()->RemoveAccessibilityObserver(
+      this);
 }
 
 void ShellSurface::AcknowledgeConfigure(uint32_t serial) {
@@ -401,11 +484,11 @@ void ShellSurface::SetFullscreen(bool fullscreen) {
   // state doesn't change.
   ScopedConfigure scoped_configure(this, true);
   widget_->SetFullscreen(fullscreen);
-  UpdateShelfStateForFullscreenChange(widget_);
 }
 
-void ShellSurface::SetPinned(bool pinned) {
-  TRACE_EVENT1("exo", "ShellSurface::SetPinned", "pinned", pinned);
+void ShellSurface::SetPinned(bool pinned, bool trusted) {
+  TRACE_EVENT2("exo", "ShellSurface::SetPinned", "pinned", pinned, "trusted",
+               trusted);
 
   if (!widget_)
     CreateShellSurfaceWidget(ui::SHOW_STATE_NORMAL);
@@ -414,7 +497,7 @@ void ShellSurface::SetPinned(bool pinned) {
   // state doesn't change.
   ScopedConfigure scoped_configure(this, true);
   if (pinned) {
-    ash::wm::PinWindow(widget_->GetNativeWindow());
+    ash::wm::PinWindow(widget_->GetNativeWindow(), trusted);
   } else {
     // At the moment, we cannot just unpin the window state, due to ash
     // implementation. Instead, we call Restore() to unpin, if it is Pinned
@@ -725,6 +808,14 @@ gfx::Size ShellSurface::GetPreferredSize() const {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// ash::AccessibilityObserver overrides:
+
+void ShellSurface::OnAccessibilityModeChanged(
+    ash::AccessibilityNotificationVisibility) {
+  UpdateShadow();
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // ash::wm::WindowStateObserver overrides:
 
 void ShellSurface::OnPreWindowStateTypeChange(
@@ -820,6 +911,7 @@ void ShellSurface::OnWindowActivated(
       lost_active == widget_->GetNativeWindow()) {
     DCHECK(activatable_);
     Configure();
+    UpdateShadow();
   }
 }
 
@@ -935,7 +1027,7 @@ void ShellSurface::CreateShellSurfaceWidget(ui::WindowShowState show_state) {
   aura::Window* window = widget_->GetNativeWindow();
   window->SetName("ExoShellSurface");
   window->AddChild(surface_->window());
-  window->SetEventTargeter(base::WrapUnique(new CustomWindowTargeter));
+  window->SetEventTargeter(base::WrapUnique(new CustomWindowTargeter(widget_)));
   SetApplicationId(window, &application_id_);
   SetMainSurface(window, surface_);
 
@@ -980,6 +1072,9 @@ void ShellSurface::CreateShellSurfaceWidget(ui::WindowShowState show_state) {
   // Set delegate for handling of fullscreening.
   window_state->SetDelegate(std::unique_ptr<ash::wm::WindowStateDelegate>(
       new CustomWindowStateDelegate(widget_)));
+
+  // Receive accessibility changes to update shadow underlay.
+  ash::WmShell::Get()->system_tray_notifier()->AddAccessibilityObserver(this);
 
   // Show widget next time Commit() is called.
   pending_show_widget_ = true;
@@ -1240,8 +1335,10 @@ void ShellSurface::UpdateShadow() {
     // Always create and show the underlay, even in maximized/fullscreen.
     if (!shadow_underlay_) {
       shadow_underlay_ = new aura::Window(nullptr);
+      shadow_underlay_event_handler_ =
+          base::MakeUnique<ShadowUnderlayEventHandler>();
+      shadow_underlay_->SetTargetHandler(shadow_underlay_event_handler_.get());
       DCHECK(shadow_underlay_->owned_by_parent());
-      shadow_underlay_->set_ignore_events(true);
       // Ensure the background area inside the shadow is solid black.
       // Clients that provide translucent contents should not be using
       // rectangular shadows as this method requires opaque contents to
@@ -1253,16 +1350,22 @@ void ShellSurface::UpdateShadow() {
       window->StackChildAtBottom(shadow_underlay_);
     }
 
+    bool underlay_capture_events = ash::WmShell::Get()
+                                       ->accessibility_delegate()
+                                       ->IsSpokenFeedbackEnabled() &&
+                                   widget_->IsActive();
+
     float shadow_underlay_opacity = rectangular_shadow_background_opacity_;
     // Put the black background layer behind the window if
-    // 1) the window is in immersive fullscreen.
+    // 1) the window is in immersive fullscreen or is active with
+    //    spoken feedback enabled.
     // 2) the window can control the bounds of the window in fullscreen (
     //    thus the background can be visible).
     // 3) the window has no transform (the transformed background may
     //    not cover the entire background, e.g. overview mode).
-    if (widget_->IsFullscreen() &&
+    if ((widget_->IsFullscreen() || underlay_capture_events) &&
         ash::wm::GetWindowState(window)->allow_set_bounds_in_maximized() &&
-        window->layer()->transform().IsIdentity()) {
+        window->layer()->GetTargetTransform().IsIdentity()) {
       gfx::Point origin;
       origin -= window->bounds().origin().OffsetFromOrigin();
       shadow_bounds.set_origin(origin);

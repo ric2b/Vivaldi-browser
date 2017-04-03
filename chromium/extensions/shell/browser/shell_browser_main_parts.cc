@@ -9,13 +9,13 @@
 #include "base/command_line.h"
 #include "base/run_loop.h"
 #include "build/build_config.h"
-#include "components/devtools_http_handler/devtools_http_handler.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/prefs/pref_service.h"
 #include "components/storage_monitor/storage_monitor.h"
 #include "components/update_client/update_query_params.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/context_factory.h"
+#include "content/public/browser/devtools_agent_host.h"
 #include "content/public/common/result_codes.h"
 #include "content/shell/browser/shell_devtools_manager_delegate.h"
 #include "extensions/browser/app_window/app_window_client.h"
@@ -79,15 +79,13 @@ namespace extensions {
 ShellBrowserMainParts::ShellBrowserMainParts(
     const content::MainFunctionParams& parameters,
     ShellBrowserMainDelegate* browser_main_delegate)
-    : devtools_http_handler_(nullptr),
-      extension_system_(nullptr),
+    : extension_system_(nullptr),
       parameters_(parameters),
       run_message_loop_(true),
       browser_main_delegate_(browser_main_delegate) {
 }
 
 ShellBrowserMainParts::~ShellBrowserMainParts() {
-  DCHECK(!devtools_http_handler_);
 }
 
 void ShellBrowserMainParts::PreMainMessageLoopStart() {
@@ -107,8 +105,7 @@ void ShellBrowserMainParts::PostMainMessageLoopStart() {
 
   bluez::BluezDBusManager::Initialize(
       chromeos::DBusThreadManager::Get()->GetSystemBus(),
-      chromeos::DBusThreadManager::Get()->IsUsingStub(
-          chromeos::DBusClientBundle::BLUETOOTH));
+      chromeos::DBusThreadManager::Get()->IsUsingFakes());
 
   chromeos::NetworkHandler::Initialize();
   network_controller_.reset(new ShellNetworkController(
@@ -210,9 +207,8 @@ void ShellBrowserMainParts::PreMainMessageLoopRun() {
       base::Bind(nacl::NaClProcessHost::EarlyStartup));
 #endif
 
-  devtools_http_handler_.reset(
-      content::ShellDevToolsManagerDelegate::CreateHttpHandler(
-          browser_context_.get()));
+  content::ShellDevToolsManagerDelegate::StartHttpHandler(
+      browser_context_.get());
   if (parameters_.ui_task) {
     // For running browser tests.
     parameters_.ui_task->Run();
@@ -236,7 +232,7 @@ bool ShellBrowserMainParts::MainMessageLoopRun(int* result_code) {
 void ShellBrowserMainParts::PostMainMessageLoopRun() {
   // NOTE: Please destroy objects in the reverse order of their creation.
   browser_main_delegate_->Shutdown();
-  devtools_http_handler_.reset();
+  content::ShellDevToolsManagerDelegate::StopHttpHandler();
 
 #if !defined(DISABLE_NACL)
   task_tracker_.TryCancelAll();

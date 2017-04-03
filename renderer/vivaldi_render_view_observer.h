@@ -10,19 +10,22 @@ namespace vivaldi {
 
 // This class holds the Vivaldi specific parts of RenderView, and has the same
 // lifetime.
-class VivaldiRenderViewObserver
-    : public content::RenderViewObserver {
+class VivaldiRenderViewObserver : public content::RenderViewObserver {
  public:
-    explicit VivaldiRenderViewObserver(content::RenderView* render_view);
-    ~VivaldiRenderViewObserver() override;
- private:
-    // RenderViewObserver implementation.
-    bool OnMessageReceived(const IPC::Message& message) override;
-    void OnDestruct() override;
-    void OnInsertText(const base::string16& text);
-    void OnPinchZoom(float scale, int x, int y);
+  explicit VivaldiRenderViewObserver(content::RenderView* render_view);
+  ~VivaldiRenderViewObserver() override;
 
-    DISALLOW_COPY_AND_ASSIGN(VivaldiRenderViewObserver);
+ private:
+  // RenderViewObserver implementation.
+  bool OnMessageReceived(const IPC::Message& message) override;
+  void OnDestruct() override;
+  void OnInsertText(const base::string16& text);
+  void OnPinchZoom(float scale, int x, int y);
+  void FocusedNodeChanged(const blink::WebNode& node) override;
+  void OnRequestThumbnailForFrame(
+      VivaldiViewMsg_RequestThumbnailForFrame_Params params);
+
+  DISALLOW_COPY_AND_ASSIGN(VivaldiRenderViewObserver);
 };
 
 }  // namespace vivaldi

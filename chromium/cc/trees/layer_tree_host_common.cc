@@ -83,6 +83,7 @@ LayerTreeHostCommon::CalcDrawPropsImplInputs::CalcDrawPropsImplInputs(
     bool can_render_to_separate_surface,
     bool can_adjust_raster_scales,
     bool verify_clip_tree_calculations,
+    bool verify_visible_rect_calculations,
     bool verify_transform_tree_calculations,
     LayerImplList* render_surface_layer_list,
     PropertyTrees* property_trees)
@@ -101,6 +102,7 @@ LayerTreeHostCommon::CalcDrawPropsImplInputs::CalcDrawPropsImplInputs(
       can_render_to_separate_surface(can_render_to_separate_surface),
       can_adjust_raster_scales(can_adjust_raster_scales),
       verify_clip_tree_calculations(verify_clip_tree_calculations),
+      verify_visible_rect_calculations(verify_visible_rect_calculations),
       verify_transform_tree_calculations(verify_transform_tree_calculations),
       render_surface_layer_list(render_surface_layer_list),
       property_trees(property_trees) {}
@@ -124,6 +126,7 @@ LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting::
                               std::numeric_limits<int>::max() / 2,
                               true,
                               false,
+                              true,
                               true,
                               true,
                               render_surface_layer_list,
@@ -221,26 +224,17 @@ static inline void SetMaskLayersAreDrawnRenderSurfaceLayerListMembers(
     RenderSurfaceImpl* surface,
     PropertyTrees* property_trees) {
   LayerImpl* mask_layer = surface->MaskLayer();
-  LayerImpl* replica_mask_layer = surface->ReplicaMaskLayer();
   if (mask_layer) {
     mask_layer->set_is_drawn_render_surface_layer_list_member(true);
     draw_property_utils::ComputeMaskDrawProperties(mask_layer, property_trees);
-  }
-  if (replica_mask_layer) {
-    replica_mask_layer->set_is_drawn_render_surface_layer_list_member(true);
-    draw_property_utils::ComputeMaskDrawProperties(replica_mask_layer,
-                                                   property_trees);
   }
 }
 
 static inline void ClearMaskLayersAreDrawnRenderSurfaceLayerListMembers(
     RenderSurfaceImpl* surface) {
   LayerImpl* mask_layer = surface->MaskLayer();
-  LayerImpl* replica_mask_layer = surface->ReplicaMaskLayer();
   if (mask_layer)
     mask_layer->set_is_drawn_render_surface_layer_list_member(false);
-  if (replica_mask_layer)
-    replica_mask_layer->set_is_drawn_render_surface_layer_list_member(false);
 }
 
 static inline void ClearIsDrawnRenderSurfaceLayerListMember(
@@ -402,15 +396,15 @@ static void ComputeInitialRenderSurfaceLayerList(
 
       // Ignore occlusion from outside the surface when surface contents need to
       // be fully drawn. Layers with copy-request need to be complete.  We could
-      // be smarter about layers with replica and exclude regions where both
-      // layer and the replica are occluded, but this seems like overkill. The
-      // same is true for layers with filters that move pixels.
+      // be smarter about layers with filters that move pixels and exclude
+      // regions where both layers and the filters are occluded, but this seems
+      // like overkill.
       // TODO(senorblanco): make this smarter for the SkImageFilter case (check
       // for pixel-moving filters)
       const FilterOperations& filters = surface->Filters();
-      bool is_occlusion_immune =
-          surface->HasCopyRequest() || surface->HasReplica() ||
-          filters.HasReferenceFilter() || filters.HasFilterThatMovesPixels();
+      bool is_occlusion_immune = surface->HasCopyRequest() ||
+                                 filters.HasReferenceFilter() ||
+                                 filters.HasFilterThatMovesPixels();
       if (is_occlusion_immune) {
         surface->SetNearestOcclusionImmuneAncestor(surface);
       } else if (is_root) {
@@ -589,12 +583,16 @@ void CalculateDrawPropertiesInternal(
           inputs->elastic_overscroll);
       // Similarly, the device viewport and device transform are shared
       // by both trees.
-      inputs->property_trees->clip_tree.SetViewportClip(
+      PropertyTrees* property_trees = inputs->property_trees;
+      property_trees->clip_tree.SetViewportClip(
           gfx::RectF(gfx::SizeF(inputs->device_viewport_size)));
-      inputs->property_trees->transform_tree.SetDeviceTransform(
+      float page_scale_factor_for_root =
+          inputs->page_scale_layer == inputs->root_layer
+              ? inputs->page_scale_factor
+              : 1.f;
+      property_trees->transform_tree.SetRootTransformsAndScales(
+          inputs->device_scale_factor, page_scale_factor_for_root,
           inputs->device_transform, inputs->root_layer->position());
-      inputs->property_trees->transform_tree.SetDeviceTransformScaleFactor(
-          inputs->device_transform);
       draw_property_utils::ComputeVisibleRects(
           inputs->root_layer, inputs->property_trees,
           inputs->can_render_to_separate_surface, &visible_layer_list);
@@ -622,6 +620,9 @@ void CalculateDrawPropertiesInternal(
   if (inputs->verify_clip_tree_calculations)
     draw_property_utils::VerifyClipTreeCalculations(visible_layer_list,
                                                     inputs->property_trees);
+  if (inputs->verify_visible_rect_calculations)
+    draw_property_utils::VerifyVisibleRectsCalculations(visible_layer_list,
+                                                        inputs->property_trees);
   if (inputs->verify_transform_tree_calculations)
     draw_property_utils::VerifyTransformTreeCalculations(
         visible_layer_list, inputs->property_trees);

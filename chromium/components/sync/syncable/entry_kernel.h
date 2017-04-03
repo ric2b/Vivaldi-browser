@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 
@@ -194,9 +195,8 @@ enum { BIT_TEMPS_COUNT = BIT_TEMPS_END - BIT_TEMPS_BEGIN };
 
 struct EntryKernel {
  private:
-  typedef syncer::ProtoValuePtr<sync_pb::EntitySpecifics> EntitySpecificsPtr;
-  typedef syncer::ProtoValuePtr<sync_pb::AttachmentMetadata>
-      AttachmentMetadataPtr;
+  typedef ProtoValuePtr<sync_pb::EntitySpecifics> EntitySpecificsPtr;
+  typedef ProtoValuePtr<sync_pb::AttachmentMetadata> AttachmentMetadataPtr;
 
   std::string string_fields[STRING_FIELDS_COUNT];
   EntitySpecificsPtr specifics_fields[PROTO_FIELDS_COUNT];
@@ -382,15 +382,22 @@ struct EntryKernel {
   bool dirty_;
 };
 
+template <typename T>
 class EntryKernelLessByMetaHandle {
  public:
-  inline bool operator()(const EntryKernel* a, const EntryKernel* b) const {
+  inline bool operator()(T a, T b) const {
     return a->ref(META_HANDLE) < b->ref(META_HANDLE);
   }
 };
 
-typedef std::set<const EntryKernel*, EntryKernelLessByMetaHandle>
+typedef std::set<const EntryKernel*,
+                 EntryKernelLessByMetaHandle<const EntryKernel*>>
     EntryKernelSet;
+
+typedef std::set<
+    std::unique_ptr<EntryKernel>,
+    EntryKernelLessByMetaHandle<const std::unique_ptr<EntryKernel>&>>
+    OwnedEntryKernelSet;
 
 struct EntryKernelMutation {
   EntryKernel original, mutated;
@@ -400,12 +407,10 @@ typedef std::map<int64_t, EntryKernelMutation> EntryKernelMutationMap;
 
 typedef Immutable<EntryKernelMutationMap> ImmutableEntryKernelMutationMap;
 
-// Caller owns the return value.
-base::DictionaryValue* EntryKernelMutationToValue(
+std::unique_ptr<base::DictionaryValue> EntryKernelMutationToValue(
     const EntryKernelMutation& mutation);
 
-// Caller owns the return value.
-base::ListValue* EntryKernelMutationMapToValue(
+std::unique_ptr<base::ListValue> EntryKernelMutationMapToValue(
     const EntryKernelMutationMap& mutations);
 
 std::ostream& operator<<(std::ostream& os, const EntryKernel& entry_kernel);

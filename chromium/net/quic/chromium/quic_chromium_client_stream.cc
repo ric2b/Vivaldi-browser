@@ -12,6 +12,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
+#include "net/log/net_log_event_type.h"
 #include "net/quic/chromium/quic_chromium_client_session.h"
 #include "net/quic/core/quic_http_utils.h"
 #include "net/quic/core/quic_spdy_session.h"
@@ -23,7 +24,7 @@ namespace net {
 QuicChromiumClientStream::QuicChromiumClientStream(
     QuicStreamId id,
     QuicClientSessionBase* session,
-    const BoundNetLog& net_log)
+    const NetLogWithSource& net_log)
     : QuicSpdyStream(id, session),
       net_log_(net_log),
       delegate_(nullptr),
@@ -135,6 +136,12 @@ void QuicChromiumClientStream::OnDataAvailable() {
     return;
   }
 
+  if (!sequencer()->HasBytesToRead() && !FinishedReadingTrailers()) {
+    // If there is no data to read, wait until either FIN is received or
+    // trailers are delivered.
+    return;
+  }
+
   // The delegate will read the data via a posted task, and
   // will be able to, potentially, read all data which has queued up.
   NotifyDelegateOfDataAvailableLater();
@@ -167,7 +174,7 @@ size_t QuicChromiumClientStream::WriteHeaders(
     DCHECK_NE("POST", entry->second);
   }
   net_log_.AddEvent(
-      NetLog::TYPE_QUIC_CHROMIUM_CLIENT_STREAM_SEND_REQUEST_HEADERS,
+      NetLogEventType::QUIC_CHROMIUM_CLIENT_STREAM_SEND_REQUEST_HEADERS,
       base::Bind(&QuicRequestNetLogCallback, id(), &header_block,
                  QuicSpdyStream::priority()));
   return QuicSpdyStream::WriteHeaders(std::move(header_block), fin,
@@ -242,7 +249,7 @@ void QuicChromiumClientStream::OnError(int error) {
 }
 
 int QuicChromiumClientStream::Read(IOBuffer* buf, int buf_len) {
-  if (sequencer()->IsClosed())
+  if (IsDoneReading())
     return 0;  // EOF
 
   if (!HasBytesToRead())
@@ -251,7 +258,12 @@ int QuicChromiumClientStream::Read(IOBuffer* buf, int buf_len) {
   iovec iov;
   iov.iov_base = buf->data();
   iov.iov_len = buf_len;
-  return Readv(&iov, 1);
+  size_t bytes_read = Readv(&iov, 1);
+  // If no more body bytes and trailers are to be delivered, return
+  // ERR_IO_PENDING now because onDataAvailable() will be called after trailers.
+  if (bytes_read == 0 && !FinishedReadingTrailers())
+    return ERR_IO_PENDING;
+  return bytes_read;
 }
 
 bool QuicChromiumClientStream::CanWrite(const CompletionCallback& callback) {
@@ -280,14 +292,16 @@ void QuicChromiumClientStream::NotifyDelegateOfHeadersComplete(
   // Only mark trailers consumed when we are about to notify delegate.
   if (headers_delivered_) {
     MarkTrailersConsumed(decompressed_trailers().length());
-    MarkTrailersDelivered();
+    MarkTrailersConsumed();
+    // Post an async task to notify delegate of the FIN flag.
+    NotifyDelegateOfDataAvailableLater();
     net_log_.AddEvent(
-        NetLog::TYPE_QUIC_CHROMIUM_CLIENT_STREAM_READ_RESPONSE_TRAILERS,
+        NetLogEventType::QUIC_CHROMIUM_CLIENT_STREAM_READ_RESPONSE_TRAILERS,
         base::Bind(&SpdyHeaderBlockNetLogCallback, &headers));
   } else {
     headers_delivered_ = true;
     net_log_.AddEvent(
-        NetLog::TYPE_QUIC_CHROMIUM_CLIENT_STREAM_READ_RESPONSE_HEADERS,
+        NetLogEventType::QUIC_CHROMIUM_CLIENT_STREAM_READ_RESPONSE_HEADERS,
         base::Bind(&SpdyHeaderBlockNetLogCallback, &headers));
   }
 
@@ -315,6 +329,10 @@ void QuicChromiumClientStream::RunOrBuffer(base::Closure closure) {
 
 void QuicChromiumClientStream::DisableConnectionMigration() {
   can_migrate_ = false;
+}
+
+bool QuicChromiumClientStream::IsFirstStream() {
+  return id() == kHeadersStreamId + 2;
 }
 
 }  // namespace net

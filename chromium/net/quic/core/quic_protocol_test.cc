@@ -9,6 +9,7 @@
 #include "base/stl_util.h"
 #include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_utils.h"
+#include "net/quic/test_tools/quic_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace net {
@@ -284,22 +285,107 @@ TEST(QuicProtocolTest, PathCloseFrameToString) {
 }
 
 TEST(QuicProtocolTest, FilterSupportedVersions) {
+  QuicFlagSaver flags;
   QuicVersionVector all_versions = {
       QUIC_VERSION_30, QUIC_VERSION_31, QUIC_VERSION_32, QUIC_VERSION_33,
       QUIC_VERSION_34, QUIC_VERSION_35, QUIC_VERSION_36};
 
   FLAGS_quic_disable_pre_32 = true;
+  FLAGS_quic_disable_pre_34 = true;
   FLAGS_quic_enable_version_35 = false;
   FLAGS_quic_enable_version_36_v2 = false;
 
   QuicVersionVector filtered_versions = FilterSupportedVersions(all_versions);
-  ASSERT_EQ(3u, filtered_versions.size());
-  EXPECT_EQ(QUIC_VERSION_32, filtered_versions[0]);
-  EXPECT_EQ(QUIC_VERSION_33, filtered_versions[1]);
-  EXPECT_EQ(QUIC_VERSION_34, filtered_versions[2]);
+  ASSERT_EQ(1u, filtered_versions.size());
+  EXPECT_EQ(QUIC_VERSION_34, filtered_versions[0]);
+}
+
+TEST(QuicProtocolTest, FilterSupportedVersionsAllVersions) {
+  QuicFlagSaver flags;
+  QuicVersionVector all_versions = {
+      QUIC_VERSION_30, QUIC_VERSION_31, QUIC_VERSION_32, QUIC_VERSION_33,
+      QUIC_VERSION_34, QUIC_VERSION_35, QUIC_VERSION_36};
+
+  FLAGS_quic_disable_pre_32 = false;
+  FLAGS_quic_disable_pre_34 = false;
+  FLAGS_quic_enable_version_35 = true;
+  FLAGS_quic_enable_version_36_v2 = true;
+
+  QuicVersionVector filtered_versions = FilterSupportedVersions(all_versions);
+  ASSERT_EQ(all_versions, filtered_versions);
+}
+
+TEST(QuicProtocolTest, FilterSupportedVersionsNo36) {
+  QuicFlagSaver flags;
+  QuicVersionVector all_versions = {
+      QUIC_VERSION_30, QUIC_VERSION_31, QUIC_VERSION_32, QUIC_VERSION_33,
+      QUIC_VERSION_34, QUIC_VERSION_35, QUIC_VERSION_36};
+
+  FLAGS_quic_disable_pre_32 = false;
+  FLAGS_quic_disable_pre_34 = false;
+  FLAGS_quic_enable_version_35 = true;
+  FLAGS_quic_enable_version_36_v2 = false;
+
+  all_versions.pop_back();  // Remove 36
+
+  ASSERT_EQ(all_versions, FilterSupportedVersions(all_versions));
+}
+
+TEST(QuicProtocolTest, FilterSupportedVersionsNo35) {
+  QuicFlagSaver flags;
+  QuicVersionVector all_versions = {
+      QUIC_VERSION_30, QUIC_VERSION_31, QUIC_VERSION_32, QUIC_VERSION_33,
+      QUIC_VERSION_34, QUIC_VERSION_35, QUIC_VERSION_36};
+
+  FLAGS_quic_disable_pre_32 = false;
+  FLAGS_quic_disable_pre_34 = false;
+  FLAGS_quic_enable_version_35 = true;
+  FLAGS_quic_enable_version_36_v2 = true;
+
+  all_versions.pop_back();  // Remove 36
+  all_versions.pop_back();  // Remove 35
+
+  ASSERT_EQ(all_versions, FilterSupportedVersions(all_versions));
+}
+
+TEST(QuicProtocolTest, FilterSupportedVersionsNoPre32) {
+  QuicFlagSaver flags;
+  QuicVersionVector all_versions = {
+      QUIC_VERSION_30, QUIC_VERSION_31, QUIC_VERSION_32, QUIC_VERSION_33,
+      QUIC_VERSION_34, QUIC_VERSION_35, QUIC_VERSION_36};
+
+  FLAGS_quic_disable_pre_32 = true;
+  FLAGS_quic_disable_pre_34 = false;
+  FLAGS_quic_enable_version_35 = true;
+  FLAGS_quic_enable_version_36_v2 = true;
+
+  all_versions.erase(all_versions.begin());  // Remove 30
+  all_versions.erase(all_versions.begin());  // Remove 31
+
+  ASSERT_EQ(all_versions, FilterSupportedVersions(all_versions));
+}
+
+TEST(QuicProtocolTest, FilterSupportedVersionsNoPre34) {
+  QuicFlagSaver flags;
+  QuicVersionVector all_versions = {
+      QUIC_VERSION_30, QUIC_VERSION_31, QUIC_VERSION_32, QUIC_VERSION_33,
+      QUIC_VERSION_34, QUIC_VERSION_35, QUIC_VERSION_36};
+
+  FLAGS_quic_disable_pre_32 = false;
+  FLAGS_quic_disable_pre_34 = true;
+  FLAGS_quic_enable_version_35 = true;
+  FLAGS_quic_enable_version_36_v2 = true;
+
+  all_versions.erase(all_versions.begin());  // Remove 30
+  all_versions.erase(all_versions.begin());  // Remove 31
+  all_versions.erase(all_versions.begin());  // Remove 32
+  all_versions.erase(all_versions.begin());  // Remove 33
+
+  ASSERT_EQ(all_versions, FilterSupportedVersions(all_versions));
 }
 
 TEST(QuicProtocolTest, QuicVersionManager) {
+  QuicFlagSaver flags;
   FLAGS_quic_enable_version_35 = false;
   FLAGS_quic_enable_version_36_v2 = false;
   QuicVersionManager manager(AllSupportedVersions());
@@ -404,27 +490,36 @@ TEST(PacketNumberQueueTest, Iterators) {
   PacketNumberQueue queue;
   queue.Add(1, 100);
 
-  const std::vector<QuicPacketNumber> actual_numbers(queue.begin(),
-                                                     queue.end());
-  const std::vector<Interval<QuicPacketNumber>> actual_intervals(
-      queue.begin_intervals(), queue.end_intervals());
-
-  std::vector<QuicPacketNumber> expected_numbers;
-  for (int i = 1; i < 100; ++i) {
-    expected_numbers.push_back(i);
-  }
+  const std::vector<Interval<QuicPacketNumber>> actual_intervals(queue.begin(),
+                                                                 queue.end());
 
   std::vector<Interval<QuicPacketNumber>> expected_intervals;
   expected_intervals.push_back(Interval<QuicPacketNumber>(1, 100));
 
   EXPECT_EQ(expected_intervals, actual_intervals);
-  EXPECT_EQ(expected_numbers, actual_numbers);
+}
 
-  PacketNumberQueue::const_iterator it_low = queue.lower_bound(10);
-  EXPECT_EQ(10u, *it_low);
+TEST(PacketNumberQueueTest, LowerBoundEquals) {
+  PacketNumberQueue queue;
+  queue.Add(1, 100);
 
-  it_low = queue.lower_bound(101);
-  EXPECT_TRUE(queue.end() == it_low);
+  PacketNumberQueue::const_iterator it = queue.lower_bound(10);
+  ASSERT_NE(queue.end(), it);
+  EXPECT_TRUE(it->Contains(10u));
+
+  it = queue.lower_bound(101);
+  EXPECT_TRUE(queue.end() == it);
+}
+
+TEST(PacketNumberQueueTest, LowerBoundGreater) {
+  PacketNumberQueue queue;
+  queue.Add(15, 25);
+  queue.Add(50, 100);
+
+  PacketNumberQueue::const_iterator it = queue.lower_bound(10);
+  ASSERT_NE(queue.end(), it);
+  EXPECT_EQ(15u, it->min());
+  EXPECT_EQ(25u, it->max());
 }
 
 TEST(PacketNumberQueueTest, IntervalLengthAndRemoveInterval) {

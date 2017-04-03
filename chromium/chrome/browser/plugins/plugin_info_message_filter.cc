@@ -11,7 +11,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -19,19 +19,20 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/plugins/chrome_plugin_service_filter.h"
-#include "chrome/browser/plugins/plugin_filter_utils.h"
 #include "chrome/browser/plugins/plugin_finder.h"
 #include "chrome/browser/plugins/plugin_metadata.h"
 #include "chrome/browser/plugins/plugin_prefs.h"
+#include "chrome/browser/plugins/plugin_utils.h"
+#include "chrome/browser/plugins/plugins_field_trial.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_otr_state.h"
 #include "chrome/common/chrome_content_client.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/render_messages.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
-#include "components/content_settings/core/browser/plugins_field_trial.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/prefs/pref_service.h"
 #include "components/rappor/rappor_service.h"
@@ -41,6 +42,7 @@
 #include "content/public/common/content_constants.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 #include "widevine_cdm_version.h"  // In SHARED_INTERMEDIATE_DIR.
 
 #if defined(ENABLE_EXTENSIONS)
@@ -88,7 +90,7 @@ static void SendPluginAvailabilityUMA(const std::string& mime_type,
 // RAPPOR service.
 void ReportMetrics(const std::string& mime_type,
                    const GURL& url,
-                   const GURL& origin_url) {
+                   const url::Origin& main_frame_origin) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   if (chrome::IsIncognitoSessionActive())
@@ -96,13 +98,15 @@ void ReportMetrics(const std::string& mime_type,
   rappor::RapporService* rappor_service = g_browser_process->rappor_service();
   if (!rappor_service)
     return;
+  if (main_frame_origin.unique())
+    return;
 
   if (mime_type == content::kFlashPluginSwfMimeType ||
       mime_type == content::kFlashPluginSplMimeType) {
     rappor_service->RecordSample(
         "Plugins.FlashOriginUrl", rappor::ETLD_PLUS_ONE_RAPPOR_TYPE,
         net::registry_controlled_domains::GetDomainAndRegistry(
-            origin_url,
+            main_frame_origin.GetURL(),
             net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES));
     rappor_service->RecordSample(
         "Plugins.FlashUrl", rappor::ETLD_PLUS_ONE_RAPPOR_TYPE,
@@ -206,22 +210,18 @@ PluginInfoMessageFilter::~PluginInfoMessageFilter() {}
 struct PluginInfoMessageFilter::GetPluginInfo_Params {
   int render_frame_id;
   GURL url;
-  GURL top_origin_url;
+  url::Origin main_frame_origin;
   std::string mime_type;
 };
 
 void PluginInfoMessageFilter::OnGetPluginInfo(
     int render_frame_id,
     const GURL& url,
-    const GURL& top_origin_url,
+    const url::Origin& main_frame_origin,
     const std::string& mime_type,
     IPC::Message* reply_msg) {
-  GetPluginInfo_Params params = {
-    render_frame_id,
-    url,
-    top_origin_url,
-    mime_type
-  };
+  GetPluginInfo_Params params = {render_frame_id, url, main_frame_origin,
+                                 mime_type};
   PluginService::GetInstance()->GetPlugins(
       base::Bind(&PluginInfoMessageFilter::PluginsLoaded,
                  weak_ptr_factory_.GetWeakPtr(),
@@ -237,7 +237,7 @@ void PluginInfoMessageFilter::PluginsLoaded(
   // This also fills in |actual_mime_type|.
   std::unique_ptr<PluginMetadata> plugin_metadata;
   if (context_.FindEnabledPlugin(params.render_frame_id, params.url,
-                                 params.top_origin_url, params.mime_type,
+                                 params.main_frame_origin, params.mime_type,
                                  &output->status, &output->plugin,
                                  &output->actual_mime_type, &plugin_metadata)) {
     context_.DecidePluginStatus(params, output->plugin, plugin_metadata.get(),
@@ -317,15 +317,16 @@ void PluginInfoMessageFilter::Context::DecidePluginStatus(
   bool is_managed = false;
   // Check plugin content settings. The primary URL is the top origin URL and
   // the secondary URL is the plugin URL.
-  GetPluginContentSetting(host_content_settings_map_, plugin,
-                          params.top_origin_url, params.url,
-                          plugin_metadata->identifier(), &plugin_setting,
-                          &uses_default_content_setting, &is_managed);
+  PluginUtils::GetPluginContentSetting(
+      host_content_settings_map_, plugin, params.main_frame_origin, params.url,
+      plugin_metadata->identifier(), &plugin_setting,
+      &uses_default_content_setting, &is_managed);
 
   // TODO(tommycli): Remove once we deprecate the plugin ASK policy.
   bool legacy_ask_user = plugin_setting == CONTENT_SETTING_ASK;
-  plugin_setting = content_settings::PluginsFieldTrial::EffectiveContentSetting(
-      CONTENT_SETTINGS_TYPE_PLUGINS, plugin_setting);
+  plugin_setting = PluginsFieldTrial::EffectiveContentSetting(
+      host_content_settings_map_, CONTENT_SETTINGS_TYPE_PLUGINS,
+      plugin_setting);
 
   DCHECK(plugin_setting != CONTENT_SETTING_DEFAULT);
   DCHECK(plugin_setting != CONTENT_SETTING_ASK);
@@ -364,7 +365,10 @@ void PluginInfoMessageFilter::Context::DecidePluginStatus(
   }
 #endif  // defined(ENABLE_EXTENSIONS)
 
-  if (plugin_setting == CONTENT_SETTING_DETECT_IMPORTANT_CONTENT) {
+  if (plugin_setting == CONTENT_SETTING_DETECT_IMPORTANT_CONTENT ||
+      (plugin_setting == CONTENT_SETTING_ALLOW &&
+       PluginUtils::ShouldPreferHtmlOverPlugins(host_content_settings_map_) &&
+       !base::FeatureList::IsEnabled(features::kRunAllFlashInAllowMode))) {
     *status = ChromeViewHostMsg_GetPluginInfo_Status::kPlayImportantContent;
   } else if (plugin_setting == CONTENT_SETTING_BLOCK) {
     // For managed users with the ASK policy, we allow manually running plugins
@@ -395,7 +399,7 @@ void PluginInfoMessageFilter::Context::DecidePluginStatus(
 bool PluginInfoMessageFilter::Context::FindEnabledPlugin(
     int render_frame_id,
     const GURL& url,
-    const GURL& top_origin_url,
+    const url::Origin& main_frame_origin,
     const std::string& mime_type,
     ChromeViewHostMsg_GetPluginInfo_Status* status,
     WebPluginInfo* plugin,
@@ -414,7 +418,9 @@ bool PluginInfoMessageFilter::Context::FindEnabledPlugin(
   matching_plugins.erase(
       std::remove_if(
           matching_plugins.begin(), matching_plugins.end(),
-          [&](const WebPluginInfo& info) { return info.path == not_present; }),
+          [&not_present](const WebPluginInfo& info) {
+            return info.path == not_present;
+          }),
       matching_plugins.end());
 #endif  // defined(GOOGLE_CHROME_BUILD)
   if (matching_plugins.empty()) {
@@ -426,12 +432,10 @@ bool PluginInfoMessageFilter::Context::FindEnabledPlugin(
       PluginService::GetInstance()->GetFilter();
   size_t i = 0;
   for (; i < matching_plugins.size(); ++i) {
-    if (!filter || filter->IsPluginAvailable(render_process_id_,
-                                             render_frame_id,
-                                             resource_context_,
-                                             url,
-                                             top_origin_url,
-                                             &matching_plugins[i])) {
+    if (!filter ||
+        filter->IsPluginAvailable(render_process_id_, render_frame_id,
+                                  resource_context_, url, main_frame_origin,
+                                  &matching_plugins[i])) {
       break;
     }
   }
@@ -442,6 +446,15 @@ bool PluginInfoMessageFilter::Context::FindEnabledPlugin(
     // Otherwise, we only found disabled plugins, so we take the first one.
     i = 0;
     *status = ChromeViewHostMsg_GetPluginInfo_Status::kDisabled;
+
+    if (PluginUtils::ShouldPreferHtmlOverPlugins(host_content_settings_map_) &&
+        matching_plugins[0].name ==
+            base::ASCIIToUTF16(content::kFlashPluginName)) {
+      // TODO(tommycli): This assumes that Flash can no longer be disabled
+      // via chrome://plugins. That should be fine since chrome://plugins is
+      // going away, but we should verify before launching HBD.
+      *status = ChromeViewHostMsg_GetPluginInfo_Status::kFlashHiddenPreferHtml;
+    }
   }
 
   *plugin = matching_plugins[i];
@@ -486,7 +499,7 @@ void PluginInfoMessageFilter::GetPluginInfoReply(
   if (output->status != ChromeViewHostMsg_GetPluginInfo_Status::kNotFound) {
     main_thread_task_runner_->PostTask(
         FROM_HERE, base::Bind(&ReportMetrics, output->actual_mime_type,
-                              params.url, params.top_origin_url));
+                              params.url, params.main_frame_origin));
   }
 }
 

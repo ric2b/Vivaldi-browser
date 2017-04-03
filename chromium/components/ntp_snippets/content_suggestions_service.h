@@ -28,7 +28,7 @@ class PrefService;
 
 namespace gfx {
 class Image;
-}
+}  // namespace gfx
 
 namespace ntp_snippets {
 
@@ -40,8 +40,7 @@ class ContentSuggestionsService : public KeyedService,
                                   public ContentSuggestionsProvider::Observer,
                                   public history::HistoryServiceObserver {
  public:
-  using ImageFetchedCallback =
-      base::Callback<void(const std::string& suggestion_id, const gfx::Image&)>;
+  using ImageFetchedCallback = base::Callback<void(const gfx::Image&)>;
   using DismissedSuggestionsCallback = base::Callback<void(
       std::vector<ContentSuggestion> dismissed_suggestions)>;
 
@@ -64,12 +63,12 @@ class ContentSuggestionsService : public KeyedService,
     // Fired when a suggestion has been invalidated. The UI must immediately
     // clear the suggestion even from open NTPs. Invalidation happens, for
     // example, when the content that the suggestion refers to is gone.
-    // Note that this event may be fired even if the corresponding |category| is
+    // Note that this event may be fired even if the corresponding category is
     // not currently AVAILABLE, because open UIs may still be showing the
     // suggestion that is to be removed. This event may also be fired for
     // |suggestion_id|s that never existed and should be ignored in that case.
-    virtual void OnSuggestionInvalidated(Category category,
-                                         const std::string& suggestion_id) = 0;
+    virtual void OnSuggestionInvalidated(
+        const ContentSuggestion::ID& suggestion_id) = 0;
 
     // Sent when the service is shutting down. After the service has shut down,
     // it will not provide any data anymore, though calling the getters is still
@@ -77,7 +76,7 @@ class ContentSuggestionsService : public KeyedService,
     virtual void ContentSuggestionsServiceShutdown() = 0;
 
    protected:
-    virtual ~Observer() {}
+    virtual ~Observer() = default;
   };
 
   enum State {
@@ -115,12 +114,16 @@ class ContentSuggestionsService : public KeyedService,
   // runs the |callback|. If that suggestion doesn't exist or the fetch fails,
   // the callback gets an empty image. The callback will not be called
   // synchronously.
-  void FetchSuggestionImage(const std::string& suggestion_id,
+  void FetchSuggestionImage(const ContentSuggestion::ID& suggestion_id,
                             const ImageFetchedCallback& callback);
 
   // Dismisses the suggestion with the given |suggestion_id|, if it exists.
   // This will not trigger an update through the observers.
-  void DismissSuggestion(const std::string& suggestion_id);
+  void DismissSuggestion(const ContentSuggestion::ID& suggestion_id);
+
+  // Dismisses the given |category|, if it exists.
+  // This will not trigger an update through the observers.
+  void DismissCategory(Category category);
 
   // Observer accessors.
   void AddObserver(Observer* observer);
@@ -178,7 +181,7 @@ class ContentSuggestionsService : public KeyedService,
     ntp_snippets_service_ = ntp_snippets_service;
   }
 
-  UserClassifier* user_classifier() { return &user_classifier_;}
+  UserClassifier* user_classifier() { return &user_classifier_; }
 
  private:
   friend class ContentSuggestionsServiceTest;
@@ -190,9 +193,9 @@ class ContentSuggestionsService : public KeyedService,
   void OnCategoryStatusChanged(ContentSuggestionsProvider* provider,
                                Category category,
                                CategoryStatus new_status) override;
-  void OnSuggestionInvalidated(ContentSuggestionsProvider* provider,
-                               Category category,
-                               const std::string& suggestion_id) override;
+  void OnSuggestionInvalidated(
+      ContentSuggestionsProvider* provider,
+      const ContentSuggestion::ID& suggestion_id) override;
 
   // history::HistoryServiceObserver implementation.
   void OnURLsDeleted(history::HistoryService* history_service,
@@ -209,11 +212,9 @@ class ContentSuggestionsService : public KeyedService,
   bool RegisterCategoryIfRequired(ContentSuggestionsProvider* provider,
                                   Category category);
 
-  // Removes a suggestion from the local stores |id_category_map_| and
-  // |suggestions_by_category_|, if it exists. Returns true if a suggestion was
-  // removed.
-  bool RemoveSuggestionByID(Category category,
-                            const std::string& suggestion_id);
+  // Removes a suggestion from the local store |suggestions_by_category_|, if it
+  // exists. Returns true if a suggestion was removed.
+  bool RemoveSuggestionByID(const ContentSuggestion::ID& suggestion_id);
 
   // Fires the OnCategoryStatusChanged event for the given |category|.
   void NotifyCategoryStatusChanged(Category category);
@@ -247,11 +248,6 @@ class ContentSuggestionsService : public KeyedService,
   // loading).
   std::map<Category, std::vector<ContentSuggestion>, Category::CompareByID>
       suggestions_by_category_;
-
-  // Map used to determine the category of a suggestion (of which only the ID
-  // is available). This also determines the provider that delivered the
-  // suggestion.
-  std::map<std::string, Category> id_category_map_;
 
   // Observer for the HistoryService. All providers are notified when history is
   // deleted.

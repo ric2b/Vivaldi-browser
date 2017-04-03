@@ -108,7 +108,6 @@ void InitDaysAgoToRecencyScoreArray() {
 const size_t ScoredHistoryMatch::kMaxVisitsToScore = 10;
 bool ScoredHistoryMatch::also_do_hup_like_scoring_ = false;
 int ScoredHistoryMatch::bookmark_value_ = 1;
-bool ScoredHistoryMatch::fix_typed_visit_bug_ = false;
 bool ScoredHistoryMatch::fix_few_visits_bug_ = false;
 bool ScoredHistoryMatch::allow_tld_matches_ = false;
 bool ScoredHistoryMatch::allow_scheme_matches_ = false;
@@ -188,13 +187,8 @@ ScoredHistoryMatch::ScoredHistoryMatch(
 
   // Sort matches by offset, which is needed for GetTopicalityScore() to
   // function correctly.
-  if (OmniboxFieldTrial::HQPAllowDupMatchesForScoring()) {
-    url_matches = SortMatches(url_matches);
-    title_matches = SortMatches(title_matches);
-  } else {
-    url_matches = SortAndDeoverlapMatches(url_matches);
-    title_matches = SortAndDeoverlapMatches(title_matches);
-  }
+  url_matches = SortMatches(url_matches);
+  title_matches = SortMatches(title_matches);
 
   // We can likely inline autocomplete a match if:
   //  1) there is only one search term
@@ -326,12 +320,8 @@ ScoredHistoryMatch::ScoredHistoryMatch(
     raw_score = std::max(raw_score, hup_like_score);
   }
 
-  // If we haven't yet removed overlaps / duplicates in the matches variables,
-  // do so now.
-  if (OmniboxFieldTrial::HQPAllowDupMatchesForScoring()) {
-    url_matches = DeoverlapMatches(url_matches);
-    title_matches = DeoverlapMatches(title_matches);
-  }
+  url_matches = DeoverlapMatches(url_matches);
+  title_matches = DeoverlapMatches(title_matches);
 
   // Now that we're done processing this entry, correct the offsets of the
   // matches in |url_matches| so they point to offsets in the original URL
@@ -429,7 +419,6 @@ void ScoredHistoryMatch::Init() {
   initialized = true;
   also_do_hup_like_scoring_ = OmniboxFieldTrial::HQPAlsoDoHUPLikeScoring();
   bookmark_value_ = OmniboxFieldTrial::HQPBookmarkValue();
-  fix_typed_visit_bug_ = OmniboxFieldTrial::HQPFixTypedVisitBug();
   fix_few_visits_bug_ = OmniboxFieldTrial::HQPFixFewVisitsBug();
   allow_tld_matches_ = OmniboxFieldTrial::HQPAllowMatchInTLDValue();
   allow_scheme_matches_ = OmniboxFieldTrial::HQPAllowMatchInSchemeValue();
@@ -606,11 +595,8 @@ float ScoredHistoryMatch::GetFrequency(const base::Time& now,
   const size_t max_visit_to_score =
       std::min(visits.size(), ScoredHistoryMatch::kMaxVisitsToScore);
   for (size_t i = 0; i < max_visit_to_score; ++i) {
-    const bool is_page_transition_typed =
-        fix_typed_visit_bug_ ? ui::PageTransitionCoreTypeIs(
-                                   visits[i].second, ui::PAGE_TRANSITION_TYPED)
-                             : ui::PageTransitionTypeIncludingQualifiersIs(
-                                   visits[i].second, ui::PAGE_TRANSITION_TYPED);
+    const bool is_page_transition_typed = ui::PageTransitionCoreTypeIs(
+        visits[i].second, ui::PAGE_TRANSITION_TYPED);
     int value_of_transition = is_page_transition_typed ? 20 : 1;
     if (bookmarked)
       value_of_transition = std::max(value_of_transition, bookmark_value_);

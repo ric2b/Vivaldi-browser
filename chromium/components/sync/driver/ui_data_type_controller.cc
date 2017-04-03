@@ -8,10 +8,10 @@
 
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/memory/weak_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/profiler/scoped_tracker.h"
-#include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/sync/api/data_type_error_handler_impl.h"
 #include "components/sync/api/sync_error.h"
 #include "components/sync/api/sync_merge_result.h"
 #include "components/sync/api/syncable_service.h"
@@ -22,28 +22,19 @@
 #include "components/sync/driver/sync_client.h"
 #include "components/sync/driver/sync_service.h"
 
-namespace sync_driver {
+namespace syncer {
 
 UIDataTypeController::UIDataTypeController()
-    : DirectoryDataTypeController(base::ThreadTaskRunnerHandle::Get(),
-                                  base::Closure()),
-      sync_client_(NULL),
-      state_(NOT_RUNNING),
-      type_(syncer::UNSPECIFIED) {}
+    : DirectoryDataTypeController(UNSPECIFIED, base::Closure(), nullptr),
+      state_(NOT_RUNNING) {}
 
-UIDataTypeController::UIDataTypeController(
-    const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
-    const base::Closure& error_callback,
-    syncer::ModelType type,
-    SyncClient* sync_client)
-    : DirectoryDataTypeController(ui_thread, error_callback),
-      sync_client_(sync_client),
+UIDataTypeController::UIDataTypeController(ModelType type,
+                                           const base::Closure& dump_stack,
+                                           SyncClient* sync_client)
+    : DirectoryDataTypeController(type, dump_stack, sync_client),
       state_(NOT_RUNNING),
-      type_(type),
-      processor_factory_(new GenericChangeProcessorFactory()),
-      ui_thread_(ui_thread) {
-  DCHECK(ui_thread_->BelongsToCurrentThread());
-  DCHECK(syncer::IsRealDataType(type_));
+      processor_factory_(new GenericChangeProcessorFactory()) {
+  DCHECK(IsRealDataType(type));
 }
 
 void UIDataTypeController::SetGenericChangeProcessorFactoryForTest(
@@ -52,19 +43,17 @@ void UIDataTypeController::SetGenericChangeProcessorFactoryForTest(
   processor_factory_ = std::move(factory);
 }
 
-UIDataTypeController::~UIDataTypeController() {
-  DCHECK(ui_thread_->BelongsToCurrentThread());
-}
+UIDataTypeController::~UIDataTypeController() {}
 
 void UIDataTypeController::LoadModels(
     const ModelLoadCallback& model_load_callback) {
-  DCHECK(ui_thread_->BelongsToCurrentThread());
-  DCHECK(syncer::IsRealDataType(type_));
+  DCHECK(CalledOnValidThread());
+  DCHECK(IsRealDataType(type()));
   model_load_callback_ = model_load_callback;
   if (state_ != NOT_RUNNING) {
-    model_load_callback.Run(
-        type(), syncer::SyncError(FROM_HERE, syncer::SyncError::DATATYPE_ERROR,
-                                  "Model already loaded", type()));
+    model_load_callback.Run(type(),
+                            SyncError(FROM_HERE, SyncError::DATATYPE_ERROR,
+                                      "Model already loaded", type()));
     return;
   }
   // Since we can't be called multiple times before Stop() is called,
@@ -82,27 +71,28 @@ void UIDataTypeController::LoadModels(
   }
 
   state_ = MODEL_LOADED;
-  model_load_callback_.Run(type(), syncer::SyncError());
+  model_load_callback_.Run(type(), SyncError());
 }
 
 void UIDataTypeController::OnModelLoaded() {
-  DCHECK(ui_thread_->BelongsToCurrentThread());
+  DCHECK(CalledOnValidThread());
   DCHECK_EQ(state_, MODEL_STARTING);
 
   state_ = MODEL_LOADED;
-  model_load_callback_.Run(type(), syncer::SyncError());
+  model_load_callback_.Run(type(), SyncError());
 }
 
 void UIDataTypeController::StartAssociating(
     const StartCallback& start_callback) {
-  DCHECK(ui_thread_->BelongsToCurrentThread());
+  DCHECK(CalledOnValidThread());
   DCHECK(!start_callback.is_null());
   DCHECK_EQ(state_, MODEL_LOADED);
 
   start_callback_ = start_callback;
   state_ = ASSOCIATING;
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&UIDataTypeController::Associate, this));
+      FROM_HERE,
+      base::Bind(&UIDataTypeController::Associate, base::AsWeakPtr(this)));
 }
 
 bool UIDataTypeController::StartModels() {
@@ -113,16 +103,16 @@ bool UIDataTypeController::StartModels() {
 }
 
 void UIDataTypeController::Associate() {
+  DCHECK(CalledOnValidThread());
   if (state_ != ASSOCIATING) {
     // Stop() must have been called while Associate() task have been waiting.
     DCHECK_EQ(state_, NOT_RUNNING);
     return;
   }
 
-  syncer::SyncMergeResult local_merge_result(type());
-  syncer::SyncMergeResult syncer_merge_result(type());
-  base::WeakPtrFactory<syncer::SyncMergeResult> weak_ptr_factory(
-      &syncer_merge_result);
+  SyncMergeResult local_merge_result(type());
+  SyncMergeResult syncer_merge_result(type());
+  base::WeakPtrFactory<SyncMergeResult> weak_ptr_factory(&syncer_merge_result);
 
   // TODO(robliao): Remove ScopedTracker below once https://crbug.com/471403 is
   // fixed.
@@ -131,15 +121,15 @@ void UIDataTypeController::Associate() {
           "471403 UIDataTypeController::Associate1"));
 
   // Connect |shared_change_processor_| to the syncer and get the
-  // syncer::SyncableService associated with type().
+  // SyncableService associated with type().
   DCHECK(sync_client_->GetSyncService());
   local_service_ = shared_change_processor_->Connect(
       sync_client_, processor_factory_.get(),
-      sync_client_->GetSyncService()->GetUserShare(), this,
+      sync_client_->GetSyncService()->GetUserShare(), CreateErrorHandler(),
       weak_ptr_factory.GetWeakPtr());
   if (!local_service_.get()) {
-    syncer::SyncError error(FROM_HERE, syncer::SyncError::DATATYPE_ERROR,
-                            "Failed to connect to syncer.", type());
+    SyncError error(FROM_HERE, SyncError::DATATYPE_ERROR,
+                    "Failed to connect to syncer.", type());
     local_merge_result.set_error(error);
     StartDone(ASSOCIATION_FAILED, local_merge_result, syncer_merge_result);
     return;
@@ -151,8 +141,7 @@ void UIDataTypeController::Associate() {
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
           "471403 UIDataTypeController::Associate2"));
   if (!shared_change_processor_->CryptoReadyIfNecessary()) {
-    syncer::SyncError error(FROM_HERE, syncer::SyncError::CRYPTO_ERROR, "",
-                            type());
+    SyncError error(FROM_HERE, SyncError::CRYPTO_ERROR, "", type());
     local_merge_result.set_error(error);
     StartDone(NEEDS_CRYPTO, local_merge_result, syncer_merge_result);
     return;
@@ -166,8 +155,8 @@ void UIDataTypeController::Associate() {
   bool sync_has_nodes = false;
   if (!shared_change_processor_->SyncModelHasUserCreatedNodes(
           &sync_has_nodes)) {
-    syncer::SyncError error(FROM_HERE, syncer::SyncError::UNRECOVERABLE_ERROR,
-                            "Failed to load sync nodes", type());
+    SyncError error(FROM_HERE, SyncError::UNRECOVERABLE_ERROR,
+                    "Failed to load sync nodes", type());
     local_merge_result.set_error(error);
     StartDone(UNRECOVERABLE_ERROR, local_merge_result, syncer_merge_result);
     return;
@@ -176,7 +165,7 @@ void UIDataTypeController::Associate() {
   // Scope for |initial_sync_data| which might be expensive, so we don't want
   // to keep it in memory longer than necessary.
   {
-    syncer::SyncDataList initial_sync_data;
+    SyncDataList initial_sync_data;
 
     // TODO(robliao): Remove ScopedTracker below once https://crbug.com/471403
     // is fixed.
@@ -184,9 +173,8 @@ void UIDataTypeController::Associate() {
         FROM_HERE_WITH_EXPLICIT_FUNCTION(
             "471403 UIDataTypeController::Associate4"));
     base::TimeTicks start_time = base::TimeTicks::Now();
-    syncer::SyncError error =
-        shared_change_processor_->GetAllSyncDataReturnError(type(),
-                                                            &initial_sync_data);
+    SyncError error = shared_change_processor_->GetAllSyncDataReturnError(
+        type(), &initial_sync_data);
     if (error.IsSet()) {
       local_merge_result.set_error(error);
       StartDone(ASSOCIATION_FAILED, local_merge_result, syncer_merge_result);
@@ -201,7 +189,7 @@ void UIDataTypeController::Associate() {
     std::string datatype_context;
     if (shared_change_processor_->GetDataTypeContext(&datatype_context)) {
       local_service_->UpdateDataTypeContext(
-          type(), syncer::SyncChangeProcessor::NO_REFRESH, datatype_context);
+          type(), SyncChangeProcessor::NO_REFRESH, datatype_context);
     }
 
     // TODO(robliao): Remove ScopedTracker below once https://crbug.com/471403
@@ -214,9 +202,9 @@ void UIDataTypeController::Associate() {
     // Passes a reference to |shared_change_processor_|.
     local_merge_result = local_service_->MergeDataAndStartSyncing(
         type(), initial_sync_data,
-        std::unique_ptr<syncer::SyncChangeProcessor>(
+        std::unique_ptr<SyncChangeProcessor>(
             new SharedChangeProcessorRef(shared_change_processor_)),
-        std::unique_ptr<syncer::SyncErrorFactory>(
+        std::unique_ptr<SyncErrorFactory>(
             new SharedChangeProcessorRef(shared_change_processor_)));
     RecordAssociationTime(base::TimeTicks::Now() - start_time);
     if (local_merge_result.error().IsSet()) {
@@ -244,7 +232,7 @@ ChangeProcessor* UIDataTypeController::GetChangeProcessor() const {
 }
 
 void UIDataTypeController::AbortModelLoad() {
-  DCHECK(ui_thread_->BelongsToCurrentThread());
+  DCHECK(CalledOnValidThread());
   state_ = NOT_RUNNING;
 
   if (shared_change_processor_.get()) {
@@ -258,9 +246,9 @@ void UIDataTypeController::AbortModelLoad() {
 
 void UIDataTypeController::StartDone(
     ConfigureResult start_result,
-    const syncer::SyncMergeResult& local_merge_result,
-    const syncer::SyncMergeResult& syncer_merge_result) {
-  DCHECK(ui_thread_->BelongsToCurrentThread());
+    const SyncMergeResult& local_merge_result,
+    const SyncMergeResult& syncer_merge_result) {
+  DCHECK(CalledOnValidThread());
 
   // TODO(robliao): Remove ScopedTracker below once https://crbug.com/471403 is
   // fixed.
@@ -287,8 +275,8 @@ void UIDataTypeController::StartDone(
 }
 
 void UIDataTypeController::Stop() {
-  DCHECK(ui_thread_->BelongsToCurrentThread());
-  DCHECK(syncer::IsRealDataType(type_));
+  DCHECK(CalledOnValidThread());
+  DCHECK(IsRealDataType(type()));
 
   if (state_ == NOT_RUNNING)
     return;
@@ -319,46 +307,43 @@ void UIDataTypeController::Stop() {
   state_ = NOT_RUNNING;
 }
 
-syncer::ModelType UIDataTypeController::type() const {
-  DCHECK(syncer::IsRealDataType(type_));
-  return type_;
-}
-
 void UIDataTypeController::StopModels() {
   // Do nothing by default.
 }
 
-syncer::ModelSafeGroup UIDataTypeController::model_safe_group() const {
-  DCHECK(syncer::IsRealDataType(type_));
-  return syncer::GROUP_UI;
+ModelSafeGroup UIDataTypeController::model_safe_group() const {
+  DCHECK(IsRealDataType(type()));
+  return GROUP_UI;
 }
 
 std::string UIDataTypeController::name() const {
   // For logging only.
-  return syncer::ModelTypeToString(type());
+  return ModelTypeToString(type());
 }
 
 DataTypeController::State UIDataTypeController::state() const {
   return state_;
 }
 
-void UIDataTypeController::OnSingleDataTypeUnrecoverableError(
-    const syncer::SyncError& error) {
+std::unique_ptr<DataTypeErrorHandler>
+UIDataTypeController::CreateErrorHandler() {
+  DCHECK(CalledOnValidThread());
+  return base::MakeUnique<DataTypeErrorHandlerImpl>(
+      base::ThreadTaskRunnerHandle::Get(), dump_stack_,
+      base::Bind(&UIDataTypeController::OnUnrecoverableError,
+                 base::AsWeakPtr(this)));
+}
+
+void UIDataTypeController::OnUnrecoverableError(const SyncError& error) {
+  DCHECK(CalledOnValidThread());
   DCHECK_EQ(type(), error.model_type());
-  UMA_HISTOGRAM_ENUMERATION("Sync.DataTypeRunFailures",
-                            ModelTypeToHistogramInt(type()),
-                            syncer::MODEL_TYPE_COUNT);
-  // TODO(tim): We double-upload some errors.  See bug 383480.
-  if (!error_callback_.is_null())
-    error_callback_.Run();
   if (!model_load_callback_.is_null()) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(model_load_callback_, type(), error));
+    model_load_callback_.Run(type(), error);
   }
 }
 
 void UIDataTypeController::RecordAssociationTime(base::TimeDelta time) {
-  DCHECK(ui_thread_->BelongsToCurrentThread());
+  DCHECK(CalledOnValidThread());
 #define PER_DATA_TYPE_MACRO(type_str) \
   UMA_HISTOGRAM_TIMES("Sync." type_str "AssociationTime", time);
   SYNC_DATA_TYPE_HISTOGRAM(type());
@@ -366,10 +351,9 @@ void UIDataTypeController::RecordAssociationTime(base::TimeDelta time) {
 }
 
 void UIDataTypeController::RecordStartFailure(ConfigureResult result) {
-  DCHECK(ui_thread_->BelongsToCurrentThread());
+  DCHECK(CalledOnValidThread());
   UMA_HISTOGRAM_ENUMERATION("Sync.DataTypeStartFailures",
-                            ModelTypeToHistogramInt(type()),
-                            syncer::MODEL_TYPE_COUNT);
+                            ModelTypeToHistogramInt(type()), MODEL_TYPE_COUNT);
 #define PER_DATA_TYPE_MACRO(type_str)                                    \
   UMA_HISTOGRAM_ENUMERATION("Sync." type_str "ConfigureFailure", result, \
                             MAX_CONFIGURE_RESULT);
@@ -377,4 +361,4 @@ void UIDataTypeController::RecordStartFailure(ConfigureResult result) {
 #undef PER_DATA_TYPE_MACRO
 }
 
-}  // namespace sync_driver
+}  // namespace syncer

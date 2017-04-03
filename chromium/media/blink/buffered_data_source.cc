@@ -207,13 +207,14 @@ bool BufferedDataSource::DidPassCORSAccessCheck() const {
 }
 
 void BufferedDataSource::Abort() {
-  DCHECK(render_task_runner_->BelongsToCurrentThread());
-  {
-    base::AutoLock auto_lock(lock_);
-    StopInternal_Locked();
-  }
-  StopLoader();
-  frame_ = NULL;
+  base::AutoLock auto_lock(lock_);
+  DCHECK(init_cb_.is_null());
+  if (read_op_)
+    ReadOperation::Run(std::move(read_op_), kAborted);
+
+  // Abort does not call StopLoader() since it is typically called prior to a
+  // seek or suspend. Let the loader logic make the decision about whether a new
+  // loader is necessary upon the seek or resume.
 }
 
 void BufferedDataSource::MediaPlaybackRateChanged(double playback_rate) {
@@ -358,6 +359,8 @@ void BufferedDataSource::ReadInternal() {
   DCHECK(render_task_runner_->BelongsToCurrentThread());
   int64_t position = 0;
   int size = 0;
+  if (stop_signal_received_ || !read_op_)
+    return;
   {
     base::AutoLock auto_lock(lock_);
     if (stop_signal_received_)
@@ -501,6 +504,9 @@ void BufferedDataSource::ReadCallback(
     BufferedResourceLoader::Status status,
     int bytes_read) {
   DCHECK(render_task_runner_->BelongsToCurrentThread());
+
+  if (stop_signal_received_ || !read_op_)
+    return;
 
   // TODO(scherkus): we shouldn't have to lock to signal host(), see
   // http://crbug.com/113712 for details.

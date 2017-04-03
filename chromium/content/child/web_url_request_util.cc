@@ -11,6 +11,7 @@
 
 #include "base/logging.h"
 #include "base/strings/string_util.h"
+#include "content/child/request_extra_data.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "third_party/WebKit/public/platform/FilePathConversion.h"
@@ -39,6 +40,7 @@ const char kThrottledErrorDescription[] =
 class HeaderFlattener : public blink::WebHTTPHeaderVisitor {
  public:
   HeaderFlattener() {}
+  ~HeaderFlattener() override {}
 
   void visitHeader(const WebString& name, const WebString& value) override {
     // Headers are latin1.
@@ -55,7 +57,7 @@ class HeaderFlattener : public blink::WebHTTPHeaderVisitor {
     buffer_.append(name_latin1 + ": " + value_latin1);
   }
 
-  const std::string& GetBuffer() {
+  const std::string& GetBuffer() const {
     return buffer_;
   }
 
@@ -204,6 +206,9 @@ int GetLoadFlagsForWebURLRequest(const blink::WebURLRequest& request) {
       break;
     case WebCachePolicy::UseProtocolCachePolicy:
       break;
+    case WebCachePolicy::BypassCacheLoadOnlyFromCache:
+      load_flags |= net::LOAD_ONLY_FROM_CACHE | net::LOAD_BYPASS_CACHE;
+      break;
     default:
       NOTREACHED();
   }
@@ -215,6 +220,13 @@ int GetLoadFlagsForWebURLRequest(const blink::WebURLRequest& request) {
 
   if (!request.allowStoredCredentials())
     load_flags |= net::LOAD_DO_NOT_SEND_AUTH_DATA;
+
+  if (request.getExtraData()) {
+    RequestExtraData* extra_data =
+        static_cast<RequestExtraData*>(request.getExtraData());
+    if (extra_data->is_prefetch())
+      load_flags |= net::LOAD_PREFETCH;
+  }
 
   return load_flags;
 }

@@ -9,27 +9,35 @@
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
 #include "public/platform/WebCanvasCaptureHandler.h"
+#include "third_party/skia/include/core/SkRefCnt.h"
 #include <memory>
 
 namespace blink {
 
-class TimedCanvasDrawListener final : public GarbageCollectedFinalized<TimedCanvasDrawListener>, public CanvasDrawListener {
-    USING_GARBAGE_COLLECTED_MIXIN(TimedCanvasDrawListener);
-public:
-    ~TimedCanvasDrawListener();
-    static TimedCanvasDrawListener* create(std::unique_ptr<WebCanvasCaptureHandler>, double frameRate);
-    void sendNewFrame(const WTF::PassRefPtr<SkImage>&) override;
+class TimedCanvasDrawListener final
+    : public GarbageCollectedFinalized<TimedCanvasDrawListener>,
+      public CanvasDrawListener {
+  USING_GARBAGE_COLLECTED_MIXIN(TimedCanvasDrawListener);
 
-    DEFINE_INLINE_TRACE() {}
-private:
-    TimedCanvasDrawListener(std::unique_ptr<WebCanvasCaptureHandler>, double frameRate);
-    // Implementation of TimerFiredFunction.
-    void requestFrameTimerFired(TimerBase*);
+ public:
+  ~TimedCanvasDrawListener();
+  static TimedCanvasDrawListener* create(
+      std::unique_ptr<WebCanvasCaptureHandler>,
+      double frameRate);
+  void sendNewFrame(sk_sp<SkImage>) override;
 
-    double m_frameInterval;
-    UnthrottledThreadTimer<TimedCanvasDrawListener> m_requestFrameTimer;
+  DEFINE_INLINE_TRACE() {}
+
+ private:
+  TimedCanvasDrawListener(std::unique_ptr<WebCanvasCaptureHandler>,
+                          double frameRate);
+  // Implementation of TimerFiredFunction.
+  void requestFrameTimerFired(TimerBase*);
+
+  double m_frameInterval;
+  UnthrottledThreadTimer<TimedCanvasDrawListener> m_requestFrameTimer;
 };
 
-} // namespace blink
+}  // namespace blink
 
 #endif

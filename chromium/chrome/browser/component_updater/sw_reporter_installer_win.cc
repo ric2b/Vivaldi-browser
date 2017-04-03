@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/base64.h"
 #include "base/base_paths.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -20,11 +21,14 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/path_service.h"
+#include "base/rand_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/threading/worker_pool.h"
 #include "base/time/time.h"
@@ -68,6 +72,8 @@ const uint8_t kSha256Hash[] = {0x6a, 0xc6, 0x0e, 0xe8, 0xf3, 0x97, 0xc0, 0xd6,
 
 const base::FilePath::CharType kSwReporterExeName[] =
     FILE_PATH_LITERAL("software_reporter_tool.exe");
+
+constexpr char kSessionIdSwitch[] = "session-id";
 
 // SRT registry keys and value names.
 const wchar_t kCleanerSuffixRegistryKey[] = L"Cleaner";
@@ -119,10 +125,10 @@ void ReportExperimentError(SwReporterExperimentError error) {
                             SW_REPORTER_EXPERIMENT_ERROR_MAX);
 }
 
-// Run the software reporter on the next Chrome startup after it's downloaded.
-// (This is the default |reporter_runner| function passed to the
-// |SwReporterInstallerTraits| constructor in |RegisterSwReporterComponent|
-// below.)
+// Once the Software Reporter is downloaded, schedules it to run sometime after
+// the current browser startup is complete. (This is the default
+// |reporter_runner| function passed to the |SwReporterInstallerTraits|
+// constructor in |RegisterSwReporterComponent| below.)
 void RunSwReportersAfterStartup(
     const safe_browsing::SwReporterQueue& invocations,
     const base::Version& version) {
@@ -145,6 +151,38 @@ bool ValidateString(const std::string& str,
          });
 }
 
+std::string GenerateSessionId() {
+  std::string session_id;
+  base::Base64Encode(base::RandBytesAsString(30), &session_id);
+  DCHECK(!session_id.empty());
+  return session_id;
+}
+
+// Add |behaviour_flag| to |supported_behaviours| if |behaviour_name| is found
+// in the dictionary. Returns false on error.
+bool GetOptionalBehaviour(
+    const base::DictionaryValue* invocation_params,
+    base::StringPiece behaviour_name,
+    SwReporterInvocation::Behaviours behaviour_flag,
+    SwReporterInvocation::Behaviours* supported_behaviours) {
+  DCHECK(invocation_params);
+  DCHECK(supported_behaviours);
+
+  // Parameters enabling behaviours are optional, but if present must be
+  // boolean.
+  const base::Value* value = nullptr;
+  if (invocation_params->Get(behaviour_name, &value)) {
+    bool enable_behaviour = false;
+    if (!value->GetAsBoolean(&enable_behaviour)) {
+      ReportExperimentError(SW_REPORTER_EXPERIMENT_ERROR_BAD_PARAMS);
+      return false;
+    }
+    if (enable_behaviour)
+      *supported_behaviours |= behaviour_flag;
+  }
+  return true;
+}
+
 // Reads the command-line params and an UMA histogram suffix from the manifest,
 // and launch the SwReporter with those parameters. If anything goes wrong the
 // SwReporter should not be run at all.
@@ -164,6 +202,8 @@ void RunExperimentalSwReporter(const base::FilePath& exe_path,
     ReportExperimentError(SW_REPORTER_EXPERIMENT_ERROR_BAD_PARAMS);
     return;
   }
+
+  const std::string session_id = GenerateSessionId();
 
   safe_browsing::SwReporterQueue invocations;
   for (const auto& iter : *parameter_list) {
@@ -209,28 +249,37 @@ void RunExperimentalSwReporter(const base::FilePath& exe_path,
 
     base::CommandLine command_line(argv);
 
+    // Add a random session id to link experimental reporter runs together.
+    command_line.AppendSwitchASCII(kSessionIdSwitch, session_id);
+
+    const std::string experiment_group =
+        variations::GetVariationParamValueByFeature(
+            kExperimentalEngineFeature, "experiment_group_for_reporting");
+    command_line.AppendSwitchNative("engine-experiment-group",
+                                    experiment_group.empty()
+                                        ? L"missing_experiment_group"
+                                        : base::UTF8ToUTF16(experiment_group));
+
     // Add the histogram suffix to the command-line as well, so that the
     // reporter will add the same suffix to registry keys where it writes
     // metrics.
     if (!suffix.empty())
       command_line.AppendSwitchASCII("registry-suffix", suffix);
 
-    // "prompt" is optional, but if present must be a boolean.
-    SwReporterInvocation::Flags flags = 0;
-    const base::Value* prompt_value = nullptr;
-    if (invocation_params->Get("prompt", &prompt_value)) {
-      bool prompt = false;
-      if (!prompt_value->GetAsBoolean(&prompt)) {
-        ReportExperimentError(SW_REPORTER_EXPERIMENT_ERROR_BAD_PARAMS);
-        return;
-      }
-      if (prompt)
-        flags |= SwReporterInvocation::FLAG_TRIGGER_PROMPT;
-    }
+    SwReporterInvocation::Behaviours supported_behaviours = 0;
+    if (!GetOptionalBehaviour(invocation_params, "prompt",
+                              SwReporterInvocation::BEHAVIOUR_TRIGGER_PROMPT,
+                              &supported_behaviours))
+      return;
+    if (!GetOptionalBehaviour(
+            invocation_params, "allow-reporter-logs",
+            SwReporterInvocation::BEHAVIOUR_ALLOW_SEND_REPORTER_LOGS,
+            &supported_behaviours))
+      return;
 
     auto invocation = SwReporterInvocation::FromCommandLine(command_line);
     invocation.suffix = suffix;
-    invocation.flags = flags;
+    invocation.supported_behaviours = supported_behaviours;
     invocations.push(invocation);
   }
 
@@ -279,10 +328,14 @@ void SwReporterInstallerTraits::ComponentReady(
     RunExperimentalSwReporter(exe_path, version, std::move(manifest),
                               reporter_runner_);
   } else {
-    auto invocation = SwReporterInvocation::FromFilePath(exe_path);
-    invocation.flags = SwReporterInvocation::FLAG_LOG_TO_RAPPOR |
-                       SwReporterInvocation::FLAG_LOG_EXIT_CODE_TO_PREFS |
-                       SwReporterInvocation::FLAG_TRIGGER_PROMPT;
+    base::CommandLine command_line(exe_path);
+    command_line.AppendSwitchASCII(kSessionIdSwitch, GenerateSessionId());
+    auto invocation = SwReporterInvocation::FromCommandLine(command_line);
+    invocation.supported_behaviours =
+        SwReporterInvocation::BEHAVIOUR_LOG_TO_RAPPOR |
+        SwReporterInvocation::BEHAVIOUR_LOG_EXIT_CODE_TO_PREFS |
+        SwReporterInvocation::BEHAVIOUR_TRIGGER_PROMPT |
+        SwReporterInvocation::BEHAVIOUR_ALLOW_SEND_REPORTER_LOGS;
 
     safe_browsing::SwReporterQueue invocations;
     invocations.push(invocation);
@@ -434,6 +487,7 @@ void RegisterPrefsForSwReporter(PrefRegistrySimple* registry) {
   registry->RegisterInt64Pref(prefs::kSwReporterLastTimeTriggered, 0);
   registry->RegisterIntegerPref(prefs::kSwReporterLastExitCode, -1);
   registry->RegisterBooleanPref(prefs::kSwReporterPendingPrompt, false);
+  registry->RegisterInt64Pref(prefs::kSwReporterLastTimeSentReport, 0);
 }
 
 void RegisterProfilePrefsForSwReporter(

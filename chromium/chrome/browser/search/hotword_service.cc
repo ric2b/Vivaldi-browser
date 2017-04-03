@@ -13,7 +13,7 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/path_service.h"
 #include "base/single_thread_task_runner.h"
@@ -39,6 +39,7 @@
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/language_usage_metrics/language_usage_metrics.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user.h"
@@ -52,7 +53,6 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/one_shot_event.h"
-#include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 
@@ -710,9 +710,9 @@ void HotwordService::LaunchHotwordAudioVerificationApp(
   if (!extension)
     return;
 
-  OpenApplication(
-      AppLaunchParams(profile_, extension, extensions::LAUNCH_CONTAINER_WINDOW,
-                      NEW_WINDOW, extensions::SOURCE_CHROME_INTERNAL));
+  OpenApplication(AppLaunchParams(
+      profile_, extension, extensions::LAUNCH_CONTAINER_WINDOW,
+      WindowOpenDisposition::NEW_WINDOW, extensions::SOURCE_CHROME_INTERNAL));
 }
 
 HotwordService::LaunchMode

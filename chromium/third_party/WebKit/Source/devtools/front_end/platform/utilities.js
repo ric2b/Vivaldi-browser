@@ -488,13 +488,14 @@ Object.defineProperty(Array.prototype, "remove", {
 
 Object.defineProperty(Array.prototype, "pushAll", {
     /**
-     * @param {!Array.<!T>} array
-     * @this {Array.<!T>}
+     * @param {!Array<!T>} array
+     * @this {Array<!T>}
      * @template T
      */
     value: function(array)
     {
-        Array.prototype.push.apply(this, array);
+        for (var i = 0; i < array.length; ++i)
+            this.push(array[i]);
     }
 });
 
@@ -1114,7 +1115,7 @@ function createSearchRegex(query, caseSensitive, isRegex)
  */
 function createPlainTextSearchRegex(query, flags)
 {
-    // This should be kept the same as the one in V8StringUtil.cpp.
+    // This should be kept the same as the one in StringUtil.cpp.
     var regexSpecialCharacters = String.regexSpecialCharacters();
     var regex = "";
     for (var i = 0; i < query.length; ++i) {

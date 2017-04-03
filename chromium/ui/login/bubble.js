@@ -28,13 +28,13 @@ cr.define('cr.ui', function() {
 
   /**
    * Bubble attachment side.
-   * @enum {string}
+   * @enum {number}
    */
   Bubble.Attachment = {
-    RIGHT: 'bubble-right',
-    LEFT: 'bubble-left',
-    TOP: 'bubble-top',
-    BOTTOM: 'bubble-bottom'
+    RIGHT: 0,
+    LEFT: 1,
+    TOP: 2,
+    BOTTOM: 3
   };
 
   Bubble.prototype = {
@@ -138,35 +138,49 @@ cr.define('cr.ui', function() {
      * @param {!Attachment} attachment Bubble attachment.
      */
     setAttachment_: function(attachment) {
-      for (var k in Bubble.Attachment) {
-        var v = Bubble.Attachment[k];
-        this.classList.toggle(v, v == attachment);
-      }
+      var styleClassList = ['bubble-right', 'bubble-left',
+                            'bubble-top', 'bubble-bottom'];
+      for (var i = 0; i < styleClassList.length; ++i)
+        this.classList.toggle(styleClassList[i], i == attachment);
     },
 
     /**
      * Shows the bubble for given anchor element.
      * @param {!Object} pos Bubble position (left, top, right, bottom in px).
-     * @param {!Attachment} attachment Bubble attachment (on which side of the
-     *     specified position it should be displayed).
      * @param {HTMLElement} opt_content Content to show in bubble.
      *     If not specified, bubble element content is shown.
+     * @param {Attachment=} opt_attachment Bubble attachment (on which side of
+     *     the element it should be displayed).
+     * @param {boolean=} opt_oldstyle Optional flag to force old style bubble,
+     *     i.e. pre-MD-style.
      * @private
      */
-    showContentAt_: function(pos, attachment, opt_content) {
+    showContentAt_: function(pos, opt_content, opt_attachment, opt_oldstyle) {
       this.style.top = this.style.left = this.style.right = this.style.bottom =
           'auto';
       for (var k in pos) {
         if (typeof pos[k] == 'number')
           this.style[k] = pos[k] + 'px';
       }
-      if (opt_content !== undefined) {
-        this.innerHTML = '';
-        this.appendChild(opt_content);
+      if (opt_content !== undefined)
+        this.replaceContent(opt_content);
+
+      if (opt_oldstyle) {
+        this.setAttribute('oldstyle', '');
+        this.setAttachment_(opt_attachment);
       }
-      this.setAttachment_(attachment);
+
       this.hidden = false;
       this.classList.remove('faded');
+    },
+
+    /**
+     * Replaces error message content with the given DOM element.
+     * @param {HTMLElement} content Content to show in bubble.
+     */
+    replaceContent: function(content) {
+      this.innerHTML = '';
+      this.appendChild(content);
     },
 
     /**
@@ -178,8 +192,12 @@ cr.define('cr.ui', function() {
      * @param {number=} opt_padding Optional padding of the bubble.
      */
     showForElement: function(el, attachment, opt_offset, opt_padding) {
+      /* showForElement() is used only to display Accessibility popup in
+       * oobe_screen_network*. It requires old-style bubble, so it is safe
+       * to always set this flag here.
+       */
       this.showContentForElement(
-          el, attachment, undefined, opt_offset, opt_padding);
+          el, attachment, undefined, opt_offset, opt_padding, undefined, true);
     },
 
     /**
@@ -195,14 +213,22 @@ cr.define('cr.ui', function() {
      *     be aligned with the left/top side of the element but not farther than
      *     half of its width/height.
      * @param {number=} opt_padding Optional padding of the bubble.
+     * @param {boolean=} opt_match_width Optional flag to force the bubble have
+     *     the same width as the element it it attached to.
+     * @param {boolean=} opt_oldstyle Optional flag to force old style bubble,
+     *     i.e. pre-MD-style.
      */
     showContentForElement: function(el, attachment, opt_content,
-                                    opt_offset, opt_padding) {
+                                    opt_offset, opt_padding, opt_match_width,
+                                    opt_oldstyle) {
       /** @const */ var ARROW_OFFSET = 25;
       /** @const */ var DEFAULT_PADDING = 18;
 
       if (opt_padding == undefined)
         opt_padding = DEFAULT_PADDING;
+
+      if (!opt_oldstyle)
+        opt_padding += 10;
 
       var origin = cr.ui.login.DisplayManager.getPosition(el);
       var offset = opt_offset == undefined ?
@@ -250,9 +276,23 @@ cr.define('cr.ui', function() {
             break;
         }
       }
+      this.style.width = '';
+      this.removeAttribute('match-width');
+      if (opt_match_width) {
+        this.setAttribute('match-width', '');
+        var elWidth =
+            window.getComputedStyle(el, null).getPropertyValue('width');
+        var paddingLeft = parseInt(window.getComputedStyle(this, null)
+            .getPropertyValue('padding-left'));
+        var paddingRight = parseInt(window.getComputedStyle(this, null)
+            .getPropertyValue('padding-right'));
+        if (elWidth)
+          this.style.width =
+              (parseInt(elWidth) - paddingLeft - paddingRight) + 'px';
+      }
 
       this.anchor_ = el;
-      this.showContentAt_(pos, attachment, opt_content);
+      this.showContentAt_(pos, opt_content, attachment, opt_oldstyle);
     },
 
     /**

@@ -59,58 +59,71 @@ class WorkerOrWorkletGlobalScope;
 //
 // Used only by in-process workers (DedicatedWorker and CompositorWorker.)
 class CORE_EXPORT InProcessWorkerObjectProxy : public WorkerReportingProxy {
-    USING_FAST_MALLOC(InProcessWorkerObjectProxy);
-    WTF_MAKE_NONCOPYABLE(InProcessWorkerObjectProxy);
-public:
-    static std::unique_ptr<InProcessWorkerObjectProxy> create(InProcessWorkerMessagingProxy*);
-    ~InProcessWorkerObjectProxy() override;
+  USING_FAST_MALLOC(InProcessWorkerObjectProxy);
+  WTF_MAKE_NONCOPYABLE(InProcessWorkerObjectProxy);
 
-    void postMessageToWorkerObject(PassRefPtr<SerializedScriptValue>, std::unique_ptr<MessagePortChannelArray>);
-    void postTaskToMainExecutionContext(std::unique_ptr<ExecutionContextTask>);
-    void confirmMessageFromWorkerObject();
-    void startPendingActivityTimer();
+ public:
+  static std::unique_ptr<InProcessWorkerObjectProxy> create(
+      const WeakPtr<InProcessWorkerMessagingProxy>&);
+  ~InProcessWorkerObjectProxy() override;
 
-    // WorkerReportingProxy overrides.
-    void reportException(const String& errorMessage, std::unique_ptr<SourceLocation>, int exceptionId) override;
-    void reportConsoleMessage(MessageSource, MessageLevel, const String& message, SourceLocation*) override;
-    void postMessageToPageInspector(const String&) override;
-    void didEvaluateWorkerScript(bool success) override;
-    void workerGlobalScopeStarted(WorkerOrWorkletGlobalScope*) override;
-    void workerGlobalScopeClosed() override;
-    void workerThreadTerminated() override;
-    void willDestroyWorkerGlobalScope() override;
+  void postMessageToWorkerObject(PassRefPtr<SerializedScriptValue>,
+                                 std::unique_ptr<MessagePortChannelArray>);
+  void postTaskToMainExecutionContext(std::unique_ptr<ExecutionContextTask>);
+  void confirmMessageFromWorkerObject();
+  void startPendingActivityTimer();
 
-protected:
-    InProcessWorkerObjectProxy(InProcessWorkerMessagingProxy*);
-    virtual ExecutionContext* getExecutionContext();
+  // WorkerReportingProxy overrides.
+  void reportException(const String& errorMessage,
+                       std::unique_ptr<SourceLocation>,
+                       int exceptionId) override;
+  void reportConsoleMessage(MessageSource,
+                            MessageLevel,
+                            const String& message,
+                            SourceLocation*) override;
+  void postMessageToPageInspector(const String&) override;
+  void didCreateWorkerGlobalScope(WorkerOrWorkletGlobalScope*) override;
+  void didEvaluateWorkerScript(bool success) override;
+  void didCloseWorkerGlobalScope() override;
+  void willDestroyWorkerGlobalScope() override;
+  void didTerminateWorkerThread() override;
 
-private:
-    friend class InProcessWorkerMessagingProxyForTest;
+ protected:
+  InProcessWorkerObjectProxy(const WeakPtr<InProcessWorkerMessagingProxy>&);
+  virtual ExecutionContext* getExecutionContext();
 
-    void checkPendingActivity(TimerBase*);
+ private:
+  friend class InProcessWorkerMessagingProxyForTest;
 
-    // Returns the parent frame's task runners.
-    ParentFrameTaskRunners* getParentFrameTaskRunners();
+  void checkPendingActivity(TimerBase*);
 
-    // This object always outlives this proxy.
-    InProcessWorkerMessagingProxy* m_messagingProxy;
+  // Returns the parent frame's task runners.
+  ParentFrameTaskRunners* getParentFrameTaskRunners();
 
-    // Used for checking pending activities on the worker global scope. This is
-    // cancelled when the worker global scope is destroyed.
-    std::unique_ptr<Timer<InProcessWorkerObjectProxy>> m_timer;
+  // This object always outlives this proxy.
+  InProcessWorkerMessagingProxy* m_messagingProxy;
 
-    // The next interval duration of the timer. This is initially set to
-    // kDefaultIntervalInSec and exponentially increased up to
-    // |m_maxIntervalInSec|.
-    double m_nextIntervalInSec;
+  // No guarantees about the lifetimes of tasks posted by this proxy wrt the
+  // InProcessWorkerMessagingProxy so a weak pointer must be used when posting
+  // the tasks.
+  WeakPtr<InProcessWorkerMessagingProxy> m_messagingProxyWeakPtr;
 
-    // The max interval duration of the timer. This is usually kMaxIntervalInSec
-    // but made as a member variable for testing.
-    double m_maxIntervalInSec;
+  // Used for checking pending activities on the worker global scope. This is
+  // cancelled when the worker global scope is destroyed.
+  std::unique_ptr<Timer<InProcessWorkerObjectProxy>> m_timer;
 
-    Persistent<WorkerGlobalScope> m_workerGlobalScope;
+  // The next interval duration of the timer. This is initially set to
+  // kDefaultIntervalInSec and exponentially increased up to
+  // |m_maxIntervalInSec|.
+  double m_nextIntervalInSec;
+
+  // The max interval duration of the timer. This is usually kMaxIntervalInSec
+  // but made as a member variable for testing.
+  double m_maxIntervalInSec;
+
+  CrossThreadPersistent<WorkerGlobalScope> m_workerGlobalScope;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // InProcessWorkerObjectProxy_h
+#endif  // InProcessWorkerObjectProxy_h

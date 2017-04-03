@@ -28,12 +28,14 @@ class TestablePictureLayerTilingSet : public PictureLayerTilingSet {
       PictureLayerTilingClient* client,
       int tiling_interest_area_padding,
       float skewport_target_time_in_seconds,
-      int skewport_extrapolation_limit_in_screen_pixels)
+      int skewport_extrapolation_limit_in_screen_pixels,
+      float max_preraster_distance)
       : PictureLayerTilingSet(tree,
                               client,
                               tiling_interest_area_padding,
                               skewport_target_time_in_seconds,
-                              skewport_extrapolation_limit_in_screen_pixels) {}
+                              skewport_extrapolation_limit_in_screen_pixels,
+                              max_preraster_distance) {}
 
   using PictureLayerTilingSet::ComputeSkewport;
   using PictureLayerTilingSet::ComputeSoonBorderRect;
@@ -46,7 +48,8 @@ std::unique_ptr<TestablePictureLayerTilingSet> CreateTilingSetWithSettings(
   return base::MakeUnique<TestablePictureLayerTilingSet>(
       ACTIVE_TREE, client, settings.tiling_interest_area_padding,
       settings.skewport_target_time_in_seconds,
-      settings.skewport_extrapolation_limit_in_screen_pixels);
+      settings.skewport_extrapolation_limit_in_screen_pixels,
+      settings.max_preraster_distance_in_screen_pixels);
 }
 
 std::unique_ptr<TestablePictureLayerTilingSet> CreateTilingSet(
@@ -234,15 +237,12 @@ class PictureLayerTilingSetTestWithResources : public testing::Test {
                float scale_increment,
                float ideal_contents_scale,
                float expected_scale) {
-    FakeOutputSurfaceClient output_surface_client;
-    std::unique_ptr<FakeOutputSurface> output_surface =
-        FakeOutputSurface::CreateDelegating3d();
-    CHECK(output_surface->BindToClient(&output_surface_client));
-
-    std::unique_ptr<SharedBitmapManager> shared_bitmap_manager(
-        new TestSharedBitmapManager());
+    scoped_refptr<TestContextProvider> context_provider =
+        TestContextProvider::Create();
+    ASSERT_TRUE(context_provider->BindToCurrentThread());
+    auto shared_bitmap_manager = base::MakeUnique<TestSharedBitmapManager>();
     std::unique_ptr<ResourceProvider> resource_provider =
-        FakeResourceProvider::Create(output_surface.get(),
+        FakeResourceProvider::Create(context_provider.get(),
                                      shared_bitmap_manager.get());
 
     FakePictureLayerTilingClient client(resource_provider.get());
@@ -326,10 +326,10 @@ TEST(PictureLayerTilingSetTest, TileSizeChange) {
   FakePictureLayerTilingClient active_client;
   std::unique_ptr<PictureLayerTilingSet> pending_set =
       PictureLayerTilingSet::Create(PENDING_TREE, &pending_client, 1000, 1.f,
-                                    1000);
+                                    1000, 1000.f);
   std::unique_ptr<PictureLayerTilingSet> active_set =
       PictureLayerTilingSet::Create(ACTIVE_TREE, &active_client, 1000, 1.f,
-                                    1000);
+                                    1000, 1000.f);
 
   gfx::Size layer_bounds(100, 100);
   scoped_refptr<FakeRasterSource> raster_source =
@@ -435,10 +435,10 @@ TEST(PictureLayerTilingSetTest, MaxContentScale) {
   FakePictureLayerTilingClient active_client;
   std::unique_ptr<PictureLayerTilingSet> pending_set =
       PictureLayerTilingSet::Create(PENDING_TREE, &pending_client, 1000, 1.f,
-                                    1000);
+                                    1000, 1000.f);
   std::unique_ptr<PictureLayerTilingSet> active_set =
       PictureLayerTilingSet::Create(ACTIVE_TREE, &active_client, 1000, 1.f,
-                                    1000);
+                                    1000, 1000.f);
 
   gfx::Size layer_bounds(100, 105);
   scoped_refptr<FakeRasterSource> raster_source =

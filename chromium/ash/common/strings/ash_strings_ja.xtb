@@ -47,7 +47,6 @@
 <translation id="2268813581635650749">すべてログアウト</translation>
 <translation id="2297568595583585744">ステータス トレイ</translation>
 <translation id="2303600792989757991">ウィンドウ切り替えの概要</translation>
-<translation id="2372145515558759244">アプリの同期中...</translation>
 <translation id="2391579633712104609">180°</translation>
 <translation id="2429753432712299108">Bluetooth デバイス「<ph name="DEVICE_NAME" />」がペア設定の権限をリクエストしています。許可するにあたっては、このデバイスで次のパスキーが表示されることを確認してください: <ph name="PASSKEY" /></translation>
 <translation id="2475982808118771221">エラーが発生しました</translation>
@@ -61,7 +60,6 @@
 <translation id="2727977024730340865">低電力の充電器に接続しています。バッテリーが充電されない可能性があります。</translation>
 <translation id="2761704814324807722">ステータス トレイ、時刻 <ph name="TIME" />、<ph name="BATTERY" /></translation>
 <translation id="2792498699870441125">Alt+ 検索</translation>
-<translation id="2805756323405976993">アプリ</translation>
 <translation id="2819276065543622893">ログアウトします。</translation>
 <translation id="2825619548187458965">シェルフ</translation>
 <translation id="2844169650293029770">USB-C デバイス（左手前のポート）</translation>
@@ -97,7 +95,6 @@
 <translation id="3621712662352432595">オーディオ設定</translation>
 <translation id="3625258641415618104">スクリーンショットが無効</translation>
 <translation id="3626281679859535460">輝度</translation>
-<translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079"><ph name="DISPLAY_NAME" /> の解像度を <ph name="RESOLUTION" /> に変更しました</translation>
 <translation id="370649949373421643">Wi-Fi を有効にする</translation>
 <translation id="3709443003275901162">9+</translation>
@@ -111,6 +108,8 @@
 <translation id="3866182280516392520">IPv6 アドレス</translation>
 <translation id="3891340733213178823">ログアウトするには、Ctrl+Shift+Q を 2 回押します。</translation>
 <translation id="3892641579809465218">内蔵ディスプレイ</translation>
+<translation id="3893630138897523026">ChromeVox（音声フィードバック）</translation>
+<translation id="3899995891769452915">音声入力</translation>
 <translation id="3963445509666917109">スピーカー（内蔵）</translation>
 <translation id="3967919079500697218">スクリーンショットを撮る機能は、管理者によって無効にされています。</translation>
 <translation id="397105322502079400">計算しています...</translation>
@@ -134,10 +133,8 @@
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl+Shift+Space</translation>
 <translation id="5045002648206642691">Google ドライブの設定...</translation>
-<translation id="511445211639755999"><ph name="RESOLUTION" />、<ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">キャスト デバイスを利用できます</translation>
 <translation id="5170568018924773124">フォルダを開く</translation>
-<translation id="5191140942132549112">質問を表示</translation>
 <translation id="5222676887888702881">ログアウト</translation>
 <translation id="5238774010593222950">別のアカウントにログインできません。</translation>
 <translation id="532063867737390965">このネットワーク設定は管理者によって無効にされています。</translation>
@@ -185,6 +182,7 @@
 <translation id="6459472438155181876"><ph name="DISPLAY_NAME" /> へ画面を拡張しています</translation>
 <translation id="6490471652906364588">USB-C デバイス（右側面のポート）</translation>
 <translation id="6501401484702599040">画面を <ph name="RECEIVER_NAME" /> にキャスト中</translation>
+<translation id="6521655319214113338">手書き入力</translation>
 <translation id="6537270692134705506">画面をキャプチャ</translation>
 <translation id="6550675742724504774">オプション</translation>
 <translation id="6585808820553845416">セッション終了まであと <ph name="SESSION_TIME_REMAINING" />です。</translation>
@@ -194,7 +192,6 @@
 <translation id="6713285437468012787">Bluetooth デバイス「<ph name="DEVICE_NAME" />」がペア設定されました。すべてのユーザーはこのデバイスを使用できます。[設定] から、このペア設定を削除することもできます。</translation>
 <translation id="6785414152754474415">バッテリー残量: <ph name="PERCENTAGE" />%、充電しています。</translation>
 <translation id="683971173229319003">Search+L</translation>
-<translation id="68610848741840742">ChromeVox（音声フィードバック）</translation>
 <translation id="6911468394164995108">他のネットワークに接続...</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6979158407327259162">Google ドライブ</translation>
@@ -217,8 +214,10 @@ Alt+ 検索/Shift キーを押すと解除されます。</translation>
 <translation id="743058460480092004">カメラとマイクが使用中です。</translation>
 <translation id="7510334386202674593">Ctrl+Shift+L</translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" /> は <ph name="SPECIFIED_RESOLUTION" /> に対応していません。解像度は <ph name="FALLBACK_RESOLUTION" /> に変更されました</translation>
+<translation id="7562368315689366235">絵文字パレット</translation>
 <translation id="7573962313813535744">ドッキング モード</translation>
 <translation id="7580671184200851182">すべてのスピーカーで同じオーディオを再生（モノラル オーディオ）</translation>
+<translation id="7581273696622423628">アンケートに答える</translation>
 <translation id="7593891976182323525">検索/Shift</translation>
 <translation id="7649070708921625228">ヘルプ</translation>
 <translation id="7692480393933218409">接続された USB-C デバイスを充電しています</translation>

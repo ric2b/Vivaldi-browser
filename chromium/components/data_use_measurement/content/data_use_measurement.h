@@ -12,6 +12,7 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/metrics/data_use_tracker.h"
@@ -40,9 +41,17 @@ class DataUseMeasurement {
       const metrics::UpdateUsagePrefCallbackType& metrics_data_use_forwarder);
   ~DataUseMeasurement();
 
+  // Called before a request is sent.
+  void OnBeforeURLRequest(net::URLRequest* request);
+
   // Called right after a redirect response code was received for |request|.
   void OnBeforeRedirect(const net::URLRequest& request,
                         const GURL& new_location);
+
+  // Called when data is received or sent on the network, respectively.
+  void OnNetworkBytesReceived(const net::URLRequest& request,
+                              int64_t bytes_received);
+  void OnNetworkBytesSent(const net::URLRequest& request, int64_t bytes_sent);
 
   // Indicates that |request| has been completed or failed.
   void OnCompleted(const net::URLRequest& request, bool started);
@@ -58,16 +67,16 @@ class DataUseMeasurement {
 #endif
 
  private:
+  friend class DataUseMeasurementTest;
+  FRIEND_TEST_ALL_PREFIXES(DataUseMeasurementTest,
+                           TimeOfBackgroundDownstreamBytes);
+
   // Specifies that data is received or sent, respectively.
   enum TrafficDirection { DOWNSTREAM, UPSTREAM };
 
-  // The state of the application. Only available on Android and on other
-  // platforms it is always FOREGROUND.
-  enum AppState { BACKGROUND, FOREGROUND };
-
   // Returns the current application state (Foreground or Background). It always
   // returns Foreground if Chrome is not running on Android.
-  AppState CurrentAppState() const;
+  DataUseUserData::AppState CurrentAppState() const;
 
   // Makes the full name of the histogram. It is made from |prefix| and suffix
   // which is made based on network and application status. suffix is a string
@@ -75,8 +84,11 @@ class DataUseMeasurement {
   // ("Downstream") path, whether the app was in the "Foreground" or
   // "Background", and whether a "Cellular" or "WiFi" network was use. For
   // example, "Prefix.Upstream.Foreground.Cellular" is a possible output.
+  // |app_state| indicates the app state which can be foreground, background, or
+  // unknown.
   std::string GetHistogramName(const char* prefix,
                                TrafficDirection dir,
+                               DataUseUserData::AppState app_state,
                                bool is_connection_cellular) const;
 
 #if defined(OS_ANDROID)
@@ -84,18 +96,32 @@ class DataUseMeasurement {
   // and vice versa.
   void OnApplicationStateChange(
       base::android::ApplicationState application_state);
+
+  // Records the count of bytes received and sent by Chrome on the network as
+  // reported by the operating system.
+  void MaybeRecordNetworkBytesOS();
 #endif
 
   // Records the data use of the |request|, thus |request| must be non-null.
-  void ReportDataUseUMA(const net::URLRequest& request) const;
+  // |dir| is the direction (which is upstream or downstream) and |bytes| is the
+  // number of bytes in the direction.
+  void ReportDataUseUMA(const net::URLRequest& request,
+                        TrafficDirection dir,
+                        int64_t bytes);
+
+  // Updates the data use of the |request|, thus |request| must be non-null.
+  void UpdateDataUsePrefs(const net::URLRequest& request) const;
 
   // A helper function used to record data use of services. It gets the size of
   // exchanged message, its direction (which is upstream or downstream) and
   // reports to two histogram groups. DataUse.MessageSize.ServiceName and
   // DataUse.Services.{Dimensions}. In the second one, services are buckets.
+  // |app_state| indicates the app state which can be foreground, background, or
+  // unknown.
   void ReportDataUsageServices(
       data_use_measurement::DataUseUserData::ServiceName service,
       TrafficDirection dir,
+      DataUseUserData::AppState app_state,
       bool is_connection_cellular,
       int64_t message_size) const;
 
@@ -113,6 +139,24 @@ class DataUseMeasurement {
   // ApplicationStatusListener used to monitor whether the application is in the
   // foreground or in the background. It is owned by DataUseMeasurement.
   std::unique_ptr<base::android::ApplicationStatusListener> app_listener_;
+
+  // Number of bytes received and sent by Chromium as reported by the operating
+  // system when it was last queried for traffic statistics. Set to 0 if the
+  // operating system was never queried.
+  int64_t rx_bytes_os_;
+  int64_t tx_bytes_os_;
+
+  // Number of bytes received and sent by Chromium as reported by the network
+  // delegate since the operating system was last queried for traffic
+  // statistics.
+  int64_t bytes_transferred_since_last_traffic_stats_query_;
+
+  // The time at which Chromium app state changed to background. Can be null if
+  // app is not in background.
+  base::TimeTicks last_app_background_time_;
+
+  // True if app is in background and first network read has not yet happened.
+  bool no_reads_since_background_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(DataUseMeasurement);

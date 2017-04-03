@@ -5,12 +5,13 @@
 #ifndef COMPONENTS_SYNC_API_MOCK_MODEL_TYPE_STORE_H_
 #define COMPONENTS_SYNC_API_MOCK_MODEL_TYPE_STORE_H_
 
+#include <memory>
 #include <string>
 
 #include "base/callback.h"
 #include "components/sync/api/model_type_store.h"
 
-namespace syncer_v2 {
+namespace syncer {
 
 // MockModelTypeStore is implementation of ModelTypeStore that does nothing.
 // Use it when testing components that depend on ModelTypeStore.
@@ -112,6 +113,6 @@ class MockModelTypeStore : public ModelTypeStore {
   DeleteGlobalMetadataSignature delete_global_metadata_handler_;
 };
 
-}  // namespace syncer_v2
+}  // namespace syncer
 
 #endif  // COMPONENTS_SYNC_API_MOCK_MODEL_TYPE_STORE_H_

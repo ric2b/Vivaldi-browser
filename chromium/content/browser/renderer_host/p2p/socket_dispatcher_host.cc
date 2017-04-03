@@ -6,7 +6,10 @@
 
 #include <stddef.h>
 
+#include <algorithm>
+
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/renderer_host/p2p/socket_host.h"
 #include "content/common/p2p_messages.h"
@@ -18,7 +21,8 @@
 #include "net/base/network_interfaces.h"
 #include "net/base/sys_addrinfo.h"
 #include "net/dns/host_resolver.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_source.h"
+#include "net/log/net_log_with_source.h"
 #include "net/socket/client_socket_factory.h"
 #include "net/udp/datagram_client_socket.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -72,7 +76,7 @@ class P2PSocketDispatcherHost::DnsRequest {
         info, net::DEFAULT_PRIORITY, &addresses_,
         base::Bind(&P2PSocketDispatcherHost::DnsRequest::OnDone,
                    base::Unretained(this)),
-        &request_, net::BoundNetLog());
+        &request_, net::NetLogWithSource());
     if (result != net::ERR_IO_PENDING)
       OnDone(result);
   }
@@ -122,7 +126,6 @@ void P2PSocketDispatcherHost::OnChannelClosing() {
   // Since the IPC sender is gone, close pending connections.
   sockets_.clear();
 
-  base::STLDeleteContainerPointers(dns_requests_.begin(), dns_requests_.end());
   dns_requests_.clear();
 
   if (monitoring_networks_) {
@@ -226,12 +229,13 @@ void P2PSocketDispatcherHost::OnStopNetworkNotifications() {
 
 void P2PSocketDispatcherHost::OnGetHostAddress(const std::string& host_name,
                                                int32_t request_id) {
-  DnsRequest* request = new DnsRequest(request_id,
-                                       resource_context_->GetHostResolver());
-  dns_requests_.insert(request);
-  request->Resolve(host_name, base::Bind(
-      &P2PSocketDispatcherHost::OnAddressResolved,
-      base::Unretained(this), request));
+  std::unique_ptr<DnsRequest> request = base::MakeUnique<DnsRequest>(
+      request_id, resource_context_->GetHostResolver());
+  DnsRequest* request_ptr = request.get();
+  dns_requests_.insert(std::move(request));
+  request_ptr->Resolve(host_name,
+                       base::Bind(&P2PSocketDispatcherHost::OnAddressResolved,
+                                  base::Unretained(this), request_ptr));
 }
 
 void P2PSocketDispatcherHost::OnCreateSocket(
@@ -368,7 +372,7 @@ net::IPAddress P2PSocketDispatcherHost::GetDefaultLocalAddress(int family) {
   std::unique_ptr<net::DatagramClientSocket> socket(
       net::ClientSocketFactory::GetDefaultFactory()->CreateDatagramClientSocket(
           net::DatagramSocket::DEFAULT_BIND, net::RandIntCallback(), nullptr,
-          net::NetLog::Source()));
+          net::NetLogSource()));
 
   net::IPAddress ip_address;
   if (family == AF_INET) {
@@ -393,8 +397,11 @@ void P2PSocketDispatcherHost::OnAddressResolved(
     const net::IPAddressList& addresses) {
   Send(new P2PMsg_GetHostAddressResult(request->request_id(), addresses));
 
-  dns_requests_.erase(request);
-  delete request;
+  dns_requests_.erase(
+      std::find_if(dns_requests_.begin(), dns_requests_.end(),
+                   [request](const std::unique_ptr<DnsRequest>& ptr) {
+                     return ptr.get() == request;
+                   }));
 }
 
 void P2PSocketDispatcherHost::StopRtpDumpOnIOThread(bool incoming,

@@ -24,6 +24,7 @@
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
 #include "chrome/browser/win/jumplist.h"
+#include "chrome/browser/win/jumplist_factory.h"
 #include "ui/views/win/scoped_fullscreen_visibility.h"
 #endif
 
@@ -32,21 +33,10 @@
 // VivaldiBrowserWindow --------------------------------------------------------
 
 VivaldiBrowserWindow::VivaldiBrowserWindow() :
-  bounds_(gfx::Rect()){
-#if defined(OS_WIN)
-  jumplist_ = NULL;
-#endif
+  bounds_(gfx::Rect()) {
 }
 
 VivaldiBrowserWindow::~VivaldiBrowserWindow() {
-#if defined(OS_WIN)
-  // Terminate the jumplist (must be called before browser_->profile() is
-  // destroyed.
-  if (jumplist_) {
-    jumplist_->Terminate();
-  }
-#endif
-
   // Explicitly set browser_ to NULL.
   browser_.reset();
 }
@@ -55,10 +45,9 @@ void VivaldiBrowserWindow::Init(Browser* browser) {
   browser_.reset(browser);
   SetBounds(browser->override_bounds());
 #if defined(OS_WIN)
-  DCHECK(!jumplist_);
-  jumplist_ = new JumpList(browser_->profile());
+  DCHECK(!jumplist_.get());
+  jumplist_ = JumpListFactory::GetForProfile(browser_->profile());
 #endif
-
 }
 
 // static
@@ -308,7 +297,7 @@ void VivaldiBrowserWindow::VivaldiShowWebsiteSettingsAt(Profile* profile,
 
 WindowOpenDisposition VivaldiBrowserWindow::GetDispositionForPopupBounds(
   const gfx::Rect& bounds) {
-  return NEW_POPUP;
+  return WindowOpenDisposition::NEW_POPUP;
 }
 
 FindBar* VivaldiBrowserWindow::CreateFindBar() {

@@ -68,17 +68,19 @@ WebUIDataSource* CreateGpuHTMLSource() {
   return source;
 }
 
-base::DictionaryValue* NewDescriptionValuePair(const std::string& desc,
+std::unique_ptr<base::DictionaryValue> NewDescriptionValuePair(
+    const std::string& desc,
     const std::string& value) {
-  base::DictionaryValue* dict = new base::DictionaryValue();
+  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetString("description", desc);
   dict->SetString("value", value);
   return dict;
 }
 
-base::DictionaryValue* NewDescriptionValuePair(const std::string& desc,
+std::unique_ptr<base::DictionaryValue> NewDescriptionValuePair(
+    const std::string& desc,
     base::Value* value) {
-  base::DictionaryValue* dict = new base::DictionaryValue();
+  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetString("description", desc);
   dict->Set("value", value);
   return dict;
@@ -251,6 +253,13 @@ base::DictionaryValue* GpuInfoAsDictionaryValue() {
   info->Set("diagnostics", std::move(dx_info));
 #endif
 
+#if defined(USE_X11) && !defined(OS_CHROMEOS)
+  basic_info->Append(NewDescriptionValuePair(
+      "System visual ID", base::Uint64ToString(gpu_info.system_visual)));
+  basic_info->Append(NewDescriptionValuePair(
+      "RGBA visual ID", base::Uint64ToString(gpu_info.rgba_visual)));
+#endif
+
   return info;
 }
 
@@ -268,6 +277,8 @@ const char* BufferFormatToString(gfx::BufferFormat format) {
       return "ETC1";
     case gfx::BufferFormat::R_8:
       return "R_8";
+    case gfx::BufferFormat::RG_88:
+      return "RG_88";
     case gfx::BufferFormat::BGR_565:
       return "BGR_565";
     case gfx::BufferFormat::RGBA_4444:
@@ -429,8 +440,7 @@ void GpuMessageHandler::OnCallAsync(const base::ListValue* args) {
     ok = args->Get(i, &arg);
     DCHECK(ok);
 
-    base::Value* argCopy = arg->DeepCopy();
-    submessageArgs->Append(argCopy);
+    submessageArgs->Append(arg->CreateDeepCopy());
   }
 
   // call the submessage handler

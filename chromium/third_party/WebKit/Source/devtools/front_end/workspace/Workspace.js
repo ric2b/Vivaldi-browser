@@ -128,12 +128,6 @@ WebInspector.Project.prototype = {
 
     /**
      * @param {string} path
-     * @param {function()=} callback
-     */
-    refresh: function(path, callback) { },
-
-    /**
-     * @param {string} path
      */
     excludeFolder: function(path) { },
 
@@ -366,28 +360,6 @@ WebInspector.Workspace.Events = {
 
 WebInspector.Workspace.prototype = {
     /**
-     * @return {!Array.<!WebInspector.UISourceCode>}
-     */
-    unsavedSourceCodes: function()
-    {
-        /**
-         * @param {!WebInspector.UISourceCode} sourceCode
-         * @return {boolean}
-         */
-        function filterUnsaved(sourceCode)
-        {
-            return sourceCode.isDirty();
-        }
-
-        var unsavedSourceCodes = [];
-        var projects = this.projectsForType(WebInspector.projectTypes.FileSystem);
-        for (var i = 0; i < projects.length; ++i)
-            unsavedSourceCodes = unsavedSourceCodes.concat(projects[i].uiSourceCodes().filter(filterUnsaved));
-
-        return unsavedSourceCodes;
-    },
-
-    /**
      * @param {string} projectId
      * @param {string} url
      * @return {?WebInspector.UISourceCode}
@@ -431,6 +403,7 @@ WebInspector.Workspace.prototype = {
      */
     addProject: function(project)
     {
+        console.assert(!this._projects.has(project.id()), `A project with id ${project.id()} already exists!`);
         this._projects.set(project.id(), project);
         this.dispatchEventToListeners(WebInspector.Workspace.Events.ProjectAdded, project);
     },

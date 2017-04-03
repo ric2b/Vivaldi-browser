@@ -4,8 +4,6 @@
 
 #include "components/sync/core/base_node.h"
 
-#include <stdint.h>
-
 #include <stack>
 
 #include "base/strings/string_number_conversions.h"
@@ -264,7 +262,7 @@ ModelType BaseNode::GetModelType() const {
   return GetEntry()->GetModelType();
 }
 
-const syncer::AttachmentIdList BaseNode::GetAttachmentIds() const {
+const AttachmentIdList BaseNode::GetAttachmentIds() const {
   AttachmentIdList result;
   const sync_pb::AttachmentMetadata& metadata =
       GetEntry()->GetAttachmentMetadata();

@@ -25,6 +25,8 @@
 #include "headless/public/headless_devtools_client.h"
 #include "headless/public/headless_devtools_target.h"
 #include "headless/public/headless_web_contents.h"
+#include "headless/public/util/deterministic_dispatcher.h"
+#include "headless/public/util/deterministic_http_protocol_handler.h"
 #include "net/base/file_stream.h"
 #include "net/base/io_buffer.h"
 #include "net/base/ip_address.h"
@@ -73,7 +75,31 @@ class HeadlessShell : public HeadlessWebContents::Observer,
   void OnStart(HeadlessBrowser* browser) {
     browser_ = browser;
 
-    browser_context_ = browser_->CreateBrowserContextBuilder().Build();
+    HeadlessBrowserContext::Builder context_builder =
+        browser_->CreateBrowserContextBuilder();
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+            headless::switches::kDeterministicFetch)) {
+      deterministic_dispatcher_.reset(
+          new headless::DeterministicDispatcher(browser_->BrowserIOThread()));
+
+      headless::ProtocolHandlerMap protocol_handlers;
+      protocol_handlers[url::kHttpScheme] =
+          base::MakeUnique<headless::DeterministicHttpProtocolHandler>(
+              deterministic_dispatcher_.get(), browser->BrowserIOThread());
+      protocol_handlers[url::kHttpsScheme] =
+          base::MakeUnique<headless::DeterministicHttpProtocolHandler>(
+              deterministic_dispatcher_.get(), browser->BrowserIOThread());
+
+      context_builder.SetProtocolHandlers(std::move(protocol_handlers));
+    }
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+            headless::switches::kHideScrollbars)) {
+      context_builder.SetOverrideWebPreferencesCallback(
+          base::Bind([](headless::WebPreferences* preferences) {
+            preferences->hide_scrollbars = true;
+          }));
+    }
+    browser_context_ = context_builder.Build();
 
     HeadlessWebContents::Builder builder(
         browser_context_->CreateWebContentsBuilder());
@@ -209,8 +235,9 @@ class HeadlessShell : public HeadlessWebContents::Observer,
   }
 
   void OnDomFetched(std::unique_ptr<runtime::EvaluateResult> result) {
-    if (result->GetExceptionDetails()) {
-      LOG(ERROR) << "Failed to evaluate document.body.innerHTML";
+    if (result->HasExceptionDetails()) {
+      LOG(ERROR) << "Failed to evaluate document.body.innerHTML: "
+                 << result->GetExceptionDetails()->GetText();
     } else {
       std::string dom;
       if (result->GetResult()->GetValue()->GetAsString(&dom)) {
@@ -334,6 +361,7 @@ class HeadlessShell : public HeadlessWebContents::Observer,
   bool processed_page_ready_;
   std::unique_ptr<net::FileStream> screenshot_file_stream_;
   HeadlessBrowserContext* browser_context_;
+  std::unique_ptr<headless::DeterministicDispatcher> deterministic_dispatcher_;
 
   DISALLOW_COPY_AND_ASSIGN(HeadlessShell);
 };

@@ -16,6 +16,7 @@
 #include "build/build_config.h"
 #include "cc/blink/web_compositor_support_impl.h"
 #include "content/child/blink_platform_impl.h"
+#include "content/child/child_shared_bitmap_manager.h"
 #include "content/common/content_export.h"
 #include "content/common/url_loader_factory.mojom.h"
 #include "content/renderer/origin_trials/web_trial_token_validator_impl.h"
@@ -92,7 +93,6 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   bool isLinkVisited(unsigned long long linkHash) override;
   void createMessageChannel(blink::WebMessagePortChannel** channel1,
                             blink::WebMessagePortChannel** channel2) override;
-  blink::WebSocketHandle* createWebSocketHandle() override;
   blink::WebPrescientNetworking* prescientNetworking() override;
   void cacheMetadata(const blink::WebURL&,
                      int64_t,
@@ -129,6 +129,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
       const blink::WebURL& url,
       const blink::WebURL& top_origin) override;
   void getPluginList(bool refresh,
+                     const blink::WebSecurityOrigin& mainFrameOrigin,
                      blink::WebPluginListBuilder* builder) override;
   blink::WebPublicSuffixList* publicSuffixList() override;
   blink::WebScrollbarBehavior* scrollbarBehavior() override;
@@ -141,6 +142,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
 
   bool isThreadedCompositingEnabled() override;
   bool isThreadedAnimationEnabled() override;
+  bool isGPUCompositingEnabled() override;
   double audioHardwareSampleRate() override;
   size_t audioHardwareBufferSize() override;
   unsigned audioHardwareOutputChannels() override;
@@ -162,7 +164,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   blink::WebMIDIAccessor* createMIDIAccessor(
       blink::WebMIDIAccessorClient* client) override;
 
-  blink::WebBlobRegistry* blobRegistry() override;
+  blink::WebBlobRegistry* getBlobRegistry() override;
   void sampleGamepads(blink::WebGamepads&) override;
   blink::WebRTCPeerConnectionHandler* createRTCPeerConnectionHandler(
       blink::WebRTCPeerConnectionHandlerClient* client) override;
@@ -188,6 +190,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
       blink::Platform::GraphicsInfo* gl_info) override;
   blink::WebGraphicsContext3DProvider*
   createSharedOffscreenGraphicsContext3DProvider() override;
+  gpu::GpuMemoryBufferManager* getGpuMemoryBufferManager() override;
   std::unique_ptr<cc::SharedBitmap> allocateSharedBitmap(
       const blink::WebSize& size) override;
   blink::WebCompositorSupport* compositorSupport() override;
@@ -289,6 +292,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   scoped_refptr<IPC::SyncMessageFilter> sync_message_filter_;
   scoped_refptr<ThreadSafeSender> thread_safe_sender_;
   scoped_refptr<QuotaMessageFilter> quota_message_filter_;
+  ChildSharedBitmapManager* shared_bitmap_manager_;
 
   std::unique_ptr<WebDatabaseObserverImpl> web_database_observer_impl_;
 

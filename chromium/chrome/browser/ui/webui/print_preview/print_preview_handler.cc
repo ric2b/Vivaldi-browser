@@ -22,7 +22,7 @@
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -87,6 +87,7 @@
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/settings/device_oauth2_token_service.h"
 #include "chrome/browser/chromeos/settings/device_oauth2_token_service_factory.h"
+#include "chrome/common/url_constants.h"
 #endif
 
 #if defined(ENABLE_SERVICE_DISCOVERY)
@@ -540,7 +541,7 @@ class PrintPreviewHandler::AccessTokenService
       oauth_scopes.insert(cloud_devices::kCloudPrintAuthScope);
       std::unique_ptr<OAuth2TokenService::Request> request(
           service->StartRequest(account_id, oauth_scopes, this));
-      requests_[type].reset(request.release());
+      requests_[type] = std::move(request);
     } else {
       handler_->SendAccessToken(type, std::string());  // Unknown type.
     }
@@ -1139,12 +1140,10 @@ void PrintPreviewHandler::HandleManageCloudPrint(
     return;
   if (!user.empty())
     manage_url = net::AppendQueryParameter(manage_url, "user", user);
-  preview_web_contents()->OpenURL(content::OpenURLParams(
-      manage_url,
-      content::Referrer(),
-      NEW_FOREGROUND_TAB,
-      ui::PAGE_TRANSITION_LINK,
-      false));
+  preview_web_contents()->OpenURL(
+      content::OpenURLParams(manage_url, content::Referrer(),
+                             WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                             ui::PAGE_TRANSITION_LINK, false));
 }
 
 #if BUILDFLAG(ENABLE_BASIC_PRINT_DIALOG)
@@ -1171,7 +1170,15 @@ void PrintPreviewHandler::HandleShowSystemDialog(
 void PrintPreviewHandler::HandleManagePrinters(
     const base::ListValue* /*args*/) {
   ++manage_printers_dialog_request_count_;
+#if defined(OS_CHROMEOS)
+  GURL local_printers_manage_url(chrome::kChromeUIMdCupsSettingsURL);
+  preview_web_contents()->OpenURL(
+      content::OpenURLParams(local_printers_manage_url, content::Referrer(),
+                             WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                             ui::PAGE_TRANSITION_LINK, false));
+#else
   printing::PrinterManagerDialog::ShowPrinterManagerDialog();
+#endif
 }
 
 void PrintPreviewHandler::HandleClosePreviewDialog(
@@ -1419,8 +1426,9 @@ void PrintPreviewHandler::FileSelected(const base::FilePath& path,
       preview_web_contents()->GetBrowserContext());
   download_prefs->SetSaveFilePath(path.DirName());
   printing::StickySettings* sticky_settings = GetStickySettings();
-   sticky_settings->SaveInPrefs(Profile::FromBrowserContext(
-      preview_web_contents()->GetBrowserContext())->GetPrefs());
+  sticky_settings->SaveInPrefs(
+      Profile::FromBrowserContext(preview_web_contents()->GetBrowserContext())
+          ->GetPrefs());
   web_ui()->CallJavascriptFunctionUnsafe("fileSelectionCompleted");
   print_to_pdf_path_ = path;
   PostPrintToPdfTask();

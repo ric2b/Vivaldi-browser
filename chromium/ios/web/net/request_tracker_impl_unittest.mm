@@ -12,6 +12,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_vector.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/strings/sys_string_conversions.h"
 #include "ios/web/public/cert_policy.h"
 #include "ios/web/public/certificate_policy_cache.h"
@@ -129,7 +130,7 @@ class DummyURLRequestDelegate : public net::URLRequest::Delegate {
   DummyURLRequestDelegate() {}
   ~DummyURLRequestDelegate() override {}
 
-  void OnResponseStarted(net::URLRequest* request) override {}
+  void OnResponseStarted(net::URLRequest* request, int net_error) override {}
   void OnReadCompleted(net::URLRequest* request, int bytes_read) override {}
 
  private:
@@ -205,7 +206,7 @@ class RequestTrackerTest : public PlatformTest {
         return [receiver_ error];
       if (base::Time::Now() > maxDate)
         return @"Time is up, too slow to go";
-      loop_.RunUntilIdle();
+      base::RunLoop().RunUntilIdle();
       base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(1));
     }
     return nil;
@@ -233,7 +234,7 @@ class RequestTrackerTest : public PlatformTest {
     tracker_->FinishPageLoad(url, false);
     receiver_.get()->value_ = 0.0f;
     receiver_.get()->max_ = 0.0f;
-    loop_.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
   }
 
   net::TestJobInterceptor* AddInterceptorToRequest(size_t i) {
@@ -449,7 +450,7 @@ TEST_F(RequestTrackerTest, CaptureHeaders) {
   tracker_->StartRequest(request);
   tracker_->CaptureHeaders(request);
   tracker_->StopRequest(request);
-  loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   EXPECT_TRUE([receiver_ headers]->HasHeaderValue("X-Auto-Login",
                                                   "Hello World"));
   std::string mimeType;

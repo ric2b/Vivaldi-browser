@@ -8,6 +8,7 @@
 <translation id="1111673857033749125">Bookmarks saved on your other devices will appear here.</translation>
 <translation id="1121094540300013208">Usage and crash reports</translation>
 <translation id="1137305377394488060">past hour</translation>
+<translation id="1146678959555564648">Enter VR</translation>
 <translation id="1178581264944972037">Pause</translation>
 <translation id="1181037720776840403">Remove</translation>
 <translation id="1197267115302279827">Move bookmarks</translation>
@@ -33,6 +34,7 @@ You must have Bluetooth and Location turned on in order to use the Physical Web.
 <translation id="1376578503827013741">Computing…</translation>
 <translation id="138361230106469022">Hi, <ph name="FULL_NAME" /></translation>
 <translation id="1383876407941801731">Search</translation>
+<translation id="1384959399684842514">Download paused</translation>
 <translation id="1389974829397082527">No bookmarks here</translation>
 <translation id="1404122904123200417">Embedded in <ph name="WEBSITE_URL" /></translation>
 <translation id="1406000523432664303">“Do Not Track”</translation>
@@ -103,9 +105,10 @@ You must have Bluetooth and Location turned on in order to use the Physical Web.
 <translation id="213279576345780926">Closed <ph name="TAB_TITLE" /></translation>
 <translation id="2138201775715568214">Looking for nearby Physical Web pages</translation>
 <translation id="2139186145475833000">Add to Home screen</translation>
+<translation id="2146738493024040262">Open Instant App</translation>
 <translation id="2148716181193084225">Today</translation>
+<translation id="2154484045852737596">Edit card</translation>
 <translation id="2154710561487035718">Copy URL</translation>
-<translation id="21570240866965662">Slow connection</translation>
 <translation id="219985413780390209">Protect you and your device from dangerous sites</translation>
 <translation id="2206488550163399966"><ph name="APP_NAME" />, web app. <ph name="APP_URL" /></translation>
 <translation id="2268044343513325586">Refine</translation>
@@ -159,6 +162,7 @@ You can control the Physical Web in Chrome Settings.
 <translation id="2777555524387840389"><ph name="SECONDS" /> secs left</translation>
 <translation id="2781151931089541271">1 sec left</translation>
 <translation id="2811892995384186721">Not seeing your device? <ph name="BEGIN_LINK" />Get help<ph name="END_LINK" /></translation>
+<translation id="2833899785646504169">Unable to add</translation>
 <translation id="2836148919159985482">Touch the back button to exit full screen.</translation>
 <translation id="2842985007712546952">Parent folder</translation>
 <translation id="2870560284913253234">Site</translation>
@@ -182,8 +186,8 @@ You can control the Physical Web in Chrome Settings.
 <translation id="3036750288708366620"><ph name="BEGIN_LINK" />Get help<ph name="END_LINK" /></translation>
 <translation id="3089395242580810162">Open in incognito tab</translation>
 <translation id="3090193911106258841">Accessing audio and video input</translation>
-<translation id="3117051980354074377">To get your bookmarks your other devices, sign in to Chrome.</translation>
 <translation id="3137521801621304719">Leave incognito mode</translation>
+<translation id="3148434565183091099">To get your bookmarks on all your devices, sign in to Chrome.</translation>
 <translation id="3149891296864842641">Delivery option</translation>
 <translation id="3177909033752230686">Page language:</translation>
 <translation id="3190152372525844641">Turn on permissions for Chrome in <ph name="BEGIN_LINK" />Android Settings<ph name="END_LINK" />.</translation>
@@ -218,6 +222,7 @@ You can control the Physical Web in Chrome Settings.
 <translation id="3518985090088779359">Accept &amp; continue</translation>
 <translation id="3522247891732774234">Update available. More options</translation>
 <translation id="3527085408025491307">Folder</translation>
+<translation id="3542235761944717775"><ph name="KILOBYTES" /> KB available</translation>
 <translation id="3549644494707163724">Encrypt all synced data with your own sync passphrase</translation>
 <translation id="3590487821116122040">Site storage Chrome doesn't think is important (e.g. sites with no saved settings or that you don't visit often)</translation>
 <translation id="360480449234699036">Learn about topics on websites without leaving the page. Touch to Search sends a word and its surrounding context to Google Search, returning definitions, pictures, search results and other details.
@@ -237,6 +242,7 @@ To adjust your search term, long press to select. To refine your search, slide t
 <translation id="380076759404194828">{NUM_SELECTED,plural, =1{1 item selected}other{# items selected}}</translation>
 <translation id="3810838688059735925">Video</translation>
 <translation id="3810973564298564668">Manage</translation>
+<translation id="3819178904835489326"><ph name="NUMBER_OF_DOWNLOADS" /> downloads deleted</translation>
 <translation id="3822502789641063741">Clear site storage?</translation>
 <translation id="3828029223314399057">Search bookmarks</translation>
 <translation id="3894427358181296146">Add folder</translation>
@@ -247,6 +253,7 @@ To adjust your search term, long press to select. To refine your search, slide t
 <translation id="393697183122708255">No enabled voice search available</translation>
 <translation id="3946611741043634542">By continuing, you agree to Chrome’s <ph name="BEGIN_LINK1" />Terms of Service<ph name="END_LINK1" /> and <ph name="BEGIN_LINK2" />Privacy Notice<ph name="END_LINK2" />.</translation>
 <translation id="3950820424414687140">Sign in</translation>
+<translation id="3967822245660637423">Download complete</translation>
 <translation id="397583555483684758">Sync has stopped working</translation>
 <translation id="3988213473815854515">Location is allowed</translation>
 <translation id="3997476611815694295">Unimportant storage</translation>
@@ -259,7 +266,6 @@ To adjust your search term, long press to select. To refine your search, slide t
 <translation id="4095146165863963773">Delete app data?</translation>
 <translation id="4099578267706723511">Help make Chrome better by sending usage statistics and crash reports to Google.</translation>
 <translation id="410351446219883937">Autoplay</translation>
-<translation id="411254640334432676">Download failed.</translation>
 <translation id="4113030288477039509">Managed by your administrator</translation>
 <translation id="4165986682804962316">Site settings</translation>
 <translation id="4170011742729630528">The service is not available; try again later.</translation>
@@ -276,11 +282,12 @@ To adjust your search term, long press to select. To refine your search, slide t
 <translation id="4271185234001491831">Never translate <ph name="LANGUAGE" /></translation>
 <translation id="4275663329226226506">Media</translation>
 <translation id="4278390842282768270">Allowed</translation>
+<translation id="4300272766492248925">Open app</translation>
 <translation id="4307992518367153382">Basics</translation>
-<translation id="4334294535648607276">Download complete.</translation>
 <translation id="4351244548802238354">Close dialogue</translation>
 <translation id="4376501731284077108">Uncontrolled</translation>
 <translation id="4378154925671717803">Phone</translation>
+<translation id="4384468725000734951">Using Sogou for search</translation>
 <translation id="4412992751769744546">Allow third-party cookies</translation>
 <translation id="4440256989292146959">Browse more for less</translation>
 <translation id="4452548195519783679">Bookmarked to <ph name="FOLDER_NAME" /></translation>
@@ -294,7 +301,6 @@ To adjust your search term, long press to select. To refine your search, slide t
 <translation id="4532845899244822526">Choose folder</translation>
 <translation id="4543661749405994812">Copy email address</translation>
 <translation id="4572422548854449519">Sign in to managed account</translation>
-<translation id="4576023202210315647">Keep tab in Chrome</translation>
 <translation id="4581964774250883625">You’ve gone incognito.</translation>
 <translation id="4583164079174244168">{MINUTES,plural, =1{# minute ago}other{# minutes ago}}</translation>
 <translation id="4605958867780575332">Item removed: <ph name="ITEM_TITLE" /></translation>
@@ -323,6 +329,7 @@ To adjust your search term, long press to select. To refine your search, slide t
 <translation id="4923459931733593730">Payment</translation>
 <translation id="4941291666397027948">* indicates required field</translation>
 <translation id="4943872375798546930">No results</translation>
+<translation id="4958708863221495346"><ph name="URL_OF_THE_CURRENT_TAB" /> is sharing your screen</translation>
 <translation id="4961700429721424617">You are signing out of an account managed by <ph name="MANAGED_DOMAIN" />. This will delete your Chrome data from this device, but your data will remain in your Google account.</translation>
 <translation id="497421865427891073">go forward</translation>
 <translation id="4988526792673242964">Pages</translation>
@@ -333,14 +340,13 @@ To adjust your search term, long press to select. To refine your search, slide t
 <translation id="5039804452771397117">Allow</translation>
 <translation id="5040262127954254034">Privacy</translation>
 <translation id="5063480226653192405">Usage</translation>
+<translation id="5087580092889165836">Add card</translation>
 <translation id="5100237604440890931">Collapsed – click to expand.</translation>
 <translation id="510275257476243843">1 hour left</translation>
-<translation id="5107381076085091558">Download paused.</translation>
 <translation id="5127805178023152808">Sync is off</translation>
 <translation id="5131405117025179004">Edit saved account</translation>
 <translation id="5138299137310274655">This page is in <ph name="SOURCE_LANGUAGE" />. Translate it to <ph name="TARGET_LANGUAGE" />?</translation>
 <translation id="515227803646670480">Clear stored data</translation>
-<translation id="5152837197884366695"><ph name="APP_NAME" /> - <ph name="STYLE_BEGIN" />Instant<ph name="STYLE_END" /></translation>
 <translation id="5156656584247937086">This is a kid’s account</translation>
 <translation id="5161254044473106830">Title required</translation>
 <translation id="5164482624172255778">Would you like Google Chrome to offer to translate <ph name="LANGUAGE" /> pages from this site next time?</translation>
@@ -366,7 +372,6 @@ To adjust your search term, long press to select. To refine your search, slide t
 <translation id="5345040418939504969">Deleted <ph name="BOOKMARK_TITLE" /></translation>
 <translation id="5345083863238459644">Location access is also <ph name="BEGIN_LINK" />turned off for this device<ph name="END_LINK" />.</translation>
 <translation id="5372829067651257087">URL copied.</translation>
-<translation id="5380554235172449987">Never send</translation>
 <translation id="5400569084694353794">By using this application, you agree to Chrome’s <ph name="BEGIN_LINK1" />Terms of Service<ph name="END_LINK1" /> and <ph name="BEGIN_LINK2" />Privacy Notice<ph name="END_LINK2" />.</translation>
 <translation id="5414836363063783498">Verifying…</translation>
 <translation id="5423934151118863508">Your most visited pages will appear here</translation>
@@ -376,7 +381,6 @@ To adjust your search term, long press to select. To refine your search, slide t
 <translation id="5456381639095306749">Download page</translation>
 <translation id="5487521232677179737">Clear data</translation>
 <translation id="5487729733663684359">Chrome updates are no longer supported for this version of Android.</translation>
-<translation id="5511351932351731210">Always send</translation>
 <translation id="5512137114520586844">This account is managed by <ph name="PARENT_NAME" />.</translation>
 <translation id="5527082711130173040">Chrome needs location access to scan for devices. <ph name="BEGIN_LINK1" />Update permissions<ph name="END_LINK1" />. Location access is also <ph name="BEGIN_LINK2" />turned off for this device<ph name="END_LINK2" />.</translation>
 <translation id="5530766185686772672">Close incognito tabs</translation>
@@ -423,6 +427,8 @@ However, you aren't invisible. Going incognito doesn't hide your browsing from y
 <translation id="5916664084637901428">On</translation>
 <translation id="5919204609460789179">Update <ph name="PRODUCT_NAME" /> to start sync</translation>
 <translation id="5939518447894949180">Reset</translation>
+<translation id="5942872142862698679">Using Google for search</translation>
+<translation id="6000066717592683814">Keep Google</translation>
 <translation id="6010869025736512584">Accessing video input</translation>
 <translation id="6012342843556706400">Chrome needs location access to share it with this site.</translation>
 <translation id="6031101910111098835">Collapsed – Click to expand</translation>
@@ -440,6 +446,7 @@ However, you aren't invisible. Going incognito doesn't hide your browsing from y
 <translation id="6159335304067198720"><ph name="PERCENT" /> data savings</translation>
 <translation id="6165508094623778733">Learn more</translation>
 <translation id="6177390657002841081">Turn on Data Saver</translation>
+<translation id="617991007797131187">Chrome can use Sogou for search in China. You can change this in <ph name="BEGIN_LINK" />Settings<ph name="END_LINK" />.</translation>
 <translation id="6181444274883918285">Add site exception</translation>
 <translation id="6192792657125177640">Exceptions</translation>
 <translation id="6232535412751077445">Enabling “Do Not Track” means that a request will be included with your browsing traffic. Any effect depends on whether a website responds to the request and how the request is interpreted.
@@ -459,9 +466,10 @@ For example, some websites may respond to this request by showing you ads that a
 <translation id="6409731863280057959">Pop-ups</translation>
 <translation id="641643625718530986">Print…</translation>
 <translation id="6433490469411711332">Edit contact info</translation>
+<translation id="6443118737398455446">Invalid expiry date</translation>
 <translation id="6447842834002726250">Cookies</translation>
 <translation id="6448273550210938826">Search and URL suggestions</translation>
-<translation id="6458785801851713928">Sync is not available for your domain.</translation>
+<translation id="6463070039183944536">Adding...</translation>
 <translation id="6464825623202322042">This device</translation>
 <translation id="6475951671322991020">Download video</translation>
 <translation id="6477460825583319731">Invalid email address</translation>
@@ -471,6 +479,7 @@ For example, some websites may respond to this request by showing you ads that a
 <translation id="654446541061731451">Select a tab to beam</translation>
 <translation id="6545017243486555795">Clear All Data</translation>
 <translation id="6550675742724504774">Options</translation>
+<translation id="6560414384669816528">Search with Sogou</translation>
 <translation id="656628257199996201">Always translate <ph name="SOURCE_LANGUAGE" /></translation>
 <translation id="6571070086367343653">Edit credit card</translation>
 <translation id="6573431926118603307">Tabs that you've opened in Chrome on your other devices will appear here.</translation>
@@ -497,12 +506,10 @@ For example, some websites may respond to this request by showing you ads that a
 <translation id="6831043979455480757">Translate</translation>
 <translation id="6846298663435243399">Loading…</translation>
 <translation id="6850830437481525139"><ph name="TAB_COUNT" /> tabs closed</translation>
-<translation id="6857778194843072568">Only send on Wi-Fi</translation>
 <translation id="6864459304226931083">Download image</translation>
 <translation id="6865313869410766144">Autofill form data</translation>
 <translation id="6868088497967843822">Sign in to get your bookmarks, history, passwords and other settings on all your devices</translation>
 <translation id="6891858906296486776">{OPEN_TABS,plural, =1{%1$d open tab}other{%1$d open tabs}}</translation>
-<translation id="6910211073230771657">Deleted</translation>
 <translation id="6945221475159498467">Select</translation>
 <translation id="6963766334940102469">Delete bookmarks</translation>
 <translation id="6965382102122355670">OK</translation>
@@ -518,8 +525,8 @@ For example, some websites may respond to this request by showing you ads that a
 <translation id="7026897394897382018">Enable Data Saver</translation>
 <translation id="7029809446516969842">Passwords</translation>
 <translation id="7031882061095297553">Sync to</translation>
+<translation id="7040138676081995583">Open with...</translation>
 <translation id="7053983685419859001">Block</translation>
-<translation id="7056999826593229648">Slow connection detected</translation>
 <translation id="7057058088140140610">Credit cards and addresses using Google Payments</translation>
 <translation id="7062545763355031412">Accept and switch accounts</translation>
 <translation id="7063006564040364415">Could not connect to the sync server.</translation>
@@ -534,8 +541,6 @@ For example, some websites may respond to this request by showing you ads that a
 <translation id="7208788139759694678">Data Saver disabled</translation>
 <translation id="7243308994586599757">Options available near bottom of the screen</translation>
 <translation id="7244362611678346589"><ph name="SEARCH_ENGINE_URL" /> uses your location to show local search results</translation>
-<translation id="7327835590071894791">Your tab is now in the background.</translation>
-<translation id="7347770551817603360">Offline content</translation>
 <translation id="7353894246028566792">{NUM_SELECTED,plural, =1{Share 1 selected item}other{Share # selected items}}</translation>
 <translation id="7366340029385295517">Casting to <ph name="SCREEN_NAME" /></translation>
 <translation id="7375125077091615385">Type:</translation>
@@ -553,7 +558,6 @@ For example, some websites may respond to this request by showing you ads that a
 Your Google account may have other forms of browsing history like searches and activity from other Google services at <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" />.</translation>
 <translation id="7493994139787901920"><ph name="VERSION" /> (Updated <ph name="TIME_SINCE_UPDATE" />)</translation>
 <translation id="7498271377022651285">Please wait…</translation>
-<translation id="7501135638693251872">All bookmarks</translation>
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7562080006725997899">Clear browsing data</translation>
 <translation id="756809126120519699">Cleared Chrome data</translation>
@@ -571,7 +575,6 @@ Your Google account may have other forms of browsing history like searches and a
 <translation id="7658239707568436148">Cancel</translation>
 <translation id="7665369617277396874">Add account</translation>
 <translation id="7682287625158474539">Shipping</translation>
-<translation id="7690588279513156836">Load original</translation>
 <translation id="771135159654932189">See what's nearby</translation>
 <translation id="7713873128508426081">Always allowed?</translation>
 <translation id="7764225426217299476">Add address</translation>
@@ -596,9 +599,11 @@ Your Google account may have other forms of browsing history like searches and a
 <translation id="7998918019931843664">Re-open closed tab</translation>
 <translation id="7999064672810608036">Are you sure that you want to clear all local data, including cookies, and reset all permissions for this website?</translation>
 <translation id="8007176423574883786">Turned off for this device</translation>
+<translation id="802154636333426148">Download failed</translation>
 <translation id="8026334261755873520">Clear browsing data</translation>
 <translation id="8035133914807600019">New folder…</translation>
 <translation id="8037750541064988519"><ph name="DAYS" /> days left</translation>
+<translation id="8051695050440594747"><ph name="MEGABYTES" /> MB available</translation>
 <translation id="8063895661287329888">Failed to add bookmark.</translation>
 <translation id="8068648041423924542">Unable to select certificate.</translation>
 <translation id="8069239273282989646">After compression</translation>
@@ -611,7 +616,6 @@ Your Google account may have other forms of browsing history like searches and a
 <translation id="8137558756159375272">Touch to Search sends the selected word and the current page as context to Google Search. You can turn it off in <ph name="BEGIN_LINK" />Settings<ph name="END_LINK" />.</translation>
 <translation id="8168435359814927499">Content</translation>
 <translation id="8173098127580644436">beginning of time</translation>
-<translation id="8187025609458112874">Can't share deleted files</translation>
 <translation id="8190358571722158785">1 day left</translation>
 <translation id="8200772114523450471">Resume</translation>
 <translation id="8202097416529803614">Order summary</translation>
@@ -641,12 +645,14 @@ Your Google account may have other forms of browsing history like searches and a
 <translation id="8518901949365209398">This site uses a weak security configuration (SHA-1 signatures), so your connection may not be private.</translation>
 <translation id="8523928698583292556">Delete stored password</translation>
 <translation id="8525306231823319788">Full screen</translation>
+<translation id="85415543246899402"><ph name="MEGABYTES" /> MB used</translation>
 <translation id="854522910157234410">Open this page:</translation>
 <translation id="8562452229998620586">Your saved passwords will appear here.</translation>
 <translation id="856481929701340285">Request desktop site</translation>
 <translation id="857943718398505171">Allowed (recommended)</translation>
 <translation id="8583805026567836021">Clearing account data</translation>
 <translation id="8617240290563765734">Open the suggested URL specified in the downloaded content?</translation>
+<translation id="8618653050765576793"><ph name="KILOBYTES" /> KB used</translation>
 <translation id="862875433388403934">Content (films, music, etc.) downloaded in other applications may no longer be playable until those applications re-acquire licences based on a new device credential. To obtain new licences, connect to the Internet and play your downloaded content.</translation>
 <translation id="8636825310635137004">To get your tabs from your other devices, turn on sync.</translation>
 <translation id="8639651215196239211">All downloads</translation>
@@ -657,6 +663,7 @@ Your Google account may have other forms of browsing history like searches and a
 <translation id="8719023831149562936">Can’t beam current tab</translation>
 <translation id="8725066075913043281">Try again</translation>
 <translation id="8730621377337864115">Finished</translation>
+<translation id="8748850008226585750">Contents hidden</translation>
 <translation id="8812942424849541387">Control how this works in <ph name="BEGIN_LINK1" />Settings<ph name="END_LINK1" /></translation>
 <translation id="8820817407110198400">Bookmarks</translation>
 <translation id="883635517171802338">Block sites from showing pop-ups (recommended)</translation>
@@ -664,7 +671,6 @@ Your Google account may have other forms of browsing history like searches and a
 <translation id="8847988622838149491">USB</translation>
 <translation id="8853345339104747198"><ph name="TAB_TITLE" />, tab</translation>
 <translation id="885701979325669005">Storage</translation>
-<translation id="8872506776304248286">Open in app</translation>
 <translation id="8901170036886848654">No bookmarks found</translation>
 <translation id="8909135823018751308">Share…</translation>
 <translation id="8912362522468806198">Google Account</translation>
@@ -679,7 +685,6 @@ Your Google account may have other forms of browsing history like searches and a
 <translation id="8986494364107987395">Automatically send usage statistics and crash reports to Google</translation>
 <translation id="8998729206196772491">You are signing in with an account managed by <ph name="MANAGED_DOMAIN" /> and giving its administrator control over your Chrome data. Your data will become permanently tied to this account. Signing out of Chrome will delete your data from this device, but it will remain stored in your Google account.</translation>
 <translation id="9019902583201351841">Managed by your parents</translation>
-<translation id="9020607083536754075">Close the current tab and return to the previous app</translation>
 <translation id="9038649477754266430">Use a prediction service to load pages more quickly</translation>
 <translation id="9050666287014529139">Passphrase</translation>
 <translation id="9060538597317784206">View app <ph name="APP_NAME" /> on the Play Store.  Rating: <ph name="APP_RATING" />.</translation>

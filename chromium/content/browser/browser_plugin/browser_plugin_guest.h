@@ -271,6 +271,11 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
 
   void ResendEventToEmbedder(const blink::WebInputEvent& event);
 
+  // TODO(ekaramad): Remove this once https://crbug.com/642826 is resolved.
+  bool can_use_cross_process_frames() const {
+    return can_use_cross_process_frames_;
+  }
+
  protected:
 
   // BrowserPluginGuest is a WebContentsObserver of |web_contents| and
@@ -357,10 +362,10 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
       const std::vector<blink::WebCompositionUnderline>& underlines,
       int selection_start,
       int selection_end);
-  void OnImeConfirmComposition(
-      int instance_id,
-      const std::string& text,
-      bool keep_selection);
+  void OnImeCommitText(int instance_id,
+                       const std::string& text,
+                       int relative_cursor_pos);
+  void OnImeFinishComposingText(bool keep_selection);
   void OnExtendSelectionAndDelete(int instance_id, int before, int after);
   void OnImeCancelComposition();
 #if defined(OS_MACOSX) || defined(USE_AURA)
@@ -400,11 +405,6 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   void SendQueuedMessages();
 
   void SendTextInputTypeChangedToView(RenderWidgetHostViewBase* guest_rwhv);
-
-  // gisli@vivaldi.com:  For handling interstitial pages within guest views.
-  RenderViewHost* GetRenderViewHost() const;
-  RenderWidgetHostView* GetRenderWidgetHostView() const;
-  WebContentsView* GetView() const;
 
   // The last tooltip that was set with SetTooltipText().
   base::string16 current_tooltip_text_;
@@ -470,6 +470,11 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   BrowserPluginGuestDelegate* delegate_;
 
   int guest_routing_id_;
+
+  // Whether or not this BrowserPluginGuest can use cross process frames. This
+  // means when we have --use-cross-process-frames-for-guests on, the
+  // WebContents associated with this BrowserPluginGuest has OOPIF structure.
+  bool can_use_cross_process_frames_;
 
   // Vivaldi specific; we need to limit focus messages sent to one per change
   // per RenderWidgetHost.

@@ -148,8 +148,12 @@ std::unique_ptr<device::BluetoothDiscoveryFilter> ComputeScanFilter(
       services.insert(service.value());
     }
   }
+  // There isn't much support for GATT over BR/EDR from neither platforms nor
+  // devices so performing a Dual scan will find devices that the API is not
+  // able to interact with. To avoid wasting power and confusing users with
+  // devices they are not able to interact with, we only perform an LE Scan.
   auto discovery_filter = base::MakeUnique<device::BluetoothDiscoveryFilter>(
-      device::BLUETOOTH_TRANSPORT_DUAL);
+      device::BLUETOOTH_TRANSPORT_LE);
   for (const BluetoothUUID& service : services) {
     discovery_filter->AddUUID(service);
   }
@@ -352,9 +356,8 @@ void BluetoothDeviceChooserController::AddFilteredDevice(
     base::Optional<int8_t> rssi = device.GetInquiryRSSI();
     chooser_->AddOrUpdateDevice(
         device.GetAddress(), !!device.GetName() /* should_update_name */,
-        device.GetNameForDisplay(),
-        // TODO(http://crbug.com/543466): Show connection and paired status.
-        false /* is_gatt_connected */, false /* is_paired */,
+        device.GetNameForDisplay(), device.IsGattConnected(),
+        web_bluetooth_service_->IsDevicePaired(device.GetAddress()),
         rssi ? CalculateSignalStrengthLevel(rssi.value()) : -1);
   }
 }

@@ -62,7 +62,7 @@ struct TestParams {
              QuicVersionVector supported_versions)
       : enable_stateless_rejects(enable_stateless_rejects),
         use_stateless_rejects(use_stateless_rejects),
-        supported_versions(supported_versions) {}
+        supported_versions(std::move(supported_versions)) {}
 
   friend ostream& operator<<(ostream& os, const TestParams& p) {
     os << "  enable_stateless_rejects: " << p.enable_stateless_rejects
@@ -201,9 +201,8 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
       *called_ = false;
     }
 
-    void RunImpl(const CryptoHandshakeMessage& client_hello,
-                 const Result& result,
-                 std::unique_ptr<ProofSource::Details> /* details */) override {
+    void Run(scoped_refptr<Result> result,
+             std::unique_ptr<ProofSource::Details> /* details */) override {
       {
         // Ensure that the strike register client lock is not held.
         QuicCryptoServerConfigPeer peer(&test_->config_);
@@ -214,15 +213,15 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
         base::AutoLock lock(*m);
       }
       ASSERT_FALSE(*called_);
-      test_->ProcessValidationResult(client_hello, result, should_succeed_,
+      test_->ProcessValidationResult(std::move(result), should_succeed_,
                                      error_substr_);
       *called_ = true;
     }
 
    private:
     CryptoServerTest* test_;
-    bool should_succeed_;
-    const char* error_substr_;
+    const bool should_succeed_;
+    const char* const error_substr_;
     bool* called_;
   };
 
@@ -246,10 +245,11 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
   void ShouldSucceed(const CryptoHandshakeMessage& message) {
     bool called = false;
     IPAddress server_ip;
-    config_.ValidateClientHello(message, client_address_.address(), server_ip,
-                                supported_versions_.front(), &clock_,
-                                &crypto_proof_,
-                                new ValidateCallback(this, true, "", &called));
+    config_.ValidateClientHello(
+        message, client_address_.address(), server_ip,
+        supported_versions_.front(), &clock_, &crypto_proof_,
+        std::unique_ptr<ValidateCallback>(
+            new ValidateCallback(this, true, "", &called)));
     EXPECT_TRUE(called);
   }
 
@@ -267,37 +267,71 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
     config_.ValidateClientHello(
         message, client_address_.address(), server_ip,
         supported_versions_.front(), &clock_, &crypto_proof_,
-        new ValidateCallback(this, false, error_substr, called));
+        std::unique_ptr<ValidateCallback>(
+            new ValidateCallback(this, false, error_substr, called)));
   }
 
-  void ProcessValidationResult(const CryptoHandshakeMessage& message,
-                               const ValidateCallback::Result& result,
+  class ProcessCallback : public ProcessClientHelloResultCallback {
+   public:
+    ProcessCallback(scoped_refptr<ValidateCallback::Result> result,
+                    bool should_succeed,
+                    const char* error_substr,
+                    bool* called,
+                    CryptoHandshakeMessage* out)
+        : result_(std::move(result)),
+          should_succeed_(should_succeed),
+          error_substr_(error_substr),
+          called_(called),
+          out_(out) {
+      *called_ = false;
+    }
+
+    void Run(
+        QuicErrorCode error,
+        const string& error_details,
+        std::unique_ptr<CryptoHandshakeMessage> message,
+        std::unique_ptr<DiversificationNonce> diversification_nonce) override {
+      if (should_succeed_) {
+        ASSERT_EQ(error, QUIC_NO_ERROR) << "Message failed with error "
+                                        << error_details << ": "
+                                        << result_->client_hello.DebugString();
+      } else {
+        ASSERT_NE(error, QUIC_NO_ERROR) << "Message didn't fail: "
+                                        << result_->client_hello.DebugString();
+
+        EXPECT_TRUE(error_details.find(error_substr_) != string::npos)
+            << error_substr_ << " not in " << error_details;
+      }
+      if (message != nullptr) {
+        *out_ = *message;
+      }
+      *called_ = true;
+    }
+
+   private:
+    const scoped_refptr<ValidateCallback::Result> result_;
+    const bool should_succeed_;
+    const char* const error_substr_;
+    bool* called_;
+    CryptoHandshakeMessage* out_;
+  };
+
+  void ProcessValidationResult(scoped_refptr<ValidateCallback::Result> result,
                                bool should_succeed,
                                const char* error_substr) {
     IPAddress server_ip;
-    DiversificationNonce diversification_nonce;
-    string error_details;
     QuicConnectionId server_designated_connection_id =
         rand_for_id_generation_.RandUint64();
-    QuicErrorCode error = config_.ProcessClientHello(
+    bool called;
+    config_.ProcessClientHello(
         result, /*reject_only=*/false, /*connection_id=*/1, server_ip,
         client_address_, supported_versions_.front(), supported_versions_,
         use_stateless_rejects_, server_designated_connection_id, &clock_, rand_,
         &compressed_certs_cache_, &params_, &crypto_proof_,
-        /*total_framing_overhead=*/50, chlo_packet_size_, &out_,
-        &diversification_nonce, &error_details);
-
-    if (should_succeed) {
-      ASSERT_EQ(error, QUIC_NO_ERROR) << "Message failed with error "
-                                      << error_details << ": "
-                                      << message.DebugString();
-    } else {
-      ASSERT_NE(error, QUIC_NO_ERROR) << "Message didn't fail: "
-                                      << message.DebugString();
-
-      EXPECT_TRUE(error_details.find(error_substr) != string::npos)
-          << error_substr << " not in " << error_details;
-    }
+        /*total_framing_overhead=*/50, chlo_packet_size_,
+        std::unique_ptr<ProcessCallback>(new ProcessCallback(
+            result, should_succeed, error_substr, &called, &out_)));
+    EXPECT_TRUE(called);
   }
 
   string GenerateNonce() {
@@ -362,6 +396,7 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
   }
 
  protected:
+  QuicFlagSaver flags_;  // Save/restore all QUIC flag values.
   QuicRandom* const rand_;
   MockRandom rand_for_id_generation_;
   MockClock clock_;
@@ -479,7 +514,6 @@ TEST_P(CryptoServerTest, RejectTooLarge) {
 }
 
 TEST_P(CryptoServerTest, RejectNotTooLarge) {
-  FLAGS_quic_use_chlo_packet_size = true;
   // When the CHLO packet is large enough, ensure that a full REJ is sent.
   chlo_packet_size_ *= 2;
 
@@ -1181,9 +1215,10 @@ TEST_P(AsyncStrikeServerVerificationTest, AsyncReplayProtection) {
 
   bool called = false;
   IPAddress server_ip;
-  config_.ValidateClientHello(msg, client_address_.address(), server_ip,
-                              client_version_, &clock_, &crypto_proof_,
-                              new ValidateCallback(this, true, "", &called));
+  config_.ValidateClientHello(
+      msg, client_address_.address(), server_ip, client_version_, &clock_,
+      &crypto_proof_, std::unique_ptr<ValidateCallback>(
+                          new ValidateCallback(this, true, "", &called)));
   // The verification request was queued.
   ASSERT_FALSE(called);
   EXPECT_EQ(0u, out_.tag());
@@ -1197,9 +1232,10 @@ TEST_P(AsyncStrikeServerVerificationTest, AsyncReplayProtection) {
   EXPECT_EQ(kSHLO, out_.tag());
 
   // Rejected if replayed.
-  config_.ValidateClientHello(msg, client_address_.address(), server_ip,
-                              client_version_, &clock_, &crypto_proof_,
-                              new ValidateCallback(this, true, "", &called));
+  config_.ValidateClientHello(
+      msg, client_address_.address(), server_ip, client_version_, &clock_,
+      &crypto_proof_, std::unique_ptr<ValidateCallback>(
+                          new ValidateCallback(this, true, "", &called)));
   // The verification request was queued.
   ASSERT_FALSE(called);
   EXPECT_EQ(1, strike_register_client_->PendingVerifications());

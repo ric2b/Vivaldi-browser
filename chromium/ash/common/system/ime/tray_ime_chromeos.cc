@@ -11,15 +11,18 @@
 #include "ash/common/system/chromeos/ime_menu/ime_list_view.h"
 #include "ash/common/system/tray/hover_highlight_view.h"
 #include "ash/common/system/tray/system_tray.h"
+#include "ash/common/system/tray/system_tray_controller.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/system_tray_notifier.h"
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/system/tray/tray_details_view.h"
 #include "ash/common/system/tray/tray_item_more.h"
 #include "ash/common/system/tray/tray_item_view.h"
+#include "ash/common/system/tray/tray_popup_item_style.h"
 #include "ash/common/system/tray/tray_utils.h"
 #include "ash/common/system/tray_accessibility.h"
 #include "ash/common/wm_shell.h"
+#include "ash/resources/vector_icons/vector_icons.h"
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "grit/ash_resources.h"
@@ -30,7 +33,6 @@
 #include "ui/gfx/font.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/gfx/vector_icons_public.h"
 #include "ui/keyboard/keyboard_util.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
@@ -70,11 +72,10 @@ class SelectableHoverHighlightView : public HoverHighlightView {
 
 class IMEDefaultView : public TrayItemMore {
  public:
-  explicit IMEDefaultView(SystemTrayItem* owner, const base::string16& label)
+  IMEDefaultView(SystemTrayItem* owner, const base::string16& label)
       : TrayItemMore(owner, true) {
     if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
-      SetImage(gfx::CreateVectorIcon(gfx::VectorIconId::SYSTEM_MENU_KEYBOARD,
-                                     kMenuIconColor));
+      SetImage(gfx::CreateVectorIcon(kSystemMenuKeyboardIcon, kMenuIconColor));
     } else {
       ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
       SetImage(*bundle.GetImageNamed(IDR_AURA_UBER_TRAY_IME).ToImageSkia());
@@ -87,6 +88,19 @@ class IMEDefaultView : public TrayItemMore {
   void UpdateLabel(const base::string16& label) {
     SetLabel(label);
     SetAccessibleName(label);
+  }
+
+ protected:
+  // TrayItemMore:
+  void UpdateStyle() override {
+    TrayItemMore::UpdateStyle();
+
+    if (!MaterialDesignController::IsSystemTrayMenuMaterial())
+      return;
+
+    std::unique_ptr<TrayPopupItemStyle> style = CreateStyle();
+    SetImage(gfx::CreateVectorIcon(kSystemMenuKeyboardIcon,
+                                   style->GetForegroundColor()));
   }
 
  private:
@@ -118,26 +132,25 @@ class IMEDetailedView : public ImeListView {
     ImeListView::Update(list, property_list, show_keyboard_toggle,
                         single_ime_behavior);
     if (login_ != LoginStatus::NOT_LOGGED_IN && login_ != LoginStatus::LOCKED &&
-        !WmShell::Get()->GetSessionStateDelegate()->IsInSecondaryLoginScreen())
+        !WmShell::Get()
+             ->GetSessionStateDelegate()
+             ->IsInSecondaryLoginScreen()) {
       AppendSettings();
-    AppendHeaderEntry();
+    }
+
+    CreateTitleRow(IDS_ASH_STATUS_TRAY_IME);
   }
 
  private:
   // ImeListView:
-  void OnViewClicked(views::View* sender) override {
-    ImeListView::OnViewClicked(sender);
-    SystemTrayDelegate* delegate = WmShell::Get()->system_tray_delegate();
-    if (sender == footer()->content()) {
-      TransitionToDefaultView();
-    } else if (sender == settings_) {
+  void HandleViewClicked(views::View* view) override {
+    ImeListView::HandleViewClicked(view);
+    if (view == settings_) {
       WmShell::Get()->RecordUserMetricsAction(
           UMA_STATUS_AREA_IME_SHOW_DETAILED);
-      delegate->ShowIMESettings();
+      WmShell::Get()->system_tray_controller()->ShowIMESettings();
     }
   }
-
-  void AppendHeaderEntry() { CreateSpecialRow(IDS_ASH_STATUS_TRAY_IME, this); }
 
   void AppendSettings() {
     HoverHighlightView* container = new HoverHighlightView(this);

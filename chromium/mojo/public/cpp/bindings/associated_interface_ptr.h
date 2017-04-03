@@ -6,6 +6,8 @@
 #define MOJO_PUBLIC_CPP_BINDINGS_ASSOCIATED_INTERFACE_PTR_H_
 
 #include <stdint.h>
+
+#include <string>
 #include <utility>
 
 #include "base/callback.h"
@@ -17,7 +19,10 @@
 #include "mojo/public/cpp/bindings/associated_group.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr_info.h"
 #include "mojo/public/cpp/bindings/associated_interface_request.h"
+#include "mojo/public/cpp/bindings/connection_error_callback.h"
 #include "mojo/public/cpp/bindings/lib/associated_interface_ptr_state.h"
+#include "mojo/public/cpp/bindings/lib/multiplex_router.h"
+#include "mojo/public/cpp/system/message_pipe.h"
 
 namespace mojo {
 
@@ -107,11 +112,24 @@ class AssociatedInterfacePtr {
     internal_state_.RequireVersion(version);
   }
 
+  // Sends a message on the underlying message pipe and runs the current
+  // message loop until its response is received. This can be used in tests to
+  // verify that no message was sent on a message pipe in response to some
+  // stimulus.
+  void FlushForTesting() { internal_state_.FlushForTesting(); }
+
   // Closes the associated interface (if any) and returns the pointer to the
   // unbound state.
   void reset() {
     State doomed;
     internal_state_.Swap(&doomed);
+  }
+
+  // Similar to the method above, but also specifies a disconnect reason.
+  void ResetWithReason(uint32_t custom_reason, const std::string& description) {
+    if (internal_state_.is_bound())
+      internal_state_.SendDisconnectReason(custom_reason, description);
+    reset();
   }
 
   // Indicates whether an error has been encountered. If true, method calls made
@@ -124,6 +142,11 @@ class AssociatedInterfacePtr {
   // bound.
   void set_connection_error_handler(const base::Closure& error_handler) {
     internal_state_.set_connection_error_handler(error_handler);
+  }
+
+  void set_connection_error_with_reason_handler(
+      const ConnectionErrorWithReasonCallback& error_handler) {
+    internal_state_.set_connection_error_with_reason_handler(error_handler);
   }
 
   // Unbinds and returns the associated interface pointer information which
@@ -201,6 +224,18 @@ AssociatedInterfaceRequest<Interface> GetProxy(
 
   ptr->Bind(std::move(ptr_info), std::move(runner));
   return request;
+}
+
+// Creates an associated interface proxy which casts its messages into the void.
+template <typename Interface>
+void GetDummyProxyForTesting(AssociatedInterfacePtr<Interface>* proxy) {
+  MessagePipe pipe;
+  scoped_refptr<internal::MultiplexRouter> router =
+      new internal::MultiplexRouter(std::move(pipe.handle0),
+                                    internal::MultiplexRouter::MULTI_INTERFACE,
+                                    false, base::ThreadTaskRunnerHandle::Get());
+  std::unique_ptr<AssociatedGroup> group = router->CreateAssociatedGroup();
+  GetProxy(proxy, group.get());
 }
 
 }  // namespace mojo

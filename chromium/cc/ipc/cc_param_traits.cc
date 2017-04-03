@@ -568,26 +568,55 @@ void ParamTraits<cc::RenderPass>::Log(const param_type& p, std::string* l) {
   l->append("])");
 }
 
-void ParamTraits<cc::SurfaceId>::GetSize(base::PickleSizer* s,
-                                         const param_type& p) {
+void ParamTraits<cc::FrameSinkId>::GetSize(base::PickleSizer* s,
+                                           const param_type& p) {
   GetParamSize(s, p.client_id());
-  GetParamSize(s, p.local_id());
-  GetParamSize(s, p.nonce());
+  GetParamSize(s, p.sink_id());
 }
 
-void ParamTraits<cc::SurfaceId>::Write(base::Pickle* m, const param_type& p) {
+void ParamTraits<cc::FrameSinkId>::Write(base::Pickle* m, const param_type& p) {
   WriteParam(m, p.client_id());
-  WriteParam(m, p.local_id());
-  WriteParam(m, p.nonce());
+  WriteParam(m, p.sink_id());
 }
 
-bool ParamTraits<cc::SurfaceId>::Read(const base::Pickle* m,
-                                      base::PickleIterator* iter,
-                                      param_type* p) {
+bool ParamTraits<cc::FrameSinkId>::Read(const base::Pickle* m,
+                                        base::PickleIterator* iter,
+                                        param_type* p) {
   uint32_t client_id;
   if (!ReadParam(m, iter, &client_id))
     return false;
 
+  uint32_t sink_id;
+  if (!ReadParam(m, iter, &sink_id))
+    return false;
+
+  *p = cc::FrameSinkId(client_id, sink_id);
+  return true;
+}
+
+void ParamTraits<cc::FrameSinkId>::Log(const param_type& p, std::string* l) {
+  l->append("FrameSinkId(");
+  LogParam(p.client_id(), l);
+  l->append(", ");
+  LogParam(p.sink_id(), l);
+  l->append(")");
+}
+
+void ParamTraits<cc::LocalFrameId>::GetSize(base::PickleSizer* s,
+                                            const param_type& p) {
+  GetParamSize(s, p.local_id());
+  GetParamSize(s, p.nonce());
+}
+
+void ParamTraits<cc::LocalFrameId>::Write(base::Pickle* m,
+                                          const param_type& p) {
+  WriteParam(m, p.local_id());
+  WriteParam(m, p.nonce());
+}
+
+bool ParamTraits<cc::LocalFrameId>::Read(const base::Pickle* m,
+                                         base::PickleIterator* iter,
+                                         param_type* p) {
   uint32_t local_id;
   if (!ReadParam(m, iter, &local_id))
     return false;
@@ -596,17 +625,49 @@ bool ParamTraits<cc::SurfaceId>::Read(const base::Pickle* m,
   if (!ReadParam(m, iter, &nonce))
     return false;
 
-  *p = cc::SurfaceId(client_id, local_id, nonce);
+  *p = cc::LocalFrameId(local_id, nonce);
+  return true;
+}
+
+void ParamTraits<cc::LocalFrameId>::Log(const param_type& p, std::string* l) {
+  l->append("LocalFrameId(");
+  LogParam(p.local_id(), l);
+  l->append(", ");
+  LogParam(p.nonce(), l);
+  l->append(")");
+}
+
+void ParamTraits<cc::SurfaceId>::GetSize(base::PickleSizer* s,
+                                         const param_type& p) {
+  GetParamSize(s, p.frame_sink_id());
+  GetParamSize(s, p.local_frame_id());
+}
+
+void ParamTraits<cc::SurfaceId>::Write(base::Pickle* m, const param_type& p) {
+  WriteParam(m, p.frame_sink_id());
+  WriteParam(m, p.local_frame_id());
+}
+
+bool ParamTraits<cc::SurfaceId>::Read(const base::Pickle* m,
+                                      base::PickleIterator* iter,
+                                      param_type* p) {
+  cc::FrameSinkId frame_sink_id;
+  if (!ReadParam(m, iter, &frame_sink_id))
+    return false;
+
+  cc::LocalFrameId local_frame_id;
+  if (!ReadParam(m, iter, &local_frame_id))
+    return false;
+
+  *p = cc::SurfaceId(frame_sink_id, local_frame_id);
   return true;
 }
 
 void ParamTraits<cc::SurfaceId>::Log(const param_type& p, std::string* l) {
   l->append("SurfaceId(");
-  LogParam(p.client_id(), l);
+  LogParam(p.frame_sink_id(), l);
   l->append(", ");
-  LogParam(p.local_id(), l);
-  l->append(", ");
-  LogParam(p.nonce(), l);
+  LogParam(p.local_frame_id(), l);
   l->append(")");
 }
 
@@ -614,7 +675,6 @@ namespace {
 enum CompositorFrameType {
   NO_FRAME,
   DELEGATED_FRAME,
-  GL_FRAME,
 };
 }
 
@@ -622,12 +682,8 @@ void ParamTraits<cc::CompositorFrame>::Write(base::Pickle* m,
                                              const param_type& p) {
   WriteParam(m, p.metadata);
   if (p.delegated_frame_data) {
-    DCHECK(!p.gl_frame_data);
     WriteParam(m, static_cast<int>(DELEGATED_FRAME));
     WriteParam(m, *p.delegated_frame_data);
-  } else if (p.gl_frame_data) {
-    WriteParam(m, static_cast<int>(GL_FRAME));
-    WriteParam(m, *p.gl_frame_data);
   } else {
     WriteParam(m, static_cast<int>(NO_FRAME));
   }
@@ -649,11 +705,6 @@ bool ParamTraits<cc::CompositorFrame>::Read(const base::Pickle* m,
       if (!ReadParam(m, iter, p->delegated_frame_data.get()))
         return false;
       break;
-    case GL_FRAME:
-      p->gl_frame_data.reset(new cc::GLFrameData());
-      if (!ReadParam(m, iter, p->gl_frame_data.get()))
-        return false;
-      break;
     case NO_FRAME:
       break;
     default:
@@ -669,8 +720,6 @@ void ParamTraits<cc::CompositorFrame>::Log(const param_type& p,
   l->append(", ");
   if (p.delegated_frame_data)
     LogParam(*p.delegated_frame_data, l);
-  else if (p.gl_frame_data)
-    LogParam(*p.gl_frame_data, l);
   l->append(")");
 }
 

@@ -35,7 +35,6 @@
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
-#include "grit/components_strings.h"
 #include "net/base/crypto_module.h"
 #include "net/base/net_errors.h"
 #include "net/cert/x509_certificate.h"
@@ -1038,7 +1037,7 @@ void CertificatesHandler::PopulateTree(
 
   {
     std::unique_ptr<base::ListValue> nodes =
-        base::WrapUnique(new base::ListValue());
+        base::MakeUnique<base::ListValue>();
     for (CertificateManagerModel::OrgGroupingMap::iterator i = map.begin();
          i != map.end(); ++i) {
       // Populate first level (org name).
@@ -1125,7 +1124,7 @@ void CertificatesHandler::RejectCallbackWithImportError(
         IDS_SETTINGS_CERTIFICATE_MANAGER_IMPORT_SOME_NOT_IMPORTED);
 
   std::unique_ptr<base::ListValue> cert_error_list =
-      base::WrapUnique(new base::ListValue());
+      base::MakeUnique<base::ListValue>();
   for (size_t i = 0; i < not_imported.size(); ++i) {
     const net::NSSCertDatabase::ImportCertFailure& failure = not_imported[i];
     std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue);

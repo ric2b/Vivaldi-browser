@@ -18,7 +18,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/media/media_stream_devices_controller.h"
+#include "chrome/browser/media/webrtc/media_stream_devices_controller.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/hotword_service.h"
 #include "chrome/browser/search/hotword_service_factory.h"
@@ -182,15 +182,11 @@ class StartPageService::StartPageWebContentsDelegate
     chrome::ScopedTabbedBrowserDisplayer displayer(profile_);
     // Force all links to open in a new tab, even if they were trying to open a
     // new window.
-    disposition =
-        disposition == NEW_BACKGROUND_TAB ? disposition : NEW_FOREGROUND_TAB;
-    chrome::AddWebContents(displayer.browser(),
-                           nullptr,
-                           new_contents,
-                           disposition,
-                           initial_pos,
-                           user_gesture,
-                           was_blocked);
+    disposition = disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB
+                      ? disposition
+                      : WindowOpenDisposition::NEW_FOREGROUND_TAB;
+    chrome::AddWebContents(displayer.browser(), nullptr, new_contents,
+                           disposition, initial_pos, user_gesture, was_blocked);
   }
 
   content::WebContents* OpenURLFromTab(
@@ -200,10 +196,10 @@ class StartPageService::StartPageWebContentsDelegate
     // window.
     chrome::NavigateParams new_tab_params(
         static_cast<Browser*>(nullptr), params.url, params.transition);
-    if (params.disposition == NEW_BACKGROUND_TAB) {
-      new_tab_params.disposition = NEW_BACKGROUND_TAB;
+    if (params.disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB) {
+      new_tab_params.disposition = WindowOpenDisposition::NEW_BACKGROUND_TAB;
     } else {
-      new_tab_params.disposition = NEW_FOREGROUND_TAB;
+      new_tab_params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
       new_tab_params.window_action = chrome::NavigateParams::SHOW_WINDOW;
     }
 
@@ -332,16 +328,13 @@ StartPageService::StartPageService(Profile* profile)
       search_engine_is_google_(false),
       backoff_entry_(&kDoodleBackoffPolicy),
       weak_factory_(this) {
-  if (switches::IsExperimentalAppListEnabled()) {
-    TemplateURLService* template_url_service =
-        TemplateURLServiceFactory::GetForProfile(profile_);
-    const TemplateURL* default_provider =
-        template_url_service->GetDefaultSearchProvider();
-    search_engine_is_google_ =
-        default_provider->GetEngineType(
-            template_url_service->search_terms_data()) ==
-        SEARCH_ENGINE_GOOGLE;
-  }
+  TemplateURLService* template_url_service =
+      TemplateURLServiceFactory::GetForProfile(profile_);
+  const TemplateURL* default_provider =
+      template_url_service->GetDefaultSearchProvider();
+  search_engine_is_google_ =
+      default_provider->GetEngineType(
+          template_url_service->search_terms_data()) == SEARCH_ENGINE_GOOGLE;
 
   network_change_observer_.reset(new NetworkChangeObserver(this));
 }
@@ -381,15 +374,14 @@ void StartPageService::UpdateRecognitionState() {
 void StartPageService::Init() {
   // Do not load the start page web contents in tests because many tests assume
   // no WebContents exist except the ones they make.
-  if (switches::IsExperimentalAppListEnabled() &&
-      !base::CommandLine::ForCurrentProcess()->HasSwitch(
-          ::switches::kTestType)) {
-    content::BrowserThread::PostDelayedTask(
-        content::BrowserThread::UI, FROM_HERE,
-        base::Bind(&StartPageService::LoadContentsIfNeeded,
-                   weak_factory_.GetWeakPtr()),
-        base::TimeDelta::FromSeconds(kLoadContentsDelaySeconds));
-  }
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(::switches::kTestType))
+    return;
+
+  content::BrowserThread::PostDelayedTask(
+      content::BrowserThread::UI, FROM_HERE,
+      base::Bind(&StartPageService::LoadContentsIfNeeded,
+                 weak_factory_.GetWeakPtr()),
+      base::TimeDelta::FromSeconds(kLoadContentsDelaySeconds));
 }
 
 void StartPageService::LoadContentsIfNeeded() {
@@ -417,9 +409,6 @@ void StartPageService::AppListShown() {
 }
 
 void StartPageService::AppListHidden() {
-  if (!app_list::switches::IsExperimentalAppListEnabled())
-    UnloadContents();
-
   if (speech_recognizer_) {
     StopSpeechRecognition();
   }
@@ -478,8 +467,7 @@ bool StartPageService::HotwordEnabled() {
 }
 
 content::WebContents* StartPageService::GetStartPageContents() {
-  return app_list::switches::IsExperimentalAppListEnabled() ? contents_.get()
-                                                            : NULL;
+  return contents_.get();
 }
 
 content::WebContents* StartPageService::GetSpeechRecognitionContents() {

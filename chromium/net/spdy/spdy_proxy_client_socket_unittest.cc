@@ -17,7 +17,8 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_response_info.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_event_type.h"
+#include "net/log/net_log_source.h"
 #include "net/log/test_net_log.h"
 #include "net/log/test_net_log_entry.h"
 #include "net/log/test_net_log_util.h"
@@ -29,7 +30,9 @@
 #include "net/spdy/spdy_protocol.h"
 #include "net/spdy/spdy_session_pool.h"
 #include "net/spdy/spdy_test_util_common.h"
+#include "net/test/cert_test_util.h"
 #include "net/test/gtest_util.h"
+#include "net/test/test_data_directory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
@@ -180,15 +183,20 @@ void SpdyProxyClientSocketTest::Initialize(MockRead* reads,
   data_.reset(
       new SequencedSocketData(reads, reads_count, writes, writes_count));
   data_->set_connect_data(connect_data_);
-
   session_deps_.socket_factory->AddSocketDataProvider(data_.get());
+
+  SSLSocketDataProvider ssl(SYNCHRONOUS, OK);
+  ssl.cert = ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
+  ASSERT_TRUE(ssl.cert);
+  session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl);
+
   session_deps_.host_resolver->set_synchronous_mode(true);
 
   session_ = SpdySessionDependencies::SpdyCreateSession(&session_deps_);
 
   // Creates the SPDY session and stream.
-  spdy_session_ = CreateInsecureSpdySession(
-      session_.get(), endpoint_spdy_session_key_, BoundNetLog());
+  spdy_session_ = CreateSecureSpdySession(
+      session_.get(), endpoint_spdy_session_key_, NetLogWithSource());
   base::WeakPtr<SpdyStream> spdy_stream(
       CreateStreamSynchronously(
           SPDY_BIDIRECTIONAL_STREAM, spdy_session_, url_, LOWEST,
@@ -1245,35 +1253,38 @@ TEST_F(SpdyProxyClientSocketTest, NetLog) {
   ResumeAndRun();
   AssertSyncReadEquals(kMsg1, kLen1);
 
-  NetLog::Source sock_source = sock_->NetLog().source();
+  NetLogSource sock_source = sock_->NetLog().source();
   sock_.reset();
 
   TestNetLogEntry::List entry_list;
   net_log_.GetEntriesForSource(sock_source, &entry_list);
 
   ASSERT_EQ(entry_list.size(), 10u);
-  EXPECT_TRUE(LogContainsBeginEvent(entry_list, 0, NetLog::TYPE_SOCKET_ALIVE));
+  EXPECT_TRUE(
+      LogContainsBeginEvent(entry_list, 0, NetLogEventType::SOCKET_ALIVE));
   EXPECT_TRUE(LogContainsEvent(entry_list, 1,
-                               NetLog::TYPE_HTTP2_PROXY_CLIENT_SESSION,
-                               NetLog::PHASE_NONE));
-  EXPECT_TRUE(LogContainsBeginEvent(entry_list, 2,
-                  NetLog::TYPE_HTTP_TRANSACTION_TUNNEL_SEND_REQUEST));
-  EXPECT_TRUE(LogContainsEvent(entry_list, 3,
-                  NetLog::TYPE_HTTP_TRANSACTION_SEND_TUNNEL_HEADERS,
-                  NetLog::PHASE_NONE));
-  EXPECT_TRUE(LogContainsEndEvent(entry_list, 4,
-                  NetLog::TYPE_HTTP_TRANSACTION_TUNNEL_SEND_REQUEST));
-  EXPECT_TRUE(LogContainsBeginEvent(entry_list, 5,
-                  NetLog::TYPE_HTTP_TRANSACTION_TUNNEL_READ_HEADERS));
-  EXPECT_TRUE(LogContainsEvent(entry_list, 6,
-                  NetLog::TYPE_HTTP_TRANSACTION_READ_TUNNEL_RESPONSE_HEADERS,
-                  NetLog::PHASE_NONE));
-  EXPECT_TRUE(LogContainsEndEvent(entry_list, 7,
-                  NetLog::TYPE_HTTP_TRANSACTION_TUNNEL_READ_HEADERS));
+                               NetLogEventType::HTTP2_PROXY_CLIENT_SESSION,
+                               NetLogEventPhase::NONE));
+  EXPECT_TRUE(LogContainsBeginEvent(
+      entry_list, 2, NetLogEventType::HTTP_TRANSACTION_TUNNEL_SEND_REQUEST));
+  EXPECT_TRUE(LogContainsEvent(
+      entry_list, 3, NetLogEventType::HTTP_TRANSACTION_SEND_TUNNEL_HEADERS,
+      NetLogEventPhase::NONE));
+  EXPECT_TRUE(LogContainsEndEvent(
+      entry_list, 4, NetLogEventType::HTTP_TRANSACTION_TUNNEL_SEND_REQUEST));
+  EXPECT_TRUE(LogContainsBeginEvent(
+      entry_list, 5, NetLogEventType::HTTP_TRANSACTION_TUNNEL_READ_HEADERS));
+  EXPECT_TRUE(LogContainsEvent(
+      entry_list, 6,
+      NetLogEventType::HTTP_TRANSACTION_READ_TUNNEL_RESPONSE_HEADERS,
+      NetLogEventPhase::NONE));
+  EXPECT_TRUE(LogContainsEndEvent(
+      entry_list, 7, NetLogEventType::HTTP_TRANSACTION_TUNNEL_READ_HEADERS));
   EXPECT_TRUE(LogContainsEvent(entry_list, 8,
-                  NetLog::TYPE_SOCKET_BYTES_RECEIVED,
-                  NetLog::PHASE_NONE));
-  EXPECT_TRUE(LogContainsEndEvent(entry_list, 9, NetLog::TYPE_SOCKET_ALIVE));
+                               NetLogEventType::SOCKET_BYTES_RECEIVED,
+                               NetLogEventPhase::NONE));
+  EXPECT_TRUE(
+      LogContainsEndEvent(entry_list, 9, NetLogEventType::SOCKET_ALIVE));
 
   // Let the RST_STREAM write while |rst| is in-scope.
   base::RunLoop().RunUntilIdle();

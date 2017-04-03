@@ -97,12 +97,40 @@ QuicPacket* BuildUnsizedDataPacket(QuicFramer* framer,
                         header.public_header.packet_number_length);
 }
 
+QuicFlagSaver::QuicFlagSaver() {
+#define QUIC_FLAG(type, flag, value) CHECK_EQ(value, flag);
+#include "net/quic/core/quic_flags_list.h"
+#undef QUIC_FLAG
+}
+
+QuicFlagSaver::~QuicFlagSaver() {
+#define QUIC_FLAG(type, flag, value) flag = value;
+#include "net/quic/core/quic_flags_list.h"
+#undef QUIC_FLAG
+}
+
 uint64_t SimpleRandom::RandUint64() {
   unsigned char hash[base::kSHA1Length];
   base::SHA1HashBytes(reinterpret_cast<unsigned char*>(&seed_), sizeof(seed_),
                       hash);
   memcpy(&seed_, hash, sizeof(seed_));
   return seed_;
+}
+
+void SimpleRandom::RandBytes(void* data, size_t len) {
+  uint8_t* real_data = static_cast<uint8_t*>(data);
+  for (size_t offset = 0; offset < len; offset++) {
+    real_data[offset] = RandUint64() & 0xff;
+  }
+}
+
+void SimpleRandom::Reseed(const void* additional_entropy, size_t len) {
+  const uint8_t* real_entropy = static_cast<const uint8_t*>(additional_entropy);
+  for (size_t offset = 0; offset < len; offset++) {
+    // Note: this is not actually a well-established way to incorporate new
+    // entropy, but good enough for tests.
+    seed_ *= real_entropy[len];
+  }
 }
 
 MockFramerVisitor::MockFramerVisitor() {
@@ -406,7 +434,7 @@ TestQuicSpdyServerSession::CreateQuicCryptoServerStream(
     QuicCompressedCertsCache* compressed_certs_cache) {
   return new QuicCryptoServerStream(crypto_config, compressed_certs_cache,
                                     FLAGS_enable_quic_stateless_reject_support,
-                                    this);
+                                    this, &helper_);
 }
 
 QuicCryptoServerStream* TestQuicSpdyServerSession::GetCryptoStream() {

@@ -16,6 +16,7 @@
 #include "cc/layers/solid_color_scrollbar_layer.h"
 #include "cc/layers/solid_color_scrollbar_layer_impl.h"
 #include "cc/quads/solid_color_draw_quad.h"
+#include "cc/resources/ui_resource_manager.h"
 #include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_host.h"
 #include "cc/test/fake_layer_tree_host_client.h"
@@ -42,17 +43,13 @@
 namespace cc {
 namespace {
 
-class FakeResourceTrackingLayerTreeHost : public FakeLayerTreeHost {
+class FakeResourceTrackingUIResourceManager : public UIResourceManager {
  public:
-  FakeResourceTrackingLayerTreeHost(FakeLayerTreeHostClient* client,
-                                    LayerTreeHost::InitParams* params)
-      : FakeLayerTreeHost(client, params, CompositorMode::SINGLE_THREADED),
-        next_id_(1),
+  FakeResourceTrackingUIResourceManager()
+      : next_id_(1),
         total_ui_resource_created_(0),
-        total_ui_resource_deleted_(0) {
-    InitializeSingleThreaded(&single_thread_client_,
-                             base::ThreadTaskRunnerHandle::Get(), nullptr);
-  }
+        total_ui_resource_deleted_(0) {}
+  ~FakeResourceTrackingUIResourceManager() override = default;
 
   UIResourceId CreateUIResource(UIResourceClient* content) override {
     total_ui_resource_created_++;
@@ -113,21 +110,27 @@ class ScrollbarLayerTest : public testing::Test {
 
     scrollbar_layer_id_ = -1;
 
-    LayerTreeHost::InitParams params;
+    LayerTreeHostInProcess::InitParams params;
     params.client = &fake_client_;
     params.settings = &layer_tree_settings_;
     params.task_graph_runner = &task_graph_runner_;
     params.animation_host =
         AnimationHost::CreateForTesting(ThreadInstance::MAIN);
 
-    layer_tree_host_.reset(
-        new FakeResourceTrackingLayerTreeHost(&fake_client_, &params));
+    std::unique_ptr<FakeResourceTrackingUIResourceManager>
+        fake_ui_resource_manager =
+            base::MakeUnique<FakeResourceTrackingUIResourceManager>();
+    fake_ui_resource_manager_ = fake_ui_resource_manager.get();
+
+    layer_tree_host_.reset(new FakeLayerTreeHost(
+        &fake_client_, &params, CompositorMode::SINGLE_THREADED));
+    layer_tree_host_->SetUIResourceManagerForTesting(
+        std::move(fake_ui_resource_manager));
+    layer_tree_host_->InitializeSingleThreaded(
+        &single_thread_client_, base::ThreadTaskRunnerHandle::Get());
     layer_tree_ = layer_tree_host_->GetLayerTree();
     layer_tree_host_->SetVisible(true);
     fake_client_.SetLayerTreeHost(layer_tree_host_.get());
-    // Force output surface creation for renderer capabilities.
-    layer_tree_host_->Composite(base::TimeTicks());
-    EXPECT_FALSE(layer_tree_host_->output_surface_lost());
   }
 
   LayerImpl* LayerImplForScrollAreaAndScrollbar(
@@ -158,10 +161,12 @@ class ScrollbarLayerTest : public testing::Test {
   }
 
  protected:
+  FakeResourceTrackingUIResourceManager* fake_ui_resource_manager_;
   FakeLayerTreeHostClient fake_client_;
+  StubLayerTreeHostSingleThreadClient single_thread_client_;
   TestTaskGraphRunner task_graph_runner_;
   LayerTreeSettings layer_tree_settings_;
-  std::unique_ptr<FakeResourceTrackingLayerTreeHost> layer_tree_host_;
+  std::unique_ptr<FakeLayerTreeHost> layer_tree_host_;
   LayerTree* layer_tree_;
   int scrollbar_layer_id_;
 };
@@ -776,16 +781,19 @@ class ScrollbarLayerTestResourceCreationAndRelease : public ScrollbarLayerTest {
     scrollbar_layer->set_visible_layer_rect(gfx::Rect(0, 0, 100, 200));
 
     testing::Mock::VerifyAndClearExpectations(layer_tree_host_.get());
-    EXPECT_EQ(scrollbar_layer->layer_tree_host(), layer_tree_host_.get());
+    EXPECT_EQ(scrollbar_layer->GetLayerTreeHostForTesting(),
+              layer_tree_host_.get());
 
     scrollbar_layer->SavePaintProperties();
     for (int update_counter = 0; update_counter < num_updates; update_counter++)
       scrollbar_layer->Update();
 
     // A non-solid-color scrollbar should have requested two textures.
-    EXPECT_EQ(expected_resources, layer_tree_host_->UIResourceCount());
-    EXPECT_EQ(expected_created, layer_tree_host_->TotalUIResourceCreated());
-    EXPECT_EQ(expected_deleted, layer_tree_host_->TotalUIResourceDeleted());
+    EXPECT_EQ(expected_resources, fake_ui_resource_manager_->UIResourceCount());
+    EXPECT_EQ(expected_created,
+              fake_ui_resource_manager_->TotalUIResourceCreated());
+    EXPECT_EQ(expected_deleted,
+              fake_ui_resource_manager_->TotalUIResourceDeleted());
 
     testing::Mock::VerifyAndClearExpectations(layer_tree_host_.get());
   }
@@ -832,7 +840,8 @@ TEST_F(ScrollbarLayerTestResourceCreationAndRelease, TestResourceUpdate) {
   scrollbar_layer->set_visible_layer_rect(gfx::Rect(0, 0, 100, 200));
 
   testing::Mock::VerifyAndClearExpectations(layer_tree_host_.get());
-  EXPECT_EQ(scrollbar_layer->layer_tree_host(), layer_tree_host_.get());
+  EXPECT_EQ(scrollbar_layer->GetLayerTreeHostForTesting(),
+            layer_tree_host_.get());
 
   size_t resource_count;
   int expected_created, expected_deleted;
@@ -844,9 +853,11 @@ TEST_F(ScrollbarLayerTestResourceCreationAndRelease, TestResourceUpdate) {
   EXPECT_TRUE(scrollbar_layer->Update());
   EXPECT_NE(0, scrollbar_layer->track_resource_id());
   EXPECT_NE(0, scrollbar_layer->thumb_resource_id());
-  EXPECT_EQ(resource_count, layer_tree_host_->UIResourceCount());
-  EXPECT_EQ(expected_created, layer_tree_host_->TotalUIResourceCreated());
-  EXPECT_EQ(expected_deleted, layer_tree_host_->TotalUIResourceDeleted());
+  EXPECT_EQ(resource_count, fake_ui_resource_manager_->UIResourceCount());
+  EXPECT_EQ(expected_created,
+            fake_ui_resource_manager_->TotalUIResourceCreated());
+  EXPECT_EQ(expected_deleted,
+            fake_ui_resource_manager_->TotalUIResourceDeleted());
 
   resource_count = 0;
   expected_created = 2;
@@ -856,9 +867,11 @@ TEST_F(ScrollbarLayerTestResourceCreationAndRelease, TestResourceUpdate) {
   EXPECT_TRUE(scrollbar_layer->Update());
   EXPECT_EQ(0, scrollbar_layer->track_resource_id());
   EXPECT_EQ(0, scrollbar_layer->thumb_resource_id());
-  EXPECT_EQ(resource_count, layer_tree_host_->UIResourceCount());
-  EXPECT_EQ(expected_created, layer_tree_host_->TotalUIResourceCreated());
-  EXPECT_EQ(expected_deleted, layer_tree_host_->TotalUIResourceDeleted());
+  EXPECT_EQ(resource_count, fake_ui_resource_manager_->UIResourceCount());
+  EXPECT_EQ(expected_created,
+            fake_ui_resource_manager_->TotalUIResourceCreated());
+  EXPECT_EQ(expected_deleted,
+            fake_ui_resource_manager_->TotalUIResourceDeleted());
 
   resource_count = 0;
   expected_created = 2;
@@ -867,9 +880,11 @@ TEST_F(ScrollbarLayerTestResourceCreationAndRelease, TestResourceUpdate) {
   EXPECT_FALSE(scrollbar_layer->Update());
   EXPECT_EQ(0, scrollbar_layer->track_resource_id());
   EXPECT_EQ(0, scrollbar_layer->thumb_resource_id());
-  EXPECT_EQ(resource_count, layer_tree_host_->UIResourceCount());
-  EXPECT_EQ(expected_created, layer_tree_host_->TotalUIResourceCreated());
-  EXPECT_EQ(expected_deleted, layer_tree_host_->TotalUIResourceDeleted());
+  EXPECT_EQ(resource_count, fake_ui_resource_manager_->UIResourceCount());
+  EXPECT_EQ(expected_created,
+            fake_ui_resource_manager_->TotalUIResourceCreated());
+  EXPECT_EQ(expected_deleted,
+            fake_ui_resource_manager_->TotalUIResourceDeleted());
 
   resource_count = 2;
   expected_created = 4;
@@ -879,9 +894,11 @@ TEST_F(ScrollbarLayerTestResourceCreationAndRelease, TestResourceUpdate) {
   EXPECT_TRUE(scrollbar_layer->Update());
   EXPECT_NE(0, scrollbar_layer->track_resource_id());
   EXPECT_NE(0, scrollbar_layer->thumb_resource_id());
-  EXPECT_EQ(resource_count, layer_tree_host_->UIResourceCount());
-  EXPECT_EQ(expected_created, layer_tree_host_->TotalUIResourceCreated());
-  EXPECT_EQ(expected_deleted, layer_tree_host_->TotalUIResourceDeleted());
+  EXPECT_EQ(resource_count, fake_ui_resource_manager_->UIResourceCount());
+  EXPECT_EQ(expected_created,
+            fake_ui_resource_manager_->TotalUIResourceCreated());
+  EXPECT_EQ(expected_deleted,
+            fake_ui_resource_manager_->TotalUIResourceDeleted());
 
   resource_count = 1;
   expected_created = 5;
@@ -890,9 +907,11 @@ TEST_F(ScrollbarLayerTestResourceCreationAndRelease, TestResourceUpdate) {
   EXPECT_TRUE(scrollbar_layer->Update());
   EXPECT_NE(0, scrollbar_layer->track_resource_id());
   EXPECT_EQ(0, scrollbar_layer->thumb_resource_id());
-  EXPECT_EQ(resource_count, layer_tree_host_->UIResourceCount());
-  EXPECT_EQ(expected_created, layer_tree_host_->TotalUIResourceCreated());
-  EXPECT_EQ(expected_deleted, layer_tree_host_->TotalUIResourceDeleted());
+  EXPECT_EQ(resource_count, fake_ui_resource_manager_->UIResourceCount());
+  EXPECT_EQ(expected_created,
+            fake_ui_resource_manager_->TotalUIResourceCreated());
+  EXPECT_EQ(expected_deleted,
+            fake_ui_resource_manager_->TotalUIResourceDeleted());
 
   resource_count = 0;
   expected_created = 5;
@@ -902,9 +921,11 @@ TEST_F(ScrollbarLayerTestResourceCreationAndRelease, TestResourceUpdate) {
   EXPECT_TRUE(scrollbar_layer->Update());
   EXPECT_EQ(0, scrollbar_layer->track_resource_id());
   EXPECT_EQ(0, scrollbar_layer->thumb_resource_id());
-  EXPECT_EQ(resource_count, layer_tree_host_->UIResourceCount());
-  EXPECT_EQ(expected_created, layer_tree_host_->TotalUIResourceCreated());
-  EXPECT_EQ(expected_deleted, layer_tree_host_->TotalUIResourceDeleted());
+  EXPECT_EQ(resource_count, fake_ui_resource_manager_->UIResourceCount());
+  EXPECT_EQ(expected_created,
+            fake_ui_resource_manager_->TotalUIResourceCreated());
+  EXPECT_EQ(expected_deleted,
+            fake_ui_resource_manager_->TotalUIResourceDeleted());
 
   resource_count = 2;
   expected_created = 7;
@@ -923,9 +944,11 @@ TEST_F(ScrollbarLayerTestResourceCreationAndRelease, TestResourceUpdate) {
   EXPECT_TRUE(scrollbar_layer->Update());
   EXPECT_NE(0, scrollbar_layer->track_resource_id());
   EXPECT_NE(0, scrollbar_layer->thumb_resource_id());
-  EXPECT_EQ(resource_count, layer_tree_host_->UIResourceCount());
-  EXPECT_EQ(expected_created, layer_tree_host_->TotalUIResourceCreated());
-  EXPECT_EQ(expected_deleted, layer_tree_host_->TotalUIResourceDeleted());
+  EXPECT_EQ(resource_count, fake_ui_resource_manager_->UIResourceCount());
+  EXPECT_EQ(expected_created,
+            fake_ui_resource_manager_->TotalUIResourceCreated());
+  EXPECT_EQ(expected_deleted,
+            fake_ui_resource_manager_->TotalUIResourceDeleted());
 
   resource_count = 1;
   expected_created = 10;
@@ -934,20 +957,23 @@ TEST_F(ScrollbarLayerTestResourceCreationAndRelease, TestResourceUpdate) {
   scrollbar_layer->fake_scrollbar()->set_has_thumb(false);
   scrollbar_layer->SetBounds(gfx::Size(90, 15));
   EXPECT_TRUE(scrollbar_layer->Update());
-  EXPECT_EQ(resource_count, layer_tree_host_->UIResourceCount());
-  EXPECT_EQ(expected_created, layer_tree_host_->TotalUIResourceCreated());
-  EXPECT_EQ(expected_deleted, layer_tree_host_->TotalUIResourceDeleted());
-  EXPECT_EQ(
-      gfx::Size(90, 15),
-      layer_tree_host_->ui_resource_size(scrollbar_layer->track_resource_id()));
+  EXPECT_EQ(resource_count, fake_ui_resource_manager_->UIResourceCount());
+  EXPECT_EQ(expected_created,
+            fake_ui_resource_manager_->TotalUIResourceCreated());
+  EXPECT_EQ(expected_deleted,
+            fake_ui_resource_manager_->TotalUIResourceDeleted());
+  EXPECT_EQ(gfx::Size(90, 15), fake_ui_resource_manager_->ui_resource_size(
+                                   scrollbar_layer->track_resource_id()));
 
   scrollbar_layer->ResetNeedsDisplayForTesting();
   EXPECT_FALSE(scrollbar_layer->Update());
   EXPECT_NE(0, scrollbar_layer->track_resource_id());
   EXPECT_EQ(0, scrollbar_layer->thumb_resource_id());
-  EXPECT_EQ(resource_count, layer_tree_host_->UIResourceCount());
-  EXPECT_EQ(expected_created, layer_tree_host_->TotalUIResourceCreated());
-  EXPECT_EQ(expected_deleted, layer_tree_host_->TotalUIResourceDeleted());
+  EXPECT_EQ(resource_count, fake_ui_resource_manager_->UIResourceCount());
+  EXPECT_EQ(expected_created,
+            fake_ui_resource_manager_->TotalUIResourceCreated());
+  EXPECT_EQ(expected_deleted,
+            fake_ui_resource_manager_->TotalUIResourceDeleted());
 
   testing::Mock::VerifyAndClearExpectations(layer_tree_host_.get());
 }
@@ -974,7 +1000,8 @@ class ScaledScrollbarLayerTestResourceCreation : public ScrollbarLayerTest {
     scrollbar_layer->set_visible_layer_rect(
         gfx::Rect(scrollbar_location, scrollbar_layer->bounds()));
 
-    EXPECT_EQ(scrollbar_layer->layer_tree_host(), layer_tree_host_.get());
+    EXPECT_EQ(scrollbar_layer->GetLayerTreeHostForTesting(),
+              layer_tree_host_.get());
 
     layer_tree_->SetDeviceScaleFactor(test_scale);
 
@@ -984,9 +1011,9 @@ class ScaledScrollbarLayerTestResourceCreation : public ScrollbarLayerTest {
     // Verify that we have not generated any content uploads that are larger
     // than their destination textures.
 
-    gfx::Size track_size = layer_tree_host_->ui_resource_size(
+    gfx::Size track_size = fake_ui_resource_manager_->ui_resource_size(
         scrollbar_layer->track_resource_id());
-    gfx::Size thumb_size = layer_tree_host_->ui_resource_size(
+    gfx::Size thumb_size = fake_ui_resource_manager_->ui_resource_size(
         scrollbar_layer->thumb_resource_id());
 
     EXPECT_LE(track_size.width(),
@@ -1010,9 +1037,13 @@ TEST_F(ScaledScrollbarLayerTestResourceCreation, ScaledResourceUpload) {
   // Try something extreme to be larger than max texture size, and make it a
   // non-integer for funsies.
   scoped_refptr<TestContextProvider> context = TestContextProvider::Create();
+  // Keep the max texture size reasonable so we don't OOM on low end devices
+  // (crbug.com/642333).
+  context->UnboundTestContext3d()->set_max_texture_size(512);
   context->BindToCurrentThread();
   int max_texture_size = 0;
   context->ContextGL()->GetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size);
+  EXPECT_EQ(512, max_texture_size);
   TestResourceUpload(max_texture_size / 9.9f);
 }
 
@@ -1043,7 +1074,7 @@ class ScaledScrollbarLayerTestScaledRasterization : public ScrollbarLayerTest {
 
     scrollbar_layer->Update();
 
-    UIResourceBitmap* bitmap = layer_tree_host_->ui_resource_bitmap(
+    UIResourceBitmap* bitmap = fake_ui_resource_manager_->ui_resource_bitmap(
         scrollbar_layer->track_resource_id());
 
     DCHECK(bitmap);

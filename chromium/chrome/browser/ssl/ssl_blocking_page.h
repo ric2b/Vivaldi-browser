@@ -36,8 +36,8 @@ class SSLErrorUI;
 }
 
 class CertReportHelper;
-class ChromeControllerClient;
 class SSLUITest;
+class ChromeMetricsHelper;
 
 // This class is responsible for showing/hiding the interstitial page that is
 // shown when a certificate error happens.
@@ -53,15 +53,18 @@ class SSLBlockingPage : public SecurityInterstitialPage {
   // is responsible for cleaning up the blocking page, otherwise the
   // interstitial takes ownership when shown. |options_mask| must be a bitwise
   // mask of SSLErrorUI::SSLErrorOptionsMask values.
-  SSLBlockingPage(content::WebContents* web_contents,
-                  int cert_error,
-                  const net::SSLInfo& ssl_info,
-                  const GURL& request_url,
-                  int options_mask,
-                  const base::Time& time_triggered,
-                  std::unique_ptr<SSLCertReporter> ssl_cert_reporter,
-                  const base::Callback<
-                      void(content::CertificateRequestResultType)>& callback);
+  // This is static because the constructor uses expensive to compute parameters
+  // more than once (e.g. overrideable).
+  static SSLBlockingPage* Create(
+      content::WebContents* web_contents,
+      int cert_error,
+      const net::SSLInfo& ssl_info,
+      const GURL& request_url,
+      int options_mask,
+      const base::Time& time_triggered,
+      std::unique_ptr<SSLCertReporter> ssl_cert_reporter,
+      const base::Callback<void(content::CertificateRequestResultType)>&
+          callback);
 
   // InterstitialPageDelegate method:
   InterstitialPageDelegate::TypeID GetTypeForTesting() const override;
@@ -88,9 +91,21 @@ class SSLBlockingPage : public SecurityInterstitialPage {
   bool ShouldCreateNewNavigation() const override;
   void PopulateInterstitialStrings(
       base::DictionaryValue* load_time_data) override;
-  void AfterShow() override;
 
  private:
+  SSLBlockingPage(
+      content::WebContents* web_contents,
+      int cert_error,
+      const net::SSLInfo& ssl_info,
+      const GURL& request_url,
+      int options_mask,
+      const base::Time& time_triggered,
+      std::unique_ptr<SSLCertReporter> ssl_cert_reporter,
+      bool overrideable,
+      std::unique_ptr<ChromeMetricsHelper> metrics_helper,
+      const base::Callback<void(content::CertificateRequestResultType)>&
+          callback);
+
   void NotifyDenyCertificate();
 
   base::Callback<void(content::CertificateRequestResultType)> callback_;
@@ -101,7 +116,6 @@ class SSLBlockingPage : public SecurityInterstitialPage {
   // expired.
   const bool expired_but_previously_allowed_;
 
-  std::unique_ptr<ChromeControllerClient> controller_;
   std::unique_ptr<security_interstitials::SSLErrorUI> ssl_error_ui_;
   std::unique_ptr<CertReportHelper> cert_report_helper_;
 

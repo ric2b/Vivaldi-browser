@@ -10,7 +10,6 @@
 syntax = "proto2";
 
 option optimize_for = LITE_RUNTIME;
-option retain_unknown_fields = true;
 
 package sync_pb;
 
@@ -140,4 +139,10 @@ message NigoriSpecifics {
 
   // Boolean corresponding to whether arc pakcage items should be encrypted.
   optional bool encrypt_arc_package = 41;
+
+  // Boolean corresponding to whether printer items should be encrypted.
+  optional bool encrypt_printers = 42;
+
+  // Boolean corresponding to whether reading list items should be encrypted.
+  optional bool encrypt_reading_list = 43;
 }

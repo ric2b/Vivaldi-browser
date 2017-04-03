@@ -12,6 +12,7 @@ import android.support.annotation.StringDef;
 import org.chromium.base.Log;
 import org.chromium.base.StreamUtil;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 
@@ -35,11 +36,16 @@ public class MinidumpUploadService extends IntentService {
     @VisibleForTesting
     static final String ACTION_UPLOAD = "com.google.android.apps.chrome.crash.ACTION_UPLOAD";
 
+    @VisibleForTesting
+    static final String ACTION_FORCE_UPLOAD =
+            "com.google.android.apps.chrome.crash.ACTION_FORCE_UPLOAD";
+
     // Intent bundle keys
     @VisibleForTesting
     static final String FILE_TO_UPLOAD_KEY = "minidump_file";
     static final String UPLOAD_LOG_KEY = "upload_log";
     static final String FINISHED_LOGCAT_EXTRACTION_KEY = "upload_extraction_completed";
+    static final String LOCAL_CRASH_ID_KEY = "local_id";
 
     /**
      * The number of times we will try to upload a crash.
@@ -101,6 +107,8 @@ public class MinidumpUploadService extends IntentService {
             handleFindAndUploadAllCrashes();
         } else if (ACTION_UPLOAD.equals(intent.getAction())) {
             handleUploadCrash(intent);
+        } else if (ACTION_FORCE_UPLOAD.equals(intent.getAction())) {
+            handleForceUploadCrash(intent);
         } else {
             Log.w(TAG, "Got unknown action from intent: " + intent.getAction());
         }
@@ -342,5 +350,55 @@ public class MinidumpUploadService extends IntentService {
     public static void tryUploadAllCrashDumps(Context context) {
         Intent findAndUploadAllCrashesIntent = createFindAndUploadAllCrashesIntent(context);
         context.startService(findAndUploadAllCrashesIntent);
+    }
+
+    /**
+     * Attempts to upload the crash report with the given local ID.
+     *
+     * Note that this method is asynchronous. All that is guaranteed is that
+     * upload attempts will be enqueued.
+     *
+     * This method is safe to call from the UI thread.
+     *
+     * @param context the context to use for the intent.
+     * @param localId The local ID of the crash report.
+     */
+    @CalledByNative
+    public static void tryUploadCrashDumpWithLocalId(Context context, String localId) {
+        Intent intent = new Intent(context, MinidumpUploadService.class);
+        intent.setAction(ACTION_FORCE_UPLOAD);
+        intent.putExtra(LOCAL_CRASH_ID_KEY, localId);
+        context.startService(intent);
+    }
+
+    private void handleForceUploadCrash(Intent intent) {
+        String localId = intent.getStringExtra(LOCAL_CRASH_ID_KEY);
+        if (localId == null || localId.isEmpty()) {
+            Log.w(TAG, "Cannot force crash upload since local crash id is absent.");
+            return;
+        }
+
+        Context context = getApplicationContext();
+        CrashFileManager fileManager = new CrashFileManager(context.getCacheDir());
+        File minidumpFile = fileManager.getCrashFileWithLocalId(localId);
+        if (minidumpFile == null) {
+            Log.w(TAG, "Could not find a crash dump with local ID " + localId);
+            return;
+        }
+        File renamedMinidumpFile = fileManager.trySetForcedUpload(minidumpFile);
+        if (renamedMinidumpFile == null) {
+            Log.w(TAG, "Could not rename the file " + minidumpFile.getName() + " for re-upload");
+            return;
+        }
+        File logfile = fileManager.getCrashUploadLogFile();
+        Intent uploadIntent = createUploadIntent(context, renamedMinidumpFile, logfile);
+
+        // This method is intended to be used for manually triggering an attempt to upload an
+        // already existing crash dump. Such a crash dump should already have had a chance to attach
+        // the logcat to the minidump. Moreover, it's almost certainly too late to try to extract
+        // the logcat now, since typically some time has passed between the crash and the user's
+        // manual upload attempt.
+        uploadIntent.putExtra(FINISHED_LOGCAT_EXTRACTION_KEY, true);
+        startService(uploadIntent);
     }
 }

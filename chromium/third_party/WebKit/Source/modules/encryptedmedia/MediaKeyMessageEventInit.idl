@@ -5,6 +5,6 @@
 // https://w3c.github.io/encrypted-media/#mediakeymessageevent
 
 dictionary MediaKeyMessageEventInit : EventInit {
-    MediaKeyMessageType messageType = "license-request";
-    ArrayBuffer message;
+    required MediaKeyMessageType messageType;
+    required ArrayBuffer message;
 };

@@ -20,7 +20,7 @@ QuicServerSessionBase::QuicServerSessionBase(
     const QuicConfig& config,
     QuicConnection* connection,
     Visitor* visitor,
-    Helper* helper,
+    QuicCryptoServerStream::Helper* helper,
     const QuicCryptoServerConfig* crypto_config,
     QuicCompressedCertsCache* compressed_certs_cache)
     : QuicSpdySession(connection, config),
@@ -31,8 +31,7 @@ QuicServerSessionBase::QuicServerSessionBase(
       bandwidth_resumption_enabled_(false),
       bandwidth_estimate_sent_to_client_(QuicBandwidth::Zero()),
       last_scup_time_(QuicTime::Zero()),
-      last_scup_packet_number_(0),
-      server_push_enabled_(false) {}
+      last_scup_packet_number_(0) {}
 
 QuicServerSessionBase::~QuicServerSessionBase() {}
 
@@ -56,8 +55,12 @@ void QuicServerSessionBase::OnConfigNegotiated() {
       ContainsQuicTag(config()->ReceivedConnectionOptions(), kBWMX);
   bandwidth_resumption_enabled_ =
       last_bandwidth_resumption || max_bandwidth_resumption;
-  server_push_enabled_ =
-      ContainsQuicTag(config()->ReceivedConnectionOptions(), kSPSH);
+
+  if (!FLAGS_quic_enable_server_push_by_default ||
+      connection()->version() < QUIC_VERSION_35) {
+    set_server_push_enabled(
+        ContainsQuicTag(config()->ReceivedConnectionOptions(), kSPSH));
+  }
 
   // If the client has provided a bandwidth estimate from the same serving
   // region as this server, then decide whether to use the data for bandwidth
@@ -196,18 +199,6 @@ void QuicServerSessionBase::OnCongestionWindowChange(QuicTime now) {
 
   last_scup_time_ = now;
   last_scup_packet_number_ = connection()->packet_number_of_last_sent_packet();
-}
-
-QuicConnectionId QuicServerSessionBase::GenerateConnectionIdForReject(
-    QuicConnectionId connection_id) {
-  return helper_->GenerateConnectionIdForReject(connection_id);
-}
-
-bool QuicServerSessionBase::CanAcceptClientHello(
-    const CryptoHandshakeMessage& message,
-    string* error_details) {
-  return helper_->CanAcceptClientHello(message, connection()->self_address(),
-                                       error_details);
 }
 
 bool QuicServerSessionBase::ShouldCreateIncomingDynamicStream(QuicStreamId id) {

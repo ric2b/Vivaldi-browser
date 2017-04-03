@@ -24,7 +24,6 @@
 #include "net/base/net_errors.h"
 #include "net/cookies/cookie_options.h"
 #include "net/http/http_status_code.h"
-#include "net/log/net_log.h"
 #include "net/url_request/url_request.h"
 
 namespace {
@@ -51,15 +50,15 @@ void ReportInvalidReferrerSend(const GURL& target_url,
 
 // Record network errors that HTTP requests complete with, including OK and
 // ABORTED.
-void RecordNetworkErrorHistograms(const net::URLRequest* request) {
+void RecordNetworkErrorHistograms(const net::URLRequest* request,
+                                  int net_error) {
   if (request->url().SchemeIs("http")) {
     UMA_HISTOGRAM_SPARSE_SLOWLY("Net.HttpRequestCompletionErrorCodes",
-                                std::abs(request->status().error()));
+                                std::abs(net_error));
 
-    if (request->load_flags() & net::LOAD_MAIN_FRAME) {
+    if (request->load_flags() & net::LOAD_MAIN_FRAME_DEPRECATED) {
       UMA_HISTOGRAM_SPARSE_SLOWLY(
-          "Net.HttpRequestCompletionErrorCodes.MainFrame",
-          std::abs(request->status().error()));
+          "Net.HttpRequestCompletionErrorCodes.MainFrame", std::abs(net_error));
     }
   }
 }
@@ -109,8 +108,9 @@ int IOSChromeNetworkDelegate::OnBeforeURLRequest(
 }
 
 void IOSChromeNetworkDelegate::OnCompleted(net::URLRequest* request,
-                                           bool started) {
-  RecordNetworkErrorHistograms(request);
+                                           bool started,
+                                           int net_error) {
+  RecordNetworkErrorHistograms(request, net_error);
 }
 
 net::NetworkDelegate::AuthRequiredResponse

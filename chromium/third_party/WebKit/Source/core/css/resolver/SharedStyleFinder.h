@@ -1,7 +1,8 @@
 /*
  * Copyright (C) 2013 Google, Inc.
  * Copyright (C) 1999 Lars Knoll (knoll@kde.org)
- * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011 Apple Inc. All rights reserved.
+ * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011 Apple Inc.
+ * All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -35,51 +36,55 @@ class SpaceSplitString;
 class StyleResolver;
 
 class CORE_EXPORT SharedStyleFinder {
-    STACK_ALLOCATED();
-public:
-    // RuleSets are passed non-const as the act of matching against them can cause them
-    // to be compacted. :(
-    SharedStyleFinder(const ElementResolveContext& context,
-        const RuleFeatureSet& features, RuleSet* siblingRuleSet,
-        RuleSet* uncommonAttributeRuleSet, StyleResolver& styleResolver)
-        : m_elementAffectedByClassRules(false)
-        , m_features(features)
-        , m_siblingRuleSet(siblingRuleSet)
-        , m_uncommonAttributeRuleSet(uncommonAttributeRuleSet)
-        , m_styleResolver(&styleResolver)
-        , m_context(context)
-    { }
+  STACK_ALLOCATED();
 
-    ComputedStyle* findSharedStyle();
+ public:
+  // RuleSets are passed non-const as the act of matching against them can cause
+  // them to be compacted. :(
+  SharedStyleFinder(const ElementResolveContext& context,
+                    const RuleFeatureSet& features,
+                    RuleSet* siblingRuleSet,
+                    RuleSet* uncommonAttributeRuleSet,
+                    StyleResolver& styleResolver)
+      : m_elementAffectedByClassRules(false),
+        m_features(features),
+        m_siblingRuleSet(siblingRuleSet),
+        m_uncommonAttributeRuleSet(uncommonAttributeRuleSet),
+        m_styleResolver(&styleResolver),
+        m_context(context) {}
 
-private:
-    Element* findElementForStyleSharing() const;
+  ComputedStyle* findSharedStyle();
 
-    // Only used when we're collecting stats on styles.
-    bool documentContainsValidCandidate() const;
+ private:
+  Element* findElementForStyleSharing() const;
 
-    bool classNamesAffectedByRules(const SpaceSplitString&) const;
+  // Only used when we're collecting stats on styles.
+  bool documentContainsValidCandidate() const;
 
-    bool canShareStyleWithElement(Element& candidate) const;
-    bool canShareStyleWithControl(Element& candidate) const;
-    bool sharingCandidateHasIdenticalStyleAffectingAttributes(Element& candidate) const;
-    bool sharingCandidateCanShareHostStyles(Element& candidate) const;
-    bool sharingCandidateDistributedToSameInsertionPoint(Element& candidate) const;
-    bool matchesRuleSet(RuleSet*);
+  bool classNamesAffectedByRules(const SpaceSplitString&) const;
 
-    Element& element() const { return *m_context.element(); }
-    Document& document() const { return element().document(); }
+  bool canShareStyleWithElement(Element& candidate) const;
+  bool canShareStyleWithControl(Element& candidate) const;
+  bool sharingCandidateHasIdenticalStyleAffectingAttributes(
+      Element& candidate) const;
+  bool sharingCandidateCanShareHostStyles(Element& candidate) const;
+  bool sharingCandidateDistributedToSameInsertionPoint(
+      Element& candidate) const;
+  bool matchesRuleSet(RuleSet*);
 
-    bool m_elementAffectedByClassRules;
-    const RuleFeatureSet& m_features;
-    Member<RuleSet> m_siblingRuleSet;
-    Member<RuleSet> m_uncommonAttributeRuleSet;
-    Member<StyleResolver> m_styleResolver;
-    const ElementResolveContext& m_context;
+  Element& element() const { return *m_context.element(); }
+  Document& document() const { return element().document(); }
 
-    friend class SharedStyleFinderTest;
+  bool m_elementAffectedByClassRules;
+  const RuleFeatureSet& m_features;
+  Member<RuleSet> m_siblingRuleSet;
+  Member<RuleSet> m_uncommonAttributeRuleSet;
+  Member<StyleResolver> m_styleResolver;
+  const ElementResolveContext& m_context;
+
+  friend class SharedStyleFinderTest;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // SharedStyleFinder_h
+#endif  // SharedStyleFinder_h

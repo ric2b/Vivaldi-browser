@@ -8,6 +8,7 @@ import("//build/config/compiler/compiler.gni")
 import("//build/config/crypto.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
+import("//net/features.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
 import("//third_party/icu/config.gni")
@@ -38,24 +39,6 @@ posix_avoid_mmap = is_android && current_cpu != "x86"
 
 use_v8_in_net = !is_ios
 enable_built_in_dns = !is_ios
-
-declare_args() {
-  # Disables support for file URLs.  File URL support requires use of icu.
-  disable_file_support = false
-
-  # WebSockets and socket stream code are not used on iOS and are optional in
-  # cronet.
-  enable_websockets = !is_ios
-  disable_ftp_support = is_ios || is_chromecast
-
-  # Enable Kerberos authentication. It is disabled by default on ChromeOS, iOS,
-  # Chromecast, at least for now. This feature needs configuration (krb5.conf
-  # and so on).
-  use_kerberos = !is_chromeos && !is_ios && !is_chromecast
-
-  # Do not disable brotli filter by default.
-  disable_brotli_filter = false
-}
 
 config("net_config") {
   defines = []
@@ -204,6 +187,8 @@ component("net") {
         "base/crypto_module_nss.cc",
         "base/keygen_handler_nss.cc",
         "cert/cert_database_nss.cc",
+        "cert/internal/trust_store_nss.cc",
+        "cert/internal/trust_store_nss.h",
         "cert/nss_cert_database.cc",
         "cert/nss_cert_database.h",
         "cert/x509_certificate_nss.cc",
@@ -356,6 +341,7 @@ component("net") {
       "crypt32.lib",
       "dhcpcsvc.lib",
       "iphlpapi.lib",
+      "ncrypt.lib",
       "rpcrt4.lib",
       "secur32.lib",
       "urlmon.lib",
@@ -404,9 +390,11 @@ component("net") {
     # Brotli support.
     if (!disable_brotli_filter) {
       sources += [ "filter/brotli_filter.cc" ]
+      sources += [ "filter/brotli_source_stream.cc" ]
       deps += [ "//third_party/brotli" ]
     } else {
       sources += [ "filter/brotli_filter_disabled.cc" ]
+      sources += [ "filter/brotli_source_stream_disabled.cc" ]
     }
   }
 }
@@ -1191,6 +1179,8 @@ source_set("simple_quic_tools") {
     "tools/quic/quic_process_packet_interface.h",
     "tools/quic/quic_simple_client.cc",
     "tools/quic/quic_simple_client.h",
+    "tools/quic/quic_simple_crypto_server_stream_helper.cc",
+    "tools/quic/quic_simple_crypto_server_stream_helper.h",
     "tools/quic/quic_simple_dispatcher.cc",
     "tools/quic/quic_simple_dispatcher.h",
     "tools/quic/quic_simple_per_connection_packet_writer.cc",
@@ -1282,6 +1272,20 @@ if (!is_ios) {
   executable("quic_packet_printer") {
     sources = [
       "tools/quic/quic_packet_printer_bin.cc",
+    ]
+    deps = [
+      ":net",
+      ":simple_quic_tools",
+      "//base",
+      "//build/config/sanitizers:deps",
+      "//build/win:default_exe_manifest",
+      "//third_party/boringssl",
+      "//third_party/protobuf:protobuf_lite",
+    ]
+  }
+  executable("quic_reject_reason_decoder") {
+    sources = [
+      "tools/quic/quic_reject_reason_decoder_bin.cc",
     ]
     deps = [
       ":net",
@@ -1388,6 +1392,10 @@ test("net_unittests") {
     sources += gypi_values.net_base_test_mac_ios_sources
   }
 
+  if (is_mac) {
+    libs = [ "Security.framework" ]
+  }
+
   if (is_chromeos) {
     sources -= [ "proxy/proxy_config_service_linux_unittest.cc" ]
   }
@@ -1398,6 +1406,7 @@ test("net_unittests") {
 
   if (!use_nss_certs) {
     sources -= [
+      "cert/internal/trust_store_nss_unittest.cc",
       "cert/nss_cert_database_unittest.cc",
       "ssl/client_cert_store_nss_unittest.cc",
     ]
@@ -1576,6 +1585,7 @@ test("net_unittests") {
   # Also, exclude the test from iOS for now (needs to read input data files).
   if (disable_brotli_filter || is_ios) {
     sources -= [ "filter/brotli_filter_unittest.cc" ]
+    sources -= [ "filter/brotli_source_stream_unittest.cc" ]
   }
 
   if (is_android) {
@@ -1921,6 +1931,30 @@ fuzzer_test("net_unescape_url_component_fuzzer") {
   libfuzzer_options = [ "max_len = 2048" ]
 }
 
+fuzzer_test("net_websocket_deflate_stream_fuzzer") {
+  sources = [
+    "websockets/websocket_deflate_stream_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    "//net",
+  ]
+  dict = "data/fuzzer_dictionaries/net_websocket_frame_parser_fuzzer.dict"
+  libfuzzer_options = [ "max_len=512" ]
+}
+
+fuzzer_test("net_websocket_extension_parser_fuzzer") {
+  sources = [
+    "websockets/websocket_extension_parser_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    "//net",
+  ]
+  dict = "data/fuzzer_dictionaries/net_websocket_extension_parser_fuzzer.dict"
+  libfuzzer_options = [ "max_len = 256" ]
+}
+
 fuzzer_test("net_websocket_frame_parser_fuzzer") {
   sources = [
     "websockets/websocket_frame_parser_fuzzer.cc",
@@ -1930,6 +1964,7 @@ fuzzer_test("net_websocket_frame_parser_fuzzer") {
     "//net",
   ]
   dict = "data/fuzzer_dictionaries/net_websocket_frame_parser_fuzzer.dict"
+  libfuzzer_options = [ "max_len=256" ]
 }
 
 fuzzer_test("net_http_chunked_decoder_fuzzer") {
@@ -1953,6 +1988,19 @@ fuzzer_test("net_http_proxy_client_socket_fuzzer") {
     "//net",
   ]
   dict = "data/fuzzer_dictionaries/net_http_proxy_client_socket_fuzzer.dict"
+}
+
+fuzzer_test("net_parse_url_hostname_to_address_fuzzer") {
+  sources = [
+    "base/parse_url_hostname_to_address_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    "//base",
+    "//net",
+  ]
+  libfuzzer_options = [ "max_len=512" ]
+  seed_corpus = "data/fuzzer_data/hostnames/"
 }
 
 fuzzer_test("net_quic_crypto_framer_parse_message_fuzzer") {
@@ -2001,4 +2049,16 @@ fuzzer_test("net_url_request_fuzzer") {
     "//net",
   ]
   dict = "data/fuzzer_dictionaries/net_url_request_fuzzer.dict"
+}
+
+fuzzer_test("net_auth_challenge_tokenizer_fuzzer") {
+  sources = [
+    "http/http_auth_challenge_tokenizer_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    ":test_support",
+    "//base",
+    "//net",
+  ]
 }

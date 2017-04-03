@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "chrome/browser/predictors/resource_prefetch_predictor.h"
 #include "content/public/browser/browser_thread.h"
@@ -46,86 +47,45 @@ void ResourcePrefetcherManager::ShutdownOnUIThread() {
 
 void ResourcePrefetcherManager::ShutdownOnIOThread() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-  base::STLDeleteContainerPairSecondPointers(prefetcher_map_.begin(),
-                                             prefetcher_map_.end());
+  prefetcher_map_.clear();
 }
 
 void ResourcePrefetcherManager::MaybeAddPrefetch(
-    const NavigationID& navigation_id,
-    PrefetchKeyType key_type,
-    std::unique_ptr<ResourcePrefetcher::RequestVector> requests) {
+    const GURL& main_frame_url,
+    const std::vector<GURL>& urls) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
-  // Don't add a duplicate prefetch for the same host or URL.
-  std::string key = key_type == PREFETCH_KEY_TYPE_HOST ?
-      navigation_id.main_frame_url.host() : navigation_id.main_frame_url.spec();
+  // Don't add a duplicate prefetch for the same host.
+  std::string key = main_frame_url.host();
   if (base::ContainsKey(prefetcher_map_, key))
     return;
 
-  ResourcePrefetcher* prefetcher = new ResourcePrefetcher(
-      this, config_, navigation_id, key_type, std::move(requests));
-  prefetcher_map_.insert(std::make_pair(key, prefetcher));
+  auto prefetcher =
+      base::MakeUnique<ResourcePrefetcher>(this, config_, main_frame_url, urls);
   prefetcher->Start();
+  prefetcher_map_[key] = std::move(prefetcher);
 }
 
 void ResourcePrefetcherManager::MaybeRemovePrefetch(
-    const NavigationID& navigation_id) {
+    const GURL& main_frame_url) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
-  // Look for a URL based prefetch first.
-  PrefetcherMap::iterator it = prefetcher_map_.find(
-      navigation_id.main_frame_url.spec());
+  std::string key = main_frame_url.host();
+  auto it = prefetcher_map_.find(key);
   if (it != prefetcher_map_.end() &&
-      it->second->navigation_id() == navigation_id) {
-    it->second->Stop();
-    return;
-  }
-
-  // No URL based prefetching, look for host based.
-  it = prefetcher_map_.find(navigation_id.main_frame_url.host());
-  if (it != prefetcher_map_.end() &&
-      it->second->navigation_id() == navigation_id) {
+      it->second->main_frame_url() == main_frame_url) {
     it->second->Stop();
   }
 }
 
 void ResourcePrefetcherManager::ResourcePrefetcherFinished(
-    ResourcePrefetcher* resource_prefetcher,
-    ResourcePrefetcher::RequestVector* requests) {
+    ResourcePrefetcher* resource_prefetcher) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
-  // |predictor_| can only be accessed from the UI thread.
-  std::unique_ptr<ResourcePrefetcher::RequestVector> scoped_requests(requests);
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-      base::Bind(&ResourcePrefetcherManager::ResourcePrefetcherFinishedOnUI,
-                 this,
-                 resource_prefetcher->navigation_id(),
-                 resource_prefetcher->key_type(),
-                 base::Passed(&scoped_requests)));
-
-  const GURL& main_frame_url =
-      resource_prefetcher->navigation_id().main_frame_url;
-  const std::string key =
-      resource_prefetcher->key_type() == PREFETCH_KEY_TYPE_HOST ?
-          main_frame_url.host() : main_frame_url.spec();
-  PrefetcherMap::iterator it = prefetcher_map_.find(key);
+  const std::string key = resource_prefetcher->main_frame_url().host();
+  auto it = prefetcher_map_.find(key);
   DCHECK(it != prefetcher_map_.end());
-  delete it->second;
   prefetcher_map_.erase(it);
-}
-
-void ResourcePrefetcherManager::ResourcePrefetcherFinishedOnUI(
-    const NavigationID& navigation_id,
-    PrefetchKeyType key_type,
-    std::unique_ptr<ResourcePrefetcher::RequestVector> requests) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  // |predictor_| may have been set to NULL if the predictor is shutting down.
-  if (predictor_) {
-    predictor_->FinishedPrefetchForNavigation(navigation_id,
-                                              key_type,
-                                              requests.release());
-  }
 }
 
 net::URLRequestContext* ResourcePrefetcherManager::GetURLRequestContext() {

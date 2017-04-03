@@ -36,6 +36,7 @@
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/events/test/event_generator.h"
+#include "ui/events/test/keyboard_layout.h"
 #include "ui/gfx/render_text.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
@@ -83,8 +84,6 @@ class MockInputMethod : public ui::InputMethodBase {
   void OnTextInputTypeChanged(const ui::TextInputClient* client) override;
   void OnCaretBoundsChanged(const ui::TextInputClient* client) override {}
   void CancelComposition(const ui::TextInputClient* client) override;
-  void OnInputLocaleChanged() override {}
-  std::string GetInputLocale() override;
   bool IsCandidatePopupOpen() const override;
   void ShowImeIfNeeded() override {}
 
@@ -211,10 +210,6 @@ void MockInputMethod::CancelComposition(const ui::TextInputClient* client) {
   }
 }
 
-std::string MockInputMethod::GetInputLocale() {
-  return "en-US";
-}
-
 bool MockInputMethod::IsCandidatePopupOpen() const {
   return false;
 }
@@ -266,29 +261,6 @@ class TestTextfield : public views::Textfield {
        key_received_(false),
        weak_ptr_factory_(this) {}
 
-  bool OnKeyPressed(const ui::KeyEvent& e) override {
-    key_received_ = true;
-
-    // Since OnKeyPressed() might destroy |this|, get a weak pointer and
-    // verify it isn't null before writing the bool value to key_handled_.
-    base::WeakPtr<TestTextfield> textfield(weak_ptr_factory_.GetWeakPtr());
-    bool key = views::Textfield::OnKeyPressed(e);
-
-    if (!textfield)
-      return key;
-
-    key_handled_ = key;
-
-    return key_handled_;
-  }
-
-  bool OnKeyReleased(const ui::KeyEvent& e) override {
-    key_received_ = true;
-    key_handled_ = views::Textfield::OnKeyReleased(e);
-    EXPECT_FALSE(key_handled_);  // Textfield doesn't override OnKeyReleased.
-    return key_handled_;
-  }
-
   // ui::TextInputClient overrides:
   void InsertChar(const ui::KeyEvent& e) override {
     views::Textfield::InsertChar(e);
@@ -305,6 +277,25 @@ class TestTextfield : public views::Textfield {
   void clear() { key_received_ = key_handled_ = false; }
 
  private:
+  // views::View override:
+  void OnKeyEvent(ui::KeyEvent* event) override {
+    key_received_ = true;
+
+    // Since Textfield::OnKeyPressed() might destroy |this|, get a weak pointer
+    // and verify it isn't null before writing the bool value to key_handled_.
+    base::WeakPtr<TestTextfield> textfield(weak_ptr_factory_.GetWeakPtr());
+    views::View::OnKeyEvent(event);
+
+    if (!textfield)
+      return;
+
+    key_handled_ = event->handled();
+
+    // Currently, Textfield::OnKeyReleased always returns false.
+    if (event->type() == ui::ET_KEY_RELEASED)
+      EXPECT_FALSE(key_handled_);
+  }
+
   bool key_handled_;
   bool key_received_;
 
@@ -769,7 +760,19 @@ TEST_F(TextfieldTest, KeyTest) {
     EXPECT_STR_EQ("TexT!1!1", textfield_->text());
 }
 
-TEST_F(TextfieldTest, KeysWithModifiersTest) {
+#if defined(OS_WIN) || defined(OS_MACOSX)
+#define MAYBE_KeysWithModifiersTest KeysWithModifiersTest
+#else
+// TODO(crbug.com/645104): Implement keyboard layout changing for other
+//                         platforms.
+#define MAYBE_KeysWithModifiersTest DISABLED_KeysWithModifiersTest
+#endif
+
+TEST_F(TextfieldTest, MAYBE_KeysWithModifiersTest) {
+  // Activate U.S. English keyboard layout. Modifier keys in other layouts may
+  // change the text inserted into a texfield and cause this test to fail.
+  ui::ScopedKeyboardLayout keyboard_layout(ui::KEYBOARD_LAYOUT_ENGLISH_US);
+
   InitTextfield();
   const int ctrl = ui::EF_CONTROL_DOWN;
   const int alt = ui::EF_ALT_DOWN;
@@ -2091,10 +2094,23 @@ TEST_F(TextfieldTest, Yank) {
   Textfield* textfield2 = static_cast<Textfield*>(GetFocusedView());
   EXPECT_TRUE(textfield2->text().empty());
 
-  // Verify yanked text persists across multiple textfields.
+  // Verify yanked text persists across multiple textfields and that yanking
+  // into a password textfield works.
+  textfield2->SetTextInputType(ui::TEXT_INPUT_TYPE_PASSWORD);
   SendKeyPress(ui::VKEY_Y, ui::EF_CONTROL_DOWN);
   EXPECT_STR_EQ("ef", textfield2->text());
   EXPECT_EQ(gfx::Range(2), textfield2->GetSelectedRange());
+
+  // Verify deletion in a password textfield does not modify the kill buffer.
+  textfield2->SetText(ASCIIToUTF16("hello"));
+  textfield2->SelectRange(gfx::Range(0));
+  SendKeyPress(ui::VKEY_K, ui::EF_CONTROL_DOWN);
+  EXPECT_TRUE(textfield2->text().empty());
+
+  textfield_->RequestFocus();
+  textfield_->SelectRange(gfx::Range(0));
+  SendKeyPress(ui::VKEY_Y, ui::EF_CONTROL_DOWN);
+  EXPECT_STR_EQ("efabefeef", textfield_->text());
 }
 
 #endif  // defined(OS_MACOSX)
@@ -2730,6 +2746,46 @@ TEST_F(TextfieldTest, DISABLED_SelectionClipboard) {
   EXPECT_STR_EQ("other", GetClipboardText(ui::CLIPBOARD_TYPE_SELECTION));
   EXPECT_EQ(ui::CLIPBOARD_TYPE_LAST, GetAndResetCopiedToClipboard());
 }
+
+// Verify that the selection clipboard is not updated for selections on a
+// password textfield. Disabled due to http://crbug.com/396477.
+TEST_F(TextfieldTest, DISABLED_SelectionClipboard_Password) {
+  InitTextfields(2);
+  textfield_->SetText(ASCIIToUTF16("abcd"));
+
+  // Select-all should update the selection clipboard for a non-password
+  // textfield.
+  SendKeyEvent(ui::VKEY_A, false, true);
+  EXPECT_EQ(gfx::Range(0, 4), textfield_->GetSelectedRange());
+  EXPECT_STR_EQ("abcd", GetClipboardText(ui::CLIPBOARD_TYPE_SELECTION));
+  EXPECT_EQ(ui::CLIPBOARD_TYPE_SELECTION, GetAndResetCopiedToClipboard());
+
+  // Move focus to the next textfield.
+  widget_->GetFocusManager()->AdvanceFocus(false);
+  EXPECT_EQ(2, GetFocusedView()->id());
+  Textfield* textfield2 = static_cast<Textfield*>(GetFocusedView());
+
+  // Select-all should not modify the selection clipboard for a password
+  // textfield.
+  textfield2->SetText(ASCIIToUTF16("1234"));
+  textfield2->SetTextInputType(ui::TEXT_INPUT_TYPE_PASSWORD);
+  SendKeyEvent(ui::VKEY_A, false, true);
+  EXPECT_EQ(gfx::Range(0, 4), textfield2->GetSelectedRange());
+  EXPECT_STR_EQ("abcd", GetClipboardText(ui::CLIPBOARD_TYPE_SELECTION));
+  EXPECT_EQ(ui::CLIPBOARD_TYPE_LAST, GetAndResetCopiedToClipboard());
+
+  // Shift-Left/Right should not modify the selection clipboard for a password
+  // textfield.
+  SendKeyEvent(ui::VKEY_LEFT, true, false);
+  EXPECT_EQ(gfx::Range(0, 3), textfield2->GetSelectedRange());
+  EXPECT_STR_EQ("abcd", GetClipboardText(ui::CLIPBOARD_TYPE_SELECTION));
+  EXPECT_EQ(ui::CLIPBOARD_TYPE_LAST, GetAndResetCopiedToClipboard());
+
+  SendKeyEvent(ui::VKEY_RIGHT, true, false);
+  EXPECT_EQ(gfx::Range(0, 4), textfield2->GetSelectedRange());
+  EXPECT_STR_EQ("abcd", GetClipboardText(ui::CLIPBOARD_TYPE_SELECTION));
+  EXPECT_EQ(ui::CLIPBOARD_TYPE_LAST, GetAndResetCopiedToClipboard());
+}
 #endif
 
 // Long_Press gesture in Textfield can initiate a drag and drop now.
@@ -2782,6 +2838,16 @@ TEST_F(TextfieldTest, DestroyingTextfieldFromOnKeyEvent) {
   SendKeyEvent(ui::VKEY_RETURN);
 
   EXPECT_FALSE(controller.target());
+}
+
+TEST_F(TextfieldTest, CursorBlinkRestartsOnInsertOrReplace) {
+  InitTextfield();
+  textfield_->SetText(ASCIIToUTF16("abc"));
+  EXPECT_TRUE(test_api_->IsCursorBlinkTimerRunning());
+  textfield_->SelectRange(gfx::Range(1, 2));
+  EXPECT_FALSE(test_api_->IsCursorBlinkTimerRunning());
+  textfield_->InsertOrReplaceText(base::ASCIIToUTF16("foo"));
+  EXPECT_TRUE(test_api_->IsCursorBlinkTimerRunning());
 }
 
 class TextfieldTouchSelectionTest : public TextfieldTest {

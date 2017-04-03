@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.services.gcm;
 
 import android.accounts.Account;
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -15,9 +16,9 @@ import com.google.android.gms.gcm.GoogleCloudMessaging;
 import com.google.ipc.invalidation.ticl.android2.channel.GcmUpstreamSenderService;
 
 import org.chromium.chrome.browser.signin.OAuth2TokenService;
+import org.chromium.components.signin.AccountManagerHelper;
+import org.chromium.components.signin.ChromeSigninController;
 import org.chromium.components.sync.SyncConstants;
-import org.chromium.components.sync.signin.AccountManagerHelper;
-import org.chromium.components.sync.signin.ChromeSigninController;
 
 import java.io.IOException;
 import java.util.UUID;
@@ -103,6 +104,8 @@ public class InvalidationGcmUpstreamSender extends GcmUpstreamSenderService {
     /*
      * Creates and returns a deep copy of the original Bundle.
      */
+    // TODO(crbug.com/635567): Fix this properly.
+    @SuppressLint("ParcelClassLoader")
     private Bundle createDeepCopy(Bundle original) {
         Parcel temp = Parcel.obtain();
         original.writeToParcel(temp, 0);

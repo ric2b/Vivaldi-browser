@@ -7,7 +7,7 @@
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/sync/driver/sync_service.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
@@ -35,7 +35,7 @@ void StartSyncOnUIThread(const base::FilePath& browser_state_path,
     return;
   }
 
-  sync_driver::SyncService* sync_service =
+  syncer::SyncService* sync_service =
       IOSChromeProfileSyncServiceFactory::GetForBrowserState(browser_state);
   if (!sync_service) {
     DVLOG(2) << "No SyncService for browser state, can't start sync.";

@@ -33,14 +33,9 @@ class TestResourcePrefetcher : public ResourcePrefetcher {
  public:
   TestResourcePrefetcher(ResourcePrefetcher::Delegate* delegate,
                          const ResourcePrefetchPredictorConfig& config,
-                         const NavigationID& navigation_id,
-                         PrefetchKeyType key_type,
-                         std::unique_ptr<RequestVector> requests)
-      : ResourcePrefetcher(delegate,
-                           config,
-                           navigation_id,
-                           key_type,
-                           std::move(requests)) {}
+                         const GURL& main_frame_url,
+                         const std::vector<GURL>& urls)
+      : ResourcePrefetcher(delegate, config, main_frame_url, urls) {}
 
   ~TestResourcePrefetcher() override {}
 
@@ -48,7 +43,7 @@ class TestResourcePrefetcher : public ResourcePrefetcher {
 
   void ReadFullResponse(net::URLRequest* request) override {
     EXPECT_TRUE(request->load_flags() & net::LOAD_PREFETCH);
-    FinishRequest(request, Request::PREFETCH_STATUS_FROM_CACHE);
+    FinishRequest(request);
   }
 
  private:
@@ -68,9 +63,8 @@ class TestResourcePrefetcherDelegate : public ResourcePrefetcher::Delegate {
     return request_context_getter_->GetURLRequestContext();
   }
 
-  MOCK_METHOD2(ResourcePrefetcherFinished,
-               void(ResourcePrefetcher* prefetcher,
-                    ResourcePrefetcher::RequestVector* requests));
+  MOCK_METHOD1(ResourcePrefetcherFinished,
+               void(ResourcePrefetcher* prefetcher));
 
  private:
   scoped_refptr<net::TestURLRequestContextGetter> request_context_getter_;
@@ -89,8 +83,6 @@ class ResourcePrefetcherTest : public testing::Test {
   ~ResourcePrefetcherTest() override;
 
  protected:
-  typedef ResourcePrefetcher::Request Request;
-
   void AddStartUrlRequestExpectation(const std::string& url) {
     EXPECT_CALL(*prefetcher_,
                 StartURLRequest(Property(&net::URLRequest::original_url,
@@ -106,18 +98,14 @@ class ResourcePrefetcherTest : public testing::Test {
   net::URLRequest* GetInFlightRequest(const std::string& url_str) {
     GURL url(url_str);
 
-    for (std::list<Request*>::const_iterator it =
-         prefetcher_->request_queue_.begin();
-         it != prefetcher_->request_queue_.end(); ++it) {
-      EXPECT_NE((*it)->resource_url, url);
+    for (const auto& queued_url : prefetcher_->request_queue_) {
+      EXPECT_NE(queued_url, url);
     }
-    for (std::map<net::URLRequest*, Request*>::const_iterator it =
-         prefetcher_->inflight_requests_.begin();
-         it != prefetcher_->inflight_requests_.end(); ++it) {
-      if (it->first->original_url() == url)
-        return it->first;
+    for (const auto& key_value : prefetcher_->inflight_requests_) {
+      if (key_value.first->original_url() == url)
+        return key_value.first;
     }
-    EXPECT_TRUE(false) << "Infligh request not found: " << url_str;
+    EXPECT_TRUE(false) << "In flight request not found: " << url_str;
     return NULL;
   }
 
@@ -162,41 +150,24 @@ ResourcePrefetcherTest::~ResourcePrefetcherTest() {
 }
 
 TEST_F(ResourcePrefetcherTest, TestPrefetcherFinishes) {
-  std::unique_ptr<ResourcePrefetcher::RequestVector> requests(
-      new ResourcePrefetcher::RequestVector);
-  requests->push_back(new ResourcePrefetcher::Request(GURL(
-      "http://www.google.com/resource1.html")));
-  requests->push_back(new ResourcePrefetcher::Request(GURL(
-      "http://www.google.com/resource2.png")));
-  requests->push_back(new ResourcePrefetcher::Request(GURL(
-      "http://yahoo.com/resource1.png")));
-  requests->push_back(new ResourcePrefetcher::Request(GURL(
-      "http://yahoo.com/resource2.png")));
-  requests->push_back(new ResourcePrefetcher::Request(GURL(
-      "http://yahoo.com/resource3.png")));
-  requests->push_back(new ResourcePrefetcher::Request(GURL(
-      "http://m.google.com/resource1.jpg")));
-  requests->push_back(new ResourcePrefetcher::Request(GURL(
-      "http://www.google.com/resource3.html")));
-  requests->push_back(new ResourcePrefetcher::Request(GURL(
-      "http://m.google.com/resource2.html")));
-  requests->push_back(new ResourcePrefetcher::Request(GURL(
-      "http://m.google.com/resource3.css")));
-  requests->push_back(new ResourcePrefetcher::Request(GURL(
-      "http://m.google.com/resource4.png")));
-  requests->push_back(new ResourcePrefetcher::Request(GURL(
-      "http://yahoo.com/resource4.png")));
-  requests->push_back(new ResourcePrefetcher::Request(GURL(
-      "http://yahoo.com/resource5.png")));
+  GURL main_frame_url("http://www.google.com");
+  std::vector<GURL> urls = {GURL("http://www.google.com/resource1.html"),
+                            GURL("http://www.google.com/resource2.png"),
+                            GURL("http://yahoo.com/resource1.png"),
+                            GURL("http://yahoo.com/resource2.png"),
+                            GURL("http://yahoo.com/resource3.png"),
+                            GURL("http://m.google.com/resource1.jpg"),
+                            GURL("http://www.google.com/resource3.html"),
+                            GURL("http://m.google.com/resource2.html"),
+                            GURL("http://m.google.com/resource3.css"),
+                            GURL("http://m.google.com/resource4.png"),
+                            GURL("http://yahoo.com/resource4.png"),
+                            GURL("http://yahoo.com/resource5.png")};
 
-  NavigationID navigation_id(1, 2, GURL("http://www.google.com"));
+  NavigationID navigation_id(1, 2, main_frame_url);
 
-  // Needed later for comparison.
-  ResourcePrefetcher::RequestVector* requests_ptr = requests.get();
-
-  prefetcher_.reset(
-      new TestResourcePrefetcher(&prefetcher_delegate_, config_, navigation_id,
-                                 PREFETCH_KEY_TYPE_URL, std::move(requests)));
+  prefetcher_.reset(new TestResourcePrefetcher(&prefetcher_delegate_, config_,
+                                               main_frame_url, urls));
 
   // Starting the prefetcher maxes out the number of possible requests.
   AddStartUrlRequestExpectation("http://www.google.com/resource1.html");
@@ -250,71 +221,25 @@ TEST_F(ResourcePrefetcherTest, TestPrefetcherFinishes) {
 
   // Expect the final call.
   EXPECT_CALL(prefetcher_delegate_,
-              ResourcePrefetcherFinished(Eq(prefetcher_.get()),
-                                         Eq(requests_ptr)));
+              ResourcePrefetcherFinished(Eq(prefetcher_.get())));
 
   OnResponse("http://yahoo.com/resource3.png");
   CheckPrefetcherState(0, 0, 0);
-
-  // Check the prefetch status.
-  EXPECT_EQ(Request::PREFETCH_STATUS_CERT_ERROR,
-            (*requests_ptr)[0]->prefetch_status);
-  EXPECT_EQ(Request::PREFETCH_STATUS_FROM_CACHE,
-            (*requests_ptr)[1]->prefetch_status);
-  EXPECT_EQ(Request::PREFETCH_STATUS_FROM_CACHE,
-            (*requests_ptr)[2]->prefetch_status);
-  EXPECT_EQ(Request::PREFETCH_STATUS_REDIRECTED,
-            (*requests_ptr)[3]->prefetch_status);
-  EXPECT_EQ(Request::PREFETCH_STATUS_FROM_CACHE,
-            (*requests_ptr)[4]->prefetch_status);
-  EXPECT_EQ(Request::PREFETCH_STATUS_FROM_CACHE,
-            (*requests_ptr)[5]->prefetch_status);
-  EXPECT_EQ(Request::PREFETCH_STATUS_REDIRECTED,
-            (*requests_ptr)[6]->prefetch_status);
-  EXPECT_EQ(Request::PREFETCH_STATUS_FROM_CACHE,
-            (*requests_ptr)[7]->prefetch_status);
-  EXPECT_EQ(Request::PREFETCH_STATUS_AUTH_REQUIRED,
-            (*requests_ptr)[8]->prefetch_status);
-  EXPECT_EQ(Request::PREFETCH_STATUS_CERT_REQUIRED,
-            (*requests_ptr)[9]->prefetch_status);
-  EXPECT_EQ(Request::PREFETCH_STATUS_FROM_CACHE,
-            (*requests_ptr)[10]->prefetch_status);
-  EXPECT_EQ(Request::PREFETCH_STATUS_FROM_CACHE,
-            (*requests_ptr)[11]->prefetch_status);
-
-  // We need to delete requests_ptr here, though it looks to be managed by the
-  // scoped_ptr requests. The scoped_ptr requests releases itself and the raw
-  // pointer requests_ptr is passed to ResourcePrefetcherFinished(). In the
-  // test, ResourcePrefetcherFinished() is a mock function and does not handle
-  // the raw pointer properly. In the real code, requests_ptr will eventually be
-  // passed to and managed by ResourcePrefetchPredictor::Result::Result.
-  delete requests_ptr;
 }
 
 TEST_F(ResourcePrefetcherTest, TestPrefetcherStopped) {
-  std::unique_ptr<ResourcePrefetcher::RequestVector> requests(
-      new ResourcePrefetcher::RequestVector);
-  requests->push_back(new ResourcePrefetcher::Request(GURL(
-      "http://www.google.com/resource1.html")));
-  requests->push_back(new ResourcePrefetcher::Request(GURL(
-      "http://www.google.com/resource2.png")));
-  requests->push_back(new ResourcePrefetcher::Request(GURL(
-      "http://yahoo.com/resource1.png")));
-  requests->push_back(new ResourcePrefetcher::Request(GURL(
-      "http://yahoo.com/resource2.png")));
-  requests->push_back(new ResourcePrefetcher::Request(GURL(
-      "http://yahoo.com/resource3.png")));
-  requests->push_back(new ResourcePrefetcher::Request(GURL(
-      "http://m.google.com/resource1.jpg")));
+  GURL main_frame_url("http://www.google.com");
+  std::vector<GURL> urls = {GURL("http://www.google.com/resource1.html"),
+                            GURL("http://www.google.com/resource2.png"),
+                            GURL("http://yahoo.com/resource1.png"),
+                            GURL("http://yahoo.com/resource2.png"),
+                            GURL("http://yahoo.com/resource3.png"),
+                            GURL("http://m.google.com/resource1.jpg")};
 
-  NavigationID navigation_id(1, 2, GURL("http://www.google.com"));
+  NavigationID navigation_id(1, 2, main_frame_url);
 
-  // Needed later for comparison.
-  ResourcePrefetcher::RequestVector* requests_ptr = requests.get();
-
-  prefetcher_.reset(
-      new TestResourcePrefetcher(&prefetcher_delegate_, config_, navigation_id,
-                                 PREFETCH_KEY_TYPE_HOST, std::move(requests)));
+  prefetcher_.reset(new TestResourcePrefetcher(&prefetcher_delegate_, config_,
+                                               main_frame_url, urls));
 
   // Starting the prefetcher maxes out the number of possible requests.
   AddStartUrlRequestExpectation("http://www.google.com/resource1.html");
@@ -342,19 +267,10 @@ TEST_F(ResourcePrefetcherTest, TestPrefetcherStopped) {
 
   // Expect the final call.
   EXPECT_CALL(prefetcher_delegate_,
-              ResourcePrefetcherFinished(Eq(prefetcher_.get()),
-                                         Eq(requests_ptr)));
+              ResourcePrefetcherFinished(Eq(prefetcher_.get())));
 
   OnResponse("http://m.google.com/resource1.jpg");
   CheckPrefetcherState(0, 1, 0);
-
-  // We need to delete requests_ptr here, though it looks to be managed by the
-  // scoped_ptr requests. The scoped_ptr requests releases itself and the raw
-  // pointer requests_ptr is passed to ResourcePrefetcherFinished(). In the
-  // test, ResourcePrefetcherFinished() is a mock function and does not handle
-  // the raw pointer properly. In the real code, requests_ptr will eventually be
-  // passed to and managed by ResourcePrefetchPredictor::Result::Result.
-  delete requests_ptr;
 }
 
 }  // namespace predictors

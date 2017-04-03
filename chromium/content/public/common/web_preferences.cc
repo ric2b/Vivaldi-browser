@@ -82,7 +82,6 @@ WebPreferences::WebPreferences()
       plugins_enabled(true),
       dom_paste_enabled(false),  // enables execCommand("paste")
       shrinks_standalone_images_to_fit(true),
-      uses_universal_detector(false),  // Disabled: page cycler regression
       text_areas_are_resizable(true),
       allow_scripts_to_close_windows(false),
       remote_fonts_enabled(true),
@@ -96,6 +95,7 @@ WebPreferences::WebPreferences()
       application_cache_enabled(false),
       tabs_to_links(true),
       caret_browsing_enabled(false),
+      history_entry_requires_user_gesture(false),
       hyperlink_auditing_enabled(true),
       allow_universal_access_from_file_urls(false),
       allow_file_access_from_file_urls(false),
@@ -107,16 +107,16 @@ WebPreferences::WebPreferences()
       privileged_webgl_extensions_enabled(false),
       webgl_errors_to_console_enabled(true),
       mock_scrollbars_enabled(false),
+      hide_scrollbars(false),
       accelerated_2d_canvas_enabled(false),
       minimum_accelerated_2d_canvas_size(257 * 256),
       disable_2d_canvas_copy_on_write(false),
       antialiased_2d_canvas_disabled(false),
-      antialiased_clips_2d_canvas_enabled(false),
+      antialiased_clips_2d_canvas_enabled(true),
       accelerated_2d_canvas_msaa_sample_count(0),
       accelerated_filters_enabled(false),
       deferred_filters_enabled(false),
       container_culling_enabled(false),
-      allow_displaying_insecure_content(true),
       allow_running_insecure_content(false),
       disable_reading_from_canvas(false),
       strict_mixed_content_checking(false),
@@ -207,6 +207,7 @@ WebPreferences::WebPreferences()
       resue_global_for_unowned_main_frame(false),
       autoplay_muted_videos_enabled(false),
       progress_bar_completion(ProgressBarCompletion::LOAD_EVENT),
+      spellcheck_enabled_by_default(true),
 #endif
 #if defined(OS_ANDROID)
       default_minimum_page_scale_factor(0.25f),

@@ -2,7 +2,8 @@
  * Copyright (C) 1999 Lars Knoll (knoll@kde.org)
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
  *           (C) 2007 David Smith (catfish.man@gmail.com)
- * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011 Apple Inc. All rights reserved.
+ * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011 Apple Inc.
+ * All rights reserved.
  * Copyright (C) Research In Motion Limited 2010. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
@@ -35,39 +36,42 @@ class LayoutObject;
 class LayoutTextFragment;
 
 class FirstLetterPseudoElement final : public PseudoElement {
-    WTF_MAKE_NONCOPYABLE(FirstLetterPseudoElement);
-public:
-    static FirstLetterPseudoElement* create(Element* parent)
-    {
-        return new FirstLetterPseudoElement(parent);
-    }
+  WTF_MAKE_NONCOPYABLE(FirstLetterPseudoElement);
 
-    ~FirstLetterPseudoElement() override;
+ public:
+  static FirstLetterPseudoElement* create(Element* parent) {
+    return new FirstLetterPseudoElement(parent);
+  }
 
-    static LayoutObject* firstLetterTextLayoutObject(const Element&);
-    static unsigned firstLetterLength(const String&);
+  ~FirstLetterPseudoElement() override;
 
-    void setRemainingTextLayoutObject(LayoutTextFragment*);
-    LayoutTextFragment* remainingTextLayoutObject() const { return m_remainingTextLayoutObject; }
+  static LayoutObject* firstLetterTextLayoutObject(const Element&);
+  static unsigned firstLetterLength(const String&);
 
-    void updateTextFragments();
+  void setRemainingTextLayoutObject(LayoutTextFragment*);
+  LayoutTextFragment* remainingTextLayoutObject() const {
+    return m_remainingTextLayoutObject;
+  }
 
-    void attachLayoutTree(const AttachContext& = AttachContext()) override;
-    void detachLayoutTree(const AttachContext& = AttachContext()) override;
+  void updateTextFragments();
 
-private:
-    explicit FirstLetterPseudoElement(Element*);
+  void attachLayoutTree(const AttachContext& = AttachContext()) override;
+  void detachLayoutTree(const AttachContext& = AttachContext()) override;
 
-    void didRecalcStyle(StyleRecalcChange) override;
+ private:
+  explicit FirstLetterPseudoElement(Element*);
 
-    void attachFirstLetterTextLayoutObjects();
-    ComputedStyle* styleForFirstLetter(LayoutObject*);
+  void didRecalcStyle(StyleRecalcChange) override;
 
-    LayoutTextFragment* m_remainingTextLayoutObject;
+  void attachFirstLetterTextLayoutObjects();
+  ComputedStyle* styleForFirstLetter(LayoutObject*);
+
+  LayoutTextFragment* m_remainingTextLayoutObject;
 };
 
-DEFINE_ELEMENT_TYPE_CASTS(FirstLetterPseudoElement, isFirstLetterPseudoElement());
+DEFINE_ELEMENT_TYPE_CASTS(FirstLetterPseudoElement,
+                          isFirstLetterPseudoElement());
 
-} // namespace blink
+}  // namespace blink
 
-#endif // FirstLetterPseudoElement_h
+#endif  // FirstLetterPseudoElement_h

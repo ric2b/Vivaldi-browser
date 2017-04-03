@@ -12,6 +12,7 @@
 #include "base/strings/string_piece.h"
 #include "base/values.h"
 #include "net/base/net_errors.h"
+#include "net/log/net_log_event_type.h"
 
 namespace net {
 
@@ -24,10 +25,8 @@ FtpCtrlResponse::FtpCtrlResponse(const FtpCtrlResponse& other) = default;
 
 FtpCtrlResponse::~FtpCtrlResponse() {}
 
-FtpCtrlResponseBuffer::FtpCtrlResponseBuffer(const BoundNetLog& net_log)
-    : multiline_(false),
-      net_log_(net_log) {
-}
+FtpCtrlResponseBuffer::FtpCtrlResponseBuffer(const NetLogWithSource& net_log)
+    : multiline_(false), net_log_(net_log) {}
 
 FtpCtrlResponseBuffer::~FtpCtrlResponseBuffer() {}
 
@@ -101,7 +100,7 @@ FtpCtrlResponse FtpCtrlResponseBuffer::PopResponse() {
   FtpCtrlResponse result = responses_.front();
   responses_.pop();
 
-  net_log_.AddEvent(NetLog::TYPE_FTP_CONTROL_RESPONSE,
+  net_log_.AddEvent(NetLogEventType::FTP_CONTROL_RESPONSE,
                     base::Bind(&NetLogFtpCtrlResponseCallback, &result));
 
   return result;

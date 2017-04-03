@@ -15,31 +15,28 @@ namespace browser_sync {
 // A controller for delete directives, which cannot sync when full encryption
 // is enabled.
 class HistoryDeleteDirectivesDataTypeController
-    : public sync_driver::UIDataTypeController,
-      public sync_driver::SyncServiceObserver {
+    : public syncer::UIDataTypeController,
+      public syncer::SyncServiceObserver {
  public:
-  HistoryDeleteDirectivesDataTypeController(
-      const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
-      const base::Closure& error_callback,
-      sync_driver::SyncClient* sync_client);
+  // |dump_stack| is called when an unrecoverable error occurs.
+  HistoryDeleteDirectivesDataTypeController(const base::Closure& dump_stack,
+                                            syncer::SyncClient* sync_client);
+  ~HistoryDeleteDirectivesDataTypeController() override;
 
   // UIDataTypeController override.
   bool ReadyForStart() const override;
   bool StartModels() override;
   void StopModels() override;
 
-  // sync_driver::SyncServiceObserver implementation.
+  // syncer::SyncServiceObserver implementation.
   void OnStateChanged() override;
 
  private:
-  // Refcounted.
-  ~HistoryDeleteDirectivesDataTypeController() override;
-
   // Triggers a SingleDataTypeUnrecoverable error and returns true if the
   // type is no longer ready, else does nothing and returns false.
   bool DisableTypeIfNecessary();
 
-  sync_driver::SyncClient* sync_client_;
+  syncer::SyncClient* sync_client_;
 
   DISALLOW_COPY_AND_ASSIGN(HistoryDeleteDirectivesDataTypeController);
 };

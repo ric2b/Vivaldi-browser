@@ -46,8 +46,6 @@
 #include "chrome/browser/chromeos/login/helper.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker.h"
 #include "chrome/browser/chromeos/login/profile_auth_data.h"
-#include "chrome/browser/chromeos/login/quick_unlock/pin_storage.h"
-#include "chrome/browser/chromeos/login/quick_unlock/pin_storage_factory.h"
 #include "chrome/browser/chromeos/login/saml/saml_offline_signin_limiter.h"
 #include "chrome/browser/chromeos/login/saml/saml_offline_signin_limiter_factory.h"
 #include "chrome/browser/chromeos/login/signin/oauth2_login_manager.h"
@@ -482,9 +480,7 @@ void UserSessionManager::StartSession(
   delegate_ = delegate;
   start_session_type_ = start_session_type;
 
-  VLOG(1) << "Starting session for "
-          << user_context.GetAccountId().GetUserEmail();
-
+  VLOG(1) << "Starting user session.";
   PreStartSession();
   CreateUserSession(user_context, has_auth_cookies);
 
@@ -720,7 +716,8 @@ bool UserSessionManager::RestartToApplyPerSessionFlagsIfNeed(
 
   LogCustomSwitches(command_line_difference);
 
-  about_flags::ReportCustomFlags("Login.CustomFlags", command_line_difference);
+  about_flags::ReportAboutFlagsHistogram(
+      "Login.CustomFlags", command_line_difference, std::set<std::string>());
 
   base::CommandLine::StringVector flags;
   // argv[0] is the program name |base::CommandLine::NO_PROGRAM|.
@@ -1283,12 +1280,6 @@ bool UserSessionManager::InitializeUserSession(Profile* profile) {
         (oobe_controller && oobe_controller->skip_post_login_screens()) ||
         cmdline->HasSwitch(chromeos::switches::kOobeSkipPostLogin);
 
-    // The user just signed into the profile session, so it means that they
-    // entered a password (or used easy unlock). We will enable quick unlock.
-    PinStorage* pin_storage = PinStorageFactory::GetForProfile(profile);
-    if (pin_storage)
-      pin_storage->MarkStrongAuth();
-
     if (user_manager->IsCurrentUserNew() && !skip_post_login_screens) {
       // Don't specify start URLs if the administrator has configured the start
       // URLs via policy.
@@ -1761,9 +1752,8 @@ void UserSessionManager::DoBrowserLaunchInternal(Profile* profile,
 
   // Check to see if this profile should show EndOfLife Notification and show
   // the message accordingly.
-  if (!ShouldShowEolNotification(profile))
-    return;
-  CheckEolStatus(profile);
+  if (ShouldShowEolNotification(profile))
+    CheckEolStatus(profile);
 }
 
 void UserSessionManager::RespectLocalePreferenceWrapper(

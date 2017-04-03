@@ -199,9 +199,9 @@ UserShare* FakeSyncManager::GetUserShare() {
   return test_user_share_.user_share();
 }
 
-std::unique_ptr<syncer_v2::ModelTypeConnector>
+std::unique_ptr<ModelTypeConnector>
 FakeSyncManager::GetModelTypeConnectorProxy() {
-  return base::MakeUnique<syncer_v2::FakeModelTypeConnector>();
+  return base::MakeUnique<FakeModelTypeConnector>();
 }
 
 const std::string FakeSyncManager::cache_guid() {
@@ -221,14 +221,9 @@ SyncEncryptionHandler* FakeSyncManager::GetEncryptionHandler() {
   return fake_encryption_handler_.get();
 }
 
-ScopedVector<syncer::ProtocolEvent>
+std::vector<std::unique_ptr<ProtocolEvent>>
 FakeSyncManager::GetBufferedProtocolEvents() {
-  return ScopedVector<syncer::ProtocolEvent>();
-}
-
-std::unique_ptr<base::ListValue> FakeSyncManager::GetAllNodesForType(
-    syncer::ModelType type) {
-  return std::unique_ptr<base::ListValue>(new base::ListValue());
+  return std::vector<std::unique_ptr<ProtocolEvent>>();
 }
 
 void FakeSyncManager::RefreshTypes(ModelTypeSet types) {
@@ -236,20 +231,20 @@ void FakeSyncManager::RefreshTypes(ModelTypeSet types) {
 }
 
 void FakeSyncManager::RegisterDirectoryTypeDebugInfoObserver(
-    syncer::TypeDebugInfoObserver* observer) {}
+    TypeDebugInfoObserver* observer) {}
 
 void FakeSyncManager::UnregisterDirectoryTypeDebugInfoObserver(
-    syncer::TypeDebugInfoObserver* observer) {}
+    TypeDebugInfoObserver* observer) {}
 
 bool FakeSyncManager::HasDirectoryTypeDebugInfoObserver(
-    syncer::TypeDebugInfoObserver* observer) {
+    TypeDebugInfoObserver* observer) {
   return false;
 }
 
 void FakeSyncManager::RequestEmitDebugInfo() {}
 
 void FakeSyncManager::OnIncomingInvalidation(
-    syncer::ModelType type,
+    ModelType type,
     std::unique_ptr<InvalidationInterface> invalidation) {
   num_invalidations_received_++;
 }

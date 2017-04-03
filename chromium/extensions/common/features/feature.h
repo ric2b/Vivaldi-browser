@@ -23,14 +23,14 @@ class Extension;
 // express requirements for where it can be accessed, and supports testing
 // support for those requirements. If platforms are not specified, then feature
 // is available on all platforms.
+//
+// See //chrome/common/extensions/api/_features.md for a description of feature
+// usage and types.
 class Feature {
  public:
   // The JavaScript contexts the feature is supported in.
   enum Context {
     UNSPECIFIED_CONTEXT,
-
-    // See chrome/common/extensions/api/_features.md for a description of these
-    // contexts.
     BLESSED_EXTENSION_CONTEXT,
     UNBLESSED_EXTENSION_CONTEXT,
     CONTENT_SCRIPT_CONTEXT,
@@ -61,6 +61,7 @@ class Feature {
     INVALID_PLATFORM,
     INVALID_MIN_MANIFEST_VERSION,
     INVALID_MAX_MANIFEST_VERSION,
+    INVALID_SESSION_TYPE,
     NOT_PRESENT,
     UNSUPPORTED_CHANNEL,
     FOUND_IN_BLACKLIST,

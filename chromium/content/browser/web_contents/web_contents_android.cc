@@ -46,6 +46,7 @@ using base::android::ConvertJavaStringToUTF16;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::ConvertUTF16ToJavaString;
 using base::android::JavaParamRef;
+using base::android::JavaRef;
 using base::android::ScopedJavaGlobalRef;
 using base::android::ScopedJavaLocalRef;
 using base::android::ToJavaIntArray;
@@ -181,9 +182,9 @@ void AXTreeSnapshotCallback(const ScopedJavaGlobalRef<jobject>& callback,
 
 // static
 WebContents* WebContents::FromJavaWebContents(
-    jobject jweb_contents_android) {
+    const JavaRef<jobject>& jweb_contents_android) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (!jweb_contents_android)
+  if (jweb_contents_android.is_null())
     return NULL;
 
   WebContentsAndroid* web_contents_android =
@@ -652,12 +653,6 @@ void WebContentsAndroid::GetContentBitmap(
                                result_callback);
 }
 
-void WebContentsAndroid::OnContextMenuClosed(JNIEnv* env,
-                                             const JavaParamRef<jobject>& obj) {
-  static_cast<WebContentsImpl*>(web_contents_)
-      ->NotifyContextMenuClosed(CustomContextMenuContext());
-}
-
 void WebContentsAndroid::ReloadLoFiImages(JNIEnv* env,
                                           const JavaParamRef<jobject>& obj) {
   static_cast<WebContentsImpl*>(web_contents_)->ReloadLoFiImages();
@@ -691,8 +686,8 @@ void WebContentsAndroid::OnFinishGetContentBitmap(
   ScopedJavaLocalRef<jobject> java_bitmap;
   if (response == READBACK_SUCCESS)
     java_bitmap = gfx::ConvertToJavaBitmap(&bitmap);
-  Java_WebContentsImpl_onGetContentBitmapFinished(
-      env, obj->obj(), callback->obj(), java_bitmap, response);
+  Java_WebContentsImpl_onGetContentBitmapFinished(env, *obj, *callback,
+                                                  java_bitmap, response);
 }
 
 void WebContentsAndroid::OnFinishDownloadImage(
@@ -722,8 +717,7 @@ void WebContentsAndroid::OnFinishDownloadImage(
     Java_WebContentsImpl_createSizeAndAddToList(env, jsizes, size.width(),
                                                 size.height());
   }
-  Java_WebContentsImpl_onDownloadImageFinished(env, obj->obj(), callback->obj(),
-                                               id, http_status_code, jurl,
-                                               jbitmaps, jsizes);
+  Java_WebContentsImpl_onDownloadImageFinished(
+      env, *obj, *callback, id, http_status_code, jurl, jbitmaps, jsizes);
 }
 }  // namespace content

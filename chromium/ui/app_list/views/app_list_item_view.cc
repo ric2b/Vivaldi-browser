@@ -14,7 +14,6 @@
 #include "ui/app_list/app_list_item.h"
 #include "ui/app_list/app_list_switches.h"
 #include "ui/app_list/views/apps_grid_view.h"
-#include "ui/app_list/views/progress_bar_view.h"
 #include "ui/base/dragdrop/drag_utils.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -33,6 +32,7 @@
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/menu/menu_runner.h"
+#include "ui/views/controls/progress_bar.h"
 #include "ui/views/drag_controller.h"
 
 namespace app_list {
@@ -78,7 +78,7 @@ AppListItemView::AppListItemView(AppsGridView* apps_grid_view,
       apps_grid_view_(apps_grid_view),
       icon_(new views::ImageView),
       title_(new views::Label),
-      progress_bar_(new ProgressBarView),
+      progress_bar_(new views::ProgressBar),
       ui_state_(UI_STATE_NORMAL),
       touch_dragging_(false),
       shadow_animator_(this),
@@ -272,13 +272,8 @@ void AppListItemView::OnPaint(gfx::Canvas* canvas) {
     return;
 
   gfx::Rect rect(GetContentsBounds());
-  if (apps_grid_view_->IsSelectedView(this)) {
+  if (apps_grid_view_->IsSelectedView(this))
     canvas->FillRect(rect, kSelectedColor);
-  } else if (is_highlighted_ && !is_installing_ &&
-             !app_list::switches::IsExperimentalAppListEnabled()) {
-    canvas->FillRect(rect, kHighlightedColor);
-    return;
-  }
 
   if (ui_state_ == UI_STATE_DROPPING_IN_FOLDER) {
     DCHECK(apps_grid_view_->model()->folders_enabled());
@@ -312,20 +307,14 @@ void AppListItemView::ShowContextMenuForView(views::View* source,
 }
 
 void AppListItemView::StateChanged() {
-  if (app_list::switches::IsExperimentalAppListEnabled()) {
-    if (state() == STATE_HOVERED || state() == STATE_PRESSED) {
-      shadow_animator_.animation()->Show();
-    } else {
-      shadow_animator_.animation()->Hide();
-    }
-  }
-
   if (state() == STATE_HOVERED || state() == STATE_PRESSED) {
+    shadow_animator_.animation()->Show();
     // Show the hover/tap highlight: for tap, lighter highlight replaces darker
     // keyboard selection; for mouse hover, keyboard selection takes precedence.
     if (!apps_grid_view_->IsSelectedView(this) || state() == STATE_PRESSED)
       SetItemIsHighlighted(true);
   } else {
+    shadow_animator_.animation()->Hide();
     SetItemIsHighlighted(false);
     if (item_weak_)
       item_weak_->set_highlighted(false);

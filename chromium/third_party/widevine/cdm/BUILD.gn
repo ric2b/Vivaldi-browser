@@ -4,7 +4,7 @@
 
 import("//build/config/chrome_build.gni")
 import("//build/config/features.gni")
-import("//chrome/version.gni")  # TODO layering violation
+import("//chrome/process_version_rc_template.gni")
 import("//media/cdm/ppapi/cdm_paths.gni")
 import("//media/cdm/ppapi/ppapi_cdm_adapter.gni")
 import("//third_party/widevine/cdm/widevine.gni")
@@ -45,12 +45,12 @@ if (is_android) {
   }
 } else if (enable_widevine) {
   widevine_cdm_version_h_file = "stub/widevine_cdm_version.h"
+  widevine_cdm_manifest_file = [ "stub/manifest.json" ]
 } else {
   # No branding, use the default one.
   widevine_cdm_version_h_file = "widevine_cdm_version.h"
 }
 
-# GYP version: third_party/widevine/cdm/widevine_cdm.gyp:widevine_cdm_version_h
 copy("version_h") {
   sources = [
     widevine_cdm_version_h_file,
@@ -64,7 +64,6 @@ copy("version_h") {
   ]
 }
 
-# GYP version: third_party/widevine/cdm/widevine_cdm.gyp:widevinecdm
 if (widevine_cdm_binary_files != []) {
   copy("widevinecdm") {
     sources = widevine_cdm_binary_files
@@ -103,13 +102,11 @@ if (widevine_cdm_binary_files != []) {
       #]
       #TODO(jrummell) Mac: 'DYLIB_INSTALL_NAME_BASE': '@loader_path',
       ldflags = [
-         "-install_name",
-         "@loader_path/libwidevinecdm.dylib",
+        "-install_name",
+        "@loader_path/libwidevinecdm.dylib",
       ]
     } else if (is_posix && !is_mac) {
       cflags = [ "-fvisibility=hidden" ]
-      # Note GYP sets rpath but this is set by default on shared libraries in
-      # the GN build.
     }
   }
 } else {
@@ -133,9 +130,8 @@ if (widevine_cdm_manifest_file != []) {
 
 if ((is_chrome_branded || enable_widevine) && enable_pepper_cdms) {
   # Produce and compile the .rc file.
-  process_version("widevinecdmadapter_resources") {
+  process_version_rc_template("widevinecdmadapter_resources") {
     visibility = [ ":*" ]
-    template_file = chrome_version_rc_template
     sources = [
       "BRANDING",
       "widevinecdmadapter.ver",

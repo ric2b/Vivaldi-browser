@@ -85,7 +85,7 @@ void OperationTestBase::SetUp() {
       blocking_task_runner_.get()));
 
   metadata_storage_.reset(new internal::ResourceMetadataStorage(
-      temp_dir_.path(), blocking_task_runner_.get()));
+      temp_dir_.GetPath(), blocking_task_runner_.get()));
   bool success = false;
   base::PostTaskAndReplyWithResult(
       blocking_task_runner_.get(),
@@ -97,10 +97,9 @@ void OperationTestBase::SetUp() {
   ASSERT_TRUE(success);
 
   fake_free_disk_space_getter_.reset(new FakeFreeDiskSpaceGetter);
-  cache_.reset(new internal::FileCache(metadata_storage_.get(),
-                                       temp_dir_.path(),
-                                       blocking_task_runner_.get(),
-                                       fake_free_disk_space_getter_.get()));
+  cache_.reset(new internal::FileCache(
+      metadata_storage_.get(), temp_dir_.GetPath(), blocking_task_runner_.get(),
+      fake_free_disk_space_getter_.get()));
   success = false;
   base::PostTaskAndReplyWithResult(
       blocking_task_runner_.get(),
@@ -146,11 +145,10 @@ FileError OperationTestBase::GetLocalResourceEntry(const base::FilePath& path,
                                                    ResourceEntry* entry) {
   FileError error = FILE_ERROR_FAILED;
   base::PostTaskAndReplyWithResult(
-      blocking_task_runner(),
-      FROM_HERE,
+      blocking_task_runner(), FROM_HERE,
       base::Bind(&internal::ResourceMetadata::GetResourceEntryByPath,
                  base::Unretained(metadata()), path, entry),
-      base::Bind(google_apis::test_util::CreateCopyResultCallback(&error)));
+      google_apis::test_util::CreateCopyResultCallback(&error));
   content::RunAllBlockingPoolTasksUntilIdle();
   return error;
 }
@@ -160,11 +158,10 @@ FileError OperationTestBase::GetLocalResourceEntryById(
     ResourceEntry* entry) {
   FileError error = FILE_ERROR_FAILED;
   base::PostTaskAndReplyWithResult(
-      blocking_task_runner(),
-      FROM_HERE,
+      blocking_task_runner(), FROM_HERE,
       base::Bind(&internal::ResourceMetadata::GetResourceEntryById,
                  base::Unretained(metadata()), local_id, entry),
-      base::Bind(google_apis::test_util::CreateCopyResultCallback(&error)));
+      google_apis::test_util::CreateCopyResultCallback(&error));
   content::RunAllBlockingPoolTasksUntilIdle();
   return error;
 }
@@ -173,11 +170,10 @@ std::string OperationTestBase::GetLocalId(const base::FilePath& path) {
   std::string local_id;
   FileError error = FILE_ERROR_FAILED;
   base::PostTaskAndReplyWithResult(
-      blocking_task_runner(),
-      FROM_HERE,
+      blocking_task_runner(), FROM_HERE,
       base::Bind(&internal::ResourceMetadata::GetIdByPath,
                  base::Unretained(metadata()), path, &local_id),
-      base::Bind(google_apis::test_util::CreateCopyResultCallback(&error)));
+      google_apis::test_util::CreateCopyResultCallback(&error));
   content::RunAllBlockingPoolTasksUntilIdle();
   EXPECT_EQ(FILE_ERROR_OK, error) << path.value();
   return local_id;

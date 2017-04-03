@@ -8,9 +8,9 @@
 #include "base/message_loop/message_loop.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/theme_resources.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_ui.h"
-#include "grit/theme_resources.h"
 #include "ui/base/resource/resource_bundle.h"
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -28,8 +28,7 @@ std::string BookmarksUIHTMLSource::GetSource() const {
 
 void BookmarksUIHTMLSource::StartDataRequest(
     const std::string& path,
-    int render_process_id,
-    int render_frame_id,
+    const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
     const content::URLDataSource::GotDataCallback& callback) {
   NOTREACHED() << "We should never get here since the extension should have"
                << "been triggered";

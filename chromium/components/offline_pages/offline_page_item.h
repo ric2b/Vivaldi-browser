@@ -54,8 +54,7 @@ struct OfflinePageItem {
   OfflinePageItem(const OfflinePageItem& other);
   ~OfflinePageItem();
 
-  // Gets a URL of the file under |file_path|.
-  GURL GetOfflineURL() const;
+  bool operator==(const OfflinePageItem& other) const;
 
   // Returns whether the offline page is expired.
   bool IsExpired() const;
@@ -70,8 +69,6 @@ struct OfflinePageItem {
   // their ids to our saved pages.
   ClientId client_id;
 
-  // Version of the offline page item.
-  int version;
   // The file path to the archive with a local copy of the page.
   base::FilePath file_path;
   // The size of the offline copy.

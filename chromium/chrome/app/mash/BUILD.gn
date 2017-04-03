@@ -10,16 +10,11 @@ source_set("mash") {
     "mash_runner.h",
   ]
   deps = [
-    "//ash/mus:lib",
     "//ash/resources",
-    "//ash/touch_hud/mus:lib",
     "//base:i18n",
     "//components/tracing:startup_tracing",
     "//content/public/common",
-    "//mash/app_driver:lib",
-    "//mash/quick_launch:lib",
-    "//mash/session:lib",
-    "//mash/task_viewer:lib",
+    "//mash/package",
     "//services/shell",
     "//services/shell/background:lib",
     "//services/shell/public/cpp",
@@ -27,7 +22,6 @@ source_set("mash") {
     "//services/shell/runner/common",
     "//services/shell/runner/host:child_process_base",
     "//services/shell/runner/host:lib",
-    "//services/ui:lib",
     "//url",
   ]
   data_deps = [
@@ -44,6 +38,7 @@ service_manifest("manifest") {
   name = "chrome_mash"
   source = "chrome_mash_manifest.json"
   deps = [
+    "//ash/autoclick/mus:manifest",
     "//ash/mus:manifest",
     "//ash/touch_hud/mus:manifest",
     "//mash/app_driver:manifest",
@@ -51,13 +46,16 @@ service_manifest("manifest") {
     "//mash/session:manifest",
     "//mash/task_viewer:manifest",
     "//services/ui:manifest",
+    "//services/ui/ime/test_ime_driver:manifest",
   ]
   packaged_services = [
+    "accessibility_autoclick",
     "app_driver",
     "ash",
     "mash_session",
     "quick_launch",
     "task_viewer",
+    "test_ime_driver",
     "touch_hud",
     "ui",
   ]

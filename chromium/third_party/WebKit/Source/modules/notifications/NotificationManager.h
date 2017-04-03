@@ -8,42 +8,59 @@
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/ExecutionContext.h"
 #include "public/platform/modules/notifications/notification_service.mojom-blink.h"
+#include "public/platform/modules/permissions/permission.mojom-blink.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
+
+class NotificationPermissionCallback;
+class ScriptPromise;
+class ScriptPromiseResolver;
+class ScriptState;
 
 // The notification manager, unique to the execution context, is responsible for
 // connecting and communicating with the Mojo notification service.
 //
 // TODO(peter): Make the NotificationManager responsible for resource loading.
 class NotificationManager final
-    : public GarbageCollectedFinalized<NotificationManager>
-    , public ContextLifecycleObserver
-    , public Supplement<ExecutionContext> {
-    USING_GARBAGE_COLLECTED_MIXIN(NotificationManager);
-    WTF_MAKE_NONCOPYABLE(NotificationManager);
-public:
-    static NotificationManager* from(ExecutionContext*);
-    static const char* supplementName();
+    : public GarbageCollectedFinalized<NotificationManager>,
+      public ContextLifecycleObserver,
+      public Supplement<ExecutionContext> {
+  USING_GARBAGE_COLLECTED_MIXIN(NotificationManager);
+  WTF_MAKE_NONCOPYABLE(NotificationManager);
 
-    ~NotificationManager();
+ public:
+  static NotificationManager* from(ExecutionContext*);
+  static const char* supplementName();
 
-    // Returns the notification permission status of the current origin. This
-    // method is synchronous to support the Notification.permission getter.
-    mojom::blink::PermissionStatus permissionStatus() const;
+  ~NotificationManager();
 
-    // ContextLifecycleObserver implementation.
-    void contextDestroyed() override;
+  // Returns the notification permission status of the current origin. This
+  // method is synchronous to support the Notification.permission getter.
+  mojom::blink::PermissionStatus permissionStatus();
 
-    DECLARE_VIRTUAL_TRACE();
+  ScriptPromise requestPermission(
+      ScriptState*,
+      NotificationPermissionCallback* deprecatedCallback);
 
-private:
-    explicit NotificationManager(ExecutionContext*);
+  // ContextLifecycleObserver interface.
+  void contextDestroyed() override;
 
-    mojom::blink::NotificationServicePtr m_service;
+  DECLARE_VIRTUAL_TRACE();
+
+ private:
+  explicit NotificationManager(ExecutionContext*);
+
+  void onPermissionRequestComplete(ScriptPromiseResolver*,
+                                   NotificationPermissionCallback*,
+                                   mojom::blink::PermissionStatus);
+  void onPermissionServiceConnectionError();
+
+  mojom::blink::NotificationServicePtr m_notificationService;
+  mojom::blink::PermissionServicePtr m_permissionService;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // NotificationManager_h
+#endif  // NotificationManager_h

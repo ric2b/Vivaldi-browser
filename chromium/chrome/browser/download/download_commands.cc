@@ -25,12 +25,10 @@
 #include "chrome/common/safe_browsing/csd.pb.h"
 #include "chrome/common/safe_browsing/file_type_policies.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/google/core/browser/google_util.h"
-#include "grit/theme_resources.h"
 #include "net/base/url_util.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
-#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 
 #if defined(OS_WIN)
@@ -344,7 +342,8 @@ void DownloadCommands::ExecuteCommand(Command command) {
     case LEARN_MORE_INTERRUPTED:
       GetBrowser()->OpenURL(content::OpenURLParams(
           GetLearnMoreURLForInterruptedDownload(), content::Referrer(),
-          NEW_FOREGROUND_TAB, ui::PAGE_TRANSITION_LINK, false));
+          WindowOpenDisposition::NEW_FOREGROUND_TAB, ui::PAGE_TRANSITION_LINK,
+          false));
       break;
     case PAUSE:
       download_item_->Pause();

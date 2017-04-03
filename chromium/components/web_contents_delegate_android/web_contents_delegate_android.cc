@@ -69,10 +69,10 @@ WebContents* WebContentsDelegateAndroid::OpenURLFromTab(
   const GURL& url = params.url;
   WindowOpenDisposition disposition = params.disposition;
 
-  if (!source || (disposition != CURRENT_TAB &&
-                  disposition != NEW_FOREGROUND_TAB &&
-                  disposition != NEW_BACKGROUND_TAB &&
-                  disposition != OFF_THE_RECORD)) {
+  if (!source || (disposition != WindowOpenDisposition::CURRENT_TAB &&
+                  disposition != WindowOpenDisposition::NEW_FOREGROUND_TAB &&
+                  disposition != WindowOpenDisposition::NEW_BACKGROUND_TAB &&
+                  disposition != WindowOpenDisposition::OFF_THE_RECORD)) {
     NOTIMPLEMENTED();
     return NULL;
   }
@@ -82,9 +82,9 @@ WebContents* WebContentsDelegateAndroid::OpenURLFromTab(
   if (obj.is_null())
     return WebContentsDelegate::OpenURLFromTab(source, params);
 
-  if (disposition == NEW_FOREGROUND_TAB ||
-      disposition == NEW_BACKGROUND_TAB ||
-      disposition == OFF_THE_RECORD) {
+  if (disposition == WindowOpenDisposition::NEW_FOREGROUND_TAB ||
+      disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB ||
+      disposition == WindowOpenDisposition::OFF_THE_RECORD) {
     JNIEnv* env = AttachCurrentThread();
     ScopedJavaLocalRef<jstring> java_url =
         ConvertUTF8ToJavaString(env, url.spec());
@@ -94,8 +94,8 @@ WebContents* WebContentsDelegateAndroid::OpenURLFromTab(
     if (params.uses_post && params.post_data)
       post_data = params.post_data->ToJavaObject(env);
     Java_WebContentsDelegateAndroid_openNewTab(
-        env, obj, java_url, extra_headers, post_data, disposition,
-        params.is_renderer_initiated);
+        env, obj, java_url, extra_headers, post_data,
+        static_cast<int>(disposition), params.is_renderer_initiated);
     return NULL;
   }
 
@@ -209,8 +209,11 @@ bool WebContentsDelegateAndroid::OnGoToEntryOffset(int offset) {
 }
 
 void WebContentsDelegateAndroid::WebContentsCreated(
-    WebContents* source_contents, int opener_render_frame_id,
-    const std::string& frame_name, const GURL& target_url,
+    WebContents* source_contents,
+    int opener_render_process_id,
+    int opener_render_frame_id,
+    const std::string& frame_name,
+    const GURL& target_url,
     WebContents* new_contents) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
@@ -325,6 +328,25 @@ void WebContentsDelegateAndroid::ShowRepostFormWarningDialog(
   if (obj.is_null())
     return;
   Java_WebContentsDelegateAndroid_showRepostFormWarningDialog(env, obj);
+}
+
+ScopedJavaLocalRef<jobject>
+WebContentsDelegateAndroid::GetContentVideoViewEmbedder() {
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
+  if (obj.is_null())
+    return ScopedJavaLocalRef<jobject>();
+
+  return Java_WebContentsDelegateAndroid_getContentVideoViewEmbedder(env, obj);
+}
+
+bool WebContentsDelegateAndroid::ShouldBlockMediaRequest(const GURL& url) {
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
+  if (obj.is_null())
+    return false;
+  ScopedJavaLocalRef<jstring> j_url = ConvertUTF8ToJavaString(env, url.spec());
+  return Java_WebContentsDelegateAndroid_shouldBlockMediaRequest(env, obj, j_url);
 }
 
 void WebContentsDelegateAndroid::EnterFullscreenModeForTab(

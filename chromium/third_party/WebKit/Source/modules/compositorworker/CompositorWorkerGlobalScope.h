@@ -17,35 +17,50 @@ namespace blink {
 class CompositorWorkerThread;
 class WorkerThreadStartupData;
 
-class MODULES_EXPORT CompositorWorkerGlobalScope final : public WorkerGlobalScope {
-    DEFINE_WRAPPERTYPEINFO();
-public:
-    static CompositorWorkerGlobalScope* create(CompositorWorkerThread*, std::unique_ptr<WorkerThreadStartupData>, double timeOrigin);
-    ~CompositorWorkerGlobalScope() override;
+class MODULES_EXPORT CompositorWorkerGlobalScope final
+    : public WorkerGlobalScope {
+  DEFINE_WRAPPERTYPEINFO();
 
-    // EventTarget
-    const AtomicString& interfaceName() const override;
+ public:
+  static CompositorWorkerGlobalScope* create(
+      CompositorWorkerThread*,
+      std::unique_ptr<WorkerThreadStartupData>,
+      double timeOrigin);
+  ~CompositorWorkerGlobalScope() override;
 
-    void postMessage(ExecutionContext*, PassRefPtr<SerializedScriptValue>, const MessagePortArray&, ExceptionState&);
-    DEFINE_ATTRIBUTE_EVENT_LISTENER(message);
+  void dispose() override;
 
-    int requestAnimationFrame(FrameRequestCallback*);
-    void cancelAnimationFrame(int id);
-    bool executeAnimationFrameCallbacks(double highResTimeMs);
+  // EventTarget
+  const AtomicString& interfaceName() const override;
 
-    // ExecutionContext:
-    bool isCompositorWorkerGlobalScope() const override { return true; }
+  void postMessage(ExecutionContext*,
+                   PassRefPtr<SerializedScriptValue>,
+                   const MessagePortArray&,
+                   ExceptionState&);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(message);
 
-    DECLARE_VIRTUAL_TRACE();
+  int requestAnimationFrame(FrameRequestCallback*);
+  void cancelAnimationFrame(int id);
+  bool executeAnimationFrameCallbacks(double highResTimeMs);
 
-private:
-    CompositorWorkerGlobalScope(const KURL&, const String& userAgent, CompositorWorkerThread*, double timeOrigin, std::unique_ptr<SecurityOrigin::PrivilegeData>, WorkerClients*);
-    CompositorWorkerThread* thread() const;
+  // ExecutionContext:
+  bool isCompositorWorkerGlobalScope() const override { return true; }
 
-    bool m_executingAnimationFrameCallbacks;
-    FrameRequestCallbackCollection m_callbackCollection;
+  DECLARE_VIRTUAL_TRACE();
+
+ private:
+  CompositorWorkerGlobalScope(const KURL&,
+                              const String& userAgent,
+                              CompositorWorkerThread*,
+                              double timeOrigin,
+                              std::unique_ptr<SecurityOrigin::PrivilegeData>,
+                              WorkerClients*);
+  CompositorWorkerThread* thread() const;
+
+  bool m_executingAnimationFrameCallbacks;
+  FrameRequestCallbackCollection m_callbackCollection;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // CompositorWorkerGlobalScope_h
+#endif  // CompositorWorkerGlobalScope_h

@@ -34,10 +34,14 @@
 #include "ui/views/window/dialog_client_view.h"
 
 #if defined(USE_ASH)
-#include "ash/shelf/shelf_util.h"
+// Note: gn check complains here, despite the correct conditional //ash dep.
+#include "ash/common/shelf/shelf_item_types.h"    // nogncheck
+#include "ash/resources/grit/ash_resources.h"     // nogncheck
+#include "ash/wm/window_properties.h"             // nogncheck
+#include "ash/wm/window_util.h"                   // nogncheck
+#include "chrome/browser/ui/ash/property_util.h"  // nogncheck
+
 #include "ash/shell.h"
-#include "ash/wm/window_util.h"
-#include "grit/ash_resources.h"
 #endif  // defined(USE_ASH)
 
 #if defined(OS_WIN)
@@ -104,10 +108,12 @@ task_manager::TaskManagerTableModel* TaskManagerView::Show(Browser* browser) {
     focus_manager->SetFocusedView(g_task_manager_view->tab_table_);
 
 #if defined(USE_ASH)
-  gfx::NativeWindow native_window =
+  aura::Window* aura_window =
       g_task_manager_view->GetWidget()->GetNativeWindow();
-  ash::SetShelfItemDetailsForDialogWindow(
-      native_window, IDR_ASH_SHELF_ICON_TASK_MANAGER, native_window->title());
+  property_util::SetIntProperty(aura_window, ash::kShelfItemTypeKey,
+                                ash::TYPE_DIALOG);
+  property_util::SetIntProperty(aura_window, ash::kShelfIconResourceIdKey,
+                                IDR_ASH_SHELF_ICON_TASK_MANAGER);
 #endif
   return g_task_manager_view->table_model_.get();
 }

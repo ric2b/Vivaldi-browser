@@ -13,7 +13,7 @@
 #include "extensions/common/api/dns.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/net_errors.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 
 using content::BrowserThread;
 using extensions::api::dns::ResolveCallbackResolveInfo;
@@ -59,7 +59,7 @@ void DnsResolveFunction::WorkOnIOThread() {
   int resolve_result = host_resolver->Resolve(
       request_info, net::DEFAULT_PRIORITY, addresses_.get(),
       base::Bind(&DnsResolveFunction::OnLookupFinished, this), &request_,
-      net::BoundNetLog());
+      net::NetLogWithSource());
 
   // Balanced in OnLookupFinished.
   AddRef();

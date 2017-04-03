@@ -15,6 +15,9 @@
 #include "net/base/address_list.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_server_properties.h"
+#include "net/log/net_log_event_type.h"
+#include "net/log/net_log_source.h"
+#include "net/log/net_log_with_source.h"
 #include "net/spdy/spdy_session.h"
 
 namespace net {
@@ -45,7 +48,6 @@ SpdySessionPool::SpdySessionPool(
       transport_security_state_(transport_security_state),
       ssl_config_service_(ssl_config_service),
       resolver_(resolver),
-      verify_domain_authentication_(true),
       enable_sending_initial_data_(true),
       enable_ping_based_connection_checking_(
           enable_ping_based_connection_checking),
@@ -77,8 +79,7 @@ SpdySessionPool::~SpdySessionPool() {
 base::WeakPtr<SpdySession> SpdySessionPool::CreateAvailableSessionFromSocket(
     const SpdySessionKey& key,
     std::unique_ptr<ClientSocketHandle> connection,
-    const BoundNetLog& net_log,
-    int certificate_error_code,
+    const NetLogWithSource& net_log,
     bool is_secure) {
   TRACE_EVENT0("net", "SpdySessionPool::CreateAvailableSessionFromSocket");
 
@@ -87,20 +88,18 @@ base::WeakPtr<SpdySession> SpdySessionPool::CreateAvailableSessionFromSocket(
 
   std::unique_ptr<SpdySession> new_session(new SpdySession(
       key, http_server_properties_, transport_security_state_,
-      verify_domain_authentication_, enable_sending_initial_data_,
-      enable_ping_based_connection_checking_, session_max_recv_window_size_,
-      stream_max_recv_window_size_, time_func_, proxy_delegate_,
-      net_log.net_log()));
+      enable_sending_initial_data_, enable_ping_based_connection_checking_,
+      session_max_recv_window_size_, stream_max_recv_window_size_, time_func_,
+      proxy_delegate_, net_log.net_log()));
 
-  new_session->InitializeWithSocket(std::move(connection), this, is_secure,
-                                    certificate_error_code);
+  new_session->InitializeWithSocket(std::move(connection), this, is_secure);
 
   base::WeakPtr<SpdySession> available_session = new_session->GetWeakPtr();
   sessions_.insert(new_session.release());
   MapKeyToAvailableSession(key, available_session);
 
   net_log.AddEvent(
-      NetLog::TYPE_HTTP2_SESSION_POOL_IMPORTED_SESSION_FROM_SOCKET,
+      NetLogEventType::HTTP2_SESSION_POOL_IMPORTED_SESSION_FROM_SOCKET,
       available_session->net_log().source().ToEventParametersCallback());
 
   // Look up the IP address for this session so that we can match
@@ -120,7 +119,7 @@ base::WeakPtr<SpdySession> SpdySessionPool::CreateAvailableSessionFromSocket(
 base::WeakPtr<SpdySession> SpdySessionPool::FindAvailableSession(
     const SpdySessionKey& key,
     const GURL& url,
-    const BoundNetLog& net_log) {
+    const NetLogWithSource& net_log) {
   UnclaimedPushedStreamMap::iterator url_it =
       unclaimed_pushed_streams_.find(url);
   if (!url.is_empty() && url_it != unclaimed_pushed_streams_.end()) {
@@ -155,7 +154,7 @@ base::WeakPtr<SpdySession> SpdySessionPool::FindAvailableSession(
     UMA_HISTOGRAM_ENUMERATION(
         "Net.SpdySessionGet", FOUND_EXISTING, SPDY_SESSION_GET_MAX);
     net_log.AddEvent(
-        NetLog::TYPE_HTTP2_SESSION_POOL_FOUND_EXISTING_SESSION,
+        NetLogEventType::HTTP2_SESSION_POOL_FOUND_EXISTING_SESSION,
         it->second->net_log().source().ToEventParametersCallback());
     return it->second;
   }
@@ -208,7 +207,7 @@ base::WeakPtr<SpdySession> SpdySessionPool::FindAvailableSession(
                               FOUND_EXISTING_FROM_IP_POOL,
                               SPDY_SESSION_GET_MAX);
     net_log.AddEvent(
-        NetLog::TYPE_HTTP2_SESSION_POOL_FOUND_EXISTING_SESSION_FROM_IP_POOL,
+        NetLogEventType::HTTP2_SESSION_POOL_FOUND_EXISTING_SESSION_FROM_IP_POOL,
         available_session->net_log().source().ToEventParametersCallback());
     // Add this session to the map so that we can find it next time.
     MapKeyToAvailableSession(key, available_session);
@@ -237,7 +236,7 @@ void SpdySessionPool::RemoveUnavailableSession(
   DCHECK(!IsSessionAvailable(unavailable_session));
 
   unavailable_session->net_log().AddEvent(
-      NetLog::TYPE_HTTP2_SESSION_POOL_REMOVE_SESSION,
+      NetLogEventType::HTTP2_SESSION_POOL_REMOVE_SESSION,
       unavailable_session->net_log().source().ToEventParametersCallback());
 
   SessionSet::iterator it = sessions_.find(unavailable_session.get());

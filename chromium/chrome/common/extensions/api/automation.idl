@@ -22,11 +22,13 @@
     childrenChanged,
     clicked,
     documentSelectionChanged,
+    expandedChanged,
     focus,
     hide,
     hover,
     invalidStatusChanged,
     layoutComplete,
+    liveRegionCreated,
     liveRegionChanged,
     loadComplete,
     locationChanged,
@@ -60,6 +62,7 @@
     annotation,
     application,
     article,
+    audio,
     banner,
     blockquote,
     busyIndicator,
@@ -177,6 +180,7 @@
     tree,
     unknown,
     tooltip,
+    video,
     webArea,
     webView,
     window
@@ -305,6 +309,9 @@
 
     // The type of the event.
     EventType type;
+
+    // The source of this event.
+    DOMString eventFrom;
 
     // Stops this event from further processing except for any remaining
     // listeners on $(ref:AutomationEvent.target).

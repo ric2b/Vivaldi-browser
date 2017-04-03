@@ -1,0 +1,6 @@
+
+post_process_target("//chrome:chrome_child") {
+  deps += [
+    "//vivaldi/importer",
+  ]
+}

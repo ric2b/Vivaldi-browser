@@ -26,6 +26,7 @@ android_library("net_java") {
   deps = [
     "//base:base_java",
     "//third_party/android_tools:android_support_annotations_java",
+    "//third_party/jsr-305:jsr_305_javalib",
   ]
   srcjar_deps = [
     ":net_errors_java",
@@ -43,16 +44,11 @@ android_aidl("embedded_test_server_aidl") {
 android_library("net_java_test_support") {
   testonly = true
   java_files = [
-    "../test/android/javatests/src/org/chromium/net/test/BaseHttpTestServer.java",
-    "../test/android/javatests/src/org/chromium/net/test/BaseTcpTestServer.java",
-    "../test/android/javatests/src/org/chromium/net/test/BaseTestServer.java",
     "../test/android/javatests/src/org/chromium/net/test/DummySpnegoAuthenticator.java",
     "../test/android/javatests/src/org/chromium/net/test/DummySpnegoAuthenticatorService.java",
     "../test/android/javatests/src/org/chromium/net/test/EmbeddedTestServer.java",
     "../test/android/javatests/src/org/chromium/net/test/EmbeddedTestServerImpl.java",
     "../test/android/javatests/src/org/chromium/net/test/EmbeddedTestServerService.java",
-    "../test/android/javatests/src/org/chromium/net/test/TestServerBuilder.java",
-    "../test/android/javatests/src/org/chromium/net/test/TestServerSpawner.java",
     "../test/android/javatests/src/org/chromium/net/test/util/CertTestUtil.java",
     "../test/android/javatests/src/org/chromium/net/test/util/NetworkChangeNotifierTestUtil.java",
     "../test/android/javatests/src/org/chromium/net/test/util/TestWebServer.java",

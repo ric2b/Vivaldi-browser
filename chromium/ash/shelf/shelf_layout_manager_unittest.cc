@@ -27,7 +27,6 @@
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/display_manager_test_api.h"
-#include "ash/test/shelf_test_api.h"
 #include "ash/test/test_system_tray_item.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
@@ -65,7 +64,7 @@ void StepWidgetLayerAnimatorToEnd(views::Widget* widget) {
 }
 
 ShelfWidget* GetShelfWidget() {
-  return test::AshTestBase::GetPrimaryShelf()->GetShelfWidgetForTesting();
+  return test::AshTestBase::GetPrimaryShelf()->shelf_widget();
 }
 
 ShelfLayoutManager* GetShelfLayoutManager() {
@@ -183,7 +182,7 @@ class ShelfDragCallback {
     // does not apply); whereas auto hidden shelf has a visible height of 3 in
     // non-MD.
     WmShelf* shelf = test::AshTestBase::GetPrimaryShelf();
-    if (!ash::MaterialDesignController::IsShelfMaterial() ||
+    if (!ash::MaterialDesignController::IsImmersiveModeMaterial() ||
         shelf->GetAutoHideState() != ash::SHELF_AUTO_HIDE_HIDDEN) {
       EXPECT_GE(shelf_bounds.height(),
                 auto_hidden_shelf_widget_bounds_.height());
@@ -523,8 +522,7 @@ void ShelfLayoutManagerTest::RunGestureDragTests(gfx::Vector2d delta) {
   // Put |widget| into fullscreen. Set the shelf to be auto hidden when |widget|
   // is fullscreen. (eg browser immersive fullscreen).
   widget->SetFullscreen(true);
-  wm::GetWindowState(window)->set_shelf_mode_in_fullscreen(
-      ash::wm::WindowState::SHELF_AUTO_HIDE_VISIBLE);
+  wm::GetWindowState(window)->set_hide_shelf_when_fullscreen(false);
   layout_manager->UpdateVisibilityState();
 
   gfx::Rect bounds_fullscreen = window->bounds();
@@ -532,7 +530,7 @@ void ShelfLayoutManagerTest::RunGestureDragTests(gfx::Vector2d delta) {
 
   // Shelf hints are removed in immersive full screen mode in MD; and some shelf
   // hints are shown in non-MD mode.
-  if (ash::MaterialDesignController::IsShelfMaterial())
+  if (ash::MaterialDesignController::IsImmersiveModeMaterial())
     EXPECT_EQ(bounds_noshelf.ToString(), bounds_fullscreen.ToString());
   else
     EXPECT_NE(bounds_noshelf.ToString(), bounds_fullscreen.ToString());
@@ -562,38 +560,9 @@ void ShelfLayoutManagerTest::RunGestureDragTests(gfx::Vector2d delta) {
             GetShelfWidget()->GetWindowBoundsInScreen().ToString());
   EXPECT_EQ(bounds_fullscreen.ToString(), window->bounds().ToString());
 
-  // Set the shelf to be auto hide and invisible when |widget| is fullscreen.
-  // (used in arc immersive fullscreen)
-  wm::GetWindowState(window)->set_shelf_mode_in_fullscreen(
-      ash::wm::WindowState::SHELF_AUTO_HIDE_INVISIBLE);
-  layout_manager->UpdateVisibilityState();
-  EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
-  EXPECT_TRUE(widget->IsFullscreen());
-  EXPECT_EQ(display::Screen::GetScreen()->GetPrimaryDisplay().bounds(),
-            display::Screen::GetScreen()->GetPrimaryDisplay().work_area());
-
-  // Switch from invisible to visible autodhide.
-  wm::GetWindowState(window)->set_shelf_mode_in_fullscreen(
-      ash::wm::WindowState::SHELF_AUTO_HIDE_VISIBLE);
-  layout_manager->UpdateVisibilityState();
-  EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
-  EXPECT_TRUE(widget->IsFullscreen());
-  EXPECT_NE(display::Screen::GetScreen()->GetPrimaryDisplay().bounds(),
-            display::Screen::GetScreen()->GetPrimaryDisplay().work_area());
-
-  // Switch from invisible to visible autodhide.
-  wm::GetWindowState(window)->set_shelf_mode_in_fullscreen(
-      ash::wm::WindowState::SHELF_AUTO_HIDE_INVISIBLE);
-  layout_manager->UpdateVisibilityState();
-  EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
-  EXPECT_TRUE(widget->IsFullscreen());
-  EXPECT_EQ(display::Screen::GetScreen()->GetPrimaryDisplay().bounds(),
-            display::Screen::GetScreen()->GetPrimaryDisplay().work_area());
-
   // Set the shelf to be hidden when |widget| is fullscreen. (eg tab fullscreen
   // with or without immersive browser fullscreen).
-  wm::GetWindowState(window)->set_shelf_mode_in_fullscreen(
-      ash::wm::WindowState::SHELF_HIDDEN);
+  wm::GetWindowState(window)->set_hide_shelf_when_fullscreen(true);
 
   layout_manager->UpdateVisibilityState();
   EXPECT_EQ(SHELF_HIDDEN, shelf->GetVisibilityState());
@@ -814,7 +783,8 @@ TEST_F(ShelfLayoutManagerTest, AutoHideShelfOnScreenBoundary) {
 
   UpdateDisplay("800x600,800x600");
   Shell::GetInstance()->display_manager()->SetLayoutForCurrentDisplays(
-      test::CreateDisplayLayout(display::DisplayPlacement::RIGHT, 0));
+      test::CreateDisplayLayout(display_manager(),
+                                display::DisplayPlacement::RIGHT, 0));
   // Put the primary monitor's shelf on the display boundary.
   WmShelf* shelf = GetPrimaryShelf();
   shelf->SetAlignment(SHELF_ALIGNMENT_RIGHT);
@@ -1461,7 +1431,7 @@ TEST_F(ShelfLayoutManagerTest, PinnedWindowHidesShelf) {
 
   EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
 
-  wm::PinWindow(window1);
+  wm::PinWindow(window1, /* trusted */ false);
   EXPECT_EQ(SHELF_HIDDEN, shelf->GetVisibilityState());
 
   WmWindowAura::Get(window1)->GetWindowState()->Restore();
@@ -1780,7 +1750,7 @@ TEST_F(ShelfLayoutManagerTest, BubbleEnlargesShelfMouseHitArea) {
   WmShelf* shelf = GetPrimaryShelf();
   ShelfLayoutManager* layout_manager = GetShelfLayoutManager();
   StatusAreaWidget* status_area_widget =
-      shelf->GetShelfWidgetForTesting()->status_area_widget();
+      shelf->shelf_widget()->status_area_widget();
   SystemTray* tray = GetPrimarySystemTray();
 
   // Create a visible window so auto-hide behavior is enforced.
@@ -1883,11 +1853,8 @@ TEST_F(ShelfLayoutManagerTest, StatusAreaHitBoxCoversEdge) {
   GetPrimaryShelf()->SetAlignment(SHELF_ALIGNMENT_BOTTOM);
   generator.MoveMouseTo(inset_display_bounds.bottom_right());
   EXPECT_FALSE(status_area_widget->IsMessageBubbleShown());
-#if !defined(OS_WIN)
   generator.ClickLeftButton();
-  // The bottom right pixel doesn't work on Windows; see crbug.com/633434
   EXPECT_TRUE(status_area_widget->IsMessageBubbleShown());
-#endif
   generator.ClickLeftButton();
   EXPECT_FALSE(status_area_widget->IsMessageBubbleShown());
 
@@ -1895,11 +1862,8 @@ TEST_F(ShelfLayoutManagerTest, StatusAreaHitBoxCoversEdge) {
   GetPrimaryShelf()->SetAlignment(SHELF_ALIGNMENT_RIGHT);
   generator.MoveMouseTo(inset_display_bounds.bottom_right());
   EXPECT_FALSE(status_area_widget->IsMessageBubbleShown());
-#if !defined(OS_WIN)
   generator.ClickLeftButton();
-  // The bottom right pixel doesn't work on Windows; see crbug.com/633434
   EXPECT_TRUE(status_area_widget->IsMessageBubbleShown());
-#endif
   generator.ClickLeftButton();
   EXPECT_FALSE(status_area_widget->IsMessageBubbleShown());
 

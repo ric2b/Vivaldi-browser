@@ -16,12 +16,24 @@
 #include "base/win/scoped_co_mem.h"
 #include "base/win/scoped_variant.h"
 #include "media/base/timestamp_constants.h"
+#include "media/capture/video/blob_utils.h"
 
 using base::win::ScopedCoMem;
 using base::win::ScopedComPtr;
 using base::win::ScopedVariant;
 
 namespace media {
+
+#if DCHECK_IS_ON()
+#define DLOG_IF_FAILED_WITH_HRESULT(message, hr)                        \
+  {                                                                     \
+    DLOG_IF(ERROR, FAILED(hr)) << (message) << ": "                     \
+                               << logging::SystemErrorCodeToString(hr); \
+  }
+#else
+#define DLOG_IF_FAILED_WITH_HRESULT(message, hr) \
+  {}
+#endif
 
 // Check if a Pin matches a category.
 bool PinMatchesCategory(IPin* pin, REFGUID category) {
@@ -241,12 +253,9 @@ bool VideoCaptureDeviceWin::Init() {
   HRESULT hr;
 
   hr = GetDeviceFilter(device_descriptor_.device_id, capture_filter_.Receive());
-
-  if (!capture_filter_.get()) {
-    DLOG(ERROR) << "Failed to create capture filter: "
-                << logging::SystemErrorCodeToString(hr);
+  DLOG_IF_FAILED_WITH_HRESULT("Failed to create capture filter", hr);
+  if (!capture_filter_.get())
     return false;
-  }
 
   output_capture_pin_ = GetPin(capture_filter_.get(), PINDIR_OUTPUT,
                                PIN_CATEGORY_CAPTURE, GUID_NULL);
@@ -266,54 +275,43 @@ bool VideoCaptureDeviceWin::Init() {
 
   hr = graph_builder_.CreateInstance(CLSID_FilterGraph, NULL,
                                      CLSCTX_INPROC_SERVER);
-  if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to create graph builder: "
-                << logging::SystemErrorCodeToString(hr);
+  DLOG_IF_FAILED_WITH_HRESULT("Failed to create capture filter", hr);
+  if (FAILED(hr))
     return false;
-  }
 
   hr = capture_graph_builder_.CreateInstance(CLSID_CaptureGraphBuilder2, NULL,
                                              CLSCTX_INPROC);
-  if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to create the Capture Graph Builder: "
-                << logging::SystemErrorCodeToString(hr);
+  DLOG_IF_FAILED_WITH_HRESULT("Failed to create the Capture Graph Builder", hr);
+  if (FAILED(hr))
     return false;
-  }
 
   hr = capture_graph_builder_->SetFiltergraph(graph_builder_.get());
-  if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to give graph to capture graph builder: "
-                << logging::SystemErrorCodeToString(hr);
+  DLOG_IF_FAILED_WITH_HRESULT("Failed to give graph to capture graph builder",
+                              hr);
+  if (FAILED(hr))
     return false;
-  }
 
   hr = graph_builder_.QueryInterface(media_control_.Receive());
-  if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to create media control builder: "
-                << logging::SystemErrorCodeToString(hr);
+  DLOG_IF_FAILED_WITH_HRESULT("Failed to create media control builder", hr);
+  if (FAILED(hr))
     return false;
-  }
 
   hr = graph_builder_->AddFilter(capture_filter_.get(), NULL);
-  if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to add the capture device to the graph: "
-                << logging::SystemErrorCodeToString(hr);
+  DLOG_IF_FAILED_WITH_HRESULT("Failed to add the capture device to the graph",
+                              hr);
+  if (FAILED(hr))
     return false;
-  }
 
   hr = graph_builder_->AddFilter(sink_filter_.get(), NULL);
-  if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to add the sink filter to the graph: "
-                << logging::SystemErrorCodeToString(hr);
+  DLOG_IF_FAILED_WITH_HRESULT("Failed to add the sink filter to the graph", hr);
+  if (FAILED(hr))
     return false;
-  }
 
-  // The following code builds the upstream portions of the graph,
-  // for example if a capture device uses a Windows Driver Model (WDM)
-  // driver, the graph may require certain filters upstream from the
-  // WDM Video Capture filter, such as a TV Tuner filter or an Analog
-  // Video Crossbar filter. We try using the more prevalent
-  // MEDIATYPE_Interleaved first.
+  // The following code builds the upstream portions of the graph, for example
+  // if a capture device uses a Windows Driver Model (WDM) driver, the graph may
+  // require certain filters upstream from the WDM Video Capture filter, such as
+  // a TV Tuner filter or an Analog Video Crossbar filter. We try using the more
+  // prevalent MEDIATYPE_Interleaved first.
   base::win::ScopedComPtr<IAMStreamConfig> stream_config;
 
   hr = capture_graph_builder_->FindInterface(
@@ -323,8 +321,7 @@ bool VideoCaptureDeviceWin::Init() {
     hr = capture_graph_builder_->FindInterface(
         &PIN_CATEGORY_CAPTURE, &MEDIATYPE_Video, capture_filter_.get(),
         IID_IAMStreamConfig, (void**)stream_config.Receive());
-    DLOG_IF(ERROR, FAILED(hr)) << "Failed to find CapFilter:IAMStreamConfig: "
-                               << logging::SystemErrorCodeToString(hr);
+    DLOG_IF_FAILED_WITH_HRESULT("Failed to find CapFilter:IAMStreamConfig", hr);
   }
 
   return CreateCapabilityMap();
@@ -352,14 +349,14 @@ void VideoCaptureDeviceWin::AllocateAndStart(
   ScopedComPtr<IAMStreamConfig> stream_config;
   HRESULT hr = output_capture_pin_.QueryInterface(stream_config.Receive());
   if (FAILED(hr)) {
-    SetErrorState(FROM_HERE, "Can't get the Capture format settings");
+    SetErrorState(FROM_HERE, "Can't get the Capture format settings", hr);
     return;
   }
 
   int count = 0, size = 0;
   hr = stream_config->GetNumberOfCapabilities(&count, &size);
   if (FAILED(hr)) {
-    SetErrorState(FROM_HERE, "Failed to GetNumberOfCapabilities");
+    SetErrorState(FROM_HERE, "Failed to GetNumberOfCapabilities", hr);
     return;
   }
 
@@ -372,7 +369,7 @@ void VideoCaptureDeviceWin::AllocateAndStart(
   hr = stream_config->GetStreamCaps(found_capability.stream_index,
                                     media_type.Receive(), caps.get());
   if (hr != S_OK) {
-    SetErrorState(FROM_HERE, "Failed to get capture device capabilities");
+    SetErrorState(FROM_HERE, "Failed to get capture device capabilities", hr);
     return;
   }
   if (media_type->formattype == FORMAT_VideoInfo) {
@@ -388,8 +385,7 @@ void VideoCaptureDeviceWin::AllocateAndStart(
   // Order the capture device to use this format.
   hr = stream_config->SetFormat(media_type.get());
   if (FAILED(hr)) {
-    // TODO(grunell): Log the error. http://crbug.com/405016.
-    SetErrorState(FROM_HERE, "Failed to set capture device output format");
+    SetErrorState(FROM_HERE, "Failed to set capture device output format", hr);
     return;
   }
 
@@ -406,26 +402,20 @@ void VideoCaptureDeviceWin::AllocateAndStart(
   }
 
   if (FAILED(hr)) {
-    SetErrorState(FROM_HERE, "Failed to connect the Capture graph.");
+    SetErrorState(FROM_HERE, "Failed to connect the Capture graph.", hr);
     return;
   }
 
   hr = media_control_->Pause();
   if (FAILED(hr)) {
-    SetErrorState(
-        FROM_HERE,
-        "Failed to pause the Capture device, is it already occupied?");
+    SetErrorState(FROM_HERE, "Failed to pause the Capture device", hr);
     return;
   }
-
-  // Get the format back from the sink filter after the filter have been
-  // connected.
-  capture_format_ = sink_filter_->ResultingFormat();
 
   // Start capturing.
   hr = media_control_->Run();
   if (FAILED(hr)) {
-    SetErrorState(FROM_HERE, "Failed to start the Capture device.");
+    SetErrorState(FROM_HERE, "Failed to start the Capture device.", hr);
     return;
   }
 
@@ -439,7 +429,7 @@ void VideoCaptureDeviceWin::StopAndDeAllocate() {
 
   HRESULT hr = media_control_->Stop();
   if (FAILED(hr)) {
-    SetErrorState(FROM_HERE, "Failed to stop the capture graph.");
+    SetErrorState(FROM_HERE, "Failed to stop the capture graph.", hr);
     return;
   }
 
@@ -450,9 +440,19 @@ void VideoCaptureDeviceWin::StopAndDeAllocate() {
   state_ = kIdle;
 }
 
+void VideoCaptureDeviceWin::TakePhoto(TakePhotoCallback callback) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  // DirectShow has other means of capturing still pictures, e.g. connecting a
+  // SampleGrabber filter to a PIN_CATEGORY_STILL of |capture_filter_|. This
+  // way, however, is not widespread and proves too cumbersome, so we just grab
+  // the next captured frame instead.
+  take_photo_callbacks_.push(std::move(callback));
+}
+
 // Implements SinkFilterObserver::SinkFilterObserver.
 void VideoCaptureDeviceWin::FrameReceived(const uint8_t* buffer,
                                           int length,
+                                          const VideoCaptureFormat& format,
                                           base::TimeDelta timestamp) {
   if (first_ref_time_.is_null())
     first_ref_time_ = base::TimeTicks::Now();
@@ -462,33 +462,37 @@ void VideoCaptureDeviceWin::FrameReceived(const uint8_t* buffer,
   if (timestamp == media::kNoTimestamp)
     timestamp = base::TimeTicks::Now() - first_ref_time_;
 
-  client_->OnIncomingCapturedData(buffer, length, capture_format_, 0,
+  client_->OnIncomingCapturedData(buffer, length, format, 0,
                                   base::TimeTicks::Now(), timestamp);
+
+  while (!take_photo_callbacks_.empty()) {
+    TakePhotoCallback cb = std::move(take_photo_callbacks_.front());
+    take_photo_callbacks_.pop();
+
+    mojom::BlobPtr blob = Blobify(buffer, length, format);
+    if (blob)
+      cb.Run(std::move(blob));
+  }
 }
 
 bool VideoCaptureDeviceWin::CreateCapabilityMap() {
   DCHECK(thread_checker_.CalledOnValidThread());
   ScopedComPtr<IAMStreamConfig> stream_config;
   HRESULT hr = output_capture_pin_.QueryInterface(stream_config.Receive());
-  if (FAILED(hr)) {
-    DPLOG(ERROR) << "Failed to get IAMStreamConfig interface from "
-                    "capture device: " << logging::SystemErrorCodeToString(hr);
+  DLOG_IF_FAILED_WITH_HRESULT(
+      "Failed to get IAMStreamConfig from capture device", hr);
+  if (FAILED(hr))
     return false;
-  }
 
   // Get interface used for getting the frame rate.
   ScopedComPtr<IAMVideoControl> video_control;
   hr = capture_filter_.QueryInterface(video_control.Receive());
-  DLOG_IF(WARNING, FAILED(hr)) << "IAMVideoControl Interface NOT SUPPORTED: "
-                               << logging::SystemErrorCodeToString(hr);
 
   int count = 0, size = 0;
   hr = stream_config->GetNumberOfCapabilities(&count, &size);
-  if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to GetNumberOfCapabilities: "
-                << logging::SystemErrorCodeToString(hr);
+  DLOG_IF_FAILED_WITH_HRESULT("Failed to GetNumberOfCapabilities", hr);
+  if (FAILED(hr))
     return false;
-  }
 
   std::unique_ptr<BYTE[]> caps(new BYTE[size]);
   for (int stream_index = 0; stream_index < count; ++stream_index) {
@@ -498,8 +502,7 @@ bool VideoCaptureDeviceWin::CreateCapabilityMap() {
     // GetStreamCaps() may return S_FALSE, so don't use FAILED() or SUCCEED()
     // macros here since they'll trigger incorrectly.
     if (hr != S_OK) {
-      DLOG(ERROR) << "Failed to GetStreamCaps: "
-                  << logging::SystemErrorCodeToString(hr);
+      DLOG(ERROR) << "Failed to GetStreamCaps";
       return false;
     }
 
@@ -576,18 +579,16 @@ void VideoCaptureDeviceWin::SetAntiFlickerInCaptureFilter(
     hr = ks_propset->Set(PROPSETID_VIDCAP_VIDEOPROCAMP,
                          KSPROPERTY_VIDEOPROCAMP_POWERLINE_FREQUENCY, &data,
                          sizeof(data), &data, sizeof(data));
-    DLOG_IF(ERROR, FAILED(hr)) << "Anti-flicker setting failed: "
-                               << logging::SystemErrorCodeToString(hr);
-    DVLOG_IF(2, SUCCEEDED(hr)) << "Anti-flicker set correctly.";
-  } else {
-    DVLOG(2) << "Anti-flicker setting not supported.";
+    DLOG_IF_FAILED_WITH_HRESULT("Anti-flicker setting failed", hr);
   }
 }
 
 void VideoCaptureDeviceWin::SetErrorState(
     const tracked_objects::Location& from_here,
-    const std::string& reason) {
+    const std::string& reason,
+    HRESULT hr) {
   DCHECK(thread_checker_.CalledOnValidThread());
+  DLOG_IF_FAILED_WITH_HRESULT(reason, hr);
   state_ = kError;
   client_->OnError(from_here, reason);
 }

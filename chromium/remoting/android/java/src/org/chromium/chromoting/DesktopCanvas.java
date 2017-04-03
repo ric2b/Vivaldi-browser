@@ -8,128 +8,131 @@ import android.graphics.Matrix;
 import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.os.SystemClock;
+import android.view.animation.DecelerateInterpolator;
+import android.view.animation.Interpolator;
 
 /**
  * This class is responsible for transforming the desktop image matrix.
  */
 public class DesktopCanvas {
-    /**
-     * Maximum allowed zoom level - see {@link #repositionImageWithZoom()}.
-     */
+    /** Used for floating point comparisons. */
+    private static final float EPSILON = 0.0001f;
+
+    /** Maximum allowed zoom level - see {@link #scaleAndRepositionImage()}. */
     private static final float MAX_ZOOM_FACTOR = 100.0f;
 
-    private final DesktopView mViewer;
+    private final RenderStub mRenderStub;
     private final RenderData mRenderData;
 
     /**
-     * Represents the desired center of the viewport.  This value may not represent the actual
-     * center of the viewport as adjustments are made to ensure as much of the desktop is visible as
-     * possible.  This value needs to be a pair of floats so the desktop image can be positioned
-     * with sub-pixel accuracy for smoother panning animations at high zoom levels.
+     * Represents the desired center of the viewport in image space.  This value may not represent
+     * the actual center of the viewport as adjustments are made to ensure as much of the desktop is
+     * visible as possible.  This value needs to be a pair of floats so the desktop image can be
+     * positioned with sub-pixel accuracy for smoother panning animations at high zoom levels.
      */
-    private PointF mViewportPosition = new PointF();
+    private PointF mDesiredCenter = new PointF();
 
     /**
-     * Represents the amount of space, in pixels, used by system UI.
+     * If System UI exists, this contains the area of the screen which is unobscured by it,
+     * otherwise it is empty.
      */
-    private Rect mSystemUiOffsetPixels = new Rect();
+    private Rect mSystemUiScreenRect = new Rect();
 
-    public DesktopCanvas(DesktopView viewer, RenderData renderData) {
-        mViewer = viewer;
+    /**
+     * Represents the amount of space, in pixels, to shift the image under the viewport.  This value
+     * is used to allow panning the image further than would be possible when using the normal
+     * boundary values to account for System UI.  This functionality ensures the user can view and
+     * interact with any area of the remote image, even when System UI might otherwise obscure it.
+     */
+    private PointF mViewportOffset = new PointF();
+
+    /**
+     * Tracks whether to adjust the size of the viewport to account for System UI. If false, the
+     * viewport center is mapped to the center of the screen.  If true, then System UI sizes will be
+     * used to determine the center of the viewport.
+     */
+    private boolean mAdjustViewportSizeForSystemUi = false;
+
+    /* Used to perform per-frame rendering tasks. */
+    private Event.ParameterCallback<Boolean, Void> mFrameRenderedCallback;
+
+    public DesktopCanvas(RenderStub renderStub, RenderData renderData) {
+        mRenderStub = renderStub;
         mRenderData = renderData;
     }
 
     /**
-     * Shifts the viewport by the passed in deltas (in image coordinates).
-     *
-     * @param useScreenCenter Determines whether to use the desired viewport position or the actual
-     *                        center of the screen for positioning.
-     * @param deltaX The distance (in image coordinates) to move the viewport along the x-axis.
-     * @param deltaY The distance (in image coordinates) to move the viewport along the y-axis.
-     * @return A point representing the new center position of the viewport.
-     */
-    public PointF moveViewportCenter(boolean useScreenCenter, float deltaX, float deltaY) {
-        PointF viewportCenter;
-        if (useScreenCenter) {
-            viewportCenter = getTrueViewportCenter();
-        } else {
-            viewportCenter = new PointF(mViewportPosition.x, mViewportPosition.y);
-        }
-        viewportCenter.offset(deltaX, deltaY);
-
-        RectF bounds = new RectF(0, 0, mRenderData.imageWidth, mRenderData.imageHeight);
-
-        if (viewportCenter.x < bounds.left) {
-            viewportCenter.x = bounds.left;
-        } else if (viewportCenter.x > bounds.right) {
-            viewportCenter.x = bounds.right;
-        }
-
-        if (viewportCenter.y < bounds.top) {
-            viewportCenter.y = bounds.top;
-        } else if (viewportCenter.y > bounds.bottom) {
-            viewportCenter.y = bounds.bottom;
-        }
-
-        mViewportPosition.set(viewportCenter);
-
-        return viewportCenter;
-    }
-
-    /**
-     * Sets the desired center position of the viewport.
+     * Sets the desired center position of the viewport (a.k.a. the cursor position).
      *
      * @param newX The new x coordinate value for the desired center position.
      * @param newY The new y coordinate value for the desired center position.
      */
-    public void setViewportPosition(float newX, float newY) {
-        mViewportPosition.set(newX, newY);
+    public void setCursorPosition(float newX, float newY) {
+        updateCursorPosition(newX, newY, getImageBounds());
     }
 
     /**
-     * Returns the current size of the viewport.  This size includes the offset calculations for
-     * any visible system UI.
+     * Sets the center of the viewport using an absolute position (in image coordinates).
      *
-     * @return A point representing the current size of the viewport.
+     * @param newX The new x coordinate value for the center position of the viewport.
+     * @param newY The new y coordinate value for the center position of the viewport.
      */
-    private PointF getViewportSize() {
-        float adjustedScreenWidth = mRenderData.screenWidth - mSystemUiOffsetPixels.right;
-        float adjustedScreenHeight = mRenderData.screenHeight - mSystemUiOffsetPixels.bottom;
-
-        return new PointF(adjustedScreenWidth, adjustedScreenHeight);
+    public void setViewportCenter(float newX, float newY) {
+        updateCursorPosition(newX, newY, getViewportBounds());
     }
 
     /**
-     * Returns the true center position of the viewport (in image coordinates).
+     * Shifts the cursor by the passed in values (in image coordinates).
      *
-     * @return A point representing the true center position of the viewport.
+     * @param deltaX The distance (in image coordinates) to move the cursor along the x-axis.
+     * @param deltaY The distance (in image coordinates) to move the cursor along the y-axis.
+     * @return A point representing the new cursor position.
      */
-    private PointF getTrueViewportCenter() {
-        PointF viewportSize = getViewportSize();
-
-        // Find the center point of the viewport on the screen.
-        float[] viewportPosition = {((float) viewportSize.x / 2), ((float) viewportSize.y / 2)};
-
-        // Convert the screen position to an image position.
-        Matrix screenToImage = new Matrix();
-        mRenderData.transform.invert(screenToImage);
-        screenToImage.mapPoints(viewportPosition);
-        return new PointF(viewportPosition[0], viewportPosition[1]);
+    public PointF moveCursorPosition(float deltaX, float deltaY) {
+        updateCursorPosition(
+                mDesiredCenter.x + deltaX, mDesiredCenter.y + deltaY, getImageBounds());
+        return new PointF(mDesiredCenter.x, mDesiredCenter.y);
     }
 
     /**
-     * Sets the offset values used to calculate the space used by system UI.
+     * Shifts the viewport by the passed in values (in image coordinates).
      *
-     * @param left The space used by system UI on the left edge of the screen.
-     * @param top The space used by system UI on the top edge of the screen.
-     * @param right The space used by system UI on the right edge of the screen.
-     * @param bottom The space used by system UI on the bottom edge of the screen.
+     * @param deltaX The distance (in image coordinates) to move the viewport along the x-axis.
+     * @param deltaY The distance (in image coordinates) to move the viewport along the y-axis.
      */
-    public void setSystemUiOffsetValues(int left, int top, int right, int bottom) {
-        mSystemUiOffsetPixels.set(left, top, right, bottom);
+    public void moveViewportCenter(float deltaX, float deltaY) {
+        updateCursorPosition(
+                mDesiredCenter.x + deltaX, mDesiredCenter.y + deltaY, getViewportBounds());
     }
 
-    /** Repositions the image by zooming it such that the image is displayed without borders. */
+    /**
+     * Handles System UI size and visibility changes.
+     *
+     * @param parameter The set of values defining the current System UI state.
+     */
+    public void onSystemUiVisibilityChanged(SystemUiVisibilityChangedEventParameter parameter) {
+        if (parameter.softInputMethodVisible) {
+            mSystemUiScreenRect.set(
+                    parameter.left, parameter.top, parameter.right, parameter.bottom);
+
+            stopOffsetReductionAnimation();
+        } else {
+            mSystemUiScreenRect.setEmpty();
+            startOffsetReductionAnimation();
+        }
+
+        repositionImage();
+    }
+
+    public void adjustViewportForSystemUi(boolean adjustViewportForSystemUi) {
+        mAdjustViewportSizeForSystemUi = adjustViewportForSystemUi;
+
+        // The viewport center may have changed so reposition the image to reflect the new value.
+        repositionImage();
+    }
+
+    /** Resizes the image by zooming it such that the image is displayed without borders. */
     public void resizeImageToFitScreen() {
         // Protect against being called before the image has been initialized.
         if (mRenderData.imageWidth == 0 || mRenderData.imageHeight == 0) {
@@ -145,86 +148,28 @@ public class DesktopCanvas {
         if (screenToImageScale > 1.0f) {
             mRenderData.transform.setScale(screenToImageScale, screenToImageScale);
         }
-
-        repositionImage(false);
-    }
-
-    /**
-     * Repositions the image by translating it (without affecting the zoom level).
-     *
-     * @param centerViewport Determines whether the viewport will be translated to the desired
-     *                       center position before being adjusted to fit the screen boundaries.
-     */
-    public void repositionImage(boolean centerViewport) {
-        PointF viewportSize = getViewportSize();
-        // The goal of the code below is to position the viewport as close to the desired center
-        // position as possible whilst keeping as much of the desktop in view as possible.
-        // To achieve these goals, we first position the desktop image at the desired center
-        // point and then re-position it to maximize the viewable area.
-        if (centerViewport) {
-            // Map the current viewport position to screen coordinates.
-            float[] viewportPosition = {mViewportPosition.x, mViewportPosition.y};
-            mRenderData.transform.mapPoints(viewportPosition);
-
-            // Translate so the viewport is displayed in the middle of the screen.
-            mRenderData.transform.postTranslate(
-                    ((float) viewportSize.x / 2) - viewportPosition[0],
-                    ((float) viewportSize.y / 2) - viewportPosition[1]);
-        }
-
-        // Get the coordinates of the desktop rectangle (top-left/bottom-right corners) in
-        // screen coordinates. Order is: left, top, right, bottom.
-        RectF rectScreen = new RectF(0, 0, mRenderData.imageWidth, mRenderData.imageHeight);
-        mRenderData.transform.mapRect(rectScreen);
-
-        float leftDelta = rectScreen.left;
-        float rightDelta =
-                rectScreen.right - mRenderData.screenWidth + mSystemUiOffsetPixels.right;
-        float topDelta = rectScreen.top;
-        float bottomDelta =
-                rectScreen.bottom - mRenderData.screenHeight + mSystemUiOffsetPixels.bottom;
-        float xAdjust = 0;
-        float yAdjust = 0;
-
-        if (rectScreen.right - rectScreen.left < viewportSize.x) {
-            // Image is narrower than the screen, so center it.
-            xAdjust = -(rightDelta + leftDelta) / 2;
-        } else if (leftDelta > 0 && rightDelta > 0) {
-            // Panning the image left will show more of it.
-            xAdjust = -Math.min(leftDelta, rightDelta);
-        } else if (leftDelta < 0 && rightDelta < 0) {
-            // Pan the image right.
-            xAdjust = Math.min(-leftDelta, -rightDelta);
-        }
-
-        // Apply similar logic for yAdjust.
-        if (rectScreen.bottom - rectScreen.top < viewportSize.y) {
-            yAdjust = -(bottomDelta + topDelta) / 2;
-        } else if (topDelta > 0 && bottomDelta > 0) {
-            yAdjust = -Math.min(topDelta, bottomDelta);
-        } else if (topDelta < 0 && bottomDelta < 0) {
-            yAdjust = Math.min(-topDelta, -bottomDelta);
-        }
-
-        mRenderData.transform.postTranslate(xAdjust, yAdjust);
-
-        mViewer.transformationChanged();
     }
 
     /**
      * Repositions the image by translating and zooming it, to keep the zoom level within sensible
-     * limits. The minimum zoom level is chosen to avoid black space around all 4 sides. The
+     * limits. The minimum zoom level is chosen to avoid letterboxing on all 4 sides. The
      * maximum zoom level is set arbitrarily, so that the user can zoom out again in a reasonable
      * time, and to prevent arithmetic overflow problems from displaying the image.
      *
-     * @param centerViewport Determines whether the viewport will be translated to the desired
+     * @param scaleFactor The factor used to zoom the canvas in or out.
+     * @param px The center x coordinate for the scale action.
+     * @param py The center y coordinate for the scale action.
+     * @param centerOnCursor Determines whether the viewport will be translated to the desired
      *                       center position before being adjusted to fit the screen boundaries.
      */
-    public void repositionImageWithZoom(boolean centerViewport) {
+    public void scaleAndRepositionImage(
+            float scaleFactor, float px, float py, boolean centerOnCursor) {
         // Avoid division by zero in case this gets called before the image size is initialized.
         if (mRenderData.imageWidth == 0 || mRenderData.imageHeight == 0) {
             return;
         }
+
+        mRenderData.transform.postScale(scaleFactor, scaleFactor, px, py);
 
         // Zoom out if the zoom level is too high.
         float currentZoomLevel = mRenderData.transform.mapRadius(1.0f);
@@ -244,6 +189,262 @@ public class DesktopCanvas {
             mRenderData.transform.setScale(scale, scale);
         }
 
-        repositionImage(centerViewport);
+        if (centerOnCursor) {
+            setCursorPosition(mDesiredCenter.x, mDesiredCenter.y);
+        } else {
+            // Find the new screen center (it probably changed during the zoom operation) and update
+            // the viewport to smoothly track the zoom gesture.
+            float[] mappedPoints = {((float) mRenderData.screenWidth / 2) - mViewportOffset.x,
+                    ((float) mRenderData.screenHeight / 2) - mViewportOffset.y};
+            Matrix screenToImage = new Matrix();
+            mRenderData.transform.invert(screenToImage);
+            screenToImage.mapPoints(mappedPoints);
+            // The cursor is mapped to the center of the viewport in this case.
+            setViewportCenter(mappedPoints[0], mappedPoints[1]);
+        }
+    }
+
+    /**
+     * Sets the new cursor position, bounded by the given rect, and updates the image transform to
+     * reflect the new position.
+     */
+    private void updateCursorPosition(float newX, float newY, RectF bounds) {
+        mDesiredCenter.set(newX, newY);
+        constrainPointToBounds(mDesiredCenter, bounds);
+
+        calculateViewportOffset(newX - mDesiredCenter.x, newY - mDesiredCenter.y);
+
+        repositionImage();
+    }
+
+    /**
+     * Returns the height of the screen (in screen coordinates) for use in calculations involving
+     * viewport positioning.
+     */
+    private float getAdjustedScreenHeight() {
+        float adjustedScreenHeight;
+        if (mAdjustViewportSizeForSystemUi && !mSystemUiScreenRect.isEmpty()) {
+            // Find the center point of the viewport on the screen.
+            adjustedScreenHeight = mSystemUiScreenRect.bottom;
+        } else {
+            adjustedScreenHeight = ((float) mRenderData.screenHeight);
+        }
+
+        return adjustedScreenHeight;
+    }
+
+    /**
+     * Returns the center position of the viewport (in screen coordinates) taking System UI into
+     * account.
+     */
+    private PointF getViewportScreenCenter() {
+        return new PointF((float) mRenderData.screenWidth / 2, getAdjustedScreenHeight() / 2);
+    }
+
+    /**
+     * Repositions the image by translating it (without affecting the zoom level).
+     */
+    private void repositionImage() {
+        PointF viewportPosition = new PointF(mDesiredCenter.x, mDesiredCenter.y);
+        constrainPointToBounds(viewportPosition, getViewportBounds());
+        float[] viewportAdjustment = {viewportPosition.x, viewportPosition.y};
+        mRenderData.transform.mapPoints(viewportAdjustment);
+
+        // Adjust the viewport to include the overpan amount.
+        viewportAdjustment[0] += mViewportOffset.x;
+        viewportAdjustment[1] += mViewportOffset.y;
+
+        // Translate the image to move the viewport to the expected screen location.
+        PointF viewportCenter = getViewportScreenCenter();
+        mRenderData.transform.postTranslate(
+                viewportCenter.x - viewportAdjustment[0], viewportCenter.y - viewportAdjustment[1]);
+
+        mRenderStub.setTransformation(mRenderData.transform);
+    }
+
+    /**
+     * Updates the given point such that it refers to a coordinate within the bounds provided.
+     *
+     * @param point The point to adjust, the original object is modified.
+     * @param bounds The bounds used to constrain the point.
+     */
+    private void constrainPointToBounds(PointF point, RectF bounds) {
+        if (point.x < bounds.left) {
+            point.x = bounds.left;
+        } else if (point.x > bounds.right) {
+            point.x = bounds.right;
+        }
+
+        if (point.y < bounds.top) {
+            point.y = bounds.top;
+        } else if (point.y > bounds.bottom) {
+            point.y = bounds.bottom;
+        }
+    }
+
+    /** Returns a region which defines the set of valid cursor positions in image space. */
+    private RectF getImageBounds() {
+        return new RectF(0, 0, mRenderData.imageWidth, mRenderData.imageHeight);
+    }
+
+    /** Returns a region which defines the set of valid viewport center values in image space. */
+    private RectF getViewportBounds() {
+        // The region of allowable viewport values is the imageBound rect, inset by the size of the
+        // viewport itself.  This prevents over and under panning of the viewport while still
+        // allowing the user to see and interact with all pixels one the desktop image.
+        Matrix screenToImage = new Matrix();
+        mRenderData.transform.invert(screenToImage);
+
+        PointF viewportCenter = getViewportScreenCenter();
+        float[] screenVectors = {viewportCenter.x, viewportCenter.y};
+        screenToImage.mapVectors(screenVectors);
+
+        PointF letterboxPadding = getLetterboxPadding();
+        float[] letterboxPaddingVectors = {letterboxPadding.x, letterboxPadding.y};
+        screenToImage.mapVectors(letterboxPaddingVectors);
+
+        // screenCenter values are 1/2 of a particular screen dimension mapped to image space.
+        float screenCenterX = screenVectors[0] - letterboxPaddingVectors[0];
+        float screenCenterY = screenVectors[1] - letterboxPaddingVectors[1];
+        RectF imageBounds = getImageBounds();
+        imageBounds.inset(screenCenterX, screenCenterY);
+        return imageBounds;
+    }
+
+    /**
+     * Returns a region defining the maximum offset distance required to view the entire image
+     * given the current amount of System UI overlapping it.
+     */
+    private RectF getViewportOffsetBounds() {
+        // The allowable region is determined by:
+        //   - Overlap of the System UI and image content
+        //   - Current viewport offset
+        //
+        // The System UI overlap represents the maximum allowable offset, this is used to bound the
+        // viewport movement in each direction.  The current offset is used to prevent 'snapping'
+        // the image when the System UI overlap is reduced.
+        RectF viewportOffsetRect = new RectF();
+        viewportOffsetRect.union(mViewportOffset.x, mViewportOffset.y);
+
+        RectF systemUiOverlap = getSystemUiOverlap();
+        return new RectF(Math.min(viewportOffsetRect.left, -systemUiOverlap.left),
+                Math.min(viewportOffsetRect.top, -systemUiOverlap.top),
+                Math.max(viewportOffsetRect.right, systemUiOverlap.right),
+                Math.max(viewportOffsetRect.bottom, systemUiOverlap.bottom));
+    }
+
+    /**
+     * Provides the amount of padding needed to center the image content on the screen.
+     */
+    private PointF getLetterboxPadding() {
+        float[] imageVectors = {mRenderData.imageWidth, mRenderData.imageHeight};
+        mRenderData.transform.mapVectors(imageVectors);
+
+        // We want to letterbox when the image is smaller than the screen in a specific dimension.
+        // Since we center the image, split the difference so it is equally distributed.
+        float widthAdjust = Math.max(((float) mRenderData.screenWidth - imageVectors[0]) / 2, 0);
+        float heightAdjust = Math.max((getAdjustedScreenHeight() - imageVectors[1]) / 2, 0);
+
+        return new PointF(widthAdjust, heightAdjust);
+    }
+
+    /**
+     * Returns the amount of System UI along each edge of the screen which could overlap the remote
+     * desktop image below it.  This is the maximum amount that could overlap, not the actual value.
+     */
+    private RectF getSystemUiOverlap() {
+        if (mSystemUiScreenRect.isEmpty()) {
+            return new RectF();
+        }
+
+        // Letterbox padding represents the space added to the image to center it on the screen.
+        // Since it does not contain any interactable UI, we ignore it when calculating the overlap
+        // between the System UI and the remote desktop image.
+        // Note: Ignore negative padding (clamp to 0) since that means no overlap exists.
+        float adjustedScreenHeight = getAdjustedScreenHeight();
+        PointF letterboxPadding = getLetterboxPadding();
+        return new RectF(Math.max(mSystemUiScreenRect.left - letterboxPadding.x, 0.0f),
+                Math.max(mSystemUiScreenRect.top - letterboxPadding.y, 0.0f),
+                Math.max(mRenderData.screenWidth - mSystemUiScreenRect.right - letterboxPadding.x,
+                        0.0f),
+                Math.max(adjustedScreenHeight - mSystemUiScreenRect.bottom - letterboxPadding.y,
+                        0.0f));
+    }
+
+    /**
+     * Applies the given offset, as needed, to allow moving the image outside its normal bounds.
+     */
+    private void calculateViewportOffset(float offsetX, float offsetY) {
+        if (mSystemUiScreenRect.isEmpty()) {
+            // We only want to directly change the viewport offset when System UI is present.
+            return;
+        }
+
+        float[] offsets = {offsetX, offsetY};
+        mRenderData.transform.mapVectors(offsets);
+
+        // Use a temporary variable here as {@link #getViewportOffsetBounds()} uses the current
+        // viewport offset as a maximum boundary.  If we add the offset first, the result ends up
+        // being unbounded.  Thus we use a temporary object for the boundary calculation.
+        PointF requestedOffset =
+                new PointF(mViewportOffset.x + offsets[0], mViewportOffset.y + offsets[1]);
+        constrainPointToBounds(requestedOffset, getViewportOffsetBounds());
+        mViewportOffset.set(requestedOffset);
+    }
+
+    /**
+     * Starts an animation to smoothly reduce the viewport offset.  Does nothing if an animation is
+     * already running or the offset is already 0.
+     */
+    private void startOffsetReductionAnimation() {
+        if (mFrameRenderedCallback != null || mViewportOffset.length() < EPSILON) {
+            return;
+        }
+
+        mFrameRenderedCallback = new Event.ParameterCallback<Boolean, Void>() {
+            private static final float DURATION_MS = 250.0f;
+
+            private final Interpolator mInterpolator = new DecelerateInterpolator();
+
+            private long mStartTime = 0;
+            private float mOriginalX = 0.0f;
+            private float mOriginalY = 0.0f;
+
+            @Override
+            public Boolean run(Void p) {
+                if (mFrameRenderedCallback == null) {
+                    return false;
+                }
+
+                if (mStartTime == 0) {
+                    mStartTime = SystemClock.elapsedRealtime();
+                    mOriginalX = mViewportOffset.x;
+                    mOriginalY = mViewportOffset.y;
+                }
+
+                float progress = (SystemClock.elapsedRealtime() - mStartTime) / DURATION_MS;
+                if (progress < 1.0f) {
+                    float reductionFactor = 1.0f - mInterpolator.getInterpolation(progress);
+                    mViewportOffset.set(mOriginalX * reductionFactor, mOriginalY * reductionFactor);
+                } else {
+                    mViewportOffset.set(0.0f, 0.0f);
+                    mFrameRenderedCallback = null;
+                }
+
+                repositionImage();
+
+                return mFrameRenderedCallback != null;
+            }
+        };
+
+        mRenderStub.onCanvasRendered().addSelfRemovable(mFrameRenderedCallback);
+    }
+
+    /**
+     * Stops an existing offset reduction animation.
+     */
+    private void stopOffsetReductionAnimation() {
+        // Setting this value this null will prevent it from continuing to execute.
+        mFrameRenderedCallback = null;
     }
 }

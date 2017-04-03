@@ -7,7 +7,6 @@
 #include "base/command_line.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
-#include "ios/web/public/cert_store.h"
 #include "ios/web/public/navigation_item.h"
 #import "ios/web/public/navigation_manager.h"
 #import "ios/web/public/origin_util.h"
@@ -34,7 +33,7 @@ GetSecurityLevelForSecurityStyle(web::SecurityStyle style) {
     case web::SECURITY_STYLE_UNAUTHENTICATED:
       return security_state::SecurityStateModel::NONE;
     case web::SECURITY_STYLE_AUTHENTICATION_BROKEN:
-      return security_state::SecurityStateModel::SECURITY_ERROR;
+      return security_state::SecurityStateModel::DANGEROUS;
     case web::SECURITY_STYLE_WARNING:
       // //ios/web currently doesn't use this style.
       NOTREACHED();
@@ -56,20 +55,20 @@ IOSChromeSecurityStateModelClient::IOSChromeSecurityStateModelClient(
 
 IOSChromeSecurityStateModelClient::~IOSChromeSecurityStateModelClient() {}
 
-const security_state::SecurityStateModel::SecurityInfo&
-IOSChromeSecurityStateModelClient::GetSecurityInfo() const {
-  return security_state_model_->GetSecurityInfo();
+void IOSChromeSecurityStateModelClient::GetSecurityInfo(
+    security_state::SecurityStateModel::SecurityInfo* result) const {
+  return security_state_model_->GetSecurityInfo(result);
 }
 
 bool IOSChromeSecurityStateModelClient::RetrieveCert(
     scoped_refptr<net::X509Certificate>* cert) {
   web::NavigationItem* item =
       web_state_->GetNavigationManager()->GetVisibleItem();
-  if (!item)
+  if (!item || !item->GetSSL().certificate)
     return false;
 
-  int cert_id = item->GetSSL().cert_id;
-  return web::CertStore::GetInstance()->RetrieveCert(cert_id, cert);
+  *cert = item->GetSSL().certificate;
+  return true;
 }
 
 bool IOSChromeSecurityStateModelClient::UsedPolicyInstalledCertificate() {
@@ -94,7 +93,7 @@ void IOSChromeSecurityStateModelClient::GetVisibleSecurityState(
   const web::SSLStatus& ssl = item->GetSSL();
   state->initial_security_level =
       GetSecurityLevelForSecurityStyle(ssl.security_style);
-  state->cert_id = ssl.cert_id;
+  state->certificate = ssl.certificate;
   state->cert_status = ssl.cert_status;
   state->connection_status = ssl.connection_status;
   state->security_bits = ssl.security_bits;

@@ -8,8 +8,6 @@ var SLIDE_CUBIC_BEZIER = 'cubic-bezier(0.3, 0.95, 0.5, 1)';
 Polymer({
   is: 'cr-shared-menu',
 
-  behaviors: [Polymer.IronA11yKeysBehavior],
-
   properties: {
     menuOpen: {
       type: Boolean,
@@ -19,21 +17,13 @@ Polymer({
     },
 
     /**
-     * The contextual item that this menu was clicked for.
-     *  e.g. the data used to render an item in an <iron-list> or <dom-repeat>
+     * The contextual item that this menu was clicked for, e.g. the data used to
+     * render an item in an <iron-list> or <dom-repeat>.
      * @type {?Object}
      */
     itemData: {
       type: Object,
       value: null,
-    },
-
-    /** @override */
-    keyEventTarget: {
-      type: Object,
-      value: function() {
-        return this.$.menu;
-      }
     },
 
     openAnimationConfig: {
@@ -76,10 +66,6 @@ Polymer({
     }
   },
 
-  keyBindings: {
-    'tab': 'onTabPressed_',
-  },
-
   listeners: {
     'dropdown.iron-overlay-canceled': 'onOverlayCanceled_',
   },
@@ -90,21 +76,19 @@ Polymer({
    */
   lastAnchor_: null,
 
-  /**
-   * The first focusable child in the menu's light DOM.
-   * @private {?Element}
-   */
-  firstFocus_: null,
-
-  /**
-   * The last focusable child in the menu's light DOM.
-   * @private {?Element}
-   */
-  lastFocus_: null,
+  /** @private {?function(!Event)} */
+  keyHandler_: null,
 
   /** @override */
   attached: function() {
     window.addEventListener('resize', this.closeMenu.bind(this));
+    this.keyHandler_ = this.onCaptureKeyDown_.bind(this);
+    this.$.menu.addEventListener('keydown', this.keyHandler_, true);
+  },
+
+  /** @override */
+  detached: function() {
+    this.$.menu.removeEventListener('keydown', this.keyHandler_, true);
   },
 
   /** Closes the menu. */
@@ -120,26 +104,19 @@ Polymer({
   /**
    * Opens the menu at the anchor location.
    * @param {!Element} anchor The location to display the menu.
-   * @param {!Object} itemData The contextual item's data.
+   * @param {!Object=} opt_itemData The contextual item's data.
    */
-  openMenu: function(anchor, itemData) {
+  openMenu: function(anchor, opt_itemData) {
     if (this.lastAnchor_ == anchor && this.menuOpen)
       return;
 
     if (this.menuOpen)
       this.closeMenu();
 
-    this.itemData = itemData;
+    this.itemData = opt_itemData || null;
     this.lastAnchor_ = anchor;
     this.$.dropdown.restoreFocusOnClose = true;
-
-    var focusableChildren = Polymer.dom(this).querySelectorAll(
-        '[tabindex]:not([hidden]),button:not([hidden])');
-    if (focusableChildren.length > 0) {
-      this.$.dropdown.focusTarget = focusableChildren[0];
-      this.firstFocus_ = focusableChildren[0];
-      this.lastFocus_ = focusableChildren[focusableChildren.length - 1];
-    }
+    this.$.menu.selected = -1;
 
     // Move the menu to the anchor.
     this.$.dropdown.positionTarget = anchor;
@@ -149,38 +126,32 @@ Polymer({
   /**
    * Toggles the menu for the anchor that is passed in.
    * @param {!Element} anchor The location to display the menu.
-   * @param {!Object} itemData The contextual item's data.
+   * @param {!Object=} opt_itemData The contextual item's data.
    */
-  toggleMenu: function(anchor, itemData) {
+  toggleMenu: function(anchor, opt_itemData) {
     if (anchor == this.lastAnchor_ && this.menuOpen)
       this.closeMenu();
     else
-      this.openMenu(anchor, itemData);
+      this.openMenu(anchor, opt_itemData);
   },
 
   /**
-   * Trap focus inside the menu. As a very basic heuristic, will wrap focus from
-   * the first element with a nonzero tabindex to the last such element.
-   * TODO(tsergeant): Use iron-focus-wrap-behavior once it is available
-   * (https://github.com/PolymerElements/iron-overlay-behavior/issues/179).
-   * @param {CustomEvent} e
+   * Close the menu when tab is pressed. Note that we must
+   * explicitly add a capture event listener to do this as iron-menu-behavior
+   * eats all key events during bubbling. See
+   * https://github.com/PolymerElements/iron-menu-behavior/issues/56.
+   * This will move focus to the next focusable element before/after the
+   * anchor.
+   * @private
    */
-  onTabPressed_: function(e) {
-    if (!this.firstFocus_ || !this.lastFocus_)
-      return;
-
-    var toFocus;
-    var keyEvent = e.detail.keyboardEvent;
-    if (keyEvent.shiftKey && keyEvent.target == this.firstFocus_)
-      toFocus = this.lastFocus_;
-    else if (keyEvent.target == this.lastFocus_)
-      toFocus = this.firstFocus_;
-
-    if (!toFocus)
-      return;
-
-    e.preventDefault();
-    toFocus.focus();
+  onCaptureKeyDown_: function(e) {
+    if (Polymer.IronA11yKeysBehavior.keyboardEventMatchesKeys(e, 'tab')) {
+      // Need to refocus the anchor synchronously so that the tab event takes
+      // effect on it.
+      this.$.dropdown.restoreFocusOnClose = false;
+      this.lastAnchor_.focus();
+      this.closeMenu();
+    }
   },
 
   /**

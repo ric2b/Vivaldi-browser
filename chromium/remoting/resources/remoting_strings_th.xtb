@@ -13,7 +13,7 @@
 
 สำหรับคอมพิวเตอร์ระยะไกลที่มีแป้นพิมพ์ที่ไม่ใช่แบบอังกฤษ-อเมริกา ข้อความที่ได้รับอาจไม่ถูกต้อง สำหรับการจัดวางแป้นพิมพ์แบบอื่นๆ จะมีการสนับสนุนในเร็วๆ นี้!
 
-สำหรับข้อมูลเกี่ยวกับความเป็นส่วนตัว โปรดดูนโยบายส่วนบุคคลของ Google (http://goo.gl/SyrVzj) และนโยบายส่วนบุคคลของ Chrome (http://goo.gl/0uXE5d)</translation>
+สำหรับข้อมูลเกี่ยวกับความเป็นส่วนตัว โปรดดูนโยบายความเป็นส่วนตัวของ Google (http://goo.gl/SyrVzj) และนโยบายความเป็นส่วนตัวของ Chrome (http://goo.gl/0uXE5d)</translation>
 <translation id="1324095856329524885">(คุณลักษณะนี้ยังไม่มีให้ใช้งานในคอมพิวเตอร์ของคุณ)</translation>
 <translation id="1342297293546459414">ดูและควบคุมคอมพิวเตอร์ที่ใช้งานร่วมกัน</translation>
 <translation id="1389790901665088353">ดาวน์โหลด Chrome Remote Desktop Host Installer</translation>
@@ -50,7 +50,7 @@
 • บนคอมพิวเตอร์แต่ละเครื่อง ให้ตั้งค่าการเข้าถึงระยะไกลโดยใช้แอป Chrome Remote Desktop จาก Chrome เว็บสโตร์ที่ https://chrome.google.com/remotedesktop
 • บนอุปกรณ์ Android ให้เปิดแอปและแตะคอมพิวเตอร์เครื่องที่ออนไลน์อยู่เพื่อเชื่อมต่อ
 
-สำหรับข้อมูลเกี่ยวกับความเป็นส่วนตัว โปรดดูนโยบายส่วนบุคคลของ Google (http://goo.gl/SyrVzj) และนโยบายส่วนบุคคลของ Chrome (http://goo.gl/0uXE5d)</translation>
+สำหรับข้อมูลเกี่ยวกับความเป็นส่วนตัว โปรดดูนโยบายความเป็นส่วนตัวของ Google (http://goo.gl/SyrVzj) และนโยบายความเป็นส่วนตัวของ Chrome (http://goo.gl/0uXE5d)</translation>
 <translation id="2124408767156847088">เข้าถึงคอมพิวเตอร์ของคุณจากอุปกรณ์ Android ได้อย่างปลอดภัย</translation>
 <translation id="2208514473086078157">การตั้งค่านโยบายไม่อนุญาตให้แชร์คอมพิวเตอร์นี้เป็นโฮสต์ Chrome Remote Desktop โปรดติดต่อขอรับความช่วยเหลือจากผู้ดูแลระบบของคุณ</translation>
 <translation id="2220529011494928058">รายงานปัญหา</translation>
@@ -65,7 +65,6 @@
 <translation id="2359808026110333948">ดำเนินการต่อ</translation>
 <translation id="2366718077645204424">ไม่สามารถเข้าถึงโฮสต์ อาจเป็นเพราะการกำหนดค่าของเครือข่ายที่คุณกำลังใช้อยู่</translation>
 <translation id="2370754117186920852"><ph name="OPTIONAL_OFFLINE_REASON" />  ออนไลน์ล่าสุด<ph name="RELATIVE_TIMESTAMP" /></translation>
-<translation id="2498359688066513246">ความช่วยเหลือและความคิดเห็น</translation>
 <translation id="2499160551253595098">ช่วยเราปรับปรุง Chrome Remote Desktop ให้ดีขึ้นด้วยการอนุญาตให้เรารวบรวมสถิติการใช้งานและรายงานข้อขัดข้อง</translation>
 <translation id="2512228156274966424">หมายเหตุ: เพื่อให้มั่นใจว่าทุกแป้นพิมพ์ลัดพร้อมใช้งาน คุณสามารถกำหนดค่า Chrome Remote Desktop เป็น "เปิดเป็นหน้าต่าง"</translation>
 <translation id="2540992418118313681">คุณต้องการจะแชร์คอมพิวเตอร์เครื่องนี้เพื่อให้ผู้ใช้อื่นเห็นและควบคุมไหม</translation>
@@ -264,6 +263,7 @@ Desktop Host</translation>
 <translation id="7948001860594368197">ตัวเลือกหน้าจอ</translation>
 <translation id="7970576581263377361">การตรวจสอบสิทธิ์ล้มเหลว โปรดลงชื่อเข้าใช้ Chromium อีกครั้ง</translation>
 <translation id="7981525049612125370">เซสชันระยะไกลหมดอายุลงแล้ว</translation>
+<translation id="8041089156583427627">ส่งความคิดเห็น</translation>
 <translation id="8041721485428375115">การดาวน์โหลด Chrome Remote Desktop Host Installer หมายถึงคุณยอมรับ<ph name="LINK_BEGIN" />ข้อกำหนดในการให้บริการ<ph name="LINK_END" />ของ Google</translation>
 <translation id="8073845705237259513">ในการใช้ Chrome Remote Desktop คุณจะต้องเพิ่มบัญชี Google ลงในอุปกรณ์ของคุณ</translation>
 <translation id="80739703311984697">โฮสต์ระยะไกลกำหนดให้คุณตรวจสอบสิทธิ์กับเว็บไซต์ของบุคคลที่สาม หากต้องการดำเนินการต่อ คุณต้องให้สิทธิ์อนุญาตเพิ่มเติมแก่ Chromoting เพื่อเข้าถึงที่อยู่นี้:</translation>
@@ -287,6 +287,7 @@ Desktop Host</translation>
 <translation id="8548209692293300397">ก่อนหน้านี้คุณได้ลงชื่อเข้าใช้เป็น <ph name="USER_NAME" /> (<ph name="USER_EMAIL" />)  หากต้องการเข้าถึงคอมพิวเตอร์ในบัญชีนั้น ให้<ph name="LINK_BEGIN" />ลงชื่อเข้าใช้ Google Chrome<ph name="LINK_END" /> ด้วยบัญชีนั้นและติดตั้ง Chrome Remote Desktop อีกครั้ง</translation>
 <translation id="8642984861538780905">พอใช้</translation>
 <translation id="8712909229180978490">ฉันไม่เห็นไฟล์ที่บันทึกไว้แบบออนไลน์ใน Google ไดรฟ์</translation>
+<translation id="8743328882720071828">คุณต้องการให้ <ph name="CLIENT_USERNAME" /> มองเห็นและควบคุมคอมพิวเตอร์ของคุณไหม</translation>
 <translation id="8759753423332885148">เรียนรู้เพิ่มเติม</translation>
 <translation id="8791202241915690908">ดาวน์โหลด Chromoting Host Installer</translation>
 <translation id="894763922177556086">ดี</translation>

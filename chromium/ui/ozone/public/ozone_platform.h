@@ -14,6 +14,10 @@ namespace gfx {
 class Rect;
 }
 
+namespace IPC {
+class MessageFilter;
+}
+
 namespace shell {
 class Connector;
 class InterfaceRegistry;
@@ -23,7 +27,6 @@ namespace ui {
 
 class CursorFactoryOzone;
 class InputController;
-class GpuPlatformSupport;
 class GpuPlatformSupportHost;
 class NativeDisplayDelegate;
 class OverlayManagerOzone;
@@ -51,8 +54,8 @@ class OZONE_EXPORT OzonePlatform {
   OzonePlatform();
   virtual ~OzonePlatform();
 
-  // Additional initalization params for the platform. Platforms must not retain
-  // a reference to this structure.
+  // Additional initialization params for the platform. Platforms must not
+  // retain a reference to this structure.
   struct InitParams {
     // Ozone may retain this pointer for later use. An Ozone platform embedder
     // must set this parameter in order for the Ozone platform implementation to
@@ -93,7 +96,7 @@ class OZONE_EXPORT OzonePlatform {
   virtual ui::OverlayManagerOzone* GetOverlayManager() = 0;
   virtual ui::CursorFactoryOzone* GetCursorFactoryOzone() = 0;
   virtual ui::InputController* GetInputController() = 0;
-  virtual ui::GpuPlatformSupport* GetGpuPlatformSupport() = 0;
+  virtual IPC::MessageFilter* GetGpuMessageFilter();
   virtual ui::GpuPlatformSupportHost* GetGpuPlatformSupportHost() = 0;
   virtual std::unique_ptr<SystemInputInjector> CreateSystemInputInjector() = 0;
   virtual std::unique_ptr<PlatformWindow> CreatePlatformWindow(

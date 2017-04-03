@@ -5,6 +5,7 @@
 #ifndef CHROMEOS_DBUS_DBUS_CLIENT_H_
 #define CHROMEOS_DBUS_DBUS_CLIENT_H_
 
+#include "base/macros.h"
 
 namespace dbus {
 class Bus;
@@ -25,7 +26,8 @@ class DBusClient {
   virtual void Init(dbus::Bus* bus) = 0;
 
  private:
-  friend class DBusThreadManager;
+  friend class DBusClientsBrowser;
+  friend class DBusClientsCommon;
 
   DISALLOW_ASSIGN(DBusClient);
 };

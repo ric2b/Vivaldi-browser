@@ -698,7 +698,7 @@ size_t SpdyConstants::GetFrameHeaderSize(SpdyMajorVersion version) {
     case HTTP2:
       return 9;
   }
-  SPDY_BUG << "Unhandled SPDY version.";
+  SPDY_BUG << "Unhandled SPDY version: " << version;
   return 0;
 }
 
@@ -750,7 +750,11 @@ SpdyFrameWithHeaderBlockIR::SpdyFrameWithHeaderBlockIR(
 SpdyFrameWithHeaderBlockIR::~SpdyFrameWithHeaderBlockIR() {}
 
 SpdyDataIR::SpdyDataIR(SpdyStreamId stream_id, base::StringPiece data)
-    : SpdyFrameWithFinIR(stream_id), padded_(false), padding_payload_len_(0) {
+    : SpdyFrameWithFinIR(stream_id),
+      data_(nullptr),
+      data_len_(0),
+      padded_(false),
+      padding_payload_len_(0) {
   SetDataDeep(data);
 }
 
@@ -760,12 +764,17 @@ SpdyDataIR::SpdyDataIR(SpdyStreamId stream_id, const char* data)
 SpdyDataIR::SpdyDataIR(SpdyStreamId stream_id, std::string data)
     : SpdyFrameWithFinIR(stream_id),
       data_store_(base::MakeUnique<std::string>(std::move(data))),
-      data_(*data_store_),
+      data_(data_store_->data()),
+      data_len_(data_store_->size()),
       padded_(false),
       padding_payload_len_(0) {}
 
 SpdyDataIR::SpdyDataIR(SpdyStreamId stream_id)
-    : SpdyFrameWithFinIR(stream_id), padded_(false), padding_payload_len_(0) {}
+    : SpdyFrameWithFinIR(stream_id),
+      data_(nullptr),
+      data_len_(0),
+      padded_(false),
+      padding_payload_len_(0) {}
 
 SpdyDataIR::~SpdyDataIR() {}
 
@@ -832,6 +841,13 @@ SpdyGoAwayIR::SpdyGoAwayIR(SpdyStreamId last_good_stream_id,
 }
 
 SpdyGoAwayIR::~SpdyGoAwayIR() {}
+
+SpdyContinuationIR::SpdyContinuationIR(SpdyStreamId stream_id)
+    : SpdyFrameWithStreamIdIR(stream_id), end_headers_(false) {
+  encoding_ = base::MakeUnique<std::string>();
+}
+
+SpdyContinuationIR::~SpdyContinuationIR() {}
 
 void SpdyGoAwayIR::Visit(SpdyFrameVisitor* visitor) const {
   return visitor->VisitGoAway(*this);

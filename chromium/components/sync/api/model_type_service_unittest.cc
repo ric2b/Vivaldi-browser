@@ -2,16 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <memory>
+#include "components/sync/api/model_type_service.h"
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
+#include "components/sync/api/data_type_error_handler_mock.h"
 #include "components/sync/api/fake_model_type_change_processor.h"
-#include "components/sync/api/fake_model_type_service.h"
-#include "components/sync/core/test/data_type_error_handler_mock.h"
+#include "components/sync/api/stub_model_type_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace syncer_v2 {
+namespace syncer {
 
 // A mock MTCP that lets us know when DisableSync is called.
 class MockModelTypeChangeProcessor : public FakeModelTypeChangeProcessor {
@@ -26,10 +26,10 @@ class MockModelTypeChangeProcessor : public FakeModelTypeChangeProcessor {
   base::Closure disabled_callback_;
 };
 
-class MockModelTypeService : public FakeModelTypeService {
+class MockModelTypeService : public StubModelTypeService {
  public:
   MockModelTypeService()
-      : FakeModelTypeService(base::Bind(&MockModelTypeService::CreateProcessor,
+      : StubModelTypeService(base::Bind(&MockModelTypeService::CreateProcessor,
                                         base::Unretained(this))) {}
   ~MockModelTypeService() override {}
 
@@ -48,7 +48,7 @@ class MockModelTypeService : public FakeModelTypeService {
 
  private:
   std::unique_ptr<ModelTypeChangeProcessor> CreateProcessor(
-      syncer::ModelType type,
+      ModelType type,
       ModelTypeService* service) {
     return base::MakeUnique<MockModelTypeChangeProcessor>(base::Bind(
         &MockModelTypeService::OnProcessorDisableSync, base::Unretained(this)));
@@ -69,8 +69,9 @@ class ModelTypeServiceTest : public ::testing::Test {
 
   void OnSyncStarting() {
     service_.OnSyncStarting(
-        &error_handler_, base::Bind(&ModelTypeServiceTest::OnProcessorStarted,
-                                    base::Unretained(this)));
+        base::MakeUnique<DataTypeErrorHandlerMock>(),
+        base::Bind(&ModelTypeServiceTest::OnProcessorStarted,
+                   base::Unretained(this)));
   }
 
   bool start_callback_called() const { return start_callback_called_; }
@@ -78,13 +79,12 @@ class ModelTypeServiceTest : public ::testing::Test {
 
  private:
   void OnProcessorStarted(
-      syncer::SyncError error,
+      SyncError error,
       std::unique_ptr<ActivationContext> activation_context) {
     start_callback_called_ = true;
   }
 
   bool start_callback_called_;
-  syncer::DataTypeErrorHandlerMock error_handler_;
   MockModelTypeService service_;
 };
 
@@ -152,4 +152,4 @@ TEST_F(ModelTypeServiceTest, DefaultConflictResolution) {
             service()->ResolveConflict(local_data, remote_data).type());
 }
 
-}  // namespace syncer_v2
+}  // namespace syncer

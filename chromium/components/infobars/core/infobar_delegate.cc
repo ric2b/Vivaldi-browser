@@ -12,7 +12,7 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/vector_icons_public.h"
 
-#if !defined(OS_MACOSX) && !defined(OS_IOS) && !defined(OS_ANDROID)
+#if !defined(OS_IOS) && !defined(OS_ANDROID)
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
 #endif
@@ -42,15 +42,13 @@ gfx::VectorIconId InfoBarDelegate::GetVectorIconId() const {
 }
 
 gfx::Image InfoBarDelegate::GetIcon() const {
-#if !defined(OS_MACOSX) && !defined(OS_IOS) && !defined(OS_ANDROID)
-  if (ui::MaterialDesignController::IsModeMaterial()) {
-    gfx::VectorIconId vector_id = GetVectorIconId();
-    if (vector_id != gfx::VectorIconId::VECTOR_ICON_NONE) {
-      return gfx::Image(gfx::CreateVectorIcon(vector_id, 16,
-                                              GetInfoBarType() == WARNING_TYPE
-                                                  ? SkColorSetRGB(0xFF, 0x67, 0)
-                                                  : gfx::kGoogleBlue500));
-    }
+#if !defined(OS_IOS) && !defined(OS_ANDROID)
+  gfx::VectorIconId vector_id = GetVectorIconId();
+  if (vector_id != gfx::VectorIconId::VECTOR_ICON_NONE) {
+    return gfx::Image(gfx::CreateVectorIcon(vector_id, 16,
+                                            GetInfoBarType() == WARNING_TYPE
+                                                ? SkColorSetRGB(0xFF, 0x67, 0)
+                                                : gfx::kGoogleBlue500));
   }
 #endif
 
@@ -134,6 +132,11 @@ InfoBarDelegate::AsMediaStreamInfoBarDelegateAndroid() {
 
 MediaThrottleInfoBarDelegate*
     InfoBarDelegate::AsMediaThrottleInfoBarDelegate() {
+  return nullptr;
+}
+
+offline_pages::OfflinePageInfoBarDelegate*
+InfoBarDelegate::AsOfflinePageInfoBarDelegate() {
   return nullptr;
 }
 #endif

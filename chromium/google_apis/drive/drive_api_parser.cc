@@ -32,7 +32,7 @@ bool CreateFileResourceFromValue(const base::Value* value,
 // for JSONValueConverter::RegisterCustomField method.
 // TODO(mukai): make it return false in case of invalid |url_string|.
 bool GetGURLFromString(const base::StringPiece& url_string, GURL* result) {
-  *result = GURL(url_string.as_string());
+  *result = GURL(url_string);
   return true;
 }
 
@@ -154,6 +154,7 @@ const char kImageMediaMetadata[] = "imageMediaMetadata";
 const char kShared[] = "shared";
 // These 5 flags are defined under |labels|.
 const char kLabelTrashed[] = "trashed";
+const char kLabelStarred[] = "starred";
 // These 3 flags are defined under |imageMediaMetadata|.
 const char kImageMediaMetadataWidth[] = "width";
 const char kImageMediaMetadataHeight[] = "height";
@@ -638,7 +639,9 @@ bool ChangeList::Parse(const base::Value& value) {
 ////////////////////////////////////////////////////////////////////////////////
 // FileLabels implementation
 
-FileLabels::FileLabels() : trashed_(false) {}
+FileLabels::FileLabels()
+    : trashed_(false),
+      starred_(false) {}
 
 FileLabels::~FileLabels() {}
 
@@ -646,6 +649,7 @@ FileLabels::~FileLabels() {}
 void FileLabels::RegisterJSONConverter(
     base::JSONValueConverter<FileLabels>* converter) {
   converter->RegisterBoolField(kLabelTrashed, &FileLabels::trashed_);
+  converter->RegisterBoolField(kLabelStarred, &FileLabels::starred_);
 }
 
 // static

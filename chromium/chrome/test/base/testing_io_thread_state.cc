@@ -46,8 +46,7 @@ TestingIOThreadState::TestingIOThreadState() {
   chromeos::DBusThreadManager::Initialize();
   bluez::BluezDBusManager::Initialize(
       chromeos::DBusThreadManager::Get()->GetSystemBus(),
-      chromeos::DBusThreadManager::Get()->IsUsingStub(
-          chromeos::DBusClientBundle::BLUETOOTH));
+      chromeos::DBusThreadManager::Get()->IsUsingFakes());
   chromeos::NetworkHandler::Initialize();
 #endif
 

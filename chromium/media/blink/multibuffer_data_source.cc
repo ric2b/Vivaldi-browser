@@ -248,8 +248,8 @@ void MultibufferDataSource::SetBufferingStrategy(
 
 bool MultibufferDataSource::HasSingleOrigin() {
   DCHECK(render_task_runner_->BelongsToCurrentThread());
-  DCHECK(init_cb_.is_null() && reader_.get())
-      << "Initialize() must complete before calling HasSingleOrigin()";
+  // Before initialization completes there is no risk of leaking data. Callers
+  // are required to order checks such that this isn't a race.
   return single_origin_;
 }
 
@@ -262,16 +262,6 @@ bool MultibufferDataSource::DidPassCORSAccessCheck() const {
   if (failed_)
     return false;
   return true;
-}
-
-void MultibufferDataSource::Abort() {
-  DCHECK(render_task_runner_->BelongsToCurrentThread());
-  {
-    base::AutoLock auto_lock(lock_);
-    StopInternal_Locked();
-  }
-  StopLoader();
-  frame_ = NULL;
 }
 
 void MultibufferDataSource::MediaPlaybackRateChanged(double playback_rate) {
@@ -306,6 +296,17 @@ void MultibufferDataSource::Stop() {
   render_task_runner_->PostTask(FROM_HERE,
                                 base::Bind(&MultibufferDataSource::StopLoader,
                                            weak_factory_.GetWeakPtr()));
+}
+
+void MultibufferDataSource::Abort() {
+  base::AutoLock auto_lock(lock_);
+  DCHECK(init_cb_.is_null());
+  if (read_op_)
+    ReadOperation::Run(std::move(read_op_), kAborted);
+
+  // Abort does not call StopLoader() since it is typically called prior to a
+  // seek or suspend. Let the loader logic make the decision about whether a new
+  // loader is necessary upon the seek or resume.
 }
 
 void MultibufferDataSource::SetBitrate(int bitrate) {
@@ -381,9 +382,8 @@ void MultibufferDataSource::ReadTask() {
 
   base::AutoLock auto_lock(lock_);
   int bytes_read = 0;
-  if (stop_signal_received_)
+  if (stop_signal_received_ || !read_op_)
     return;
-  DCHECK(read_op_);
   DCHECK(read_op_->size());
 
   if (!reader_) {
@@ -416,8 +416,8 @@ void MultibufferDataSource::ReadTask() {
   } else {
     reader_->Wait(1, base::Bind(&MultibufferDataSource::ReadTask,
                                 weak_factory_.GetWeakPtr()));
-    UpdateLoadingState_Locked(false);
   }
+  UpdateLoadingState_Locked(false);
 }
 
 void MultibufferDataSource::StopInternal_Locked() {
@@ -538,14 +538,20 @@ void MultibufferDataSource::UpdateLoadingState_Locked(bool force_loading) {
     return;
   // Update loading state.
   bool is_loading = !!reader_ && reader_->IsLoading();
-  if (read_op_)
-    is_loading = true;
   if (force_loading || is_loading != loading_) {
-    loading_ = is_loading || force_loading;
+    bool loading = is_loading || force_loading;
 
-    if (!loading_ && cancel_on_defer_) {
+    if (!loading && cancel_on_defer_) {
+      if (read_op_) {
+        // We can't destroy the reader if a read operation is pending.
+        // UpdateLoadingState_Locked will be called again when the read
+        // operation is done.
+        return;
+      }
       reader_.reset(nullptr);
     }
+
+    loading_ = loading;
 
     // Callback could kill us, be sure to call it last.
     downloading_cb_.Run(loading_);

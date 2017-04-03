@@ -47,7 +47,6 @@ Vaihda syöttötapaa painamalla Shift + Alt.</translation>
 <translation id="2268813581635650749">Kirjaa kaikki ulos</translation>
 <translation id="2297568595583585744">Tila-alue</translation>
 <translation id="2303600792989757991">Vaihda ikkunan yleiskatsausta</translation>
-<translation id="2372145515558759244">Synkronoidaan sovelluksia...</translation>
 <translation id="2391579633712104609">180°</translation>
 <translation id="2429753432712299108">Bluetooth-laite <ph name="DEVICE_NAME" /> pyytää lupaa laiteparin muodostamiseen. Ennen kuin hyväksyt pyynnön, varmista, että laitteella näkyy tämä avain: <ph name="PASSKEY" /></translation>
 <translation id="2475982808118771221">Tapahtui virhe</translation>
@@ -61,7 +60,6 @@ Vaihda syöttötapaa painamalla Shift + Alt.</translation>
 <translation id="2727977024730340865">Pienitehoinen laturi kytketty. Akku ei ehkä lataudu luotettavasti.</translation>
 <translation id="2761704814324807722">Tila-alue, aika <ph name="TIME" />, <ph name="BATTERY" /></translation>
 <translation id="2792498699870441125">Alt + haku</translation>
-<translation id="2805756323405976993">Sovellukset</translation>
 <translation id="2819276065543622893">Sinut kirjataan ulos nyt.</translation>
 <translation id="2825619548187458965">Hylly</translation>
 <translation id="2844169650293029770">C-tyypin USB-laite (vasemman sivun etummainen portti)</translation>
@@ -96,7 +94,6 @@ Vaihda syöttötapaa painamalla Shift + Alt.</translation>
 <translation id="3621712662352432595">Ääniasetukset</translation>
 <translation id="3625258641415618104">Kuvakaappaukset poissa käytöstä</translation>
 <translation id="3626281679859535460">Kirkkaus</translation>
-<translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079">Ruudun <ph name="DISPLAY_NAME" /> tarkkuudeksi vaihdettiin <ph name="RESOLUTION" /></translation>
 <translation id="370649949373421643">Ota Wi-Fi käyttöön</translation>
 <translation id="3709443003275901162">Yli 9</translation>
@@ -110,6 +107,8 @@ Vaihda syöttötapaa painamalla Shift + Alt.</translation>
 <translation id="3866182280516392520">IPv6-osoite</translation>
 <translation id="3891340733213178823">Kirjaudu ulos painamalla Ctrl+Shift+Q kahdesti.</translation>
 <translation id="3892641579809465218">Sisäinen näyttö</translation>
+<translation id="3893630138897523026">ChromeVox (äänipalaute)</translation>
+<translation id="3899995891769452915">Äänisyöte</translation>
 <translation id="3963445509666917109">Kaiutin (sisäinen)</translation>
 <translation id="3967919079500697218">Järjestelmänvalvoja on poistanut käytöstä mahdollisuuden ottaa kuvakaappauksia.</translation>
 <translation id="397105322502079400">Lasketaan...</translation>
@@ -133,10 +132,8 @@ Vaihda syöttötapaa painamalla Shift + Alt.</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl+Shift+välilyönti</translation>
 <translation id="5045002648206642691">Google Driven asetukset...</translation>
-<translation id="511445211639755999"><ph name="RESOLUTION" />, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">Cast-laitteita käytettävissä</translation>
 <translation id="5170568018924773124">Näytä kansiossa</translation>
-<translation id="5191140942132549112">NÄYTÄ KYSYMYKSET</translation>
 <translation id="5222676887888702881">Kirjaudu ulos</translation>
 <translation id="5238774010593222950">Kirjautuminen toiseen tiliin ei onnistu.</translation>
 <translation id="532063867737390965">Järjestelmänvalvoja on ottanut tämän verkkoasetuksen pois käytöstä.</translation>
@@ -184,6 +181,7 @@ Vaihda syöttötapaa painamalla Shift + Alt.</translation>
 <translation id="6459472438155181876">Ruutua laajennetaan: <ph name="DISPLAY_NAME" /></translation>
 <translation id="6490471652906364588">C-tyypin USB-laite (oikean sivun portti)</translation>
 <translation id="6501401484702599040">Näkymä peilataan kohteeseen <ph name="RECEIVER_NAME" />.</translation>
+<translation id="6521655319214113338">Käsinkirjoitus</translation>
 <translation id="6537270692134705506">Tallenna kuvakaappaus koko näkymästä</translation>
 <translation id="6550675742724504774">Asetukset</translation>
 <translation id="6585808820553845416">Istunnon loppumiseen on <ph name="SESSION_TIME_REMAINING" />.</translation>
@@ -193,7 +191,6 @@ Vaihda syöttötapaa painamalla Shift + Alt.</translation>
 <translation id="6713285437468012787">Bluetooth-laitteeseen <ph name="DEVICE_NAME" /> on nyt muodostettu laitepariyhteys, ja se on kaikkien käyttäjien saatavilla. Voit poistaa laiteparin Asetuksien kautta.</translation>
 <translation id="6785414152754474415">Akussa on virtaa <ph name="PERCENTAGE" /> %, ja laite on kytketty laturiin.</translation>
 <translation id="683971173229319003">Haku+L</translation>
-<translation id="68610848741840742">ChromeVox (äänipalaute)</translation>
 <translation id="6911468394164995108">Liity muuhun verkkoon...</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6979158407327259162">Google Drive</translation>
@@ -214,8 +211,10 @@ Vaihda syöttötapaa painamalla Shift + Alt.</translation>
 <translation id="743058460480092004">Kamera ja mikrofoni ovat käytössä.</translation>
 <translation id="7510334386202674593">Ctrl+Shift+L</translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" /> ei tue resoluutiota <ph name="SPECIFIED_RESOLUTION" />. Resoluutioksi valittiin <ph name="FALLBACK_RESOLUTION" />.</translation>
+<translation id="7562368315689366235">Emojipaletti</translation>
 <translation id="7573962313813535744">Telakoitu tila</translation>
 <translation id="7580671184200851182">Toista äänet samanlaisina kaikista kaiuttimista (monotoisto)</translation>
+<translation id="7581273696622423628">Vastaa kyselyyn</translation>
 <translation id="7593891976182323525">Haku tai Shift</translation>
 <translation id="7649070708921625228">Ohje</translation>
 <translation id="7692480393933218409">Ladataan yhdistettyjä C-tyypin USB-laitteita</translation>

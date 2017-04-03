@@ -14,7 +14,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/persistent_histogram_allocator.h"
 #include "base/metrics/persistent_memory_allocator.h"
 #include "base/stl_util.h"
@@ -27,12 +27,12 @@
 #include "content/browser/histogram_message_filter.h"
 #include "content/browser/loader/resource_message_filter.h"
 #include "content/browser/memory/memory_message_filter.h"
-#include "content/browser/mojo/mojo_shell_context.h"
 #include "content/browser/profiler_message_filter.h"
+#include "content/browser/service_manager/service_manager_context.h"
 #include "content/browser/tracing/trace_message_filter.h"
 #include "content/common/child_process_host_impl.h"
 #include "content/common/child_process_messages.h"
-#include "content/common/mojo/mojo_child_connection.h"
+#include "content/common/service_manager/child_connection.h"
 #include "content/public/browser/browser_child_process_host_delegate.h"
 #include "content/public/browser/browser_child_process_observer.h"
 #include "content/public/browser/browser_thread.h"
@@ -175,9 +175,9 @@ BrowserChildProcessHostImpl::BrowserChildProcessHostImpl(
 
   if (!service_name.empty()) {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
-    child_connection_.reset(new MojoChildConnection(
+    child_connection_.reset(new ChildConnection(
         service_name, base::StringPrintf("%d", data_.id), child_token_,
-        MojoShellContext::GetConnectorForIOThread(),
+        ServiceManagerContext::GetConnectorForIOThread(),
         base::ThreadTaskRunnerHandle::Get()));
   }
 
@@ -252,7 +252,7 @@ void BrowserChildProcessHostImpl::Launch(
                              arraysize(kForwardSwitches));
 
   if (child_connection_) {
-    cmd_line->AppendSwitchASCII(switches::kMojoApplicationChannelToken,
+    cmd_line->AppendSwitchASCII(switches::kServiceRequestChannelToken,
                                 child_connection_->service_token());
   }
 
@@ -476,12 +476,40 @@ void BrowserChildProcessHostImpl::CreateMetricsAllocator() {
   size_t memory_size;
   base::StringPiece metrics_name;
   switch (data_.process_type) {
+    case PROCESS_TYPE_UTILITY:
+      memory_size = 100 << 10;  // 100 KiB
+      metrics_name = "UtilityMetrics";
+      break;
+
+    case PROCESS_TYPE_ZYGOTE:
+      memory_size = 100 << 10;  // 100 KiB
+      metrics_name = "ZygoteMetrics";
+      break;
+
+    case PROCESS_TYPE_SANDBOX_HELPER:
+      memory_size = 100 << 10;  // 100 KiB
+      metrics_name = "SandboxHelperMetrics";
+      break;
+
     case PROCESS_TYPE_GPU:
       memory_size = 100 << 10;  // 100 KiB
       metrics_name = "GpuMetrics";
       break;
 
+    case PROCESS_TYPE_PPAPI_PLUGIN:
+      memory_size = 100 << 10;  // 100 KiB
+      metrics_name = "PpapiPluginMetrics";
+      break;
+
+    case PROCESS_TYPE_PPAPI_BROKER:
+      memory_size = 100 << 10;  // 100 KiB
+      metrics_name = "PpapiBrokerMetrics";
+      break;
+
     default:
+      UMA_HISTOGRAM_ENUMERATION(
+          "UMA.SubprocessMetricsProvider.UntrackedProcesses",
+          data_.process_type, PROCESS_TYPE_CONTENT_END);
       return;
   }
 

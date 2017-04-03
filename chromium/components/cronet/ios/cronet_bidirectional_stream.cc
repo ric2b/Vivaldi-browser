@@ -73,7 +73,10 @@ CronetBidirectionalStream::CronetBidirectionalStream(
       pending_write_data_(new WriteBuffers()),
       flushing_write_data_(new WriteBuffers()),
       sending_write_data_(new WriteBuffers()),
-      delegate_(delegate) {}
+      delegate_(delegate),
+      weak_factory_(this) {
+  weak_this_ = weak_factory_.GetWeakPtr();
+}
 
 CronetBidirectionalStream::~CronetBidirectionalStream() {
   DCHECK(environment_->IsOnNetworkThread());
@@ -98,9 +101,8 @@ int CronetBidirectionalStream::Start(const char* url,
   write_end_of_stream_ = end_of_stream;
   DCHECK(environment_);
   environment_->PostToNetworkThread(
-      FROM_HERE,
-      base::Bind(&CronetBidirectionalStream::StartOnNetworkThread,
-                 base::Unretained(this), base::Passed(&request_info)));
+      FROM_HERE, base::Bind(&CronetBidirectionalStream::StartOnNetworkThread,
+                            weak_this_, base::Passed(&request_info)));
   return 0;
 }
 
@@ -112,7 +114,7 @@ bool CronetBidirectionalStream::ReadData(char* buffer, int capacity) {
 
   environment_->PostToNetworkThread(
       FROM_HERE, base::Bind(&CronetBidirectionalStream::ReadDataOnNetworkThread,
-                            base::Unretained(this), read_buffer, capacity));
+                            weak_this_, read_buffer, capacity));
   return true;
 }
 
@@ -128,20 +130,20 @@ bool CronetBidirectionalStream::WriteData(const char* buffer,
   environment_->PostToNetworkThread(
       FROM_HERE,
       base::Bind(&CronetBidirectionalStream::WriteDataOnNetworkThread,
-                 base::Unretained(this), write_buffer, count, end_of_stream));
+                 weak_this_, write_buffer, count, end_of_stream));
   return true;
 }
 
 void CronetBidirectionalStream::Flush() {
   environment_->PostToNetworkThread(
-      FROM_HERE, base::Bind(&CronetBidirectionalStream::FlushOnNetworkThread,
-                            base::Unretained(this)));
+      FROM_HERE,
+      base::Bind(&CronetBidirectionalStream::FlushOnNetworkThread, weak_this_));
 }
 
 void CronetBidirectionalStream::Cancel() {
   environment_->PostToNetworkThread(
       FROM_HERE, base::Bind(&CronetBidirectionalStream::CancelOnNetworkThread,
-                            base::Unretained(this)));
+                            weak_this_));
 }
 
 void CronetBidirectionalStream::Destroy() {
@@ -156,6 +158,8 @@ void CronetBidirectionalStream::Destroy() {
 void CronetBidirectionalStream::OnStreamReady(bool request_headers_sent) {
   DCHECK(environment_->IsOnNetworkThread());
   DCHECK_EQ(STARTED, write_state_);
+  if (!bidi_stream_)
+    return;
   request_headers_sent_ = request_headers_sent;
   write_state_ = WAITING_FOR_FLUSH;
   if (write_end_of_stream_) {
@@ -173,6 +177,8 @@ void CronetBidirectionalStream::OnHeadersReceived(
     const net::SpdyHeaderBlock& response_headers) {
   DCHECK(environment_->IsOnNetworkThread());
   DCHECK_EQ(STARTED, read_state_);
+  if (!bidi_stream_)
+    return;
   read_state_ = WAITING_FOR_READ;
   // Get http status code from response headers.
   int http_status_code = 0;
@@ -196,6 +202,8 @@ void CronetBidirectionalStream::OnHeadersReceived(
 void CronetBidirectionalStream::OnDataRead(int bytes_read) {
   DCHECK(environment_->IsOnNetworkThread());
   DCHECK_EQ(READING, read_state_);
+  if (!bidi_stream_)
+    return;
   read_state_ = WAITING_FOR_READ;
   delegate_->OnDataRead(read_buffer_->data(), bytes_read);
 
@@ -208,6 +216,8 @@ void CronetBidirectionalStream::OnDataRead(int bytes_read) {
 
 void CronetBidirectionalStream::OnDataSent() {
   DCHECK(environment_->IsOnNetworkThread());
+  if (!bidi_stream_)
+    return;
   DCHECK_EQ(WRITING, write_state_);
   write_state_ = WAITING_FOR_FLUSH;
   for (const scoped_refptr<net::IOBuffer>& buffer :
@@ -229,13 +239,21 @@ void CronetBidirectionalStream::OnDataSent() {
 void CronetBidirectionalStream::OnTrailersReceived(
     const net::SpdyHeaderBlock& response_trailers) {
   DCHECK(environment_->IsOnNetworkThread());
+  if (!bidi_stream_)
+    return;
   delegate_->OnTrailersReceived(response_trailers);
 }
 
 void CronetBidirectionalStream::OnFailed(int error) {
   DCHECK(environment_->IsOnNetworkThread());
-  bidi_stream_.reset();
+  if (!bidi_stream_ && read_state_ != NOT_STARTED)
+    return;
   read_state_ = write_state_ = ERROR;
+  weak_factory_.InvalidateWeakPtrs();
+  // Delete underlying |bidi_stream_| asynchronously as it may still be used.
+  environment_->PostToNetworkThread(
+      FROM_HERE, base::Bind(&base::DeletePointer<net::BidirectionalStream>,
+                            bidi_stream_.release()));
   delegate_->OnFailed(error);
 }
 
@@ -262,7 +280,7 @@ void CronetBidirectionalStream::ReadDataOnNetworkThread(
   DCHECK(read_buffer);
   DCHECK(!read_buffer_);
   if (read_state_ != WAITING_FOR_READ) {
-    DLOG(ERROR) << "Unexpected Read Data in read_state " << WAITING_FOR_READ;
+    DLOG(ERROR) << "Unexpected Read Data in read_state " << read_state_;
     // Invoke OnFailed unless it is already invoked.
     if (read_state_ != ERROR)
       OnFailed(net::ERR_UNEXPECTED);
@@ -327,6 +345,7 @@ void CronetBidirectionalStream::FlushOnNetworkThread() {
 }
 
 void CronetBidirectionalStream::SendFlushingWriteData() {
+  DCHECK(bidi_stream_);
   // If previous send is not done, or there is nothing to flush, then exit.
   if (write_state_ == WRITING || flushing_write_data_->Empty())
     return;
@@ -344,6 +363,7 @@ void CronetBidirectionalStream::CancelOnNetworkThread() {
     return;
   read_state_ = write_state_ = CANCELED;
   bidi_stream_.reset();
+  weak_factory_.InvalidateWeakPtrs();
   delegate_->OnCanceled();
 }
 
@@ -354,9 +374,15 @@ void CronetBidirectionalStream::DestroyOnNetworkThread() {
 
 void CronetBidirectionalStream::MaybeOnSucceded() {
   DCHECK(environment_->IsOnNetworkThread());
+  if (!bidi_stream_)
+    return;
   if (read_state_ == READING_DONE && write_state_ == WRITING_DONE) {
     read_state_ = write_state_ = SUCCESS;
-    bidi_stream_.reset();
+    weak_factory_.InvalidateWeakPtrs();
+    // Delete underlying |bidi_stream_| asynchronously as it may still be used.
+    environment_->PostToNetworkThread(
+        FROM_HERE, base::Bind(&base::DeletePointer<net::BidirectionalStream>,
+                              bidi_stream_.release()));
     delegate_->OnSucceeded();
   }
 }

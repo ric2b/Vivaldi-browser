@@ -9,6 +9,7 @@
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
+#include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/skia_util.h"
@@ -42,6 +43,10 @@ void FocusableBorder::UseDefaultColor() {
 }
 
 void FocusableBorder::Paint(const View& view, gfx::Canvas* canvas) {
+  // In harmony, the focus indicator is a FocusRing.
+  if (ui::MaterialDesignController::IsSecondaryUiMaterial() && view.HasFocus())
+    return;
+
   SkPaint paint;
   paint.setStyle(SkPaint::kStroke_Style);
   paint.setColor(GetCurrentColor(view));
@@ -49,8 +54,8 @@ void FocusableBorder::Paint(const View& view, gfx::Canvas* canvas) {
   if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
     gfx::ScopedCanvas scoped(canvas);
     float dsf = canvas->UndoDeviceScaleFactor();
-    gfx::RectF rect((gfx::Rect(view.GetLocalBounds())));
-    rect = ScaleRect(rect, dsf, dsf);
+    // Scale the rect and snap to pixel boundaries.
+    gfx::RectF rect(gfx::ScaleToEnclosingRect(view.GetLocalBounds(), dsf));
     rect.Inset(gfx::InsetsF(0.5f));
     SkPath path;
     float corner_radius_px = kCornerRadiusDp * dsf;
@@ -84,9 +89,17 @@ void FocusableBorder::SetInsets(int top, int left, int bottom, int right) {
 SkColor FocusableBorder::GetCurrentColor(const View& view) const {
   if (!use_default_color_)
     return override_color_;
-  return view.GetNativeTheme()->GetSystemColor(
+
+  SkColor color = view.GetNativeTheme()->GetSystemColor(
       view.HasFocus() ? ui::NativeTheme::kColorId_FocusedBorderColor :
                         ui::NativeTheme::kColorId_UnfocusedBorderColor);
+  if (ui::MaterialDesignController::IsSecondaryUiMaterial() &&
+      !view.enabled()) {
+    return color_utils::BlendTowardOppositeLuma(color,
+                                                gfx::kDisabledControlAlpha);
+  }
+
+  return color;
 }
 
 }  // namespace views

@@ -9,7 +9,6 @@
 
 #include "base/command_line.h"
 #include "base/json/json_writer.h"
-#include "base/message_loop/message_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/sys_info.h"
 #include "base/task_runner_util.h"
@@ -18,8 +17,6 @@
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/dbus_method_call_status.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/session_manager_client.h"
-#include "components/arc/arc_bridge_host_impl.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 
@@ -31,17 +28,18 @@ namespace {
 constexpr int64_t kReconnectDelayInSeconds = 5;
 }  // namespace
 
-ArcBridgeServiceImpl::ArcBridgeServiceImpl(
-    std::unique_ptr<ArcBridgeBootstrap> bootstrap)
-    : bootstrap_(std::move(bootstrap)),
-      session_started_(false),
+ArcBridgeServiceImpl::ArcBridgeServiceImpl()
+    : session_started_(false),
+      factory_(base::Bind(ArcBridgeBootstrap::Create)),
       weak_factory_(this) {
   DCHECK(!g_arc_bridge_service);
   g_arc_bridge_service = this;
-  bootstrap_->set_delegate(this);
 }
 
 ArcBridgeServiceImpl::~ArcBridgeServiceImpl() {
+  if (bootstrap_)
+    bootstrap_->RemoveObserver(this);
+
   DCHECK(g_arc_bridge_service == this);
   g_arc_bridge_service = nullptr;
 }
@@ -64,6 +62,13 @@ void ArcBridgeServiceImpl::Shutdown() {
   PrerequisitesChanged();
 }
 
+void ArcBridgeServiceImpl::SetArcBridgeBootstrapFactoryForTesting(
+    const ArcBridgeBootstrapFactory& factory) {
+  DCHECK(!factory.is_null());
+  factory_ = factory;
+}
+
+
 void ArcBridgeServiceImpl::DisableReconnectDelayForTesting() {
   use_delay_before_reconnecting_ = false;
 }
@@ -78,7 +83,13 @@ void ArcBridgeServiceImpl::PrerequisitesChanged() {
       return;
     VLOG(0) << "Prerequisites met, starting ARC";
     SetStopReason(StopReason::SHUTDOWN);
+
+    if (bootstrap_)
+      bootstrap_->RemoveObserver(this);
+
     SetState(State::CONNECTING);
+    bootstrap_ = factory_.Run();
+    bootstrap_->AddObserver(this);
     bootstrap_->Start();
   } else {
     if (session_started_)
@@ -95,24 +106,23 @@ void ArcBridgeServiceImpl::StopInstance() {
     return;
   }
 
-  VLOG(1) << "Stopping ARC";
-  SetState(State::STOPPING);
-  arc_bridge_host_.reset();
-  bootstrap_->Stop();
-
   // We were explicitly asked to stop, so do not reconnect.
   reconnect_ = false;
+
+  VLOG(1) << "Stopping ARC";
+  DCHECK(bootstrap_.get());
+  SetState(State::STOPPING);
+
+  // Note: this can call OnStopped() internally as a callback.
+  bootstrap_->Stop();
 }
 
-void ArcBridgeServiceImpl::OnConnectionEstablished(
-    mojom::ArcBridgeInstancePtr instance) {
+void ArcBridgeServiceImpl::OnReady() {
   DCHECK(CalledOnValidThread());
   if (state() != State::CONNECTING) {
     VLOG(1) << "StopInstance() called while connecting";
     return;
   }
-
-  arc_bridge_host_.reset(new ArcBridgeHostImpl(std::move(instance)));
 
   // The container can be considered to have been successfully launched, so
   // restart if the connection goes down without being requested.
@@ -123,10 +133,11 @@ void ArcBridgeServiceImpl::OnConnectionEstablished(
 
 void ArcBridgeServiceImpl::OnStopped(StopReason stop_reason) {
   DCHECK(CalledOnValidThread());
-  arc_bridge_host_.reset();
+  VLOG(0) << "ARC stopped: " << stop_reason;
+  bootstrap_->RemoveObserver(this);
+  bootstrap_.reset();
   SetStopReason(stop_reason);
   SetState(State::STOPPED);
-  VLOG(0) << "ARC stopped";
 
   if (reconnect_) {
     // There was a previous invocation and it crashed for some reason. Try
@@ -137,7 +148,7 @@ void ArcBridgeServiceImpl::OnStopped(StopReason stop_reason) {
       // Instead of immediately trying to restart the container, give it some
       // time to finish tearing down in case it is still in the process of
       // stopping.
-      base::MessageLoop::current()->task_runner()->PostDelayedTask(
+      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
           FROM_HERE, base::Bind(&ArcBridgeServiceImpl::PrerequisitesChanged,
                                 weak_factory_.GetWeakPtr()),
           base::TimeDelta::FromSeconds(kReconnectDelayInSeconds));

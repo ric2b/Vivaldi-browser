@@ -14,6 +14,7 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/translate/language_model_factory.h"
 #include "chrome/browser/translate/translate_accept_languages_factory.h"
 #include "chrome/browser/translate/translate_service.h"
 #include "chrome/browser/ui/browser.h"
@@ -24,7 +25,9 @@
 #include "chrome/browser/ui/translate/translate_bubble_factory.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/prefs/pref_service.h"
+#include "components/translate/core/browser/language_model.h"
 #include "components/translate/core/browser/language_state.h"
 #include "components/translate/core/browser/page_translated_details.h"
 #include "components/translate/core/browser/translate_accept_languages.h"
@@ -37,7 +40,6 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
-#include "grit/theme_resources.h"
 #include "url/gurl.h"
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(ChromeTranslateClient);
@@ -46,7 +48,10 @@ ChromeTranslateClient::ChromeTranslateClient(content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents),
       translate_driver_(&web_contents->GetController()),
       translate_manager_(
-          new translate::TranslateManager(this, prefs::kAcceptLanguages)) {
+          new translate::TranslateManager(this, prefs::kAcceptLanguages)),
+      language_model_(
+          LanguageModelFactory::GetInstance()->GetForBrowserContext(
+              web_contents->GetBrowserContext())) {
   translate_driver_.AddObserver(this);
   translate_driver_.set_translate_manager(translate_manager_.get());
 }
@@ -276,6 +281,11 @@ void ChromeTranslateClient::OnLanguageDetermined(
       chrome::NOTIFICATION_TAB_LANGUAGE_DETERMINED,
       content::Source<content::WebContents>(web_contents()),
       content::Details<const translate::LanguageDetectionDetails>(&details));
+
+  // Unless we have no language model (e.g., in incognito), notify the model
+  // about detected language of every page visited.
+  if (language_model_ && details.is_cld_reliable)
+    language_model_->OnPageVisited(details.cld_language);
 }
 
 void ChromeTranslateClient::OnPageTranslated(

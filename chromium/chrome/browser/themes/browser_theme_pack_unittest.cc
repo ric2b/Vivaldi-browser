@@ -15,8 +15,8 @@
 #include "build/build_config.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/common/chrome_paths.h"
+#include "chrome/grit/theme_resources.h"
 #include "content/public/test/test_browser_thread.h"
-#include "grit/theme_resources.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/image/image.h"
@@ -616,7 +616,7 @@ TEST_F(BrowserThemePackTest, TestNonExistantImages) {
 TEST_F(BrowserThemePackTest, CanBuildAndReadPack) {
   base::ScopedTempDir dir;
   ASSERT_TRUE(dir.CreateUniqueTempDir());
-  base::FilePath file = dir.path().AppendASCII("data.pak");
+  base::FilePath file = dir.GetPath().AppendASCII("data.pak");
 
   // Part 1: Build the pack from an extension.
   {
@@ -640,7 +640,7 @@ TEST_F(BrowserThemePackTest, CanBuildAndReadPack) {
 TEST_F(BrowserThemePackTest, HiDpiThemeTest) {
   base::ScopedTempDir dir;
   ASSERT_TRUE(dir.CreateUniqueTempDir());
-  base::FilePath file = dir.path().AppendASCII("theme_data.pak");
+  base::FilePath file = dir.GetPath().AppendASCII("theme_data.pak");
 
   // Part 1: Build the pack from an extension.
   {

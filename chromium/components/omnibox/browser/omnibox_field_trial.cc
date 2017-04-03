@@ -401,12 +401,6 @@ float OmniboxFieldTrial::HQPExperimentalTopicalityThreshold() {
   return static_cast<float>(topicality_threshold);
 }
 
-bool OmniboxFieldTrial::HQPFixTypedVisitBug() {
-  return variations::GetVariationParamValue(
-      kBundledExperimentFieldTrialName,
-      kHQPFixTypedVisitBugRule) == "true";
-}
-
 bool OmniboxFieldTrial::HQPFixFewVisitsBug() {
   return variations::GetVariationParamValue(
       kBundledExperimentFieldTrialName,
@@ -466,12 +460,6 @@ int OmniboxFieldTrial::KeywordScoreForSufficientlyCompleteMatch() {
   return value;
 }
 
-bool OmniboxFieldTrial::HQPAllowDupMatchesForScoring() {
-  return variations::GetVariationParamValue(
-      kBundledExperimentFieldTrialName,
-      kHQPAllowDupMatchesForScoringRule) == "true";
-}
-
 OmniboxFieldTrial::EmphasizeTitlesCondition
 OmniboxFieldTrial::GetEmphasizeTitlesConditionForInput(
     metrics::OmniboxInputType::Type input_type) {
@@ -519,8 +507,6 @@ OmniboxFieldTrial::kMeasureSuggestPollingDelayFromLastKeystrokeRule[] =
     "MeasureSuggestPollingDelayFromLastKeystroke";
 const char OmniboxFieldTrial::kSuggestPollingDelayMsRule[] =
     "SuggestPollingDelayMs";
-const char OmniboxFieldTrial::kHQPFixTypedVisitBugRule[] =
-    "HQPFixTypedVisitBug";
 const char OmniboxFieldTrial::kHQPFixFewVisitsBugRule[] = "HQPFixFewVisitsBug";
 const char OmniboxFieldTrial::kHQPNumTitleWordsRule[] = "HQPNumTitleWords";
 const char OmniboxFieldTrial::kHQPAlsoDoHUPLikeScoringRule[] =
@@ -533,8 +519,6 @@ const char OmniboxFieldTrial::kKeywordRequiresPrefixMatchRule[] =
     "KeywordRequiresPrefixMatch";
 const char OmniboxFieldTrial::kKeywordScoreForSufficientlyCompleteMatchRule[] =
     "KeywordScoreForSufficientlyCompleteMatch";
-const char OmniboxFieldTrial::kHQPAllowDupMatchesForScoringRule[] =
-    "HQPAllowDupMatchesForScoring";
 const char OmniboxFieldTrial::kEmphasizeTitlesRule[] = "EmphasizeTitles";
 
 const char OmniboxFieldTrial::kHUPNewScoringEnabledParam[] =

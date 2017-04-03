@@ -23,57 +23,59 @@
 
 #include "core/SVGNames.h"
 #include "core/dom/StyleElement.h"
-#include "core/events/EventSender.h"
 #include "core/svg/SVGElement.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
 
-using SVGStyleEventSender = EventSender<SVGStyleElement>;
+class SVGStyleElement final : public SVGElement, public StyleElement {
+  DEFINE_WRAPPERTYPEINFO();
+  USING_GARBAGE_COLLECTED_MIXIN(SVGStyleElement);
 
-class SVGStyleElement final : public SVGElement
-                            , public StyleElement {
-    DEFINE_WRAPPERTYPEINFO();
-    USING_GARBAGE_COLLECTED_MIXIN(SVGStyleElement);
-public:
-    static SVGStyleElement* create(Document&, bool createdByParser);
-    ~SVGStyleElement() override;
+ public:
+  static SVGStyleElement* create(Document&, bool createdByParser);
+  ~SVGStyleElement() override;
 
-    using StyleElement::sheet;
+  using StyleElement::sheet;
 
-    bool disabled() const;
-    void setDisabled(bool);
+  bool disabled() const;
+  void setDisabled(bool);
 
-    const AtomicString& type() const override;
-    void setType(const AtomicString&);
+  const AtomicString& type() const override;
+  void setType(const AtomicString&);
 
-    const AtomicString& media() const override;
-    void setMedia(const AtomicString&);
+  const AtomicString& media() const override;
+  void setMedia(const AtomicString&);
 
-    String title() const override;
-    void setTitle(const AtomicString&);
+  String title() const override;
+  void setTitle(const AtomicString&);
 
-    void dispatchPendingEvent(SVGStyleEventSender*);
+  void dispatchPendingEvent();
 
-    DECLARE_VIRTUAL_TRACE();
+  DECLARE_VIRTUAL_TRACE();
 
-private:
-    SVGStyleElement(Document&, bool createdByParser);
+ private:
+  SVGStyleElement(Document&, bool createdByParser);
 
-    void parseAttribute(const QualifiedName&, const AtomicString&, const AtomicString&) override;
-    InsertionNotificationRequest insertedInto(ContainerNode*) override;
-    void didNotifySubtreeInsertionsToDocument() override;
-    void removedFrom(ContainerNode*) override;
-    void childrenChanged(const ChildrenChange&) override;
+  void parseAttribute(const QualifiedName&,
+                      const AtomicString&,
+                      const AtomicString&) override;
+  InsertionNotificationRequest insertedInto(ContainerNode*) override;
+  void didNotifySubtreeInsertionsToDocument() override;
+  void removedFrom(ContainerNode*) override;
+  void childrenChanged(const ChildrenChange&) override;
 
-    void finishParsingChildren() override;
-    bool layoutObjectIsNeeded(const ComputedStyle&) override { return false; }
+  void finishParsingChildren() override;
+  bool layoutObjectIsNeeded(const ComputedStyle&) override { return false; }
 
-    bool sheetLoaded() override { return StyleElement::sheetLoaded(document()); }
-    void notifyLoadedSheetAndAllCriticalSubresources(LoadedSheetErrorStatus) override;
-    void startLoadingDynamicSheet() override { StyleElement::startLoadingDynamicSheet(document()); }
+  bool sheetLoaded() override { return StyleElement::sheetLoaded(document()); }
+  void notifyLoadedSheetAndAllCriticalSubresources(
+      LoadedSheetErrorStatus) override;
+  void startLoadingDynamicSheet() override {
+    StyleElement::startLoadingDynamicSheet(document());
+  }
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // SVGStyleElement_h
+#endif  // SVGStyleElement_h

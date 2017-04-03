@@ -18,6 +18,10 @@ extern const char kVivaldiHomepage[];
 extern const char kVivaldiNumberOfDaysToKeepVisits[];
 extern const char kVivaldiExperiments[];
 
+#if defined(USE_AURA)
+extern const char kHideMouseCursorInFullscreen[];
+#endif // USE_AURA
+
 #if defined(OS_MACOSX)
 extern const char kAppleKeyboardUIMode[];
 extern const char kAppleMiniaturizeOnDoubleClick[];

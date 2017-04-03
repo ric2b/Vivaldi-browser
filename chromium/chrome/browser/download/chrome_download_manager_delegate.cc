@@ -11,7 +11,7 @@
 #include "base/callback.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -495,10 +495,8 @@ void ChromeDownloadManagerDelegate::OpenDownload(DownloadItem* download) {
   }
   content::OpenURLParams params(
       net::FilePathToFileURL(download->GetTargetFilePath()),
-      content::Referrer(),
-      NEW_FOREGROUND_TAB,
-      ui::PAGE_TRANSITION_LINK,
-      false);
+      content::Referrer(), WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui::PAGE_TRANSITION_LINK, false);
 
   if (download->GetMimeType() == "application/x-x509-user-cert")
     chrome::ShowSettingsSubPage(browser, "certificates");

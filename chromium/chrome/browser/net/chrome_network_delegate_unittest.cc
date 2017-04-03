@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/command_line.h"
 #include "base/macros.h"
@@ -90,7 +91,8 @@ std::unique_ptr<net::URLRequest> RequestURL(
     request->SetUserData(
         data_use_measurement::DataUseUserData::kUserDataKey,
         new data_use_measurement::DataUseUserData(
-            data_use_measurement::DataUseUserData::SUGGESTIONS));
+            data_use_measurement::DataUseUserData::SUGGESTIONS,
+            data_use_measurement::DataUseUserData::FOREGROUND));
   }
   request->Start();
   base::RunLoop().RunUntilIdle();
@@ -194,6 +196,21 @@ class ChromeNetworkDelegateTest : public testing::Test {
   std::unique_ptr<net::TestURLRequestContext> context_;
 };
 
+// Test that the total data use consumed by Chrome is recorded correctly.
+TEST_F(ChromeNetworkDelegateTest, TotalDataUseMeasurementTest) {
+  Initialize();
+  base::HistogramTester histogram_tester;
+
+  // A query from a user without redirection.
+  RequestURL(context(), socket_factory(), true, false);
+  std::vector<base::Bucket> buckets =
+      histogram_tester.GetAllSamples("DataUse.BytesSent.Delegate");
+  EXPECT_FALSE(buckets.empty());
+
+  buckets = histogram_tester.GetAllSamples("DataUse.BytesReceived.Delegate");
+  EXPECT_FALSE(buckets.empty());
+}
+
 // This function tests data use measurement for requests by services. it makes a
 // query which is similar to a query of a service, so it should affect
 // DataUse.TrafficSize.System.Dimensions and DataUse.MessageSize.ServiceName
@@ -205,12 +222,16 @@ TEST_F(ChromeNetworkDelegateTest, DataUseMeasurementServiceTest) {
 
   // A query from a service without redirection.
   RequestURL(context(), socket_factory(), false, false);
-  histogram_tester.ExpectTotalCount(
-      "DataUse.TrafficSize.System.Downstream.Foreground.NotCellular", 1);
+  EXPECT_FALSE(
+      histogram_tester
+          .GetTotalCountsForPrefix(
+              "DataUse.TrafficSize.System.Downstream.Foreground.NotCellular")
+          .empty());
   histogram_tester.ExpectTotalCount(
       "DataUse.TrafficSize.System.Upstream.Foreground.NotCellular", 1);
-  // One upload and one download message, so totalCount should be 2.
-  histogram_tester.ExpectTotalCount("DataUse.MessageSize.Suggestions", 2);
+  EXPECT_FALSE(histogram_tester
+                   .GetTotalCountsForPrefix("DataUse.MessageSize.Suggestions")
+                   .empty());
   histogram_tester.ExpectTotalCount(
       "DataUse.TrafficSize.User.Downstream.Foreground.NotCellular", 0);
   histogram_tester.ExpectTotalCount(
@@ -227,8 +248,11 @@ TEST_F(ChromeNetworkDelegateTest, DataUseMeasurementUserTest) {
 
   // A query from user without redirection.
   RequestURL(context(), socket_factory(), true, false);
-  histogram_tester.ExpectTotalCount(
-      "DataUse.TrafficSize.User.Downstream.Foreground.NotCellular", 1);
+  EXPECT_FALSE(
+      histogram_tester
+          .GetTotalCountsForPrefix(
+              "DataUse.TrafficSize.User.Downstream.Foreground.NotCellular")
+          .empty());
   histogram_tester.ExpectTotalCount(
       "DataUse.TrafficSize.User.Upstream.Foreground.NotCellular", 1);
   histogram_tester.ExpectTotalCount(
@@ -249,12 +273,17 @@ TEST_F(ChromeNetworkDelegateTest, DataUseMeasurementServiceTestWithRedirect) {
 
   // A query from user with one redirection.
   RequestURL(context(), socket_factory(), false, true);
-  histogram_tester.ExpectTotalCount(
-      "DataUse.TrafficSize.System.Downstream.Foreground.NotCellular", 2);
+  EXPECT_FALSE(
+      histogram_tester
+          .GetTotalCountsForPrefix(
+              "DataUse.TrafficSize.System.Downstream.Foreground.NotCellular")
+          .empty());
   histogram_tester.ExpectTotalCount(
       "DataUse.TrafficSize.System.Upstream.Foreground.NotCellular", 2);
   // Two uploads and two downloads message, so totalCount should be 4.
-  histogram_tester.ExpectTotalCount("DataUse.MessageSize.Suggestions", 4);
+  EXPECT_FALSE(histogram_tester
+                   .GetTotalCountsForPrefix("DataUse.MessageSize.Suggestions")
+                   .empty());
   histogram_tester.ExpectTotalCount(
       "DataUse.TrafficSize.User.Downstream.Foreground.NotCellular", 0);
   histogram_tester.ExpectTotalCount(
@@ -272,8 +301,11 @@ TEST_F(ChromeNetworkDelegateTest, DataUseMeasurementUserTestWithRedirect) {
   // A query from user with one redirection.
   RequestURL(context(), socket_factory(), true, true);
 
-  histogram_tester.ExpectTotalCount(
-      "DataUse.TrafficSize.User.Downstream.Foreground.NotCellular", 2);
+  EXPECT_FALSE(
+      histogram_tester
+          .GetTotalCountsForPrefix(
+              "DataUse.TrafficSize.User.Downstream.Foreground.NotCellular")
+          .empty());
   histogram_tester.ExpectTotalCount(
       "DataUse.TrafficSize.User.Upstream.Foreground.NotCellular", 2);
   histogram_tester.ExpectTotalCount(
@@ -370,7 +402,7 @@ class ChromeNetworkDelegateSafeSearchTest :
         &enable_referrers_,
         nullptr,
         &force_google_safe_search_,
-        &force_youtube_safety_mode_,
+        &force_youtube_restrict_,
         nullptr,
         profile_.GetTestingPrefService());
   }
@@ -381,23 +413,20 @@ class ChromeNetworkDelegateSafeSearchTest :
         new ChromeNetworkDelegate(forwarder(), &enable_referrers_,
                                   metrics::UpdateUsagePrefCallbackType()));
     network_delegate->set_force_google_safe_search(&force_google_safe_search_);
-    network_delegate->set_force_youtube_safety_mode(
-        &force_youtube_safety_mode_);
+    network_delegate->set_force_youtube_restrict(&force_youtube_restrict_);
     return std::move(network_delegate);
   }
 
-  void SetSafeSearch(bool google_safe_search,
-                     bool youtube_safety_mode) {
+  void SetSafeSearch(bool google_safe_search, int youtube_restrict) {
     force_google_safe_search_.SetValue(google_safe_search);
-    force_youtube_safety_mode_.SetValue(youtube_safety_mode);
+    force_youtube_restrict_.SetValue(youtube_restrict);
   }
 
   // Does a request to an arbitrary URL and verifies that the SafeSearch
   // enforcement utility functions were called/not called as expected.
-  void QueryURL(bool expect_google_safe_search,
-                bool expect_youtube_safety_mode) {
+  void QueryURL(bool expect_google_safe_search, bool expect_youtube_restrict) {
     safe_search_util::ClearForceGoogleSafeSearchCountForTesting();
-    safe_search_util::ClearForceYouTubeSafetyModeCountForTesting();
+    safe_search_util::ClearForceYouTubeRestrictCountForTesting();
 
     std::unique_ptr<net::URLRequest> request(context_.CreateRequest(
         GURL("http://anyurl.com"), net::DEFAULT_PRIORITY, &delegate_));
@@ -406,27 +435,33 @@ class ChromeNetworkDelegateSafeSearchTest :
     base::RunLoop().RunUntilIdle();
 
     EXPECT_EQ(expect_google_safe_search ? 1 : 0,
-        safe_search_util::GetForceGoogleSafeSearchCountForTesting());
-    EXPECT_EQ(expect_youtube_safety_mode ? 1 : 0,
-        safe_search_util::GetForceYouTubeSafetyModeCountForTesting());
+              safe_search_util::GetForceGoogleSafeSearchCountForTesting());
+    EXPECT_EQ(expect_youtube_restrict ? 1 : 0,
+              safe_search_util::GetForceYouTubeRestrictCountForTesting());
   }
 
  private:
   BooleanPrefMember force_google_safe_search_;
-  BooleanPrefMember force_youtube_safety_mode_;
+  IntegerPrefMember force_youtube_restrict_;
 };
 
 TEST_F(ChromeNetworkDelegateSafeSearchTest, SafeSearch) {
   std::unique_ptr<net::NetworkDelegate> delegate(CreateNetworkDelegate());
   SetDelegate(delegate.get());
 
-  // Loop over all combinations of the two policies.
-  for (int i = 0; i < 4; i++) {
-    bool google_safe_search = i % 2;
-    bool youtube_safety_mode = i / 2;
-    SetSafeSearch(google_safe_search, youtube_safety_mode);
+  static_assert(safe_search_util::YOUTUBE_RESTRICT_OFF      == 0 &&
+                safe_search_util::YOUTUBE_RESTRICT_MODERATE == 1 &&
+                safe_search_util::YOUTUBE_RESTRICT_STRICT   == 2 &&
+                safe_search_util::YOUTUBE_RESTRICT_COUNT    == 3,
+                "This test relies on mapping ints to enum values.");
 
-    QueryURL(google_safe_search, youtube_safety_mode);
+  // Loop over all combinations of the two policies.
+  for (int i = 0; i < 6; i++) {
+    bool google_safe_search = (i / 3) != 0;
+    int youtube_restrict = i % 3;
+    SetSafeSearch(google_safe_search, youtube_restrict);
+
+    QueryURL(google_safe_search, youtube_restrict != 0);
   }
 }
 

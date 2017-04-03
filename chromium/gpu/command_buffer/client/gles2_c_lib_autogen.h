@@ -1246,6 +1246,11 @@ void* GL_APIENTRY GLES2MapBufferRange(GLenum target,
 GLboolean GL_APIENTRY GLES2UnmapBuffer(GLenum target) {
   return gles2::GetGLContext()->UnmapBuffer(target);
 }
+void GL_APIENTRY GLES2FlushMappedBufferRange(GLenum target,
+                                             GLintptr offset,
+                                             GLsizeiptr size) {
+  gles2::GetGLContext()->FlushMappedBufferRange(target, offset, size);
+}
 void* GL_APIENTRY GLES2MapTexSubImage2DCHROMIUM(GLenum target,
                                                 GLint level,
                                                 GLint xoffset,
@@ -1697,6 +1702,12 @@ GLES2UniformMatrix4fvStreamTextureMatrixCHROMIUM(GLint location,
                                                  const GLfloat* transform) {
   gles2::GetGLContext()->UniformMatrix4fvStreamTextureMatrixCHROMIUM(
       location, transpose, transform);
+}
+void GL_APIENTRY GLES2SwapBuffersWithDamageCHROMIUM(GLint x,
+                                                    GLint y,
+                                                    GLint width,
+                                                    GLint height) {
+  gles2::GetGLContext()->SwapBuffersWithDamageCHROMIUM(x, y, width, height);
 }
 
 namespace gles2 {
@@ -2652,6 +2663,10 @@ extern const NameToFunc g_gles2_function_table[] = {
         "glUnmapBuffer", reinterpret_cast<GLES2FunctionPointer>(glUnmapBuffer),
     },
     {
+        "glFlushMappedBufferRange",
+        reinterpret_cast<GLES2FunctionPointer>(glFlushMappedBufferRange),
+    },
+    {
         "glMapTexSubImage2DCHROMIUM",
         reinterpret_cast<GLES2FunctionPointer>(glMapTexSubImage2DCHROMIUM),
     },
@@ -2988,6 +3003,10 @@ extern const NameToFunc g_gles2_function_table[] = {
         "glUniformMatrix4fvStreamTextureMatrixCHROMIUM",
         reinterpret_cast<GLES2FunctionPointer>(
             glUniformMatrix4fvStreamTextureMatrixCHROMIUM),
+    },
+    {
+        "glSwapBuffersWithDamageCHROMIUM",
+        reinterpret_cast<GLES2FunctionPointer>(glSwapBuffersWithDamageCHROMIUM),
     },
     {
         NULL, NULL,

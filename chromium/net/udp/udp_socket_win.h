@@ -24,13 +24,15 @@
 #include "net/base/net_export.h"
 #include "net/base/network_change_notifier.h"
 #include "net/base/rand_callback.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 #include "net/udp/datagram_socket.h"
 #include "net/udp/diff_serv_code_point.h"
 
 namespace net {
 
 class IPAddress;
+class NetLog;
+struct NetLogSource;
 
 class NET_EXPORT UDPSocketWin
     : NON_EXPORTED_BASE(public base::NonThreadSafe),
@@ -39,7 +41,7 @@ class NET_EXPORT UDPSocketWin
   UDPSocketWin(DatagramSocket::BindType bind_type,
                const RandIntCallback& rand_int_cb,
                net::NetLog* net_log,
-               const net::NetLog::Source& source);
+               const net::NetLogSource& source);
   ~UDPSocketWin() override;
 
   // Opens the socket.
@@ -134,7 +136,7 @@ class NET_EXPORT UDPSocketWin
   // Returns true if the socket is already connected or bound.
   bool is_connected() const { return is_connected_; }
 
-  const BoundNetLog& NetLog() const { return net_log_; }
+  const NetLogWithSource& NetLog() const { return net_log_; }
 
   // Sets corresponding flags in |socket_options_| to allow the socket
   // to share the local address to which the socket will be bound with
@@ -317,7 +319,7 @@ class NET_EXPORT UDPSocketWin
   // External callback; called when write is complete.
   CompletionCallback write_callback_;
 
-  BoundNetLog net_log_;
+  NetLogWithSource net_log_;
 
   // QWAVE data. Used to set DSCP bits on outgoing packets.
   HANDLE qos_handle_;

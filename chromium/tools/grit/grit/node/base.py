@@ -380,8 +380,11 @@ class Node(object):
     Return:
       'resource'
     '''
+    path_from_basedir = util.PathSearcher.LocatePath(
+                              os.path.expandvars(path_from_basedir),
+                              self.GetRoot().GetBaseDir())
     return util.normpath(os.path.join(self.GetRoot().GetBaseDir(),
-                                      os.path.expandvars(path_from_basedir)))
+                                      path_from_basedir ))
 
   def GetInputPath(self):
     '''Returns a path, relative to the base directory set for the grd file,

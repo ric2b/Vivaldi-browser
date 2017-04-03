@@ -17,6 +17,7 @@ class URLRequest;
 }
 
 namespace content {
+class NavigationUIData;
 class ResourceContext;
 class WebContents;
 
@@ -95,6 +96,10 @@ class ResourceRequestInfo {
   // another process.  Otherwise it is 0.
   virtual int GetOriginPID() const = 0;
 
+  // Returns the FrameTreeNode ID for this frame. This ID is browser-global and
+  // uniquely identifies a frame that hosts content.
+  virtual int GetFrameTreeNodeId() const = 0;
+
   // The IPC route identifier of the RenderFrame.
   // To get a WebContents, use GetWebContentsGetterForRequest instead.
   // TODO(jam): once all navigation and resource requests are sent between
@@ -151,6 +156,11 @@ class ResourceRequestInfo {
 
   // Whether this request if using Lo-Fi mode.
   virtual bool IsUsingLoFi() const = 0;
+
+  // PlzNavigate
+  // Only used for navigations. Returns opaque data set by the embedder on the
+  // UI thread at the beginning of navigation.
+  virtual NavigationUIData* GetNavigationUIData() const = 0;
 
  protected:
   virtual ~ResourceRequestInfo() {}

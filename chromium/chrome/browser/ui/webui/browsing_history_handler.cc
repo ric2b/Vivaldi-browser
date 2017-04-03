@@ -13,7 +13,8 @@
 #include "base/bind_helpers.h"
 #include "base/i18n/rtl.h"
 #include "base/i18n/time_formatting.h"
-#include "base/metrics/histogram.h"
+#include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -37,8 +38,8 @@
 #include "chrome/common/pref_names.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
-#include "components/browsing_data_ui/history_notice_utils.h"
+#include "components/browser_sync/profile_sync_service.h"
+#include "components/browsing_data/core/history_notice_utils.h"
 #include "components/favicon/core/fallback_icon_service.h"
 #include "components/favicon/core/fallback_url_util.h"
 #include "components/favicon/core/large_icon_service.h"
@@ -48,6 +49,7 @@
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/prefs/pref_service.h"
 #include "components/query_parser/snippet.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/sync/device_info/device_info.h"
 #include "components/sync/device_info/device_info_tracker.h"
 #include "components/sync/driver/sync_service_observer.h"
@@ -56,7 +58,6 @@
 #include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_ui.h"
-#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/time_format.h"
 
@@ -75,11 +76,18 @@
 #include "chrome/browser/android/chrome_application.h"
 #endif
 
+#if !defined(OS_ANDROID)
+#include "chrome/browser/ui/webui/md_history_ui.h"
+#endif
+
 #include "app/vivaldi_apptools.h"
 #include "extensions/tools/vivaldi_tools.h"
 
 // The amount of time to wait for a response from the WebHistoryService.
 static const int kWebHistoryTimeoutSeconds = 3;
+
+// Number of chars to truncate titles when making them "short".
+static const size_t kShortTitleLength = 300;
 
 using bookmarks::BookmarkModel;
 
@@ -131,7 +139,7 @@ bool IsLocalOnlyResult(const BrowsingHistoryHandler::HistoryEntry& entry) {
 
 // Gets the name and type of a device for the given sync client ID.
 // |name| and |type| are out parameters.
-void GetDeviceNameAndType(const ProfileSyncService* sync_service,
+void GetDeviceNameAndType(const browser_sync::ProfileSyncService* sync_service,
                           const std::string& client_id,
                           std::string* name,
                           std::string* type) {
@@ -141,7 +149,7 @@ void GetDeviceNameAndType(const ProfileSyncService* sync_service,
   DCHECK(sync_service->GetDeviceInfoTracker());
   DCHECK(sync_service->GetDeviceInfoTracker()->IsSyncing());
 
-  std::unique_ptr<sync_driver::DeviceInfo> device_info =
+  std::unique_ptr<syncer::DeviceInfo> device_info =
       sync_service->GetDeviceInfoTracker()->GetDeviceInfo(client_id);
   if (device_info.get()) {
     *name = device_info->client_name();
@@ -197,7 +205,8 @@ BrowsingHistoryHandler::HistoryEntry::~HistoryEntry() {
 }
 
 void BrowsingHistoryHandler::HistoryEntry::SetUrlAndTitle(
-    base::DictionaryValue* result) const {
+    base::DictionaryValue* result,
+    bool limit_title_length) const {
   result->SetString("url", url.spec());
 
   bool using_url_as_the_title = false;
@@ -217,16 +226,20 @@ void BrowsingHistoryHandler::HistoryEntry::SetUrlAndTitle(
     else
       base::i18n::AdjustStringForLocaleDirection(&title_to_set);
   }
-  result->SetString("title", title_to_set);
+
+  result->SetString("title",
+      limit_title_length ? title_to_set.substr(0, kShortTitleLength)
+                         : title_to_set);
 }
 
 std::unique_ptr<base::DictionaryValue>
 BrowsingHistoryHandler::HistoryEntry::ToValue(
     BookmarkModel* bookmark_model,
     SupervisedUserService* supervised_user_service,
-    const ProfileSyncService* sync_service) const {
+    const browser_sync::ProfileSyncService* sync_service,
+    bool limit_title_length) const {
   std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue());
-  SetUrlAndTitle(result.get());
+  SetUrlAndTitle(result.get(), limit_title_length);
 
   base::string16 domain = url_formatter::IDNToUnicode(url.host());
   // When the domain is empty, use the scheme instead. This allows for a
@@ -362,7 +375,7 @@ void BrowsingHistoryHandler::RegisterMessages() {
     // If |web_history| is not available, it means that the history sync is
     // disabled. Observe |sync_service| so that we can attach the listener
     // in case it gets enabled later.
-    ProfileSyncService* sync_service =
+    browser_sync::ProfileSyncService* sync_service =
         ProfileSyncServiceFactory::GetForProfile(profile);
     if (sync_service)
       sync_service_observer_.Add(sync_service);
@@ -408,6 +421,7 @@ void BrowsingHistoryHandler::OnStateChanged() {
 }
 
 void BrowsingHistoryHandler::WebHistoryTimeout() {
+  has_synced_results_ = false;
   // TODO(dubroy): Communicate the failure to the front end.
   if (!query_task_tracker_.HasTrackedTasks())
     ReturnResultsToFrontEnd();
@@ -428,8 +442,6 @@ void BrowsingHistoryHandler::QueryHistory(
 
   query_results_.clear();
   results_info_value_.Clear();
-  has_synced_results_ = false;
-  has_other_forms_of_browsing_history_ = false;
 
   history::HistoryService* hs = HistoryServiceFactory::GetForProfile(
       profile, ServiceAccessType::EXPLICIT_ACCESS);
@@ -462,7 +474,7 @@ void BrowsingHistoryHandler::QueryHistory(
         this, &BrowsingHistoryHandler::WebHistoryTimeout);
 
     // Test the existence of other forms of browsing history.
-    browsing_data_ui::ShouldShowNoticeAboutOtherFormsOfBrowsingHistory(
+    browsing_data::ShouldShowNoticeAboutOtherFormsOfBrowsingHistory(
         ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile),
         web_history,
         base::Bind(
@@ -471,6 +483,8 @@ void BrowsingHistoryHandler::QueryHistory(
   } else {
     // The notice could not have been shown, because there is no web history.
     RecordMetricsForNoticeAboutOtherFormsOfBrowsingHistory(false);
+    has_synced_results_ = false;
+    has_other_forms_of_browsing_history_ = false;
   }
 }
 
@@ -706,57 +720,6 @@ void BrowsingHistoryHandler::MergeDuplicateResults(
   results->swap(new_results);
 }
 
-void BrowsingHistoryHandler::ReturnResultsToFrontEnd() {
-  Profile* profile = Profile::FromWebUI(web_ui());
-  BookmarkModel* bookmark_model =
-      BookmarkModelFactory::GetForBrowserContext(profile);
-  SupervisedUserService* supervised_user_service = NULL;
-#if defined(ENABLE_SUPERVISED_USERS)
-  if (profile->IsSupervised())
-    supervised_user_service =
-        SupervisedUserServiceFactory::GetForProfile(profile);
-#endif
-  ProfileSyncService* sync_service =
-      ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile);
-
-  // Combine the local and remote results into |query_results_|, and remove
-  // any duplicates.
-  if (!web_history_query_results_.empty()) {
-    int local_result_count = query_results_.size();
-    query_results_.insert(query_results_.end(),
-                          web_history_query_results_.begin(),
-                          web_history_query_results_.end());
-    MergeDuplicateResults(&query_results_);
-
-    if (local_result_count) {
-      // In the best case, we expect that all local results are duplicated on
-      // the server. Keep track of how many are missing.
-      int missing_count = std::count_if(
-          query_results_.begin(), query_results_.end(), IsLocalOnlyResult);
-      UMA_HISTOGRAM_PERCENTAGE("WebHistory.LocalResultMissingOnServer",
-                               missing_count * 100.0 / local_result_count);
-    }
-  }
-
-  // Convert the result vector into a ListValue.
-  base::ListValue results_value;
-  for (std::vector<BrowsingHistoryHandler::HistoryEntry>::iterator it =
-           query_results_.begin(); it != query_results_.end(); ++it) {
-    std::unique_ptr<base::Value> value(
-        it->ToValue(bookmark_model, supervised_user_service, sync_service));
-    results_value.Append(std::move(value));
-  }
-
-  web_ui()->CallJavascriptFunctionUnsafe("historyResult", results_info_value_,
-                                         results_value);
-  web_ui()->CallJavascriptFunctionUnsafe(
-      "showNotification", base::FundamentalValue(has_synced_results_),
-      base::FundamentalValue(has_other_forms_of_browsing_history_));
-  results_info_value_.Clear();
-  query_results_.clear();
-  web_history_query_results_.clear();
-}
-
 void BrowsingHistoryHandler::QueryComplete(
     const base::string16& search_text,
     const history::QueryOptions& options,
@@ -800,6 +763,62 @@ void BrowsingHistoryHandler::QueryComplete(
   }
   if (!web_history_timer_.IsRunning())
     ReturnResultsToFrontEnd();
+}
+
+void BrowsingHistoryHandler::ReturnResultsToFrontEnd() {
+  Profile* profile = Profile::FromWebUI(web_ui());
+  BookmarkModel* bookmark_model =
+      BookmarkModelFactory::GetForBrowserContext(profile);
+  SupervisedUserService* supervised_user_service = NULL;
+#if defined(ENABLE_SUPERVISED_USERS)
+  if (profile->IsSupervised())
+    supervised_user_service =
+        SupervisedUserServiceFactory::GetForProfile(profile);
+#endif
+  browser_sync::ProfileSyncService* sync_service =
+      ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile);
+
+  // Combine the local and remote results into |query_results_|, and remove
+  // any duplicates.
+  if (!web_history_query_results_.empty()) {
+    int local_result_count = query_results_.size();
+    query_results_.insert(query_results_.end(),
+                          web_history_query_results_.begin(),
+                          web_history_query_results_.end());
+    MergeDuplicateResults(&query_results_);
+
+    if (local_result_count) {
+      // In the best case, we expect that all local results are duplicated on
+      // the server. Keep track of how many are missing.
+      int missing_count = std::count_if(
+          query_results_.begin(), query_results_.end(), IsLocalOnlyResult);
+      UMA_HISTOGRAM_PERCENTAGE("WebHistory.LocalResultMissingOnServer",
+                               missing_count * 100.0 / local_result_count);
+    }
+  }
+
+  bool is_md = false;
+#if !defined(OS_ANDROID)
+  is_md = MdHistoryUI::IsEnabled(profile);
+#endif
+
+  // Convert the result vector into a ListValue.
+  base::ListValue results_value;
+  for (std::vector<BrowsingHistoryHandler::HistoryEntry>::iterator it =
+           query_results_.begin(); it != query_results_.end(); ++it) {
+    std::unique_ptr<base::Value> value(it->ToValue(
+        bookmark_model, supervised_user_service, sync_service, is_md));
+    results_value.Append(std::move(value));
+  }
+
+  web_ui()->CallJavascriptFunctionUnsafe("historyResult", results_info_value_,
+                                         results_value);
+  web_ui()->CallJavascriptFunctionUnsafe(
+      "showNotification", base::FundamentalValue(has_synced_results_),
+      base::FundamentalValue(has_other_forms_of_browsing_history_));
+  results_info_value_.Clear();
+  query_results_.clear();
+  web_history_query_results_.clear();
 }
 
 void BrowsingHistoryHandler::WebHistoryQueryComplete(
@@ -999,5 +1018,6 @@ void BrowsingHistoryHandler::OnURLsDeleted(
 }
 
 void BrowsingHistoryHandler::OnWebHistoryDeleted() {
-  web_ui()->CallJavascriptFunctionUnsafe("historyDeleted");
+  if (!has_pending_delete_request_)
+    web_ui()->CallJavascriptFunctionUnsafe("historyDeleted");
 }

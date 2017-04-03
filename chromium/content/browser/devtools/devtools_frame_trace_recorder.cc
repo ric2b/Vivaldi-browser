@@ -28,7 +28,7 @@ namespace content {
 namespace {
 
 static base::subtle::Atomic32 frame_data_count = 0;
-static int kMaximumFrameDataCount = 150;
+static int kMaximumFrameDataCount = 450;
 static size_t kFrameAreaLimit = 256000;
 
 class TraceableDevToolsScreenshot
@@ -77,7 +77,7 @@ void FrameCaptured(base::TimeTicks timestamp, const SkBitmap& bitmap,
   base::subtle::NoBarrier_AtomicIncrement(&frame_data_count, 1);
   TRACE_EVENT_OBJECT_SNAPSHOT_WITH_ID_AND_TIMESTAMP(
       TRACE_DISABLED_BY_DEFAULT("devtools.screenshot"), "Screenshot", 1,
-      timestamp.ToInternalValue(),
+      timestamp,
       std::unique_ptr<base::trace_event::ConvertableToTraceFormat>(
           new TraceableDevToolsScreenshot(bitmap)));
 }

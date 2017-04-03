@@ -133,7 +133,7 @@ gfx::Rect PaintedScrollbarLayer::ScrollbarLayerRectToContentRect(
     const gfx::Rect& layer_rect) const {
   // Don't intersect with the bounds as in LayerRectToContentRect() because
   // layer_rect here might be in coordinates of the containing layer.
-  gfx::Rect expanded_rect = gfx::ScaleToEnclosingRect(
+  gfx::Rect expanded_rect = gfx::ScaleToEnclosingRectSafe(
       layer_rect, internal_contents_scale_, internal_contents_scale_);
   // We should never return a rect bigger than the content bounds.
   gfx::Size clamped_size = expanded_rect.size();
@@ -171,7 +171,7 @@ void PaintedScrollbarLayer::UpdateThumbAndTrackGeometry() {
 void PaintedScrollbarLayer::UpdateInternalContentScale() {
   float scale = GetLayerTree()->device_scale_factor();
   if (layer_tree_host()
-          ->settings()
+          ->GetSettings()
           .layer_transforms_should_scale_layer_contents) {
     gfx::Transform transform;
     transform = draw_property_utils::ScreenSpaceTransform(
@@ -229,7 +229,7 @@ bool PaintedScrollbarLayer::Update() {
 
   if (!track_resource_ || scrollbar_->NeedsPaintPart(TRACK)) {
     track_resource_ = ScopedUIResource::Create(
-        layer_tree_host(),
+        layer_tree_host()->GetUIResourceManager(),
         RasterizeScrollbarPart(track_layer_rect, scaled_track_rect, TRACK));
   }
 
@@ -241,7 +241,7 @@ bool PaintedScrollbarLayer::Update() {
         scaled_thumb_rect.size() !=
             thumb_resource_->GetBitmap(0, false).GetSize()) {
       thumb_resource_ = ScopedUIResource::Create(
-          layer_tree_host(),
+          layer_tree_host()->GetUIResourceManager(),
           RasterizeScrollbarPart(thumb_layer_rect, scaled_thumb_rect, THUMB));
     }
     thumb_opacity_ = scrollbar_->ThumbOpacity();

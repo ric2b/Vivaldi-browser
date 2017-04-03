@@ -20,12 +20,13 @@
 #include "components/ntp_snippets/content_suggestions_service.h"
 #include "components/ntp_snippets/features.h"
 #include "components/ntp_snippets/ntp_snippets_constants.h"
-#include "components/ntp_snippets/ntp_snippets_database.h"
-#include "components/ntp_snippets/ntp_snippets_fetcher.h"
-#include "components/ntp_snippets/ntp_snippets_service.h"
-#include "components/ntp_snippets/ntp_snippets_status_service.h"
+#include "components/ntp_snippets/remote/ntp_snippets_database.h"
+#include "components/ntp_snippets/remote/ntp_snippets_fetcher.h"
+#include "components/ntp_snippets/remote/ntp_snippets_service.h"
+#include "components/ntp_snippets/remote/ntp_snippets_status_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/version_info/version_info.h"
+#include "google_apis/google_api_keys.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
@@ -34,7 +35,6 @@
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
 #include "ios/chrome/browser/suggestions/image_fetcher_impl.h"
 #include "ios/chrome/browser/suggestions/ios_image_decoder_impl.h"
-#include "ios/chrome/browser/suggestions/suggestions_service_factory.h"
 #include "ios/chrome/common/channel_info.h"
 #include "ios/web/public/browser_state.h"
 #include "ios/web/public/web_thread.h"
@@ -52,8 +52,6 @@ using ntp_snippets::NTPSnippetsService;
 using ntp_snippets::NTPSnippetsStatusService;
 using suggestions::ImageFetcherImpl;
 using suggestions::IOSImageDecoderImpl;
-using suggestions::SuggestionsService;
-using suggestions::SuggestionsServiceFactory;
 
 namespace {
 
@@ -97,7 +95,6 @@ IOSChromeContentSuggestionsServiceFactory::
   DependsOn(ios::HistoryServiceFactory::GetInstance());
   DependsOn(OAuth2TokenServiceFactory::GetInstance());
   DependsOn(ios::SigninManagerFactory::GetInstance());
-  DependsOn(SuggestionsServiceFactory::GetInstance());
 }
 
 IOSChromeContentSuggestionsServiceFactory::
@@ -144,8 +141,6 @@ IOSChromeContentSuggestionsServiceFactory::BuildServiceInstanceFor(
         OAuth2TokenServiceFactory::GetForBrowserState(chrome_browser_state);
     scoped_refptr<net::URLRequestContextGetter> request_context =
         browser_state->GetRequestContext();
-    SuggestionsService* suggestions_service =
-        SuggestionsServiceFactory::GetForBrowserState(chrome_browser_state);
     NTPSnippetsScheduler* scheduler = nullptr;
     base::FilePath database_dir(
         browser_state->GetStatePath().Append(ntp_snippets::kDatabaseFolder));
@@ -157,12 +152,14 @@ IOSChromeContentSuggestionsServiceFactory::BuildServiceInstanceFor(
     std::unique_ptr<NTPSnippetsService> ntp_snippets_service =
         base::MakeUnique<NTPSnippetsService>(
             service.get(), service->category_factory(), prefs,
-            suggestions_service,
-            GetApplicationContext()->GetApplicationLocale(), scheduler,
+            GetApplicationContext()->GetApplicationLocale(),
+            service->user_classifier(), scheduler,
             base::MakeUnique<NTPSnippetsFetcher>(
                 signin_manager, token_service, request_context, prefs,
                 service->category_factory(), base::Bind(&ParseJson),
-                GetChannel() == version_info::Channel::STABLE),
+                GetChannel() == version_info::Channel::STABLE
+                    ? google_apis::GetAPIKey()
+                    : google_apis::GetNonStableAPIKey()),
             base::MakeUnique<ImageFetcherImpl>(
                 request_context.get(), web::WebThread::GetBlockingPool()),
             base::MakeUnique<IOSImageDecoderImpl>(),

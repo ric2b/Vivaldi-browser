@@ -30,20 +30,23 @@ void WebappRegistry::UnregisterWebappsForUrls(
   // back OnWebappsUnregistered().
   UrlFilterBridge* filter_bridge = new UrlFilterBridge(url_filter);
 
-  Java_WebappRegistry_unregisterWebappsForUrls(
-      env, base::android::GetApplicationContext(), filter_bridge->j_bridge(),
-      callback_pointer);
+  Java_WebappRegistry_unregisterWebappsForUrls(env, filter_bridge->j_bridge(),
+                                               callback_pointer);
 }
 
-void WebappRegistry::ClearWebappHistory(const base::Closure& callback) {
+void WebappRegistry::ClearWebappHistoryForUrls(
+    const base::Callback<bool(const GURL&)>& url_filter,
+    const base::Closure& callback) {
   JNIEnv* env = base::android::AttachCurrentThread();
   uintptr_t callback_pointer = reinterpret_cast<uintptr_t>(
       new base::Closure(callback));
 
-  Java_WebappRegistry_clearWebappHistory(
-      env,
-      base::android::GetApplicationContext(),
-      callback_pointer);
+  // We will destroy |filter_bridge| from its Java counterpart before calling
+  // back OnClearedWebappHistory().
+  UrlFilterBridge* filter_bridge = new UrlFilterBridge(url_filter);
+
+  Java_WebappRegistry_clearWebappHistoryForUrls(env, filter_bridge->j_bridge(),
+                                                callback_pointer);
 }
 
 // Callback used by Java when all web apps have been unregistered.

@@ -18,7 +18,7 @@
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "chrome/browser/android/preferences/important_sites_util.h"
+#include "chrome/browser/browsing_data/browsing_data_flash_lso_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_local_storage_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_quota_helper.h"
 #include "chrome/browser/browsing_data/cookies_tree_model.h"
@@ -27,6 +27,7 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/content_settings/web_site_settings_uma_util.h"
+#include "chrome/browser/engagement/important_sites_util.h"
 #include "chrome/browser/notifications/desktop_notification_profile_util.h"
 #include "chrome/browser/permissions/permission_uma_util.h"
 #include "chrome/browser/permissions/permission_util.h"
@@ -666,9 +667,9 @@ class LocalStorageInfoReadyCallback {
     ScopedJavaLocalRef<jobject> map =
         Java_WebsitePreferenceBridge_createLocalStorageInfoMap(env_);
 
-    std::vector<std::string> important_domains =
-        ImportantSitesUtil::GetImportantRegisterableDomains(
-            profile, kMaxImportantSites, nullptr);
+    std::vector<ImportantSitesUtil::ImportantDomainInfo> important_domains =
+        ImportantSitesUtil::GetImportantRegisterableDomains(profile,
+                                                            kMaxImportantSites);
 
     std::list<BrowsingDataLocalStorageHelper::LocalStorageInfo>::const_iterator
         i;
@@ -686,8 +687,12 @@ class LocalStorageInfoReadyCallback {
                 i->origin_url,
                 net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
       }
-      if (std::find(important_domains.begin(), important_domains.end(),
-                    registerable_domain) != important_domains.end()) {
+      auto important_domain_search = [&registerable_domain](
+          const ImportantSitesUtil::ImportantDomainInfo& item) {
+        return item.registerable_domain == registerable_domain;
+      };
+      if (std::find_if(important_domains.begin(), important_domains.end(),
+                       important_domain_search) != important_domains.end()) {
         important = true;
       }
       // Remove the trailing slash so the origin is matched correctly in

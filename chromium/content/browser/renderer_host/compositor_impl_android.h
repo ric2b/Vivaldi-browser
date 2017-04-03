@@ -15,6 +15,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/timer/timer.h"
+#include "cc/surfaces/frame_sink_id.h"
 #include "cc/trees/layer_tree_host_client.h"
 #include "cc/trees/layer_tree_host_single_thread_client.h"
 #include "content/common/content_export.h"
@@ -35,6 +36,7 @@ namespace cc {
 class Display;
 class Layer;
 class LayerTreeHost;
+class OutputSurface;
 class SurfaceIdAllocator;
 class SurfaceManager;
 class VulkanContextProvider;
@@ -98,9 +100,9 @@ class CONTENT_EXPORT CompositorImpl
                            const gfx::Vector2dF& elastic_overscroll_delta,
                            float page_scale,
                            float top_controls_delta) override {}
-  void RequestNewOutputSurface() override;
-  void DidInitializeOutputSurface() override;
-  void DidFailToInitializeOutputSurface() override;
+  void RequestNewCompositorFrameSink() override;
+  void DidInitializeCompositorFrameSink() override;
+  void DidFailToInitializeCompositorFrameSink() override;
   void WillCommit() override {}
   void DidCommit() override;
   void DidCommitAndDrawFrame() override {}
@@ -118,10 +120,12 @@ class CONTENT_EXPORT CompositorImpl
   void OnVSync(base::TimeTicks frame_time,
                base::TimeDelta vsync_period) override;
   void SetNeedsAnimate() override;
+  cc::FrameSinkId GetFrameSinkId() override;
+
   void SetVisible(bool visible);
   void CreateLayerTreeHost();
 
-  void HandlePendingOutputSurfaceRequest();
+  void HandlePendingCompositorFrameSinkRequest();
 
 #if defined(ENABLE_VULKAN)
   void CreateVulkanOutputSurface();
@@ -135,6 +139,9 @@ class CONTENT_EXPORT CompositorImpl
       scoped_refptr<cc::ContextProvider> context_provider);
 
   bool HavePendingReadbacks();
+  void SetBackgroundColor(int color);
+
+  cc::FrameSinkId frame_sink_id_;
 
   // root_layer_ is the persistent internal root layer, while subroot_layer_
   // is the one attached by the compositor client.
@@ -144,7 +151,6 @@ class CONTENT_EXPORT CompositorImpl
   scoped_refptr<cc::Layer> readback_layer_tree_;
 
   // Destruction order matters here:
-  std::unique_ptr<cc::SurfaceIdAllocator> surface_id_allocator_;
   base::ObserverList<VSyncObserver, true> observer_list_;
   std::unique_ptr<cc::LayerTreeHost> host_;
   ui::ResourceManagerImpl resource_manager_;
@@ -171,11 +177,11 @@ class CONTENT_EXPORT CompositorImpl
 
   size_t num_successive_context_creation_failures_;
 
-  // Whether there is an OutputSurface request pending from the current
-  // |host_|. Becomes |true| if RequestNewOutputSurface is called, and |false|
-  // if |host_| is deleted or we succeed in creating *and* initializing an
-  // OutputSurface (which is essentially the contract with cc).
-  bool output_surface_request_pending_;
+  // Whether there is an CompositorFrameSink request pending from the current
+  // |host_|. Becomes |true| if RequestNewCompositorFrameSink is called, and
+  // |false| if |host_| is deleted or we succeed in creating *and* initializing
+  // a CompositorFrameSink (which is essentially the contract with cc).
+  bool compositor_frame_sink_request_pending_;
 
   gpu::Capabilities gpu_capabilities_;
   bool needs_begin_frames_;

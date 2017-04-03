@@ -368,7 +368,7 @@ void PasswordFormManager::Update(
   if (observed_form_.IsPossibleChangePasswordForm()) {
     FormStructure form_structure(credentials_to_update.form_data);
     UploadChangePasswordForm(autofill::NEW_PASSWORD,
-                             form_structure.FormSignature());
+                             form_structure.FormSignatureAsStr());
   }
   base::string16 password_to_save = pending_credentials_.password_value;
   bool skip_zero_click = pending_credentials_.skip_zero_click;
@@ -462,12 +462,64 @@ void PasswordFormManager::SetSubmittedForm(const autofill::PasswordForm& form) {
   }
 }
 
-void PasswordFormManager::ProcessMatches(
-    const std::vector<const PasswordForm*>& non_federated,
-    size_t filtered_count) {
+void PasswordFormManager::ScoreMatches(
+    const std::vector<const PasswordForm*>& matches) {
+  DCHECK(std::all_of(
+      matches.begin(), matches.end(),
+      [](const PasswordForm* match) { return !match->blacklisted_by_user; }));
+
   preferred_match_ = nullptr;
   best_matches_.clear();
   not_best_matches_.clear();
+
+  if (matches.empty())
+    return;
+
+  // Compute scores.
+  std::vector<uint32_t> credential_scores(matches.size());
+  std::transform(
+      matches.begin(), matches.end(), credential_scores.begin(),
+      [this](const PasswordForm* match) { return ScoreResult(*match); });
+
+  const uint32_t best_score =
+      *std::max_element(credential_scores.begin(), credential_scores.end());
+
+  std::map<base::string16, uint32_t> best_scores;  // best scores for usernames
+
+  for (size_t i = 0; i < matches.size(); ++i) {
+    uint32_t& score = best_scores[matches[i]->username_value];
+    score = std::max(score, credential_scores[i]);
+  }
+
+  // Assign best, non-best and preferred matches.
+  not_best_matches_.reserve(matches.size() - best_scores.size());
+  // Fill |best_matches_| with the best-scoring credentials for each username.
+  for (size_t i = 0; i < matches.size(); ++i) {
+    const PasswordForm* const match = matches[i];
+    const base::string16& username = match->username_value;
+
+    if (credential_scores[i] < best_scores[username]) {
+      not_best_matches_.push_back(match);
+      continue;
+    }
+
+    if (!preferred_match_ && credential_scores[i] == best_score)
+      preferred_match_ = match;
+
+    // If there is another best-score match for the same username then leave it
+    // and add the current form to |not_best_matches_|.
+    auto best_match_username = best_matches_.find(username);
+    if (best_match_username == best_matches_.end()) {
+      best_matches_.insert(std::make_pair(username, match));
+    } else {
+      not_best_matches_.push_back(match);
+    }
+  }
+}
+
+void PasswordFormManager::ProcessMatches(
+    const std::vector<const PasswordForm*>& non_federated,
+    size_t filtered_count) {
   blacklisted_matches_.clear();
   new_blacklisted_.reset();
 
@@ -478,66 +530,21 @@ void PasswordFormManager::ProcessMatches(
     logger->LogMessage(Logger::STRING_PROCESS_MATCHES_METHOD);
   }
 
-  // Create a copy of |non_federated| which we can reorder and prune.
-  std::vector<const PasswordForm*> all_matches(non_federated);
+  // Copy out and score non-blacklisted matches.
+  std::vector<const PasswordForm*> matches(std::count_if(
+      non_federated.begin(), non_federated.end(),
+      [this](const PasswordForm* form) { return IsMatch(*form); }));
+  std::copy_if(non_federated.begin(), non_federated.end(), matches.begin(),
+               [this](const PasswordForm* form) { return IsMatch(*form); });
+  ScoreMatches(matches);
 
-  // The next step is to reorder |all_matches| into three consequent blocks:
-  // (A) relevant blacklist entries
-  // (B) non-relevant blacklist entries
-  // (C) non-blacklisted matches
-
-  auto begin_nonblacklisted =  // start of block (C)
-      std::partition(
-          all_matches.begin(), all_matches.end(),
-          [](const PasswordForm* form) { return form->blacklisted_by_user; });
-
-  auto begin_nonrelevant =  // start of block (B)
-      std::partition(
-          all_matches.begin(), begin_nonblacklisted,
-          [this](const PasswordForm* form) { return IsBlacklistMatch(*form); });
-
-  // Now compute scores for forms in block (C).
-  const size_t non_blacklist_count = all_matches.end() - begin_nonblacklisted;
-  std::vector<uint32_t> credential_scores;  // scores for forms from (C)
-  credential_scores.reserve(non_blacklist_count);
-  uint32_t best_score = 0;
-  std::map<base::string16, uint32_t> best_scores;  // best scores for usernames
-  for (auto it = begin_nonblacklisted; it != all_matches.end(); ++it) {
-    const PasswordForm& login = **it;
-    uint32_t current_score = ScoreResult(login);
-    best_score = std::max(best_score, current_score);
-    best_scores[login.username_value] =
-        std::max(best_scores[login.username_value], current_score);
-    credential_scores.push_back(current_score);
-  }
-
-  not_best_matches_.reserve(non_blacklist_count - best_scores.size());
-  // Fill |best_matches_| with the best-scoring credentials for each username.
-  for (size_t i = 0; i < non_blacklist_count; ++i) {
-    const PasswordForm* login = *(begin_nonblacklisted + i);
-    DCHECK(!login->blacklisted_by_user);
-    const base::string16& username = login->username_value;
-
-    if (credential_scores[i] < best_scores[username]) {
-      not_best_matches_.push_back(login);
-      continue;
-    }
-
-    if (!preferred_match_ && credential_scores[i] == best_score)
-      preferred_match_ = login;
-
-    // If there is another best-score match for the same username then leave it
-    // and add the current form to |not_best_matches_|.
-    auto best_match_username = best_matches_.find(username);
-    if (best_match_username == best_matches_.end()) {
-      best_matches_.insert(std::make_pair(username, login));
-    } else {
-      not_best_matches_.push_back(login);
-    }
-  }
-
-  all_matches.erase(begin_nonrelevant, all_matches.end());
-  blacklisted_matches_ = std::move(all_matches);
+  // Copy out blacklisted matches.
+  blacklisted_matches_.resize(std::count_if(
+      non_federated.begin(), non_federated.end(),
+      [this](const PasswordForm* form) { return IsBlacklistMatch(*form); }));
+  std::copy_if(
+      non_federated.begin(), non_federated.end(), blacklisted_matches_.begin(),
+      [this](const PasswordForm* form) { return IsBlacklistMatch(*form); });
 
   UMA_HISTOGRAM_COUNTS(
       "PasswordManager.NumPasswordsNotShown",
@@ -708,7 +715,8 @@ void PasswordFormManager::SendAutofillVotes(
   // to PasswordForm. Even without this check, these FormStructure's won't
   // be uploaded, but it makes it hard to see if we are encountering
   // unexpected errors.
-  if (pending_structure.FormSignature() != observed_structure.FormSignature()) {
+  if (pending_structure.FormSignatureAsStr() !=
+      observed_structure.FormSignatureAsStr()) {
     // Only upload if this is the first time the password has been used.
     // Otherwise the credentials have been used on the same field before so
     // they aren't from an account creation form.
@@ -718,7 +726,7 @@ void PasswordFormManager::SendAutofillVotes(
     if (pending->times_used == 1 && selected_username_.empty()) {
       if (UploadPasswordForm(pending->form_data, pending->username_element,
                              autofill::ACCOUNT_CREATION_PASSWORD,
-                             observed_structure.FormSignature())) {
+                             observed_structure.FormSignatureAsStr())) {
         pending->generation_upload_status =
             autofill::PasswordForm::POSITIVE_SIGNAL_SENT;
       }
@@ -1165,14 +1173,20 @@ uint32_t PasswordFormManager::ScoreResult(const PasswordForm& candidate) const {
   return score;
 }
 
+bool PasswordFormManager::IsMatch(const autofill::PasswordForm& form) const {
+  return !form.blacklisted_by_user && form.scheme == observed_form_.scheme;
+}
+
 bool PasswordFormManager::IsBlacklistMatch(
     const autofill::PasswordForm& blacklisted_form) const {
-  DCHECK(blacklisted_form.blacklisted_by_user);
+  if (!blacklisted_form.blacklisted_by_user ||
+      blacklisted_form.is_public_suffix_match ||
+      blacklisted_form.scheme != observed_form_.scheme ||
+      blacklisted_form.origin.GetOrigin() !=
+          observed_form_.origin.GetOrigin()) {
+    return false;
+  }
 
-  if (blacklisted_form.is_public_suffix_match)
-    return false;
-  if (blacklisted_form.origin.GetOrigin() != observed_form_.origin.GetOrigin())
-    return false;
   if (observed_form_.scheme == PasswordForm::SCHEME_HTML) {
     return (blacklisted_form.origin.path() == observed_form_.origin.path()) ||
            (AreStringsEqualOrEmpty(blacklisted_form.submit_element,
@@ -1204,6 +1218,8 @@ const PasswordForm* PasswordFormManager::FindBestMatchForUpdatePassword(
 
 const PasswordForm* PasswordFormManager::FindBestSavedMatch(
     const PasswordForm* form) const {
+  if (!form->federation_origin.unique())
+    return nullptr;
   auto it = best_matches_.find(form->username_value);
   if (it != best_matches_.end())
     return it->second;

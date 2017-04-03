@@ -53,7 +53,7 @@ class WebSocketManager::Handle : public base::SupportsUserData::Data,
 
 // static
 void WebSocketManager::CreateWebSocket(int process_id, int frame_id,
-                                       mojom::WebSocketRequest request) {
+                                       blink::mojom::WebSocketRequest request) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
 
   RenderProcessHost* host = RenderProcessHost::FromID(process_id);
@@ -102,13 +102,16 @@ WebSocketManager::~WebSocketManager() {
   }
 }
 
-void WebSocketManager::DoCreateWebSocket(int frame_id,
-                                         mojom::WebSocketRequest request) {
+void WebSocketManager::DoCreateWebSocket(
+    int frame_id,
+    blink::mojom::WebSocketRequest request) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
 
   if (num_pending_connections_ >= kMaxPendingWebSocketConnections) {
-    // Too many websockets! By returning here, we let |request| die, which
-    // will be observed by the client as Mojo connection error.
+    // Too many websockets!
+    request.ResetWithReason(
+        blink::mojom::WebSocket::kInsufficientResources,
+        "Error in connection establishment: net::ERR_INSUFFICIENT_RESOURCES");
     return;
   }
 
@@ -157,7 +160,7 @@ void WebSocketManager::ThrottlingPeriodTimerCallback() {
 
 WebSocketImpl* WebSocketManager::CreateWebSocketImpl(
     WebSocketImpl::Delegate* delegate,
-    mojom::WebSocketRequest request,
+    blink::mojom::WebSocketRequest request,
     int frame_id,
     base::TimeDelta delay) {
   return new WebSocketImpl(delegate, std::move(request), frame_id, delay);

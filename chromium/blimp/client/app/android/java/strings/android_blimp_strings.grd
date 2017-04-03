@@ -190,8 +190,11 @@
       <message name="IDS_BLIMP_SWITCH" desc="Blimp Switch.">
         Blimp Switch
       </message>
-      <message name="IDS_BLIMP_ENGINE_IP" desc="Blimp Engine IP.">
+      <message name="IDS_BLIMP_ENGINE_IP" desc="Blimp Engine IP address.">
         Engine IP
+      </message>
+      <message name="IDS_BLIMP_ENGINE_INFO" desc="Blimp Engine IP address or connection status.">
+        Engine Info
       </message>
       <message name="IDS_BLIMP_ENGINE_VERSION" desc="Blimp Engine Version.">
         Engine Version
@@ -199,8 +202,11 @@
       <message name="IDS_BLIMP_ASSIGNER_URL" desc="Blimp Assigner URL.">
         Assigner URL
       </message>
-     <message name="IDS_BLIMP_ASSIGNER_CHANGED_PLEASE_RESTART" desc="Blimp assigner changed, restart message.">
+      <message name="IDS_BLIMP_ASSIGNER_CHANGED_PLEASE_RESTART" desc="Blimp assigner changed, restart message.">
         Please restart the application to use the new assigner configuration.
+      </message>
+      <message name="IDS_BLIMP_SIGN_OUT_RESTART" desc="User sign out, restart message.">
+        Please restart the application.
       </message>
       <message name="IDS_BLIMP_SWITCH_CHANGED_PLEASE_RESTART" desc="Blimp switch changed, restart message.">
         Blimp switch changed, Please restart the application.
@@ -210,6 +216,24 @@
       </message>
       <message name="IDS_BLIMP_RESTART_NOW" desc="Restart now message">
         Restart Now
+      </message>
+      <message name="IDS_BLIMP_IME_DIALOG_TITLE" desc="Label for the title text for IME dialog.">
+        Enter Text
+      </message>
+      <message name="IDS_BLIMP_FORM_INPUT_OK" desc="Label for a confirm button. Used in multiple contexts. [CHAR-LIMIT=20]">
+        OK
+      </message>
+      <message name="IDS_BLIMP_FORM_INPUT_CANCEL" desc="Label for a cancel button. Used in multiple contexts. [CHAR-LIMIT=20]">
+        Cancel
+      </message>
+      <message name="IDS_BLIMP_SIGN_IN_TITLE" desc="Sign in.">
+        Please sign in
+      </message>
+      <message name="IDS_BLIMP_SIGN_IN_MSG" desc="Sign in message.">
+        Please sign in to google account to enable Blimp.
+      </message>
+      <message name="IDS_BLIMP_SIGN_IN_BTN" desc="Sign in button.">
+        Sign in now
       </message>
     </messages>
   </release>

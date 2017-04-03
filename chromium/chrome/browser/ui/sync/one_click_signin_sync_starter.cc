@@ -6,7 +6,7 @@
 
 #include <stddef.h>
 
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/policy/cloud/user_policy_signin_service.h"
@@ -33,7 +33,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_metrics.h"
@@ -43,6 +43,8 @@
 #include "net/base/url_util.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "ui/base/l10n/l10n_util.h"
+
+using browser_sync::ProfileSyncService;
 
 namespace {
 
@@ -137,7 +139,7 @@ void OneClickSigninSyncStarter::Initialize(Profile* profile, Browser* browser) {
 
   // Make sure the syncing is requested, otherwise the SigninManager
   // will not be able to complete successfully.
-  sync_driver::SyncPrefs sync_prefs(profile_->GetPrefs());
+  syncer::SyncPrefs sync_prefs(profile_->GetPrefs());
   sync_prefs.SetSyncRequested(true);
 }
 
@@ -520,8 +522,8 @@ void OneClickSigninSyncStarter::AccountAddedToCookie(
 void OneClickSigninSyncStarter::DisplayFinalConfirmationBubble(
     const base::string16& custom_message) {
   browser_ = EnsureBrowser(browser_, profile_);
-  LoginUIServiceFactory::GetForProfile(browser_->profile())->
-      DisplayLoginResult(browser_, custom_message);
+  LoginUIServiceFactory::GetForProfile(browser_->profile())
+      ->DisplayLoginResult(browser_, custom_message, base::string16());
 }
 
 void OneClickSigninSyncStarter::DisplayModalSyncConfirmationWindow() {
@@ -627,11 +629,9 @@ void OneClickSigninSyncStarter::ShowSettingsPageInWebContents(
   }
 
   GURL url = chrome::GetSettingsUrl(sub_page);
-  content::OpenURLParams params(url,
-                                content::Referrer(),
-                                CURRENT_TAB,
-                                ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
-                                false);
+  content::OpenURLParams params(url, content::Referrer(),
+                                WindowOpenDisposition::CURRENT_TAB,
+                                ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false);
   contents->OpenURL(params);
 
   // Activate the tab.

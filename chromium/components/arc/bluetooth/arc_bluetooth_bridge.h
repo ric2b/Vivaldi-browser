@@ -21,6 +21,7 @@
 #include "components/arc/instance_holder.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
+#include "device/bluetooth/bluetooth_advertisement.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_discovery_session.h"
 #include "device/bluetooth/bluetooth_local_gatt_service.h"
@@ -52,9 +53,6 @@ class ArcBluetoothBridge
   void OnAdapterInitialized(scoped_refptr<device::BluetoothAdapter> adapter);
 
   // Overridden from device::BluetoothAdadpter::Observer
-  void AdapterPoweredChanged(device::BluetoothAdapter* adapter,
-                             bool powered) override;
-
   void DeviceAdded(device::BluetoothAdapter* adapter,
                    device::BluetoothDevice* device) override;
 
@@ -167,7 +165,7 @@ class ArcBluetoothBridge
   void SetRemoteDeviceProperty(mojom::BluetoothAddressPtr remote_addr,
                                mojom::BluetoothPropertyPtr property) override;
   void GetRemoteServiceRecord(mojom::BluetoothAddressPtr remote_addr,
-                              mojom::BluetoothUUIDPtr uuid) override;
+                              const device::BluetoothUUID& uuid) override;
 
   void GetRemoteServices(mojom::BluetoothAddressPtr remote_addr) override;
 
@@ -242,14 +240,14 @@ class ArcBluetoothBridge
                   const AddServiceCallback& callback) override;
   // Add a characteristic to a service and pass the characteristic handle back.
   void AddCharacteristic(int32_t service_handle,
-                         mojom::BluetoothUUIDPtr uuid,
+                         const device::BluetoothUUID& uuid,
                          int32_t properties,
                          int32_t permissions,
                          const AddCharacteristicCallback& callback) override;
   // Add a descriptor to the last characteristic added to the given service
   // and pass the descriptor handle back.
   void AddDescriptor(int32_t service_handle,
-                     mojom::BluetoothUUIDPtr uuid,
+                     const device::BluetoothUUID& uuid,
                      int32_t permissions,
                      const AddDescriptorCallback& callback) override;
   // Start a local service.
@@ -270,11 +268,22 @@ class ArcBluetoothBridge
 
   // Bluetooth Mojo host interface - Bluetooth SDP functions
   void GetSdpRecords(mojom::BluetoothAddressPtr remote_addr,
-                     mojom::BluetoothUUIDPtr target_uuid) override;
+                     const device::BluetoothUUID& target_uuid) override;
   void CreateSdpRecord(mojom::BluetoothSdpRecordPtr record_mojo,
                        const CreateSdpRecordCallback& callback) override;
   void RemoveSdpRecord(uint32_t service_handle,
                        const RemoveSdpRecordCallback& callback) override;
+
+  // Set up or disable multiple advertising.
+  void ReserveAdvertisementHandle(
+      const ReserveAdvertisementHandleCallback& callback) override;
+  void BroadcastAdvertisement(
+      int32_t adv_handle,
+      std::unique_ptr<device::BluetoothAdvertisement::Data> advertisement,
+      const BroadcastAdvertisementCallback& callback) override;
+  void ReleaseAdvertisementHandle(
+      int32_t adv_handle,
+      const ReleaseAdvertisementHandleCallback& callback) override;
 
   // Chrome observer callbacks
   void OnPoweredOn(
@@ -324,15 +333,13 @@ class ArcBluetoothBridge
  private:
   mojo::Array<mojom::BluetoothPropertyPtr> GetDeviceProperties(
       mojom::BluetoothPropertyType type,
-      device::BluetoothDevice* device) const;
+      const device::BluetoothDevice* device) const;
   mojo::Array<mojom::BluetoothPropertyPtr> GetAdapterProperties(
       mojom::BluetoothPropertyType type) const;
   mojo::Array<mojom::BluetoothAdvertisingDataPtr> GetAdvertisingData(
-      device::BluetoothDevice* device) const;
+      const device::BluetoothDevice* device) const;
 
   void SendCachedDevicesFound() const;
-  bool HasBluetoothInstance() const;
-  bool CheckBluetoothInstanceVersion(uint32_t version_need) const;
 
   device::BluetoothRemoteGattCharacteristic* FindGattCharacteristic(
       mojom::BluetoothAddressPtr remote_addr,
@@ -375,12 +382,53 @@ class ArcBluetoothBridge
 
   void OnGetServiceRecordsDone(
       mojom::BluetoothAddressPtr remote_addr,
-      mojom::BluetoothUUIDPtr target_uuid,
+      const device::BluetoothUUID& target_uuid,
       const std::vector<bluez::BluetoothServiceRecordBlueZ>& records_bluez);
   void OnGetServiceRecordsError(
       mojom::BluetoothAddressPtr remote_addr,
-      mojom::BluetoothUUIDPtr target_uuid,
+      const device::BluetoothUUID& target_uuid,
       bluez::BluetoothServiceRecordBlueZ::ErrorCode error_code);
+
+  void OnSetAdapterProperty(mojom::BluetoothStatus success,
+                            mojom::BluetoothPropertyPtr property);
+
+  // Callbacks for managing advertisements registered from the instance.
+
+  // Called when we have an open slot in the advertisement map and want to
+  // register the advertisement given by |data| for handle |adv_handle|.
+  void OnReadyToRegisterAdvertisement(
+      const BroadcastAdvertisementCallback& callback,
+      int32_t adv_handle,
+      std::unique_ptr<device::BluetoothAdvertisement::Data> data);
+  // Called when we've successfully registered a new advertisement for
+  // handle |adv_handle|.
+  void OnRegisterAdvertisementDone(
+      const BroadcastAdvertisementCallback& callback,
+      int32_t adv_handle,
+      scoped_refptr<device::BluetoothAdvertisement> advertisement);
+  // Called when the attempt to register an advertisement for handle
+  // |adv_handle| has failed. |adv_handle| remains reserved, but no
+  // advertisement is associated with it.
+  void OnRegisterAdvertisementError(
+      const BroadcastAdvertisementCallback& callback,
+      int32_t adv_handle,
+      device::BluetoothAdvertisement::ErrorCode error_code);
+  // Both of the following are called after we've tried to unregister
+  // the advertisement for |adv_handle|. Either way, we will no
+  // longer be broadcasting this advertisement, so in either case, the
+  // handle can be released.
+  void OnUnregisterAdvertisementDone(
+      const ReleaseAdvertisementHandleCallback& callback,
+      int32_t adv_handle);
+  void OnUnregisterAdvertisementError(
+      const ReleaseAdvertisementHandleCallback& callback,
+      int32_t adv_handle,
+      device::BluetoothAdvertisement::ErrorCode error_code);
+  // Find the next free advertisement handle and put it in *adv_handle,
+  // or return false if the advertisement map is full.
+  bool GetAdvertisementHandle(int32_t* adv_handle);
+
+  void SendDevice(const device::BluetoothDevice* device) const;
 
   bool CalledOnValidThread();
 
@@ -408,8 +456,27 @@ class ArcBluetoothBridge
   std::unordered_map<std::string,
                      std::unique_ptr<device::BluetoothGattConnection>>
       gatt_connections_;
+  // Timer to turn discovery off.
+  base::OneShotTimer discovery_off_timer_;
   // Timer to turn adapter discoverable off.
   base::OneShotTimer discoverable_off_timer_;
+
+  // Holds advertising data registered by the instance.
+  //
+  // When a handle is reserved, an entry is placed into the advertisements_
+  // map. This entry is not yet associated with a device::BluetoothAdvertisement
+  // because the instance hasn't sent us any advertising data yet, so its
+  // mapped value is nullptr until that happens. Thus we have three states for a
+  // handle:
+  // * unmapped -> free
+  // * mapped to nullptr -> reserved, awaiting data
+  // * mapped to a device::BluetoothAdvertisement -> in use, and the mapped
+  //   BluetoothAdvertisement is currently registered with the adapter.
+  // TODO(crbug.com/658385) Change back to 5 when we support setting signal
+  // strength per each advertisement slot.
+  enum { kMaxAdvertisements = 1 };
+  std::map<int32_t, scoped_refptr<device::BluetoothAdvertisement>>
+      advertisements_;
 
   base::ThreadChecker thread_checker_;
 

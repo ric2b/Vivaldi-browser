@@ -9,15 +9,16 @@
 
 /**
  * @typedef {{
- *   printerId: string,
- *   printerName: string,
+ *   printerAddress: string,
  *   printerDescription: string,
+ *   printerId: string,
  *   printerManufacturer: string,
  *   printerModel: string,
- *   printerStatus: string,
- *   printerAddress: string,
+ *   printerName: string,
+ *   printerPPDPath: string,
  *   printerProtocol: string,
- *   printerQueue: string
+ *   printerQueue: string,
+ *   printerStatus: string
  * }}
  */
 var CupsPrinterInfo;
@@ -48,9 +49,23 @@ cr.define('settings', function() {
 
     /**
      * @param {string} printerId
+     * @param {string} printerName
      */
-    removeCupsPrinter: function(printerId) {},
+    removeCupsPrinter: function(printerId, printerName) {},
 
+    /**
+     * @return {!Promise<string>} The full path of the printer PPD file.
+     */
+    getCupsPrinterPPDPath: function() {},
+
+    /**
+     * @param {!CupsPrinterInfo} newPrinter
+     */
+    addCupsPrinter: function(newPrinter) {},
+
+    startDiscoveringPrinters: function() {},
+
+    stopDiscoveringPrinters: function() {},
   };
 
   /**
@@ -61,19 +76,39 @@ cr.define('settings', function() {
   cr.addSingletonGetter(CupsPrintersBrowserProxyImpl);
 
   CupsPrintersBrowserProxyImpl.prototype = {
-    /** override */
+    /** @override */
     getCupsPrintersList: function() {
       return cr.sendWithPromise('getCupsPrintersList');
     },
 
-    /** override */
+    /** @override */
     updateCupsPrinter: function(printerId, printerName) {
       chrome.send('updateCupsPrinter', [printerId, printerName]);
     },
 
-    /** override */
-    removeCupsPrinter: function(printerId) {
-      chrome.send('removeCupsPrinter', [printerId]);
+    /** @override */
+    removeCupsPrinter: function(printerId, printerName) {
+      chrome.send('removeCupsPrinter', [printerId, printerName]);
+    },
+
+    /** @override */
+    addCupsPrinter: function(newPrinter) {
+      chrome.send('addCupsPrinter', [newPrinter]);
+    },
+
+    /** @override */
+    getCupsPrinterPPDPath: function() {
+      return cr.sendWithPromise('selectPPDFile');
+    },
+
+    /** @override */
+    startDiscoveringPrinters: function() {
+      chrome.send('startDiscoveringPrinters');
+    },
+
+    /** @override */
+    stopDiscoveringPrinters: function() {
+      chrome.send('stopDiscoveringPrinters');
     },
   };
 

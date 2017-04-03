@@ -6,6 +6,7 @@
 
 #include "base/logging.h"
 #include "content/public/browser/browser_thread.h"
+#include "net/log/net_log_with_source.h"
 
 namespace content {
 
@@ -14,7 +15,7 @@ namespace content {
 //               Unfortunately, as it is, constructors of SaveFile don't always
 //               have access to the SavePackage at this point.
 SaveFile::SaveFile(const SaveFileCreateInfo* info, bool calculate_hash)
-    : file_(net::BoundNetLog()), info_(info) {
+    : file_(net::NetLogWithSource()), info_(info) {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
 
   DCHECK(info);

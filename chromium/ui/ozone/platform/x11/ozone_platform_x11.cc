@@ -12,12 +12,11 @@
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "ui/display/fake_display_delegate.h"
 #include "ui/events/platform/x11/x11_event_source_libevent.h"
 #include "ui/ozone/common/stub_overlay_manager.h"
-#include "ui/ozone/platform/x11/native_display_delegate_ozone_x11.h"
 #include "ui/ozone/platform/x11/x11_cursor_factory_ozone.h"
 #include "ui/ozone/platform/x11/x11_surface_factory.h"
-#include "ui/ozone/public/gpu_platform_support.h"
 #include "ui/ozone/public/gpu_platform_support_host.h"
 #include "ui/ozone/public/input_controller.h"
 #include "ui/ozone/public/ozone_platform.h"
@@ -70,10 +69,6 @@ class OzonePlatformX11 : public OzonePlatform {
     return input_controller_.get();
   }
 
-  GpuPlatformSupport* GetGpuPlatformSupport() override {
-    return gpu_platform_support_.get();
-  }
-
   GpuPlatformSupportHost* GetGpuPlatformSupportHost() override {
     return gpu_platform_support_host_.get();
   }
@@ -91,12 +86,13 @@ class OzonePlatformX11 : public OzonePlatform {
 
   std::unique_ptr<NativeDisplayDelegate> CreateNativeDisplayDelegate()
       override {
-    return base::MakeUnique<NativeDisplayDelegateOzoneX11>();
+    return base::MakeUnique<display::FakeDisplayDelegate>();
   }
 
   void InitializeUI() override {
     window_manager_.reset(new X11WindowManagerOzone);
-    event_source_.reset(new X11EventSourceLibevent(gfx::GetXDisplay()));
+    if (!event_source_)
+      event_source_.reset(new X11EventSourceLibevent(gfx::GetXDisplay()));
     overlay_manager_.reset(new StubOverlayManager());
     input_controller_ = CreateStubInputController();
     cursor_factory_ozone_.reset(new X11CursorFactoryOzone());
@@ -104,14 +100,14 @@ class OzonePlatformX11 : public OzonePlatform {
   }
 
   void InitializeGPU() override {
+    if (!event_source_)
+      event_source_.reset(new X11EventSourceLibevent(gfx::GetXDisplay()));
     surface_factory_ozone_.reset(new X11SurfaceFactory());
-    gpu_platform_support_.reset(CreateStubGpuPlatformSupport());
   }
 
  private:
-  // Objects in the Browser process.
+  // Objects in the browser process.
   std::unique_ptr<X11WindowManagerOzone> window_manager_;
-  std::unique_ptr<X11EventSourceLibevent> event_source_;
   std::unique_ptr<OverlayManagerOzone> overlay_manager_;
   std::unique_ptr<InputController> input_controller_;
   std::unique_ptr<X11CursorFactoryOzone> cursor_factory_ozone_;
@@ -119,7 +115,9 @@ class OzonePlatformX11 : public OzonePlatform {
 
   // Objects in the GPU process.
   std::unique_ptr<X11SurfaceFactory> surface_factory_ozone_;
-  std::unique_ptr<GpuPlatformSupport> gpu_platform_support_;
+
+  // Objects in both browser and GPU process.
+  std::unique_ptr<X11EventSourceLibevent> event_source_;
 
   DISALLOW_COPY_AND_ASSIGN(OzonePlatformX11);
 };

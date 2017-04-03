@@ -4,6 +4,10 @@
 
 #include "ui/views/mus/clipboard_mus.h"
 
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "base/logging.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -24,7 +28,8 @@ ui::mojom::Clipboard::Type GetType(ui::ClipboardType type) {
     case ui::CLIPBOARD_TYPE_SELECTION:
       return ui::mojom::Clipboard::Type::SELECTION;
     case ui::CLIPBOARD_TYPE_DRAG:
-      return ui::mojom::Clipboard::Type::DRAG;
+      // Only OSX uses a drag clipboard.
+      break;
   }
 
   NOTREACHED();
@@ -41,7 +46,7 @@ ClipboardMus::ClipboardMus() {}
 ClipboardMus::~ClipboardMus() {}
 
 void ClipboardMus::Init(shell::Connector* connector) {
-  connector->ConnectToInterface("mojo:ui", &clipboard_);
+  connector->ConnectToInterface("service:ui", &clipboard_);
 }
 
 // TODO(erg): This isn't optimal. It would be better to move the entire
@@ -255,7 +260,8 @@ void ClipboardMus::ReadData(const FormatType& format,
 
 void ClipboardMus::WriteObjects(ui::ClipboardType type,
                                 const ObjectMap& objects) {
-  current_clipboard_.reset(new mojo::Map<mojo::String, mojo::Array<uint8_t>>);
+  current_clipboard_ =
+      base::MakeUnique<mojo::Map<mojo::String, mojo::Array<uint8_t>>>();
   for (const auto& p : objects)
     DispatchObject(static_cast<ObjectType>(p.first), p.second);
 

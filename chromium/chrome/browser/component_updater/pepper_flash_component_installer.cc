@@ -63,7 +63,7 @@ const uint8_t kSha2Hash[] = {0xc8, 0xce, 0x99, 0xba, 0xce, 0x89, 0xf8, 0x20,
 
 #if !defined(OS_LINUX) && defined(GOOGLE_CHROME_BUILD)
 bool MakePepperFlashPluginInfo(const base::FilePath& flash_path,
-                               const Version& flash_version,
+                               const base::Version& flash_version,
                                bool out_of_process,
                                content::PepperPluginInfo* plugin_info) {
   if (!flash_version.IsValid())
@@ -102,7 +102,7 @@ bool MakePepperFlashPluginInfo(const base::FilePath& flash_path,
 // or component updated).
 // |version| is the version of that Flash implementation.
 void RegisterPepperFlashWithChrome(const base::FilePath& path,
-                                   const Version& version) {
+                                   const base::Version& version) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   content::PepperPluginInfo plugin_info;
   if (!MakePepperFlashPluginInfo(path, version, true, &plugin_info))
@@ -127,30 +127,11 @@ void RegisterPepperFlashWithChrome(const base::FilePath& path,
       break;
     }
 
-    Version registered_version(base::UTF16ToUTF8(plugin.version));
+    base::Version registered_version(base::UTF16ToUTF8(plugin.version));
 
-    // If lower version, never register.
+    // If lower or equal version, never register.
     if (registered_version.IsValid() &&
-        version.CompareTo(registered_version) < 0) {
-      return;
-    }
-
-    bool registered_is_debug_system =
-        !system_flash_path.empty() &&
-        base::FilePath::CompareEqualIgnoreCase(plugin.path.value(),
-                                               system_flash_path.value()) &&
-        chrome::IsSystemFlashScriptDebuggerPresent();
-    bool is_on_network = false;
-#if defined(OS_WIN)
-    // On Windows, component updated DLLs can't load off network drives.
-    // See crbug.com/572131 for details.
-    is_on_network = base::IsOnNetworkDrive(path);
-#endif
-    // If equal version, register iff component is not on a network drive,
-    // and the version of flash is not debug system.
-    if (registered_version.IsValid() &&
-        version.CompareTo(registered_version) == 0 &&
-        (is_on_network || registered_is_debug_system)) {
+        version.CompareTo(registered_version) <= 0) {
       return;
     }
 
@@ -242,7 +223,7 @@ void FlashComponentInstallerTraits::ComponentReady(
 bool FlashComponentInstallerTraits::VerifyInstallation(
     const base::DictionaryValue& manifest,
     const base::FilePath& install_dir) const {
-  Version unused;
+  base::Version unused;
   return chrome::CheckPepperFlashManifest(manifest, &unused);
 }
 

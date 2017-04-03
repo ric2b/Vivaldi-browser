@@ -20,8 +20,8 @@
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/input_method/component_extension_ime_manager_impl.h"
 #include "components/chrome_apps/grit/chrome_apps_resources.h"
-#include "grit/keyboard_resources.h"
 #include "ui/file_manager/grit/file_manager_resources.h"
+#include "ui/keyboard/grit/keyboard_resources.h"
 #endif
 
 #include "app/vivaldi_resources.h"
@@ -38,6 +38,7 @@ bool IsComponentExtensionWhitelisted(const std::string& extension_id) {
     extension_misc::kPdfExtensionId,
 #if defined(OS_CHROMEOS)
     extension_misc::kChromeVoxExtensionId,
+    extension_misc::kSelectToSpeakExtensionId,
     extension_misc::kSpeechSynthesisExtensionId,
     extension_misc::kZIPUnpackerExtensionId,
 #endif

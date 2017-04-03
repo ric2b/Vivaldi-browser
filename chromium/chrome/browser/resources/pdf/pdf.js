@@ -40,36 +40,6 @@ function getFilenameFromURL(url) {
 }
 
 /**
- * Called when navigation happens in the current tab.
- * @param {boolean} isInTab Indicates if the PDF viewer is displayed in a tab.
- * @param {boolean} isSourceFileUrl Indicates if the navigation source is a
- *     file:// URL.
- * @param {string} url The url to be opened in the current tab.
- */
-function onNavigateInCurrentTab(isInTab, isSourceFileUrl, url) {
-  // When the PDFviewer is inside a browser tab, prefer the tabs API because
-  // it can navigate from one file:// URL to another.
-  if (chrome.tabs && isInTab && isSourceFileUrl)
-    chrome.tabs.update({url: url});
-  else
-    window.location.href = url;
-}
-
-/**
- * Called when navigation happens in the new tab.
- * @param {string} url The url to be opened in the new tab.
- * @param {boolean} active Indicates if the new tab should be the active tab.
- */
-function onNavigateInNewTab(url, active) {
-  // Prefer the tabs API because it guarantees we can just open a new tab.
-  // window.open doesn't have this guarantee.
-  if (chrome.tabs)
-    chrome.tabs.create({url: url, active: active});
-  else
-    window.open(url);
-}
-
-/**
  * Whether keydown events should currently be ignored. Events are ignored when
  * an editable element has focus, to allow for proper editing controls.
  * @param {HTMLElement} activeElement The currently selected DOM node.
@@ -131,7 +101,7 @@ function PDFViewer(browserApi) {
 
   this.delayedScriptingMessages_ = [];
 
-  this.isPrintPreview_ = this.originalUrl_.indexOf('chrome://print') == 0;
+  this.isPrintPreview_ = location.origin === 'chrome://print';
 
   // Parse open pdf parameters.
   this.paramsParser_ =
@@ -202,8 +172,12 @@ function PDFViewer(browserApi) {
   this.plugin_.setAttribute('background-color', backgroundColor);
   this.plugin_.setAttribute('top-toolbar-height', topToolbarHeight);
 
-  if (!this.browserApi_.getStreamInfo().embedded)
+  if (this.browserApi_.getStreamInfo().embedded) {
+    this.plugin_.setAttribute('top-level-url',
+                              this.browserApi_.getStreamInfo().tabUrl);
+  } else {
     this.plugin_.setAttribute('full-frame', '');
+  }
   document.body.appendChild(this.plugin_);
 
   // Setup the button event listeners.
@@ -259,13 +233,9 @@ function PDFViewer(browserApi) {
   document.addEventListener('mouseout', this.handleMouseEvent_.bind(this));
 
   var isInTab = this.browserApi_.getStreamInfo().tabId != -1;
-  var isSourceFileUrl = this.originalUrl_.indexOf('file://') == 0;
-  this.navigator_ = new Navigator(this.originalUrl_,
-                                  this.viewport_, this.paramsParser_,
-                                  onNavigateInCurrentTab.bind(undefined,
-                                                              isInTab,
-                                                              isSourceFileUrl),
-                                  onNavigateInNewTab);
+  this.navigator_ = new Navigator(
+      this.originalUrl_, this.viewport_, this.paramsParser_,
+      new NavigatorDelegate(isInTab));
   this.viewportScroller_ =
       new ViewportScroller(this.viewport_, this.plugin_, window);
 
@@ -377,7 +347,7 @@ PDFViewer.prototype = {
           this.viewport.position = position;
         }
         return;
-      case 65:  // a key.
+      case 65:  // 'a' key.
         if (e.ctrlKey || e.metaKey) {
           this.plugin_.postMessage({
             type: 'selectAll'
@@ -386,17 +356,21 @@ PDFViewer.prototype = {
           e.preventDefault();
         }
         return;
-      case 71: // g key.
+      case 71: // 'g' key.
         if (this.toolbar_ && (e.ctrlKey || e.metaKey) && e.altKey) {
           this.toolbarManager_.showToolbars();
           this.toolbar_.selectPageNumber();
         }
         return;
-      case 219:  // left bracket.
+      case 219:  // Left bracket key.
         if (e.ctrlKey)
           this.rotateCounterClockwise_();
         return;
-      case 221:  // right bracket.
+      case 220:  // Backslash key.
+        if (e.ctrlKey)
+          this.zoomToolbar_.fitToggleFromHotKey();
+        return;
+      case 221:  // Right bracket key.
         if (e.ctrlKey)
           this.rotateClockwise_();
         return;
@@ -442,6 +416,10 @@ PDFViewer.prototype = {
     });
   },
 
+  /**
+   * @private
+   * Set zoom to "fit to page".
+   */
   fitToPage_: function() {
     this.viewport_.fitToPage();
     this.toolbarManager_.forceHideTopToolbar();

@@ -39,6 +39,11 @@ void GlRenderer::RequestCanvasSize() {
 void GlRenderer::OnPixelTransformationChanged(
     const std::array<float, 9>& matrix) {
   DCHECK(thread_checker_.CalledOnValidThread());
+  if (!canvas_) {
+    LOG(WARNING) << "Trying to set transformation matrix when the canvas is "
+        "not ready.";
+    return;
+  }
   canvas_->SetTransformationMatrix(matrix);
   RequestRender();
 }
@@ -87,8 +92,13 @@ void GlRenderer::OnCursorShapeChanged(const protocol::CursorShapeInfo& shape) {
 
 void GlRenderer::OnSurfaceCreated(int gl_version) {
   DCHECK(thread_checker_.CalledOnValidThread());
+#ifndef NDEBUG
+  // Set the background clear color to bright green for debugging purposes.
+  glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
+#else
   // Set the background clear color to black.
   glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+#endif
   canvas_.reset(new GlCanvas(gl_version));
   desktop_.SetCanvas(canvas_.get());
   cursor_.SetCanvas(canvas_.get());
@@ -97,6 +107,10 @@ void GlRenderer::OnSurfaceCreated(int gl_version) {
 
 void GlRenderer::OnSurfaceChanged(int view_width, int view_height) {
   DCHECK(thread_checker_.CalledOnValidThread());
+  if (!canvas_) {
+    LOG(WARNING) << "Trying to set the view size when the canvas is not ready.";
+    return;
+  }
   canvas_->SetViewSize(view_width, view_height);
   RequestRender();
 }

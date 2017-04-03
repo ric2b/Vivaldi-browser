@@ -296,15 +296,15 @@ bool VivaldiSessionService::Load(const base::FilePath& path,
     return false;
 
   ScopedVector<sessions::SessionCommand> commands;
-  ScopedVector<sessions::SessionWindow> valid_windows;
+  std::vector<std::unique_ptr<sessions::SessionWindow>> valid_windows;
   SessionID::id_type active_window_id = 0;
 
   if (Read(&commands)) {
-    sessions::RestoreSessionFromCommands(commands, &valid_windows.get(),
+    sessions::RestoreSessionFromCommands(commands, &valid_windows,
                                          &active_window_id);
-    RemoveUnusedRestoreWindows(&valid_windows.get());
+    RemoveUnusedRestoreWindows(&valid_windows);
     std::vector<SessionRestoreDelegate::RestoredTab> created_contents;
-    ProcessSessionWindows(&valid_windows.get(), active_window_id,
+    ProcessSessionWindows(&valid_windows, active_window_id,
                           &created_contents);
     return true;
   }
@@ -454,7 +454,7 @@ void VivaldiSessionService::NotifySessionServiceOfRestoredTabs(
 
 
 Browser* VivaldiSessionService::ProcessSessionWindows(
-    std::vector<sessions::SessionWindow*>* windows,
+  std::vector<std::unique_ptr<sessions::SessionWindow>>* windows,
     SessionID::id_type active_window_id,
     std::vector<SessionRestoreDelegate::RestoredTab>* created_contents) {
   DVLOG(1) << "ProcessSessionWindows " << windows->size();
@@ -482,15 +482,13 @@ Browser* VivaldiSessionService::ProcessSessionWindows(
   // active window it will be made visible by the call to
   // browser_to_activate->window()->Activate() later on in this method.
   bool has_visible_browser = false;
-  for (std::vector<sessions::SessionWindow*>::iterator i = windows->begin();
-        i != windows->end(); ++i) {
+  for (auto i = windows->begin(); i != windows->end(); ++i) {
     if ((*i)->show_state != ui::SHOW_STATE_MINIMIZED ||
         (*i)->window_id.id() == active_window_id)
       has_visible_browser = true;
   }
 
-  for (std::vector<sessions::SessionWindow*>::iterator i = windows->begin();
-        i != windows->end(); ++i) {
+  for (auto i = windows->begin(); i != windows->end(); ++i) {
     Browser* browser = nullptr;
     if (!has_tabbed_browser &&
         (*i)->type == sessions::SessionWindow::TYPE_TABBED) {
@@ -547,10 +545,10 @@ Browser* VivaldiSessionService::ProcessSessionWindows(
 }
 
 void VivaldiSessionService::RemoveUnusedRestoreWindows(
-    std::vector<sessions::SessionWindow*>* window_list) {
-  std::vector<sessions::SessionWindow*>::iterator i = window_list->begin();
+    std::vector<std::unique_ptr<sessions::SessionWindow>>* window_list) {
+  auto i = window_list->begin();
   while (i != window_list->end()) {
-    sessions::SessionWindow* window = *i;
+    sessions::SessionWindow* window = i->get();
     if (window->type != sessions::SessionWindow::TYPE_TABBED) {
       delete window;
       i = window_list->erase(i);

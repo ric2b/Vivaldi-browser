@@ -5,11 +5,21 @@
 #include "ash/mus/accelerators/accelerator_controller_delegate_mus.h"
 
 #include "base/logging.h"
+#include "mash/public/interfaces/launchable.mojom.h"
+#include "services/ui/public/interfaces/display/display_controller.mojom.h"
 
 namespace ash {
 namespace mus {
 
-AcceleratorControllerDelegateMus::AcceleratorControllerDelegateMus() {}
+AcceleratorControllerDelegateMus::AcceleratorControllerDelegateMus(
+    shell::Connector* connector)
+    : connector_(connector) {
+#if !defined(OS_CHROMEOS)
+  // To avoid trybot complaining that |connector_| is not being
+  // used in non-ChromeOS.
+  connector_ = nullptr;
+#endif
+}
 
 AcceleratorControllerDelegateMus::~AcceleratorControllerDelegateMus() {}
 
@@ -20,22 +30,11 @@ bool AcceleratorControllerDelegateMus::HandlesAction(AcceleratorAction action) {
   // mus, then they should be removed from AcceleratorAction.
   // http://crbug.com/612331.
   switch (action) {
-    case DEBUG_TOGGLE_DESKTOP_BACKGROUND_MODE:
     case DEBUG_TOGGLE_DEVICE_SCALE_FACTOR:
-    case DEBUG_TOGGLE_ROOT_WINDOW_FULL_SCREEN:
+    case DEV_TOGGLE_ROOT_WINDOW_FULL_SCREEN:
     case DEBUG_TOGGLE_SHOW_DEBUG_BORDERS:
     case DEBUG_TOGGLE_SHOW_FPS_COUNTER:
     case DEBUG_TOGGLE_SHOW_PAINT_RECTS:
-    case FOCUS_SHELF:
-    case LAUNCH_APP_0:
-    case LAUNCH_APP_1:
-    case LAUNCH_APP_2:
-    case LAUNCH_APP_3:
-    case LAUNCH_APP_4:
-    case LAUNCH_APP_5:
-    case LAUNCH_APP_6:
-    case LAUNCH_APP_7:
-    case LAUNCH_LAST_APP:
     case MAGNIFY_SCREEN_ZOOM_IN:
     case MAGNIFY_SCREEN_ZOOM_OUT:
     case ROTATE_SCREEN:
@@ -43,7 +42,6 @@ bool AcceleratorControllerDelegateMus::HandlesAction(AcceleratorAction action) {
     case SCALE_UI_DOWN:
     case SCALE_UI_RESET:
     case SCALE_UI_UP:
-    case SHOW_MESSAGE_CENTER_BUBBLE:
     case SHOW_SYSTEM_TRAY_BUBBLE:
     case TAKE_PARTIAL_SCREENSHOT:
     case TAKE_SCREENSHOT:
@@ -53,9 +51,13 @@ bool AcceleratorControllerDelegateMus::HandlesAction(AcceleratorAction action) {
       return false;
 
 #if defined(OS_CHROMEOS)
-    case DEBUG_ADD_REMOVE_DISPLAY:
-    case DEBUG_TOGGLE_UNIFIED_DESKTOP:
-    case DISABLE_GPU_WATCHDOG:
+    case DEV_ADD_REMOVE_DISPLAY: {
+      display::mojom::DisplayControllerPtr display_controller;
+      connector_->ConnectToInterface("service:ui", &display_controller);
+      display_controller->ToggleVirtualDisplay();
+      return true;
+    }
+    case DEV_TOGGLE_UNIFIED_DESKTOP:
     case LOCK_PRESSED:
     case LOCK_RELEASED:
     case POWER_PRESSED:
@@ -64,9 +66,15 @@ bool AcceleratorControllerDelegateMus::HandlesAction(AcceleratorAction action) {
     case TOGGLE_MIRROR_MODE:
     case TOUCH_HUD_CLEAR:
     case TOUCH_HUD_MODE_CHANGE:
-    case TOUCH_HUD_PROJECTION_TOGGLE:
       NOTIMPLEMENTED();
       return false;
+    case TOUCH_HUD_PROJECTION_TOGGLE: {
+      mash::mojom::LaunchablePtr launchable;
+      connector_->ConnectToInterface("service:touch_hud", &launchable);
+      launchable->Launch(mash::mojom::kWindow,
+                         mash::mojom::LaunchMode::DEFAULT);
+      return true;
+    }
 #endif
 
     default:

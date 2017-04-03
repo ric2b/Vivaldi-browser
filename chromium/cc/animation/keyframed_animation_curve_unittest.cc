@@ -561,37 +561,6 @@ TEST(KeyframedAnimationCurveTest, AnimatedBounds) {
             bounds.ToString());
 }
 
-// Tests that animations that affect scale are correctly identified.
-TEST(KeyframedAnimationCurveTest, AffectsScale) {
-  std::unique_ptr<KeyframedTransformAnimationCurve> curve(
-      KeyframedTransformAnimationCurve::Create());
-
-  TransformOperations operations1;
-  curve->AddKeyframe(
-      TransformKeyframe::Create(base::TimeDelta(), operations1, nullptr));
-  operations1.AppendTranslate(2.0, 3.0, -1.0);
-  TransformOperations operations2;
-  operations2.AppendTranslate(4.0, 1.0, 2.0);
-  curve->AddKeyframe(TransformKeyframe::Create(
-      base::TimeDelta::FromSecondsD(1.f), operations2, nullptr));
-
-  EXPECT_FALSE(curve->AffectsScale());
-
-  TransformOperations operations3;
-  operations3.AppendScale(2.f, 2.f, 2.f);
-  curve->AddKeyframe(TransformKeyframe::Create(
-      base::TimeDelta::FromSecondsD(2.f), operations3, nullptr));
-
-  EXPECT_TRUE(curve->AffectsScale());
-
-  TransformOperations operations4;
-  operations3.AppendTranslate(2.f, 2.f, 2.f);
-  curve->AddKeyframe(TransformKeyframe::Create(
-      base::TimeDelta::FromSecondsD(3.f), operations4, nullptr));
-
-  EXPECT_TRUE(curve->AffectsScale());
-}
-
 // Tests that animations that are translations are correctly identified.
 TEST(KeyframedAnimationCurveTest, IsTranslation) {
   std::unique_ptr<KeyframedTransformAnimationCurve> curve(
@@ -658,22 +627,32 @@ TEST(KeyframedAnimationCurveTest, MaximumTargetScale) {
       CubicBezierTimingFunction::CreatePreset(
           CubicBezierTimingFunction::EaseType::EASE)));
 
+  EXPECT_TRUE(curve->MaximumTargetScale(true, &maximum_scale));
+  EXPECT_EQ(6.f, maximum_scale);
+
+  TransformOperations operations4;
+  operations4.AppendPerspective(3.f);
+  curve->AddKeyframe(TransformKeyframe::Create(
+      base::TimeDelta::FromSecondsD(4.f), operations4,
+      CubicBezierTimingFunction::CreatePreset(
+          CubicBezierTimingFunction::EaseType::EASE)));
+
   EXPECT_FALSE(curve->MaximumTargetScale(true, &maximum_scale));
 
   // The original scale is not used in computing the max.
   std::unique_ptr<KeyframedTransformAnimationCurve> curve2(
       KeyframedTransformAnimationCurve::Create());
 
-  TransformOperations operations4;
-  operations4.AppendScale(0.4f, 0.2f, 0.6f);
+  TransformOperations operations5;
+  operations5.AppendScale(0.4f, 0.2f, 0.6f);
   curve2->AddKeyframe(TransformKeyframe::Create(
-      base::TimeDelta(), operations4,
+      base::TimeDelta(), operations5,
       CubicBezierTimingFunction::CreatePreset(
           CubicBezierTimingFunction::EaseType::EASE)));
-  TransformOperations operations5;
-  operations5.AppendScale(0.5f, 0.3f, -0.8f);
+  TransformOperations operations6;
+  operations6.AppendScale(0.5f, 0.3f, -0.8f);
   curve2->AddKeyframe(TransformKeyframe::Create(
-      base::TimeDelta::FromSecondsD(1.f), operations5,
+      base::TimeDelta::FromSecondsD(1.f), operations6,
       CubicBezierTimingFunction::CreatePreset(
           CubicBezierTimingFunction::EaseType::EASE)));
 
@@ -715,7 +694,7 @@ TEST(KeyframedAnimationCurveTest, AnimationStartScale) {
       CubicBezierTimingFunction::CreatePreset(
           CubicBezierTimingFunction::EaseType::EASE)));
 
-  // Backward direction
+  // Forward direction
   EXPECT_TRUE(curve->AnimationStartScale(true, &start_scale));
   EXPECT_EQ(1.f, start_scale);
 
@@ -727,6 +706,16 @@ TEST(KeyframedAnimationCurveTest, AnimationStartScale) {
   operations3.AppendRotate(1.f, 0.f, 0.f, 90.f);
   curve->AddKeyframe(TransformKeyframe::Create(
       base::TimeDelta::FromSecondsD(3.f), operations3,
+      CubicBezierTimingFunction::CreatePreset(
+          CubicBezierTimingFunction::EaseType::EASE)));
+
+  EXPECT_TRUE(curve->AnimationStartScale(false, &start_scale));
+  EXPECT_EQ(1.f, start_scale);
+
+  TransformOperations operations4;
+  operations4.AppendPerspective(90.f);
+  curve->AddKeyframe(TransformKeyframe::Create(
+      base::TimeDelta::FromSecondsD(4.f), operations4,
       CubicBezierTimingFunction::CreatePreset(
           CubicBezierTimingFunction::EaseType::EASE)));
 

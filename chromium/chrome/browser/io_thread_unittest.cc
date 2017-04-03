@@ -7,6 +7,7 @@
 #include "base/at_exit.h"
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "base/test/mock_entropy_provider.h"
@@ -56,7 +57,7 @@ class IOThreadPeer {
       bool is_quic_allowed_by_policy,
       net::HttpNetworkSession::Params* params) {
     IOThread::ConfigureParamsFromFieldTrialsAndCommandLine(
-        command_line, is_quic_allowed_by_policy, params);
+        command_line, is_quic_allowed_by_policy, false, params);
   }
 };
 
@@ -293,7 +294,8 @@ TEST_F(ConfigureParamsFromFieldTrialsAndCommandLineTest,
 TEST_F(ConfigureParamsFromFieldTrialsAndCommandLineTest,
        DisableQuicFromCommandLineOverridesFieldTrial) {
   auto field_trial_list =
-      base::MakeUnique<base::FieldTrialList>(new base::MockEntropyProvider());
+      base::MakeUnique<base::FieldTrialList>(
+          base::MakeUnique<base::MockEntropyProvider>());
   variations::testing::ClearAllVariationParams();
 
   std::map<std::string, std::string> field_trial_params;

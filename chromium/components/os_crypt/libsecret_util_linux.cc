@@ -13,6 +13,17 @@
 // LibsecretLoader
 //
 
+namespace {
+
+// TODO(crbug.com/660005) A message that is attached to useless entries that we
+// create, to explain its existence.
+const char kExplanationMessage[] =
+    "Because of quirks in the gnome libsecret API, Chrome needs to store a "
+    "dummy entry to quarantee that this keyring was properly unlocked. More "
+    "details at http://crbug.com/660005.";
+
+}  // namespace
+
 decltype(
     &::secret_password_store_sync) LibsecretLoader::secret_password_store_sync;
 decltype(
@@ -26,8 +37,6 @@ decltype(
 decltype(&::secret_item_load_secret_sync)
     LibsecretLoader::secret_item_load_secret_sync;
 decltype(&::secret_value_unref) LibsecretLoader::secret_value_unref;
-decltype(
-    &::secret_service_lookup_sync) LibsecretLoader::secret_service_lookup_sync;
 
 bool LibsecretLoader::libsecret_loaded_ = false;
 
@@ -42,8 +51,6 @@ const LibsecretLoader::FunctionInfo LibsecretLoader::kFunctions[] = {
      reinterpret_cast<void**>(&secret_password_clear_sync)},
     {"secret_password_store_sync",
      reinterpret_cast<void**>(&secret_password_store_sync)},
-    {"secret_service_lookup_sync",
-     reinterpret_cast<void**>(&secret_service_lookup_sync)},
     {"secret_service_search_sync",
      reinterpret_cast<void**>(&secret_service_search_sync)},
     {"secret_value_get_text", reinterpret_cast<void**>(&secret_value_get_text)},
@@ -102,11 +109,12 @@ bool LibsecretLoader::LibsecretIsAvailable() {
        {nullptr, SECRET_SCHEMA_ATTRIBUTE_STRING}}};
 
   GError* error = nullptr;
-  GList* found =
-      secret_service_search_sync(nullptr,  // default secret service
-                                 &kDummySchema, attrs.Get(), SECRET_SEARCH_ALL,
-                                 nullptr,  // no cancellable ojbect
-                                 &error);
+  GList* found = secret_service_search_sync(
+      nullptr,  // default secret service
+      &kDummySchema, attrs.Get(),
+      static_cast<SecretSearchFlags>(SECRET_SEARCH_ALL | SECRET_SEARCH_UNLOCK),
+      nullptr,  // no cancellable ojbect
+      &error);
   bool success = (error == nullptr);
   if (error)
     g_error_free(error);
@@ -114,6 +122,31 @@ bool LibsecretLoader::LibsecretIsAvailable() {
     g_list_free(found);
 
   return success;
+}
+
+// TODO(crbug.com/660005) This is needed to properly unlock the default keyring.
+// We don't need to ever read it.
+void LibsecretLoader::EnsureKeyringUnlocked() {
+  const SecretSchema kDummySchema = {
+      "_chrome_dummy_schema_for_unlocking",
+      SECRET_SCHEMA_NONE,
+      {{"explanation", SECRET_SCHEMA_ATTRIBUTE_STRING},
+       {nullptr, SECRET_SCHEMA_ATTRIBUTE_STRING}}};
+
+  GError* error = nullptr;
+  bool success = LibsecretLoader::secret_password_store_sync(
+      &kDummySchema, nullptr /* default keyring */,
+      "Chrome Safe Storage Control" /* entry title */,
+      "The meaning of life" /* password */, nullptr, &error, "explanation",
+      kExplanationMessage,
+      nullptr /* null-terminated variable argument list */);
+  if (error) {
+    VLOG(1) << "Dummy store to unlock the default keyring failed: "
+            << error->message;
+    g_error_free(error);
+  } else if (!success) {
+    VLOG(1) << "Dummy store to unlock the default keyring failed.";
+  }
 }
 
 //

@@ -15,11 +15,7 @@
 #include "remoting/base/capabilities.h"
 #include "remoting/base/constants.h"
 #include "remoting/base/logging.h"
-#include "remoting/codec/audio_encoder.h"
-#include "remoting/codec/audio_encoder_opus.h"
-#include "remoting/codec/audio_encoder_verbatim.h"
 #include "remoting/host/audio_capturer.h"
-#include "remoting/host/audio_pump.h"
 #include "remoting/host/desktop_environment.h"
 #include "remoting/host/host_extension_session.h"
 #include "remoting/host/input_injector.h"
@@ -28,6 +24,7 @@
 #include "remoting/host/screen_resolution.h"
 #include "remoting/proto/control.pb.h"
 #include "remoting/proto/event.pb.h"
+#include "remoting/protocol/audio_stream.h"
 #include "remoting/protocol/client_stub.h"
 #include "remoting/protocol/clipboard_thread_proxy.h"
 #include "remoting/protocol/pairing_registry.h"
@@ -43,25 +40,10 @@ namespace {
 // Name of command-line flag to disable use of I444 by default.
 const char kDisableI444SwitchName[] = "disable-i444";
 
-std::unique_ptr<AudioEncoder> CreateAudioEncoder(
-    const protocol::SessionConfig& config) {
-  const protocol::ChannelConfig& audio_config = config.audio_config();
-
-  if (audio_config.codec == protocol::ChannelConfig::CODEC_VERBATIM) {
-    return base::MakeUnique<AudioEncoderVerbatim>();
-  } else if (audio_config.codec == protocol::ChannelConfig::CODEC_OPUS) {
-    return base::MakeUnique<AudioEncoderOpus>();
-  }
-
-  NOTREACHED();
-  return nullptr;
-}
-
 }  // namespace
 
 ClientSession::ClientSession(
     EventHandler* event_handler,
-    scoped_refptr<base::SingleThreadTaskRunner> audio_task_runner,
     std::unique_ptr<protocol::ConnectionToClient> connection,
     DesktopEnvironmentFactory* desktop_environment_factory,
     const base::TimeDelta& max_duration,
@@ -78,7 +60,6 @@ ClientSession::ClientSession(
       disable_clipboard_filter_(clipboard_echo_filter_.host_filter()),
       client_clipboard_factory_(clipboard_echo_filter_.client_filter()),
       max_duration_(max_duration),
-      audio_task_runner_(audio_task_runner),
       pairing_registry_(pairing_registry),
       // Note that |lossless_video_color_| defaults to true, but actually only
       // controls VP9 video stream color quality.
@@ -99,7 +80,7 @@ ClientSession::ClientSession(
 
 ClientSession::~ClientSession() {
   DCHECK(CalledOnValidThread());
-  DCHECK(!audio_pump_);
+  DCHECK(!audio_stream_);
   DCHECK(!desktop_environment_);
   DCHECK(!input_injector_);
   DCHECK(!screen_controls_);
@@ -173,8 +154,8 @@ void ClientSession::ControlAudio(const protocol::AudioControl& audio_control) {
   if (audio_control.has_enable()) {
     VLOG(1) << "Received AudioControl (enable="
             << audio_control.enable() << ")";
-    if (audio_pump_)
-      audio_pump_->Pause(!audio_control.enable());
+    if (audio_stream_)
+      audio_stream_->Pause(!audio_control.enable());
   }
 }
 
@@ -234,16 +215,13 @@ void ClientSession::DeliverClientMessage(
   }
 }
 
-void ClientSession::OnConnectionAuthenticating(
-    protocol::ConnectionToClient* connection) {
+void ClientSession::OnConnectionAuthenticating() {
   event_handler_->OnSessionAuthenticating(this);
 }
 
-void ClientSession::OnConnectionAuthenticated(
-    protocol::ConnectionToClient* connection) {
+void ClientSession::OnConnectionAuthenticated() {
   DCHECK(CalledOnValidThread());
-  DCHECK_EQ(connection_.get(), connection);
-  DCHECK(!audio_pump_);
+  DCHECK(!audio_stream_);
   DCHECK(!desktop_environment_);
   DCHECK(!input_injector_);
   DCHECK(!screen_controls_);
@@ -295,14 +273,16 @@ void ClientSession::OnConnectionAuthenticated(
   clipboard_echo_filter_.set_client_stub(connection_->client_stub());
 }
 
-void ClientSession::CreateVideoStreams(
-    protocol::ConnectionToClient* connection) {
+void ClientSession::CreateMediaStreams() {
   DCHECK(CalledOnValidThread());
-  DCHECK_EQ(connection_.get(), connection);
 
   // Create a VideoStream to pump frames from the capturer to the client.
   video_stream_ = connection_->StartVideoStream(
       desktop_environment_->CreateVideoCapturer());
+
+  // Create a AudioStream to pump audio from the capturer to the client.
+  audio_stream_ = connection_->StartAudioStream(
+      desktop_environment_->CreateAudioCapturer());
 
   video_stream_->SetObserver(this);
 
@@ -314,10 +294,8 @@ void ClientSession::CreateVideoStreams(
   video_stream_->Pause(pause_video_);
 }
 
-void ClientSession::OnConnectionChannelsConnected(
-    protocol::ConnectionToClient* connection) {
+void ClientSession::OnConnectionChannelsConnected() {
   DCHECK(CalledOnValidThread());
-  DCHECK_EQ(connection_.get(), connection);
 
   DCHECK(!channels_connected_);
   channels_connected_ = true;
@@ -337,15 +315,6 @@ void ClientSession::OnConnectionChannelsConnected(
       new MouseShapePump(desktop_environment_->CreateMouseCursorMonitor(),
                          connection_->client_stub()));
 
-  // Create an AudioPump if audio is enabled, to pump audio samples.
-  if (connection_->session()->config().is_audio_enabled()) {
-    std::unique_ptr<AudioEncoder> audio_encoder =
-        CreateAudioEncoder(connection_->session()->config());
-    audio_pump_.reset(new AudioPump(
-        audio_task_runner_, desktop_environment_->CreateAudioCapturer(),
-        std::move(audio_encoder), connection_->audio_stub()));
-  }
-
   if (pending_video_layout_message_) {
     connection_->client_stub()->SetVideoLayout(*pending_video_layout_message_);
     pending_video_layout_message_.reset();
@@ -355,11 +324,8 @@ void ClientSession::OnConnectionChannelsConnected(
   event_handler_->OnSessionChannelsConnected(this);
 }
 
-void ClientSession::OnConnectionClosed(
-    protocol::ConnectionToClient* connection,
-    protocol::ErrorCode error) {
+void ClientSession::OnConnectionClosed(protocol::ErrorCode error) {
   DCHECK(CalledOnValidThread());
-  DCHECK_EQ(connection_.get(), connection);
 
   HOST_LOG << "Client disconnected: " << client_jid_ << "; error = " << error;
 
@@ -375,7 +341,7 @@ void ClientSession::OnConnectionClosed(
 
   // Stop components access the client, audio or video stubs, which are no
   // longer valid once ConnectionToClient calls OnConnectionClosed().
-  audio_pump_.reset();
+  audio_stream_.reset();
   video_stream_.reset();
   mouse_shape_pump_.reset();
   client_clipboard_factory_.InvalidateWeakPtrs();
@@ -388,21 +354,17 @@ void ClientSession::OnConnectionClosed(
 }
 
 void ClientSession::OnInputEventReceived(
-    protocol::ConnectionToClient* connection,
     int64_t event_timestamp) {
   DCHECK(CalledOnValidThread());
-  DCHECK_EQ(connection_.get(), connection);
 
   if (video_stream_.get())
     video_stream_->OnInputEventReceived(event_timestamp);
 }
 
 void ClientSession::OnRouteChange(
-    protocol::ConnectionToClient* connection,
     const std::string& channel_name,
     const protocol::TransportRoute& route) {
   DCHECK(CalledOnValidThread());
-  DCHECK_EQ(connection_.get(), connection);
   event_handler_->OnSessionRouteChange(this, channel_name, route);
 }
 
@@ -496,12 +458,6 @@ void ClientSession::OnVideoSizeChanged(protocol::VideoStream* video_stream,
       break;
     }
   }
-}
-
-void ClientSession::OnVideoFrameSent(protocol::VideoStream* stream,
-                                     uint32_t frame_id,
-                                     int64_t input_event_timestamp) {
-  // TODO(sergeyu): Send a message to the client to notify about the new frame.
 }
 
 }  // namespace remoting

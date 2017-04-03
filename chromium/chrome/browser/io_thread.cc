@@ -34,6 +34,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/data_usage/tab_id_annotator.h"
+#include "chrome/browser/data_use_measurement/chrome_data_use_ascriber.h"
 #include "chrome/browser/net/async_dns_field_trial.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
 #include "chrome/browser/net/dns_probe_service.h"
@@ -48,6 +49,7 @@
 #include "components/data_usage/core/data_use_aggregator.h"
 #include "components/data_usage/core/data_use_amortizer.h"
 #include "components/data_usage/core/data_use_annotator.h"
+#include "components/data_use_measurement/core/data_use_ascriber.h"
 #include "components/metrics/metrics_service.h"
 #include "components/net_log/chrome_net_log.h"
 #include "components/network_session_configurator/network_session_configurator.h"
@@ -318,8 +320,9 @@ IOThread::IOThread(
 #if defined(ENABLE_EXTENSIONS)
       extension_event_router_forwarder_(extension_event_router_forwarder),
 #endif
-      globals_(NULL),
+      globals_(nullptr),
       is_quic_allowed_by_policy_(true),
+      http_09_on_non_default_ports_enabled_(false),
       creation_time_(base::TimeTicks::Now()),
       weak_factory_(this) {
   scoped_refptr<base::SingleThreadTaskRunner> io_thread_proxy =
@@ -393,6 +396,13 @@ IOThread::IOThread(
       std::string())).GetValue(policy::key::kQuicAllowed);
   if (value)
     value->GetAsBoolean(&is_quic_allowed_by_policy_);
+
+  value = policy_service
+              ->GetPolicies(policy::PolicyNamespace(
+                  policy::POLICY_DOMAIN_CHROME, std::string()))
+              .GetValue(policy::key::kHttp09OnNonDefaultPortsEnabled);
+  if (value)
+    value->GetAsBoolean(&http_09_on_non_default_ports_enabled_);
 
   // Some unit tests use IOThread but do not initialize MetricsService. In that
   // case it is fine not to have |metrics_data_use_forwarder_|.
@@ -494,6 +504,9 @@ void IOThread::Init() {
   data_use_amortizer.reset(new data_usage::android::TrafficStatsAmortizer());
 #endif
 
+  globals_->data_use_ascriber =
+      base::MakeUnique<data_use_measurement::ChromeDataUseAscriber>();
+
   globals_->data_use_aggregator.reset(new data_usage::DataUseAggregator(
       std::unique_ptr<data_usage::DataUseAnnotator>(
           new chrome_browser_data_usage::TabIdAnnotator()),
@@ -516,7 +529,10 @@ void IOThread::Init() {
           BrowserThread::GetTaskRunnerForThread(BrowserThread::UI)));
 #endif
 
-  globals_->system_network_delegate = std::move(chrome_network_delegate);
+  globals_->system_network_delegate =
+      globals_->data_use_ascriber->CreateNetworkDelegate(
+          std::move(chrome_network_delegate));
+
   globals_->host_resolver = CreateGlobalHostResolver(net_log_);
 
   std::map<std::string, std::string> network_quality_estimator_params;
@@ -607,7 +623,8 @@ void IOThread::Init() {
   net::CheckSupportAndMaybeEnableTCPFastOpen(always_enable_tfo_if_supported);
 
   ConfigureParamsFromFieldTrialsAndCommandLine(
-      command_line, is_quic_allowed_by_policy_, &params_);
+      command_line, is_quic_allowed_by_policy_,
+      http_09_on_non_default_ports_enabled_, &params_);
 
   TRACE_EVENT_BEGIN0("startup",
                      "IOThread::Init:ProxyScriptFetcherRequestContext");
@@ -748,12 +765,13 @@ void IOThread::CreateDefaultAuthHandlerFactory() {
           globals_->http_auth_preferences.get(), globals_->host_resolver.get());
 }
 
-void IOThread::ClearHostCache() {
+void IOThread::ClearHostCache(
+    const base::Callback<bool(const std::string&)>& host_filter) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   net::HostCache* host_cache = globals_->host_resolver->GetHostCache();
   if (host_cache)
-    host_cache->clear();
+    host_cache->ClearForHosts(host_filter);
 }
 
 const net::HttpNetworkSession::Params& IOThread::NetworkSessionParams() const {
@@ -773,7 +791,7 @@ void IOThread::ChangedToOnTheRecordOnIOThread() {
 
   // Clear the host cache to avoid showing entries from the OTR session
   // in about:net-internals.
-  ClearHostCache();
+  ClearHostCache(base::Callback<bool(const std::string&)>());
 }
 
 void IOThread::InitSystemRequestContext() {
@@ -886,6 +904,7 @@ net::URLRequestContext* IOThread::ConstructSystemRequestContext(
 void IOThread::ConfigureParamsFromFieldTrialsAndCommandLine(
     const base::CommandLine& command_line,
     bool is_quic_allowed_by_policy,
+    bool http_09_on_non_default_ports_enabled,
     net::HttpNetworkSession::Params* params) {
   std::string quic_user_agent_id = chrome::GetChannelString();
   if (!quic_user_agent_id.empty())
@@ -982,6 +1001,9 @@ void IOThread::ConfigureParamsFromFieldTrialsAndCommandLine(
     params->testing_fixed_https_port =
         GetSwitchValueAsInt(command_line, switches::kTestingFixedHttpsPort);
   }
+
+  params->http_09_on_non_default_ports_enabled =
+      http_09_on_non_default_ports_enabled;
 }
 
 // static
@@ -1031,21 +1053,21 @@ net::URLRequestContext* IOThread::ConstructProxyScriptFetcherContext(
   std::unique_ptr<net::URLRequestJobFactoryImpl> job_factory(
       new net::URLRequestJobFactoryImpl());
 
-  job_factory->SetProtocolHandler(
-      url::kDataScheme, base::WrapUnique(new net::DataProtocolHandler()));
+  job_factory->SetProtocolHandler(url::kDataScheme,
+                                  base::MakeUnique<net::DataProtocolHandler>());
   job_factory->SetProtocolHandler(
       url::kFileScheme,
-      base::WrapUnique(new net::FileProtocolHandler(
+      base::MakeUnique<net::FileProtocolHandler>(
           content::BrowserThread::GetBlockingPool()
               ->GetTaskRunnerWithShutdownBehavior(
-                  base::SequencedWorkerPool::SKIP_ON_SHUTDOWN))));
+                  base::SequencedWorkerPool::SKIP_ON_SHUTDOWN)));
 #if !defined(DISABLE_FTP_SUPPORT)
   globals->proxy_script_fetcher_ftp_transaction_factory.reset(
       new net::FtpNetworkLayer(globals->host_resolver.get()));
   job_factory->SetProtocolHandler(
       url::kFtpScheme,
-      base::WrapUnique(new net::FtpProtocolHandler(
-          globals->proxy_script_fetcher_ftp_transaction_factory.get())));
+      base::MakeUnique<net::FtpProtocolHandler>(
+          globals->proxy_script_fetcher_ftp_transaction_factory.get()));
 #endif
   globals->proxy_script_fetcher_url_request_job_factory =
       std::move(job_factory);

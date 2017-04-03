@@ -46,10 +46,6 @@
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/page_transition_types.h"
 
-#if defined(OS_ANDROID)
-#include "content/public/browser/android/interface_registry_android.h"
-#endif
-
 class GURL;
 struct AccessibilityHostMsg_EventParams;
 struct AccessibilityHostMsg_FindInPageResultParams;
@@ -76,6 +72,7 @@ class WebBluetoothService;
 
 namespace content {
 
+class AssociatedInterfaceProviderImpl;
 class CrossProcessFrameConnector;
 class CrossSiteTransferringRequest;
 class FrameTree;
@@ -161,6 +158,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   RenderViewHost* GetRenderViewHost() override;
   shell::InterfaceRegistry* GetInterfaceRegistry() override;
   shell::InterfaceProvider* GetRemoteInterfaces() override;
+  AssociatedInterfaceProvider* GetRemoteAssociatedInterfaces() override;
   blink::WebPageVisibilityState GetVisibilityState() override;
   bool IsRenderFrameLive() override;
   int GetProxyCount() override;
@@ -179,6 +177,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   // IPC::Listener
   bool OnMessageReceived(const IPC::Message& msg) override;
+  void OnAssociatedInterfaceRequest(
+      const std::string& interface_name,
+      mojo::ScopedInterfaceEndpointHandle handle) override;
 
   // BrowserAccessibilityDelegate
   void AccessibilitySetFocus(int acc_obj_id) override;
@@ -200,9 +201,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   gfx::Rect AccessibilityGetViewBounds() const override;
   gfx::Point AccessibilityOriginInScreen(
       const gfx::Rect& bounds) const override;
-  gfx::Rect AccessibilityTransformToRootCoordSpace(
-      const gfx::Rect& bounds) override;
-  SiteInstance* AccessibilityGetSiteInstance() override;
   void AccessibilityHitTest(const gfx::Point& point) override;
   void AccessibilitySetAccessibilityFocus(int acc_obj_id) override;
   void AccessibilityFatalError() override;
@@ -641,6 +639,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest, CrashSubframe);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
                            RenderViewHostIsNotReusedAfterDelayedSwapOutACK);
+  FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
+                           LoadEventForwardingWhilePendingDeletion);
 
   // IPC Message handlers.
   void OnAddMessageToConsole(int32_t level,
@@ -706,7 +706,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void OnDispatchLoad();
   void OnAccessibilityEvents(
       const std::vector<AccessibilityHostMsg_EventParams>& params,
-      int reset_token);
+      int reset_token,
+      int ack_token);
   void OnAccessibilityLocationChanges(
       const std::vector<AccessibilityHostMsg_LocationChangeParams>& params);
   void OnAccessibilityFindInPageResult(
@@ -723,7 +724,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void OnSerializeAsMHTMLResponse(
       int job_id,
       bool success,
-      const std::set<std::string>& digests_of_uris_of_serialized_resources);
+      const std::set<std::string>& digests_of_uris_of_serialized_resources,
+      base::TimeDelta renderer_main_thread_time);
   void OnDidChangeLoadProgressExtended(
       const FrameMsg_ExtendedLoadingProgress_Params& params);
 
@@ -975,10 +977,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   std::unique_ptr<shell::InterfaceRegistry> interface_registry_;
   std::unique_ptr<shell::InterfaceProvider> remote_interfaces_;
 
-#if defined(OS_ANDROID)
-  std::unique_ptr<InterfaceRegistryAndroid> interface_registry_android_;
-#endif
-
   std::unique_ptr<WebBluetoothServiceImpl> web_bluetooth_service_;
 
   // The object managing the accessibility tree for this frame.
@@ -1059,6 +1057,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
   TextSurroundingSelectionCallback text_surrounding_selection_callback_;
 
   std::vector<std::unique_ptr<shell::InterfaceRegistry>> media_registries_;
+
+  std::unique_ptr<AssociatedInterfaceProviderImpl>
+      remote_associated_interfaces_;
 
   // NOTE: This must be the last member.
   base::WeakPtrFactory<RenderFrameHostImpl> weak_ptr_factory_;

@@ -4,7 +4,7 @@
 
 #include "components/sync/driver/shared_change_processor_ref.h"
 
-namespace sync_driver {
+namespace syncer {
 
 SharedChangeProcessorRef::SharedChangeProcessorRef(
     const scoped_refptr<SharedChangeProcessor>& change_processor)
@@ -14,29 +14,38 @@ SharedChangeProcessorRef::SharedChangeProcessorRef(
 
 SharedChangeProcessorRef::~SharedChangeProcessorRef() {}
 
-syncer::SyncError SharedChangeProcessorRef::ProcessSyncChanges(
+SyncError SharedChangeProcessorRef::ProcessSyncChanges(
     const tracked_objects::Location& from_here,
-    const syncer::SyncChangeList& change_list) {
+    const SyncChangeList& change_list) {
   return change_processor_->ProcessSyncChanges(from_here, change_list);
 }
 
-syncer::SyncDataList SharedChangeProcessorRef::GetAllSyncData(
-    syncer::ModelType type) const {
+SyncDataList SharedChangeProcessorRef::GetAllSyncData(ModelType type) const {
   return change_processor_->GetAllSyncData(type);
 }
 
-syncer::SyncError SharedChangeProcessorRef::UpdateDataTypeContext(
-    syncer::ModelType type,
-    syncer::SyncChangeProcessor::ContextRefreshStatus refresh_status,
+SyncError SharedChangeProcessorRef::UpdateDataTypeContext(
+    ModelType type,
+    SyncChangeProcessor::ContextRefreshStatus refresh_status,
     const std::string& context) {
   return change_processor_->UpdateDataTypeContext(type, refresh_status,
                                                   context);
 }
 
-syncer::SyncError SharedChangeProcessorRef::CreateAndUploadError(
+void SharedChangeProcessorRef::AddLocalChangeObserver(
+    LocalChangeObserver* observer) {
+  change_processor_->AddLocalChangeObserver(observer);
+}
+
+void SharedChangeProcessorRef::RemoveLocalChangeObserver(
+    LocalChangeObserver* observer) {
+  change_processor_->RemoveLocalChangeObserver(observer);
+}
+
+SyncError SharedChangeProcessorRef::CreateAndUploadError(
     const tracked_objects::Location& from_here,
     const std::string& message) {
   return change_processor_->CreateAndUploadError(from_here, message);
 }
 
-}  // namespace sync_driver
+}  // namespace syncer

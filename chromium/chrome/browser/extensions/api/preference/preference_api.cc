@@ -7,12 +7,13 @@
 #include <stddef.h>
 
 #include <map>
+#include <memory>
 #include <utility>
 
 #include "base/lazy_instance.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
-#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -264,10 +265,9 @@ class PrefMapping {
 
   PrefTransformerInterface* FindTransformerForBrowserPref(
       const std::string& browser_pref) {
-    std::map<std::string, PrefTransformerInterface*>::iterator it =
-        transformers_.find(browser_pref);
+    auto it = transformers_.find(browser_pref);
     if (it != transformers_.end())
-      return it->second;
+      return it->second.get();
     else
       return identity_transformer_.get();
   }
@@ -293,23 +293,22 @@ class PrefMapping {
     DCHECK_EQ(arraysize(kPrefMapping), mapping_.size());
     DCHECK_EQ(arraysize(kPrefMapping), event_mapping_.size());
     RegisterPrefTransformer(proxy_config::prefs::kProxy,
-                            new ProxyPrefTransformer());
+                            base::MakeUnique<ProxyPrefTransformer>());
     RegisterPrefTransformer(prefs::kBlockThirdPartyCookies,
-                            new InvertBooleanTransformer());
+                            base::MakeUnique<InvertBooleanTransformer>());
     RegisterPrefTransformer(prefs::kNetworkPredictionOptions,
-                            new NetworkPredictionTransformer());
+                            base::MakeUnique<NetworkPredictionTransformer>());
   }
 
   ~PrefMapping() {
-    base::STLDeleteContainerPairSecondPointers(transformers_.begin(),
-                                               transformers_.end());
   }
 
-  void RegisterPrefTransformer(const std::string& browser_pref,
-                               PrefTransformerInterface* transformer) {
+  void RegisterPrefTransformer(
+      const std::string& browser_pref,
+      std::unique_ptr<PrefTransformerInterface> transformer) {
     DCHECK_EQ(0u, transformers_.count(browser_pref)) <<
         "Trying to register pref transformer for " << browser_pref << " twice";
-    transformers_[browser_pref] = transformer;
+    transformers_[browser_pref] = std::move(transformer);
   }
 
   struct PrefMapData {
@@ -343,7 +342,8 @@ class PrefMapping {
   PrefMap event_mapping_;
 
   // Mapping from browser pref keys to transformers.
-  std::map<std::string, PrefTransformerInterface*> transformers_;
+  std::map<std::string, std::unique_ptr<PrefTransformerInterface>>
+      transformers_;
 
   std::unique_ptr<PrefTransformerInterface> identity_transformer_;
 
@@ -381,8 +381,6 @@ void PreferenceEventRouter::OnPrefChanged(PrefService* pref_service,
   DCHECK(rv);
 
   base::ListValue args;
-  base::DictionaryValue* dict = new base::DictionaryValue();
-  args.Append(dict);
   const PrefService::Preference* pref =
       pref_service->FindPreference(browser_pref.c_str());
   CHECK(pref);
@@ -396,12 +394,14 @@ void PreferenceEventRouter::OnPrefChanged(PrefService* pref_service,
     return;
   }
 
+  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->Set(keys::kValue, transformed_value);
   if (incognito) {
     ExtensionPrefs* ep = ExtensionPrefs::Get(profile_);
     dict->SetBoolean(keys::kIncognitoSpecific,
                      ep->HasIncognitoPrefValue(browser_pref));
   }
+  args.Append(std::move(dict));
 
   // TODO(kalman): Have a histogram value for each pref type.
   // This isn't so important for the current use case of these
@@ -737,7 +737,7 @@ bool SetPreferenceFunction::RunSync() {
       transformer->ExtensionToBrowserPref(value, &error, &bad_message));
   if (!browser_pref_value) {
     error_ = error;
-    bad_message_ = bad_message;
+    set_bad_message(bad_message);
     return false;
   }
   EXTENSION_FUNCTION_VALIDATE(browser_pref_value->GetType() == pref->GetType());
@@ -749,7 +749,7 @@ bool SetPreferenceFunction::RunSync() {
   if (!extensionPrefValue) {
     error_ =  ErrorUtils::FormatErrorMessage(kConversionErrorMessage,
                                                       pref->name());
-    bad_message_ = true;
+    set_bad_message(true);
     return false;
   }
 

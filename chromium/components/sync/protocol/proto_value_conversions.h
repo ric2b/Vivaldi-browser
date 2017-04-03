@@ -37,6 +37,7 @@ class DeviceInfoSpecifics;
 class DeviceInformation;
 class DictionarySpecifics;
 class EncryptedData;
+class EntityMetadata;
 class EntitySpecifics;
 class EverythingDirective;
 class ExperimentsSpecifics;
@@ -59,6 +60,9 @@ class PasswordSpecifics;
 class PasswordSpecificsData;
 class PreferenceSpecifics;
 class PriorityPreferenceSpecifics;
+class PrinterPPDData;
+class PrinterSpecifics;
+class ReadingListSpecifics;
 class SearchEngineSpecifics;
 class SessionHeader;
 class SessionSpecifics;
@@ -156,6 +160,11 @@ std::unique_ptr<base::DictionaryValue> KeystoreEncryptionToValue(
 std::unique_ptr<base::DictionaryValue> SessionSpecificsToValue(
     const sync_pb::SessionSpecifics& session_specifics);
 
+// Sub-protocol of PrinterSpecifics.
+
+std::unique_ptr<base::DictionaryValue> PrinterPPDDataToValue(
+    const sync_pb::PrinterPPDData& proto);
+
 // Main *SpecificsToValue functions.
 
 std::unique_ptr<base::DictionaryValue> AppNotificationToValue(
@@ -239,6 +248,13 @@ std::unique_ptr<base::DictionaryValue> PasswordSpecificsToValue(
 std::unique_ptr<base::DictionaryValue> PreferenceSpecificsToValue(
     const sync_pb::PreferenceSpecifics& password_specifics);
 
+std::unique_ptr<base::DictionaryValue> PrinterSpecificsToValue(
+    const sync_pb::PrinterSpecifics& printer_specifics);
+
+// Sub-protocol of ReadingListSpecifics.
+std::unique_ptr<base::DictionaryValue> ReadingListSpecificsToValue(
+    const sync_pb::ReadingListSpecifics& proto);
+
 std::unique_ptr<base::DictionaryValue>
 SyncedNotificationAppInfoSpecificsToValue(
     const sync_pb::SyncedNotificationAppInfoSpecifics&
@@ -299,6 +315,9 @@ std::unique_ptr<base::DictionaryValue> ClientConfigParamsToValue(
 
 std::unique_ptr<base::DictionaryValue> AttachmentIdProtoToValue(
     const sync_pb::AttachmentIdProto& proto);
+
+std::unique_ptr<base::DictionaryValue> EntityMetadataToValue(
+    const sync_pb::EntityMetadata& metadata);
 
 }  // namespace syncer
 

@@ -10,6 +10,12 @@
  *
  *    <settings-ui prefs="{{prefs}}"></settings-ui>
  */
+cr.exportPath('settings');
+assert(!settings.defaultResourceLoaded,
+       'settings_ui.js run twice. You probably have an invalid import.');
+/** Global defined when the main Settings script runs. */
+settings.defaultResourceLoaded = true;
+
 Polymer({
   is: 'settings-ui',
 
@@ -23,6 +29,7 @@ Polymer({
     directionDelegate: {
       observer: 'directionDelegateChanged_',
       type: Object,
+      value: new settings.DirectionDelegateImpl(),
     },
 
     /** @private {boolean} */
@@ -36,9 +43,11 @@ Polymer({
      * @private {!GuestModePageVisibility}
      */
     pageVisibility_: Object,
+  },
 
-    /** @private */
-    drawerOpened_: Boolean,
+  /** @override */
+  created: function() {
+    settings.initializeRouteFromUrl();
   },
 
   /**
@@ -51,8 +60,14 @@ Polymer({
       this.$$('settings-main').searchContents(e.detail);
     }.bind(this));
 
+    // Lazy-create the drawer the first time it is opened or swiped into view.
+    var drawer = assert(this.$$('app-drawer'));
+    listenOnce(drawer, 'track opened-changed', function() {
+      this.$.drawerTemplate.if = true;
+    }.bind(this));
+
     window.addEventListener('popstate', function(e) {
-      this.$$('app-drawer').close();
+      drawer.close();
     }.bind(this));
 
     if (loadTimeData.getBoolean('isGuest')) {
@@ -74,9 +89,6 @@ Polymer({
           pageZoom: false,
         },
         advancedSettings: true,
-        dateTime: {
-          timeZoneSelector: false,
-        },
         privacy: {
           searchPrediction: false,
           networkPrediction: false,
@@ -88,6 +100,12 @@ Polymer({
 </if>
       };
     }
+  },
+
+  /** @override */
+  attached: function() {
+    // Preload bold Roboto so it doesn't load and flicker the first time used.
+    document.fonts.load('bold 12px Roboto');
   },
 
   /**

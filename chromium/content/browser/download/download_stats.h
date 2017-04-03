@@ -11,10 +11,12 @@
 #include <stdint.h>
 
 #include <string>
+#include <vector>
 
 #include "content/common/content_export.h"
 #include "content/public/browser/download_danger_type.h"
 #include "content/public/browser/download_interrupt_reasons.h"
+#include "url/gurl.h"
 
 namespace base {
 class FilePath;
@@ -70,9 +72,9 @@ enum DownloadCountTypes {
   // progress.
   APPEND_TO_DETACHED_FILE_COUNT,
 
-  // Counts the number of instances where the downloaded file is missing after a
-  // successful invocation of ScanAndSaveDownloadedFile().
-  FILE_MISSING_AFTER_SUCCESSFUL_SCAN_COUNT,
+  // (Deprecated) Counts the number of instances where the downloaded file is
+  // missing after a successful invocation of ScanAndSaveDownloadedFile().
+  DOWNLOAD_COUNT_UNUSED_14,
 
   // (Deprecated) Count of downloads with a strong ETag and specified
   // 'Accept-Ranges: bytes'.
@@ -248,6 +250,9 @@ enum OriginStateOnResumption {
 // enum.
 void RecordOriginStateOnResumption(bool is_partial,
                                    int state);
+
+void RecordDownloadConnectionSecurity(const GURL& download_url,
+                                      const std::vector<GURL>& url_chain);
 
 }  // namespace content
 

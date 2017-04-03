@@ -6,24 +6,6 @@ cr.define('settings_privacy_page', function() {
   /**
    * @constructor
    * @extends {TestBrowserProxy}
-   * @implements {settings.PrivacyPageBrowserProxy}
-   */
-  function TestPrivacyPageBrowserProxy() {
-    settings.TestBrowserProxy.call(this, ['showManageSSLCertificates']);
-  }
-
-  TestPrivacyPageBrowserProxy.prototype = {
-    __proto__: settings.TestBrowserProxy.prototype,
-
-    /** @override */
-    showManageSSLCertificates: function() {
-      this.methodCalled('showManageSSLCertificates');
-    },
-  };
-
-  /**
-   * @constructor
-   * @extends {TestBrowserProxy}
    * @implements {settings.ClearBrowsingDataBrowserProxy}
    */
   function TestClearBrowsingDataBrowserProxy() {
@@ -105,7 +87,14 @@ cr.define('settings_privacy_page', function() {
         assertFalse(!!page.$$('settings-clear-browsing-data-dialog'));
         MockInteractions.tap(page.$.clearBrowsingData);
         Polymer.dom.flush();
-        assertTrue(!!page.$$('settings-clear-browsing-data-dialog'));
+
+        var dialog = page.$$('settings-clear-browsing-data-dialog');
+        assertTrue(!!dialog);
+
+        // Ensure that the dialog is fully opened before returning from this
+        // test, otherwise asynchronous code run in attached() can cause flaky
+        // errors.
+        return test_util.whenAttributeIs(dialog.$.dialog, 'open', true);
       });
     });
   }

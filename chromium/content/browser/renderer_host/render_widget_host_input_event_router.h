@@ -38,6 +38,7 @@ class LatencyInfo;
 
 namespace content {
 
+class RenderWidgetHostImpl;
 class RenderWidgetHostViewBase;
 
 // Class owned by WebContentsImpl for the purpose of directing input events
@@ -70,14 +71,24 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
                          const blink::WebGestureEvent& event);
   void CancelScrollBubbling(RenderWidgetHostViewBase* target_view);
 
-  void AddSurfaceClientIdOwner(uint32_t id, RenderWidgetHostViewBase* owner);
-  void RemoveSurfaceClientIdOwner(uint32_t id);
+  void AddFrameSinkIdOwner(const cc::FrameSinkId& id,
+                           RenderWidgetHostViewBase* owner);
+  void RemoveFrameSinkIdOwner(const cc::FrameSinkId& id);
 
-  bool is_registered(uint32_t id) {
+  bool is_registered(const cc::FrameSinkId& id) {
     return owner_map_.find(id) != owner_map_.end();
   }
 
   void OnHittestData(const FrameHostMsg_HittestData_Params& params);
+
+  // Returns the RenderWidgetHostImpl inside the |root_view| at |point| where
+  // |point| is with respect to |root_view|'s coordinates. If a RWHI is found,
+  // the value of |transformed_point| is the coordinate of the point with
+  // respect to the RWHI's coordinates.
+  RenderWidgetHostImpl* GetRenderWidgetHostAtPoint(
+      RenderWidgetHostViewBase* root_view,
+      const gfx::Point& point,
+      gfx::Point* transformed_point);
 
  private:
   struct HittestData {
@@ -98,8 +109,9 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
         hittest_data_;
   };
 
-  using SurfaceClientIdOwnerMap =
-      base::hash_map<uint32_t, RenderWidgetHostViewBase*>;
+  using FrameSinkIdOwnerMap = std::unordered_map<cc::FrameSinkId,
+                                                 RenderWidgetHostViewBase*,
+                                                 cc::FrameSinkIdHash>;
   struct TargetData {
     RenderWidgetHostViewBase* target;
     gfx::Vector2d delta;
@@ -121,6 +133,15 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
                                  blink::WebGestureEvent* event,
                                  const ui::LatencyInfo& latency);
 
+  // MouseMove/Enter/Leave events might need to be processed by multiple frames
+  // in different processes for MouseEnter and MouseLeave event handlers to
+  // properly fire. This method determines which RenderWidgetHostViews other
+  // than the actual target require notification, and sends the appropriate
+  // events to them.
+  void SendMouseEnterOrLeaveEvents(blink::WebMouseEvent* event,
+                                   RenderWidgetHostViewBase* target,
+                                   RenderWidgetHostViewBase* root_view);
+
   // The following methods take a GestureScrollUpdate event and send a
   // GestureScrollBegin or GestureScrollEnd for wrapping it. This is needed
   // when GestureScrollUpdates are being forwarded for scroll bubbling.
@@ -129,13 +150,20 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
   void SendGestureScrollEnd(RenderWidgetHostViewBase* view,
                             const blink::WebGestureEvent& event);
 
-  SurfaceClientIdOwnerMap owner_map_;
+  FrameSinkIdOwnerMap owner_map_;
   TargetQueue touchscreen_gesture_target_queue_;
   TargetData touch_target_;
   TargetData touchscreen_gesture_target_;
   TargetData touchpad_gesture_target_;
   TargetData bubbling_gesture_scroll_target_;
   TargetData first_bubbling_scroll_target_;
+  // Maintains the same target between mouse down and mouse up.
+  TargetData mouse_capture_target_;
+
+  // Tracked for the purpose of generating MouseEnter and MouseLeave events.
+  RenderWidgetHostViewBase* last_mouse_move_target_;
+  RenderWidgetHostViewBase* last_mouse_move_root_view_;
+
   int active_touches_;
   // Keep track of when we are between GesturePinchBegin and GesturePinchEnd
   // inclusive, as we need to route these events (and anything in between) to

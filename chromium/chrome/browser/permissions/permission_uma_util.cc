@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/command_line.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/browser_process.h"
@@ -21,7 +21,7 @@
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/rappor/rappor_service.h"
 #include "components/rappor/rappor_utils.h"
@@ -331,8 +331,8 @@ void PermissionUmaUtil::PermissionIgnored(
   // RecordPermission* methods need to be called before RecordIgnore in the
   // blocker because they record the number of prior ignore and dismiss values,
   // and we don't want to include the current ignore.
-  PermissionDecisionAutoBlocker(profile).RecordIgnore(requesting_origin,
-                                                      permission);
+  PermissionDecisionAutoBlocker::RecordIgnore(requesting_origin, permission,
+                                              profile);
 }
 
 void PermissionUmaUtil::PermissionRevoked(PermissionType permission,
@@ -496,6 +496,10 @@ void PermissionUmaUtil::PermissionPromptAcceptedWithPersistenceToggle(
       UMA_HISTOGRAM_BOOLEAN(
           "Permissions.Prompt.Accepted.Persisted.VideoCapture", toggle_enabled);
       break;
+    case PermissionType::FLASH:
+      UMA_HISTOGRAM_BOOLEAN("Permissions.Prompt.Accepted.Persisted.Flash",
+                            toggle_enabled);
+      break;
     // The user is not prompted for these permissions, thus there is no accept
     // recorded for them.
     case PermissionType::MIDI:
@@ -543,6 +547,10 @@ void PermissionUmaUtil::PermissionPromptDeniedWithPersistenceToggle(
       UMA_HISTOGRAM_BOOLEAN("Permissions.Prompt.Denied.Persisted.VideoCapture",
                             toggle_enabled);
       break;
+    case PermissionType::FLASH:
+      UMA_HISTOGRAM_BOOLEAN("Permissions.Prompt.Denied.Persisted.Flash",
+                            toggle_enabled);
+      break;
     // The user is not prompted for these permissions, thus there is no deny
     // recorded for them.
     case PermissionType::MIDI:
@@ -566,7 +574,7 @@ bool PermissionUmaUtil::IsOptedIntoPermissionActionReporting(Profile* profile) {
   if (!profile->GetPrefs()->GetBoolean(prefs::kSafeBrowsingEnabled))
     return false;
 
-  ProfileSyncService* profile_sync_service =
+  browser_sync::ProfileSyncService* profile_sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile);
 
   // Do not report if profile can't get a profile sync service or sync cannot
@@ -660,6 +668,11 @@ void PermissionUmaUtil::RecordPermissionAction(
     case PermissionType::VIDEO_CAPTURE:
       UMA_HISTOGRAM_ENUMERATION("Permissions.Action.VideoCapture", action,
                                 PERMISSION_ACTION_NUM);
+      break;
+    case PermissionType::FLASH:
+      PERMISSION_ACTION_UMA(secure_origin, "Permissions.Action.Flash",
+                            "Permissions.Action.SecureOrigin.Flash",
+                            "Permissions.Action.InsecureOrigin.Flash", action);
       break;
     // The user is not prompted for these permissions, thus there is no
     // permission action recorded for them.

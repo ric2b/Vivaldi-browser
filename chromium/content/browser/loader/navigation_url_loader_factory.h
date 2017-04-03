@@ -19,7 +19,8 @@ class NavigationURLLoaderFactory {
   virtual std::unique_ptr<NavigationURLLoader> CreateLoader(
       BrowserContext* browser_context,
       std::unique_ptr<NavigationRequestInfo> request_info,
-      ServiceWorkerContextWrapper* service_worker_context_wrapper,
+      std::unique_ptr<NavigationUIData> navigation_ui_data,
+      ServiceWorkerNavigationHandle* service_worker_handle,
       NavigationURLLoaderDelegate* delegate) = 0;
 
  protected:

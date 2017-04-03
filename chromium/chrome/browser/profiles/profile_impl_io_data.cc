@@ -13,6 +13,7 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/sequenced_task_runner.h"
 #include "base/stl_util.h"
@@ -24,6 +25,7 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
+#include "chrome/browser/data_use_measurement/chrome_data_use_ascriber.h"
 #include "chrome/browser/io_thread.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
 #include "chrome/browser/net/http_server_properties_manager_factory.h"
@@ -33,6 +35,8 @@
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_io_data.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings_factory.h"
+#include "chrome/browser/previews/previews_service.h"
+#include "chrome/browser/previews/previews_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
@@ -48,6 +52,8 @@
 #include "components/prefs/pref_filter.h"
 #include "components/prefs/pref_member.h"
 #include "components/prefs/pref_service.h"
+#include "components/previews/core/previews_io_data.h"
+#include "components/previews/core/previews_ui_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
 #include "content/public/browser/notification_service.h"
@@ -200,6 +206,14 @@ void ProfileImplIOData::Handle::Init(
           profile_->GetRequestContext(), std::move(store),
           BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
           db_task_runner);
+
+  io_data_->previews_io_data_ = base::MakeUnique<previews::PreviewsIOData>(
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
+  PreviewsServiceFactory::GetForProfile(profile_)->set_previews_ui_service(
+      base::MakeUnique<previews::PreviewsUIService>(
+          io_data_->previews_io_data_.get(),
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::IO), nullptr));
 }
 
 content::ResourceContext*
@@ -464,7 +478,9 @@ void ProfileImplIOData::InitializeInternal(
   main_context->set_net_log(io_thread->net_log());
 
   network_delegate_ = data_reduction_proxy_io_data()->CreateNetworkDelegate(
-      std::move(chrome_network_delegate), true);
+      io_thread_globals->data_use_ascriber->CreateNetworkDelegate(
+          std::move(chrome_network_delegate)),
+      true);
 
   main_context->set_network_delegate(network_delegate_.get());
 
@@ -533,7 +549,8 @@ void ProfileImplIOData::InitializeInternal(
   // Install the Offline Page Interceptor.
 #if defined(OS_ANDROID)
   request_interceptors.push_back(std::unique_ptr<net::URLRequestInterceptor>(
-      new offline_pages::OfflinePageRequestInterceptor()));
+      new offline_pages::OfflinePageRequestInterceptor(
+          previews_io_data_.get())));
 #endif
 
   // The data reduction proxy interceptor should be as close to the network

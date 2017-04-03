@@ -22,7 +22,7 @@ public class GestureStateListener {
     /**
      * Called when a fling starts.
      */
-    public void onFlingStartGesture(int vx, int vy, int scrollOffsetY, int scrollExtentY) {}
+    public void onFlingStartGesture(int scrollOffsetY, int scrollExtentY) {}
 
     /**
      * Called when a fling has ended.
@@ -56,7 +56,7 @@ public class GestureStateListener {
      * Called after a single-tap gesture event was dispatched to the renderer,
      * indicating whether or not the gesture was consumed.
      */
-    public void onSingleTap(boolean consumed, int x, int y) {}
+    public void onSingleTap(boolean consumed) {}
 
     /*
      * Called after a single-tap gesture event was processed by the renderer,

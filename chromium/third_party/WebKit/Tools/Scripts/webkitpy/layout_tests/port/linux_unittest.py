@@ -96,7 +96,8 @@ class LinuxPortTest(port_testcase.PortTestCase):
 
     def test_driver_name_option(self):
         self.assertTrue(self.make_port()._path_to_driver().endswith('content_shell'))
-        self.assertTrue(self.make_port(options=optparse.Values({'driver_name': 'OtherDriver'}))._path_to_driver().endswith('OtherDriver'))
+        port = self.make_port(options=optparse.Values({'driver_name': 'OtherDriver'}))
+        self.assertTrue(port._path_to_driver().endswith('OtherDriver'))  # pylint: disable=protected-access
 
     def test_path_to_image_diff(self):
         self.assertEqual(self.make_port()._path_to_image_diff(), '/mock-checkout/out/Release/image_diff')
@@ -104,16 +105,16 @@ class LinuxPortTest(port_testcase.PortTestCase):
     def test_dummy_home_dir_is_created_and_cleaned_up(self):
         port = self.make_port()
         port.host.environ['HOME'] = '/home/user'
-        port._filesystem.files['/home/user/.Xauthority'] = ''
+        port.host.filesystem.files['/home/user/.Xauthority'] = ''
 
         # Set up the test run; the temporary home directory should be set up.
         port.setup_test_run()
         temp_home_dir = port.host.environ['HOME']
         self.assertNotEqual(temp_home_dir, '/home/user')
-        self.assertTrue(port._filesystem.isdir(temp_home_dir))
-        self.assertTrue(port._filesystem.isfile(port._filesystem.join(temp_home_dir, '.Xauthority')))
+        self.assertTrue(port.host.filesystem.isdir(temp_home_dir))
+        self.assertTrue(port.host.filesystem.isfile(port.host.filesystem.join(temp_home_dir, '.Xauthority')))
 
         # Clean up; HOME should be reset and the temp dir should be cleaned up.
         port.clean_up_test_run()
         self.assertEqual(port.host.environ['HOME'], '/home/user')
-        self.assertFalse(port._filesystem.exists(temp_home_dir))
+        self.assertFalse(port.host.filesystem.exists(temp_home_dir))

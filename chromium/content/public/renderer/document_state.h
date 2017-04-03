@@ -132,14 +132,14 @@ class CONTENT_EXPORT DocumentState
   bool was_fetched_via_spdy() const { return was_fetched_via_spdy_; }
   void set_was_fetched_via_spdy(bool value) { was_fetched_via_spdy_ = value; }
 
-  bool was_npn_negotiated() const { return was_npn_negotiated_; }
-  void set_was_npn_negotiated(bool value) { was_npn_negotiated_ = value; }
+  bool was_alpn_negotiated() const { return was_alpn_negotiated_; }
+  void set_was_alpn_negotiated(bool value) { was_alpn_negotiated_ = value; }
 
-  const std::string& npn_negotiated_protocol() const {
-    return npn_negotiated_protocol_;
+  const std::string& alpn_negotiated_protocol() const {
+    return alpn_negotiated_protocol_;
   }
-  void set_npn_negotiated_protocol(const std::string& value) {
-    npn_negotiated_protocol_ = value;
+  void set_alpn_negotiated_protocol(const std::string& value) {
+    alpn_negotiated_protocol_ = value;
   }
 
   bool was_alternate_protocol_available() const {
@@ -156,31 +156,6 @@ class CONTENT_EXPORT DocumentState
       net::HttpResponseInfo::ConnectionInfo connection_info) {
     connection_info_ = connection_info;
   }
-
-  bool was_fetched_via_proxy() const { return was_fetched_via_proxy_; }
-  void set_was_fetched_via_proxy(bool value) {
-    was_fetched_via_proxy_ = value;
-  }
-
-  const net::HostPortPair& proxy_server() const { return proxy_server_; }
-  void set_proxy_server(const net::HostPortPair& proxy_server) {
-    proxy_server_ = proxy_server;
-  }
-
-  void set_was_prefetcher(bool value) { was_prefetcher_ = value; }
-  bool was_prefetcher() const { return was_prefetcher_; }
-
-  void set_was_referred_by_prefetcher(bool value) {
-    was_referred_by_prefetcher_ = value;
-  }
-  bool was_referred_by_prefetcher() const {
-    return was_referred_by_prefetcher_;
-  }
-
-  void set_was_after_preconnect_request(bool value) {
-    was_after_preconnect_request_ = value;
-  }
-  bool was_after_preconnect_request() { return was_after_preconnect_request_; }
 
   // For LoadDataWithBaseURL navigations, |was_load_data_with_base_url_request_|
   // is set to true and |data_url_| is set to the data URL of the navigation.
@@ -222,17 +197,10 @@ class CONTENT_EXPORT DocumentState
   bool load_histograms_recorded_;
   bool web_timing_histograms_recorded_;
   bool was_fetched_via_spdy_;
-  bool was_npn_negotiated_;
-  std::string npn_negotiated_protocol_;
+  bool was_alpn_negotiated_;
+  std::string alpn_negotiated_protocol_;
   bool was_alternate_protocol_available_;
   net::HttpResponseInfo::ConnectionInfo connection_info_;
-  bool was_fetched_via_proxy_;
-  net::HostPortPair proxy_server_;
-
-  // A prefetcher is a page that contains link rel=prefetch elements.
-  bool was_prefetcher_;
-  bool was_referred_by_prefetcher_;
-  bool was_after_preconnect_request_;
 
   bool was_load_data_with_base_url_request_;
   GURL data_url_;

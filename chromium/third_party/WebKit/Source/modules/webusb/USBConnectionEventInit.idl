@@ -5,5 +5,5 @@
 // http://wicg.github.io/webusb/#events
 
 dictionary USBConnectionEventInit : EventInit {
-    USBDevice device;
+    required USBDevice device;
 };

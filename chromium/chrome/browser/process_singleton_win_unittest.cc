@@ -206,7 +206,7 @@ class ProcessSingletonTest : public base::MultiProcessTest {
   base::CommandLine MakeCmdLine(const std::string& procname) override {
     base::CommandLine cmd_line = base::MultiProcessTest::MakeCmdLine(procname);
 
-    cmd_line.AppendSwitchPath(switches::kUserDataDir, user_data_dir_.path());
+    cmd_line.AppendSwitchPath(switches::kUserDataDir, user_data_dir_.GetPath());
     cmd_line.AppendSwitchNative(kReadyEventNameFlag, ready_event_name_);
     cmd_line.AppendSwitchNative(kContinueEventNameFlag, continue_event_name_);
     if (window_option_ == WITH_WINDOW)
@@ -229,7 +229,9 @@ class ProcessSingletonTest : public base::MultiProcessTest {
   }
 
   base::Process* browser_victim() { return &browser_victim_; }
-  const base::FilePath& user_data_dir() const { return user_data_dir_.path(); }
+  const base::FilePath& user_data_dir() const {
+    return user_data_dir_.GetPath();
+  }
   ProcessSingleton* test_singleton() const { return test_singleton_.get(); }
   bool should_kill_called() const { return should_kill_called_; }
 
@@ -264,13 +266,16 @@ TEST_F(ProcessSingletonTest, KillsHungBrowserWithNoWindows) {
   // user interaction.
   ProcessSingleton::NotifyResult notify_result =
       test_singleton()->NotifyOtherProcessOrCreate();
-  ASSERT_EQ(ProcessSingleton::PROFILE_IN_USE, notify_result);
+
+  // The hung process was killed and the notification is equivalent to
+  // a non existent process.
+  ASSERT_EQ(ProcessSingleton::PROCESS_NONE, notify_result);
 
   // The should-kill callback should not have been called, as the "browser" does
   // not have visible window.
   EXPECT_FALSE(should_kill_called());
 
-  // Verify that the hung browser has beem terminated with the
+  // Verify that the hung browser has been terminated with the
   // RESULT_CODE_HUNG exit code.
   int exit_code = 0;
   EXPECT_TRUE(
@@ -304,13 +309,16 @@ TEST_F(ProcessSingletonTest, KillWithUserPermission) {
   // before killing the hung process.
   ProcessSingleton::NotifyResult notify_result =
       test_singleton()->NotifyOtherProcessOrCreate();
-  ASSERT_EQ(ProcessSingleton::PROFILE_IN_USE, notify_result);
+
+  // The hung process was killed and the notification is equivalent to
+  // a non existent process.
+  ASSERT_EQ(ProcessSingleton::PROCESS_NONE, notify_result);
 
   // The should-kill callback should have been called, as the "browser" has a
   // visible window.
   EXPECT_TRUE(should_kill_called());
 
-  // Verify that the hung browser has beem terminated with the
+  // Verify that the hung browser has been terminated with the
   // RESULT_CODE_HUNG exit code.
   int exit_code = 0;
   EXPECT_TRUE(

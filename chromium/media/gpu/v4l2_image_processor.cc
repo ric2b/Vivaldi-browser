@@ -57,6 +57,7 @@ V4L2ImageProcessor::V4L2ImageProcessor(const scoped_refptr<V4L2Device>& device)
     : input_format_(PIXEL_FORMAT_UNKNOWN),
       output_format_(PIXEL_FORMAT_UNKNOWN),
       input_memory_type_(V4L2_MEMORY_USERPTR),
+      output_memory_type_(V4L2_MEMORY_MMAP),
       input_format_fourcc_(0),
       output_format_fourcc_(0),
       input_planes_count_(0),
@@ -100,6 +101,7 @@ void V4L2ImageProcessor::NotifyErrorOnChildThread(
 bool V4L2ImageProcessor::Initialize(VideoPixelFormat input_format,
                                     VideoPixelFormat output_format,
                                     v4l2_memory input_memory_type,
+                                    v4l2_memory output_memory_type,
                                     gfx::Size input_visible_size,
                                     gfx::Size input_allocated_size,
                                     gfx::Size output_visible_size,
@@ -110,6 +112,8 @@ bool V4L2ImageProcessor::Initialize(VideoPixelFormat input_format,
   DCHECK_GT(num_buffers, 0);
   DCHECK(input_memory_type == V4L2_MEMORY_USERPTR ||
          input_memory_type == V4L2_MEMORY_DMABUF);
+  DCHECK(output_memory_type == V4L2_MEMORY_MMAP ||
+         output_memory_type == V4L2_MEMORY_DMABUF);
   error_cb_ = error_cb;
 
   input_format_ = input_format;
@@ -125,6 +129,7 @@ bool V4L2ImageProcessor::Initialize(VideoPixelFormat input_format,
   }
 
   input_memory_type_ = input_memory_type;
+  output_memory_type_ = output_memory_type;
   input_visible_size_ = input_visible_size;
   input_allocated_size_ = input_allocated_size;
   output_visible_size_ = output_visible_size;
@@ -145,15 +150,14 @@ bool V4L2ImageProcessor::Initialize(VideoPixelFormat input_format,
     return false;
 
   if (!device_thread_.Start()) {
-    LOG(ERROR) << "Initialize(): encoder thread failed to start";
+    LOG(ERROR) << "Initialize(): device thread failed to start";
     return false;
   }
 
-  // StartDevicePoll will NotifyError on failure, so IgnoreResult is fine here.
+  // StartDevicePoll will NotifyError on failure.
   device_thread_.task_runner()->PostTask(
       FROM_HERE,
-      base::Bind(base::IgnoreResult(&V4L2ImageProcessor::StartDevicePoll),
-                 base::Unretained(this)));
+      base::Bind(&V4L2ImageProcessor::StartDevicePoll, base::Unretained(this)));
 
   DVLOG(1) << "V4L2ImageProcessor initialized for "
            << " input_format:" << VideoPixelFormatToString(input_format)
@@ -218,29 +222,64 @@ bool V4L2ImageProcessor::TryOutputFormat(uint32_t pixelformat,
   return true;
 }
 
-void V4L2ImageProcessor::Process(const scoped_refptr<VideoFrame>& frame,
+bool V4L2ImageProcessor::Process(const scoped_refptr<VideoFrame>& frame,
                                  int output_buffer_index,
+                                 std::vector<base::ScopedFD> output_dmabuf_fds,
                                  const FrameReadyCB& cb) {
   DVLOG(3) << __func__ << ": ts=" << frame->timestamp().InMilliseconds();
+  size_t expected_num_fds =
+      (output_memory_type_ == V4L2_MEMORY_DMABUF ? output_planes_count_ : 0);
+  if (expected_num_fds != output_dmabuf_fds.size()) {
+    LOG(ERROR) << __func__ << ": wrong number of output fds. Expected "
+               << expected_num_fds << ", actual " << output_dmabuf_fds.size();
+    return false;
+  }
 
   std::unique_ptr<JobRecord> job_record(new JobRecord());
   job_record->frame = frame;
   job_record->output_buffer_index = output_buffer_index;
+  job_record->output_dmabuf_fds = std::move(output_dmabuf_fds);
   job_record->ready_cb = cb;
 
   device_thread_.task_runner()->PostTask(
       FROM_HERE, base::Bind(&V4L2ImageProcessor::ProcessTask,
                             base::Unretained(this), base::Passed(&job_record)));
+  return true;
 }
 
 void V4L2ImageProcessor::ProcessTask(std::unique_ptr<JobRecord> job_record) {
   int index = job_record->output_buffer_index;
   DVLOG(3) << __func__ << ": Reusing output buffer, index=" << index;
   DCHECK(device_thread_.task_runner()->BelongsToCurrentThread());
+  DCHECK(output_buffer_map_[index].dmabuf_fds.empty());
+  output_buffer_map_[index].dmabuf_fds =
+      std::move(job_record->output_dmabuf_fds);
 
   EnqueueOutput(index);
   input_queue_.push(make_linked_ptr(job_record.release()));
   EnqueueInput();
+}
+
+bool V4L2ImageProcessor::Reset() {
+  DVLOG(3) << __func__;
+  DCHECK(child_task_runner_->BelongsToCurrentThread());
+  DCHECK(device_thread_.IsRunning());
+
+  weak_this_factory_.InvalidateWeakPtrs();
+  device_thread_.task_runner()->PostTask(
+      FROM_HERE,
+      base::Bind(&V4L2ImageProcessor::StopDevicePoll, base::Unretained(this)));
+  device_thread_.Stop();
+
+  weak_this_ = weak_this_factory_.GetWeakPtr();
+  if (!device_thread_.Start()) {
+    LOG(ERROR) << "Reset(): device thread failed to start";
+    return false;
+  }
+  device_thread_.task_runner()->PostTask(
+      FROM_HERE,
+      base::Bind(&V4L2ImageProcessor::StartDevicePoll, base::Unretained(this)));
+  return true;
 }
 
 void V4L2ImageProcessor::Destroy() {
@@ -252,8 +291,8 @@ void V4L2ImageProcessor::Destroy() {
   // If the device thread is running, destroy using posted task.
   if (device_thread_.IsRunning()) {
     device_thread_.task_runner()->PostTask(
-        FROM_HERE,
-        base::Bind(&V4L2ImageProcessor::DestroyTask, base::Unretained(this)));
+        FROM_HERE, base::Bind(&V4L2ImageProcessor::StopDevicePoll,
+                              base::Unretained(this)));
     // Wait for tasks to finish/early-exit.
     device_thread_.Stop();
   } else {
@@ -262,13 +301,6 @@ void V4L2ImageProcessor::Destroy() {
   }
 
   delete this;
-}
-
-void V4L2ImageProcessor::DestroyTask() {
-  DCHECK(device_thread_.task_runner()->BelongsToCurrentThread());
-
-  // Stop streaming and the device_poll_thread_.
-  StopDevicePoll();
 }
 
 bool V4L2ImageProcessor::CreateInputBuffers() {
@@ -375,7 +407,7 @@ bool V4L2ImageProcessor::CreateOutputBuffers() {
   memset(&reqbufs, 0, sizeof(reqbufs));
   reqbufs.count = num_buffers_;
   reqbufs.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-  reqbufs.memory = V4L2_MEMORY_MMAP;
+  reqbufs.memory = output_memory_type_;
   IOCTL_OR_ERROR_RETURN_FALSE(VIDIOC_REQBUFS, &reqbufs);
   if (static_cast<int>(reqbufs.count) != num_buffers_) {
     LOG(ERROR) << "Failed to allocate output buffers. reqbufs.count="
@@ -412,7 +444,7 @@ void V4L2ImageProcessor::DestroyOutputBuffers() {
   memset(&reqbufs, 0, sizeof(reqbufs));
   reqbufs.count = 0;
   reqbufs.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-  reqbufs.memory = V4L2_MEMORY_MMAP;
+  reqbufs.memory = output_memory_type_;
   IOCTL_OR_LOG_ERROR(VIDIOC_REQBUFS, &reqbufs);
 
   output_buffer_map_.clear();
@@ -428,7 +460,7 @@ void V4L2ImageProcessor::DevicePollTask(bool poll_device) {
   }
 
   // All processing should happen on ServiceDeviceTask(), since we shouldn't
-  // touch encoder state from this thread.
+  // touch processor state from this thread.
   device_thread_.task_runner()->PostTask(
       FROM_HERE, base::Bind(&V4L2ImageProcessor::ServiceDeviceTask,
                             base::Unretained(this)));
@@ -447,8 +479,10 @@ void V4L2ImageProcessor::ServiceDeviceTask() {
   Dequeue();
   EnqueueInput();
 
-  if (!device_->ClearDevicePollInterrupt())
+  if (!device_->ClearDevicePollInterrupt()) {
+    NotifyError();
     return;
+  }
 
   bool poll_device =
       (input_buffer_queued_count_ > 0 || output_buffer_queued_count_ > 0);
@@ -476,8 +510,10 @@ void V4L2ImageProcessor::EnqueueInput() {
   if (old_inputs_queued == 0 && input_buffer_queued_count_ != 0) {
     // We started up a previously empty queue.
     // Queue state changed; signal interrupt.
-    if (!device_->SetDevicePollInterrupt())
+    if (!device_->SetDevicePollInterrupt()) {
+      NotifyError();
       return;
+    }
     // VIDIOC_STREAMON if we haven't yet.
     if (!input_streamon_) {
       __u32 type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
@@ -497,8 +533,10 @@ void V4L2ImageProcessor::EnqueueOutput(int index) {
   if (old_outputs_queued == 0 && output_buffer_queued_count_ != 0) {
     // We just started up a previously empty queue.
     // Queue state changed; signal interrupt.
-    if (!device_->SetDevicePollInterrupt())
+    if (!device_->SetDevicePollInterrupt()) {
+      NotifyError();
       return;
+    }
     // Start VIDIOC_STREAMON if we haven't yet.
     if (!output_streamon_) {
       __u32 type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
@@ -547,7 +585,7 @@ void V4L2ImageProcessor::Dequeue() {
     memset(&dqbuf, 0, sizeof(dqbuf));
     memset(&planes, 0, sizeof(planes));
     dqbuf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-    dqbuf.memory = V4L2_MEMORY_MMAP;
+    dqbuf.memory = output_memory_type_;
     dqbuf.m.planes = planes;
     dqbuf.length = output_planes_count_;
     if (device_->Ioctl(VIDIOC_DQBUF, &dqbuf) != 0) {
@@ -562,6 +600,7 @@ void V4L2ImageProcessor::Dequeue() {
     OutputRecord& output_record = output_buffer_map_[dqbuf.index];
     DCHECK(output_record.at_device);
     output_record.at_device = false;
+    output_record.dmabuf_fds.clear();
     output_buffer_queued_count_--;
 
     // Jobs are always processed in FIFO order.
@@ -634,7 +673,11 @@ bool V4L2ImageProcessor::EnqueueOutputRecord(int index) {
   memset(qbuf_planes, 0, sizeof(qbuf_planes));
   qbuf.index = index;
   qbuf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-  qbuf.memory = V4L2_MEMORY_MMAP;
+  qbuf.memory = output_memory_type_;
+  if (output_memory_type_ == V4L2_MEMORY_DMABUF) {
+    for (size_t i = 0; i < output_record.dmabuf_fds.size(); ++i)
+      qbuf_planes[i].m.fd = output_record.dmabuf_fds[i].get();
+  }
   qbuf.m.planes = qbuf_planes;
   qbuf.length = output_planes_count_;
   IOCTL_OR_ERROR_RETURN_FALSE(VIDIOC_QBUF, &qbuf);
@@ -643,7 +686,7 @@ bool V4L2ImageProcessor::EnqueueOutputRecord(int index) {
   return true;
 }
 
-bool V4L2ImageProcessor::StartDevicePoll() {
+void V4L2ImageProcessor::StartDevicePoll() {
   DVLOG(3) << __func__ << ": starting device poll";
   DCHECK(device_thread_.task_runner()->BelongsToCurrentThread());
   DCHECK(!device_poll_thread_.IsRunning());
@@ -652,40 +695,42 @@ bool V4L2ImageProcessor::StartDevicePoll() {
   if (!device_poll_thread_.Start()) {
     LOG(ERROR) << "StartDevicePoll(): Device thread failed to start";
     NotifyError();
-    return false;
+    return;
   }
   // Enqueue a poll task with no devices to poll on - will wait only for the
   // poll interrupt
   device_poll_thread_.task_runner()->PostTask(
       FROM_HERE, base::Bind(&V4L2ImageProcessor::DevicePollTask,
                             base::Unretained(this), false));
-
-  return true;
 }
 
-bool V4L2ImageProcessor::StopDevicePoll() {
+void V4L2ImageProcessor::StopDevicePoll() {
   DVLOG(3) << __func__ << ": stopping device poll";
-  if (device_thread_.IsRunning())
-    DCHECK(device_thread_.task_runner()->BelongsToCurrentThread());
+  DCHECK(device_thread_.task_runner()->BelongsToCurrentThread());
 
   // Signal the DevicePollTask() to stop, and stop the device poll thread.
-  if (!device_->SetDevicePollInterrupt())
-    return false;
+  bool result = device_->SetDevicePollInterrupt();
   device_poll_thread_.Stop();
+  if (!result) {
+    NotifyError();
+    return;
+  }
 
   // Clear the interrupt now, to be sure.
-  if (!device_->ClearDevicePollInterrupt())
-    return false;
+  if (!device_->ClearDevicePollInterrupt()) {
+    NotifyError();
+    return;
+  }
 
   if (input_streamon_) {
     __u32 type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-    IOCTL_OR_ERROR_RETURN_FALSE(VIDIOC_STREAMOFF, &type);
+    IOCTL_OR_ERROR_RETURN(VIDIOC_STREAMOFF, &type);
   }
   input_streamon_ = false;
 
   if (output_streamon_) {
     __u32 type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-    IOCTL_OR_ERROR_RETURN_FALSE(VIDIOC_STREAMOFF, &type);
+    IOCTL_OR_ERROR_RETURN(VIDIOC_STREAMOFF, &type);
   }
   output_streamon_ = false;
 
@@ -708,8 +753,6 @@ bool V4L2ImageProcessor::StopDevicePoll() {
   output_buffer_map_.clear();
   output_buffer_map_.resize(num_buffers_);
   output_buffer_queued_count_ = 0;
-
-  return true;
 }
 
 void V4L2ImageProcessor::FrameReady(const FrameReadyCB& cb,

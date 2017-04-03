@@ -26,6 +26,30 @@ namespace offline_pages {
 
 // OfflinePageMetadataStoreSQL is an instance of OfflinePageMetadataStore
 // which is implemented using a SQLite database.
+//
+// This store has a history of schema updates in pretty much every release.
+// Original schema was delivered in M52. Since then, the following changes
+// happened:
+// * In M53 expiration_time was added,
+// * In M54 title was added,
+// * In M55 we dropped the following fields (never used): version, status,
+//   offline_url, user_initiated.
+//
+// Here is a procedure to update the schema for this store:
+// * Decide how to detect that the store is on a particular version, which
+//   typically means that a certain field exists or is missing. This happens in
+//   Upgrade section of |CreateSchema|
+// * Work out appropriate change and apply it to all existing upgrade paths. In
+//   the interest of performing a single update of the store, it upgrades from a
+//   detected version to the current one. This means that when making a change,
+//   more than a single query may have to be updated (in case of fields being
+//   removed or needed to be initialized to a specific, non-default value).
+//   Such approach is preferred to doing N updates for every changed version on
+//   a startup after browser update.
+// * New upgrade method should specify which version it is upgrading from, e.g.
+//   |UpgradeFrom54|.
+// * Upgrade should use |UpgradeWithQuery| and simply specify SQL command to
+//   move data from old table (prefixed by temp_) to the new one.
 class OfflinePageMetadataStoreSQL : public OfflinePageMetadataStore {
  public:
   OfflinePageMetadataStoreSQL(
@@ -34,48 +58,45 @@ class OfflinePageMetadataStoreSQL : public OfflinePageMetadataStore {
   ~OfflinePageMetadataStoreSQL() override;
 
   // Implementation methods.
-  void Load(const LoadCallback& callback) override;
-  void AddOrUpdateOfflinePage(const OfflinePageItem& offline_page,
-                              const UpdateCallback& callback) override;
+  void GetOfflinePages(const LoadCallback& callback) override;
+  void AddOfflinePage(const OfflinePageItem& offline_page,
+                      const AddCallback& callback) override;
+  void UpdateOfflinePages(const std::vector<OfflinePageItem>& pages,
+                          const UpdateCallback& callback) override;
   void RemoveOfflinePages(const std::vector<int64_t>& offline_ids,
                           const UpdateCallback& callback) override;
   void Reset(const ResetCallback& callback) override;
+  StoreState state() const override;
+
+  // Helper function used to force incorrect state for testing purposes.
+  void SetStateForTesting(StoreState state, bool reset_db);
 
  private:
-  // Synchronous implementations, these are run on the background thread
-  // and actually do the work to access SQL.  The implementations above
-  // simply dispatch to the corresponding *Sync method on the background thread.
-  // 'runner' is where to run the callback.
-  static void LoadSync(sql::Connection* db,
-                       const base::FilePath& path,
-                       scoped_refptr<base::SingleThreadTaskRunner> runner,
-                       const LoadCallback& callback);
-  static void AddOrUpdateOfflinePageSync(
-      const OfflinePageItem& offline_page,
-      sql::Connection* db,
-      scoped_refptr<base::SingleThreadTaskRunner> runner,
-      const UpdateCallback& callback);
-  static void RemoveOfflinePagesSync(
-      const std::vector<int64_t>& offline_ids,
-      sql::Connection* db,
-      scoped_refptr<base::SingleThreadTaskRunner> runner,
-      const UpdateCallback& callback);
-  static void ResetSync(std::unique_ptr<sql::Connection> db,
-                        scoped_refptr<base::SingleThreadTaskRunner> runner,
-                        const ResetCallback& callback);
+  // Used to initialize DB connection.
+  void OpenConnection();
+  void OnOpenConnectionDone(StoreState state);
 
-  static void NotifyLoadResult(
-      scoped_refptr<base::SingleThreadTaskRunner> runner,
-      const LoadCallback& callback,
-      LoadStatus status,
-      const std::vector<OfflinePageItem>& result);
+  // Used to reset DB connection.
+  void OnResetDone(const ResetCallback& callback, StoreState state);
+
+  // Helper function that checks whether a valid DB connection is present.
+  // Returns true if valid connection is present, otherwise it returns false and
+  // calls the provided callback as a shortcut.
+  bool CheckDb(const base::Closure& callback);
 
   // Background thread where all SQL access should be run.
   scoped_refptr<base::SequencedTaskRunner> background_task_runner_;
 
   // Path to the database on disk.
   base::FilePath db_file_path_;
+
+  // Database connection.
   std::unique_ptr<sql::Connection> db_;
+
+  // State of the store.
+  StoreState state_;
+
+  base::WeakPtrFactory<OfflinePageMetadataStoreSQL> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(OfflinePageMetadataStoreSQL);
 };

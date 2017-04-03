@@ -33,85 +33,88 @@
 #include "public/platform/modules/indexeddb/WebIDBMetadata.h"
 #include "wtf/Allocator.h"
 #include "wtf/HashMap.h"
+#include "wtf/RefCounted.h"
+#include "wtf/RefPtr.h"
 #include "wtf/text/StringHash.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
 
-struct IDBIndexMetadata {
-    DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
-    IDBIndexMetadata() { }
-    IDBIndexMetadata(const String& name, int64_t id, const IDBKeyPath& keyPath, bool unique, bool multiEntry)
-        : name(name)
-        , id(id)
-        , keyPath(keyPath)
-        , unique(unique)
-        , multiEntry(multiEntry) { }
-    String name;
-    int64_t id;
-    IDBKeyPath keyPath;
-    bool unique;
-    bool multiEntry;
+// The lifecycle of the IndexedDB metadata objects defined below is managed by
+// reference counting (RefPtr). We don't have to worry about cycles because
+// these objects form a tree with the hierarchy shown below.
+//     IDBDatabaseMetadata -> IDBObjectStoreMetadata -> IDBIndexMetadata
 
-    static const int64_t InvalidId = -1;
+class IDBIndexMetadata : public RefCounted<IDBIndexMetadata> {
+  USING_FAST_MALLOC(IDBIndexMetadata);
+
+ public:
+  static constexpr int64_t InvalidId = -1;
+
+  IDBIndexMetadata();
+  IDBIndexMetadata(const String& name,
+                   int64_t id,
+                   const IDBKeyPath&,
+                   bool unique,
+                   bool multiEntry);
+
+  String name;
+  int64_t id;
+  IDBKeyPath keyPath;
+  bool unique;
+  bool multiEntry;
 };
 
-struct IDBObjectStoreMetadata {
-    DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
-    IDBObjectStoreMetadata() { }
-    IDBObjectStoreMetadata(const String& name, int64_t id, const IDBKeyPath& keyPath, bool autoIncrement, int64_t maxIndexId)
-        : name(name)
-        , id(id)
-        , keyPath(keyPath)
-        , autoIncrement(autoIncrement)
-        , maxIndexId(maxIndexId)
-    {
-    }
-    String name;
-    int64_t id;
-    IDBKeyPath keyPath;
-    bool autoIncrement;
-    int64_t maxIndexId;
+class IDBObjectStoreMetadata : public RefCounted<IDBObjectStoreMetadata> {
+  USING_FAST_MALLOC(IDBObjectStoreMetadata);
 
-    static const int64_t InvalidId = -1;
+ public:
+  static constexpr int64_t InvalidId = -1;
 
-    typedef HashMap<int64_t, IDBIndexMetadata> IndexMap;
-    IndexMap indexes;
+  IDBObjectStoreMetadata();
+  IDBObjectStoreMetadata(const String& name,
+                         int64_t id,
+                         const IDBKeyPath&,
+                         bool autoIncrement,
+                         int64_t maxIndexId);
+
+  // Creates a deep copy of the object metadata, which includes copies of index
+  // metadata items.
+  RefPtr<IDBObjectStoreMetadata> createCopy() const;
+
+  String name;
+  int64_t id;
+  IDBKeyPath keyPath;
+  bool autoIncrement;
+  int64_t maxIndexId;
+  HashMap<int64_t, RefPtr<IDBIndexMetadata>> indexes;
 };
 
-struct IDBDatabaseMetadata {
-    DISALLOW_NEW();
-    // FIXME: These can probably be collapsed into 0.
-    enum {
-        NoVersion = -1,
-        DefaultVersion = 0
-    };
+struct MODULES_EXPORT IDBDatabaseMetadata {
+  DISALLOW_NEW();
 
-    typedef HashMap<int64_t, IDBObjectStoreMetadata> ObjectStoreMap;
+  // FIXME: These can probably be collapsed into 0.
+  enum { NoVersion = -1, DefaultVersion = 0 };
 
-    IDBDatabaseMetadata()
-        : version(NoVersion)
-    {
-    }
+  IDBDatabaseMetadata();
+  IDBDatabaseMetadata(const String& name,
+                      int64_t id,
+                      int64_t version,
+                      int64_t maxObjectStoreId);
 
-    IDBDatabaseMetadata(const String& name, int64_t id, int64_t version, int64_t maxObjectStoreId)
-        : name(name)
-        , id(id)
-        , version(version)
-        , maxObjectStoreId(maxObjectStoreId)
-    {
-    }
+  explicit IDBDatabaseMetadata(const WebIDBMetadata&);
 
-    explicit IDBDatabaseMetadata(const WebIDBMetadata&);
+  // Overwrites the database metadata, but does not change the object store and
+  // index metadata.
+  void copyFrom(const IDBDatabaseMetadata&);
 
-    String name;
-    int64_t id;
-    int64_t version;
-    int64_t maxObjectStoreId;
-
-    ObjectStoreMap objectStores;
+  String name;
+  int64_t id;
+  int64_t version;
+  int64_t maxObjectStoreId;
+  HashMap<int64_t, RefPtr<IDBObjectStoreMetadata>> objectStores;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // IDBMetadata_h
+#endif  // IDBMetadata_h

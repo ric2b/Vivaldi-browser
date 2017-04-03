@@ -69,10 +69,10 @@ void NotifyProcessOutput(content::BrowserContext* browser_context,
   }
 
   std::unique_ptr<base::ListValue> args(new base::ListValue());
-  args->Append(new base::FundamentalValue(tab_id));
-  args->Append(new base::FundamentalValue(terminal_id));
-  args->Append(new base::StringValue(output_type));
-  args->Append(new base::StringValue(output));
+  args->AppendInteger(tab_id);
+  args->AppendInteger(terminal_id);
+  args->AppendString(output_type);
+  args->AppendString(output);
 
   extensions::EventRouter* event_router =
       extensions::EventRouter::Get(browser_context);
@@ -166,12 +166,10 @@ TerminalPrivateSendInputFunction::~TerminalPrivateSendInputFunction() {}
 void TerminalPrivateOpenTerminalProcessFunction::RespondOnUIThread(
     int terminal_id) {
   if (terminal_id < 0) {
-    SetError("Failed to open process.");
-    SendResponse(false);
+    Respond(Error("Failed to open process."));
     return;
   }
-  SetResult(base::MakeUnique<base::FundamentalValue>(terminal_id));
-  SendResponse(true);
+  Respond(OneArgument(base::MakeUnique<base::FundamentalValue>(terminal_id)));
 }
 
 ExtensionFunction::ResponseAction TerminalPrivateSendInputFunction::Run() {
@@ -198,8 +196,7 @@ void TerminalPrivateSendInputFunction::SendInputOnFileThread(
 }
 
 void TerminalPrivateSendInputFunction::RespondOnUIThread(bool success) {
-  SetResult(base::MakeUnique<base::FundamentalValue>(success));
-  SendResponse(true);
+  Respond(OneArgument(base::MakeUnique<base::FundamentalValue>(success)));
 }
 
 TerminalPrivateCloseTerminalProcessFunction::
@@ -233,8 +230,7 @@ void TerminalPrivateCloseTerminalProcessFunction::CloseOnFileThread(
 
 void TerminalPrivateCloseTerminalProcessFunction::RespondOnUIThread(
     bool success) {
-  SetResult(base::MakeUnique<base::FundamentalValue>(success));
-  SendResponse(true);
+  Respond(OneArgument(base::MakeUnique<base::FundamentalValue>(success)));
 }
 
 TerminalPrivateOnTerminalResizeFunction::
@@ -267,8 +263,7 @@ void TerminalPrivateOnTerminalResizeFunction::OnResizeOnFileThread(
 }
 
 void TerminalPrivateOnTerminalResizeFunction::RespondOnUIThread(bool success) {
-  SetResult(base::MakeUnique<base::FundamentalValue>(success));
-  SendResponse(true);
+  Respond(OneArgument(base::MakeUnique<base::FundamentalValue>(success)));
 }
 
 TerminalPrivateAckOutputFunction::~TerminalPrivateAckOutputFunction() {}

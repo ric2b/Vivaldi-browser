@@ -184,14 +184,11 @@ bool RenderFrameProxyHost::InitRenderFrameProxy() {
         site_instance_.get());
   }
 
-  Send(new FrameMsg_NewFrameProxy(routing_id_,
-                                  frame_tree_node_->frame_tree()
-                                      ->GetRenderViewHost(site_instance_.get())
-                                      ->GetRoutingID(),
-                                  opener_routing_id,
-                                  parent_routing_id,
-                                  frame_tree_node_
-                                      ->current_replication_state()));
+  int view_routing_id = frame_tree_node_->frame_tree()
+      ->GetRenderViewHost(site_instance_.get())->GetRoutingID();
+  RenderProcessHostImpl::GetRendererInterface(GetProcess())->CreateFrameProxy(
+      routing_id_, view_routing_id, opener_routing_id, parent_routing_id,
+      frame_tree_node_->current_replication_state());
 
   render_frame_proxy_created_ = true;
 
@@ -257,7 +254,7 @@ void RenderFrameProxyHost::OnOpenURL(
 
   // Since this navigation targeted a specific RenderFrameProxy, it should stay
   // in the current tab.
-  DCHECK_EQ(CURRENT_TAB, params.disposition);
+  DCHECK_EQ(WindowOpenDisposition::CURRENT_TAB, params.disposition);
 
   // TODO(alexmos, creis): Figure out whether |params.user_gesture| needs to be
   // passed in as well.

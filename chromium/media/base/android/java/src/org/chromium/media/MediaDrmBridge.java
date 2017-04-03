@@ -25,9 +25,10 @@ import java.util.UUID;
 
 /**
  * A wrapper of the android MediaDrm class. Each MediaDrmBridge manages multiple
- * sessions for a single MediaSourcePlayer.
+ * sessions for AndroidVideoDecodeAccelerators and MediaCodecAudioDecoders.
  */
 @JNINamespace("media")
+@MainDex
 @SuppressLint("WrongConstant")
 @TargetApi(Build.VERSION_CODES.KITKAT)
 public class MediaDrmBridge {

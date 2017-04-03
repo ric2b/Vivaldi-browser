@@ -24,7 +24,7 @@
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/omnibox/common/omnibox_focus_state.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/navigation_controller.h"
@@ -98,8 +98,9 @@ class SearchTabHelperTest : public ChromeRenderViewHostTestHarness {
 
   // Configure the account to |sync_history| or not.
   void SetHistorySync(bool sync_history) {
-    ProfileSyncServiceMock* sync_service = static_cast<ProfileSyncServiceMock*>(
-        ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile()));
+    browser_sync::ProfileSyncServiceMock* sync_service =
+        static_cast<browser_sync::ProfileSyncServiceMock*>(
+            ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile()));
 
     syncer::ModelTypeSet result;
     if (sync_history) {

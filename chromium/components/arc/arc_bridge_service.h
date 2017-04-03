@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_ARC_ARC_BRIDGE_SERVICE_H_
 #define COMPONENTS_ARC_ARC_BRIDGE_SERVICE_H_
 
+#include <iosfwd>
 #include <string>
 #include <vector>
 
@@ -123,6 +124,7 @@ class ArcBridgeService {
   }
   InstanceHolder<mojom::TtsInstance>* tts() { return &tts_; }
   InstanceHolder<mojom::VideoInstance>* video() { return &video_; }
+  InstanceHolder<mojom::WallpaperInstance>* wallpaper() { return &wallpaper_; }
 
   // Gets if ARC is currently running.
   bool ready() const { return state() == State::READY; }
@@ -192,6 +194,7 @@ class ArcBridgeService {
   InstanceHolder<mojom::StorageManagerInstance> storage_manager_;
   InstanceHolder<mojom::TtsInstance> tts_;
   InstanceHolder<mojom::VideoInstance> video_;
+  InstanceHolder<mojom::WallpaperInstance> wallpaper_;
 
   // Gets the current state of the bridge service.
   State state() const { return state_; }
@@ -231,6 +234,10 @@ class ArcBridgeService {
 
   DISALLOW_COPY_AND_ASSIGN(ArcBridgeService);
 };
+
+// Defines "<<" operator for LOGging purpose.
+std::ostream& operator<<(
+    std::ostream& os, ArcBridgeService::StopReason reason);
 
 }  // namespace arc
 

@@ -554,10 +554,6 @@ void Widget::StackAtTop() {
   native_widget_->StackAtTop();
 }
 
-void Widget::StackBelow(gfx::NativeView native_view) {
-  native_widget_->StackBelow(native_view);
-}
-
 void Widget::SetShape(std::unique_ptr<SkRegion> shape) {
   native_widget_->SetShape(std::move(shape));
 }
@@ -1211,7 +1207,14 @@ void Widget::OnMouseEvent(ui::MouseEvent* event) {
       }
       if (root_view)
         root_view->OnMouseReleased(*event);
-      if ((event->flags() & ui::EF_IS_NON_CLIENT) == 0)
+      if ((event->flags() & ui::EF_IS_NON_CLIENT) == 0 &&
+          // If none of the "normal" buttons are pressed, this event may be from
+          // one of the newer mice that have buttons bound to browser forward
+          // back actions. Don't squelch the event and let the default handler
+          // process it.
+          (event->flags() &
+           (ui::EF_LEFT_MOUSE_BUTTON | ui::EF_MIDDLE_MOUSE_BUTTON |
+            ui::EF_RIGHT_MOUSE_BUTTON)) != 0)
         event->SetHandled();
       return;
 

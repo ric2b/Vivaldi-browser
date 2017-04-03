@@ -1267,7 +1267,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExtensionCacheImplTest) {
   // Create and initialize local cache.
   base::ScopedTempDir cache_dir;
   EXPECT_TRUE(cache_dir.CreateUniqueTempDir());
-  const base::FilePath impl_path = cache_dir.path();
+  const base::FilePath impl_path = cache_dir.GetPath();
   EXPECT_TRUE(base::CreateDirectory(impl_path));
   CreateFile(impl_path.Append(
                  extensions::LocalExtensionCache::kCacheReadyFlagFileName),
@@ -1282,7 +1282,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExtensionCacheImplTest) {
   // Put extension in the local cache.
   base::ScopedTempDir temp_dir;
   EXPECT_TRUE(temp_dir.CreateUniqueTempDir());
-  const base::FilePath temp_path = temp_dir.path();
+  const base::FilePath temp_path = temp_dir.GetPath();
   EXPECT_TRUE(base::CreateDirectory(temp_path));
   const base::FilePath temp_file =
       GetCacheCRXFilePath(kGoodExtensionID, kGoodExtensionVersion, temp_path);
@@ -1565,9 +1565,9 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, LastWindowClosedLogoutReminder) {
 
   // Start the platform app, causing it to open a window.
   run_loop_.reset(new base::RunLoop);
-  OpenApplication(AppLaunchParams(profile, app,
-                                  extensions::LAUNCH_CONTAINER_NONE, NEW_WINDOW,
-                                  extensions::SOURCE_TEST));
+  OpenApplication(AppLaunchParams(
+      profile, app, extensions::LAUNCH_CONTAINER_NONE,
+      WindowOpenDisposition::NEW_WINDOW, extensions::SOURCE_TEST));
   run_loop_->Run();
   EXPECT_EQ(1U, app_window_registry->app_windows().size());
 

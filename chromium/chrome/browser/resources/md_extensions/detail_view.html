@@ -7,16 +7,22 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable-behavior.html">
 <link rel="import" href="chrome://extensions/animation_helper.html">
+<link rel="import" href="chrome://extensions/item_source.html">
 
 <dom-module id="extensions-detail-view">
   <style include="iron-flex"></style>
   <template>
     <style>
+      [hidden] {
+        display: none !important;
+      }
+
       #main {
         background-color: white;
         height: 800px;
         width: 90%;
       }
+
       #top-bar {
         align-items: center;
         color: var(--paper-grey-600);
@@ -25,31 +31,39 @@
         margin-bottom: 30px;
         padding: 8px 12px 0;
       }
+
       #name {
         flex-grow: 1;
       }
+
       .section {
-        border-bottom: var(--paper-grey-600);
+        border-bottom: 1px solid var(--paper-grey-400);
         padding: 12px 20px;
       }
+
       .section:last-child {
         border: none;
       }
+
       .section-title {
         color: var(--paper-grey-800);
       }
+
       .section-content {
         color: var(--paper-grey-600);
       }
+
       .section paper-checkbox {
         align-items: center;
         display: flex;
         min-height: 40px;
       }
+
       paper-checkbox {
         --paper-checkbox-checked-color: var(--google-blue-500);
         --primary-text-color: var(--paper-grey-800);
       }
+
       ul {
         -webkit-padding-start: 20px;
         margin: 0;
@@ -58,11 +72,13 @@
     <div id="main">
       <div id="top-bar">
         <paper-icon-button id="close-button" icon="arrow-back"
-            on-click="onCloseButtonClick_"></paper-icon-button>
+            on-tap="onCloseButtonTap_"></paper-icon-button>
         <span id="name">[[data.name]]</span>
         <paper-icon-button id="open-in-webstore" icon="open-in-new">
         </paper-icon-button>
-        <paper-icon-button id="options" icon="settings">
+        <paper-icon-button id="options" icon="settings"
+            on-tap="onOptionsButtonTap_"
+            hidden$="[[!shouldShowOptionsButton_(data.*)]]">
         </paper-icon-button>
       </div>
       <div class="section">
@@ -135,7 +151,9 @@
       </template>
       <div class="section">
         <div class="section-title">$i18n{itemSource}</div>
-        <div class="section-content">TODO</div>
+        <div class="section-content">
+          [[computeSourceString_(data.*)]]
+        </div>
       </div>
     </div>
   </template>

@@ -41,12 +41,13 @@ WebInspector.SettingsScreen = function()
     this.contentElement.tabIndex = 0;
     this.contentElement.classList.add("help-window-main");
     this.contentElement.classList.add("vbox");
-    var settingsLabelElement = createElementWithClass("div", "help-window-label");
-    settingsLabelElement.createTextChild(WebInspector.UIString("Settings"));
+
+    var settingsLabelElement = createElement("div");
+    WebInspector.createShadowRootWithCoreStyles(settingsLabelElement, "settings/settingsScreen.css").createChild("div", "settings-window-title").textContent = WebInspector.UIString("Settings");
 
     this._tabbedLocation = WebInspector.viewManager.createTabbedLocation(() => WebInspector.SettingsScreen._showSettingsScreen(), "settings-view");
     var tabbedPane = this._tabbedLocation.tabbedPane();
-    tabbedPane.insertBeforeTabStrip(settingsLabelElement);
+    tabbedPane.leftToolbar().appendToolbarItem(new WebInspector.ToolbarItem(settingsLabelElement));
     tabbedPane.setShrinkableTabs(false);
     tabbedPane.setVerticalTabLayout(true);
     var shortcutsView = new WebInspector.SimpleView(WebInspector.UIString("Shortcuts"));
@@ -309,9 +310,9 @@ WebInspector.WorkspaceSettingsTab = function()
     /** @type {!Map<string, !WebInspector.EditFileSystemView>} */
     this._mappingViewByPath = new Map();
 
-    var fileSystemPaths = WebInspector.isolatedFileSystemManager.fileSystemPaths();
-    for (var i = 0; i < fileSystemPaths.length; ++i)
-        this._addItem(/** @type {!WebInspector.IsolatedFileSystem} */ (WebInspector.isolatedFileSystemManager.fileSystem(fileSystemPaths[i])));
+    var fileSystems = WebInspector.isolatedFileSystemManager.fileSystems();
+    for (var i = 0; i < fileSystems.length; ++i)
+        this._addItem(fileSystems[i]);
 }
 
 WebInspector.WorkspaceSettingsTab.prototype = {

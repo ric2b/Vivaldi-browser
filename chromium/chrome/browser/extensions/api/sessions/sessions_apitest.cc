@@ -25,8 +25,8 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/testing_browser_process.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
-#include "components/browser_sync/browser/profile_sync_service_mock.h"
+#include "components/browser_sync/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service_mock.h"
 #include "components/sync/api/attachments/attachment_id.h"
 #include "components/sync/api/fake_sync_change_processor.h"
 #include "components/sync/api/sync_error_factory_mock.h"
@@ -182,20 +182,21 @@ void ExtensionSessionsTest::SetUpOnMainThread() {
 
 std::unique_ptr<KeyedService> ExtensionSessionsTest::BuildProfileSyncService(
     content::BrowserContext* context) {
-  std::unique_ptr<SyncApiComponentFactoryMock> factory(
-      new SyncApiComponentFactoryMock());
+  std::unique_ptr<syncer::SyncApiComponentFactoryMock> factory(
+      new syncer::SyncApiComponentFactoryMock());
 
   factory->SetLocalDeviceInfoProvider(
-      std::unique_ptr<sync_driver::LocalDeviceInfoProvider>(
-          new sync_driver::LocalDeviceInfoProviderMock(
+      std::unique_ptr<syncer::LocalDeviceInfoProvider>(
+          new syncer::LocalDeviceInfoProviderMock(
               kSessionTags[0], "machine name", "Chromium 10k", "Chrome 10k",
               sync_pb::SyncEnums_DeviceType_TYPE_LINUX, "device_id")));
 
   Profile* profile = static_cast<Profile*>(context);
-  ProfileSyncServiceMock* sync_service =
-      new ProfileSyncServiceMock(CreateProfileSyncServiceParamsForTest(
-          base::WrapUnique(new browser_sync::ChromeSyncClient(profile)),
-          profile));
+  browser_sync::ProfileSyncServiceMock* sync_service =
+      new browser_sync::ProfileSyncServiceMock(
+          CreateProfileSyncServiceParamsForTest(
+              base::MakeUnique<browser_sync::ChromeSyncClient>(profile),
+              profile));
   static_cast<browser_sync::ChromeSyncClient*>(sync_service->GetSyncClient())
       ->SetSyncApiComponentFactoryForTesting(std::move(factory));
   return base::WrapUnique(sync_service);
@@ -211,9 +212,10 @@ void ExtensionSessionsTest::CreateTestProfileSyncService() {
   Profile* profile =
       Profile::CreateProfile(path, NULL, Profile::CREATE_MODE_SYNCHRONOUS);
   profile_manager->RegisterTestingProfile(profile, true, false);
-  ProfileSyncServiceMock* service = static_cast<ProfileSyncServiceMock*>(
-      ProfileSyncServiceFactory::GetInstance()->SetTestingFactoryAndUse(
-      profile, &ExtensionSessionsTest::BuildProfileSyncService));
+  browser_sync::ProfileSyncServiceMock* service =
+      static_cast<browser_sync::ProfileSyncServiceMock*>(
+          ProfileSyncServiceFactory::GetInstance()->SetTestingFactoryAndUse(
+              profile, &ExtensionSessionsTest::BuildProfileSyncService));
 
   syncer::ModelTypeSet preferred_types;
   preferred_types.Put(syncer::SESSIONS);
@@ -264,7 +266,7 @@ void ExtensionSessionsTest::CreateSessionModels() {
     initial_data.push_back(syncer::SyncData::CreateRemoteData(
         1, entity, base::Time(), syncer::AttachmentIdList(),
         syncer::AttachmentServiceProxyForTest::Create(),
-        browser_sync::SessionsSyncManager::TagHashFromSpecifics(
+        sync_sessions::SessionsSyncManager::TagHashFromSpecifics(
             entity.session())));
     for (size_t i = 0; i < tabs.size(); i++) {
       sync_pb::EntitySpecifics entity;
@@ -272,7 +274,7 @@ void ExtensionSessionsTest::CreateSessionModels() {
       initial_data.push_back(syncer::SyncData::CreateRemoteData(
           i + 2, entity, base::Time(), syncer::AttachmentIdList(),
           syncer::AttachmentServiceProxyForTest::Create(),
-          browser_sync::SessionsSyncManager::TagHashFromSpecifics(
+          sync_sessions::SessionsSyncManager::TagHashFromSpecifics(
               entity.session())));
     }
   }

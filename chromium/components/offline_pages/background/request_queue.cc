@@ -7,6 +7,8 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/offline_pages/background/change_requests_state_task.h"
+#include "components/offline_pages/background/remove_requests_task.h"
 #include "components/offline_pages/background/request_queue_store.h"
 #include "components/offline_pages/background/save_page_request.h"
 
@@ -16,7 +18,7 @@ namespace {
 // Completes the get requests call.
 void GetRequestsDone(const RequestQueue::GetRequestsCallback& callback,
                      bool success,
-                     const std::vector<SavePageRequest>& requests) {
+                     std::vector<std::unique_ptr<SavePageRequest>> requests) {
   RequestQueue::GetRequestsResult result =
       success ? RequestQueue::GetRequestsResult::SUCCESS
               : RequestQueue::GetRequestsResult::STORE_FAILURE;
@@ -24,45 +26,52 @@ void GetRequestsDone(const RequestQueue::GetRequestsCallback& callback,
   // This may trigger the purging if necessary.
   // Also this may be turned into a method on the request queue or add a policy
   // parameter in the process.
-  callback.Run(result, requests);
+  callback.Run(result, std::move(requests));
 }
 
 // Completes the add request call.
 void AddRequestDone(const RequestQueue::AddRequestCallback& callback,
                     const SavePageRequest& request,
-                    RequestQueueStore::UpdateStatus status) {
-  RequestQueue::AddRequestResult result =
-      (status == RequestQueueStore::UpdateStatus::UPDATED)
-          ? RequestQueue::AddRequestResult::SUCCESS
-          : RequestQueue::AddRequestResult::STORE_FAILURE;
+                    ItemActionStatus status) {
+  RequestQueue::AddRequestResult result;
+  switch (status) {
+    case ItemActionStatus::SUCCESS:
+      result = RequestQueue::AddRequestResult::SUCCESS;
+      break;
+    case ItemActionStatus::ALREADY_EXISTS:
+      result = RequestQueue::AddRequestResult::ALREADY_EXISTS;
+      break;
+    case ItemActionStatus::STORE_ERROR:
+      result = RequestQueue::AddRequestResult::STORE_FAILURE;
+      break;
+    case ItemActionStatus::NOT_FOUND:
+    default:
+      NOTREACHED();
+      return;
+  }
   callback.Run(result, request);
 }
 
 // Completes the update request call.
-// TODO(petewil): Move callers to the UpdateMultipleRequestDone callback
-void UpdateRequestDone(const RequestQueue::UpdateRequestCallback& callback,
-                       RequestQueueStore::UpdateStatus status) {
-  RequestQueue::UpdateRequestResult result =
-      (status == RequestQueueStore::UpdateStatus::UPDATED)
-          ? RequestQueue::UpdateRequestResult::SUCCESS
-          : RequestQueue::UpdateRequestResult::STORE_FAILURE;
+// TODO(fgorski): For specific cases, check that appropriate items were updated.
+void UpdateRequestsDone(const RequestQueue::UpdateRequestCallback& callback,
+                        std::unique_ptr<UpdateRequestsResult> store_result) {
+  RequestQueue::UpdateRequestResult result;
+  if (store_result->store_state != StoreState::LOADED) {
+    result = RequestQueue::UpdateRequestResult::STORE_FAILURE;
+  } else if (store_result->item_statuses.size() == 0) {
+    result = RequestQueue::UpdateRequestResult::REQUEST_DOES_NOT_EXIST;
+  } else {
+    ItemActionStatus status = store_result->item_statuses.begin()->second;
+    if (status == ItemActionStatus::STORE_ERROR)
+      result = RequestQueue::UpdateRequestResult::STORE_FAILURE;
+    else if (status == ItemActionStatus::NOT_FOUND)
+      result = RequestQueue::UpdateRequestResult::REQUEST_DOES_NOT_EXIST;
+    else
+      result = RequestQueue::UpdateRequestResult::SUCCESS;
+  }
+
   callback.Run(result);
-}
-
-// Handles updating multiple requests at the same time.
-void UpdateMultipleRequestsDone(
-    const RequestQueue::UpdateMultipleRequestsCallback& callback,
-    const RequestQueue::UpdateMultipleRequestResults& results,
-    const std::vector<SavePageRequest>& requests) {
-  callback.Run(results, requests);
-}
-
-// Completes the remove request call.
-void RemoveRequestsDone(
-    const RequestQueue::RemoveRequestsCallback& callback,
-    const RequestQueue::UpdateMultipleRequestResults& results,
-    const std::vector<SavePageRequest>& requests) {
-  callback.Run(results, requests);
 }
 
 }  // namespace
@@ -80,8 +89,7 @@ void RequestQueue::AddRequest(const SavePageRequest& request,
                               const AddRequestCallback& callback) {
   // TODO(fgorski): check that request makes sense.
   // TODO(fgorski): check that request does not violate policy.
-  store_->AddOrUpdateRequest(request,
-                             base::Bind(&AddRequestDone, callback, request));
+  store_->AddRequest(request, base::Bind(&AddRequestDone, callback, request));
 }
 
 void RequestQueue::UpdateRequest(const SavePageRequest& update_request,
@@ -90,7 +98,7 @@ void RequestQueue::UpdateRequest(const SavePageRequest& update_request,
   // by currying the update_callback as a parameter to be used when calling
   // GetForUpdateDone.  The actual request queue store get operation will not
   // see this bound parameter, but just pass it along.  GetForUpdateDone then
-  // passes it into the AddOrUpdateRequest method, where it ends up calling back
+  // passes it into the UpdateRequests method, where it ends up calling back
   // to the request queue client.
   // TODO(petewil): This would be more efficient if the store supported a call
   // to get a single item by ID.  Change this code to use that API when added.
@@ -103,12 +111,12 @@ void RequestQueue::UpdateRequest(const SavePageRequest& update_request,
 // We need a different version of the GetCallback that can take the curried
 // update_callback as a parameter, and call back into the request queue store
 // implementation.  This must be a member function because we need access to
-// the store pointer to call AddOrUpdateRequest.
+// the store pointer to call UpdateRequests.
 void RequestQueue::GetForUpdateDone(
     const UpdateRequestCallback& update_callback,
     const SavePageRequest& update_request,
     bool success,
-    const std::vector<SavePageRequest>& found_requests) {
+    std::vector<std::unique_ptr<SavePageRequest>> found_requests) {
   // If the result was not found, return now.
   if (!success) {
     update_callback.Run(
@@ -118,9 +126,9 @@ void RequestQueue::GetForUpdateDone(
   // If the found result does not contain the request we are looking for, return
   // now.
   bool found = false;
-  std::vector<SavePageRequest>::const_iterator iter;
+  std::vector<std::unique_ptr<SavePageRequest>>::const_iterator iter;
   for (iter = found_requests.begin(); iter != found_requests.end(); ++iter) {
-    if (iter->request_id() == update_request.request_id())
+    if ((*iter)->request_id() == update_request.request_id())
       found = true;
   }
   if (!found) {
@@ -130,21 +138,25 @@ void RequestQueue::GetForUpdateDone(
   }
 
   // Since the request exists, update it.
-  store_->AddOrUpdateRequest(update_request,
-                             base::Bind(&UpdateRequestDone, update_callback));
+  std::vector<SavePageRequest> update_requests{update_request};
+  store_->UpdateRequests(update_requests,
+                         base::Bind(&UpdateRequestsDone, update_callback));
 }
 
 void RequestQueue::RemoveRequests(const std::vector<int64_t>& request_ids,
-                                  const RemoveRequestsCallback& callback) {
-  store_->RemoveRequests(request_ids, base::Bind(RemoveRequestsDone, callback));
+                                  const UpdateCallback& callback) {
+  std::unique_ptr<Task> task(
+      new RemoveRequestsTask(store_.get(), request_ids, callback));
+  task_queue_.AddTask(std::move(task));
 }
 
 void RequestQueue::ChangeRequestsState(
     const std::vector<int64_t>& request_ids,
     const SavePageRequest::RequestState new_state,
-    const UpdateMultipleRequestsCallback& callback) {
-  store_->ChangeRequestsState(request_ids, new_state,
-                              base::Bind(UpdateMultipleRequestsDone, callback));
+    const RequestQueue::UpdateCallback& callback) {
+  std::unique_ptr<Task> task(new ChangeRequestsStateTask(
+      store_.get(), request_ids, new_state, callback));
+  task_queue_.AddTask(std::move(task));
 }
 
 void RequestQueue::PurgeRequests(const PurgeRequestsCallback& callback) {}

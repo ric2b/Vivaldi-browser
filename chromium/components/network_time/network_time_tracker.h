@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <memory>
 
+#include "base/feature_list.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -22,7 +23,7 @@ class PrefRegistrySimple;
 class PrefService;
 
 namespace base {
-class MessageLoop;
+class RunLoop;
 class TickClock;
 }  // namespace base
 
@@ -44,10 +45,27 @@ const int64_t kTicksResolutionMs = base::Time::kMinLowResolutionThresholdMs;
 const int64_t kTicksResolutionMs = 1;  // Assume 1ms for non-windows platforms.
 #endif
 
+// Variations Service feature that enables network time service querying.
+extern const base::Feature kNetworkTimeServiceQuerying;
+
 // A class that receives network time updates and can provide the network time
 // for a corresponding local time. This class is not thread safe.
 class NetworkTimeTracker : public net::URLFetcherDelegate {
  public:
+  // Describes the result of a GetNetworkTime() call, describing whether
+  // network time was available and if not, why not.
+  enum NetworkTimeResult {
+    // Network time is available.
+    NETWORK_TIME_AVAILABLE,
+    // A time has been retrieved from the network in the past, but
+    // network time is no longer available because the tracker fell out
+    // of sync due to, for example, a suspend/resume.
+    NETWORK_TIME_SYNC_LOST,
+    // Network time is unavailable because the tracker has not yet
+    // retrieved a time from the network.
+    NETWORK_TIME_NO_SYNC,
+  };
+
   static void RegisterPrefs(PrefRegistrySimple* registry);
 
   // Constructor.  Arguments may be stubbed out for tests.  |getter|, if not
@@ -59,9 +77,13 @@ class NetworkTimeTracker : public net::URLFetcherDelegate {
                      scoped_refptr<net::URLRequestContextGetter> getter);
   ~NetworkTimeTracker() override;
 
-  // Sets |network_time| to an estimate of the true time.  Returns true if time
-  // is available, and false otherwise.  If |uncertainty| is non-NULL, it will
-  // be set to an estimate of the error range.
+  // Sets |network_time| to an estimate of the true time.  Returns
+  // NETWORK_TIME_AVAILABLE if time is available. If |uncertainty| is
+  // non-NULL, it will be set to an estimate of the error range.
+  //
+  // If network time is unavailable, this method returns
+  // NETWORK_TIME_SYNC_LOST or NETWORK_TIME_NO_SYNC to indicate the
+  // reason.
   //
   // Network time may be available on startup if deserialized from a pref.
   // Failing that, a call to |UpdateNetworkTime| is required to make time
@@ -69,8 +91,8 @@ class NetworkTimeTracker : public net::URLFetcherDelegate {
   // become unavailable if |NetworkTimeTracker| has reason to believe it is no
   // longer accurate.  Consumers should even be prepared to handle the case
   // where calls to |GetNetworkTime| never once succeeds.
-  bool GetNetworkTime(base::Time* network_time,
-                      base::TimeDelta* uncertainty) const;
+  NetworkTimeResult GetNetworkTime(base::Time* network_time,
+                                   base::TimeDelta* uncertainty) const;
 
   // Calculates corresponding time ticks according to the given parameters.
   // The provided |network_time| is precise at the given |resolution| and
@@ -126,7 +148,9 @@ class NetworkTimeTracker : public net::URLFetcherDelegate {
   std::unique_ptr<net::URLFetcher> time_fetcher_;
   base::TimeTicks fetch_started_;
   std::unique_ptr<client_update_protocol::Ecdsa> query_signer_;
-  base::MessageLoop* loop_;  // For testing; quit on fetch complete.
+
+  // Run by WaitForFetchForTesting() and quit by OnURLFetchComplete().
+  base::RunLoop* run_loop_for_testing_ = nullptr;
 
   // The |Clock| and |TickClock| are used to sanity-check one another, allowing
   // the NetworkTimeTracker to notice e.g. suspend/resume events and clock

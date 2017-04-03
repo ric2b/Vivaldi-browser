@@ -11,26 +11,33 @@
 namespace chromecast {
 namespace media {
 
+class MediaResourceTracker;
+class VideoResolutionPolicy;
+
 class CastMojoMediaClient : public ::media::MojoMediaClient {
  public:
   using CreateCdmFactoryCB =
       base::Callback<std::unique_ptr<::media::CdmFactory>()>;
 
   CastMojoMediaClient(const CreateMediaPipelineBackendCB& create_backend_cb,
-                      const CreateCdmFactoryCB& create_cdm_factory_cb);
+                      const CreateCdmFactoryCB& create_cdm_factory_cb,
+                      VideoResolutionPolicy* video_resolution_policy,
+                      MediaResourceTracker* media_resource_tracker);
   ~CastMojoMediaClient() override;
 
   // MojoMediaClient overrides.
-  std::unique_ptr<::media::Renderer> CreateRenderer(
-      scoped_refptr<base::SingleThreadTaskRunner> media_task_runner,
-      scoped_refptr<::media::MediaLog> media_log,
+  scoped_refptr<::media::AudioRendererSink> CreateAudioRendererSink(
       const std::string& audio_device_id) override;
+  std::unique_ptr<::media::RendererFactory> CreateRendererFactory(
+      const scoped_refptr<::media::MediaLog>& media_log) override;
   std::unique_ptr<::media::CdmFactory> CreateCdmFactory(
       ::shell::mojom::InterfaceProvider* interface_provider) override;
 
  private:
   const CreateMediaPipelineBackendCB create_backend_cb_;
   const CreateCdmFactoryCB create_cdm_factory_cb_;
+  VideoResolutionPolicy* video_resolution_policy_;
+  MediaResourceTracker* media_resource_tracker_;
 
   DISALLOW_COPY_AND_ASSIGN(CastMojoMediaClient);
 };

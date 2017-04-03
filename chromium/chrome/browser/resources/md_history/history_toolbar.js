@@ -26,6 +26,7 @@ Polymer({
     // as the user types.
     searchTerm: {
       type: String,
+      observer: 'searchTermChanged_',
       notify: true,
     },
 
@@ -41,6 +42,8 @@ Polymer({
       observer: 'hasDrawerChanged_',
       reflectToAttribute: true,
     },
+
+    showSyncNotice: Boolean,
 
     // Whether domain-grouped history is enabled.
     isGroupedMode: {
@@ -61,6 +64,25 @@ Polymer({
 
     // The end time of the query range.
     queryEndTime: String,
+
+    // Whether to show the menu promo (a tooltip that points at the menu button
+    // in narrow mode).
+    showMenuPromo_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('showMenuPromo');
+      },
+    },
+  },
+
+  /** @return {CrToolbarSearchFieldElement} */
+  get searchField() {
+    return /** @type {CrToolbarElement} */ (this.$['main-toolbar'])
+        .getSearchField();
+  },
+
+  showSearchField: function() {
+    this.searchField.showAndFocus();
   },
 
   /**
@@ -75,17 +97,17 @@ Polymer({
   /**
    * When changing the search term externally, update the search field to
    * reflect the new search term.
-   * @param {string} search
    */
-  setSearchTerm: function(search) {
-    if (this.searchTerm == search)
-      return;
+  searchTermChanged_: function() {
+    if (this.searchField.getValue() != this.searchTerm) {
+      this.searchField.showAndFocus();
+      this.searchField.setValue(this.searchTerm);
+    }
+  },
 
-    this.searchTerm = search;
-    var searchField = /** @type {!CrToolbarElement} */(this.$['main-toolbar'])
-                          .getSearchField();
-    searchField.showAndFocus();
-    searchField.setValue(search);
+  /** @private */
+  onMenuPromoShown_: function() {
+    md_history.BrowserService.getInstance().menuPromoShown();
   },
 
   /**
@@ -96,22 +118,22 @@ Polymer({
     this.searchTerm = /** @type {string} */ (event.detail);
   },
 
+  /** @private */
+  onInfoButtonTap_: function() {
+    var dropdown = this.$.syncNotice.get();
+    dropdown.positionTarget = this.$$('#info-button-icon');
+    // It is possible for this listener to trigger while the dialog is
+    // closing. Ensure the dialog is fully closed before reopening it.
+    if (dropdown.style.display == 'none')
+      dropdown.open();
+  },
+
   onClearSelectionTap_: function() {
     this.fire('unselect-all');
   },
 
   onDeleteTap_: function() {
     this.fire('delete-selected');
-  },
-
-  get searchBar() {
-    return this.$['main-toolbar'].getSearchField();
-  },
-
-  showSearchField: function() {
-    /** @type {!CrToolbarElement} */(this.$['main-toolbar'])
-        .getSearchField()
-        .showAndFocus();
   },
 
   /**

@@ -7,7 +7,6 @@
 # Vivaldi Application dir entries, sorted alphabetically.
 #
 vivaldi.exe: %(ChromeDir)s\
-wow_helper.exe: %(ChromeDir)s\
 crash_service.exe: %(ChromeDir)s\
 #
 # Chrome version dir assembly manifest.

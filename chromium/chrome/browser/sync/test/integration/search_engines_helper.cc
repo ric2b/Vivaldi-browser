@@ -8,13 +8,13 @@
 
 #include <vector>
 
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
-#include "chrome/browser/sync/test/integration/await_match_status_change_checker.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/sync_datatype_helper.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
@@ -162,13 +162,6 @@ bool ServiceMatchesVerifier(int profile_index) {
   return true;
 }
 
-bool AwaitAllServicesMatch() {
-  AwaitMatchStatusChangeChecker checker(base::Bind(AllServicesMatch),
-                                        "All search engines match");
-  checker.Wait();
-  return !checker.TimedOut();
-}
-
 bool AllServicesMatch() {
   // Use 0 as the baseline.
   if (test()->use_verifier() && !ServiceMatchesVerifier(0)) {
@@ -186,24 +179,26 @@ bool AllServicesMatch() {
   return true;
 }
 
-TemplateURL* CreateTestTemplateURL(Profile* profile, int seed) {
+std::unique_ptr<TemplateURL> CreateTestTemplateURL(Profile* profile, int seed) {
   return CreateTestTemplateURL(profile, seed, CreateKeyword(seed),
                                base::StringPrintf("0000-0000-0000-%04d", seed));
 }
 
-TemplateURL* CreateTestTemplateURL(Profile* profile,
-                                   int seed,
-                                   const base::string16& keyword,
-                                   const std::string& sync_guid) {
+std::unique_ptr<TemplateURL> CreateTestTemplateURL(
+    Profile* profile,
+    int seed,
+    const base::string16& keyword,
+    const std::string& sync_guid) {
   return CreateTestTemplateURL(profile, seed, keyword,
       base::StringPrintf("http://www.test%d.com/", seed), sync_guid);
 }
 
-TemplateURL* CreateTestTemplateURL(Profile* profile,
-                                   int seed,
-                                   const base::string16& keyword,
-                                   const std::string& url,
-                                   const std::string& sync_guid) {
+std::unique_ptr<TemplateURL> CreateTestTemplateURL(
+    Profile* profile,
+    int seed,
+    const base::string16& keyword,
+    const std::string& url,
+    const std::string& sync_guid) {
   TemplateURLData data;
   data.SetShortName(CreateKeyword(seed));
   data.SetKeyword(keyword);
@@ -214,7 +209,7 @@ TemplateURL* CreateTestTemplateURL(Profile* profile,
   data.last_modified = base::Time::FromTimeT(100);
   data.prepopulate_id = 999999;
   data.sync_guid = sync_guid;
-  return new TemplateURL(data);
+  return base::MakeUnique<TemplateURL>(data);
 }
 
 void AddSearchEngine(int profile_index, int seed) {
@@ -283,3 +278,8 @@ bool HasSearchEngine(int profile_index, int seed) {
 }
 
 }  // namespace search_engines_helper
+
+SearchEnginesMatchChecker::SearchEnginesMatchChecker()
+    : AwaitMatchStatusChangeChecker(
+          base::Bind(search_engines_helper::AllServicesMatch),
+          "All search engines match") {}

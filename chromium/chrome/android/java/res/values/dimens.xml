@@ -101,6 +101,7 @@
     <dimen name="contextual_search_peek_promo_height">48dp</dimen>
     <dimen name="contextual_search_peek_promo_padding">12dp</dimen>
     <dimen name="contextual_search_caption_text_size">14sp</dimen>
+    <dimen name="contextual_search_thumbnail_size">36dp</dimen>
 
     <!-- Overlay panel dimensions -->
     <dimen name="overlay_panel_bar_height">56dp</dimen>
@@ -231,9 +232,6 @@
     <dimen name="tablet_toolbar_start_padding_no_buttons">6dp</dimen>
     <dimen name="tablet_toolbar_end_padding">6dp</dimen>
     <dimen name="location_bar_status_separator_width">1dp</dimen>
-    <!-- Offset applied to the toolbar menu button in document mode to align with the menu
-         positioned inside the omnibox. -->
-    <dimen name="document_toolbar_menu_offset">5dp</dimen>
 
     <!-- Omnibox suggestions -->
     <dimen name="omnibox_suggestion_height">60dp</dimen>
@@ -265,6 +263,7 @@
     <dimen name="most_visited_icon_size">48dp</dimen>
     <dimen name="most_visited_offline_badge_size">24dp</dimen>
     <dimen name="ntp_logo_height">116dp</dimen>
+    <dimen name="ntp_search_box_height">48dp</dimen>
     <dimen name="ntp_search_box_material_margin_left">10dp</dimen>
     <dimen name="ntp_search_box_material_margin_right">10dp</dimen>
     <dimen name="ntp_search_box_material_margin_top">0dp</dimen>
@@ -280,7 +279,7 @@
     <dimen name="ntp_list_item_min_height">48dp</dimen>
     <dimen name="ntp_list_item_text_size">16sp</dimen>
     <dimen name="ntp_shadow_height">9dp</dimen>
-    <dimen name="ntp_min_bottom_spacing_recycler_view">32dp</dimen>
+    <dimen name="ntp_sign_in_promo_margin_top">20dp</dimen>
     <dimen name="ntp_progress_indicator_diameter">56dp</dimen>
     <dimen name="snippets_thumbnail_size">72dp</dimen>
     <dimen name="snippets_padding_and_peeking_card_height">16dp</dimen>
@@ -320,6 +319,8 @@
     <dimen name="custom_tabs_url_text_size">12sp</dimen>
     <dimen name="custom_tabs_title_text_size">16sp</dimen>
     <dimen name="custom_tabs_bottom_bar_max_height">60dp</dimen>
+    <dimen name="custom_tabs_screenshot_height">300dp</dimen>
+    <dimen name="custom_tabs_screenshot_width">190dp</dimen>
 
     <!-- Favicon dimensions -->
     <dimen name="default_favicon_size">16dp</dimen>
@@ -368,4 +369,7 @@
     <!-- Dialog dimensions.
          https://www.google.com/design/spec/components/dialogs.html#dialogs-simple-dialogs -->
     <dimen name="dialog_width_unit">56dp</dimen>  <!-- MD dialog widths are multiples of this. -->
+
+    <!-- Downloads dimensions. -->
+    <dimen name="downloads_item_icon_size">48dp</dimen>
 </resources>

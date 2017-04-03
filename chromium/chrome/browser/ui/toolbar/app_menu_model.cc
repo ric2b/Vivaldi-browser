@@ -12,7 +12,7 @@
 #include "base/debug/profiler.h"
 #include "base/i18n/number_formatting.h"
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -37,7 +37,6 @@
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/bookmark_sub_menu_model.h"
-#include "chrome/browser/ui/toolbar/encoding_menu_controller.h"
 #include "chrome/browser/ui/toolbar/recent_tabs_sub_menu_model.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
 #include "chrome/browser/upgrade_detector.h"
@@ -46,11 +45,13 @@
 #include "chrome/common/profiling.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/dom_distiller/core/dom_distiller_switches.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/common/profile_management_switches.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/zoom/zoom_controller.h"
 #include "components/zoom/zoom_event_manager.h"
 #include "content/public/browser/host_zoom_map.h"
@@ -61,8 +62,6 @@
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/common/feature_switch.h"
-#include "grit/components_strings.h"
-#include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/layout.h"
 #include "ui/base/models/button_menu_item_model.h"
@@ -82,7 +81,7 @@
 #endif
 
 #if defined(USE_ASH)
-#include "ash/shell.h"
+#include "ash/shell.h"  // nogncheck
 #endif
 
 using base::UserMetricsAction;
@@ -108,70 +107,6 @@ base::string16 GetUpgradeDialogMenuItemName() {
 }
 
 }  // namespace
-
-////////////////////////////////////////////////////////////////////////////////
-// EncodingMenuModel
-
-EncodingMenuModel::EncodingMenuModel(Browser* browser)
-    : ui::SimpleMenuModel(this),
-      browser_(browser) {
-  Build();
-}
-
-EncodingMenuModel::~EncodingMenuModel() {
-}
-
-void EncodingMenuModel::Build() {
-  EncodingMenuController::EncodingMenuItemList encoding_menu_items;
-  EncodingMenuController encoding_menu_controller;
-  encoding_menu_controller.GetEncodingMenuItems(browser_->profile(),
-                                                &encoding_menu_items);
-
-  int group_id = 0;
-  EncodingMenuController::EncodingMenuItemList::iterator it =
-      encoding_menu_items.begin();
-  for (; it != encoding_menu_items.end(); ++it) {
-    int id = it->first;
-    base::string16& label = it->second;
-    if (id == 0) {
-      AddSeparator(ui::NORMAL_SEPARATOR);
-    } else {
-      if (id == IDC_ENCODING_AUTO_DETECT) {
-        AddCheckItem(id, label);
-      } else {
-        // Use the id of the first radio command as the id of the group.
-        if (group_id <= 0)
-          group_id = id;
-        AddRadioItem(id, label, group_id);
-      }
-    }
-  }
-}
-
-bool EncodingMenuModel::IsCommandIdChecked(int command_id) const {
-  WebContents* current_tab =
-      browser_->tab_strip_model()->GetActiveWebContents();
-  if (!current_tab)
-    return false;
-  EncodingMenuController controller;
-  return controller.IsItemChecked(browser_->profile(),
-                                  current_tab->GetEncoding(), command_id);
-}
-
-bool EncodingMenuModel::IsCommandIdEnabled(int command_id) const {
-  bool enabled = chrome::IsCommandEnabled(browser_, command_id);
-  // Special handling for the contents of the Encoding submenu. On Mac OS,
-  // instead of enabling/disabling the top-level menu item, the submenu's
-  // contents get disabled, per Apple's HIG.
-#if defined(OS_MACOSX)
-  enabled &= chrome::IsCommandEnabled(browser_, IDC_ENCODING_MENU);
-#endif
-  return enabled;
-}
-
-void EncodingMenuModel::ExecuteCommand(int command_id, int event_flags) {
-  chrome::ExecuteCommand(browser_, command_id);
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 // ZoomMenuModel
@@ -268,10 +203,6 @@ void ToolsMenuModel::Build(Browser* browser) {
 #if defined(OS_CHROMEOS)
   AddItemWithStringId(IDC_TAKE_SCREENSHOT, IDS_TAKE_SCREENSHOT);
 #endif
-  encoding_menu_model_.reset(new EncodingMenuModel(browser));
-  AddSubMenuWithStringId(IDC_ENCODING_MENU, IDS_ENCODING_MENU,
-                         encoding_menu_model_.get());
-
   AddSeparator(ui::NORMAL_SEPARATOR);
   AddItemWithStringId(IDC_DEV_TOOLS, IDS_DEV_TOOLS);
 
@@ -683,24 +614,14 @@ bool AppMenuModel::IsCommandIdVisible(int command_id) const {
     case kEmptyMenuItemCommand:
       return false;  // Always hidden (see CreateActionToolbarOverflowMenu).
 #endif
-#if defined(OS_WIN)
-    case IDC_VIEW_INCOMPATIBILITIES: {
-      EnumerateModulesModel* loaded_modules =
-          EnumerateModulesModel::GetInstance();
-      if (loaded_modules->confirmed_bad_modules_detected() <= 0)
-        return false;
-      // We'll leave the app menu adornment on until the user clicks the link.
-      if (loaded_modules->modules_to_notify_about() <= 0)
-        loaded_modules->AcknowledgeConflictNotification();
-      return true;
-    }
-    case IDC_PIN_TO_START_SCREEN:
-      return false;
-#else
     case IDC_VIEW_INCOMPATIBILITIES:
-    case IDC_PIN_TO_START_SCREEN:
+#if defined(OS_WIN)
+      return EnumerateModulesModel::GetInstance()->ShouldShowConflictWarning();
+#else
       return false;
 #endif
+    case IDC_PIN_TO_START_SCREEN:
+      return false;
     case IDC_UPGRADE_DIALOG:
       return browser_defaults::kShowUpgradeMenuItem &&
           UpgradeDetector::GetInstance()->notify_upgrade();

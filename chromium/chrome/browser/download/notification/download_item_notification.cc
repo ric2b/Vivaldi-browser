@@ -21,6 +21,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/mime_util/mime_util.h"
 #include "components/url_formatter/elide_url.h"
 #include "content/public/browser/browser_context.h"
@@ -30,7 +31,6 @@
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
-#include "grit/theme_resources.h"
 #include "net/base/mime_util.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -252,7 +252,7 @@ void DownloadItemNotification::OnNotificationClick() {
           UserMetricsAction("DownloadNotification.Click_Stopped"));
       GetBrowser()->OpenURL(content::OpenURLParams(
           GURL(chrome::kChromeUIDownloadsURL), content::Referrer(),
-          NEW_FOREGROUND_TAB, ui::PAGE_TRANSITION_LINK,
+          WindowOpenDisposition::NEW_FOREGROUND_TAB, ui::PAGE_TRANSITION_LINK,
           false /* is_renderer_initiated */));
       CloseNotificationByUser();
       break;
@@ -387,6 +387,7 @@ void DownloadItemNotification::UpdateNotificationData(
           // Negative progress value shows an indeterminate progress bar.
           notification_->set_progress(-1);
         }
+
         notification_->set_type(message_center::NOTIFICATION_TYPE_PROGRESS);
         break;
       }

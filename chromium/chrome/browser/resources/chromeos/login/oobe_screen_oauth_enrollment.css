@@ -23,14 +23,15 @@
   display: none;
 }
 
+.oauth-enroll-state-working #oauth-enroll-step-working,
 .oauth-enroll-state-error #oauth-enroll-step-error,
-.oauth-enroll-state-success #oauth-enroll-step-success {
+.oauth-enroll-state-success #oauth-enroll-step-success,
+.oauth-enroll-state-abe-success #oauth-enroll-step-abe-success {
   display: table;
   height: 480px;
   margin: 0 auto;
 }
 
-.oauth-enroll-state-working #oauth-enroll-step-signin,
 .oauth-enroll-state-attribute-prompt-error
     #oauth-enroll-step-attribute-prompt-error,
 .oauth-enroll-state-signin #oauth-enroll-step-signin,
@@ -121,4 +122,3 @@
 #oauth-enrollment.saml #oauth-enroll-navigation {
   color: rgba(0, 0, 0, .54);
 }
-

@@ -90,9 +90,9 @@ AwSettings::~AwSettings() {
 
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jobject> scoped_obj = aw_settings_.get(env);
-  jobject obj = scoped_obj.obj();
-  if (!obj) return;
-  Java_AwSettings_nativeAwSettingsGone(env, obj,
+  if (scoped_obj.is_null())
+    return;
+  Java_AwSettings_nativeAwSettingsGone(env, scoped_obj,
                                        reinterpret_cast<intptr_t>(this));
 }
 
@@ -122,10 +122,10 @@ void AwSettings::UpdateEverything() {
   JNIEnv* env = base::android::AttachCurrentThread();
   CHECK(env);
   ScopedJavaLocalRef<jobject> scoped_obj = aw_settings_.get(env);
-  jobject obj = scoped_obj.obj();
-  if (!obj) return;
+  if (scoped_obj.is_null())
+    return;
   // Grab the lock and call UpdateEverythingLocked.
-  Java_AwSettings_updateEverything(env, obj);
+  Java_AwSettings_updateEverything(env, scoped_obj);
 }
 
 void AwSettings::UpdateEverythingLocked(JNIEnv* env,
@@ -212,18 +212,6 @@ void AwSettings::UpdateRendererPreferencesLocked(
     update_prefs = true;
   }
 
-  bool video_overlay =
-      Java_AwSettings_getVideoOverlayForEmbeddedVideoEnabledLocked(env, obj);
-  bool force_video_overlay =
-      Java_AwSettings_getForceVideoOverlayForTests(env, obj);
-  if (video_overlay !=
-          prefs->use_video_overlay_for_embedded_encrypted_video ||
-      force_video_overlay != prefs->use_view_overlay_for_all_video) {
-    prefs->use_video_overlay_for_embedded_encrypted_video = video_overlay;
-    prefs->use_view_overlay_for_all_video = force_video_overlay;
-    update_prefs = true;
-  }
-
   if (prefs->accept_languages.compare(
           AwContentBrowserClient::GetAcceptLangsImpl())) {
     prefs->accept_languages = AwContentBrowserClient::GetAcceptLangsImpl();
@@ -260,11 +248,11 @@ void AwSettings::PopulateWebPreferences(WebPreferences* web_prefs) {
   JNIEnv* env = base::android::AttachCurrentThread();
   CHECK(env);
   ScopedJavaLocalRef<jobject> scoped_obj = aw_settings_.get(env);
-  jobject obj = scoped_obj.obj();
-  if (!obj) return;
+  if (scoped_obj.is_null())
+    return;
   // Grab the lock and call PopulateWebPreferencesLocked.
-  Java_AwSettings_populateWebPreferences(
-      env, obj, reinterpret_cast<jlong>(web_prefs));
+  Java_AwSettings_populateWebPreferences(env, scoped_obj,
+                                         reinterpret_cast<jlong>(web_prefs));
 }
 
 void AwSettings::PopulateWebPreferencesLocked(JNIEnv* env,
@@ -429,10 +417,14 @@ void AwSettings::PopulateWebPreferencesLocked(JNIEnv* env,
       web_prefs->experimental_webgl_enabled &&
       enable_supported_hardware_accelerated_features;
 
-  web_prefs->allow_displaying_insecure_content =
-      Java_AwSettings_getAllowDisplayingInsecureContentLocked(env, obj);
+  // If strict mixed content checking is enabled then running should not be
+  // allowed.
+  DCHECK(!Java_AwSettings_getUseStricMixedContentCheckingLocked(env, obj) ||
+         !Java_AwSettings_getAllowRunningInsecureContentLocked(env, obj));
   web_prefs->allow_running_insecure_content =
       Java_AwSettings_getAllowRunningInsecureContentLocked(env, obj);
+  web_prefs->strict_mixed_content_checking =
+      Java_AwSettings_getUseStricMixedContentCheckingLocked(env, obj);
 
   web_prefs->fullscreen_supported =
       Java_AwSettings_getFullscreenSupportedLocked(env, obj);
@@ -443,6 +435,14 @@ void AwSettings::PopulateWebPreferencesLocked(JNIEnv* env,
   // possible API breakage because of disabling insecure use of geolocation.
   web_prefs->allow_geolocation_on_insecure_origins =
       Java_AwSettings_getAllowGeolocationOnInsecureOrigins(env, obj);
+
+  // We use system scrollbars, so make Blink's scrollbars invisible.
+  web_prefs->hide_scrollbars = true;
+
+  // Keep spellcheck disabled on html elements unless the spellcheck="true"
+  // attribute is explicitly specified. This "opt-in" behavior is for backward
+  // consistency in apps that use WebView (see crbug.com/652314).
+  web_prefs->spellcheck_enabled_by_default = false;
 }
 
 static jlong Init(JNIEnv* env,

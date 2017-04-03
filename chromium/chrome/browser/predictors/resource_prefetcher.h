@@ -10,6 +10,7 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "base/macros.h"
@@ -26,49 +27,14 @@ class URLRequestContext;
 
 namespace predictors {
 
-// Responsible for prefetching resources for a single navigation based on the
-// input list of resources.
+// Responsible for prefetching resources for a single main frame URL based on
+// the input list of resources.
 //  - Limits the max number of resources in flight for any host and also across
 //    hosts.
 //  - When stopped, will wait for the pending requests to finish.
 //  - Lives entirely on the IO thread.
 class ResourcePrefetcher : public net::URLRequest::Delegate {
  public:
-  // Denotes the prefetch request for a single subresource.
-  struct Request {
-    explicit Request(const GURL& i_resource_url);
-    Request(const Request& other);
-
-    enum PrefetchStatus {
-      PREFETCH_STATUS_NOT_STARTED,
-      PREFETCH_STATUS_STARTED,
-
-      // Cancellation reasons.
-      PREFETCH_STATUS_REDIRECTED,
-      PREFETCH_STATUS_AUTH_REQUIRED,
-      PREFETCH_STATUS_CERT_REQUIRED,
-      PREFETCH_STATUS_CERT_ERROR,
-      PREFETCH_STATUS_CANCELLED,
-      PREFETCH_STATUS_FAILED,
-
-      // Successful prefetch states.
-      PREFETCH_STATUS_FROM_CACHE,
-      PREFETCH_STATUS_FROM_NETWORK
-    };
-
-    enum UsageStatus {
-      USAGE_STATUS_NOT_REQUESTED,
-      USAGE_STATUS_FROM_CACHE,
-      USAGE_STATUS_FROM_NETWORK,
-      USAGE_STATUS_NAVIGATION_ABANDONED
-    };
-
-    GURL resource_url;
-    PrefetchStatus prefetch_status;
-    UsageStatus usage_status;
-  };
-  typedef ScopedVector<Request> RequestVector;
-
   // Used to communicate when the prefetching is done. All methods are invoked
   // on the IO thread.
   class Delegate {
@@ -76,28 +42,23 @@ class ResourcePrefetcher : public net::URLRequest::Delegate {
     virtual ~Delegate() { }
 
     // Called when the ResourcePrefetcher is finished, i.e. there is nothing
-    // pending in flight. Should take ownership of |requests|.
-    virtual void ResourcePrefetcherFinished(
-        ResourcePrefetcher* prefetcher,
-        RequestVector* requests) = 0;
+    // pending in flight.
+    virtual void ResourcePrefetcherFinished(ResourcePrefetcher* prefetcher) = 0;
 
     virtual net::URLRequestContext* GetURLRequestContext() = 0;
   };
 
-  // |delegate| has to outlive the ResourcePrefetcher. The ResourcePrefetcher
-  // takes ownership of |requests|.
+  // |delegate| has to outlive the ResourcePrefetcher.
   ResourcePrefetcher(Delegate* delegate,
                      const ResourcePrefetchPredictorConfig& config,
-                     const NavigationID& navigation_id,
-                     PrefetchKeyType key_type,
-                     std::unique_ptr<RequestVector> requests);
+                     const GURL& main_frame_url,
+                     const std::vector<GURL>& urls);
   ~ResourcePrefetcher() override;
 
   void Start();  // Kicks off the prefetching. Can only be called once.
   void Stop();   // No additional prefetches will be queued after this.
 
-  const NavigationID& navigation_id() const { return navigation_id_; }
-  PrefetchKeyType key_type() const { return key_type_; }
+  const GURL& main_frame_url() const { return main_frame_url_; }
 
  private:
   friend class ResourcePrefetcherTest;
@@ -106,15 +67,15 @@ class ResourcePrefetcher : public net::URLRequest::Delegate {
   // Launches new prefetch requests if possible.
   void TryToLaunchPrefetchRequests();
 
-  // Starts a net::URLRequest for the input |request|.
-  void SendRequest(Request* request);
+  // Starts a net::URLRequest for the input |url|.
+  void SendRequest(const GURL& url);
 
   // Called by |SendRequest| to start the |request|. This is necessary to stub
   // out the Start() call to net::URLRequest for unittesting.
   virtual void StartURLRequest(net::URLRequest* request);
 
   // Marks the request as finished, with the given status.
-  void FinishRequest(net::URLRequest* request, Request::PrefetchStatus status);
+  void FinishRequest(net::URLRequest* request);
 
   // Reads the response data from the response - required for the resource to
   // be cached correctly. Stubbed out during testing.
@@ -150,12 +111,12 @@ class ResourcePrefetcher : public net::URLRequest::Delegate {
   PrefetcherState state_;
   Delegate* const delegate_;
   ResourcePrefetchPredictorConfig const config_;
-  NavigationID navigation_id_;
-  PrefetchKeyType key_type_;
-  std::unique_ptr<RequestVector> request_vector_;
+  GURL main_frame_url_;
+  std::unique_ptr<GURL> urls_;
 
-  std::map<net::URLRequest*, Request*> inflight_requests_;
-  std::list<Request*> request_queue_;
+  std::map<net::URLRequest*, std::unique_ptr<net::URLRequest>>
+      inflight_requests_;
+  std::list<GURL> request_queue_;
   std::map<std::string, size_t> host_inflight_counts_;
 
   DISALLOW_COPY_AND_ASSIGN(ResourcePrefetcher);

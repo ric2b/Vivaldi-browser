@@ -8,13 +8,13 @@
 
 #include "base/macros.h"
 #include "build/build_config.h"
-#include "grit/components_scaled_resources.h"
-#include "grit/theme_resources.h"
+#include "chrome/grit/theme_resources.h"
+#include "components/grit/components_scaled_resources.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/resources/grit/ui_resources.h"
 
 #if defined(OS_CHROMEOS)
-#include "grit/ui_chromeos_resources.h"
+#include "ui/chromeos/resources/grit/ui_chromeos_resources.h"
 #endif
 
 TEST(ResourcesUtil, SpotCheckIds) {

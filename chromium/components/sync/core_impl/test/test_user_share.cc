@@ -4,8 +4,6 @@
 
 #include "components/sync/core/test/test_user_share.h"
 
-#include <stddef.h>
-
 #include "base/compiler_specific.h"
 #include "components/sync/syncable/directory.h"
 #include "components/sync/syncable/mutable_entry.h"
@@ -46,7 +44,7 @@ bool TestUserShare::Reload() {
   if (!user_share_->directory->SaveChanges())
     return false;
 
-  syncer::syncable::DirectoryBackingStore* saved_store =
+  syncable::DirectoryBackingStore* saved_store =
       user_share_->directory->store_.release();
 
   // Ensure the unique_ptr doesn't delete the memory we don't own.
@@ -71,7 +69,7 @@ syncable::TestTransactionObserver* TestUserShare::transaction_observer() {
 
 /* static */
 bool TestUserShare::CreateRoot(ModelType model_type, UserShare* user_share) {
-  syncer::syncable::Directory* directory = user_share->directory.get();
+  syncable::Directory* directory = user_share->directory.get();
   syncable::WriteTransaction wtrans(FROM_HERE, syncable::UNITTEST, directory);
   CreateTypeRoot(&wtrans, directory, model_type);
   return true;

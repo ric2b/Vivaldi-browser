@@ -7,14 +7,16 @@
 #include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
 #include "chrome/browser/infobars/infobar_service.h"
-#include "chrome/browser/media/media_capture_devices_dispatcher.h"
-#include "chrome/browser/media/media_stream_capture_indicator.h"
+#include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
+#include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/content_settings/content_setting_bubble_model.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
@@ -36,6 +38,12 @@ class ContentSettingBubbleModelTest : public ChromeRenderViewHostTestHarness {
  protected:
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
+
+    // Although this is redundant with the Field Trial testing configuration,
+    // the
+    // official builders don't use those, so enable it here.
+    feature_list.InitAndEnableFeature(features::kPreferHtmlOverPlugins);
+
     TabSpecificContentSettings::CreateForWebContents(web_contents());
     InfoBarService::CreateForWebContents(web_contents());
   }
@@ -68,6 +76,9 @@ class ContentSettingBubbleModelTest : public ChromeRenderViewHostTestHarness {
     PrefService* prefs = profile()->GetPrefs();
     return prefs->GetString(prefs::kDefaultVideoCaptureDevice);
   }
+
+ private:
+  base::test::ScopedFeatureList feature_list;
 };
 
 TEST_F(ContentSettingBubbleModelTest, ImageRadios) {
@@ -104,7 +115,7 @@ TEST_F(ContentSettingBubbleModelTest, Cookies) {
   EXPECT_TRUE(bubble_content.custom_link_enabled);
   EXPECT_FALSE(bubble_content.manage_text.empty());
 
-  content_settings->ClearCookieSpecificContentSettings();
+  content_settings->ClearNavigationRelatedContentSettings();
   content_settings->OnContentAllowed(CONTENT_SETTINGS_TYPE_COOKIES);
   content_setting_bubble_model.reset(
       ContentSettingBubbleModel::CreateContentSettingBubbleModel(
@@ -744,7 +755,8 @@ TEST_F(ContentSettingBubbleModelTest, PepperBroker) {
   EXPECT_FALSE(bubble_content.custom_link_enabled);
   EXPECT_FALSE(bubble_content.manage_text.empty());
 
-  content_settings->ClearBlockedContentSettingsExceptForCookies();
+  content_settings
+      ->ClearContentSettingsExceptForNavigationRelatedSettings();
   content_settings->OnContentAllowed(CONTENT_SETTINGS_TYPE_PPAPI_BROKER);
   content_setting_bubble_model.reset(
       ContentSettingBubbleModel::CreateContentSettingBubbleModel(

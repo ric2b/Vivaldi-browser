@@ -15,11 +15,14 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/browser_resources.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -29,9 +32,6 @@
 #include "extensions/common/extension_set.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/manifest.h"
-#include "grit/browser_resources.h"
-#include "grit/components_strings.h"
-#include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
@@ -279,8 +279,8 @@ void ExtensionSettingsHandler::GetLocalizedValues(
 
 void ExtensionSettingsHandler::DidStartNavigationToPendingEntry(
     const GURL& url,
-    content::NavigationController::ReloadType reload_type) {
-  if (reload_type != content::NavigationController::NO_RELOAD)
+    content::ReloadType reload_type) {
+  if (reload_type != content::ReloadType::NONE)
     ReloadUnpackedExtensions();
 }
 

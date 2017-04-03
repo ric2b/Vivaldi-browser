@@ -35,6 +35,7 @@
 #include "chrome/browser/chromeos/policy/display_rotation_default_handler.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/system/input_device_settings.h"
+#include "chrome/browser/chromeos/ui/accessibility_focus_ring_controller.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -66,13 +67,14 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "chromeos/chromeos_switches.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/user_metrics.h"
-#include "grit/theme_resources.h"
+#include "content/public/common/service_manager_connection.h"
 #include "ui/app_list/presenter/app_list_presenter.h"
 #include "ui/aura/window.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
@@ -258,6 +260,12 @@ class AccessibilityDelegateImpl : public ash::AccessibilityDelegate {
     TtsController::GetInstance()->Stop();
   }
 
+  void ClearFocusHighlight() const override {
+    chromeos::AccessibilityFocusRingController::GetInstance()->SetFocusRing(
+        std::vector<gfx::Rect>(),
+        chromeos::AccessibilityFocusRingController::PERSIST_FOCUS_RING);
+  }
+
   void SaveScreenMagnifierScale(double scale) override {
     if (chromeos::MagnificationManager::Get())
       chromeos::MagnificationManager::Get()->SaveScreenMagnifierScale(scale);
@@ -324,6 +332,10 @@ ChromeShellDelegate::ChromeShellDelegate()
 ChromeShellDelegate::~ChromeShellDelegate() {
 }
 
+shell::Connector* ChromeShellDelegate::GetShellConnector() const {
+  return content::ServiceManagerConnection::GetForProcess()->GetConnector();
+}
+
 bool ChromeShellDelegate::IsFirstRunAfterBoot() const {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       chromeos::switches::kFirstExecAfterBoot);
@@ -387,14 +399,10 @@ void ChromeShellDelegate::PreInit() {
   // in Shell::Init.
   display_configuration_observer_.reset(
       new chromeos::DisplayConfigurationObserver());
-
-  chrome_user_metrics_recorder_.reset(new ChromeUserMetricsRecorder);
 }
 
 void ChromeShellDelegate::PreShutdown() {
   display_configuration_observer_.reset();
-
-  chrome_user_metrics_recorder_.reset();
 }
 
 void ChromeShellDelegate::Exit() {
@@ -466,7 +474,7 @@ void ChromeShellDelegate::OpenKeyboardShortcutHelpPage() const {
 
   chrome::NavigateParams params(browser, GURL(kKeyboardShortcutHelpPageUrl),
                                 ui::PAGE_TRANSITION_AUTO_BOOKMARK);
-  params.disposition = SINGLETON_TAB;
+  params.disposition = WindowOpenDisposition::SINGLETON_TAB;
   chrome::Navigate(&params);
 }
 

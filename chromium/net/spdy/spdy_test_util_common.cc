@@ -16,12 +16,14 @@
 #include "base/strings/string_split.h"
 #include "net/base/host_port_pair.h"
 #include "net/cert/ct_policy_enforcer.h"
+#include "net/cert/ct_policy_status.h"
 #include "net/cert/mock_cert_verifier.h"
 #include "net/cert/multi_log_ct_verifier.h"
 #include "net/http/http_cache.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_network_transaction.h"
 #include "net/http/http_server_properties_impl.h"
+#include "net/log/net_log_with_source.h"
 #include "net/socket/next_proto.h"
 #include "net/socket/socket_test_util.h"
 #include "net/socket/ssl_client_socket.h"
@@ -47,7 +49,7 @@ namespace {
 // SPDY request.
 void ParseUrl(base::StringPiece url, std::string* scheme, std::string* host,
               std::string* path) {
-  GURL gurl(url.as_string());
+  GURL gurl(url);
   path->assign(gurl.PathForRequest());
   scheme->assign(gurl.scheme());
   host->assign(gurl.host());
@@ -250,7 +252,7 @@ base::WeakPtr<SpdyStream> CreateStreamSynchronously(
     const base::WeakPtr<SpdySession>& session,
     const GURL& url,
     RequestPriority priority,
-    const BoundNetLog& net_log) {
+    const NetLogWithSource& net_log) {
   SpdyStreamRequest stream_request;
   int rv = stream_request.StartRequest(type, session, url, priority, net_log,
                                        CompletionCallback());
@@ -343,7 +345,8 @@ SpdySessionDependencies::SpdySessionDependencies(
       stream_max_recv_window_size(kDefaultInitialWindowSize),
       time_func(&base::TimeTicks::Now),
       enable_http2_alternative_service_with_different_host(false),
-      net_log(NULL) {
+      net_log(nullptr),
+      http_09_on_non_default_ports_enabled(false) {
   // Note: The CancelledTransaction test does cleanup by running all
   // tasks in the message loop (RunAllPending).  Unfortunately, that
   // doesn't clean up tasks on the host resolver thread; and
@@ -397,8 +400,47 @@ HttpNetworkSession::Params SpdySessionDependencies::CreateSessionParams(
   params.enable_http2_alternative_service_with_different_host =
       session_deps->enable_http2_alternative_service_with_different_host;
   params.net_log = session_deps->net_log;
+  params.http_09_on_non_default_ports_enabled =
+      session_deps->http_09_on_non_default_ports_enabled;
   return params;
 }
+
+class AllowAnyCertCTPolicyEnforcer : public CTPolicyEnforcer {
+ public:
+  AllowAnyCertCTPolicyEnforcer(){};
+  ~AllowAnyCertCTPolicyEnforcer() override = default;
+
+  ct::CertPolicyCompliance DoesConformToCertPolicy(
+      X509Certificate* cert,
+      const SCTList& verified_scts,
+      const NetLogWithSource& net_log) override {
+    return ct::CertPolicyCompliance::CERT_POLICY_COMPLIES_VIA_SCTS;
+  }
+
+  ct::EVPolicyCompliance DoesConformToCTEVPolicy(
+      X509Certificate* cert,
+      const ct::EVCertsWhitelist* ev_whitelist,
+      const SCTList& verified_scts,
+      const NetLogWithSource& net_log) override {
+    return ct::EVPolicyCompliance::EV_POLICY_COMPLIES_VIA_SCTS;
+  }
+};
+
+class IgnoresCTVerifier : public net::CTVerifier {
+ public:
+  IgnoresCTVerifier() = default;
+  ~IgnoresCTVerifier() override = default;
+
+  int Verify(net::X509Certificate* cert,
+             const std::string& stapled_ocsp_response,
+             const std::string& sct_list_from_tls_extension,
+             net::ct::CTVerifyResult* result,
+             const net::NetLogWithSource& net_log) override {
+    return net::OK;
+  }
+
+  void SetObserver(Observer* observer) override {}
+};
 
 SpdyURLRequestContext::SpdyURLRequestContext() : storage_(this) {
   storage_.set_host_resolver(
@@ -407,30 +449,36 @@ SpdyURLRequestContext::SpdyURLRequestContext() : storage_(this) {
   storage_.set_transport_security_state(
       base::WrapUnique(new TransportSecurityState));
   storage_.set_proxy_service(ProxyService::CreateDirect());
+  storage_.set_ct_policy_enforcer(
+      base::WrapUnique(new AllowAnyCertCTPolicyEnforcer()));
+  storage_.set_cert_transparency_verifier(
+      base::WrapUnique(new IgnoresCTVerifier()));
   storage_.set_ssl_config_service(new SSLConfigServiceDefaults);
   storage_.set_http_auth_handler_factory(
       HttpAuthHandlerFactory::CreateDefault(host_resolver()));
   storage_.set_http_server_properties(
       std::unique_ptr<HttpServerProperties>(new HttpServerPropertiesImpl()));
-  storage_.set_job_factory(base::WrapUnique(new URLRequestJobFactoryImpl()));
+  storage_.set_job_factory(base::MakeUnique<URLRequestJobFactoryImpl>());
   HttpNetworkSession::Params params;
   params.client_socket_factory = &socket_factory_;
   params.host_resolver = host_resolver();
   params.cert_verifier = cert_verifier();
   params.transport_security_state = transport_security_state();
   params.proxy_service = proxy_service();
+  params.ct_policy_enforcer = ct_policy_enforcer();
+  params.cert_transparency_verifier = cert_transparency_verifier();
   params.ssl_config_service = ssl_config_service();
   params.http_auth_handler_factory = http_auth_handler_factory();
   params.enable_spdy_ping_based_connection_checking = false;
   params.http_server_properties = http_server_properties();
   storage_.set_http_network_session(
-      base::WrapUnique(new HttpNetworkSession(params)));
+      base::MakeUnique<HttpNetworkSession>(params));
   SpdySessionPoolPeer pool_peer(
       storage_.http_network_session()->spdy_session_pool());
   pool_peer.SetEnableSendingInitialData(false);
-  storage_.set_http_transaction_factory(base::WrapUnique(
-      new HttpCache(storage_.http_network_session(),
-                    HttpCache::DefaultBackend::InMemory(0), false)));
+  storage_.set_http_transaction_factory(base::MakeUnique<HttpCache>(
+      storage_.http_network_session(), HttpCache::DefaultBackend::InMemory(0),
+      false));
 }
 
 SpdyURLRequestContext::~SpdyURLRequestContext() {
@@ -439,7 +487,7 @@ SpdyURLRequestContext::~SpdyURLRequestContext() {
 
 bool HasSpdySession(SpdySessionPool* pool, const SpdySessionKey& key) {
   return static_cast<bool>(
-      pool->FindAvailableSession(key, GURL(), BoundNetLog()));
+      pool->FindAvailableSession(key, GURL(), NetLogWithSource()));
 }
 
 namespace {
@@ -447,7 +495,7 @@ namespace {
 base::WeakPtr<SpdySession> CreateSpdySessionHelper(
     HttpNetworkSession* http_session,
     const SpdySessionKey& key,
-    const BoundNetLog& net_log,
+    const NetLogWithSource& net_log,
     Error expected_status,
     bool is_secure) {
   EXPECT_FALSE(HasSpdySession(http_session->spdy_session_pool(), key));
@@ -493,7 +541,7 @@ base::WeakPtr<SpdySession> CreateSpdySessionHelper(
 
   base::WeakPtr<SpdySession> spdy_session =
       http_session->spdy_session_pool()->CreateAvailableSessionFromSocket(
-          key, std::move(connection), net_log, OK, is_secure);
+          key, std::move(connection), net_log, is_secure);
   // Failure is reported asynchronously.
   EXPECT_TRUE(spdy_session);
   EXPECT_TRUE(HasSpdySession(http_session->spdy_session_pool(), key));
@@ -505,25 +553,25 @@ base::WeakPtr<SpdySession> CreateSpdySessionHelper(
 base::WeakPtr<SpdySession> CreateInsecureSpdySession(
     HttpNetworkSession* http_session,
     const SpdySessionKey& key,
-    const BoundNetLog& net_log) {
+    const NetLogWithSource& net_log) {
   return CreateSpdySessionHelper(http_session, key, net_log,
                                  OK, false /* is_secure */);
 }
 
-base::WeakPtr<SpdySession> TryCreateInsecureSpdySessionExpectingFailure(
+base::WeakPtr<SpdySession> TryCreateSpdySessionExpectingFailure(
     HttpNetworkSession* http_session,
     const SpdySessionKey& key,
     Error expected_error,
-    const BoundNetLog& net_log) {
+    const NetLogWithSource& net_log) {
   DCHECK_LT(expected_error, ERR_IO_PENDING);
-  return CreateSpdySessionHelper(http_session, key, net_log,
-                                 expected_error, false /* is_secure */);
+  return CreateSpdySessionHelper(http_session, key, net_log, expected_error,
+                                 true /* is_secure */);
 }
 
 base::WeakPtr<SpdySession> CreateSecureSpdySession(
     HttpNetworkSession* http_session,
     const SpdySessionKey& key,
-    const BoundNetLog& net_log) {
+    const NetLogWithSource& net_log) {
   return CreateSpdySessionHelper(http_session, key, net_log,
                                  OK, true /* is_secure */);
 }
@@ -534,7 +582,7 @@ namespace {
 class FakeSpdySessionClientSocket : public MockClientSocket {
  public:
   explicit FakeSpdySessionClientSocket(int read_result)
-      : MockClientSocket(BoundNetLog()), read_result_(read_result) {}
+      : MockClientSocket(NetLogWithSource()), read_result_(read_result) {}
 
   ~FakeSpdySessionClientSocket() override {}
 
@@ -596,7 +644,7 @@ base::WeakPtr<SpdySession> CreateFakeSpdySessionHelper(
           expected_status == OK ? ERR_IO_PENDING : expected_status)));
   base::WeakPtr<SpdySession> spdy_session =
       pool->CreateAvailableSessionFromSocket(
-          key, std::move(handle), BoundNetLog(), OK, true /* is_secure */);
+          key, std::move(handle), NetLogWithSource(), true /* is_secure */);
   // Failure is reported asynchronously.
   EXPECT_TRUE(spdy_session);
   EXPECT_TRUE(HasSpdySession(pool, key));
@@ -623,10 +671,6 @@ SpdySessionPoolPeer::SpdySessionPoolPeer(SpdySessionPool* pool) : pool_(pool) {
 
 void SpdySessionPoolPeer::RemoveAliases(const SpdySessionKey& key) {
   pool_->RemoveAliases(key);
-}
-
-void SpdySessionPoolPeer::DisableDomainAuthenticationVerification() {
-  pool_->verify_domain_authentication_ = false;
 }
 
 void SpdySessionPoolPeer::SetEnableSendingInitialData(bool enabled) {
@@ -1089,7 +1133,7 @@ SpdyHeaderBlock SpdyTestUtil::ConstructHeaderBlock(
     base::StringPiece url,
     int64_t* content_length) const {
   std::string scheme, host, path;
-  ParseUrl(url.data(), &scheme, &host, &path);
+  ParseUrl(url, &scheme, &host, &path);
   SpdyHeaderBlock headers;
   headers[GetMethodKey()] = method.as_string();
   headers[GetHostKey()] = host.c_str();

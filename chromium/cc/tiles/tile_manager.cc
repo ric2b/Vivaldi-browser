@@ -18,6 +18,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/optional.h"
 #include "base/threading/thread_checker.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/base/histograms.h"
@@ -37,10 +38,45 @@ namespace {
 // a tile is of solid color.
 const bool kUseColorEstimator = true;
 
+// TODO(enne): remove this histogram and its monitoring in M58 once there is
+// enough new data from the other two raster task timers.
 DEFINE_SCOPED_UMA_HISTOGRAM_AREA_TIMER(
-    ScopedRasterTaskTimer,
+    ScopedGeneralRasterTaskTimer,
     "Compositing.%s.RasterTask.RasterUs",
     "Compositing.%s.RasterTask.RasterPixelsPerMs");
+
+DEFINE_SCOPED_UMA_HISTOGRAM_AREA_TIMER(
+    ScopedSoftwareRasterTaskTimer,
+    "Compositing.%s.RasterTask.RasterUs.Software",
+    "Compositing.%s.RasterTask.RasterPixelsPerMs.Software");
+
+DEFINE_SCOPED_UMA_HISTOGRAM_AREA_TIMER(
+    ScopedGpuRasterTaskTimer,
+    "Compositing.%s.RasterTask.RasterUs.Gpu",
+    "Compositing.%s.RasterTask.RasterPixelsPerMs.Gpu");
+
+class ScopedRasterTaskTimer {
+ public:
+  explicit ScopedRasterTaskTimer(bool use_gpu_rasterization) {
+    if (use_gpu_rasterization)
+      gpu_timer_.emplace();
+    else
+      software_timer_.emplace();
+  }
+
+  void SetArea(int area) {
+    general_timer_.SetArea(area);
+    if (software_timer_)
+      software_timer_->SetArea(area);
+    if (gpu_timer_)
+      gpu_timer_->SetArea(area);
+  }
+
+ private:
+  ScopedGeneralRasterTaskTimer general_timer_;
+  base::Optional<ScopedSoftwareRasterTaskTimer> software_timer_;
+  base::Optional<ScopedGpuRasterTaskTimer> gpu_timer_;
+};
 
 class RasterTaskImpl : public TileTask {
  public:
@@ -54,8 +90,8 @@ class RasterTaskImpl : public TileTask {
                  uint64_t source_prepare_tiles_id,
                  std::unique_ptr<RasterBuffer> raster_buffer,
                  TileTask::Vector* dependencies,
-                 bool supports_concurrent_execution)
-      : TileTask(supports_concurrent_execution, dependencies),
+                 bool is_gpu_rasterization)
+      : TileTask(!is_gpu_rasterization, dependencies),
         tile_manager_(tile_manager),
         tile_(tile),
         resource_(resource),
@@ -70,6 +106,7 @@ class RasterTaskImpl : public TileTask {
         tile_tracing_id_(static_cast<void*>(tile)),
         new_content_id_(tile->id()),
         source_frame_number_(tile->source_frame_number()),
+        is_gpu_rasterization_(is_gpu_rasterization),
         raster_buffer_(std::move(raster_buffer)) {
     DCHECK(origin_thread_checker_.CalledOnValidThread());
   }
@@ -84,7 +121,7 @@ class RasterTaskImpl : public TileTask {
 
     frame_viewer_instrumentation::ScopedRasterTask raster_task(
         tile_tracing_id_, tile_resolution_, source_frame_number_, layer_id_);
-    ScopedRasterTaskTimer timer;
+    ScopedRasterTaskTimer timer(is_gpu_rasterization_);
     timer.SetArea(content_rect_.size().GetArea());
 
     DCHECK(raster_source_);
@@ -133,6 +170,7 @@ class RasterTaskImpl : public TileTask {
   void* tile_tracing_id_;
   uint64_t new_content_id_;
   int source_frame_number_;
+  bool is_gpu_rasterization_;
   std::unique_ptr<RasterBuffer> raster_buffer_;
 
   DISALLOW_COPY_AND_ASSIGN(RasterTaskImpl);
@@ -179,11 +217,10 @@ void InsertNodeForTask(TaskGraph* graph,
                        uint16_t priority,
                        size_t dependencies) {
   DCHECK(std::find_if(graph->nodes.begin(), graph->nodes.end(),
-                      [task](const TaskGraph::Node& node) {
+                      [&task](const TaskGraph::Node& node) {
                         return node.task == task;
                       }) == graph->nodes.end());
-  graph->nodes.push_back(
-      TaskGraph::Node(task, category, priority, dependencies));
+  graph->nodes.emplace_back(task, category, priority, dependencies);
 }
 
 void InsertNodeForDecodeTask(TaskGraph* graph,
@@ -308,8 +345,7 @@ RasterTaskCompletionStatsAsValue(const RasterTaskCompletionStats& stats) {
 TileManager::TileManager(TileManagerClient* client,
                          base::SequencedTaskRunner* task_runner,
                          size_t scheduled_raster_task_limit,
-                         bool use_partial_raster,
-                         int max_preraster_distance_in_screen_pixels)
+                         bool use_partial_raster)
     : client_(client),
       task_runner_(task_runner),
       resource_pool_(nullptr),
@@ -330,8 +366,6 @@ TileManager::TileManager(TileManagerClient* client,
       has_scheduled_tile_tasks_(false),
       prepare_tiles_count_(0u),
       next_tile_id_(0u),
-      max_preraster_distance_in_screen_pixels_(
-          max_preraster_distance_in_screen_pixels),
       task_set_finished_weak_ptr_factory_(this) {}
 
 TileManager::~TileManager() {
@@ -350,10 +384,10 @@ void TileManager::FinishTasksAndCleanUp() {
 
   raster_buffer_provider_->Shutdown();
 
+  tile_task_manager_->CheckForCompletedTasks();
+
   // Now that all tasks have been finished, we can clear any |orphan_tasks_|.
   orphan_tasks_.clear();
-
-  tile_task_manager_->CheckForCompletedTasks();
 
   FreeResourcesForReleasedTiles();
   CleanUpReleasedTiles();
@@ -364,9 +398,8 @@ void TileManager::FinishTasksAndCleanUp() {
   signals_check_notifier_.Cancel();
   task_set_finished_weak_ptr_factory_.InvalidateWeakPtrs();
 
-  for (auto& draw_image_pair : locked_images_)
-    image_decode_controller_->UnrefImage(draw_image_pair.first);
-  locked_images_.clear();
+  image_manager_.SetImageDecodeController(nullptr);
+  locked_image_tasks_.clear();
 }
 
 void TileManager::SetResources(ResourcePool* resource_pool,
@@ -381,7 +414,7 @@ void TileManager::SetResources(ResourcePool* resource_pool,
   use_gpu_rasterization_ = use_gpu_rasterization;
   scheduled_raster_task_limit_ = scheduled_raster_task_limit;
   resource_pool_ = resource_pool;
-  image_decode_controller_ = image_decode_controller;
+  image_manager_.SetImageDecodeController(image_decode_controller);
   tile_task_manager_ = tile_task_manager;
   raster_buffer_provider_ = raster_buffer_provider;
 }
@@ -417,6 +450,8 @@ void TileManager::DidFinishRunningTileTasksRequiredForActivation() {
                "TileManager::DidFinishRunningTileTasksRequiredForActivation");
   TRACE_EVENT_ASYNC_STEP_INTO1("cc", "ScheduledTasks", this, "running", "state",
                                ScheduledTasksStateAsValue());
+  // TODO(vmpstr): Temporary check to debug crbug.com/642927.
+  CHECK(tile_task_manager_);
   signals_.ready_to_activate = true;
   signals_check_notifier_.Schedule();
 }
@@ -425,6 +460,8 @@ void TileManager::DidFinishRunningTileTasksRequiredForDraw() {
   TRACE_EVENT0("cc", "TileManager::DidFinishRunningTileTasksRequiredForDraw");
   TRACE_EVENT_ASYNC_STEP_INTO1("cc", "ScheduledTasks", this, "running", "state",
                                ScheduledTasksStateAsValue());
+  // TODO(vmpstr): Temporary check to debug crbug.com/642927.
+  CHECK(tile_task_manager_);
   signals_.ready_to_draw = true;
   signals_check_notifier_.Schedule();
 }
@@ -445,6 +482,8 @@ void TileManager::DidFinishRunningAllTileTasks() {
     // TODO(ericrk): We should find a better way to safely handle re-entrant
     // notifications than always having to schedule a new task.
     // http://crbug.com/498439
+    // TODO(vmpstr): Temporary check to debug crbug.com/642927.
+    CHECK(tile_task_manager_);
     signals_.all_tile_tasks_completed = true;
     signals_check_notifier_.Schedule();
     return;
@@ -635,11 +674,13 @@ TileManager::PrioritizedWorkToSchedule TileManager::AssignGpuMemoryToTiles() {
     }
 
     bool tile_is_needed_now = priority.priority_bin == TilePriority::NOW;
-    if (tile->use_picture_analysis() && kUseColorEstimator) {
+    if (!tile->is_solid_color_analysis_performed() &&
+        tile->use_picture_analysis() && kUseColorEstimator) {
       // We analyze for solid color here, to decide to continue
       // or drop the tile for scheduling and raster.
       // TODO(sohanjg): Check if we could use a shared analysis
       // canvas which is reset between tiles.
+      tile->set_solid_color_analysis_performed(true);
       SkColor color = SK_ColorTRANSPARENT;
       bool is_solid_color =
           prioritized_tile.raster_source()->PerformSolidColorAnalysis(
@@ -656,8 +697,7 @@ TileManager::PrioritizedWorkToSchedule TileManager::AssignGpuMemoryToTiles() {
 
     // Prepaint tiles that are far away are only processed for images.
     if (!tile->required_for_activation() && !tile->required_for_draw() &&
-        priority.distance_to_visible >
-            max_preraster_distance_in_screen_pixels_) {
+        prioritized_tile.is_process_for_images_only()) {
       work_to_schedule.tiles_to_process_for_images.push_back(prioritized_tile);
       continue;
     }
@@ -789,6 +829,8 @@ void TileManager::ScheduleTasks(
 
   graph_.Reset();
 
+  gfx::ColorSpace color_space = client_->GetTileColorSpace();
+
   scoped_refptr<TileTask> required_for_activation_done_task =
       CreateTaskSetFinishedTask(
           &TileManager::DidFinishRunningTileTasksRequiredForActivation);
@@ -807,7 +849,7 @@ void TileManager::ScheduleTasks(
     DCHECK(!tile->draw_info().resource_);
 
     if (!tile->raster_task_)
-      tile->raster_task_ = CreateRasterTask(prioritized_tile);
+      tile->raster_task_ = CreateRasterTask(prioritized_tile, color_space);
 
     TileTask* task = tile->raster_task_.get();
 
@@ -838,54 +880,51 @@ void TileManager::ScheduleTasks(
 
   const std::vector<PrioritizedTile>& tiles_to_process_for_images =
       work_to_schedule.tiles_to_process_for_images;
-  std::vector<std::pair<DrawImage, scoped_refptr<TileTask>>> new_locked_images;
+  std::vector<DrawImage> new_locked_images;
   for (const PrioritizedTile& prioritized_tile : tiles_to_process_for_images) {
     Tile* tile = prioritized_tile.tile();
 
     std::vector<DrawImage> images;
     prioritized_tile.raster_source()->GetDiscardableImagesInRect(
         tile->enclosing_layer_rect(), tile->contents_scale(), &images);
-    ImageDecodeController::TracingInfo tracing_info(
-        prepare_tiles_count_, prioritized_tile.priority().priority_bin);
-    for (DrawImage& draw_image : images) {
-      scoped_refptr<TileTask> task;
-      bool need_to_unref_when_finished =
-          image_decode_controller_->GetTaskForImageAndRef(draw_image,
-                                                          tracing_info, &task);
-      // We only care about images that need to be locked (ie they need to be
-      // unreffed later).
-      if (!need_to_unref_when_finished)
-        continue;
-      new_locked_images.emplace_back(draw_image, task);
-
-      // If there's no actual task associated with this image, then we're done.
-      if (!task)
-        continue;
-
-      auto decode_it = std::find_if(graph_.nodes.begin(), graph_.nodes.end(),
-                                    [&task](const TaskGraph::Node& node) {
-                                      return node.task == task.get();
-                                    });
-      // If this task is already in the graph, then we don't have to insert it.
-      if (decode_it != graph_.nodes.end())
-        continue;
-
-      InsertNodeForDecodeTask(&graph_, task.get(), false, priority++);
-      all_count++;
-      graph_.edges.push_back(TaskGraph::Edge(task.get(), all_done_task.get()));
-    }
+    new_locked_images.insert(new_locked_images.end(), images.begin(),
+                             images.end());
   }
 
-  for (auto& draw_image_pair : locked_images_)
-    image_decode_controller_->UnrefImage(draw_image_pair.first);
-  // The old locked images have to stay around until past the ScheduleTasks call
-  // below, so we do a swap instead of a move.
-  locked_images_.swap(new_locked_images);
+  // TODO(vmpstr): SOON is misleading here, but these images can come from
+  // several diffent tiles. Rethink what we actually want to trace here. Note
+  // that I'm using SOON, since it can't be NOW (these are prepaint).
+  ImageDecodeController::TracingInfo tracing_info(prepare_tiles_count_,
+                                                  TilePriority::SOON);
+  std::vector<scoped_refptr<TileTask>> new_locked_image_tasks =
+      image_manager_.SetPredecodeImages(std::move(new_locked_images),
+                                        tracing_info);
+
+  for (auto& task : new_locked_image_tasks) {
+    auto decode_it = std::find_if(graph_.nodes.begin(), graph_.nodes.end(),
+                                  [&task](const TaskGraph::Node& node) {
+                                    return node.task == task.get();
+                                  });
+    // If this task is already in the graph, then we don't have to insert it.
+    if (decode_it != graph_.nodes.end())
+      continue;
+
+    InsertNodeForDecodeTask(&graph_, task.get(), false, priority++);
+    all_count++;
+    graph_.edges.push_back(TaskGraph::Edge(task.get(), all_done_task.get()));
+  }
+
+  // The old locked images tasks have to stay around until past the
+  // ScheduleTasks call below, so we do a swap instead of a move.
+  // TODO(crbug.com/647402): Have the tile_task_manager keep a ref on the tasks,
+  // since it makes it awkward for the callers to keep refs on tasks that only
+  // exist within the task graph runner.
+  locked_image_tasks_.swap(new_locked_image_tasks);
 
   // We must reduce the amount of unused resources before calling
   // ScheduleTasks to prevent usage from rising above limits.
   resource_pool_->ReduceResourceUsage();
-  image_decode_controller_->ReduceCacheUsage();
+  image_manager_.ReduceMemoryUsage();
 
   // Insert nodes for our task completion tasks. We enqueue these using
   // NONCONCURRENT_FOREGROUND category this is the highest prioirty category and
@@ -927,7 +966,8 @@ void TileManager::ScheduleTasks(
 }
 
 scoped_refptr<TileTask> TileManager::CreateRasterTask(
-    const PrioritizedTile& prioritized_tile) {
+    const PrioritizedTile& prioritized_tile,
+    const gfx::ColorSpace& color_space) {
   Tile* tile = prioritized_tile.tile();
 
   // Get the resource.
@@ -946,7 +986,7 @@ scoped_refptr<TileTask> TileManager::CreateRasterTask(
   } else {
     resource = resource_pool_->AcquireResource(tile->desired_texture_size(),
                                                DetermineResourceFormat(tile),
-                                               gfx::ColorSpace());
+                                               color_space);
   }
 
   // For LOW_RESOLUTION tiles, we don't draw or predecode images.
@@ -965,22 +1005,12 @@ scoped_refptr<TileTask> TileManager::CreateRasterTask(
 
   // We can skip the image hijack canvas if we have no images.
   playback_settings.use_image_hijack_canvas = !images.empty();
+
+  // Get the tasks for the required images.
   ImageDecodeController::TracingInfo tracing_info(
       prepare_tiles_count_, prioritized_tile.priority().priority_bin);
-  for (auto it = images.begin(); it != images.end();) {
-    scoped_refptr<TileTask> task;
-    bool need_to_unref_when_finished =
-        image_decode_controller_->GetTaskForImageAndRef(*it, tracing_info,
-                                                        &task);
-    if (task)
-      decode_tasks.push_back(task);
+  image_manager_.GetTasksForImagesAndRef(&images, &decode_tasks, tracing_info);
 
-    if (need_to_unref_when_finished)
-      ++it;
-    else
-      it = images.erase(it);
-  }
-  bool supports_concurrent_execution = !use_gpu_rasterization_;
   std::unique_ptr<RasterBuffer> raster_buffer =
       raster_buffer_provider_->AcquireBufferForRaster(
           resource, resource_content_id, tile->invalidated_id());
@@ -988,7 +1018,7 @@ scoped_refptr<TileTask> TileManager::CreateRasterTask(
       this, tile, resource, prioritized_tile.raster_source(), playback_settings,
       prioritized_tile.priority().resolution, invalidated_rect,
       prepare_tiles_count_, std::move(raster_buffer), &decode_tasks,
-      supports_concurrent_execution));
+      use_gpu_rasterization_));
 }
 
 void TileManager::OnRasterTaskCompleted(
@@ -1007,9 +1037,7 @@ void TileManager::OnRasterTaskCompleted(
 
   // Unref all the images.
   auto images_it = scheduled_draw_images_.find(tile->id());
-  const std::vector<DrawImage>& images = images_it->second;
-  for (const auto& image : images)
-    image_decode_controller_->UnrefImage(image);
+  image_manager_.UnrefImages(images_it->second);
   scheduled_draw_images_.erase(images_it);
 
   if (was_canceled) {
@@ -1159,16 +1187,18 @@ void TileManager::CheckIfMoreTilesNeedToBePrepared() {
   // If we're not in SMOOTHNESS_TAKES_PRIORITY  mode, we should unlock all
   // images since we're technically going idle here at least for this frame.
   if (global_state_.tree_priority != SMOOTHNESS_TAKES_PRIORITY) {
-    for (auto& draw_image_pair : locked_images_)
-      image_decode_controller_->UnrefImage(draw_image_pair.first);
-    locked_images_.clear();
+    image_manager_.SetPredecodeImages(std::vector<DrawImage>(),
+                                      ImageDecodeController::TracingInfo());
+    locked_image_tasks_.clear();
   }
 
   FreeResourcesForReleasedTiles();
 
   resource_pool_->ReduceResourceUsage();
-  image_decode_controller_->ReduceCacheUsage();
+  image_manager_.ReduceMemoryUsage();
 
+  // TODO(vmpstr): Temporary check to debug crbug.com/642927.
+  CHECK(tile_task_manager_);
   signals_.all_tile_tasks_completed = true;
   signals_check_notifier_.Schedule();
 
@@ -1199,6 +1229,8 @@ void TileManager::CheckIfMoreTilesNeedToBePrepared() {
       global_state_.tree_priority,
       RasterTilePriorityQueue::Type::REQUIRED_FOR_DRAW));
 
+  // TODO(vmpstr): Temporary check to debug crbug.com/642927.
+  CHECK(tile_task_manager_);
   DCHECK(IsReadyToActivate());
   DCHECK(IsReadyToDraw());
   signals_.ready_to_activate = need_to_signal_activate;

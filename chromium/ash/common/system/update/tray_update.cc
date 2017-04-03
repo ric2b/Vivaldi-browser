@@ -11,14 +11,15 @@
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/system_tray_notifier.h"
 #include "ash/common/system/tray/tray_constants.h"
+#include "ash/common/system/tray/tray_popup_item_style.h"
 #include "ash/common/wm_shell.h"
+#include "ash/resources/vector_icons/vector_icons.h"
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/gfx/vector_icons_public.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
@@ -64,7 +65,7 @@ SkColor IconColorForUpdateSeverity(UpdateInfo::UpdateSeverity severity,
     case UpdateInfo::UPDATE_NONE:
       return default_color;
     case UpdateInfo::UPDATE_LOW:
-      return for_menu ? gfx::kGoogleGreen700 : gfx::kGoogleGreen300;
+      return for_menu ? gfx::kGoogleGreen700 : kTrayIconColor;
     case UpdateInfo::UPDATE_ELEVATED:
       return for_menu ? gfx::kGoogleYellow700 : gfx::kGoogleYellow300;
     case UpdateInfo::UPDATE_HIGH:
@@ -81,7 +82,7 @@ SkColor IconColorForUpdateSeverity(UpdateInfo::UpdateSeverity severity,
 class UpdateView : public ActionableView {
  public:
   UpdateView(SystemTrayItem* owner, const UpdateInfo& info)
-      : ActionableView(owner) {
+      : ActionableView(owner), label_(nullptr) {
     SetLayoutManager(new views::BoxLayout(views::BoxLayout::kHorizontal,
                                           kTrayPopupPaddingHorizontal, 0,
                                           kTrayPopupPaddingBetweenItems));
@@ -91,7 +92,7 @@ class UpdateView : public ActionableView {
         new FixedSizedImageView(0, GetTrayConstant(TRAY_POPUP_ITEM_HEIGHT));
     if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
       image->SetImage(gfx::CreateVectorIcon(
-          gfx::VectorIconId::SYSTEM_MENU_UPDATE,
+          kSystemMenuUpdateIcon,
           IconColorForUpdateSeverity(info.severity, true)));
     } else {
       image->SetImage(bundle.GetImageNamed(DecideResource(info.severity, true))
@@ -99,13 +100,14 @@ class UpdateView : public ActionableView {
     }
     AddChildView(image);
 
-    base::string16 label =
+    base::string16 label_text =
         info.factory_reset_required
             ? bundle.GetLocalizedString(
                   IDS_ASH_STATUS_TRAY_RESTART_AND_POWERWASH_TO_UPDATE)
             : bundle.GetLocalizedString(IDS_ASH_STATUS_TRAY_UPDATE);
-    AddChildView(new views::Label(label));
-    SetAccessibleName(label);
+    label_ = new views::Label(label_text);
+    AddChildView(label_);
+    SetAccessibleName(label_text);
   }
 
   ~UpdateView() override {}
@@ -119,6 +121,19 @@ class UpdateView : public ActionableView {
     CloseSystemBubble();
     return true;
   }
+
+  void OnNativeThemeChanged(const ui::NativeTheme* theme) override {
+    ActionableView::OnNativeThemeChanged(theme);
+
+    if (!MaterialDesignController::IsSystemTrayMenuMaterial())
+      return;
+
+    TrayPopupItemStyle style(GetNativeTheme(),
+                             TrayPopupItemStyle::FontStyle::DEFAULT_VIEW_LABEL);
+    style.SetupLabel(label_);
+  }
+
+  views::Label* label_;
 
   DISALLOW_COPY_AND_ASSIGN(UpdateView);
 };

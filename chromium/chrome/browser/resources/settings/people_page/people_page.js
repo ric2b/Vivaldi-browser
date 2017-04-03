@@ -10,6 +10,7 @@ Polymer({
   is: 'settings-people-page',
 
   behaviors: [
+    settings.RouteObserverBehavior,
     I18nBehavior,
     WebUIListenerBehavior,
 <if expr="chromeos">
@@ -139,6 +140,14 @@ Polymer({
 </if>
   },
 
+  /** @protected */
+  currentRouteChanged: function() {
+    if (settings.getCurrentRoute() == settings.Route.SIGN_OUT)
+      this.$.disconnectDialog.showModal();
+    else if (this.$.disconnectDialog.open)
+      this.$.disconnectDialog.close();
+  },
+
 <if expr="chromeos">
   /** @private */
   getPasswordState_: function(hasPin, enableScreenLock) {
@@ -175,6 +184,9 @@ Polymer({
    * @private
    */
   handleSyncStatus_: function(syncStatus) {
+    if (!this.syncStatus && syncStatus && !syncStatus.signedIn) {
+      chrome.metricsPrivate.recordUserAction('Signin_Impression_FromSettings');
+    }
     this.syncStatus = syncStatus;
   },
 
@@ -216,8 +228,14 @@ Polymer({
   },
 
   /** @private */
+  onDisconnectClosed_: function() {
+    if (settings.getCurrentRoute() == settings.Route.SIGN_OUT)
+      settings.navigateToPreviousRoute();
+  },
+
+  /** @private */
   onDisconnectTap_: function() {
-    this.$.disconnectDialog.showModal();
+    settings.navigateTo(settings.Route.SIGN_OUT);
   },
 
   /** @private */
@@ -329,7 +347,7 @@ Polymer({
     if (syncStatus.managed)
       return 'settings:sync-disabled';
 
-    return 'settings:done';
+    return 'settings:sync';
   },
 
   /**
@@ -338,6 +356,14 @@ Polymer({
    * @private
    */
   getIconImageset_: function(iconUrl) {
-    return cr.icon.getProfileAvatarIcon(iconUrl);
+    return cr.icon.getImage(iconUrl);
+  },
+
+  /**
+   * @return {boolean} Whether to show the "Sign in to Chrome" button.
+   * @private
+   */
+  showSignin_: function(syncStatus) {
+    return !!syncStatus.signinAllowed && !syncStatus.signedIn;
   },
 });

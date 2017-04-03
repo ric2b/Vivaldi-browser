@@ -175,6 +175,11 @@ mojom::AshWindowType GetAshWindowType(const ui::Window* window) {
       window->GetSharedProperty<int32_t>(mojom::kAshWindowType_Property));
 }
 
+void SetWindowTitle(ui::Window* window, base::string16 title) {
+  window->SetSharedProperty<base::string16>(
+      ui::mojom::WindowManager::kWindowTitle_Property, title);
+}
+
 base::string16 GetWindowTitle(const ui::Window* window) {
   if (!window->HasSharedProperty(
           ui::mojom::WindowManager::kWindowTitle_Property)) {
@@ -244,6 +249,20 @@ bool ShouldRemoveStandardFrame(ui::Window* window) {
              ui::mojom::WindowManager::kRemoveStandardFrame_Property) &&
          window->GetSharedProperty<bool>(
              ui::mojom::WindowManager::kRemoveStandardFrame_Property);
+}
+
+bool ShouldRenderParentTitleArea(ui::Window* window) {
+  return window->HasSharedProperty(
+             ui::mojom::WindowManager::kRendererParentTitleArea_Property) &&
+         window->GetSharedProperty<bool>(
+             ui::mojom::WindowManager::kRendererParentTitleArea_Property);
+}
+
+int64_t GetInitialDisplayId(const ui::Window::SharedProperties& properties) {
+  auto iter =
+      properties.find(ui::mojom::WindowManager::kInitialDisplayId_Property);
+  return iter == properties.end() ? display::Display::kInvalidDisplayID
+                                  : mojo::ConvertTo<int64_t>(iter->second);
 }
 
 }  // namespace mus

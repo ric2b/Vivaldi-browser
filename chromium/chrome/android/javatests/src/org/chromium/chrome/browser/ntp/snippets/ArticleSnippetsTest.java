@@ -17,6 +17,7 @@ import android.widget.FrameLayout;
 import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.favicon.FaviconHelper.FaviconImageCallback;
@@ -30,6 +31,7 @@ import org.chromium.chrome.browser.ntp.cards.NewTabPageAdapter;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageRecyclerView;
 import org.chromium.chrome.browser.ntp.cards.SuggestionsCategoryInfo;
 import org.chromium.chrome.browser.profiles.MostVisitedSites.MostVisitedURLsObserver;
+import org.chromium.chrome.browser.signin.SigninManager.SignInStateObserver;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
 import org.chromium.chrome.test.util.RenderUtils.ViewRenderer;
 
@@ -57,6 +59,7 @@ public class ArticleSnippetsTest extends ChromeActivityTestCaseBase<ChromeActivi
 
     @MediumTest
     @Feature({"ArticleSnippets", "RenderTest"})
+    @RetryOnFailure
     public void testSnippetAppearance() throws IOException {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
@@ -75,8 +78,7 @@ public class ArticleSnippetsTest extends ChromeActivityTestCaseBase<ChromeActivi
                 View aboveTheFold = new View(getActivity());
 
                 mRecyclerView.setAboveTheFoldView(aboveTheFold);
-                mAdapter = new NewTabPageAdapter(mNtpManager, aboveTheFold, mSnippetsSource,
-                        mUiConfig);
+                mAdapter = NewTabPageAdapter.create(mNtpManager, aboveTheFold, mUiConfig);
                 mRecyclerView.setAdapter(mAdapter);
             }
         });
@@ -171,8 +173,9 @@ public class ArticleSnippetsTest extends ChromeActivityTestCaseBase<ChromeActivi
                 0,  // Position
                 ContentSuggestionsCardLayout.MINIMAL_CARD);
 
-        mSnippetsSource.setInfoForCategory(KnownCategories.ARTICLES,  new SuggestionsCategoryInfo(
-                "Section Title", ContentSuggestionsCardLayout.FULL_CARD, false, true));
+        mSnippetsSource.setInfoForCategory(KnownCategories.ARTICLES,
+                new SuggestionsCategoryInfo(KnownCategories.ARTICLES, "Section Title",
+                        ContentSuggestionsCardLayout.FULL_CARD, false, true));
         mSnippetsSource.setStatusForCategory(KnownCategories.ARTICLES,
                 CategoryStatus.AVAILABLE);
         mSnippetsSource.setSuggestionsForCategory(KnownCategories.ARTICLES,
@@ -345,8 +348,21 @@ public class ArticleSnippetsTest extends ChromeActivityTestCaseBase<ChromeActivi
         }
 
         @Override
+        public SuggestionsSource getSuggestionsSource() {
+            return mSnippetsSource;
+        }
+
+        @Override
+        public void registerSignInStateObserver(SignInStateObserver signInStateObserver) {}
+
+        @Override
         public void closeContextMenu() {
             throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public boolean isCurrentPage() {
+            return true;
         }
     }
 }

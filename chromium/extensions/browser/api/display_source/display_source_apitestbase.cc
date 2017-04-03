@@ -4,11 +4,13 @@
 
 #include "extensions/browser/api/display_source/display_source_apitestbase.h"
 
+#include <list>
 #include <map>
 #include <utility>
 
 #include "base/memory/ptr_util.h"
 #include "net/base/net_errors.h"
+#include "net/log/net_log_source.h"
 #include "net/udp/udp_socket.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -464,9 +466,9 @@ CheckSourceMessageContent(std::string pattern,
 void MockDisplaySourceConnectionDelegate::BindToUdpSocket() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  socket_.reset(new net::UDPSocket(
-      net::DatagramSocket::DEFAULT_BIND, net::RandIntCallback(), nullptr,
-      net::NetLog::Source()));
+  socket_.reset(new net::UDPSocket(net::DatagramSocket::DEFAULT_BIND,
+                                   net::RandIntCallback(), nullptr,
+                                   net::NetLogSource()));
 
   net::IPAddress address;
   ASSERT_TRUE(address.AssignFromIPLiteral(kLocalHost));

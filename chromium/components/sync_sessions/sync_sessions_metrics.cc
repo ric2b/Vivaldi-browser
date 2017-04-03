@@ -19,9 +19,9 @@ namespace sync_sessions {
 
 // static
 void SyncSessionsMetrics::RecordYoungestForeignTabAgeOnNTP(
-    browser_sync::SessionsSyncManager* sessions_sync_manager) {
+    SessionsSyncManager* sessions_sync_manager) {
   if (sessions_sync_manager != NULL) {
-    std::vector<const sync_driver::SyncedSession*> foreign_sessions;
+    std::vector<const SyncedSession*> foreign_sessions;
     sessions_sync_manager->GetAllForeignSessions(&foreign_sessions);
     base::Time best(MaxTabTimestamp(foreign_sessions));
     base::Time now(base::Time::Now());
@@ -40,19 +40,18 @@ void SyncSessionsMetrics::RecordYoungestForeignTabAgeOnNTP(
 
 // static
 base::Time SyncSessionsMetrics::MaxTabTimestamp(
-    const std::vector<const sync_driver::SyncedSession*>& sessions) {
+    const std::vector<const SyncedSession*>& sessions) {
   // While Sessions are ordered by recency, windows and tabs are not. Because
   // the timestamp of sessions are updated when windows/tabs are removed, we
   // only need to search until all the remaining sessions are older than the
   // most recent tab we've found so far.
   base::Time best(base::Time::UnixEpoch());
-  for (const sync_driver::SyncedSession* session : sessions) {
+  for (const SyncedSession* session : sessions) {
     if (session->modified_time < best) {
       break;
     }
-    for (const std::pair<const SessionID::id_type, sessions::SessionWindow*>&
-             key_value : session->windows) {
-      for (const sessions::SessionTab* tab : key_value.second->tabs) {
+    for (const auto& key_value : session->windows) {
+      for (const auto& tab : key_value.second->tabs) {
         best = std::max(best, tab->timestamp);
       }
     }

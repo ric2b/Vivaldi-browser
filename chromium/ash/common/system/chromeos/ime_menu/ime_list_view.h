@@ -7,11 +7,10 @@
 
 #include "ash/common/system/tray/ime_info.h"
 #include "ash/common/system/tray/tray_details_view.h"
-#include "ash/common/system/tray/view_click_listener.h"
 
 namespace ash {
 // The detailed view for showing IME list.
-class ImeListView : public TrayDetailsView, public ViewClickListener {
+class ImeListView : public TrayDetailsView {
  public:
   enum SingleImeBehavior {
     // Shows the IME menu if there's only one IME in system.
@@ -32,9 +31,8 @@ class ImeListView : public TrayDetailsView, public ViewClickListener {
                       bool show_keyboard_toggle,
                       SingleImeBehavior single_ime_behavior);
 
- protected:
-  // ViewClickListener:
-  void OnViewClicked(views::View* sender) override;
+  // TrayDetailsView:
+  void HandleViewClicked(views::View* view) override;
 
  private:
   // To allow the test class to access |ime_map_|.
@@ -45,6 +43,11 @@ class ImeListView : public TrayDetailsView, public ViewClickListener {
 
   // Appends the IME listed to the scrollable area of the detailed view.
   void AppendIMEProperties(const IMEPropertyInfoList& property_list);
+
+  // Appends the IMEs and properties to the scrollable area  in the material
+  // design IME menu.
+  void AppendImeListAndProperties(const IMEInfoList& list,
+                                  const IMEPropertyInfoList& property_list);
 
   // Appends the on-screen keyboard status to the last area of the detailed
   // view.

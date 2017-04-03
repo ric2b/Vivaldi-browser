@@ -42,6 +42,7 @@ def SmokeTestGenerator(benchmark):
   # than is usally intended. Instead, if a particular benchmark is failing,
   # disable it in tools/perf/benchmarks/*.
   @benchmark_module.Disabled('chromeos')  # crbug.com/351114
+  @benchmark_module.Disabled('android')  # crbug.com/641934
   def BenchmarkSmokeTest(self):
     # Only measure a single page so that this test cycles reasonably quickly.
     benchmark.options['pageset_repeat'] = 1
@@ -142,19 +143,10 @@ def load_tests(loader, standard_tests, pattern):
     # test from the class. We should probably discover all of the tests
     # in a class, and then throw the ones we don't need away instead.
 
-    # TODO(aiolos): remove try after all telemetry-side changes land.
-    try:
-      decorators.IS_UPDATED_DECORATORS
-    except AttributeError:
-      enabled_benchmark_attr = '_enabled_strings'
-      enabled_method_attr = '_enabled_strings'
-      disabled_benchmark_attr = '_disabled_strings'
-      disabled_method_attr = '_disabled_strings'
-    else:
-      disabled_benchmark_attr = decorators.DisabledAttributeName(benchmark)
-      disabled_method_attr = decorators.DisabledAttributeName(method)
-      enabled_benchmark_attr = decorators.EnabledAttributeName(benchmark)
-      enabled_method_attr = decorators.EnabledAttributeName(method)
+    disabled_benchmark_attr = decorators.DisabledAttributeName(benchmark)
+    disabled_method_attr = decorators.DisabledAttributeName(method)
+    enabled_benchmark_attr = decorators.EnabledAttributeName(benchmark)
+    enabled_method_attr = decorators.EnabledAttributeName(method)
 
     MergeDecorators(method, disabled_method_attr, benchmark,
                     disabled_benchmark_attr)

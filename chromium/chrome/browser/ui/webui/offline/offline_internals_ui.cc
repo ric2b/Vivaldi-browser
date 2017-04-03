@@ -8,10 +8,10 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/offline/offline_internals_ui_message_handler.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/browser_resources.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_controller.h"
 #include "content/public/browser/web_ui_data_source.h"
-#include "grit/browser_resources.h"
 
 OfflineInternalsUI::OfflineInternalsUI(content::WebUI* web_ui)
     : content::WebUIController(web_ui) {
@@ -28,8 +28,12 @@ OfflineInternalsUI::OfflineInternalsUI(content::WebUI* web_ui)
   html_source->AddResourcePath("offline_internals_browser_proxy.js",
                                IDR_OFFLINE_INTERNALS_BROWSER_PROXY_JS);
   html_source->SetDefaultResource(IDR_OFFLINE_INTERNALS_HTML);
+  html_source->DisableI18nAndUseGzipForAllPaths();
 
-  content::WebUIDataSource::Add(Profile::FromWebUI(web_ui), html_source);
+  Profile* profile = Profile::FromWebUI(web_ui);
+  html_source->AddBoolean("isIncognito", profile->IsOffTheRecord());
+
+  content::WebUIDataSource::Add(profile, html_source);
 
   web_ui->AddMessageHandler(
       new offline_internals::OfflineInternalsUIMessageHandler());

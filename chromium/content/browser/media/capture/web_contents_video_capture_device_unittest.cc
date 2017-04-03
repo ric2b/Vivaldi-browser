@@ -20,7 +20,7 @@
 #include "build/build_config.h"
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
-#include "content/browser/renderer_host/media/video_capture_buffer_pool.h"
+#include "content/browser/renderer_host/media/video_capture_buffer_tracker_factory_impl.h"
 #include "content/browser/renderer_host/render_view_host_factory.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -37,6 +37,7 @@
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
 #include "media/base/yuv_convert.h"
+#include "media/capture/video/video_capture_buffer_pool_impl.h"
 #include "skia/ext/platform_canvas.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -276,11 +277,11 @@ class CaptureTestRenderViewHost : public TestRenderViewHost {
                             bool swapped_out,
                             CaptureTestSourceController* controller)
       : TestRenderViewHost(instance,
-                           base::WrapUnique(new CaptureTestRenderWidgetHost(
+                           base::MakeUnique<CaptureTestRenderWidgetHost>(
                                widget_delegate,
                                instance->GetProcess(),
                                routing_id,
-                               controller)),
+                               controller),
                            delegate,
                            main_frame_routing_id,
                            swapped_out) {
@@ -332,7 +333,8 @@ class StubClient : public media::VideoCaptureDevice::Client {
       const base::Closure& error_callback)
       : report_callback_(report_callback),
         error_callback_(error_callback) {
-    buffer_pool_ = new VideoCaptureBufferPool(2);
+    buffer_pool_ = new media::VideoCaptureBufferPoolImpl(
+        base::MakeUnique<VideoCaptureBufferTrackerFactoryImpl>(), 2);
   }
   ~StubClient() override {}
 
@@ -351,10 +353,11 @@ class StubClient : public media::VideoCaptureDevice::Client {
                       media::VideoPixelFormat format,
                       media::VideoPixelStorage storage) override {
     CHECK_EQ(format, media::PIXEL_FORMAT_I420);
-    int buffer_id_to_drop = VideoCaptureBufferPool::kInvalidId;  // Ignored.
+    int buffer_id_to_drop =
+        media::VideoCaptureBufferPool::kInvalidId;  // Ignored.
     const int buffer_id = buffer_pool_->ReserveForProducer(
         dimensions, format, storage, &buffer_id_to_drop);
-    if (buffer_id == VideoCaptureBufferPool::kInvalidId)
+    if (buffer_id == media::VideoCaptureBufferPool::kInvalidId)
       return NULL;
 
     return std::unique_ptr<media::VideoCaptureDevice::Client::Buffer>(
@@ -405,7 +408,7 @@ class StubClient : public media::VideoCaptureDevice::Client {
     CHECK_EQ(format, media::PIXEL_FORMAT_I420);
     const int buffer_id =
         buffer_pool_->ResurrectLastForProducer(dimensions, format, storage);
-    if (buffer_id == VideoCaptureBufferPool::kInvalidId)
+    if (buffer_id == media::VideoCaptureBufferPool::kInvalidId)
       return nullptr;
     return std::unique_ptr<media::VideoCaptureDevice::Client::Buffer>(
         new AutoReleaseBuffer(
@@ -423,8 +426,8 @@ class StubClient : public media::VideoCaptureDevice::Client {
   class AutoReleaseBuffer : public media::VideoCaptureDevice::Client::Buffer {
    public:
     AutoReleaseBuffer(
-        const scoped_refptr<VideoCaptureBufferPool>& pool,
-        std::unique_ptr<VideoCaptureBufferPool::BufferHandle> buffer_handle,
+        const scoped_refptr<media::VideoCaptureBufferPool>& pool,
+        std::unique_ptr<media::VideoCaptureBufferHandle> buffer_handle,
         int buffer_id)
         : id_(buffer_id),
           pool_(pool),
@@ -450,11 +453,11 @@ class StubClient : public media::VideoCaptureDevice::Client {
     ~AutoReleaseBuffer() override { pool_->RelinquishProducerReservation(id_); }
 
     const int id_;
-    const scoped_refptr<VideoCaptureBufferPool> pool_;
-    const std::unique_ptr<VideoCaptureBufferPool::BufferHandle> buffer_handle_;
+    const scoped_refptr<media::VideoCaptureBufferPool> pool_;
+    const std::unique_ptr<media::VideoCaptureBufferHandle> buffer_handle_;
   };
 
-  scoped_refptr<VideoCaptureBufferPool> buffer_pool_;
+  scoped_refptr<media::VideoCaptureBufferPool> buffer_pool_;
   base::Callback<void(SkColor, const gfx::Size&)> report_callback_;
   base::Closure error_callback_;
 
@@ -465,7 +468,8 @@ class StubClientObserver {
  public:
   StubClientObserver()
       : error_encountered_(false),
-        wait_color_yuv_(0xcafe1950) {
+        wait_color_yuv_(0xcafe1950),
+        expecting_frames_(true) {
     client_.reset(new StubClient(
         base::Bind(&StubClientObserver::DidDeliverFrame,
                    base::Unretained(this)),
@@ -478,8 +482,14 @@ class StubClientObserver {
     return std::move(client_);
   }
 
+  void SetIsExpectingFrames(bool expecting_frames) {
+    base::AutoLock guard(lock_);
+    expecting_frames_ = expecting_frames;
+  }
+
   void QuitIfConditionsMet(SkColor color, const gfx::Size& size) {
     base::AutoLock guard(lock_);
+    EXPECT_TRUE(expecting_frames_);
     if (error_encountered_ || wait_color_yuv_ == kNotInterested ||
         wait_color_yuv_ == color) {
       last_frame_color_yuv_ = color;
@@ -563,6 +573,7 @@ class StubClientObserver {
   SkColor last_frame_color_yuv_;
   gfx::Size last_frame_size_;
   std::unique_ptr<StubClient> client_;
+  bool expecting_frames_;
 
   DISALLOW_COPY_AND_ASSIGN(StubClientObserver);
 };
@@ -1181,6 +1192,41 @@ TEST_F(MAYBE_WebContentsVideoCaptureDeviceTest,
     RunTestForPreferredSize(
         policies[i], gfx::Size(837, 999), gfx::Size(837, 999));
   }
+}
+
+// Tests the Suspend/Resume() functionality.
+TEST_F(MAYBE_WebContentsVideoCaptureDeviceTest, SuspendsAndResumes) {
+  media::VideoCaptureParams capture_params;
+  capture_params.requested_format.frame_size.SetSize(kTestWidth, kTestHeight);
+  capture_params.requested_format.frame_rate = kTestFramesPerSecond;
+  capture_params.requested_format.pixel_format = media::PIXEL_FORMAT_I420;
+  device()->AllocateAndStart(capture_params, client_observer()->PassClient());
+
+  for (int i = 0; i < 3; ++i) {
+    // Draw a RED frame and wait for a normal frame capture to occur.
+    source()->SetSolidColor(SK_ColorRED);
+    SimulateDrawEvent();
+    ASSERT_NO_FATAL_FAILURE(client_observer()->WaitForNextColor(SK_ColorRED));
+
+    // Suspend capture and then draw a GREEN frame. No frame capture should
+    // occur.
+    device()->MaybeSuspend();
+    base::RunLoop().RunUntilIdle();
+    client_observer()->SetIsExpectingFrames(false);
+    source()->SetSolidColor(SK_ColorGREEN);
+    SimulateDrawEvent();
+    base::RunLoop().RunUntilIdle();
+
+    // Resume capture and then draw a BLUE frame and wait for it to be captured.
+    device()->Resume();
+    base::RunLoop().RunUntilIdle();
+    client_observer()->SetIsExpectingFrames(true);
+    source()->SetSolidColor(SK_ColorBLUE);
+    SimulateDrawEvent();
+    ASSERT_NO_FATAL_FAILURE(client_observer()->WaitForNextColor(SK_ColorBLUE));
+  }
+
+  device()->StopAndDeAllocate();
 }
 
 // Tests the RequestRefreshFrame() functionality.

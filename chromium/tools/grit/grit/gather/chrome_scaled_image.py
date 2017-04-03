@@ -117,8 +117,6 @@ class ChromeScaledImage(interface.GathererBase):
       for scale in scales:
         dir = '%s_%s_percent' % (layout, scale)
         path = os.path.join(dir, self.rc_file)
-        path = util.PathSearcher.LocatePath(path,
-                            self.grd_node.GetRoot().GetBaseDir())
         if os.path.exists(self.grd_node.ToRealPath(path)):
           return path, scale, req_scale
 

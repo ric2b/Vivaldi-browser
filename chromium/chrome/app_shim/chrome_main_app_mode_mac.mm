@@ -17,7 +17,7 @@
 #include "base/logging.h"
 #include "base/mac/bundle_locations.h"
 #include "base/mac/foundation_util.h"
-#include "base/mac/launch_services_util.h"
+#import "base/mac/launch_services_util.h"
 #include "base/mac/mac_logging.h"
 #include "base/mac/mac_util.h"
 #include "base/mac/scoped_nsautorelease_pool.h"
@@ -25,6 +25,7 @@
 #include "base/mac/sdk_forward_declarations.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/threading/thread.h"
@@ -34,9 +35,15 @@
 #include "chrome/common/mac/app_mode_common.h"
 #include "chrome/common/mac/app_shim_messages.h"
 #include "chrome/grit/generated_resources.h"
+#include "ipc/ipc_channel_mojo.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_message.h"
+#include "mojo/edk/embedder/embedder.h"
+#include "mojo/edk/embedder/named_platform_handle.h"
+#include "mojo/edk/embedder/named_platform_handle_utils.h"
+#include "mojo/edk/embedder/scoped_ipc_support.h"
+#include "mojo/edk/embedder/scoped_platform_handle.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 
@@ -212,9 +219,12 @@ void AppShimController::Init() {
 
 void AppShimController::CreateChannelAndSendLaunchApp(
     const base::FilePath& socket_path) {
-  IPC::ChannelHandle handle(socket_path.value());
-  channel_ = IPC::ChannelProxy::Create(handle, IPC::Channel::MODE_NAMED_CLIENT,
-                                       this, g_io_thread->task_runner().get());
+  channel_ = IPC::ChannelProxy::Create(
+      IPC::ChannelMojo::CreateClientFactory(
+          mojo::edk::ConnectToPeerProcess(mojo::edk::CreateClientHandle(
+              mojo::edk::NamedPlatformHandle(socket_path.value()))),
+          g_io_thread->task_runner().get()),
+      this, g_io_thread->task_runner().get());
 
   bool launched_by_chrome = base::CommandLine::ForCurrentProcess()->HasSwitch(
       app_mode::kLaunchedByChromeProcessId);
@@ -629,6 +639,9 @@ int ChromeAppModeStart_v4(const app_mode::ChromeAppModeInfo* info) {
   io_thread->StartWithOptions(io_thread_options);
   g_io_thread = io_thread;
 
+  mojo::edk::Init();
+  mojo::edk::ScopedIPCSupport ipc_support(io_thread->task_runner());
+
   // Find already running instances of Chrome.
   pid_t pid = -1;
   std::string chrome_process_id =
@@ -668,12 +681,12 @@ int ChromeAppModeStart_v4(const app_mode::ChromeAppModeInfo* info) {
                                     info->profile_dir);
     }
 
-    bool success =
-        base::mac::OpenApplicationWithPath(base::mac::OuterBundlePath(),
-                                           command_line,
-                                           kLSLaunchDefaults,
-                                           &psn);
-    if (!success)
+    base::Process app = base::mac::OpenApplicationWithPath(
+        base::mac::OuterBundlePath(), command_line, NSWorkspaceLaunchDefault);
+
+    // TODO(crbug.com/652563): Do not use deprecated GetProcessForPID. Change
+    // |ReplyEventHandler| to take |pid_t| instead of |ProcessSerialNumber|.
+    if (!app.IsValid() || GetProcessForPID(app.Pid(), &psn) != noErr)
       return 1;
 
     base::Callback<void(bool)> on_ping_chrome_reply =
@@ -700,6 +713,6 @@ int ChromeAppModeStart_v4(const app_mode::ChromeAppModeInfo* info) {
         base::Bind(&AppShimController::Init, base::Unretained(&controller)));
   }
 
-  main_message_loop.Run();
+  base::RunLoop().Run();
   return 0;
 }

@@ -222,7 +222,8 @@ bool IsSupportedDevToolsURL(const GURL& url, base::FilePath* path) {
   if (inspector_dir.empty())
     return false;
 
-  *path = inspector_dir.AppendASCII(relative_path);
+  // Use the non-bundled and non-minified devtools app for development
+  *path = inspector_dir.AppendASCII("debug").AppendASCII(relative_path);
   return true;
 }
 
@@ -471,13 +472,13 @@ void ProfileIOData::InitializeOnUIThread(Profile* profile) {
 #endif
 
   params->profile = profile;
-  profile_params_.reset(params.release());
+  profile_params_ = std::move(params);
 
   ChromeNetworkDelegate::InitializePrefsOnUIThread(
       &enable_referrers_,
       &enable_do_not_track_,
       &force_google_safesearch_,
-      &force_youtube_safety_mode_,
+      &force_youtube_restrict_,
       &allowed_domains_for_apps_,
       pref_service);
 
@@ -494,7 +495,7 @@ void ProfileIOData::InitializeOnUIThread(Profile* profile) {
         prefs::kGoogleServicesUserAccountId, pref_service);
     google_services_user_account_id_.MoveToThread(io_task_runner);
 
-    sync_disabled_.Init(sync_driver::prefs::kSyncManaged, pref_service);
+    sync_disabled_.Init(syncer::prefs::kSyncManaged, pref_service);
     sync_disabled_.MoveToThread(io_task_runner);
 
     signin_allowed_.Init(prefs::kSigninAllowed, pref_service);
@@ -893,22 +894,12 @@ bool ProfileIOData::IsOffTheRecord() const {
 
 void ProfileIOData::InitializeMetricsEnabledStateOnUIThread() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-#if BUILDFLAG(ANDROID_JAVA_UI)
-  // TODO(dwkang): rename or unify the pref for UMA once we have conclusion
-  // in crbugs.com/246495.
-  // Android has it's own preferences for metrics / crash uploading.
-  enable_metrics_.Init(prefs::kCrashReportingEnabled,
-                       g_browser_process->local_state());
-  enable_metrics_.MoveToThread(
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
-#else
   // Prep the PrefMember and send it to the IO thread, since this value will be
   // read from there.
   enable_metrics_.Init(metrics::prefs::kMetricsReportingEnabled,
                        g_browser_process->local_state());
   enable_metrics_.MoveToThread(
       BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
-#endif  // BUILDFLAG(ANDROID_JAVA_UI)
 }
 
 bool ProfileIOData::GetMetricsEnabledStateOnIOThread() const {
@@ -932,8 +923,8 @@ std::unique_ptr<net::ClientCertStore> ProfileIOData::CreateClientCertStore() {
   return std::unique_ptr<net::ClientCertStore>(
       new chromeos::ClientCertStoreChromeOS(
           certificate_provider_ ? certificate_provider_->Copy() : nullptr,
-          base::WrapUnique(new chromeos::ClientCertFilterChromeOS(
-              use_system_key_slot_, username_hash_)),
+          base::MakeUnique<chromeos::ClientCertFilterChromeOS>(
+              use_system_key_slot_, username_hash_),
           base::Bind(&CreateCryptoModuleBlockingPasswordDelegate,
                      chrome::kCryptoModulePasswordClientAuth)));
 #elif defined(USE_NSS_CERTS)
@@ -1011,8 +1002,8 @@ void ProfileIOData::ResourceContext::CreateKeygenHandler(
       this,
       got_delegate_callback);
 #else
-  callback.Run(base::WrapUnique(
-      new net::KeygenHandler(key_size_in_bits, challenge_string, url)));
+  callback.Run(base::MakeUnique<net::KeygenHandler>(key_size_in_bits,
+                                                    challenge_string, url));
 #endif
 }
 
@@ -1072,7 +1063,7 @@ void ProfileIOData::Init(
   network_delegate->set_cookie_settings(profile_params_->cookie_settings.get());
   network_delegate->set_enable_do_not_track(&enable_do_not_track_);
   network_delegate->set_force_google_safe_search(&force_google_safesearch_);
-  network_delegate->set_force_youtube_safety_mode(&force_youtube_safety_mode_);
+  network_delegate->set_force_youtube_restrict(&force_youtube_restrict_);
   network_delegate->set_allowed_domains_for_apps(&allowed_domains_for_apps_);
   network_delegate->set_data_use_aggregator(
       io_thread_globals->data_use_aggregator.get(), IsOffTheRecord());
@@ -1207,10 +1198,10 @@ ProfileIOData::SetUpJobFactoryDefaults(
   // ProfileIOData::IsHandledProtocol().
   bool set_protocol = job_factory->SetProtocolHandler(
       url::kFileScheme,
-      base::WrapUnique(new net::FileProtocolHandler(
+      base::MakeUnique<net::FileProtocolHandler>(
           content::BrowserThread::GetBlockingPool()
               ->GetTaskRunnerWithShutdownBehavior(
-                  base::SequencedWorkerPool::SKIP_ON_SHUTDOWN))));
+                  base::SequencedWorkerPool::SKIP_ON_SHUTDOWN)));
   DCHECK(set_protocol);
 
 #if defined(ENABLE_EXTENSIONS)
@@ -1228,14 +1219,14 @@ ProfileIOData::SetUpJobFactoryDefaults(
   DCHECK(set_protocol);
 #endif
   set_protocol = job_factory->SetProtocolHandler(
-      url::kDataScheme, base::WrapUnique(new net::DataProtocolHandler()));
+      url::kDataScheme, base::MakeUnique<net::DataProtocolHandler>());
   DCHECK(set_protocol);
 #if defined(OS_CHROMEOS)
   if (profile_params_) {
     set_protocol = job_factory->SetProtocolHandler(
         content::kExternalFileScheme,
-        base::WrapUnique(new chromeos::ExternalFileProtocolHandler(
-            profile_params_->profile)));
+        base::MakeUnique<chromeos::ExternalFileProtocolHandler>(
+            profile_params_->profile));
     DCHECK(set_protocol);
   }
 #endif  // defined(OS_CHROMEOS)
@@ -1250,12 +1241,12 @@ ProfileIOData::SetUpJobFactoryDefaults(
 
   job_factory->SetProtocolHandler(
       url::kAboutScheme,
-      base::WrapUnique(new about_handler::AboutProtocolHandler()));
+      base::MakeUnique<about_handler::AboutProtocolHandler>());
 #if !defined(DISABLE_FTP_SUPPORT)
   DCHECK(ftp_transaction_factory);
   job_factory->SetProtocolHandler(
       url::kFtpScheme,
-      base::WrapUnique(new net::FtpProtocolHandler(ftp_transaction_factory)));
+      base::MakeUnique<net::FtpProtocolHandler>(ftp_transaction_factory));
 #endif  // !defined(DISABLE_FTP_SUPPORT)
 
 #if defined(DEBUG_DEVTOOLS)
@@ -1290,7 +1281,7 @@ void ProfileIOData::ShutdownOnUIThread(
   enable_referrers_.Destroy();
   enable_do_not_track_.Destroy();
   force_google_safesearch_.Destroy();
-  force_youtube_safety_mode_.Destroy();
+  force_youtube_restrict_.Destroy();
   allowed_domains_for_apps_.Destroy();
   enable_metrics_.Destroy();
   safe_browsing_enabled_.Destroy();
@@ -1366,19 +1357,19 @@ ProfileIOData::CreateHttpNetworkSession(
 std::unique_ptr<net::HttpCache> ProfileIOData::CreateMainHttpFactory(
     net::HttpNetworkSession* session,
     std::unique_ptr<net::HttpCache::BackendFactory> main_backend) const {
-  return base::WrapUnique(new net::HttpCache(
+  return base::MakeUnique<net::HttpCache>(
       base::WrapUnique(new DevToolsNetworkTransactionFactory(
           network_controller_handle_.GetController(), session)),
-      std::move(main_backend), true /* set_up_quic_server_info */));
+      std::move(main_backend), true /* set_up_quic_server_info */);
 }
 
 std::unique_ptr<net::HttpCache> ProfileIOData::CreateHttpFactory(
     net::HttpNetworkSession* shared_session,
     std::unique_ptr<net::HttpCache::BackendFactory> backend) const {
-  return base::WrapUnique(new net::HttpCache(
+  return base::MakeUnique<net::HttpCache>(
       base::WrapUnique(new DevToolsNetworkTransactionFactory(
           network_controller_handle_.GetController(), shared_session)),
-      std::move(backend), true /* set_up_quic_server_info */));
+      std::move(backend), true /* set_up_quic_server_info */);
 }
 
 void ProfileIOData::SetCookieSettingsForTesting(

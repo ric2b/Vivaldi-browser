@@ -8,6 +8,8 @@
 #include "core/CoreExport.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Element.h"
+#include "platform/text/Character.h"
+#include "wtf/ASCIICType.h"
 #include "wtf/Allocator.h"
 #include "wtf/text/AtomicString.h"
 
@@ -22,41 +24,80 @@ class CustomElementReaction;
 class CustomElementRegistry;
 
 class CORE_EXPORT CustomElement {
-    STATIC_ONLY(CustomElement);
-public:
-    // Retrieves the CustomElementRegistry for Element, if any. This
-    // may be a different object for a given element over its lifetime
-    // as it moves between documents.
-    static CustomElementRegistry* registry(const Element&);
-    static CustomElementRegistry* registry(const Document&);
+  STATIC_ONLY(CustomElement);
 
-    static CustomElementDefinition* definitionForElement(const Element*);
+ public:
+  // Retrieves the CustomElementRegistry for Element, if any. This
+  // may be a different object for a given element over its lifetime
+  // as it moves between documents.
+  static CustomElementRegistry* registry(const Element&);
+  static CustomElementRegistry* registry(const Document&);
 
-    static bool isValidName(const AtomicString& name);
+  static CustomElementDefinition* definitionForElement(const Element*);
 
-    static bool shouldCreateCustomElement(const AtomicString& localName);
-    static bool shouldCreateCustomElement(const QualifiedName&);
+  static bool isValidName(const AtomicString& name) {
+    // This quickly rejects all common built-in element names.
+    if (name.find('-', 1) == kNotFound)
+      return false;
 
-    static HTMLElement* createCustomElementSync(Document&, const AtomicString& localName, ExceptionState&);
-    static HTMLElement* createCustomElementSync(Document&, const QualifiedName&, ExceptionState&);
-    static HTMLElement* createCustomElementSync(Document&, const QualifiedName&);
-    static HTMLElement* createCustomElementAsync(Document&, const QualifiedName&);
+    if (!isASCIILower(name[0]))
+      return false;
 
-    static HTMLElement* createFailedElement(Document&, const QualifiedName&);
+    if (name.is8Bit()) {
+      const LChar* characters = name.characters8();
+      for (size_t i = 1; i < name.length(); ++i) {
+        if (!Character::isPotentialCustomElementName8BitChar(characters[i]))
+          return false;
+      }
+    } else {
+      const UChar* characters = name.characters16();
+      for (size_t i = 1; i < name.length();) {
+        UChar32 ch;
+        U16_NEXT(characters, i, name.length(), ch);
+        if (!Character::isPotentialCustomElementNameChar(ch))
+          return false;
+      }
+    }
 
-    static void enqueue(Element*, CustomElementReaction*);
-    static void enqueueConnectedCallback(Element*);
-    static void enqueueDisconnectedCallback(Element*);
-    static void enqueueAdoptedCallback(Element*);
-    static void enqueueAttributeChangedCallback(Element*, const QualifiedName&,
-        const AtomicString& oldValue, const AtomicString& newValue);
+    return !isHyphenatedSpecElementName(name);
+  }
 
-    static void tryToUpgrade(Element*);
+  static bool shouldCreateCustomElement(const AtomicString& localName);
+  static bool shouldCreateCustomElement(const QualifiedName&);
 
-private:
-    static HTMLElement* createUndefinedElement(Document&, const QualifiedName&);
+  static HTMLElement* createCustomElementSync(Document&,
+                                              const AtomicString& localName,
+                                              ExceptionState&);
+  static HTMLElement* createCustomElementSync(Document&,
+                                              const QualifiedName&,
+                                              ExceptionState&);
+  static HTMLElement* createCustomElementSync(Document&, const QualifiedName&);
+  static HTMLElement* createCustomElementAsync(Document&, const QualifiedName&);
+
+  static HTMLElement* createFailedElement(Document&, const QualifiedName&);
+
+  static void enqueue(Element*, CustomElementReaction*);
+  static void enqueueConnectedCallback(Element*);
+  static void enqueueDisconnectedCallback(Element*);
+  static void enqueueAdoptedCallback(Element*,
+                                     Document* oldOwner,
+                                     Document* newOwner);
+  static void enqueueAttributeChangedCallback(Element*,
+                                              const QualifiedName&,
+                                              const AtomicString& oldValue,
+                                              const AtomicString& newValue);
+
+  static void tryToUpgrade(Element*);
+
+ private:
+  // Some existing specs have element names with hyphens in them,
+  // like font-face in SVG. The custom elements spec explicitly
+  // disallows these as custom element names.
+  // https://html.spec.whatwg.org/#valid-custom-element-name
+  static bool isHyphenatedSpecElementName(const AtomicString&);
+  static HTMLElement* createUndefinedElement(Document&, const QualifiedName&);
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // CustomElement_h
+#endif  // CustomElement_h

@@ -14,6 +14,7 @@
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/download_prefs.h"
@@ -34,6 +35,7 @@
 #include "extensions/browser/extension_function.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/granted_file_entry.h"
+#include "net/log/net_log_entry.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/system_logs/debug_log_writer.h"
@@ -61,11 +63,16 @@ scoped_refptr<base::SequencedTaskRunner> GetSequencedTaskRunner() {
       base::SequencedWorkerPool::BLOCK_SHUTDOWN);
 }
 
+#if DCHECK_IS_ON()
+base::LazyInstance<base::SequenceChecker>::Leaky
+    g_file_resource_sequence_checker = LAZY_INSTANCE_INITIALIZER;
+#endif
+
 // Checks if we are running on sequenced task runner thread.
-bool IsRunningOnSequenceThread() {
-  base::SequencedWorkerPool* pool = content::BrowserThread::GetBlockingPool();
-  return pool->IsRunningSequenceOnCurrentThread(
-      pool->GetNamedSequenceToken(FileResource::kSequenceToken));
+void AssertCurrentlyOnFileResourceSequence() {
+#if DCHECK_IS_ON()
+  DCHECK(g_file_resource_sequence_checker.Get().CalledOnValidSequence());
+#endif
 }
 
 std::unique_ptr<LogParser> CreateLogParser(const std::string& log_type) {
@@ -114,7 +121,7 @@ void CleanUpLeftoverLogs(bool is_primary_profile,
   LOG(WARNING) << "Deleting " << app_logs_dir.value();
   LOG(WARNING) << "Deleting " << logs_dumps.value();
 
-  DCHECK(IsRunningOnSequenceThread());
+  AssertCurrentlyOnFileResourceSequence();
   base::DeleteFile(logs_dumps, true);
 
   // App-specific logs are stored in /home/chronos/user/log/apps directory that
@@ -193,17 +200,10 @@ void LogPrivateAPI::StopAllWatches(const std::string& extension_id,
 
 void LogPrivateAPI::RegisterTempFile(const std::string& owner_extension_id,
                                      const base::FilePath& file_path) {
-  if (!IsRunningOnSequenceThread()) {
-    GetSequencedTaskRunner()->PostTask(
-        FROM_HERE,
-        base::Bind(&LogPrivateAPI::RegisterTempFile,
-                   base::Unretained(this),
-                   owner_extension_id,
-                   file_path));
-    return;
-  }
-
-  log_file_resources_.Add(new FileResource(owner_extension_id, file_path));
+  GetSequencedTaskRunner()->PostTask(
+      FROM_HERE,
+      base::Bind(&LogPrivateAPI::RegisterTempFileOnFileResourceSequence,
+                 base::Unretained(this), owner_extension_id, file_path));
 }
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<LogPrivateAPI> >
@@ -215,7 +215,7 @@ LogPrivateAPI::GetFactoryInstance() {
   return g_factory.Pointer();
 }
 
-void LogPrivateAPI::OnAddEntry(const net::NetLog::Entry& entry) {
+void LogPrivateAPI::OnAddEntry(const net::NetLogEntry& entry) {
   // We could receive events on whatever thread they happen to be generated,
   // since we are only interested in network events, we should ignore any
   // other thread than BrowserThread::IO.
@@ -259,7 +259,7 @@ void LogPrivateAPI::AddEntriesOnUI(std::unique_ptr<base::ListValue> value) {
 
 void LogPrivateAPI::CreateTempNetLogFile(const std::string& owner_extension_id,
                                          base::ScopedFILE* file) {
-  DCHECK(IsRunningOnSequenceThread());
+  AssertCurrentlyOnFileResourceSequence();
 
   // Create app-specific subdirectory in session logs folder.
   base::FilePath app_log_dir = GetAppLogDirectory().Append(owner_extension_id);
@@ -278,7 +278,7 @@ void LogPrivateAPI::CreateTempNetLogFile(const std::string& owner_extension_id,
     return;
   }
 
-  RegisterTempFile(owner_extension_id, file_path);
+  RegisterTempFileOnFileResourceSequence(owner_extension_id, file_path);
   return file->reset(file_ptr);
 }
 
@@ -386,6 +386,13 @@ void LogPrivateAPI::Initialize() {
                      ProfileManager::GetPrimaryUserProfile(),
                  GetAppLogDirectory(),
                  GetLogDumpDirectory(browser_context_)));
+}
+
+void LogPrivateAPI::RegisterTempFileOnFileResourceSequence(
+    const std::string& owner_extension_id,
+    const base::FilePath& file_path) {
+  AssertCurrentlyOnFileResourceSequence();
+  log_file_resources_.Add(new FileResource(owner_extension_id, file_path));
 }
 
 void LogPrivateAPI::OnExtensionUnloaded(
@@ -531,13 +538,13 @@ void LogPrivateDumpLogsFunction::OnStoreLogsCompleted(
           log_path,
           false);
 
-  base::DictionaryValue* entry = new base::DictionaryValue();
+  auto entry = base::MakeUnique<base::DictionaryValue>();
   entry->SetString("fileSystemId", file_entry.filesystem_id);
   entry->SetString("baseName", file_entry.registered_name);
   entry->SetString("id", file_entry.id);
   entry->SetBoolean("isDirectory", false);
   base::ListValue* entry_list = new base::ListValue();
-  entry_list->Append(entry);
+  entry_list->Append(std::move(entry));
   response->Set("entries", entry_list);
   response->SetBoolean("multiple", false);
   SetResult(std::move(response));

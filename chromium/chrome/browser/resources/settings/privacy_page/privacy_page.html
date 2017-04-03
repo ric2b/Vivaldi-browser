@@ -1,9 +1,10 @@
 <link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_vars_css.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/classes/iron-flex-layout.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout-classes.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="/clear_browsing_data_dialog/clear_browsing_data_dialog.html">
 <link rel="import" href="/controls/settings_checkbox.html">
 <link rel="import" href="/route.html">
@@ -16,6 +17,7 @@
 <link rel="import" href="/site_settings/protocol_handlers.html">
 <link rel="import" href="/site_settings/usb_devices.html">
 <link rel="import" href="/site_settings/site_data.html">
+<link rel="import" href="/site_settings/zoom_levels.html">
 <link rel="import" href="/site_settings_page/site_settings_page.html">
 
 <if expr="use_nss_certs">
@@ -122,23 +124,34 @@
 </if>
         </div>
 <if expr="use_nss_certs or is_win or is_macosx">
-        <div id="manageCertificates" class="settings-box two-line single-column"
+        <div id="manageCertificates" class="settings-box two-line"
             actionable on-tap="onManageCertificatesTap_">
-          <div>$i18n{manageCertificates}</div>
-          <div class="secondary">$i18n{manageCertificatesDescription}</div>
+          <div class="start">
+            <div>$i18n{manageCertificates}</div>
+            <div class="secondary">$i18n{manageCertificatesDescription}</div>
+          </div>
+          <button class="icon-arrow-right" is="paper-icon-button-light">
+          </button>
         </div>
 </if>
         <div id="site-settings-subpage-trigger"
-            class="settings-box two-line single-column" actionable
+            class="settings-box two-line" actionable
             on-tap="onSiteSettingsTap_">
-          <div>$i18n{siteSettings}</div>
-          <div class="secondary">$i18n{siteSettingsDescription}</div>
+          <div class="start">
+            <div>$i18n{siteSettings}</div>
+            <div class="secondary">$i18n{siteSettingsDescription}</div>
+          </div>
+          <button class="icon-arrow-right" is="paper-icon-button-light">
+          </button>
         </div>
-        <div class="settings-box">
-          <paper-button id="clearBrowsingData"
-              on-tap="onClearBrowsingDataTap_" class="primary-button">
+        <div class="settings-box two-line" id="clearBrowsingData"
+            on-tap="onClearBrowsingDataTap_" actionable>
+          <div class="start">
             $i18n{clearBrowsingData}
-          </paper-button>
+            <div class="secondary">$i18n{clearBrowsingDataDescription}</div>
+          </div>
+          <button class="icon-arrow-right" is="paper-icon-button-light">
+          </button>
         </div>
       </neon-animatable>
 <if expr="use_nss_certs">
@@ -230,6 +243,11 @@
           <protocol-handlers></protocol-handlers>
         </settings-subpage>
       </template>
+      <template is="dom-if" route-path="/siteSettings/zoomLevels" no-search>
+        <settings-subpage page-title="$i18n{siteSettingsCategoryZoomLevels}">
+          <zoom-levels></zoom-levels>
+        </settings-subpage>
+      </template>
       <template is="dom-if" route-path="/siteSettings/javascript" no-search>
         <settings-subpage page-title="$i18n{siteSettingsCategoryJavascript}">
           <site-settings-category
@@ -263,8 +281,8 @@
           </site-settings-category>
         </settings-subpage>
       </template>
-      <template is="dom-if" route-path="/siteSettings/plugins" no-search>
-        <settings-subpage page-title="$i18n{siteSettingsPlugins}">
+      <template is="dom-if" route-path="/siteSettings/flash" no-search>
+        <settings-subpage page-title="$i18n{siteSettingsFlash}">
           <site-settings-category
               selected-site="{{selectedSite}}"
               category="{{ContentSettingsTypes.PLUGINS}}">
@@ -293,7 +311,7 @@
         </settings-subpage>
       </template>
       <template is="dom-if" route-path="/siteSettings/siteDetails" no-search>
-        <settings-subpage page-title="[[selectedSite.originForDisplay]]">
+        <settings-subpage page-title="$i18n{siteSettingsSiteDetails}">
           <site-details site="[[selectedSite]]"></site-details>
         </settings-subpage>
       </template>

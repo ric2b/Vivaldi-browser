@@ -22,7 +22,7 @@
 #include "content/public/browser/download_interrupt_reasons.h"
 #include "crypto/secure_hash.h"
 #include "net/base/net_errors.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -36,7 +36,7 @@ class CONTENT_EXPORT BaseFile {
  public:
   // May be constructed on any thread.  All other routines (including
   // destruction) must occur on the FILE thread.
-  BaseFile(const net::BoundNetLog& bound_net_log);
+  BaseFile(const net::NetLogWithSource& net_log);
   ~BaseFile();
 
   // Returns DOWNLOAD_INTERRUPT_REASON_NONE on success, or a
@@ -223,7 +223,7 @@ class CONTENT_EXPORT BaseFile {
   // won't delete it on destruction.
   bool detached_ = false;
 
-  net::BoundNetLog bound_net_log_;
+  net::NetLogWithSource net_log_;
 
   DISALLOW_COPY_AND_ASSIGN(BaseFile);
 };

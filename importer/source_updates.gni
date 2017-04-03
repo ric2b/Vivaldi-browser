@@ -1,0 +1,6 @@
+
+post_process_target("//chrome/test:browser_tests") {
+  sources += [
+    "//vivaldi/importer/viv_importer_browsertest.cpp",
+  ]
+}

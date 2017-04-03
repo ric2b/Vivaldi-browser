@@ -10,16 +10,17 @@
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
- * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+ * DAMAGE.
  */
 
 #ifndef AudioBasicInspectorNode_h
@@ -32,34 +33,46 @@ namespace blink {
 class BaseAudioContext;
 class ExceptionState;
 
-// AudioBasicInspectorNode is an AudioNode with one input and one output where the output might not necessarily connect to another node's input.
-// If the output is not connected to any other node, then the AudioBasicInspectorNode's processIfNecessary() function will be called automatically by
-// BaseAudioContext before the end of each render quantum so that it can inspect the audio stream.
+// AudioBasicInspectorNode is an AudioNode with one input and one output where
+// the output might not necessarily connect to another node's input.
+// If the output is not connected to any other node, then the
+// AudioBasicInspectorNode's processIfNecessary() function will be called
+// automatically by BaseAudioContext before the end of each render quantum so
+// that it can inspect the audio stream.
 class AudioBasicInspectorHandler : public AudioHandler {
-public:
-    AudioBasicInspectorHandler(NodeType, AudioNode&, float sampleRate, unsigned outputChannelCount);
+ public:
+  AudioBasicInspectorHandler(NodeType,
+                             AudioNode&,
+                             float sampleRate,
+                             unsigned outputChannelCount);
 
-    // AudioHandler
-    void pullInputs(size_t framesToProcess) final;
-    void checkNumberOfChannelsForInput(AudioNodeInput*) final;
+  // AudioHandler
+  void pullInputs(size_t framesToProcess) final;
+  void checkNumberOfChannelsForInput(AudioNodeInput*) final;
 
-    void updatePullStatus();
+  void updatePullStatus();
 
-private:
-    bool m_needAutomaticPull; // When setting to true, AudioBasicInspectorHandler will be pulled automaticlly by BaseAudioContext before the end of each render quantum.
+ private:
+  // When setting to true, AudioBasicInspectorHandler will be pulled
+  // automaticlly by BaseAudioContext before the end of each render quantum.
+  bool m_needAutomaticPull;
 };
 
 class AudioBasicInspectorNode : public AudioNode {
-protected:
-    explicit AudioBasicInspectorNode(BaseAudioContext& context) : AudioNode(context) { }
+ protected:
+  explicit AudioBasicInspectorNode(BaseAudioContext& context)
+      : AudioNode(context) {}
 
-private:
-    // TODO(tkent): Should AudioBasicInspectorNode override other variants of
-    // connect() and disconnect()?
-    AudioNode* connect(AudioNode*, unsigned outputIndex, unsigned inputIndex, ExceptionState&) final;
-    void disconnect(unsigned outputIndex, ExceptionState&) final;
+ private:
+  // TODO(tkent): Should AudioBasicInspectorNode override other variants of
+  // connect() and disconnect()?
+  AudioNode* connect(AudioNode*,
+                     unsigned outputIndex,
+                     unsigned inputIndex,
+                     ExceptionState&) final;
+  void disconnect(unsigned outputIndex, ExceptionState&) final;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // AudioBasicInspectorNode_h
+#endif  // AudioBasicInspectorNode_h

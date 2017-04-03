@@ -2,7 +2,79 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/**
+ * @param {!Element} root
+ * @param {?Element} boundary
+ * @param {cr.ui.FocusRow.Delegate} delegate
+ * @constructor
+ * @extends {cr.ui.FocusRow}
+ */
+function HistoryFocusRow(root, boundary, delegate) {
+  cr.ui.FocusRow.call(this, root, boundary, delegate);
+  this.addItems();
+}
+
+HistoryFocusRow.prototype = {
+  __proto__: cr.ui.FocusRow.prototype,
+
+  /** @override */
+  getCustomEquivalent: function(sampleElement) {
+    var equivalent;
+
+    if (this.getTypeForElement(sampleElement) == 'star')
+      equivalent = this.getFirstFocusable('title');
+
+    return equivalent ||
+        cr.ui.FocusRow.prototype.getCustomEquivalent.call(
+            this, sampleElement);
+  },
+
+  addItems: function() {
+    this.destroy();
+
+    assert(this.addItem('checkbox', '#checkbox'));
+    assert(this.addItem('title', '#title'));
+    assert(this.addItem('menu-button', '#menu-button'));
+
+    this.addItem('star', '#bookmark-star');
+  },
+};
+
 cr.define('md_history', function() {
+  /**
+   * @param {{lastFocused: Object}} historyItemElement
+   * @constructor
+   * @implements {cr.ui.FocusRow.Delegate}
+   */
+  function FocusRowDelegate(historyItemElement) {
+    this.historyItemElement = historyItemElement;
+  }
+
+  FocusRowDelegate.prototype = {
+    /**
+     * @override
+     * @param {!cr.ui.FocusRow} row
+     * @param {!Event} e
+     */
+    onFocus: function(row, e) {
+      this.historyItemElement.lastFocused = e.path[0];
+    },
+
+    /**
+     * @override
+     * @param {!cr.ui.FocusRow} row The row that detected a keydown.
+     * @param {!Event} e
+     * @return {boolean} Whether the event was handled.
+     */
+    onKeydown: function(row, e) {
+      // Prevent iron-list from changing the focus on enter.
+      if (e.key == 'Enter')
+        e.stopPropagation();
+
+      return false;
+    },
+  };
+
   var HistoryItem = Polymer({
     is: 'history-item',
 
@@ -14,9 +86,7 @@ cr.define('md_history', function() {
       // Search term used to obtain this history-item.
       searchTerm: {type: String},
 
-      selected: {type: Boolean, notify: true},
-
-      isFirstItem: {type: Boolean, reflectToAttribute: true},
+      selected: {type: Boolean, reflectToAttribute: true},
 
       isCardStart: {type: Boolean, reflectToAttribute: true},
 
@@ -34,6 +104,67 @@ cr.define('md_history', function() {
       path: String,
 
       index: Number,
+
+      /** @type {Element} */
+      lastFocused: {
+        type: Object,
+        notify: true,
+      },
+
+      ironListTabIndex: {
+        type: Number,
+        observer: 'ironListTabIndexChanged_',
+      },
+    },
+
+    /** @private {?HistoryFocusRow} */
+    row_: null,
+
+    /** @override */
+    attached: function() {
+      Polymer.RenderStatus.afterNextRender(this, function() {
+        this.row_ = new HistoryFocusRow(
+            this.$['main-container'], null, new FocusRowDelegate(this));
+        this.row_.makeActive(this.ironListTabIndex == 0);
+        this.listen(this, 'focus', 'onFocus_');
+        this.listen(this, 'dom-change', 'onDomChange_');
+      });
+    },
+
+    /** @override */
+    detached: function() {
+      this.unlisten(this, 'focus', 'onFocus_');
+      this.unlisten(this, 'dom-change', 'onDomChange_');
+      if (this.row_)
+        this.row_.destroy();
+    },
+
+    /**
+     * @private
+     */
+    onFocus_: function() {
+      if (this.lastFocused)
+        this.row_.getEquivalentElement(this.lastFocused).focus();
+      else
+        this.row_.getFirstFocusable().focus();
+
+      this.tabIndex = -1;
+    },
+
+    /**
+     * @private
+     */
+    ironListTabIndexChanged_: function() {
+      if (this.row_)
+        this.row_.makeActive(this.ironListTabIndex == 0);
+    },
+
+    /**
+     * @private
+     */
+    onDomChange_: function() {
+      if (this.row_)
+        this.row_.addItems();
     },
 
     /**
@@ -59,6 +190,27 @@ cr.define('md_history', function() {
       // Prevent shift clicking a checkbox from selecting text.
       if (e.shiftKey)
         e.preventDefault();
+    },
+
+    /**
+     * @private
+     * @return {string}
+     */
+    getEntrySummary_: function() {
+      var item = this.item;
+      return loadTimeData.getStringF(
+          'entrySummary', item.dateTimeOfDay,
+          item.starred ? loadTimeData.getString('bookmarked') : '', item.title,
+          item.domain);
+    },
+
+    /**
+     * @param {boolean} selected
+     * @return {string}
+     * @private
+     */
+    getAriaChecked_: function(selected) {
+      return selected ? 'true' : 'false';
     },
 
     /**
@@ -97,7 +249,7 @@ cr.define('md_history', function() {
 
     /**
      * Record metrics when a result is clicked. This is deliberately tied to
-   * on-click rather than on-tap, as on-click triggers from middle clicks.
+     * on-click rather than on-tap, as on-click triggers from middle clicks.
      */
     onLinkClick_: function() {
       var browserService = md_history.BrowserService.getInstance();
@@ -129,8 +281,7 @@ cr.define('md_history', function() {
      * @private
      */
     showIcon_: function() {
-      this.$.icon.style.backgroundImage =
-          cr.icon.getFaviconImageSet(this.item.url);
+      this.$.icon.style.backgroundImage = cr.icon.getFavicon(this.item.url);
     },
 
     selectionNotAllowed_: function() {
@@ -138,31 +289,17 @@ cr.define('md_history', function() {
     },
 
     /**
-     * Generates the title for this history card.
      * @param {number} numberOfItems The number of items in the card.
+     * @param {string} historyDate Date of the current result.
      * @param {string} search The search term associated with these results.
+     * @return {string} The title for this history card.
      * @private
      */
     cardTitle_: function(numberOfItems, historyDate, search) {
       if (!search)
         return this.item.dateRelativeDay;
-
-      var resultId = numberOfItems == 1 ? 'searchResult' : 'searchResults';
-      return loadTimeData.getStringF('foundSearchResults', numberOfItems,
-          loadTimeData.getString(resultId), search);
+      return HistoryItem.searchResultsTitle(numberOfItems, search);
     },
-
-    /**
-     * Crop long item titles to reduce their effect on layout performance. See
-     * crbug.com/621347.
-     * @param {string} title
-     * @return {string}
-     */
-    cropItemTitle_: function(title) {
-      return (title.length > TITLE_MAX_LENGTH) ?
-          title.substr(0, TITLE_MAX_LENGTH) :
-          title;
-    }
   });
 
   /**
@@ -172,7 +309,6 @@ cr.define('md_history', function() {
    * @param {number} currentIndex
    * @param {string} searchedTerm
    * @return {boolean} Whether or not time gap separator is required.
-   * @private
    */
   HistoryItem.needsTimeGap = function(visits, currentIndex, searchedTerm) {
     if (currentIndex >= visits.length - 1 || visits.length == 0)
@@ -186,6 +322,17 @@ cr.define('md_history', function() {
 
     return currentItem.time - nextItem.time > BROWSING_GAP_TIME &&
         currentItem.dateRelativeDay == nextItem.dateRelativeDay;
+  };
+
+  /**
+   * @param {number} numberOfResults
+   * @param {string} searchTerm
+   * @return {string} The title for a page of search results.
+   */
+  HistoryItem.searchResultsTitle = function(numberOfResults, searchTerm) {
+    var resultId = numberOfResults == 1 ? 'searchResult' : 'searchResults';
+    return loadTimeData.getStringF('foundSearchResults', numberOfResults,
+        loadTimeData.getString(resultId), searchTerm);
   };
 
   return { HistoryItem: HistoryItem };

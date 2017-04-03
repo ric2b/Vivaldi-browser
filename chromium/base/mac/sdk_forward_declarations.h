@@ -117,6 +117,18 @@ BASE_EXPORT extern NSString* const NSAppearanceNameVibrantLight;
              topLevelObjects:(NSArray**)topLevelObjects;
 @end
 
+@interface NSArray (MountainLionSDK)
+- (id)objectAtIndexedSubscript:(NSUInteger)idx;
+@end
+
+@interface NSDictionary (MountainLionSDK)
+- (id)objectForKeyedSubscript:(id)key;
+@end
+
+@interface NSMutableDictionary (MountainLionSDK)
+- (void)setObject:(id)obj forKeyedSubscript:(id<NSCopying>)key;
+@end
+
 #endif  // MAC_OS_X_VERSION_10_8
 
 // Once Chrome no longer supports OSX 10.8, everything within this preprocessor
@@ -180,12 +192,6 @@ BASE_EXPORT extern NSString* const NSAppearanceNameVibrantLight;
 @property(readonly, nonatomic) NSUUID* identifier;
 @end
 
-@interface NSVisualEffectView (MavericksSDK)
-- (void)setState:(NSVisualEffectState)state;
-@end
-
-@class NSVisualEffectView;
-
 @class NSUserActivity;
 
 #endif  // MAC_OS_X_VERSION_10_9
@@ -223,6 +229,12 @@ BASE_EXPORT extern NSString* const NSAppearanceNameVibrantLight;
 @property(readonly) NSOperatingSystemVersion operatingSystemVersion;
 @end
 
+@interface NSVisualEffectView (YosemiteSDK)
+- (void)setState:(NSVisualEffectState)state;
+@end
+
+@class NSVisualEffectView;
+
 #endif  // MAC_OS_X_VERSION_10_10
 
 // Once Chrome no longer supports OSX 10.10.2, everything within this
@@ -239,6 +251,17 @@ BASE_EXPORT extern NSString* const NSAppearanceNameVibrantLight;
 @end
 
 #endif  // MAC_OS_X_VERSION_10_10
+
+// Once Chrome no longer supports OSX 10.11, everything within this
+// preprocessor block can be removed.
+#if !defined(MAC_OS_X_VERSION_10_12) || \
+    MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_12
+
+@interface NSWindow (SierraSDK)
+@property(class) BOOL allowsAutomaticWindowTabbing;
+@end
+
+#endif  // MAC_OS_X_VERSION_10_12
 
 // ----------------------------------------------------------------------------
 // The symbol for kCWSSIDDidChangeNotification is available in the

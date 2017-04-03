@@ -6,8 +6,9 @@
 
 #include <utility>
 
-#include "cc/output/compositor_frame.h"
 #include "cc/output/output_surface_client.h"
+#include "cc/output/output_surface_frame.h"
+#include "gpu/command_buffer/client/gles2_interface.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "ui/gfx/transform.h"
 
@@ -15,29 +16,26 @@ namespace cc {
 
 PixelTestOutputSurface::PixelTestOutputSurface(
     scoped_refptr<ContextProvider> context_provider,
-    scoped_refptr<ContextProvider> worker_context_provider,
     bool flipped_output_surface)
-    : OutputSurface(std::move(context_provider),
-                    std::move(worker_context_provider),
-                    nullptr),
+    : OutputSurface(std::move(context_provider)),
       external_stencil_test_(false) {
-  capabilities_.adjust_deadline_for_parent = false;
   capabilities_.flipped_output_surface = flipped_output_surface;
 }
 
 PixelTestOutputSurface::PixelTestOutputSurface(
-    scoped_refptr<ContextProvider> context_provider,
-    bool flipped_output_surface)
-    : PixelTestOutputSurface(std::move(context_provider),
-                             nullptr,
-                             flipped_output_surface) {}
-
-PixelTestOutputSurface::PixelTestOutputSurface(
     std::unique_ptr<SoftwareOutputDevice> software_device)
-    : OutputSurface(nullptr, nullptr, std::move(software_device)),
+    : OutputSurface(std::move(software_device)),
       external_stencil_test_(false) {}
 
-PixelTestOutputSurface::~PixelTestOutputSurface() {}
+PixelTestOutputSurface::~PixelTestOutputSurface() = default;
+
+void PixelTestOutputSurface::EnsureBackbuffer() {}
+
+void PixelTestOutputSurface::DiscardBackbuffer() {}
+
+void PixelTestOutputSurface::BindFramebuffer() {
+  context_provider()->ContextGL()->BindFramebuffer(GL_FRAMEBUFFER, 0);
+}
 
 void PixelTestOutputSurface::Reshape(const gfx::Size& size,
                                      float scale_factor,
@@ -52,8 +50,27 @@ bool PixelTestOutputSurface::HasExternalStencilTest() const {
   return external_stencil_test_;
 }
 
-void PixelTestOutputSurface::SwapBuffers(CompositorFrame frame) {
+void PixelTestOutputSurface::ApplyExternalStencil() {}
+
+void PixelTestOutputSurface::SwapBuffers(OutputSurfaceFrame frame) {
   PostSwapBuffersComplete();
+}
+
+OverlayCandidateValidator*
+PixelTestOutputSurface::GetOverlayCandidateValidator() const {
+  return nullptr;
+}
+
+bool PixelTestOutputSurface::IsDisplayedAsOverlayPlane() const {
+  return false;
+}
+
+unsigned PixelTestOutputSurface::GetOverlayTextureId() const {
+  return 0;
+}
+
+bool PixelTestOutputSurface::SurfaceIsSuspendForRecycle() const {
+  return false;
 }
 
 uint32_t PixelTestOutputSurface::GetFramebufferCopyTextureFormat() {

@@ -5,10 +5,11 @@
 #include "services/ui/ws/server_window_surface.h"
 
 #include "base/callback.h"
+#include "base/message_loop/message_loop.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/quads/shared_quad_state.h"
 #include "cc/quads/surface_draw_quad.h"
-#include "services/ui/surfaces/surfaces_state.h"
+#include "services/ui/surfaces/display_compositor.h"
 #include "services/ui/ws/server_window.h"
 #include "services/ui/ws/server_window_delegate.h"
 #include "services/ui/ws/server_window_surface_manager.h"
@@ -18,18 +19,17 @@ namespace ws {
 
 ServerWindowSurface::ServerWindowSurface(
     ServerWindowSurfaceManager* manager,
+    const cc::FrameSinkId& frame_sink_id,
     mojo::InterfaceRequest<Surface> request,
     mojom::SurfaceClientPtr client)
-    : manager_(manager),
-      surface_id_allocator_(
-          manager->window()->delegate()->GetSurfacesState()->next_client_id()),
-      surface_factory_(manager_->GetSurfaceManager(), this),
+    : frame_sink_id_(frame_sink_id),
+      manager_(manager),
+      surface_factory_(frame_sink_id_, manager_->GetSurfaceManager(), this),
       client_(std::move(client)),
       binding_(this, std::move(request)) {
   cc::SurfaceManager* surface_manager = manager_->GetSurfaceManager();
-  surface_manager->RegisterSurfaceClientId(surface_id_allocator_.client_id());
-  surface_manager->RegisterSurfaceFactoryClient(
-      surface_id_allocator_.client_id(), this);
+  surface_manager->RegisterFrameSinkId(frame_sink_id_);
+  surface_manager->RegisterSurfaceFactoryClient(frame_sink_id_, this);
 }
 
 ServerWindowSurface::~ServerWindowSurface() {
@@ -38,9 +38,8 @@ ServerWindowSurface::~ServerWindowSurface() {
   // |surface_factory_|'s resources early on.
   surface_factory_.DestroyAll();
   cc::SurfaceManager* surface_manager = manager_->GetSurfaceManager();
-  surface_manager->UnregisterSurfaceFactoryClient(
-      surface_id_allocator_.client_id());
-  surface_manager->InvalidateSurfaceClientId(surface_id_allocator_.client_id());
+  surface_manager->UnregisterSurfaceFactoryClient(frame_sink_id_);
+  surface_manager->InvalidateFrameSinkId(frame_sink_id_);
 }
 
 void ServerWindowSurface::SubmitCompositorFrame(
@@ -50,7 +49,7 @@ void ServerWindowSurface::SubmitCompositorFrame(
       frame.delegated_frame_data->render_pass_list[0]->output_rect.size();
   // If the size of the CompostiorFrame has changed then destroy the existing
   // Surface and create a new one of the appropriate size.
-  if (surface_id_.is_null() || frame_size != last_submitted_frame_size_) {
+  if (local_frame_id_.is_null() || frame_size != last_submitted_frame_size_) {
     // Rendering of the topmost frame happens in two phases. First the frame
     // is generated and submitted, and a later date it is actually drawn.
     // During the time the frame is generated and drawn we can't destroy the
@@ -58,22 +57,26 @@ void ServerWindowSurface::SubmitCompositorFrame(
     // this we schedule destruction via the delegate. The delegate will call
     // us back when we're not waiting on a frame to be drawn (which may be
     // synchronously).
-    if (!surface_id_.is_null()) {
-      surfaces_scheduled_for_destruction_.insert(surface_id_);
+    if (!local_frame_id_.is_null()) {
+      surfaces_scheduled_for_destruction_.insert(local_frame_id_);
       window()->delegate()->ScheduleSurfaceDestruction(window());
     }
-    surface_id_ = surface_id_allocator_.GenerateId();
-    surface_factory_.Create(surface_id_);
+    local_frame_id_ = surface_id_allocator_.GenerateId();
+    surface_factory_.Create(local_frame_id_);
   }
   may_contain_video_ = frame.metadata.may_contain_video;
-  surface_factory_.SubmitCompositorFrame(surface_id_, std::move(frame),
+  surface_factory_.SubmitCompositorFrame(local_frame_id_, std::move(frame),
                                          callback);
   last_submitted_frame_size_ = frame_size;
   window()->delegate()->OnScheduleWindowPaint(window());
 }
 
+cc::SurfaceId ServerWindowSurface::GetSurfaceId() const {
+  return cc::SurfaceId(frame_sink_id_, local_frame_id_);
+}
+
 void ServerWindowSurface::DestroySurfacesScheduledForDestruction() {
-  std::set<cc::SurfaceId> surfaces;
+  std::set<cc::LocalFrameId> surfaces;
   surfaces.swap(surfaces_scheduled_for_destruction_);
   for (auto& id : surfaces)
     surface_factory_.Destroy(id);

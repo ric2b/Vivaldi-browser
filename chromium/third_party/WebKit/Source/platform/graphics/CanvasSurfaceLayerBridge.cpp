@@ -18,39 +18,44 @@
 
 namespace blink {
 
-CanvasSurfaceLayerBridge::CanvasSurfaceLayerBridge(std::unique_ptr<CanvasSurfaceLayerBridgeClient> client)
-{
-    m_client = std::move(client);
+CanvasSurfaceLayerBridge::CanvasSurfaceLayerBridge(
+    mojom::blink::OffscreenCanvasSurfacePtr service)
+    : m_service(std::move(service)) {}
+
+CanvasSurfaceLayerBridge::~CanvasSurfaceLayerBridge() {}
+
+bool CanvasSurfaceLayerBridge::createSurfaceLayer(int canvasWidth,
+                                                  int canvasHeight) {
+  if (!m_service->GetSurfaceId(&m_surfaceId))
+    return false;
+
+  cc::SurfaceLayer::SatisfyCallback satisfyCallback =
+      convertToBaseCallback(WTF::bind(
+          &CanvasSurfaceLayerBridge::satisfyCallback, WTF::unretained(this)));
+  cc::SurfaceLayer::RequireCallback requireCallback =
+      convertToBaseCallback(WTF::bind(
+          &CanvasSurfaceLayerBridge::requireCallback, WTF::unretained(this)));
+  m_surfaceLayer = cc::SurfaceLayer::Create(std::move(satisfyCallback),
+                                            std::move(requireCallback));
+  m_surfaceLayer->SetSurfaceId(m_surfaceId, 1.f,
+                               gfx::Size(canvasWidth, canvasHeight));
+
+  m_webLayer = wrapUnique(
+      Platform::current()->compositorSupport()->createLayerFromCCLayer(
+          m_surfaceLayer.get()));
+  GraphicsLayer::registerContentsLayer(m_webLayer.get());
+  return true;
 }
 
-CanvasSurfaceLayerBridge::~CanvasSurfaceLayerBridge()
-{
+void CanvasSurfaceLayerBridge::satisfyCallback(
+    const cc::SurfaceSequence& sequence) {
+  m_service->Satisfy(sequence);
 }
 
-bool CanvasSurfaceLayerBridge::createSurfaceLayer(int canvasWidth, int canvasHeight)
-{
-    if (!m_client->syncGetSurfaceId(&m_surfaceId))
-        return false;
-
-    m_client->asyncRequestSurfaceCreation(m_surfaceId);
-    cc::SurfaceLayer::SatisfyCallback satisfyCallback = convertToBaseCallback(WTF::bind(&CanvasSurfaceLayerBridge::satisfyCallback, WTF::unretained(this)));
-    cc::SurfaceLayer::RequireCallback requireCallback = convertToBaseCallback(WTF::bind(&CanvasSurfaceLayerBridge::requireCallback, WTF::unretained(this)));
-    m_surfaceLayer = cc::SurfaceLayer::Create(std::move(satisfyCallback), std::move(requireCallback));
-    m_surfaceLayer->SetSurfaceId(m_surfaceId, 1.f, gfx::Size(canvasWidth, canvasHeight));
-
-    m_webLayer = wrapUnique(Platform::current()->compositorSupport()->createLayerFromCCLayer(m_surfaceLayer.get()));
-    GraphicsLayer::registerContentsLayer(m_webLayer.get());
-    return true;
+void CanvasSurfaceLayerBridge::requireCallback(
+    const cc::SurfaceId& surfaceId,
+    const cc::SurfaceSequence& sequence) {
+  m_service->Require(surfaceId, sequence);
 }
 
-void CanvasSurfaceLayerBridge::satisfyCallback(const cc::SurfaceSequence& sequence)
-{
-    m_client->asyncSatisfy(sequence);
-}
-
-void CanvasSurfaceLayerBridge::requireCallback(const cc::SurfaceId& surfaceId, const cc::SurfaceSequence& sequence)
-{
-    m_client->asyncRequire(surfaceId, sequence);
-}
-
-} // namespace blink
+}  // namespace blink

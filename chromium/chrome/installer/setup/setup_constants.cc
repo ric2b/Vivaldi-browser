@@ -11,7 +11,6 @@ const wchar_t kChromeArchive[] = L"vivaldi.7z";
 const wchar_t kChromeCompressedArchive[] = L"vivaldi.packed.7z";
 const wchar_t kVisualElements[] = L"VisualElements";
 const wchar_t kVisualElementsManifest[] = L"chrome.VisualElementsManifest.xml";
-const wchar_t kWowHelperExe[] = L"wow_helper.exe";
 const wchar_t kStandaloneProfileHelper[] = L"stp.viv";
 
 // Sub directory of install source package under install temporary directory.

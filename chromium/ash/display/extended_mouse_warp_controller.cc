@@ -11,11 +11,11 @@
 #include "ash/display/shared_display_edge_indicator.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/root_window_controller.h"
-#include "ash/screen_util.h"
 #include "ash/shell.h"
 #include "base/memory/ptr_util.h"
 #include "ui/aura/window.h"
 #include "ui/display/manager/display_layout.h"
+#include "ui/display/manager/display_manager_utilities.h"
 #include "ui/display/screen.h"
 #include "ui/events/event_utils.h"
 #include "ui/wm/core/coordinate_conversion.h"
@@ -104,7 +104,7 @@ ExtendedMouseWarpController::ExtendedMouseWarpController(
       Shell::GetInstance()->display_manager();
   int64_t drag_source_id = drag_source ? GetDisplayIdFromWindow(drag_source)
                                        : display::Display::kInvalidDisplayID;
-  display::DisplayList display_list = display_manager->active_display_list();
+  display::Displays display_list = display_manager->active_display_list();
   // Try to create a Warp region for all possible two displays combination.
   // The following code does it by poping the last element in the list
   // and then pairing with remaining displays in the list, until the list
@@ -209,7 +209,7 @@ ExtendedMouseWarpController::CreateWarpRegion(const display::Display& a,
                          ? 0
                          : kMaximumSnapHeight;
 
-  if (!ComputeBoundary(a, b, &a_edge, &b_edge))
+  if (!display::ComputeBoundary(a, b, &a_edge, &b_edge))
     return nullptr;
 
   // Creates the snap window barrirer only when horizontally connected.

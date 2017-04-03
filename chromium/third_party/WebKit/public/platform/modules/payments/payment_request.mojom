@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-[JavaPackage="org.chromium.mojom.payments"]
+[JavaPackage="org.chromium.payments.mojom"]
 module blink.mojom;
 
 // The shipping address that the browser process provides to the renderer
@@ -28,7 +28,6 @@ struct PaymentAddress {
 
   string organization;
   string recipient;
-  string careOf;
   string phone;
 };
 
@@ -36,7 +35,9 @@ struct PaymentAddress {
 // browser shows the amount in UI and forwards it on to the payment app, if it
 // requires the amount.
 struct PaymentCurrencyAmount {
-  // ISO 4217 currency code. Three upper case ASCII letters.
+  // The most common identifiers are three-letter alphabetic codes as defined
+  // by [ISO4217] (for example, "USD" for US Dollars), however any string of at
+  // most 2048 characters is considered valid.
   string currency;
 
   // ISO 20022 CurrencyAnd30Amount. Up to 30 total digits. Up to 10 fraction
@@ -59,6 +60,7 @@ struct PaymentResponse {
 
   PaymentAddress? shipping_address;
   string? shipping_option;
+  string? payer_name;
   string? payer_email;
   string? payer_phone;
 };
@@ -101,9 +103,11 @@ struct PaymentDetails {
   array<PaymentItem> display_items;
   array<PaymentShippingOption> shipping_options;
   array<PaymentDetailsModifier> modifiers;
+  string error;
 };
 
 struct PaymentOptions {
+  bool request_payer_name;
   bool request_payer_email;
   bool request_payer_phone;
   bool request_shipping;

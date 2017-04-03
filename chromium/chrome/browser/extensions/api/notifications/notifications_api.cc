@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/callback.h"
+#include "base/feature_list.h"
 #include "base/guid.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -31,6 +32,9 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/browser/app_window/app_window.h"
+#include "extensions/browser/app_window/app_window_registry.h"
+#include "extensions/browser/app_window/native_app_window.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_system_provider.h"
 #include "extensions/browser/extensions_browser_client.h"
@@ -46,9 +50,15 @@
 #include "ui/message_center/notifier_settings.h"
 #include "url/gurl.h"
 
+using message_center::NotifierId;
+
 namespace extensions {
 
 namespace notifications = api::notifications;
+
+const base::Feature kAllowFullscreenAppNotificationsFeature{
+  "FSNotificationsApp", base::FEATURE_DISABLED_BY_DEFAULT
+};
 
 namespace {
 
@@ -187,6 +197,34 @@ class NotificationsApiDelegate : public NotificationDelegate {
   }
 
   std::string id() const override { return scoped_id_; }
+
+  // Should only display when fullscreen if this app is the source of the
+  // fullscreen window.
+  bool ShouldDisplayOverFullscreen() const override {
+    AppWindowRegistry::AppWindowList windows = AppWindowRegistry::Get(
+        api_function_->GetProfile())->GetAppWindowsForApp(extension_id_);
+    for (const auto& window : windows) {
+      // Window must be fullscreen and visible
+      if (window->IsFullscreen() && window->GetBaseWindow()->IsActive()) {
+        bool enabled = base::FeatureList::IsEnabled(
+            kAllowFullscreenAppNotificationsFeature);
+        if (enabled) {
+          UMA_HISTOGRAM_ENUMERATION("Notifications.Display_Fullscreen.Shown",
+                                    NotifierId::APPLICATION,
+                                    NotifierId::SIZE);
+        } else {
+          UMA_HISTOGRAM_ENUMERATION(
+              "Notifications.Display_Fullscreen.Suppressed",
+              NotifierId::APPLICATION,
+              NotifierId::SIZE);
+
+        }
+        return enabled;
+      }
+    }
+
+    return false;
+  }
 
  private:
   ~NotificationsApiDelegate() override {}

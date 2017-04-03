@@ -73,11 +73,32 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
         else:
             test_prefix_list = self._test_prefix_list(
                 issue_number, only_changed_tests=options.only_changed_tests)
+
+        # TODO(qyearsley): Fix places where non-existing tests may be added:
+        #  1. Make sure that the tests obtained when passing --only-changed-tests include only existing tests.
+        #  2. Make sure that update-w3c-test-expectations doesn't specify non-existing tests (http://crbug.com/649691).
+        test_prefix_list = self._filter_existing(test_prefix_list)
+
         self._log_test_prefix_list(test_prefix_list)
 
         if options.dry_run:
             return
-        self._rebaseline(options, test_prefix_list, update_scm=False)
+        # NOTE(qyearsley): If this is changed to stage all new files with git,
+        # e.g. if update_scm is not False, then update_w3c_test_expectations.py
+        # should be changed to not call git add --all.
+        self.rebaseline(options, test_prefix_list, update_scm=False)
+
+    def _filter_existing(self, test_prefix_list):
+        """Filters out entries in |test_prefix_list| for tests that don't exist."""
+        new_test_prefix_list = {}
+        port = self._tool.port_factory.get()
+        for test in test_prefix_list:
+            path = port.abspath_for_test(test)
+            if self._tool.filesystem.exists(path):
+                new_test_prefix_list[test] = test_prefix_list[test]
+            else:
+                _log.warning('%s not found, removing from list.', path)
+        return new_test_prefix_list
 
     def _get_issue_number(self, options):
         """Gets the Rietveld CL number from either |options| or from the current local branch."""
@@ -94,7 +115,7 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
 
     def git_cl(self):
         """Returns a GitCL instance; can be overridden for tests."""
-        return GitCL(self._tool.executive)
+        return GitCL(self._tool)
 
     def trigger_jobs_for_missing_builds(self, builds):
         builders_with_builds = {b.builder_name for b in builds}

@@ -113,7 +113,7 @@ enum BadMessageReason {
   SWDH_UNREGISTER_BAD_REGISTRATION_ID = 89,
   BDH_INVALID_WRITE_VALUE_LENGTH = 90,
   WC_MEMORY_CACHE_RESOURCE_BAD_SECURITY_INFO = 91,  // obsolete; no longer used
-  WC_RENDERER_DID_NAVIGATE_BAD_SECURITY_INFO = 92,
+  WC_RENDERER_DID_NAVIGATE_BAD_SECURITY_INFO = 92,  // obsolete; no longer used
   OBSOLETE_BDH_DUPLICATE_REQUEST_DEVICE_ID = 93,
   CSDH_INVALID_ORIGIN = 94,
   RDH_ILLEGAL_ORIGIN = 95,
@@ -161,6 +161,7 @@ enum BadMessageReason {
   DSH_DELETED_SESSION_ID = 137,
   DSH_WRONG_STORAGE_PARTITION = 138,
   BDH_DISALLOWED_ORIGIN = 139,
+  ARH_CREATED_STREAM_WITHOUT_AUTHORIZATION = 140,
 
   // Please add new elements here. The naming convention is abbreviated class
   // name (e.g. RenderFrameHost becomes RFH) plus a unique description of the

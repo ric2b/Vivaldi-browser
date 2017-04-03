@@ -310,9 +310,7 @@ scoped_refptr<media::VideoFrame> CreateHighbitVideoFrame(
       video_frame->natural_size(), video_frame->timestamp());
 
   // Copy all metadata.
-  base::DictionaryValue tmp;
-  video_frame->metadata()->MergeInternalValuesInto(&tmp);
-  ret->metadata()->MergeInternalValuesFrom(tmp);
+  ret->metadata()->MergeMetadataFrom(video_frame->metadata());
 
   for (int plane = media::VideoFrame::kYPlane;
        plane <= media::VideoFrame::kVPlane; ++plane) {
@@ -2196,30 +2194,6 @@ TEST_F(ExternalStencilPixelTest, RenderSurfacesIgnoreStencil) {
   EXPECT_TRUE(this->RunPixelTest(
       &pass_list,
       base::FilePath(FILE_PATH_LITERAL("four_blue_green_checkers.png")),
-      ExactPixelComparator(true)));
-}
-
-TEST_F(ExternalStencilPixelTest, DeviceClip) {
-  ClearBackgroundToGreen();
-  gfx::Rect clip_rect(gfx::Point(150, 150), gfx::Size(50, 50));
-  this->ForceDeviceClip(clip_rect);
-
-  // Draw a blue quad that covers the entire device viewport. It should be
-  // clipped to the bottom right corner by the device clip.
-  gfx::Rect rect(this->device_viewport_size_);
-  RenderPassId id(1, 1);
-  std::unique_ptr<RenderPass> pass = CreateTestRootRenderPass(id, rect);
-  SharedQuadState* blue_shared_state =
-      CreateTestSharedQuadState(gfx::Transform(), rect, pass.get());
-  SolidColorDrawQuad* blue =
-      pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
-  blue->SetNew(blue_shared_state, rect, rect, SK_ColorBLUE, false);
-  RenderPassList pass_list;
-  pass_list.push_back(std::move(pass));
-
-  EXPECT_TRUE(this->RunPixelTest(
-      &pass_list,
-      base::FilePath(FILE_PATH_LITERAL("green_with_blue_corner.png")),
       ExactPixelComparator(true)));
 }
 

@@ -42,9 +42,9 @@ class SchedulerClient {
   virtual DrawResult ScheduledActionDrawAndSwapForced() = 0;
   virtual void ScheduledActionCommit() = 0;
   virtual void ScheduledActionActivateSyncTree() = 0;
-  virtual void ScheduledActionBeginOutputSurfaceCreation() = 0;
+  virtual void ScheduledActionBeginCompositorFrameSinkCreation() = 0;
   virtual void ScheduledActionPrepareTiles() = 0;
-  virtual void ScheduledActionInvalidateOutputSurface() = 0;
+  virtual void ScheduledActionInvalidateCompositorFrameSink() = 0;
   virtual void DidFinishImplFrame() = 0;
   virtual void SendBeginMainFrameNotExpectedSoon() = 0;
 
@@ -54,25 +54,20 @@ class SchedulerClient {
 
 class CC_EXPORT Scheduler : public BeginFrameObserverBase {
  public:
-  static std::unique_ptr<Scheduler> Create(
-      SchedulerClient* client,
-      const SchedulerSettings& scheduler_settings,
-      int layer_tree_host_id,
-      base::SingleThreadTaskRunner* task_runner,
-      BeginFrameSource* begin_frame_source,
-      std::unique_ptr<CompositorTimingHistory> compositor_timing_history);
-
+  Scheduler(SchedulerClient* client,
+            const SchedulerSettings& scheduler_settings,
+            int layer_tree_host_id,
+            base::SingleThreadTaskRunner* task_runner,
+            std::unique_ptr<CompositorTimingHistory> compositor_timing_history);
   ~Scheduler() override;
 
   // BeginFrameObserverBase
   void OnBeginFrameSourcePausedChanged(bool paused) override;
   bool OnBeginFrameDerivedImpl(const BeginFrameArgs& args) override;
 
-  void OnDrawForOutputSurface(bool resourceless_software_draw);
+  void OnDrawForCompositorFrameSink(bool resourceless_software_draw);
 
   const SchedulerSettings& settings() const { return settings_; }
-
-  void SetEstimatedParentDrawTime(base::TimeDelta draw_time);
 
   void SetVisible(bool visible);
   bool visible() { return state_machine_.visible(); }
@@ -102,8 +97,8 @@ class CC_EXPORT Scheduler : public BeginFrameObserverBase {
 
   void WillPrepareTiles();
   void DidPrepareTiles();
-  void DidLoseOutputSurface();
-  void DidCreateAndInitializeOutputSurface();
+  void DidLoseCompositorFrameSink();
+  void DidCreateAndInitializeCompositorFrameSink();
 
   // Tests do not want to shut down until all possible BeginMainFrames have
   // occured to prevent flakiness.
@@ -140,13 +135,6 @@ class CC_EXPORT Scheduler : public BeginFrameObserverBase {
   }
 
  protected:
-  Scheduler(SchedulerClient* client,
-            const SchedulerSettings& scheduler_settings,
-            int layer_tree_host_id,
-            base::SingleThreadTaskRunner* task_runner,
-            BeginFrameSource* begin_frame_source,
-            std::unique_ptr<CompositorTimingHistory> compositor_timing_history);
-
   // Virtual for testing.
   virtual base::TimeTicks Now() const;
 
@@ -161,7 +149,6 @@ class CC_EXPORT Scheduler : public BeginFrameObserverBase {
   bool observing_begin_frame_source_;
 
   std::unique_ptr<CompositorTimingHistory> compositor_timing_history_;
-  base::TimeDelta estimated_parent_draw_time_;
 
   std::deque<BeginFrameArgs> begin_retro_frame_args_;
   SchedulerStateMachine::BeginImplFrameDeadlineMode
@@ -204,10 +191,6 @@ class CC_EXPORT Scheduler : public BeginFrameObserverBase {
   void FinishImplFrame();
   void OnBeginImplFrameDeadline();
   void PollToAdvanceCommitState();
-
-  base::TimeDelta EstimatedParentDrawTime() {
-    return estimated_parent_draw_time_;
-  }
 
   bool IsInsideAction(SchedulerStateMachine::Action action) {
     return inside_action_ == action;

@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/lazy_instance.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
@@ -66,39 +67,39 @@ base::ListValue* GetAPIPermissions(const Extension* ext) {
   return permissions;
 }
 
-bool IsTestMode(Profile* profile) {
-  return AutotestPrivateAPI::GetFactoryInstance()->Get(profile)->test_mode();
+bool IsTestMode(content::BrowserContext* context) {
+  return AutotestPrivateAPI::GetFactoryInstance()->Get(context)->test_mode();
 }
 
 }  // namespace
 
-bool AutotestPrivateLogoutFunction::RunSync() {
+ExtensionFunction::ResponseAction AutotestPrivateLogoutFunction::Run() {
   DVLOG(1) << "AutotestPrivateLogoutFunction";
-  if (!IsTestMode(GetProfile()))
+  if (!IsTestMode(browser_context()))
     chrome::AttemptUserExit();
-  return true;
+  return RespondNow(NoArguments());
 }
 
-bool AutotestPrivateRestartFunction::RunSync() {
+ExtensionFunction::ResponseAction AutotestPrivateRestartFunction::Run() {
   DVLOG(1) << "AutotestPrivateRestartFunction";
-  if (!IsTestMode(GetProfile()))
+  if (!IsTestMode(browser_context()))
     chrome::AttemptRestart();
-  return true;
+  return RespondNow(NoArguments());
 }
 
-bool AutotestPrivateShutdownFunction::RunSync() {
+ExtensionFunction::ResponseAction AutotestPrivateShutdownFunction::Run() {
   std::unique_ptr<api::autotest_private::Shutdown::Params> params(
       api::autotest_private::Shutdown::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   DVLOG(1) << "AutotestPrivateShutdownFunction " << params->force;
 
-  if (!IsTestMode(GetProfile()))
+  if (!IsTestMode(browser_context()))
     chrome::AttemptExit();
-  return true;
+  return RespondNow(NoArguments());
 }
 
-bool AutotestPrivateLoginStatusFunction::RunSync() {
+ExtensionFunction::ResponseAction AutotestPrivateLoginStatusFunction::Run() {
   DVLOG(1) << "AutotestPrivateLoginStatusFunction";
 
   std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue);
@@ -141,29 +142,29 @@ bool AutotestPrivateLoginStatusFunction::RunSync() {
   }
 #endif
 
-  SetResult(std::move(result));
-  return true;
+  return RespondNow(OneArgument(std::move(result)));
 }
 
-bool AutotestPrivateLockScreenFunction::RunSync() {
+ExtensionFunction::ResponseAction AutotestPrivateLockScreenFunction::Run() {
   DVLOG(1) << "AutotestPrivateLockScreenFunction";
 #if defined(OS_CHROMEOS)
   chromeos::DBusThreadManager::Get()->GetSessionManagerClient()->
       RequestLockScreen();
 #endif
-  return true;
+  return RespondNow(NoArguments());
 }
 
-bool AutotestPrivateGetExtensionsInfoFunction::RunSync() {
+ExtensionFunction::ResponseAction
+AutotestPrivateGetExtensionsInfoFunction::Run() {
   DVLOG(1) << "AutotestPrivateGetExtensionsInfoFunction";
 
   ExtensionService* service =
-      ExtensionSystem::Get(GetProfile())->extension_service();
-  ExtensionRegistry* registry = ExtensionRegistry::Get(GetProfile());
+      ExtensionSystem::Get(browser_context())->extension_service();
+  ExtensionRegistry* registry = ExtensionRegistry::Get(browser_context());
   const ExtensionSet& extensions = registry->enabled_extensions();
   const ExtensionSet& disabled_extensions = registry->disabled_extensions();
   ExtensionActionManager* extension_action_manager =
-      ExtensionActionManager::Get(GetProfile());
+      ExtensionActionManager::Get(browser_context());
 
   base::ListValue* extensions_values = new base::ListValue;
   ExtensionList all;
@@ -200,8 +201,8 @@ bool AutotestPrivateGetExtensionsInfoFunction::RunSync() {
         location == Manifest::INTERNAL ||
         Manifest::IsUnpackedLocation(location));
     extension_value->SetBoolean("isEnabled", service->IsExtensionEnabled(id));
-    extension_value->SetBoolean("allowedInIncognito",
-        util::IsIncognitoEnabled(id, GetProfile()));
+    extension_value->SetBoolean(
+        "allowedInIncognito", util::IsIncognitoEnabled(id, browser_context()));
     extension_value->SetBoolean(
         "hasPageAction",
         extension_action_manager->GetPageAction(*extension) != NULL);
@@ -212,17 +213,17 @@ bool AutotestPrivateGetExtensionsInfoFunction::RunSync() {
   std::unique_ptr<base::DictionaryValue> return_value(
       new base::DictionaryValue);
   return_value->Set("extensions", extensions_values);
-  SetResult(std::move(return_value));
-  return true;
+  return RespondNow(OneArgument(std::move(return_value)));
 }
 
 static int AccessArray(const volatile int arr[], const volatile int *index) {
   return arr[*index];
 }
 
-bool AutotestPrivateSimulateAsanMemoryBugFunction::RunSync() {
+ExtensionFunction::ResponseAction
+AutotestPrivateSimulateAsanMemoryBugFunction::Run() {
   DVLOG(1) << "AutotestPrivateSimulateAsanMemoryBugFunction";
-  if (!IsTestMode(GetProfile())) {
+  if (!IsTestMode(browser_context())) {
     // This array is volatile not to let compiler optimize us out.
     volatile int testarray[3] = {0, 0, 0};
 
@@ -230,10 +231,11 @@ bool AutotestPrivateSimulateAsanMemoryBugFunction::RunSync() {
     volatile int index = 5;
     AccessArray(testarray, &index);
   }
-  return true;
+  return RespondNow(NoArguments());
 }
 
-bool AutotestPrivateSetTouchpadSensitivityFunction::RunSync() {
+ExtensionFunction::ResponseAction
+AutotestPrivateSetTouchpadSensitivityFunction::Run() {
   std::unique_ptr<api::autotest_private::SetTouchpadSensitivity::Params> params(
       api::autotest_private::SetTouchpadSensitivity::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -244,10 +246,10 @@ bool AutotestPrivateSetTouchpadSensitivityFunction::RunSync() {
   chromeos::system::InputDeviceSettings::Get()->SetTouchpadSensitivity(
       params->value);
 #endif
-  return true;
+  return RespondNow(NoArguments());
 }
 
-bool AutotestPrivateSetTapToClickFunction::RunSync() {
+ExtensionFunction::ResponseAction AutotestPrivateSetTapToClickFunction::Run() {
   std::unique_ptr<api::autotest_private::SetTapToClick::Params> params(
       api::autotest_private::SetTapToClick::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -257,10 +259,11 @@ bool AutotestPrivateSetTapToClickFunction::RunSync() {
 #if defined(OS_CHROMEOS)
   chromeos::system::InputDeviceSettings::Get()->SetTapToClick(params->enabled);
 #endif
-  return true;
+  return RespondNow(NoArguments());
 }
 
-bool AutotestPrivateSetThreeFingerClickFunction::RunSync() {
+ExtensionFunction::ResponseAction
+AutotestPrivateSetThreeFingerClickFunction::Run() {
   std::unique_ptr<api::autotest_private::SetThreeFingerClick::Params> params(
       api::autotest_private::SetThreeFingerClick::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -271,10 +274,10 @@ bool AutotestPrivateSetThreeFingerClickFunction::RunSync() {
   chromeos::system::InputDeviceSettings::Get()->SetThreeFingerClick(
       params->enabled);
 #endif
-  return true;
+  return RespondNow(NoArguments());
 }
 
-bool AutotestPrivateSetTapDraggingFunction::RunSync() {
+ExtensionFunction::ResponseAction AutotestPrivateSetTapDraggingFunction::Run() {
   std::unique_ptr<api::autotest_private::SetTapDragging::Params> params(
       api::autotest_private::SetTapDragging::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -284,10 +287,11 @@ bool AutotestPrivateSetTapDraggingFunction::RunSync() {
 #if defined(OS_CHROMEOS)
   chromeos::system::InputDeviceSettings::Get()->SetTapDragging(params->enabled);
 #endif
-  return true;
+  return RespondNow(NoArguments());
 }
 
-bool AutotestPrivateSetNaturalScrollFunction::RunSync() {
+ExtensionFunction::ResponseAction
+AutotestPrivateSetNaturalScrollFunction::Run() {
   std::unique_ptr<api::autotest_private::SetNaturalScroll::Params> params(
       api::autotest_private::SetNaturalScroll::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -298,10 +302,11 @@ bool AutotestPrivateSetNaturalScrollFunction::RunSync() {
   chromeos::system::InputDeviceSettings::Get()->SetNaturalScroll(
       params->enabled);
 #endif
-  return true;
+  return RespondNow(NoArguments());
 }
 
-bool AutotestPrivateSetMouseSensitivityFunction::RunSync() {
+ExtensionFunction::ResponseAction
+AutotestPrivateSetMouseSensitivityFunction::Run() {
   std::unique_ptr<api::autotest_private::SetMouseSensitivity::Params> params(
       api::autotest_private::SetMouseSensitivity::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -312,10 +317,11 @@ bool AutotestPrivateSetMouseSensitivityFunction::RunSync() {
   chromeos::system::InputDeviceSettings::Get()->SetMouseSensitivity(
       params->value);
 #endif
-  return true;
+  return RespondNow(NoArguments());
 }
 
-bool AutotestPrivateSetPrimaryButtonRightFunction::RunSync() {
+ExtensionFunction::ResponseAction
+AutotestPrivateSetPrimaryButtonRightFunction::Run() {
   std::unique_ptr<api::autotest_private::SetPrimaryButtonRight::Params> params(
       api::autotest_private::SetPrimaryButtonRight::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -326,7 +332,7 @@ bool AutotestPrivateSetPrimaryButtonRightFunction::RunSync() {
   chromeos::system::InputDeviceSettings::Get()->SetPrimaryButtonRight(
       params->right);
 #endif
-  return true;
+  return RespondNow(NoArguments());
 }
 
 // static
@@ -351,25 +357,25 @@ std::string AutotestPrivateGetVisibleNotificationsFunction::ConvertToString(
   return "unknown";
 }
 
-bool AutotestPrivateGetVisibleNotificationsFunction::RunSync() {
+ExtensionFunction::ResponseAction
+AutotestPrivateGetVisibleNotificationsFunction::Run() {
   DVLOG(1) << "AutotestPrivateGetVisibleNotificationsFunction";
   std::unique_ptr<base::ListValue> values(new base::ListValue);
 #if defined(OS_CHROMEOS)
   for (auto* notification :
        message_center::MessageCenter::Get()->GetVisibleNotifications()) {
-    base::DictionaryValue* result(new base::DictionaryValue);
+    auto result = base::MakeUnique<base::DictionaryValue>();
     result->SetString("id", notification->id());
     result->SetString("type", ConvertToString(notification->type()));
     result->SetString("title", notification->title());
     result->SetString("message", notification->message());
     result->SetInteger("priority", notification->priority());
     result->SetInteger("progress", notification->progress());
-    values->Append(result);
+    values->Append(std::move(result));
   }
 
 #endif
-  SetResult(std::move(values));
-  return true;
+  return RespondNow(OneArgument(std::move(values)));
 }
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<AutotestPrivateAPI> >

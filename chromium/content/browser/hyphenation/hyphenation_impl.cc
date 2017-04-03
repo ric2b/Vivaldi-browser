@@ -10,8 +10,11 @@
 
 #include "base/files/file.h"
 #include "base/files/file_path.h"
+#include "base/metrics/histogram.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/timer/elapsed_timer.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 
 namespace {
@@ -42,7 +45,9 @@ static base::File& GetDictionaryFile(const std::string& locale) {
 #endif
   std::string filename = base::StringPrintf("hyph-%s.hyb", locale.c_str());
   base::FilePath path = dir.AppendASCII(filename);
+  base::ElapsedTimer timer;
   file.Initialize(path, base::File::FLAG_OPEN | base::File::FLAG_READ);
+  UMA_HISTOGRAM_TIMES("Hyphenation.Open.File", timer.Elapsed());
   return file;
 }
 
@@ -50,14 +55,14 @@ static base::File& GetDictionaryFile(const std::string& locale) {
 
 namespace hyphenation {
 
-HyphenationImpl::HyphenationImpl(blink::mojom::HyphenationRequest request)
-    : binding_(this, std::move(request)) {}
+HyphenationImpl::HyphenationImpl() {}
 
 HyphenationImpl::~HyphenationImpl() {}
 
 // static
 void HyphenationImpl::Create(blink::mojom::HyphenationRequest request) {
-  new HyphenationImpl(std::move(request));
+  mojo::MakeStrongBinding(base::MakeUnique<HyphenationImpl>(),
+                          std::move(request));
 }
 
 void HyphenationImpl::OpenDictionary(const mojo::String& locale,

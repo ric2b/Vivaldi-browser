@@ -105,6 +105,13 @@ class NET_EXPORT_PRIVATE SpdyFramerVisitorInterface {
   // Called if an error is detected in the SpdySerializedFrame protocol.
   virtual void OnError(SpdyFramer* framer) = 0;
 
+  // Called when the common header for a frame is received. Validating the
+  // common header occurs in later processing.
+  virtual void OnCommonHeader(SpdyStreamId stream_id,
+                              size_t length,
+                              uint8_t type,
+                              uint8_t flags) {}
+
   // Called when a data frame header is received. The frame's data
   // payload will be provided via subsequent calls to
   // OnStreamFrameData().
@@ -428,6 +435,33 @@ class NET_EXPORT_PRIVATE SpdyFramer {
                                 size_t header_length,
                                 SpdyHeaderBlock* block) const;
 
+  // Iteratively converts a SpdyHeadersIR (with a possibly huge SpdyHeaderBlock)
+  // into an appropriate sequence of SpdySerializedFrames.
+  class NET_EXPORT_PRIVATE SpdyHeaderFrameIterator {
+   public:
+    SpdyHeaderFrameIterator(SpdyFramer* framer,
+                            std::unique_ptr<SpdyHeadersIR> headers_ir);
+    ~SpdyHeaderFrameIterator();
+
+    // SpdyHeaderFrameIterator is neither copyable nor movable.
+    SpdyHeaderFrameIterator(const SpdyHeaderFrameIterator&) = delete;
+    SpdyHeaderFrameIterator& operator=(const SpdyHeaderFrameIterator&) = delete;
+
+    SpdySerializedFrame NextFrame();
+    bool HasNextFrame() const { return has_next_frame_; }
+
+   private:
+    std::unique_ptr<SpdyHeadersIR> headers_ir_;
+    std::unique_ptr<HpackEncoder::ProgressiveEncoder> encoder_;
+    SpdyFramer* framer_;
+
+    // Field for debug reporting.
+    size_t debug_total_size_;
+
+    bool is_first_frame_;
+    bool has_next_frame_;
+  };
+
   // Serialize a data frame.
   SpdySerializedFrame SerializeData(const SpdyDataIR& data) const;
   // Serializes the data frame header and optionally padding length fields,
@@ -482,11 +516,8 @@ class NET_EXPORT_PRIVATE SpdyFramer {
 
   // Serializes a CONTINUATION frame. The CONTINUATION frame is used
   // to continue a sequence of header block fragments.
-  // TODO(jgraettinger): This implementation is incorrect. The continuation
-  // frame continues a previously-begun HPACK encoding; it doesn't begin a
-  // new one. Figure out whether it makes sense to keep SerializeContinuation().
   SpdySerializedFrame SerializeContinuation(
-      const SpdyContinuationIR& continuation);
+      const SpdyContinuationIR& continuation) const;
 
   // Serializes an ALTSVC frame. The ALTSVC frame advertises the
   // availability of an alternative service to the client.
@@ -513,6 +544,10 @@ class NET_EXPORT_PRIVATE SpdyFramer {
   // For ease of testing and experimentation we can tweak compression on/off.
   void set_enable_compression(bool value) {
     enable_compression_ = value;
+  }
+
+  void SetHpackIndexingPolicy(HpackEncoder::IndexingPolicy policy) {
+    GetHpackEncoder()->SetIndexingPolicy(std::move(policy));
   }
 
   // Used only in log messages.
@@ -741,6 +776,19 @@ class NET_EXPORT_PRIVATE SpdyFramer {
   void SerializeHeaderBlock(SpdyFrameBuilder* builder,
                             const SpdyFrameWithHeaderBlockIR& frame);
 
+  // Serializes a HEADERS frame from the given SpdyHeadersIR and encoded header
+  // block. Does not need or use the SpdyHeaderBlock inside SpdyHeadersIR.
+  SpdySerializedFrame SerializeHeadersGivenEncoding(
+      const SpdyHeadersIR& headers,
+      const std::string& encoding) const;
+
+  // Calculates the number of bytes required to serialize a SpdyHeadersIR, not
+  // including the bytes to be used for the encoded header set.
+  size_t GetHeaderFrameSizeSansBlock(const SpdyHeadersIR& header_ir) const;
+
+  // Serializes the flags octet for a given SpdyHeadersIR.
+  uint8_t SerializeHeaderFrameFlags(const SpdyHeadersIR& header_ir) const;
+
   // Set the error code and moves the framer into the error state.
   void set_error(SpdyError error);
 
@@ -861,7 +909,7 @@ class NET_EXPORT_PRIVATE SpdyFramer {
   bool process_single_input_frame_ = false;
 
   bool use_new_methods_ =
-      FLAGS_chromium_http2_flag_spdy_framer_use_new_methods3;
+      FLAGS_chromium_http2_flag_spdy_framer_use_new_methods4;
 };
 
 }  // namespace net

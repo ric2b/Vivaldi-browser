@@ -55,7 +55,6 @@
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents_delegate.h"
-#include "content/public/common/browser_plugin_guest_mode.h"
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
@@ -78,7 +77,6 @@
 #include "net/test/embedded_test_server/http_response.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
-#include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/compositor_observer.h"
 #include "ui/display/display_switches.h"
@@ -217,6 +215,11 @@ class EmbedderWebContentsObserver : public content::WebContentsObserver {
 
   DISALLOW_COPY_AND_ASSIGN(EmbedderWebContentsObserver);
 };
+
+bool UseCrossProcessFramesForGuests() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kUseCrossProcessFramesForGuests);
+}
 
 void ExecuteScriptWaitForTitle(content::WebContents* web_contents,
                                const char* script,
@@ -1094,7 +1097,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, AcceptTouchEvents) {
   // UseCrossProcessFramesForGuests() events are routed directly to the
   // guest, so the embedder does not need to know about the installation of
   // touch handlers.
-  if (content::BrowserPluginGuestMode::UseCrossProcessFramesForGuests())
+  if (UseCrossProcessFramesForGuests())
     return;
 
   LoadAppWithGuest("web_view/accept_touch_events");
@@ -1305,8 +1308,8 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, Shim_TestDisplayNoneWebviewLoad) {
 
 IN_PROC_BROWSER_TEST_P(WebViewTest, Shim_TestDisplayNoneWebviewRemoveChild) {
   // http://crbug.com/585652
-  if (content::BrowserPluginGuestMode::UseCrossProcessFramesForGuests())
-     return;
+  if (UseCrossProcessFramesForGuests())
+    return;
   TestHelper("testDisplayNoneWebviewRemoveChild",
              "web_view/shim", NO_TEST_SERVER);
 }
@@ -1409,6 +1412,13 @@ IN_PROC_BROWSER_TEST_P(WebViewTest,
 IN_PROC_BROWSER_TEST_P(WebViewTest, Shim_TestAddContentScriptWithCode) {
   TestHelper("testAddContentScriptWithCode", "web_view/shim",
              NEEDS_TEST_SERVER);
+}
+
+IN_PROC_BROWSER_TEST_P(
+    WebViewTest,
+    Shim_TestAddMultipleContentScriptsWithCodeAndCheckGeneratedScriptUrl) {
+  TestHelper("testAddMultipleContentScriptsWithCodeAndCheckGeneratedScriptUrl",
+             "web_view/shim", NEEDS_TEST_SERVER);
 }
 
 IN_PROC_BROWSER_TEST_P(WebViewTest, Shim_TestExecuteScriptFail) {
@@ -1933,9 +1943,8 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, OpenURLFromTab_CurrentTab_Abort) {
   ExtensionTestMessageListener load_listener("WebViewTest.LOADSTOP", false);
 
   // Navigating to a file URL is forbidden inside a <webview>.
-  content::OpenURLParams params(GURL("file://foo"),
-                                content::Referrer(),
-                                CURRENT_TAB,
+  content::OpenURLParams params(GURL("file://foo"), content::Referrer(),
+                                WindowOpenDisposition::CURRENT_TAB,
                                 ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
                                 true /* is_renderer_initiated */);
   GetGuestWebContents()->GetDelegate()->OpenURLFromTab(
@@ -1958,9 +1967,9 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, OpenURLFromTab_CurrentTab_Succeed) {
   ExtensionTestMessageListener load_listener("WebViewTest.LOADSTOP", false);
 
   GURL test_url("http://www.google.com");
-  content::OpenURLParams params(test_url, content::Referrer(), CURRENT_TAB,
-                                ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
-                                false /* is_renderer_initiated */);
+  content::OpenURLParams params(
+      test_url, content::Referrer(), WindowOpenDisposition::CURRENT_TAB,
+      ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false /* is_renderer_initiated */);
   GetGuestWebContents()->GetDelegate()->OpenURLFromTab(GetGuestWebContents(),
                                                        params);
 
@@ -1978,9 +1987,8 @@ IN_PROC_BROWSER_TEST_P(WebViewNewWindowTest, OpenURLFromTab_NewWindow_Abort) {
       "WebViewTest.NEWWINDOW", false);
 
   // Navigating to a file URL is forbidden inside a <webview>.
-  content::OpenURLParams params(GURL("file://foo"),
-                                content::Referrer(),
-                                NEW_BACKGROUND_TAB,
+  content::OpenURLParams params(GURL("file://foo"), content::Referrer(),
+                                WindowOpenDisposition::NEW_BACKGROUND_TAB,
                                 ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
                                 true /* is_renderer_initiated */);
   GetGuestWebContents()->GetDelegate()->OpenURLFromTab(
@@ -2448,7 +2456,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, DownloadPermission) {
   base::ScopedTempDir temporary_download_dir;
   ASSERT_TRUE(temporary_download_dir.CreateUniqueTempDir());
   DownloadPrefs::FromBrowserContext(guest_web_contents->GetBrowserContext())
-      ->SetDownloadPath(temporary_download_dir.path());
+      ->SetDownloadPath(temporary_download_dir.GetPath());
 
   std::unique_ptr<content::DownloadTestObserver> completion_observer(
       new content::DownloadTestObserverTerminal(
@@ -2605,7 +2613,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, DownloadCookieIsolation) {
   base::ScopedTempDir temporary_download_dir;
   ASSERT_TRUE(temporary_download_dir.CreateUniqueTempDir());
   DownloadPrefs::FromBrowserContext(web_contents->GetBrowserContext())
-      ->SetDownloadPath(temporary_download_dir.path());
+      ->SetDownloadPath(temporary_download_dir.GetPath());
 
   content::DownloadManager* download_manager =
       content::BrowserContext::GetDownloadManager(
@@ -2690,7 +2698,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, PRE_DownloadCookieIsolation_CrossSession) {
   base::ScopedTempDir temporary_download_dir;
   ASSERT_TRUE(temporary_download_dir.CreateUniqueTempDir());
   DownloadPrefs::FromBrowserContext(web_contents->GetBrowserContext())
-      ->SetDownloadPath(temporary_download_dir.path());
+      ->SetDownloadPath(temporary_download_dir.GetPath());
 
   content::DownloadManager* download_manager =
       content::BrowserContext::GetDownloadManager(
@@ -2787,8 +2795,8 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, DownloadCookieIsolation_CrossSession) {
 
   for (auto* download : downloads) {
     ASSERT_TRUE(download->CanResume());
-    ASSERT_TRUE(
-        temporary_download_dir.path().IsParent(download->GetTargetFilePath()));
+    ASSERT_TRUE(temporary_download_dir.GetPath().IsParent(
+        download->GetTargetFilePath()));
     ASSERT_TRUE(download->GetFullPath().empty());
     EXPECT_EQ(content::DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED,
               download->GetLastReason());
@@ -3194,7 +3202,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, Shim_TestFocusWhileFocused) {
 
 IN_PROC_BROWSER_TEST_P(WebViewTest, NestedGuestContainerBounds) {
   // TODO(lfg): https://crbug.com/581898
-  if (content::BrowserPluginGuestMode::UseCrossProcessFramesForGuests())
+  if (UseCrossProcessFramesForGuests())
     return;
 
   TestHelper("testPDFInWebview", "web_view/shim", NO_TEST_SERVER);
@@ -3325,7 +3333,7 @@ class WebContentsAccessibilityEventWatcher
   size_t count_;
 };
 
-IN_PROC_BROWSER_TEST_P(WebViewAccessibilityTest, TouchAccessibility) {
+IN_PROC_BROWSER_TEST_P(WebViewAccessibilityTest, DISABLED_TouchAccessibility) {
   LoadAppWithGuest("web_view/touch_accessibility");
   content::WebContents* web_contents = GetFirstAppWindowWebContents();
   content::EnableAccessibilityForWebContents(web_contents);
@@ -3534,7 +3542,7 @@ class FocusChangeWaiter {
 IN_PROC_BROWSER_TEST_F(WebViewGuestTouchFocusTest,
                        TouchFocusesBrowserPluginInEmbedder) {
   // This test is only relevant for non-OOPIF WebView.
-  if (content::BrowserPluginGuestMode::UseCrossProcessFramesForGuests())
+  if (UseCrossProcessFramesForGuests())
     return;
 
   LoadAppWithGuest("web_view/guest_focus_test");

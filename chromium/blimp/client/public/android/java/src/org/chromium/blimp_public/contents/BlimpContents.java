@@ -4,6 +4,8 @@
 
 package org.chromium.blimp_public.contents;
 
+import android.view.ViewGroup;
+
 /**
  * BlimpContents is the Java representation of a native BlimpContents object.
  *
@@ -13,10 +15,15 @@ package org.chromium.blimp_public.contents;
  */
 public interface BlimpContents {
     /**
-     * Retrives the {@link BlimpNavigationController} that controls all navigation related
+     * Retrieves the {@link BlimpNavigationController} that controls all navigation related
      * to this BlimpContents.
      */
     BlimpNavigationController getNavigationController();
+
+    /**
+     * Returns the theme color for Blimp tab.
+     */
+    int getThemeColor();
 
     /**
      * Adds an observer to this BlimpContents.
@@ -29,8 +36,23 @@ public interface BlimpContents {
     void removeObserver(BlimpContentsObserver observer);
 
     /**
+     * Returns a view that represents the content for this BlimpContents.
+     */
+    ViewGroup getView();
+
+    /**
      * For BlimpContents that are owned by Java, this must be called before this BlimpContents is
      * garbage collected.
      */
     void destroy();
+
+    /**
+     * Shows this BlimpContents.
+     */
+    void show();
+
+    /**
+     * Hide this BlimpContents.
+     */
+    void hide();
 }

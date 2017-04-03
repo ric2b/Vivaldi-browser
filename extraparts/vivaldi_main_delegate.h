@@ -8,6 +8,7 @@
 class VivaldiMainDelegate : public ChromeMainDelegate {
  public:
   VivaldiMainDelegate();
+  explicit VivaldiMainDelegate(base::TimeTicks exe_entry_point_ticks);
   ~VivaldiMainDelegate() override;
 };
 

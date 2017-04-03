@@ -26,12 +26,17 @@
 #include "ui/views/controls/textfield/textfield.h"
 #endif
 
+#if defined(OS_MACOSX)
+#include "ui/base/cocoa/defaults_utils.h"
+#endif
+
 #if defined(USE_AURA) && defined(OS_LINUX) && !defined(OS_CHROMEOS)
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "ui/views/linux_ui/linux_ui.h"
 #endif
 
+#if defined(ENABLE_WEBRTC)
 namespace {
 
 // Parses a string |range| with a port range in the form "<min>-<max>".
@@ -71,6 +76,7 @@ void ParsePortRange(const std::string& range,
 }
 
 }  // namespace
+#endif
 
 namespace renderer_preferences_util {
 
@@ -118,6 +124,12 @@ void UpdateFromSystemSettings(content::RendererPreferences* prefs,
 
 #if defined(TOOLKIT_VIEWS)
   prefs->caret_blink_interval = views::Textfield::GetCaretBlinkMs() / 1000.0;
+#endif
+
+#if defined(OS_MACOSX)
+  base::TimeDelta interval;
+  if (ui::TextInsertionCaretBlinkPeriod(&interval))
+    prefs->caret_blink_interval = interval.InSecondsF();
 #endif
 
 #if defined(USE_AURA) && defined(OS_LINUX) && !defined(OS_CHROMEOS)

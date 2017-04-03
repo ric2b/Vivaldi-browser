@@ -28,14 +28,13 @@
 <translation id="1653828314016431939">OK – перезапустити зараз</translation>
 <translation id="1682634494516646069">Google Chrome не може читати та записувати у свій каталог даних: <ph name="USER_DATA_DIRECTORY" /></translation>
 <translation id="1698376642261615901">Google Chrome – це веб-переглядач, який запускає веб-сторінки та програми з блискавичною швидкістю. Він швидкий, надійний і зручний у користуванні. Вбудований у Google Chrome захист від шкідливих програм і фішингу гарантує ще більшу безпеку під час перегляду веб-сторінок.</translation>
+<translation id="1718131156967340976">Виберіть <ph name="SMALL_PRODUCT_LOGO" /> <ph name="BEGIN_BOLD" />Google Chrome<ph name="END_BOLD" /></translation>
 <translation id="174539241580958092">Google Chrome не вдалося синхронізувати ваші дані через помилку входу.</translation>
 <translation id="1759301979429102118">Дані ваших контактів допоможуть швидше заповнювати форми в Chrome.</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1773601347087397504">Отримати довідку щодо користування ОС Chrome</translation>
 <translation id="1818142563254268765">Не вдалось оновити Chrome до останньої версії. Щоб застосувати виправлення системи безпеки та скористатись новими цікавими функціями, оновіть Chrome.</translation>
-<translation id="1864458292167284385">Панель запуску програм Chrome більше не доступна.</translation>
 <translation id="1877026089748256423">Версія Chrome застаріла</translation>
-<translation id="1924381329666691588">Не можна вибрати цю мову для Google Chrome.</translation>
 <translation id="2063848847527508675">Щоб застосувати це оновлення, потрібно перезапустити ОС Chrome.</translation>
 <translation id="2077129598763517140">Використовувати апаратне прискорення, якщо доступно</translation>
 <translation id="2084710999043359739">Додати в Chrome</translation>
@@ -105,7 +104,7 @@
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3881912906674381083">Chrome підтвердив, що компанія <ph name="ISSUER" /> видала сертифікат цього веб-сайту. Сервер надав інформацію про прозорість сертифіката, але Chromium не вдалося розпізнати журнали прозорості сертифіката.</translation>
 <translation id="3889417619312448367">Видалити Google Chrome</translation>
-<translation id="396182988103551265">Відкривайте додатки за допомогою ярлика <ph name="APPS_ICON_IMAGE" /> на панелі закладок Chrome.</translation>
+<translation id="4028693306634653894">Відкривайте Chrome швидше</translation>
 <translation id="4042449298237264661">На цей комп’ютер не надходитимуть оновлення Google Chrome, оскільки Windows XP та Windows Vista більше не підтримуються.</translation>
 <translation id="4050175100176540509">В останній версії покращено безпеку та додано нові функції.</translation>
 <translation id="4053720452172726777">Налаштування та керування Google Chrome</translation>
@@ -118,6 +117,7 @@
 <translation id="437002079035561265">На цей комп’ютер більше не надходитимуть оновлення Google Chrome, оскільки ця система Linux уже не підтримується.</translation>
 <translation id="4407807842708586359">ОС Google Chrome</translation>
 <translation id="4458285410772214805">Щоб зміна почала діяти, вийдіть і ввійдіть знову.</translation>
+<translation id="4458462641685292929">У Google Chrome виконується інша операція. Спробуйте пізніше.</translation>
 <translation id="4480040274068703980">ОС Chrome не вдалося синхронізувати ваші дані через помилку входу.</translation>
 <translation id="4519152997629025674">Google Chrome може покращувати веб-перегляд за допомогою <ph name="BEGIN_LINK" />веб-служб<ph name="END_LINK" />. Ви можете будь-коли вимкнути ці служби.</translation>
 <translation id="4561051373932531560">Google Chrome дозволяє натиснути номер телефону в Інтернеті та здійснити виклик через Skype.</translation>
@@ -130,8 +130,10 @@
 <translation id="4743926867934016338">Прийняти й шукати</translation>
 <translation id="4751441238232965030">Цей комп’ютер невдовзі перестане отримувати оновлення для 32-розрядної версії Google Chrome. Установіть 64-розрядну версію.</translation>
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
+<translation id="4771048833395599659">Цей файл може бути небезпечним, тому Chrome заблокував його.</translation>
 <translation id="4794050651896644714">Зберігати дані в Chrome</translation>
 <translation id="4891791193823137474">Дозволити Google Chrome працювати у фоновому режимі</translation>
+<translation id="4901390485477164536">Google Chrome ваш веб-переглядач за умовчанням.</translation>
 <translation id="4921569541910214635">Користуєтеся комп’ютером спільно з іншими? Тепер ви можете налаштувати Chrome на свій смак.</translation>
 <translation id="4925019873400497719">Chrome підтвердив, що компанія <ph name="ISSUER" /> видала сертифікат цього веб-сайту. Сервер надав інформацію про прозорість сертифіката, але вона недійсна.</translation>
 <translation id="4953650215774548573">Зробити Google Chrome веб-переглядачем за умовчанням</translation>
@@ -159,7 +161,6 @@
 <translation id="5563479599352954471">Пошук одним дотиком</translation>
 <translation id="5566025111015594046">Google Chrome (mDNS-In)</translation>
 <translation id="5620765574781326016">Дізнавайтеся про теми на веб-сайтах, залишаючись на сторінці.</translation>
-<translation id="5637867606963802593">Не можна вибрати цю мову для ОС Chrome.</translation>
 <translation id="568643307450491754">Шукайте свої закладки в меню Chrome або на панелі закладок.</translation>
 <translation id="573759479754913123">Про ОС Chrome</translation>
 <translation id="5749068826913805084">Щоб завантажувати файли, Chrome потребує доступу до пам’яті.</translation>
@@ -181,20 +182,20 @@
 <translation id="6236285698028833233">Оновлення Google Chrome припинилось. Ця версія вашої операційної системи більше не підтримується.</translation>
 <translation id="6291549208091401781">Google Chrome уже встановлено для всіх користувачів на вашому комп’ютері.</translation>
 <translation id="629218512217695915">Використовувати пароль, згенерований Chrome</translation>
-<translation id="6338556085225130112">Оновлення Google Chrome</translation>
 <translation id="6368805772029492593">Задля підвищення безпеки Google Chrome шифруватиме ваші дані.</translation>
 <translation id="6368958679917195344">ОС Chrome стала можливою завдяки додатковому <ph name="BEGIN_LINK_CROS_OSS" />програмному забезпеченню з відкритим кодом<ph name="END_LINK_CROS_OSS" />.</translation>
 <translation id="6400076122676892962">На цей комп’ютер невдовзі перестануть надходити оновлення Google Chrome, оскільки Mac OS X версій 10.6, 10.7 і 10.8 більше не підтримуватиметься.</translation>
 <translation id="6470176598693778404">На цей комп’ютер не надходитимуть оновлення Google Chrome, оскільки Mac OS X версій 10.6, 10.7 і 10.8 більше не підтримується.</translation>
 <translation id="6477562832195530369">{NUM_DOWNLOAD,plural, =1{Триває завантаження. Скасувати його та вийти з Google Chrome?}one{Триває # завантаження. Скасувати їх і вийти з Google Chrome?}few{Тривають # завантаження. Скасувати їх і вийти з Google Chrome?}many{Тривають # завантажень. Скасувати їх і вийти з Google Chrome?}other{Тривають # завантаження. Скасувати їх і вийти з Google Chrome?}}</translation>
+<translation id="6566149418543181476">Google Chrome оновлюється (<ph name="PROGRESS_PERCENT" />)</translation>
 <translation id="6598387184982954187">Ви синхронізуєте дані Chrome через обліковий запис <ph name="PROFILE_EMAIL" />. Щоб оновити параметри синхронізації або використовувати Chrome без облікового запису Google, перейдіть на сторінку <ph name="SETTINGS_LINK" />.</translation>
 <translation id="6600954340915313787">Скопійовано в Chrome</translation>
 <translation id="6626317981028933585">Шкода, але ваші налаштування Mozilla Firefox не є доступні, коли переглядач запущено. Щоб імпортувати такі налаштування у Google Chrome, збережіть зроблені вами зміни та закрийте усі вікна Firefox. Потім натисніть "Продовжити"</translation>
 <translation id="6634887557811630702">У вас остання версія Google Chrome.</translation>
-<translation id="6648058004052854464">Не вдалося зробити Google Chrome веб-переглядачем за умовчанням.</translation>
 <translation id="6676384891291319759">Доступ до Інтернету</translation>
 <translation id="6757767188268205357">Не турбувати мене</translation>
 <translation id="683440813066116847">Вхідне правило для Google Chrome Canary дозволяє трафік mDNS.</translation>
+<translation id="686561893457936865">Використовуйте Chrome на всіх пристроях</translation>
 <translation id="6883876366448858277">надсилає слово та його контекст у Пошук Google і повертає визначення, зображення й інші результати пошуку.</translation>
 <translation id="6930860321615955692">https://support.google.com/chrome/?p=ib_chromeframe</translation>
 <translation id="6970811910055250180">Оновлення пристрою...</translation>
@@ -211,13 +212,11 @@
 <translation id="7164397146364144019">Ви можете допомогти зробити Chrome безпечнішим і простішим у користуванні, автоматично повідомляючи Google деталі щодо можливого порушення безпеки.</translation>
 <translation id="7177347454226092725">Дані веб-перегляду буде видалено з цього пристрою назавжди. Щоб відновити дані пізніше, увійдіть в обліковий запис Chrome як $2.</translation>
 <translation id="7185038942300673794"><ph name="EXTENSION_NAME" /> додано в Chrome.</translation>
-<translation id="7191567847629796517">ОС Google Chrome не підтримує запуск зовнішніх додатків для обробки посилань типу <ph name="SCHEME" />. Потрібний тип посилання: <ph name="PROTOLINK" />.</translation>
 <translation id="7193750696137290001">Для Google Chrome вибрано цю мову.</translation>
 <translation id="7196020411877309443">Чому відображається це повідомлення?</translation>
 <translation id="7242029209006116544">Ви входите, використовуючи дані облікового запису, яким керує адміністратор. Адміністратор може контролювати ваш профіль Google Chrome. Ваші дані Chrome, як-от програми, закладки, історія, паролі й інші налаштування, буде назавжди пов’язано з обліковим записом <ph name="USER_NAME" />. Ці дані можна видалити на інформаційній панелі Облікових записів Google, але ви не зможете пов’язати їх з іншим обліковим записом. Проте ви можете створити новий профіль, щоб зберігати наявні дані Chrome окремо. <ph name="LEARN_MORE" /></translation>
 <translation id="729375352412857283">На цей комп’ютер невдовзі перестануть надходити оновлення Google Chrome, оскільки Windows XP та Windows Vista більше не підтримуватимуться.</translation>
 <translation id="7339898014177206373">Нове вікно</translation>
-<translation id="7393806081343982361">Google Chrome установлено веб-переглядачем за умовчанням.</translation>
 <translation id="7398801000654795464">Ви ввійшли в Chrome як <ph name="USER_EMAIL_ADDRESS" />. Скористайтеся тим самим обліковим записом, щоб увійти знову.</translation>
 <translation id="7400722733683201933">Про Google Chrome</translation>
 <translation id="7408085963519505752">Умови ОС Chrome</translation>
@@ -239,6 +238,7 @@
 <translation id="7788788617745289808">Chrome потрібен доступ до камери, щоб дозволити цьому сайту використовувати її.</translation>
 <translation id="7808348361785373670">Видалити з Chrome…</translation>
 <translation id="7825851276765848807">Програму не вдалося встановити через невизначену помилку. Завантажте Google Chrome ще раз.</translation>
+<translation id="7888186132678118370">Як закріпити значок Chrome на панелі завдань</translation>
 <translation id="7890208801193284374">Якщо вашим комп’ютером користуєтесь не лише ви, а й ваші друзі чи сім’я, вони можуть налаштувати Chrome на свій смак.</translation>
 <translation id="7908168227788431038">Майже оновлено. Перезапустіть Google Chrome, щоб завершити оновлення.</translation>
 <translation id="795025003224538582">Не перезапускати</translation>
@@ -251,11 +251,12 @@
 <translation id="8129812357326543296">Про &amp;Google Chrome</translation>
 <translation id="8183957050892517584">Chrome надійно зберігатиме ваші особисті дані, тож вам не потрібно буде вводити їх знову.</translation>
 <translation id="8211929904040702368">З цього пристрою буде назавжди видалено принаймні стільки елементів: <ph name="TOTAL_COUNT" />. Щоб відновити дані пізніше, увійдіть в обліковий запис Chrome як $2.</translation>
-<translation id="8227755444512189073">Google Chrome потребує запуску зовнішньої прикладної програми для опрацювання посилань <ph name="SCHEME" />. Посилання, на яке здійснено запит, - <ph name="PROTOLINK" />.</translation>
 <translation id="8255190535488645436">Google Chrome використовує вашу камеру та мікрофон.</translation>
 <translation id="8286862437124483331">Google Chrome намагається показати паролі. Щоб дозволити, введіть свій пароль Windows.</translation>
 <translation id="8290100596633877290">Відбулося аварійне завершення роботи Google Chrome. Перезапустити зараз?</translation>
+<translation id="8342675569599923794">Цей файл небезпечний, тому Chrome заблокував його.</translation>
 <translation id="8406086379114794905">Допоможіть покращити Chrome</translation>
+<translation id="8410645163819739900">Неможливо відкрити цю сторінку в ОС Google Chrome</translation>
 <translation id="8455999171311319804">Додатково. Допоможіть покращити ОС Chrome, автоматично надсилаючи в Google дані про діагностику та використання.</translation>
 <translation id="853189717709780425">Ви входите, використовуючи дані керованого облікового запису, що дає його адміністратору можливість контролювати ваш профіль Google Chrome. Ваші дані Chrome, як-от програми, закладки, історія, паролі й інші налаштування, буде назавжди пов’язано з обліковим записом <ph name="USER_NAME" />. Ви зможете видалити ці дані на інформаційній панелі облікових записів Google, але не зможете пов’язати їх з іншим обліковим записом.</translation>
 <translation id="8540666473246803645">Google Chrome</translation>
@@ -279,4 +280,5 @@
 <translation id="9102715433345326100">Цей файл шкідливий, тому Chrome заблокував його.</translation>
 <translation id="9107728822479888688"><ph name="BEGIN_BOLD" />Застереження:<ph name="END_BOLD" /> Google Chrome не може заборонити розширенням реєструвати вашу історію веб-перегляду. Щоб вимкнути це розширення в режимі анонімного перегляду, зніміть прапорець поруч із цим параметром.</translation>
 <translation id="911206726377975832">Також видалити дані веб-перегляду?</translation>
+<translation id="924447568950697217">Як зробити Chrome веб-переглядачем за умовчанням</translation>
 </translationbundle>

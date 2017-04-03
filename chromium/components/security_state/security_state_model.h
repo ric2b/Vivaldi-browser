@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_SECURITY_STATE_SECURITY_STATE_MODEL_H_
 #define COMPONENTS_SECURITY_STATE_SECURITY_STATE_MODEL_H_
 
+#include <stdint.h>
+
 #include "base/macros.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/sct_status_flags.h"
@@ -37,6 +39,14 @@ class SecurityStateModel {
     // HTTP/no URL/HTTPS but with insecure passive content on the page.
     NONE,
 
+    // HTTP, in a case where we want to show a visible warning about the page's
+    // lack of security.
+    //
+    // The criteria used to classify pages as NONE vs. HTTP_SHOW_WARNING will
+    // change over time. Eventually, NONE will be eliminated.
+    // See https://crbug.com/647754.
+    HTTP_SHOW_WARNING,
+
     // HTTPS with valid EV cert.
     EV_SECURE,
 
@@ -48,12 +58,12 @@ class SecurityStateModel {
 
     // HTTPS, but the certificate verification chain is anchored on a
     // certificate that was installed by the system administrator.
-    SECURITY_POLICY_WARNING,
+    SECURE_WITH_POLICY_INSTALLED_CERT,
 
     // Attempted HTTPS and failed, page not authenticated, HTTPS with
     // insecure active content on the page, malware, phishing, or any other
-    // serious security issue.
-    SECURITY_ERROR,
+    // serious security issue that could be dangerous.
+    DANGEROUS,
   };
 
   // Describes how the SHA1 deprecation policy applies to an HTTPS
@@ -105,15 +115,20 @@ class SecurityStateModel {
     std::vector<net::ct::SCTVerifyStatus> sct_verify_statuses;
     bool scheme_is_cryptographic;
     net::CertStatus cert_status;
-    int cert_id;
+    scoped_refptr<net::X509Certificate> certificate;
     // The security strength, in bits, of the SSL cipher suite. In late
     // 2015, 128 is considered the minimum.
-    // 0 means the connection is not encrypted.
-    // -1 means the security strength is unknown.
+    //
+    // 0 means the connection uses HTTPS but is not encrypted.  -1 means
+    // the security strength is unknown or the connection does not use
+    // HTTPS.
     int security_bits;
     // Information about the SSL connection, such as protocol and
     // ciphersuite. See ssl_connection_flags.h in net.
     int connection_status;
+    // The ID of the (EC)DH group used by the key exchange. The value is zero if
+    // unknown (older cache entries may not store the value) or not applicable.
+    uint16_t key_exchange_group;
     // A mask that indicates which of the protocol version,
     // key exchange, or cipher for the connection is considered
     // obsolete. See net::ObsoleteSSLMask for specific mask values.
@@ -142,9 +157,12 @@ class SecurityStateModel {
     bool connection_info_initialized;
     // The following fields contain information about the connection
     // used to load the page or request.
-    int cert_id;
+    scoped_refptr<net::X509Certificate> certificate;
     net::CertStatus cert_status;
     int connection_status;
+    // The ID of the (EC)DH group used by the key exchange. The value is zero if
+    // unknown (older cache entries may not store the value) or not applicable.
+    uint16_t key_exchange_group;
     int security_bits;
     // The verification statuses of the Signed Certificate
     // Timestamps (if any) that the server provided.
@@ -159,6 +177,10 @@ class SecurityStateModel {
     bool ran_content_with_cert_errors;
     // True if PKP was bypassed due to a local trust anchor.
     bool pkp_bypassed;
+    // True if the page was an HTTP page that displayed a password field.
+    bool displayed_password_field_on_http;
+    // True if the page was an HTTP page that displayed a credit card field.
+    bool displayed_credit_card_field_on_http;
   };
 
   // These security levels describe the treatment given to pages that
@@ -170,20 +192,12 @@ class SecurityStateModel {
   SecurityStateModel();
   virtual ~SecurityStateModel();
 
-  // Returns a SecurityInfo describing the current page. Results are
-  // cached so that computation is only done when the relevant security
-  // state has changed.
-  const SecurityInfo& GetSecurityInfo() const;
+  // Populates |result| to describe the current page.
+  void GetSecurityInfo(SecurityInfo* result) const;
 
   void SetClient(SecurityStateModelClient* client);
 
  private:
-  // Caches the SecurityInfo for the visible page. Marked
-  // mutable so that the const accessor GetSecurityInfo() can update the
-  // cached values.
-  mutable SecurityInfo security_info_;
-  mutable VisibleSecurityState visible_security_state_;
-
   SecurityStateModelClient* client_;
 
   DISALLOW_COPY_AND_ASSIGN(SecurityStateModel);

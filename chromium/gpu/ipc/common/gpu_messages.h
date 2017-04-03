@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/memory/shared_memory.h"
+#include "base/unguessable_token.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/capabilities.h"
 #include "gpu/command_buffer/common/command_buffer.h"
@@ -77,7 +78,6 @@ IPC_STRUCT_BEGIN(GpuCommandBufferMsg_SwapBuffersCompleted_Params)
   // TODO(ccameron): Remove these parameters once the CALayer tree is hosted in
   // the browser process.
   // https://crbug.com/604052
-  IPC_STRUCT_MEMBER(gpu::SurfaceHandle, surface_handle)
   // Only one of ca_context_id or io_surface may be non-0.
   IPC_STRUCT_MEMBER(CAContextID, ca_context_id)
   IPC_STRUCT_MEMBER(bool, fullscreen_low_power_ca_context_valid)
@@ -130,6 +130,11 @@ IPC_SYNC_MESSAGE_CONTROL0_1(GpuChannelMsg_GetDriverBugWorkArounds,
 IPC_MESSAGE_ROUTED2(GpuStreamTextureMsg_EstablishPeer,
                     int32_t, /* primary_id */
                     int32_t /* secondary_id */)
+
+// Tells the StreamTexture to send its SurfaceTexture to the browser process,
+// via the ScopedSurfaceRequestConduit.
+IPC_MESSAGE_ROUTED1(GpuStreamTextureMsg_ForwardForSurfaceRequest,
+                    base::UnguessableToken)
 
 // Tells the GPU process to set the size of StreamTexture from the given
 // stream Id.

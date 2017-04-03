@@ -10,6 +10,8 @@ class WebMediaPlayer;
 }
 namespace media {
 
+enum class MediaContentType;
+
 // An interface to allow a WebMediaPlayer to communicate changes of state to
 // objects that need to know.
 class WebMediaPlayerDelegate {
@@ -29,7 +31,10 @@ class WebMediaPlayerDelegate {
     // it may do some or all of the same actions as when |must_suspend| is true.
     // To be clear, the player is not required to call PlayerGone() when
     // |must_suspend| is false.
-    virtual void OnSuspendRequested(bool must_suspend) = 0;
+    // Return false to reject the request and indicate that further calls to
+    // OnSuspendRequested() are required. Otherwise the Observer is removed
+    // from the idle list.
+    virtual bool OnSuspendRequested(bool must_suspend) = 0;
 
     virtual void OnPlay() = 0;
     virtual void OnPause() = 0;
@@ -51,7 +56,7 @@ class WebMediaPlayerDelegate {
                        bool has_video,
                        bool has_audio,
                        bool is_remote,
-                       base::TimeDelta duration) = 0;
+                       media::MediaContentType media_content_type) = 0;
 
   // The specified player stopped playing media. This may be called at any time
   // with or without a DidPlay() having previously occurred. Calling this will

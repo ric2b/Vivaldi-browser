@@ -9,14 +9,15 @@
 #include <map>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/app_list/app_list_model.h"
 #include "ui/app_list/test/app_list_test_view_delegate.h"
 #include "ui/app_list/test/test_search_result.h"
-#include "ui/app_list/views/progress_bar_view.h"
 #include "ui/app_list/views/search_result_list_view_delegate.h"
 #include "ui/app_list/views/search_result_view.h"
+#include "ui/views/controls/progress_bar.h"
 #include "ui/views/test/views_test_base.h"
 
 namespace app_list {
@@ -62,12 +63,13 @@ class SearchResultListViewTest : public views::ViewsTestBase,
   void SetUpSearchResults() {
     AppListModel::SearchResults* results = GetResults();
     for (int i = 0; i < kDefaultSearchItems; ++i) {
-      TestSearchResult* result = new TestSearchResult();
+      std::unique_ptr<TestSearchResult> result =
+          base::MakeUnique<TestSearchResult>();
       result->set_display_type(SearchResult::DISPLAY_LIST);
       result->set_title(base::UTF8ToUTF16(base::StringPrintf("Result %d", i)));
       if (i < 2)
         result->set_details(base::ASCIIToUTF16("Detail"));
-      results->Add(result);
+      results->Add(std::move(result));
     }
 
     // Adding results will schedule Update().
@@ -90,7 +92,7 @@ class SearchResultListViewTest : public views::ViewsTestBase,
   }
 
   void AddTestResultAtIndex(int index) {
-    GetResults()->Add(new TestSearchResult());
+    GetResults()->Add(base::MakeUnique<TestSearchResult>());
   }
 
   void DeleteResultAt(int index) { GetResults()->DeleteAt(index); }
@@ -116,7 +118,7 @@ class SearchResultListViewTest : public views::ViewsTestBase,
     }
   }
 
-  ProgressBarView* GetProgressBarAt(size_t index) {
+  views::ProgressBar* GetProgressBarAt(size_t index) {
     return GetResultViewAt(index)->progress_bar_;
   }
 

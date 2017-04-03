@@ -17,6 +17,7 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.AdvancedMockContext;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.RetryOnFailure;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -245,7 +246,7 @@ public class DownloadNotificationServiceTest extends
                 sharedPrefs, DownloadNotificationService.PENDING_DOWNLOAD_NOTIFICATIONS);
         assertEquals(3, entries.size());
 
-        service.notifyDownloadSuccessful(guid1, "success", 100L, false);
+        service.notifyDownloadSuccessful(guid1, "/path/to/success", "success", 100L, false, false);
         entries = DownloadManagerService.getStoredDownloadInfo(
                 sharedPrefs, DownloadNotificationService.PENDING_DOWNLOAD_NOTIFICATIONS);
         assertEquals(2, entries.size());
@@ -265,12 +266,13 @@ public class DownloadNotificationServiceTest extends
      */
     @SmallTest
     @Feature({"Download"})
+    @RetryOnFailure
     public void testDownloadSuccessNotification() {
         setupService();
         startNotificationService();
         DownloadNotificationService service = bindNotificationService();
         String guid = UUID.randomUUID().toString();
-        service.notifyDownloadSuccessful(guid, "test", 100L, false);
+        service.notifyDownloadSuccessful(guid, "/path/to/test", "test", 100L, false, false);
         assertEquals(1, getService().getNotificationIds().size());
     }
 

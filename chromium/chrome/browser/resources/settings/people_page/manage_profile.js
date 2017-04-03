@@ -10,7 +10,7 @@
 Polymer({
   is: 'settings-manage-profile',
 
-  behaviors: [WebUIListenerBehavior],
+  behaviors: [WebUIListenerBehavior, settings.RouteObserverBehavior],
 
   properties: {
     /**
@@ -33,6 +33,12 @@ Polymer({
     },
 
     /**
+     * The current sync status.
+     * @type {?settings.SyncStatus}
+     */
+    syncStatus: Object,
+
+    /**
      * @private {!settings.ManageProfileBrowserProxy}
      */
     browserProxy_: {
@@ -51,6 +57,12 @@ Polymer({
 
     this.addWebUIListener('available-icons-changed', setIcons);
     this.browserProxy_.getAvailableIcons().then(setIcons);
+  },
+
+  /** @protected */
+  currentRouteChanged: function() {
+    if (settings.getCurrentRoute() == settings.Route.MANAGE_PROFILE)
+      this.$.name.value = this.profileName;
   },
 
   /**
@@ -74,5 +86,14 @@ Polymer({
   onIconActivate_: function(event) {
     this.browserProxy_.setProfileIconAndName(event.detail.selected,
                                              this.profileName);
+  },
+
+  /**
+   * @param {?settings.SyncStatus} syncStatus
+   * @return {boolean} Whether the profile name field is disabled.
+   * @private
+   */
+  isProfileNameDisabled_: function(syncStatus) {
+    return !!syncStatus.supervisedUser && !syncStatus.childUser;
   },
 });

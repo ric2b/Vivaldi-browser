@@ -5,13 +5,44 @@
 <dom-module id="settings-shared">
   <template>
     <style include="cr-shared-style">
+      button[is='paper-icon-button-light'] {
+        --paper-icon-button-light-ripple: {
+          /* Center the ripple on the icon button. */
+          height: 36px;
+          left: -8px;
+          top: -8px;
+          width: 36px;
+        };
+        -webkit-margin-start: 16px;
+        background-size: cover;
+        flex-shrink: 0;
+        height: 20px;
+        width: 20px;
+      }
+
+      [actionable] button[is="paper-icon-button-light"].icon-arrow-right {
+        background-image: url(images/arrow_right.svg);
+      }
+
+      [actionable] button[is="paper-icon-button-light"].icon-external {
+        background-image: url(images/open_in_new.svg);
+      }
+
+      :host-context([dir=rtl]) paper-icon-button[icon='settings:arrow-back'] {
+        transform: scaleX(-1);  /* Flip on the X axis (aka mirror). */
+      }
+
+      /* Use <h2> as the "sub-header" mentioned in the UX design docs. */
       h2 {
         align-items: center;
+        align-self: flex-start;
+        color: var(--paper-grey-600);
         display: flex;
-        font-size: 100%;
+        font-size: inherit;
         font-weight: 500;
         margin: 0;
-        min-height: var(--settings-row-min-height);
+        padding-top: 24px;
+        padding-bottom: 12px;
       }
 
       iron-icon[icon='cr:check'],
@@ -20,6 +51,7 @@
       }
 
       paper-button {
+        height: 32px;
         margin: 0;
       }
 
@@ -29,29 +61,33 @@
 
       paper-toggle-button {
         @apply(--settings-actionable);
+        height: var(--settings-row-min-height);
+        width: 31px;
       }
 
-      paper-dropdown-menu {
+      paper-dropdown-menu-light {
         --iron-icon-fill-color: var(--paper-grey-600);
         --paper-font-subhead: {
           font-size: inherit;
         };
-        --paper-input-container-underline: {
-          background: var(--paper-grey-300);
+        --paper-dropdown-menu-input: {
+          border-bottom-color: var(--paper-grey-300);
         };
+        /* Offsets the input's border-bottom. */
+        top: 1px;
       }
 
       iron-dropdown .dropdown-content,
-      paper-dropdown-menu paper-listbox {
+      paper-dropdown-menu-light paper-listbox {
         min-width: 128px;
         padding: 8px 0;
       }
 
-      iron-dropdown .dropdown-item,
-      paper-dropdown-menu .dropdown-item {
+      .dropdown-item {
         align-items: center;
         background: none;
         border: none;
+        box-sizing: border-box;
         color: var(--paper-grey-800);
         display: flex;
         font: inherit;
@@ -61,12 +97,12 @@
         width: 100%;
       }
 
-      paper-dropdown-menu .dropdown-item.iron-selected {
+      paper-dropdown-menu-light .dropdown-item.iron-selected {
         font-weight: bold;
       }
 
       iron-dropdown .dropdown-item:focus,
-      paper-dropdown-menu .dropdown-item:focus {
+      paper-dropdown-menu-light .dropdown-item:focus {
         @apply(--cr-selectable-focus);
       }
 
@@ -75,12 +111,13 @@
         box-shadow: 0 2px 6px var(--paper-grey-500);
       }
 
-      iron-dropdown .dropdown-content .dropdown-item:not([disabled]),
+      .dropdown-item:not([disabled]),
       iron-dropdown .dropdown-content paper-item {
         @apply(--settings-actionable);
       }
 
-      iron-dropdown .dropdown-content .dropdown-item[disabled] {
+      iron-dropdown .dropdown-content .dropdown-item[disabled],
+      cr-shared-menu .dropdown-item[disabled] {
         opacity: var(--settings-disabled-opacity);
       }
 
@@ -93,7 +130,8 @@
       [is='action-link']:hover,
       [is='action-link']:visited,
       .primary-button,
-      .tertiary-button {
+      .tertiary-button,
+      a[href] {
         color: var(--google-blue-700);
       }
 
@@ -104,6 +142,7 @@
         };
       }
 
+      a[href],
       [is='action-link']:hover {
         text-decoration: none;
       }
@@ -251,7 +290,7 @@
         border-top: var(--settings-separator-line);
         display: flex;
         min-height: var(--settings-row-min-height);
-        padding: 0 20px;
+        padding: 0 var(--settings-box-row-padding);
       }
 
       /* We use an explicit tag to remove the top border, rather than a
@@ -289,15 +328,25 @@
 
       /* The middle part (horizontally) of a row. */
       .settings-box .middle {
-        -webkit-margin-start: 16px;
+        -webkit-padding-start: 16px;
         align-items: center;
         flex: auto;
+      }
+
+      .settings-box .middle.two-line {
+        display: flex;
+        min-height: var(--settings-row-two-line-min-height);
       }
 
       /* The start (left in LTR) part (horizontally) of a row. */
       .settings-box .start {
         align-items: center;
         flex: auto;
+      }
+
+      .settings-box .start.two-line {
+        display: flex;
+        min-height: var(--settings-row-two-line-min-height);
       }
 
       /* The secondary-action wraps a clickable sub-area of a .settings-box.
@@ -311,8 +360,12 @@
        *  +-------------------------------------------------------+ */
       .settings-box .secondary-action {
         -webkit-border-start: var(--settings-separator-line);
+        -webkit-margin-start: 20px;
         -webkit-padding-start: 20px;
+        align-items: center;
+        display: flex;
         flex-shrink: 0;
+        height: var(--settings-row-min-height);
       }
 
       .settings-box paper-item iron-icon {

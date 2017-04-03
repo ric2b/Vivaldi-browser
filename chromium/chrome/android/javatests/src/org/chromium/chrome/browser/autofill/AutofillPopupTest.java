@@ -10,10 +10,12 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
+import org.chromium.components.autofill.AutofillPopup;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.input.ChromiumBaseInputConnection;
 import org.chromium.content.browser.test.util.Criteria;
@@ -23,7 +25,6 @@ import org.chromium.content.browser.test.util.TestInputMethodManagerWrapper;
 import org.chromium.content.browser.test.util.TouchCommon;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.R;
-import org.chromium.ui.autofill.AutofillPopup;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -34,6 +35,7 @@ import java.util.concurrent.TimeoutException;
 /**
  * Integration tests for the AutofillPopup.
  */
+@RetryOnFailure
 public class AutofillPopupTest extends ChromeActivityTestCaseBase<ChromeActivity> {
 
     private static final String FIRST_NAME = "John";

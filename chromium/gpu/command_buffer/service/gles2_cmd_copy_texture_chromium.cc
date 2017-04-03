@@ -322,6 +322,7 @@ void DoCopyTexSubImage2D(const gpu::gles2::GLES2Decoder* decoder,
 }  // namespace
 
 namespace gpu {
+namespace gles2 {
 
 CopyTextureCHROMIUMResourceManager::CopyTextureCHROMIUMResourceManager()
     : initialized_(false),
@@ -767,4 +768,5 @@ void CopyTextureCHROMIUMResourceManager::DoCopyTextureInternal(
   decoder->RestoreGlobalState();
 }
 
+}  // namespace gles2
 }  // namespace gpu

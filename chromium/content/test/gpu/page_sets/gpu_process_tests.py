@@ -217,9 +217,13 @@ class NoGpuProcessSharedPageState(GpuProcessSharedPageState):
     options = finder_options.browser_options
 
     if options.browser_type.startswith('android'):
-      # Hit id 8 from kSoftwareRenderingListJson, which applies to any platform.
-      options.AppendExtraBrowserArgs('--gpu-testing-vendor-id=0x10de')
-      options.AppendExtraBrowserArgs('--gpu-testing-device-id=0x0324')
+      # Android doesn't support starting up the browser without any
+      # GPU process. This test is skipped on Android in
+      # gpu_process_expectations.py, but we must at least be able to
+      # bring up the browser in order to detect that the test
+      # shouldn't run. Faking a vendor and device ID can get the
+      # browser into a state where it won't launch.
+      pass
     elif sys.platform in ('cygwin', 'win32'):
       # Hit id 34 from kSoftwareRenderingListJson.
       options.AppendExtraBrowserArgs('--gpu-testing-vendor-id=0x5333')
@@ -576,7 +580,7 @@ class HasTransparentVisualsGpuProcessPage(DriverBugWorkaroundsTestsPage):
       shared_page_state_class=HasTransparentVisualsShared,
       expectations=expectations,
       expected_workaround=None,
-      unexpected_workaround='disable_transparent_visuals')
+      unexpected_workaround=None)
 
   def Validate(self, tab, results):
     if sys.platform.startswith('linux'):
@@ -587,9 +591,6 @@ class NoTransparentVisualsShared(GpuProcessSharedPageState):
   def __init__(self, test, finder_options, story_set):
     super(NoTransparentVisualsShared, self).__init__(
       test, finder_options, story_set)
-    options = finder_options.browser_options
-    if sys.platform.startswith('linux'):
-      options.AppendExtraBrowserArgs('--disable_transparent_visuals=1')
 
 class NoTransparentVisualsGpuProcessPage(DriverBugWorkaroundsTestsPage):
   def __init__(self, story_set, expectations):
@@ -598,7 +599,7 @@ class NoTransparentVisualsGpuProcessPage(DriverBugWorkaroundsTestsPage):
       page_set=story_set,
       shared_page_state_class=NoTransparentVisualsShared,
       expectations=expectations,
-      expected_workaround='disable_transparent_visuals',
+      expected_workaround=None,
       unexpected_workaround=None)
 
   def Validate(self, tab, results):

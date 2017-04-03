@@ -45,10 +45,10 @@ SavePasswordInfoBar::CreateRenderInfoBar(JNIEnv* env) {
 
 void SavePasswordInfoBar::OnLinkClicked(JNIEnv* env,
                                         const JavaParamRef<jobject>& obj) {
-  GetDelegate()->LinkClicked(NEW_FOREGROUND_TAB);
+  GetDelegate()->LinkClicked(WindowOpenDisposition::NEW_FOREGROUND_TAB);
 }
 
 std::unique_ptr<infobars::InfoBar> CreateSavePasswordInfoBar(
     std::unique_ptr<SavePasswordInfoBarDelegate> delegate) {
-  return base::WrapUnique(new SavePasswordInfoBar(std::move(delegate)));
+  return base::MakeUnique<SavePasswordInfoBar>(std::move(delegate));
 }

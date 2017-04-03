@@ -10,13 +10,14 @@
 #include "base/gtest_prod_util.h"
 #include "base/time/time.h"
 #include "net/base/net_export.h"
-#include "net/log/net_log.h"
 #include "net/proxy/proxy_config.h"
 #include "net/proxy/proxy_list.h"
 #include "net/proxy/proxy_retry_info.h"
 #include "net/proxy/proxy_server.h"
 
 namespace net {
+
+class NetLogWithSource;
 
 // This object holds proxy information returned by ResolveProxy.
 class NET_EXPORT ProxyInfo {
@@ -141,7 +142,7 @@ class NET_EXPORT ProxyInfo {
   // is not because of a network error, then |OK| should be passed in (eg. for
   // reasons such as local policy). Returns true if there is another proxy is
   // available to try in proxy list_.
-  bool Fallback(int net_error, const BoundNetLog& net_log);
+  bool Fallback(int net_error, const NetLogWithSource& net_log);
 
   // De-prioritizes the proxies that we have cached as not working, by moving
   // them to the end of the proxy list.

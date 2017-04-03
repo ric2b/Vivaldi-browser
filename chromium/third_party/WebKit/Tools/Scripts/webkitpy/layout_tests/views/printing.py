@@ -80,6 +80,8 @@ class Printer(object):
         self._print_default("Test configuration: %s" % self._port.test_configuration())
         self._print_default("View the test results at file://%s/results.html" % results_directory)
         self._print_default("View the archived results dashboard at file://%s/dashboard.html" % results_directory)
+        if self._options.order == 'random':
+            self._print_default("Using random order with seed: %d" % self._options.seed)
 
         # FIXME: should these options be in printing_options?
         if self._options.new_baseline:
@@ -412,7 +414,7 @@ class Printer(object):
 
     def _print_baseline(self, test_name, extension):
         baseline = self._port.expected_filename(test_name, extension)
-        if self._port._filesystem.exists(baseline):
+        if self._port.host.filesystem.exists(baseline):
             relpath = self._port.relative_test_filename(baseline)
         else:
             relpath = '<none>'

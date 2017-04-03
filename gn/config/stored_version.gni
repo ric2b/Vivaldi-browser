@@ -10,7 +10,8 @@ _version_full = exec_script(
           "-t",
           "@VIVALDI_MAJOR@.@VIVALDI_MINOR@.@VIVALDI_NIGHTLY@.@VIVALDI_BUILD@",
         ],
-        "trim string")
+        "trim string",
+        [_vivaldi_version_path])
 
 _vivaldi_global_build_number =
     exec_script(_vivaldi_version_py_path,
@@ -20,7 +21,8 @@ _vivaldi_global_build_number =
                   "-t",
                   "@VIVALDI_BUILD@",
                 ],
-                "trim string")
+                "trim string",
+                [_vivaldi_version_path])
 
 declare_overrides() {
   GLOBAL_BUILDNUM = _vivaldi_global_build_number

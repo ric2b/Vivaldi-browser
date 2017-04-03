@@ -5,112 +5,68 @@
 package org.chromium.chrome.browser;
 
 import android.app.Activity;
-import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
-import android.provider.Settings;
 import android.util.Log;
-import android.view.View;
-
-import com.google.ipc.invalidation.external.client.android.service.AndroidLogger;
 
 import org.chromium.base.ActivityState;
-import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.base.ApplicationState;
 import org.chromium.base.ApplicationStatus;
-import org.chromium.base.ApplicationStatus.ApplicationStateListener;
-import org.chromium.base.CommandLine;
 import org.chromium.base.CommandLineInitUtil;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ResourceExtractor;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.library_loader.ProcessInitException;
-import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.accessibility.FontSizePrefs;
-import org.chromium.chrome.browser.banners.AppBannerManager;
 import org.chromium.chrome.browser.banners.AppDetailsDelegate;
-import org.chromium.chrome.browser.browsing_data.BrowsingDataType;
-import org.chromium.chrome.browser.browsing_data.TimePeriod;
 import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
 import org.chromium.chrome.browser.datausage.ExternalDataUseObserver;
 import org.chromium.chrome.browser.document.DocumentActivity;
 import org.chromium.chrome.browser.document.IncognitoDocumentActivity;
-import org.chromium.chrome.browser.download.DownloadController;
-import org.chromium.chrome.browser.download.DownloadManagerService;
 import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
 import org.chromium.chrome.browser.feedback.EmptyFeedbackReporter;
 import org.chromium.chrome.browser.feedback.FeedbackReporter;
-import org.chromium.chrome.browser.firstrun.ForcedSigninProcessor;
 import org.chromium.chrome.browser.gsa.GSAHelper;
 import org.chromium.chrome.browser.help.HelpAndFeedback;
-import org.chromium.chrome.browser.identity.UniqueIdentificationGeneratorFactory;
-import org.chromium.chrome.browser.identity.UuidBasedUniqueIdentificationGenerator;
 import org.chromium.chrome.browser.init.InvalidStartupDialog;
 import org.chromium.chrome.browser.instantapps.InstantAppsHandler;
-import org.chromium.chrome.browser.invalidation.UniqueIdInvalidationClientNameGenerator;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.metrics.UmaUtils;
 import org.chromium.chrome.browser.metrics.VariationsSession;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.net.qualityprovider.ExternalEstimateProviderAndroid;
-import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
-import org.chromium.chrome.browser.notifications.NotificationPlatformBridge;
 import org.chromium.chrome.browser.omaha.RequestGenerator;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.physicalweb.PhysicalWebBleClient;
 import org.chromium.chrome.browser.physicalweb.PhysicalWebEnvironment;
 import org.chromium.chrome.browser.policy.PolicyAuditor;
 import org.chromium.chrome.browser.preferences.LocationSettings;
-import org.chromium.chrome.browser.preferences.PrefServiceBridge;
-import org.chromium.chrome.browser.preferences.Preferences;
 import org.chromium.chrome.browser.preferences.PreferencesLauncher;
 import org.chromium.chrome.browser.preferences.autofill.AutofillPreferences;
 import org.chromium.chrome.browser.preferences.password.SavePasswordsPreferences;
 import org.chromium.chrome.browser.preferences.privacy.ClearBrowsingDataPreferences;
-import org.chromium.chrome.browser.preferences.website.SingleWebsitePreferences;
-import org.chromium.chrome.browser.printing.PrintingControllerFactory;
 import org.chromium.chrome.browser.rlz.RevenueStats;
-import org.chromium.chrome.browser.services.AccountsChangedReceiver;
 import org.chromium.chrome.browser.services.AndroidEduOwnerCheckCallback;
-import org.chromium.chrome.browser.services.GoogleServicesManager;
-import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.chrome.browser.signin.GoogleActivityController;
 import org.chromium.chrome.browser.sync.GmsCoreSyncListener;
-import org.chromium.chrome.browser.sync.SyncController;
 import org.chromium.chrome.browser.tab.AuthenticatorNavigationInterceptor;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.document.ActivityDelegateImpl;
 import org.chromium.chrome.browser.tabmodel.document.DocumentTabModelSelector;
 import org.chromium.chrome.browser.tabmodel.document.StorageDelegate;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
-import org.chromium.chrome.browser.util.FeatureUtilities;
-import org.chromium.components.sync.signin.AccountManagerDelegate;
-import org.chromium.components.sync.signin.AccountManagerHelper;
-import org.chromium.components.sync.signin.SystemAccountManagerDelegate;
+import org.chromium.components.signin.AccountManagerDelegate;
+import org.chromium.components.signin.SystemAccountManagerDelegate;
 import org.chromium.content.app.ContentApplication;
 import org.chromium.content.browser.ChildProcessCreationParams;
-import org.chromium.content.browser.ChildProcessLauncher;
-import org.chromium.content.common.ContentSwitches;
 import org.chromium.policy.AppRestrictionsProvider;
 import org.chromium.policy.CombinedPolicyProvider;
-import org.chromium.policy.CombinedPolicyProvider.PolicyChangeListener;
-import org.chromium.printing.PrintingController;
-import org.chromium.ui.UiUtils;
-import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.ResourceBundle;
-
-import java.lang.ref.WeakReference;
-import java.util.Locale;
 
 /**
  * Basic application functionality that should be shared among all browser applications that use
@@ -123,26 +79,13 @@ public class ChromeApplication extends ContentApplication {
     private static final String PREF_BOOT_TIMESTAMP =
             "com.google.android.apps.chrome.ChromeMobileApplication.BOOT_TIMESTAMP";
     private static final long BOOT_TIMESTAMP_MARGIN_MS = 1000;
-    private static final String PREF_LOCALE = "locale";
-    private static final String DEV_TOOLS_SERVER_SOCKET_PREFIX = "chrome";
-    private static final String SESSIONS_UUID_PREF_KEY = "chromium.sync.sessions.id";
 
-    private static boolean sIsFinishedCachingNativeFlags;
     private static DocumentTabModelSelector sDocumentTabModelSelector;
 
-    private final PowerBroadcastReceiver mPowerBroadcastReceiver = new PowerBroadcastReceiver();
-
-    // Used to trigger variation changes (such as seed fetches) upon application foregrounding.
-    private VariationsSession mVariationsSession;
-
-    private DevToolsServer mDevToolsServer;
-
-    private boolean mIsStarted;
-    private boolean mInitializedSharedClasses;
-    private boolean mIsProcessInitialized;
-
-    private ChromeLifetimeController mChromeLifetimeController;
-    private PrintingController mPrintingController;
+    public ChromeApplication() {
+        super();
+        ContextUtils.initApplicationContext(this);
+    }
 
     /**
      * This is called during early initialization in order to set up ChildProcessLauncher
@@ -165,139 +108,8 @@ public class ChromeApplication extends ContentApplication {
         TraceEvent.begin("ChromeApplication.onCreate");
 
         super.onCreate();
-        ContextUtils.initApplicationContext(this);
 
-        UiUtils.setKeyboardShowingDelegate(new UiUtils.KeyboardShowingDelegate() {
-            @Override
-            public boolean disableKeyboardCheck(Context context, View view) {
-                Activity activity = null;
-                if (context instanceof Activity) {
-                    activity = (Activity) context;
-                } else if (view != null && view.getContext() instanceof Activity) {
-                    activity = (Activity) view.getContext();
-                }
-
-                // For multiwindow mode we do not track keyboard visibility.
-                return activity != null
-                        && MultiWindowUtils.getInstance().isLegacyMultiWindow(activity);
-            }
-        });
-
-        // Initialize the AccountManagerHelper with the correct AccountManagerDelegate. Must be done
-        // only once and before AccountMangerHelper.get(...) is called to avoid using the
-        // default AccountManagerDelegate.
-        AccountManagerHelper.initializeAccountManagerHelper(this, createAccountManagerDelegate());
-
-        // Set the unique identification generator for invalidations.  The
-        // invalidations system can start and attempt to fetch the client ID
-        // very early.  We need this generator to be ready before that happens.
-        UniqueIdInvalidationClientNameGenerator.doInitializeAndInstallGenerator(this);
-
-        // Set minimum Tango log level. This sets an in-memory static field, and needs to be
-        // set in the ApplicationContext instead of an activity, since Tango can be woken up
-        // by the system directly though messages from GCM.
-        AndroidLogger.setMinimumAndroidLogLevel(Log.WARN);
-
-        // Set up the identification generator for sync. The ID is actually generated
-        // in the SyncController constructor.
-        UniqueIdentificationGeneratorFactory.registerGenerator(SyncController.GENERATOR_ID,
-                new UuidBasedUniqueIdentificationGenerator(this, SESSIONS_UUID_PREF_KEY), false);
         TraceEvent.end("ChromeApplication.onCreate");
-    }
-
-    /**
-     * Each top-level activity (ChromeTabbedActivity, FullscreenActivity) should call this during
-     * its onStart phase. When called for the first time, this marks the beginning of a foreground
-     * session and calls onForegroundSessionStart(). Subsequent calls are noops until
-     * onForegroundSessionEnd() is called, to handle changing top-level Chrome activities in one
-     * foreground session.
-     */
-    public void onStartWithNative() {
-        if (mIsStarted) return;
-        mIsStarted = true;
-
-        assert mIsProcessInitialized;
-
-        onForegroundSessionStart();
-        cacheNativeFlags();
-    }
-
-    /**
-     * Called when a top-level Chrome activity (ChromeTabbedActivity, FullscreenActivity) is
-     * started in foreground. It will not be called again when other Chrome activities take over
-     * (see onStart()), that is, when correct activity calls startActivity() for another Chrome
-     * activity.
-     */
-    private void onForegroundSessionStart() {
-        UmaUtils.recordForegroundStartTime();
-        ChildProcessLauncher.onBroughtToForeground();
-        updatePasswordEchoState();
-        FontSizePrefs.getInstance(this).onSystemFontScaleChanged();
-        updateAcceptLanguages();
-        mVariationsSession.start(getApplicationContext());
-        mPowerBroadcastReceiver.onForegroundSessionStart();
-
-        // Track the ratio of Chrome startups that are caused by notification clicks.
-        // TODO(johnme): Add other reasons (and switch to recordEnumeratedHistogram).
-        RecordHistogram.recordBooleanHistogram(
-                "Startup.BringToForegroundReason",
-                NotificationPlatformBridge.wasNotificationRecentlyClicked());
-    }
-
-    /**
-     * Called when last of Chrome activities is stopped, ending the foreground session. This will
-     * not be called when a Chrome activity is stopped because another Chrome activity takes over.
-     * This is ensured by ActivityStatus, which switches to track new activity when its started and
-     * will not report the old one being stopped (see createStateListener() below).
-     */
-    private void onForegroundSessionEnd() {
-        if (!mIsStarted) return;
-        flushPersistentData();
-        mIsStarted = false;
-        mPowerBroadcastReceiver.onForegroundSessionEnd();
-
-        ChildProcessLauncher.onSentToBackground();
-        IntentHandler.clearPendingReferrer();
-        IntentHandler.clearPendingIncognitoUrl();
-
-        int totalTabCount = 0;
-        for (WeakReference<Activity> reference : ApplicationStatus.getRunningActivities()) {
-            Activity activity = reference.get();
-            if (activity instanceof ChromeActivity) {
-                TabModelSelector tabModelSelector =
-                        ((ChromeActivity) activity).getTabModelSelector();
-                if (tabModelSelector != null) {
-                    totalTabCount += tabModelSelector.getTotalTabCount();
-                }
-            }
-        }
-        RecordHistogram.recordCountHistogram(
-                "Tab.TotalTabCount.BeforeLeavingApp", totalTabCount);
-    }
-
-    /**
-     * Called after onForegroundSessionEnd() indicating that the activity whose onStop() ended the
-     * last foreground session was destroyed.
-     */
-    private void onForegroundActivityDestroyed() {
-        if (ApplicationStatus.isEveryActivityDestroyed()) {
-            // These will all be re-initialized when a new Activity starts / upon next use.
-            PartnerBrowserCustomizations.destroy();
-            ShareHelper.clearSharedImages(this);
-        }
-    }
-
-    private ApplicationStateListener createApplicationStateListener() {
-        return new ApplicationStateListener() {
-            @Override
-            public void onApplicationStateChange(int newState) {
-                if (newState == ApplicationState.HAS_STOPPED_ACTIVITIES) {
-                    onForegroundSessionEnd();
-                } else if (newState == ApplicationState.HAS_DESTROYED_ACTIVITIES) {
-                    onForegroundActivityDestroyed();
-                }
-            }
-        };
     }
 
     /**
@@ -315,16 +127,6 @@ public class ChromeApplication extends ContentApplication {
     public AuthenticatorNavigationInterceptor createAuthenticatorNavigationInterceptor(Tab tab) {
         return null;
     }
-
-    /**
-     * Starts the application activity tracker.
-     */
-    protected void startApplicationActivityTracker() {}
-
-    /**
-     * Stops the application activity tracker.
-     */
-    protected void stopApplicationActivityTracker() {}
 
     /**
      * Initiate AndroidEdu device check.
@@ -351,112 +153,12 @@ public class ChromeApplication extends ContentApplication {
                 SavePasswordsPreferences.class.getName());
     }
 
-    /**
-     * Opens the single origin settings page for the given URL.
-     *
-     * @param url The URL to show the single origin settings for. This is a complete url
-     *            including scheme, domain, port, path, etc.
-     */
-    protected void showSingleOriginSettings(String url) {
-        Bundle fragmentArgs = SingleWebsitePreferences.createFragmentArgsForSite(url);
-        Intent intent = PreferencesLauncher.createIntentForSettingsPage(
-                this, SingleWebsitePreferences.class.getName());
-        intent.putExtra(Preferences.EXTRA_SHOW_FRAGMENT_ARGUMENTS, fragmentArgs);
-        startActivity(intent);
-    }
-
     @Override
     protected void initializeLibraryDependencies() {
         // The ResourceExtractor is only needed by the browser process, but this will have no
         // impact on the renderer process construction.
         ResourceBundle.initializeLocalePaks(this, R.array.locale_paks);
         ResourceExtractor.setResourcesToExtract(ResourceBundle.getActiveLocaleResources());
-    }
-
-    /**
-     * The host activity should call this after the native library has loaded to ensure classes
-     * shared by Activities in the same process are properly initialized.
-     */
-    public void initializeSharedClasses() {
-        if (mInitializedSharedClasses) return;
-        mInitializedSharedClasses = true;
-
-        DeferredStartupHandler.getInstance().addDeferredTask(new Runnable() {
-            @Override
-            public void run() {
-                ForcedSigninProcessor.start(getApplicationContext());
-                AccountsChangedReceiver.addObserver(
-                        new AccountsChangedReceiver.AccountsChangedObserver() {
-                            @Override
-                            public void onAccountsChanged(Context context, Intent intent) {
-                                ThreadUtils.runOnUiThread(new Runnable() {
-                                    @Override
-                                    public void run() {
-                                        ForcedSigninProcessor.start(getApplicationContext());
-                                    }
-                                });
-                            }
-                        });
-            }
-        });
-
-        DeferredStartupHandler.getInstance().addDeferredTask(new Runnable() {
-            @Override
-            public void run() {
-                GoogleServicesManager.get(getApplicationContext()).onMainActivityStart();
-                RevenueStats.getInstance();
-            }
-        });
-
-        DeferredStartupHandler.getInstance().addDeferredTask(new Runnable() {
-            @Override
-            public void run() {
-                mDevToolsServer = new DevToolsServer(DEV_TOOLS_SERVER_SOCKET_PREFIX);
-                mDevToolsServer.setRemoteDebuggingEnabled(
-                        true, DevToolsServer.Security.ALLOW_DEBUG_PERMISSION);
-
-                startApplicationActivityTracker();
-            }
-        });
-
-        DeferredStartupHandler.getInstance().addDeferredTask(new Runnable() {
-            @Override
-            public void run() {
-                // Add process check to diagnose http://crbug.com/606309. Remove this after the bug
-                // is fixed.
-                assert !CommandLine.getInstance().hasSwitch(ContentSwitches.SWITCH_PROCESS_TYPE);
-                if (!CommandLine.getInstance().hasSwitch(ContentSwitches.SWITCH_PROCESS_TYPE)) {
-                    DownloadController.setDownloadNotificationService(
-                            DownloadManagerService.getDownloadManagerService(
-                                    getApplicationContext()));
-                }
-
-                if (ApiCompatibilityUtils.isPrintingSupported()) {
-                    mPrintingController = PrintingControllerFactory.create(getApplicationContext());
-                }
-            }
-        });
-    }
-
-    /**
-     * For extending classes to carry out tasks that initialize the browser process.
-     * Should be called almost immediately after the native library has loaded to initialize things
-     * that really, really have to be set up early.  Avoid putting any long tasks here.
-     */
-    public void initializeProcess() {
-        if (mIsProcessInitialized) return;
-        mIsProcessInitialized = true;
-        assert !mIsStarted;
-
-        DataReductionProxySettings.reconcileDataReductionProxyEnabledState(getApplicationContext());
-
-        mVariationsSession = createVariationsSession();
-        removeSessionCookies();
-        ApplicationStatus.registerApplicationStateListener(createApplicationStateListener());
-        AppBannerManager.setAppDetailsDelegate(createAppDetailsDelegate());
-        mChromeLifetimeController = new ChromeLifetimeController();
-
-        PrefServiceBridge.getInstance().migratePreferences(this);
     }
 
     @Override
@@ -484,14 +186,6 @@ public class ChromeApplication extends ContentApplication {
         // This is done to deter instantiation of LocationSettings elsewhere without using the
         // getInstance() helper method.
         return new LocationSettings(){};
-    }
-
-    /**
-     * @return The Application's PowerBroadcastReceiver.
-     */
-    @VisibleForTesting
-    public PowerBroadcastReceiver getPowerBroadcastReceiver() {
-        return mPowerBroadcastReceiver;
     }
 
     /**
@@ -564,7 +258,7 @@ public class ChromeApplication extends ContentApplication {
      * by one hour.  However, this should only happen at most once when the clock changes since the
      * updated timestamp is immediately saved.
      */
-    protected void removeSessionCookies() {
+    public static void removeSessionCookies() {
         long lastKnownBootTimestamp =
                 ContextUtils.getAppSharedPreferences().getLong(PREF_BOOT_TIMESTAMP, 0);
         long bootTimestamp = System.currentTimeMillis() - SystemClock.uptimeMillis();
@@ -607,14 +301,6 @@ public class ChromeApplication extends ContentApplication {
     }
 
     /**
-     * @return A new ActivityWindowAndroid instance.
-     */
-    public ActivityWindowAndroid createActivityWindowAndroid(Activity activity) {
-        if (activity instanceof ChromeActivity) return new ChromeWindow((ChromeActivity) activity);
-        return new ActivityWindowAndroid(activity);
-    }
-
-    /**
      * @return An instance of {@link CustomTabsConnection}. Should not be called
      * outside of {@link CustomTabsConnection#getInstance()}.
      */
@@ -634,14 +320,6 @@ public class ChromeApplication extends ContentApplication {
      */
     public PhysicalWebEnvironment createPhysicalWebEnvironment() {
         return new PhysicalWebEnvironment();
-    }
-
-    /**
-     * @return Instance of printing controller that is shared among all chromium activities. May
-     *         return null if printing is not supported on the platform.
-     */
-    public PrintingController getPrintingController() {
-        return mPrintingController;
     }
 
     public InstantAppsHandler createInstantAppsHandler() {
@@ -671,20 +349,6 @@ public class ChromeApplication extends ContentApplication {
      */
     public void registerPolicyProviders(CombinedPolicyProvider combinedProvider) {
         combinedProvider.registerProvider(new AppRestrictionsProvider(getApplicationContext()));
-    }
-
-    /**
-     * Add a listener to be notified upon policy changes.
-     */
-    public void addPolicyChangeListener(PolicyChangeListener listener) {
-        CombinedPolicyProvider.get().addPolicyChangeListener(listener);
-    }
-
-    /**
-     * Remove a listener to be notified upon policy changes.
-     */
-    public void removePolicyChangeListener(PolicyChangeListener listener) {
-        CombinedPolicyProvider.get().removePolicyChangeListener(listener);
     }
 
     /**
@@ -730,7 +394,7 @@ public class ChromeApplication extends ContentApplication {
      * @return An instance of AppDetailsDelegate that can be queried about app information for the
      *         App Banner feature.  Will be null if one is unavailable.
      */
-    protected AppDetailsDelegate createAppDetailsDelegate() {
+    public AppDetailsDelegate createAppDetailsDelegate() {
         return null;
     }
 
@@ -765,63 +429,5 @@ public class ChromeApplication extends ContentApplication {
      */
     public AccountManagerDelegate createAccountManagerDelegate() {
         return new SystemAccountManagerDelegate(this);
-    }
-
-    /**
-     * Update the accept languages after changing Android locale setting. Doing so kills the
-     * Activities but it doesn't kill the ChromeApplication, so this should be called in
-     * {@link #onStart} instead of {@link #initialize}.
-     */
-    private void updateAcceptLanguages() {
-        PrefServiceBridge instance = PrefServiceBridge.getInstance();
-        String localeString = Locale.getDefault().toString();  // ex) en_US, de_DE, zh_CN_#Hans
-        if (hasLocaleChanged(localeString)) {
-            instance.resetAcceptLanguages(localeString);
-            // Clear cache so that accept-languages change can be applied immediately.
-            // TODO(changwan): The underlying BrowsingDataRemover::Remove() is an asynchronous call.
-            // So cache-clearing may not be effective if URL rendering can happen before
-            // OnBrowsingDataRemoverDone() is called, in which case we may have to reload as well.
-            // Check if it can happen.
-            instance.clearBrowsingData(
-                    null, new int[]{ BrowsingDataType.CACHE }, TimePeriod.ALL_TIME);
-        }
-    }
-
-    private boolean hasLocaleChanged(String newLocale) {
-        String previousLocale = ContextUtils.getAppSharedPreferences().getString(
-                PREF_LOCALE, "");
-
-        if (!previousLocale.equals(newLocale)) {
-            SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
-            SharedPreferences.Editor editor = prefs.edit();
-            editor.putString(PREF_LOCALE, newLocale);
-            editor.apply();
-            return true;
-        }
-        return false;
-    }
-
-    /**
-     * Honor the Android system setting about showing the last character of a password for a short
-     * period of time.
-     */
-    private void updatePasswordEchoState() {
-        boolean systemEnabled = Settings.System.getInt(
-                getApplicationContext().getContentResolver(),
-                Settings.System.TEXT_SHOW_PASSWORD, 1) == 1;
-        if (PrefServiceBridge.getInstance().getPasswordEchoEnabled() == systemEnabled) return;
-
-        PrefServiceBridge.getInstance().setPasswordEchoEnabled(systemEnabled);
-    }
-
-    /**
-     * Caches flags that are needed by Activities that launch before the native library is loaded
-     * and stores them in SharedPreferences. Because this function is called during launch after the
-     * library has loaded, they won't affect the next launch until Chrome is restarted.
-     */
-    private void cacheNativeFlags() {
-        if (sIsFinishedCachingNativeFlags) return;
-        FeatureUtilities.cacheNativeFlags(this);
-        sIsFinishedCachingNativeFlags = true;
     }
 }

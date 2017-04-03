@@ -28,8 +28,8 @@ NSString* const kHeuristicsForPasswordGeneration =
     @"HeuristicsForPasswordGeneration";
 NSString* const kEnableReadingList = @"EnableReadingList";
 NSString* const kUpdatePasswordUIDisabled = @"UpdatePasswordUIDisabled";
-NSString* const kEnableQRCodeReader = @"EnableQRCodeReader";
 NSString* const kEnableNewClearBrowsingDataUI = @"EnableNewClearBrowsingDataUI";
+NSString* const kMDMIntegrationDisabled = @"MDMIntegrationDisabled";
 }  // namespace
 
 namespace experimental_flags {
@@ -118,7 +118,7 @@ bool IsAllBookmarksEnabled() {
       base::FieldTrialList::FindFullName("RemoveAllBookmarks");
 
   if (group_name.empty()) {
-    return true;  // If no finch experiment, keep all bookmarks enabled.
+    return false;  // If no finch experiment, all bookmarks is disabled.
   }
   return base::StartsWith(group_name, "Enabled",
                           base::CompareCase::INSENSITIVE_ASCII);
@@ -145,13 +145,7 @@ bool IsUpdatePasswordUIEnabled() {
 }
 
 bool IsQRCodeReaderEnabled() {
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kEnableQRScanner))
-    return true;
-
-  // Check if the finch experiment is turned on.
-  return [[NSUserDefaults standardUserDefaults]
-      boolForKey:kEnableQRCodeReader];
+  return false;
 }
 
 bool IsNewClearBrowsingDataUIEnabled() {
@@ -179,6 +173,16 @@ bool IsPaymentRequestEnabled() {
   // Check if the Finch experiment is turned on.
   return base::StartsWith(group_name, "Enabled",
                           base::CompareCase::INSENSITIVE_ASCII);
+}
+
+bool IsSpotlightActionsEnabled() {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  return !command_line->HasSwitch(switches::kDisableSpotlightActions);
+}
+
+bool IsMDMIntegrationEnabled() {
+  return ![[NSUserDefaults standardUserDefaults]
+      boolForKey:kMDMIntegrationDisabled];
 }
 
 }  // namespace experimental_flags

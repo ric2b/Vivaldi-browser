@@ -6,6 +6,7 @@
 #define MOJO_PUBLIC_CPP_BINDINGS_LIB_BINDING_STATE_H_
 
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "base/bind.h"
@@ -16,6 +17,8 @@
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "mojo/public/cpp/bindings/associated_group.h"
+#include "mojo/public/cpp/bindings/bindings_export.h"
+#include "mojo/public/cpp/bindings/connection_error_callback.h"
 #include "mojo/public/cpp/bindings/filter_chain.h"
 #include "mojo/public/cpp/bindings/interface_endpoint_client.h"
 #include "mojo/public/cpp/bindings/interface_id.h"
@@ -33,7 +36,7 @@ namespace internal {
 
 // Base class used for templated binding primitives which bind a pipe
 // exclusively to a single interface.
-class SimpleBindingState {
+class MOJO_CPP_BINDINGS_EXPORT SimpleBindingState {
  public:
   SimpleBindingState();
   ~SimpleBindingState();
@@ -49,10 +52,17 @@ class SimpleBindingState {
       MojoDeadline deadline = MOJO_DEADLINE_INDEFINITE);
 
   void Close();
+  void CloseWithReason(uint32_t custom_reason, const std::string& description);
 
   void set_connection_error_handler(const base::Closure& error_handler) {
     DCHECK(is_bound());
-    connection_error_handler_ = error_handler;
+    router_->set_connection_error_handler(error_handler);
+  }
+
+  void set_connection_error_with_reason_handler(
+      const ConnectionErrorWithReasonCallback& error_handler) {
+    DCHECK(is_bound());
+    router_->set_connection_error_with_reason_handler(error_handler);
   }
 
   bool is_bound() const { return !!router_; }
@@ -64,6 +74,8 @@ class SimpleBindingState {
 
   AssociatedGroup* associated_group() { return nullptr; }
 
+  void FlushForTesting();
+
   void EnableTestingMode();
 
  protected:
@@ -72,15 +84,12 @@ class SimpleBindingState {
                     const char* interface_name,
                     std::unique_ptr<MessageReceiver> request_validator,
                     bool has_sync_methods,
-                    MessageReceiverWithResponderStatus* stub);
+                    MessageReceiverWithResponderStatus* stub,
+                    uint32_t interface_version);
 
   void DestroyRouter();
 
   internal::Router* router_ = nullptr;
-  base::Closure connection_error_handler_;
-
- private:
-  void RunConnectionErrorHandler();
 };
 
 template <typename Interface, bool use_multiplex_router>
@@ -105,7 +114,7 @@ class BindingState<Interface, false> : public SimpleBindingState {
     SimpleBindingState::BindInternal(
         std::move(handle), runner, Interface::Name_,
         base::MakeUnique<typename Interface::RequestValidator_>(),
-        Interface::HasSyncMethods_, &stub_);
+        Interface::HasSyncMethods_, &stub_, Interface::Version_);
   }
 
   InterfaceRequest<Interface> Unbind() {
@@ -126,10 +135,12 @@ class BindingState<Interface, false> : public SimpleBindingState {
 
 // Base class used for templated binding primitives which may bind a pipe to
 // multiple interfaces.
-class MultiplexedBindingState {
+class MOJO_CPP_BINDINGS_EXPORT MultiplexedBindingState {
  public:
   MultiplexedBindingState();
   ~MultiplexedBindingState();
+
+  void AddFilter(std::unique_ptr<MessageReceiver> filter);
 
   bool HasAssociatedInterfaces() const;
 
@@ -140,10 +151,17 @@ class MultiplexedBindingState {
       MojoDeadline deadline = MOJO_DEADLINE_INDEFINITE);
 
   void Close();
+  void CloseWithReason(uint32_t custom_reason, const std::string& description);
 
   void set_connection_error_handler(const base::Closure& error_handler) {
     DCHECK(is_bound());
-    connection_error_handler_ = error_handler;
+    endpoint_client_->set_connection_error_handler(error_handler);
+  }
+
+  void set_connection_error_with_reason_handler(
+      const ConnectionErrorWithReasonCallback& error_handler) {
+    DCHECK(is_bound());
+    endpoint_client_->set_connection_error_with_reason_handler(error_handler);
   }
 
   bool is_bound() const { return !!router_; }
@@ -157,6 +175,8 @@ class MultiplexedBindingState {
     return endpoint_client_ ? endpoint_client_->associated_group() : nullptr;
   }
 
+  void FlushForTesting();
+
   void EnableTestingMode();
 
  protected:
@@ -164,15 +184,13 @@ class MultiplexedBindingState {
                     scoped_refptr<base::SingleThreadTaskRunner> runner,
                     const char* interface_name,
                     std::unique_ptr<MessageReceiver> request_validator,
+                    bool passes_associated_kinds,
                     bool has_sync_methods,
-                    MessageReceiverWithResponderStatus* stub);
+                    MessageReceiverWithResponderStatus* stub,
+                    uint32_t interface_version);
 
   scoped_refptr<internal::MultiplexRouter> router_;
   std::unique_ptr<InterfaceEndpointClient> endpoint_client_;
-  base::Closure connection_error_handler_;
-
- private:
-  void RunConnectionErrorHandler();
 };
 
 // Uses a multiplexing router. If |Interface| has methods to pass associated
@@ -191,7 +209,8 @@ class BindingState<Interface, true> : public MultiplexedBindingState {
     MultiplexedBindingState::BindInternal(
         std::move(handle), runner, Interface::Name_,
         base::MakeUnique<typename Interface::RequestValidator_>(),
-        Interface::HasSyncMethods_, &stub_);
+        Interface::PassesAssociatedKinds_, Interface::HasSyncMethods_, &stub_,
+        Interface::Version_);
     stub_.serialization_context()->group_controller = router_;
   }
 
@@ -200,7 +219,6 @@ class BindingState<Interface, true> : public MultiplexedBindingState {
     InterfaceRequest<Interface> request =
         MakeRequest<Interface>(router_->PassMessagePipe());
     router_ = nullptr;
-    connection_error_handler_.Reset();
     return request;
   }
 

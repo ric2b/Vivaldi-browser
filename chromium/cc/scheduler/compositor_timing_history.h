@@ -50,7 +50,7 @@ class CC_EXPORT CompositorTimingHistory {
 
   // State that affects when events should be expected/recorded/reported.
   void SetRecordingEnabled(bool enabled);
-  void DidCreateAndInitializeOutputSurface();
+  void DidCreateAndInitializeCompositorFrameSink();
 
   // Events to be timed.
   void WillBeginImplFrame(bool new_active_tree_is_likely);
@@ -116,6 +116,9 @@ class CC_EXPORT CompositorTimingHistory {
   base::TimeTicks active_tree_main_frame_time_;
   base::TimeTicks draw_start_time_;
   base::TimeTicks swap_start_time_;
+
+  // Watchdog timers.
+  bool swap_ack_watchdog_enabled_;
 
   std::unique_ptr<UMAReporter> uma_reporter_;
   RenderingStatsInstrumentation* rendering_stats_instrumentation_;

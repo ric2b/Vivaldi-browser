@@ -25,6 +25,7 @@
 #include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
+#include "net/log/net_log_source.h"
 #include "net/socket/stream_socket.h"
 #include "net/socket/tcp_server_socket.h"
 
@@ -154,7 +155,6 @@ char kSampleWebViewPages[] = "[ {\n"
     "/devtools/page/3E962D4D-B676-182D-3BE8-FAE7CE224DE7\",\n"
     "   \"faviconUrl\": \"http://chromium.org/favicon.ico\",\n"
     "   \"id\": \"3E962D4D-B676-182D-3BE8-FAE7CE224DE7\",\n"
-    "   \"thumbnailUrl\": \"/thumb/3E962D4D-B676-182D-3BE8-FAE7CE224DE7\",\n"
     "   \"title\": \"Blink - The Chromium Projects\",\n"
     "   \"type\": \"page\",\n"
     "   \"url\": \"http://www.chromium.org/blink\",\n"
@@ -168,7 +168,6 @@ char kSampleWebViewPages[] = "[ {\n"
     "/devtools/page/44681551-ADFD-2411-076B-3AB14C1C60E2\",\n"
     "   \"faviconUrl\": \"\",\n"
     "   \"id\": \"44681551-ADFD-2411-076B-3AB14C1C60E2\",\n"
-    "   \"thumbnailUrl\": \"/thumb/44681551-ADFD-2411-076B-3AB14C1C60E2\",\n"
     "   \"title\": \"More Activity\",\n"
     "   \"type\": \"page\",\n"
     "   \"url\": \"about:blank\",\n"
@@ -233,7 +232,7 @@ class SimpleHttpServer : base::NonThreadSafe {
 SimpleHttpServer::SimpleHttpServer(const ParserFactory& factory,
                                    net::IPEndPoint endpoint)
     : factory_(factory),
-      socket_(new net::TCPServerSocket(nullptr, net::NetLog::Source())),
+      socket_(new net::TCPServerSocket(nullptr, net::NetLogSource())),
       weak_factory_(this) {
   socket_->Listen(endpoint, 5);
   OnConnect();
@@ -435,7 +434,7 @@ class AdbParser : public SimpleHttpServer::Parser,
       Send("FAIL", "device offline (x)");
     } else {
       mock_connection_ =
-          base::WrapUnique(new MockAndroidConnection(this, serial_, command));
+          base::MakeUnique<MockAndroidConnection>(this, serial_, command);
     }
   }
 

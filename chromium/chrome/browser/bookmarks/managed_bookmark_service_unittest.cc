@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -20,9 +21,9 @@
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
 #include "components/bookmarks/test/mock_bookmark_model_observer.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/syncable_prefs/testing_pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
-#include "grit/components_strings.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -63,18 +64,20 @@ class ManagedBookmarkServiceTest : public testing::Test {
     DCHECK(managed_);
   }
 
-  static base::DictionaryValue* CreateBookmark(const std::string& title,
-                                               const std::string& url) {
+  static std::unique_ptr<base::DictionaryValue> CreateBookmark(
+      const std::string& title,
+      const std::string& url) {
     EXPECT_TRUE(GURL(url).is_valid());
-    base::DictionaryValue* dict = new base::DictionaryValue();
+    auto dict = base::MakeUnique<base::DictionaryValue>();
     dict->SetString("name", title);
     dict->SetString("url", GURL(url).spec());
     return dict;
   }
 
-  static base::DictionaryValue* CreateFolder(const std::string& title,
-                                             base::ListValue* children) {
-    base::DictionaryValue* dict = new base::DictionaryValue();
+  static std::unique_ptr<base::DictionaryValue> CreateFolder(
+      const std::string& title,
+      base::ListValue* children) {
+    auto dict = base::MakeUnique<base::DictionaryValue>();
     dict->SetString("name", title);
     dict->Set("children", children);
     return dict;
@@ -93,7 +96,7 @@ class ManagedBookmarkServiceTest : public testing::Test {
     return list;
   }
 
-  static base::DictionaryValue* CreateExpectedTree() {
+  static std::unique_ptr<base::DictionaryValue> CreateExpectedTree() {
     return CreateFolder(GetManagedFolderTitle(), CreateTestTree());
   }
 

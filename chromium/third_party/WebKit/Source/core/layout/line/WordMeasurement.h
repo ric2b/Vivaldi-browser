@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2000 Lars Knoll (knoll@kde.org)
- * Copyright (C) 2003, 2004, 2006, 2007, 2008, 2009, 2010, 2011 Apple Inc. All right reserved.
+ * Copyright (C) 2003, 2004, 2006, 2007, 2008, 2009, 2010, 2011 Apple Inc.
+ *               All right reserved.
  * Copyright (C) 2010 Google Inc. All rights reserved.
  * Copyright (C) 2013 Adobe Systems Incorporated.
  *
@@ -31,24 +32,20 @@
 namespace blink {
 
 class WordMeasurement {
-    DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
-public:
-    WordMeasurement()
-        : layoutText(nullptr)
-        , width(0)
-        , startOffset(0)
-        , endOffset(0)
-    {
-    }
+  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
 
-    LineLayoutText layoutText;
-    float width;
-    int startOffset;
-    int endOffset;
-    HashSet<const SimpleFontData*> fallbackFonts;
-    FloatRect glyphBounds;
+ public:
+  WordMeasurement()
+      : layoutText(nullptr), width(0), startOffset(0), endOffset(0) {}
+
+  LineLayoutText layoutText;
+  float width;
+  int startOffset;
+  int endOffset;
+  HashSet<const SimpleFontData*> fallbackFonts;
+  FloatRect glyphBounds;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // WordMeasurement_h
+#endif  // WordMeasurement_h

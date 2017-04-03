@@ -12,7 +12,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chromeos/attestation/attestation_ca_client.h"
 #include "chrome/browser/chromeos/login/enrollment/auto_enrollment_controller.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_cloud_policy_store_chromeos.h"
@@ -71,30 +70,26 @@ em::DeviceRegisterRequest::Flavor EnrollmentModeToRegistrationFlavor(
 
 EnrollmentHandlerChromeOS::EnrollmentHandlerChromeOS(
     DeviceCloudPolicyStoreChromeOS* store,
-    EnterpriseInstallAttributes* install_attributes,
+    chromeos::InstallAttributes* install_attributes,
     ServerBackedStateKeysBroker* state_keys_broker,
-    cryptohome::AsyncMethodCaller* async_method_caller,
-    chromeos::CryptohomeClient* cryptohome_client,
+    chromeos::attestation::AttestationFlow* attestation_flow,
     std::unique_ptr<CloudPolicyClient> client,
     scoped_refptr<base::SequencedTaskRunner> background_task_runner,
     const EnrollmentConfig& enrollment_config,
     const std::string& auth_token,
     const std::string& client_id,
     const std::string& requisition,
-    const AllowedDeviceModes& allowed_device_modes,
     const EnrollmentCallback& completion_callback)
     : store_(store),
       install_attributes_(install_attributes),
       state_keys_broker_(state_keys_broker),
-      async_method_caller_(async_method_caller),
-      cryptohome_client_(cryptohome_client),
+      attestation_flow_(attestation_flow),
       client_(std::move(client)),
       background_task_runner_(background_task_runner),
       enrollment_config_(enrollment_config),
       auth_token_(auth_token),
       client_id_(client_id),
       requisition_(requisition),
-      allowed_device_modes_(allowed_device_modes),
       completion_callback_(completion_callback),
       device_mode_(DEVICE_MODE_NOT_SET),
       skip_robot_auth_(false),
@@ -108,7 +103,7 @@ EnrollmentHandlerChromeOS::EnrollmentHandlerChromeOS(
              EnrollmentConfig::MODE_ATTESTATION_FORCED) == auth_token_.empty());
   CHECK(enrollment_config_.auth_mechanism !=
             EnrollmentConfig::AUTH_MECHANISM_ATTESTATION ||
-        (async_method_caller_ != nullptr && cryptohome_client_ != nullptr));
+        attestation_flow_);
   store_->AddObserver(this);
   client_->AddObserver(this);
   client_->AddPolicyTypeToFetch(dm_protocol::kChromeDevicePolicyType,
@@ -123,6 +118,20 @@ EnrollmentHandlerChromeOS::~EnrollmentHandlerChromeOS() {
 void EnrollmentHandlerChromeOS::StartEnrollment() {
   CHECK_EQ(STEP_PENDING, enrollment_step_);
   enrollment_step_ = STEP_STATE_KEYS;
+
+  if (client_->machine_id().empty()) {
+    LOG(ERROR) << "Machine id empty.";
+    ReportResult(EnrollmentStatus::ForStatus(
+        EnrollmentStatus::STATUS_NO_MACHINE_IDENTIFICATION));
+    return;
+  }
+  if (client_->machine_model().empty()) {
+    LOG(ERROR) << "Machine model empty.";
+    ReportResult(EnrollmentStatus::ForStatus(
+        EnrollmentStatus::STATUS_NO_MACHINE_IDENTIFICATION));
+    return;
+  }
+
   state_keys_broker_->RequestStateKeys(
       base::Bind(&EnrollmentHandlerChromeOS::HandleStateKeysResult,
                  weak_ptr_factory_.GetWeakPtr()));
@@ -187,9 +196,7 @@ void EnrollmentHandlerChromeOS::OnRegistrationStateChanged(
   if (enrollment_step_ == STEP_REGISTRATION && client_->is_registered()) {
     enrollment_step_ = STEP_POLICY_FETCH,
     device_mode_ = client_->device_mode();
-    if (device_mode_ == DEVICE_MODE_NOT_SET)
-      device_mode_ = DEVICE_MODE_ENTERPRISE;
-    if (!allowed_device_modes_.test(device_mode_)) {
+    if (device_mode_ != policy::DEVICE_MODE_ENTERPRISE) {
       LOG(ERROR) << "Bad device mode " << device_mode_;
       ReportResult(EnrollmentStatus::ForStatus(
           EnrollmentStatus::STATUS_REGISTRATION_BAD_MODE));
@@ -271,7 +278,7 @@ void EnrollmentHandlerChromeOS::StartRegistration() {
     return;
   }
   enrollment_step_ = STEP_REGISTRATION;
-  if (enrollment_config_.should_enroll_with_attestation()) {
+  if (enrollment_config_.is_mode_attestation()) {
     StartAttestationBasedEnrollmentFlow();
   } else {
     client_->Register(
@@ -282,13 +289,6 @@ void EnrollmentHandlerChromeOS::StartRegistration() {
 }
 
 void EnrollmentHandlerChromeOS::StartAttestationBasedEnrollmentFlow() {
-  if (!attestation_flow_) {
-    std::unique_ptr<chromeos::attestation::ServerProxy> attestation_ca_client(
-        new chromeos::attestation::AttestationCAClient());
-    attestation_flow_.reset(new chromeos::attestation::AttestationFlow(
-        async_method_caller_, cryptohome_client_,
-        std::move(attestation_ca_client)));
-  }
   const chromeos::attestation::AttestationFlow::CertificateCallback callback =
       base::Bind(
           &EnrollmentHandlerChromeOS::HandleRegistrationCertificateResult,
@@ -302,14 +302,14 @@ void EnrollmentHandlerChromeOS::StartAttestationBasedEnrollmentFlow() {
 void EnrollmentHandlerChromeOS::HandleRegistrationCertificateResult(
     bool success,
     const std::string& pem_certificate_chain) {
-  LOG(WARNING) << "Enrolling with a registration certificate"
-                  " is not supported yet.";
-  // TODO(drcrash): Invert success/fail tests, mocking as always failed now.
-  if (success) {
-    // TODO(drcrash): Implement new call in client_ to register with cert.
-  }
-  ReportResult(EnrollmentStatus::ForStatus(
-      EnrollmentStatus::STATUS_REGISTRATION_CERTIFICATE_FETCH_FAILED));
+  if (success)
+    client_->RegisterWithCertificate(
+        em::DeviceRegisterRequest::DEVICE,
+        EnrollmentModeToRegistrationFlavor(enrollment_config_.mode),
+        pem_certificate_chain, client_id_, requisition_, current_state_key_);
+  else
+    ReportResult(EnrollmentStatus::ForStatus(
+        EnrollmentStatus::STATUS_REGISTRATION_CERTIFICATE_FETCH_FAILED));
 }
 
 void EnrollmentHandlerChromeOS::HandlePolicyValidationResult(
@@ -422,13 +422,13 @@ void EnrollmentHandlerChromeOS::HandleSetManagementSettingsDone(bool success) {
 }
 
 void EnrollmentHandlerChromeOS::HandleLockDeviceResult(
-    EnterpriseInstallAttributes::LockResult lock_result) {
+    chromeos::InstallAttributes::LockResult lock_result) {
   CHECK_EQ(STEP_LOCK_DEVICE, enrollment_step_);
   switch (lock_result) {
-    case EnterpriseInstallAttributes::LOCK_SUCCESS:
+    case chromeos::InstallAttributes::LOCK_SUCCESS:
       StartStoreRobotAuth();
       break;
-    case EnterpriseInstallAttributes::LOCK_NOT_READY:
+    case chromeos::InstallAttributes::LOCK_NOT_READY:
       // We wait up to |kLockRetryTimeoutMs| milliseconds and if it hasn't
       // succeeded by then show an error to the user and stop the enrollment.
       if (lockbox_init_duration_ < kLockRetryTimeoutMs) {
@@ -441,17 +441,17 @@ void EnrollmentHandlerChromeOS::HandleLockDeviceResult(
             base::TimeDelta::FromMilliseconds(kLockRetryIntervalMs));
         lockbox_init_duration_ += kLockRetryIntervalMs;
       } else {
-        HandleLockDeviceResult(EnterpriseInstallAttributes::LOCK_TIMEOUT);
+        HandleLockDeviceResult(chromeos::InstallAttributes::LOCK_TIMEOUT);
       }
       break;
-    case EnterpriseInstallAttributes::LOCK_TIMEOUT:
-    case EnterpriseInstallAttributes::LOCK_BACKEND_INVALID:
-    case EnterpriseInstallAttributes::LOCK_ALREADY_LOCKED:
-    case EnterpriseInstallAttributes::LOCK_SET_ERROR:
-    case EnterpriseInstallAttributes::LOCK_FINALIZE_ERROR:
-    case EnterpriseInstallAttributes::LOCK_READBACK_ERROR:
-    case EnterpriseInstallAttributes::LOCK_WRONG_DOMAIN:
-    case EnterpriseInstallAttributes::LOCK_WRONG_MODE:
+    case chromeos::InstallAttributes::LOCK_TIMEOUT:
+    case chromeos::InstallAttributes::LOCK_BACKEND_INVALID:
+    case chromeos::InstallAttributes::LOCK_ALREADY_LOCKED:
+    case chromeos::InstallAttributes::LOCK_SET_ERROR:
+    case chromeos::InstallAttributes::LOCK_FINALIZE_ERROR:
+    case chromeos::InstallAttributes::LOCK_READBACK_ERROR:
+    case chromeos::InstallAttributes::LOCK_WRONG_DOMAIN:
+    case chromeos::InstallAttributes::LOCK_WRONG_MODE:
       ReportResult(EnrollmentStatus::ForLockError(lock_result));
       break;
   }

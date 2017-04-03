@@ -73,10 +73,6 @@ void ShortcutHelper::AddToLauncherWithSkBitmap(
     const base::Closure& splash_image_callback) {
   if (info.display == blink::WebDisplayModeStandalone ||
       info.display == blink::WebDisplayModeFullscreen) {
-    if (ChromeWebApkHost::AreWebApkEnabled()) {
-      InstallWebApkWithSkBitmap(browser_context, info, icon_bitmap);
-      return;
-    }
     AddWebappWithSkBitmap(info, webapp_id, icon_bitmap, splash_image_callback);
     return;
   }
@@ -87,11 +83,11 @@ void ShortcutHelper::AddToLauncherWithSkBitmap(
 void ShortcutHelper::InstallWebApkWithSkBitmap(
     content::BrowserContext* browser_context,
     const ShortcutInfo& info,
-    const SkBitmap& icon_bitmap) {
+    const SkBitmap& icon_bitmap,
+    const WebApkInstaller::FinishCallback& callback) {
   // WebApkInstaller destroys itself when it is done.
   WebApkInstaller* installer = new WebApkInstaller(info, icon_bitmap);
-  installer->InstallAsync(browser_context,
-                          base::Bind(&ShortcutHelper::OnBuiltWebApk));
+  installer->InstallAsync(browser_context, callback);
 }
 
 // static
@@ -148,16 +144,6 @@ void ShortcutHelper::AddShortcutWithSkBitmap(
 
   Java_ShortcutHelper_addShortcut(env, java_url, java_user_title, java_bitmap,
                                   info.source);
-}
-
-void ShortcutHelper::OnBuiltWebApk(bool success) {
-  if (success) {
-    DVLOG(1) << "Sent request to install WebAPK. Seems to have worked.";
-  } else {
-    LOG(ERROR) << "WebAPK install failed.";
-  }
-  // TODO(pkotwicz): Figure out what to do when installing WebAPK fails.
-  // (crbug.com/626950)
 }
 
 int ShortcutHelper::GetIdealHomescreenIconSizeInDp() {
@@ -258,11 +244,24 @@ SkBitmap ShortcutHelper::FinalizeLauncherIconInBackground(
 }
 
 // static
-bool ShortcutHelper::IsWebApkInstalled(const GURL& url) {
+std::string ShortcutHelper::QueryWebApkPackage(const GURL& url) {
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jstring> java_url =
       base::android::ConvertUTF8ToJavaString(env, url.spec());
-  return Java_ShortcutHelper_isWebApkInstalled(env, java_url);
+  ScopedJavaLocalRef<jstring> java_webapk_package_name =
+      Java_ShortcutHelper_queryWebApkPackage(env, java_url);
+
+  std::string webapk_package_name = "";
+  if (java_webapk_package_name.obj()) {
+    webapk_package_name = base::android::ConvertJavaStringToUTF8(
+        env, java_webapk_package_name);
+  }
+  return webapk_package_name;
+}
+
+// static
+bool ShortcutHelper::IsWebApkInstalled(const GURL& url) {
+  return !QueryWebApkPackage(url).empty();
 }
 
 GURL ShortcutHelper::GetScopeFromURL(const GURL& url) {

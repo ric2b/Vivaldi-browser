@@ -28,6 +28,9 @@ std::string GetUserAgent();
 class ChromeContentClient : public content::ContentClient {
  public:
 #if defined(GOOGLE_CHROME_BUILD)
+  // kNotPresent is a placeholder plugin location for plugins that are not
+  // currently present in this installation of Chrome, but which can be fetched
+  // on-demand and therefore should still appear in navigator.plugins.
   static const char kNotPresent[];
 #endif
   static const char kPDFPluginName[];
@@ -73,7 +76,6 @@ class ChromeContentClient : public content::ContentClient {
   void AddAdditionalSchemes(std::vector<url::SchemeWithType>* standard_schemes,
                             std::vector<url::SchemeWithType>* referrer_schemes,
                             std::vector<std::string>* saveable_shemes) override;
-  bool CanSendWhileSwappedOut(const IPC::Message* message) override;
   std::string GetProduct() const override;
   std::string GetUserAgent() const override;
   base::string16 GetLocalizedString(int message_id) const override;

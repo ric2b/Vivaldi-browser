@@ -22,6 +22,7 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.metrics.WebappUma;
@@ -53,6 +54,7 @@ public class WebappSplashScreenTest extends WebappActivityTestBase {
 
     @SmallTest
     @Feature({"Webapps"})
+    @RetryOnFailure
     public void testDefaultBackgroundColor() throws Exception {
         startWebappActivity();
         ViewGroup splashScreen = waitUntilSplashScreenAppears();
@@ -66,6 +68,7 @@ public class WebappSplashScreenTest extends WebappActivityTestBase {
     @SmallTest
     @Feature({"Webapps"})
     @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+    @RetryOnFailure
     public void testThemeColorWhenNotSpecified() throws Exception {
         startWebappActivity();
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return;
@@ -75,6 +78,7 @@ public class WebappSplashScreenTest extends WebappActivityTestBase {
 
     @SmallTest
     @Feature({"Webapps"})
+    @RetryOnFailure
     public void testHidesAfterFirstPaint() throws Exception {
         startWebappActivity();
         assertTrue(getActivity().isSplashScreenVisibleForTests());
@@ -91,6 +95,7 @@ public class WebappSplashScreenTest extends WebappActivityTestBase {
 
     @SmallTest
     @Feature({"Webapps"})
+    @RetryOnFailure
     public void testHidesAfterCrash() throws Exception {
         startWebappActivity();
         assertTrue(getActivity().isSplashScreenVisibleForTests());
@@ -107,6 +112,7 @@ public class WebappSplashScreenTest extends WebappActivityTestBase {
 
     @SmallTest
     @Feature({"Webapps"})
+    @RetryOnFailure
     public void testHidesAfterLoadCompletes() throws Exception {
         startWebappActivity();
         assertTrue(getActivity().isSplashScreenVisibleForTests());
@@ -139,6 +145,7 @@ public class WebappSplashScreenTest extends WebappActivityTestBase {
 
     @SmallTest
     @Feature({"Webapps"})
+    @RetryOnFailure
     public void testHidesAfterMultipleEvents() throws Exception {
         startWebappActivity();
         assertTrue(getActivity().isSplashScreenVisibleForTests());
@@ -159,6 +166,7 @@ public class WebappSplashScreenTest extends WebappActivityTestBase {
 
     @SmallTest
     @Feature({"Webapps"})
+    @RetryOnFailure
     public void testUmaOnNativeLoad() throws Exception {
         startWebappActivity();
 
@@ -192,6 +200,7 @@ public class WebappSplashScreenTest extends WebappActivityTestBase {
 
     @SmallTest
     @Feature({"Webapps"})
+    @RetryOnFailure
     public void testUmaWhenSplashHides() throws Exception {
         startWebappActivity();
         ThreadUtils.runOnUiThread(new Runnable() {
@@ -204,7 +213,7 @@ public class WebappSplashScreenTest extends WebappActivityTestBase {
         waitUntilSplashscreenHides();
 
         // DURATION and HIDES should now have a value.
-        assertTrue(hasHistogramEntry(WebappUma.HISTOGRAM_SPLASHSCREEN_DURATION, 3000));
+        assertTrue(hasHistogramEntry(WebappUma.HISTOGRAM_SPLASHSCREEN_DURATION, 5000));
         assertEquals(1, getHistogramTotalCountFor(WebappUma.HISTOGRAM_SPLASHSCREEN_HIDES,
                 WebappUma.SPLASHSCREEN_HIDES_REASON_MAX));
 
@@ -220,6 +229,7 @@ public class WebappSplashScreenTest extends WebappActivityTestBase {
 
     @SmallTest
     @Feature({"Webapps"})
+    @RetryOnFailure
     public void testRegularSplashScreenAppears() throws Exception {
         // Register a properly-sized icon for the splash screen.
         Context context = getInstrumentation().getTargetContext();
@@ -227,7 +237,7 @@ public class WebappSplashScreenTest extends WebappActivityTestBase {
                 R.dimen.webapp_splash_image_size_threshold);
         int bitmapSize = thresholdSize + 1;
         Bitmap splashBitmap = Bitmap.createBitmap(bitmapSize, bitmapSize, Bitmap.Config.ARGB_8888);
-        WebappDataStorage.open(context, WEBAPP_ID).updateSplashScreenImage(splashBitmap);
+        WebappDataStorage.open(WEBAPP_ID).updateSplashScreenImage(splashBitmap);
 
         startWebappActivity(createIntent());
         ViewGroup splashScreen = waitUntilSplashScreenAppears();
@@ -246,6 +256,7 @@ public class WebappSplashScreenTest extends WebappActivityTestBase {
 
     @SmallTest
     @Feature({"Webapps"})
+    @RetryOnFailure
     public void testSmallSplashScreenAppears() throws Exception {
         // Register a smaller icon for the splash screen.
         Context context = getInstrumentation().getTargetContext();
@@ -254,7 +265,7 @@ public class WebappSplashScreenTest extends WebappActivityTestBase {
         int bitmapSize = context.getResources().getDimensionPixelSize(
                 R.dimen.webapp_splash_image_size_minimum);
         Bitmap splashBitmap = Bitmap.createBitmap(bitmapSize, bitmapSize, Bitmap.Config.ARGB_8888);
-        WebappDataStorage.open(context, WEBAPP_ID).updateSplashScreenImage(splashBitmap);
+        WebappDataStorage.open(WEBAPP_ID).updateSplashScreenImage(splashBitmap);
 
         startWebappActivity(createIntent());
         ViewGroup splashScreen = waitUntilSplashScreenAppears();
@@ -281,7 +292,7 @@ public class WebappSplashScreenTest extends WebappActivityTestBase {
         int bitmapSize = context.getResources().getDimensionPixelSize(
                 R.dimen.webapp_splash_image_size_minimum) - 1;
         Bitmap splashBitmap = Bitmap.createBitmap(bitmapSize, bitmapSize, Bitmap.Config.ARGB_8888);
-        WebappDataStorage.open(context, WEBAPP_ID).updateSplashScreenImage(splashBitmap);
+        WebappDataStorage.open(WEBAPP_ID).updateSplashScreenImage(splashBitmap);
 
         Intent intent = createIntent();
         intent.putExtra(ShortcutHelper.EXTRA_IS_ICON_GENERATED, true);

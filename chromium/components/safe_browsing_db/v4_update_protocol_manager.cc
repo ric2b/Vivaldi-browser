@@ -12,6 +12,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/timer/timer.h"
+#include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/safe_browsing_db/safebrowsing.pb.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_response_headers.h"
@@ -192,21 +193,19 @@ void V4UpdateProtocolManager::ScheduleNextUpdateAfterInterval(
                       &V4UpdateProtocolManager::IssueUpdateRequest);
 }
 
-// static
-std::string V4UpdateProtocolManager::GetBase64SerializedUpdateRequestProto(
-    const StoreStateMap& store_state_map) {
-  DCHECK(!store_state_map.empty());
+std::string V4UpdateProtocolManager::GetBase64SerializedUpdateRequestProto() {
+  DCHECK(!store_state_map_->empty());
   // Build the request. Client info and client states are not added to the
   // request protocol buffer. Client info is passed as params in the url.
   FetchThreatListUpdatesRequest request;
-  for (const auto& entry : store_state_map) {
+  for (const auto& entry : *store_state_map_) {
     const auto& list_to_update = entry.first;
     const auto& state = entry.second;
     ListUpdateRequest* list_update_request = request.add_list_update_requests();
-    list_update_request->set_platform_type(list_to_update.platform_type);
+    list_update_request->set_platform_type(list_to_update.platform_type());
     list_update_request->set_threat_entry_type(
-        list_to_update.threat_entry_type);
-    list_update_request->set_threat_type(list_to_update.threat_type);
+        list_to_update.threat_entry_type());
+    list_update_request->set_threat_type(list_to_update.threat_type());
 
     if (!state.empty()) {
       list_update_request->set_state(state);
@@ -216,6 +215,9 @@ std::string V4UpdateProtocolManager::GetBase64SerializedUpdateRequestProto(
     list_update_request->mutable_constraints()->add_supported_compressions(
         RICE);
   }
+
+  V4ProtocolManagerUtil::SetClientInfoFromConfig(request.mutable_client(),
+                                                 config_);
 
   // Serialize and Base64 encode.
   std::string req_data, req_base64;
@@ -277,8 +279,7 @@ void V4UpdateProtocolManager::IssueUpdateRequest() {
     return;
   }
 
-  std::string req_base64 =
-      GetBase64SerializedUpdateRequestProto(*store_state_map_.get());
+  std::string req_base64 = GetBase64SerializedUpdateRequestProto();
   GURL update_url;
   net::HttpRequestHeaders headers;
   GetUpdateUrlAndHeaders(req_base64, &update_url, &headers);
@@ -286,6 +287,8 @@ void V4UpdateProtocolManager::IssueUpdateRequest() {
   std::unique_ptr<net::URLFetcher> fetcher = net::URLFetcher::Create(
       url_fetcher_id_++, update_url, net::URLFetcher::GET, this);
   fetcher->SetExtraRequestHeaders(headers.ToString());
+  data_use_measurement::DataUseUserData::AttachToFetcher(
+      fetcher.get(), data_use_measurement::DataUseUserData::SAFE_BROWSING);
 
   request_.reset(fetcher.release());
 

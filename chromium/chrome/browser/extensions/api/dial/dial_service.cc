@@ -32,6 +32,8 @@
 #include "net/base/network_interfaces.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
+#include "net/log/net_log.h"
+#include "net/log/net_log_source_type.h"
 #include "url/gurl.h"
 
 #if defined(OS_CHROMEOS)
@@ -163,7 +165,7 @@ DialServiceImpl::DialSocket::~DialSocket() {
 bool DialServiceImpl::DialSocket::CreateAndBindSocket(
     const IPAddress& bind_ip_address,
     net::NetLog* net_log,
-    net::NetLog::Source net_log_source) {
+    net::NetLogSource net_log_source) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(!socket_);
   DCHECK(bind_ip_address.IsIPv4());
@@ -389,7 +391,7 @@ DialServiceImpl::DialServiceImpl(net::NetLog* net_log)
   DCHECK(success);
   send_address_ = net::IPEndPoint(address, kDialRequestPort);
   send_buffer_ = new StringIOBuffer(BuildRequest());
-  net_log_source_.type = net::NetLog::SOURCE_UDP_SOCKET;
+  net_log_source_.type = net::NetLogSourceType::UDP_SOCKET;
   net_log_source_.id = net_log_->NextID();
 }
 
@@ -448,8 +450,8 @@ void DialServiceImpl::StartDiscovery() {
 #else
   BrowserThread::PostTaskAndReplyWithResult(
       BrowserThread::FILE, FROM_HERE, base::Bind(&GetNetworkListOnFileThread),
-      base::Bind(base::Bind(&DialServiceImpl::SendNetworkList,
-                            weak_factory_.GetWeakPtr())));
+      base::Bind(&DialServiceImpl::SendNetworkList,
+                 weak_factory_.GetWeakPtr()));
 #endif
 }
 

@@ -14,16 +14,13 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/logging.h"
-#include "content/browser/file_descriptor_info_impl.h"
+#include "content/browser/android/scoped_surface_request_manager.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/media/android/browser_media_player_manager.h"
 #include "content/browser/media/android/media_web_contents_observer_android.h"
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "content/common/child_process_host_impl.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_process_host.h"
-#include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "jni/ChildProcessLauncher_jni.h"
 #include "media/base/android/media_player_android.h"
@@ -31,6 +28,7 @@
 
 using base::android::AttachCurrentThread;
 using base::android::JavaParamRef;
+using base::android::JavaRef;
 using base::android::ToJavaArrayOfStrings;
 using base::android::ScopedJavaGlobalRef;
 using base::android::ScopedJavaLocalRef;
@@ -90,21 +88,6 @@ static void SetSurfacePeer(
   }
 }
 
-void LaunchDownloadProcess(base::CommandLine* cmd_line) {
-  std::unique_ptr<base::CommandLine> cmd_line_deleter(cmd_line);
-
-  JNIEnv* env = AttachCurrentThread();
-  DCHECK(env);
-
-  // Create the Command line String[]
-  ScopedJavaLocalRef<jobjectArray> j_argv =
-      ToJavaArrayOfStrings(env, cmd_line->argv());
-
-  // TODO(qinmin): pass download parameters here.
-  Java_ChildProcessLauncher_startDownloadProcessIfNecessary(
-      env, base::android::GetApplicationContext(), j_argv);
-}
-
 }  // anonymous namespace
 
 // Called from ChildProcessLauncher.java when the ChildProcess was
@@ -124,32 +107,6 @@ static void OnChildProcessStarted(JNIEnv*,
   delete callback;
 }
 
-void StartDownloadProcessIfNecessary() {
-  base::FilePath exe_path = content::ChildProcessHost::GetChildPath(
-      content::ChildProcessHost::CHILD_NORMAL);
-  if (exe_path.empty()) {
-    NOTREACHED() << "Unable to get download process binary name.";
-    return;
-  }
-  base::CommandLine* cmd_line = new base::CommandLine(exe_path);
-  cmd_line->AppendSwitchASCII(switches::kProcessType,
-                              switches::kDownloadProcess);
-  cmd_line->AppendSwitch(switches::kNoSandbox);
-
-  const base::CommandLine browser_command_line =
-      *base::CommandLine::ForCurrentProcess();
-  static const char* const kForwardSwitches[] = {
-      switches::kDisableLogging,
-      switches::kEnableLogging,
-      switches::kLoggingLevel,
-  };
-  cmd_line->CopySwitchesFrom(browser_command_line, kForwardSwitches,
-                             arraysize(kForwardSwitches));
-  CHECK(!cmd_line->HasSwitch(switches::kSingleProcess));
-  BrowserThread::PostTask(BrowserThread::PROCESS_LAUNCHER, FROM_HERE,
-                          base::Bind(&LaunchDownloadProcess, cmd_line));
-}
-
 void StartChildProcess(
     const base::CommandLine::StringVector& argv,
     int child_process_id,
@@ -166,7 +123,7 @@ void StartChildProcess(
   DCHECK(file_count > 0);
 
   ScopedJavaLocalRef<jclass> j_file_info_class = base::android::GetClass(
-      env, "org/chromium/content/browser/FileDescriptorInfo");
+      env, "org/chromium/content/common/FileDescriptorInfo");
   ScopedJavaLocalRef<jobjectArray> j_file_infos(
       env, env->NewObjectArray(file_count, j_file_info_class.obj(), NULL));
   base::android::CheckException(env);
@@ -236,7 +193,27 @@ void EstablishSurfacePeer(JNIEnv* env,
       &SetSurfacePeer, jsurface, pid, primary_id, secondary_id));
 }
 
-void RegisterViewSurface(int surface_id, jobject j_surface) {
+void CompleteScopedSurfaceRequest(JNIEnv* env,
+                                  const JavaParamRef<jclass>& clazz,
+                                  jlong request_token_high,
+                                  jlong request_token_low,
+                                  const JavaParamRef<jobject>& surface) {
+  if (request_token_high == 0 && request_token_low == 0) {
+    DLOG(ERROR) << "Received invalid surface request token.";
+    return;
+  }
+
+  DCHECK(!BrowserThread::CurrentlyOn(BrowserThread::UI));
+
+  ScopedJavaGlobalRef<jobject> jsurface;
+  jsurface.Reset(env, surface);
+  ScopedSurfaceRequestManager::GetInstance()->FulfillScopedSurfaceRequest(
+      base::UnguessableToken::Deserialize(request_token_high,
+                                          request_token_low),
+      gl::ScopedJavaSurface(jsurface));
+}
+
+void RegisterViewSurface(int surface_id, const JavaRef<jobject>& j_surface) {
   JNIEnv* env = AttachCurrentThread();
   DCHECK(env);
   Java_ChildProcessLauncher_registerViewSurface(env, surface_id, j_surface);

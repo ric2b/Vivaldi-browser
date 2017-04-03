@@ -21,34 +21,6 @@ except ImportError:
 # is regenerated, which causes a race condition and breaks concurrent build,
 # since some compile processes will try to read the partially written cache.
 module_path, module_filename = os.path.split(os.path.realpath(__file__))
-templates_dir = module_path
-
-# In Blink, jinja2 is in chromium's third_party directory.
-# Insert at 1 so at front to override system libraries, and
-# after path[0] == invoking script dir
-blink_third_party_dir = os.path.normpath(os.path.join(
-    module_path, os.pardir, os.pardir, os.pardir, os.pardir, os.pardir,
-    "third_party"))
-if os.path.isdir(blink_third_party_dir):
-    sys.path.insert(1, blink_third_party_dir)
-
-# In V8, it is in third_party folder
-v8_third_party_dir = os.path.normpath(os.path.join(
-    module_path, os.pardir, os.pardir, "third_party"))
-
-if os.path.isdir(v8_third_party_dir):
-    sys.path.insert(1, v8_third_party_dir)
-
-# In Node, it is in deps folder
-deps_dir = os.path.normpath(os.path.join(
-    module_path, os.pardir, os.pardir, os.pardir, os.pardir, "third_party"))
-
-if os.path.isdir(deps_dir):
-    sys.path.insert(1, os.path.join(deps_dir, "jinja2"))
-    sys.path.insert(1, os.path.join(deps_dir, "markupsafe"))
-
-import jinja2
-
 
 def read_config():
     # pylint: disable=W0703
@@ -60,11 +32,30 @@ def read_config():
             return collections.namedtuple('X', keys)(*values)
         return json.loads(data, object_hook=json_object_hook)
 
+    def init_defaults(config_tuple, path, defaults):
+        keys = list(config_tuple._fields)  # pylint: disable=E1101
+        values = [getattr(config_tuple, k) for k in keys]
+        for i in xrange(len(keys)):
+            if hasattr(values[i], "_fields"):
+                values[i] = init_defaults(values[i], path + "." + keys[i], defaults)
+        for optional in defaults:
+            if optional.find(path + ".") != 0:
+                continue
+            optional_key = optional[len(path) + 1:]
+            if optional_key.find(".") == -1 and optional_key not in keys:
+                keys.append(optional_key)
+                values.append(defaults[optional])
+        return collections.namedtuple('X', keys)(*values)
+
     try:
         cmdline_parser = optparse.OptionParser()
         cmdline_parser.add_option("--output_base")
+        cmdline_parser.add_option("--jinja_dir")
         cmdline_parser.add_option("--config")
         arg_options, _ = cmdline_parser.parse_args()
+        jinja_dir = arg_options.jinja_dir
+        if not jinja_dir:
+            raise Exception("jinja directory must be specified")
         output_base = arg_options.output_base
         if not output_base:
             raise Exception("Base output directory must be specified")
@@ -82,14 +73,23 @@ def read_config():
         config_json_file = open(config_file, "r")
         config_json_string = config_json_file.read()
         config_partial = json_to_object(config_json_string, output_base, config_base)
-        keys = list(config_partial._fields)  # pylint: disable=E1101
-        values = [getattr(config_partial, k) for k in keys]
-        for optional in ["imported", "exported", "lib"]:
-            if optional not in keys:
-                keys.append(optional)
-                values.append(False)
         config_json_file.close()
-        return (config_file, collections.namedtuple('X', keys)(*values))
+        defaults = {
+            ".imported": False,
+            ".imported.export_macro": "",
+            ".imported.export_header": False,
+            ".imported.header": False,
+            ".imported.package": False,
+            ".protocol.export_macro": "",
+            ".protocol.export_header": False,
+            ".exported": False,
+            ".exported.export_macro": "",
+            ".exported.export_header": False,
+            ".lib": False,
+            ".lib.export_macro": "",
+            ".lib.export_header": False,
+        }
+        return (jinja_dir, config_file, init_defaults(config_partial, "", defaults))
     except Exception:
         # Work with python 2 and 3 http://docs.python.org/py3k/howto/pyporting.html
         exc = sys.exc_info()[1]
@@ -109,9 +109,13 @@ def dash_to_camelcase(word):
     return prefix + "".join(to_title_case(x) or "-" for x in word.split("-"))
 
 
-def initialize_jinja_env(cache_dir):
+def initialize_jinja_env(jinja_dir, cache_dir):
+    # pylint: disable=F0401
+    sys.path.insert(1, os.path.abspath(jinja_dir))
+    import jinja2
+
     jinja_env = jinja2.Environment(
-        loader=jinja2.FileSystemLoader(templates_dir),
+        loader=jinja2.FileSystemLoader(module_path),
         # Bytecode cache is not concurrency-safe unless pre-cached:
         # if pre-cached this is read-only, but writing creates a race condition.
         bytecode_cache=jinja2.FileSystemBytecodeCache(cache_dir),
@@ -164,18 +168,18 @@ def calculate_exports(protocol):
             protocol.json_api["has_exports"] = True
 
 
-def create_imported_type_definition(domain_name, type):
+def create_imported_type_definition(domain_name, type, imported_namespace):
     # pylint: disable=W0622
     return {
-        "return_type": "std::unique_ptr<protocol::%s::API::%s>" % (domain_name, type["id"]),
-        "pass_type": "std::unique_ptr<protocol::%s::API::%s>" % (domain_name, type["id"]),
+        "return_type": "std::unique_ptr<%s::%s::API::%s>" % (imported_namespace, domain_name, type["id"]),
+        "pass_type": "std::unique_ptr<%s::%s::API::%s>" % (imported_namespace, domain_name, type["id"]),
         "to_raw_type": "%s.get()",
         "to_pass_type": "std::move(%s)",
         "to_rvalue": "std::move(%s)",
-        "type": "std::unique_ptr<protocol::%s::API::%s>" % (domain_name, type["id"]),
-        "raw_type": "protocol::%s::API::%s" % (domain_name, type["id"]),
-        "raw_pass_type": "protocol::%s::API::%s*" % (domain_name, type["id"]),
-        "raw_return_type": "protocol::%s::API::%s*" % (domain_name, type["id"]),
+        "type": "std::unique_ptr<%s::%s::API::%s>" % (imported_namespace, domain_name, type["id"]),
+        "raw_type": "%s::%s::API::%s" % (imported_namespace, domain_name, type["id"]),
+        "raw_pass_type": "%s::%s::API::%s*" % (imported_namespace, domain_name, type["id"]),
+        "raw_return_type": "%s::%s::API::%s*" % (imported_namespace, domain_name, type["id"]),
     }
 
 
@@ -224,18 +228,18 @@ def create_any_type_definition():
     }
 
 
-def create_string_type_definition(string_type):
+def create_string_type_definition():
     # pylint: disable=W0622
     return {
-        "return_type": string_type,
-        "pass_type": ("const %s&" % string_type),
+        "return_type": "String",
+        "pass_type": "const String&",
         "to_pass_type": "%s",
         "to_raw_type": "%s",
         "to_rvalue": "%s",
-        "type": string_type,
-        "raw_type": string_type,
-        "raw_pass_type": ("const %s&" % string_type),
-        "raw_return_type": string_type,
+        "type": "String",
+        "raw_type": "String",
+        "raw_pass_type": "const String&",
+        "raw_return_type": "String",
     }
 
 
@@ -287,7 +291,7 @@ def wrap_array_definition(type):
     }
 
 
-def create_type_definitions(protocol, string_type):
+def create_type_definitions(protocol, imported_namespace):
     protocol.type_definitions = {}
     protocol.type_definitions["number"] = create_primitive_type_definition("number")
     protocol.type_definitions["integer"] = create_primitive_type_definition("integer")
@@ -295,20 +299,20 @@ def create_type_definitions(protocol, string_type):
     protocol.type_definitions["object"] = create_object_type_definition()
     protocol.type_definitions["any"] = create_any_type_definition()
     for domain in protocol.json_api["domains"]:
-        protocol.type_definitions[domain["domain"] + ".string"] = create_string_type_definition(string_type)
+        protocol.type_definitions[domain["domain"] + ".string"] = create_string_type_definition()
         if not ("types" in domain):
             continue
         for type in domain["types"]:
             type_name = domain["domain"] + "." + type["id"]
             if type["type"] == "object" and domain["domain"] in protocol.imported_domains:
-                protocol.type_definitions[type_name] = create_imported_type_definition(domain["domain"], type)
+                protocol.type_definitions[type_name] = create_imported_type_definition(domain["domain"], type, imported_namespace)
             elif type["type"] == "object":
                 protocol.type_definitions[type_name] = create_user_type_definition(domain["domain"], type)
             elif type["type"] == "array":
                 items_type = type["items"]["type"]
                 protocol.type_definitions[type_name] = wrap_array_definition(protocol.type_definitions[items_type])
             elif type["type"] == domain["domain"] + ".string":
-                protocol.type_definitions[type_name] = create_string_type_definition(string_type)
+                protocol.type_definitions[type_name] = create_string_type_definition()
             else:
                 protocol.type_definitions[type_name] = create_primitive_type_definition(type["type"])
 
@@ -340,6 +344,10 @@ def has_disable(commands):
     return False
 
 
+def format_include(header):
+    return "\"" + header + "\"" if header[0] not in "<\"" else header
+
+
 def read_protocol_file(file_name, json_api):
     input_file = open(file_name, "r")
     json_string = input_file.read()
@@ -362,7 +370,7 @@ class Protocol(object):
 
 
 def main():
-    config_file, config = read_config()
+    jinja_dir, config_file, config = read_config()
 
     protocol = Protocol()
     protocol.json_api = {"domains": []}
@@ -370,7 +378,7 @@ def main():
     protocol.imported_domains = read_protocol_file(config.imported.path, protocol.json_api) if config.imported else []
     patch_full_qualified_refs(protocol)
     calculate_exports(protocol)
-    create_type_definitions(protocol, config.string.class_name)
+    create_type_definitions(protocol, "::".join(config.imported.namespace) if config.imported else "")
 
     if not config.exported:
         for domain_json in protocol.json_api["domains"]:
@@ -382,7 +390,7 @@ def main():
         os.mkdir(config.protocol.output)
     if protocol.json_api["has_exports"] and not os.path.exists(config.exported.output):
         os.mkdir(config.exported.output)
-    jinja_env = initialize_jinja_env(config.protocol.output)
+    jinja_env = initialize_jinja_env(jinja_dir, config.protocol.output)
 
     inputs = []
     inputs.append(__file__)
@@ -390,15 +398,16 @@ def main():
     inputs.append(config.protocol.path)
     if config.imported:
         inputs.append(config.imported.path)
+    templates_dir = os.path.join(module_path, "templates")
     inputs.append(os.path.join(templates_dir, "TypeBuilder_h.template"))
     inputs.append(os.path.join(templates_dir, "TypeBuilder_cpp.template"))
     inputs.append(os.path.join(templates_dir, "Exported_h.template"))
     inputs.append(os.path.join(templates_dir, "Imported_h.template"))
 
-    h_template = jinja_env.get_template("TypeBuilder_h.template")
-    cpp_template = jinja_env.get_template("TypeBuilder_cpp.template")
-    exported_template = jinja_env.get_template("Exported_h.template")
-    imported_template = jinja_env.get_template("Imported_h.template")
+    h_template = jinja_env.get_template("templates/TypeBuilder_h.template")
+    cpp_template = jinja_env.get_template("templates/TypeBuilder_cpp.template")
+    exported_template = jinja_env.get_template("templates/Exported_h.template")
+    imported_template = jinja_env.get_template("templates/Imported_h.template")
 
     outputs = dict()
 
@@ -410,7 +419,8 @@ def main():
             "join_arrays": join_arrays,
             "resolve_type": functools.partial(resolve_type, protocol),
             "type_definition": functools.partial(type_definition, protocol),
-            "has_disable": has_disable
+            "has_disable": has_disable,
+            "format_include": format_include,
         }
 
         if domain["domain"] in protocol.generate_domains:
@@ -423,31 +433,28 @@ def main():
 
     if config.lib:
         template_context = {
-            "config": config
+            "config": config,
+            "format_include": format_include,
         }
 
+        lib_templates_dir = os.path.join(module_path, "lib")
         # Note these should be sorted in the right order.
         # TODO(dgozman): sort them programmatically based on commented includes.
         lib_h_templates = [
-            "Allocator_h.template",
-            "Platform_h.template",
             "Collections_h.template",
-            "String16_h.template",
             "ErrorSupport_h.template",
             "Values_h.template",
             "Object_h.template",
             "ValueConversions_h.template",
             "Maybe_h.template",
             "Array_h.template",
-            "FrontendChannel_h.template",
             "BackendCallback_h.template",
             "DispatcherBase_h.template",
             "Parser_h.template",
         ]
 
         lib_cpp_templates = [
-            "InspectorProtocol_cpp.template",
-            "String16_cpp.template",
+            "Protocol_cpp.template",
             "ErrorSupport_cpp.template",
             "Values_cpp.template",
             "Object_cpp.template",
@@ -455,16 +462,23 @@ def main():
             "Parser_cpp.template",
         ]
 
+        forward_h_templates = [
+            "Forward_h.template",
+            "Allocator_h.template",
+            "FrontendChannel_h.template",
+        ]
+
         def generate_lib_file(file_name, template_files):
             parts = []
             for template_file in template_files:
-                inputs.append(os.path.join(templates_dir, template_file))
-                template = jinja_env.get_template(template_file)
+                inputs.append(os.path.join(lib_templates_dir, template_file))
+                template = jinja_env.get_template("lib/" + template_file)
                 parts.append(template.render(template_context))
             outputs[file_name] = "\n\n".join(parts)
 
-        generate_lib_file(os.path.join(config.lib.output, "InspectorProtocol.h"), lib_h_templates)
-        generate_lib_file(os.path.join(config.lib.output, "InspectorProtocol.cpp"), lib_cpp_templates)
+        generate_lib_file(os.path.join(config.lib.output, "Forward.h"), forward_h_templates)
+        generate_lib_file(os.path.join(config.lib.output, "Protocol.h"), lib_h_templates)
+        generate_lib_file(os.path.join(config.lib.output, "Protocol.cpp"), lib_cpp_templates)
 
     # Make gyp / make generatos happy, otherwise make rebuilds world.
     inputs_ts = max(map(os.path.getmtime, inputs))

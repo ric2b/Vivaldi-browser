@@ -17,7 +17,6 @@
 #include "base/strings/stringprintf.h"
 #include "media/base/media_log.h"
 #include "media/base/seekable_buffer.h"
-#include "media/blink/mock_webframeclient.h"
 #include "media/blink/mock_weburlloader.h"
 #include "media/blink/url_index.h"
 #include "net/base/net_errors.h"
@@ -27,6 +26,7 @@
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
+#include "third_party/WebKit/public/web/WebFrameClient.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebView.h"
 
@@ -46,6 +46,7 @@ namespace media {
 
 const char kHttpUrl[] = "http://test";
 const char kHttpRedirect[] = "http://test/ing";
+const char kEtag[] = "\"arglebargle glopy-glyf?\"";
 
 const int kDataSize = 1024;
 const int kHttpOK = 200;
@@ -54,7 +55,11 @@ const int kHttpPartialContent = 206;
 enum NetworkState { NONE, LOADED, LOADING };
 
 // Predicate that tests that request disallows compressed data.
-static bool CorrectAcceptEncoding(const blink::WebURLRequest& request) {
+static bool CorrectAcceptEncodingAndEtag(const blink::WebURLRequest& request) {
+  std::string etag =
+      request.httpHeaderField(WebString::fromUTF8("If-Match")).utf8();
+  EXPECT_EQ(etag, kEtag);
+
   std::string value =
       request.httpHeaderField(
                  WebString::fromUTF8(net::HttpRequestHeaders::kAcceptEncoding))
@@ -66,11 +71,11 @@ static bool CorrectAcceptEncoding(const blink::WebURLRequest& request) {
 class ResourceMultiBufferDataProviderTest : public testing::Test {
  public:
   ResourceMultiBufferDataProviderTest()
-      : view_(WebView::create(nullptr, blink::WebPageVisibilityStateVisible)),
-        frame_(WebLocalFrame::create(blink::WebTreeScopeType::Document,
-                                     &client_)) {
-    view_->setMainFrame(frame_);
-    url_index_.reset(new UrlIndex(frame_, 0));
+      : view_(WebView::create(nullptr, blink::WebPageVisibilityStateVisible)) {
+    WebLocalFrame* frame =
+        WebLocalFrame::create(blink::WebTreeScopeType::Document, &client_);
+    view_->setMainFrame(frame);
+    url_index_.reset(new UrlIndex(frame, 0));
 
     for (int i = 0; i < kDataSize; ++i) {
       data_[i] = i;
@@ -79,12 +84,12 @@ class ResourceMultiBufferDataProviderTest : public testing::Test {
 
   virtual ~ResourceMultiBufferDataProviderTest() {
     view_->close();
-    frame_->close();
   }
 
   void Initialize(const char* url, int first_position) {
     gurl_ = GURL(url);
     url_data_ = url_index_->GetByUrl(gurl_, UrlData::CORS_UNSPECIFIED);
+    url_data_->set_etag(kEtag);
     DCHECK(url_data_);
     DCHECK(url_data_->frame());
     url_data_->OnRedirect(
@@ -105,8 +110,9 @@ class ResourceMultiBufferDataProviderTest : public testing::Test {
 
   void Start() {
     InSequence s;
-    EXPECT_CALL(*url_loader_,
-                loadAsynchronously(Truly(CorrectAcceptEncoding), loader_));
+    EXPECT_CALL(
+        *url_loader_,
+        loadAsynchronously(Truly(CorrectAcceptEncodingAndEtag), loader_));
 
     loader_->Start();
   }
@@ -180,7 +186,7 @@ class ResourceMultiBufferDataProviderTest : public testing::Test {
         .WillOnce(
             Invoke(this, &ResourceMultiBufferDataProviderTest::SetUrlData));
 
-    loader_->willFollowRedirect(url_loader_, newRequest, redirectResponse, 0);
+    loader_->willFollowRedirect(url_loader_, newRequest, redirectResponse);
 
     base::RunLoop().RunUntilIdle();
   }
@@ -227,9 +233,8 @@ class ResourceMultiBufferDataProviderTest : public testing::Test {
   ResourceMultiBufferDataProvider* loader_;
   NiceMock<MockWebURLLoader>* url_loader_;
 
-  MockWebFrameClient client_;
+  blink::WebFrameClient client_;
   WebView* view_;
-  WebLocalFrame* frame_;
 
   base::MessageLoop message_loop_;
 

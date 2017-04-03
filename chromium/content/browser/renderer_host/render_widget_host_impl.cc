@@ -20,7 +20,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -154,6 +154,8 @@ inline blink::WebGestureEvent CreateScrollBeginForWrapping(
   wrap_gesture_scroll_begin.data.scrollBegin.deltaXHint = 0;
   wrap_gesture_scroll_begin.data.scrollBegin.deltaYHint = 0;
   wrap_gesture_scroll_begin.resendingPluginId = gesture_event.resendingPluginId;
+  wrap_gesture_scroll_begin.data.scrollBegin.deltaHintUnits =
+      gesture_event.data.scrollUpdate.deltaUnits;
 
   return wrap_gesture_scroll_begin;
 }
@@ -167,6 +169,8 @@ inline blink::WebGestureEvent CreateScrollEndForWrapping(
   wrap_gesture_scroll_end.timeStampSeconds = gesture_event.timeStampSeconds;
   wrap_gesture_scroll_end.sourceDevice = gesture_event.sourceDevice;
   wrap_gesture_scroll_end.resendingPluginId = gesture_event.resendingPluginId;
+  wrap_gesture_scroll_end.data.scrollEnd.deltaUnits =
+      gesture_event.data.scrollUpdate.deltaUnits;
 
   return wrap_gesture_scroll_end;
 }
@@ -337,8 +341,7 @@ void RenderWidgetHostImpl::SetView(RenderWidgetHostViewBase* view) {
   // If the renderer has not yet been initialized, then the surface ID
   // namespace will be sent during initialization.
   if (view_ && renderer_initialized_) {
-    Send(new ViewMsg_SetSurfaceClientId(routing_id_,
-                                        view_->GetSurfaceClientId()));
+    Send(new ViewMsg_SetFrameSinkId(routing_id_, view_->GetFrameSinkId()));
   }
 
   synthetic_gesture_controller_.reset();
@@ -410,8 +413,7 @@ void RenderWidgetHostImpl::Init() {
   // If the RWHV has not yet been set, the surface ID namespace will get
   // passed down by the call to SetView().
   if (view_) {
-    Send(new ViewMsg_SetSurfaceClientId(routing_id_,
-                                        view_->GetSurfaceClientId()));
+    Send(new ViewMsg_SetFrameSinkId(routing_id_, view_->GetFrameSinkId()));
   }
 
   SendScreenRects();
@@ -595,7 +597,7 @@ void RenderWidgetHostImpl::WasShown(const ui::LatencyInfo& latency_info) {
 bool RenderWidgetHostImpl::GetResizeParams(ResizeParams* resize_params) {
   *resize_params = ResizeParams();
 
-  GetWebScreenInfo(&resize_params->screen_info);
+  GetScreenInfo(&resize_params->screen_info);
   if (delegate_) {
     resize_params->resizer_rect = delegate_->GetRootWindowResizerRect(this);
     resize_params->is_fullscreen_granted =
@@ -653,7 +655,7 @@ void RenderWidgetHostImpl::SetInitialRenderSizeParams(
     const ResizeParams& resize_params) {
   resize_ack_pending_ = resize_params.needs_resize_ack;
 
-  old_resize_params_ = base::WrapUnique(new ResizeParams(resize_params));
+  old_resize_params_ = base::MakeUnique<ResizeParams>(resize_params);
 }
 
 void RenderWidgetHostImpl::WasResized() {
@@ -1046,6 +1048,8 @@ void RenderWidgetHostImpl::ForwardGestureEventWithLatencyInfo(
       gesture_event.type == blink::WebInputEvent::GestureScrollUpdate &&
       gesture_event.resendingPluginId != -1 && !(*is_in_gesture_scroll);
 
+  // TODO(crbug.com/544782): Fix WebViewGuestScrollTest.TestGuestWheelScrolls-
+  // Bubble to test the resending logic of gesture events.
   if (scroll_update_needs_wrapping) {
     ForwardGestureEventWithLatencyInfo(
         CreateScrollBeginForWrapping(gesture_event), ui::LatencyInfo());
@@ -1245,8 +1249,8 @@ void RenderWidgetHostImpl::RemoveInputEventObserver(
   input_event_observers_.RemoveObserver(observer);
 }
 
-void RenderWidgetHostImpl::GetWebScreenInfo(blink::WebScreenInfo* result) {
-  TRACE_EVENT0("renderer_host", "RenderWidgetHostImpl::GetWebScreenInfo");
+void RenderWidgetHostImpl::GetScreenInfo(ScreenInfo* result) {
+  TRACE_EVENT0("renderer_host", "RenderWidgetHostImpl::GetScreenInfo");
   if (delegate_)
     delegate_->GetScreenInfo(result);
   else
@@ -1254,9 +1258,9 @@ void RenderWidgetHostImpl::GetWebScreenInfo(blink::WebScreenInfo* result) {
 
   // TODO(sievers): find a way to make this done another way so the method
   // can be const.
-  latency_tracker_.set_device_scale_factor(result->deviceScaleFactor);
+  latency_tracker_.set_device_scale_factor(result->device_scale_factor);
   if (IsUseZoomForDSFEnabled())
-    input_router_->SetDeviceScaleFactor(result->deviceScaleFactor);
+    input_router_->SetDeviceScaleFactor(result->device_scale_factor);
 }
 
 void RenderWidgetHostImpl::HandleCompositorProto(
@@ -1331,11 +1335,6 @@ void RenderWidgetHostImpl::OnSetNeedsBeginFrames(bool needs_begin_frames) {
   needs_begin_frames_ = needs_begin_frames;
   if (view_)
     view_->SetNeedsBeginFrames(needs_begin_frames);
-}
-
-void RenderWidgetHostImpl::UpdateVSyncParameters(base::TimeTicks timebase,
-                                                 base::TimeDelta interval) {
-  Send(new ViewMsg_UpdateVSyncParameters(GetRoutingID(), timebase, interval));
 }
 
 void RenderWidgetHostImpl::RendererExited(base::TerminationStatus status,
@@ -1418,12 +1417,15 @@ void RenderWidgetHostImpl::ImeSetComposition(
             selection_start, selection_end));
 }
 
-void RenderWidgetHostImpl::ImeConfirmComposition(
-    const base::string16& text,
-    const gfx::Range& replacement_range,
-    bool keep_selection) {
-  Send(new InputMsg_ImeConfirmComposition(
-        GetRoutingID(), text, replacement_range, keep_selection));
+void RenderWidgetHostImpl::ImeCommitText(const base::string16& text,
+                                         const gfx::Range& replacement_range,
+                                         int relative_cursor_pos) {
+  Send(new InputMsg_ImeCommitText(GetRoutingID(), text, replacement_range,
+                                  relative_cursor_pos));
+}
+
+void RenderWidgetHostImpl::ImeFinishComposingText(bool keep_selection) {
+  Send(new InputMsg_ImeFinishComposingText(GetRoutingID(), keep_selection));
 }
 
 void RenderWidgetHostImpl::ImeCancelComposition() {
@@ -1601,7 +1603,7 @@ bool RenderWidgetHostImpl::OnSwapCompositorFrame(
   if (!ViewHostMsg_SwapCompositorFrame::Read(&message, &param))
     return false;
   cc::CompositorFrame frame(std::move(std::get<1>(param)));
-  uint32_t output_surface_id = std::get<0>(param);
+  uint32_t compositor_frame_sink_id = std::get<0>(param);
   std::vector<IPC::Message> messages_to_deliver_with_frame;
   messages_to_deliver_with_frame.swap(std::get<2>(param));
 
@@ -1618,7 +1620,7 @@ bool RenderWidgetHostImpl::OnSwapCompositorFrame(
     touch_emulator_->SetDoubleTapSupportForPageEnabled(!is_mobile_optimized);
 
   if (view_) {
-    view_->OnSwapCompositorFrame(output_surface_id, std::move(frame));
+    view_->OnSwapCompositorFrame(compositor_frame_sink_id, std::move(frame));
     view_->DidReceiveRendererFrame();
   } else {
     cc::ReturnedResourceArray resources;
@@ -1626,7 +1628,7 @@ bool RenderWidgetHostImpl::OnSwapCompositorFrame(
       cc::TransferableResource::ReturnResources(
           frame.delegated_frame_data->resource_list, &resources);
     }
-    SendReclaimCompositorResources(routing_id_, output_surface_id,
+    SendReclaimCompositorResources(routing_id_, compositor_frame_sink_id,
                                    process_->GetID(), true /* is_swap_ack */,
                                    resources);
   }
@@ -2065,15 +2067,15 @@ bool RenderWidgetHostImpl::GotResponseToLockMouseRequest(bool allowed) {
 // static
 void RenderWidgetHostImpl::SendReclaimCompositorResources(
     int32_t route_id,
-    uint32_t output_surface_id,
+    uint32_t compositor_frame_sink_id,
     int renderer_host_id,
     bool is_swap_ack,
     const cc::ReturnedResourceArray& resources) {
   RenderProcessHost* host = RenderProcessHost::FromID(renderer_host_id);
   if (!host)
     return;
-  host->Send(new ViewMsg_ReclaimCompositorResources(route_id, output_surface_id,
-                                                    is_swap_ack, resources));
+  host->Send(new ViewMsg_ReclaimCompositorResources(
+      route_id, compositor_frame_sink_id, is_swap_ack, resources));
 }
 
 void RenderWidgetHostImpl::DelayedAutoResized() {

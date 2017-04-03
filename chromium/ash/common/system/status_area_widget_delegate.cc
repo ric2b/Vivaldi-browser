@@ -5,7 +5,6 @@
 #include "ash/common/system/status_area_widget_delegate.h"
 
 #include "ash/ash_export.h"
-#include "ash/common/ash_switches.h"
 #include "ash/common/focus_cycler.h"
 #include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/shelf/shelf_constants.h"
@@ -70,7 +69,25 @@ void StatusAreaWidgetDelegate::SetFocusCyclerForTesting(
 }
 
 views::View* StatusAreaWidgetDelegate::GetDefaultFocusableChild() {
-  return child_at(0);
+  return default_last_focusable_child_ ? GetLastFocusableChild()
+                                       : GetFirstFocusableChild();
+}
+
+views::FocusSearch* StatusAreaWidgetDelegate::GetFocusSearch() {
+  return custom_focus_traversable_ ? custom_focus_traversable_->GetFocusSearch()
+                                   : AccessiblePaneView::GetFocusSearch();
+}
+
+views::FocusTraversable* StatusAreaWidgetDelegate::GetFocusTraversableParent() {
+  return custom_focus_traversable_
+             ? custom_focus_traversable_->GetFocusTraversableParent()
+             : AccessiblePaneView::GetFocusTraversableParent();
+}
+
+views::View* StatusAreaWidgetDelegate::GetFocusTraversableParentView() {
+  return custom_focus_traversable_
+             ? custom_focus_traversable_->GetFocusTraversableParentView()
+             : AccessiblePaneView::GetFocusTraversableParentView();
 }
 
 views::Widget* StatusAreaWidgetDelegate::GetWidget() {

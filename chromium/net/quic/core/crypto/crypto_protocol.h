@@ -10,7 +10,6 @@
 
 #include <string>
 
-#include "net/base/net_export.h"
 #include "net/quic/core/quic_protocol.h"
 
 // Version and Crypto tags are written to the wire with a big-endian
@@ -105,6 +104,8 @@ const QuicTag kCTIM = TAG('C', 'T', 'I', 'M');   // Client timestamp in seconds
                                                  // since UNIX epoch.
 const QuicTag kDHDT = TAG('D', 'H', 'D', 'T');   // Disable HPACK dynamic table.
 const QuicTag kIPFS = TAG('I', 'P', 'F', 'S');   // No Immediate Forward Secrecy
+const QuicTag kCONH = TAG('C', 'O', 'N', 'H');   // Conservative Handshake
+                                                 // Retransmissions.
 
 // Optional support of truncated Connection IDs.  If sent by a peer, the value
 // is the minimum number of bytes allowed for the connection ID sent to the
@@ -121,6 +122,7 @@ const QuicTag kNCMR = TAG('N', 'C', 'M', 'R');   // Do not attempt connection
 const QuicTag kBWRE = TAG('B', 'W', 'R', 'E');  // Bandwidth resumption.
 const QuicTag kBWMX = TAG('B', 'W', 'M', 'X');  // Max bandwidth resumption.
 const QuicTag kBWRS = TAG('B', 'W', 'R', 'S');  // Server bandwidth resumption.
+const QuicTag kBWS2 = TAG('B', 'W', 'S', '2');  // Server bw resumption v2.
 
 // Enable path MTU discovery experiment.
 const QuicTag kMTUH = TAG('M', 'T', 'U', 'H');  // High-target MTU discovery.
@@ -163,6 +165,7 @@ const QuicTag kPROF = TAG('P', 'R', 'O', 'F');   // Proof (signature).
 const QuicTag kCCS  = TAG('C', 'C', 'S', 0);     // Common certificate set
 const QuicTag kCCRT = TAG('C', 'C', 'R', 'T');   // Cached certificate
 const QuicTag kEXPY = TAG('E', 'X', 'P', 'Y');   // Expiry
+const QuicTag kSTTL = TAG('S', 'T', 'T', 'L');   // Server Config TTL
 const QuicTag kSFCW = TAG('S', 'F', 'C', 'W');   // Initial stream flow control
                                                  // receive window.
 const QuicTag kCFCW = TAG('C', 'F', 'C', 'W');   // Initial session/connection
@@ -170,6 +173,9 @@ const QuicTag kCFCW = TAG('C', 'F', 'C', 'W');   // Initial session/connection
 const QuicTag kUAID = TAG('U', 'A', 'I', 'D');   // Client's User Agent ID.
 const QuicTag kXLCT = TAG('X', 'L', 'C', 'T');   // Expected leaf certificate.
 const QuicTag kTBKP = TAG('T', 'B', 'K', 'P');   // Token Binding key params.
+
+// Token Binding tags
+const QuicTag kTB10 = TAG('T', 'B', '1', '0');   // TB draft 10 with P256.
 
 // Rejection tags
 const QuicTag kRREJ = TAG('R', 'R', 'E', 'J');   // Reasons for server sending

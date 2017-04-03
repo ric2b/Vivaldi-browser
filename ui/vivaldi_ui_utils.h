@@ -6,9 +6,9 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "extensions/browser/app_window/app_window.h"
+#include "extensions/common/api/extension_types.h"
 
 namespace vivaldi {
-
 namespace ui_tools {
 
 // Returns the currently active WebViewGuest.
@@ -25,7 +25,25 @@ GetActiveWebViewGuest(extensions::NativeAppWindow *app_window);
 // taskbar on Windows.
 extern extensions::AppWindow* GetActiveAppWindow();
 
-extern extensions::WebViewGuest *GetActiveWebGuestFromBrowser(Browser *browser);
+extern extensions::WebViewGuest* GetActiveWebGuestFromBrowser(Browser* browser);
+
+extern content::WebContents* GetWebContentsFromTabStrip(int tab_id,
+                                                        Profile* profile);
+
+extern bool IsOutsideAppWindow(int screen_x, int screen_y, Profile* profile);
+
+extern bool EncodeBitmap(
+    const SkBitmap& screen_capture,
+    std::vector<unsigned char>* data,
+    std::string& mime_type,
+    extensions::api::extension_types::ImageFormat image_format,
+    gfx::Size size,
+    double scale,
+    int image_quality);
+
+extern SkBitmap SmartCropAndSize(const SkBitmap& capture,
+                                 int target_width,
+                                 int target_height);
 
 } // namespace ui_tools
 

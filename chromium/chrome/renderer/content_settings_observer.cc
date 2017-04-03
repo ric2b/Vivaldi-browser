@@ -4,8 +4,8 @@
 
 #include "chrome/renderer/content_settings_observer.h"
 
+#include "chrome/common/render_messages.h"
 #include "chrome/common/ssl_insecure_content.h"
-#include "components/content_settings/content/common/content_settings_messages.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/renderer/document_state.h"
 #include "content/public/renderer/render_frame.h"
@@ -289,8 +289,7 @@ bool ContentSettingsObserver::allowScript(bool enabled_per_settings) {
     return true;
 
   WebFrame* frame = render_frame()->GetWebFrame();
-  std::map<WebFrame*, bool>::const_iterator it =
-      cached_script_permissions_.find(frame);
+  const auto it = cached_script_permissions_.find(frame);
   if (it != cached_script_permissions_.end())
     return it->second;
 
@@ -335,7 +334,6 @@ bool ContentSettingsObserver::allowStorage(bool local) {
   if (frame->getSecurityOrigin().isUnique() ||
       frame->top()->getSecurityOrigin().isUnique())
     return false;
-  bool result = false;
 
   int render_frame_id = render_frame()->GetRoutingID();
   int rid = routing_id();
@@ -346,11 +344,11 @@ bool ContentSettingsObserver::allowStorage(bool local) {
   StoragePermissionsKey key(
       blink::WebStringToGURL(frame->document().getSecurityOrigin().toString()),
       local);
-  std::map<StoragePermissionsKey, bool>::const_iterator permissions =
-      cached_storage_permissions_.find(key);
+  const auto permissions = cached_storage_permissions_.find(key);
   if (permissions != cached_storage_permissions_.end())
     return permissions->second;
 
+  bool result = false;
   Send(new ChromeViewHostMsg_AllowDOMStorage(
       render_frame_id,
       blink::WebStringToGURL(frame->getSecurityOrigin().toString()),
@@ -397,15 +395,6 @@ bool ContentSettingsObserver::allowMutationEvents(bool default_value) {
   return IsPlatformApp() ? false : default_value;
 }
 
-bool ContentSettingsObserver::allowDisplayingInsecureContent(
-    bool allowed_per_settings,
-    const blink::WebURL& resource_url) {
-  DCHECK(allowed_per_settings);
-  ReportInsecureContent(SslInsecureContentType::DISPLAY);
-  FilteredReportInsecureContentDisplayed(GURL(resource_url));
-  return true;
-}
-
 bool ContentSettingsObserver::allowRunningInsecureContent(
     bool allowed_per_settings,
     const blink::WebSecurityOrigin& origin,
@@ -430,6 +419,12 @@ bool ContentSettingsObserver::allowAutoplay(bool default_value) {
              blink::WebStringToGURL(
                  frame->document().getSecurityOrigin().toString())) ==
          CONTENT_SETTING_ALLOW;
+}
+
+void ContentSettingsObserver::passiveInsecureContentFound(
+    const blink::WebURL& resource_url) {
+  ReportInsecureContent(SslInsecureContentType::DISPLAY);
+  FilteredReportInsecureContentDisplayed(GURL(resource_url));
 }
 
 void ContentSettingsObserver::didUseKeygen() {

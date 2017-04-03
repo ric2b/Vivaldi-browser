@@ -6,7 +6,7 @@
 
 #include "base/values.h"
 
-namespace sync_driver {
+namespace syncer {
 
 DeviceInfo::DeviceInfo(const std::string& guid,
                        const std::string& client_name,
@@ -96,8 +96,8 @@ bool DeviceInfo::Equals(const DeviceInfo& other) const {
          this->signin_scoped_device_id() == other.signin_scoped_device_id();
 }
 
-base::DictionaryValue* DeviceInfo::ToValue() {
-  base::DictionaryValue* value = new base::DictionaryValue();
+std::unique_ptr<base::DictionaryValue> DeviceInfo::ToValue() {
+  std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
   value->SetString("name", client_name_);
   value->SetString("id", public_id_);
   value->SetString("os", GetOSString());
@@ -110,4 +110,4 @@ void DeviceInfo::set_public_id(const std::string& id) {
   public_id_ = id;
 }
 
-}  // namespace sync_driver
+}  // namespace syncer

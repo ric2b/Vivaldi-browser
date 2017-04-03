@@ -18,7 +18,9 @@
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
+#include "base/sys_info.h"
 #include "base/task_runner_util.h"
+#include "base/threading/thread.h"
 #include "base/threading/thread_checker.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
@@ -33,9 +35,7 @@
 #include "media/base/media.h"
 #include "media/base/timestamp_constants.h"
 #include "media/base/video_decoder_config.h"
-#include "media/gpu/android_copying_backing_strategy.h"
-#include "media/gpu/android_deferred_rendering_backing_strategy.h"
-#include "media/gpu/avda_return_on_failure.h"
+#include "media/gpu/avda_picture_buffer_manager.h"
 #include "media/gpu/shared_memory_region.h"
 #include "media/video/picture.h"
 #include "ui/gl/android/scoped_java_surface.h"
@@ -79,6 +79,11 @@ constexpr VideoCodecProfile kSupportedH264Profiles[] = {
     H264PROFILE_STEREOHIGH,
     H264PROFILE_MULTIVIEWHIGH};
 
+#if BUILDFLAG(ENABLE_HEVC_DEMUXING)
+constexpr VideoCodecProfile kSupportedHevcProfiles[] = {HEVCPROFILE_MAIN,
+                                                        HEVCPROFILE_MAIN10};
+#endif
+
 // Because MediaCodec is thread-hostile (must be poked on a single thread) and
 // has no callback mechanism (b/11990118), we must drive it by polling for
 // complete frames (and available input buffers, when the codec is fully
@@ -106,14 +111,6 @@ constexpr base::TimeDelta IdleTimerTimeOut = base::TimeDelta::FromSeconds(1);
 // from breaking the pipeline, if we're about to be reset anyway.
 constexpr base::TimeDelta ErrorPostingDelay = base::TimeDelta::FromSeconds(2);
 
-// Give tasks on the construction thread 800ms before considering them hung.
-// MediaCodec.configure() calls typically take 100-200ms on a N5, so 800ms is
-// expected to very rarely result in false positives. Also, false positives have
-// low impact because we resume using the thread if its apparently hung task
-// completes.
-constexpr base::TimeDelta kHungTaskDetectionTimeout =
-    base::TimeDelta::FromMilliseconds(800);
-
 // For RecordFormatChangedMetric.
 enum FormatChangedValue {
   CodecInitialized = false,
@@ -126,56 +123,8 @@ inline void RecordFormatChangedMetric(FormatChangedValue value) {
 
 }  // namespace
 
-// Handle OnFrameAvailable callbacks safely.  Since they occur asynchronously,
-// we take care that the AVDA that wants them still exists.  A WeakPtr to
-// the AVDA would be preferable, except that OnFrameAvailable callbacks can
-// occur off the gpu main thread.  We also can't guarantee when the
-// SurfaceTexture will quit sending callbacks to coordinate with the
-// destruction of the AVDA, so we have a separate object that the cb can own.
-class AndroidVideoDecodeAccelerator::OnFrameAvailableHandler
-    : public base::RefCountedThreadSafe<OnFrameAvailableHandler> {
- public:
-  // We do not retain ownership of |owner|.  It must remain valid until
-  // after ClearOwner() is called.  This will register with
-  // |surface_texture| to receive OnFrameAvailable callbacks.
-  OnFrameAvailableHandler(
-      AndroidVideoDecodeAccelerator* owner,
-      const scoped_refptr<gl::SurfaceTexture>& surface_texture)
-      : owner_(owner) {
-    // Note that the callback owns a strong ref to us.
-    surface_texture->SetFrameAvailableCallbackOnAnyThread(
-        base::Bind(&OnFrameAvailableHandler::OnFrameAvailable,
-                   scoped_refptr<OnFrameAvailableHandler>(this)));
-  }
-
-  // Forget about our owner, which is required before one deletes it.
-  // No further callbacks will happen once this completes.
-  void ClearOwner() {
-    base::AutoLock lock(lock_);
-    // No callback can happen until we release the lock.
-    owner_ = nullptr;
-  }
-
-  // Call back into our owner if it hasn't been deleted.
-  void OnFrameAvailable() {
-    base::AutoLock auto_lock(lock_);
-    // |owner_| can't be deleted while we have the lock.
-    if (owner_)
-      owner_->OnFrameAvailable();
-  }
-
- private:
-  friend class base::RefCountedThreadSafe<OnFrameAvailableHandler>;
-  virtual ~OnFrameAvailableHandler() {}
-
-  // Protects changes to owner_.
-  base::Lock lock_;
-
-  // AVDA that wants the OnFrameAvailable callback.
-  AndroidVideoDecodeAccelerator* owner_;
-
-  DISALLOW_COPY_AND_ASSIGN(OnFrameAvailableHandler);
-};
+static base::LazyInstance<AVDACodecAllocator>::Leaky g_avda_codec_allocator =
+    LAZY_INSTANCE_INITIALIZER;
 
 // AVDAManager manages shared resources for a number of AVDA instances.
 // Its responsibilities include:
@@ -189,85 +138,6 @@ class AndroidVideoDecodeAccelerator::OnFrameAvailableHandler
 //    surfaces are released.
 class AVDAManager {
  public:
-  class HangDetector : public base::MessageLoop::TaskObserver {
-   public:
-    HangDetector() {}
-
-    void WillProcessTask(const base::PendingTask& pending_task) override {
-      base::AutoLock l(lock_);
-      task_start_time_ = base::TimeTicks::Now();
-    }
-
-    void DidProcessTask(const base::PendingTask& pending_task) override {
-      base::AutoLock l(lock_);
-      task_start_time_ = base::TimeTicks();
-    }
-
-    bool IsThreadLikelyHung() {
-      base::AutoLock l(lock_);
-      if (task_start_time_.is_null())
-        return false;
-
-      return (base::TimeTicks::Now() - task_start_time_) >
-             kHungTaskDetectionTimeout;
-    }
-
-   private:
-    base::Lock lock_;
-    // Non-null when a task is currently running.
-    base::TimeTicks task_start_time_;
-
-    DISALLOW_COPY_AND_ASSIGN(HangDetector);
-  };
-
-  // Make sure the construction thread is started for |avda|.
-  bool StartThread(AndroidVideoDecodeAccelerator* avda) {
-    DCHECK(thread_checker_.CalledOnValidThread());
-
-    if (!construction_thread_.IsRunning()) {
-      if (!construction_thread_.Start()) {
-        LOG(ERROR) << "Failed to start construction thread.";
-        return false;
-      }
-      // Register |hang_detector_| to observe the thread's MessageLoop.
-      construction_thread_.task_runner()->PostTask(
-          FROM_HERE,
-          base::Bind(&base::MessageLoop::AddTaskObserver,
-                     base::Unretained(construction_thread_.message_loop()),
-                     &hang_detector_));
-    }
-
-    // Cancel any pending StopThreadTask()s because we need the thread now.
-    weak_this_factory_.InvalidateWeakPtrs();
-
-    thread_avda_instances_.insert(avda);
-    UMA_HISTOGRAM_ENUMERATION("Media.AVDA.NumAVDAInstances",
-                              thread_avda_instances_.size(),
-                              31);  // PRESUBMIT_IGNORE_UMA_MAX
-    return true;
-  }
-
-  void StopThread(AndroidVideoDecodeAccelerator* avda) {
-    DCHECK(thread_checker_.CalledOnValidThread());
-
-    thread_avda_instances_.erase(avda);
-    // Post a task to stop the thread through the thread's task runner and back
-    // to this thread. This ensures that all pending tasks are run first. If the
-    // thread is hung we don't post a task to avoid leaking an unbounded number
-    // of tasks on its queue. If the thread is not hung, but appears to be, it
-    // will stay alive until next time an AVDA tries to stop it. We're
-    // guaranteed to not run StopThreadTask() when the thread is hung because if
-    // an AVDA queues tasks after DoNothing(), the StopThreadTask() reply will
-    // be canceled by invalidating its weak pointer.
-    if (thread_avda_instances_.empty() && construction_thread_.IsRunning() &&
-        !hang_detector_.IsThreadLikelyHung()) {
-      construction_thread_.task_runner()->PostTaskAndReply(
-          FROM_HERE, base::Bind(&base::DoNothing),
-          base::Bind(&AVDAManager::StopThreadTask,
-                     weak_this_factory_.GetWeakPtr()));
-    }
-  }
-
   // Request periodic callback of |avda|->DoIOTask(). Does nothing if the
   // instance is already registered and the timer started. The first request
   // will start the repeating timer on an interval of DecodePollDelay.
@@ -301,17 +171,6 @@ class AVDAManager {
     timer_avda_instances_.erase(avda);
     if (timer_avda_instances_.empty())
       io_timer_.Stop();
-  }
-
-  scoped_refptr<base::SingleThreadTaskRunner> ConstructionTaskRunner() {
-    DCHECK(thread_checker_.CalledOnValidThread());
-    return construction_thread_.task_runner();
-  }
-
-  // Returns a hint about whether the construction thread has hung.
-  bool IsConstructionThreadLikelyHung() {
-    DCHECK(thread_checker_.CalledOnValidThread());
-    return hang_detector_.IsThreadLikelyHung();
   }
 
   // |avda| would like to use |surface_id|.  If it is not busy, then mark it
@@ -372,11 +231,21 @@ class AVDAManager {
     waiter->OnSurfaceAvailable(true);
   }
 
+  // On low end devices (< KitKat is always low-end due to buggy MediaCodec),
+  // defer the surface creation until the codec is actually used if we know no
+  // software fallback exists.
+  bool ShouldDeferSurfaceCreation(int surface_id, VideoCodec codec) {
+    return surface_id == AndroidVideoDecodeAccelerator::Config::kNoSurfaceID &&
+           codec == kCodecH264 &&
+           g_avda_codec_allocator.Get().IsAnyRegisteredAVDA() &&
+           (base::android::BuildInfo::GetInstance()->sdk_int() <= 18 ||
+            base::SysInfo::IsLowEndDevice());
+  }
+
  private:
   friend struct base::DefaultLazyInstanceTraits<AVDAManager>;
 
-  AVDAManager()
-      : construction_thread_("AVDAThread"), weak_this_factory_(this) {}
+  AVDAManager() {}
   ~AVDAManager() { NOTREACHED(); }
 
   void RunTimer() {
@@ -398,11 +267,6 @@ class AVDAManager {
     // takes too long for the combined timer.
   }
 
-  void StopThreadTask() { construction_thread_.Stop(); }
-
-  // All registered AVDA instances.
-  std::set<AndroidVideoDecodeAccelerator*> thread_avda_instances_;
-
   // All AVDA instances that would like us to poll DoIOTask.
   std::set<AndroidVideoDecodeAccelerator*> timer_avda_instances_;
 
@@ -422,17 +286,7 @@ class AVDAManager {
   // Repeating timer responsible for draining pending IO to the codecs.
   base::RepeatingTimer io_timer_;
 
-  // A thread for posting MediaCodec construction and releases to. It's created
-  // lazily when requested.
-  base::Thread construction_thread_;
-
-  // For detecting when a task has hung on |construction_thread_|.
-  HangDetector hang_detector_;
-
   base::ThreadChecker thread_checker_;
-
-  // For canceling pending StopThreadTask()s.
-  base::WeakPtrFactory<AVDAManager> weak_this_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(AVDAManager);
 };
@@ -473,12 +327,13 @@ AndroidVideoDecodeAccelerator::AndroidVideoDecodeAccelerator(
       defer_errors_(false),
       deferred_initialization_pending_(false),
       codec_needs_reset_(false),
+      defer_surface_creation_(false),
       weak_this_factory_(this) {}
 
 AndroidVideoDecodeAccelerator::~AndroidVideoDecodeAccelerator() {
   DCHECK(thread_checker_.CalledOnValidThread());
   g_avda_manager.Get().StopTimer(this);
-  g_avda_manager.Get().StopThread(this);
+  g_avda_codec_allocator.Get().StopThread(this);
 
 #if defined(ENABLE_MOJO_MEDIA_IN_GPU_PROCESS)
   if (!media_drm_bridge_cdm_context_)
@@ -519,17 +374,11 @@ bool AndroidVideoDecodeAccelerator::Initialize(const Config& config,
   codec_config_->initial_expected_coded_size_ =
       config.initial_expected_coded_size;
 
-  // We signalled that we support deferred initialization, so see if the client
-  // does also.
-  deferred_initialization_pending_ = config.is_deferred_initialization_allowed;
-
-  if (config_.is_encrypted && !deferred_initialization_pending_) {
-    DLOG(ERROR) << "Deferred initialization must be used for encrypted streams";
-    return false;
-  }
-
   if (codec_config_->codec_ != kCodecVP8 &&
       codec_config_->codec_ != kCodecVP9 &&
+#if BUILDFLAG(ENABLE_HEVC_DEMUXING)
+      codec_config_->codec_ != kCodecHEVC &&
+#endif
       codec_config_->codec_ != kCodecH264) {
     LOG(ERROR) << "Unsupported profile: " << config.profile;
     return false;
@@ -552,25 +401,32 @@ bool AndroidVideoDecodeAccelerator::Initialize(const Config& config,
     return false;
   }
 
-  const gpu::GpuPreferences& gpu_preferences =
-      gles_decoder->GetContextGroup()->gpu_preferences();
+  // If we're low on resources, we may decide to defer creation of the surface
+  // until the codec is actually used.
+  if (g_avda_manager.Get().ShouldDeferSurfaceCreation(config_.surface_id,
+                                                      codec_config_->codec_)) {
+    DCHECK(!deferred_initialization_pending_);
 
-  if (UseDeferredRenderingStrategy(gpu_preferences)) {
-    DVLOG(1) << __FUNCTION__ << ", using deferred rendering strategy.";
-    strategy_.reset(new AndroidDeferredRenderingBackingStrategy(this));
-  } else {
-    DVLOG(1) << __FUNCTION__ << ", using copy back strategy.";
-    strategy_.reset(new AndroidCopyingBackingStrategy(this));
+    // We should never be here if a SurfaceView is required.
+    DCHECK_EQ(config_.surface_id, Config::kNoSurfaceID);
+    DCHECK(g_avda_manager.Get().AllocateSurface(config_.surface_id, this));
+
+    defer_surface_creation_ = true;
+    NotifyInitializationComplete(true);
+    return true;
   }
 
-  if (!make_context_current_cb_.Run()) {
-    LOG(ERROR) << "Failed to make this decoder's GL context current.";
+  // We signaled that we support deferred initialization, so see if the client
+  // does also.
+  deferred_initialization_pending_ = config.is_deferred_initialization_allowed;
+  if (config_.is_encrypted && !deferred_initialization_pending_) {
+    DLOG(ERROR) << "Deferred initialization must be used for encrypted streams";
     return false;
   }
 
   if (g_avda_manager.Get().AllocateSurface(config_.surface_id, this)) {
-    // We have succesfully owned the surface, so finish initialization now.
-    return InitializeStrategy();
+    // We have successfully owned the surface, so finish initialization now.
+    return InitializePictureBufferManager();
   }
 
   // We have to wait for some other AVDA instance to free up the surface.
@@ -580,20 +436,24 @@ bool AndroidVideoDecodeAccelerator::Initialize(const Config& config,
 
 void AndroidVideoDecodeAccelerator::OnSurfaceAvailable(bool success) {
   DCHECK(deferred_initialization_pending_);
+  DCHECK(!defer_surface_creation_);
 
-  if (!success || !InitializeStrategy()) {
+  if (!success || !InitializePictureBufferManager()) {
     NotifyInitializationComplete(false);
     deferred_initialization_pending_ = false;
   }
 }
 
-bool AndroidVideoDecodeAccelerator::InitializeStrategy() {
-  codec_config_->surface_ = strategy_->Initialize(config_.surface_id);
-  if (codec_config_->surface_.IsEmpty()) {
-    LOG(ERROR) << "Failed to initialize the backing strategy. The returned "
-                  "Java surface is empty.";
+bool AndroidVideoDecodeAccelerator::InitializePictureBufferManager() {
+  if (!make_context_current_cb_.Run()) {
+    LOG(ERROR) << "Failed to make this decoder's GL context current.";
     return false;
   }
+
+  codec_config_->surface_ =
+      picture_buffer_manager_.Initialize(this, config_.surface_id);
+  if (codec_config_->surface_.IsEmpty())
+    return false;
 
   on_destroying_surface_cb_ =
       base::Bind(&AndroidVideoDecodeAccelerator::OnDestroyingSurface,
@@ -601,15 +461,7 @@ bool AndroidVideoDecodeAccelerator::InitializeStrategy() {
   AVDASurfaceTracker::GetInstance()->RegisterOnDestroyingSurfaceCallback(
       on_destroying_surface_cb_);
 
-  // TODO(watk,liberato): move this into the strategy.
-  scoped_refptr<gl::SurfaceTexture> surface_texture =
-      strategy_->GetSurfaceTexture();
-  if (surface_texture) {
-    on_frame_available_handler_ =
-        new OnFrameAvailableHandler(this, surface_texture);
-  }
-
-  if (!g_avda_manager.Get().StartThread(this))
+  if (!g_avda_codec_allocator.Get().StartThread(this))
     return false;
 
   // If we are encrypted, then we aren't able to create the codec yet.
@@ -618,7 +470,8 @@ bool AndroidVideoDecodeAccelerator::InitializeStrategy() {
     return true;
   }
 
-  if (deferred_initialization_pending_) {
+  if (deferred_initialization_pending_ || defer_surface_creation_) {
+    defer_surface_creation_ = false;
     ConfigureMediaCodecAsynchronously();
     return true;
   }
@@ -640,7 +493,7 @@ void AndroidVideoDecodeAccelerator::DoIOTask(bool start_timer) {
     return;
   }
 
-  strategy_->MaybeRenderEarly();
+  picture_buffer_manager_.MaybeRenderEarly();
   bool did_work = false, did_input = false, did_output = false;
   do {
     did_input = QueueInput();
@@ -856,7 +709,7 @@ bool AndroidVideoDecodeAccelerator::DequeueOutput() {
         // decoded images. Breaking their connection to the decoded image will
         // cause rendering of black frames. Instead, we let the existing
         // PictureBuffers live on and we simply update their size the next time
-        // they're attachted to an image of the new resolution. See the
+        // they're attached to an image of the new resolution. See the
         // size update in |SendDecodedFrameToClient| and https://crbug/587994.
         if (output_picture_buffers_.empty() && !picturebuffers_requested_) {
           picturebuffers_requested_ = true;
@@ -961,22 +814,19 @@ void AndroidVideoDecodeAccelerator::SendDecodedFrameToClient(
   free_picture_ids_.pop();
   TRACE_COUNTER1("media", "AVDA::FreePictureIds", free_picture_ids_.size());
 
-  const auto& i = output_picture_buffers_.find(picture_buffer_id);
-  if (i == output_picture_buffers_.end()) {
+  const auto it = output_picture_buffers_.find(picture_buffer_id);
+  if (it == output_picture_buffers_.end()) {
     POST_ERROR(PLATFORM_FAILURE,
                "Can't find PictureBuffer id: " << picture_buffer_id);
     return;
   }
 
-  bool size_changed = false;
-  if (i->second.size() != size_) {
-    // Size may have changed due to resolution change since the last time this
-    // PictureBuffer was used.
-    strategy_->UpdatePictureBufferSize(&i->second, size_);
-    size_changed = true;
-  }
+  PictureBuffer& picture_buffer = it->second;
+  const bool size_changed = picture_buffer.size() != size_;
+  if (size_changed)
+    picture_buffer.set_size(size_);
 
-  const bool allow_overlay = strategy_->ArePicturesOverlayable();
+  const bool allow_overlay = picture_buffer_manager_.ArePicturesOverlayable();
   UMA_HISTOGRAM_BOOLEAN("Media.AVDA.FrameSentAsOverlay", allow_overlay);
   Picture picture(picture_buffer_id, bitstream_id, gfx::Rect(size_),
                   allow_overlay);
@@ -988,14 +838,20 @@ void AndroidVideoDecodeAccelerator::SendDecodedFrameToClient(
   // called, so it is safe to do this.
   NotifyPictureReady(picture);
 
-  // Connect the PictureBuffer to the decoded frame, via whatever mechanism the
-  // strategy likes.
-  strategy_->UseCodecBufferForPictureBuffer(codec_buffer_index, i->second);
+  // Connect the PictureBuffer to the decoded frame.
+  picture_buffer_manager_.UseCodecBufferForPictureBuffer(codec_buffer_index,
+                                                         picture_buffer);
 }
 
 void AndroidVideoDecodeAccelerator::Decode(
     const BitstreamBuffer& bitstream_buffer) {
   DCHECK(thread_checker_.CalledOnValidThread());
+
+  if (defer_surface_creation_ && !InitializePictureBufferManager()) {
+    POST_ERROR(PLATFORM_FAILURE,
+               "Failed deferred surface and MediaCodec initialization.");
+    return;
+  }
 
   // If we previously deferred a codec restart, take care of it now. This can
   // happen on older devices where configuration changes require a codec reset.
@@ -1034,9 +890,10 @@ void AndroidVideoDecodeAccelerator::DecodeBuffer(
 
 void AndroidVideoDecodeAccelerator::RequestPictureBuffers() {
   if (client_) {
-    client_->ProvidePictureBuffers(kNumPictureBuffers, PIXEL_FORMAT_UNKNOWN, 1,
-                                   strategy_->GetPictureBufferSize(),
-                                   strategy_->GetTextureTarget());
+    client_->ProvidePictureBuffers(
+        kNumPictureBuffers, PIXEL_FORMAT_UNKNOWN, 1,
+        picture_buffer_manager_.GetPictureBufferSize(),
+        picture_buffer_manager_.GetTextureTarget());
   }
 }
 
@@ -1056,7 +913,7 @@ void AndroidVideoDecodeAccelerator::AssignPictureBuffers(
       << "Failed to make GL context current for Assign, continuing.";
 
   for (size_t i = 0; i < buffers.size(); ++i) {
-    if (buffers[i].size() != strategy_->GetPictureBufferSize()) {
+    if (buffers[i].size() != picture_buffer_manager_.GetPictureBufferSize()) {
       POST_ERROR(INVALID_ARGUMENT,
                  "Invalid picture buffer size assigned. Wanted "
                      << size_.ToString() << ", but got "
@@ -1067,7 +924,7 @@ void AndroidVideoDecodeAccelerator::AssignPictureBuffers(
     output_picture_buffers_.insert(std::make_pair(id, buffers[i]));
     free_picture_ids_.push(id);
 
-    strategy_->AssignOnePictureBuffer(buffers[i], have_context);
+    picture_buffer_manager_.AssignOnePictureBuffer(buffers[i], have_context);
   }
   TRACE_COUNTER1("media", "AVDA::FreePictureIds", free_picture_ids_.size());
   DoIOTask(true);
@@ -1080,15 +937,14 @@ void AndroidVideoDecodeAccelerator::ReusePictureBuffer(
   free_picture_ids_.push(picture_buffer_id);
   TRACE_COUNTER1("media", "AVDA::FreePictureIds", free_picture_ids_.size());
 
-  OutputBufferMap::const_iterator i =
-      output_picture_buffers_.find(picture_buffer_id);
-  if (i == output_picture_buffers_.end()) {
+  auto it = output_picture_buffers_.find(picture_buffer_id);
+  if (it == output_picture_buffers_.end()) {
     POST_ERROR(PLATFORM_FAILURE, "Can't find PictureBuffer id "
                                      << picture_buffer_id);
     return;
   }
 
-  strategy_->ReuseOnePictureBuffer(i->second);
+  picture_buffer_manager_.ReuseOnePictureBuffer(it->second);
   DoIOTask(true);
 }
 
@@ -1096,7 +952,7 @@ void AndroidVideoDecodeAccelerator::Flush() {
   DVLOG(1) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (state_ == SURFACE_DESTROYED)
+  if (state_ == SURFACE_DESTROYED || defer_surface_creation_)
     NotifyFlushDone();
   else
     StartCodecDrain(DRAIN_FOR_FLUSH);
@@ -1113,39 +969,37 @@ void AndroidVideoDecodeAccelerator::ConfigureMediaCodecAsynchronously() {
 
   state_ = WAITING_FOR_CODEC;
 
-  // Tell the strategy that we're changing codecs.  The codec itself could be
-  // used normally, since we don't replace it until we're back on the main
-  // thread.  However, if we're using an output surface, then the incoming codec
-  // might access that surface while the main thread is drawing.  Telling the
-  // strategy to forget the codec avoids this.
+  // Tell the picture buffer manager that we're changing codecs.  The codec
+  // itself could be used normally, since we don't replace it until we're back
+  // on the main thread.  However, if we're using an output surface, then the
+  // incoming codec might access that surface while the main thread is drawing.
+  // Telling the manager to forget the codec avoids this.
   if (media_codec_) {
     ReleaseMediaCodec();
-    strategy_->CodecChanged(nullptr);
+    picture_buffer_manager_.CodecChanged(nullptr);
   }
 
-  // Choose whether to autodetect the codec type.  Note that we do this after
-  // releasing any outgoing codec, so that |codec_config_| still matches the
-  // outgoing codec for ReleaseMediaCodec().
-  codec_config_->allow_autodetection_ =
-      !g_avda_manager.Get().IsConstructionThreadLikelyHung();
+  codec_config_->task_type_ =
+      g_avda_codec_allocator.Get().TaskTypeForAllocation();
+  if (codec_config_->task_type_ == AVDACodecAllocator::TaskType::FAILED_CODEC) {
+    // If there is no free thread, then just fail.
+    OnCodecConfigured(nullptr);
+    return;
+  }
 
   // If autodetection is disallowed, fall back to Chrome's software decoders
   // instead of using the software decoders provided by MediaCodec.
-  if (!codec_config_->allow_autodetection_ &&
+  if (codec_config_->task_type_ == AVDACodecAllocator::TaskType::SW_CODEC &&
       IsMediaCodecSoftwareDecodingForbidden()) {
     OnCodecConfigured(nullptr);
     return;
   }
 
-  // If we're not trying autodetection, then use the main thread.
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner =
-      codec_config_->allow_autodetection_
-          ? g_avda_manager.Get().ConstructionTaskRunner()
-          : base::ThreadTaskRunnerHandle::Get();
-  CHECK(task_runner);
-
   base::PostTaskAndReplyWithResult(
-      task_runner.get(), FROM_HERE,
+      g_avda_codec_allocator.Get()
+          .TaskRunnerFor(codec_config_->task_type_)
+          .get(),
+      FROM_HERE,
       base::Bind(&AndroidVideoDecodeAccelerator::ConfigureMediaCodecOnAnyThread,
                  codec_config_),
       base::Bind(&AndroidVideoDecodeAccelerator::OnCodecConfigured,
@@ -1155,10 +1009,15 @@ void AndroidVideoDecodeAccelerator::ConfigureMediaCodecAsynchronously() {
 bool AndroidVideoDecodeAccelerator::ConfigureMediaCodecSynchronously() {
   state_ = WAITING_FOR_CODEC;
 
-  codec_config_->allow_autodetection_ =
-      !g_avda_manager.Get().IsConstructionThreadLikelyHung();
-
   ReleaseMediaCodec();
+
+  codec_config_->task_type_ =
+      g_avda_codec_allocator.Get().TaskTypeForAllocation();
+  if (codec_config_->task_type_ == AVDACodecAllocator::TaskType::FAILED_CODEC) {
+    OnCodecConfigured(nullptr);
+    return false;
+  }
+
   std::unique_ptr<VideoCodecBridge> media_codec =
       ConfigureMediaCodecOnAnyThread(codec_config_);
   OnCodecConfigured(std::move(media_codec));
@@ -1177,7 +1036,8 @@ AndroidVideoDecodeAccelerator::ConfigureMediaCodecOnAnyThread(
   // |needs_protected_surface_| implies encrypted stream.
   DCHECK(!codec_config->needs_protected_surface_ || media_crypto);
 
-  const bool require_software_codec = !codec_config->allow_autodetection_;
+  const bool require_software_codec =
+      codec_config->task_type_ == AVDACodecAllocator::TaskType::SW_CODEC;
 
   std::unique_ptr<VideoCodecBridge> codec(VideoCodecBridge::CreateDecoder(
       codec_config->codec_, codec_config->needs_protected_surface_,
@@ -1213,7 +1073,7 @@ void AndroidVideoDecodeAccelerator::OnCodecConfigured(
 
   DCHECK(!media_codec_);
   media_codec_ = std::move(media_codec);
-  strategy_->CodecChanged(media_codec_.get());
+  picture_buffer_manager_.CodecChanged(media_codec_.get());
   if (!media_codec_) {
     POST_ERROR(PLATFORM_FAILURE, "Failed to create MediaCodec.");
     return;
@@ -1327,12 +1187,12 @@ void AndroidVideoDecodeAccelerator::ResetCodecState() {
 
   // Flush the codec if possible, or create a new one if not.
   if (!did_codec_error_happen &&
-      !media::MediaCodecUtil::CodecNeedsFlushWorkaround(media_codec_.get())) {
+      !MediaCodecUtil::CodecNeedsFlushWorkaround(media_codec_.get())) {
     DVLOG(3) << __FUNCTION__ << " Flushing MediaCodec.";
     media_codec_->Flush();
     // Since we just flushed all the output buffers, make sure that nothing is
     // using them.
-    strategy_->CodecChanged(media_codec_.get());
+    picture_buffer_manager_.CodecChanged(media_codec_.get());
   } else {
     DVLOG(3) << __FUNCTION__
              << " Deleting the MediaCodec and creating a new one.";
@@ -1345,6 +1205,16 @@ void AndroidVideoDecodeAccelerator::Reset() {
   DVLOG(1) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
   TRACE_EVENT0("media", "AVDA::Reset");
+
+  if (defer_surface_creation_) {
+    DCHECK(!media_codec_);
+    DCHECK(pending_bitstream_records_.empty());
+    DCHECK_EQ(state_, NO_ERROR);
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(&AndroidVideoDecodeAccelerator::NotifyResetDone,
+                              weak_this_factory_.GetWeakPtr()));
+    return;
+  }
 
   while (!pending_bitstream_records_.empty()) {
     int32_t bitstream_buffer_id =
@@ -1364,8 +1234,7 @@ void AndroidVideoDecodeAccelerator::Reset() {
   // Any error that is waiting to post can be ignored.
   error_sequence_token_++;
 
-  DCHECK(strategy_);
-  strategy_->ReleaseCodecBuffers(output_picture_buffers_);
+  picture_buffer_manager_.ReleaseCodecBuffers(output_picture_buffers_);
 
   // Some VP8 files require complete MediaCodec drain before we can call
   // MediaCodec.flush() or MediaCodec.reset(). http://crbug.com/598963.
@@ -1385,29 +1254,18 @@ void AndroidVideoDecodeAccelerator::Destroy() {
   DVLOG(1) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  bool have_context = make_context_current_cb_.Run();
-  if (!have_context)
-    LOG(WARNING) << "Failed make GL context current for Destroy, continuing.";
-
-  if (strategy_)
-    strategy_->BeginCleanup(have_context, output_picture_buffers_);
-
-  // If we have an OnFrameAvailable handler, tell it that we're going away.
-  if (on_frame_available_handler_) {
-    on_frame_available_handler_->ClearOwner();
-    on_frame_available_handler_ = nullptr;
-  }
+  picture_buffer_manager_.Destroy(output_picture_buffers_);
 
   client_ = nullptr;
 
-  // Some VP8 files require complete MediaCodec drain before we can call
-  // MediaCodec.flush() or MediaCodec.reset(). http://crbug.com/598963.
+  // Some VP8 files require a complete MediaCodec drain before we can call
+  // MediaCodec.flush() or MediaCodec.release(). http://crbug.com/598963. In
+  // that case, postpone ActualDestroy() until after the drain.
   if (media_codec_ && codec_config_->codec_ == kCodecVP8) {
-    // Clear pending_bitstream_records_.
+    // Clear |pending_bitstream_records_|.
     while (!pending_bitstream_records_.empty())
       pending_bitstream_records_.pop();
 
-    // Postpone ActualDestroy after the drain.
     StartCodecDrain(DRAIN_FOR_DESTROY);
   } else {
     ActualDestroy();
@@ -1423,9 +1281,6 @@ void AndroidVideoDecodeAccelerator::ActualDestroy() {
         on_destroying_surface_cb_);
   }
 
-  if (strategy_)
-    strategy_->EndCleanup();
-
   // We no longer care about |surface_id|, in case we did before.  It's okay
   // if we have no surface and/or weren't the owner or a waiter.
   g_avda_manager.Get().DeallocateSurface(config_.surface_id, this);
@@ -1438,6 +1293,7 @@ void AndroidVideoDecodeAccelerator::ActualDestroy() {
     g_avda_manager.Get().StopTimer(this);
     ReleaseMediaCodec();
   }
+
   delete this;
 }
 
@@ -1451,64 +1307,9 @@ const gfx::Size& AndroidVideoDecodeAccelerator::GetSize() const {
   return size_;
 }
 
-const base::ThreadChecker& AndroidVideoDecodeAccelerator::ThreadChecker()
-    const {
-  return thread_checker_;
-}
-
 base::WeakPtr<gpu::gles2::GLES2Decoder>
 AndroidVideoDecodeAccelerator::GetGlDecoder() const {
   return get_gles2_decoder_cb_.Run();
-}
-
-gpu::gles2::TextureRef* AndroidVideoDecodeAccelerator::GetTextureForPicture(
-    const PictureBuffer& picture_buffer) {
-  auto gles_decoder = GetGlDecoder();
-  RETURN_ON_FAILURE(this, gles_decoder, "Failed to get GL decoder",
-                    ILLEGAL_STATE, nullptr);
-  RETURN_ON_FAILURE(this, gles_decoder->GetContextGroup(),
-                    "Null gles_decoder->GetContextGroup()", ILLEGAL_STATE,
-                    nullptr);
-  gpu::gles2::TextureManager* texture_manager =
-      gles_decoder->GetContextGroup()->texture_manager();
-  RETURN_ON_FAILURE(this, texture_manager, "Null texture_manager",
-                    ILLEGAL_STATE, nullptr);
-
-  DCHECK_LE(1u, picture_buffer.internal_texture_ids().size());
-  gpu::gles2::TextureRef* texture_ref =
-      texture_manager->GetTexture(picture_buffer.internal_texture_ids()[0]);
-  RETURN_ON_FAILURE(this, texture_manager, "Null texture_ref", ILLEGAL_STATE,
-                    nullptr);
-
-  return texture_ref;
-}
-
-scoped_refptr<gl::SurfaceTexture>
-AndroidVideoDecodeAccelerator::CreateAttachedSurfaceTexture(
-    GLuint* service_id) {
-  GLuint texture_id;
-  glGenTextures(1, &texture_id);
-
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_EXTERNAL_OES, texture_id);
-  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-  auto gl_decoder = GetGlDecoder();
-  gl_decoder->RestoreTextureUnitBindings(0);
-  gl_decoder->RestoreActiveTexture();
-  DCHECK_EQ(static_cast<GLenum>(GL_NO_ERROR), glGetError());
-
-  *service_id = texture_id;
-  // Previously, to reduce context switching, we used to create an unattached
-  // SurfaceTexture and attach it lazily in the compositor's context. But that
-  // was flaky because SurfaceTexture#detachFromGLContext() is buggy on a lot of
-  // devices. Now we attach it to the current context, which means we might have
-  // to context switch later to call updateTexImage(). Fortunately, if virtual
-  // contexts are in use, we won't have to context switch.
-  return gl::SurfaceTexture::Create(texture_id);
 }
 
 void AndroidVideoDecodeAccelerator::OnDestroyingSurface(int surface_id) {
@@ -1525,18 +1326,12 @@ void AndroidVideoDecodeAccelerator::OnDestroyingSurface(int surface_id) {
   state_ = SURFACE_DESTROYED;
   if (media_codec_) {
     ReleaseMediaCodec();
-    strategy_->CodecChanged(media_codec_.get());
+    picture_buffer_manager_.CodecChanged(media_codec_.get());
   }
   // If we're draining, signal completion now because the drain can no longer
   // proceed.
   if (drain_type_ != DRAIN_TYPE_NONE)
     OnDrainCompleted();
-}
-
-void AndroidVideoDecodeAccelerator::OnFrameAvailable() {
-  // Remember: this may be on any thread.
-  DCHECK(strategy_);
-  strategy_->OnFrameAvailable();
 }
 
 void AndroidVideoDecodeAccelerator::PostError(
@@ -1684,26 +1479,12 @@ void AndroidVideoDecodeAccelerator::ReleaseMediaCodec() {
   if (!media_codec_)
     return;
 
-  // If codec construction is broken, then we can't release this codec if it's
-  // backed by hardware, else it may hang too.  Post it to the construction
-  // thread, and it'll get freed if things start working.  If things are
-  // already working, then it'll be freed soon.
-  //
-  // We require software codecs when |allow_autodetection_| is false, so use
-  // the stored value as a proxy for whether the MediaCodec is software backed
-  // or not.
-  if (!codec_config_->allow_autodetection_) {
-    media_codec_.reset();
-  } else {
-    g_avda_manager.Get().ConstructionTaskRunner()->DeleteSoon(
-        FROM_HERE, media_codec_.release());
-  }
-}
-
-// static
-bool AndroidVideoDecodeAccelerator::UseDeferredRenderingStrategy(
-    const gpu::GpuPreferences& gpu_preferences) {
-  return true;
+  // Post it to the same thread as was used to allocate it, and it'll get freed
+  // if that thread isn't hung waiting on mediaserver.  We can't release it
+  // on this thread since it might hang up.
+  g_avda_codec_allocator.Get()
+      .TaskRunnerFor(codec_config_->task_type_)
+      ->DeleteSoon(FROM_HERE, media_codec_.release());
 }
 
 // static
@@ -1713,12 +1494,7 @@ AndroidVideoDecodeAccelerator::GetCapabilities(
   Capabilities capabilities;
   SupportedProfiles& profiles = capabilities.supported_profiles;
 
-  // Only support VP8 on Android versions where we don't have to synchronously
-  // tear down the MediaCodec on surface destruction because VP8 requires
-  // us to completely drain the decoder before releasing it, which is difficult
-  // and time consuming to do while the surface is being destroyed.
-  if (base::android::BuildInfo::GetInstance()->sdk_int() >= 18 &&
-      MediaCodecUtil::IsVp8DecoderAvailable()) {
+  if (MediaCodecUtil::IsVp8DecoderAvailable()) {
     SupportedProfile profile;
     profile.profile = VP8PROFILE_ANY;
     // Since there is little to no power benefit below 360p, don't advertise
@@ -1782,21 +1558,29 @@ AndroidVideoDecodeAccelerator::GetCapabilities(
 
   capabilities.flags =
       VideoDecodeAccelerator::Capabilities::SUPPORTS_DEFERRED_INITIALIZATION;
-  if (UseDeferredRenderingStrategy(gpu_preferences)) {
-    capabilities.flags |= VideoDecodeAccelerator::Capabilities::
-        NEEDS_ALL_PICTURE_BUFFERS_TO_DECODE;
+  capabilities.flags |=
+      VideoDecodeAccelerator::Capabilities::NEEDS_ALL_PICTURE_BUFFERS_TO_DECODE;
 
-    // If we're using threaded texture mailboxes the COPY_REQUIRED flag must be
-    // set on deferred strategy frames (http://crbug.com/582170), and
-    // SurfaceView output is disabled (http://crbug.com/582170).
-    if (gpu_preferences.enable_threaded_texture_mailboxes) {
-      capabilities.flags |=
-          media::VideoDecodeAccelerator::Capabilities::REQUIRES_TEXTURE_COPY;
-    } else if (media::MediaCodecUtil::IsSurfaceViewOutputSupported()) {
-      capabilities.flags |= media::VideoDecodeAccelerator::Capabilities::
-          SUPPORTS_EXTERNAL_OUTPUT_SURFACE;
-    }
+  // If we're using threaded texture mailboxes the COPY_REQUIRED flag must be
+  // set on the video frames (http://crbug.com/582170), and SurfaceView output
+  // is disabled (http://crbug.com/582170).
+  if (gpu_preferences.enable_threaded_texture_mailboxes) {
+    capabilities.flags |=
+        VideoDecodeAccelerator::Capabilities::REQUIRES_TEXTURE_COPY;
+  } else if (MediaCodecUtil::IsSurfaceViewOutputSupported()) {
+    capabilities.flags |=
+        VideoDecodeAccelerator::Capabilities::SUPPORTS_EXTERNAL_OUTPUT_SURFACE;
   }
+
+#if BUILDFLAG(ENABLE_HEVC_DEMUXING)
+  for (const auto& supported_profile : kSupportedHevcProfiles) {
+    SupportedProfile profile;
+    profile.profile = supported_profile;
+    profile.min_resolution.SetSize(0, 0);
+    profile.max_resolution.SetSize(3840, 2160);
+    profiles.push_back(profile);
+  }
+#endif
 
   return capabilities;
 }
@@ -1805,8 +1589,8 @@ bool AndroidVideoDecodeAccelerator::IsMediaCodecSoftwareDecodingForbidden()
     const {
   // Prevent MediaCodec from using its internal software decoders when we have
   // more secure and up to date versions in the renderer process.
-  return !config_.is_encrypted && (codec_config_->codec_ == media::kCodecVP8 ||
-                                   codec_config_->codec_ == media::kCodecVP9);
+  return !config_.is_encrypted && (codec_config_->codec_ == kCodecVP8 ||
+                                   codec_config_->codec_ == kCodecVP9);
 }
 
 }  // namespace media

@@ -24,6 +24,7 @@
 #include "cc/trees/effect_node.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/occlusion.h"
+#include "cc/trees/transform_node.h"
 #include "third_party/skia/include/core/SkImageFilter.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/transform.h"
@@ -33,6 +34,7 @@ namespace cc {
 RenderSurfaceImpl::RenderSurfaceImpl(LayerImpl* owning_layer)
     : owning_layer_(owning_layer),
       surface_property_changed_(false),
+      ancestor_property_changed_(false),
       contributes_to_drawn_surface_(false),
       nearest_occlusion_immune_ancestor_(nullptr),
       target_render_surface_layer_index_history_(0),
@@ -86,10 +88,7 @@ gfx::RectF RenderSurfaceImpl::DrawableContentRect() const {
   }
   gfx::RectF drawable_content_rect = MathUtil::MapClippedRect(
       draw_transform(), gfx::RectF(surface_content_rect));
-  if (HasReplica()) {
-    drawable_content_rect.Union(MathUtil::MapClippedRect(
-        replica_draw_transform(), gfx::RectF(surface_content_rect)));
-  } else if (!filters.IsEmpty() && is_clipped()) {
+  if (!filters.IsEmpty() && is_clipped()) {
     // Filter could move pixels around, but still need to be clipped.
     drawable_content_rect.Intersect(gfx::RectF(clip_rect()));
   }
@@ -117,35 +116,12 @@ SkColor RenderSurfaceImpl::GetDebugBorderColor() const {
   return DebugColors::SurfaceBorderColor();
 }
 
-SkColor RenderSurfaceImpl::GetReplicaDebugBorderColor() const {
-  return DebugColors::SurfaceReplicaBorderColor();
-}
-
 float RenderSurfaceImpl::GetDebugBorderWidth() const {
   return DebugColors::SurfaceBorderWidth(owning_layer_->layer_tree_impl());
 }
 
-float RenderSurfaceImpl::GetReplicaDebugBorderWidth() const {
-  return DebugColors::SurfaceReplicaBorderWidth(
-      owning_layer_->layer_tree_impl());
-}
-
 int RenderSurfaceImpl::OwningLayerId() const {
   return owning_layer_ ? owning_layer_->id() : 0;
-}
-
-bool RenderSurfaceImpl::HasReplica() const {
-  return OwningEffectNode()->replica_layer_id != EffectTree::kInvalidNodeId;
-}
-
-const LayerImpl* RenderSurfaceImpl::ReplicaLayer() const {
-  int replica_layer_id = OwningEffectNode()->replica_layer_id;
-  return owning_layer_->layer_tree_impl()->LayerById(replica_layer_id);
-}
-
-LayerImpl* RenderSurfaceImpl::ReplicaLayer() {
-  int replica_layer_id = OwningEffectNode()->replica_layer_id;
-  return owning_layer_->layer_tree_impl()->LayerById(replica_layer_id);
 }
 
 LayerImpl* RenderSurfaceImpl::MaskLayer() {
@@ -155,16 +131,6 @@ LayerImpl* RenderSurfaceImpl::MaskLayer() {
 
 bool RenderSurfaceImpl::HasMask() const {
   return OwningEffectNode()->mask_layer_id != EffectTree::kInvalidNodeId;
-}
-
-LayerImpl* RenderSurfaceImpl::ReplicaMaskLayer() {
-  int replica_mask_layer_id = OwningEffectNode()->replica_mask_layer_id;
-  return owning_layer_->layer_tree_impl()->LayerById(replica_mask_layer_id);
-}
-
-bool RenderSurfaceImpl::HasReplicaMask() const {
-  return OwningEffectNode()->replica_mask_layer_id !=
-         EffectTree::kInvalidNodeId;
 }
 
 const FilterOperations& RenderSurfaceImpl::Filters() const {
@@ -225,7 +191,7 @@ void RenderSurfaceImpl::SetContentRectForTesting(const gfx::Rect& rect) {
 }
 
 gfx::Rect RenderSurfaceImpl::CalculateClippedAccumulatedContentRect() {
-  if (ReplicaLayer() || HasCopyRequest() || !is_clipped())
+  if (HasCopyRequest() || !is_clipped())
     return accumulated_content_rect();
 
   if (accumulated_content_rect().IsEmpty())
@@ -333,15 +299,33 @@ bool RenderSurfaceImpl::SurfacePropertyChanged() const {
   //   change. As of now, these are the only two properties that can be affected
   //   by descendant layers.
   //
-  // - all other property changes come from the owning layer (or some ancestor
-  //   layer that propagates its change to the owning layer).
+  // - all other property changes come from the surface's property tree nodes
+  //   (or some ancestor node that propagates its change to one of these nodes).
   //
   DCHECK(owning_layer_);
-  return surface_property_changed_ || owning_layer_->LayerPropertyChanged();
+  return surface_property_changed_ || AncestorPropertyChanged();
 }
 
 bool RenderSurfaceImpl::SurfacePropertyChangedOnlyFromDescendant() const {
-  return surface_property_changed_ && !owning_layer_->LayerPropertyChanged();
+  return surface_property_changed_ && !AncestorPropertyChanged();
+}
+
+bool RenderSurfaceImpl::AncestorPropertyChanged() const {
+  const PropertyTrees* property_trees =
+      owning_layer_->layer_tree_impl()->property_trees();
+  return ancestor_property_changed_ || property_trees->full_tree_damaged ||
+         property_trees->transform_tree.Node(TransformTreeIndex())
+             ->transform_changed ||
+         property_trees->effect_tree.Node(EffectTreeIndex())->effect_changed;
+}
+
+void RenderSurfaceImpl::NoteAncestorPropertyChanged() {
+  ancestor_property_changed_ = true;
+}
+
+void RenderSurfaceImpl::ResetPropertyChangedFlags() {
+  surface_property_changed_ = false;
+  ancestor_property_changed_ = false;
 }
 
 void RenderSurfaceImpl::ClearLayerLists() {

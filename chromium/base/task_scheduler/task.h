@@ -23,8 +23,10 @@ namespace internal {
 // profiling inherited from PendingTask.
 struct BASE_EXPORT Task : public PendingTask {
   // |posted_from| is the site the task was posted from. |task| is the closure
-  // to run. |traits| is metadata about the task. |delay| is a delay that must
-  // expire before the Task runs.
+  // to run. |traits_in| is metadata about the task. |delay| is a delay that
+  // must expire before the Task runs. If |delay| is non-zero and the shutdown
+  // behavior in |traits| is BLOCK_SHUTDOWN, the shutdown behavior is
+  // automatically adjusted to SKIP_ON_SHUTDOWN.
   Task(const tracked_objects::Location& posted_from,
        const Closure& task,
        const TaskTraits& traits,

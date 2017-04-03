@@ -6,13 +6,16 @@
 
 #include <memory>
 
+#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/ui/webui/site_settings_helper.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "content/public/browser/notification_service.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_web_ui.h"
+#include "extensions/common/extension_builder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -37,7 +40,8 @@ class SiteSettingsHandlerTest : public testing::Test {
   content::TestWebUI* web_ui() { return &web_ui_; }
   SiteSettingsHandler* handler() { return &handler_; }
 
-  void ValidateDefault(bool expected_default, size_t expected_total_calls) {
+  void ValidateDefault(const std::string& expected_default,
+                       size_t expected_total_calls) {
     EXPECT_EQ(expected_total_calls, web_ui()->call_data().size());
 
     const content::TestWebUI::CallData& data = *web_ui()->call_data().back();
@@ -51,9 +55,9 @@ class SiteSettingsHandlerTest : public testing::Test {
     ASSERT_TRUE(data.arg2()->GetAsBoolean(&success));
     ASSERT_TRUE(success);
 
-    bool enabled;
-    ASSERT_TRUE(data.arg3()->GetAsBoolean(&enabled));
-    EXPECT_EQ(expected_default, enabled);
+    std::string default_value;
+    ASSERT_TRUE(data.arg3()->GetAsString(&default_value));
+    EXPECT_EQ(expected_default, default_value);
   }
 
   void ValidateOrigin(
@@ -129,9 +133,71 @@ class SiteSettingsHandlerTest : public testing::Test {
     EXPECT_EQ(expected_validity, valid);
   }
 
+  void ValidateIncognitoExists(
+      bool expected_incognito, size_t expected_total_calls) {
+    EXPECT_EQ(expected_total_calls, web_ui()->call_data().size());
+
+    const content::TestWebUI::CallData& data = *web_ui()->call_data().back();
+    EXPECT_EQ("cr.webUIListenerCallback", data.function_name());
+
+    std::string callback_id;
+    ASSERT_TRUE(data.arg1()->GetAsString(&callback_id));
+    EXPECT_EQ("onIncognitoStatusChanged", callback_id);
+
+    bool incognito;
+    ASSERT_TRUE(data.arg2()->GetAsBoolean(&incognito));
+    EXPECT_EQ(expected_incognito, incognito);
+  }
+
+  void ValidateZoom(const std::string& expected_host,
+      const std::string& expected_zoom, size_t expected_total_calls) {
+    EXPECT_EQ(expected_total_calls, web_ui()->call_data().size());
+
+    const content::TestWebUI::CallData& data = *web_ui()->call_data().back();
+    EXPECT_EQ("cr.webUIListenerCallback", data.function_name());
+
+    std::string callback_id;
+    ASSERT_TRUE(data.arg1()->GetAsString(&callback_id));
+    EXPECT_EQ("onZoomLevelsChanged", callback_id);
+
+    const base::ListValue* exceptions;
+    ASSERT_TRUE(data.arg2()->GetAsList(&exceptions));
+    if (expected_host.empty()) {
+      EXPECT_EQ(0U, exceptions->GetSize());
+    } else {
+      EXPECT_EQ(1U, exceptions->GetSize());
+
+      const base::DictionaryValue* exception;
+      ASSERT_TRUE(exceptions->GetDictionary(0, &exception));
+
+      std::string host;
+      ASSERT_TRUE(exception->GetString("origin", &host));
+      ASSERT_EQ(expected_host, host);
+
+      std::string zoom;
+      ASSERT_TRUE(exception->GetString("zoom", &zoom));
+      ASSERT_EQ(expected_zoom, zoom);
+    }
+  }
+
+  void CreateIncognitoProfile() {
+    incognito_profile_ = TestingProfile::Builder().BuildIncognito(&profile_);
+  }
+
+  void DestroyIncognitoProfile() {
+    content::NotificationService::current()->Notify(
+        chrome::NOTIFICATION_PROFILE_DESTROYED,
+        content::Source<Profile>(static_cast<Profile*>(incognito_profile_)),
+        content::NotificationService::NoDetails());
+    profile_.SetOffTheRecordProfile(nullptr);
+    ASSERT_FALSE(profile_.HasOffTheRecordProfile());
+    incognito_profile_ = nullptr;
+  }
+
  private:
   content::TestBrowserThreadBundle thread_bundle_;
   TestingProfile profile_;
+  TestingProfile* incognito_profile_;
   content::TestWebUI web_ui_;
   SiteSettingsHandler handler_;
 };
@@ -142,7 +208,7 @@ TEST_F(SiteSettingsHandlerTest, GetAndSetDefault) {
   getArgs.AppendString(kCallbackId);
   getArgs.AppendString("notifications");
   handler()->HandleGetDefaultValueForContentType(&getArgs);
-  ValidateDefault(true, 1U);
+  ValidateDefault("ask", 1U);
 
   // Set the default to 'Blocked'.
   base::ListValue setArgs;
@@ -154,7 +220,7 @@ TEST_F(SiteSettingsHandlerTest, GetAndSetDefault) {
 
   // Verify that the default has been set to 'Blocked'.
   handler()->HandleGetDefaultValueForContentType(&getArgs);
-  ValidateDefault(false, 3U);
+  ValidateDefault("block", 3U);
 }
 
 TEST_F(SiteSettingsHandlerTest, Origins) {
@@ -166,6 +232,7 @@ TEST_F(SiteSettingsHandlerTest, Origins) {
   setArgs.AppendString(google);  // Secondary pattern.
   setArgs.AppendString("notifications");
   setArgs.AppendString("block");
+  setArgs.AppendBoolean(false);  // Incognito.
   handler()->HandleSetCategoryPermissionForOrigin(&setArgs);
   EXPECT_EQ(1U, web_ui()->call_data().size());
 
@@ -181,12 +248,65 @@ TEST_F(SiteSettingsHandlerTest, Origins) {
   resetArgs.AppendString(google);
   resetArgs.AppendString(google);
   resetArgs.AppendString("notifications");
+  resetArgs.AppendBoolean(false);  // Incognito.
   handler()->HandleResetCategoryPermissionForOrigin(&resetArgs);
   EXPECT_EQ(3U, web_ui()->call_data().size());
 
   // Verify the reset was successful.
   handler()->HandleGetExceptionList(&listArgs);
   ValidateNoOrigin(4U);
+}
+
+TEST_F(SiteSettingsHandlerTest, ExceptionHelpers) {
+  ContentSettingsPattern pattern =
+      ContentSettingsPattern::FromString("[*.]google.com");
+  std::unique_ptr<base::DictionaryValue> exception =
+      site_settings::GetExceptionForPage(pattern, pattern,
+          CONTENT_SETTING_BLOCK, "preference", false);
+
+  std::string primary_pattern, secondary_pattern, type;
+  bool incognito;
+  CHECK(exception->GetString(site_settings::kOrigin, &primary_pattern));
+  CHECK(exception->GetString(site_settings::kEmbeddingOrigin,
+                             &secondary_pattern));
+  CHECK(exception->GetString(site_settings::kSetting, &type));
+  CHECK(exception->GetBoolean(site_settings::kIncognito, &incognito));
+
+  base::ListValue args;
+  args.AppendString(primary_pattern);
+  args.AppendString(secondary_pattern);
+  args.AppendString("notifications");  // Chosen arbitrarily.
+  args.AppendString(type);
+  args.AppendBoolean(incognito);
+
+  // We don't need to check the results. This is just to make sure it doesn't
+  // crash on the input.
+  handler()->HandleSetCategoryPermissionForOrigin(&args);
+
+  scoped_refptr<const extensions::Extension> extension;
+  extension = extensions::ExtensionBuilder()
+                  .SetManifest(extensions::DictionaryBuilder()
+                                   .Set("name", "Test extension")
+                                   .Set("version", "1.0.0")
+                                   .Set("manifest_version", 2)
+                                   .Build())
+                  .SetID("ahfgeienlihckogmohjhadlkjgocpleb")
+                  .Build();
+
+  std::unique_ptr<base::ListValue> exceptions(new base::ListValue);
+  site_settings::AddExceptionForHostedApp(
+      "[*.]google.com", *extension.get(), exceptions.get());
+
+  const base::DictionaryValue* dictionary;
+  CHECK(exceptions->GetDictionary(0, &dictionary));
+  CHECK(dictionary->GetString(site_settings::kOrigin, &primary_pattern));
+  CHECK(dictionary->GetString(site_settings::kEmbeddingOrigin,
+                              &secondary_pattern));
+  CHECK(dictionary->GetString(site_settings::kSetting, &type));
+  CHECK(dictionary->GetBoolean(site_settings::kIncognito, &incognito));
+
+  // Again, don't need to check the results.
+  handler()->HandleSetCategoryPermissionForOrigin(&args);
 }
 
 TEST_F(SiteSettingsHandlerTest, Patterns) {
@@ -203,6 +323,40 @@ TEST_F(SiteSettingsHandlerTest, Patterns) {
   invalid.AppendString(bad_pattern);
   handler()->HandleIsPatternValid(&invalid);
   ValidatePattern(false, 2U);
+}
+
+TEST_F(SiteSettingsHandlerTest, Incognito) {
+  base::ListValue args;
+  handler()->HandleUpdateIncognitoStatus(&args);
+  ValidateIncognitoExists(false, 1U);
+
+  CreateIncognitoProfile();
+  ValidateIncognitoExists(true, 2U);
+
+  DestroyIncognitoProfile();
+  ValidateIncognitoExists(false, 3U);
+}
+
+TEST_F(SiteSettingsHandlerTest, ZoomLevels) {
+  std::string host("http://www.google.com");
+  double zoom_level = 1.1;
+
+  content::HostZoomMap* host_zoom_map =
+      content::HostZoomMap::GetDefaultForBrowserContext(profile());
+  host_zoom_map->SetZoomLevelForHost(host, zoom_level);
+  ValidateZoom(host, "122%", 1U);
+
+  base::ListValue args;
+  handler()->HandleFetchZoomLevels(&args);
+  ValidateZoom(host, "122%", 2U);
+
+  args.AppendString("http://www.google.com");
+  handler()->HandleRemoveZoomLevel(&args);
+  ValidateZoom("", "", 3U);
+
+  double default_level = host_zoom_map->GetDefaultZoomLevel();
+  double level = host_zoom_map->GetZoomLevelForHostAndScheme("http", host);
+  EXPECT_EQ(default_level, level);
 }
 
 }  // namespace settings

@@ -29,6 +29,7 @@ extern "C" {
 #include "ui/gfx/x/x11_types.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_implementation.h"
+#include "ui/gl/gl_visual_picker_glx.h"
 #include "ui/gl/sync_control_vsync_provider.h"
 
 namespace gl {
@@ -49,6 +50,11 @@ bool g_glx_oml_sync_control_supported = false;
 bool g_glx_get_msc_rate_oml_supported = false;
 
 bool g_glx_sgi_video_sync_supported = false;
+
+// A 24-bit RGB visual and colormap to use when creating offscreen surfaces.
+Visual* g_visual = nullptr;
+int g_depth = CopyFromParent;
+Colormap g_colormap = CopyFromParent;
 
 GLXFBConfig GetConfigForWindow(Display* display,
                                gfx::AcceleratedWidget window) {
@@ -109,9 +115,6 @@ bool CreateDummyWindow(Display* display) {
   DCHECK(display);
   gfx::AcceleratedWidget parent_window =
       RootWindow(display, DefaultScreen(display));
-  // We create a window with CopyFromParent visual so that we have the same
-  // visual as NativeViewGLSurfaceGLX (i.e. same GLXFBConfig), to ensure
-  // contexts are compatible and can be made current with either.
   gfx::AcceleratedWidget window =
       XCreateWindow(display, parent_window, 0, 0, 1, 1, 0, CopyFromParent,
                     InputOutput, CopyFromParent, 0, nullptr);
@@ -422,6 +425,13 @@ bool GLSurfaceGLX::InitializeOneOff() {
   g_glx_get_msc_rate_oml_supported = g_glx_oml_sync_control_supported;
   g_glx_sgi_video_sync_supported = HasGLXExtension("GLX_SGI_video_sync");
 
+  const XVisualInfo& visual_info =
+      gl::GLVisualPickerGLX::GetInstance()->system_visual();
+  g_visual = visual_info.visual;
+  g_depth = visual_info.depth;
+  g_colormap = XCreateColormap(g_display, DefaultRootWindow(g_display),
+                               visual_info.visual, AllocNone);
+
   // We create a dummy unmapped window for both the main Display and the video
   // sync Display so that the Nvidia driver can initialize itself before the
   // sandbox is set up.
@@ -493,7 +503,11 @@ void* GLSurfaceGLX::GetDisplay() {
 GLSurfaceGLX::~GLSurfaceGLX() {}
 
 NativeViewGLSurfaceGLX::NativeViewGLSurfaceGLX(gfx::AcceleratedWidget window)
-    : parent_window_(window), window_(0), glx_window_(0), config_(nullptr) {}
+    : parent_window_(window),
+      window_(0),
+      glx_window_(0),
+      config_(nullptr),
+      visual_id_(CopyFromParent) {}
 
 GLXDrawable NativeViewGLSurfaceGLX::GetDrawableHandle() const {
   return glx_window_;
@@ -507,6 +521,7 @@ bool NativeViewGLSurfaceGLX::Initialize(GLSurface::Format format) {
     return false;
   }
   size_ = gfx::Size(attributes.width, attributes.height);
+  visual_id_ = XVisualIDFromVisual(attributes.visual);
   // Create a child window, with a CopyFromParent visual (to avoid inducing
   // extra blits in the driver), that we can resize exactly in Resize(),
   // correctly ordered with GL, so that we don't have invalid transient states.
@@ -520,13 +535,7 @@ bool NativeViewGLSurfaceGLX::Initialize(GLSurface::Format format) {
                           CopyFromParent, CWBackPixmap | CWBitGravity, &swa);
   XMapWindow(g_display, window_);
 
-  ui::PlatformEventSource* event_source =
-      ui::PlatformEventSource::GetInstance();
-  // Can be nullptr in tests, when we don't care about Exposes.
-  if (event_source) {
-    XSelectInput(g_display, window_, ExposureMask);
-    ui::PlatformEventSource::GetInstance()->AddPlatformEventDispatcher(this);
-  }
+  RegisterEvents();
   XFlush(g_display);
 
   GetConfig();
@@ -560,26 +569,11 @@ void NativeViewGLSurfaceGLX::Destroy() {
     glx_window_ = 0;
   }
   if (window_) {
-    ui::PlatformEventSource* event_source =
-        ui::PlatformEventSource::GetInstance();
-    if (event_source)
-      event_source->RemovePlatformEventDispatcher(this);
+    UnregisterEvents();
     XDestroyWindow(g_display, window_);
     window_ = 0;
     XFlush(g_display);
   }
-}
-
-bool NativeViewGLSurfaceGLX::CanDispatchEvent(const ui::PlatformEvent& event) {
-  return event->type == Expose && event->xexpose.window == window_;
-}
-
-uint32_t NativeViewGLSurfaceGLX::DispatchEvent(const ui::PlatformEvent& event) {
-  XEvent forwarded_event = *event;
-  forwarded_event.xexpose.window = parent_window_;
-  XSendEvent(g_display, parent_window_, False, ExposureMask, &forwarded_event);
-  XFlush(g_display);
-  return ui::POST_DISPATCH_STOP_PROPAGATION;
 }
 
 bool NativeViewGLSurfaceGLX::Resize(const gfx::Size& size,
@@ -622,6 +616,10 @@ void* NativeViewGLSurfaceGLX::GetConfig() {
   return config_;
 }
 
+unsigned long NativeViewGLSurfaceGLX::GetCompatibilityKey() {
+  return visual_id_;
+}
+
 gfx::SwapResult NativeViewGLSurfaceGLX::PostSubBuffer(int x,
                                                       int y,
                                                       int width,
@@ -639,6 +637,18 @@ NativeViewGLSurfaceGLX::~NativeViewGLSurfaceGLX() {
   Destroy();
 }
 
+void NativeViewGLSurfaceGLX::ForwardExposeEvent(XEvent* event) {
+  XEvent forwarded_event = *event;
+  forwarded_event.xexpose.window = parent_window_;
+  XSendEvent(g_display, parent_window_, False, ExposureMask, &forwarded_event);
+  XFlush(g_display);
+}
+
+bool NativeViewGLSurfaceGLX::CanHandleEvent(XEvent* event) {
+  return event->type == Expose &&
+         event->xexpose.window == static_cast<Window>(window_);
+}
+
 UnmappedNativeViewGLSurfaceGLX::UnmappedNativeViewGLSurfaceGLX(
     const gfx::Size& size)
     : size_(size), config_(nullptr), window_(0), glx_window_(0) {
@@ -650,15 +660,14 @@ UnmappedNativeViewGLSurfaceGLX::UnmappedNativeViewGLSurfaceGLX(
 bool UnmappedNativeViewGLSurfaceGLX::Initialize(GLSurface::Format format) {
   DCHECK(!window_);
 
-  gfx::AcceleratedWidget parent_window =
-      RootWindow(g_display, DefaultScreen(g_display));
+  gfx::AcceleratedWidget parent_window = DefaultRootWindow(g_display);
 
-  // We create a window with CopyFromParent visual so that we have the same
-  // visual as NativeViewGLSurfaceGLX (i.e. same GLXFBConfig), to ensure
-  // contexts are compatible and can be made current with either.
+  XSetWindowAttributes attrs;
+  attrs.border_pixel = 0;
+  attrs.colormap = g_colormap;
   window_ = XCreateWindow(g_display, parent_window, 0, 0, size_.width(),
-                          size_.height(), 0, CopyFromParent, InputOutput,
-                          CopyFromParent, 0, nullptr);
+                          size_.height(), 0, g_depth, InputOutput, g_visual,
+                          CWBorderPixel | CWColormap, &attrs);
   GetConfig();
   DCHECK(config_);
   glx_window_ = glXCreateWindow(g_display, config_, window_, NULL);
@@ -698,6 +707,10 @@ void* UnmappedNativeViewGLSurfaceGLX::GetConfig() {
   if (!config_)
     config_ = GetConfigForWindow(g_display, window_);
   return config_;
+}
+
+unsigned long UnmappedNativeViewGLSurfaceGLX::GetCompatibilityKey() {
+  return XVisualIDFromVisual(g_visual);
 }
 
 UnmappedNativeViewGLSurfaceGLX::~UnmappedNativeViewGLSurfaceGLX() {

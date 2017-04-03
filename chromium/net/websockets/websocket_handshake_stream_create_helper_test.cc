@@ -15,6 +15,7 @@
 #include "net/http/http_request_info.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_response_info.h"
+#include "net/log/net_log_with_source.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/socket_test_util.h"
 #include "net/test/gtest_util.h"
@@ -49,7 +50,7 @@ class MockClientSocketHandleFactory {
     std::unique_ptr<ClientSocketHandle> socket_handle(new ClientSocketHandle);
     socket_handle->Init("a", scoped_refptr<MockTransportSocketParams>(), MEDIUM,
                         ClientSocketPool::RespectLimits::ENABLED,
-                        CompletionCallback(), &pool_, BoundNetLog());
+                        CompletionCallback(), &pool_, NetLogWithSource());
     return socket_handle;
   }
 
@@ -119,8 +120,9 @@ class WebSocketHandshakeStreamCreateHelperTest : public ::testing::Test {
     request_info.url = GURL("ws://localhost/");
     request_info.method = "GET";
     request_info.load_flags = LOAD_DISABLE_CACHE;
-    int rv = handshake->InitializeStream(
-        &request_info, DEFAULT_PRIORITY, BoundNetLog(), CompletionCallback());
+    int rv =
+        handshake->InitializeStream(&request_info, DEFAULT_PRIORITY,
+                                    NetLogWithSource(), CompletionCallback());
     EXPECT_THAT(rv, IsOk());
 
     HttpRequestHeaders headers;

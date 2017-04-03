@@ -43,6 +43,7 @@
 #include "net/http/http_response_headers.h"
 #include "net/http/http_response_info.h"
 #include "net/http/http_util.h"
+#include "net/log/net_log_with_source.h"
 #include "net/quic/core/crypto/quic_server_info.h"
 
 #if defined(OS_POSIX)
@@ -240,7 +241,7 @@ void HttpCache::MetadataWriter::Write(const GURL& url,
   int rv = transaction_->Start(
       &request_info_,
       base::Bind(&MetadataWriter::OnIOComplete, base::Unretained(this)),
-      BoundNetLog());
+      NetLogWithSource());
   if (rv != ERR_IO_PENDING)
     VerifyResponse(rv);
 }
@@ -293,7 +294,7 @@ class HttpCache::QuicServerInfoFactoryAdaptor : public QuicServerInfoFactory {
 HttpCache::HttpCache(HttpNetworkSession* session,
                      std::unique_ptr<BackendFactory> backend_factory,
                      bool set_up_quic_server_info)
-    : HttpCache(base::WrapUnique(new HttpNetworkLayer(session)),
+    : HttpCache(base::MakeUnique<HttpNetworkLayer>(session),
                 std::move(backend_factory),
                 set_up_quic_server_info) {}
 

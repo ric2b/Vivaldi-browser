@@ -12,7 +12,7 @@
 #include "base/command_line.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/field_trial.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
@@ -32,7 +32,7 @@
 #include "components/autofill/content/common/autofill_messages.h"
 #include "components/autofill/core/browser/password_generator.h"
 #include "components/autofill/core/common/password_form.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/password_manager/content/browser/content_password_manager_driver.h"
 #include "components/password_manager/content/browser/password_manager_internals_service_factory.h"
 #include "components/password_manager/core/browser/browser_save_password_progress_logger.h"
@@ -54,6 +54,7 @@
 #include "components/version_info/version_info.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/ssl_status.h"
 #include "content/public/browser/web_contents.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/base/url_util.h"
@@ -83,7 +84,7 @@ DEFINE_WEB_CONTENTS_USER_DATA_KEY(ChromePasswordManagerClient);
 
 namespace {
 
-const sync_driver::SyncService* GetSyncService(Profile* profile) {
+const syncer::SyncService* GetSyncService(Profile* profile) {
   if (ProfileSyncServiceFactory::HasProfileSyncService(profile))
     return ProfileSyncServiceFactory::GetForProfile(profile);
   return nullptr;
@@ -402,7 +403,7 @@ ChromePasswordManagerClient::GetPasswordStore() const {
 
 password_manager::PasswordSyncState
 ChromePasswordManagerClient::GetPasswordSyncState() const {
-  const ProfileSyncService* sync_service =
+  const browser_sync::ProfileSyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile_);
   return password_manager_util::GetPasswordSyncState(sync_service);
 }
@@ -597,7 +598,7 @@ bool ChromePasswordManagerClient::ShouldAnnotateNavigationEntries(
   if (!ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled())
     return false;
 
-  ProfileSyncService* profile_sync_service =
+  browser_sync::ProfileSyncService* profile_sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile);
   if (!profile_sync_service || !profile_sync_service->IsSyncActive() ||
       profile_sync_service->IsUsingSecondaryPassphrase()) {

@@ -23,6 +23,9 @@ class SequencedTaskRunner;
 }
 
 namespace chromeos {
+
+class InstallAttributes;
+
 namespace attestation {
 class AttestationPolicyObserver;
 }
@@ -34,7 +37,6 @@ class PrefService;
 namespace policy {
 
 class DeviceCloudPolicyStoreChromeOS;
-class EnterpriseInstallAttributes;
 class HeartbeatScheduler;
 class StatusUploader;
 class SystemLogUploader;
@@ -85,12 +87,6 @@ class DeviceCloudPolicyManagerChromeOS : public CloudPolicyManager {
   // Pref registration helper.
   static void RegisterPrefs(PrefRegistrySimple* registry);
 
-  // Returns the device serial number, or an empty string if not available.
-  static std::string GetMachineID();
-
-  // Returns the machine model, or an empty string if not available.
-  static std::string GetMachineModel();
-
   // Returns the mode for using zero-touch enrollment.
   static ZeroTouchEnrollmentMode GetZeroTouchEnrollmentMode();
 
@@ -101,7 +97,7 @@ class DeviceCloudPolicyManagerChromeOS : public CloudPolicyManager {
 
   // Starts the connection via |client_to_connect|.
   void StartConnection(std::unique_ptr<CloudPolicyClient> client_to_connect,
-                       EnterpriseInstallAttributes* install_attributes);
+                       chromeos::InstallAttributes* install_attributes);
 
   // Sends the unregister request. |callback| is invoked with a boolean
   // parameter indicating the result when done.

@@ -4,30 +4,13 @@
 
 #import "ios/web/public/test/web_test_with_web_state.h"
 
-#import <WebKit/WebKit.h>
-
-#include "base/base64.h"
+#include "base/run_loop.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/test/ios/wait_util.h"
-#import "ios/testing/ocmock_complex_type_helper.h"
-#import "ios/web/navigation/crw_session_controller.h"
 #import "ios/web/public/web_state/url_verification_constants.h"
+#include "ios/web/public/web_state/web_state_observer.h"
 #import "ios/web/web_state/ui/crw_web_controller.h"
 #import "ios/web/web_state/web_state_impl.h"
-
-// Helper Mock to stub out API with C++ objects in arguments.
-@interface WebDelegateMock : OCMockComplexTypeHelper
-@end
-
-@implementation WebDelegateMock
-// Stub implementation always returns YES.
-- (BOOL)webController:(CRWWebController*)webController
-        shouldOpenURL:(const GURL&)url
-      mainDocumentURL:(const GURL&)mainDocumentURL
-          linkClicked:(BOOL)linkClicked {
-  return YES;
-}
-@end
 
 namespace {
 // Returns CRWWebController for the given |web_state|.
@@ -44,8 +27,6 @@ WebTestWithWebState::WebTestWithWebState() {}
 
 WebTestWithWebState::~WebTestWithWebState() {}
 
-static int s_html_load_count;
-
 void WebTestWithWebState::SetUp() {
   WebTest::SetUp();
   std::unique_ptr<WebStateImpl> web_state(new WebStateImpl(GetBrowserState()));
@@ -55,7 +36,6 @@ void WebTestWithWebState::SetUp() {
 
   // Force generation of child views; necessary for some tests.
   [GetWebController(web_state_.get()) triggerPendingLoad];
-  s_html_load_count = 0;
 }
 
 void WebTestWithWebState::TearDown() {
@@ -63,58 +43,48 @@ void WebTestWithWebState::TearDown() {
   WebTest::TearDown();
 }
 
-void WebTestWithWebState::WillProcessTask(
-    const base::PendingTask& pending_task) {
-  // Nothing to do.
-}
+void WebTestWithWebState::LoadHtml(NSString* html, const GURL& url) {
+  // Sets MIME type to "text/html" once navigation is committed.
+  class MimeTypeUpdater : public WebStateObserver {
+   public:
+    explicit MimeTypeUpdater(WebState* web_state)
+        : WebStateObserver(web_state) {}
+    // WebStateObserver overrides:
+    void NavigationItemCommitted(const LoadCommittedDetails&) override {
+      // loadHTML:forURL: does not notify web view delegate about received
+      // response, so web controller does not get a chance to properly update
+      // MIME type and it should be set manually after navigation is committed
+      // but before WebState signal load completion and clients will start
+      // checking if MIME type is in fact HTML.
+      static_cast<WebStateImpl*>(web_state())->SetContentsMimeType("text/html");
+    }
+  };
+  MimeTypeUpdater mime_type_updater(web_state());
 
-void WebTestWithWebState::DidProcessTask(
-    const base::PendingTask& pending_task) {
-  processed_a_task_ = true;
-}
+  // Initiate asynchronous HTML load.
+  CRWWebController* web_controller = GetWebController(web_state());
+  ASSERT_EQ(PAGE_LOADED, web_controller.loadPhase);
+  [web_controller loadHTML:html forURL:url];
+  ASSERT_EQ(LOAD_REQUESTED, web_controller.loadPhase);
 
-void WebTestWithWebState::LoadHtml(NSString* html) {
-  LoadHtml([html UTF8String]);
-}
+  // Wait until the page is loaded.
+  base::test::ios::WaitUntilCondition(^{
+    return web_controller.loadPhase == PAGE_LOADED;
+  });
 
-void WebTestWithWebState::LoadHtml(const std::string& html) {
-  NSString* load_check = CreateLoadCheck();
-  std::string marked_html = html + [load_check UTF8String];
-  std::string encoded_html;
-  base::Base64Encode(marked_html, &encoded_html);
-  GURL url("data:text/html;charset=utf8;base64," + encoded_html);
-  LoadURL(url);
-
-  if (ResetPageIfNavigationStalled(load_check)) {
-    LoadHtml(html);
+  // Reload the page if script execution is not possible.
+  if (![ExecuteJavaScript(@"0;") isEqual:@0]) {
+    LoadHtml(html, url);
   }
 }
 
-void WebTestWithWebState::LoadURL(const GURL& url) {
-  // First step is to ensure that the web controller has finished any previous
-  // page loads so the new load is not confused.
-  while ([GetWebController(web_state()) loadPhase] != PAGE_LOADED)
-    WaitForBackgroundTasks();
-  id originalMockDelegate =
-      [OCMockObject niceMockForProtocol:@protocol(CRWWebDelegate)];
-  id mockDelegate =
-      [[WebDelegateMock alloc] initWithRepresentedObject:originalMockDelegate];
-  id existingDelegate = GetWebController(web_state()).delegate;
-  GetWebController(web_state()).delegate = mockDelegate;
+void WebTestWithWebState::LoadHtml(NSString* html) {
+  GURL url("https://chromium.test/");
+  LoadHtml(html, url);
+}
 
-  web::NavigationManagerImpl& navManager =
-      [GetWebController(web_state()) webStateImpl]->GetNavigationManagerImpl();
-  navManager.InitializeSession(@"name", nil, NO, 0);
-  [navManager.GetSessionController() addPendingEntry:url
-                                            referrer:web::Referrer()
-                                          transition:ui::PAGE_TRANSITION_TYPED
-                                   rendererInitiated:NO];
-
-  [GetWebController(web_state()) loadCurrentURL];
-  while ([GetWebController(web_state()) loadPhase] != PAGE_LOADED)
-    WaitForBackgroundTasks();
-  GetWebController(web_state()).delegate = existingDelegate;
-  [web_state()->GetView() layoutIfNeeded];
+void WebTestWithWebState::LoadHtml(const std::string& html) {
+  LoadHtml(base::SysUTF8ToNSString(html));
 }
 
 void WebTestWithWebState::WaitForBackgroundTasks() {
@@ -134,7 +104,7 @@ void WebTestWithWebState::WaitForBackgroundTasks() {
     // Yield to the Chromium message queue, e.g. WebThread::PostTask()
     // events.
     processed_a_task_ = false;
-    messageLoop->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
     if (processed_a_task_)  // Set in TaskObserver method.
       activitySeen = true;
 
@@ -177,21 +147,12 @@ const web::WebState* WebTestWithWebState::web_state() const {
   return web_state_.get();
 }
 
-bool WebTestWithWebState::ResetPageIfNavigationStalled(NSString* load_check) {
-  id inner_html = ExecuteJavaScript(
-      @"(document && document.body && document.body.innerHTML) || 'undefined'");
-  if (![inner_html rangeOfString:load_check].length) {
-    web_state_->SetWebUsageEnabled(false);
-    web_state_->SetWebUsageEnabled(true);
-    [GetWebController(web_state()) triggerPendingLoad];
-    return true;
-  }
-  return false;
+void WebTestWithWebState::WillProcessTask(const base::PendingTask&) {
+  // Nothing to do.
 }
 
-NSString* WebTestWithWebState::CreateLoadCheck() {
-  return [NSString stringWithFormat:@"<p style=\"display: none;\">%d</p>",
-                                    s_html_load_count++];
+void WebTestWithWebState::DidProcessTask(const base::PendingTask&) {
+  processed_a_task_ = true;
 }
 
 }  // namespace web

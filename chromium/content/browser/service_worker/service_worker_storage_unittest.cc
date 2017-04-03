@@ -293,14 +293,15 @@ class ServiceWorkerStorageTest : public testing::Test {
     base::RunLoop().RunUntilIdle();
   }
 
-  base::FilePath GetUserDataDirectory() { return user_data_directory_.path(); }
-
   bool InitUserDataDirectory() {
-    return user_data_directory_.CreateUniqueTempDir();
+    if (!user_data_directory_.CreateUniqueTempDir())
+      return false;
+    user_data_directory_path_ = user_data_directory_.GetPath();
+    return true;
   }
 
   void InitializeTestHelper() {
-    helper_.reset(new EmbeddedWorkerTestHelper(GetUserDataDirectory()));
+    helper_.reset(new EmbeddedWorkerTestHelper(user_data_directory_path_));
     base::RunLoop().RunUntilIdle();
   }
 
@@ -503,6 +504,7 @@ class ServiceWorkerStorageTest : public testing::Test {
 
   // user_data_directory_ must be declared first to preserve destructor order.
   base::ScopedTempDir user_data_directory_;
+  base::FilePath user_data_directory_path_;
   std::unique_ptr<EmbeddedWorkerTestHelper> helper_;
   TestBrowserThreadBundle browser_thread_bundle_;
 };
@@ -587,7 +589,6 @@ TEST_F(ServiceWorkerStorageTest, DisabledStorage) {
 
 TEST_F(ServiceWorkerStorageTest, StoreFindUpdateDeleteRegistration) {
   const GURL kScope("http://www.test.not/scope/");
-  const GURL kScript("http://www.test.not/script.js");
   const GURL kDocumentUrl("http://www.test.not/scope/document.html");
   const GURL kResource1("http://www.test.not/scope/resource1.js");
   const int64_t kResource1Size = 1591234;
@@ -627,7 +628,7 @@ TEST_F(ServiceWorkerStorageTest, StoreFindUpdateDeleteRegistration) {
       new ServiceWorkerRegistration(kScope, kRegistrationId,
                                     context()->AsWeakPtr());
   scoped_refptr<ServiceWorkerVersion> live_version = new ServiceWorkerVersion(
-      live_registration.get(), kScript, kVersionId, context()->AsWeakPtr());
+      live_registration.get(), kResource1, kVersionId, context()->AsWeakPtr());
   live_version->set_fetch_handler_existence(
       ServiceWorkerVersion::FetchHandlerExistence::EXISTS);
   live_version->SetStatus(ServiceWorkerVersion::INSTALLED);

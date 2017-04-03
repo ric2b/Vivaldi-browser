@@ -4,14 +4,13 @@
 
 #include "components/sync/api/model_type_service.h"
 
-#include "components/sync/api/model_type_change_processor.h"
-#include "components/sync/core/data_type_error_handler.h"
+#include <utility>
 
-namespace syncer_v2 {
+namespace syncer {
 
 ModelTypeService::ModelTypeService(
     const ChangeProcessorFactory& change_processor_factory,
-    syncer::ModelType type)
+    ModelType type)
     : change_processor_factory_(change_processor_factory), type_(type) {}
 
 ModelTypeService::~ModelTypeService() {}
@@ -28,10 +27,10 @@ ConflictResolution ModelTypeService::ResolveConflict(
 }
 
 void ModelTypeService::OnSyncStarting(
-    syncer::DataTypeErrorHandler* error_handler,
+    std::unique_ptr<DataTypeErrorHandler> error_handler,
     const ModelTypeChangeProcessor::StartCallback& start_callback) {
   CreateChangeProcessor();
-  change_processor_->OnSyncStarting(error_handler, start_callback);
+  change_processor_->OnSyncStarting(std::move(error_handler), start_callback);
 }
 
 void ModelTypeService::DisableSync() {
@@ -56,4 +55,4 @@ void ModelTypeService::clear_change_processor() {
   change_processor_.reset();
 }
 
-}  // namespace syncer_v2
+}  // namespace syncer

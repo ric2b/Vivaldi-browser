@@ -370,8 +370,7 @@ def GnNinjaInstall(pepperdir, toolchains):
       pair[1] += '.exe'
 
   InstallFiles(GetNinjaOutDir('x64'), tools_dir, tools_files_x64)
-  if platform != 'mac':
-    InstallFiles(GetNinjaOutDir('x86'), tools_dir, tools_files_x86)
+  InstallFiles(GetNinjaOutDir('x86'), tools_dir, tools_files_x86)
   if platform == 'linux':
     InstallFiles(GetNinjaOutDir('arm'), tools_dir, tools_files_arm)
 
@@ -403,14 +402,10 @@ def GnNinjaBuildAll(rel_out_dir):
   def MakeNinjaRelPath(suffix):
     return os.path.join(os.path.relpath(OUT_DIR, SRC_DIR), rel_out_dir + suffix)
 
-  platform = getos.GetPlatform()
+  GnNinjaBuild('x64', MakeNinjaRelPath('-x64'), ['nacl_sdk_untrusted=true'])
+  GnNinjaBuild('x86', MakeNinjaRelPath('-x86'))
 
-  GnNinjaBuild('x64', MakeNinjaRelPath('-x64'),
-      ['nacl_sdk_untrusted=true'])
-  if platform != 'mac':
-    GnNinjaBuild('x86', MakeNinjaRelPath('-x86'))
-
-  if platform == 'linux':
+  if getos.GetPlatform() == 'linux':
     GnNinjaBuild('arm', MakeNinjaRelPath('-arm'))
 
 
@@ -435,9 +430,10 @@ def GnNinjaBuild(arch, out_dir, extra_gn_args=None):
   if platform == 'mac':
     if options.mac_sdk:
       gn_args.append('mac_sdk_min="%s"' % options.mac_sdk)
-    # Without this the target_cpu='arm' build complains about missing code
-    # signing identity
-    gn_args.append('use_ios_simulator=true')
+    if arch == 'arm':
+      # Without this the target_cpu='arm' build complains about missing code
+      # signing identity
+      gn_args.append('use_ios_simulator=true')
 
   gn_exe = GetGNExecutable(platform)
 
@@ -853,8 +849,11 @@ def main(args):
   if options.tar:
     BuildStepTarBundle(pepper_ver, tarfile)
 
-  if platform == 'linux':
-    BuildStepBuildPNaClComponent(pepper_ver, chrome_revision)
+  # TODO(sbc): Re-enable this once we switch the pnacl component build
+  # from gyp to gn:
+  # https://bugs.chromium.org/p/chromium/issues/detail?id=646241
+  #if platform == 'linux':
+    #BuildStepBuildPNaClComponent(pepper_ver, chrome_revision)
 
   if options.build_app_engine and platform == 'linux':
     BuildStepBuildAppEngine(pepperdir, chrome_revision)
@@ -870,7 +869,7 @@ def main(args):
     # Only archive sdk_tools/naclport/pnacl_component on linux.
     if platform == 'linux':
       BuildStepArchiveSDKTools()
-      BuildStepArchivePNaClComponent(chrome_revision)
+      #BuildStepArchivePNaClComponent(chrome_revision)
 
   return 0
 

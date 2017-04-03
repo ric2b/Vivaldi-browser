@@ -2,7 +2,8 @@
  * Copyright (C) 1999 Lars Knoll (knoll@kde.org)
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
  *           (C) 2000 Dirk Mueller (mueller@kde.org)
- * Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010 Apple Inc. All rights reserved.
+ * Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010 Apple Inc. All rights
+ * reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -31,30 +32,37 @@ namespace blink {
 
 class FormControlState;
 
-class CORE_EXPORT HTMLFormControlElementWithState : public HTMLFormControlElement {
-public:
-    ~HTMLFormControlElementWithState() override;
+class CORE_EXPORT HTMLFormControlElementWithState
+    : public HTMLFormControlElement {
+ public:
+  ~HTMLFormControlElementWithState() override;
 
-    bool canContainRangeEndPoint() const final { return false; }
+  bool canContainRangeEndPoint() const final { return false; }
 
-    virtual bool shouldAutocomplete() const;
-    virtual bool shouldSaveAndRestoreFormControlState() const;
-    virtual FormControlState saveFormControlState() const;
-    // The specified FormControlState must have at least one string value.
-    virtual void restoreFormControlState(const FormControlState&) { }
-    void notifyFormStateChanged();
+  virtual bool shouldAutocomplete() const;
+  virtual bool shouldSaveAndRestoreFormControlState() const;
+  virtual FormControlState saveFormControlState() const;
+  // The specified FormControlState must have at least one string value.
+  virtual void restoreFormControlState(const FormControlState&) {}
+  void notifyFormStateChanged();
 
-protected:
-    HTMLFormControlElementWithState(const QualifiedName& tagName, Document&, HTMLFormElement*);
+ protected:
+  HTMLFormControlElementWithState(const QualifiedName& tagName,
+                                  Document&,
+                                  HTMLFormElement*);
 
-    void finishParsingChildren() override;
-    InsertionNotificationRequest insertedInto(ContainerNode*) override;
-    void removedFrom(ContainerNode*) override;
-    bool isFormControlElementWithState() const final;
+  void finishParsingChildren() override;
+  InsertionNotificationRequest insertedInto(ContainerNode*) override;
+  void removedFrom(ContainerNode*) override;
+  bool isFormControlElementWithState() const final;
 };
 
-DEFINE_TYPE_CASTS(HTMLFormControlElementWithState, FormAssociatedElement, control, control->isFormControlElementWithState(), control.isFormControlElementWithState());
+DEFINE_TYPE_CASTS(HTMLFormControlElementWithState,
+                  FormAssociatedElement,
+                  control,
+                  control->isFormControlElementWithState(),
+                  control.isFormControlElementWithState());
 
-} // namespace blink
+}  // namespace blink
 
 #endif

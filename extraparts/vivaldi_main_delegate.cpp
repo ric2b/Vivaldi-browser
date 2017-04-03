@@ -4,7 +4,11 @@
 
 #include "extensions/vivaldi_extensions_client.h"
 
-VivaldiMainDelegate::VivaldiMainDelegate() {
+VivaldiMainDelegate::VivaldiMainDelegate()
+ : VivaldiMainDelegate(base::TimeTicks()) {}
+
+VivaldiMainDelegate::VivaldiMainDelegate(base::TimeTicks exe_entry_point_ticks)
+ : ChromeMainDelegate(exe_entry_point_ticks) {
   extensions::VivaldiExtensionsClient::RegisterVivaldiExtensionsClient();
 }
 

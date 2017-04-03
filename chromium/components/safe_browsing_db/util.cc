@@ -8,7 +8,6 @@
 
 #include "base/macros.h"
 #include "base/trace_event/trace_event.h"
-#include "components/safe_browsing_db/v4_protocol_manager_util.h"
 #include "crypto/sha2.h"
 #include "net/base/escape.h"
 #include "url/gurl.h"
@@ -37,6 +36,16 @@ ThreatMetadata::ThreatMetadata()
 ThreatMetadata::ThreatMetadata(const ThreatMetadata& other) = default;
 
 ThreatMetadata::~ThreatMetadata() {}
+
+bool ThreatMetadata::operator==(const ThreatMetadata& other) const {
+  return threat_pattern_type == other.threat_pattern_type &&
+         api_permissions == other.api_permissions &&
+         population_id == other.population_id;
+}
+
+bool ThreatMetadata::operator!=(const ThreatMetadata& other) const {
+  return !operator==(other);
+}
 
 // SBCachedFullHashResult ------------------------------------------------------
 

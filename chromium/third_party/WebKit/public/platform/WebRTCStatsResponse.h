@@ -10,16 +10,16 @@
  *     notice, this list of conditions and the following disclaimer in the
  *     documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
- * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #ifndef WebRTCStatsResponse_h
@@ -27,7 +27,7 @@
 
 #include "WebCommon.h"
 #include "WebPrivatePtr.h"
-#include "WebRTCStats.h"
+#include "WebRTCLegacyStats.h"
 #include "WebString.h"
 
 namespace blink {
@@ -35,30 +35,29 @@ namespace blink {
 class RTCStatsResponseBase;
 
 class WebRTCStatsResponse {
-public:
-    WebRTCStatsResponse(const WebRTCStatsResponse& other) { assign(other); }
-    WebRTCStatsResponse() { }
-    ~WebRTCStatsResponse() { reset(); }
+ public:
+  WebRTCStatsResponse(const WebRTCStatsResponse& other) { assign(other); }
+  WebRTCStatsResponse() {}
+  ~WebRTCStatsResponse() { reset(); }
 
-    WebRTCStatsResponse& operator=(const WebRTCStatsResponse& other)
-    {
-        assign(other);
-        return *this;
-    }
-    BLINK_PLATFORM_EXPORT void assign(const WebRTCStatsResponse&);
-    BLINK_PLATFORM_EXPORT void reset();
+  WebRTCStatsResponse& operator=(const WebRTCStatsResponse& other) {
+    assign(other);
+    return *this;
+  }
+  BLINK_PLATFORM_EXPORT void assign(const WebRTCStatsResponse&);
+  BLINK_PLATFORM_EXPORT void reset();
 
-    BLINK_PLATFORM_EXPORT void addStats(const WebRTCStats&);
+  BLINK_PLATFORM_EXPORT void addStats(const WebRTCLegacyStats&);
 
 #if INSIDE_BLINK
-    BLINK_PLATFORM_EXPORT WebRTCStatsResponse(RTCStatsResponseBase*);
-    BLINK_PLATFORM_EXPORT operator RTCStatsResponseBase*() const;
+  BLINK_PLATFORM_EXPORT WebRTCStatsResponse(RTCStatsResponseBase*);
+  BLINK_PLATFORM_EXPORT operator RTCStatsResponseBase*() const;
 #endif
 
-private:
-    WebPrivatePtr<RTCStatsResponseBase> m_private;
+ private:
+  WebPrivatePtr<RTCStatsResponseBase> m_private;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // WebRTCStatsResponse_h
+#endif  // WebRTCStatsResponse_h

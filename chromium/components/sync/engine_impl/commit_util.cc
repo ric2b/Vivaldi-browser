@@ -4,10 +4,7 @@
 
 #include "components/sync/engine_impl/commit_util.h"
 
-#include <stdint.h>
-
 #include <limits>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -18,7 +15,6 @@
 #include "components/sync/base/unique_position.h"
 #include "components/sync/engine_impl/syncer_proto_util.h"
 #include "components/sync/protocol/bookmark_specifics.pb.h"
-#include "components/sync/protocol/sync.pb.h"
 #include "components/sync/syncable/directory.h"
 #include "components/sync/syncable/entry.h"
 #include "components/sync/syncable/model_neutral_mutable_entry.h"
@@ -74,8 +70,7 @@ void AddClientConfigParamsToMessage(ModelTypeSet enabled_types,
     int field_number = GetSpecificsFieldNumberFromModelType(it.Get());
     config_params->mutable_enabled_type_ids()->Add(field_number);
   }
-  config_params->set_tabs_datatype_enabled(
-      enabled_types.Has(syncer::PROXY_TABS));
+  config_params->set_tabs_datatype_enabled(enabled_types.Has(PROXY_TABS));
   config_params->set_cookie_jar_mismatch(cookie_jar_mismatch);
 }
 

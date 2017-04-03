@@ -18,7 +18,7 @@ const char kSoftwareRenderingListJson[] = LONG_STRING_CONST(
 {
   "name": "software rendering list",
   // Please update the version number whenever you change this file.
-  "version": "11.12",
+  "version": "11.17",
   "entries": [
     {
       "id": 1,
@@ -691,16 +691,6 @@ LONG_STRING_CONST(
       ]
     },
     {
-      "id": 82,
-      "description": "MediaCodec is still too buggy to use for encoding (b/11536167)",
-      "os": {
-        "type": "android"
-      },
-      "features": [
-        "accelerated_video_encode"
-      ]
-    },
-    {
       "id": 86,
       "description": "Intel Graphics Media Accelerator 3150 causes the GPU process to hang running WebGL",
       "cr_bugs": [305431],
@@ -1252,6 +1242,101 @@ LONG_STRING_CONST(
       ]
     },
     {
+      "id": 122,
+      "description": "GPU rasterization should only be enabled on NVIDIA Pascal and Maxwell, Intel Broadwell+, and AMD RX-R5 GPUs for now.",
+      "cr_bugs": [643850],
+      "os": {
+        "type": "win"
+      },
+      "features": [
+        "gpu_rasterization"
+      ],
+      "exceptions": [
+        {
+          "vendor_id": "0x10de",
+          "device_id": ["0x1340", "0x1341", "0x1344", "0x1346", "0x1347",
+                        "0x1348", "0x1349", "0x134d", "0x134e", "0x134f",
+                        "0x137a", "0x137d", "0x1380", "0x1381", "0x1382",
+                        "0x1389", "0x1390", "0x1391", "0x1392", "0x1393",
+                        "0x1398", "0x139a", "0x139b", "0x139c", "0x139d",
+                        "0x13b0", "0x13b1", "0x13b2", "0x13b9", "0x13ba",
+                        "0x13bb", "0x13bc", "0x13bd", "0x13c0", "0x13c1",
+                        "0x13c2", "0x13c3", "0x13d7", "0x13d8", "0x13d9",
+                        "0x13da", "0x13f0", "0x13f1", "0x13f2", "0x13f3",
+                        "0x13f8", "0x13f9", "0x13fa", "0x1401", "0x1402",
+                        "0x1406", "0x1407", "0x1427", "0x1430", "0x1431",
+                        "0x1617", "0x1618", "0x1619", "0x161a", "0x1667",
+                        "0x17c2", "0x17c8", "0x17f0", "0x17fd", "0x15f0",
+                        "0x15f1", "0x15f8", "0x15f9", "0x1725", "0x172e",
+                        "0x172f", "0x1b00", "0x1b01", "0x1b70", "0x1b78",
+                        "0x1b80", "0x1b81", "0x1b82", "0x1b83", "0x1bb0",
+                        "0x1bb1", "0x1bb4", "0x1c00", "0x1c01", "0x1c02",
+                        "0x1c03", "0x1c30", "0x1c70", "0x1c80", "0x1c81",
+                        "0x1c82", "0x1ca7", "0x1ca8", "0x1caa", "0x1d01"]
+
+        },
+        {
+          "os": {
+            "type": "win",
+            "version": {
+              "op": ">=",
+              "value": "10.0"
+            }
+          },
+          "vendor_id": "0x8086",
+          "device_id": ["0x1602", "0x1606", "0x160a", "0x160b", "0x160d",
+                        "0x160e", "0x1612", "0x1616", "0x161a", "0x161b",
+                        "0x161d", "0x161e", "0x1622", "0x1626", "0x162a",
+                        "0x162b", "0x162d", "0x162e", "0x22b0", "0x22b1",
+                        "0x22b2", "0x22b3", "0x1902", "0x1906", "0x190a",
+                        "0x190b", "0x190e", "0x1912", "0x1913", "0x1915",
+                        "0x1916", "0x1917", "0x191a", "0x191b", "0x191d",
+                        "0x191e", "0x1921", "0x1923", "0x1926", "0x1927",
+                        "0x192a", "0x192b", "0x192d", "0x1932", "0x193a",
+                        "0x193b", "0x193d", "0x0a84", "0x1a84", "0x1a85",
+                        "0x5a84", "0x5a85", "0x5916", "0x5913", "0x5906",
+                        "0x5926", "0x5921", "0x5915", "0x590e", "0x591e",
+                        "0x5912", "0x5917", "0x5902", "0x591b", "0x593b",
+                        "0x590b", "0x591a", "0x590a", "0x591d", "0x5908",
+                        "0x5923", "0x5927"]
+        },
+        {
+          "os": {
+            "type": "win",
+            "version": {
+              "op": ">=",
+              "value": "10.0"
+            }
+          },
+          "vendor_id": "0x1002",
+          "device_id": ["0x1309", "0x130a", "0x130c", "0x130d", "0x130e",
+                        "0x130f", "0x130f", "0x130f", "0x130f", "0x130f",
+                        "0x1313", "0x1313", "0x1313", "0x1313", "0x1315",
+                        "0x1315", "0x1315", "0x1315", "0x1315", "0x1316",
+                        "0x1318", "0x131c", "0x131d", "0x6600", "0x6604",
+                        "0x6604", "0x6605", "0x6605", "0x6610", "0x6610",
+                        "0x6610", "0x6611", "0x6617", "0x6640", "0x6646",
+                        "0x6646", "0x6647", "0x6647", "0x6658", "0x665d",
+                        "0x665f", "0x6660", "0x6660", "0x6663", "0x6664",
+                        "0x6665", "0x6665", "0x6665", "0x6667", "0x67b0",
+                        "0x67b0", "0x67b1", "0x67b1", "0x67b9", "0x67df",
+                        "0x67df", "0x67ef", "0x67ef", "0x67ef", "0x67ef",
+                        "0x6810", "0x6811", "0x6820", "0x6820", "0x6821",
+                        "0x6821", "0x682b", "0x6835", "0x6900", "0x6900",
+                        "0x6900", "0x6900", "0x6900", "0x6901", "0x6907",
+                        "0x6907", "0x6920", "0x6920", "0x6921", "0x6938",
+                        "0x6938", "0x6938", "0x6939", "0x6939", "0x6939",
+                        "0x7300", "0x7300", "0x7300", "0x7300", "0x9851",
+                        "0x9851", "0x9855", "0x9855", "0x9874", "0x9874",
+                        "0x9874", "0x9874", "0x9874", "0x9874", "0x9874",
+                        "0x9874", "0x9874", "0x9874", "0x9874", "0x9874",
+                        "0x9874", "0x9874", "0x9874", "0x9874", "0x9874",
+                        "0x9874", "0x9874", "0x9874", "0x9874", "0x98e4",
+                        "0x98e4", "0x98e4"]
+        }
+      ]
+    },
+    {
       "id": 123,
       "description": "Accelerated VPx decoding is hanging on some videos.",
       "cr_bugs": [654111],
@@ -1261,6 +1346,36 @@ LONG_STRING_CONST(
       "vendor_id": "0x8086",
       "features": [
         "accelerated_vpx_decode"
+      ]
+    },
+    {
+      "id": 124,
+      "description": "New AMD drivers have rendering glitches with GPU Rasterization",
+      "cr_bugs": [653538],
+      "os" : {
+        "type": "win"
+      },
+      "vendor_id": "0x1002",
+      "driver_version": {
+        "op": ">",
+        "value": "16.200.1035.1001"
+      },
+      "features": [
+        "gpu_rasterization"
+      ]
+    },
+)  // String split to avoid MSVC char limit.
+LONG_STRING_CONST(
+    {
+      "id": 127,
+      "description": "AMD cards have rendering issues with GPU rasterization on Windows",
+      "cr_bugs": [660897],
+      "os": {
+        "type": "win"
+      },
+      "vendor_id": "0x1002",
+      "features": [
+        "gpu_rasterization"
       ]
     }
   ]

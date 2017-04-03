@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2008 Torch Mobile Inc. All rights reserved. (http://www.torchmobile.com/)
+ * Copyright (C) 2008 Torch Mobile Inc. All rights reserved.
+ * (http://www.torchmobile.com/)
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -37,7 +38,6 @@ WTF_EXPORT void setAlwaysZeroRandomSourceForTesting();
 // These functions are threadsafe.
 WTF_EXPORT uint32_t cryptographicallyRandomNumber();
 WTF_EXPORT void cryptographicallyRandomValues(void* buffer, size_t length);
-
 }
 
 using WTF::cryptographicallyRandomNumber;

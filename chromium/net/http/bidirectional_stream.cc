@@ -22,7 +22,10 @@
 #include "net/http/http_network_session.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_stream.h"
+#include "net/log/net_log.h"
 #include "net/log/net_log_capture_mode.h"
+#include "net/log/net_log_event_type.h"
+#include "net/log/net_log_source_type.h"
 #include "net/spdy/spdy_header_block.h"
 #include "net/spdy/spdy_http_utils.h"
 #include "net/ssl/ssl_cert_request_info.h"
@@ -70,7 +73,7 @@ BidirectionalStream::BidirectionalStream(
                           session,
                           send_request_headers_automatically,
                           delegate,
-                          base::WrapUnique(new base::Timer(false, false))) {}
+                          base::MakeUnique<base::Timer>(false, false)) {}
 
 BidirectionalStream::BidirectionalStream(
     std::unique_ptr<BidirectionalStreamRequestInfo> request_info,
@@ -79,8 +82,8 @@ BidirectionalStream::BidirectionalStream(
     Delegate* delegate,
     std::unique_ptr<base::Timer> timer)
     : request_info_(std::move(request_info)),
-      net_log_(BoundNetLog::Make(session->net_log(),
-                                 NetLog::SOURCE_BIDIRECTIONAL_STREAM)),
+      net_log_(NetLogWithSource::Make(session->net_log(),
+                                      NetLogSourceType::BIDIRECTIONAL_STREAM)),
       session_(session),
       send_request_headers_automatically_(send_request_headers_automatically),
       request_headers_sent_(false),
@@ -90,9 +93,13 @@ BidirectionalStream::BidirectionalStream(
   DCHECK(delegate_);
   DCHECK(request_info_);
 
+  // Start time should be measured before connect.
+  load_timing_info_.request_start_time = base::Time::Now();
+  load_timing_info_.request_start = base::TimeTicks::Now();
+
   if (net_log_.IsCapturing()) {
     net_log_.BeginEvent(
-        NetLog::TYPE_BIDIRECTIONAL_STREAM_ALIVE,
+        NetLogEventType::BIDIRECTIONAL_STREAM_ALIVE,
         base::Bind(&NetLogCallback, &request_info_->url, &request_info_->method,
                    base::Unretained(&request_info_->extra_headers)));
   }
@@ -100,7 +107,6 @@ BidirectionalStream::BidirectionalStream(
   SSLConfig server_ssl_config;
   session->ssl_config_service()->GetSSLConfig(&server_ssl_config);
   session->GetAlpnProtos(&server_ssl_config.alpn_protos);
-  session->GetNpnProtos(&server_ssl_config.npn_protos);
 
   if (!request_info_->url.SchemeIs(url::kHttpsScheme)) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -128,7 +134,7 @@ BidirectionalStream::BidirectionalStream(
 BidirectionalStream::~BidirectionalStream() {
   UpdateHistograms();
   if (net_log_.IsCapturing()) {
-    net_log_.EndEvent(NetLog::TYPE_BIDIRECTIONAL_STREAM_ALIVE);
+    net_log_.EndEvent(NetLogEventType::BIDIRECTIONAL_STREAM_ALIVE);
   }
 }
 
@@ -147,13 +153,13 @@ int BidirectionalStream::ReadData(IOBuffer* buf, int buf_len) {
   if (rv > 0) {
     read_end_time_ = base::TimeTicks::Now();
     net_log_.AddByteTransferEvent(
-        NetLog::TYPE_BIDIRECTIONAL_STREAM_BYTES_RECEIVED, rv, buf->data());
+        NetLogEventType::BIDIRECTIONAL_STREAM_BYTES_RECEIVED, rv, buf->data());
   } else if (rv == ERR_IO_PENDING) {
     read_buffer_ = buf;
     // Bytes will be logged in OnDataRead().
   }
   if (net_log_.IsCapturing()) {
-    net_log_.AddEvent(NetLog::TYPE_BIDIRECTIONAL_STREAM_READ_DATA,
+    net_log_.AddEvent(NetLogEventType::BIDIRECTIONAL_STREAM_READ_DATA,
                       NetLog::IntCallback("rv", rv));
   }
   return rv;
@@ -167,7 +173,7 @@ void BidirectionalStream::SendData(const scoped_refptr<IOBuffer>& data,
   DCHECK(write_buffer_len_list_.empty());
 
   if (net_log_.IsCapturing()) {
-    net_log_.AddEvent(NetLog::TYPE_BIDIRECTIONAL_STREAM_SEND_DATA);
+    net_log_.AddEvent(NetLogEventType::BIDIRECTIONAL_STREAM_SEND_DATA);
   }
   stream_impl_->SendData(data, length, end_stream);
   write_buffer_list_.push_back(data);
@@ -184,7 +190,7 @@ void BidirectionalStream::SendvData(
   DCHECK(write_buffer_len_list_.empty());
 
   if (net_log_.IsCapturing()) {
-    net_log_.AddEvent(NetLog::TYPE_BIDIRECTIONAL_STREAM_SENDV_DATA,
+    net_log_.AddEvent(NetLogEventType::BIDIRECTIONAL_STREAM_SENDV_DATA,
                       NetLog::IntCallback("num_buffers", buffers.size()));
   }
   stream_impl_->SendvData(buffers, lengths, end_stream);
@@ -215,15 +221,20 @@ int64_t BidirectionalStream::GetTotalSentBytes() const {
   return stream_impl_->GetTotalSentBytes();
 }
 
+void BidirectionalStream::GetLoadTimingInfo(
+    LoadTimingInfo* load_timing_info) const {
+  *load_timing_info = load_timing_info_;
+}
+
 void BidirectionalStream::OnStreamReady(bool request_headers_sent) {
   request_headers_sent_ = request_headers_sent;
   if (net_log_.IsCapturing()) {
     net_log_.AddEvent(
-        NetLog::TYPE_BIDIRECTIONAL_STREAM_READY,
+        NetLogEventType::BIDIRECTIONAL_STREAM_READY,
         NetLog::BoolCallback("request_headers_sent", request_headers_sent));
   }
-  send_start_time_ = base::TimeTicks::Now();
-  send_end_time_ = send_start_time_;
+  load_timing_info_.send_start = base::TimeTicks::Now();
+  load_timing_info_.send_end = load_timing_info_.send_start;
   delegate_->OnStreamReady(request_headers_sent);
 }
 
@@ -236,11 +247,20 @@ void BidirectionalStream::OnHeadersReceived(
     return;
   }
   if (net_log_.IsCapturing()) {
-    net_log_.AddEvent(NetLog::TYPE_BIDIRECTIONAL_STREAM_RECV_HEADERS,
+    net_log_.AddEvent(NetLogEventType::BIDIRECTIONAL_STREAM_RECV_HEADERS,
                       base::Bind(&NetLogHeadersCallback, &response_headers));
   }
-  read_start_time_ = base::TimeTicks::Now();
-  read_end_time_ = read_start_time_;
+  // Impl should only provide |connect_timing| and |socket_reused| info,
+  // so use a copy to get these information only.
+  LoadTimingInfo impl_load_timing_info;
+  bool has_load_timing =
+      stream_impl_->GetLoadTimingInfo(&impl_load_timing_info);
+  if (has_load_timing) {
+    load_timing_info_.connect_timing = impl_load_timing_info.connect_timing;
+    load_timing_info_.socket_reused = impl_load_timing_info.socket_reused;
+  }
+  load_timing_info_.receive_headers_end = base::TimeTicks::Now();
+  read_end_time_ = load_timing_info_.receive_headers_end;
   session_->http_stream_factory()->ProcessAlternativeServices(
       session_, response_info.headers.get(),
       url::SchemeHostPort(request_info_->url));
@@ -252,7 +272,7 @@ void BidirectionalStream::OnDataRead(int bytes_read) {
 
   if (net_log_.IsCapturing()) {
     net_log_.AddByteTransferEvent(
-        NetLog::TYPE_BIDIRECTIONAL_STREAM_BYTES_RECEIVED, bytes_read,
+        NetLogEventType::BIDIRECTIONAL_STREAM_BYTES_RECEIVED, bytes_read,
         read_buffer_->data());
   }
   read_end_time_ = base::TimeTicks::Now();
@@ -267,20 +287,21 @@ void BidirectionalStream::OnDataSent() {
   if (net_log_.IsCapturing()) {
     if (write_buffer_list_.size() > 1) {
       net_log_.BeginEvent(
-          NetLog::TYPE_BIDIRECTIONAL_STREAM_BYTES_SENT_COALESCED,
+          NetLogEventType::BIDIRECTIONAL_STREAM_BYTES_SENT_COALESCED,
           NetLog::IntCallback("num_buffers_coalesced",
                               write_buffer_list_.size()));
     }
     for (size_t i = 0; i < write_buffer_list_.size(); ++i) {
       net_log_.AddByteTransferEvent(
-          NetLog::TYPE_BIDIRECTIONAL_STREAM_BYTES_SENT,
+          NetLogEventType::BIDIRECTIONAL_STREAM_BYTES_SENT,
           write_buffer_len_list_[i], write_buffer_list_[i]->data());
     }
     if (write_buffer_list_.size() > 1) {
-      net_log_.EndEvent(NetLog::TYPE_BIDIRECTIONAL_STREAM_BYTES_SENT_COALESCED);
+      net_log_.EndEvent(
+          NetLogEventType::BIDIRECTIONAL_STREAM_BYTES_SENT_COALESCED);
     }
   }
-  send_end_time_ = base::TimeTicks::Now();
+  load_timing_info_.send_end = base::TimeTicks::Now();
   write_buffer_list_.clear();
   write_buffer_len_list_.clear();
   delegate_->OnDataSent();
@@ -288,7 +309,7 @@ void BidirectionalStream::OnDataSent() {
 
 void BidirectionalStream::OnTrailersReceived(const SpdyHeaderBlock& trailers) {
   if (net_log_.IsCapturing()) {
-    net_log_.AddEvent(NetLog::TYPE_BIDIRECTIONAL_STREAM_RECV_TRAILERS,
+    net_log_.AddEvent(NetLogEventType::BIDIRECTIONAL_STREAM_RECV_TRAILERS,
                       base::Bind(&NetLogHeadersCallback, &trailers));
   }
   read_end_time_ = base::TimeTicks::Now();
@@ -297,7 +318,7 @@ void BidirectionalStream::OnTrailersReceived(const SpdyHeaderBlock& trailers) {
 
 void BidirectionalStream::OnFailed(int status) {
   if (net_log_.IsCapturing()) {
-    net_log_.AddEvent(NetLog::TYPE_BIDIRECTIONAL_STREAM_FAILED,
+    net_log_.AddEvent(NetLogEventType::BIDIRECTIONAL_STREAM_FAILED,
                       NetLog::IntCallback("net_error", status));
   }
   NotifyFailed(status);
@@ -315,7 +336,6 @@ void BidirectionalStream::OnBidirectionalStreamImplReady(
     BidirectionalStreamImpl* stream) {
   DCHECK(!stream_impl_);
 
-  start_time_ = base::TimeTicks::Now();
   stream_request_.reset();
   stream_impl_.reset(stream);
   stream_impl_->Start(request_info_.get(), net_log_,
@@ -385,33 +405,40 @@ void BidirectionalStream::NotifyFailed(int error) {
 void BidirectionalStream::UpdateHistograms() {
   // If the request failed before response is started, treat the metrics as
   // bogus and skip logging.
-  if (start_time_.is_null() || read_start_time_.is_null() ||
-      read_end_time_.is_null() || send_start_time_.is_null() ||
-      send_end_time_.is_null()) {
+  if (load_timing_info_.request_start.is_null() ||
+      load_timing_info_.receive_headers_end.is_null() ||
+      read_end_time_.is_null() || load_timing_info_.send_start.is_null() ||
+      load_timing_info_.send_end.is_null()) {
     return;
   }
   if (GetProtocol() == kProtoHTTP2) {
     UMA_HISTOGRAM_TIMES("Net.BidirectionalStream.TimeToReadStart.HTTP2",
-                        read_start_time_ - start_time_);
+                        load_timing_info_.receive_headers_end -
+                            load_timing_info_.request_start);
     UMA_HISTOGRAM_TIMES("Net.BidirectionalStream.TimeToReadEnd.HTTP2",
-                        read_end_time_ - start_time_);
-    UMA_HISTOGRAM_TIMES("Net.BidirectionalStream.TimeToSendStart.HTTP2",
-                        send_start_time_ - start_time_);
-    UMA_HISTOGRAM_TIMES("Net.BidirectionalStream.TimeToSendEnd.HTTP2",
-                        send_end_time_ - start_time_);
+                        read_end_time_ - load_timing_info_.request_start);
+    UMA_HISTOGRAM_TIMES(
+        "Net.BidirectionalStream.TimeToSendStart.HTTP2",
+        load_timing_info_.send_start - load_timing_info_.request_start);
+    UMA_HISTOGRAM_TIMES(
+        "Net.BidirectionalStream.TimeToSendEnd.HTTP2",
+        load_timing_info_.send_end - load_timing_info_.request_start);
     UMA_HISTOGRAM_COUNTS("Net.BidirectionalStream.ReceivedBytes.HTTP2",
                          stream_impl_->GetTotalReceivedBytes());
     UMA_HISTOGRAM_COUNTS("Net.BidirectionalStream.SentBytes.HTTP2",
                          stream_impl_->GetTotalSentBytes());
   } else if (GetProtocol() == kProtoQUIC1SPDY3) {
     UMA_HISTOGRAM_TIMES("Net.BidirectionalStream.TimeToReadStart.QUIC",
-                        read_start_time_ - start_time_);
+                        load_timing_info_.receive_headers_end -
+                            load_timing_info_.request_start);
     UMA_HISTOGRAM_TIMES("Net.BidirectionalStream.TimeToReadEnd.QUIC",
-                        read_end_time_ - start_time_);
-    UMA_HISTOGRAM_TIMES("Net.BidirectionalStream.TimeToSendStart.QUIC",
-                        send_start_time_ - start_time_);
-    UMA_HISTOGRAM_TIMES("Net.BidirectionalStream.TimeToSendEnd.QUIC",
-                        send_end_time_ - start_time_);
+                        read_end_time_ - load_timing_info_.request_start);
+    UMA_HISTOGRAM_TIMES(
+        "Net.BidirectionalStream.TimeToSendStart.QUIC",
+        load_timing_info_.send_start - load_timing_info_.request_start);
+    UMA_HISTOGRAM_TIMES(
+        "Net.BidirectionalStream.TimeToSendEnd.QUIC",
+        load_timing_info_.send_end - load_timing_info_.request_start);
     UMA_HISTOGRAM_COUNTS("Net.BidirectionalStream.ReceivedBytes.QUIC",
                          stream_impl_->GetTotalReceivedBytes());
     UMA_HISTOGRAM_COUNTS("Net.BidirectionalStream.SentBytes.QUIC",

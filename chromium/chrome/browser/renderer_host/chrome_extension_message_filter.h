@@ -57,7 +57,13 @@ class ChromeExtensionMessageFilter : public content::BrowserMessageFilter,
                                 const ExtensionMsg_ExternalConnectionInfo& info,
                                 const std::string& channel_name,
                                 bool include_tls_channel_id,
-                                int* port_id);
+                                int request_id);
+  void OnOpenChannelToExtensionSync(
+      int routing_id,
+      const ExtensionMsg_ExternalConnectionInfo& info,
+      const std::string& channel_name,
+      bool include_tls_channel_id,
+      int* port_id);
   void OpenChannelToExtensionOnUIThread(
       int source_process_id,
       int source_routing_id,
@@ -67,7 +73,7 @@ class ChromeExtensionMessageFilter : public content::BrowserMessageFilter,
       bool include_tls_channel_id);
   void OnOpenChannelToNativeApp(int routing_id,
                                 const std::string& native_app_name,
-                                int* port_id);
+                                int request_id);
   void OpenChannelToNativeAppOnUIThread(int source_routing_id,
                                         int receiver_port_id,
                                         const std::string& native_app_name);
@@ -75,7 +81,7 @@ class ChromeExtensionMessageFilter : public content::BrowserMessageFilter,
                           const ExtensionMsg_TabTargetConnectionInfo& info,
                           const std::string& extension_id,
                           const std::string& channel_name,
-                          int* port_id);
+                          int request_id);
   void OpenChannelToTabOnUIThread(
       int source_process_id,
       int source_routing_id,

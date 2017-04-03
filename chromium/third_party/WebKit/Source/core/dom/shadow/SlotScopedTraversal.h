@@ -5,20 +5,25 @@
 #ifndef SlotScopedTraversal_h
 #define SlotScopedTraversal_h
 
+#include "core/CoreExport.h"
+
 namespace blink {
 
 class Element;
 class HTMLSlotElement;
 
-class SlotScopedTraversal {
-public:
-    static HTMLSlotElement* findScopeOwnerSlot(const Element&);
-    static Element* nearestAncestorAssignedToSlot(const Element&);
-    static Element* next(const Element&);
-    static Element* previous(const Element&);
-    static bool isSlotScoped(const Element&);
+class CORE_EXPORT SlotScopedTraversal {
+ public:
+  static HTMLSlotElement* findScopeOwnerSlot(const Element&);
+  static Element* nearestInclusiveAncestorAssignedToSlot(const Element&);
+  static Element* next(const Element&);
+  static Element* previous(const Element&);
+  static Element* firstAssignedToSlot(HTMLSlotElement&);
+  static Element* lastAssignedToSlot(HTMLSlotElement&);
+
+  static bool isSlotScoped(const Element&);
 };
 
-} // namespace blink
+}  // namespace blink
 
 #endif

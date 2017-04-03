@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/arc/gpu_arc_video_service_host.h"
 
 #include <string>
+#include <utility>
 
 #include "base/location.h"
 #include "base/logging.h"
@@ -42,9 +43,7 @@ void ConnectToVideoAcceleratorServiceOnIOThread(
 
 class VideoAcceleratorFactoryService : public mojom::VideoAcceleratorFactory {
  public:
-  explicit VideoAcceleratorFactoryService(
-      mojom::VideoAcceleratorFactoryRequest request)
-      : binding_(this, std::move(request)) {}
+  VideoAcceleratorFactoryService() = default;
 
   void Create(mojom::VideoAcceleratorServiceRequest request) override {
     content::BrowserThread::PostTask(
@@ -54,8 +53,6 @@ class VideoAcceleratorFactoryService : public mojom::VideoAcceleratorFactory {
   }
 
  private:
-  mojo::StrongBinding<VideoAcceleratorFactory> binding_;
-
   DISALLOW_COPY_AND_ASSIGN(VideoAcceleratorFactoryService);
 };
 
@@ -73,7 +70,8 @@ GpuArcVideoServiceHost::~GpuArcVideoServiceHost() {
 
 void GpuArcVideoServiceHost::OnInstanceReady() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  auto* video_instance = arc_bridge_service()->video()->instance();
+  auto* video_instance =
+      arc_bridge_service()->video()->GetInstanceForMethod("Init");
   DCHECK(video_instance);
   video_instance->Init(binding_.CreateInterfacePtrAndBind());
 }
@@ -150,11 +148,9 @@ void GpuArcVideoServiceHost::OnBootstrapVideoAcceleratorFactory(
   }
   callback.Run(std::move(child_handle), token);
 
-  // The lifetime is managed by the StrongBinding insides the
-  // VideoAcceleratorFactoryService.
-  new VideoAcceleratorFactoryService(
-      mojo::MakeRequest<mojom::VideoAcceleratorFactory>(
-          std::move(server_pipe)));
+  mojo::MakeStrongBinding(base::MakeUnique<VideoAcceleratorFactoryService>(),
+                          mojo::MakeRequest<mojom::VideoAcceleratorFactory>(
+                              std::move(server_pipe)));
 }
 
 }  // namespace arc

@@ -188,7 +188,11 @@ QuicVersionVector FilterSupportedVersions(QuicVersionVector versions) {
   filtered_versions.clear();  // Guaranteed by spec not to change capacity.
   for (QuicVersion version : versions) {
     if (version < QUIC_VERSION_32) {
-      if (!FLAGS_quic_disable_pre_32) {
+      if (!FLAGS_quic_disable_pre_32 && !FLAGS_quic_disable_pre_34) {
+        filtered_versions.push_back(version);
+      }
+    } else if (version < QUIC_VERSION_34) {
+      if (!FLAGS_quic_disable_pre_34) {
         filtered_versions.push_back(version);
       }
     } else if (version == QUIC_VERSION_35) {
@@ -307,7 +311,8 @@ ostream& operator<<(ostream& os, const QuicPacketHeader& header) {
   }
   if (header.public_header.nonce != nullptr) {
     os << ", diversification_nonce: "
-       << net::QuicUtils::HexDecode(*header.public_header.nonce);
+       << QuicUtils::HexEncode(StringPiece(header.public_header.nonce->data(),
+                                           header.public_header.nonce->size()));
   }
   os << ", fec_flag: " << header.fec_flag
      << ", entropy_flag: " << header.entropy_flag
@@ -406,64 +411,6 @@ ostream& operator<<(ostream& os, const QuicStopWaitingFrame& sent_info) {
   return os;
 }
 
-PacketNumberQueue::const_iterator::const_iterator(
-    IntervalSet<QuicPacketNumber>::const_iterator interval_set_iter,
-    QuicPacketNumber first,
-    QuicPacketNumber last)
-    : interval_set_iter_(std::move(interval_set_iter)),
-      current_(first),
-      last_(last) {}
-
-PacketNumberQueue::const_iterator::const_iterator(const const_iterator& other) =
-    default;
-// TODO(rtenneti): on windows RValue reference gives errors.
-// PacketNumberQueue::const_iterator::const_iterator(const_iterator&& other) =
-//    default;
-PacketNumberQueue::const_iterator::~const_iterator() {}
-
-PacketNumberQueue::const_iterator& PacketNumberQueue::const_iterator::operator=(
-    const const_iterator& other) = default;
-// TODO(rtenneti): on windows RValue reference gives errors.
-// PacketNumberQueue::const_iterator&
-// PacketNumberQueue::const_iterator::operator=(
-//    const_iterator&& other) = default;
-
-bool PacketNumberQueue::const_iterator::operator!=(
-    const const_iterator& other) const {
-  return current_ != other.current_;
-}
-
-bool PacketNumberQueue::const_iterator::operator==(
-    const const_iterator& other) const {
-  return current_ == other.current_;
-}
-
-PacketNumberQueue::const_iterator::value_type
-    PacketNumberQueue::const_iterator::operator*() const {
-  return current_;
-}
-
-PacketNumberQueue::const_iterator& PacketNumberQueue::const_iterator::
-operator++() {
-  ++current_;
-  if (current_ < last_) {
-    if (current_ >= interval_set_iter_->max()) {
-      ++interval_set_iter_;
-      current_ = interval_set_iter_->min();
-    }
-  } else {
-    current_ = last_;
-  }
-  return *this;
-}
-
-PacketNumberQueue::const_iterator PacketNumberQueue::const_iterator::operator++(
-    int /* postincrement */) {
-  PacketNumberQueue::const_iterator preincrement(*this);
-  operator++();
-  return preincrement;
-}
-
 PacketNumberQueue::PacketNumberQueue() = default;
 PacketNumberQueue::PacketNumberQueue(const PacketNumberQueue& other) = default;
 // TODO(rtenneti): on windows RValue reference gives errors.
@@ -544,68 +491,45 @@ QuicPacketNumber PacketNumberQueue::LastIntervalLength() const {
   return packet_number_intervals_.rbegin()->Length();
 }
 
-PacketNumberQueue::const_iterator PacketNumberQueue::begin() const {
-  QuicPacketNumber first;
-  QuicPacketNumber last;
-  if (packet_number_intervals_.Empty()) {
-    first = 0;
-    last = 0;
-  } else {
-    first = packet_number_intervals_.begin()->min();
-    last = packet_number_intervals_.rbegin()->max();
-  }
-  return const_iterator(packet_number_intervals_.begin(), first, last);
-}
-
-PacketNumberQueue::const_iterator PacketNumberQueue::end() const {
-  QuicPacketNumber last = packet_number_intervals_.Empty()
-                              ? 0
-                              : packet_number_intervals_.rbegin()->max();
-  return const_iterator(packet_number_intervals_.end(), last, last);
-}
-
 PacketNumberQueue::const_iterator PacketNumberQueue::lower_bound(
     QuicPacketNumber packet_number) const {
-  QuicPacketNumber first;
-  QuicPacketNumber last;
-  if (packet_number_intervals_.Empty()) {
-    first = 0;
-    last = 0;
-    return const_iterator(packet_number_intervals_.begin(), first, last);
+  // lower_bound returns the first interval that contains |packet_number| or the
+  // first interval after |packet_number|.
+  auto itr = packet_number_intervals_.Find(packet_number);
+  if (itr != packet_number_intervals_.end()) {
+    return itr;
   }
-  if (!packet_number_intervals_.Contains(packet_number)) {
-    return end();
+  for (itr = packet_number_intervals_.begin();
+       itr != packet_number_intervals_.end(); ++itr) {
+    if (packet_number < itr->min()) {
+      return itr;
+    }
   }
-  IntervalSet<QuicPacketNumber>::const_iterator it =
-      packet_number_intervals_.Find(packet_number);
-  first = packet_number;
-  last = packet_number_intervals_.rbegin()->max();
-  return const_iterator(it, first, last);
-}
-
-PacketNumberQueue::const_interval_iterator PacketNumberQueue::begin_intervals()
-    const {
-  return packet_number_intervals_.begin();
-}
-
-PacketNumberQueue::const_interval_iterator PacketNumberQueue::end_intervals()
-    const {
   return packet_number_intervals_.end();
 }
 
-PacketNumberQueue::const_reverse_interval_iterator
-PacketNumberQueue::rbegin_intervals() const {
+PacketNumberQueue::const_iterator PacketNumberQueue::begin() const {
+  return packet_number_intervals_.begin();
+}
+
+PacketNumberQueue::const_iterator PacketNumberQueue::end() const {
+  return packet_number_intervals_.end();
+}
+
+PacketNumberQueue::const_reverse_iterator PacketNumberQueue::rbegin() const {
   return packet_number_intervals_.rbegin();
 }
 
-PacketNumberQueue::const_reverse_interval_iterator
-PacketNumberQueue::rend_intervals() const {
+PacketNumberQueue::const_reverse_iterator PacketNumberQueue::rend() const {
   return packet_number_intervals_.rend();
 }
 
 ostream& operator<<(ostream& os, const PacketNumberQueue& q) {
-  for (QuicPacketNumber packet_number : q) {
-    os << packet_number << " ";
+  for (const Interval<QuicPacketNumber>& interval : q) {
+    for (QuicPacketNumber packet_number = interval.min();
+         packet_number < interval.max(); ++packet_number) {
+      os << packet_number << " ";
+    }
   }
   return os;
 }
@@ -802,33 +726,40 @@ ostream& operator<<(ostream& os, const QuicEncryptedPacket& s) {
 QuicReceivedPacket::QuicReceivedPacket(const char* buffer,
                                        size_t length,
                                        QuicTime receipt_time)
-    : QuicEncryptedPacket(buffer, length),
-      receipt_time_(receipt_time),
-      ttl_(0) {}
+    : QuicReceivedPacket(buffer,
+                         length,
+                         receipt_time,
+                         false /* owns_buffer */) {}
 
 QuicReceivedPacket::QuicReceivedPacket(const char* buffer,
                                        size_t length,
                                        QuicTime receipt_time,
                                        bool owns_buffer)
-    : QuicEncryptedPacket(buffer, length, owns_buffer),
-      receipt_time_(receipt_time),
-      ttl_(0) {}
+    : QuicReceivedPacket(buffer,
+                         length,
+                         receipt_time,
+                         owns_buffer,
+                         false /* potentially_small_mtu */,
+                         -1 /* ttl */,
+                         false /* ttl_valid */) {}
 
 QuicReceivedPacket::QuicReceivedPacket(const char* buffer,
                                        size_t length,
                                        QuicTime receipt_time,
                                        bool owns_buffer,
+                                       bool potentially_small_mtu,
                                        int ttl,
                                        bool ttl_valid)
     : QuicEncryptedPacket(buffer, length, owns_buffer),
       receipt_time_(receipt_time),
-      ttl_(ttl_valid ? ttl : -1) {}
+      ttl_(ttl_valid ? ttl : -1),
+      potentially_small_mtu_(potentially_small_mtu) {}
 
 QuicReceivedPacket* QuicReceivedPacket::Clone() const {
   char* buffer = new char[this->length()];
   memcpy(buffer, this->data(), this->length());
   return new QuicReceivedPacket(buffer, this->length(), receipt_time(), true,
-                                ttl(), ttl() >= 0);
+                                potentially_small_mtu(), ttl(), ttl() >= 0);
 }
 
 ostream& operator<<(ostream& os, const QuicReceivedPacket& s) {
@@ -854,6 +785,7 @@ StringPiece QuicPacket::Plaintext(QuicVersion version) const {
 
 QuicVersionManager::QuicVersionManager(QuicVersionVector supported_versions)
     : disable_pre_32_(FLAGS_quic_disable_pre_32),
+      disable_pre_34_(FLAGS_quic_disable_pre_34),
       enable_version_35_(FLAGS_quic_enable_version_35),
       enable_version_36_(FLAGS_quic_enable_version_36_v2),
       allowed_supported_versions_(supported_versions),
@@ -864,9 +796,11 @@ QuicVersionManager::~QuicVersionManager() {}
 
 const QuicVersionVector& QuicVersionManager::GetSupportedVersions() {
   if (disable_pre_32_ != FLAGS_quic_disable_pre_32 ||
+      disable_pre_34_ != FLAGS_quic_disable_pre_34 ||
       enable_version_35_ != FLAGS_quic_enable_version_35 ||
       enable_version_36_ != FLAGS_quic_enable_version_36_v2) {
     disable_pre_32_ = FLAGS_quic_disable_pre_32;
+    disable_pre_34_ = FLAGS_quic_disable_pre_34;
     enable_version_35_ = FLAGS_quic_enable_version_35;
     enable_version_36_ = FLAGS_quic_enable_version_36_v2;
     filtered_supported_versions_ =

@@ -5,10 +5,9 @@
 #include <algorithm>
 #include <vector>
 
-#include "ash/common/ash_switches.h"
 #include "ash/common/material_design/material_design_controller.h"
-#include "ash/common/shelf/shelf.h"
 #include "ash/common/shelf/shelf_widget.h"
+#include "ash/common/shelf/wm_shelf.h"
 #include "ash/display/display_manager.h"
 #include "ash/shell.h"
 #include "ash/test/ash_md_test_base.h"
@@ -60,7 +59,7 @@ TEST_P(DIPTest, WorkArea) {
   display::Screen* screen = display::Screen::GetScreen();
 
   const display::Display display_2x = screen->GetDisplayNearestWindow(root);
-  const DisplayInfo display_info_2x =
+  const display::ManagedDisplayInfo display_info_2x =
       Shell::GetInstance()->display_manager()->GetDisplayInfo(display_2x.id());
 
   // The |bounds_in_pixel()| should report bounds in pixel coordinate.
@@ -76,7 +75,7 @@ TEST_P(DIPTest, WorkArea) {
 
   // Sanity check if the workarea's inset hight is same as
   // the shelf's height.
-  Shelf* shelf = Shelf::ForPrimaryDisplay();
+  WmShelf* shelf = GetPrimaryShelf();
   EXPECT_EQ(display_2x.bounds().InsetsFrom(work_area).height(),
             shelf->shelf_widget()->GetNativeView()->layer()->bounds().height());
 }

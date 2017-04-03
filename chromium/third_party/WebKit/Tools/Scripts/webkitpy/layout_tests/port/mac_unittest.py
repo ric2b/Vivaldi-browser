@@ -57,8 +57,8 @@ class MacPortTest(port_testcase.PortTestCase):
 
         # Test that we prefer the legacy dir over the new dir.
         options = optparse.Values({'configuration': 'Release', 'build_directory': None})
-        self.assert_build_path(options, ['/mock-checkout/xcodebuild/Release',
-                                         '/mock-checkout/out/Release'], '/mock-checkout/xcodebuild/Release')
+        self.assert_build_path(
+            options, ['/mock-checkout/xcodebuild/Release', '/mock-checkout/out/Release'], '/mock-checkout/xcodebuild/Release')
 
     def test_build_path_timestamps(self):
         options = optparse.Values({'configuration': 'Release', 'build_directory': None})
@@ -74,11 +74,15 @@ class MacPortTest(port_testcase.PortTestCase):
 
     def test_driver_name_option(self):
         self.assertTrue(self.make_port()._path_to_driver().endswith('Content Shell'))
-        self.assertTrue(self.make_port(options=optparse.Values(dict(driver_name='OtherDriver')))._path_to_driver().endswith('OtherDriver'))
+        port = self.make_port(options=optparse.Values(dict(driver_name='OtherDriver')))
+        self.assertTrue(port._path_to_driver().endswith('OtherDriver'))  # pylint: disable=protected-access
 
     def test_path_to_image_diff(self):
         self.assertEqual(self.make_port()._path_to_image_diff(), '/mock-checkout/out/Release/image_diff')
 
-    def test_expectation_files(self):
-        # FIXME: crbug.com/589709 - Delete this test override once the 10.11 failures have been rebaselined or triaged.
-        pass
+    def test_path_to_apache_config_file(self):
+        port = self.make_port()
+        port._apache_version = lambda: '2.2'  # pylint: disable=protected-access
+        self.assertEqual(
+            port.path_to_apache_config_file(),
+            '/mock-checkout/third_party/WebKit/LayoutTests/http/conf/apache2-httpd-2.2.conf')

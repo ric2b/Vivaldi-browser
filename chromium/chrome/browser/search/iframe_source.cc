@@ -50,14 +50,12 @@ bool IframeSource::ShouldDenyXFrameOptions() const {
 }
 
 bool IframeSource::GetOrigin(
-    int render_process_id,
-    int render_frame_id,
+    const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
     std::string* origin) const {
-  content::RenderFrameHost* rfh =
-      content::RenderFrameHost::FromID(render_process_id, render_frame_id);
-  content::WebContents* contents =
-      content::WebContents::FromRenderFrameHost(rfh);
-  if (contents == NULL)
+  if (wc_getter.is_null())
+    return false;
+  content::WebContents* contents = wc_getter.Run();
+  if (!contents)
     return false;
   const content::NavigationEntry* entry =
       contents->GetController().GetVisibleEntry();
@@ -80,11 +78,10 @@ void IframeSource::SendResource(
 
 void IframeSource::SendJSWithOrigin(
     int resource_id,
-    int render_process_id,
-    int render_frame_id,
+    const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
     const content::URLDataSource::GotDataCallback& callback) {
   std::string origin;
-  if (!GetOrigin(render_process_id, render_frame_id, &origin)) {
+  if (!GetOrigin(wc_getter, &origin)) {
     callback.Run(NULL);
     return;
   }

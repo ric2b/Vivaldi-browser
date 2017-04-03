@@ -11,12 +11,12 @@
 #include "chrome/browser/notifications/notification_ui_manager.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
+#include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_urls.h"
-#include "grit/generated_resources.h"
-#include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 
@@ -69,7 +69,7 @@ void ExtensionInstalledNotification::Click() {
     return;
 
   AppLaunchParams params = CreateAppLaunchParamsUserContainer(
-      profile_, extension, NEW_FOREGROUND_TAB,
+      profile_, extension, WindowOpenDisposition::NEW_FOREGROUND_TAB,
       extensions::SOURCE_INSTALLED_NOTIFICATION);
   OpenApplication(params);
 }

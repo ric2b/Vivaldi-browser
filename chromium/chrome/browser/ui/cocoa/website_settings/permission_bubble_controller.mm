@@ -34,10 +34,10 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/elide_url.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/user_metrics.h"
-#include "grit/components_strings.h"
 #include "skia/ext/skia_utils_mac.h"
 #include "ui/base/cocoa/cocoa_base_utils.h"
 #import "ui/base/cocoa/controls/hyperlink_text_view.h"
@@ -45,6 +45,9 @@
 #include "ui/base/cocoa/window_size_constants.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "ui/base/models/simple_menu_model.h"
+#include "ui/gfx/color_palette.h"
+#include "ui/gfx/image/image_skia_util_mac.h"
+#include "ui/gfx/paint_vector_icon.h"
 #include "url/gurl.h"
 
 using base::UserMetricsAction;
@@ -81,7 +84,8 @@ const NSInteger kFullscreenLeftOffset = 40;
 - (id)initForURL:(const GURL&)url
          allowed:(BOOL)allow
            index:(int)index
-        delegate:(PermissionPrompt::Delegate*)delegate;
+        delegate:(PermissionPrompt::Delegate*)delegate
+         profile:(Profile*)profile;
 
 // Returns the maximum width of its possible titles.
 - (CGFloat)maximumTitleWidth;
@@ -92,7 +96,8 @@ const NSInteger kFullscreenLeftOffset = 40;
 - (id)initForURL:(const GURL&)url
          allowed:(BOOL)allow
            index:(int)index
-        delegate:(PermissionPrompt::Delegate*)delegate {
+        delegate:(PermissionPrompt::Delegate*)delegate
+         profile:(Profile*)profile {
   if (self = [super initWithFrame:NSZeroRect pullsDown:NO]) {
     ContentSetting setting =
         allow ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK;
@@ -110,7 +115,8 @@ const NSInteger kFullscreenLeftOffset = 40;
                                                   [blockSelf title])];
         });
 
-    menuModel_.reset(new PermissionMenuModel(url, setting, changeCallback));
+    menuModel_.reset(
+        new PermissionMenuModel(profile, url, setting, changeCallback));
     menuController_.reset([[MenuController alloc] initWithModel:menuModel_.get()
                                          useWithPopUpButtonCell:NO]);
     [self setMenu:[menuController_ menu]];
@@ -506,8 +512,9 @@ const NSInteger kFullscreenLeftOffset = 40;
       [[NSView alloc] initWithFrame:NSZeroRect]);
   base::scoped_nsobject<NSImageView> permissionIcon(
       [[NSImageView alloc] initWithFrame:NSZeroRect]);
-  [permissionIcon setImage:ui::ResourceBundle::GetSharedInstance().
-      GetNativeImageNamed(request->GetIconId()).ToNSImage()];
+  [permissionIcon
+      setImage:NSImageFromImageSkia(gfx::CreateVectorIcon(
+                   request->GetIconId(), 18, gfx::kChromeIconGrey))];
   [permissionIcon setFrameSize:kPermissionIconSize];
   [permissionView addSubview:permissionIcon];
 
@@ -575,7 +582,8 @@ const NSInteger kFullscreenLeftOffset = 40;
       [[AllowBlockMenuButton alloc] initForURL:request->GetOrigin()
                                        allowed:allow
                                          index:index
-                                      delegate:delegate_]);
+                                      delegate:delegate_
+                                       profile:browser_->profile()]);
   return button.autorelease();
 }
 

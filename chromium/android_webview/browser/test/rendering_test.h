@@ -11,6 +11,7 @@
 #include "android_webview/browser/render_thread_manager_client.h"
 #include "android_webview/browser/test/fake_window.h"
 #include "base/macros.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "cc/resources/resource.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -26,6 +27,10 @@ class CompositorFrame;
 namespace content {
 class SynchronousCompositor;
 class TestSynchronousCompositor;
+}
+
+namespace ui {
+class TouchHandleDrawable;
 }
 
 namespace android_webview {
@@ -53,6 +58,7 @@ class RenderingTest : public testing::Test,
                          float max_page_scale_factor) override {}
   void DidOverscroll(const gfx::Vector2d& overscroll_delta,
                      const gfx::Vector2dF& overscroll_velocity) override {}
+  ui::TouchHandleDrawable* CreateDrawable() override;
 
   // WindowHooks overrides.
   void WillOnDraw() override;
@@ -92,11 +98,10 @@ class RenderingTest : public testing::Test,
   std::unique_ptr<content::TestSynchronousCompositor> compositor_;
 
  private:
-  void QuitMessageLoop();
-
   void DrawGL(AwDrawGLInfo* aw_draw_gl_info);
 
   const std::unique_ptr<base::MessageLoop> message_loop_;
+  base::RunLoop run_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderingTest);
 };

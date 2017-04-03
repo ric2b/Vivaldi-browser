@@ -8,7 +8,7 @@
 
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/sys_byteorder.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -18,7 +18,7 @@
 #include "net/dns/dns_protocol.h"
 #include "net/dns/dns_response.h"
 #include "net/dns/mdns_client.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_source.h"
 #include "net/udp/datagram_server_socket.h"
 #include "net/udp/udp_server_socket.h"
 
@@ -131,7 +131,7 @@ int PrivetTrafficDetector::Bind() {
   }
   start_time_ = base::Time::Now();
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-  socket_.reset(new net::UDPServerSocket(NULL, net::NetLog::Source()));
+  socket_.reset(new net::UDPServerSocket(NULL, net::NetLogSource()));
   net::IPEndPoint multicast_addr = net::GetMDnsIPEndPoint(address_family_);
   net::IPEndPoint bind_endpoint(
       net::IPAddress::AllZeros(multicast_addr.address().size()),

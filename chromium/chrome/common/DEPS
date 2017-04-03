@@ -1,5 +1,5 @@
 include_rules = [
-  "+chrome/grit",  # For generated headers
+  "+chrome/grit",
   "+chromeos",  # For chromeos_switches.h
   "+components/autofill/content/common",
   "+components/autofill/core/common",
@@ -10,7 +10,6 @@ include_rules = [
   "+components/content_settings/core/common",
   "+components/crash/core/common",
   "+components/crx_file",
-  "+components/data_reduction_proxy/content/common",
   "+components/data_reduction_proxy/core/common",
   "+components/dom_distiller/core",
   "+components/flags_ui/flags_ui_switches.h",
@@ -23,18 +22,17 @@ include_rules = [
   "+components/policy/core/common",
   "+components/printing/common",
   "+components/signin/core/common",
-  "+components/strings/grit",
   "+components/translate/core/common",
   "+components/url_formatter",
   "+components/version_info",
   "+extensions/common",
   "+gin/public",  # For profiling.cc
   "+google_apis/gaia",  # For gaia_switches.h
-  "+grit",  # For generated headers. TODO(thestig): Remove.
   "+media",
   "+ppapi/c",
   "+ppapi/shared_impl",
   "+ppapi/thunk",
+  "+sandbox/linux/services/credentials.h",
   "+third_party/kasko",
 
   # FIXME - refactor code and remove these dependencies

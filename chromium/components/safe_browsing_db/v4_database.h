@@ -25,14 +25,44 @@ typedef base::Callback<void(std::unique_ptr<V4Database>)>
 // requests.
 typedef base::Callback<void()> DatabaseUpdatedCallback;
 
-// This hash_map maps the UpdateListIdentifiers to their corresponding in-memory
-// stores, which contain the hash prefixes for that UpdateListIdentifier as well
-// as manage their storage on disk.
-typedef base::hash_map<UpdateListIdentifier, std::unique_ptr<V4Store>> StoreMap;
+// Maps the ListIdentifiers to their corresponding in-memory stores, which
+// contain the hash prefixes for that ListIdentifier as well as manage their
+// storage on disk.
+typedef base::hash_map<ListIdentifier, std::unique_ptr<V4Store>> StoreMap;
 
-// Map of identifier for any store that had a hash prefix matching the given
-// full hash to the matching hash prefix.
-typedef base::hash_map<UpdateListIdentifier, HashPrefix> MatchedHashPrefixMap;
+// Associates metadata for a list with its ListIdentifier.
+struct ListInfo {
+  ListInfo(const bool fetch_updates,
+           const std::string& filename,
+           const ListIdentifier& list_id,
+           const SBThreatType sb_threat_type);
+  ~ListInfo();
+
+  ListIdentifier list_id() const { return list_id_; }
+  std::string filename() const { return filename_; }
+  SBThreatType sb_threat_type() const { return sb_threat_type_; }
+  bool fetch_updates() const { return fetch_updates_; }
+
+ private:
+  // Whether to fetch and store updates for this list.
+  bool fetch_updates_;
+
+  // The ASCII name of the file on disk. This file is created inside the
+  // user-data directory. For instance, the ListIdentifier could be for URL
+  // expressions for UwS on Windows platform, and the corresponding file on disk
+  // could be named: "UrlUws.store"
+  std::string filename_;
+
+  // The list being read from/written to the disk.
+  ListIdentifier list_id_;
+
+  // The threat type enum value for this store.
+  SBThreatType sb_threat_type_;
+
+  ListInfo();
+};
+
+typedef std::vector<ListInfo> ListInfos;
 
 // Factory for creating V4Database. Tests implement this factory to create fake
 // databases for testing.
@@ -42,7 +72,7 @@ class V4DatabaseFactory {
   virtual V4Database* CreateV4Database(
       const scoped_refptr<base::SequencedTaskRunner>& db_task_runner,
       const base::FilePath& base_dir_path,
-      const StoreFileNameMap& store_file_name_map) = 0;
+      const ListInfos& list_infos) = 0;
 };
 
 // The on-disk databases are shared among all profiles, as it doesn't contain
@@ -61,7 +91,7 @@ class V4Database {
   static void Create(
       const scoped_refptr<base::SequencedTaskRunner>& db_task_runner,
       const base::FilePath& base_path,
-      const StoreFileNameMap& store_file_name_map,
+      const ListInfos& list_infos,
       NewDatabaseReadyCallback callback);
 
   // Destroys the provided v4_database on its task_runner since this may be a
@@ -79,12 +109,12 @@ class V4Database {
   std::unique_ptr<StoreStateMap> GetStoreStateMap();
 
   // Searches for a hash prefix matching the |full_hash| in stores in the
-  // database, filtered by |stores_to_look|, and returns the identifier of the
+  // database, filtered by |stores_to_check|, and returns the identifier of the
   // store along with the matching hash prefix in |matched_hash_prefix_map|.
   virtual void GetStoresMatchingFullHash(
       const FullHash& full_hash,
-      const base::hash_set<UpdateListIdentifier>& stores_to_look,
-      MatchedHashPrefixMap* matched_hash_prefix_map);
+      const StoresToCheck& stores_to_check,
+      StoreAndHashPrefixes* matched_store_and_full_hashes);
 
   // Deletes the current database and creates a new one.
   virtual bool ResetDatabase();
@@ -115,19 +145,19 @@ class V4Database {
   static void CreateOnTaskRunner(
       const scoped_refptr<base::SequencedTaskRunner>& db_task_runner,
       const base::FilePath& base_path,
-      const StoreFileNameMap& store_file_name_map,
+      const ListInfos& list_infos,
       const scoped_refptr<base::SingleThreadTaskRunner>& callback_task_runner,
       NewDatabaseReadyCallback callback);
 
   // Callback called when a new store has been created and is ready to be used.
   // This method updates the store_map_ to point to the new store, which causes
   // the old store to get deleted.
-  void UpdatedStoreReady(UpdateListIdentifier identifier,
+  void UpdatedStoreReady(ListIdentifier identifier,
                          std::unique_ptr<V4Store> store);
 
   const scoped_refptr<base::SequencedTaskRunner> db_task_runner_;
 
-  // Map of UpdateListIdentifier to the V4Store.
+  // Map of ListIdentifier to the V4Store.
   const std::unique_ptr<StoreMap> store_map_;
 
   DatabaseUpdatedCallback db_updated_callback_;

@@ -93,13 +93,8 @@ class CC_EXPORT LayerImpl {
 
   // Interactions with attached animations.
   gfx::ScrollOffset ScrollOffsetForAnimation() const;
-  void OnScrollOffsetAnimated(const gfx::ScrollOffset& scroll_offset);
-  void OnTransformIsCurrentlyAnimatingChanged(bool is_currently_animating);
-  void OnTransformIsPotentiallyAnimatingChanged(bool has_potential_animation);
-  void OnOpacityIsCurrentlyAnimatingChanged(bool is_currently_animating);
-  void OnOpacityIsPotentiallyAnimatingChanged(bool has_potential_animation);
-  void OnFilterIsCurrentlyAnimatingChanged(bool is_currently_animating);
-  void OnFilterIsPotentiallyAnimatingChanged(bool has_potential_animation);
+  void OnIsAnimatingChanged(const PropertyAnimationState& mask,
+                            const PropertyAnimationState& state);
   bool IsActive() const;
 
   void DistributeScroll(ScrollState* scroll_state);
@@ -250,8 +245,6 @@ class CC_EXPORT LayerImpl {
   void ClearRenderSurfaceLayerList();
   void SetHasRenderSurface(bool has_render_surface);
 
-  void SetForceRenderSurface(bool has_render_surface);
-
   RenderSurfaceImpl* render_surface() const { return render_surface_.get(); }
 
   // The render surface which this layer draws into. This can be either owned by
@@ -383,12 +376,16 @@ class CC_EXPORT LayerImpl {
   virtual void DidBeginTracing();
 
   // Release resources held by this layer. Called when the output surface
-  // that rendered this layer was lost or a rendering mode switch has occured.
+  // that rendered this layer was lost.
   virtual void ReleaseResources();
 
-  // Recreate resources that are required after they were released by a
-  // ReleaseResources call.
-  virtual void RecreateResources();
+  // Release tile resources held by this layer. Called when a rendering mode
+  // switch has occured and tiles are no longer valid.
+  virtual void ReleaseTileResources();
+
+  // Recreate tile resources held by this layer after they were released by a
+  // ReleaseTileResources call.
+  virtual void RecreateTileResources();
 
   virtual std::unique_ptr<LayerImpl> CreateLayerImpl(LayerTreeImpl* tree_impl);
   virtual void PushPropertiesTo(LayerImpl* layer);
@@ -437,8 +434,6 @@ class CC_EXPORT LayerImpl {
   void UpdatePropertyTreeForScrollingAndAnimationIfNeeded();
 
   bool IsHidden() const;
-
-  bool InsideReplica() const;
 
   float GetIdealContentsScale() const;
 

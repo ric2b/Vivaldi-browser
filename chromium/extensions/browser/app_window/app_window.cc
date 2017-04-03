@@ -79,6 +79,8 @@
 #if defined(OS_WIN)
 #include "ui/display/win/screen_win.h"
 #endif
+#include "ui/vivaldi_ui_utils.h"
+#include "extensions/browser/guest_view/web_view/web_view_guest.h"
 
 using content::BrowserContext;
 using content::ConsoleMessageLevel;
@@ -529,6 +531,23 @@ std::unique_ptr<content::BluetoothChooser> AppWindow::RunBluetoothChooser(
     const content::BluetoothChooser::EventHandler& event_handler) {
   return ExtensionsBrowserClient::Get()->CreateBluetoothChooser(frame,
                                                                 event_handler);
+}
+
+void AppWindow::ContentsMouseEvent(WebContents* source,
+                                   const gfx::Point& location,
+                                   bool motion,
+                                   bool exited) {
+  extensions::WebViewGuest* guest =
+      vivaldi::ui_tools::GetActiveWebViewGuest(GetBaseWindow());
+  if (guest) {
+    if (exited) {
+      guest->OnMouseLeave();
+      mouse_has_entered_ = false;
+    } else if (!mouse_has_entered_) {
+      guest->OnMouseEnter();
+      mouse_has_entered_ = true;
+    }
+  }
 }
 
 void AppWindow::RenderViewCreated(content::RenderViewHost* render_view_host) {

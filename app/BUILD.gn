@@ -1,5 +1,4 @@
 import("//vivaldi/gn/config/product.gni")
-import("//vivaldi/gn/deepcopy.gni")
 
 import("resources/vivaldi_grit.gni")
 
@@ -14,22 +13,10 @@ source_set("app") {
   deps = []
 }
 
-if (is_win) {
-  copy("vivaldi_local_profile.bat") {
-    sources = [
-      "vivaldi_local_profile.bat",
-    ]
-    outputs = [
-      "$root_out_dir/vivaldi_local_profile.bat",
-    ]
-  }
-}
-
 group("resources") {
   public_deps = [
     ":vivaldi_native_resources",
     ":vivaldi_native_strings",
-    ":vivaldi_other_resources",
     "resources",
   ]
 }
@@ -68,14 +55,4 @@ grit("vivaldi_unscaled_native_resources") {
                               rebase_path(resource_ids, root_build_dir),
                             ],
                         "list lines")
-}
-
-deepcopy("vivaldi_other_resources") {
-  destination = "$root_gen_dir/vivaldi_resources/other_resources/"
-  basepath = "other_resources/$VIVALDI_RELEASE_KIND/"
-  inputs = [
-    "other_resources/$VIVALDI_RELEASE_KIND/win8/Logo.png",
-    "other_resources/$VIVALDI_RELEASE_KIND/win8/SecondaryTile.png",
-    "other_resources/$VIVALDI_RELEASE_KIND/win8/SmallLogo.png",
-  ]
 }

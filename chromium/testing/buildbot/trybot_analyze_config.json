@@ -16,10 +16,11 @@
       "build/get_landmines.py",
       "build/gyp_chromium",
       "build/linux/sysroot_ld_path.sh",
+      "build/mac_toolchain.py",
       "build/toolchain/get_concurrent_links.py",
       "build/toolchain/mac/.*py",
       "build/util/lib/common/unittest_util.py",
-      "infra/.*",
+      "infra/scripts/.*",
       "DEPS",
       "testing/buildbot/.*",
       "testing/scripts/.*",
@@ -27,6 +28,10 @@
       "third_party/android_platform/development/scripts/.*",
       "tools/clang/blink_gc_plugin/CMakeLists.txt",
       "tools/luci-go/.*"
+    ],
+    "ignores": [
+      "infra/config/recipes.cfg",
+      "infra/recipes/.*"
     ]
   },
   "chromium": {

@@ -17,7 +17,7 @@
 #include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/field_trial.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -71,7 +71,7 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_namespace.h"
@@ -114,11 +114,10 @@
 #endif
 
 #if defined(OS_CHROMEOS)
-#include "ash/common/accessibility_types.h"
-#include "ash/common/ash_switches.h"
-#include "ash/common/system/chromeos/devicetype_utils.h"
-#include "ash/common/wallpaper/wallpaper_delegate.h"
-#include "ash/shell.h"
+#include "ash/common/accessibility_types.h"  // nogncheck
+#include "ash/common/system/chromeos/devicetype_utils.h"  // nogncheck
+#include "ash/common/wallpaper/wallpaper_delegate.h"  // nogncheck
+#include "ash/shell.h"  // nogncheck
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_util.h"
 #include "chrome/browser/chromeos/arc/arc_auth_service.h"
@@ -149,7 +148,7 @@
 #endif
 
 #if defined(USE_ASH)
-#include "ash/common/wm_shell.h"
+#include "ash/common/wm_shell.h"  // nogncheck
 #endif
 
 using base::UserMetricsAction;
@@ -206,8 +205,9 @@ BrowserOptionsHandler::BrowserOptionsHandler()
 }
 
 BrowserOptionsHandler::~BrowserOptionsHandler() {
-  ProfileSyncService* sync_service(ProfileSyncServiceFactory::
-      GetInstance()->GetForProfile(Profile::FromWebUI(web_ui())));
+  browser_sync::ProfileSyncService* sync_service(
+      ProfileSyncServiceFactory::GetInstance()->GetForProfile(
+          Profile::FromWebUI(web_ui())));
   if (sync_service)
     sync_service->RemoveObserver(this);
 
@@ -443,6 +443,7 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
       IDS_OPTIONS_SETTINGS_ACCESSIBILITY_VIRTUAL_KEYBOARD_DESCRIPTION },
     { "accessibilityMonoAudio",
       IDS_OPTIONS_SETTINGS_ACCESSIBILITY_MONO_AUDIO_DESCRIPTION},
+    { "androidAppsTitle", IDS_OPTIONS_ARC_TITLE },
     { "androidAppsEnabled", IDS_OPTIONS_ARC_ENABLE },
     { "androidAppsSettingsLabel", IDS_OPTIONS_ARC_MANAGE_APPS },
     { "arcOptOutConfirmOverlayTabTitle", IDS_ARC_OPT_OUT_TAB_TITLE },
@@ -572,14 +573,6 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
   RegisterCloudPrintValues(values);
 #endif
 
-  // TODO(xdai): Revert this after it's merged to M53.
-#if defined(OS_CHROMEOS)
-  std::string android_apps_title =
-      l10n_util::GetStringUTF8(IDS_OPTIONS_ARC_TITLE) + " (" +
-      l10n_util::GetStringUTF8(IDS_ABOUT_PAGE_CURRENT_CHANNEL_BETA) + ")";
-  values->SetString("androidAppsTitle", android_apps_title);
-#endif
-
   values->SetString("syncLearnMoreURL", chrome::kSyncLearnMoreURL);
   base::string16 omnibox_url = base::ASCIIToUTF16(chrome::kOmniboxLearnMoreURL);
   values->SetString(
@@ -647,13 +640,13 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
   option_full->AppendInteger(ash::MAGNIFIER_FULL);
   option_full->AppendString(l10n_util::GetStringUTF16(
       IDS_OPTIONS_SETTINGS_ACCESSIBILITY_SCREEN_MAGNIFIER_FULL));
-  magnifier_list->Append(option_full.release());
+  magnifier_list->Append(std::move(option_full));
 
   std::unique_ptr<base::ListValue> option_partial(new base::ListValue);
   option_partial->AppendInteger(ash::MAGNIFIER_PARTIAL);
-  option_partial->Append(new base::StringValue(l10n_util::GetStringUTF16(
-      IDS_OPTIONS_SETTINGS_ACCESSIBILITY_SCREEN_MAGNIFIER_PARTIAL)));
-  magnifier_list->Append(option_partial.release());
+  option_partial->AppendString(l10n_util::GetStringUTF16(
+      IDS_OPTIONS_SETTINGS_ACCESSIBILITY_SCREEN_MAGNIFIER_PARTIAL));
+  magnifier_list->Append(std::move(option_partial));
 
   values->Set("magnifierList", magnifier_list.release());
 #endif
@@ -961,7 +954,7 @@ void BrowserOptionsHandler::InitializeHandler() {
   g_browser_process->profile_manager()->
       GetProfileAttributesStorage().AddObserver(this);
 
-  ProfileSyncService* sync_service(
+  browser_sync::ProfileSyncService* sync_service(
       ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile));
   // TODO(blundell): Use a ScopedObserver to observe the PSS so that cleanup on
   // destruction is automatic.
@@ -1546,7 +1539,7 @@ BrowserOptionsHandler::GetSyncStateDictionary() {
       SigninManagerFactory::GetForProfile(profile)->IsSignoutProhibited();
 #endif
 
-  ProfileSyncService* service =
+  browser_sync::ProfileSyncService* service =
       ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile);
   SigninManagerBase* signin = SigninManagerFactory::GetForProfile(profile);
   DCHECK(signin);
@@ -1723,9 +1716,9 @@ void BrowserOptionsHandler::ShowCloudPrintDevicesPage(
     const base::ListValue* args) {
   content::RecordAction(UserMetricsAction("Options_CloudPrintDevicesPage"));
   // Navigate in current tab to devices page.
-  OpenURLParams params(
-      GURL(chrome::kChromeUIDevicesURL), Referrer(),
-      CURRENT_TAB, ui::PAGE_TRANSITION_LINK, false);
+  OpenURLParams params(GURL(chrome::kChromeUIDevicesURL), Referrer(),
+                       WindowOpenDisposition::CURRENT_TAB,
+                       ui::PAGE_TRANSITION_LINK, false);
   web_ui()->GetWebContents()->OpenURL(params);
 }
 
@@ -1962,7 +1955,14 @@ void BrowserOptionsHandler::ShowAndroidAppsSettings(
     return;
   }
 
-  arc::LaunchAndroidSettingsApp(profile);
+  // We only care whether the event came from a keyboard or non-keyboard
+  // (mouse/touch). Set the default flags in such a way that it would appear
+  // that it came from a mouse by default.
+  bool activated_from_keyboard = false;
+  args->GetBoolean(0, &activated_from_keyboard);
+  int flags = activated_from_keyboard ? ui::EF_NONE : ui::EF_LEFT_MOUSE_BUTTON;
+
+  arc::LaunchAndroidSettingsApp(profile, flags);
 }
 
 void BrowserOptionsHandler::ShowAccessibilityTalkBackSettings(

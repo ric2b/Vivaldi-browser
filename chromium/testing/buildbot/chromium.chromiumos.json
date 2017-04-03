@@ -4,62 +4,6 @@
       "All"
     ]
   },
-  "Linux ChromiumOS GN": {
-    "additional_compile_targets": [
-      "gn_all"
-    ],
-    "gtest_tests": [
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "base_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "exo_unittests"
-      },
-      {
-        "args": [
-          "--override-use-gl-with-osmesa-for-tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "mash_unittests"
-      }
-    ]
-  },
-  "Linux ChromiumOS GN (dbg)": {
-    "additional_compile_targets": [
-      "gn_all"
-    ],
-    "gtest_tests": [
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "base_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "exo_unittests"
-      },
-      {
-        "args": [
-          "--override-use-gl-with-osmesa-for-tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "mash_unittests"
-      }
-    ]
-  },
   "Linux ChromiumOS Ozone Tests (1)": {
     "gtest_tests": [
       {
@@ -67,6 +11,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "accessibility_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "angle_unittests"
       },
       {
         "swarming": {
@@ -90,6 +40,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "ash_content_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "ash_unittests"
       },
       {
@@ -103,6 +59,19 @@
           "can_use_on_swarming_builders": true
         },
         "test": "base_unittests"
+      },
+      {
+        "args": [
+          "--override-use-gl-with-osmesa-for-tests",
+          "--run-in-mash",
+          "--test-launcher-filter-file=src/testing/buildbot/filters/mash.browser_tests.filter",
+          "--use-test-config"
+        ],
+        "name": "mash_browser_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": false
+        },
+        "test": "browser_tests"
       },
       {
         "swarming": {
@@ -158,6 +127,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "device_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "display_service_unittests"
       },
       {
         "swarming": {
@@ -249,6 +224,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "media_blink_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "media_mojo_unittests"
       },
       {
         "swarming": {
@@ -418,6 +399,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "app_shell_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "ash_content_unittests"
       },
       {
         "swarming": {
@@ -626,6 +613,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "media_mojo_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "media_unittests"
       },
       {
@@ -639,6 +632,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "midi_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "mus_demo_unittests"
       },
       {
         "swarming": {
@@ -778,6 +777,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "app_shell_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "ash_content_unittests"
       },
       {
         "swarming": {
@@ -943,6 +948,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "media_blink_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "media_mojo_unittests"
       },
       {
         "swarming": {

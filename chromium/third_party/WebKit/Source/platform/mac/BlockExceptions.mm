@@ -20,21 +20,22 @@
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
  * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #import "platform/mac/BlockExceptions.h"
 
 #import "wtf/Assertions.h"
 
-void ReportBlockedObjCException(NSException *exception)
-{
+void ReportBlockedObjCException(NSException* exception) {
 #if DCHECK_IS_ON()
-    NOTREACHED() << "Uncaught exception - " << [[exception description] UTF8String];
-    // This function is marked as NO_RETURN_DUE_TO_ASSERT, but NOTREACHED() and
-    // DCHECK(false) are not recognized as NO_RETURN.
-    CRASH();
+  NOTREACHED() << "Uncaught exception - "
+               << [[exception description] UTF8String];
+  // This function is marked as NO_RETURN_DUE_TO_ASSERT, but NOTREACHED() and
+  // DCHECK(false) are not recognized as NO_RETURN.
+  CRASH();
 #else
-    NSLog(@"*** WebKit discarding exception: <%@> %@", [exception name], [exception reason]);
+  NSLog(@"*** WebKit discarding exception: <%@> %@", [exception name],
+        [exception reason]);
 #endif
 }

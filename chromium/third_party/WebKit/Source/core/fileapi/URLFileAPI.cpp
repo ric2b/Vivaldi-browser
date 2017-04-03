@@ -8,31 +8,39 @@
 #include "core/dom/DOMURL.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/fileapi/Blob.h"
+#include "core/frame/UseCounter.h"
 #include "core/html/PublicURLManager.h"
 
 namespace blink {
 
 // static
-String URLFileAPI::createObjectURL(ExecutionContext* executionContext, Blob* blob, ExceptionState& exceptionState)
-{
-    DCHECK(blob);
-    DCHECK(executionContext);
+String URLFileAPI::createObjectURL(ExecutionContext* executionContext,
+                                   Blob* blob,
+                                   ExceptionState& exceptionState) {
+  DCHECK(blob);
+  DCHECK(executionContext);
 
-    if (blob->isClosed()) {
-        exceptionState.throwDOMException(InvalidStateError, String(blob->isFile() ? "File" : "Blob") + " has been closed.");
-        return String();
-    }
-    return DOMURL::createPublicURL(executionContext, blob, blob->uuid());
+  if (blob->isClosed()) {
+    // TODO(jsbell): The spec doesn't throw, but rather returns a blob: URL
+    // without adding it to the store.
+    exceptionState.throwDOMException(
+        InvalidStateError,
+        String(blob->isFile() ? "File" : "Blob") + " has been closed.");
+    return String();
+  }
+
+  UseCounter::count(executionContext, UseCounter::CreateObjectURLBlob);
+  return DOMURL::createPublicURL(executionContext, blob, blob->uuid());
 }
 
 // static
-void URLFileAPI::revokeObjectURL(ExecutionContext* executionContext, const String& urlString)
-{
-    DCHECK(executionContext);
+void URLFileAPI::revokeObjectURL(ExecutionContext* executionContext,
+                                 const String& urlString) {
+  DCHECK(executionContext);
 
-    KURL url(KURL(), urlString);
-    executionContext->removeURLFromMemoryCache(url);
-    executionContext->publicURLManager().revoke(url);
+  KURL url(KURL(), urlString);
+  executionContext->removeURLFromMemoryCache(url);
+  executionContext->publicURLManager().revoke(url);
 }
 
-} // namespace blink
+}  // namespace blink

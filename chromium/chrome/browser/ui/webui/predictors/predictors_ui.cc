@@ -7,10 +7,10 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/predictors/predictors_handler.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/browser_resources.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
-#include "grit/browser_resources.h"
 
 namespace {
 
@@ -19,6 +19,7 @@ content::WebUIDataSource* CreatePredictorsUIHTMLSource() {
       content::WebUIDataSource::Create(chrome::kChromeUIPredictorsHost);
   source->AddResourcePath("predictors.js", IDR_PREDICTORS_JS);
   source->SetDefaultResource(IDR_PREDICTORS_HTML);
+  source->DisableI18nAndUseGzipForAllPaths();
   return source;
 }
 

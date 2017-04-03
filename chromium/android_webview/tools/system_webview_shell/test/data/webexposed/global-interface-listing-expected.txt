@@ -371,7 +371,6 @@ interface CanvasRenderingContext2D
     getter strokeStyle
     getter textAlign
     getter textBaseline
-    getter webkitImageSmoothingEnabled
     method arc
     method arcTo
     method beginPath
@@ -430,7 +429,6 @@ interface CanvasRenderingContext2D
     setter strokeStyle
     setter textAlign
     setter textBaseline
-    setter webkitImageSmoothingEnabled
 interface ChannelMergerNode : AudioNode
     method constructor
 interface ChannelSplitterNode : AudioNode
@@ -2044,6 +2042,7 @@ interface HTMLMediaElement : HTMLElement
     getter muted
     getter networkState
     getter onencrypted
+    getter onwaitingforkey
     getter paused
     getter playbackRate
     getter played
@@ -2073,6 +2072,7 @@ interface HTMLMediaElement : HTMLElement
     setter loop
     setter muted
     setter onencrypted
+    setter onwaitingforkey
     setter playbackRate
     setter preload
     setter src
@@ -2809,6 +2809,8 @@ interface MediaKeySession : EventTarget
     getter closed
     getter expiration
     getter keyStatuses
+    getter onkeystatuseschange
+    getter onmessage
     getter sessionId
     method close
     method constructor
@@ -2816,6 +2818,8 @@ interface MediaKeySession : EventTarget
     method load
     method remove
     method update
+    setter onkeystatuseschange
+    setter onmessage
 interface MediaKeyStatusMap
     getter size
     method constructor
@@ -4199,7 +4203,6 @@ interface SVGSVGElement : SVGGraphicsElement
     getter preserveAspectRatio
     getter useCurrentView
     getter viewBox
-    getter viewport
     getter width
     getter x
     getter y

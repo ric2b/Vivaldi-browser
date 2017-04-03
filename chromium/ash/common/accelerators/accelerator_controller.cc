@@ -15,6 +15,7 @@
 #include "ash/common/multi_profile_uma.h"
 #include "ash/common/new_window_delegate.h"
 #include "ash/common/session/session_state_delegate.h"
+#include "ash/common/shelf/shelf_widget.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shell_delegate.h"
 #include "ash/common/system/brightness_control_delegate.h"
@@ -23,6 +24,7 @@
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/system_tray_notifier.h"
 #include "ash/common/system/volume_control_delegate.h"
+#include "ash/common/system/web_notification/web_notification_tray.h"
 #include "ash/common/wm/mru_window_tracker.h"
 #include "ash/common/wm/overview/window_selector_controller.h"
 #include "ash/common/wm/window_cycle_controller.h"
@@ -104,6 +106,23 @@ void HandleRotatePaneFocus(FocusCycler::Direction direction) {
     }
   }
   WmShell::Get()->focus_cycler()->RotateFocus(direction);
+}
+
+void HandleFocusShelf() {
+  base::RecordAction(UserMetricsAction("Accel_Focus_Shelf"));
+  // TODO(jamescook): Should this be GetRootWindowForNewWindows()?
+  WmShelf* shelf = WmShelf::ForWindow(WmShell::Get()->GetPrimaryRootWindow());
+  WmShell::Get()->focus_cycler()->FocusWidget(shelf->shelf_widget());
+}
+
+void HandleLaunchAppN(int n) {
+  base::RecordAction(UserMetricsAction("Accel_Launch_App"));
+  WmShelf::LaunchShelfItem(n);
+}
+
+void HandleLaunchLastApp() {
+  base::RecordAction(UserMetricsAction("Accel_Launch_Last_App"));
+  WmShelf::LaunchShelfItem(-1);
 }
 
 void HandleMediaNextTrack() {
@@ -201,6 +220,27 @@ void HandleRestoreTab() {
 void HandleShowKeyboardOverlay() {
   base::RecordAction(UserMetricsAction("Accel_Show_Keyboard_Overlay"));
   WmShell::Get()->new_window_delegate()->ShowKeyboardOverlay();
+}
+
+bool CanHandleShowMessageCenterBubble() {
+  WmWindow* target_root = WmShell::Get()->GetRootWindowForNewWindows();
+  StatusAreaWidget* status_area_widget =
+      WmShelf::ForWindow(target_root)->shelf_widget()->status_area_widget();
+  return status_area_widget &&
+         status_area_widget->web_notification_tray()->visible();
+}
+
+void HandleShowMessageCenterBubble() {
+  base::RecordAction(UserMetricsAction("Accel_Show_Message_Center_Bubble"));
+  WmWindow* target_root = WmShell::Get()->GetRootWindowForNewWindows();
+  StatusAreaWidget* status_area_widget =
+      WmShelf::ForWindow(target_root)->shelf_widget()->status_area_widget();
+  if (status_area_widget) {
+    WebNotificationTray* notification_tray =
+        status_area_widget->web_notification_tray();
+    if (notification_tray->visible())
+      notification_tray->ShowMessageCenterBubble();
+  }
 }
 
 void HandleShowTaskManager() {
@@ -302,11 +342,9 @@ void HandlePositionCenter() {
 void HandleShowImeMenuBubble() {
   base::RecordAction(UserMetricsAction("Accel_Show_Ime_Menu_Bubble"));
 
-  StatusAreaWidget* status_area_widget = ash::WmShell::Get()
-                                             ->GetPrimaryRootWindow()
-                                             ->GetRootWindowController()
-                                             ->GetShelf()
-                                             ->GetStatusAreaWidget();
+  StatusAreaWidget* status_area_widget =
+      WmShelf::ForWindow(WmShell::Get()->GetPrimaryRootWindow())
+          ->GetStatusAreaWidget();
   if (status_area_widget) {
     ImeMenuTray* ime_menu_tray = status_area_widget->ime_menu_tray();
     if (ime_menu_tray && ime_menu_tray->visible() &&
@@ -648,6 +686,14 @@ void AcceleratorController::Init() {
     for (size_t i = 0; i < kDebugAcceleratorDataLength; ++i)
       reserved_actions_.insert(kDebugAcceleratorData[i].action);
   }
+
+  if (debug::DeveloperAcceleratorsEnabled()) {
+    RegisterAccelerators(kDeveloperAcceleratorData,
+                         kDeveloperAcceleratorDataLength);
+    // Developer accelerators are also reserved.
+    for (size_t i = 0; i < kDeveloperAcceleratorDataLength; ++i)
+      reserved_actions_.insert(kDeveloperAcceleratorData[i].action);
+  }
 }
 
 void AcceleratorController::RegisterAccelerators(
@@ -706,6 +752,7 @@ bool AcceleratorController::CanPerformAction(
     case DEBUG_PRINT_LAYER_HIERARCHY:
     case DEBUG_PRINT_VIEW_HIERARCHY:
     case DEBUG_PRINT_WINDOW_HIERARCHY:
+    case DEBUG_TOGGLE_WALLPAPER_MODE:
       return debug::DebugAcceleratorsEnabled();
     case NEW_INCOGNITO_WINDOW:
       return CanHandleNewIncognitoWindow();
@@ -713,6 +760,8 @@ bool AcceleratorController::CanPerformAction(
       return CanHandleNextIme(ime_control_delegate_.get());
     case PREVIOUS_IME:
       return CanHandlePreviousIme(ime_control_delegate_.get());
+    case SHOW_MESSAGE_CENTER_BUBBLE:
+      return CanHandleShowMessageCenterBubble();
     case SWITCH_IME:
       return CanHandleSwitchIme(ime_control_delegate_.get(), accelerator);
     case TOGGLE_APP_LIST:
@@ -743,6 +792,16 @@ bool AcceleratorController::CanPerformAction(
     case EXIT:
     case FOCUS_NEXT_PANE:
     case FOCUS_PREVIOUS_PANE:
+    case FOCUS_SHELF:
+    case LAUNCH_APP_0:
+    case LAUNCH_APP_1:
+    case LAUNCH_APP_2:
+    case LAUNCH_APP_3:
+    case LAUNCH_APP_4:
+    case LAUNCH_APP_5:
+    case LAUNCH_APP_6:
+    case LAUNCH_APP_7:
+    case LAUNCH_LAST_APP:
     case MEDIA_NEXT_TRACK:
     case MEDIA_PLAY_PAUSE:
     case MEDIA_PREV_TRACK:
@@ -806,6 +865,7 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
     case DEBUG_PRINT_LAYER_HIERARCHY:
     case DEBUG_PRINT_VIEW_HIERARCHY:
     case DEBUG_PRINT_WINDOW_HIERARCHY:
+    case DEBUG_TOGGLE_WALLPAPER_MODE:
       debug::PerformDebugActionIfEnabled(action);
       break;
     case EXIT:
@@ -817,6 +877,36 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
       break;
     case FOCUS_PREVIOUS_PANE:
       HandleRotatePaneFocus(FocusCycler::BACKWARD);
+      break;
+    case FOCUS_SHELF:
+      HandleFocusShelf();
+      break;
+    case LAUNCH_APP_0:
+      HandleLaunchAppN(0);
+      break;
+    case LAUNCH_APP_1:
+      HandleLaunchAppN(1);
+      break;
+    case LAUNCH_APP_2:
+      HandleLaunchAppN(2);
+      break;
+    case LAUNCH_APP_3:
+      HandleLaunchAppN(3);
+      break;
+    case LAUNCH_APP_4:
+      HandleLaunchAppN(4);
+      break;
+    case LAUNCH_APP_5:
+      HandleLaunchAppN(5);
+      break;
+    case LAUNCH_APP_6:
+      HandleLaunchAppN(6);
+      break;
+    case LAUNCH_APP_7:
+      HandleLaunchAppN(7);
+      break;
+    case LAUNCH_LAST_APP:
+      HandleLaunchLastApp();
       break;
     case MEDIA_NEXT_TRACK:
       HandleMediaNextTrack();
@@ -853,6 +943,9 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
       break;
     case SHOW_KEYBOARD_OVERLAY:
       HandleShowKeyboardOverlay();
+      break;
+    case SHOW_MESSAGE_CENTER_BUBBLE:
+      HandleShowMessageCenterBubble();
       break;
     case SHOW_TASK_MANAGER:
       HandleShowTaskManager();

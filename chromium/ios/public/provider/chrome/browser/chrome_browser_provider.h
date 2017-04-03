@@ -28,20 +28,27 @@ class CardUnmaskPromptController;
 class CardUnmaskPromptView;
 }
 
-namespace browser_sync {
-class SyncedWindowDelegatesGetter;
-}
-
 namespace net {
 class URLRequestContextGetter;
+}
+
+namespace web {
+class WebState;
+}
+
+namespace sync_sessions {
+class SyncedWindowDelegatesGetter;
 }
 
 namespace user_prefs {
 class PrefRegistrySyncable;
 }
 
-@class UIView;
+@protocol AppRatingPrompt;
 @protocol InfoBarViewProtocol;
+@protocol TextFieldStyling;
+@class UITextField;
+@class UIView;
 typedef UIView<InfoBarViewProtocol>* InfoBarViewPlaceholder;
 
 namespace ios {
@@ -80,6 +87,9 @@ class ChromeBrowserProvider {
       InfoBarViewDelegate* delegate) NS_RETURNS_RETAINED;
   // Returns an instance of a signin resources provider.
   virtual SigninResourcesProvider* GetSigninResourcesProvider();
+  // Sets the current instance of Chrome identity service. Used for testing.
+  virtual void SetChromeIdentityServiceForTesting(
+      std::unique_ptr<ChromeIdentityService> service);
   // Returns an instance of a Chrome identity service.
   virtual ChromeIdentityService* GetChromeIdentityService();
   // Returns an instance of a LiveTabContextProvider.
@@ -106,13 +116,32 @@ class ChromeBrowserProvider {
       const GURL& page_url,
       const std::vector<int>& desired_sizes_in_pixel,
       const favicon_base::FaviconResultsCallback& callback) const;
+  // Creates and returns a new styled text field with the given |frame|.
+  virtual UITextField<TextFieldStyling>* CreateStyledTextField(
+      CGRect frame) const NS_RETURNS_RETAINED;
+  // Creates and returns an app ratings prompt object.  Can return nil if app
+  // ratings prompts are not supported by the provider.
+  virtual id<AppRatingPrompt> CreateAppRatingPrompt() const NS_RETURNS_RETAINED;
+
+  // Initializes the cast service.  Should be called soon after the given
+  // |main_tab_model| is created.
+  // TODO(rohitrao): Change from |id| to |TabModel*| once TabModel is moved into
+  // the Chromium tree.
+  virtual void InitializeCastService(id main_tab_model) const;
+
+  // Attaches any embedder-specific tab helpers to the given |web_state|.  The
+  // owning |tab| is included for helpers that need access to information that
+  // is not yet available through web::WebState.
+  // TODO(rohitrao): Change from |id| to |Tab*| once Tab is moved into the
+  // Chromium tree.
+  virtual void AttachTabHelpers(web::WebState* web_state, id tab) const;
 
   // Returns whether safe browsing is enabled. See the comment on
   // metrics_services_manager_client.h for details on |on_update_callback|.
   virtual bool IsSafeBrowsingEnabled(const base::Closure& on_update_callback);
 
   // Returns the SyncedWindowDelegatesGetter implementation.
-  virtual std::unique_ptr<browser_sync::SyncedWindowDelegatesGetter>
+  virtual std::unique_ptr<sync_sessions::SyncedWindowDelegatesGetter>
   CreateSyncedWindowDelegatesGetter(ios::ChromeBrowserState* browser_state);
 };
 

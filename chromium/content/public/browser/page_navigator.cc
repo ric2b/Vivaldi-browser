@@ -6,12 +6,11 @@
 
 namespace content {
 
-OpenURLParams::OpenURLParams(
-    const GURL& url,
-    const Referrer& referrer,
-    WindowOpenDisposition disposition,
-    ui::PageTransition transition,
-    bool is_renderer_initiated)
+OpenURLParams::OpenURLParams(const GURL& url,
+                             const Referrer& referrer,
+                             WindowOpenDisposition disposition,
+                             ui::PageTransition transition,
+                             bool is_renderer_initiated)
     : url(url),
       referrer(referrer),
       uses_post(false),
@@ -24,11 +23,11 @@ OpenURLParams::OpenURLParams(
       started_from_context_menu(false) {}
 
 OpenURLParams::OpenURLParams(const GURL& url,
-    const Referrer& referrer,
-    WindowOpenDisposition disposition,
-    ui::PageTransition transition,
-    bool is_renderer_initiated,
-    bool started_from_context_menu)
+                             const Referrer& referrer,
+                             WindowOpenDisposition disposition,
+                             ui::PageTransition transition,
+                             bool is_renderer_initiated,
+                             bool started_from_context_menu)
     : url(url),
       referrer(referrer),
       uses_post(false),
@@ -41,11 +40,11 @@ OpenURLParams::OpenURLParams(const GURL& url,
       started_from_context_menu(started_from_context_menu) {}
 
 OpenURLParams::OpenURLParams(const GURL& url,
-    const Referrer& referrer,
-    int frame_tree_node_id,
-    WindowOpenDisposition disposition,
-    ui::PageTransition transition,
-    bool is_renderer_initiated)
+                             const Referrer& referrer,
+                             int frame_tree_node_id,
+                             WindowOpenDisposition disposition,
+                             ui::PageTransition transition,
+                             bool is_renderer_initiated)
     : url(url),
       referrer(referrer),
       uses_post(false),
@@ -60,7 +59,7 @@ OpenURLParams::OpenURLParams(const GURL& url,
 OpenURLParams::OpenURLParams()
     : uses_post(false),
       frame_tree_node_id(-1),
-      disposition(UNKNOWN),
+      disposition(WindowOpenDisposition::UNKNOWN),
       transition(ui::PAGE_TRANSITION_LINK),
       is_renderer_initiated(false),
       should_replace_current_entry(false),

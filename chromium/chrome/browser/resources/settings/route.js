@@ -91,6 +91,12 @@ cr.define('settings', function() {
   r.ADVANCED = new Route('/advanced');
   r.ABOUT = new Route('/help');
 
+  // Navigable dialogs. These are the only non-section children of root pages.
+  // These are disfavored. If we add anymore, we should add explicit support.
+  r.SIGN_OUT = r.BASIC.createChild('/signOut');
+  r.CLEAR_BROWSER_DATA = r.ADVANCED.createChild('/clearBrowserData');
+  r.RESET_DIALOG = r.ADVANCED.createChild('/resetProfileSettings');
+
 <if expr="chromeos">
   r.INTERNET = r.BASIC.createSection('/internet', 'internet');
   r.NETWORK_DETAIL = r.INTERNET.createChild('/networkDetail');
@@ -123,15 +129,11 @@ cr.define('settings', function() {
   r.KEYBOARD = r.DEVICE.createChild('/keyboard-overlay');
   r.DISPLAY = r.DEVICE.createChild('/display');
   r.STYLUS = r.DEVICE.createChild('/stylus');
+  r.STORAGE = r.DEVICE.createChild('/storage');
 </if>
 
   r.PRIVACY = r.ADVANCED.createSection('/privacy', 'privacy');
   r.CERTIFICATES = r.PRIVACY.createChild('/certificates');
-
-  // CLEAR_BROWSER_DATA is the only navigable dialog route. It's the only child
-  // of a root page that's not a section. Don't add any more routes like these.
-  // If more navigable dialogs are needed, add explicit support in Route.
-  r.CLEAR_BROWSER_DATA = r.ADVANCED.createChild('/clearBrowserData');
 
   r.SITE_SETTINGS = r.PRIVACY.createChild('/siteSettings');
   r.SITE_SETTINGS_ALL = r.SITE_SETTINGS.createChild('all');
@@ -153,11 +155,12 @@ cr.define('settings', function() {
   r.SITE_SETTINGS_LOCATION = r.SITE_SETTINGS.createChild('location');
   r.SITE_SETTINGS_MICROPHONE = r.SITE_SETTINGS.createChild('microphone');
   r.SITE_SETTINGS_NOTIFICATIONS = r.SITE_SETTINGS.createChild('notifications');
-  r.SITE_SETTINGS_PLUGINS = r.SITE_SETTINGS.createChild('plugins');
+  r.SITE_SETTINGS_FLASH = r.SITE_SETTINGS.createChild('flash');
   r.SITE_SETTINGS_POPUPS = r.SITE_SETTINGS.createChild('popups');
   r.SITE_SETTINGS_UNSANDBOXED_PLUGINS =
       r.SITE_SETTINGS.createChild('unsandboxedPlugins');
   r.SITE_SETTINGS_USB_DEVICES = r.SITE_SETTINGS.createChild('usbDevices');
+  r.SITE_SETTINGS_ZOOM_LEVELS = r.SITE_SETTINGS.createChild('zoomLevels');
 
 <if expr="chromeos">
   r.DATETIME = r.ADVANCED.createSection('/dateTime', 'dateTime');
@@ -197,9 +200,10 @@ cr.define('settings', function() {
   r.RESET = r.ADVANCED.createSection('/reset', 'reset');
 
 <if expr="chromeos">
-  r.INPUT_METHODS = r.LANGUAGES.createChild('/inputMethods');
-  r.DETAILED_BUILD_INFO = r.ABOUT.createChild('/help/details');
-  r.DETAILED_BUILD_INFO.section = 'about';
+  // "About" is the only section in About, but we still need to create the route
+  // in order to show the subpage on Chrome OS.
+  r.ABOUT_ABOUT = r.ABOUT.createSection('/help/about', 'about');
+  r.DETAILED_BUILD_INFO = r.ABOUT_ABOUT.createChild('/help/details');
 </if>
 
   var routeObservers_ = new Set();
@@ -253,6 +257,9 @@ cr.define('settings', function() {
    */
   var currentQueryParameters_ = new URLSearchParams();
 
+  /** @private {boolean} */
+  var lastRouteChangeWasPopstate_ = false;
+
   /** @private */
   var initializeRouteFromUrlCalled_ = false;
 
@@ -277,11 +284,13 @@ cr.define('settings', function() {
    * Helper function to set the current route and notify all observers.
    * @param {!settings.Route} route
    * @param {!URLSearchParams} queryParameters
+   * @param {boolean} isPopstate
    */
-  var setCurrentRoute = function(route, queryParameters) {
+  var setCurrentRoute = function(route, queryParameters, isPopstate) {
     var oldRoute = currentRoute_;
     currentRoute_ = route;
     currentQueryParameters_ = queryParameters;
+    lastRouteChangeWasPopstate_ = isPopstate;
     for (var observer of routeObservers_)
       observer.currentRouteChanged(currentRoute_, oldRoute);
   };
@@ -292,6 +301,11 @@ cr.define('settings', function() {
   /** @return {!URLSearchParams} */
   var getQueryParameters = function() {
     return new URLSearchParams(currentQueryParameters_);  // Defensive copy.
+  };
+
+  /** @return {boolean} */
+  var lastRouteChangeWasPopstate = function() {
+    return lastRouteChangeWasPopstate_;
   };
 
   /**
@@ -312,7 +326,7 @@ cr.define('settings', function() {
 
     // History serializes the state, so we don't push the actual route object.
     window.history.pushState(currentRoute_.path, '', url);
-    setCurrentRoute(route, params);
+    setCurrentRoute(route, params, false);
   };
 
   /**
@@ -334,7 +348,7 @@ cr.define('settings', function() {
   window.addEventListener('popstate', function(event) {
     // On pop state, do not push the state onto the window.history again.
     setCurrentRoute(getRouteForPath(window.location.pathname) || Route.BASIC,
-                    new URLSearchParams(window.location.search));
+                    new URLSearchParams(window.location.search), true);
   });
 
   return {
@@ -344,6 +358,7 @@ cr.define('settings', function() {
     initializeRouteFromUrl: initializeRouteFromUrl,
     getCurrentRoute: getCurrentRoute,
     getQueryParameters: getQueryParameters,
+    lastRouteChangeWasPopstate: lastRouteChangeWasPopstate,
     navigateTo: navigateTo,
     navigateToPreviousRoute: navigateToPreviousRoute,
   };

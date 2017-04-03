@@ -22,59 +22,71 @@
 
 #include "core/SVGNames.h"
 #include "core/svg/SVGElement.h"
+#include "core/svg/SVGStaticStringList.h"
 #include "platform/Language.h"
 
 namespace blink {
 
 SVGTests::SVGTests(SVGElement* contextElement)
-    : m_requiredFeatures(SVGStaticStringList::create(contextElement, SVGNames::requiredFeaturesAttr))
-    , m_requiredExtensions(SVGStaticStringList::create(contextElement, SVGNames::requiredExtensionsAttr))
-    , m_systemLanguage(SVGStaticStringList::create(contextElement, SVGNames::systemLanguageAttr))
-{
-    ASSERT(contextElement);
+    : m_requiredFeatures(
+          SVGStaticStringList::create(contextElement,
+                                      SVGNames::requiredFeaturesAttr)),
+      m_requiredExtensions(
+          SVGStaticStringList::create(contextElement,
+                                      SVGNames::requiredExtensionsAttr)),
+      m_systemLanguage(
+          SVGStaticStringList::create(contextElement,
+                                      SVGNames::systemLanguageAttr)) {
+  ASSERT(contextElement);
 
-    contextElement->addToPropertyMap(m_requiredFeatures);
-    contextElement->addToPropertyMap(m_requiredExtensions);
-    contextElement->addToPropertyMap(m_systemLanguage);
+  contextElement->addToPropertyMap(m_requiredFeatures);
+  contextElement->addToPropertyMap(m_requiredExtensions);
+  contextElement->addToPropertyMap(m_systemLanguage);
 }
 
-DEFINE_TRACE(SVGTests)
-{
-    visitor->trace(m_requiredFeatures);
-    visitor->trace(m_requiredExtensions);
-    visitor->trace(m_systemLanguage);
+DEFINE_TRACE(SVGTests) {
+  visitor->trace(m_requiredFeatures);
+  visitor->trace(m_requiredExtensions);
+  visitor->trace(m_systemLanguage);
 }
 
-bool SVGTests::isValid() const
-{
-    // No need to check requiredFeatures since hasFeature always returns true.
+SVGStringListTearOff* SVGTests::requiredFeatures() {
+  return m_requiredFeatures->tearOff();
+}
 
-    if (m_systemLanguage->isSpecified()) {
-        bool matchFound = false;
+SVGStringListTearOff* SVGTests::requiredExtensions() {
+  return m_requiredExtensions->tearOff();
+}
 
-        const Vector<String>& systemLanguage = m_systemLanguage->value()->values();
-        for (const auto& value : systemLanguage) {
-            if (value == defaultLanguage().getString().substring(0, 2)) {
-                matchFound = true;
-                break;
-            }
-        }
+SVGStringListTearOff* SVGTests::systemLanguage() {
+  return m_systemLanguage->tearOff();
+}
 
-        if (!matchFound)
-            return false;
+bool SVGTests::isValid() const {
+  // No need to check requiredFeatures since hasFeature always returns true.
+
+  if (m_systemLanguage->isSpecified()) {
+    bool matchFound = false;
+    for (const auto& value : m_systemLanguage->value()->values()) {
+      if (value.length() == 2 && defaultLanguage().startsWith(value)) {
+        matchFound = true;
+        break;
+      }
     }
+    if (!matchFound)
+      return false;
+  }
 
-    if (!m_requiredExtensions->value()->values().isEmpty())
-        return false;
+  if (!m_requiredExtensions->value()->values().isEmpty())
+    return false;
 
-    return true;
+  return true;
 }
 
-bool SVGTests::isKnownAttribute(const QualifiedName& attrName)
-{
-    return attrName == SVGNames::requiredFeaturesAttr
-        || attrName == SVGNames::requiredExtensionsAttr
-        || attrName == SVGNames::systemLanguageAttr;
+bool SVGTests::isKnownAttribute(const QualifiedName& attrName) {
+  return attrName == SVGNames::requiredFeaturesAttr ||
+         attrName == SVGNames::requiredExtensionsAttr ||
+         attrName == SVGNames::systemLanguageAttr;
 }
 
-} // namespace blink
+}  // namespace blink

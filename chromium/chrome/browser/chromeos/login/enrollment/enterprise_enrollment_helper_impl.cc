@@ -157,16 +157,12 @@ void EnterpriseEnrollmentHelperImpl::DoEnroll(const std::string& token) {
     return;
   }
 
-  policy::DeviceCloudPolicyInitializer::AllowedDeviceModes device_modes;
-  device_modes[policy::DEVICE_MODE_ENTERPRISE] = true;
   connector->ScheduleServiceInitialization(0);
-
   policy::DeviceCloudPolicyInitializer* dcp_initializer =
       connector->GetDeviceCloudPolicyInitializer();
   CHECK(dcp_initializer);
   dcp_initializer->StartEnrollment(
       connector->device_management_service(), enrollment_config_, token,
-      device_modes,
       base::Bind(&EnterpriseEnrollmentHelperImpl::OnEnrollmentFinished,
                  weak_ptr_factory_.GetWeakPtr()));
 }
@@ -263,7 +259,6 @@ void EnterpriseEnrollmentHelperImpl::ReportAuthStatus(
     case GoogleServiceAuthError::NONE:
     case GoogleServiceAuthError::CAPTCHA_REQUIRED:
     case GoogleServiceAuthError::TWO_FACTOR:
-    case GoogleServiceAuthError::HOSTED_NOT_ALLOWED:
     case GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS:
     case GoogleServiceAuthError::REQUEST_CANCELED:
     case GoogleServiceAuthError::UNEXPECTED_SERVICE_RESPONSE:
@@ -289,6 +284,7 @@ void EnterpriseEnrollmentHelperImpl::ReportAuthStatus(
       UMA(policy::kMetricEnrollmentNetworkFailed);
       LOG(WARNING) << "Network error " << error.state();
       break;
+    case GoogleServiceAuthError::HOSTED_NOT_ALLOWED_DEPRECATED:
     case GoogleServiceAuthError::NUM_STATES:
       NOTREACHED();
       break;
@@ -370,32 +366,32 @@ void EnterpriseEnrollmentHelperImpl::ReportEnrollmentStatus(
       break;
     case policy::EnrollmentStatus::STATUS_LOCK_ERROR:
       switch (status.lock_status()) {
-        case policy::EnterpriseInstallAttributes::LOCK_SUCCESS:
-        case policy::EnterpriseInstallAttributes::LOCK_NOT_READY:
+        case InstallAttributes::LOCK_SUCCESS:
+        case InstallAttributes::LOCK_NOT_READY:
           NOTREACHED();
           break;
-        case policy::EnterpriseInstallAttributes::LOCK_TIMEOUT:
+        case InstallAttributes::LOCK_TIMEOUT:
           UMA(policy::kMetricEnrollmentLockboxTimeoutError);
           break;
-        case policy::EnterpriseInstallAttributes::LOCK_BACKEND_INVALID:
+        case InstallAttributes::LOCK_BACKEND_INVALID:
           UMA(policy::kMetricEnrollmentLockBackendInvalid);
           break;
-        case policy::EnterpriseInstallAttributes::LOCK_ALREADY_LOCKED:
+        case InstallAttributes::LOCK_ALREADY_LOCKED:
           UMA(policy::kMetricEnrollmentLockAlreadyLocked);
           break;
-        case policy::EnterpriseInstallAttributes::LOCK_SET_ERROR:
+        case InstallAttributes::LOCK_SET_ERROR:
           UMA(policy::kMetricEnrollmentLockSetError);
           break;
-        case policy::EnterpriseInstallAttributes::LOCK_FINALIZE_ERROR:
+        case InstallAttributes::LOCK_FINALIZE_ERROR:
           UMA(policy::kMetricEnrollmentLockFinalizeError);
           break;
-        case policy::EnterpriseInstallAttributes::LOCK_READBACK_ERROR:
+        case InstallAttributes::LOCK_READBACK_ERROR:
           UMA(policy::kMetricEnrollmentLockReadbackError);
           break;
-        case policy::EnterpriseInstallAttributes::LOCK_WRONG_DOMAIN:
+        case InstallAttributes::LOCK_WRONG_DOMAIN:
           UMA(policy::kMetricEnrollmentLockDomainMismatch);
           break;
-        case policy::EnterpriseInstallAttributes::LOCK_WRONG_MODE:
+        case InstallAttributes::LOCK_WRONG_MODE:
           UMA(policy::kMetricEnrollmentLockModeMismatch);
           break;
       }
@@ -420,6 +416,9 @@ void EnterpriseEnrollmentHelperImpl::ReportEnrollmentStatus(
       break;
     case policy::EnrollmentStatus::STATUS_REGISTRATION_CERTIFICATE_FETCH_FAILED:
       UMA(policy::kMetricEnrollmentRegistrationCertificateFetchFailed);
+      break;
+    case policy::EnrollmentStatus::STATUS_NO_MACHINE_IDENTIFICATION:
+      UMA(policy::kMetricEnrollmentNoDeviceIdentification);
       break;
   }
 }

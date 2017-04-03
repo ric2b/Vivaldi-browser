@@ -15,6 +15,7 @@ TransformNode::TransformNode()
     : id(-1),
       parent_id(-1),
       owner_id(-1),
+      sticky_position_constraint_id(-1),
       source_node_id(-1),
       sorting_context_id(0),
       needs_local_transform_update(true),
@@ -231,6 +232,8 @@ void TransformNode::AsValueInto(base::trace_event::TracedValue* value) const {
   value->SetInteger("content_target_id", 0);
   value->SetInteger("source_node_id", source_node_id);
   value->SetInteger("sorting_context_id", sorting_context_id);
+  MathUtil::AddToTracedValue("scroll_offset", scroll_offset, value);
+  MathUtil::AddToTracedValue("scroll_snap", scroll_snap, value);
 }
 
 TransformCachedNodeData::TransformCachedNodeData()

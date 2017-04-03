@@ -68,14 +68,9 @@ public class ChromeBackgroundService extends GcmTaskService {
                                 context, params.getExtras(), waiter, taskTag);
                         break;
 
-                    case SnippetsLauncher.TASK_TAG_WIFI_CHARGING:
                     case SnippetsLauncher.TASK_TAG_WIFI:
                     case SnippetsLauncher.TASK_TAG_FALLBACK:
                         handleFetchSnippets(context, taskTag);
-                        break;
-
-                    case SnippetsLauncher.TASK_TAG_RESCHEDULE:
-                        handleRescheduleSnippets(context, taskTag);
                         break;
 
                     case PrecacheController.PERIODIC_TASK_TAG:
@@ -125,15 +120,8 @@ public class ChromeBackgroundService extends GcmTaskService {
         SnippetsBridge.fetchSnippets(/*forceRequest=*/false);
     }
 
-    private void handleRescheduleSnippets(Context context, String tag) {
-        if (!SnippetsLauncher.hasInstance()) {
-            launchBrowser(context, tag);
-        }
-        rescheduleSnippets();
-    }
-
     @VisibleForTesting
-    protected void rescheduleSnippets() {
+    protected void rescheduleFetching() {
         SnippetsBridge.rescheduleFetching();
     }
 
@@ -219,9 +207,29 @@ public class ChromeBackgroundService extends GcmTaskService {
         }
     }
 
+    @VisibleForTesting
+    protected void rescheduleBackgroundSyncTasksOnUpgrade() {
+        BackgroundSyncLauncher.rescheduleTasksOnUpgrade(this);
+    }
+
+    @VisibleForTesting
+    protected void reschedulePrecacheTasksOnUpgrade() {
+        PrecacheController.rescheduleTasksOnUpgrade(this);
+    }
+
+    private void rescheduleSnippetsTasksOnUpgrade() {
+        if (SnippetsLauncher.shouldRescheduleTasksOnUpgrade()) {
+            if (!SnippetsLauncher.hasInstance()) {
+                launchBrowser(this, /*tag=*/""); // The |tag| doesn't matter here.
+            }
+            rescheduleFetching();
+        }
+    }
+
     @Override
     public void onInitializeTasks() {
-        BackgroundSyncLauncher.rescheduleTasksOnUpgrade(this);
-        PrecacheController.rescheduleTasksOnUpgrade(this);
+        rescheduleBackgroundSyncTasksOnUpgrade();
+        reschedulePrecacheTasksOnUpgrade();
+        rescheduleSnippetsTasksOnUpgrade();
     }
 }

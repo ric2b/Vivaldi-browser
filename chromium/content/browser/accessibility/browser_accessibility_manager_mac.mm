@@ -4,16 +4,24 @@
 
 #include "content/browser/accessibility/browser_accessibility_manager_mac.h"
 
+#include "base/bind.h"
 #import "base/mac/mac_util.h"
+#import "base/mac/scoped_nsobject.h"
 #import "base/mac/sdk_forward_declarations.h"
+#include "base/location.h"
 #include "base/logging.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/time/time.h"
 #import "content/browser/accessibility/browser_accessibility_cocoa.h"
 #import "content/browser/accessibility/browser_accessibility_mac.h"
 #include "content/common/accessibility_messages.h"
+#include "content/public/browser/browser_thread.h"
 
 namespace {
+
+// Use same value as in Safari's WebKit.
+const int kLiveRegionChangeIntervalMS = 20;
 
 // Declare undocumented accessibility constants and enums only present in
 // WebKit.
@@ -65,6 +73,8 @@ NSString* const NSAccessibilityLoadCompleteNotification =
     @"AXLoadComplete";
 NSString* const NSAccessibilityInvalidStatusChangedNotification =
     @"AXInvalidStatusChanged";
+NSString* const NSAccessibilityLiveRegionCreatedNotification =
+    @"AXLiveRegionCreated";
 NSString* const NSAccessibilityLiveRegionChangedNotification =
     @"AXLiveRegionChanged";
 NSString* const NSAccessibilityExpandedChanged =
@@ -220,7 +230,7 @@ void BrowserAccessibilityManagerMac::NotifyAccessibilityEvent(
       NSAccessibilityPostNotification(ToBrowserAccessibilityCocoa(focus),
                                       mac_notification);
 
-      if (base::mac::IsOSElCapitanOrLater()) {
+      if (base::mac::IsAtLeastOS10_11()) {
         // |NSAccessibilityPostNotificationWithUserInfo| should be used on OS X
         // 10.11 or later to notify Voiceover about text selection changes. This
         // API has been present on versions of OS X since 10.7 but doesn't
@@ -245,7 +255,7 @@ void BrowserAccessibilityManagerMac::NotifyAccessibilityEvent(
       break;
     case ui::AX_EVENT_VALUE_CHANGED:
       mac_notification = NSAccessibilityValueChangedNotification;
-      if (base::mac::IsOSElCapitanOrLater() && text_edits_.size()) {
+      if (base::mac::IsAtLeastOS10_11() && text_edits_.size()) {
         // It seems that we don't need to distinguish between deleted and
         // inserted text for now.
         base::string16 deleted_text;
@@ -268,10 +278,36 @@ void BrowserAccessibilityManagerMac::NotifyAccessibilityEvent(
         return;
       }
       break;
-    // TODO(nektar): Need to add an event for live region created.
-    case ui::AX_EVENT_LIVE_REGION_CHANGED:
-      mac_notification = NSAccessibilityLiveRegionChangedNotification;
+    case ui::AX_EVENT_LIVE_REGION_CREATED:
+      mac_notification = NSAccessibilityLiveRegionCreatedNotification;
       break;
+    case ui::AX_EVENT_ALERT:
+      NSAccessibilityPostNotification(
+          native_node, NSAccessibilityLiveRegionCreatedNotification);
+      // Voiceover requires a live region changed notification to actually
+      // announce the live region.
+      NotifyAccessibilityEvent(BrowserAccessibilityEvent::FromTreeChange,
+                               ui::AX_EVENT_LIVE_REGION_CHANGED, node);
+      return;
+    case ui::AX_EVENT_LIVE_REGION_CHANGED: {
+      // Voiceover seems to drop live region changed notifications if they come
+      // too soon after a live region created notification.
+      // TODO(nektar): Limit the number of changed notifications as well.
+      base::scoped_nsobject<BrowserAccessibilityCocoa> retained_node(
+          [native_node retain]);
+      BrowserThread::PostDelayedTask(
+          BrowserThread::UI, FROM_HERE,
+          base::Bind(
+              [](base::scoped_nsobject<BrowserAccessibilityCocoa> node) {
+                if (node && [node instanceActive]) {
+                  NSAccessibilityPostNotification(
+                      node, NSAccessibilityLiveRegionChangedNotification);
+                }
+              },
+              std::move(retained_node)),
+          base::TimeDelta::FromMilliseconds(kLiveRegionChangeIntervalMS));
+    }
+      return;
     case ui::AX_EVENT_ROW_COUNT_CHANGED:
       mac_notification = NSAccessibilityRowCountChangedNotification;
       break;
@@ -291,7 +327,6 @@ void BrowserAccessibilityManagerMac::NotifyAccessibilityEvent(
       break;
 
     // These events are not used on Mac for now.
-    case ui::AX_EVENT_ALERT:
     case ui::AX_EVENT_TEXT_CHANGED:
     case ui::AX_EVENT_CHILDREN_CHANGED:
     case ui::AX_EVENT_MENU_LIST_VALUE_CHANGED:
@@ -370,46 +405,6 @@ void BrowserAccessibilityManagerMac::OnNodeDataWillChange(
     size_t length = (old_text.length() - i) - (new_text.length() - i);
     base::string16 deleted_text = old_text.substr(i, length);
     text_edits_[new_node_data.id] = deleted_text;
-  }
-}
-
-void BrowserAccessibilityManagerMac::OnAtomicUpdateFinished(
-    ui::AXTree* tree,
-    bool root_changed,
-    const std::vector<ui::AXTreeDelegate::Change>& changes) {
-  BrowserAccessibilityManager::OnAtomicUpdateFinished(
-      tree, root_changed, changes);
-
-  bool created_live_region = false;
-  for (size_t i = 0; i < changes.size(); ++i) {
-    if (changes[i].type != NODE_CREATED && changes[i].type != SUBTREE_CREATED)
-      continue;
-
-    const ui::AXNode* changed_node = changes[i].node;
-    DCHECK(changed_node);
-    BrowserAccessibility* obj = GetFromAXNode(changed_node);
-    if (obj && obj->HasStringAttribute(ui::AX_ATTR_LIVE_STATUS)) {
-      created_live_region = true;
-      break;
-    }
-  }
-
-  if (!created_live_region)
-    return;
-
-  // This code is to work around a bug in VoiceOver, where a new live
-  // region that gets added is ignored. VoiceOver seems to only scan the
-  // page for live regions once. By recreating the NSAccessibility
-  // object for the root of the tree, we force VoiceOver to clear out its
-  // internal state and find newly-added live regions this time.
-  BrowserAccessibilityMac* root =
-      static_cast<BrowserAccessibilityMac*>(GetRoot());
-  if (root) {
-    root->RecreateNativeObject();
-    NotifyAccessibilityEvent(
-        BrowserAccessibilityEvent::FromTreeChange,
-        ui::AX_EVENT_CHILDREN_CHANGED,
-        root);
   }
 }
 

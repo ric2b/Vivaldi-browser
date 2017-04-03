@@ -39,6 +39,15 @@ class VRServiceImpl : public VRService {
   void GetPose(uint32_t index, const GetPoseCallback& callback) override;
   void ResetPose(uint32_t index) override;
 
+  void RequestPresent(uint32_t index,
+                      bool secureOrigin,
+                      const RequestPresentCallback& callback) override;
+  void ExitPresent(uint32_t index) override;
+  void SubmitFrame(uint32_t index, VRPosePtr pose) override;
+  void UpdateLayerBounds(uint32_t index,
+                         VRLayerBoundsPtr leftBounds,
+                         VRLayerBoundsPtr rightBounds) override;
+
   std::unique_ptr<mojo::Binding<VRService>> binding_;
   VRServiceClientPtr client_;
 

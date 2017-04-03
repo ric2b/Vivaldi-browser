@@ -135,7 +135,8 @@ std::vector<LiveTab*> TabRestoreServiceHelper::RestoreMostRecentEntry(
     LiveTabContext* context) {
   if (entries_.empty())
     return std::vector<LiveTab*>();
-  return RestoreEntryById(context, entries_.front()->id, UNKNOWN);
+  return RestoreEntryById(context, entries_.front()->id,
+                          WindowOpenDisposition::UNKNOWN);
 }
 
 std::unique_ptr<TabRestoreService::Tab>
@@ -248,8 +249,8 @@ std::vector<LiveTab*> TabRestoreServiceHelper::RestoreEntryById(
       }
       context->ShowBrowserWindow();
 
-      if (disposition == CURRENT_TAB && current_context &&
-          current_context->GetActiveLiveTab()) {
+      if (disposition == WindowOpenDisposition::CURRENT_TAB &&
+          current_context && current_context->GetActiveLiveTab()) {
         current_context->CloseTab();
       }
       break;
@@ -263,6 +264,10 @@ std::vector<LiveTab*> TabRestoreServiceHelper::RestoreEntryById(
   restoring_ = false;
   NotifyTabsChanged();
   return live_tabs;
+}
+
+bool TabRestoreServiceHelper::IsRestoring() const {
+  return restoring_;
 }
 
 void TabRestoreServiceHelper::NotifyTabsChanged() {
@@ -381,14 +386,14 @@ LiveTabContext* TabRestoreServiceHelper::RestoreTab(
     WindowOpenDisposition disposition,
     LiveTab** live_tab) {
   LiveTab* restored_tab;
-  if (disposition == CURRENT_TAB && context) {
+  if (disposition == WindowOpenDisposition::CURRENT_TAB && context) {
     restored_tab = context->ReplaceRestoredTab(
         tab.navigations, tab.current_navigation_index, tab.from_last_session,
         tab.extension_app_id, tab.platform_data.get(), tab.user_agent_override,
         tab.ext_data);
   } else {
     // We only respsect the tab's original browser if there's no disposition.
-    if (disposition == UNKNOWN && tab.browser_id) {
+    if (disposition == WindowOpenDisposition::UNKNOWN && tab.browser_id) {
       context = client_->FindLiveTabContextWithID(tab.browser_id);
     }
 
@@ -397,7 +402,7 @@ LiveTabContext* TabRestoreServiceHelper::RestoreTab(
     // |context| will be NULL in cases where one isn't already available (eg,
     // when invoked on Mac OS X with no windows open). In this case, create a
     // new browser into which we restore the tabs.
-    if (context && disposition != NEW_WINDOW) {
+    if (context && disposition != WindowOpenDisposition::NEW_WINDOW) {
       tab_index = tab.tabstrip_index;
     } else {
       context = client_->CreateLiveTabContext(std::string());
@@ -408,13 +413,14 @@ LiveTabContext* TabRestoreServiceHelper::RestoreTab(
     // Place the tab at the end if the tab index is no longer valid or
     // we were passed a specific disposition.
     if (tab_index < 0 || tab_index > context->GetTabCount() ||
-        disposition != UNKNOWN) {
+        disposition != WindowOpenDisposition::UNKNOWN) {
       tab_index = context->GetTabCount();
     }
 
     restored_tab = context->AddRestoredTab(
         tab.navigations, tab_index, tab.current_navigation_index,
-        tab.extension_app_id, disposition != NEW_BACKGROUND_TAB, tab.pinned,
+        tab.extension_app_id,
+        disposition != WindowOpenDisposition::NEW_BACKGROUND_TAB, tab.pinned,
         tab.from_last_session, tab.platform_data.get(),
         tab.user_agent_override, tab.ext_data);
     restored_tab->LoadIfNecessary();

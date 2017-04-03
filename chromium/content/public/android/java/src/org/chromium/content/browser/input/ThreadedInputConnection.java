@@ -4,6 +4,7 @@
 
 package org.chromium.content.browser.input;
 
+import android.annotation.SuppressLint;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -114,10 +115,14 @@ public class ThreadedInputConnection extends BaseInputConnection
     }
 
     @Override
-    public void updateStateOnUiThread(final String text, final int selectionStart,
+    public void updateStateOnUiThread(String text, final int selectionStart,
             final int selectionEnd, final int compositionStart, final int compositionEnd,
             boolean singleLine, final boolean isNonImeChange) {
         ImeUtils.checkOnUiThread();
+
+        // crbug.com/663880: Non-breaking spaces can cause the IME to get confused. Replace with
+        // normal spaces.
+        text = text.replace('\u00A0', ' ');
 
         mCachedTextInputState =
                 new TextInputState(text, new Range(selectionStart, selectionEnd),
@@ -287,6 +292,7 @@ public class ThreadedInputConnection extends BaseInputConnection
     @Override
     public boolean setComposingText(final CharSequence text, final int newCursorPosition) {
         if (DEBUG_LOGS) Log.w(TAG, "setComposingText [%s] [%d]", text, newCursorPosition);
+        if (text == null) return false;
         return updateComposingText(text, newCursorPosition, false);
     }
 
@@ -652,6 +658,8 @@ public class ThreadedInputConnection extends BaseInputConnection
     /**
      * @see InputConnection#closeConnection()
      */
+    // TODO(crbug.com/635567): Fix this properly.
+    @SuppressLint("MissingSuperCall")
     public void closeConnection() {
         if (DEBUG_LOGS) Log.w(TAG, "closeConnection");
         // TODO(changwan): Implement this. http://crbug.com/595525

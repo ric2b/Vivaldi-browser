@@ -38,6 +38,10 @@ class CompositorMessage;
 }
 }
 
+namespace gfx {
+class ColorSpace;
+}
+
 namespace ui {
 class LatencyInfo;
 }
@@ -97,9 +101,10 @@ class CONTENT_EXPORT RenderWidgetCompositor
       std::unique_ptr<base::Value> value,
       const base::Callback<void(std::unique_ptr<base::Value>)>& callback);
   bool SendMessageToMicroBenchmark(int id, std::unique_ptr<base::Value> value);
-  void SetSurfaceClientId(uint32_t surface_id_namespace);
+  void SetFrameSinkId(const cc::FrameSinkId& frame_sink_id);
   void OnHandleCompositorProto(const std::vector<uint8_t>& proto);
   void SetPaintedDeviceScaleFactor(float device_scale);
+  void SetDeviceColorSpace(const gfx::ColorSpace& color_space);
 
   // WebLayerTreeView implementation.
   void setRootLayer(const blink::WebLayer& layer) override;
@@ -109,6 +114,7 @@ class CONTENT_EXPORT RenderWidgetCompositor
   void detachCompositorAnimationTimeline(
       cc::AnimationTimeline* compositor_timeline) override;
   void setViewportSize(const blink::WebSize& device_viewport_size) override;
+  blink::WebSize getViewportSize() const override;
   virtual blink::WebFloatPoint adjustEventPointForPinchZoom(
       const blink::WebFloatPoint& point) const;
   void setDeviceScaleFactor(float device_scale) override;
@@ -124,7 +130,6 @@ class CONTENT_EXPORT RenderWidgetCompositor
                                double duration_sec) override;
   bool hasPendingPageScaleAnimation() const override;
   void heuristicsForGpuRasterizationUpdated(bool matches_heuristics) override;
-  void setNeedsAnimate() override;
   void setNeedsBeginFrame() override;
   void setNeedsCompositorUpdate() override;
   void didStopFlinging() override;
@@ -143,6 +148,7 @@ class CONTENT_EXPORT RenderWidgetCompositor
   void clearSelection() override;
   void setMutatorClient(
       std::unique_ptr<blink::WebCompositorMutatorClient>) override;
+  void forceRecalculateRasterScales() override;
   void setEventListenerProperties(
       blink::WebEventListenerClass eventClass,
       blink::WebEventListenerProperties properties) override;
@@ -176,9 +182,9 @@ class CONTENT_EXPORT RenderWidgetCompositor
                            const gfx::Vector2dF& elastic_overscroll_delta,
                            float page_scale,
                            float top_controls_delta) override;
-  void RequestNewOutputSurface() override;
-  void DidInitializeOutputSurface() override;
-  void DidFailToInitializeOutputSurface() override;
+  void RequestNewCompositorFrameSink() override;
+  void DidInitializeCompositorFrameSink() override;
+  void DidFailToInitializeCompositorFrameSink() override;
   void WillCommit() override;
   void DidCommit() override;
   void DidCommitAndDrawFrame() override;
@@ -195,8 +201,8 @@ class CONTENT_EXPORT RenderWidgetCompositor
   void SendCompositorProto(const cc::proto::CompositorMessage& proto) override;
 
   enum {
-    OUTPUT_SURFACE_RETRIES_BEFORE_FALLBACK = 4,
-    MAX_OUTPUT_SURFACE_RETRIES = 5,
+    COMPOSITOR_FRAME_SINK_RETRIES_BEFORE_FALLBACK = 4,
+    MAX_COMPOSITOR_FRAME_SINK_RETRIES = 5,
   };
 
  protected:

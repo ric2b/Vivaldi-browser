@@ -12,8 +12,8 @@
 #include "chrome/browser/ui/cocoa/location_bar/manage_passwords_decoration.h"
 #include "chrome/browser/ui/cocoa/omnibox/omnibox_view_mac.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/password_manager/core/common/password_manager_ui.h"
-#include "grit/theme_resources.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/gtest_mac.h"
 #include "ui/base/l10n/l10n_util_mac.h"
@@ -103,20 +103,14 @@ TEST_P(ManagePasswordsDecorationStateTest, TestState) {
   EXPECT_EQ(GetParam().visible, decoration()->IsVisible());
   NSImage* expected_image = nil;
   if (GetParam().image) {
-    if (ui::MaterialDesignController::IsModeMaterial()) {
-      // IDR_SAVE_PASSWORD_ACTIVE and IDR_SAVE_PASSWORD_INACTIVE map to
-      // gfx::VectorIconId::AUTOLOGIN in Material Design - fail the test if
-      // somehow some other value is present.
-      EXPECT_TRUE(GetParam().image == IDR_SAVE_PASSWORD_ACTIVE ||
-                  GetParam().image == IDR_SAVE_PASSWORD_INACTIVE);
-      const int kIconSize = 16;
-      expected_image = NSImageFromImageSkia(
-          gfx::CreateVectorIcon(gfx::VectorIconId::AUTOLOGIN,
-                                kIconSize,
-                                gfx::kChromeIconGrey));
-    } else {
-      expected_image = OmniboxViewMac::ImageForResource(GetParam().image);
-    }
+    // IDR_SAVE_PASSWORD_ACTIVE and IDR_SAVE_PASSWORD_INACTIVE map to
+    // gfx::VectorIconId::AUTOLOGIN in Material Design; fail the test if
+    // somehow some other value is present.
+    EXPECT_TRUE(GetParam().image == IDR_SAVE_PASSWORD_ACTIVE ||
+                GetParam().image == IDR_SAVE_PASSWORD_INACTIVE);
+    const int kIconSize = 16;
+    expected_image = NSImageFromImageSkia(gfx::CreateVectorIcon(
+        gfx::VectorIconId::AUTOLOGIN, kIconSize, gfx::kChromeIconGrey));
   }
   EXPECT_TRUE(ImagesEqual(expected_image, decoration()->GetImage()));
   EXPECT_NSEQ(GetParam().toolTip

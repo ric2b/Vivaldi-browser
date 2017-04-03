@@ -4,9 +4,6 @@
 
 #include "ash/mus/bridge/wm_root_window_controller_mus.h"
 
-#include "ash/common/wm/workspace/workspace_layout_manager.h"
-#include "ash/common/wm/workspace/workspace_layout_manager_backdrop_delegate.h"
-#include "ash/common/wm_root_window_controller_observer.h"
 #include "ash/mus/bridge/wm_shelf_mus.h"
 #include "ash/mus/bridge/wm_shell_mus.h"
 #include "ash/mus/bridge/wm_window_mus.h"
@@ -36,7 +33,9 @@ namespace mus {
 WmRootWindowControllerMus::WmRootWindowControllerMus(
     WmShellMus* shell,
     RootWindowController* root_window_controller)
-    : shell_(shell), root_window_controller_(root_window_controller) {
+    : WmRootWindowController(WmWindowMus::Get(root_window_controller->root())),
+      shell_(shell),
+      root_window_controller_(root_window_controller) {
   shell_->AddRootWindowController(this);
   root_window_controller_->root()->SetLocalProperty(kWmRootWindowControllerKey,
                                                     this);
@@ -76,27 +75,16 @@ const display::Display& WmRootWindowControllerMus::GetDisplay() const {
   return root_window_controller_->display();
 }
 
+void WmRootWindowControllerMus::MoveWindowsTo(WmWindow* dest) {
+  WmRootWindowController::MoveWindowsTo(dest);
+}
+
 bool WmRootWindowControllerMus::HasShelf() {
   return GetShelf() != nullptr;
 }
 
 WmShell* WmRootWindowControllerMus::GetShell() {
   return shell_;
-}
-
-wm::WorkspaceWindowState WmRootWindowControllerMus::GetWorkspaceWindowState() {
-  NOTIMPLEMENTED();
-  return wm::WORKSPACE_WINDOW_STATE_DEFAULT;
-}
-
-void WmRootWindowControllerMus::SetMaximizeBackdropDelegate(
-    std::unique_ptr<WorkspaceLayoutManagerBackdropDelegate> delegate) {
-  root_window_controller_->workspace_layout_manager()
-      ->SetMaximizeBackdropDelegate(std::move(delegate));
-}
-
-AlwaysOnTopController* WmRootWindowControllerMus::GetAlwaysOnTopController() {
-  return root_window_controller_->always_on_top_controller();
 }
 
 WmShelf* WmRootWindowControllerMus::GetShelf() {
@@ -139,14 +127,11 @@ gfx::Point WmRootWindowControllerMus::GetLastMouseLocationInRoot() {
   return location;
 }
 
-void WmRootWindowControllerMus::AddObserver(
-    WmRootWindowControllerObserver* observer) {
-  observers_.AddObserver(observer);
-}
-
-void WmRootWindowControllerMus::RemoveObserver(
-    WmRootWindowControllerObserver* observer) {
-  observers_.RemoveObserver(observer);
+bool WmRootWindowControllerMus::ShouldDestroyWindowInCloseChildWindows(
+    WmWindow* window) {
+  ui::Window* ui_window = WmWindowMus::GetMusWindow(window);
+  return ui_window->WasCreatedByThisClient() ||
+         ui_window->window_tree()->GetRoots().count(ui_window);
 }
 
 }  // namespace mus

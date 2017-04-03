@@ -4,7 +4,6 @@
 
 #include "ash/shell/content/client/shell_browser_main_parts.h"
 
-#include "ash/common/ash_switches.h"
 #include "ash/common/login_status.h"
 #include "ash/common/material_design/material_design_controller.h"
 #include "ash/content/shell_content_state.h"
@@ -97,7 +96,8 @@ void ShellBrowserMainParts::PreMainMessageLoopStart() {
 
 void ShellBrowserMainParts::PostMainMessageLoopStart() {
 #if defined(OS_CHROMEOS)
-  chromeos::DBusThreadManager::Initialize();
+  chromeos::DBusThreadManager::Initialize(
+      chromeos::DBusThreadManager::PROCESS_ASH);
 #endif
 }
 

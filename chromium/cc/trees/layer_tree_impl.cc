@@ -33,6 +33,7 @@
 #include "cc/layers/layer_list_iterator.h"
 #include "cc/layers/render_surface_impl.h"
 #include "cc/layers/scrollbar_layer_impl_base.h"
+#include "cc/output/compositor_frame_sink.h"
 #include "cc/resources/ui_resource_request.h"
 #include "cc/trees/clip_node.h"
 #include "cc/trees/draw_property_utils.h"
@@ -123,10 +124,17 @@ void LayerTreeImpl::ReleaseResources() {
   }
 }
 
-void LayerTreeImpl::RecreateResources() {
+void LayerTreeImpl::ReleaseTileResources() {
   if (!LayerListIsEmpty()) {
     LayerTreeHostCommon::CallFunctionForEveryLayer(
-        this, [](LayerImpl* layer) { layer->RecreateResources(); });
+        this, [](LayerImpl* layer) { layer->ReleaseTileResources(); });
+  }
+}
+
+void LayerTreeImpl::RecreateTileResources() {
+  if (!LayerListIsEmpty()) {
+    LayerTreeHostCommon::CallFunctionForEveryLayer(
+        this, [](LayerImpl* layer) { layer->RecreateTileResources(); });
   }
 }
 
@@ -144,18 +152,19 @@ bool LayerTreeImpl::IsViewportLayerId(int id) const {
   return false;
 }
 
-// TODO(sunxd): when we have a layer_id to property_tree index map in property
-// trees, use the transform_id parameter instead of looking for indices from
-// LayerImpls.
-void LayerTreeImpl::DidUpdateScrollOffset(int layer_id, int transform_id) {
+void LayerTreeImpl::DidUpdateScrollOffset(int layer_id) {
   DidUpdateScrollState(layer_id);
   TransformTree& transform_tree = property_trees()->transform_tree;
   ScrollTree& scroll_tree = property_trees()->scroll_tree;
+  int transform_id = -1;
 
   // If pending tree topology changed and we still want to notify the pending
   // tree about scroll offset in the active tree, we may not find the
   // corresponding pending layer.
   if (LayerById(layer_id)) {
+    // TODO(sunxd): when we have a layer_id to property_tree index map in
+    // property trees, use the transform_id parameter instead of looking for
+    // indices from LayerImpls.
     transform_id = LayerById(layer_id)->transform_tree_index();
   } else {
     DCHECK(!IsActiveTree());
@@ -175,8 +184,7 @@ void LayerTreeImpl::DidUpdateScrollOffset(int layer_id, int transform_id) {
   }
 
   if (IsActiveTree() && layer_tree_host_impl_->pending_tree())
-    layer_tree_host_impl_->pending_tree()->DidUpdateScrollOffset(layer_id,
-                                                                 transform_id);
+    layer_tree_host_impl_->pending_tree()->DidUpdateScrollOffset(layer_id);
 }
 
 void LayerTreeImpl::DidUpdateScrollState(int layer_id) {
@@ -441,6 +449,7 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
                                             max_page_scale_factor());
   target_tree->SetDeviceScaleFactor(device_scale_factor());
   target_tree->set_painted_device_scale_factor(painted_device_scale_factor());
+  target_tree->SetDeviceColorSpace(device_color_space_);
   target_tree->elastic_overscroll()->PushPendingToActive();
 
   target_tree->pending_page_scale_animation_ =
@@ -489,7 +498,15 @@ void LayerTreeImpl::MoveChangeTrackingToLayers() {
   for (auto* layer : *this) {
     if (layer->LayerPropertyChanged())
       layer->NoteLayerPropertyChanged();
+    if (layer->render_surface() &&
+        layer->render_surface()->AncestorPropertyChanged())
+      layer->render_surface()->NoteAncestorPropertyChanged();
   }
+}
+
+void LayerTreeImpl::ForceRecalculateRasterScales() {
+  for (auto* layer : picture_layers_)
+    layer->ResetRasterScale();
 }
 
 LayerImplList::const_iterator LayerTreeImpl::begin() const {
@@ -850,6 +867,13 @@ void LayerTreeImpl::SetDeviceScaleFactor(float device_scale_factor) {
     layer_tree_host_impl_->SetFullViewportDamage();
 }
 
+void LayerTreeImpl::SetDeviceColorSpace(
+    const gfx::ColorSpace& device_color_space) {
+  if (device_color_space == device_color_space_)
+    return;
+  device_color_space_ = device_color_space;
+}
+
 SyncedProperty<ScaleGroup>* LayerTreeImpl::page_scale_factor() {
   return page_scale_factor_.get();
 }
@@ -920,7 +944,9 @@ void LayerTreeImpl::SetElementIdsForTesting() {
   }
 }
 
-bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
+bool LayerTreeImpl::UpdateDrawProperties(
+    bool update_lcd_text,
+    bool force_skip_verify_visible_rect_calculations) {
   if (!needs_update_draw_properties_)
     return true;
 
@@ -928,10 +954,9 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
   // early outs before this.
   needs_update_draw_properties_ = false;
 
-  // For max_texture_size.  When the renderer is re-created in
-  // CreateAndSetRenderer, the needs update draw properties flag is set
-  // again.
-  if (!layer_tree_host_impl_->renderer())
+  // For max_texture_size. When a new output surface is received the needs
+  // update draw properties flag is set again.
+  if (!layer_tree_host_impl_->compositor_frame_sink())
     return false;
 
   // Clear this after the renderer early out, as it should still be
@@ -949,6 +974,13 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
     bool can_render_to_separate_surface =
         (!is_in_resourceless_software_draw_mode());
 
+    // We verify visible rect calculations whenever we verify clip tree
+    // calculations except when this function is explicitly passed a flag asking
+    // us to skip it.
+    bool verify_visible_rect_calculations =
+        force_skip_verify_visible_rect_calculations
+            ? false
+            : settings().verify_clip_tree_calculations;
     LayerTreeHostCommon::CalcDrawPropsImplInputs inputs(
         layer_list_[0], DrawViewportSize(),
         layer_tree_host_impl_->DrawTransform(), device_scale_factor(),
@@ -959,6 +991,7 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
         can_render_to_separate_surface,
         settings().layer_transforms_should_scale_layer_contents,
         settings().verify_clip_tree_calculations,
+        verify_visible_rect_calculations,
         settings().verify_transform_tree_calculations,
         &render_surface_layer_list_, &property_trees_);
     LayerTreeHostCommon::CalculateDrawProperties(&inputs);
@@ -991,26 +1024,12 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
          it != end; ++it) {
       occlusion_tracker.EnterLayer(it);
 
-      bool inside_replica = it->InsideReplica();
-
-      // Don't use occlusion if a layer will appear in a replica, since the
-      // tile raster code does not know how to look for the replica and would
-      // consider it occluded even though the replica is visible.
-      // Since occlusion is only used for browser compositor (i.e.
-      // use_occlusion_for_tile_prioritization) and it won't use replicas,
-      // this should matter not.
-
       if (it.represents_itself()) {
-        Occlusion occlusion =
-            inside_replica ? Occlusion()
-                           : occlusion_tracker.GetCurrentOcclusionForLayer(
-                                 it->DrawTransform());
-        it->draw_properties().occlusion_in_content_space = occlusion;
+        it->draw_properties().occlusion_in_content_space =
+            occlusion_tracker.GetCurrentOcclusionForLayer(it->DrawTransform());
       }
 
       if (it.represents_contributing_render_surface()) {
-        // Surfaces aren't used by the tile raster code, so they can have
-        // occlusion regardless of replicas.
         const RenderSurfaceImpl* occlusion_surface =
             occlusion_tracker.OcclusionSurfaceForContributingSurface();
         gfx::Transform draw_transform;
@@ -1021,15 +1040,11 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
           property_trees()->ComputeTransformToTarget(
               it->render_surface()->TransformTreeIndex(),
               occlusion_surface->EffectTreeIndex(), &draw_transform);
-          // We don't have to apply surface contents scale when target is root.
-          if (occlusion_surface->EffectTreeIndex() !=
-              EffectTree::kContentsRootNodeId) {
-            const EffectNode* occlusion_effect_node =
-                property_trees()->effect_tree.Node(
-                    occlusion_surface->EffectTreeIndex());
-            draw_property_utils::PostConcatSurfaceContentsScale(
-                occlusion_effect_node, &draw_transform);
-          }
+          const EffectNode* occlusion_effect_node =
+              property_trees()->effect_tree.Node(
+                  occlusion_surface->EffectTreeIndex());
+          draw_property_utils::PostConcatSurfaceContentsScale(
+              occlusion_effect_node, &draw_transform);
           const EffectNode* effect_node = property_trees()->effect_tree.Node(
               it->render_surface()->EffectTreeIndex());
           draw_property_utils::ConcatInverseSurfaceContentsScale(
@@ -1044,17 +1059,9 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
         // the same occlusion as the surface (nothing inside the surface
         // occludes them).
         if (LayerImpl* mask = it->render_surface()->MaskLayer()) {
-          Occlusion mask_occlusion =
-              inside_replica
-                  ? Occlusion()
-                  : occlusion_tracker.GetCurrentOcclusionForContributingSurface(
-                        draw_transform * it->DrawTransform());
-          mask->draw_properties().occlusion_in_content_space = mask_occlusion;
-        }
-        if (LayerImpl* replica_mask =
-                it->render_surface()->ReplicaMaskLayer()) {
-          replica_mask->draw_properties().occlusion_in_content_space =
-              Occlusion();
+          mask->draw_properties().occlusion_in_content_space =
+              occlusion_tracker.GetCurrentOcclusionForContributingSurface(
+                  draw_transform * it->DrawTransform());
         }
       }
 
@@ -1268,11 +1275,7 @@ const LayerTreeDebugState& LayerTreeImpl::debug_state() const {
 }
 
 ContextProvider* LayerTreeImpl::context_provider() const {
-  return output_surface()->context_provider();
-}
-
-OutputSurface* LayerTreeImpl::output_surface() const {
-  return layer_tree_host_impl_->output_surface();
+  return layer_tree_host_impl_->compositor_frame_sink()->context_provider();
 }
 
 ResourceProvider* LayerTreeImpl::resource_provider() const {
@@ -1557,8 +1560,8 @@ void LayerTreeImpl::DidModifyTilePriorities() {
 }
 
 void LayerTreeImpl::set_ui_resource_request_queue(
-    const UIResourceRequestQueue& queue) {
-  ui_resource_request_queue_ = queue;
+    UIResourceRequestQueue queue) {
+  ui_resource_request_queue_ = std::move(queue);
 }
 
 ResourceId LayerTreeImpl::ResourceIdForUIResource(UIResourceId uid) const {
@@ -2077,7 +2080,7 @@ void LayerTreeImpl::ScrollAnimationAbort(bool needs_completion) {
 
 void LayerTreeImpl::ResetAllChangeTracking() {
   layers_that_should_push_properties_.clear();
-  // Iterate over all layers, including masks and replicas.
+  // Iterate over all layers, including masks.
   for (auto& layer : *layers_)
     layer->ResetChangeTracking();
   property_trees_.ResetAllChangeTracking();

@@ -33,9 +33,9 @@ struct wl_resource;
  * reset.
  *
  * @section page_ifaces_remote_shell_unstable_v1 Interfaces
- * - @subpage page_iface_zwp_remote_shell_v1 - remote_shell
- * - @subpage page_iface_zwp_remote_surface_v1 - A desktop window
- * - @subpage page_iface_zwp_notification_surface_v1 - A notification window
+ * - @subpage page_iface_zcr_remote_shell_v1 - remote_shell
+ * - @subpage page_iface_zcr_remote_surface_v1 - A desktop window
+ * - @subpage page_iface_zcr_notification_surface_v1 - A notification window
  * @section page_copyright_remote_shell_unstable_v1 Copyright
  * <pre>
  *
@@ -62,31 +62,31 @@ struct wl_resource;
  * </pre>
  */
 struct wl_surface;
-struct zwp_notification_surface_v1;
-struct zwp_remote_shell_v1;
-struct zwp_remote_surface_v1;
+struct zcr_notification_surface_v1;
+struct zcr_remote_shell_v1;
+struct zcr_remote_surface_v1;
 
 /**
- * @page page_iface_zwp_remote_shell_v1 zwp_remote_shell_v1
- * @section page_iface_zwp_remote_shell_v1_desc Description
+ * @page page_iface_zcr_remote_shell_v1 zcr_remote_shell_v1
+ * @section page_iface_zcr_remote_shell_v1_desc Description
  *
  * The global interface that allows clients to turn a wl_surface into a
  * "real window" which is remotely managed but can be stacked, activated
  * and made fullscreen by the user.
- * @section page_iface_zwp_remote_shell_v1_api API
- * See @ref iface_zwp_remote_shell_v1.
+ * @section page_iface_zcr_remote_shell_v1_api API
+ * See @ref iface_zcr_remote_shell_v1.
  */
 /**
- * @defgroup iface_zwp_remote_shell_v1 The zwp_remote_shell_v1 interface
+ * @defgroup iface_zcr_remote_shell_v1 The zcr_remote_shell_v1 interface
  *
  * The global interface that allows clients to turn a wl_surface into a
  * "real window" which is remotely managed but can be stacked, activated
  * and made fullscreen by the user.
  */
-extern const struct wl_interface zwp_remote_shell_v1_interface;
+extern const struct wl_interface zcr_remote_shell_v1_interface;
 /**
- * @page page_iface_zwp_remote_surface_v1 zwp_remote_surface_v1
- * @section page_iface_zwp_remote_surface_v1_desc Description
+ * @page page_iface_zcr_remote_surface_v1 zcr_remote_surface_v1
+ * @section page_iface_zcr_remote_surface_v1_desc Description
  *
  * An interface that may be implemented by a wl_surface, for
  * implementations that provide a desktop-style user interface
@@ -100,11 +100,11 @@ extern const struct wl_interface zwp_remote_shell_v1_interface;
  *
  * For a surface to be mapped by the compositor the client must have
  * committed both an remote_surface state and a buffer.
- * @section page_iface_zwp_remote_surface_v1_api API
- * See @ref iface_zwp_remote_surface_v1.
+ * @section page_iface_zcr_remote_surface_v1_api API
+ * See @ref iface_zcr_remote_surface_v1.
  */
 /**
- * @defgroup iface_zwp_remote_surface_v1 The zwp_remote_surface_v1 interface
+ * @defgroup iface_zcr_remote_surface_v1 The zcr_remote_surface_v1 interface
  *
  * An interface that may be implemented by a wl_surface, for
  * implementations that provide a desktop-style user interface
@@ -119,120 +119,120 @@ extern const struct wl_interface zwp_remote_shell_v1_interface;
  * For a surface to be mapped by the compositor the client must have
  * committed both an remote_surface state and a buffer.
  */
-extern const struct wl_interface zwp_remote_surface_v1_interface;
+extern const struct wl_interface zcr_remote_surface_v1_interface;
 /**
- * @page page_iface_zwp_notification_surface_v1 zwp_notification_surface_v1
- * @section page_iface_zwp_notification_surface_v1_desc Description
+ * @page page_iface_zcr_notification_surface_v1 zcr_notification_surface_v1
+ * @section page_iface_zcr_notification_surface_v1_desc Description
  *
  * An interface that may be implemented by a wl_surface to host
  * notification contents.
- * @section page_iface_zwp_notification_surface_v1_api API
- * See @ref iface_zwp_notification_surface_v1.
+ * @section page_iface_zcr_notification_surface_v1_api API
+ * See @ref iface_zcr_notification_surface_v1.
  */
 /**
- * @defgroup iface_zwp_notification_surface_v1 The zwp_notification_surface_v1 interface
+ * @defgroup iface_zcr_notification_surface_v1 The zcr_notification_surface_v1 interface
  *
  * An interface that may be implemented by a wl_surface to host
  * notification contents.
  */
-extern const struct wl_interface zwp_notification_surface_v1_interface;
+extern const struct wl_interface zcr_notification_surface_v1_interface;
 
-#ifndef ZWP_REMOTE_SHELL_V1_CONTAINER_ENUM
-#define ZWP_REMOTE_SHELL_V1_CONTAINER_ENUM
+#ifndef ZCR_REMOTE_SHELL_V1_CONTAINER_ENUM
+#define ZCR_REMOTE_SHELL_V1_CONTAINER_ENUM
 /**
- * @ingroup iface_zwp_remote_shell_v1
+ * @ingroup iface_zcr_remote_shell_v1
  * containers for remote surfaces
  *
  * Determine how a remote surface should be stacked relative to other
  * shell surfaces.
  */
-enum zwp_remote_shell_v1_container {
+enum zcr_remote_shell_v1_container {
 	/**
 	 * default container
 	 */
-	ZWP_REMOTE_SHELL_V1_CONTAINER_DEFAULT = 1,
+	ZCR_REMOTE_SHELL_V1_CONTAINER_DEFAULT = 1,
 	/**
 	 * system modal container
 	 */
-	ZWP_REMOTE_SHELL_V1_CONTAINER_OVERLAY = 2,
+	ZCR_REMOTE_SHELL_V1_CONTAINER_OVERLAY = 2,
 };
-#endif /* ZWP_REMOTE_SHELL_V1_CONTAINER_ENUM */
+#endif /* ZCR_REMOTE_SHELL_V1_CONTAINER_ENUM */
 
-#ifndef ZWP_REMOTE_SHELL_V1_STATE_TYPE_ENUM
-#define ZWP_REMOTE_SHELL_V1_STATE_TYPE_ENUM
+#ifndef ZCR_REMOTE_SHELL_V1_STATE_TYPE_ENUM
+#define ZCR_REMOTE_SHELL_V1_STATE_TYPE_ENUM
 /**
- * @ingroup iface_zwp_remote_shell_v1
+ * @ingroup iface_zcr_remote_shell_v1
  * state types for remote surfaces
  *
  * Defines common show states for shell surfaces.
  */
-enum zwp_remote_shell_v1_state_type {
+enum zcr_remote_shell_v1_state_type {
 	/**
 	 * normal window state
 	 */
-	ZWP_REMOTE_SHELL_V1_STATE_TYPE_NORMAL = 1,
+	ZCR_REMOTE_SHELL_V1_STATE_TYPE_NORMAL = 1,
 	/**
 	 * minimized window state
 	 */
-	ZWP_REMOTE_SHELL_V1_STATE_TYPE_MINIMIZED = 2,
+	ZCR_REMOTE_SHELL_V1_STATE_TYPE_MINIMIZED = 2,
 	/**
 	 * maximized window state
 	 */
-	ZWP_REMOTE_SHELL_V1_STATE_TYPE_MAXIMIZED = 3,
+	ZCR_REMOTE_SHELL_V1_STATE_TYPE_MAXIMIZED = 3,
 	/**
 	 * fullscreen window state
 	 */
-	ZWP_REMOTE_SHELL_V1_STATE_TYPE_FULLSCREEN = 4,
+	ZCR_REMOTE_SHELL_V1_STATE_TYPE_FULLSCREEN = 4,
 	/**
 	 * pinned window state
 	 */
-	ZWP_REMOTE_SHELL_V1_STATE_TYPE_PINNED = 5,
+	ZCR_REMOTE_SHELL_V1_STATE_TYPE_PINNED = 5,
 	/**
 	 * trusted pinned window state
 	 */
-	ZWP_REMOTE_SHELL_V1_STATE_TYPE_TRUSTED_PINNED = 6,
+	ZCR_REMOTE_SHELL_V1_STATE_TYPE_TRUSTED_PINNED = 6,
 };
-#endif /* ZWP_REMOTE_SHELL_V1_STATE_TYPE_ENUM */
+#endif /* ZCR_REMOTE_SHELL_V1_STATE_TYPE_ENUM */
 
-#ifndef ZWP_REMOTE_SHELL_V1_ERROR_ENUM
-#define ZWP_REMOTE_SHELL_V1_ERROR_ENUM
-enum zwp_remote_shell_v1_error {
+#ifndef ZCR_REMOTE_SHELL_V1_ERROR_ENUM
+#define ZCR_REMOTE_SHELL_V1_ERROR_ENUM
+enum zcr_remote_shell_v1_error {
 	/**
 	 * given wl_surface has another role
 	 */
-	ZWP_REMOTE_SHELL_V1_ERROR_ROLE = 0,
+	ZCR_REMOTE_SHELL_V1_ERROR_ROLE = 0,
 	/**
 	 * invalid notification id
 	 */
-	ZWP_REMOTE_SHELL_V1_ERROR_INVALID_NOTIFICATION_ID = 1,
+	ZCR_REMOTE_SHELL_V1_ERROR_INVALID_NOTIFICATION_ID = 1,
 };
-#endif /* ZWP_REMOTE_SHELL_V1_ERROR_ENUM */
+#endif /* ZCR_REMOTE_SHELL_V1_ERROR_ENUM */
 
-#ifndef ZWP_REMOTE_SHELL_V1_LAYOUT_MODE_ENUM
-#define ZWP_REMOTE_SHELL_V1_LAYOUT_MODE_ENUM
+#ifndef ZCR_REMOTE_SHELL_V1_LAYOUT_MODE_ENUM
+#define ZCR_REMOTE_SHELL_V1_LAYOUT_MODE_ENUM
 /**
- * @ingroup iface_zwp_remote_shell_v1
+ * @ingroup iface_zcr_remote_shell_v1
  * the layout mode
  *
  * Determine how a client should layout surfaces.
  */
-enum zwp_remote_shell_v1_layout_mode {
+enum zcr_remote_shell_v1_layout_mode {
 	/**
 	 * multiple windows
 	 */
-	ZWP_REMOTE_SHELL_V1_LAYOUT_MODE_WINDOWED = 1,
+	ZCR_REMOTE_SHELL_V1_LAYOUT_MODE_WINDOWED = 1,
 	/**
 	 * restricted mode for tablet
 	 */
-	ZWP_REMOTE_SHELL_V1_LAYOUT_MODE_TABLET = 2,
+	ZCR_REMOTE_SHELL_V1_LAYOUT_MODE_TABLET = 2,
 };
-#endif /* ZWP_REMOTE_SHELL_V1_LAYOUT_MODE_ENUM */
+#endif /* ZCR_REMOTE_SHELL_V1_LAYOUT_MODE_ENUM */
 
 /**
- * @ingroup iface_zwp_remote_shell_v1
- * @struct zwp_remote_shell_v1_interface
+ * @ingroup iface_zcr_remote_shell_v1
+ * @struct zcr_remote_shell_v1_interface
  */
-struct zwp_remote_shell_v1_interface {
+struct zcr_remote_shell_v1_interface {
 	/**
 	 * destroy remote_shell
 	 *
@@ -267,7 +267,6 @@ struct zwp_remote_shell_v1_interface {
 	 * Creates a notification_surface for the given surface, gives it
 	 * the notification_surface role and associated it with a
 	 * notification id.
-	 * @since 6
 	 */
 	void (*get_notification_surface)(struct wl_client *client,
 					 struct wl_resource *resource,
@@ -276,77 +275,45 @@ struct zwp_remote_shell_v1_interface {
 					 const char *notification_id);
 };
 
-#define ZWP_REMOTE_SHELL_V1_CONFIGURE	0
-#define ZWP_REMOTE_SHELL_V1_ACTIVATED	1
-#define ZWP_REMOTE_SHELL_V1_LAYOUT_MODE_CHANGED	2
-#define ZWP_REMOTE_SHELL_V1_CONFIGURATION_CHANGED	3
+#define ZCR_REMOTE_SHELL_V1_ACTIVATED	0
+#define ZCR_REMOTE_SHELL_V1_CONFIGURATION_CHANGED	1
 
 /**
- * @ingroup iface_zwp_remote_shell_v1
+ * @ingroup iface_zcr_remote_shell_v1
  */
-#define ZWP_REMOTE_SHELL_V1_CONFIGURE_SINCE_VERSION	1
+#define ZCR_REMOTE_SHELL_V1_ACTIVATED_SINCE_VERSION	1
 /**
- * @ingroup iface_zwp_remote_shell_v1
+ * @ingroup iface_zcr_remote_shell_v1
  */
-#define ZWP_REMOTE_SHELL_V1_ACTIVATED_SINCE_VERSION	1
-/**
- * @ingroup iface_zwp_remote_shell_v1
- */
-#define ZWP_REMOTE_SHELL_V1_LAYOUT_MODE_CHANGED_SINCE_VERSION	8
-/**
- * @ingroup iface_zwp_remote_shell_v1
- */
-#define ZWP_REMOTE_SHELL_V1_CONFIGURATION_CHANGED_SINCE_VERSION	9
+#define ZCR_REMOTE_SHELL_V1_CONFIGURATION_CHANGED_SINCE_VERSION	1
 
 /**
- * @ingroup iface_zwp_remote_shell_v1
- * Sends an configure event to the client owning the resource.
- * @param resource_ The client's resource
- */
-static inline void
-zwp_remote_shell_v1_send_configure(struct wl_resource *resource_, int32_t width, int32_t height, int32_t work_area_inset_left, int32_t work_area_inset_top, int32_t work_area_inset_right, int32_t work_area_inset_bottom)
-{
-	wl_resource_post_event(resource_, ZWP_REMOTE_SHELL_V1_CONFIGURE, width, height, work_area_inset_left, work_area_inset_top, work_area_inset_right, work_area_inset_bottom);
-}
-
-/**
- * @ingroup iface_zwp_remote_shell_v1
+ * @ingroup iface_zcr_remote_shell_v1
  * Sends an activated event to the client owning the resource.
  * @param resource_ The client's resource
  */
 static inline void
-zwp_remote_shell_v1_send_activated(struct wl_resource *resource_, struct wl_resource *gained_active, struct wl_resource *lost_active)
+zcr_remote_shell_v1_send_activated(struct wl_resource *resource_, struct wl_resource *gained_active, struct wl_resource *lost_active)
 {
-	wl_resource_post_event(resource_, ZWP_REMOTE_SHELL_V1_ACTIVATED, gained_active, lost_active);
+	wl_resource_post_event(resource_, ZCR_REMOTE_SHELL_V1_ACTIVATED, gained_active, lost_active);
 }
 
 /**
- * @ingroup iface_zwp_remote_shell_v1
- * Sends an layout_mode_changed event to the client owning the resource.
- * @param resource_ The client's resource
- */
-static inline void
-zwp_remote_shell_v1_send_layout_mode_changed(struct wl_resource *resource_, uint32_t layout_mode)
-{
-	wl_resource_post_event(resource_, ZWP_REMOTE_SHELL_V1_LAYOUT_MODE_CHANGED, layout_mode);
-}
-
-/**
- * @ingroup iface_zwp_remote_shell_v1
+ * @ingroup iface_zcr_remote_shell_v1
  * Sends an configuration_changed event to the client owning the resource.
  * @param resource_ The client's resource
  */
 static inline void
-zwp_remote_shell_v1_send_configuration_changed(struct wl_resource *resource_, int32_t width, int32_t height, int32_t transform, wl_fixed_t scale_factor, int32_t work_area_inset_left, int32_t work_area_inset_top, int32_t work_area_inset_right, int32_t work_area_inset_bottom, uint32_t layout_mode)
+zcr_remote_shell_v1_send_configuration_changed(struct wl_resource *resource_, int32_t width, int32_t height, int32_t transform, wl_fixed_t scale_factor, int32_t work_area_inset_left, int32_t work_area_inset_top, int32_t work_area_inset_right, int32_t work_area_inset_bottom, uint32_t layout_mode)
 {
-	wl_resource_post_event(resource_, ZWP_REMOTE_SHELL_V1_CONFIGURATION_CHANGED, width, height, transform, scale_factor, work_area_inset_left, work_area_inset_top, work_area_inset_right, work_area_inset_bottom, layout_mode);
+	wl_resource_post_event(resource_, ZCR_REMOTE_SHELL_V1_CONFIGURATION_CHANGED, width, height, transform, scale_factor, work_area_inset_left, work_area_inset_top, work_area_inset_right, work_area_inset_bottom, layout_mode);
 }
 
 /**
- * @ingroup iface_zwp_remote_surface_v1
- * @struct zwp_remote_surface_v1_interface
+ * @ingroup iface_zcr_remote_surface_v1
+ * @struct zcr_remote_surface_v1_interface
  */
-struct zwp_remote_surface_v1_interface {
+struct zcr_remote_surface_v1_interface {
 	/**
 	 * Destroy the remote_surface
 	 *
@@ -404,18 +371,69 @@ struct zwp_remote_surface_v1_interface {
 			  struct wl_resource *resource,
 			  wl_fixed_t scale);
 	/**
-	 * fullscreen
+	 * set a rectangular shadow
 	 *
-	 * Request that surface is made fullscreen.
+	 * Request that surface needs a rectangular shadow.
 	 *
-	 * This is only a request that the window should be made
-	 * fullscreen. The compositor may choose to ignore this request.
-	 * The client should listen to set_fullscreen events to determine
-	 * if the window was made fullscreen or not.
-	 * @since 2
+	 * This is only a request that the surface should have a
+	 * rectangular shadow. The compositor may choose to ignore this
+	 * request.
+	 *
+	 * The arguments are given in the output coordinate space and
+	 * specifies the inner bounds of the shadow.
+	 *
+	 * The arguments are given in the output coordinate space.
+	 * Specifying zero width and height will disable the shadow.
 	 */
-	void (*fullscreen)(struct wl_client *client,
-			   struct wl_resource *resource);
+	void (*set_rectangular_shadow)(struct wl_client *client,
+				       struct wl_resource *resource,
+				       int32_t x,
+				       int32_t y,
+				       int32_t width,
+				       int32_t height);
+	/**
+	 * suggests the window's background opacity
+	 *
+	 * Suggests the window's background opacity when the shadow is
+	 * requested.
+	 */
+	void (*set_rectangular_shadow_background_opacity)(struct wl_client *client,
+							  struct wl_resource *resource,
+							  wl_fixed_t opacity);
+	/**
+	 * set surface title
+	 *
+	 * Set a short title for the surface.
+	 *
+	 * This string may be used to identify the surface in a task bar,
+	 * window list, or other user interface elements provided by the
+	 * compositor.
+	 *
+	 * The string must be encoded in UTF-8.
+	 */
+	void (*set_title)(struct wl_client *client,
+			  struct wl_resource *resource,
+			  const char *title);
+	/**
+	 * set top inset for surface
+	 *
+	 * Set distance from the top of the surface to the contents.
+	 *
+	 * This distance typically represents the size of the window
+	 * caption.
+	 */
+	void (*set_top_inset)(struct wl_client *client,
+			      struct wl_resource *resource,
+			      int32_t height);
+	/**
+	 * make the surface active
+	 *
+	 * Make the surface active and bring it to the front.
+	 * @param serial the serial of the user event
+	 */
+	void (*activate)(struct wl_client *client,
+			 struct wl_resource *resource,
+			 uint32_t serial);
 	/**
 	 * maximize
 	 *
@@ -427,7 +445,6 @@ struct zwp_remote_surface_v1_interface {
 	 * compositor may choose to ignore this request. The client should
 	 * listen to set_maximized events to determine if the window was
 	 * maximized or not.
-	 * @since 2
 	 */
 	void (*maximize)(struct wl_client *client,
 			 struct wl_resource *resource);
@@ -440,7 +457,6 @@ struct zwp_remote_surface_v1_interface {
 	 * compositor may choose to ignore this request. The client should
 	 * listen to set_minimized events to determine if the window was
 	 * minimized or not.
-	 * @since 2
 	 */
 	void (*minimize)(struct wl_client *client,
 			 struct wl_resource *resource);
@@ -455,36 +471,21 @@ struct zwp_remote_surface_v1_interface {
 	 * compositor may choose to ignore this request. The client should
 	 * listen to unset_maximized, unset_minimize and unset_fullscreen
 	 * events to determine if the window was restored or not.
-	 * @since 2
 	 */
 	void (*restore)(struct wl_client *client,
 			struct wl_resource *resource);
 	/**
-	 * pin
+	 * fullscreen
 	 *
-	 * Request that surface is pinned.
+	 * Request that surface is made fullscreen.
 	 *
-	 * This is only a request that the window should be pinned. The
-	 * compositor may choose to ignore this request. The client should
-	 * listen to set_pinned events to determine if the window was
-	 * pinned or not.
-	 * @since 3
+	 * This is only a request that the window should be made
+	 * fullscreen. The compositor may choose to ignore this request.
+	 * The client should listen to set_fullscreen events to determine
+	 * if the window was made fullscreen or not.
 	 */
-	void (*pin)(struct wl_client *client,
-		    struct wl_resource *resource);
-	/**
-	 * unpin
-	 *
-	 * Request that surface is unpinned.
-	 *
-	 * This is only a request that the window should be unpinned. The
-	 * compositor may choose to ignore this request. The client should
-	 * listen to unset_pinned events to determine if the window was
-	 * unpinned or not.
-	 * @since 3
-	 */
-	void (*unpin)(struct wl_client *client,
-		      struct wl_resource *resource);
+	void (*fullscreen)(struct wl_client *client,
+			   struct wl_resource *resource);
 	/**
 	 * unfullscreen
 	 *
@@ -494,64 +495,39 @@ struct zwp_remote_surface_v1_interface {
 	 * unfullscreen. The compositor may choose to ignore this request.
 	 * The client should listen to unset_fullscreen events to determine
 	 * if the window was made unfullscreen or not.
-	 * @since 3
 	 */
 	void (*unfullscreen)(struct wl_client *client,
 			     struct wl_resource *resource);
 	/**
-	 * set a rectangular shadow
+	 * pin
 	 *
-	 * Request that surface needs a rectangular shadow.
+	 * Request that surface is pinned.
 	 *
-	 * This is only a request that the surface should have a
-	 * rectangular shadow. The compositor may choose to ignore this
-	 * request.
-	 *
-	 * The arguments are given in the output coordinate space and
-	 * specifies the inner bounds of the shadow.
-	 *
-	 * The arguments are given in the output coordinate space.
-	 * Specifying zero width and height will disable the shadow.
-	 * @since 4
+	 * This is only a request that the window should be pinned. The
+	 * compositor may choose to ignore this request. The client should
+	 * listen to state_changed events to determine if the window was
+	 * pinned or not. If trusted flag is non-zero, the app can prevent
+	 * users from exiting the pinned mode.
 	 */
-	void (*set_rectangular_shadow)(struct wl_client *client,
-				       struct wl_resource *resource,
-				       int32_t x,
-				       int32_t y,
-				       int32_t width,
-				       int32_t height);
+	void (*pin)(struct wl_client *client,
+		    struct wl_resource *resource,
+		    int32_t trusted);
 	/**
-	 * set surface title
+	 * unpin
 	 *
-	 * Set a short title for the surface.
+	 * Request that surface is unpinned.
 	 *
-	 * This string may be used to identify the surface in a task bar,
-	 * window list, or other user interface elements provided by the
-	 * compositor.
-	 *
-	 * The string must be encoded in UTF-8.
-	 * @since 5
+	 * This is only a request that the window should be unpinned. The
+	 * compositor may choose to ignore this request. The client should
+	 * listen to unset_pinned events to determine if the window was
+	 * unpinned or not.
 	 */
-	void (*set_title)(struct wl_client *client,
-			  struct wl_resource *resource,
-			  const char *title);
-	/**
-	 * set top inset for surface
-	 *
-	 * Set distance from the top of the surface to the contents.
-	 *
-	 * This distance typically represents the size of the window
-	 * caption.
-	 * @since 5
-	 */
-	void (*set_top_inset)(struct wl_client *client,
-			      struct wl_resource *resource,
-			      int32_t height);
+	void (*unpin)(struct wl_client *client,
+		      struct wl_resource *resource);
 	/**
 	 * suggests a re-layout of remote shell input area
 	 *
 	 * Suggests a surface should become system modal.
-	 * @since 8
 	 */
 	void (*set_system_modal)(struct wl_client *client,
 				 struct wl_resource *resource);
@@ -559,215 +535,71 @@ struct zwp_remote_surface_v1_interface {
 	 * suggests a re-layout of remote shell input area
 	 *
 	 * Suggests a surface should become non system modal.
-	 * @since 8
 	 */
 	void (*unset_system_modal)(struct wl_client *client,
 				   struct wl_resource *resource);
 	/**
-	 * suggests the window's background opacity
+	 * interactive move started
 	 *
-	 * Suggests the window's background opacity when the shadow is
-	 * requested.
-	 * @since 9
+	 * Notifies the compositor when an interactive, user-driven move
+	 * of the surface starts. The compositor may assume that subsequent
+	 * set_window_geometry requests are position updates until it
+	 * receives a unset_moving request.
+	 * @since 2
 	 */
-	void (*set_rectangular_shadow_background_opacity)(struct wl_client *client,
-							  struct wl_resource *resource,
-							  wl_fixed_t opacity);
+	void (*set_moving)(struct wl_client *client,
+			   struct wl_resource *resource);
 	/**
-	 * make the surface active
+	 * interactive move stopped
 	 *
-	 * Make the surface active and bring it to the front.
-	 * @param serial the serial of the user event
-	 * @since 10
+	 * Notifies the compositor when an interactive, user-driven move
+	 * of the surface stops. The compositor may choose to stop the move
+	 * regardless of this request.
+	 * @since 2
 	 */
-	void (*activate)(struct wl_client *client,
-			 struct wl_resource *resource,
-			 uint32_t serial);
-	/**
-	 * set window mode as pinned with taking a trasted flag.
-	 *
-	 * Request that surface is pinned.
-	 *
-	 * This is only a request that the window should be pinned. The
-	 * compositor may choose to ignore this request. The client should
-	 * listen to set_pinned events to determine if the window was
-	 * pinned or not. If trusted flag is non-zero, the app can prevent
-	 * users from exiting the pinned mode.
-	 * @param trusted whether the app can enforce users           to stay in the pinned mode.
-	 * @since 11
-	 */
-	void (*pin_with_trusted_flag)(struct wl_client *client,
-				      struct wl_resource *resource,
-				      int32_t trusted);
+	void (*unset_moving)(struct wl_client *client,
+			     struct wl_resource *resource);
 };
 
-#define ZWP_REMOTE_SURFACE_V1_SET_FULLSCREEN	0
-#define ZWP_REMOTE_SURFACE_V1_UNSET_FULLSCREEN	1
-#define ZWP_REMOTE_SURFACE_V1_CLOSE	2
-#define ZWP_REMOTE_SURFACE_V1_SET_MAXIMIZED	3
-#define ZWP_REMOTE_SURFACE_V1_UNSET_MAXIMIZED	4
-#define ZWP_REMOTE_SURFACE_V1_SET_MINIMIZED	5
-#define ZWP_REMOTE_SURFACE_V1_UNSET_MINIMIZED	6
-#define ZWP_REMOTE_SURFACE_V1_SET_PINNED	7
-#define ZWP_REMOTE_SURFACE_V1_UNSET_PINNED	8
-#define ZWP_REMOTE_SURFACE_V1_STATE_TYPE_CHANGED	9
+#define ZCR_REMOTE_SURFACE_V1_CLOSE	0
+#define ZCR_REMOTE_SURFACE_V1_STATE_TYPE_CHANGED	1
 
 /**
- * @ingroup iface_zwp_remote_surface_v1
+ * @ingroup iface_zcr_remote_surface_v1
  */
-#define ZWP_REMOTE_SURFACE_V1_SET_FULLSCREEN_SINCE_VERSION	1
+#define ZCR_REMOTE_SURFACE_V1_CLOSE_SINCE_VERSION	1
 /**
- * @ingroup iface_zwp_remote_surface_v1
+ * @ingroup iface_zcr_remote_surface_v1
  */
-#define ZWP_REMOTE_SURFACE_V1_UNSET_FULLSCREEN_SINCE_VERSION	1
-/**
- * @ingroup iface_zwp_remote_surface_v1
- */
-#define ZWP_REMOTE_SURFACE_V1_CLOSE_SINCE_VERSION	1
-/**
- * @ingroup iface_zwp_remote_surface_v1
- */
-#define ZWP_REMOTE_SURFACE_V1_SET_MAXIMIZED_SINCE_VERSION	2
-/**
- * @ingroup iface_zwp_remote_surface_v1
- */
-#define ZWP_REMOTE_SURFACE_V1_UNSET_MAXIMIZED_SINCE_VERSION	2
-/**
- * @ingroup iface_zwp_remote_surface_v1
- */
-#define ZWP_REMOTE_SURFACE_V1_SET_MINIMIZED_SINCE_VERSION	2
-/**
- * @ingroup iface_zwp_remote_surface_v1
- */
-#define ZWP_REMOTE_SURFACE_V1_UNSET_MINIMIZED_SINCE_VERSION	2
-/**
- * @ingroup iface_zwp_remote_surface_v1
- */
-#define ZWP_REMOTE_SURFACE_V1_SET_PINNED_SINCE_VERSION	3
-/**
- * @ingroup iface_zwp_remote_surface_v1
- */
-#define ZWP_REMOTE_SURFACE_V1_UNSET_PINNED_SINCE_VERSION	3
-/**
- * @ingroup iface_zwp_remote_surface_v1
- */
-#define ZWP_REMOTE_SURFACE_V1_STATE_TYPE_CHANGED_SINCE_VERSION	7
+#define ZCR_REMOTE_SURFACE_V1_STATE_TYPE_CHANGED_SINCE_VERSION	1
 
 /**
- * @ingroup iface_zwp_remote_surface_v1
- * Sends an set_fullscreen event to the client owning the resource.
- * @param resource_ The client's resource
- */
-static inline void
-zwp_remote_surface_v1_send_set_fullscreen(struct wl_resource *resource_)
-{
-	wl_resource_post_event(resource_, ZWP_REMOTE_SURFACE_V1_SET_FULLSCREEN);
-}
-
-/**
- * @ingroup iface_zwp_remote_surface_v1
- * Sends an unset_fullscreen event to the client owning the resource.
- * @param resource_ The client's resource
- */
-static inline void
-zwp_remote_surface_v1_send_unset_fullscreen(struct wl_resource *resource_)
-{
-	wl_resource_post_event(resource_, ZWP_REMOTE_SURFACE_V1_UNSET_FULLSCREEN);
-}
-
-/**
- * @ingroup iface_zwp_remote_surface_v1
+ * @ingroup iface_zcr_remote_surface_v1
  * Sends an close event to the client owning the resource.
  * @param resource_ The client's resource
  */
 static inline void
-zwp_remote_surface_v1_send_close(struct wl_resource *resource_)
+zcr_remote_surface_v1_send_close(struct wl_resource *resource_)
 {
-	wl_resource_post_event(resource_, ZWP_REMOTE_SURFACE_V1_CLOSE);
+	wl_resource_post_event(resource_, ZCR_REMOTE_SURFACE_V1_CLOSE);
 }
 
 /**
- * @ingroup iface_zwp_remote_surface_v1
- * Sends an set_maximized event to the client owning the resource.
- * @param resource_ The client's resource
- */
-static inline void
-zwp_remote_surface_v1_send_set_maximized(struct wl_resource *resource_)
-{
-	wl_resource_post_event(resource_, ZWP_REMOTE_SURFACE_V1_SET_MAXIMIZED);
-}
-
-/**
- * @ingroup iface_zwp_remote_surface_v1
- * Sends an unset_maximized event to the client owning the resource.
- * @param resource_ The client's resource
- */
-static inline void
-zwp_remote_surface_v1_send_unset_maximized(struct wl_resource *resource_)
-{
-	wl_resource_post_event(resource_, ZWP_REMOTE_SURFACE_V1_UNSET_MAXIMIZED);
-}
-
-/**
- * @ingroup iface_zwp_remote_surface_v1
- * Sends an set_minimized event to the client owning the resource.
- * @param resource_ The client's resource
- */
-static inline void
-zwp_remote_surface_v1_send_set_minimized(struct wl_resource *resource_)
-{
-	wl_resource_post_event(resource_, ZWP_REMOTE_SURFACE_V1_SET_MINIMIZED);
-}
-
-/**
- * @ingroup iface_zwp_remote_surface_v1
- * Sends an unset_minimized event to the client owning the resource.
- * @param resource_ The client's resource
- */
-static inline void
-zwp_remote_surface_v1_send_unset_minimized(struct wl_resource *resource_)
-{
-	wl_resource_post_event(resource_, ZWP_REMOTE_SURFACE_V1_UNSET_MINIMIZED);
-}
-
-/**
- * @ingroup iface_zwp_remote_surface_v1
- * Sends an set_pinned event to the client owning the resource.
- * @param resource_ The client's resource
- */
-static inline void
-zwp_remote_surface_v1_send_set_pinned(struct wl_resource *resource_)
-{
-	wl_resource_post_event(resource_, ZWP_REMOTE_SURFACE_V1_SET_PINNED);
-}
-
-/**
- * @ingroup iface_zwp_remote_surface_v1
- * Sends an unset_pinned event to the client owning the resource.
- * @param resource_ The client's resource
- */
-static inline void
-zwp_remote_surface_v1_send_unset_pinned(struct wl_resource *resource_)
-{
-	wl_resource_post_event(resource_, ZWP_REMOTE_SURFACE_V1_UNSET_PINNED);
-}
-
-/**
- * @ingroup iface_zwp_remote_surface_v1
+ * @ingroup iface_zcr_remote_surface_v1
  * Sends an state_type_changed event to the client owning the resource.
  * @param resource_ The client's resource
  */
 static inline void
-zwp_remote_surface_v1_send_state_type_changed(struct wl_resource *resource_, uint32_t state_type)
+zcr_remote_surface_v1_send_state_type_changed(struct wl_resource *resource_, uint32_t state_type)
 {
-	wl_resource_post_event(resource_, ZWP_REMOTE_SURFACE_V1_STATE_TYPE_CHANGED, state_type);
+	wl_resource_post_event(resource_, ZCR_REMOTE_SURFACE_V1_STATE_TYPE_CHANGED, state_type);
 }
 
 /**
- * @ingroup iface_zwp_notification_surface_v1
- * @struct zwp_notification_surface_v1_interface
+ * @ingroup iface_zcr_notification_surface_v1
+ * @struct zcr_notification_surface_v1_interface
  */
-struct zwp_notification_surface_v1_interface {
+struct zcr_notification_surface_v1_interface {
 	/**
 	 * Destroy the notification_surface
 	 *

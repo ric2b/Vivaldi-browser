@@ -771,7 +771,7 @@ def merge_resource(origin_file, overlay_file, target_location, params = {},
     PRINT_SPECIAL_UPDATE_TARGETS: special_update_targets+special_copy_targets,
   }
 
-  if action != SETUP_RESOURCES:
+  if False and action != SETUP_RESOURCES:
     source_dir = os.path.dirname(origin_file)
     # initial copy, to please HTML flattening by grit
     for x in sources[PRINT_MAIN_RESOURCES]:

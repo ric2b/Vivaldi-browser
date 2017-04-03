@@ -409,10 +409,7 @@ class NET_EXPORT_PRIVATE QuicFramer {
     QuicPacketNumber max_block_length;
     // Length of first ack block.
     QuicPacketNumber first_block_length;
-    // Ack blocks starting with gaps to next block and ack block lengths.
-    std::vector<AckBlock> ack_blocks;
-    // Number of ACK blocks. If |ack_blocks| is generated, must equal
-    // |ack_blocks.size()|.
+    // Number of ACK blocks needed for the ACK frame.
     size_t num_ack_blocks;
   };
 
@@ -444,7 +441,7 @@ class NET_EXPORT_PRIVATE QuicFramer {
   bool ProcessPathId(QuicDataReader* reader, QuicPathId* path_id);
   bool ProcessPacketSequenceNumber(QuicDataReader* reader,
                                    QuicPacketNumberLength packet_number_length,
-                                   QuicPacketNumber last_packet_number,
+                                   QuicPacketNumber base_packet_number,
                                    QuicPacketNumber* packet_number);
   bool ProcessFrameData(QuicDataReader* reader, const QuicPacketHeader& header);
   bool ProcessStreamFrame(QuicDataReader* reader,
@@ -477,9 +474,10 @@ class NET_EXPORT_PRIVATE QuicFramer {
                       size_t* decrypted_length);
 
   // Checks if |path_id| is a viable path to receive packets on. Returns true
-  // and sets |last_packet_number| if the path is not closed. Returns false
+  // and sets |base_packet_number| to the packet number to calculate the
+  // incoming packet number from if the path is not closed. Returns false
   // otherwise.
-  bool IsValidPath(QuicPathId path_id, QuicPacketNumber* last_packet_number);
+  bool IsValidPath(QuicPathId path_id, QuicPacketNumber* base_packet_number);
 
   // Sets last_packet_number_. This can only be called after the packet is
   // successfully decrypted.
@@ -489,7 +487,7 @@ class NET_EXPORT_PRIVATE QuicFramer {
   // wire format version and the last seen packet number.
   QuicPacketNumber CalculatePacketNumberFromWire(
       QuicPacketNumberLength packet_number_length,
-      QuicPacketNumber last_packet_number,
+      QuicPacketNumber base_packet_number,
       QuicPacketNumber packet_number) const;
 
   // Returns the QuicTime::Delta corresponding to the time from when the framer
@@ -528,8 +526,7 @@ class NET_EXPORT_PRIVATE QuicFramer {
 
   static AckFrameInfo GetAckFrameInfo(const QuicAckFrame& frame);
 
-  static NewAckFrameInfo GetNewAckFrameInfo(const QuicAckFrame& frame,
-                                            bool construct_blocks);
+  static NewAckFrameInfo GetNewAckFrameInfo(const QuicAckFrame& frame);
 
   // The Append* methods attempt to write the provided header or frame using the
   // |writer|, and return true if successful.
@@ -573,9 +570,16 @@ class NET_EXPORT_PRIVATE QuicFramer {
   std::unordered_set<QuicPathId> closed_paths_;
   // Map mapping path id to packet number of last successfully decrypted
   // received packet.
+  // TODO(ianswett): Remove when
+  // gfe2_reloadable_flag_quic_packet_numbers_largest_received is deprecated.
   std::unordered_map<QuicPathId, QuicPacketNumber> last_packet_numbers_;
   // Updated by ProcessPacketHeader when it succeeds.
   QuicPacketNumber last_packet_number_;
+  // Map mapping path id to packet number of largest successfully decrypted
+  // received packet.
+  std::unordered_map<QuicPathId, QuicPacketNumber> largest_packet_numbers_;
+  // Updated by ProcessPacketHeader when it succeeds decrypting a larger packet.
+  QuicPacketNumber largest_packet_number_;
   // The path on which last successfully decrypted packet was received.
   QuicPathId last_path_id_;
   // Updated by WritePacketHeader.

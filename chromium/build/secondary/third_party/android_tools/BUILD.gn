@@ -15,8 +15,6 @@ config("cpu_features_warnings") {
   }
 }
 
-# This is the GN version of
-# //build/android/ndk.gyp:cpu_features
 source_set("cpu_features") {
   sources = [
     "$android_ndk_root/sources/android/cpufeatures/cpu-features.c",
@@ -65,6 +63,7 @@ android_java_prebuilt("android_support_annotations_java") {
 android_aar_prebuilt("android_support_v4_java") {
   lib_name = "support-v4"
   aar_path = "$lib_path/$lib_name/$lib_version/$lib_name-$lib_version.aar"
+  ignore_aidl = true  # We don't appear to need these currently.
 }
 
 android_aar_prebuilt("android_support_v13_java") {
@@ -125,7 +124,9 @@ android_java_prebuilt("google_play_services_default_java") {
   ]
   input_jars_paths = [ "$android_sdk/optional/org.apache.http.legacy.jar" ]
   proguard_preprocess = true
-  proguard_config = "//third_party/android_tools/proguard.flags"
+  proguard_preprocess_config = "//third_party/android_tools/proguard.flags"
+  proguard_configs =
+      [ "//build/secondary/third_party/android_tools/apk_proguard.flags" ]
   jar_path = "$android_sdk_root/extras/google/google_play_services/libproject/google-play-services_lib/libs/google-play-services.jar"
 }
 

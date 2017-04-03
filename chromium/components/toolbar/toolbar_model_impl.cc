@@ -73,6 +73,7 @@ SecurityStateModel::SecurityLevel ToolbarModelImpl::GetSecurityLevel(
 int ToolbarModelImpl::GetIcon() const {
   switch (GetSecurityLevel(false)) {
     case SecurityStateModel::NONE:
+    case SecurityStateModel::HTTP_SHOW_WARNING:
       return IDR_LOCATION_BAR_HTTP;
     case SecurityStateModel::EV_SECURE:
     case SecurityStateModel::SECURE:
@@ -80,9 +81,9 @@ int ToolbarModelImpl::GetIcon() const {
     case SecurityStateModel::SECURITY_WARNING:
       // Surface Dubious as Neutral.
       return IDR_LOCATION_BAR_HTTP;
-    case SecurityStateModel::SECURITY_POLICY_WARNING:
+    case SecurityStateModel::SECURE_WITH_POLICY_INSTALLED_CERT:
       return IDR_OMNIBOX_HTTPS_POLICY_WARNING;
-    case SecurityStateModel::SECURITY_ERROR:
+    case SecurityStateModel::DANGEROUS:
       return IDR_OMNIBOX_HTTPS_INVALID;
   }
 
@@ -94,6 +95,7 @@ gfx::VectorIconId ToolbarModelImpl::GetVectorIcon() const {
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
   switch (GetSecurityLevel(false)) {
     case SecurityStateModel::NONE:
+    case SecurityStateModel::HTTP_SHOW_WARNING:
       return gfx::VectorIconId::LOCATION_BAR_HTTP;
     case SecurityStateModel::EV_SECURE:
     case SecurityStateModel::SECURE:
@@ -101,9 +103,9 @@ gfx::VectorIconId ToolbarModelImpl::GetVectorIcon() const {
     case SecurityStateModel::SECURITY_WARNING:
       // Surface Dubious as Neutral.
       return gfx::VectorIconId::LOCATION_BAR_HTTP;
-    case SecurityStateModel::SECURITY_POLICY_WARNING:
+    case SecurityStateModel::SECURE_WITH_POLICY_INSTALLED_CERT:
       return gfx::VectorIconId::BUSINESS;
-    case SecurityStateModel::SECURITY_ERROR:
+    case SecurityStateModel::DANGEROUS:
       return gfx::VectorIconId::LOCATION_BAR_HTTPS_INVALID;
   }
 #endif
@@ -127,6 +129,19 @@ base::string16 ToolbarModelImpl::GetEVCertName() const {
       IDS_SECURE_CONNECTION_EV,
       base::UTF8ToUTF16(cert->subject().organization_names[0]),
       base::UTF8ToUTF16(cert->subject().country_name));
+}
+
+base::string16 ToolbarModelImpl::GetSecureVerboseText() const {
+  switch (GetSecurityLevel(false)) {
+    case SecurityStateModel::SECURE:
+      return l10n_util::GetStringUTF16(IDS_SECURE_VERBOSE_STATE);
+    case SecurityStateModel::DANGEROUS:
+      return l10n_util::GetStringUTF16(delegate_->FailsMalwareCheck()
+                                           ? IDS_DANGEROUS_VERBOSE_STATE
+                                           : IDS_NOT_SECURE_VERBOSE_STATE);
+    default:
+      return base::string16();
+  }
 }
 
 bool ToolbarModelImpl::ShouldDisplayURL() const {

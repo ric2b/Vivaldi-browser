@@ -44,8 +44,8 @@ const char kSlowDownRasterScaleFactor[] = "slow-down-raster-scale-factor";
 // Compress tile textures for GPUs supporting it.
 const char kEnableTileCompression[] = "enable-tile-compression";
 
-// Disable the BeginFrame signal from browser to renderer to schedule rendering.
-const char kDisableBeginFrameScheduling[] = "disable-begin-frame-scheduling";
+// Enable color space aware rasterization and compositing.
+const char kEnableColorCorrectRendering[] = "enable-color-correct-rendering";
 
 // Enables the GPU benchmarking extension
 const char kEnableGpuBenchmarking[] = "enable-gpu-benchmarking";
@@ -83,12 +83,6 @@ const char kUIShowSurfaceDamageRects[] = "ui-show-surface-damage-rects";
 // layer.
 const char kShowScreenSpaceRects[] = "show-screenspace-rects";
 const char kUIShowScreenSpaceRects[] = "ui-show-screenspace-rects";
-
-// Show rects in the HUD around the screen-space transformed bounds of every
-// layer's replica, when they have one.
-const char kShowReplicaScreenSpaceRects[] = "show-replica-screenspace-rects";
-const char kUIShowReplicaScreenSpaceRects[] =
-    "ui-show-replica-screenspace-rects";
 
 // Switches cc machinery to use layer lists instead of layer trees
 const char kEnableLayerLists[] = "enable-layer-lists";

@@ -13,14 +13,12 @@
 #include <utility>
 #include <vector>
 
-#include "ash/common/root_window_controller_common.h"
+#include "ash/common/shelf/shelf_layout_manager.h"
 #include "ash/common/shell_window_ids.h"
-#include "ash/common/wm/always_on_top_controller.h"
 #include "ash/common/wm/container_finder.h"
 #include "ash/common/wm/dock/docked_window_layout_manager.h"
 #include "ash/common/wm/panels/panel_layout_manager.h"
 #include "ash/common/wm/root_window_layout_manager.h"
-#include "ash/common/wm/workspace/workspace_layout_manager.h"
 #include "ash/mus/bridge/wm_root_window_controller_mus.h"
 #include "ash/mus/bridge/wm_shelf_mus.h"
 #include "ash/mus/bridge/wm_shell_mus.h"
@@ -29,7 +27,6 @@
 #include "ash/mus/non_client_frame_controller.h"
 #include "ash/mus/property_util.h"
 #include "ash/mus/screenlock_layout.h"
-#include "ash/mus/shelf_layout_manager.h"
 #include "ash/mus/window_manager.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -42,7 +39,8 @@
 #include "services/ui/public/cpp/window.h"
 #include "services/ui/public/cpp/window_property.h"
 #include "services/ui/public/cpp/window_tree_client.h"
-#include "services/ui/public/cpp/window_tree_host_factory.h"
+#include "ui/display/display_list.h"
+#include "ui/display/screen_base.h"
 
 using ash::mojom::Container;
 
@@ -55,34 +53,36 @@ RootWindowController::RootWindowController(WindowManager* window_manager,
     : window_manager_(window_manager),
       root_(root),
       window_count_(0),
-      display_(display) {
-  wm_root_window_controller_.reset(
-      new WmRootWindowControllerMus(window_manager_->shell(), this));
-
-  root_window_controller_common_.reset(
-      new RootWindowControllerCommon(WmWindowMus::Get(root_)));
-  root_window_controller_common_->CreateContainers();
-  root_window_controller_common_->CreateLayoutManagers();
+      display_(display),
+      wm_root_window_controller_(
+          base::MakeUnique<WmRootWindowControllerMus>(window_manager_->shell(),
+                                                      this)) {
+  wm_root_window_controller_->CreateContainers();
+  wm_root_window_controller_->CreateLayoutManagers();
   CreateLayoutManagers();
 
   disconnected_app_handler_.reset(new DisconnectedAppHandler(root));
 
   // Force a layout of the root, and its children, RootWindowLayout handles
   // both.
-  root_window_controller_common_->root_window_layout()->OnWindowResized();
+  wm_root_window_controller_->root_window_layout_manager()->OnWindowResized();
 
   for (size_t i = 0; i < kNumActivatableShellWindowIds; ++i) {
     window_manager_->window_manager_client()->AddActivationParent(
         GetWindowByShellWindowId(kActivatableShellWindowIds[i])->mus_window());
   }
-
-  WmWindowMus* always_on_top_container =
-      GetWindowByShellWindowId(kShellWindowId_AlwaysOnTopContainer);
-  always_on_top_controller_.reset(
-      new AlwaysOnTopController(always_on_top_container));
 }
 
-RootWindowController::~RootWindowController() {}
+RootWindowController::~RootWindowController() {
+  Shutdown();
+  root_->Destroy();
+}
+
+void RootWindowController::Shutdown() {
+  // NOTE: Shutdown() may be called multiple times.
+  wm_root_window_controller_->ResetRootForNewWindowsIfNecessary();
+  wm_root_window_controller_->CloseChildWindows();
+}
 
 shell::Connector* RootWindowController::GetConnector() {
   return window_manager_->connector();
@@ -113,7 +113,7 @@ ui::Window* RootWindowController::NewTopLevelWindow(
   DCHECK(WmWindowMus::Get(container_window)->IsContainer());
 
   if (provide_non_client_frame) {
-    NonClientFrameController::Create(GetConnector(), container_window, window,
+    NonClientFrameController::Create(container_window, window,
                                      window_manager_->window_manager_client());
   } else {
     container_window->AddChild(window);
@@ -134,6 +134,21 @@ ui::Window* RootWindowController::GetWindowForContainer(Container container) {
 WmWindowMus* RootWindowController::GetWindowByShellWindowId(int id) {
   return WmWindowMus::AsWmWindowMus(
       WmWindowMus::Get(root_)->GetChildByShellWindowId(id));
+}
+
+void RootWindowController::SetWorkAreaInests(const gfx::Insets& insets) {
+  display_.UpdateWorkAreaFromInsets(insets);
+  display::DisplayList* display_list =
+      window_manager_->screen()->display_list();
+  auto iter = display_list->FindDisplayById(display_.id());
+  DCHECK(iter != display_list->displays().end());
+  const display::DisplayList::Type display_type =
+      iter == display_list->GetPrimaryDisplayIterator()
+          ? display::DisplayList::Type::PRIMARY
+          : display::DisplayList::Type::NOT_PRIMARY;
+  display_list->UpdateDisplay(display_, display_type);
+  // TODO(kylechar): needs to push to DisplayController.
+  NOTIMPLEMENTED();
 }
 
 gfx::Rect RootWindowController::CalculateDefaultBounds(
@@ -163,21 +178,6 @@ gfx::Rect RootWindowController::CalculateDefaultBounds(
                    width, height);
 }
 
-void RootWindowController::OnShelfWindowAvailable() {
-  DockedWindowLayoutManager* docked_window_layout_manager =
-      DockedWindowLayoutManager::Get(WmWindowMus::Get(root_));
-
-  DCHECK(!docked_window_layout_manager->shelf());
-  docked_window_layout_manager->SetShelf(wm_shelf_.get());
-
-  PanelLayoutManager::Get(WmWindowMus::Get(root_))->SetShelf(wm_shelf_.get());
-
-  // TODO: http://crbug.com/614182 Ash's ShelfLayoutManager implements
-  // DockedWindowLayoutManagerObserver so that it can inset by the docked
-  // windows.
-  // docked_layout_manager_->AddObserver(shelf_->shelf_layout_manager());
-}
-
 void RootWindowController::CreateLayoutManagers() {
   // Override the default layout managers for certain containers.
   WmWindowMus* lock_screen_container =
@@ -185,31 +185,8 @@ void RootWindowController::CreateLayoutManagers() {
   layout_managers_[lock_screen_container->mus_window()].reset(
       new ScreenlockLayout(lock_screen_container->mus_window()));
 
-  WmWindowMus* shelf_container =
-      GetWindowByShellWindowId(kShellWindowId_ShelfContainer);
-  ShelfLayoutManager* shelf_layout_manager =
-      new ShelfLayoutManager(shelf_container->mus_window(), this);
-  layout_managers_[shelf_container->mus_window()].reset(shelf_layout_manager);
-
-  wm_shelf_.reset(new WmShelfMus(wm_root_window_controller_.get()));
-
-  WmWindowMus* default_container =
-      GetWindowByShellWindowId(kShellWindowId_DefaultContainer);
-  // WorkspaceLayoutManager is not a mash::wm::LayoutManager (it's a
-  // wm::LayoutManager), so it can't be in |layout_managers_|.
-  workspace_layout_manager_ = new WorkspaceLayoutManager(default_container);
-  default_container->SetLayoutManager(
-      base::WrapUnique(workspace_layout_manager_));
-
-  WmWindowMus* docked_container =
-      GetWindowByShellWindowId(kShellWindowId_DockedContainer);
-  docked_container->SetLayoutManager(
-      base::MakeUnique<DockedWindowLayoutManager>(docked_container));
-
-  WmWindowMus* panel_container =
-      GetWindowByShellWindowId(kShellWindowId_PanelContainer);
-  panel_container->SetLayoutManager(
-      base::MakeUnique<PanelLayoutManager>(panel_container));
+  // Creating the shelf also creates the status area and both layout managers.
+  wm_shelf_.reset(new WmShelfMus(wm_root_window_controller_->GetWindow()));
 }
 
 }  // namespace mus

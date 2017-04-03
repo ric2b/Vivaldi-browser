@@ -12,7 +12,6 @@
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/navigation/public/interfaces/view.mojom.h"
 #include "services/shell/public/cpp/interface_factory.h"
 #include "services/shell/public/cpp/service.h"
@@ -37,7 +36,6 @@ class ViewImpl : public mojom::View,
   ViewImpl(std::unique_ptr<shell::Connector> connector,
            const std::string& client_user_id,
            mojom::ViewClientPtr client,
-           mojom::ViewRequest request,
            std::unique_ptr<shell::ServiceContextRef> ref);
   ~ViewImpl() override;
 
@@ -81,7 +79,8 @@ class ViewImpl : public mojom::View,
 
   // ui::WindowTreeClientDelegate:
   void OnEmbed(ui::Window* root) override;
-  void OnDidDestroyClient(ui::WindowTreeClient* client) override;
+  void OnEmbedRootDestroyed(ui::Window* root) override;
+  void OnLostConnection(ui::WindowTreeClient* client) override;
   void OnPointerEventObserved(const ui::PointerEvent& event,
                               ui::Window* target) override;
 
@@ -91,9 +90,10 @@ class ViewImpl : public mojom::View,
   const views::Widget* GetWidget() const override;
 
   std::unique_ptr<shell::Connector> connector_;
-  mojo::StrongBinding<mojom::View> binding_;
   mojom::ViewClientPtr client_;
   std::unique_ptr<shell::ServiceContextRef> ref_;
+
+  std::unique_ptr<ui::WindowTreeClient> window_tree_client_;
 
   views::WebView* web_view_;
 

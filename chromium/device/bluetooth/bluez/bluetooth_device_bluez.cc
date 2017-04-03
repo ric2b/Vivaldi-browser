@@ -236,6 +236,28 @@ bool BluetoothDeviceBlueZ::IsGattServicesDiscoveryComplete() const {
 }
 
 void BluetoothDeviceBlueZ::DisconnectGatt() {
+  // There isn't currently a good way to manage the ownership of a connection
+  // between Chrome and bluetoothd plugins/profiles. Until a proper reference
+  // count is kept in bluetoothd, we might unwittingly kill a connection to a
+  // device the user is still interested in, e.g. a mouse. A device's paired
+  // status is usually a good indication that the device is being used by other
+  // parts of the system and therefore we leak these connections.
+  // TODO(crbug.com/630586): Call disconnect for all devices.
+
+  // IsPaired() returns true if we've connected to the device before. So we
+  // check the dbus property directly.
+  // TODO(crbug.com/649651): Use IsPaired once it returns true only for paired
+  // devices.
+  bluez::BluetoothDeviceClient::Properties* properties =
+      bluez::BluezDBusManager::Get()->GetBluetoothDeviceClient()->GetProperties(
+          object_path_);
+  DCHECK(properties);
+
+  if (properties->paired.value()) {
+    LOG(WARNING) << "Leaking connection to paired device.";
+    return;
+  }
+
   Disconnect(base::Bind(&base::DoNothing), base::Bind(&base::DoNothing));
 }
 
@@ -557,8 +579,8 @@ void BluetoothDeviceBlueZ::CreateGattConnection(
     return;
   }
 
-  // TODO(armansito): Until there is a way to create a reference counted GATT
-  // connection in bluetoothd, simply do a regular connect.
+  // TODO(crbug.com/630586): Until there is a way to create a reference counted
+  // GATT connection in bluetoothd, simply do a regular connect.
   Connect(NULL, base::Bind(&BluetoothDeviceBlueZ::OnCreateGattConnection,
                            weak_ptr_factory_.GetWeakPtr(), callback),
           error_callback);
@@ -571,6 +593,18 @@ void BluetoothDeviceBlueZ::GetServiceRecords(
       object_path_, callback,
       base::Bind(&BluetoothDeviceBlueZ::OnGetServiceRecordsError,
                  weak_ptr_factory_.GetWeakPtr(), error_callback));
+}
+
+void BluetoothDeviceBlueZ::UpdateServiceData() {
+  bluez::BluetoothDeviceClient::Properties* properties =
+      bluez::BluezDBusManager::Get()->GetBluetoothDeviceClient()->GetProperties(
+          object_path_);
+  DCHECK(properties);
+  DCHECK(properties->service_data.is_valid());
+
+  service_data_.clear();
+  for (const auto& pair : properties->service_data.value())
+    service_data_[BluetoothUUID(pair.first)] = pair.second;
 }
 
 BluetoothPairingBlueZ* BluetoothDeviceBlueZ::BeginPairing(

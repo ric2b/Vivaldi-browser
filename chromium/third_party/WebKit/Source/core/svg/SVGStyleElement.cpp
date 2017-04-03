@@ -24,141 +24,127 @@
 
 #include "core/MediaTypeNames.h"
 #include "core/css/CSSStyleSheet.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/events/Event.h"
 #include "wtf/StdLibExtras.h"
 
 namespace blink {
 
-static SVGStyleEventSender& styleErrorEventSender()
-{
-    DEFINE_STATIC_LOCAL(SVGStyleEventSender, sharedErrorEventSender, (SVGStyleEventSender::create(EventTypeNames::error)));
-    return sharedErrorEventSender;
+inline SVGStyleElement::SVGStyleElement(Document& document,
+                                        bool createdByParser)
+    : SVGElement(SVGNames::styleTag, document),
+      StyleElement(&document, createdByParser) {}
+
+SVGStyleElement::~SVGStyleElement() {}
+
+SVGStyleElement* SVGStyleElement::create(Document& document,
+                                         bool createdByParser) {
+  return new SVGStyleElement(document, createdByParser);
 }
 
-inline SVGStyleElement::SVGStyleElement(Document& document, bool createdByParser)
-    : SVGElement(SVGNames::styleTag, document)
-    , StyleElement(&document, createdByParser)
-{
+bool SVGStyleElement::disabled() const {
+  if (!m_sheet)
+    return false;
+
+  return m_sheet->disabled();
 }
 
-SVGStyleElement::~SVGStyleElement()
-{
+void SVGStyleElement::setDisabled(bool setDisabled) {
+  if (CSSStyleSheet* styleSheet = sheet())
+    styleSheet->setDisabled(setDisabled);
 }
 
-SVGStyleElement* SVGStyleElement::create(Document& document, bool createdByParser)
-{
-    return new SVGStyleElement(document, createdByParser);
+const AtomicString& SVGStyleElement::type() const {
+  DEFINE_STATIC_LOCAL(const AtomicString, defaultValue, ("text/css"));
+  const AtomicString& n = getAttribute(SVGNames::typeAttr);
+  return n.isNull() ? defaultValue : n;
 }
 
-bool SVGStyleElement::disabled() const
-{
-    if (!m_sheet)
-        return false;
-
-    return m_sheet->disabled();
+void SVGStyleElement::setType(const AtomicString& type) {
+  setAttribute(SVGNames::typeAttr, type);
 }
 
-void SVGStyleElement::setDisabled(bool setDisabled)
-{
-    if (CSSStyleSheet* styleSheet = sheet())
-        styleSheet->setDisabled(setDisabled);
+const AtomicString& SVGStyleElement::media() const {
+  const AtomicString& n = fastGetAttribute(SVGNames::mediaAttr);
+  return n.isNull() ? MediaTypeNames::all : n;
 }
 
-const AtomicString& SVGStyleElement::type() const
-{
-    DEFINE_STATIC_LOCAL(const AtomicString, defaultValue, ("text/css"));
-    const AtomicString& n = getAttribute(SVGNames::typeAttr);
-    return n.isNull() ? defaultValue : n;
+void SVGStyleElement::setMedia(const AtomicString& media) {
+  setAttribute(SVGNames::mediaAttr, media);
 }
 
-void SVGStyleElement::setType(const AtomicString& type)
-{
-    setAttribute(SVGNames::typeAttr, type);
+String SVGStyleElement::title() const {
+  return fastGetAttribute(SVGNames::titleAttr);
 }
 
-const AtomicString& SVGStyleElement::media() const
-{
-    const AtomicString& n = fastGetAttribute(SVGNames::mediaAttr);
-    return n.isNull() ? MediaTypeNames::all : n;
+void SVGStyleElement::setTitle(const AtomicString& title) {
+  setAttribute(SVGNames::titleAttr, title);
 }
 
-void SVGStyleElement::setMedia(const AtomicString& media)
-{
-    setAttribute(SVGNames::mediaAttr, media);
+void SVGStyleElement::parseAttribute(const QualifiedName& name,
+                                     const AtomicString& oldValue,
+                                     const AtomicString& value) {
+  if (name == SVGNames::titleAttr) {
+    if (m_sheet && isInDocumentTree())
+      m_sheet->setTitle(value);
+
+    return;
+  }
+
+  SVGElement::parseAttribute(name, oldValue, value);
 }
 
-String SVGStyleElement::title() const
-{
-    return fastGetAttribute(SVGNames::titleAttr);
+void SVGStyleElement::finishParsingChildren() {
+  StyleElement::ProcessingResult result =
+      StyleElement::finishParsingChildren(*this);
+  SVGElement::finishParsingChildren();
+  if (result == StyleElement::ProcessingFatalError)
+    notifyLoadedSheetAndAllCriticalSubresources(
+        ErrorOccurredLoadingSubresource);
 }
 
-void SVGStyleElement::setTitle(const AtomicString& title)
-{
-    setAttribute(SVGNames::titleAttr, title);
+Node::InsertionNotificationRequest SVGStyleElement::insertedInto(
+    ContainerNode* insertionPoint) {
+  SVGElement::insertedInto(insertionPoint);
+  return InsertionShouldCallDidNotifySubtreeInsertions;
 }
 
-void SVGStyleElement::parseAttribute(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& value)
-{
-    if (name == SVGNames::titleAttr) {
-        if (m_sheet && isInDocumentTree())
-            m_sheet->setTitle(value);
-
-        return;
-    }
-
-    SVGElement::parseAttribute(name, oldValue, value);
+void SVGStyleElement::didNotifySubtreeInsertionsToDocument() {
+  if (StyleElement::processStyleSheet(document(), *this) ==
+      StyleElement::ProcessingFatalError)
+    notifyLoadedSheetAndAllCriticalSubresources(
+        ErrorOccurredLoadingSubresource);
 }
 
-void SVGStyleElement::finishParsingChildren()
-{
-    StyleElement::ProcessingResult result = StyleElement::finishParsingChildren(this);
-    SVGElement::finishParsingChildren();
-    if (result == StyleElement::ProcessingFatalError)
-        notifyLoadedSheetAndAllCriticalSubresources(ErrorOccurredLoadingSubresource);
+void SVGStyleElement::removedFrom(ContainerNode* insertionPoint) {
+  SVGElement::removedFrom(insertionPoint);
+  StyleElement::removedFrom(*this, insertionPoint);
 }
 
-Node::InsertionNotificationRequest SVGStyleElement::insertedInto(ContainerNode* insertionPoint)
-{
-    SVGElement::insertedInto(insertionPoint);
-    StyleElement::insertedInto(this, insertionPoint);
-    return InsertionShouldCallDidNotifySubtreeInsertions;
+void SVGStyleElement::childrenChanged(const ChildrenChange& change) {
+  SVGElement::childrenChanged(change);
+  if (StyleElement::childrenChanged(*this) ==
+      StyleElement::ProcessingFatalError)
+    notifyLoadedSheetAndAllCriticalSubresources(
+        ErrorOccurredLoadingSubresource);
 }
 
-void SVGStyleElement::didNotifySubtreeInsertionsToDocument()
-{
-    if (StyleElement::processStyleSheet(document(), this) == StyleElement::ProcessingFatalError)
-        notifyLoadedSheetAndAllCriticalSubresources(ErrorOccurredLoadingSubresource);
+void SVGStyleElement::notifyLoadedSheetAndAllCriticalSubresources(
+    LoadedSheetErrorStatus errorStatus) {
+  if (errorStatus != NoErrorLoadingSubresource)
+    TaskRunnerHelper::get(TaskType::DOMManipulation, &document())
+        ->postTask(BLINK_FROM_HERE,
+                   WTF::bind(&SVGStyleElement::dispatchPendingEvent,
+                             wrapPersistent(this)));
 }
 
-void SVGStyleElement::removedFrom(ContainerNode* insertionPoint)
-{
-    SVGElement::removedFrom(insertionPoint);
-    StyleElement::removedFrom(this, insertionPoint);
+void SVGStyleElement::dispatchPendingEvent() {
+  dispatchEvent(Event::create(EventTypeNames::error));
 }
 
-void SVGStyleElement::childrenChanged(const ChildrenChange& change)
-{
-    SVGElement::childrenChanged(change);
-    if (StyleElement::childrenChanged(this) == StyleElement::ProcessingFatalError)
-        notifyLoadedSheetAndAllCriticalSubresources(ErrorOccurredLoadingSubresource);
+DEFINE_TRACE(SVGStyleElement) {
+  StyleElement::trace(visitor);
+  SVGElement::trace(visitor);
 }
 
-void SVGStyleElement::notifyLoadedSheetAndAllCriticalSubresources(LoadedSheetErrorStatus errorStatus)
-{
-    if (errorStatus != NoErrorLoadingSubresource)
-        styleErrorEventSender().dispatchEventSoon(this);
-}
-
-void SVGStyleElement::dispatchPendingEvent(SVGStyleEventSender* eventSender)
-{
-    ASSERT_UNUSED(eventSender, eventSender == &styleErrorEventSender());
-    dispatchEvent(Event::create(EventTypeNames::error));
-}
-
-DEFINE_TRACE(SVGStyleElement)
-{
-    StyleElement::trace(visitor);
-    SVGElement::trace(visitor);
-}
-
-} // namespace blink
+}  // namespace blink

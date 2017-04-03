@@ -13,35 +13,30 @@
 #include "base/memory/weak_ptr.h"
 #include "remoting/client/gl_renderer.h"
 #include "remoting/client/gl_renderer_delegate.h"
-#include "remoting/client/jni/display_updater_factory.h"
+#include "remoting/client/queued_task_poster.h"
 #include "remoting/protocol/cursor_shape_stub.h"
 
 namespace remoting {
 
+namespace protocol {
+class VideoRenderer;
+}  // namespace protocol
+
 class ChromotingJniRuntime;
 class DualBufferFrameConsumer;
 class EglThreadContext;
-class QueuedTaskPoster;
 
 // Handles OpenGL display operations. Draws desktop and cursor on the OpenGL
-// surface.
-// JNI functions should all be called on the UI thread. The display handler
-// itself should be deleted on the display thread.
-// Please see GlDisplay.java for documentations.
-class JniGlDisplayHandler : public DisplayUpdaterFactory,
-                            public protocol::CursorShapeStub,
-                            public GlRendererDelegate {
+// surface. The handler should be used and destroyed on the UI thread. It also
+// has a core that works on the display thread.
+class JniGlDisplayHandler {
  public:
-  JniGlDisplayHandler(ChromotingJniRuntime* runtime);
-  ~JniGlDisplayHandler() override;
+  JniGlDisplayHandler(ChromotingJniRuntime* runtime,
+                      const base::android::JavaRef<jobject>& java_client);
+  ~JniGlDisplayHandler();
 
-  // Sets the DesktopViewFactory for the Java client.
-  void InitializeClient(
-      const base::android::JavaRef<jobject>& java_client);
-
-  // DisplayUpdaterFactory interface.
-  std::unique_ptr<protocol::CursorShapeStub> CreateCursorShapeStub() override;
-  std::unique_ptr<protocol::VideoRenderer> CreateVideoRenderer() override;
+  std::unique_ptr<protocol::CursorShapeStub> CreateCursorShapeStub();
+  std::unique_ptr<protocol::VideoRenderer> CreateVideoRenderer();
 
   static bool RegisterJni(JNIEnv* env);
 
@@ -84,42 +79,21 @@ class JniGlDisplayHandler : public DisplayUpdaterFactory,
       float diameter);
 
  private:
-  // GlRendererDelegate interface.
-  bool CanRenderFrame() override;
-  void OnFrameRendered() override;
-  void OnSizeChanged(int width, int height) override;
+  class Core;
 
-  // CursorShapeStub interface.
-  void SetCursorShape(const protocol::CursorShapeInfo& cursor_shape) override;
-
-  static void NotifyRenderDoneOnUiThread(
-      base::android::ScopedJavaGlobalRef<jobject> java_display);
-
-  void SurfaceCreatedOnDisplayThread(
-      base::android::ScopedJavaGlobalRef<jobject> surface);
-
-  void SurfaceDestroyedOnDisplayThread();
-
-  static void ChangeCanvasSizeOnUiThread(
-      base::android::ScopedJavaGlobalRef<jobject> java_display,
-      int width,
-      int height);
+  // Callbacks from the core.
+  void OnRenderDone();
+  void OnCanvasSizeChanged(int width, int height);
 
   ChromotingJniRuntime* runtime_;
 
+  QueuedTaskPoster ui_task_poster_;
+
+  std::unique_ptr<Core> core_;
+
   base::android::ScopedJavaGlobalRef<jobject> java_display_;
 
-  std::unique_ptr<EglThreadContext> egl_context_;
-
-  base::WeakPtr<DualBufferFrameConsumer> frame_consumer_;
-
-  // |renderer_| must be deleted earlier than |egl_context_|.
-  GlRenderer renderer_;
-
-  std::unique_ptr<QueuedTaskPoster> ui_task_poster_;
-
-  // Used on display thread.
-  base::WeakPtr<JniGlDisplayHandler> weak_ptr_;
+  // Used on UI thread.
   base::WeakPtrFactory<JniGlDisplayHandler> weak_factory_;
   DISALLOW_COPY_AND_ASSIGN(JniGlDisplayHandler);
 };

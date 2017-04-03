@@ -20,6 +20,9 @@
 #include "base/values.h"
 #include "net/base/ip_address.h"
 #include "net/cert/x509_certificate.h"
+#include "net/log/net_log.h"
+#include "net/log/net_log_capture_mode.h"
+#include "net/log/net_log_event_type.h"
 #include "net/quic/core/crypto/crypto_handshake_message.h"
 #include "net/quic/core/crypto/crypto_protocol.h"
 #include "net/quic/core/quic_address_mismatch.h"
@@ -119,8 +122,12 @@ std::unique_ptr<base::Value> NetLogQuicAckFrameCallback(
   base::ListValue* missing = new base::ListValue();
   dict->Set("missing_packets", missing);
   if (frame->missing) {
-    for (QuicPacketNumber packet : frame->packets)
-      missing->AppendString(base::Uint64ToString(packet));
+    for (const Interval<QuicPacketNumber>& interval : frame->packets) {
+      for (QuicPacketNumber packet = interval.min(); packet < interval.max();
+           ++packet) {
+        missing->AppendString(base::Uint64ToString(packet));
+      }
+    }
   } else if (!frame->packets.Empty()) {
     // V34 and above express acked packets, but only print
     // missing packets, because it's typically a shorter list.
@@ -283,11 +290,12 @@ QuicConnectionLogger::QuicConnectionLogger(
     QuicSpdySession* session,
     const char* const connection_description,
     std::unique_ptr<SocketPerformanceWatcher> socket_performance_watcher,
-    const BoundNetLog& net_log)
+    const NetLogWithSource& net_log)
     : net_log_(net_log),
       session_(session),
       last_received_packet_number_(0),
       last_received_packet_size_(0),
+      no_packet_received_after_ping_(false),
       previous_received_packet_size_(0),
       largest_received_packet_number_(0),
       largest_received_missing_packet_number_(0),
@@ -349,45 +357,46 @@ void QuicConnectionLogger::OnFrameAddedToPacket(const QuicFrame& frame) {
       break;
     case STREAM_FRAME:
       net_log_.AddEvent(
-          NetLog::TYPE_QUIC_SESSION_STREAM_FRAME_SENT,
+          NetLogEventType::QUIC_SESSION_STREAM_FRAME_SENT,
           base::Bind(&NetLogQuicStreamFrameCallback, frame.stream_frame));
       break;
     case ACK_FRAME: {
       net_log_.AddEvent(
-          NetLog::TYPE_QUIC_SESSION_ACK_FRAME_SENT,
+          NetLogEventType::QUIC_SESSION_ACK_FRAME_SENT,
           base::Bind(&NetLogQuicAckFrameCallback, frame.ack_frame));
       break;
     }
     case RST_STREAM_FRAME:
       UMA_HISTOGRAM_SPARSE_SLOWLY("Net.QuicSession.RstStreamErrorCodeClient",
                                   frame.rst_stream_frame->error_code);
-      net_log_.AddEvent(NetLog::TYPE_QUIC_SESSION_RST_STREAM_FRAME_SENT,
+      net_log_.AddEvent(NetLogEventType::QUIC_SESSION_RST_STREAM_FRAME_SENT,
                         base::Bind(&NetLogQuicRstStreamFrameCallback,
                                    frame.rst_stream_frame));
       break;
     case CONNECTION_CLOSE_FRAME:
-      net_log_.AddEvent(NetLog::TYPE_QUIC_SESSION_CONNECTION_CLOSE_FRAME_SENT,
-                        base::Bind(&NetLogQuicConnectionCloseFrameCallback,
-                                   frame.connection_close_frame));
+      net_log_.AddEvent(
+          NetLogEventType::QUIC_SESSION_CONNECTION_CLOSE_FRAME_SENT,
+          base::Bind(&NetLogQuicConnectionCloseFrameCallback,
+                     frame.connection_close_frame));
       break;
     case GOAWAY_FRAME:
       net_log_.AddEvent(
-          NetLog::TYPE_QUIC_SESSION_GOAWAY_FRAME_SENT,
+          NetLogEventType::QUIC_SESSION_GOAWAY_FRAME_SENT,
           base::Bind(&NetLogQuicGoAwayFrameCallback, frame.goaway_frame));
       break;
     case WINDOW_UPDATE_FRAME:
-      net_log_.AddEvent(NetLog::TYPE_QUIC_SESSION_WINDOW_UPDATE_FRAME_SENT,
+      net_log_.AddEvent(NetLogEventType::QUIC_SESSION_WINDOW_UPDATE_FRAME_SENT,
                         base::Bind(&NetLogQuicWindowUpdateFrameCallback,
                                    frame.window_update_frame));
       break;
     case BLOCKED_FRAME:
       ++num_blocked_frames_sent_;
       net_log_.AddEvent(
-          NetLog::TYPE_QUIC_SESSION_BLOCKED_FRAME_SENT,
+          NetLogEventType::QUIC_SESSION_BLOCKED_FRAME_SENT,
           base::Bind(&NetLogQuicBlockedFrameCallback, frame.blocked_frame));
       break;
     case STOP_WAITING_FRAME:
-      net_log_.AddEvent(NetLog::TYPE_QUIC_SESSION_STOP_WAITING_FRAME_SENT,
+      net_log_.AddEvent(NetLogEventType::QUIC_SESSION_STOP_WAITING_FRAME_SENT,
                         base::Bind(&NetLogQuicStopWaitingFrameCallback,
                                    frame.stop_waiting_frame));
       break;
@@ -397,11 +406,11 @@ void QuicConnectionLogger::OnFrameAddedToPacket(const QuicFrame& frame) {
       UMA_HISTOGRAM_BOOLEAN("Net.QuicSession.StreamFlowControlBlocked",
                             session_->IsStreamFlowControlBlocked());
       // PingFrame has no contents to log, so just record that it was sent.
-      net_log_.AddEvent(NetLog::TYPE_QUIC_SESSION_PING_FRAME_SENT);
+      net_log_.AddEvent(NetLogEventType::QUIC_SESSION_PING_FRAME_SENT);
       break;
     case MTU_DISCOVERY_FRAME:
       // MtuDiscoveryFrame is PingFrame on wire, it does not have any payload.
-      net_log_.AddEvent(NetLog::TYPE_QUIC_SESSION_MTU_DISCOVERY_FRAME_SENT);
+      net_log_.AddEvent(NetLogEventType::QUIC_SESSION_MTU_DISCOVERY_FRAME_SENT);
       break;
     default:
       DCHECK(false) << "Illegal frame type: " << frame.type;
@@ -416,15 +425,19 @@ void QuicConnectionLogger::OnPacketSent(
     QuicTime sent_time) {
   if (original_packet_number == 0) {
     net_log_.AddEvent(
-        NetLog::TYPE_QUIC_SESSION_PACKET_SENT,
+        NetLogEventType::QUIC_SESSION_PACKET_SENT,
         base::Bind(&NetLogQuicPacketSentCallback, serialized_packet,
                    transmission_type, sent_time));
   } else {
     net_log_.AddEvent(
-        NetLog::TYPE_QUIC_SESSION_PACKET_RETRANSMITTED,
+        NetLogEventType::QUIC_SESSION_PACKET_RETRANSMITTED,
         base::Bind(&NetLogQuicPacketRetransmittedCallback,
                    original_packet_number, serialized_packet.packet_number));
   }
+}
+
+void QuicConnectionLogger::OnPingSent() {
+  no_packet_received_after_ping_ = true;
 }
 
 void QuicConnectionLogger::OnPacketReceived(const IPEndPoint& self_address,
@@ -439,7 +452,7 @@ void QuicConnectionLogger::OnPacketReceived(const IPEndPoint& self_address,
 
   previous_received_packet_size_ = last_received_packet_size_;
   last_received_packet_size_ = packet.length();
-  net_log_.AddEvent(NetLog::TYPE_QUIC_SESSION_PACKET_RECEIVED,
+  net_log_.AddEvent(NetLogEventType::QUIC_SESSION_PACKET_RECEIVED,
                     base::Bind(&NetLogQuicPacketCallback, &self_address,
                                &peer_address, packet.length()));
 }
@@ -447,7 +460,7 @@ void QuicConnectionLogger::OnPacketReceived(const IPEndPoint& self_address,
 void QuicConnectionLogger::OnUnauthenticatedHeader(
     const QuicPacketHeader& header) {
   net_log_.AddEvent(
-      NetLog::TYPE_QUIC_SESSION_UNAUTHENTICATED_PACKET_HEADER_RECEIVED,
+      NetLogEventType::QUIC_SESSION_UNAUTHENTICATED_PACKET_HEADER_RECEIVED,
       base::Bind(&NetLogQuicPacketHeaderCallback, &header));
 }
 
@@ -462,7 +475,7 @@ void QuicConnectionLogger::OnUndecryptablePacket() {
 
 void QuicConnectionLogger::OnDuplicatePacket(QuicPacketNumber packet_number) {
   net_log_.AddEvent(
-      NetLog::TYPE_QUIC_SESSION_DUPLICATE_PACKET_RECEIVED,
+      NetLogEventType::QUIC_SESSION_DUPLICATE_PACKET_RECEIVED,
       base::Bind(&NetLogQuicDuplicatePacketCallback, packet_number));
   ++num_duplicate_packets_;
 }
@@ -473,7 +486,7 @@ void QuicConnectionLogger::OnProtocolVersionMismatch(
 }
 
 void QuicConnectionLogger::OnPacketHeader(const QuicPacketHeader& header) {
-  net_log_.AddEvent(NetLog::TYPE_QUIC_SESSION_PACKET_AUTHENTICATED);
+  net_log_.AddEvent(NetLogEventType::QUIC_SESSION_PACKET_AUTHENTICATED);
   ++num_packets_received_;
   if (largest_received_packet_number_ < header.packet_number) {
     QuicPacketNumber delta =
@@ -498,17 +511,23 @@ void QuicConnectionLogger::OnPacketHeader(const QuicPacketHeader& header) {
         "Net.QuicSession.OutOfOrderGapReceived",
         static_cast<base::HistogramBase::Sample>(last_received_packet_number_ -
                                                  header.packet_number));
+  } else if (no_packet_received_after_ping_) {
+    UMA_HISTOGRAM_COUNTS(
+        "Net.QuicSession.PacketGapReceivedNearPing",
+        static_cast<base::HistogramBase::Sample>(header.packet_number -
+                                                 last_received_packet_number_));
+    no_packet_received_after_ping_ = false;
   }
   last_received_packet_number_ = header.packet_number;
 }
 
 void QuicConnectionLogger::OnStreamFrame(const QuicStreamFrame& frame) {
-  net_log_.AddEvent(NetLog::TYPE_QUIC_SESSION_STREAM_FRAME_RECEIVED,
+  net_log_.AddEvent(NetLogEventType::QUIC_SESSION_STREAM_FRAME_RECEIVED,
                     base::Bind(&NetLogQuicStreamFrameCallback, &frame));
 }
 
 void QuicConnectionLogger::OnAckFrame(const QuicAckFrame& frame) {
-  net_log_.AddEvent(NetLog::TYPE_QUIC_SESSION_ACK_FRAME_RECEIVED,
+  net_log_.AddEvent(NetLogEventType::QUIC_SESSION_ACK_FRAME_RECEIVED,
                     base::Bind(&NetLogQuicAckFrameCallback, &frame));
 
   const size_t kApproximateLargestSoloAckBytes = 100;
@@ -527,64 +546,67 @@ void QuicConnectionLogger::OnAckFrame(const QuicAckFrame& frame) {
   const PacketNumberQueue& missing_packets = frame.packets;
   PacketNumberQueue::const_iterator it =
       missing_packets.lower_bound(largest_received_missing_packet_number_);
-  if (it == missing_packets.end())
+  if (it == missing_packets.end() ||
+      largest_received_missing_packet_number_ == missing_packets.Max()) {
     return;
+  }
 
-  if (*it == largest_received_missing_packet_number_) {
-    ++it;
-    if (it == missing_packets.end())
-      return;
-  }
   // Scan through the list and log consecutive ranges of missing packets.
-  size_t num_consecutive_missing_packets = 0;
-  QuicPacketNumber previous_missing_packet = *it - 1;
-  while (it != missing_packets.end()) {
-    if (previous_missing_packet == *it - 1) {
-      ++num_consecutive_missing_packets;
-    } else {
-      DCHECK_NE(0u, num_consecutive_missing_packets);
-      UpdatePacketGapSentHistogram(num_consecutive_missing_packets);
-      // Make sure this packet it included in the count.
-      num_consecutive_missing_packets = 1;
+  size_t num_consecutive_missing_packets = 1;
+  QuicPacketNumber previous_missing_packet =
+      largest_received_missing_packet_number_;
+  for (; it != missing_packets.end(); ++it) {
+    // Account for case where first interval starts below
+    // largest_received_missing_packet_number_.
+    QuicPacketNumber interval_min =
+        std::max(previous_missing_packet + 1, it->min());
+    DCHECK_LE(interval_min, it->max());
+
+    size_t interval_len = it->max() - interval_min;
+    if (interval_len == 0) {
+      continue;
     }
-    previous_missing_packet = *it;
-    ++it;
+    if (interval_min == previous_missing_packet + 1) {
+      num_consecutive_missing_packets += interval_len;
+    } else {
+      UpdatePacketGapSentHistogram(num_consecutive_missing_packets);
+      num_consecutive_missing_packets = interval_len;
+    }
+    previous_missing_packet = it->max() - 1;
   }
-  if (num_consecutive_missing_packets != 0) {
-    UpdatePacketGapSentHistogram(num_consecutive_missing_packets);
-  }
+  UpdatePacketGapSentHistogram(num_consecutive_missing_packets);
   largest_received_missing_packet_number_ = missing_packets.Max();
 }
 
 void QuicConnectionLogger::OnStopWaitingFrame(
     const QuicStopWaitingFrame& frame) {
-  net_log_.AddEvent(NetLog::TYPE_QUIC_SESSION_STOP_WAITING_FRAME_RECEIVED,
+  net_log_.AddEvent(NetLogEventType::QUIC_SESSION_STOP_WAITING_FRAME_RECEIVED,
                     base::Bind(&NetLogQuicStopWaitingFrameCallback, &frame));
 }
 
 void QuicConnectionLogger::OnRstStreamFrame(const QuicRstStreamFrame& frame) {
   UMA_HISTOGRAM_SPARSE_SLOWLY("Net.QuicSession.RstStreamErrorCodeServer",
                               frame.error_code);
-  net_log_.AddEvent(NetLog::TYPE_QUIC_SESSION_RST_STREAM_FRAME_RECEIVED,
+  net_log_.AddEvent(NetLogEventType::QUIC_SESSION_RST_STREAM_FRAME_RECEIVED,
                     base::Bind(&NetLogQuicRstStreamFrameCallback, &frame));
 }
 
 void QuicConnectionLogger::OnConnectionCloseFrame(
     const QuicConnectionCloseFrame& frame) {
   net_log_.AddEvent(
-      NetLog::TYPE_QUIC_SESSION_CONNECTION_CLOSE_FRAME_RECEIVED,
+      NetLogEventType::QUIC_SESSION_CONNECTION_CLOSE_FRAME_RECEIVED,
       base::Bind(&NetLogQuicConnectionCloseFrameCallback, &frame));
 }
 
 void QuicConnectionLogger::OnWindowUpdateFrame(
     const QuicWindowUpdateFrame& frame) {
-  net_log_.AddEvent(NetLog::TYPE_QUIC_SESSION_WINDOW_UPDATE_FRAME_RECEIVED,
+  net_log_.AddEvent(NetLogEventType::QUIC_SESSION_WINDOW_UPDATE_FRAME_RECEIVED,
                     base::Bind(&NetLogQuicWindowUpdateFrameCallback, &frame));
 }
 
 void QuicConnectionLogger::OnBlockedFrame(const QuicBlockedFrame& frame) {
   ++num_blocked_frames_received_;
-  net_log_.AddEvent(NetLog::TYPE_QUIC_SESSION_BLOCKED_FRAME_RECEIVED,
+  net_log_.AddEvent(NetLogEventType::QUIC_SESSION_BLOCKED_FRAME_RECEIVED,
                     base::Bind(&NetLogQuicBlockedFrameCallback, &frame));
 }
 
@@ -592,18 +614,18 @@ void QuicConnectionLogger::OnGoAwayFrame(const QuicGoAwayFrame& frame) {
   UMA_HISTOGRAM_BOOLEAN("Net.QuicSession.GoAwayReceivedForConnectionMigration",
                         frame.error_code == QUIC_ERROR_MIGRATING_PORT);
 
-  net_log_.AddEvent(NetLog::TYPE_QUIC_SESSION_GOAWAY_FRAME_RECEIVED,
+  net_log_.AddEvent(NetLogEventType::QUIC_SESSION_GOAWAY_FRAME_RECEIVED,
                     base::Bind(&NetLogQuicGoAwayFrameCallback, &frame));
 }
 
 void QuicConnectionLogger::OnPingFrame(const QuicPingFrame& frame) {
   // PingFrame has no contents to log, so just record that it was received.
-  net_log_.AddEvent(NetLog::TYPE_QUIC_SESSION_PING_FRAME_RECEIVED);
+  net_log_.AddEvent(NetLogEventType::QUIC_SESSION_PING_FRAME_RECEIVED);
 }
 
 void QuicConnectionLogger::OnPublicResetPacket(
     const QuicPublicResetPacket& packet) {
-  net_log_.AddEvent(NetLog::TYPE_QUIC_SESSION_PUBLIC_RESET_PACKET_RECEIVED);
+  net_log_.AddEvent(NetLogEventType::QUIC_SESSION_PUBLIC_RESET_PACKET_RECEIVED);
   UpdatePublicResetAddressMismatchHistogram(local_address_from_shlo_,
                                             packet.client_address);
 }
@@ -611,14 +633,14 @@ void QuicConnectionLogger::OnPublicResetPacket(
 void QuicConnectionLogger::OnVersionNegotiationPacket(
     const QuicVersionNegotiationPacket& packet) {
   net_log_.AddEvent(
-      NetLog::TYPE_QUIC_SESSION_VERSION_NEGOTIATION_PACKET_RECEIVED,
+      NetLogEventType::QUIC_SESSION_VERSION_NEGOTIATION_PACKET_RECEIVED,
       base::Bind(&NetLogQuicVersionNegotiationPacketCallback, &packet));
 }
 
 void QuicConnectionLogger::OnCryptoHandshakeMessageReceived(
     const CryptoHandshakeMessage& message) {
   net_log_.AddEvent(
-      NetLog::TYPE_QUIC_SESSION_CRYPTO_HANDSHAKE_MESSAGE_RECEIVED,
+      NetLogEventType::QUIC_SESSION_CRYPTO_HANDSHAKE_MESSAGE_RECEIVED,
       base::Bind(&NetLogQuicCryptoHandshakeMessageCallback, &message));
 
   if (message.tag() == kSHLO) {
@@ -638,7 +660,7 @@ void QuicConnectionLogger::OnCryptoHandshakeMessageReceived(
 void QuicConnectionLogger::OnCryptoHandshakeMessageSent(
     const CryptoHandshakeMessage& message) {
   net_log_.AddEvent(
-      NetLog::TYPE_QUIC_SESSION_CRYPTO_HANDSHAKE_MESSAGE_SENT,
+      NetLogEventType::QUIC_SESSION_CRYPTO_HANDSHAKE_MESSAGE_SENT,
       base::Bind(&NetLogQuicCryptoHandshakeMessageCallback, &message));
 }
 
@@ -646,14 +668,14 @@ void QuicConnectionLogger::OnConnectionClosed(QuicErrorCode error,
                                               const string& error_details,
                                               ConnectionCloseSource source) {
   net_log_.AddEvent(
-      NetLog::TYPE_QUIC_SESSION_CLOSED,
+      NetLogEventType::QUIC_SESSION_CLOSED,
       base::Bind(&NetLogQuicOnConnectionClosedCallback, error, source));
 }
 
 void QuicConnectionLogger::OnSuccessfulVersionNegotiation(
     const QuicVersion& version) {
   string quic_version = QuicVersionToString(version);
-  net_log_.AddEvent(NetLog::TYPE_QUIC_SESSION_VERSION_NEGOTIATED,
+  net_log_.AddEvent(NetLogEventType::QUIC_SESSION_VERSION_NEGOTIATED,
                     NetLog::StringCallback("version", &quic_version));
 }
 
@@ -670,11 +692,11 @@ void QuicConnectionLogger::UpdateReceivedFrameCounts(
 void QuicConnectionLogger::OnCertificateVerified(
     const CertVerifyResult& result) {
   if (result.cert_status == CERT_STATUS_INVALID) {
-    net_log_.AddEvent(NetLog::TYPE_QUIC_SESSION_CERTIFICATE_VERIFY_FAILED);
+    net_log_.AddEvent(NetLogEventType::QUIC_SESSION_CERTIFICATE_VERIFY_FAILED);
     return;
   }
   net_log_.AddEvent(
-      NetLog::TYPE_QUIC_SESSION_CERTIFICATE_VERIFIED,
+      NetLogEventType::QUIC_SESSION_CERTIFICATE_VERIFIED,
       base::Bind(&NetLogQuicCertificateVerifiedCallback, result.verified_cert));
 }
 

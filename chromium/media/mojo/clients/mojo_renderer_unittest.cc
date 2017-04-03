@@ -6,14 +6,17 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/test/test_message_loop.h"
 #include "base/threading/platform_thread.h"
+#include "base/timer/elapsed_timer.h"
+#include "media/base/audio_renderer_sink.h"
 #include "media/base/cdm_config.h"
 #include "media/base/cdm_context.h"
 #include "media/base/gmock_callback_support.h"
 #include "media/base/mock_filters.h"
 #include "media/base/test_helpers.h"
+#include "media/base/video_renderer_sink.h"
 #include "media/cdm/default_cdm_factory.h"
 #include "media/mojo/clients/mojo_renderer.h"
 #include "media/mojo/common/media_type_converters.h"
@@ -24,6 +27,7 @@
 #include "media/mojo/services/mojo_renderer_service.h"
 #include "media/renderers/video_overlay_factory.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using ::testing::_;
@@ -34,12 +38,21 @@ using ::testing::StrictMock;
 
 namespace media {
 
+namespace {
 const int64_t kStartPlayingTimeInMs = 100;
 const char kClearKeyKeySystem[] = "org.w3.clearkey";
 
-ACTION_P2(SetError, renderer_client, error) {
-  renderer_client->OnError(error);
+ACTION_P2(GetMediaTime, start_time, elapsed_timer) {
+  return start_time + elapsed_timer->Elapsed();
 }
+
+void WaitFor(base::TimeDelta duration) {
+  base::RunLoop run_loop;
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE, run_loop.QuitClosure(), duration);
+  run_loop.Run();
+}
+}  // namespace
 
 class MojoRendererTest : public ::testing::Test {
  public:
@@ -49,9 +62,10 @@ class MojoRendererTest : public ::testing::Test {
     mock_renderer_ = mock_renderer.get();
 
     mojom::RendererPtr remote_renderer;
-
-    mojo_renderer_service_ = new MojoRendererService(
-        mojo_cdm_service_context_.GetWeakPtr(), std::move(mock_renderer),
+    renderer_binding_ = MojoRendererService::Create(
+        mojo_cdm_service_context_.GetWeakPtr(), nullptr, nullptr,
+        std::move(mock_renderer),
+        MojoRendererService::InitiateSurfaceRequestCB(),
         mojo::GetProxy(&remote_renderer));
 
     mojo_renderer_.reset(
@@ -142,7 +156,8 @@ class MojoRendererTest : public ::testing::Test {
   // on it. Otherwise the test will crash.
   void ConnectionError() {
     DVLOG(1) << __FUNCTION__;
-    delete mojo_renderer_service_;
+    DCHECK(renderer_binding_);
+    renderer_binding_->Close();
     base::RunLoop().RunUntilIdle();
   }
 
@@ -155,8 +170,10 @@ class MojoRendererTest : public ::testing::Test {
   }
 
   void CreateCdm() {
-    new MojoCdmService(mojo_cdm_service_context_.GetWeakPtr(), &cdm_factory_,
-                       mojo::GetProxy(&remote_cdm_));
+    mojo::MakeStrongBinding(
+        base::MakeUnique<MojoCdmService>(mojo_cdm_service_context_.GetWeakPtr(),
+                                         &cdm_factory_),
+        mojo::GetProxy(&remote_cdm_));
     remote_cdm_->Initialize(
         kClearKeyKeySystem, "https://www.test.com",
         mojom::CdmConfig::From(CdmConfig()),
@@ -176,7 +193,7 @@ class MojoRendererTest : public ::testing::Test {
   }
 
   // Fixture members.
-  base::MessageLoop message_loop_;
+  base::TestMessageLoop message_loop_;
 
   // The MojoRenderer that we are testing.
   std::unique_ptr<MojoRenderer> mojo_renderer_;
@@ -197,9 +214,7 @@ class MojoRendererTest : public ::testing::Test {
   RendererClient* remote_renderer_client_;
   DefaultCdmFactory cdm_factory_;
 
-  // Owned by the connection. But we can delete it manually to trigger a
-  // connection error at the client side. See ConnectionError();
-  MojoRendererService* mojo_renderer_service_;
+  mojo::StrongBindingPtr<mojom::Renderer> renderer_binding_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MojoRendererTest);
@@ -324,15 +339,37 @@ TEST_F(MojoRendererTest, GetMediaTime) {
   Initialize();
   EXPECT_EQ(base::TimeDelta(), mojo_renderer_->GetMediaTime());
 
-  Play();
+  const base::TimeDelta kSleepTime = base::TimeDelta::FromMilliseconds(500);
+  const base::TimeDelta kStartTime =
+      base::TimeDelta::FromMilliseconds(kStartPlayingTimeInMs);
 
-  // Time is updated periodically with a short delay.
-  const base::TimeDelta kUpdatedTime = base::TimeDelta::FromMilliseconds(500);
+  // Media time should not advance since playback rate is 0.
+  EXPECT_CALL(*mock_renderer_, SetPlaybackRate(0));
+  EXPECT_CALL(*mock_renderer_, StartPlayingFrom(kStartTime));
   EXPECT_CALL(*mock_renderer_, GetMediaTime())
-      .WillRepeatedly(Return(kUpdatedTime));
-  base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(100));
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(kUpdatedTime, mojo_renderer_->GetMediaTime());
+      .WillRepeatedly(Return(kStartTime));
+  mojo_renderer_->SetPlaybackRate(0);
+  mojo_renderer_->StartPlayingFrom(kStartTime);
+  WaitFor(kSleepTime);
+  EXPECT_EQ(kStartTime, mojo_renderer_->GetMediaTime());
+
+  // Media time should now advance since playback rate is > 0.
+  std::unique_ptr<base::ElapsedTimer> elapsed_timer(new base::ElapsedTimer);
+  EXPECT_CALL(*mock_renderer_, SetPlaybackRate(1.0));
+  EXPECT_CALL(*mock_renderer_, GetMediaTime())
+      .WillRepeatedly(GetMediaTime(kStartTime, elapsed_timer.get()));
+  mojo_renderer_->SetPlaybackRate(1.0);
+  WaitFor(kSleepTime);
+  EXPECT_GT(mojo_renderer_->GetMediaTime(), kStartTime);
+
+  // Flushing should pause media-time updates.
+  EXPECT_CALL(*mock_renderer_, Flush(_)).WillOnce(RunClosure<0>());
+  Flush();
+  base::TimeDelta pause_time = mojo_renderer_->GetMediaTime();
+  EXPECT_GT(pause_time, kStartTime);
+  WaitFor(kSleepTime);
+  EXPECT_EQ(pause_time, mojo_renderer_->GetMediaTime());
+  Destroy();
 }
 
 TEST_F(MojoRendererTest, OnEnded) {
@@ -369,6 +406,7 @@ TEST_F(MojoRendererTest, Destroy_PendingFlush) {
 
 TEST_F(MojoRendererTest, Destroy_PendingSetCdm) {
   Initialize();
+
   EXPECT_CALL(*mock_renderer_, Flush(_)).WillRepeatedly(RunClosure<0>());
   EXPECT_CALL(*this, OnFlushed());
   mojo_renderer_->Flush(

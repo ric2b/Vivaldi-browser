@@ -9,6 +9,7 @@
 #include <iostream>
 #include <memory>
 #include <sstream>
+#include <utility>
 
 #include "base/callback.h"
 #include "base/json/json_reader.h"
@@ -42,9 +43,9 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/net/proxy_config_handler.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
-#include "chrome/browser/chromeos/policy/stub_enterprise_install_attributes.h"
 #include "chrome/browser/chromeos/proxy_cros_settings_parser.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
+#include "chrome/browser/chromeos/settings/stub_install_attributes.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/shill_profile_client.h"
 #include "chromeos/dbus/shill_service_client.h"
@@ -722,8 +723,8 @@ class ManagedPreferencesBrowserTest : public PreferencesBrowserTest {
   // PreferencesBrowserTest implementation:
   void SetUpInProcessBrowserTestFixture() override {
     // Set up fake install attributes.
-    std::unique_ptr<policy::StubEnterpriseInstallAttributes> attributes(
-        new policy::StubEnterpriseInstallAttributes());
+    std::unique_ptr<chromeos::StubInstallAttributes> attributes =
+        base::MakeUnique<chromeos::StubInstallAttributes>();
     attributes->SetDomain("example.com");
     attributes->SetRegistrationUser("user@example.com");
     policy::BrowserPolicyConnectorChromeOS::SetInstallAttributesForTesting(
@@ -756,22 +757,22 @@ IN_PROC_BROWSER_TEST_F(ManagedPreferencesBrowserTest,
   // List pref.
   pref_names_.push_back(chromeos::kAccountsPrefUsers);
   base::ListValue* list = new base::ListValue;
-  list->Append(new base::StringValue("me@google.com"));
-  list->Append(new base::StringValue("you@google.com"));
+  list->AppendString("me@google.com");
+  list->AppendString("you@google.com");
   non_default_values_.push_back(list);
   list = new base::ListValue;
-  base::DictionaryValue* dict = new base::DictionaryValue;
+  auto dict = base::MakeUnique<base::DictionaryValue>();
   dict->SetString("username", "me@google.com");
   dict->SetString("name", "me@google.com");
   dict->SetString("email", "");
   dict->SetBoolean("owner", false);
-  list->Append(dict);
-  dict = new base::DictionaryValue;
+  list->Append(std::move(dict));
+  dict = base::MakeUnique<base::DictionaryValue>();
   dict->SetString("username", "you@google.com");
   dict->SetString("name", "you@google.com");
   dict->SetString("email", "");
   dict->SetBoolean("owner", false);
-  list->Append(dict);
+  list->Append(std::move(dict));
   decorated_non_default_values.push_back(list);
 
   chromeos::CrosSettings* cros_settings = chromeos::CrosSettings::Get();
@@ -883,7 +884,7 @@ class ProxyPreferencesBrowserTest : public PreferencesBrowserTest {
     policy::PolicyMap map;
     map.Set(policy_name, policy::POLICY_LEVEL_MANDATORY, scope,
             policy::POLICY_SOURCE_CLOUD,
-            base::WrapUnique(new base::StringValue(onc_policy)), nullptr);
+            base::MakeUnique<base::StringValue>(onc_policy), nullptr);
     policy_provider_.UpdateChromePolicy(map);
 
     content::RunAllPendingInMessageLoop();
@@ -950,8 +951,8 @@ IN_PROC_BROWSER_TEST_F(ProxyPreferencesBrowserTest, ChromeOSInitializeProxy) {
   // List pref.
   pref_names_.push_back(chromeos::kProxyIgnoreList);
   base::ListValue* list = new base::ListValue();
-  list->Append(new base::StringValue("*.google.com"));
-  list->Append(new base::StringValue("1.2.3.4:22"));
+  list->AppendString("*.google.com");
+  list->AppendString("1.2.3.4:22");
   non_default_values_.push_back(list);
 
   // Verify that no policy is presented to the UI. This must be verified on the

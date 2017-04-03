@@ -17,7 +17,15 @@
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size);
 
+namespace mojo {
+template <typename, typename> struct StructTraits;
+}
+
 namespace gfx {
+
+namespace mojom {
+class ICCProfileDataView;
+}
 
 // Used to represent a full ICC profile, usually retrieved from a monitor. It
 // can be lossily compressed into a ColorSpace object. This structure should
@@ -46,6 +54,9 @@ class GFX_EXPORT ICCProfile {
   // to the one that created |color_space|, but this is not guaranteed.
   static ICCProfile FromColorSpace(const gfx::ColorSpace& color_space);
 
+  // Create directly from profile data.
+  static ICCProfile FromData(const char* icc_profile, size_t size);
+
   // This will perform a potentially-lossy conversion to a more compact color
   // space representation.
   ColorSpace GetColorSpace() const;
@@ -60,7 +71,6 @@ class GFX_EXPORT ICCProfile {
 #endif
 
  private:
-  static ICCProfile FromData(const char* icc_profile, size_t size);
   static bool IsValidProfileLength(size_t length);
 
   bool valid_ = false;
@@ -75,6 +85,8 @@ class GFX_EXPORT ICCProfile {
   friend int ::LLVMFuzzerTestOneInput(const uint8_t*, size_t);
   friend class ColorSpace;
   friend struct IPC::ParamTraits<gfx::ICCProfile>;
+  friend struct mojo::StructTraits<gfx::mojom::ICCProfileDataView,
+                                   gfx::ICCProfile>;
 };
 
 }  // namespace gfx

@@ -13,7 +13,7 @@
 #import "chrome/browser/ui/cocoa/themed_window.h"
 #import "chrome/browser/ui/cocoa/view_id_util.h"
 #include "chrome/grit/generated_resources.h"
-#include "grit/theme_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "ui/base/accelerators/platform_accelerator_cocoa.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
@@ -89,38 +89,7 @@ const int kReloadMenuCommands[]  = {
 
   // Forcibly remove any stale tooltip which is being displayed.
   [self removeAllToolTips];
-  id cell = [self cell];
   [self setTag:anInt];
-
-  // The old way of doing things.
-  if (!ui::MaterialDesignController::IsModeMaterial()) {
-    if (anInt == IDC_RELOAD) {
-      [cell setImageID:IDR_RELOAD
-        forButtonState:image_button_cell::kDefaultState];
-      [cell setImageID:IDR_RELOAD_H
-        forButtonState:image_button_cell::kHoverState];
-      [cell setImageID:IDR_RELOAD_P
-        forButtonState:image_button_cell::kPressedState];
-      // The stop button has a disabled image but the reload button doesn't. To
-      // unset it we have to explicilty change the image ID to 0.
-      [cell setImageID:0
-        forButtonState:image_button_cell::kDisabledState];
-      [self setToolTip:l10n_util::GetNSStringWithFixup(IDS_TOOLTIP_RELOAD)];
-    } else if (anInt == IDC_STOP) {
-      [cell setImageID:IDR_STOP
-        forButtonState:image_button_cell::kDefaultState];
-      [cell setImageID:IDR_STOP_H
-        forButtonState:image_button_cell::kHoverState];
-      [cell setImageID:IDR_STOP_P
-        forButtonState:image_button_cell::kPressedState];
-      [cell setImageID:IDR_STOP_D
-        forButtonState:image_button_cell::kDisabledState];
-      [self setToolTip:l10n_util::GetNSStringWithFixup(IDS_TOOLTIP_STOP)];
-    } else {
-      NOTREACHED();
-    }
-    return;
-  }
 
   [self resetButtonStateImages];
   if (anInt == IDC_RELOAD) {
@@ -154,28 +123,16 @@ const int kReloadMenuCommands[]  = {
   } else if ([self tag] == IDC_STOP &&
              !pendingReloadTimer_ &&
              [[self cell] isMouseInside]) {
-    id cell = [self cell];
-    if (ui::MaterialDesignController::IsModeMaterial()) {
-      [self resetButtonStateImages];
-      NSImage* disabledStopImage =
-          [[self cell] imageForState:image_button_cell::kDisabledState
-                                view:self];
-      [cell setImage:disabledStopImage
-          forButtonState:image_button_cell::kDefaultState];
-      [cell setImage:disabledStopImage
-          forButtonState:image_button_cell::kHoverState];
-      [cell setImage:disabledStopImage
-          forButtonState:image_button_cell::kPressedState];
-    } else {
-      [cell setImageID:IDR_STOP_D
+    [self resetButtonStateImages];
+    NSImage* disabledStopImage =
+        [[self cell] imageForState:image_button_cell::kDisabledState
+                              view:self];
+    [[self cell] setImage:disabledStopImage
         forButtonState:image_button_cell::kDefaultState];
-      [cell setImageID:IDR_STOP_D
-        forButtonState:image_button_cell::kDisabledState];
-      [cell setImageID:IDR_STOP_D
+    [[self cell] setImage:disabledStopImage
         forButtonState:image_button_cell::kHoverState];
-      [cell setImageID:IDR_STOP_D
+    [[self cell] setImage:disabledStopImage
         forButtonState:image_button_cell::kPressedState];
-    }
     pendingReloadTimer_ =
         [NSTimer timerWithTimeInterval:kPendingReloadTimeout
                                 target:self

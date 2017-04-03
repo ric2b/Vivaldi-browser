@@ -45,6 +45,8 @@ class ProfileMetrics {
     DELETE_PROFILE_USER_MANAGER_SHOW_WARNING,
     // Show the delete profile warning in the Settings page.
     DELETE_PROFILE_SETTINGS_SHOW_WARNING,
+    // Aborts profile deletion in an OnBeforeUnload event in any browser tab.
+    DELETE_PROFILE_ABORTED,
     NUM_DELETE_PROFILE_METRICS
   };
 
@@ -60,6 +62,7 @@ class ProfileMetrics {
     SWITCH_PROFILE_UNLOCK,   // User switches to locked profile via User Manager
     SWITCH_PROFILE_GUEST,    // User switches to guest profile
     SWITCH_PROFILE_CONTEXT_MENU,  // User switches profiles from context menu
+    SWITCH_PROFILE_DUPLICATE,     // User switches to existing duplicate profile
     NUM_PROFILE_OPEN_METRICS
   };
 

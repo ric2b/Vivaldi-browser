@@ -114,7 +114,7 @@ class BaseDescBuilder {
 
   template <typename T>
   ValuePtr RenderValue(const std::vector<T>& vector) {
-    auto res = base::WrapUnique(new base::ListValue());
+    auto res = base::MakeUnique<base::ListValue>();
     for (const auto& v : vector)
       res->Append(RenderValue(v));
 
@@ -159,13 +159,14 @@ class BaseDescBuilder {
                                const ConfigValues& values) {
     if (what(variables::kPrecompiledHeader) &&
         !values.precompiled_header().empty()) {
-      out->Set(variables::kPrecompiledHeader,
-               RenderValue(values.precompiled_header(), true));
+      out->SetWithoutPathExpansion(
+          variables::kPrecompiledHeader,
+          RenderValue(values.precompiled_header(), true));
     }
     if (what(variables::kPrecompiledSource) &&
         !values.precompiled_source().is_null()) {
-      out->Set(variables::kPrecompiledSource,
-               RenderValue(values.precompiled_source()));
+      out->SetWithoutPathExpansion(variables::kPrecompiledSource,
+                                   RenderValue(values.precompiled_source()));
     }
   }
 
@@ -181,18 +182,18 @@ class ConfigDescBuilder : public BaseDescBuilder {
       : BaseDescBuilder(what, false, false, false), config_(config) {}
 
   std::unique_ptr<base::DictionaryValue> BuildDescription() {
-    auto res = base::WrapUnique(new base::DictionaryValue());
+    auto res = base::MakeUnique<base::DictionaryValue>();
     const ConfigValues& values = config_->resolved_values();
 
     if (what_.empty())
-      res->SetString(
+      res->SetStringWithoutPathExpansion(
           "toolchain",
           config_->label().GetToolchainLabel().GetUserVisibleName(false));
 
     if (what(variables::kConfigs) && !config_->configs().empty()) {
-      auto configs = base::WrapUnique(new base::ListValue());
+      auto configs = base::MakeUnique<base::ListValue>();
       FillInConfigVector(configs.get(), config_->configs().vector());
-      res->Set(variables::kConfigs, std::move(configs));
+      res->SetWithoutPathExpansion(variables::kConfigs, std::move(configs));
     }
 
 #define CONFIG_VALUE_ARRAY_HANDLER(name, type)                        \
@@ -200,7 +201,7 @@ class ConfigDescBuilder : public BaseDescBuilder {
     ValuePtr ptr =                                                    \
         render_config_value_array<type>(values, &ConfigValues::name); \
     if (ptr) {                                                        \
-      res->Set(#name, std::move(ptr));                                \
+      res->SetWithoutPathExpansion(#name, std::move(ptr));            \
     }                                                                 \
   }
     CONFIG_VALUE_ARRAY_HANDLER(arflags, std::string)
@@ -233,7 +234,7 @@ class ConfigDescBuilder : public BaseDescBuilder {
   ValuePtr render_config_value_array(
       const ConfigValues& values,
       const std::vector<T>& (ConfigValues::*getter)() const) {
-    auto res = base::WrapUnique(new base::ListValue());
+    auto res = base::MakeUnique<base::ListValue>();
 
     for (const T& cur : (values.*getter)())
       res->Append(RenderValue(cur));
@@ -254,97 +255,112 @@ class TargetDescBuilder : public BaseDescBuilder {
       : BaseDescBuilder(what, all, tree, blame), target_(target) {}
 
   std::unique_ptr<base::DictionaryValue> BuildDescription() {
-    auto res = base::WrapUnique(new base::DictionaryValue());
+    auto res = base::MakeUnique<base::DictionaryValue>();
     bool is_binary_output = target_->IsBinary();
 
     if (what_.empty()) {
-      res->SetString("type",
-                     Target::GetStringForOutputType(target_->output_type()));
-      res->SetString(
+      res->SetStringWithoutPathExpansion(
+          "type",
+          Target::GetStringForOutputType(target_->output_type()));
+      res->SetStringWithoutPathExpansion(
           "toolchain",
           target_->label().GetToolchainLabel().GetUserVisibleName(false));
     }
 
     // General target meta variables.
     if (what(variables::kVisibility))
-      res->Set(variables::kVisibility, target_->visibility().AsValue());
+      res->SetWithoutPathExpansion(variables::kVisibility,
+                                   target_->visibility().AsValue());
 
     if (what(variables::kTestonly))
-      res->SetBoolean(variables::kTestonly, target_->testonly());
+      res->SetBooleanWithoutPathExpansion(variables::kTestonly,
+                                          target_->testonly());
 
     if (is_binary_output) {
       if (what(variables::kCheckIncludes))
-        res->SetBoolean(variables::kCheckIncludes, target_->check_includes());
+        res->SetBooleanWithoutPathExpansion(variables::kCheckIncludes,
+                                            target_->check_includes());
 
       if (what(variables::kAllowCircularIncludesFrom)) {
-        auto labels = base::WrapUnique(new base::ListValue());
+        auto labels = base::MakeUnique<base::ListValue>();
         for (const auto& cur : target_->allow_circular_includes_from())
           labels->AppendString(cur.GetUserVisibleName(GetToolchainLabel()));
 
-        res->Set(variables::kAllowCircularIncludesFrom, std::move(labels));
+        res->SetWithoutPathExpansion(variables::kAllowCircularIncludesFrom,
+                                     std::move(labels));
       }
     }
 
     if (what(variables::kSources) && !target_->sources().empty())
-      res->Set(variables::kSources, RenderValue(target_->sources()));
+      res->SetWithoutPathExpansion(variables::kSources,
+                                   RenderValue(target_->sources()));
 
     if (what(variables::kOutputName) && !target_->output_name().empty())
-      res->SetString(variables::kOutputName, target_->output_name());
+      res->SetStringWithoutPathExpansion(variables::kOutputName,
+                                         target_->output_name());
 
     if (what(variables::kOutputDir) && !target_->output_dir().is_null())
-      res->Set(variables::kOutputDir, RenderValue(target_->output_dir()));
+      res->SetWithoutPathExpansion(variables::kOutputDir,
+                                   RenderValue(target_->output_dir()));
 
     if (what(variables::kOutputExtension) && target_->output_extension_set())
-      res->SetString(variables::kOutputExtension, target_->output_extension());
+      res->SetStringWithoutPathExpansion(variables::kOutputExtension,
+                                         target_->output_extension());
 
     if (what(variables::kPublic)) {
       if (target_->all_headers_public())
-        res->SetString(variables::kPublic, "*");
+        res->SetStringWithoutPathExpansion(variables::kPublic, "*");
       else
-        res->Set(variables::kPublic, RenderValue(target_->public_headers()));
+        res->SetWithoutPathExpansion(variables::kPublic,
+                                     RenderValue(target_->public_headers()));
     }
 
     if (what(variables::kInputs) && !target_->inputs().empty())
-      res->Set(variables::kInputs, RenderValue(target_->inputs()));
+      res->SetWithoutPathExpansion(variables::kInputs,
+                                   RenderValue(target_->inputs()));
 
     if (is_binary_output && what(variables::kConfigs) &&
         !target_->configs().empty()) {
-      auto configs = base::WrapUnique(new base::ListValue());
+      auto configs = base::MakeUnique<base::ListValue>();
       FillInConfigVector(configs.get(), target_->configs().vector());
-      res->Set(variables::kConfigs, std::move(configs));
+      res->SetWithoutPathExpansion(variables::kConfigs, std::move(configs));
     }
 
     if (what(variables::kPublicConfigs) && !target_->public_configs().empty()) {
-      auto configs = base::WrapUnique(new base::ListValue());
+      auto configs = base::MakeUnique<base::ListValue>();
       FillInConfigVector(configs.get(), target_->public_configs());
-      res->Set(variables::kPublicConfigs, std::move(configs));
+      res->SetWithoutPathExpansion(variables::kPublicConfigs,
+                                   std::move(configs));
     }
 
     if (what(variables::kAllDependentConfigs) &&
         !target_->all_dependent_configs().empty()) {
-      auto configs = base::WrapUnique(new base::ListValue());
+      auto configs = base::MakeUnique<base::ListValue>();
       FillInConfigVector(configs.get(), target_->all_dependent_configs());
-      res->Set(variables::kAllDependentConfigs, std::move(configs));
+      res->SetWithoutPathExpansion(variables::kAllDependentConfigs,
+                                   std::move(configs));
     }
 
     // Action
     if (target_->output_type() == Target::ACTION ||
         target_->output_type() == Target::ACTION_FOREACH) {
       if (what(variables::kScript))
-        res->SetString(variables::kScript,
-                       target_->action_values().script().value());
+        res->SetStringWithoutPathExpansion(
+            variables::kScript,
+            target_->action_values().script().value());
 
       if (what(variables::kArgs)) {
-        auto args = base::WrapUnique(new base::ListValue());
+        auto args = base::MakeUnique<base::ListValue>();
         for (const auto& elem : target_->action_values().args().list())
           args->AppendString(elem.AsString());
 
-        res->Set(variables::kArgs, std::move(args));
+        res->SetWithoutPathExpansion(variables::kArgs, std::move(args));
       }
       if (what(variables::kDepfile) &&
           !target_->action_values().depfile().empty()) {
-        res->SetString(variables::kDepfile,
-                       target_->action_values().depfile().AsString());
+        res->SetStringWithoutPathExpansion(
+            variables::kDepfile,
+            target_->action_values().depfile().AsString());
       }
     }
 
@@ -367,7 +383,7 @@ class TargetDescBuilder : public BaseDescBuilder {
   if (what(#name)) {                                              \
     ValuePtr ptr = RenderConfigValues<type>(&ConfigValues::name); \
     if (ptr) {                                                    \
-      res->Set(#name, std::move(ptr));                            \
+      res->SetWithoutPathExpansion(#name, std::move(ptr));        \
     }                                                             \
   }
       CONFIG_VALUE_ARRAY_HANDLER(arflags, std::string)
@@ -388,12 +404,12 @@ class TargetDescBuilder : public BaseDescBuilder {
     }
 
     if (what(variables::kDeps))
-      res->Set(variables::kDeps, RenderDeps());
+      res->SetWithoutPathExpansion(variables::kDeps, RenderDeps());
 
     // Runtime deps are special, print only when explicitly asked for and not in
     // overview mode.
     if (what_.find("runtime_deps") != what_.end())
-      res->Set("runtime_deps", RenderRuntimeDeps());
+      res->SetWithoutPathExpansion("runtime_deps", RenderRuntimeDeps());
 
     // libs and lib_dirs are special in that they're inherited. We don't
     // currently
@@ -405,20 +421,20 @@ class TargetDescBuilder : public BaseDescBuilder {
     if (what(variables::kLibs)) {
       const OrderedSet<LibFile>& all_libs = target_->all_libs();
       if (!all_libs.empty()) {
-        auto libs = base::WrapUnique(new base::ListValue());
+        auto libs = base::MakeUnique<base::ListValue>();
         for (size_t i = 0; i < all_libs.size(); i++)
           libs->AppendString(all_libs[i].value());
-        res->Set(variables::kLibs, std::move(libs));
+        res->SetWithoutPathExpansion(variables::kLibs, std::move(libs));
       }
     }
 
     if (what(variables::kLibDirs)) {
       const OrderedSet<SourceDir>& all_lib_dirs = target_->all_lib_dirs();
       if (!all_lib_dirs.empty()) {
-        auto lib_dirs = base::WrapUnique(new base::ListValue());
+        auto lib_dirs = base::MakeUnique<base::ListValue>();
         for (size_t i = 0; i < all_lib_dirs.size(); i++)
           lib_dirs->AppendString(FormatSourceDir(all_lib_dirs[i]));
-        res->Set(variables::kLibDirs, std::move(lib_dirs));
+        res->SetWithoutPathExpansion(variables::kLibDirs, std::move(lib_dirs));
       }
     }
 
@@ -472,7 +488,7 @@ class TargetDescBuilder : public BaseDescBuilder {
   }
 
   ValuePtr RenderDeps() {
-    auto res = base::WrapUnique(new base::ListValue());
+    auto res = base::MakeUnique<base::ListValue>();
 
     // Tree mode is separate.
     if (tree_) {
@@ -506,7 +522,7 @@ class TargetDescBuilder : public BaseDescBuilder {
   }
 
   ValuePtr RenderRuntimeDeps() {
-    auto res = base::WrapUnique(new base::ListValue());
+    auto res = base::MakeUnique<base::ListValue>();
 
     const Target* previous_from = NULL;
     for (const auto& pair : ComputeRuntimeDeps(target_)) {
@@ -532,70 +548,78 @@ class TargetDescBuilder : public BaseDescBuilder {
   }
 
   void FillInSourceOutputs(base::DictionaryValue* res) {
-    auto dict = base::WrapUnique(new base::DictionaryValue());
+    auto dict = base::MakeUnique<base::DictionaryValue>();
     for (const auto& source : target_->sources()) {
       std::vector<OutputFile> outputs;
       Toolchain::ToolType tool_type = Toolchain::TYPE_NONE;
       if (target_->GetOutputFilesForSource(source, &tool_type, &outputs)) {
-        auto list = base::WrapUnique(new base::ListValue());
+        auto list = base::MakeUnique<base::ListValue>();
         for (const auto& output : outputs)
           list->AppendString(output.value());
 
         dict->SetWithoutPathExpansion(source.value(), std::move(list));
       }
     }
-    res->Set("source_outputs", std::move(dict));
+    res->SetWithoutPathExpansion("source_outputs", std::move(dict));
   }
 
   void FillInBundle(base::DictionaryValue* res) {
-    auto data = base::WrapUnique(new base::DictionaryValue());
+    auto data = base::MakeUnique<base::DictionaryValue>();
     const BundleData& bundle_data = target_->bundle_data();
     const Settings* settings = target_->settings();
     BundleData::SourceFiles sources;
     bundle_data.GetSourceFiles(&sources);
-    data->Set("source_files", RenderValue(sources));
-    data->SetString("root_dir_output",
-                    bundle_data.GetBundleRootDirOutput(settings).value());
-    data->Set("root_dir", RenderValue(bundle_data.root_dir()));
-    data->Set("resources_dir", RenderValue(bundle_data.resources_dir()));
-    data->Set("executable_dir", RenderValue(bundle_data.executable_dir()));
-    data->Set("plugins_dir", RenderValue(bundle_data.plugins_dir()));
-    data->SetString("product_type", bundle_data.product_type());
+    data->SetWithoutPathExpansion("source_files", RenderValue(sources));
+    data->SetStringWithoutPathExpansion(
+        "root_dir_output",
+        bundle_data.GetBundleRootDirOutput(settings).value());
+    data->SetWithoutPathExpansion("root_dir",
+                                  RenderValue(bundle_data.root_dir()));
+    data->SetWithoutPathExpansion("resources_dir",
+                                  RenderValue(bundle_data.resources_dir()));
+    data->SetWithoutPathExpansion("executable_dir",
+                                  RenderValue(bundle_data.executable_dir()));
+    data->SetWithoutPathExpansion("plugins_dir",
+                                  RenderValue(bundle_data.plugins_dir()));
+    data->SetStringWithoutPathExpansion("product_type",
+                                        bundle_data.product_type());
 
-    auto deps = base::WrapUnique(new base::ListValue());
+    auto deps = base::MakeUnique<base::ListValue>();
     for (const auto* dep : bundle_data.bundle_deps())
       deps->AppendString(dep->label().GetUserVisibleName(GetToolchainLabel()));
 
-    data->Set("deps", std::move(deps));
-    res->Set("bundle_data", std::move(data));
+    data->SetWithoutPathExpansion("deps", std::move(deps));
+    res->SetWithoutPathExpansion("bundle_data", std::move(data));
   }
 
   void FillInOutputs(base::DictionaryValue* res) {
     if (target_->output_type() == Target::ACTION) {
-      auto list = base::WrapUnique(new base::ListValue());
+      auto list = base::MakeUnique<base::ListValue>();
       for (const auto& elem : target_->action_values().outputs().list())
         list->AppendString(elem.AsString());
 
-      res->Set(variables::kOutputs, std::move(list));
+      res->SetWithoutPathExpansion(variables::kOutputs, std::move(list));
     } else if (target_->output_type() == Target::CREATE_BUNDLE) {
       std::vector<SourceFile> output_files;
       target_->bundle_data().GetOutputsAsSourceFiles(target_->settings(),
                                                      &output_files);
-      res->Set(variables::kOutputs, RenderValue(output_files));
+      res->SetWithoutPathExpansion(variables::kOutputs,
+                                   RenderValue(output_files));
     } else if (target_->output_type() == Target::ACTION_FOREACH ||
                target_->output_type() == Target::COPY_FILES) {
       const SubstitutionList& outputs = target_->action_values().outputs();
       if (!outputs.required_types().empty()) {
-        auto patterns = base::WrapUnique(new base::ListValue());
+        auto patterns = base::MakeUnique<base::ListValue>();
         for (const auto& elem : outputs.list())
           patterns->AppendString(elem.AsString());
 
-        res->Set("output_patterns", std::move(patterns));
+        res->SetWithoutPathExpansion("output_patterns", std::move(patterns));
       }
       std::vector<SourceFile> output_files;
       SubstitutionWriter::ApplyListToSources(target_->settings(), outputs,
                                              target_->sources(), &output_files);
-      res->Set(variables::kOutputs, RenderValue(output_files));
+      res->SetWithoutPathExpansion(variables::kOutputs,
+                                   RenderValue(output_files));
     } else {
       DCHECK(target_->IsBinary());
       const Tool* tool =
@@ -609,7 +633,8 @@ class TargetDescBuilder : public BaseDescBuilder {
         output_files_as_source_file.push_back(
             output_file.AsSourceFile(target_->settings()->build_settings()));
 
-      res->Set(variables::kOutputs, RenderValue(output_files_as_source_file));
+      res->SetWithoutPathExpansion(variables::kOutputs,
+                                   RenderValue(output_files_as_source_file));
     }
   }
 
@@ -619,7 +644,7 @@ class TargetDescBuilder : public BaseDescBuilder {
   template <class T>
   ValuePtr RenderConfigValues(const std::vector<T>& (ConfigValues::*getter)()
                                   const) {
-    auto res = base::WrapUnique(new base::ListValue());
+    auto res = base::MakeUnique<base::ListValue>();
     for (ConfigValuesIterator iter(target_); !iter.done(); iter.Next()) {
       const std::vector<T>& vec = (iter.cur().*getter)();
 
@@ -653,7 +678,7 @@ class TargetDescBuilder : public BaseDescBuilder {
         // Indent string values in blame mode
         if (blame_ && rendered->GetAsString(&str)) {
           str = "  " + str;
-          rendered = base::WrapUnique(new base::StringValue(str));
+          rendered = base::MakeUnique<base::StringValue>(str);
         }
         res->Append(std::move(rendered));
       }

@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.ntp.cards;
 
+import android.support.annotation.CallSuper;
 import android.support.annotation.DrawableRes;
 import android.support.v4.view.animation.FastOutSlowInInterpolator;
 import android.support.v7.widget.RecyclerView;
@@ -25,8 +26,7 @@ import org.chromium.chrome.browser.util.ViewUtils;
  *
  * Specific behaviors added to the cards:
  *
- * - Cards can shrink and fade their appearance so that they can be made peeking above the screen
- *   limit.
+ * - Cards can peek above the fold if there is enough space.
  *
  * - When peeking, tapping on cards will make them request a scroll up (see
  *   {@link NewTabPageRecyclerView#scrollToFirstCard()}). Tap events in non-peeking state will be
@@ -35,7 +35,7 @@ import org.chromium.chrome.browser.util.ViewUtils;
  * - Cards will get some lateral margins when the viewport is sufficiently wide.
  *   (see {@link UiConfig#DISPLAY_STYLE_WIDE})
  *
- * Note: If a subclass overrides {@link #onBindViewHolder(NewTabPageItem)}, it should call the
+ * Note: If a subclass overrides {@link #onBindViewHolder()}, it should call the
  * parent implementation to reset the private state when a card is recycled.
  */
 public class CardViewHolder extends NewTabPageViewHolder {
@@ -113,12 +113,10 @@ public class CardViewHolder extends NewTabPageViewHolder {
 
     /**
      * Called when the NTP cards adapter is requested to update the currently visible ViewHolder
-     * with data. {@link CardViewHolder}'s implementation must be called by subclasses.
-     *
-     * @param item The NewTabPageListItem object that holds the data for this ViewHolder
+     * with data.
      */
-    @Override
-    public void onBindViewHolder(NewTabPageItem item) {
+    @CallSuper
+    protected void onBindViewHolder() {
         // Reset the peek status to avoid recycled view holders to be peeking at the wrong moment.
         if (getAdapterPosition() != mRecyclerView.getNewTabPageAdapter().getFirstCardPosition()) {
             // Not the first card, we can't peek anyway.
@@ -130,6 +128,9 @@ public class CardViewHolder extends NewTabPageViewHolder {
         // Reset the transparency and translation in case a dismissed card is being recycled.
         itemView.setAlpha(1f);
         itemView.setTranslationX(0f);
+
+        // Make sure we use the right background.
+        updateLayoutParams();
     }
 
     @Override
@@ -232,11 +233,12 @@ public class CardViewHolder extends NewTabPageViewHolder {
         return LayoutInflater.from(parent.getContext()).inflate(resourceId, parent, false);
     }
 
-    private static boolean isCard(@NewTabPageItem.ViewType int type) {
+    public static boolean isCard(@NewTabPageItem.ViewType int type) {
         switch (type) {
             case NewTabPageItem.VIEW_TYPE_SNIPPET:
             case NewTabPageItem.VIEW_TYPE_STATUS:
             case NewTabPageItem.VIEW_TYPE_ACTION:
+            case NewTabPageItem.VIEW_TYPE_PROMO:
                 return true;
             case NewTabPageItem.VIEW_TYPE_ABOVE_THE_FOLD:
             case NewTabPageItem.VIEW_TYPE_HEADER:
@@ -251,7 +253,7 @@ public class CardViewHolder extends NewTabPageViewHolder {
     }
 
     @DrawableRes
-    private static int selectBackground(boolean hasCardAbove, boolean hasCardBelow) {
+    protected int selectBackground(boolean hasCardAbove, boolean hasCardBelow) {
         if (hasCardAbove && hasCardBelow) return R.drawable.ntp_card_middle;
         if (!hasCardAbove && hasCardBelow) return R.drawable.ntp_card_top;
         if (hasCardAbove && !hasCardBelow) return R.drawable.ntp_card_bottom;

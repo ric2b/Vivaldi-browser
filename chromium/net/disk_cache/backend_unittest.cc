@@ -6,6 +6,7 @@
 
 #include "base/files/file.h"
 #include "base/files/file_util.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -595,15 +596,9 @@ TEST_F(DiskCacheBackendTest, MultipleInstancesWithPendingFileIO) {
 
   net::TestCompletionCallback cb;
   std::unique_ptr<disk_cache::Backend> extra_cache;
-  int rv = disk_cache::CreateCacheBackend(net::DISK_CACHE,
-                                          net::CACHE_BACKEND_DEFAULT,
-                                          store.path(),
-                                          0,
-                                          false,
-                                          base::ThreadTaskRunnerHandle::Get(),
-                                          NULL,
-                                          &extra_cache,
-                                          cb.callback());
+  int rv = disk_cache::CreateCacheBackend(
+      net::DISK_CACHE, net::CACHE_BACKEND_DEFAULT, store.GetPath(), 0, false,
+      base::ThreadTaskRunnerHandle::Get(), NULL, &extra_cache, cb.callback());
   ASSERT_THAT(cb.GetResult(rv), IsOk());
   ASSERT_TRUE(extra_cache.get() != NULL);
 
@@ -2063,7 +2058,8 @@ TEST_F(DiskCacheTest, SimpleCacheControlJoin) {
 
   // Instantiate the SimpleCacheTrial, forcing this run into the
   // ExperimentControl group.
-  base::FieldTrialList field_trial_list(new base::MockEntropyProvider());
+  base::FieldTrialList field_trial_list(
+      base::MakeUnique<base::MockEntropyProvider>());
   base::FieldTrialList::CreateFieldTrial("SimpleCacheTrial",
                                          "ExperimentControl");
   net::TestCompletionCallback cb;
@@ -2087,7 +2083,8 @@ TEST_F(DiskCacheTest, SimpleCacheControlJoin) {
 TEST_F(DiskCacheTest, SimpleCacheControlRestart) {
   // Instantiate the SimpleCacheTrial, forcing this run into the
   // ExperimentControl group.
-  base::FieldTrialList field_trial_list(new base::MockEntropyProvider());
+  base::FieldTrialList field_trial_list(
+      base::MakeUnique<base::MockEntropyProvider>());
   base::FieldTrialList::CreateFieldTrial("SimpleCacheTrial",
                                          "ExperimentControl");
 
@@ -2127,7 +2124,8 @@ TEST_F(DiskCacheTest, SimpleCacheControlLeave) {
   {
     // Instantiate the SimpleCacheTrial, forcing this run into the
     // ExperimentControl group.
-    base::FieldTrialList field_trial_list(new base::MockEntropyProvider());
+    base::FieldTrialList field_trial_list(
+        base::MakeUnique<base::MockEntropyProvider>());
     base::FieldTrialList::CreateFieldTrial("SimpleCacheTrial",
                                            "ExperimentControl");
 
@@ -2138,7 +2136,8 @@ TEST_F(DiskCacheTest, SimpleCacheControlLeave) {
 
   // Instantiate the SimpleCacheTrial, forcing this run into the
   // ExperimentNo group.
-  base::FieldTrialList field_trial_list(new base::MockEntropyProvider());
+  base::FieldTrialList field_trial_list(
+      base::MakeUnique<base::MockEntropyProvider>());
   base::FieldTrialList::CreateFieldTrial("SimpleCacheTrial", "ExperimentNo");
   net::TestCompletionCallback cb;
 
@@ -3230,25 +3229,13 @@ TEST_F(DiskCacheTest, MultipleInstances) {
   const int kNumberOfCaches = 2;
   std::unique_ptr<disk_cache::Backend> cache[kNumberOfCaches];
 
-  int rv = disk_cache::CreateCacheBackend(net::DISK_CACHE,
-                                          net::CACHE_BACKEND_DEFAULT,
-                                          store1.path(),
-                                          0,
-                                          false,
-                                          cache_thread.task_runner(),
-                                          NULL,
-                                          &cache[0],
-                                          cb.callback());
+  int rv = disk_cache::CreateCacheBackend(
+      net::DISK_CACHE, net::CACHE_BACKEND_DEFAULT, store1.GetPath(), 0, false,
+      cache_thread.task_runner(), NULL, &cache[0], cb.callback());
   ASSERT_THAT(cb.GetResult(rv), IsOk());
-  rv = disk_cache::CreateCacheBackend(net::MEDIA_CACHE,
-                                      net::CACHE_BACKEND_DEFAULT,
-                                      store2.path(),
-                                      0,
-                                      false,
-                                      cache_thread.task_runner(),
-                                      NULL,
-                                      &cache[1],
-                                      cb.callback());
+  rv = disk_cache::CreateCacheBackend(
+      net::MEDIA_CACHE, net::CACHE_BACKEND_DEFAULT, store2.GetPath(), 0, false,
+      cache_thread.task_runner(), NULL, &cache[1], cb.callback());
   ASSERT_THAT(cb.GetResult(rv), IsOk());
 
   ASSERT_TRUE(cache[0].get() != NULL && cache[1].get() != NULL);
@@ -3753,6 +3740,8 @@ TEST_F(DiskCacheBackendTest, SimpleCacheEnumerationWhileDoomed) {
   EXPECT_TRUE(keys_to_match.empty());
 }
 
+// This test is flaky on Android Marshmallow crbug.com/638891.
+#if !defined(OS_ANDROID)
 // Tests that enumerations are not affected by corrupt files.
 TEST_F(DiskCacheBackendTest, SimpleCacheEnumerationCorruption) {
   SetSimpleCacheMode();
@@ -3790,6 +3779,7 @@ TEST_F(DiskCacheBackendTest, SimpleCacheEnumerationCorruption) {
   EXPECT_EQ(key_pool.size(), count);
   EXPECT_TRUE(keys_to_match.empty());
 }
+#endif
 
 // Tests that enumerations don't leak memory when the backend is destructed
 // mid-enumeration.

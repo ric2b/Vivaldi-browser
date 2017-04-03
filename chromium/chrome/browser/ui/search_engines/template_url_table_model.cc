@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/favicon/core/favicon_service.h"
@@ -148,7 +149,7 @@ void TemplateURLTableModel::Reload() {
     // the lists while editing.
     if (template_url->show_in_default_list())
       default_entries.push_back(new ModelEntry(this, template_url));
-    else if (template_url->GetType() == TemplateURL::OMNIBOX_API_EXTENSION)
+    else if (template_url->type() == TemplateURL::OMNIBOX_API_EXTENSION)
       extension_entries.push_back(new ModelEntry(this, template_url));
     else
       other_entries.push_back(new ModelEntry(this, template_url));
@@ -266,8 +267,8 @@ void TemplateURLTableModel::Add(int index,
   data.SetShortName(short_name);
   data.SetKeyword(keyword);
   data.SetURL(url);
-  TemplateURL* turl = new TemplateURL(data);
-  template_url_service_->Add(turl);
+  TemplateURL* turl =
+      template_url_service_->Add(base::MakeUnique<TemplateURL>(data));
   std::unique_ptr<ModelEntry> entry(new ModelEntry(this, turl));
   template_url_service_->AddObserver(this);
   AddEntry(index, std::move(entry));

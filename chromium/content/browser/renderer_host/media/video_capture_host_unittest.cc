@@ -16,9 +16,9 @@
 #include "base/files/scoped_file.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -46,7 +46,6 @@
 #endif
 
 using ::testing::_;
-using ::testing::AtLeast;
 using ::testing::AnyNumber;
 using ::testing::DoAll;
 using ::testing::InSequence;
@@ -67,8 +66,8 @@ static const int kDeviceId = 555;
 // Define to use a real video capture device.
 // #define TEST_REAL_CAPTURE_DEVICE
 
-// Simple class used for dumping video to a file. This can be used for
-// verifying the output.
+// Simple class used for dumping video to a file. This can be used for verifying
+// the output.
 class DumpVideo {
  public:
   DumpVideo() {}
@@ -166,9 +165,8 @@ class MockVideoCaptureHost : public VideoCaptureHost {
   int GetReceivedDib() {
     if (filled_dib_.empty())
       return 0;
-    std::map<int, base::SharedMemory*>::iterator it = filled_dib_.begin();
+    auto it = filled_dib_.begin();
     int h = it->first;
-    delete it->second;
     filled_dib_.erase(it);
 
     return h;
@@ -176,8 +174,6 @@ class MockVideoCaptureHost : public VideoCaptureHost {
 
  private:
   ~MockVideoCaptureHost() override {
-    base::STLDeleteContainerPairSecondPointers(filled_dib_.begin(),
-                                               filled_dib_.end());
   }
 
   // This method is used to dispatch IPC messages to the renderer. We intercept
@@ -208,24 +204,23 @@ class MockVideoCaptureHost : public VideoCaptureHost {
                                   uint32_t length,
                                   int buffer_id) {
     OnNewBufferCreated(device_id, handle, length, buffer_id);
-    base::SharedMemory* dib = new base::SharedMemory(handle, false);
+    std::unique_ptr<base::SharedMemory> dib =
+        base::MakeUnique<base::SharedMemory>(handle, false);
     dib->Map(length);
-    filled_dib_[buffer_id] = dib;
+    filled_dib_[buffer_id] = std::move(dib);
   }
 
   void OnBufferFreedDispatch(int device_id, int buffer_id) {
     OnBufferFreed(device_id, buffer_id);
 
-    std::map<int, base::SharedMemory*>::iterator it =
-        filled_dib_.find(buffer_id);
+    auto it = filled_dib_.find(buffer_id);
     ASSERT_TRUE(it != filled_dib_.end());
-    delete it->second;
     filled_dib_.erase(it);
   }
 
   void OnBufferFilledDispatch(
       const VideoCaptureMsg_BufferReady_Params& params) {
-    base::SharedMemory* dib = filled_dib_[params.buffer_id];
+    base::SharedMemory* dib = filled_dib_[params.buffer_id].get();
     ASSERT_TRUE(dib != NULL);
     if (dump_video_) {
       if (dumper_.coded_size().IsEmpty())
@@ -246,7 +241,7 @@ class MockVideoCaptureHost : public VideoCaptureHost {
     OnStateChanged(device_id, state);
   }
 
-  std::map<int, base::SharedMemory*> filled_dib_;
+  std::map<int, std::unique_ptr<base::SharedMemory>> filled_dib_;
   bool return_buffers_;
   bool dump_video_;
   media::VideoCaptureFormat format_;
@@ -295,7 +290,7 @@ class VideoCaptureHostTest : public testing::Test {
     // Verifies and removes the expectations on host_ and
     // returns true iff successful.
     Mock::VerifyAndClearExpectations(host_.get());
-    EXPECT_EQ(0u, host_->entries_.size());
+    EXPECT_TRUE(host_->controllers_.empty());
 
     CloseSession();
 
@@ -406,7 +401,24 @@ class VideoCaptureHostTest : public testing::Test {
     params.requested_format = media::VideoCaptureFormat(
         gfx::Size(352, 288), 30, media::PIXEL_FORMAT_I420);
     host_->OnStartCapture(kDeviceId, opened_session_id_, params);
-    host_->OnStopCapture(kDeviceId);
+    host_->Stop(kDeviceId);
+    run_loop.RunUntilIdle();
+    WaitForVideoDeviceThread();
+  }
+
+  void PauseResumeCapture() {
+    InSequence s;
+    base::RunLoop run_loop;
+    EXPECT_CALL(*host_.get(),
+                OnStateChanged(kDeviceId, VIDEO_CAPTURE_STATE_PAUSED));
+    host_->Pause(kDeviceId);
+
+    EXPECT_CALL(*host_.get(),
+                OnStateChanged(kDeviceId, VIDEO_CAPTURE_STATE_RESUMED));
+    media::VideoCaptureParams params;
+    params.requested_format = media::VideoCaptureFormat(
+        gfx::Size(352, 288), 30, media::PIXEL_FORMAT_I420);
+    host_->OnResumeCapture(kDeviceId, opened_session_id_, params);
     run_loop.RunUntilIdle();
     WaitForVideoDeviceThread();
   }
@@ -437,7 +449,7 @@ class VideoCaptureHostTest : public testing::Test {
                 OnStateChanged(kDeviceId, VIDEO_CAPTURE_STATE_STOPPED))
         .WillOnce(ExitMessageLoop(task_runner_, run_loop.QuitClosure()));
 
-    host_->OnStopCapture(kDeviceId);
+    host_->Stop(kDeviceId);
     host_->SetReturnReceivedDibs(true);
     host_->ReturnReceivedDibs(kDeviceId);
 
@@ -445,7 +457,7 @@ class VideoCaptureHostTest : public testing::Test {
 
     host_->SetReturnReceivedDibs(false);
     // Expect the VideoCaptureDevice has been stopped
-    EXPECT_EQ(0u, host_->entries_.size());
+    EXPECT_TRUE(host_->controllers_.empty());
   }
 
   void NotifyPacketReady() {
@@ -484,16 +496,16 @@ class VideoCaptureHostTest : public testing::Test {
   scoped_refptr<MockVideoCaptureHost> host_;
 
  private:
-  // media_stream_manager_ needs to outlive thread_bundle_ because it is a
-  // MessageLoop::DestructionObserver. audio_manager_ needs to outlive
-  // thread_bundle_ because it uses the underlying message loop.
+  // |media_stream_manager_| needs to outlive |thread_bundle_| because it is a
+  // MessageLoop::DestructionObserver. |audio_manager_| needs to outlive
+  // |thread_bundle_| because it uses the underlying message loop.
   StrictMock<MockMediaStreamRequester> stream_requester_;
   std::unique_ptr<MediaStreamManager> media_stream_manager_;
-  content::TestBrowserThreadBundle thread_bundle_;
+  const content::TestBrowserThreadBundle thread_bundle_;
   media::ScopedAudioManagerPtr audio_manager_;
   content::TestBrowserContext browser_context_;
   content::TestContentBrowserClient browser_client_;
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   int opened_session_id_;
   std::string opened_device_label_;
 
@@ -546,5 +558,11 @@ TEST_F(VideoCaptureHostTest, CaptureAndDump720P) {
   CaptureAndDumpVideo(1280, 720, 30);
 }
 #endif
+
+TEST_F(VideoCaptureHostTest, PauseResumeCapture) {
+  StartCapture();
+  PauseResumeCapture();
+  StopCapture();
+}
 
 }  // namespace content

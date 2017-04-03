@@ -181,16 +181,24 @@ class BitVector {
   class OutOfLineBits {};
   enum Foo { Blah };
   struct Bar {};
+  class Baz {};
+  class FooBar {};
+
+  template <typename T>
+  class MyRefPtr {};
 
   // Naive renaming will break the build, by leaving return type the same
-  // as method the name - to avoid this "Get" prefix needs to be prepended
+  // as the method name - to avoid this "Get" prefix needs to be prepended
   // as suggested in https://crbug.com/582312#c17.
   const OutOfLineBits* outOfLineBits() const { return nullptr; }
   Foo foo() { return Blah; }
   const Bar& bar() const { return m_bar; }
+  MyRefPtr<Baz> baz() { return MyRefPtr<Baz>(); }
+  const MyRefPtr<FooBar>& fooBar() { return foobar_; }
 
  private:
   Bar m_bar;
+  MyRefPtr<FooBar> foobar_;
 };
 
 }  // namespace blink
@@ -210,3 +218,25 @@ void F2() {
   WTF::StructInWTF w;
   w.function();
 }
+
+namespace blink {
+
+class ClassDeclaredInsideBlink {
+ public:
+  static void methodDefinedOutsideBlink();
+};
+
+namespace internal {
+
+class InternalClass {
+ public:
+  static void method();
+};
+
+}  // namespace internal
+
+}  // namespace blink
+
+// https://crbug.com/640688 - need to rewrite method name below.
+void blink::ClassDeclaredInsideBlink::methodDefinedOutsideBlink() {}
+void blink::internal::InternalClass::method() {}

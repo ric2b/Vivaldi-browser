@@ -28,6 +28,7 @@
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/signin/signin_promo.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/bookmarks/bookmark_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -41,7 +42,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/profiling.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/dom_distiller/core/dom_distiller_switches.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/core/tab_restore_service.h"
@@ -52,8 +53,11 @@
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/common/service_manager_connection.h"
 #include "content/public/common/url_constants.h"
 #include "extensions/browser/extension_system.h"
+#include "mash/public/interfaces/launchable.mojom.h"
+#include "services/shell/public/cpp/connector.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
 #if defined(OS_MACOSX)
@@ -66,8 +70,8 @@
 #endif
 
 #if defined(USE_ASH)
-#include "ash/accelerators/accelerator_commands_aura.h"
-#include "chrome/browser/ui/ash/ash_util.h"
+#include "ash/accelerators/accelerator_commands_aura.h"  // nogncheck
+#include "chrome/browser/ui/ash/ash_util.h"  // nogncheck
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -96,24 +100,6 @@ enum WindowState {
   WINDOW_STATE_FULLSCREEN,
 };
 
-// Returns |true| if entry has an internal chrome:// URL, |false| otherwise.
-bool HasInternalURL(const NavigationEntry* entry) {
-  if (!entry)
-    return false;
-
-  // Check the |virtual_url()| first. This catches regular chrome:// URLs
-  // including URLs that were rewritten (such as chrome://bookmarks).
-  if (entry->GetVirtualURL().SchemeIs(content::kChromeUIScheme))
-    return true;
-
-  // If the |virtual_url()| isn't a chrome:// URL, check if it's actually
-  // view-source: of a chrome:// URL.
-  if (entry->GetVirtualURL().SchemeIs(content::kViewSourceScheme))
-    return entry->GetURL().SchemeIs(content::kChromeUIScheme);
-
-  return false;
-}
-
 }  // namespace
 
 namespace chrome {
@@ -126,7 +112,7 @@ BrowserCommandController::BrowserCommandController(Browser* browser)
       command_updater_(this),
       block_command_execution_(false),
       last_blocked_command_id_(-1),
-      last_blocked_command_disposition_(CURRENT_TAB) {
+      last_blocked_command_disposition_(WindowOpenDisposition::CURRENT_TAB) {
   browser_->tab_strip_model()->AddObserver(this);
   PrefService* local_state = g_browser_process->local_state();
   if (local_state) {
@@ -242,7 +228,7 @@ void BrowserCommandController::SetBlockCommandExecution(bool block) {
   block_command_execution_ = block;
   if (block) {
     last_blocked_command_id_ = -1;
-    last_blocked_command_disposition_ = CURRENT_TAB;
+    last_blocked_command_disposition_ = WindowOpenDisposition::CURRENT_TAB;
   }
 }
 
@@ -476,49 +462,6 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
       ManagePasswordsForPage(browser_);
       break;
 
-    // Page encoding commands
-    case IDC_ENCODING_AUTO_DETECT:
-      browser_->ToggleEncodingAutoDetect();
-      break;
-    case IDC_ENCODING_UTF8:
-    case IDC_ENCODING_UTF16LE:
-    case IDC_ENCODING_WINDOWS1252:
-    case IDC_ENCODING_GBK:
-    case IDC_ENCODING_GB18030:
-    case IDC_ENCODING_BIG5:
-    case IDC_ENCODING_KOREAN:
-    case IDC_ENCODING_SHIFTJIS:
-    case IDC_ENCODING_ISO2022JP:
-    case IDC_ENCODING_EUCJP:
-    case IDC_ENCODING_THAI:
-    case IDC_ENCODING_ISO885915:
-    case IDC_ENCODING_MACINTOSH:
-    case IDC_ENCODING_ISO88592:
-    case IDC_ENCODING_WINDOWS1250:
-    case IDC_ENCODING_ISO88595:
-    case IDC_ENCODING_WINDOWS1251:
-    case IDC_ENCODING_KOI8R:
-    case IDC_ENCODING_KOI8U:
-    case IDC_ENCODING_IBM866:
-    case IDC_ENCODING_ISO88597:
-    case IDC_ENCODING_WINDOWS1253:
-    case IDC_ENCODING_ISO88594:
-    case IDC_ENCODING_ISO885913:
-    case IDC_ENCODING_WINDOWS1257:
-    case IDC_ENCODING_ISO88593:
-    case IDC_ENCODING_ISO885910:
-    case IDC_ENCODING_ISO885914:
-    case IDC_ENCODING_ISO885916:
-    case IDC_ENCODING_WINDOWS1254:
-    case IDC_ENCODING_ISO88596:
-    case IDC_ENCODING_WINDOWS1256:
-    case IDC_ENCODING_ISO88598:
-    case IDC_ENCODING_ISO88598I:
-    case IDC_ENCODING_WINDOWS1255:
-    case IDC_ENCODING_WINDOWS1258:
-      browser_->OverrideEncoding(id);
-      break;
-
     // Clipboard commands
     case IDC_CUT:
     case IDC_COPY:
@@ -688,7 +631,16 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
       break;
 #if defined(OS_CHROMEOS)
     case IDC_TOUCH_HUD_PROJECTION_TOGGLE:
-      ash::accelerators::ToggleTouchHudProjection();
+      if (chrome::IsRunningInMash()) {
+        shell::Connector* connector =
+            content::ServiceManagerConnection::GetForProcess()->GetConnector();
+        mash::mojom::LaunchablePtr launchable;
+        connector->ConnectToInterface("service:touch_hud", &launchable);
+        launchable->Launch(mash::mojom::kWindow,
+                           mash::mojom::LaunchMode::DEFAULT);
+      } else {
+        ash::accelerators::ToggleTouchHudProjection();
+      }
       break;
 #endif
     case IDC_ROUTE_MEDIA:
@@ -715,7 +667,8 @@ void BrowserCommandController::OnSigninAllowedPrefChange() {
 
 // BrowserCommandController, TabStripModelObserver implementation:
 
-void BrowserCommandController::TabInsertedAt(WebContents* contents,
+void BrowserCommandController::TabInsertedAt(TabStripModel* tab_strip_model,
+                                             WebContents* contents,
                                              int index,
                                              bool foreground) {
   AddInterstitialObservers(contents);
@@ -823,43 +776,6 @@ void BrowserCommandController::InitCommandState() {
   // Page-related commands
   command_updater_.UpdateCommandEnabled(IDC_EMAIL_PAGE_LOCATION, true);
   command_updater_.UpdateCommandEnabled(IDC_MANAGE_PASSWORDS_FOR_PAGE, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_AUTO_DETECT, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_UTF8, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_UTF16LE, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_WINDOWS1252, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_GBK, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_GB18030, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_BIG5, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_THAI, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_KOREAN, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_SHIFTJIS, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_ISO2022JP, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_EUCJP, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_ISO885915, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_MACINTOSH, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_ISO88592, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_WINDOWS1250, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_ISO88595, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_WINDOWS1251, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_KOI8R, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_KOI8U, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_IBM866, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_ISO88597, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_WINDOWS1253, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_ISO88594, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_ISO885913, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_WINDOWS1257, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_ISO88593, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_ISO885910, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_ISO885914, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_ISO885916, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_WINDOWS1254, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_ISO88596, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_WINDOWS1256, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_ISO88598, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_ISO88598I, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_WINDOWS1255, true);
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_WINDOWS1258, true);
 
   // Zoom
   command_updater_.UpdateCommandEnabled(IDC_ZOOM_MENU, true);
@@ -1019,13 +935,6 @@ void BrowserCommandController::UpdateCommandsForTabState() {
                                         CanEmailPageLocation(browser_));
   if (browser_->is_devtools())
     command_updater_.UpdateCommandEnabled(IDC_OPEN_FILE, false);
-
-  // Changing the encoding is not possible on Chrome-internal webpages.
-  NavigationController& nc = current_web_contents->GetController();
-  bool is_chrome_internal = HasInternalURL(nc.GetLastCommittedEntry()) ||
-      current_web_contents->ShowingInterstitialPage();
-  command_updater_.UpdateCommandEnabled(IDC_ENCODING_MENU,
-      !is_chrome_internal && current_web_contents->IsSavable());
 
   // Show various bits of UI
   // TODO(pinkerton): Disable app-mode in the model until we implement it

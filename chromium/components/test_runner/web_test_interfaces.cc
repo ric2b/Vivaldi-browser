@@ -18,6 +18,7 @@
 #include "components/test_runner/web_view_test_client.h"
 #include "components/test_runner/web_view_test_proxy.h"
 #include "components/test_runner/web_widget_test_client.h"
+#include "components/test_runner/web_widget_test_proxy.h"
 
 using namespace blink;
 
@@ -92,22 +93,22 @@ WebTestInterfaces::CreateAppBannerClient() {
 std::unique_ptr<WebFrameTestClient> WebTestInterfaces::CreateWebFrameTestClient(
     WebViewTestProxyBase* web_view_test_proxy_base,
     WebFrameTestProxyBase* web_frame_test_proxy_base) {
-  return base::WrapUnique(new WebFrameTestClient(
-      interfaces_->GetTestRunner(), interfaces_->GetDelegate(),
-      web_view_test_proxy_base, web_frame_test_proxy_base));
+  // TODO(lukasza): Do not pass the WebTestDelegate below - it's lifetime can
+  // differ from the lifetime of WebFrameTestClient - https://crbug.com/606594.
+  return base::MakeUnique<WebFrameTestClient>(interfaces_->GetDelegate(),
+                                              web_view_test_proxy_base,
+                                              web_frame_test_proxy_base);
 }
 
 std::unique_ptr<WebViewTestClient> WebTestInterfaces::CreateWebViewTestClient(
     WebViewTestProxyBase* web_view_test_proxy_base) {
-  return base::WrapUnique(new WebViewTestClient(interfaces_->GetTestRunner(),
-                                                web_view_test_proxy_base));
+  return base::MakeUnique<WebViewTestClient>(web_view_test_proxy_base);
 }
 
 std::unique_ptr<WebWidgetTestClient>
 WebTestInterfaces::CreateWebWidgetTestClient(
-    WebViewTestProxyBase* web_view_test_proxy_base) {
-  return base::WrapUnique(new WebWidgetTestClient(interfaces_->GetTestRunner(),
-                                                  web_view_test_proxy_base));
+    WebWidgetTestProxyBase* web_widget_test_proxy_base) {
+  return base::MakeUnique<WebWidgetTestClient>(web_widget_test_proxy_base);
 }
 
 std::vector<blink::WebView*> WebTestInterfaces::GetWindowList() {

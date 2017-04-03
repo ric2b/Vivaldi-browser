@@ -11,7 +11,6 @@
 #include "mojo/public/cpp/bindings/sync_call_restrictions.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "services/shell/public/cpp/connector.h"
-#include "services/ui/common/gpu_type_converters.h"
 #include "services/ui/common/switches.h"
 #include "services/ui/public/cpp/mojo_gpu_memory_buffer_manager.h"
 #include "services/ui/public/interfaces/gpu_service.mojom.h"
@@ -66,7 +65,7 @@ void GpuService::EstablishGpuChannel(
   if (gpu_service_)
     return;
 
-  connector_->ConnectToInterface("mojo:ui", &gpu_service_);
+  connector_->ConnectToInterface("service:ui", &gpu_service_);
   gpu_service_->EstablishGpuChannel(
       base::Bind(&GpuService::OnEstablishedGpuChannel, base::Unretained(this)));
 }
@@ -79,7 +78,7 @@ scoped_refptr<gpu::GpuChannelHost> GpuService::EstablishGpuChannelSync() {
   int client_id = 0;
   mojo::ScopedMessagePipeHandle channel_handle;
   gpu::GPUInfo gpu_info;
-  connector_->ConnectToInterface("mojo:ui", &gpu_service_);
+  connector_->ConnectToInterface("service:ui", &gpu_service_);
 
   mojo::SyncCallRestrictions::ScopedAllowSyncCall allow_sync_call;
   if (!gpu_service_->EstablishGpuChannel(&client_id, &channel_handle,
@@ -114,11 +113,9 @@ void GpuService::OnEstablishedGpuChannel(
   DCHECK(!gpu_channel_);
 
   if (client_id) {
-    // TODO(penghuang): Get the real gpu info from mus.
     gpu_channel_ = gpu::GpuChannelHost::Create(
-        this, client_id, gpu::GPUInfo(),
-        IPC::ChannelHandle(channel_handle.release()), &shutdown_event_,
-        gpu_memory_buffer_manager_.get());
+        this, client_id, gpu_info, IPC::ChannelHandle(channel_handle.release()),
+        &shutdown_event_, gpu_memory_buffer_manager_.get());
   }
 
   gpu_service_.reset();

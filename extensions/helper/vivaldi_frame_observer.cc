@@ -5,6 +5,7 @@
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/render_view_host.h"
 #include "extensions/helper/vivaldi_frame_observer.h"
+#include "renderer/vivaldi_render_messages.h"
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(vivaldi::VivaldiFrameObserver);
 
@@ -16,6 +17,30 @@ VivaldiFrameObserver::VivaldiFrameObserver(content::WebContents *web_contents)
 }
 
 VivaldiFrameObserver::~VivaldiFrameObserver() {}
+
+bool VivaldiFrameObserver::OnMessageReceived(const IPC::Message& message) {
+  bool handled = true;
+  IPC_BEGIN_MESSAGE_MAP(VivaldiFrameObserver, message)
+    IPC_MESSAGE_HANDLER(VivaldiMsg_DidUpdateFocusedElementInfo,
+                        OnDidUpdateFocusedElementInfo)
+    IPC_MESSAGE_UNHANDLED(handled = false)
+  IPC_END_MESSAGE_MAP()
+  return handled;
+}
+
+void VivaldiFrameObserver::OnDidUpdateFocusedElementInfo(std::string tagname,
+  std::string type, bool editable) {
+  focused_element_tagname_ = tagname;
+  focused_element_type_ = type;
+  focused_element_editable_ = editable;
+}
+
+void VivaldiFrameObserver::GetFocusedElementInfo(
+  std::string *tagname, std::string *type, bool *editable) {
+  *tagname = focused_element_tagname_;
+  *type = focused_element_type_;
+  *editable = focused_element_editable_;
+}
 
 void VivaldiFrameObserver::RenderFrameHostChanged(
   content::RenderFrameHost* old_host,

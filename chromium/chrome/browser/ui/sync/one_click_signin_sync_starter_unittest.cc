@@ -18,7 +18,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/browser_sync/common/browser_sync_switches.h"
+#include "components/browser_sync/browser_sync_switches.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/fake_signin_manager.h"
 #include "components/signin/core/common/profile_management_switches.h"
@@ -97,11 +97,11 @@ class OneClickSigninSyncStarterTest : public ChromeRenderViewHostTestHarness {
   static std::unique_ptr<KeyedService> BuildSigninManager(
       content::BrowserContext* context) {
     Profile* profile = static_cast<Profile*>(context);
-    return base::WrapUnique(new FakeSigninManager(
+    return base::MakeUnique<FakeSigninManager>(
         ChromeSigninClientFactory::GetForProfile(profile),
         ProfileOAuth2TokenServiceFactory::GetForProfile(profile),
         AccountTrackerServiceFactory::GetForProfile(profile),
-        GaiaCookieManagerServiceFactory::GetForProfile(profile)));
+        GaiaCookieManagerServiceFactory::GetForProfile(profile));
   }
 
   DISALLOW_COPY_AND_ASSIGN(OneClickSigninSyncStarterTest);

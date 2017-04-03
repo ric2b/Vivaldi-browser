@@ -24,14 +24,13 @@
 #include "ash/magnifier/partial_magnification_controller.h"
 #include "ash/root_window_controller.h"
 #include "ash/root_window_settings.h"
-#include "ash/screen_util.h"
 #include "ash/shell.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
-#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "grit/ash_strings.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/client/screen_position_client.h"
@@ -41,6 +40,7 @@
 #include "ui/aura/window_tracker.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/ime/input_method_factory.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/compositor.h"
 #include "ui/display/display.h"
 #include "ui/display/manager/display_layout.h"
@@ -84,7 +84,8 @@ DisplayManager* GetDisplayManager() {
 
 void SetDisplayPropertiesOnHost(AshWindowTreeHost* ash_host,
                                 const display::Display& display) {
-  DisplayInfo info = GetDisplayManager()->GetDisplayInfo(display.id());
+  display::ManagedDisplayInfo info =
+      GetDisplayManager()->GetDisplayInfo(display.id());
   aura::WindowTreeHost* host = ash_host->AsWindowTreeHost();
 #if defined(OS_CHROMEOS)
 #if defined(USE_X11)
@@ -136,7 +137,7 @@ void SetDisplayPropertiesOnHost(AshWindowTreeHost* ash_host,
       CreateRootWindowTransformerForDisplay(host->window(), display));
   ash_host->SetRootWindowTransformer(std::move(transformer));
 
-  scoped_refptr<ManagedDisplayMode> mode =
+  scoped_refptr<display::ManagedDisplayMode> mode =
       GetDisplayManager()->GetActiveModeForDisplayId(display.id());
   if (mode && mode->refresh_rate() > 0.0f) {
     host->compositor()->SetAuthoritativeVSyncInterval(
@@ -281,7 +282,8 @@ void WindowTreeHostManager::Shutdown() {
   }
   CHECK(primary_rwc);
 
-  base::STLDeleteElements(&to_delete);
+  for (auto rwc : to_delete)
+    delete rwc;
   delete primary_rwc;
 }
 
@@ -480,7 +482,7 @@ void WindowTreeHostManager::UpdateMouseLocationAfterDisplayChange() {
   aura::Window* dst_root_window = nullptr;
   for (size_t i = 0; i < display_manager->GetNumDisplays(); ++i) {
     const display::Display& display = display_manager->GetDisplayAt(i);
-    const DisplayInfo display_info =
+    const display::ManagedDisplayInfo display_info =
         display_manager->GetDisplayInfo(display.id());
     aura::Window* root_window = GetRootWindowForDisplayId(display.id());
     if (display_info.bounds_in_native().Contains(
@@ -624,7 +626,7 @@ void WindowTreeHostManager::OnDisplayAdded(const display::Display& display) {
     GetRootWindowSettings(GetWindow(primary_tree_host_for_replace_))
         ->display_id = display.id();
     primary_tree_host_for_replace_ = nullptr;
-    const DisplayInfo& display_info =
+    const display::ManagedDisplayInfo& display_info =
         GetDisplayManager()->GetDisplayInfo(display.id());
     AshWindowTreeHost* ash_host = window_tree_hosts_[display.id()];
     ash_host->AsWindowTreeHost()->SetBounds(display_info.bounds_in_native());
@@ -705,7 +707,7 @@ void WindowTreeHostManager::OnDisplayMetricsChanged(
   if (!(metrics & (DISPLAY_METRIC_BOUNDS | DISPLAY_METRIC_ROTATION |
                    DISPLAY_METRIC_DEVICE_SCALE_FACTOR)))
     return;
-  const DisplayInfo& display_info =
+  const display::ManagedDisplayInfo& display_info =
       GetDisplayManager()->GetDisplayInfo(display.id());
   DCHECK(!display_info.bounds_in_native().IsEmpty());
   AshWindowTreeHost* ash_host = window_tree_hosts_[display.id()];
@@ -796,6 +798,20 @@ void WindowTreeHostManager::PostDisplayConfigurationChange() {
   UpdateMouseLocationAfterDisplayChange();
 }
 
+#if defined(OS_CHROMEOS)
+ui::DisplayConfigurator* WindowTreeHostManager::display_configurator() {
+  return Shell::GetInstance()->display_configurator();
+}
+#endif
+
+std::string WindowTreeHostManager::GetInternalDisplayNameString() {
+  return l10n_util::GetStringUTF8(IDS_ASH_INTERNAL_DISPLAY_NAME);
+}
+
+std::string WindowTreeHostManager::GetUnknownDisplayNameString() {
+  return l10n_util::GetStringUTF8(IDS_ASH_STATUS_TRAY_UNKNOWN_DISPLAY_NAME);
+}
+
 ui::EventDispatchDetails WindowTreeHostManager::DispatchKeyEventPostIME(
     ui::KeyEvent* event) {
   // Getting the active root window to dispatch the event. This isn't
@@ -811,7 +827,7 @@ AshWindowTreeHost* WindowTreeHostManager::AddWindowTreeHostForDisplay(
     const display::Display& display,
     const AshWindowTreeHostInitParams& init_params) {
   static int host_count = 0;
-  const DisplayInfo& display_info =
+  const display::ManagedDisplayInfo& display_info =
       GetDisplayManager()->GetDisplayInfo(display.id());
   AshWindowTreeHostInitParams params_with_bounds(init_params);
   params_with_bounds.initial_bounds = display_info.bounds_in_native();

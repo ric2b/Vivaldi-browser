@@ -81,6 +81,7 @@ WebInspector.Main.prototype = {
     {
         Runtime.experiments.register("accessibilityInspection", "Accessibility Inspection");
         Runtime.experiments.register("applyCustomStylesheet", "Allow custom UI themes");
+        Runtime.experiments.register("autoAttachToCrossProcessSubframes", "Auto-attach to cross-process subframes", true);
         Runtime.experiments.register("blackboxJSFramesOnTimeline", "Blackbox JavaScript frames on Timeline", true);
         Runtime.experiments.register("colorContrastRatio", "Contrast ratio line in color picker", true);
         Runtime.experiments.register("continueToFirstInvocation", "Continue to first invocation", true);
@@ -90,13 +91,16 @@ WebInspector.Main.prototype = {
         Runtime.experiments.register("layoutEditor", "Layout editor", true);
         Runtime.experiments.register("inspectTooltip", "Dark inspect element tooltip");
         Runtime.experiments.register("liveSASS", "Live SASS");
+        Runtime.experiments.register("nodeDebugging", "Node debugging", true);
+        Runtime.experiments.register("persistence2", "Persistence 2.0", true);
         Runtime.experiments.register("privateScriptInspection", "Private script inspection");
         Runtime.experiments.register("requestBlocking", "Request blocking", true);
         Runtime.experiments.register("resolveVariableNames", "Resolve variable names");
         Runtime.experiments.register("timelineShowAllEvents", "Show all events on Timeline", true);
+        Runtime.experiments.register("timelineShowAllProcesses", "Show all processes on Timeline", true);
         Runtime.experiments.register("securityPanel", "Security panel");
-        Runtime.experiments.register("shadowEditor", "Shadow editor", true);
         Runtime.experiments.register("sourceDiff", "Source diff");
+        Runtime.experiments.register("terminalInDrawer", "Terminal in drawer", true);
         Runtime.experiments.register("timelineFlowEvents", "Timeline flow events", true);
         Runtime.experiments.register("timelineInvalidationTracking", "Timeline invalidation tracking", true);
         Runtime.experiments.register("timelineRecordingPerspectives", "Timeline recording perspectives UI");
@@ -135,7 +139,8 @@ WebInspector.Main.prototype = {
 
         // Request filesystems early, we won't create connections until callback is fired. Things will happen in parallel.
         WebInspector.isolatedFileSystemManager = new WebInspector.IsolatedFileSystemManager();
-        WebInspector.isolatedFileSystemManager.initialize(this._didInitializeFileSystemManager.bind(this));
+        WebInspector.isolatedFileSystemManager.waitForFileSystems()
+            .then(this._didInitializeFileSystemManager.bind(this));
 
         var themeSetting = WebInspector.settings.createSetting("uiTheme", "default");
         WebInspector.initializeUIUtils(document, themeSetting);
@@ -170,16 +175,18 @@ WebInspector.Main.prototype = {
 
         var fileSystemWorkspaceBinding = new WebInspector.FileSystemWorkspaceBinding(WebInspector.isolatedFileSystemManager, WebInspector.workspace);
         WebInspector.networkMapping = new WebInspector.NetworkMapping(WebInspector.targetManager, WebInspector.workspace, fileSystemWorkspaceBinding, WebInspector.fileSystemMapping);
-        WebInspector.networkProjectManager = new WebInspector.NetworkProjectManager(WebInspector.targetManager, WebInspector.workspace, WebInspector.networkMapping);
+        WebInspector.networkProjectManager = new WebInspector.NetworkProjectManager(WebInspector.targetManager, WebInspector.workspace);
         WebInspector.presentationConsoleMessageHelper = new WebInspector.PresentationConsoleMessageHelper(WebInspector.workspace);
         WebInspector.cssWorkspaceBinding = new WebInspector.CSSWorkspaceBinding(WebInspector.targetManager, WebInspector.workspace, WebInspector.networkMapping);
         WebInspector.debuggerWorkspaceBinding = new WebInspector.DebuggerWorkspaceBinding(WebInspector.targetManager, WebInspector.workspace, WebInspector.networkMapping);
-        WebInspector.breakpointManager = new WebInspector.BreakpointManager(null, WebInspector.workspace, WebInspector.networkMapping, WebInspector.targetManager, WebInspector.debuggerWorkspaceBinding);
+        WebInspector.breakpointManager = new WebInspector.BreakpointManager(null, WebInspector.workspace, WebInspector.targetManager, WebInspector.debuggerWorkspaceBinding);
         WebInspector.extensionServer = new WebInspector.ExtensionServer();
+
+        WebInspector.persistence = new WebInspector.Persistence(WebInspector.workspace, WebInspector.breakpointManager, WebInspector.fileSystemMapping);
 
         new WebInspector.OverlayController();
         new WebInspector.ExecutionContextSelector(WebInspector.targetManager, WebInspector.context);
-        WebInspector.blackboxManager = new WebInspector.BlackboxManager(WebInspector.debuggerWorkspaceBinding, WebInspector.networkMapping);
+        WebInspector.blackboxManager = new WebInspector.BlackboxManager(WebInspector.debuggerWorkspaceBinding);
 
         var autoselectPanel = WebInspector.UIString("auto");
         var openAnchorLocationSetting = WebInspector.settings.createSetting("openLinkHandler", autoselectPanel);
@@ -289,9 +296,14 @@ WebInspector.Main.prototype = {
             WebInspector.RemoteDebuggingTerminatedScreen.show(event.data.reason);
         }
 
-        var capabilities = WebInspector.Target.Capability.Browser | WebInspector.Target.Capability.JS | WebInspector.Target.Capability.Network | WebInspector.Target.Capability.Worker | WebInspector.Target.Capability.DOM;
+        var capabilities =
+            WebInspector.Target.Capability.Browser | WebInspector.Target.Capability.DOM |
+            WebInspector.Target.Capability.JS | WebInspector.Target.Capability.Log |
+            WebInspector.Target.Capability.Network | WebInspector.Target.Capability.Worker;
         if (Runtime.queryParam("isSharedWorker"))
-            capabilities = WebInspector.Target.Capability.Browser | WebInspector.Target.Capability.Network | WebInspector.Target.Capability.Worker;
+            capabilities =
+                WebInspector.Target.Capability.Browser | WebInspector.Target.Capability.Log |
+                WebInspector.Target.Capability.Network | WebInspector.Target.Capability.Worker;
         else if (Runtime.queryParam("v8only"))
             capabilities = WebInspector.Target.Capability.JS;
 
@@ -310,12 +322,17 @@ WebInspector.Main.prototype = {
         InspectorFrontendHost.readyForTest();
 
         // Asynchronously run the extensions.
-        setTimeout(lateInitialization, 0);
+        setTimeout(lateInitialization.bind(this), 0);
 
+        /**
+         * @this {WebInspector.Main}
+         */
         function lateInitialization()
         {
             console.timeStamp("Main.lateInitialization");
             WebInspector.extensionServer.initializeExtensions();
+            if (Runtime.experiments.isEnabled("nodeDebugging"))
+                new WebInspector.RemoteLocationManager(this._mainTarget);
         }
     },
 

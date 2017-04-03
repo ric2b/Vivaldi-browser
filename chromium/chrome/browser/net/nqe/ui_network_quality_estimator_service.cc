@@ -8,7 +8,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/io_thread.h"
 #include "content/public/browser/browser_thread.h"
-#include "net/nqe/network_quality_estimator.h"
 
 // A class that sets itself as an observer of the EffectiveconnectionType for
 // the browser IO thread. It reports any change in EffectiveConnectionType back
@@ -89,6 +88,8 @@ UINetworkQualityEstimatorService::~UINetworkQualityEstimatorService() {
 void UINetworkQualityEstimatorService::Shutdown() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   weak_factory_.InvalidateWeakPtrs();
+  DCHECK(content::BrowserThread::DeleteSoon(content::BrowserThread::IO,
+                                            FROM_HERE, io_observer_));
 }
 
 void UINetworkQualityEstimatorService::EffectiveConnectionTypeChanged(

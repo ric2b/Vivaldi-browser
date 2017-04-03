@@ -19,6 +19,7 @@
 #include "ui/views/controls/label.h"
 #include "ui/views/examples/bubble_example.h"
 #include "ui/views/examples/button_example.h"
+#include "ui/views/examples/button_sticker_sheet.h"
 #include "ui/views/examples/checkbox_example.h"
 #include "ui/views/examples/combobox_example.h"
 #include "ui/views/examples/label_example.h"
@@ -56,6 +57,7 @@ ScopedExamples CreateExamples() {
   ScopedExamples examples(new ScopedVector<ExampleBase>);
   examples->push_back(new BubbleExample);
   examples->push_back(new ButtonExample);
+  examples->push_back(new ButtonStickerSheet);
   examples->push_back(new CheckboxExample);
   examples->push_back(new ComboboxExample);
   examples->push_back(new LabelExample);
@@ -181,7 +183,6 @@ class ExamplesWindowContents : public WidgetDelegateView,
   base::string16 GetWindowTitle() const override {
     return base::ASCIIToUTF16("Views Examples");
   }
-  View* GetContentsView() override { return this; }
   void WindowClosing() override {
     instance_ = NULL;
     if (operation_ == QUIT_ON_CLOSE)

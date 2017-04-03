@@ -4,9 +4,6 @@
 
 #include "chrome/browser/chromeos/file_manager/fake_disk_mount_manager.h"
 
-#include "base/callback.h"
-#include "base/stl_util.h"
-
 namespace file_manager {
 
 FakeDiskMountManager::MountRequest::MountRequest(
@@ -35,7 +32,6 @@ FakeDiskMountManager::FakeDiskMountManager() {
 }
 
 FakeDiskMountManager::~FakeDiskMountManager() {
-  base::STLDeleteValues(&disks_);
 }
 
 void FakeDiskMountManager::AddObserver(Observer* observer) {
@@ -57,9 +53,7 @@ const chromeos::disks::DiskMountManager::Disk*
 FakeDiskMountManager::FindDiskBySourcePath(
     const std::string& source_path) const {
   DiskMap::const_iterator iter = disks_.find(source_path);
-  if (iter == disks_.end())
-    return NULL;
-  return iter->second;
+  return iter != disks_.end() ? iter->second.get() : nullptr;
 }
 
 const chromeos::disks::DiskMountManager::MountPointMap&
@@ -101,13 +95,28 @@ void FakeDiskMountManager::UnmountPath(const std::string& mount_path,
   MountPointMap::iterator iter = mount_points_.find(mount_path);
   if (iter == mount_points_.end())
     return;
+
   const MountPointInfo mount_point = iter->second;
   mount_points_.erase(iter);
   FOR_EACH_OBSERVER(DiskMountManager::Observer, observers_,
                     OnMountEvent(DiskMountManager::UNMOUNTING,
                                  chromeos::MOUNT_ERROR_NONE,
                                  mount_point));
-  // Currently |callback| is just ignored.
+
+  // Enqueue callback so that |FakeDiskMountManager::FinishAllUnmountRequest()|
+  // can call them.
+  pending_unmount_callbacks_.push(callback);
+}
+
+bool FakeDiskMountManager::FinishAllUnmountPathRequests() {
+  if (pending_unmount_callbacks_.empty())
+    return false;
+
+  while (!pending_unmount_callbacks_.empty()) {
+    pending_unmount_callbacks_.front().Run(chromeos::MOUNT_ERROR_NONE);
+    pending_unmount_callbacks_.pop();
+  }
+  return true;
 }
 
 void FakeDiskMountManager::FormatMountedDevice(const std::string& mount_path) {
@@ -118,9 +127,9 @@ void FakeDiskMountManager::UnmountDeviceRecursively(
     const UnmountDeviceRecursivelyCallbackType& callback) {
 }
 
-bool FakeDiskMountManager::AddDiskForTest(Disk* disk) {
+bool FakeDiskMountManager::AddDiskForTest(std::unique_ptr<Disk> disk) {
   DCHECK(disk);
-  return disks_.insert(make_pair(disk->device_path(), disk)).second;
+  return disks_.insert(make_pair(disk->device_path(), std::move(disk))).second;
 }
 
 bool FakeDiskMountManager::AddMountPointForTest(

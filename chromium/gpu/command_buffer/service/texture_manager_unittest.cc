@@ -81,16 +81,13 @@ class TextureManagerTest : public GpuServiceTest {
  protected:
   void SetUp() override {
     GpuServiceTest::SetUp();
-    manager_.reset(new TextureManager(NULL,
-                                      feature_info_.get(),
-                                      kMaxTextureSize,
-                                      kMaxCubeMapTextureSize,
-                                      kMaxRectangleTextureSize,
-                                      kMax3DTextureSize,
-                                      kMaxArrayTextureLayers,
-                                      kUseDefaultTextures));
+    manager_.reset(new TextureManager(
+        NULL, feature_info_.get(), kMaxTextureSize, kMaxCubeMapTextureSize,
+        kMaxRectangleTextureSize, kMax3DTextureSize, kMaxArrayTextureLayers,
+        kUseDefaultTextures, nullptr));
+    SetupFeatureInfo("", "OpenGL ES 2.0", false);
     TestHelper::SetupTextureManagerInitExpectations(
-        gl_.get(), false, false, "", kUseDefaultTextures);
+        gl_.get(), false, false, false, "", kUseDefaultTextures);
     manager_->Initialize();
     error_state_.reset(new ::testing::StrictMock<gles2::MockErrorState>());
   }
@@ -112,7 +109,8 @@ class TextureManagerTest : public GpuServiceTest {
                         const char* gl_version,
                         bool enable_es3) {
     TestHelper::SetupFeatureInfoInitExpectationsWithGLVersion(
-        gl_.get(), gl_extensions, "", gl_version, enable_es3);
+        gl_.get(), gl_extensions, "", gl_version,
+        feature_info_->context_type(), enable_es3);
     feature_info_->InitializeForTesting();
     if (enable_es3) {
       EXPECT_CALL(*gl_, GetIntegerv(GL_MAX_COLOR_ATTACHMENTS, _))
@@ -245,15 +243,11 @@ TEST_F(TextureManagerTest, SetParameter) {
 TEST_F(TextureManagerTest, UseDefaultTexturesTrue) {
   bool use_default_textures = true;
   TestHelper::SetupTextureManagerInitExpectations(gl_.get(),
-      false, false, "GL_ANGLE_texture_usage", use_default_textures);
-  TextureManager manager(NULL,
-                         feature_info_.get(),
-                         kMaxTextureSize,
-                         kMaxCubeMapTextureSize,
-                         kMaxRectangleTextureSize,
-                         kMax3DTextureSize,
-                         kMaxArrayTextureLayers,
-                         use_default_textures);
+      false, false, false, "GL_ANGLE_texture_usage", use_default_textures);
+  TextureManager manager(nullptr, feature_info_.get(), kMaxTextureSize,
+                         kMaxCubeMapTextureSize, kMaxRectangleTextureSize,
+                         kMax3DTextureSize, kMaxArrayTextureLayers,
+                         use_default_textures, nullptr);
   manager.Initialize();
 
   EXPECT_TRUE(manager.GetDefaultTextureInfo(GL_TEXTURE_2D) != NULL);
@@ -267,15 +261,11 @@ TEST_F(TextureManagerTest, UseDefaultTexturesTrue) {
 TEST_F(TextureManagerTest, UseDefaultTexturesFalse) {
   bool use_default_textures = false;
   TestHelper::SetupTextureManagerInitExpectations(gl_.get(),
-      false, false, "GL_ANGLE_texture_usage", use_default_textures);
-  TextureManager manager(NULL,
-                         feature_info_.get(),
-                         kMaxTextureSize,
-                         kMaxCubeMapTextureSize,
-                         kMaxRectangleTextureSize,
-                         kMax3DTextureSize,
-                         kMaxArrayTextureLayers,
-                         use_default_textures);
+      false, false, false, "GL_ANGLE_texture_usage", use_default_textures);
+  TextureManager manager(nullptr, feature_info_.get(), kMaxTextureSize,
+                         kMaxCubeMapTextureSize, kMaxRectangleTextureSize,
+                         kMax3DTextureSize, kMaxArrayTextureLayers,
+                         use_default_textures, nullptr);
   manager.Initialize();
 
   EXPECT_TRUE(manager.GetDefaultTextureInfo(GL_TEXTURE_2D) == NULL);
@@ -290,15 +280,11 @@ TEST_F(TextureManagerTest, UseDefaultTexturesTrueES3) {
   bool use_default_textures = true;
   SetupFeatureInfo("", "OpenGL ES 3.0", true);
   TestHelper::SetupTextureManagerInitExpectations(gl_.get(),
-      true, false, "", use_default_textures);
-  TextureManager manager(NULL,
-                         feature_info_.get(),
-                         kMaxTextureSize,
-                         kMaxCubeMapTextureSize,
-                         kMaxRectangleTextureSize,
-                         kMax3DTextureSize,
-                         kMaxArrayTextureLayers,
-                         use_default_textures);
+      true, true, false, "", use_default_textures);
+  TextureManager manager(nullptr, feature_info_.get(), kMaxTextureSize,
+                         kMaxCubeMapTextureSize, kMaxRectangleTextureSize,
+                         kMax3DTextureSize, kMaxArrayTextureLayers,
+                         use_default_textures, nullptr);
   manager.Initialize();
 
   EXPECT_TRUE(manager.GetDefaultTextureInfo(GL_TEXTURE_3D) != NULL);
@@ -311,15 +297,11 @@ TEST_F(TextureManagerTest, UseDefaultTexturesFalseES3) {
   bool use_default_textures = false;
   SetupFeatureInfo("", "OpenGL ES 3.0", true);
   TestHelper::SetupTextureManagerInitExpectations(gl_.get(),
-      true, false, "", use_default_textures);
-  TextureManager manager(NULL,
-                         feature_info_.get(),
-                         kMaxTextureSize,
-                         kMaxCubeMapTextureSize,
-                         kMaxRectangleTextureSize,
-                         kMax3DTextureSize,
-                         kMaxArrayTextureLayers,
-                         use_default_textures);
+      true, true, false, "", use_default_textures);
+  TextureManager manager(nullptr, feature_info_.get(), kMaxTextureSize,
+                         kMaxCubeMapTextureSize, kMaxRectangleTextureSize,
+                         kMax3DTextureSize, kMaxArrayTextureLayers,
+                         use_default_textures, nullptr);
   manager.Initialize();
 
   EXPECT_TRUE(manager.GetDefaultTextureInfo(GL_TEXTURE_3D) == NULL);
@@ -330,15 +312,12 @@ TEST_F(TextureManagerTest, UseDefaultTexturesFalseES3) {
 
 TEST_F(TextureManagerTest, TextureUsageExt) {
   TestHelper::SetupTextureManagerInitExpectations(
-      gl_.get(), false, false, "GL_ANGLE_texture_usage", kUseDefaultTextures);
-  TextureManager manager(NULL,
-                         feature_info_.get(),
-                         kMaxTextureSize,
-                         kMaxCubeMapTextureSize,
-                         kMaxRectangleTextureSize,
-                         kMax3DTextureSize,
-                         kMaxArrayTextureLayers,
-                         kUseDefaultTextures);
+      gl_.get(), false, false, false, "GL_ANGLE_texture_usage",
+      kUseDefaultTextures);
+  TextureManager manager(nullptr, feature_info_.get(), kMaxTextureSize,
+                         kMaxCubeMapTextureSize, kMaxRectangleTextureSize,
+                         kMax3DTextureSize, kMaxArrayTextureLayers,
+                         kUseDefaultTextures, nullptr);
   manager.Initialize();
   const GLuint kClient1Id = 1;
   const GLuint kService1Id = 11;
@@ -359,15 +338,11 @@ TEST_F(TextureManagerTest, Destroy) {
   const GLuint kClient1Id = 1;
   const GLuint kService1Id = 11;
   TestHelper::SetupTextureManagerInitExpectations(
-      gl_.get(), false, false, "", kUseDefaultTextures);
-  TextureManager manager(NULL,
-                         feature_info_.get(),
-                         kMaxTextureSize,
-                         kMaxCubeMapTextureSize,
-                         kMaxRectangleTextureSize,
-                         kMax3DTextureSize,
-                         kMaxArrayTextureLayers,
-                         kUseDefaultTextures);
+      gl_.get(), false, false, false, "", kUseDefaultTextures);
+  TextureManager manager(nullptr, feature_info_.get(), kMaxTextureSize,
+                         kMaxCubeMapTextureSize, kMaxRectangleTextureSize,
+                         kMax3DTextureSize, kMaxArrayTextureLayers,
+                         kUseDefaultTextures, nullptr);
   manager.Initialize();
   // Check we can create texture.
   manager.CreateTexture(kClient1Id, kService1Id);
@@ -519,14 +494,10 @@ TEST_F(TextureManagerTest, ValidForTargetNPOT) {
       gl_.get(), "GL_OES_texture_npot");
   scoped_refptr<FeatureInfo> feature_info(new FeatureInfo());
   feature_info->InitializeForTesting();
-  TextureManager manager(NULL,
-                         feature_info.get(),
-                         kMaxTextureSize,
-                         kMaxCubeMapTextureSize,
-                         kMaxRectangleTextureSize,
-                         kMax3DTextureSize,
-                         kMaxArrayTextureLayers,
-                         kUseDefaultTextures);
+  TextureManager manager(nullptr, feature_info.get(), kMaxTextureSize,
+                         kMaxCubeMapTextureSize, kMaxRectangleTextureSize,
+                         kMax3DTextureSize, kMaxArrayTextureLayers,
+                         kUseDefaultTextures, nullptr);
   // Check NPOT width on level 0
   EXPECT_TRUE(manager.ValidForTarget(GL_TEXTURE_2D, 0, 5, 2, 1));
   // Check NPOT height on level 0
@@ -543,16 +514,12 @@ TEST_F(TextureManagerTest, AlphaLuminanceCompatibilityProfile) {
   const GLuint kServiceId = 11;
 
   SetupFeatureInfo("", "2.1", false);
-  TestHelper::SetupTextureManagerInitExpectations(gl_.get(), false, false, "",
-      kUseDefaultTextures);
-  TextureManager manager(NULL,
-                         feature_info_.get(),
-                         kMaxTextureSize,
-                         kMaxCubeMapTextureSize,
-                         kMaxRectangleTextureSize,
-                         kMax3DTextureSize,
-                         kMaxArrayTextureLayers,
-                         kUseDefaultTextures);
+  TestHelper::SetupTextureManagerInitExpectations(gl_.get(), false, false,
+      false, "", kUseDefaultTextures);
+  TextureManager manager(nullptr, feature_info_.get(), kMaxTextureSize,
+                         kMaxCubeMapTextureSize, kMaxRectangleTextureSize,
+                         kMax3DTextureSize, kMaxArrayTextureLayers,
+                         kUseDefaultTextures, nullptr);
   manager.Initialize();
 
   // Create a texture.
@@ -588,16 +555,12 @@ TEST_F(TextureManagerTest, AlphaLuminanceCoreProfileEmulation) {
   const GLuint kServiceId = 11;
 
   SetupFeatureInfo("", "4.2", true);
-  TestHelper::SetupTextureManagerInitExpectations(gl_.get(), true, true, "",
-      kUseDefaultTextures);
-  TextureManager manager(NULL,
-                         feature_info_.get(),
-                         kMaxTextureSize,
-                         kMaxCubeMapTextureSize,
-                         kMaxRectangleTextureSize,
-                         kMax3DTextureSize,
-                         kMaxArrayTextureLayers,
-                         kUseDefaultTextures);
+  TestHelper::SetupTextureManagerInitExpectations(gl_.get(), true, true, true,
+      "", kUseDefaultTextures);
+  TextureManager manager(nullptr, feature_info_.get(), kMaxTextureSize,
+                         kMaxCubeMapTextureSize, kMaxRectangleTextureSize,
+                         kMax3DTextureSize, kMaxArrayTextureLayers,
+                         kUseDefaultTextures, nullptr);
   manager.Initialize();
 
   // Create a texture.
@@ -705,20 +668,14 @@ class TextureTestBase : public GpuServiceTest {
  protected:
   void SetUpBase(MemoryTracker* memory_tracker, const std::string& extensions) {
     GpuServiceTest::SetUp();
-    if (!extensions.empty()) {
-      TestHelper::SetupFeatureInfoInitExpectations(gl_.get(),
-                                                   extensions.c_str());
-      feature_info_->InitializeForTesting();
-    }
+    TestHelper::SetupFeatureInfoInitExpectations(gl_.get(),
+                                                 extensions.c_str());
+    feature_info_->InitializeForTesting();
 
-    manager_.reset(new TextureManager(memory_tracker,
-                                      feature_info_.get(),
-                                      kMaxTextureSize,
-                                      kMaxCubeMapTextureSize,
-                                      kMaxRectangleTextureSize,
-                                      kMax3DTextureSize,
-                                      kMaxArrayTextureLayers,
-                                      kUseDefaultTextures));
+    manager_.reset(new TextureManager(
+        memory_tracker, feature_info_.get(), kMaxTextureSize,
+        kMaxCubeMapTextureSize, kMaxRectangleTextureSize, kMax3DTextureSize,
+        kMaxArrayTextureLayers, kUseDefaultTextures, nullptr));
     decoder_.reset(new ::testing::StrictMock<gles2::MockGLES2Decoder>());
     error_state_.reset(new ::testing::StrictMock<gles2::MockErrorState>());
     manager_->CreateTexture(kClient1Id, kService1Id);
@@ -1017,14 +974,10 @@ TEST_F(TextureTest, NPOT2DNPOTOK) {
       gl_.get(), "GL_OES_texture_npot");
   scoped_refptr<FeatureInfo> feature_info(new FeatureInfo());
   feature_info->InitializeForTesting();
-  TextureManager manager(NULL,
-                         feature_info.get(),
-                         kMaxTextureSize,
-                         kMaxCubeMapTextureSize,
-                         kMaxRectangleTextureSize,
-                         kMax3DTextureSize,
-                         kMaxArrayTextureLayers,
-                         kUseDefaultTextures);
+  TextureManager manager(nullptr, feature_info.get(), kMaxTextureSize,
+                         kMaxCubeMapTextureSize, kMaxRectangleTextureSize,
+                         kMax3DTextureSize, kMaxArrayTextureLayers,
+                         kUseDefaultTextures, nullptr);
   manager.CreateTexture(kClient1Id, kService1Id);
   TextureRef* texture_ref = manager.GetTexture(kClient1Id);
   ASSERT_TRUE(texture_ref != NULL);
@@ -1319,14 +1272,10 @@ TEST_F(TextureTest, FloatNotLinear) {
       gl_.get(), "GL_OES_texture_float");
   scoped_refptr<FeatureInfo> feature_info(new FeatureInfo());
   feature_info->InitializeForTesting();
-  TextureManager manager(NULL,
-                         feature_info.get(),
-                         kMaxTextureSize,
-                         kMaxCubeMapTextureSize,
-                         kMaxRectangleTextureSize,
-                         kMax3DTextureSize,
-                         kMaxArrayTextureLayers,
-                         kUseDefaultTextures);
+  TextureManager manager(nullptr, feature_info.get(), kMaxTextureSize,
+                         kMaxCubeMapTextureSize, kMaxRectangleTextureSize,
+                         kMax3DTextureSize, kMaxArrayTextureLayers,
+                         kUseDefaultTextures, nullptr);
   manager.CreateTexture(kClient1Id, kService1Id);
   TextureRef* texture_ref = manager.GetTexture(kClient1Id);
   ASSERT_TRUE(texture_ref != NULL);
@@ -1352,14 +1301,10 @@ TEST_F(TextureTest, FloatLinear) {
       gl_.get(), "GL_OES_texture_float GL_OES_texture_float_linear");
   scoped_refptr<FeatureInfo> feature_info(new FeatureInfo());
   feature_info->InitializeForTesting();
-  TextureManager manager(NULL,
-                         feature_info.get(),
-                         kMaxTextureSize,
-                         kMaxCubeMapTextureSize,
-                         kMaxRectangleTextureSize,
-                         kMax3DTextureSize,
-                         kMaxArrayTextureLayers,
-                         kUseDefaultTextures);
+  TextureManager manager(nullptr, feature_info.get(), kMaxTextureSize,
+                         kMaxCubeMapTextureSize, kMaxRectangleTextureSize,
+                         kMax3DTextureSize, kMaxArrayTextureLayers,
+                         kUseDefaultTextures, nullptr);
   manager.CreateTexture(kClient1Id, kService1Id);
   TextureRef* texture_ref = manager.GetTexture(kClient1Id);
   ASSERT_TRUE(texture_ref != NULL);
@@ -1377,14 +1322,10 @@ TEST_F(TextureTest, HalfFloatNotLinear) {
       gl_.get(), "GL_OES_texture_half_float");
   scoped_refptr<FeatureInfo> feature_info(new FeatureInfo());
   feature_info->InitializeForTesting();
-  TextureManager manager(NULL,
-                         feature_info.get(),
-                         kMaxTextureSize,
-                         kMaxCubeMapTextureSize,
-                         kMaxRectangleTextureSize,
-                         kMax3DTextureSize,
-                         kMaxArrayTextureLayers,
-                         kUseDefaultTextures);
+  TextureManager manager(nullptr, feature_info.get(), kMaxTextureSize,
+                         kMaxCubeMapTextureSize, kMaxRectangleTextureSize,
+                         kMax3DTextureSize, kMaxArrayTextureLayers,
+                         kUseDefaultTextures, nullptr);
   manager.CreateTexture(kClient1Id, kService1Id);
   TextureRef* texture_ref = manager.GetTexture(kClient1Id);
   ASSERT_TRUE(texture_ref != NULL);
@@ -1410,14 +1351,10 @@ TEST_F(TextureTest, HalfFloatLinear) {
       gl_.get(), "GL_OES_texture_half_float GL_OES_texture_half_float_linear");
   scoped_refptr<FeatureInfo> feature_info(new FeatureInfo());
   feature_info->InitializeForTesting();
-  TextureManager manager(NULL,
-                         feature_info.get(),
-                         kMaxTextureSize,
-                         kMaxCubeMapTextureSize,
-                         kMaxRectangleTextureSize,
-                         kMax3DTextureSize,
-                         kMaxArrayTextureLayers,
-                         kUseDefaultTextures);
+  TextureManager manager(nullptr, feature_info.get(), kMaxTextureSize,
+                         kMaxCubeMapTextureSize, kMaxRectangleTextureSize,
+                         kMax3DTextureSize, kMaxArrayTextureLayers,
+                         kUseDefaultTextures, nullptr);
   manager.CreateTexture(kClient1Id, kService1Id);
   TextureRef* texture_ref = manager.GetTexture(kClient1Id);
   ASSERT_TRUE(texture_ref != NULL);
@@ -1435,14 +1372,10 @@ TEST_F(TextureTest, EGLImageExternal) {
       gl_.get(), "GL_OES_EGL_image_external");
   scoped_refptr<FeatureInfo> feature_info(new FeatureInfo());
   feature_info->InitializeForTesting();
-  TextureManager manager(NULL,
-                         feature_info.get(),
-                         kMaxTextureSize,
-                         kMaxCubeMapTextureSize,
-                         kMaxRectangleTextureSize,
-                         kMax3DTextureSize,
-                         kMaxArrayTextureLayers,
-                         kUseDefaultTextures);
+  TextureManager manager(nullptr, feature_info.get(), kMaxTextureSize,
+                         kMaxCubeMapTextureSize, kMaxRectangleTextureSize,
+                         kMax3DTextureSize, kMaxArrayTextureLayers,
+                         kUseDefaultTextures, nullptr);
   manager.CreateTexture(kClient1Id, kService1Id);
   TextureRef* texture_ref = manager.GetTexture(kClient1Id);
   ASSERT_TRUE(texture_ref != NULL);
@@ -1458,14 +1391,10 @@ TEST_F(TextureTest, DepthTexture) {
       gl_.get(), "GL_ANGLE_depth_texture");
   scoped_refptr<FeatureInfo> feature_info(new FeatureInfo());
   feature_info->InitializeForTesting();
-  TextureManager manager(NULL,
-                         feature_info.get(),
-                         kMaxTextureSize,
-                         kMaxCubeMapTextureSize,
-                         kMaxRectangleTextureSize,
-                         kMax3DTextureSize,
-                         kMaxArrayTextureLayers,
-                         kUseDefaultTextures);
+  TextureManager manager(nullptr, feature_info.get(), kMaxTextureSize,
+                         kMaxCubeMapTextureSize, kMaxRectangleTextureSize,
+                         kMax3DTextureSize, kMaxArrayTextureLayers,
+                         kUseDefaultTextures, nullptr);
   manager.CreateTexture(kClient1Id, kService1Id);
   TextureRef* texture_ref = manager.GetTexture(kClient1Id);
   ASSERT_TRUE(texture_ref != NULL);
@@ -1623,6 +1552,8 @@ TEST_F(TextureTest, ClearTexture) {
   EXPECT_TRUE(manager_->HaveUnsafeTextures());
   EXPECT_TRUE(manager_->HaveUnclearedMips());
   EXPECT_EQ(2, texture->num_uncleared_mips());
+  EXPECT_CALL(*decoder_.get(), GetFeatureInfo())
+     .WillRepeatedly(Return(feature_info_.get()));
   manager_->ClearRenderableLevels(decoder_.get(), texture_ref_.get());
   EXPECT_TRUE(texture->SafeToRenderFrom());
   EXPECT_FALSE(manager_->HaveUnsafeTextures());
@@ -2109,6 +2040,8 @@ TEST_F(ProduceConsumeTextureTest, ProduceConsumeClearRectangle) {
   // is covered best by the WebGL 2.0 conformance tests.
   EXPECT_CALL(*decoder_, IsCompressedTextureFormat(_))
       .WillRepeatedly(Return(false));
+  EXPECT_CALL(*decoder_.get(), GetFeatureInfo())
+     .WillRepeatedly(Return(feature_info_.get()));
   EXPECT_TRUE(manager_->ClearTextureLevel(
       decoder_.get(), restored_texture.get(), GL_TEXTURE_RECTANGLE_ARB, 0));
 }
@@ -2231,29 +2164,28 @@ class SharedTextureTest : public GpuServiceTest {
     GpuServiceTest::SetUp();
     memory_tracker1_ = new CountingMemoryTracker;
     texture_manager1_.reset(
-        new TextureManager(memory_tracker1_.get(),
-                           feature_info_.get(),
+        new TextureManager(memory_tracker1_.get(), feature_info_.get(),
                            TextureManagerTest::kMaxTextureSize,
                            TextureManagerTest::kMaxCubeMapTextureSize,
                            TextureManagerTest::kMaxRectangleTextureSize,
                            TextureManagerTest::kMax3DTextureSize,
                            TextureManagerTest::kMaxArrayTextureLayers,
-                           kUseDefaultTextures));
+                           kUseDefaultTextures, nullptr));
     memory_tracker2_ = new CountingMemoryTracker;
     texture_manager2_.reset(
-        new TextureManager(memory_tracker2_.get(),
-                           feature_info_.get(),
+        new TextureManager(memory_tracker2_.get(), feature_info_.get(),
                            TextureManagerTest::kMaxTextureSize,
                            TextureManagerTest::kMaxCubeMapTextureSize,
                            TextureManagerTest::kMaxRectangleTextureSize,
                            TextureManagerTest::kMax3DTextureSize,
                            TextureManagerTest::kMaxArrayTextureLayers,
-                           kUseDefaultTextures));
+                           kUseDefaultTextures, nullptr));
+    SetupFeatureInfo("", "OpenGL ES 2.0", false);
     TestHelper::SetupTextureManagerInitExpectations(
-        gl_.get(), false, false, "", kUseDefaultTextures);
+        gl_.get(), false, false, false, "", kUseDefaultTextures);
     texture_manager1_->Initialize();
     TestHelper::SetupTextureManagerInitExpectations(
-        gl_.get(), false, false, "", kUseDefaultTextures);
+        gl_.get(), false, false, false, "", kUseDefaultTextures);
     texture_manager2_->Initialize();
   }
 
@@ -2266,6 +2198,24 @@ class SharedTextureTest : public GpuServiceTest {
   }
 
  protected:
+  void SetupFeatureInfo(const char* gl_extensions,
+                        const char* gl_version,
+                        bool enable_es3) {
+    TestHelper::SetupFeatureInfoInitExpectationsWithGLVersion(
+        gl_.get(), gl_extensions, "", gl_version,
+        feature_info_->context_type(), enable_es3);
+    feature_info_->InitializeForTesting();
+    if (enable_es3) {
+      EXPECT_CALL(*gl_, GetIntegerv(GL_MAX_COLOR_ATTACHMENTS, _))
+          .WillOnce(SetArgPointee<1>(8))
+          .RetiresOnSaturation();
+      EXPECT_CALL(*gl_, GetIntegerv(GL_MAX_DRAW_BUFFERS, _))
+          .WillOnce(SetArgPointee<1>(8))
+          .RetiresOnSaturation();
+      feature_info_->EnableES3Validators();
+    }
+  }
+
   scoped_refptr<FeatureInfo> feature_info_;
   scoped_refptr<CountingMemoryTracker> memory_tracker1_;
   std::unique_ptr<TextureManager> texture_manager1_;
@@ -2340,11 +2290,9 @@ TEST_F(SharedTextureTest, TextureSafetyAccounting) {
 
 TEST_F(SharedTextureTest, FBOCompletenessCheck) {
   const GLenum kCompleteValue = GL_FRAMEBUFFER_COMPLETE;
-  FramebufferManager framebuffer_manager1(1, 1, CONTEXT_TYPE_OPENGLES2,
-                                          nullptr);
+  FramebufferManager framebuffer_manager1(1, 1, nullptr);
   texture_manager1_->set_framebuffer_manager(&framebuffer_manager1);
-  FramebufferManager framebuffer_manager2(1, 1, CONTEXT_TYPE_OPENGLES2,
-                                          nullptr);
+  FramebufferManager framebuffer_manager2(1, 1, nullptr);
   texture_manager2_->set_framebuffer_manager(&framebuffer_manager2);
 
   scoped_refptr<TextureRef> ref1 = texture_manager1_->CreateTexture(10, 10);

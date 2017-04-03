@@ -9,7 +9,6 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/sync/driver/non_ui_data_type_controller.h"
@@ -24,22 +23,17 @@ namespace browser_sync {
 class ControlTask;
 
 // A class that manages the startup and shutdown of typed_url sync.
-class TypedUrlDataTypeController : public sync_driver::NonUIDataTypeController {
+class TypedUrlDataTypeController : public syncer::NonUIDataTypeController {
  public:
-  explicit TypedUrlDataTypeController(
-      const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
-      const base::Closure& error_callback,
-      sync_driver::SyncClient* sync_client,
-      const char* history_disabled_pref_name);
+  // |dump_stack| is called when an unrecoverable error occurs.
+  TypedUrlDataTypeController(const base::Closure& dump_stack,
+                             syncer::SyncClient* sync_client,
+                             const char* history_disabled_pref_name);
+  ~TypedUrlDataTypeController() override;
 
   // NonUIDataTypeController implementation
-  syncer::ModelType type() const override;
   syncer::ModelSafeGroup model_safe_group() const override;
   bool ReadyForStart() const override;
-
-  // Invoked on the history thread to set our history backend - must be called
-  // before CreateSyncComponents() is invoked.
-  void SetBackend(history::HistoryBackend* backend);
 
  protected:
   // NonUIDataTypeController interface.
@@ -47,21 +41,18 @@ class TypedUrlDataTypeController : public sync_driver::NonUIDataTypeController {
                                const base::Closure& task) override;
 
  private:
-  ~TypedUrlDataTypeController() override;
-
   void OnSavingBrowserHistoryDisabledChanged();
 
   // Name of the pref that indicates whether saving history is disabled.
   const char* history_disabled_pref_name_;
 
-  history::HistoryBackend* backend_;
   PrefChangeRegistrar pref_registrar_;
 
   // Helper object to make sure we don't leave tasks running on the history
   // thread.
   base::CancelableTaskTracker task_tracker_;
 
-  sync_driver::SyncClient* const sync_client_;
+  syncer::SyncClient* const sync_client_;
 
   DISALLOW_COPY_AND_ASSIGN(TypedUrlDataTypeController);
 };

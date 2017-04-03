@@ -366,9 +366,11 @@ class FakeRenderWidgetHostViewAura : public RenderWidgetHostViewAura {
     return GetDelegatedFrameHost()->SurfaceIdForTesting();
   }
 
-  bool HasFrameData() const {
-    return !surface_id().is_null();
+  const cc::LocalFrameId& GetLocalFrameId() const {
+    return GetDelegatedFrameHost()->LocalFrameIdForTesting();
   }
+
+  bool HasFrameData() const { return !GetLocalFrameId().is_null(); }
 
   bool released_front_lock_active() const {
     return GetDelegatedFrameHost()->ReleasedFrontLockActiveForTesting();
@@ -667,8 +669,8 @@ class RenderWidgetHostViewGuestAuraTest : public RenderWidgetHostViewAuraTest {
 
     RenderWidgetHostViewAuraTest::SetUp();
 
-    guest_view_weak_ = (new RenderWidgetHostViewGuest(widget_host_, nullptr,
-                                                      view_->GetWeakPtr()))
+    guest_view_weak_ = (RenderWidgetHostViewGuest::Create(widget_host_, nullptr,
+                                                          view_->GetWeakPtr()))
                            ->GetWeakPtr();
   }
 
@@ -1231,8 +1233,8 @@ TEST_F(RenderWidgetHostViewAuraTest, FinishCompositionByMouse) {
   EXPECT_EQ(2U, sink_->message_count());
 
   if (sink_->message_count() == 2) {
-    // Verify mouse event happens after the confirm-composition event.
-    EXPECT_EQ(InputMsg_ImeConfirmComposition::ID,
+    // Verify mouse event happens after the finish composing text event.
+    EXPECT_EQ(InputMsg_ImeFinishComposingText::ID,
               sink_->GetMessageAt(0)->type());
     EXPECT_EQ(InputMsg_HandleInputEvent::ID,
               sink_->GetMessageAt(1)->type());
@@ -1668,7 +1670,7 @@ TEST_F(RenderWidgetHostViewAuraTest, ResettingCompositorReturnsResources) {
     EXPECT_EQ(ViewMsg_ReclaimCompositorResources::ID, msg->type());
     ViewMsg_ReclaimCompositorResources::Param params;
     ViewMsg_ReclaimCompositorResources::Read(msg, &params);
-    EXPECT_EQ(0u, std::get<0>(params));  // output_surface_id
+    EXPECT_EQ(0u, std::get<0>(params));  // compositor_frame_sink_id
     EXPECT_TRUE(std::get<1>(params));    // is_swap_ack
   }
   manager->RemoveObserver(&damage_observer);
@@ -1699,12 +1701,12 @@ TEST_F(RenderWidgetHostViewAuraTest, ReturnedResources) {
     EXPECT_EQ(ViewMsg_ReclaimCompositorResources::ID, msg->type());
     ViewMsg_ReclaimCompositorResources::Param params;
     ViewMsg_ReclaimCompositorResources::Read(msg, &params);
-    EXPECT_EQ(0u, std::get<0>(params));  // output_surface_id
+    EXPECT_EQ(0u, std::get<0>(params));  // compositor_frame_sink_id
     EXPECT_FALSE(std::get<1>(params));   // is_swap_ack
   }
 }
 
-// This test verifies that when the output_surface_id changes, then
+// This test verifies that when the compositor_frame_sink_id changes, then
 // DelegateFrameHost returns compositor resources without a swap ack.
 TEST_F(RenderWidgetHostViewAuraTest, TwoOutputSurfaces) {
   FakeSurfaceDamageObserver damage_observer;
@@ -1734,7 +1736,8 @@ TEST_F(RenderWidgetHostViewAuraTest, TwoOutputSurfaces) {
   view_->ReturnResources(resources);
   EXPECT_EQ(0u, sink_->message_count());
 
-  // Swap another CompositorFrame but this time from another output_surface_id.
+  // Swap another CompositorFrame but this time from another
+  // compositor_frame_sink_id.
   // This should trigger a non-ACK ReclaimCompositorResources IPC.
   view_->OnSwapCompositorFrame(1,
                                MakeDelegatedFrame(1.f, view_size, view_rect));
@@ -1744,7 +1747,7 @@ TEST_F(RenderWidgetHostViewAuraTest, TwoOutputSurfaces) {
     EXPECT_EQ(ViewMsg_ReclaimCompositorResources::ID, msg->type());
     ViewMsg_ReclaimCompositorResources::Param params;
     ViewMsg_ReclaimCompositorResources::Read(msg, &params);
-    EXPECT_EQ(0u, std::get<0>(params));  // output_surface_id
+    EXPECT_EQ(0u, std::get<0>(params));  // compositor_frame_sink_id
     EXPECT_FALSE(std::get<1>(params));   // is_swap_ack
   }
   sink_->ClearMessages();
@@ -1759,7 +1762,7 @@ TEST_F(RenderWidgetHostViewAuraTest, TwoOutputSurfaces) {
     EXPECT_EQ(ViewMsg_ReclaimCompositorResources::ID, msg->type());
     ViewMsg_ReclaimCompositorResources::Param params;
     ViewMsg_ReclaimCompositorResources::Read(msg, &params);
-    EXPECT_EQ(1u, std::get<0>(params));    // output_surface_id
+    EXPECT_EQ(1u, std::get<0>(params));    // compositor_frame_sink_id
     EXPECT_EQ(true, std::get<1>(params));  // is_swap_ack
   }
 
@@ -1786,7 +1789,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DISABLED_FullscreenResize) {
     ViewMsg_Resize::Read(msg, &params);
     EXPECT_EQ(
         "0,0 800x600",
-        gfx::Rect(std::get<0>(params).screen_info.availableRect).ToString());
+        std::get<0>(params).screen_info.available_rect.ToString());
     EXPECT_EQ("800x600", std::get<0>(params).new_size.ToString());
     // Resizes are blocked until we swapped a frame of the correct size, and
     // we've committed it.
@@ -1811,7 +1814,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DISABLED_FullscreenResize) {
     ViewMsg_Resize::Read(msg, &params);
     EXPECT_EQ(
         "0,0 1600x1200",
-        gfx::Rect(std::get<0>(params).screen_info.availableRect).ToString());
+        std::get<0>(params).screen_info.available_rect.ToString());
     EXPECT_EQ("1600x1200", std::get<0>(params).new_size.ToString());
     view_->OnSwapCompositorFrame(
         0, MakeDelegatedFrame(1.f, std::get<0>(params).new_size,
@@ -1852,23 +1855,23 @@ TEST_F(RenderWidgetHostViewAuraTest, SwapNotifiesWindow) {
   view_->window_->RemoveObserver(&observer);
 }
 
-// Recreating the layers for a window should cause Surface destruction to
+// Mirroring the layers for a window should cause Surface destruction to
 // depend on both layers.
-TEST_F(RenderWidgetHostViewAuraTest, RecreateLayers) {
+TEST_F(RenderWidgetHostViewAuraTest, MirrorLayers) {
   gfx::Size view_size(100, 100);
   gfx::Rect view_rect(view_size);
+  aura::Window* const root = parent_view_->GetNativeView()->GetRootWindow();
 
   view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
-      view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
-      gfx::Rect());
+      view_->GetNativeView(), root, gfx::Rect());
   view_->SetSize(view_size);
   view_->Show();
 
   view_->OnSwapCompositorFrame(0,
                                MakeDelegatedFrame(1.f, view_size, view_rect));
-  std::unique_ptr<ui::LayerTreeOwner> cloned_owner(
-      wm::RecreateLayers(view_->GetNativeView(), nullptr));
+  std::unique_ptr<ui::LayerTreeOwner> mirror(wm::MirrorLayers(
+      view_->GetNativeView(), false /* sync_bounds */));
 
   cc::SurfaceId id = view_->GetDelegatedFrameHost()->SurfaceIdForTesting();
   if (!id.is_null()) {
@@ -1876,8 +1879,14 @@ TEST_F(RenderWidgetHostViewAuraTest, RecreateLayers) {
     cc::SurfaceManager* manager = factory->GetSurfaceManager();
     cc::Surface* surface = manager->GetSurfaceForId(id);
     EXPECT_TRUE(surface);
-    // Should be a SurfaceSequence for both the original and new layers.
+
+    // An orphaned mirror should not be a destruction dependency.
+    EXPECT_EQ(1u, surface->GetDestructionDependencyCount());
+
+    // Both layers should be destruction dependencies.
+    root->layer()->Add(mirror->root());
     EXPECT_EQ(2u, surface->GetDestructionDependencyCount());
+    root->layer()->Remove(mirror->root());
   }
 }
 
@@ -2569,7 +2578,8 @@ class RenderWidgetHostViewAuraCopyRequestTest
     cc::SurfaceId surface_id =
         view_->GetDelegatedFrameHost()->SurfaceIdForTesting();
     if (!surface_id.is_null())
-      view_->GetDelegatedFrameHost()->WillDrawSurface(surface_id, view_rect_);
+      view_->GetDelegatedFrameHost()->WillDrawSurface(
+          surface_id.local_frame_id(), view_rect_);
     ASSERT_TRUE(view_->last_copy_request_);
   }
 
@@ -2810,6 +2820,38 @@ TEST_F(RenderWidgetHostViewAuraTest, TouchEventPositionsArentRounded) {
   EXPECT_EQ(1U, pointer_state().GetPointerCount());
   EXPECT_EQ(kX, pointer_state().GetX(0));
   EXPECT_EQ(kY, pointer_state().GetY(0));
+}
+
+TEST_F(RenderWidgetHostViewAuraOverscrollTest, WheelNotPreciseScrollEvent) {
+  SetUpOverscrollEnvironment();
+
+  // Simulate wheel events.
+  SimulateWheelEvent(-5, 0, 0, false);    // sent directly
+  SimulateWheelEvent(-60, 1, 0, false);    // enqueued
+  EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
+
+  // Receive ACK the first wheel event as not processed.
+  SendInputEventACK(WebInputEvent::MouseWheel,
+                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+
+  // ScrollBegin, ScrollUpdate, MouseWheel will be queued events
+  EXPECT_EQ(3U, GetSentMessageCountAndResetSink());
+  SendInputEventACK(WebInputEvent::GestureScrollUpdate,
+                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+
+  EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
+
+  SendInputEventACK(WebInputEvent::MouseWheel,
+                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  // ScrollUpdate, MouseWheel will be queued events
+  EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
+  SendInputEventACK(WebInputEvent::GestureScrollUpdate,
+                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+
+  EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
 }
 
 TEST_F(RenderWidgetHostViewAuraOverscrollTest, WheelScrollEventOverscrolls) {
@@ -4028,20 +4070,20 @@ TEST_F(RenderWidgetHostViewAuraTest, ForwardMouseEvent) {
 
 // Tests the RenderWidgetHostImpl sends the correct surface ID namespace to
 // the renderer process.
-TEST_F(RenderWidgetHostViewAuraTest, SurfaceClientIdInitialized) {
+TEST_F(RenderWidgetHostViewAuraTest, FrameSinkIdInitialized) {
   gfx::Size size(5, 5);
 
   const IPC::Message* msg =
-      sink_->GetUniqueMessageMatching(ViewMsg_SetSurfaceClientId::ID);
+      sink_->GetUniqueMessageMatching(ViewMsg_SetFrameSinkId::ID);
   EXPECT_TRUE(msg);
-  ViewMsg_SetSurfaceClientId::Param params;
-  ViewMsg_SetSurfaceClientId::Read(msg, &params);
+  ViewMsg_SetFrameSinkId::Param params;
+  ViewMsg_SetFrameSinkId::Read(msg, &params);
   view_->InitAsChild(nullptr);
   view_->Show();
   view_->SetSize(size);
   view_->OnSwapCompositorFrame(0,
                                MakeDelegatedFrame(1.f, size, gfx::Rect(size)));
-  EXPECT_EQ(view_->GetSurfaceClientId(), std::get<0>(params));
+  EXPECT_EQ(view_->GetFrameSinkId(), std::get<0>(params));
 }
 
 // This class provides functionality to test a RenderWidgetHostViewAura
@@ -4355,11 +4397,11 @@ TEST_F(InputMethodResultAuraTest, ConfirmCompositionText) {
     ActivateViewForTextInputManager(views_[index], ui::TEXT_INPUT_TYPE_TEXT);
     SetHasCompositionTextToTrue();
     EXPECT_TRUE(!!RunAndReturnIPCSent(ime_call, processes_[index],
-                                      InputMsg_ImeConfirmComposition::ID));
+                                      InputMsg_ImeFinishComposingText::ID));
   }
 }
 
-// This test is for ui::TextInputClient::ConfirmCompositionText.
+// This test is for ui::TextInputClient::ClearCompositionText.
 TEST_F(InputMethodResultAuraTest, ClearCompositionText) {
   base::Closure ime_call =
       base::Bind(&ui::TextInputClient::ClearCompositionText,
@@ -4372,15 +4414,28 @@ TEST_F(InputMethodResultAuraTest, ClearCompositionText) {
   }
 }
 
-// This test is for that ui::TextInputClient::InsertText.
-TEST_F(InputMethodResultAuraTest, InsertText) {
+// This test is for ui::TextInputClient::InsertText with empty text.
+TEST_F(InputMethodResultAuraTest, FinishComposingText) {
   base::Closure ime_call =
       base::Bind(&ui::TextInputClient::InsertText,
                  base::Unretained(text_input_client()), base::string16());
   for (auto index : active_view_sequence_) {
     ActivateViewForTextInputManager(views_[index], ui::TEXT_INPUT_TYPE_TEXT);
+    SetHasCompositionTextToTrue();
     EXPECT_TRUE(!!RunAndReturnIPCSent(ime_call, processes_[index],
-                                      InputMsg_ImeConfirmComposition::ID));
+                                      InputMsg_ImeFinishComposingText::ID));
+  }
+}
+
+// This test is for ui::TextInputClient::InsertText with non-empty text.
+TEST_F(InputMethodResultAuraTest, CommitText) {
+  base::Closure ime_call = base::Bind(&ui::TextInputClient::InsertText,
+                                      base::Unretained(text_input_client()),
+                                      base::UTF8ToUTF16("hello"));
+  for (auto index : active_view_sequence_) {
+    ActivateViewForTextInputManager(views_[index], ui::TEXT_INPUT_TYPE_TEXT);
+    EXPECT_TRUE(!!RunAndReturnIPCSent(ime_call, processes_[index],
+                                      InputMsg_ImeCommitText::ID));
   }
 }
 
@@ -4395,7 +4450,7 @@ TEST_F(InputMethodResultAuraTest, FinishImeCompositionSession) {
     SetHasCompositionTextToTrue();
     EXPECT_TRUE(!!RunAndReturnIPCSent(ime_finish_session_call,
                                       processes_[index],
-                                      InputMsg_ImeConfirmComposition::ID));
+                                      InputMsg_ImeFinishComposingText::ID));
   }
 }
 

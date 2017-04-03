@@ -9,6 +9,7 @@
 
 namespace device {
 
+class VRClientDispatcher;
 class VRDevice;
 
 class VRDeviceProvider {
@@ -20,6 +21,10 @@ class VRDeviceProvider {
 
   // If the VR API requires initialization that should happen here.
   virtual void Initialize() = 0;
+
+  virtual void PollEvents() {}
+
+  virtual void SetClient(VRClientDispatcher* client) {}
 };
 
 }  // namespace device

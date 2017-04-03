@@ -16,6 +16,7 @@ import android.test.suitebuilder.annotation.SmallTest;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.accessibility.FontSizePrefs;
 import org.chromium.chrome.browser.preferences.website.ContentSetting;
 import org.chromium.chrome.browser.preferences.website.GeolocationInfo;
@@ -78,6 +79,7 @@ public class PreferencesTest extends NativeLibraryTestBase {
     @SmallTest
     @Feature({"Preferences"})
     @DisableIf.Build(hardware_is = "sprout", message = "crashes on android-one: crbug.com/540720")
+    @RetryOnFailure
     public void testSearchEnginePreference() throws Exception {
         ensureTemplateUrlServiceLoaded();
 
@@ -89,17 +91,15 @@ public class PreferencesTest extends NativeLibraryTestBase {
             }
         });
 
-        final Preferences prefActivity = startPreferences(getInstrumentation(),
-                MainPreferences.class.getName());
+        final Preferences prefActivity =
+                startPreferences(getInstrumentation(), SearchEnginePreference.class.getName());
 
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
                 // Ensure that the second search engine in the list is selected.
-                PreferenceFragment fragment = (PreferenceFragment)
-                        prefActivity.getFragmentForTest();
-                SearchEnginePreference pref = (SearchEnginePreference)
-                        fragment.findPreference(SearchEnginePreference.PREF_SEARCH_ENGINE);
+                SearchEnginePreference pref =
+                        (SearchEnginePreference) prefActivity.getFragmentForTest();
                 assertNotNull(pref);
                 assertEquals("1", pref.getValueForTesting());
 
@@ -152,17 +152,15 @@ public class PreferencesTest extends NativeLibraryTestBase {
             }
         });
 
-        final Preferences prefActivity = startPreferences(getInstrumentation(),
-                MainPreferences.class.getName());
+        final Preferences prefActivity =
+                startPreferences(getInstrumentation(), SearchEnginePreference.class.getName());
 
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
                 // Ensure that the first search engine in the list is selected.
-                PreferenceFragment fragment = (PreferenceFragment)
-                        prefActivity.getFragmentForTest();
-                SearchEnginePreference pref = (SearchEnginePreference)
-                        fragment.findPreference(SearchEnginePreference.PREF_SEARCH_ENGINE);
+                SearchEnginePreference pref =
+                        (SearchEnginePreference) prefActivity.getFragmentForTest();
                 assertNotNull(pref);
                 assertEquals("0", pref.getValueForTesting());
 

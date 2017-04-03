@@ -45,18 +45,18 @@ class Layer;
 
 namespace cc_blink {
 
-class WebLayerImpl : public blink::WebLayer {
+class CC_BLINK_EXPORT WebLayerImpl : public NON_EXPORTED_BASE(blink::WebLayer) {
  public:
-  CC_BLINK_EXPORT WebLayerImpl();
-  CC_BLINK_EXPORT explicit WebLayerImpl(scoped_refptr<cc::Layer>);
+  WebLayerImpl();
+  explicit WebLayerImpl(scoped_refptr<cc::Layer>);
   ~WebLayerImpl() override;
 
-  CC_BLINK_EXPORT cc::Layer* layer() const;
+  cc::Layer* layer() const;
 
   // If set to true, content opaqueness cannot be changed using setOpaque.
   // However, it can still be modified using SetContentsOpaque on the
   // cc::Layer.
-  CC_BLINK_EXPORT void SetContentsOpaqueIsFixed(bool fixed);
+  void SetContentsOpaqueIsFixed(bool fixed);
 
   // WebLayer implementation.
   int id() const override;
@@ -73,7 +73,6 @@ class WebLayerImpl : public blink::WebLayer {
   void setMasksToBounds(bool masks_to_bounds) override;
   bool masksToBounds() const override;
   void setMaskLayer(blink::WebLayer* mask) override;
-  void setReplicaLayer(blink::WebLayer* replica) override;
   void setOpacity(float opacity) override;
   float opacity() const override;
   void setBlendMode(blink::WebBlendMode blend_mode) override;
@@ -124,6 +123,10 @@ class WebLayerImpl : public blink::WebLayer {
   void setPositionConstraint(
       const blink::WebLayerPositionConstraint& constraint) override;
   blink::WebLayerPositionConstraint positionConstraint() const override;
+  void setStickyPositionConstraint(
+      const blink::WebLayerStickyPositionConstraint& constraint) override;
+  blink::WebLayerStickyPositionConstraint stickyPositionConstraint()
+      const override;
   void setScrollClient(blink::WebLayerScrollClient* client) override;
   void setLayerClient(cc::LayerClient* client) override;
   const cc::Layer* ccLayer() const override;

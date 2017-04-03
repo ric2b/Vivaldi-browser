@@ -6,30 +6,17 @@
 
 #include "base/logging.h"
 #include "base/scoped_observer.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 
 MultiClientStatusChangeChecker::MultiClientStatusChangeChecker(
-    std::vector<ProfileSyncService*> services)
-  : services_(services) {}
+    std::vector<browser_sync::ProfileSyncService*> services)
+    : services_(services), scoped_observer_(this) {
+  for (browser_sync::ProfileSyncService* service : services) {
+    scoped_observer_.Add(service);
+  }
+}
 
 MultiClientStatusChangeChecker::~MultiClientStatusChangeChecker() {}
-
-void MultiClientStatusChangeChecker::Wait() {
-  DVLOG(1) << "Await: " << GetDebugMessage();
-
-  if (IsExitConditionSatisfied()) {
-    DVLOG(1) << "Await -> Exit before waiting: " << GetDebugMessage();
-    return;
-  }
-
-  ScopedObserver<ProfileSyncService, MultiClientStatusChangeChecker> obs(this);
-  for (std::vector<ProfileSyncService*>::iterator it = services_.begin();
-       it != services_.end(); ++it) {
-    obs.Add(*it);
-  }
-
-  StartBlockingWait();
-}
 
 void MultiClientStatusChangeChecker::OnStateChanged() {
   CheckExitCondition();

@@ -24,7 +24,9 @@ struct ResolvedSearchTerm {
                      bool prevent_preload,
                      int selection_start_adjust,
                      int selection_end_adjust,
-                     const std::string& context_language);
+                     const std::string& context_language,
+                     const std::string& thumbnail_url,
+                     const std::string& caption);
   ~ResolvedSearchTerm();
 
   const bool is_invalid;
@@ -38,6 +40,8 @@ struct ResolvedSearchTerm {
   const int selection_start_adjust;
   const int selection_end_adjust;
   const std::string context_language;
+  const std::string thumbnail_url;
+  const std::string caption;
 
   DISALLOW_COPY_AND_ASSIGN(ResolvedSearchTerm);
 };

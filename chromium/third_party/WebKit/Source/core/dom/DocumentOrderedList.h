@@ -3,8 +3,10 @@
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
  *           (C) 2001 Dirk Mueller (mueller@kde.org)
  *           (C) 2006 Alexey Proskuryakov (ap@webkit.org)
- * Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2012 Apple Inc. All rights reserved.
- * Copyright (C) 2008, 2009 Torch Mobile Inc. All rights reserved. (http://www.torchmobile.com/)
+ * Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2012 Apple Inc. All
+ * rights reserved.
+ * Copyright (C) 2008, 2009 Torch Mobile Inc. All rights reserved.
+ * (http://www.torchmobile.com/)
  * Copyright (C) 2010 Nokia Corporation and/or its subsidiary(-ies)
  * Copyright (C) 2013 Google Inc. All rights reserved.
  *
@@ -36,32 +38,34 @@ namespace blink {
 class Node;
 
 class DocumentOrderedList final {
-    WTF_MAKE_NONCOPYABLE(DocumentOrderedList);
-    DISALLOW_NEW();
-public:
-    DocumentOrderedList() { }
+  WTF_MAKE_NONCOPYABLE(DocumentOrderedList);
+  DISALLOW_NEW();
 
-    void add(Node*);
-    void remove(const Node*);
-    bool isEmpty() const { return m_nodes.isEmpty(); }
-    void clear() { m_nodes.clear(); }
-    size_t size() const { return m_nodes.size(); }
+ public:
+  DocumentOrderedList() {}
 
-    using iterator = HeapListHashSet<Member<Node>, 32>::iterator;
-    using const_reverse_iterator = HeapListHashSet<Member<Node>, 32>::const_reverse_iterator;
+  void add(Node*);
+  void remove(const Node*);
+  bool isEmpty() const { return m_nodes.isEmpty(); }
+  void clear() { m_nodes.clear(); }
+  size_t size() const { return m_nodes.size(); }
 
-    iterator begin() { return m_nodes.begin(); }
-    iterator end() { return m_nodes.end(); }
+  using iterator = HeapListHashSet<Member<Node>, 32>::iterator;
+  using const_reverse_iterator =
+      HeapListHashSet<Member<Node>, 32>::const_reverse_iterator;
 
-    const_reverse_iterator rbegin() const { return m_nodes.rbegin(); }
-    const_reverse_iterator rend() const { return m_nodes.rend(); }
+  iterator begin() { return m_nodes.begin(); }
+  iterator end() { return m_nodes.end(); }
 
-    DECLARE_TRACE();
+  const_reverse_iterator rbegin() const { return m_nodes.rbegin(); }
+  const_reverse_iterator rend() const { return m_nodes.rend(); }
 
-private:
-    HeapListHashSet<Member<Node>, 32> m_nodes;
+  DECLARE_TRACE();
+
+ private:
+  HeapListHashSet<Member<Node>, 32> m_nodes;
 };
 
-} // namespace blink
+}  // namespace blink
 
 #endif

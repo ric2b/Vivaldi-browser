@@ -248,6 +248,63 @@ Calling the non-`[EnforceRange]` version of `setColor()` uses **ToUint8()** to c
 
 Calling the `[EnforceRange]` version of `setColorEnforced()` with an out of range value, such as -1, 256, or Infinity will result in a `TypeError` exception.
 
+### [Exposed] _(i, m, a, c)_
+
+Standard: [Exposed](http://heycam.github.io/webidl/#Exposed)
+
+Summary: Indicates on which global object or objects (e.g., Window, WorkerGlobalScope) the interface property is generated, i.e., in which global scope or scopes an interface exists. This is primarily of interest for the constructor, i.e., the [interface object Call method](https://heycam.github.io/webidl/#es-interface-call). Global context defaults to Window (the primary global scope) if not present, overridden by standard extended attribute `[NoInterfaceObject]` (the value of the property on the global object corresponding to the interface is called the **interface object**), which results in no interface property being generated.
+
+As with `[NoInterfaceObject]` does not affect generated code for the interface itself, only the code for the corresponding global object. A partial interface is generated at build time, containing an attribute for each interface property on that global object.
+
+All non-callback interfaces without `[NoInterfaceObject]` have a corresponding interface property on the global object. Note that in the Web IDL spec, callback interfaces with constants also have interface properties, but in Blink callback interfaces only have methods (no constants or attributes), so this is not applicable. `[Exposed]` can be used with different values to indicate on which global object or objects the property should be generated. Valid values are:
+
+* `Window`
+* [Worker](http://www.whatwg.org/specs/web-apps/current-work/multipage/workers.html#the-workerglobalscope-common-interface)
+* [SharedWorker](http://www.whatwg.org/specs/web-apps/current-work/multipage/workers.html#dedicated-workers-and-the-dedicatedworkerglobalscope-interface)
+* [DedicatedWorker](http://www.whatwg.org/specs/web-apps/current-work/multipage/workers.html#shared-workers-and-the-sharedworkerglobalscope-interface)
+* [ServiceWorker](https://rawgithub.com/slightlyoff/ServiceWorker/master/spec/service_worker/index.html#service-worker-global-scope)
+
+For reference, see [ECMAScript 5.1: 15.1 The Global Object](http://www.ecma-international.org/ecma-262/5.1/#sec-15.1) ([annotated](http://es5.github.io/#x15.1)), [HTML: 10 Web workers](http://www.whatwg.org/specs/web-apps/current-work/multipage/workers.html), [Web Workers](http://dev.w3.org/html5/workers/), and [Service Workers](https://rawgithub.com/slightlyoff/ServiceWorker/master/spec/service_worker/index.html) specs.
+
+It is possible to have the global constructor generated on several interfaces by listing them, e.g. `[Exposed=(Window,WorkerGlobalScope)]`.
+
+Usage: `[Exposed]` can be specified on interfaces that do not have the `[NoInterfaceObject]` extended attribute.
+
+```webidl
+[
+    Exposed=DedicatedWorker,
+] interface XXX {
+    ...
+};
+
+[
+    Exposed=(Window,Worker),
+] interface YYY {
+    ...
+};
+```
+
+Exposed can also be specified with a method, attribute and constant.
+
+As a Blink-specific extension, we allow `Exposed(Arguments)` form, such as `[Exposed(Window Feature1, DedicatedWorker Feature2)]`. You can use this form to vary the exposing global scope based on runtime enabled features. For example, `[Exposed(Window Feature1, Worker Feature2)]` exposes the qualified element to Window if "Feature1" is enabled and to Worker if "Feature2" is enabled.
+
+### [Global] and [PrimaryGlobal] _(i)_
+
+Standard: [Global](http://heycam.github.io/webidl/#Global)
+
+Summary: The `[Global]` and `[PrimaryGlobal]` extended attributes can be used to give a name to one or more global interfaces, which can then be referenced by the `[Exposed]` extended attribute.
+
+These extended attributes must either take no arguments or take an identifier list.
+
+If the `[Global]` or `[PrimaryGlobal]` extended attribute is declared with an identifier list argument, then those identifiers are the interface’s global names; otherwise, the interface has a single global name, which is the interface's identifier.
+
+### [HTMLConstructor]
+
+Standard: [HTMLConstructor](https://html.spec.whatwg.org/multipage/dom.html#html-element-constructors)
+
+Summary: HTML Elements have special constructor behavior. Interface object of given interface with the `[HTMLConstructor]` attribute will have specific behavior when called.
+
+Usage: Must take no arguments, and must not appear on anything other than an interface. It much appear once on an interface, and the interface cannot be annotated with `[Constructor]` or `[NoInterfaceObject]` extended attributes. It must not be used on a callback interface.
 
 ### [NamedConstructor] _(i)_
 
@@ -307,56 +364,6 @@ Note that `[NoInterfaceObject]` **MUST** be specified on testing interfaces, as 
     ...
 };
 ```
-
-### [Global] and [PrimaryGlobal] _(i)_
-
-Standard: [Global](http://heycam.github.io/webidl/#Global)
-
-Summary: The `[Global]` and `[PrimaryGlobal]` extended attributes can be used to give a name to one or more global interfaces, which can then be referenced by the `[Exposed]` extended attribute.
-
-These extended attributes must either take no arguments or take an identifier list.
-
-If the `[Global]` or `[PrimaryGlobal]` extended attribute is declared with an identifier list argument, then those identifiers are the interface’s global names; otherwise, the interface has a single global name, which is the interface's identifier.
-
-### [Exposed] _(i, m, a, c)_
-
-Standard: [Exposed](http://heycam.github.io/webidl/#Exposed)
-
-Summary: Indicates on which global object or objects (e.g., Window, WorkerGlobalScope) the interface property is generated, i.e., in which global scope or scopes an interface exists. This is primarily of interest for the constructor, i.e., the [interface object Call method](https://heycam.github.io/webidl/#es-interface-call). Global context defaults to Window (the primary global scope) if not present, overridden by standard extended attribute `[NoInterfaceObject]` (the value of the property on the global object corresponding to the interface is called the **interface object**), which results in no interface property being generated.
-
-As with `[NoInterfaceObject]` does not affect generated code for the interface itself, only the code for the corresponding global object. A partial interface is generated at build time, containing an attribute for each interface property on that global object.
-
-All non-callback interfaces without `[NoInterfaceObject]` have a corresponding interface property on the global object. Note that in the Web IDL spec, callback interfaces with constants also have interface properties, but in Blink callback interfaces only have methods (no constants or attributes), so this is not applicable. `[Exposed]` can be used with different values to indicate on which global object or objects the property should be generated. Valid values are:
-
-* `Window`
-* [Worker](http://www.whatwg.org/specs/web-apps/current-work/multipage/workers.html#the-workerglobalscope-common-interface)
-* [SharedWorker](http://www.whatwg.org/specs/web-apps/current-work/multipage/workers.html#dedicated-workers-and-the-dedicatedworkerglobalscope-interface)
-* [DedicatedWorker](http://www.whatwg.org/specs/web-apps/current-work/multipage/workers.html#shared-workers-and-the-sharedworkerglobalscope-interface)
-* [ServiceWorker](https://rawgithub.com/slightlyoff/ServiceWorker/master/spec/service_worker/index.html#service-worker-global-scope)
-
-For reference, see [ECMAScript 5.1: 15.1 The Global Object](http://www.ecma-international.org/ecma-262/5.1/#sec-15.1) ([annotated](http://es5.github.io/#x15.1)), [HTML: 10 Web workers](http://www.whatwg.org/specs/web-apps/current-work/multipage/workers.html), [Web Workers](http://dev.w3.org/html5/workers/), and [Service Workers](https://rawgithub.com/slightlyoff/ServiceWorker/master/spec/service_worker/index.html) specs.
-
-It is possible to have the global constructor generated on several interfaces by listing them, e.g. `[Exposed=(Window,WorkerGlobalScope)]`.
-
-Usage: `[Exposed]` can be specified on interfaces that do not have the `[NoInterfaceObject]` extended attribute.
-
-```webidl
-[
-    Exposed=DedicatedWorker,
-] interface XXX {
-    ...
-};
-
-[
-    Exposed=(Window,Worker),
-] interface YYY {
-    ...
-};
-```
-
-Exposed can also be specified with a method, attribute and constant.
-
-As a Blink-specific extension, we allow `Exposed(Arguments)` form, such as `[Exposed(Window Feature1, DedicatedWorker Feature2)]`. You can use this form to vary the exposing global scope based on runtime enabled features. For example, `[Exposed(Window Feature1, Worker Feature2)]` exposes the qualified element to Window if "Feature1" is enabled and to Worker if "Feature2" is enabled.
 
 ### [OverrideBuiltins] _(i)_
 
@@ -478,9 +485,9 @@ By default, interface members are configurable (i.e. you can modify a property d
 
 Implementation: **Non-standard**: `[Unforgeable]` for attributes has an unspeced side-effect that it makes the property data-type property (`{writable: ..., value: ...}`) although it must be accessor-type property (`{get: ..., set: ...}`). ([Bug 497616](https://crbug.co/497616))
 
-### [Unscopeable] _(o, a)_
+### [Unscopable] _(o, a)_
 
-Standard: [Unscopeable](http://heycam.github.io/webidl/#Unscopeable)
+Standard: [Unscopable](http://heycam.github.io/webidl/#Unscopable)
 
 Summary: The interface member will not appear as a named property within `with` statements.
 
@@ -844,7 +851,7 @@ v8::Handle<v8::Value> V8XXX::callAsFunctionCallback(const v8::Arguments& args)
 #### [Custom=VisitDOMWrapper] _(i)_
 
 
-Summary: Allows you to write custom code for visitDOMWrapper: like `[SetWrapperReferenceFrom]`, but does not generate the function. One use (Nodelist.idl).
+Summary: Allows you to write custom code for visitDOMWrapper: like `[SetWrapperReferenceFrom]`, but with custom code. One use (Nodelist.idl).
 
 Usage:
 
@@ -859,7 +866,7 @@ Usage:
 And then in V8XXXCustom.cpp:
 
 ```c++
-void V8XXX::visitDOMWrapper(DOMDataStore* store, void* object, v8::Persistent<v8::Object> wrapper)
+void V8XXX::visitDOMWrapperCustom(v8::Isolate* isolate, ScriptWrappable* scriptWrappable, v8::Persistent<v8::Object> wrapper)
 {
     ...
 }
@@ -1283,7 +1290,7 @@ When specified, caches the resulting object and returns it in later calls so tha
 
 Summary: This generates code that allows you to set up implicit references between wrappers which can be used to keep wrappers alive during GC.
 
-Usage: `[SetWrapperReferenceFrom]` and `[SetWrapperReferenceTo]` can be specified on an interface. Use `[Custom=VisitDOMWrapper]` instead if want to write a custom function.
+Usage: `[SetWrapperReferenceFrom]` and `[SetWrapperReferenceTo]` can be specified on an interface. Use `[Custom=VisitDOMWrapper]` if want to write a custom function.
 
 ```webidl
 [
@@ -1505,6 +1512,10 @@ Without `[NoImplHeader]`, the IDL compiler assumes that there is XXX.h in the im
 ## Temporary Blink-specific IDL Extended Attributes
 
 These extended attributes are _temporary_ and are only in use while some change is in progress. Unless you are involved with the change, you can generally ignore them, and should not use them.
+
+### [ExperimentalCallbackFunction]
+
+Summary: `[ExperimentalCallbackFunction]` on a callback function is a flag to collect callback functions. Currently the code generator doesn't generate bindings for IDL callback functions (instead, it just uses `ScriptValue`). While generating bindings for callback functions, to change existing code which uses callback functions until the generated bindings are stabilized is undesirable. To implement bindings generation for IDL callback functions incrementally, [ExperimentalCallbackFunction] extended attribute is added. The code generator keeps using ScriptValue for IDL callback functions which don't have this extended attribute.
 
 ### [LegacyTreatAsPartialInterface] _(i)_
 

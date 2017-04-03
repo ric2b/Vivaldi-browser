@@ -74,6 +74,7 @@ extern const char kChromeUIMdSettingsURL[];
 extern const char kChromeUISettingsURL[];
 extern const char kChromeUIContentSettingsURL[];
 extern const char kChromeUISettingsFrameURL[];
+extern const char kChromeUISigninErrorURL[];
 extern const char kChromeUISiteEngagementHost[];
 extern const char kChromeUISuggestionsURL[];
 extern const char kChromeUISupervisedUserPassphrasePageURL[];
@@ -86,6 +87,7 @@ extern const char kChromeUIUberFrameURL[];
 extern const char kChromeUIUserActionsURL[];
 extern const char kChromeUIUserManagerURL[];
 extern const char kChromeUIVersionURL[];
+extern const char kChromeUIWelcomeURL[];
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
 extern const char kChromeUIContextualSearchPromoURL[];
@@ -104,7 +106,6 @@ extern const char kChromeUIDeviceEmulatorURL[];
 extern const char kChromeUIFirstRunURL[];
 extern const char kChromeUIKeyboardOverlayURL[];
 extern const char kChromeUIMobileSetupURL[];
-extern const char kChromeUINfcDebugURL[];
 extern const char kChromeUIOobeURL[];
 extern const char kChromeUIOSCreditsURL[];
 extern const char kChromeUIProxySettingsURL[];
@@ -115,6 +116,7 @@ extern const char kChromeUISlowURL[];
 extern const char kChromeUISystemInfoURL[];
 extern const char kChromeUITermsOemURL[];
 extern const char kChromeUIUserImageURL[];
+extern const char kChromeUIMdCupsSettingsURL[];
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_WIN)
@@ -147,6 +149,7 @@ extern const char kChromeUIAboutPageFrameHost[];
 extern const char kChromeUIBlankHost[];
 extern const char kChromeUIAppLauncherPageHost[];
 extern const char kChromeUIAppListStartPageHost[];
+extern const char kChromeUIBluetoothInternalsHost[];
 extern const char kChromeUIBookmarksHost[];
 extern const char kChromeUICacheHost[];
 extern const char kChromeUICertificateViewerHost[];
@@ -214,6 +217,7 @@ extern const char kChromeUIRestartHost[];
 extern const char kChromeUISettingsHost[];
 extern const char kChromeUISettingsFrameHost[];
 extern const char kChromeUIShorthangHost[];
+extern const char kChromeUISigninErrorHost[];
 extern const char kChromeUISignInInternalsHost[];
 extern const char kChromeUISuggestionsHost[];
 extern const char kChromeUISupervisedUserInternalsHost[];
@@ -224,6 +228,7 @@ extern const char kChromeUISyncFileSystemInternalsHost[];
 extern const char kChromeUISyncInternalsHost[];
 extern const char kChromeUISyncResourcesHost[];
 extern const char kChromeUISystemInfoHost[];
+extern const char kChromeUITaskSchedulerInternalsHost[];
 extern const char kChromeUITermsHost[];
 extern const char kChromeUIThemeHost[];
 extern const char kChromeUIThumbnailHost[];
@@ -236,6 +241,7 @@ extern const char kChromeUIUberHost[];
 extern const char kChromeUIUsbInternalsHost[];
 extern const char kChromeUIUserActionsHost[];
 extern const char kChromeUIVersionHost[];
+extern const char kChromeUIWelcomeHost[];
 extern const char kChromeUIWorkersHost[];
 
 #if defined(ENABLE_PRINT_PREVIEW)
@@ -255,6 +261,10 @@ extern const char kChromeUIPopularSitesInternalsHost[];
 extern const char kChromeUISnippetsInternalsHost[];
 #endif
 
+#if defined(ENABLE_VR_SHELL)
+extern const char kChromeUIVrShellUIHost[];
+#endif
+
 #if defined(OS_CHROMEOS)
 extern const char kChromeUIActivationMessageHost[];
 extern const char kChromeUIAppLaunchHost[];
@@ -269,7 +279,6 @@ extern const char kChromeUILoginContainerHost[];
 extern const char kChromeUILoginHost[];
 extern const char kChromeUIMobileSetupHost[];
 extern const char kChromeUINetworkHost[];
-extern const char kChromeUINfcDebugHost[];
 extern const char kChromeUIOobeHost[];
 extern const char kChromeUIOSCreditsHost[];
 extern const char kChromeUIPowerHost[];
@@ -334,7 +343,6 @@ extern const char kSyncSetupSubPage[];
 extern const char kTriggeredResetProfileSettingsSubPage[];
 #if defined(OS_CHROMEOS)
 extern const char kInternetOptionsSubPage[];
-extern const char kChangeProfilePictureSubPage[];
 #endif
 
 // Extensions sub pages.
@@ -585,6 +593,9 @@ extern const char kWindowsXPVistaDeprecationURL[];
 // The URL for the Bluetooth Overview help center article in the Web Bluetooth
 // Chooser.
 extern const char kChooserBluetoothOverviewURL[];
+
+// The URL for providing help when the Bluetooth adapter is off.
+extern const char kBluetoothAdapterOffHelpURL[];
 
 // The URL for the WebUsb help center article.
 extern const char kChooserUsbOverviewURL[];

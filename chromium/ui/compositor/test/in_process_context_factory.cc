@@ -11,15 +11,15 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/threading/thread.h"
-#include "cc/output/compositor_frame.h"
 #include "cc/output/context_provider.h"
 #include "cc/output/output_surface_client.h"
+#include "cc/output/output_surface_frame.h"
 #include "cc/output/texture_mailbox_deleter.h"
 #include "cc/scheduler/begin_frame_source.h"
 #include "cc/scheduler/delay_based_time_source.h"
+#include "cc/surfaces/direct_compositor_frame_sink.h"
 #include "cc/surfaces/display.h"
 #include "cc/surfaces/display_scheduler.h"
-#include "cc/surfaces/surface_display_output_surface.h"
 #include "cc/surfaces/surface_id_allocator.h"
 #include "cc/test/pixel_test_output_surface.h"
 #include "cc/test/test_shared_bitmap_manager.h"
@@ -49,31 +49,30 @@ class FakeReflector : public Reflector {
 // GL surface.
 class DirectOutputSurface : public cc::OutputSurface {
  public:
-  DirectOutputSurface(
-      scoped_refptr<InProcessContextProvider> context_provider,
-      scoped_refptr<InProcessContextProvider> worker_context_provider)
-      : cc::OutputSurface(std::move(context_provider),
-                          std::move(worker_context_provider),
-                          nullptr),
+  DirectOutputSurface(scoped_refptr<InProcessContextProvider> context_provider)
+      : cc::OutputSurface(std::move(context_provider)),
         weak_ptr_factory_(this) {}
 
   ~DirectOutputSurface() override {}
 
   // cc::OutputSurface implementation.
+  void EnsureBackbuffer() override {}
+  void DiscardBackbuffer() override {}
+  void BindFramebuffer() override {
+    context_provider()->ContextGL()->BindFramebuffer(GL_FRAMEBUFFER, 0);
+  }
   bool BindToClient(cc::OutputSurfaceClient* client) override {
     if (!OutputSurface::BindToClient(client))
       return false;
     return true;
   }
-  void SwapBuffers(cc::CompositorFrame frame) override {
+  void SwapBuffers(cc::OutputSurfaceFrame frame) override {
     DCHECK(context_provider_.get());
-    DCHECK(frame.gl_frame_data);
-    if (frame.gl_frame_data->sub_buffer_rect ==
-        gfx::Rect(frame.gl_frame_data->size)) {
+    if (frame.sub_buffer_rect == gfx::Rect(frame.size)) {
       context_provider_->ContextSupport()->Swap();
     } else {
       context_provider_->ContextSupport()->PartialSwapBuffers(
-          frame.gl_frame_data->sub_buffer_rect);
+          frame.sub_buffer_rect);
     }
     gpu::gles2::GLES2Interface* gl = context_provider_->ContextGL();
     const uint64_t fence_sync = gl->InsertFenceSyncCHROMIUM();
@@ -83,15 +82,25 @@ class DirectOutputSurface : public cc::OutputSurface {
     gl->GenUnverifiedSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
 
     context_provider_->ContextSupport()->SignalSyncToken(
-        sync_token, base::Bind(&OutputSurface::OnSwapBuffersComplete,
+        sync_token, base::Bind(&DirectOutputSurface::OnSwapBuffersComplete,
                                weak_ptr_factory_.GetWeakPtr()));
   }
   uint32_t GetFramebufferCopyTextureFormat() override {
     auto* gl = static_cast<InProcessContextProvider*>(context_provider());
     return gl->GetCopyTextureInternalFormat();
   }
+  cc::OverlayCandidateValidator* GetOverlayCandidateValidator() const override {
+    return nullptr;
+  }
+  bool IsDisplayedAsOverlayPlane() const override { return false; }
+  unsigned GetOverlayTextureId() const override { return 0; }
+  bool SurfaceIsSuspendForRecycle() const override { return false; }
+  bool HasExternalStencilTest() const override { return false; }
+  void ApplyExternalStencil() override {}
 
  private:
+  void OnSwapBuffersComplete() { client_->DidSwapBuffersComplete(); }
+
   base::WeakPtrFactory<DirectOutputSurface> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(DirectOutputSurface);
@@ -106,6 +115,7 @@ InProcessContextFactory::InProcessContextFactory(
       use_test_surface_(true),
       context_factory_for_test_(context_factory_for_test),
       surface_manager_(surface_manager) {
+  DCHECK(surface_manager);
   DCHECK_NE(gl::GetGLImplementation(), gl::kGLImplementationNone)
       << "If running tests, ensure that main() is calling "
       << "gl::GLSurfaceTestSupport::InitializeOneOff()";
@@ -119,7 +129,7 @@ void InProcessContextFactory::SendOnLostResources() {
   FOR_EACH_OBSERVER(ContextFactoryObserver, observer_list_, OnLostResources());
 }
 
-void InProcessContextFactory::CreateOutputSurface(
+void InProcessContextFactory::CreateCompositorFrameSink(
     base::WeakPtr<Compositor> compositor) {
   // Try to reuse existing shared worker context provider.
   bool shared_worker_context_provider_lost = false;
@@ -160,37 +170,31 @@ void InProcessContextFactory::CreateOutputSurface(
   if (use_test_surface_) {
     bool flipped_output_surface = false;
     display_output_surface = base::MakeUnique<cc::PixelTestOutputSurface>(
-        context_provider, shared_worker_context_provider_,
-        flipped_output_surface);
+        context_provider, flipped_output_surface);
   } else {
-    display_output_surface = base::MakeUnique<DirectOutputSurface>(
-        context_provider, shared_worker_context_provider_);
+    display_output_surface =
+        base::MakeUnique<DirectOutputSurface>(context_provider);
   }
 
-  if (surface_manager_) {
-    std::unique_ptr<cc::DelayBasedBeginFrameSource> begin_frame_source(
-        new cc::DelayBasedBeginFrameSource(
-            base::MakeUnique<cc::DelayBasedTimeSource>(
-                compositor->task_runner().get())));
-    std::unique_ptr<cc::DisplayScheduler> scheduler(new cc::DisplayScheduler(
-        begin_frame_source.get(), compositor->task_runner().get(),
-        display_output_surface->capabilities().max_frames_pending));
-    per_compositor_data_[compositor.get()] = base::MakeUnique<cc::Display>(
-        GetSharedBitmapManager(), GetGpuMemoryBufferManager(),
-        compositor->GetRendererSettings(), std::move(begin_frame_source),
-        std::move(display_output_surface), std::move(scheduler),
-        base::MakeUnique<cc::TextureMailboxDeleter>(
-            compositor->task_runner().get()));
+  std::unique_ptr<cc::DelayBasedBeginFrameSource> begin_frame_source(
+      new cc::DelayBasedBeginFrameSource(
+          base::MakeUnique<cc::DelayBasedTimeSource>(
+              compositor->task_runner().get())));
+  std::unique_ptr<cc::DisplayScheduler> scheduler(new cc::DisplayScheduler(
+      begin_frame_source.get(), compositor->task_runner().get(),
+      display_output_surface->capabilities().max_frames_pending));
+  per_compositor_data_[compositor.get()] = base::MakeUnique<cc::Display>(
+      GetSharedBitmapManager(), GetGpuMemoryBufferManager(),
+      compositor->GetRendererSettings(), std::move(begin_frame_source),
+      std::move(display_output_surface), std::move(scheduler),
+      base::MakeUnique<cc::TextureMailboxDeleter>(
+          compositor->task_runner().get()));
 
-    auto* display = per_compositor_data_[compositor.get()].get();
-    std::unique_ptr<cc::SurfaceDisplayOutputSurface> surface_output_surface(
-        new cc::SurfaceDisplayOutputSurface(
-            surface_manager_, compositor->surface_id_allocator(), display,
-            context_provider, shared_worker_context_provider_));
-    compositor->SetOutputSurface(std::move(surface_output_surface));
-  } else {
-    compositor->SetOutputSurface(std::move(display_output_surface));
-  }
+  auto* display = per_compositor_data_[compositor.get()].get();
+  auto compositor_frame_sink = base::MakeUnique<cc::DirectCompositorFrameSink>(
+      compositor->frame_sink_id(), surface_manager_, display, context_provider,
+      shared_worker_context_provider_);
+  compositor->SetCompositorFrameSink(std::move(compositor_frame_sink));
 }
 
 std::unique_ptr<Reflector> InProcessContextFactory::CreateReflector(
@@ -247,8 +251,8 @@ cc::TaskGraphRunner* InProcessContextFactory::GetTaskGraphRunner() {
   return &task_graph_runner_;
 }
 
-uint32_t InProcessContextFactory::AllocateSurfaceClientId() {
-  return next_surface_client_id_++;
+cc::FrameSinkId InProcessContextFactory::AllocateFrameSinkId() {
+  return cc::FrameSinkId(next_surface_client_id_++, 0);
 }
 
 cc::SurfaceManager* InProcessContextFactory::GetSurfaceManager() {

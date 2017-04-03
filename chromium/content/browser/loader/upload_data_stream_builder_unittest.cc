@@ -22,6 +22,7 @@
 #include "net/base/upload_bytes_element_reader.h"
 #include "net/base/upload_data_stream.h"
 #include "net/base/upload_file_element_reader.h"
+#include "net/log/net_log_with_source.h"
 #include "storage/browser/blob/blob_data_builder.h"
 #include "storage/browser/blob/blob_data_handle.h"
 #include "storage/browser/blob/blob_storage_context.h"
@@ -137,7 +138,7 @@ TEST(UploadDataStreamBuilderTest,
 
     net::TestCompletionCallback init_callback;
     ASSERT_EQ(net::ERR_IO_PENDING,
-              upload->Init(init_callback.callback(), net::BoundNetLog()));
+              upload->Init(init_callback.callback(), net::NetLogWithSource()));
     EXPECT_EQ(net::OK, init_callback.WaitForResult());
 
     EXPECT_EQ(kZeroLength, upload->size());
@@ -185,7 +186,7 @@ TEST(UploadDataStreamBuilderTest, ResetUploadStreamWithBlob) {
 
     net::TestCompletionCallback init_callback;
     ASSERT_EQ(net::OK,
-              upload->Init(init_callback.callback(), net::BoundNetLog()));
+              upload->Init(init_callback.callback(), net::NetLogWithSource()));
 
     // Read part of the data.
     const int kBufferLength = 4;
@@ -200,7 +201,7 @@ TEST(UploadDataStreamBuilderTest, ResetUploadStreamWithBlob) {
 
     // Reset.
     ASSERT_EQ(net::OK,
-              upload->Init(init_callback.callback(), net::BoundNetLog()));
+              upload->Init(init_callback.callback(), net::NetLogWithSource()));
 
     // Read all the data.
     buffer = new net::IOBufferWithSize(kBlobDataLength);

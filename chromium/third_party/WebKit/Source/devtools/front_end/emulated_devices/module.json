@@ -227,7 +227,7 @@
                     "touch",
                     "mobile"
                 ],
-                "user-agent": "Mozilla/5.0 (Linux; Android 4.4.2; Nexus 4 Build/KOT49H) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.23 Mobile Safari/537.36",
+                "user-agent": "Mozilla/5.0 (Linux; Android 4.4.2; Nexus 4 Build/KOT49H) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%s Mobile Safari/537.36",
                 "type": "phone",
                 "modes": [
                     {
@@ -248,7 +248,7 @@
             "device": {
                 "title": "Nexus 5",
                 "type": "phone",
-                "user-agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.23 Mobile Safari/537.36",
+                "user-agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%s Mobile Safari/537.36",
                 "capabilities": [
                     "touch",
                     "mobile"
@@ -311,7 +311,7 @@
             "device": {
                 "title": "Nexus 5X",
                 "type": "phone",
-                "user-agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.23 Mobile Safari/537.36",
+                "user-agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%s Mobile Safari/537.36",
                 "capabilities": [
                     "touch",
                     "mobile"
@@ -322,7 +322,7 @@
                     "vertical": {
                         "outline" : {
                             "image": "@url(Nexus5X-portrait.svg)",
-                            "insets" : { "left": 18, "top": 88, "right": 22, "bottom": 98 }
+                            "insets" : { "left": 20, "top": 92, "right": 22, "bottom": 108 }
                         },
                         "width": 412,
                         "height": 732
@@ -330,7 +330,7 @@
                     "horizontal": {
                         "outline" : {
                             "image": "@url(Nexus5X-landscape.svg)",
-                            "insets" : { "left": 88, "top": 21, "right": 98, "bottom": 19 }
+                            "insets" : { "left": 94, "top": 23, "right": 100, "bottom": 20 }
                         },
                         "width": 732,
                         "height": 412
@@ -396,7 +396,7 @@
                     "touch",
                     "mobile"
                 ],
-                "user-agent": "Mozilla/5.0 (Linux; Android 5.1.1; Nexus 6 Build/LYZ28E) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.23 Mobile Safari/537.36",
+                "user-agent": "Mozilla/5.0 (Linux; Android 5.1.1; Nexus 6 Build/LYZ28E) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%s Mobile Safari/537.36",
                 "type": "phone",
                 "modes": [
                     {
@@ -422,7 +422,7 @@
                     "horizontal": {
                         "outline" : {
                             "image": "@url(Nexus6P-landscape.svg)",
-                            "insets" : { "left": 94, "top": 17, "right": 88, "bottom": 17 }
+                            "insets" : { "left": 94, "top": 48, "right": 97, "bottom": 48 }
                         },
                         "width": 732,
                         "height": 412
@@ -431,7 +431,7 @@
                     "vertical": {
                         "outline" : {
                             "image": "@url(Nexus6P-portrait.svg)",
-                            "insets" : { "left": 16, "top": 94, "right": 16, "bottom": 88 }
+                            "insets" : { "left": 58, "top": 94, "right": 58, "bottom": 97 }
                         },
                         "width": 412,
                         "height": 732
@@ -441,7 +441,7 @@
                     "touch",
                     "mobile"
                 ],
-                "user-agent": "Mozilla/5.0 (Linux; Android 5.1.1; Nexus 6 Build/LYZ28E) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.23 Mobile Safari/537.36",
+                "user-agent": "Mozilla/5.0 (Linux; Android 5.1.1; Nexus 6 Build/LYZ28E) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%s Mobile Safari/537.36",
                 "type": "phone",
                 "modes": [
                     {
@@ -477,7 +477,7 @@
                     "touch",
                     "mobile"
                 ],
-                "user-agent": "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; LGMS323 Build/KOT49I.MS32310c) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/48.0.2564.23 Mobile Safari/537.36",
+                "user-agent": "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; LGMS323 Build/KOT49I.MS32310c) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/%s Mobile Safari/537.36",
                 "type": "phone",
                 "modes": [
                     {
@@ -694,7 +694,7 @@
                     "touch",
                     "mobile"
                 ],
-                "user-agent": "Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.23 Mobile Safari/537.36",
+                "user-agent": "Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%s Mobile Safari/537.36",
                 "type": "phone",
                 "modes": [
                     {
@@ -829,6 +829,43 @@
         },
         {
             "type": "emulated-device",
+            "order": 80,
+            "device": {
+                "show-by-default": true,
+                "title": "iPad Pro",
+                "screen": {
+                    "horizontal": {
+                        "width": 1366,
+                        "height": 1024
+                    },
+                    "device-pixel-ratio": 2,
+                    "vertical": {
+                        "width": 1024,
+                        "height": 1366
+                    }
+                },
+                "capabilities": [
+                    "touch",
+                    "mobile"
+                ],
+                "user-agent": "Mozilla/5.0 (iPad; CPU OS 9_1 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13B143 Safari/601.1",
+                "type": "tablet",
+                "modes": [
+                    {
+                        "title": "default",
+                        "orientation": "vertical",
+                        "insets": { "left": 0, "top": 0, "right": 0, "bottom": 0 }
+                    },
+                    {
+                        "title": "default",
+                        "orientation": "horizontal",
+                        "insets": { "left": 0, "top": 0, "right": 0, "bottom": 0 }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "emulated-device",
             "device": {
                 "show-by-default": false,
                 "title": "Blackberry PlayBook",
@@ -883,7 +920,7 @@
                     "touch",
                     "mobile"
                 ],
-                "user-agent": "Mozilla/5.0 (Linux; Android 4.3; Nexus 10 Build/JSS15Q) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.23 Safari/537.36",
+                "user-agent": "Mozilla/5.0 (Linux; Android 4.3; Nexus 10 Build/JSS15Q) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%s Safari/537.36",
                 "type": "tablet",
                 "modes": [
                     {
@@ -919,7 +956,7 @@
                     "touch",
                     "mobile"
                 ],
-                "user-agent": "Mozilla/5.0 (Linux; Android 4.3; Nexus 7 Build/JSS15Q) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.23 Safari/537.36",
+                "user-agent": "Mozilla/5.0 (Linux; Android 4.3; Nexus 7 Build/JSS15Q) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%s Safari/537.36",
                 "type": "tablet",
                 "modes": [
                     {

@@ -174,14 +174,12 @@ bool ImeObserver::ShouldForwardKeyEvent() const {
   // the key events, and therefore, all key events will be eaten.
   // This is for error-tolerance, and it means that onKeyEvent will never wake
   // up lazy background page.
-  const extensions::EventListenerMap::ListenerList& listener_list =
+  const extensions::EventListenerMap::ListenerList& listeners =
       extensions::EventRouter::Get(profile_)
           ->listeners()
           .GetEventListenersByName(input_ime::OnKeyEvent::kEventName);
-  for (extensions::EventListenerMap::ListenerList::const_iterator it =
-           listener_list.begin();
-       it != listener_list.end(); ++it) {
-    if ((*it)->extension_id() == extension_id_ && !(*it)->IsLazy())
+  for (const std::unique_ptr<extensions::EventListener>& listener : listeners) {
+    if (listener->extension_id() == extension_id_ && !listener->IsLazy())
       return true;
   }
   return false;
@@ -285,7 +283,6 @@ ExtensionFunction::ResponseAction InputImeKeyEventHandledFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction InputImeSetCompositionFunction::Run() {
-  bool success = false;
   InputImeEventRouter* event_router =
       GetInputImeEventRouter(Profile::FromBrowserContext(browser_context()));
   InputMethodEngineBase* engine =
@@ -320,17 +317,21 @@ ExtensionFunction::ResponseAction InputImeSetCompositionFunction::Run() {
         params.selection_start ? *params.selection_start : params.cursor;
     int selection_end =
         params.selection_end ? *params.selection_end : params.cursor;
-    success = engine->SetComposition(params.context_id, params.text.c_str(),
-                                     selection_start, selection_end,
-                                     params.cursor, segments, &error_);
+    std::string error;
+    if (!engine->SetComposition(params.context_id, params.text.c_str(),
+                                selection_start, selection_end, params.cursor,
+                                segments, &error)) {
+      std::unique_ptr<base::ListValue> results =
+          base::MakeUnique<base::ListValue>();
+      results->Append(base::MakeUnique<base::FundamentalValue>(false));
+      return RespondNow(ErrorWithArguments(std::move(results), error));
+    }
   }
-  std::unique_ptr<base::ListValue> output =
-      SetComposition::Results::Create(success);
-  return RespondNow(ArgumentList(std::move(output)));
+  return RespondNow(
+      OneArgument(base::MakeUnique<base::FundamentalValue>(true)));
 }
 
 ExtensionFunction::ResponseAction InputImeCommitTextFunction::Run() {
-  bool success = false;
   InputImeEventRouter* event_router =
       GetInputImeEventRouter(Profile::FromBrowserContext(browser_context()));
   InputMethodEngineBase* engine =
@@ -339,12 +340,16 @@ ExtensionFunction::ResponseAction InputImeCommitTextFunction::Run() {
     std::unique_ptr<CommitText::Params> parent_params(
         CommitText::Params::Create(*args_));
     const CommitText::Params::Parameters& params = parent_params->parameters;
-    success =
-        engine->CommitText(params.context_id, params.text.c_str(), &error_);
+    std::string error;
+    if (!engine->CommitText(params.context_id, params.text.c_str(), &error)) {
+      std::unique_ptr<base::ListValue> results =
+          base::MakeUnique<base::ListValue>();
+      results->Append(base::MakeUnique<base::FundamentalValue>(false));
+      return RespondNow(ErrorWithArguments(std::move(results), error));
+    }
   }
-  std::unique_ptr<base::ListValue> output =
-      CommitText::Results::Create(success);
-  return RespondNow(ArgumentList(std::move(output)));
+  return RespondNow(
+      OneArgument(base::MakeUnique<base::FundamentalValue>(true)));
 }
 
 ExtensionFunction::ResponseAction InputImeSendKeyEventsFunction::Run() {

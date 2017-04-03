@@ -5,32 +5,33 @@
 #ifndef CHROME_BROWSER_SYNC_TEST_INTEGRATION_MULTI_CLIENT_STATUS_CHANGE_CHECKER_H_
 #define CHROME_BROWSER_SYNC_TEST_INTEGRATION_MULTI_CLIENT_STATUS_CHANGE_CHECKER_H_
 
+#include <string>
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/scoped_observer.h"
 #include "base/time/time.h"
 #include "chrome/browser/sync/test/integration/status_change_checker.h"
 #include "components/sync/driver/sync_service_observer.h"
 
+namespace browser_sync {
 class ProfileSyncService;
+}  // namespace browser_sync
 
 // This class provides some common functionality for StatusChangeCheckers that
 // observe many ProfileSyncServices.  This class is abstract.  Its descendants
 // are expected to provide additional functionality.
 class MultiClientStatusChangeChecker : public StatusChangeChecker,
-                                       public sync_driver::SyncServiceObserver {
+                                       public syncer::SyncServiceObserver {
  public:
   explicit MultiClientStatusChangeChecker(
-      std::vector<ProfileSyncService*> services);
+      std::vector<browser_sync::ProfileSyncService*> services);
   ~MultiClientStatusChangeChecker() override;
 
   // Called when waiting times out.
   void OnTimeout();
 
-  // Blocks until the exit condition is satisfied or a timeout occurs.
-  void Wait();
-
-  // sync_driver::SyncServiceObserver implementation.
+  // syncer::SyncServiceObserver implementation.
   void OnStateChanged() override;
 
   // StatusChangeChecker implementations and stubs.
@@ -38,10 +39,15 @@ class MultiClientStatusChangeChecker : public StatusChangeChecker,
   std::string GetDebugMessage() const override = 0;
 
  protected:
-  const std::vector<ProfileSyncService*>& services() { return services_; }
+  const std::vector<browser_sync::ProfileSyncService*>& services() {
+    return services_;
+  }
 
  private:
-  std::vector<ProfileSyncService*> services_;
+  std::vector<browser_sync::ProfileSyncService*> services_;
+  ScopedObserver<browser_sync::ProfileSyncService,
+                 MultiClientStatusChangeChecker>
+      scoped_observer_;
 };
 
 #endif  // CHROME_BROWSER_SYNC_TEST_INTEGRATION_MULTI_CLIENT_STATUS_CHANGE_CHECKER_H_

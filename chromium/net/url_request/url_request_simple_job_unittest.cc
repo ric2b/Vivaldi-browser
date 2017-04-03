@@ -5,14 +5,16 @@
 #include "net/url_request/url_request_simple_job.h"
 
 #include <memory>
+#include <utility>
 
 #include "base/bind_helpers.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
+#include "base/sequenced_task_runner.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
-#include "base/test/sequenced_worker_pool_owner.h"
-#include "base/threading/worker_pool.h"
+#include "base/threading/thread.h"
 #include "net/base/request_priority.h"
 #include "net/test/gtest_util.h"
 #include "net/url_request/url_request_job.h"
@@ -43,10 +45,10 @@ class MockSimpleJob : public URLRequestSimpleJob {
   MockSimpleJob(URLRequest* request,
                 NetworkDelegate* network_delegate,
                 scoped_refptr<base::TaskRunner> task_runner,
-                std::string data)
+                base::StringPiece data)
       : URLRequestSimpleJob(request, network_delegate),
-        data_(data),
-        task_runner_(task_runner) {}
+        data_(data.as_string()),
+        task_runner_(std::move(task_runner)) {}
 
  protected:
   // URLRequestSimpleJob implementation:
@@ -69,7 +71,7 @@ class MockSimpleJob : public URLRequestSimpleJob {
 
   const std::string data_;
 
-  scoped_refptr<base::TaskRunner> task_runner_;
+  const scoped_refptr<base::TaskRunner> task_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(MockSimpleJob);
 };
@@ -80,16 +82,12 @@ class CancelAfterFirstReadURLRequestDelegate : public TestDelegate {
 
   ~CancelAfterFirstReadURLRequestDelegate() override {}
 
-  void OnResponseStarted(URLRequest* request) override {
+  void OnResponseStarted(URLRequest* request, int net_error) override {
+    DCHECK_NE(ERR_IO_PENDING, net_error);
     // net::TestDelegate will start the first read.
-    TestDelegate::OnResponseStarted(request);
+    TestDelegate::OnResponseStarted(request, net_error);
     request->Cancel();
     run_loop_->Quit();
-  }
-
-  void OnReadCompleted(URLRequest* request, int bytes_read) override {
-    // Read should have been cancelled.
-    EXPECT_EQ(-1, bytes_read);
   }
 
   void WaitUntilHeadersReceived() const { run_loop_->Run(); }
@@ -104,7 +102,7 @@ class SimpleJobProtocolHandler :
     public URLRequestJobFactory::ProtocolHandler {
  public:
   SimpleJobProtocolHandler(scoped_refptr<base::TaskRunner> task_runner)
-      : task_runner_(task_runner) {}
+      : task_runner_(std::move(task_runner)) {}
   URLRequestJob* MaybeCreateJob(
       URLRequest* request,
       NetworkDelegate* network_delegate) const override {
@@ -117,21 +115,19 @@ class SimpleJobProtocolHandler :
   ~SimpleJobProtocolHandler() override {}
 
  private:
-  scoped_refptr<base::TaskRunner> task_runner_;
+  const scoped_refptr<base::TaskRunner> task_runner_;
+
+  DISALLOW_COPY_AND_ASSIGN(SimpleJobProtocolHandler);
 };
 
 class URLRequestSimpleJobTest : public ::testing::Test {
  public:
   URLRequestSimpleJobTest()
-      : worker_pool_owner_(1, "URLRequestSimpleJobTest"),
-        task_runner_(worker_pool_owner_.pool()
-                         ->GetSequencedTaskRunnerWithShutdownBehavior(
-                             worker_pool_owner_.pool()
-                                 ->GetSequenceToken(),
-                             base::SequencedWorkerPool::SKIP_ON_SHUTDOWN)),
-        context_(true) {
+      : worker_thread_("URLRequestSimpleJobTest"), context_(true) {
+    EXPECT_TRUE(worker_thread_.Start());
+
     job_factory_.SetProtocolHandler(
-        "data", base::WrapUnique(new SimpleJobProtocolHandler(task_runner_)));
+        "data", base::MakeUnique<SimpleJobProtocolHandler>(task_runner()));
     context_.set_job_factory(&job_factory_);
     context_.Init();
 
@@ -149,20 +145,25 @@ class URLRequestSimpleJobTest : public ::testing::Test {
     EXPECT_FALSE(request_->is_pending());
   }
 
+  scoped_refptr<base::SequencedTaskRunner> task_runner() {
+    return worker_thread_.task_runner();
+  }
+
  protected:
-  base::SequencedWorkerPoolOwner worker_pool_owner_;
-  scoped_refptr<base::SequencedTaskRunner> task_runner_;
+  base::Thread worker_thread_;
   TestURLRequestContext context_;
   URLRequestJobFactoryImpl job_factory_;
   TestDelegate delegate_;
   std::unique_ptr<URLRequest> request_;
+
+  DISALLOW_COPY_AND_ASSIGN(URLRequestSimpleJobTest);
 };
 
 }  // namespace
 
 TEST_F(URLRequestSimpleJobTest, SimpleRequest) {
   StartRequest(NULL);
-  ASSERT_TRUE(request_->status().is_success());
+  EXPECT_THAT(delegate_.request_status(), IsOk());
   EXPECT_EQ(kTestData, delegate_.data_received());
 }
 
@@ -177,7 +178,7 @@ TEST_F(URLRequestSimpleJobTest, RangeRequest) {
 
   StartRequest(&headers);
 
-  ASSERT_TRUE(request_->status().is_success());
+  EXPECT_THAT(delegate_.request_status(), IsOk());
   EXPECT_EQ(kExpectedBody, delegate_.data_received());
 }
 
@@ -194,8 +195,7 @@ TEST_F(URLRequestSimpleJobTest, MultipleRangeRequest) {
   StartRequest(&headers);
 
   EXPECT_TRUE(delegate_.request_failed());
-  EXPECT_THAT(request_->status().error(),
-              IsError(ERR_REQUEST_RANGE_NOT_SATISFIABLE));
+  EXPECT_EQ(ERR_REQUEST_RANGE_NOT_SATISFIABLE, delegate_.request_status());
 }
 
 TEST_F(URLRequestSimpleJobTest, InvalidRangeRequest) {
@@ -206,7 +206,7 @@ TEST_F(URLRequestSimpleJobTest, InvalidRangeRequest) {
 
   StartRequest(&headers);
 
-  ASSERT_TRUE(request_->status().is_success());
+  EXPECT_THAT(delegate_.request_status(), IsOk());
   EXPECT_EQ(kTestData, delegate_.data_received());
 }
 
@@ -214,7 +214,7 @@ TEST_F(URLRequestSimpleJobTest, EmptyDataRequest) {
   request_ =
       context_.CreateRequest(GURL("data:empty"), DEFAULT_PRIORITY, &delegate_);
   StartRequest(nullptr);
-  ASSERT_TRUE(request_->status().is_success());
+  EXPECT_THAT(delegate_.request_status(), IsOk());
   EXPECT_EQ("", delegate_.data_received());
 }
 
@@ -225,7 +225,7 @@ TEST_F(URLRequestSimpleJobTest, CancelBeforeResponseStarts) {
   request_->Cancel();
 
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(URLRequestStatus::CANCELED, request_->status().status());
+  EXPECT_THAT(delegate_.request_status(), IsError(ERR_ABORTED));
   EXPECT_EQ(1, delegate_.response_started_count());
 }
 
@@ -239,11 +239,11 @@ TEST_F(URLRequestSimpleJobTest, CancelAfterFirstReadStarted) {
   // Feed a dummy task to the SequencedTaskRunner to make sure that the
   // callbacks which are invoked in ReadRawData have completed safely.
   base::RunLoop run_loop;
-  EXPECT_TRUE(task_runner_->PostTaskAndReply(
+  EXPECT_TRUE(task_runner()->PostTaskAndReply(
       FROM_HERE, base::Bind(&base::DoNothing), run_loop.QuitClosure()));
   run_loop.Run();
 
-  EXPECT_EQ(URLRequestStatus::CANCELED, request_->status().status());
+  EXPECT_THAT(cancel_delegate.request_status(), IsError(ERR_ABORTED));
   EXPECT_EQ(1, cancel_delegate.response_started_count());
   EXPECT_EQ("", cancel_delegate.data_received());
   // Destroy the request so it doesn't outlive its delegate.

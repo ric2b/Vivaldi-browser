@@ -1,12 +1,12 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="bn">
-<translation id="1014825444426747588">খালি</translation>
 <translation id="1018939186200882850">মেনু আইটেম</translation>
 <translation id="1020833440720551630">অডিও ট্র্যাক নিঃশব্দ করুন</translation>
 <translation id="10623998915015855">টগল বোতাম</translation>
 <translation id="1088086359088493902">সেকেন্ড</translation>
 <translation id="1171774979989969504">দয়া করে কোন ইমেল ঠিকানা প্রবেশ করান:</translation>
+<translation id="1178581264944972037">বিরাম</translation>
 <translation id="1188858454923323853">পরিপূরক</translation>
 <translation id="1206619573307042055">marquee</translation>
 <translation id="1206693055195146388">স্লাইডার</translation>
@@ -25,6 +25,7 @@
 <translation id="1822429046913737220">AM/PM</translation>
 <translation id="1832974991323546415">রিমোট ডিভাইসে প্লে করুন</translation>
 <translation id="1842960171412779397">নির্বাচন করুন</translation>
+<translation id="1854180393107901205">কাস্ট করা বন্ধ করুন</translation>
 <translation id="1880518467580572141">রূপরেখা</translation>
 <translation id="1921819250265091946">dd</translation>
 <translation id="1930711995431081526">স্থিতি</translation>
@@ -39,6 +40,7 @@
 <translation id="2507943997699731163">দয়া করে এই ক্ষেত্রটি পূরণ করুন৷</translation>
 <translation id="2508569020611168319">ট্যাব তালিকা</translation>
 <translation id="2548326553472216322">কোন সাম্প্রতিক অনুসন্ধান নেই</translation>
+<translation id="2561842179657104141">আরো মিডিয়া নিয়ন্ত্রণ দেখান</translation>
 <translation id="2572483411312390101">চালনা করুন</translation>
 <translation id="2613802280814924224">দয়া করে একটি বৈধ মান লিখুন৷ কাছাকাছির বৈধ মান হল <ph name="VALID_VALUE" />৷</translation>
 <translation id="2653659639078652383">জমা</translation>
@@ -71,6 +73,7 @@
 <translation id="3808586225841795776">পদ</translation>
 <translation id="3822383571486410024">দয়া করে এই পাঠ্যকে ন্যূনতম <ph name="MIN_CHARACTERS" /> অক্ষরের বা তার বেশি (আপনি বর্তমানে <ph name="CURRENT_LENGTH" />টি অক্ষর ব্যবহার করেছেন) দৈর্ঘের করুন।</translation>
 <translation id="383465348367842624">'<ph name="ATSIGN" />' অনুসরণ করে এমন একটি অংশে '<ph name="INVALIDCHARACTER" />' চিহ্ন থাকা উচিত নয়৷</translation>
+<translation id="3846214748874656680">পূর্ণস্ক্রীন থেকে প্রস্থান করুন</translation>
 <translation id="3924558731517983934">অ্যাপ্লিকেশান</translation>
 <translation id="3960700977367013758">স্ক্রোল বার</translation>
 <translation id="4103419683916926126">মিলিসেকেন্ড</translation>
@@ -91,6 +94,7 @@
 <translation id="479989351350248267">search</translation>
 <translation id="4812940957355064477">দয়া করে একটি সংখ্যা লিখুন৷</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" />টি নির্বাচিত</translation>
+<translation id="4992066212339426712">সশব্দ করুন</translation>
 <translation id="49969490063480558">দয়া করে '<ph name="ATSIGN" />' অনুসরণ করে একটি অংশ লিখুন৷ '<ph name="INVALIDADDRESS" />' অসম্পূর্ণ৷</translation>
 <translation id="5034860022980953847">অগ্রগতি সূচক</translation>
 <translation id="5048533449481078685">তালিকা নির্দেশক</translation>
@@ -105,13 +109,17 @@
 <translation id="5468998798572797635">পূর্ণ স্ক্রীন বন্ধ করুন</translation>
 <translation id="5476505524087279545">আনচেক</translation>
 <translation id="5516424706154626233">তারিখ চয়নকারি</translation>
+<translation id="5537725057119320332">কাস্ট করুন</translation>
 <translation id="5546461542133609677">সশব্দ</translation>
 <translation id="561939826962581046">time</translation>
 <translation id="5641012560118721995">প্লেব্যাক বিরতি</translation>
 <translation id="5643186887447432888">বোতাম</translation>
+<translation id="5677946354068040947">আরো বিকল্প</translation>
+<translation id="57838592816432529">নিঃশব্দ করুন</translation>
 <translation id="583281660410589416">অজানা</translation>
 <translation id="5843503607508392247">অন্যান্য...</translation>
 <translation id="5860033963881614850">বন্ধ করুন</translation>
+<translation id="588258955323874662">সম্পূর্নস্ক্রীণ</translation>
 <translation id="5939518447894949180">রিসেট করুন</translation>
 <translation id="5944544982112848342">2048 (উচ্চ গ্রেড)</translation>
 <translation id="5966707198760109579">সপ্তাহ</translation>
@@ -134,12 +142,14 @@
 <translation id="6692633176391053278">পদক্ষেপকারী</translation>
 <translation id="6739588121953935928">রুলার</translation>
 <translation id="6755330956360078551">সরঞ্জামটিপ</translation>
+<translation id="6790428901817661496">চালু করুন</translation>
 <translation id="6820355525329141109">প্লাগ ইন লোড করা যায়নি।</translation>
 <translation id="6843725295806269523">নিঃশব্দ</translation>
 <translation id="6845533974506654842">টিপুন</translation>
 <translation id="6853785296079745596">বন্ধ করা পরিচয়লিপিগুলি লুকান</translation>
 <translation id="6885760532393684712">ডিরেক্টরি</translation>
 <translation id="6934078000481955284">ব্লক উদ্ধৃতি</translation>
+<translation id="6941933287844615239">মিডিয়া ডাউনলোড করুন</translation>
 <translation id="7057186640035488495">চলচ্চিত্রের সময়</translation>
 <translation id="709897737746224366">দয়া করে অনুরোধ হওয়া বিন্যাসটি মেলান৷</translation>
 <translation id="7223624360433298498">অতিবাহিত সময়</translation>
@@ -148,6 +158,7 @@
 <translation id="7364796246159120393">ফাইল বেছে নিন</translation>
 <translation id="739024184232394898">অন্যান্য...</translation>
 <translation id="7491962110804786152">ট্যাব</translation>
+<translation id="7514365320538308">ডাউনলোড করুন</translation>
 <translation id="7673697353781729403">ঘণ্টা</translation>
 <translation id="7720026100085573005">অবশিষ্ট সময়</translation>
 <translation id="7740016676195725605">বদ্ধ পরিচয়লিপিগুলির প্রদর্শন থামান</translation>
@@ -164,6 +175,7 @@
 <translation id="819205353528511139">পূর্ণ স্ক্রীন মোডে চলচ্চিত্র চালান</translation>
 <translation id="8199524924445686405">yyyy</translation>
 <translation id="8244226242650769279">ছবি মানচিত্র</translation>
+<translation id="8284326494547611709">পরিচয়লিপিগুলি</translation>
 <translation id="835897206747267392">অকার্যকর মান৷</translation>
 <translation id="838869780401515933">চেক করুন</translation>
 <translation id="8433900881053900389">সরঞ্জাম দণ্ড</translation>

@@ -11,16 +11,20 @@
 #include <set>
 
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "services/ui/common/types.h"
 #include "services/ui/public/cpp/window_manager_delegate.h"
-#include "services/ui/public/cpp/window_observer.h"
 #include "services/ui/public/cpp/window_tree_client_delegate.h"
 #include "services/ui/public/interfaces/window_manager.mojom.h"
 
+namespace base {
+class SequencedWorkerPool;
+}
+
 namespace display {
 class Display;
-class Screen;
+class ScreenBase;
 }
 
 namespace shell {
@@ -47,17 +51,21 @@ class WmTestHelper;
 // a RootWindowController per Display. WindowManager takes ownership of
 // the WindowTreeClient.
 class WindowManager : public ui::WindowManagerDelegate,
-                      public ui::WindowObserver,
                       public ui::WindowTreeClientDelegate {
  public:
   explicit WindowManager(shell::Connector* connector);
   ~WindowManager() override;
 
-  void Init(ui::WindowTreeClient* window_tree_client);
+  void Init(std::unique_ptr<ui::WindowTreeClient> window_tree_client,
+            const scoped_refptr<base::SequencedWorkerPool>& blocking_pool);
 
   WmShellMus* shell() { return shell_.get(); }
 
-  ui::WindowTreeClient* window_tree_client() { return window_tree_client_; }
+  display::ScreenBase* screen() { return screen_.get(); }
+
+  ui::WindowTreeClient* window_tree_client() {
+    return window_tree_client_.get();
+  }
 
   ui::WindowManagerClient* window_manager_client() {
     return window_manager_client_;
@@ -86,17 +94,36 @@ class WindowManager : public ui::WindowManagerDelegate,
  private:
   friend class WmTestHelper;
 
+  using RootWindowControllers = std::set<std::unique_ptr<RootWindowController>>;
+
   RootWindowController* CreateRootWindowController(
       ui::Window* window,
       const display::Display& display);
 
-  // ui::WindowObserver:
-  void OnWindowDestroying(ui::Window* window) override;
-  void OnWindowDestroyed(ui::Window* window) override;
+  // Deletes the specified RootWindowController. Called when a display is
+  // removed.
+  void DestroyRootWindowController(
+      RootWindowController* root_window_controller);
+
+  void Shutdown();
+
+  // Returns an iterator into |root_window_controllers_|. Returns
+  // root_window_controllers_.end() if |window| is not the root of a
+  // RootWindowController.
+  RootWindowControllers::iterator FindRootWindowControllerByWindow(
+      ui::Window* window);
+
+  RootWindowController* GetPrimaryRootWindowController();
+
+  // Returns the RootWindowController where new top levels are created.
+  // |properties| is the properties supplied during window creation.
+  RootWindowController* GetRootWindowControllerForNewTopLevelWindow(
+      std::map<std::string, std::vector<uint8_t>>* properties);
 
   // WindowTreeClientDelegate:
   void OnEmbed(ui::Window* root) override;
-  void OnDidDestroyClient(ui::WindowTreeClient* client) override;
+  void OnEmbedRootDestroyed(ui::Window* root) override;
+  void OnLostConnection(ui::WindowTreeClient* client) override;
   void OnPointerEventObserved(const ui::PointerEvent& event,
                               ui::Window* target) override;
 
@@ -113,6 +140,7 @@ class WindowManager : public ui::WindowManagerDelegate,
                                   bool not_responding) override;
   void OnWmNewDisplay(ui::Window* window,
                       const display::Display& display) override;
+  void OnWmDisplayRemoved(ui::Window* window) override;
   void OnWmPerformMoveLoop(ui::Window* window,
                            ui::mojom::MoveLoopSource source,
                            const gfx::Point& cursor_location,
@@ -123,7 +151,7 @@ class WindowManager : public ui::WindowManagerDelegate,
 
   shell::Connector* connector_;
 
-  ui::WindowTreeClient* window_tree_client_ = nullptr;
+  std::unique_ptr<ui::WindowTreeClient> window_tree_client_;
 
   ui::WindowManagerClient* window_manager_client_ = nullptr;
 
@@ -132,11 +160,11 @@ class WindowManager : public ui::WindowManagerDelegate,
 
   std::unique_ptr<ShadowController> shadow_controller_;
 
-  std::set<std::unique_ptr<RootWindowController>> root_window_controllers_;
+  RootWindowControllers root_window_controllers_;
 
   base::ObserverList<WindowManagerObserver> observers_;
 
-  std::unique_ptr<display::Screen> screen_;
+  std::unique_ptr<display::ScreenBase> screen_;
 
   std::unique_ptr<WmShellMus> shell_;
 

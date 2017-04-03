@@ -16,9 +16,9 @@
 #include <iosfwd>
 #include <string>
 
-#include "base/numerics/safe_conversions.h"
 #include "build/build_config.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/safe_integer_conversions.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/vector2d.h"
 
@@ -37,10 +37,13 @@ class GFX_EXPORT Rect {
   constexpr Rect() = default;
   constexpr Rect(int width, int height) : size_(width, height) {}
   constexpr Rect(int x, int y, int width, int height)
-      : origin_(x, y), size_(width, height) {}
+      : origin_(x, y),
+        size_(GetClampedValue(x, width), GetClampedValue(y, height)) {}
   constexpr explicit Rect(const Size& size) : size_(size) {}
   constexpr Rect(const Point& origin, const Size& size)
-      : origin_(origin), size_(size) {}
+      : origin_(origin),
+        size_(GetClampedValue(origin.x(), size.width()),
+              GetClampedValue(origin.y(), size.height())) {}
 
 #if defined(OS_WIN)
   explicit Rect(const RECT& r);
@@ -57,22 +60,38 @@ class GFX_EXPORT Rect {
 #endif
 
   constexpr int x() const { return origin_.x(); }
-  void set_x(int x) { origin_.set_x(x); }
+  void set_x(int x) {
+    origin_.set_x(x);
+    size_.set_width(GetClampedValue(x, width()));
+  }
 
   constexpr int y() const { return origin_.y(); }
-  void set_y(int y) { origin_.set_y(y); }
+  void set_y(int y) {
+    origin_.set_y(y);
+    size_.set_height(GetClampedValue(y, height()));
+  }
 
   constexpr int width() const { return size_.width(); }
-  void set_width(int width) { size_.set_width(width); }
+  void set_width(int width) { size_.set_width(GetClampedValue(x(), width)); }
 
   constexpr int height() const { return size_.height(); }
-  void set_height(int height) { size_.set_height(height); }
+  void set_height(int height) {
+    size_.set_height(GetClampedValue(y(), height));
+  }
 
   constexpr const Point& origin() const { return origin_; }
-  void set_origin(const Point& origin) { origin_ = origin; }
+  void set_origin(const Point& origin) {
+    origin_ = origin;
+    // Ensure that width and height remain valid.
+    set_width(width());
+    set_height(height());
+  }
 
   constexpr const Size& size() const { return size_; }
-  void set_size(const Size& size) { size_ = size; }
+  void set_size(const Size& size) {
+    set_width(size.width());
+    set_height(size.height());
+  }
 
   constexpr int right() const { return x() + width(); }
   constexpr int bottom() const { return y() + height(); }
@@ -85,7 +104,9 @@ class GFX_EXPORT Rect {
 
   void SetRect(int x, int y, int width, int height) {
     origin_.SetPoint(x, y);
-    size_.SetSize(width, height);
+    // Ensure that width and height remain valid.
+    set_width(width);
+    set_height(height);
   }
 
   // Shrink the rectangle by a horizontal and vertical distance on all sides.
@@ -184,6 +205,20 @@ class GFX_EXPORT Rect {
  private:
   gfx::Point origin_;
   gfx::Size size_;
+
+  // Clamp the size to avoid integer overflow in bottom() and right().
+  // This returns the width given an origin and a width.
+  static constexpr int GetClampedValue(int origin, int size) {
+    return AddWouldOverflow(origin, size)
+               ? std::numeric_limits<int>::max() - origin
+               : size;
+  }
+
+  // Returns a clamped width given a right and a left, assuming right > left.
+  static constexpr int GetClampedWidthFromExtents(int left, int right) {
+    return SubtractWouldOverflow(right, left) ? std::numeric_limits<int>::max()
+                                              : right - left;
+  }
 };
 
 inline bool operator==(const Rect& lhs, const Rect& rhs) {
@@ -213,6 +248,9 @@ GFX_EXPORT Rect SubtractRects(const Rect& a, const Rect& b);
 // contained within the rect, because they will appear on one of these edges.
 GFX_EXPORT Rect BoundingRect(const Point& p1, const Point& p2);
 
+// Scales the rect and returns the enclosing rect.  Use this only the inputs are
+// known to not overflow.  Use ScaleToEnclosingRectSafe if the inputs are
+// unknown and need to use saturated math.
 inline Rect ScaleToEnclosingRect(const Rect& rect,
                                  float x_scale,
                                  float y_scale) {
@@ -241,6 +279,24 @@ inline Rect ScaleToEnclosingRect(const Rect& rect,
 
 inline Rect ScaleToEnclosingRect(const Rect& rect, float scale) {
   return ScaleToEnclosingRect(rect, scale, scale);
+}
+
+// ScaleToEnclosingRect but clamping instead of asserting if the resulting rect
+// would overflow.
+inline Rect ScaleToEnclosingRectSafe(const Rect& rect,
+                                     float x_scale,
+                                     float y_scale) {
+  if (x_scale == 1.f && y_scale == 1.f)
+    return rect;
+  int x = base::saturated_cast<int>(std::floor(rect.x() * x_scale));
+  int y = base::saturated_cast<int>(std::floor(rect.y() * y_scale));
+  int w = base::saturated_cast<int>(std::ceil(rect.width() * x_scale));
+  int h = base::saturated_cast<int>(std::ceil(rect.height() * y_scale));
+  return Rect(x, y, w, h);
+}
+
+inline Rect ScaleToEnclosingRectSafe(const Rect& rect, float scale) {
+  return ScaleToEnclosingRectSafe(rect, scale, scale);
 }
 
 inline Rect ScaleToEnclosedRect(const Rect& rect,

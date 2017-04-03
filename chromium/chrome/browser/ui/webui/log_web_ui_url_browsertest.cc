@@ -16,12 +16,12 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/md_history_ui.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
-#include "grit/components_strings.h"
-#include "grit/generated_resources.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
@@ -42,7 +42,7 @@ class LogWebUIUrlTest : public InProcessBrowserTest {
 
   void SetUpOnMainThread() override {
     // Disable MD History to test non-MD history page.
-    MdHistoryUI::DisableForTesting();
+    MdHistoryUI::SetEnabledForTesting(false);
   }
 
  private:
@@ -59,7 +59,7 @@ IN_PROC_BROWSER_TEST_F(LogWebUIUrlTest, TestHistoryFrame) {
   uint32_t history_frame_url_hash = base::Hash(history_frame_url.spec());
   EXPECT_THAT(GetSamples(), ElementsAre(Bucket(history_frame_url_hash, 1)));
 
-  chrome::Reload(browser(), CURRENT_TAB);
+  chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
 
   EXPECT_THAT(GetSamples(), ElementsAre(Bucket(history_frame_url_hash, 2)));
 }
@@ -93,7 +93,7 @@ IN_PROC_BROWSER_TEST_F(LogWebUIUrlTest, TestUberPage) {
 
   {
     content::TitleWatcher title_watcher(tab, history_title);
-    chrome::Reload(browser(), CURRENT_TAB);
+    chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
     ASSERT_EQ(history_title, title_watcher.WaitAndGetTitle());
   }
 

@@ -7,29 +7,46 @@
 
 #include <stdint.h>
 
-#include "base/callback_forward.h"
+#include <string>
+
+#include "base/callback.h"
 #include "base/macros.h"
+#include "mojo/public/cpp/bindings/bindings_export.h"
 #include "mojo/public/cpp/bindings/lib/serialization_context.h"
+#include "mojo/public/cpp/bindings/message.h"
 
 namespace mojo {
-
-class MessageReceiverWithResponder;
 
 namespace internal {
 
 // Proxy for request messages defined in interface_control_messages.mojom.
-class ControlMessageProxy {
+class MOJO_CPP_BINDINGS_EXPORT ControlMessageProxy {
  public:
   // Doesn't take ownership of |receiver|. It must outlive this object.
   explicit ControlMessageProxy(MessageReceiverWithResponder* receiver);
+  ~ControlMessageProxy();
 
   void QueryVersion(const base::Callback<void(uint32_t)>& callback);
   void RequireVersion(uint32_t version);
 
- protected:
+  void FlushForTesting();
+  void SendDisconnectReason(uint32_t custom_reason,
+                            const std::string& description);
+
+  void OnConnectionError();
+
+  static Message ConstructDisconnectReasonMessage(
+      uint32_t custom_reason,
+      const std::string& description);
+
+ private:
+  void RunFlushForTestingClosure();
+
   // Not owned.
   MessageReceiverWithResponder* receiver_;
-  SerializationContext context_;
+  bool encountered_error_ = false;
+
+  base::Closure run_loop_quit_closure_;
 
   DISALLOW_COPY_AND_ASSIGN(ControlMessageProxy);
 };

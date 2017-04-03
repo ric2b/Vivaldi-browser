@@ -158,11 +158,11 @@ class SystemLogUploaderTest : public testing::Test {
   // Given a pending task to upload system logs.
   void RunPendingUploadTaskAndCheckNext(const SystemLogUploader& uploader,
                                         base::TimeDelta expected_delay) {
-    EXPECT_FALSE(task_runner_->GetPendingTasks().empty());
+    EXPECT_TRUE(task_runner_->HasPendingTask());
     task_runner_->RunPendingTasks();
 
     // The previous task should have uploaded another log upload task.
-    EXPECT_EQ(1U, task_runner_->GetPendingTasks().size());
+    EXPECT_EQ(1U, task_runner_->NumPendingTasks());
 
     CheckPendingTaskDelay(uploader, expected_delay);
   }
@@ -187,7 +187,7 @@ class SystemLogUploaderTest : public testing::Test {
 
 // Check disabled system log uploads by default.
 TEST_F(SystemLogUploaderTest, Basic) {
-  EXPECT_TRUE(task_runner_->GetPendingTasks().empty());
+  EXPECT_FALSE(task_runner_->HasPendingTask());
 
   std::unique_ptr<MockSystemLogDelegate> syslog_delegate(
       new MockSystemLogDelegate(false, SystemLogUploader::SystemLogs()));
@@ -199,7 +199,7 @@ TEST_F(SystemLogUploaderTest, Basic) {
 
 // One success task pending.
 TEST_F(SystemLogUploaderTest, SuccessTest) {
-  EXPECT_TRUE(task_runner_->GetPendingTasks().empty());
+  EXPECT_FALSE(task_runner_->HasPendingTask());
 
   std::unique_ptr<MockSystemLogDelegate> syslog_delegate(
       new MockSystemLogDelegate(false, SystemLogUploader::SystemLogs()));
@@ -207,7 +207,7 @@ TEST_F(SystemLogUploaderTest, SuccessTest) {
   settings_helper_.SetBoolean(chromeos::kSystemLogUploadEnabled, true);
   SystemLogUploader uploader(std::move(syslog_delegate), task_runner_);
 
-  EXPECT_EQ(1U, task_runner_->GetPendingTasks().size());
+  EXPECT_EQ(1U, task_runner_->NumPendingTasks());
 
   RunPendingUploadTaskAndCheckNext(
       uploader, base::TimeDelta::FromMilliseconds(
@@ -216,7 +216,7 @@ TEST_F(SystemLogUploaderTest, SuccessTest) {
 
 // Three failed responses recieved.
 TEST_F(SystemLogUploaderTest, ThreeFailureTest) {
-  EXPECT_TRUE(task_runner_->GetPendingTasks().empty());
+  EXPECT_FALSE(task_runner_->HasPendingTask());
 
   std::unique_ptr<MockSystemLogDelegate> syslog_delegate(
       new MockSystemLogDelegate(true, SystemLogUploader::SystemLogs()));
@@ -224,7 +224,7 @@ TEST_F(SystemLogUploaderTest, ThreeFailureTest) {
   settings_helper_.SetBoolean(chromeos::kSystemLogUploadEnabled, true);
   SystemLogUploader uploader(std::move(syslog_delegate), task_runner_);
 
-  EXPECT_EQ(1U, task_runner_->GetPendingTasks().size());
+  EXPECT_EQ(1U, task_runner_->NumPendingTasks());
 
   // Do not retry two times consequentially.
   RunPendingUploadTaskAndCheckNext(uploader,
@@ -242,7 +242,7 @@ TEST_F(SystemLogUploaderTest, ThreeFailureTest) {
 
 // Check header fields of system log files to upload.
 TEST_F(SystemLogUploaderTest, CheckHeaders) {
-  EXPECT_TRUE(task_runner_->GetPendingTasks().empty());
+  EXPECT_FALSE(task_runner_->HasPendingTask());
 
   SystemLogUploader::SystemLogs system_logs = GenerateTestSystemLogFiles();
   std::unique_ptr<MockSystemLogDelegate> syslog_delegate(
@@ -251,7 +251,7 @@ TEST_F(SystemLogUploaderTest, CheckHeaders) {
   settings_helper_.SetBoolean(chromeos::kSystemLogUploadEnabled, true);
   SystemLogUploader uploader(std::move(syslog_delegate), task_runner_);
 
-  EXPECT_EQ(1U, task_runner_->GetPendingTasks().size());
+  EXPECT_EQ(1U, task_runner_->NumPendingTasks());
 
   RunPendingUploadTaskAndCheckNext(
       uploader, base::TimeDelta::FromMilliseconds(
@@ -260,7 +260,7 @@ TEST_F(SystemLogUploaderTest, CheckHeaders) {
 
 // Disable system log uploads after one failed log upload.
 TEST_F(SystemLogUploaderTest, DisableLogUpload) {
-  EXPECT_TRUE(task_runner_->GetPendingTasks().empty());
+  EXPECT_FALSE(task_runner_->HasPendingTask());
 
   std::unique_ptr<MockSystemLogDelegate> syslog_delegate(
       new MockSystemLogDelegate(true, SystemLogUploader::SystemLogs()));
@@ -269,7 +269,7 @@ TEST_F(SystemLogUploaderTest, DisableLogUpload) {
   mock_delegate->set_upload_allowed(true);
   SystemLogUploader uploader(std::move(syslog_delegate), task_runner_);
 
-  EXPECT_EQ(1U, task_runner_->GetPendingTasks().size());
+  EXPECT_EQ(1U, task_runner_->NumPendingTasks());
   RunPendingUploadTaskAndCheckNext(uploader,
                                    base::TimeDelta::FromMilliseconds(
                                        SystemLogUploader::kErrorUploadDelayMs));

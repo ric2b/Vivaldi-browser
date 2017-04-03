@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/webui/chromeos/network_ui.h"
 
 #include <string>
+#include <utility>
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -13,6 +14,7 @@
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/ui/webui/settings/md_settings_localized_strings_provider.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/network/device_state.h"
 #include "chromeos/network/network_configuration_handler.h"
@@ -23,7 +25,6 @@
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/browser/web_ui_message_handler.h"
-#include "grit/browser_resources.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/chromeos/strings/grit/ui_chromeos_strings.h"
@@ -118,7 +119,7 @@ class NetworkConfigMessageHandler : public content::WebUIMessageHandler {
     SetDeviceProperties(dictionary_copy.get());
 
     base::ListValue return_arg_list;
-    return_arg_list.Append(dictionary_copy.release());
+    return_arg_list.Append(std::move(dictionary_copy));
     web_ui()->CallJavascriptFunctionUnsafe("NetworkUI.getShillPropertiesResult",
                                            return_arg_list);
   }
@@ -132,7 +133,7 @@ class NetworkConfigMessageHandler : public content::WebUIMessageHandler {
     std::unique_ptr<base::DictionaryValue> dictionary;
     dictionary->SetStringWithoutPathExpansion(shill::kGuidProperty, guid);
     dictionary->SetStringWithoutPathExpansion("ShillError", error_name);
-    return_arg_list.Append(dictionary.release());
+    return_arg_list.Append(std::move(dictionary));
     web_ui()->CallJavascriptFunctionUnsafe("NetworkUI.getShillPropertiesResult",
                                            return_arg_list);
   }

@@ -2,16 +2,39 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+cr.define('md_history', function() {
+  var lazyLoadPromise = null;
+  function ensureLazyLoaded() {
+    if (!lazyLoadPromise) {
+      lazyLoadPromise = new Promise(function(resolve, reject) {
+        Polymer.Base.importHref(
+            'chrome://history/lazy_load.html', resolve, reject, true);
+      });
+    }
+    return lazyLoadPromise;
+  }
+
+  return {
+    ensureLazyLoaded: ensureLazyLoaded,
+  };
+});
+
 Polymer({
   is: 'history-app',
 
-  behaviors: [Polymer.IronScrollTargetBehavior],
+  behaviors: [
+    Polymer.IronScrollTargetBehavior,
+    WebUIListenerBehavior,
+  ],
 
   properties: {
+    // Used to display notices for profile sign-in status.
     showSidebarFooter: Boolean,
 
+    hasSyncedResults: Boolean,
+
     // The id of the currently selected page.
-    selectedPage_: {type: String, observer: 'unselectAll'},
+    selectedPage_: {type: String, observer: 'selectedPageChanged_'},
 
     // Whether domain-grouped history is enabled.
     grouped_: {type: Boolean, reflectToAttribute: true},
@@ -49,12 +72,6 @@ Polymer({
       }
     },
 
-    // Route data for the current page.
-    routeData_: Object,
-
-    // The query params for the page.
-    queryParams_: Object,
-
     // True if the window is narrow enough for the page to have a drawer.
     hasDrawer_: Boolean,
 
@@ -72,24 +89,12 @@ Polymer({
     }
   },
 
-  observers: [
-    // routeData_.page <=> selectedPage
-    'routeDataChanged_(routeData_.page)',
-    'selectedPageChanged_(selectedPage_)',
-
-    // queryParams_.q <=> queryState.searchTerm
-    'searchTermChanged_(queryState_.searchTerm)',
-    'searchQueryParamChanged_(queryParams_.q)',
-
-  ],
-
   // TODO(calamity): Replace these event listeners with data bound properties.
   listeners: {
     'cr-menu-tap': 'onMenuTap_',
     'history-checkbox-select': 'checkboxSelected',
     'unselect-all': 'unselectAll',
     'delete-selected': 'deleteSelected',
-    'search-domain': 'searchDomain_',
     'history-close-drawer': 'closeDrawer_',
     'history-view-changed': 'historyViewChanged_',
   },
@@ -101,18 +106,16 @@ Polymer({
     cr.ui.decorate('command', cr.ui.Command);
     document.addEventListener('canExecute', this.onCanExecute_.bind(this));
     document.addEventListener('command', this.onCommand_.bind(this));
+  },
 
-    // Redirect legacy search URLs to URLs compatible with material history.
-    if (window.location.hash) {
-      window.location.href = window.location.href.split('#')[0] + '?' +
-          window.location.hash.substr(1);
-    }
+  /** @override */
+  attached: function() {
+    this.addWebUIListener('sign-in-state-updated',
+                          this.updateSignInState.bind(this));
   },
 
   onFirstRender: function() {
-    // requestAnimationFrame allows measurement immediately before the next
-    // repaint, but after the first page of <iron-list> items has stamped.
-    requestAnimationFrame(function() {
+    setTimeout(function() {
       chrome.send(
           'metricsHandler:recordTime',
           ['History.ResultsRenderedTime', window.performance.now()]);
@@ -120,14 +123,20 @@ Polymer({
 
     // Focus the search field on load. Done here to ensure the history page
     // is rendered before we try to take focus.
-    if (!this.hasDrawer_) {
-      this.focusToolbarSearchField();
+    var searchField =
+        /** @type {HistoryToolbarElement} */ (this.$.toolbar).searchField;
+    if (!searchField.narrow) {
+      searchField.getSearchInput().focus();
     }
+
+    // Lazily load the remainder of the UI.
+    md_history.ensureLazyLoaded();
   },
 
   /** Overridden from IronScrollTargetBehavior */
   _scrollHandler: function() {
-    this.toolbarShadow_ = this.scrollTarget.scrollTop != 0;
+    if (this.scrollTarget)
+      this.toolbarShadow_ = this.scrollTarget.scrollTop != 0;
   },
 
   /** @private */
@@ -178,15 +187,9 @@ Polymer({
   },
 
   /**
-   * Focuses the search bar in the toolbar.
+   * Shows and focuses the search bar in the toolbar.
    */
   focusToolbarSearchField: function() { this.$.toolbar.showSearchField(); },
-
-  /**
-   * Fired when the user presses 'More from this site'.
-   * @param {{detail: {domain: string}}} e
-   */
-  searchDomain_: function(e) { this.$.toolbar.setSearchTerm(e.detail.domain); },
 
   /**
    * @param {Event} e
@@ -199,32 +202,12 @@ Polymer({
         e.canExecute = true;
         break;
       case 'slash-command':
-        e.canExecute = !this.$.toolbar.searchBar.isSearchFocused();
+        e.canExecute = !this.$.toolbar.searchField.isSearchFocused();
         break;
       case 'delete-command':
         e.canExecute = this.$.toolbar.count > 0;
         break;
     }
-  },
-
-  /**
-   * @param {string} searchTerm
-   * @private
-   */
-  searchTermChanged_: function(searchTerm) {
-    this.set('queryParams_.q', searchTerm || null);
-    this.$['history'].queryHistory(false);
-    // TODO(tsergeant): Ignore incremental searches in this metric.
-    if (this.queryState_.searchTerm)
-      md_history.BrowserService.getInstance().recordAction('Search');
-  },
-
-  /**
-   * @param {string} searchQuery
-   * @private
-   */
-  searchQueryParamChanged_: function(searchQuery) {
-    this.$.toolbar.setSearchTerm(searchQuery || '');
   },
 
   /**
@@ -293,17 +276,20 @@ Polymer({
   },
 
   /**
-   * @param {string} page
+   * @param {boolean} hasSyncedResults
+   * @param {string} selectedPage
+   * @return {boolean} Whether the (i) synced results notice should be shown.
    * @private
    */
-  routeDataChanged_: function(page) { this.selectedPage_ = page; },
+  showSyncNotice_: function(hasSyncedResults, selectedPage) {
+    return hasSyncedResults && selectedPage != 'syncedTabs';
+  },
 
   /**
-   * @param {string} selectedPage
    * @private
    */
-  selectedPageChanged_: function(selectedPage) {
-    this.set('routeData_.page', selectedPage);
+  selectedPageChanged_: function() {
+    this.unselectAll();
     this.historyViewChanged_();
   },
 
@@ -312,7 +298,12 @@ Polymer({
     // This allows the synced-device-manager to render so that it can be set as
     // the scroll target.
     requestAnimationFrame(function() {
-      this.scrollTarget = this.$.content.selectedItem.getContentScrollTarget();
+      // <iron-pages> can occasionally end up with no item selected during
+      // tests.
+      if (!this.$.content.selectedItem)
+        return;
+      this.scrollTarget =
+          this.$.content.selectedItem.getContentScrollTarget();
       this._scrollHandler();
     }.bind(this));
     this.recordHistoryPageView_();

@@ -20,6 +20,7 @@
 #include "media/mojo/interfaces/decryptor.mojom.h"
 #include "media/mojo/interfaces/renderer.mojom.h"
 #include "media/mojo/interfaces/service_factory.mojom.h"
+#include "mojo/public/cpp/bindings/associated_binding.h"
 #include "services/shell/public/cpp/service_test.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -43,8 +44,10 @@ class MockRendererClient : public mojom::RendererClient {
   ~MockRendererClient() override {}
 
   // mojom::RendererClient implementation.
-  MOCK_METHOD2(OnTimeUpdate,
-               void(base::TimeDelta time, base::TimeDelta max_time));
+  MOCK_METHOD3(OnTimeUpdate,
+               void(base::TimeDelta time,
+                    base::TimeDelta max_time,
+                    base::TimeTicks capture_time));
   MOCK_METHOD1(OnBufferingStateChange, void(mojom::BufferingState state));
   MOCK_METHOD0(OnEnded, void());
   MOCK_METHOD0(OnError, void());
@@ -70,7 +73,7 @@ class MediaServiceTest : public shell::test::ServiceTest {
   void SetUp() override {
     ServiceTest::SetUp();
 
-    connection_ = connector()->Connect("mojo:media");
+    connection_ = connector()->Connect("service:media");
     connection_->SetConnectionLostClosure(base::Bind(
         &MediaServiceTest::ConnectionClosed, base::Unretained(this)));
 
@@ -114,11 +117,15 @@ class MediaServiceTest : public shell::test::ServiceTest {
     mojo_video_stream_.reset(new MojoDemuxerStreamImpl(
         &video_stream_, GetProxy(&video_stream_proxy)));
 
+    mojom::RendererClientAssociatedPtrInfo client_ptr_info;
+    renderer_client_binding_.Bind(&client_ptr_info,
+                                  renderer_.associated_group());
+
     EXPECT_CALL(*this, OnRendererInitialized(expected_result))
         .Times(Exactly(1))
         .WillOnce(InvokeWithoutArgs(run_loop_.get(), &base::RunLoop::Quit));
-    renderer_->Initialize(renderer_client_binding_.CreateInterfacePtrAndBind(),
-                          nullptr, std::move(video_stream_proxy), base::nullopt,
+    renderer_->Initialize(std::move(client_ptr_info), nullptr,
+                          std::move(video_stream_proxy), base::nullopt,
                           base::Bind(&MediaServiceTest::OnRendererInitialized,
                                      base::Unretained(this)));
   }
@@ -133,7 +140,7 @@ class MediaServiceTest : public shell::test::ServiceTest {
   mojom::RendererPtr renderer_;
 
   StrictMock<MockRendererClient> renderer_client_;
-  mojo::Binding<mojom::RendererClient> renderer_client_binding_;
+  mojo::AssociatedBinding<mojom::RendererClient> renderer_client_binding_;
 
   StrictMock<MockDemuxerStream> video_stream_;
   std::unique_ptr<MojoDemuxerStreamImpl> mojo_video_stream_;

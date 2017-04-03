@@ -16,6 +16,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
+#include "net/base/net_export.h"
 #include "net/proxy/proxy_script_fetcher.h"
 #include "net/url_request/url_request.h"
 
@@ -44,7 +45,7 @@ class NET_EXPORT ProxyScriptFetcherImpl : public ProxyScriptFetcher,
   base::TimeDelta SetTimeoutConstraint(base::TimeDelta timeout);
   size_t SetSizeConstraint(size_t size_bytes);
 
-  void OnResponseCompleted(URLRequest* request);
+  void OnResponseCompleted(URLRequest* request, int net_error);
 
   // ProxyScriptFetcher methods:
   int Fetch(const GURL& url,
@@ -59,7 +60,7 @@ class NET_EXPORT ProxyScriptFetcherImpl : public ProxyScriptFetcher,
   void OnSSLCertificateError(URLRequest* request,
                              const SSLInfo& ssl_info,
                              bool is_hsts_ok) override;
-  void OnResponseStarted(URLRequest* request) override;
+  void OnResponseStarted(URLRequest* request, int net_error) override;
   void OnReadCompleted(URLRequest* request, int num_bytes) override;
 
  private:

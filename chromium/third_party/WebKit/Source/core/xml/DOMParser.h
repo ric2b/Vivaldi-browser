@@ -13,7 +13,8 @@
  *
  *  You should have received a copy of the GNU Lesser General Public
  *  License along with this library; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301 USA
  */
 
 #ifndef DOMParser_h
@@ -27,24 +28,25 @@ namespace blink {
 
 class Document;
 
-class DOMParser final : public GarbageCollected<DOMParser>, public ScriptWrappable {
-    DEFINE_WRAPPERTYPEINFO();
-public:
-    static DOMParser* create(Document& document)
-    {
-        return new DOMParser(document);
-    }
+class DOMParser final : public GarbageCollected<DOMParser>,
+                        public ScriptWrappable {
+  DEFINE_WRAPPERTYPEINFO();
 
-    Document* parseFromString(const String&, const String& type);
+ public:
+  static DOMParser* create(Document& document) {
+    return new DOMParser(document);
+  }
 
-    DECLARE_TRACE();
+  Document* parseFromString(const String&, const String& type);
 
-private:
-    explicit DOMParser(Document&);
+  DECLARE_TRACE();
 
-    WeakMember<Document> m_contextDocument;
+ private:
+  explicit DOMParser(Document&);
+
+  WeakMember<Document> m_contextDocument;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // DOMParser_h
+#endif  // DOMParser_h

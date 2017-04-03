@@ -49,7 +49,8 @@ class GpuProcessTransportFactory
   ~GpuProcessTransportFactory() override;
 
   // ui::ContextFactory implementation.
-  void CreateOutputSurface(base::WeakPtr<ui::Compositor> compositor) override;
+  void CreateCompositorFrameSink(
+      base::WeakPtr<ui::Compositor> compositor) override;
   std::unique_ptr<ui::Reflector> CreateReflector(ui::Compositor* source,
                                                  ui::Layer* target) override;
   void RemoveReflector(ui::Reflector* reflector) override;
@@ -61,7 +62,7 @@ class GpuProcessTransportFactory
   cc::SharedBitmapManager* GetSharedBitmapManager() override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
   cc::TaskGraphRunner* GetTaskGraphRunner() override;
-  uint32_t AllocateSurfaceClientId() override;
+  cc::FrameSinkId AllocateFrameSinkId() override;
   void SetDisplayVisible(ui::Compositor* compositor, bool visible) override;
   void ResizeDisplay(ui::Compositor* compositor,
                      const gfx::Size& size) override;
@@ -105,13 +106,22 @@ class GpuProcessTransportFactory
   scoped_refptr<cc::VulkanInProcessContextProvider>
   SharedVulkanContextProvider();
 
-  typedef std::map<ui::Compositor*, PerCompositorData*> PerCompositorDataMap;
+  std::unique_ptr<cc::SurfaceManager> surface_manager_;
+  uint32_t next_sink_id_ = 1u;
+
+#if defined(OS_WIN)
+  // Used by output surface, stored in PerCompositorData.
+  std::unique_ptr<OutputDeviceBacking> software_backing_;
+#endif
+
+  // Depends on SurfaceManager.
+  typedef std::map<ui::Compositor*, std::unique_ptr<PerCompositorData>>
+      PerCompositorDataMap;
   PerCompositorDataMap per_compositor_data_;
+
   scoped_refptr<ContextProviderCommandBuffer> shared_main_thread_contexts_;
   std::unique_ptr<display_compositor::GLHelper> gl_helper_;
   base::ObserverList<ui::ContextFactoryObserver> observer_list_;
-  std::unique_ptr<cc::SurfaceManager> surface_manager_;
-  uint32_t next_surface_client_id_;
   std::unique_ptr<cc::SingleThreadTaskGraphRunner> task_graph_runner_;
   scoped_refptr<ContextProviderCommandBuffer> shared_worker_context_provider_;
 
@@ -121,9 +131,6 @@ class GpuProcessTransportFactory
 
   gpu::GpuChannelEstablishFactory* gpu_channel_factory_ = nullptr;
 
-#if defined(OS_WIN)
-  std::unique_ptr<OutputDeviceBacking> software_backing_;
-#endif
   base::WeakPtrFactory<GpuProcessTransportFactory> callback_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(GpuProcessTransportFactory);

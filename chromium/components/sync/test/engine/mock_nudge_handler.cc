@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "components/sync/base/model_type.h"
 #include "components/sync/test/engine/mock_nudge_handler.h"
 
 namespace syncer {
@@ -12,15 +11,15 @@ MockNudgeHandler::MockNudgeHandler()
 
 MockNudgeHandler::~MockNudgeHandler() {}
 
-void MockNudgeHandler::NudgeForInitialDownload(syncer::ModelType type) {
+void MockNudgeHandler::NudgeForInitialDownload(ModelType type) {
   num_initial_nudges_++;
 }
 
-void MockNudgeHandler::NudgeForCommit(syncer::ModelType type) {
+void MockNudgeHandler::NudgeForCommit(ModelType type) {
   num_commit_nudges_++;
 }
 
-void MockNudgeHandler::NudgeForRefresh(syncer::ModelType type) {
+void MockNudgeHandler::NudgeForRefresh(ModelType type) {
   num_refresh_nudges_++;
 }
 

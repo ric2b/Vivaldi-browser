@@ -105,7 +105,7 @@ class MostVisitedSites : public history::TopSitesObserver,
   class Observer {
    public:
     virtual void OnMostVisitedURLsAvailable(const NTPTilesVector& tiles) = 0;
-    virtual void OnPopularURLsAvailable(const PopularSitesVector& sites) = 0;
+    virtual void OnPopularURLsAvailable(const PopularSitesVector& sites) {}
 
    protected:
     virtual ~Observer() {}
@@ -113,13 +113,13 @@ class MostVisitedSites : public history::TopSitesObserver,
 
   // Construct a MostVisitedSites instance.
   //
-  // |prefs|, |top_sites|, and |suggestions| are required and may not be null.
-  // |popular_sites| and |supervisor| are optional and if null the associated
+  // |prefs| and |suggestions| are required and may not be null. |top_sites|,
+  // |popular_sites|, and |supervisor| are optional and if null the associated
   // features will be disabled.
   MostVisitedSites(PrefService* prefs,
                    scoped_refptr<history::TopSites> top_sites,
                    suggestions::SuggestionsService* suggestions,
-                   PopularSites* popular_sites,
+                   std::unique_ptr<PopularSites> popular_sites,
                    MostVisitedSitesSupervisor* supervisor);
 
   ~MostVisitedSites() override;
@@ -129,9 +129,11 @@ class MostVisitedSites : public history::TopSitesObserver,
   void SetMostVisitedURLsObserver(Observer* observer, int num_sites);
 
   void AddOrRemoveBlacklistedUrl(const GURL& url, bool add_url);
-  void RecordTileTypeMetrics(const std::vector<int>& tile_types,
-                             const std::vector<int>& sources);
-  void RecordOpenedMostVisitedItem(int index, int tile_type, int source);
+  void RecordTileTypeMetrics(const std::vector<MostVisitedTileType>& tile_types,
+                             const std::vector<NTPTileSource>& sources);
+  void RecordOpenedMostVisitedItem(int index,
+                                   MostVisitedTileType tile_type,
+                                   NTPTileSource source);
 
   // MostVisitedSitesSupervisor::Observer implementation.
   void OnBlockedSitesChanged() override;
@@ -195,7 +197,7 @@ class MostVisitedSites : public history::TopSitesObserver,
   PrefService* prefs_;
   scoped_refptr<history::TopSites> top_sites_;
   suggestions::SuggestionsService* suggestions_service_;
-  PopularSites* const popular_sites_;
+  std::unique_ptr<PopularSites> const popular_sites_;
   MostVisitedSitesSupervisor* supervisor_;
 
   Observer* observer_;

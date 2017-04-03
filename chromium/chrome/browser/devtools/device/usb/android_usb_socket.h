@@ -7,12 +7,15 @@
 
 #include <stdint.h>
 
+#include <string>
+
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/non_thread_safe.h"
 #include "chrome/browser/devtools/device/usb/android_usb_device.h"
 #include "net/base/ip_endpoint.h"
+#include "net/log/net_log_with_source.h"
 #include "net/socket/stream_socket.h"
 
 namespace base {
@@ -47,7 +50,7 @@ class AndroidUsbSocket : public net::StreamSocket,
   bool IsConnectedAndIdle() const override;
   int GetPeerAddress(net::IPEndPoint* address) const override;
   int GetLocalAddress(net::IPEndPoint* address) const override;
-  const net::BoundNetLog& NetLog() const override;
+  const net::NetLogWithSource& NetLog() const override;
   void SetSubresourceSpeculation() override;
   void SetOmniboxSpeculation() override;
   bool WasEverUsed() const override;
@@ -68,7 +71,7 @@ class AndroidUsbSocket : public net::StreamSocket,
   std::string command_;
   uint32_t local_id_;
   uint32_t remote_id_;
-  net::BoundNetLog net_log_;
+  net::NetLogWithSource net_log_;
   bool is_connected_;
   std::string read_buffer_;
   scoped_refptr<net::IOBuffer> read_io_buffer_;

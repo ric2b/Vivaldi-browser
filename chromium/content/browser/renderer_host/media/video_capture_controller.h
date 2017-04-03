@@ -52,12 +52,15 @@
 #include "content/common/content_export.h"
 #include "content/common/media/video_capture.h"
 #include "media/base/video_capture_types.h"
-#include "media/capture/video/video_capture_device.h"
+#include "media/capture/video/video_frame_receiver.h"
+
+namespace media {
+class VideoCaptureBufferPool;
+}
 
 namespace content {
-class VideoCaptureBufferPool;
 
-class CONTENT_EXPORT VideoCaptureController {
+class CONTENT_EXPORT VideoCaptureController : public media::VideoFrameReceiver {
  public:
   // |max_buffers| is the maximum number of video frame buffers in-flight at any
   // one time.  This value should be based on the logical capacity of the
@@ -65,7 +68,7 @@ class CONTENT_EXPORT VideoCaptureController {
   // capture requires more buffers than webcam capture because the pipeline is
   // longer (it includes read-backs pending in the GPU pipeline).
   explicit VideoCaptureController(int max_buffers);
-  virtual ~VideoCaptureController();
+  ~VideoCaptureController() override;
 
   base::WeakPtr<VideoCaptureController> GetWeakPtrForIOThread();
 
@@ -125,17 +128,17 @@ class CONTENT_EXPORT VideoCaptureController {
 
   bool has_received_frames() const { return has_received_frames_; }
 
-  // Worker functions on IO thread. Called by the VideoCaptureDeviceClient.
-  virtual void DoIncomingCapturedVideoFrameOnIOThread(
+  // Implementation of media::VideoFrameReceiver interface:
+  void OnIncomingCapturedVideoFrame(
       std::unique_ptr<media::VideoCaptureDevice::Client::Buffer> buffer,
-      const scoped_refptr<media::VideoFrame>& frame);
-  virtual void DoErrorOnIOThread();
-  virtual void DoLogOnIOThread(const std::string& message);
-  virtual void DoBufferDestroyedOnIOThread(int buffer_id_to_drop);
+      const scoped_refptr<media::VideoFrame>& frame) override;
+  void OnError() override;
+  void OnLog(const std::string& message) override;
+  void OnBufferDestroyed(int buffer_id_to_drop) override;
 
  private:
   struct ControllerClient;
-  typedef std::list<ControllerClient*> ControllerClients;
+  typedef std::list<std::unique_ptr<ControllerClient>> ControllerClients;
 
   // Notify renderer that a new buffer has been created.
   void DoNewBufferOnIOThread(ControllerClient* client,
@@ -152,7 +155,7 @@ class CONTENT_EXPORT VideoCaptureController {
                                const ControllerClients& clients);
 
   // The pool of shared-memory buffers used for capturing.
-  const scoped_refptr<VideoCaptureBufferPool> buffer_pool_;
+  const scoped_refptr<media::VideoCaptureBufferPool> buffer_pool_;
 
   // All clients served by this controller.
   ControllerClients controller_clients_;

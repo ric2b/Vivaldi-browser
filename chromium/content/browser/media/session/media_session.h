@@ -10,6 +10,8 @@
 #include "base/callback_list.h"
 #include "base/id_map.h"
 #include "base/macros.h"
+#include "base/optional.h"
+#include "content/browser/media/session/audio_focus_manager.h"
 #include "content/browser/media/session/media_session_uma_helper.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -17,6 +19,10 @@
 #include "content/public/common/media_metadata.h"
 
 class MediaSessionBrowserTest;
+
+namespace media {
+enum class MediaContentType;
+}  // namespace media
 
 namespace content {
 
@@ -43,11 +49,6 @@ class MediaSessionVisibilityBrowserTest;
 class MediaSession : public WebContentsObserver,
                      protected WebContentsUserData<MediaSession> {
  public:
-  enum class Type {
-    Content,
-    Transient
-  };
-
   enum class SuspendType {
     // Suspended by the system because a transient sound needs to be played.
     SYSTEM,
@@ -57,20 +58,28 @@ class MediaSession : public WebContentsObserver,
     CONTENT,
   };
 
+  // Only visible to tests.
+  enum class State {
+    ACTIVE,
+    SUSPENDED,
+    INACTIVE
+  };
+
   // Returns the MediaSession associated to this WebContents. Creates one if
   // none is currently available.
   CONTENT_EXPORT static MediaSession* Get(WebContents* web_contents);
 
   ~MediaSession() override;
 
-  void SetMetadata(const MediaMetadata& metadata);
-  const MediaMetadata& metadata() const { return metadata_; }
+  void SetMetadata(const base::Optional<MediaMetadata>& metadata);
+  const base::Optional<MediaMetadata>& metadata() const { return metadata_; }
 
   // Adds the given player to the current media session. Returns whether the
   // player was successfully added. If it returns false, AddPlayer() should be
   // called again later.
   CONTENT_EXPORT bool AddPlayer(MediaSessionObserver* observer,
-                                int player_id, Type type);
+                                int player_id,
+                                media::MediaContentType media_content_type);
 
   // Removes the given player from the current media session. Abandons audio
   // focus if that was the last player in the session.
@@ -92,18 +101,23 @@ class MediaSession : public WebContentsObserver,
 
   // Resume the media session.
   // |type| represents the origin of the request.
-  CONTENT_EXPORT void Resume(SuspendType type);
+  CONTENT_EXPORT void Resume(SuspendType suspend_type);
 
   // Suspend the media session.
   // |type| represents the origin of the request.
-  CONTENT_EXPORT void Suspend(SuspendType type);
+  CONTENT_EXPORT void Suspend(SuspendType suspend_type);
 
   // Stop the media session.
   // |type| represents the origin of the request.
-  CONTENT_EXPORT void Stop(SuspendType type);
+  CONTENT_EXPORT void Stop(SuspendType suspend_type);
 
-  // Change the volume multiplier of the session to |volume_multiplier|.
-  CONTENT_EXPORT void SetVolumeMultiplier(double volume_multiplier);
+  // Let the media session start ducking such that the volume multiplier is
+  // reduced.
+  CONTENT_EXPORT void StartDucking();
+
+  // Let the media session stop ducking such that the volume multiplier is
+  // recovered.
+  CONTENT_EXPORT void StopDucking();
 
   // Returns if the session can be controlled by Resume() and Suspend calls
   // above.
@@ -117,10 +131,22 @@ class MediaSession : public WebContentsObserver,
   // instead of checking if the state is SUSPENDED. In order to not have to
   // change all the callers and make the current refactoring ridiculously huge,
   // this method is introduced temporarily and will be removed later.
-  bool IsReallySuspended() const;
+  CONTENT_EXPORT bool IsReallySuspended() const;
 
   // Returns if the session is currently suspended or inactive.
   CONTENT_EXPORT bool IsSuspended() const;
+
+  // Returns the audio focus type. The type is updated everytime after the
+  // session requests audio focus.
+  CONTENT_EXPORT AudioFocusManager::AudioFocusType audio_focus_type() const {
+    return audio_focus_type_;
+  }
+
+  // Returns whether the session has Pepper instances.
+  bool HasPepper() const;
+
+  // WebContentsObserver implementation
+  void WebContentsDestroyed() override;
 
  private:
   friend class content::WebContentsUserData<MediaSession>;
@@ -132,15 +158,8 @@ class MediaSession : public WebContentsObserver,
   CONTENT_EXPORT void SetDelegateForTests(
       std::unique_ptr<MediaSessionDelegate> delegate);
   CONTENT_EXPORT bool IsActiveForTest() const;
-  CONTENT_EXPORT Type audio_focus_type_for_test() const;
   CONTENT_EXPORT void RemoveAllPlayersForTest();
   CONTENT_EXPORT MediaSessionUmaHelper* uma_helper_for_test();
-
-  enum class State {
-    ACTIVE,
-    SUSPENDED,
-    INACTIVE
-  };
 
   // Representation of a player for the MediaSession.
   struct PlayerIdentifier {
@@ -165,16 +184,18 @@ class MediaSession : public WebContentsObserver,
 
   void Initialize();
 
-  CONTENT_EXPORT void OnSuspendInternal(SuspendType type, State new_state);
-  CONTENT_EXPORT void OnResumeInternal(SuspendType type);
+  CONTENT_EXPORT void OnSuspendInternal(SuspendType suspend_type,
+                                        State new_state);
+  CONTENT_EXPORT void OnResumeInternal(SuspendType suspend_type);
 
   // Requests audio focus to the MediaSessionDelegate.
   // Returns whether the request was granted.
-  bool RequestSystemAudioFocus(Type type);
+  CONTENT_EXPORT bool RequestSystemAudioFocus(
+      AudioFocusManager::AudioFocusType audio_focus_type);
 
   // To be called after a call to AbandonAudioFocus() in order request the
   // delegate to abandon the audio focus.
-  void AbandonSystemAudioFocusIfNeeded();
+  CONTENT_EXPORT void AbandonSystemAudioFocusIfNeeded();
 
   // Notifies WebContents about the state change of the media session.
   void UpdateWebContents();
@@ -183,25 +204,37 @@ class MediaSession : public WebContentsObserver,
   // It sets audio_focus_state_ and notifies observers about the state change.
   void SetAudioFocusState(State audio_focus_state);
 
+  // Update the volume multiplier when ducking state changes.
+  void UpdateVolumeMultiplier();
+
+  // Get the volume multiplier, which depends on whether the media session is
+  // ducking.
+  double GetVolumeMultiplier() const;
+
   // Registers a MediaSession state change callback.
   CONTENT_EXPORT std::unique_ptr<base::CallbackList<void(State)>::Subscription>
   RegisterMediaSessionStateChangedCallbackForTest(
       const StateChangedCallback& cb);
 
+  CONTENT_EXPORT bool AddPepperPlayer(MediaSessionObserver* observer,
+                                      int player_id);
+
   std::unique_ptr<MediaSessionDelegate> delegate_;
   PlayersMap players_;
+  PlayersMap pepper_players_;
 
   State audio_focus_state_;
   SuspendType suspend_type_;
-  Type audio_focus_type_;
+  AudioFocusManager::AudioFocusType audio_focus_type_;
 
   MediaSessionUmaHelper uma_helper_;
 
-  // The volume multiplier of this session. All players in this session should
-  // multiply their volume with this multiplier to get the effective volume.
-  double volume_multiplier_;
+  // The ducking state of this media session. The initial value is |false|, and
+  // is set to |true| after StartDucking(), and will be set to |false| after
+  // StopDucking().
+  bool is_ducking_;
 
-  MediaMetadata metadata_;
+  base::Optional<MediaMetadata> metadata_;
   base::CallbackList<void(State)> media_session_state_listeners_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaSession);

@@ -9,14 +9,23 @@
 #include "content/browser/loader/resource_handler.h"
 #include "content/browser/loader/stream_writer.h"
 
-namespace content {
+namespace net {
+class SSLInfo;
+}
 
+namespace content {
 class NavigationURLLoaderImplCore;
 class ResourceDispatcherHostDelegate;
+struct SSLStatus;
 
 // PlzNavigate: The leaf ResourceHandler used with NavigationURLLoaderImplCore.
 class NavigationResourceHandler : public ResourceHandler {
  public:
+  static void GetSSLStatusForRequest(const GURL& url,
+                                     const net::SSLInfo& ssl_info,
+                                     int child_id,
+                                     SSLStatus* ssl_status);
+
   NavigationResourceHandler(
       net::URLRequest* request,
       NavigationURLLoaderImplCore* core,
@@ -44,7 +53,6 @@ class NavigationResourceHandler : public ResourceHandler {
                   int min_size) override;
   bool OnReadCompleted(int bytes_read, bool* defer) override;
   void OnResponseCompleted(const net::URLRequestStatus& status,
-                           const std::string& security_info,
                            bool* defer) override;
   void OnDataDownloaded(int bytes_downloaded) override;
 

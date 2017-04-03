@@ -14,13 +14,13 @@
 #include "media/base/mock_filters.h"
 #include "media/base/test_helpers.h"
 #include "media/blink/buffered_data_source_host_impl.h"
-#include "media/blink/mock_webframeclient.h"
 #include "media/blink/mock_weburlloader.h"
 #include "media/blink/multibuffer_data_source.h"
 #include "media/blink/multibuffer_reader.h"
 #include "media/blink/resource_multibuffer_data_provider.h"
 #include "media/blink/test_response_generator.h"
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
+#include "third_party/WebKit/public/web/WebFrameClient.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebView.h"
 
@@ -225,16 +225,15 @@ class MultibufferDataSourceTest : public testing::Test {
  public:
   MultibufferDataSourceTest()
       : view_(WebView::create(nullptr, blink::WebPageVisibilityStateVisible)),
-        frame_(
-            WebLocalFrame::create(blink::WebTreeScopeType::Document, &client_)),
-        preload_(MultibufferDataSource::AUTO),
-        url_index_(make_linked_ptr(new TestUrlIndex(frame_))) {
-    view_->setMainFrame(frame_);
+        preload_(MultibufferDataSource::AUTO) {
+    WebLocalFrame* frame =
+        WebLocalFrame::create(blink::WebTreeScopeType::Document, &client_);
+    view_->setMainFrame(frame);
+    url_index_ = make_linked_ptr(new TestUrlIndex(frame));
   }
 
   virtual ~MultibufferDataSourceTest() {
     view_->close();
-    frame_->close();
   }
 
   MOCK_METHOD1(OnInitialize, void(bool));
@@ -470,14 +469,14 @@ class MultibufferDataSourceTest : public testing::Test {
   int data_source_bitrate() { return data_source_->bitrate_; }
   double data_source_playback_rate() { return data_source_->playback_rate_; }
   bool is_local_source() { return data_source_->assume_fully_buffered(); }
+  scoped_refptr<UrlData> url_data() { return data_source_->url_data_; }
   void set_might_be_reused_from_cache_in_future(bool value) {
-    data_source_->url_data_->set_cacheable(value);
+    url_data()->set_cacheable(value);
   }
 
  protected:
-  MockWebFrameClient client_;
+  blink::WebFrameClient client_;
   WebView* view_;
-  WebLocalFrame* frame_;
   MultibufferDataSource::Preload preload_;
   base::MessageLoop message_loop_;
   linked_ptr<TestUrlIndex> url_index_;
@@ -616,11 +615,11 @@ TEST_F(MultibufferDataSourceTest, Http_AbortWhileReading) {
   ReadAt(kFileSize);
 
   // Abort!!!
-  EXPECT_CALL(*this, ReadCallback(media::DataSource::kReadError));
+  EXPECT_CALL(*this, ReadCallback(media::DataSource::kAborted));
   data_source_->Abort();
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_FALSE(loading());
+  EXPECT_TRUE(loading());
   Stop();
 }
 
@@ -631,11 +630,11 @@ TEST_F(MultibufferDataSourceTest, File_AbortWhileReading) {
   ReadAt(kFileSize);
 
   // Abort!!!
-  EXPECT_CALL(*this, ReadCallback(media::DataSource::kReadError));
+  EXPECT_CALL(*this, ReadCallback(media::DataSource::kAborted));
   data_source_->Abort();
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_FALSE(loading());
+  EXPECT_TRUE(loading());
   Stop();
 }
 
@@ -1388,7 +1387,7 @@ TEST_F(MultibufferDataSourceTest, Http_RetryThenRedirect) {
   blink::WebURLRequest request((GURL(kHttpDifferentPathUrl)));
   blink::WebURLResponse response((GURL(kHttpUrl)));
   response.setHTTPStatusCode(307);
-  data_provider()->willFollowRedirect(url_loader(), request, response, 0);
+  data_provider()->willFollowRedirect(url_loader(), request, response);
   Respond(response_generator_->Generate206(kDataSize));
   ReceiveData(kDataSize);
   EXPECT_CALL(host_, AddBufferedByteRange(0, kDataSize * 3));
@@ -1404,7 +1403,7 @@ TEST_F(MultibufferDataSourceTest, Http_NotStreamingAfterRedirect) {
   blink::WebURLRequest request((GURL(kHttpDifferentPathUrl)));
   blink::WebURLResponse response((GURL(kHttpUrl)));
   response.setHTTPStatusCode(307);
-  data_provider()->willFollowRedirect(url_loader(), request, response, 0);
+  data_provider()->willFollowRedirect(url_loader(), request, response);
 
   EXPECT_CALL(host_, SetTotalBytes(response_generator_->content_length()));
   Respond(response_generator_->Generate206(0));
@@ -1426,7 +1425,7 @@ TEST_F(MultibufferDataSourceTest, Http_RangeNotSatisfiableAfterRedirect) {
   blink::WebURLRequest request((GURL(kHttpDifferentPathUrl)));
   blink::WebURLResponse response((GURL(kHttpUrl)));
   response.setHTTPStatusCode(307);
-  data_provider()->willFollowRedirect(url_loader(), request, response, 0);
+  data_provider()->willFollowRedirect(url_loader(), request, response);
 
   EXPECT_CALL(host_, AddBufferedByteRange(0, kDataSize));
   Respond(response_generator_->GenerateResponse(416));
@@ -1510,6 +1509,61 @@ TEST_F(MultibufferDataSourceTest, DidPassCORSAccessTest) {
   base::RunLoop().RunUntilIdle();
 
   EXPECT_TRUE(data_source_->DidPassCORSAccessCheck());
+}
+
+TEST_F(MultibufferDataSourceTest, EtagTest) {
+  Initialize(kHttpUrl, true);
+
+  EXPECT_CALL(host_, SetTotalBytes(response_generator_->content_length()));
+  WebURLResponse response = response_generator_->Generate206(0);
+  const std::string etag("\"arglebargle glop-glyf?\"");
+  response.setHTTPHeaderField(WebString::fromUTF8("Etag"),
+                              WebString::fromUTF8(etag));
+  Respond(response);
+  EXPECT_CALL(host_, AddBufferedByteRange(0, kDataSize));
+  ReceiveData(kDataSize);
+
+  EXPECT_EQ(url_data()->etag(), etag);
+}
+
+// Provoke an edge case where the loading state may not end up transitioning
+// back to "idle" when we're done loading.
+TEST_F(MultibufferDataSourceTest, Http_CheckLoadingTransition) {
+  GURL gurl(kHttpUrl);
+  data_source_.reset(new MockMultibufferDataSource(
+      gurl, UrlData::CORS_UNSPECIFIED, message_loop_.task_runner(), url_index_,
+      view_->mainFrame()->toWebLocalFrame(), &host_));
+  data_source_->SetPreload(preload_);
+
+  response_generator_.reset(new TestResponseGenerator(gurl, kDataSize * 1));
+  EXPECT_CALL(*this, OnInitialize(true));
+  data_source_->Initialize(base::Bind(&MultibufferDataSourceTest::OnInitialize,
+                                      base::Unretained(this)));
+  base::RunLoop().RunUntilIdle();
+
+  // Not really loading until after OnInitialize is called.
+  EXPECT_EQ(data_source_->downloading(), false);
+
+  EXPECT_CALL(host_, SetTotalBytes(response_generator_->content_length()));
+  Respond(response_generator_->Generate206(0));
+  EXPECT_CALL(host_, AddBufferedByteRange(0, kDataSize));
+  ReceiveData(kDataSize);
+
+  EXPECT_EQ(data_source_->downloading(), true);
+  EXPECT_CALL(host_, AddBufferedByteRange(kDataSize, kDataSize + 1));
+  ReceiveDataLow(1);
+  EXPECT_CALL(host_, AddBufferedByteRange(0, kDataSize * 3));
+  data_provider()->didFinishLoading(url_loader(), 0, -1);
+
+  EXPECT_CALL(*this, ReadCallback(1));
+  data_source_->Read(kDataSize, 2, buffer_,
+                     base::Bind(&MultibufferDataSourceTest::ReadCallback,
+                                base::Unretained(this)));
+  base::RunLoop().RunUntilIdle();
+
+  // Make sure we're not downloading anymore.
+  EXPECT_EQ(data_source_->downloading(), false);
+  Stop();
 }
 
 }  // namespace media

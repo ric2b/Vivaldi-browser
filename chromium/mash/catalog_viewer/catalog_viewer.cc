@@ -72,7 +72,6 @@ class CatalogViewerContents : public views::WidgetDelegateView,
 
 
   // Overridden from views::WidgetDelegate:
-  views::View* GetContentsView() override { return this; }
   base::string16 GetWindowTitle() const override {
     // TODO(beng): use resources.
     return base::ASCIIToUTF16("Applications");
@@ -189,7 +188,7 @@ void CatalogViewer::Launch(uint32_t what, mojom::LaunchMode how) {
     return;
   }
   catalog::mojom::CatalogPtr catalog;
-  connector()->ConnectToInterface("mojo:catalog", &catalog);
+  connector()->ConnectToInterface("service:catalog", &catalog);
 
   views::Widget* window = views::Widget::CreateWindowWithContextAndBounds(
       new CatalogViewerContents(this, std::move(catalog)), nullptr,

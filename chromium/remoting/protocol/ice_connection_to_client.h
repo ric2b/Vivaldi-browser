@@ -38,7 +38,8 @@ class IceConnectionToClient : public ConnectionToClient,
   IceConnectionToClient(
       std::unique_ptr<Session> session,
       scoped_refptr<TransportContext> transport_context,
-      scoped_refptr<base::SingleThreadTaskRunner> video_encode_task_runner);
+      scoped_refptr<base::SingleThreadTaskRunner> video_encode_task_runner,
+      scoped_refptr<base::SingleThreadTaskRunner> audio_task_runner);
   ~IceConnectionToClient() override;
 
   // ConnectionToClient interface.
@@ -46,10 +47,10 @@ class IceConnectionToClient : public ConnectionToClient,
       ConnectionToClient::EventHandler* event_handler) override;
   Session* session() override;
   void Disconnect(ErrorCode error) override;
-  void OnInputEventReceived(int64_t timestamp) override;
   std::unique_ptr<VideoStream> StartVideoStream(
       std::unique_ptr<webrtc::DesktopCapturer> desktop_capturer) override;
-  AudioStub* audio_stub() override;
+  std::unique_ptr<AudioStream> StartAudioStream(
+      std::unique_ptr<AudioSource> audio_source) override;
   ClientStub* client_stub() override;
   void set_clipboard_stub(ClipboardStub* clipboard_stub) override;
   void set_host_stub(HostStub* host_stub) override;
@@ -68,6 +69,9 @@ class IceConnectionToClient : public ConnectionToClient,
   void OnChannelInitialized(ChannelDispatcherBase* channel_dispatcher) override;
   void OnChannelClosed(ChannelDispatcherBase* channel_dispatcher) override;
 
+  // Callback passed to |event_dispatcher_|
+  void OnInputEventReceived(int64_t timestamp);
+
   void NotifyIfChannelsReady();
 
   void CloseChannels();
@@ -80,6 +84,7 @@ class IceConnectionToClient : public ConnectionToClient,
   std::unique_ptr<Session> session_;
 
   scoped_refptr<base::SingleThreadTaskRunner> video_encode_task_runner_;
+  scoped_refptr<base::SingleThreadTaskRunner> audio_task_runner_;
 
   IceTransport transport_;
 

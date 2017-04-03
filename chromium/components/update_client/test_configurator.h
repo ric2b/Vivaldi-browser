@@ -14,14 +14,19 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "components/update_client/configurator.h"
-#include "net/url_request/url_request_test_util.h"
+#include "url/gurl.h"
 
-class GURL;
 class PrefService;
 
 namespace base {
 class SequencedTaskRunner;
+class SingleThreadTaskRunner;
 }  // namespace base
+
+namespace net {
+class TestURLRequestContextGetter;
+class URLRequestContextGetter;
+}  // namespace net
 
 namespace update_client {
 
@@ -64,6 +69,7 @@ class TestConfigurator : public Configurator {
   int UpdateDelay() const override;
   std::vector<GURL> UpdateUrl() const override;
   std::vector<GURL> PingUrl() const override;
+  std::string GetProdId() const override;
   base::Version GetBrowserVersion() const override;
   std::string GetChannel() const override;
   std::string GetBrand() const override;
@@ -80,6 +86,7 @@ class TestConfigurator : public Configurator {
   scoped_refptr<base::SequencedTaskRunner> GetSequencedTaskRunner()
       const override;
   PrefService* GetPrefService() const override;
+  bool IsPerUserInstall() const override;
 
   void SetBrand(const std::string& brand);
   void SetOnDemandTime(int seconds);

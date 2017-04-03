@@ -41,7 +41,7 @@ void TaskSchedulerImpl::PostTaskWithTraits(
     const Closure& task) {
   // Post |task| as part of a one-off single-task Sequence.
   GetWorkerPoolForTraits(traits)->PostTaskWithSequence(
-      WrapUnique(new Task(from_here, task, traits, TimeDelta())),
+      MakeUnique<Task>(from_here, task, traits, TimeDelta()),
       make_scoped_refptr(new Sequence), nullptr);
 }
 
@@ -55,6 +55,10 @@ scoped_refptr<TaskRunner> TaskSchedulerImpl::CreateTaskRunnerWithTraits(
 void TaskSchedulerImpl::Shutdown() {
   // TODO(fdoray): Increase the priority of BACKGROUND tasks blocking shutdown.
   task_tracker_.Shutdown();
+}
+
+void TaskSchedulerImpl::FlushForTesting() {
+  task_tracker_.Flush();
 }
 
 void TaskSchedulerImpl::JoinForTesting() {

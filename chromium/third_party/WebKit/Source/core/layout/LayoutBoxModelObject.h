@@ -40,12 +40,12 @@ class PaintLayer;
 class PaintLayerScrollableArea;
 
 enum PaintLayerType {
-    NoPaintLayer,
-    NormalPaintLayer,
-    // A forced or overflow clip layer is required for bookkeeping purposes,
-    // but does not force a layer to be self painting.
-    OverflowClipPaintLayer,
-    ForcedPaintLayer
+  NoPaintLayer,
+  NormalPaintLayer,
+  // A forced or overflow clip layer is required for bookkeeping purposes,
+  // but does not force a layer to be self painting.
+  OverflowClipPaintLayer,
+  ForcedPaintLayer
 };
 
 // Modes for some of the line-related functions.
@@ -55,12 +55,13 @@ enum LineDirectionMode { HorizontalLine, VerticalLine };
 class InlineFlowBox;
 
 struct LayoutBoxModelObjectRareData {
-    WTF_MAKE_NONCOPYABLE(LayoutBoxModelObjectRareData);
-    USING_FAST_MALLOC(LayoutBoxModelObjectRareData);
-public:
-    LayoutBoxModelObjectRareData() {}
+  WTF_MAKE_NONCOPYABLE(LayoutBoxModelObjectRareData);
+  USING_FAST_MALLOC(LayoutBoxModelObjectRareData);
 
-    StickyPositionScrollingConstraints m_stickyPositionScrollingConstraints;
+ public:
+  LayoutBoxModelObjectRareData() {}
+
+  StickyPositionScrollingConstraints m_stickyPositionScrollingConstraints;
 };
 
 // This class is the base class for all CSS objects.
@@ -127,259 +128,388 @@ public:
 // - physical coordinates with flipped block-flow direction: those are physical
 //   coordinates but we flipped the block direction. See
 //   LayoutBox::noOverflowRect.
-//   TODO(jchaffraix): I don't fully understand why we need this coordinate
-//   system someone should fill in those details.
+//
+// For more, see Source/core/layout/README.md ### Coordinate Spaces.
 class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
-public:
-    LayoutBoxModelObject(ContainerNode*);
-    ~LayoutBoxModelObject() override;
+ public:
+  LayoutBoxModelObject(ContainerNode*);
+  ~LayoutBoxModelObject() override;
 
-    // This is the only way layers should ever be destroyed.
-    void destroyLayer();
+  // This is the only way layers should ever be destroyed.
+  void destroyLayer();
 
-    LayoutSize relativePositionOffset() const;
-    LayoutSize relativePositionLogicalOffset() const { return style()->isHorizontalWritingMode() ? relativePositionOffset() : relativePositionOffset().transposedSize(); }
+  LayoutSize relativePositionOffset() const;
+  LayoutSize relativePositionLogicalOffset() const {
+    return style()->isHorizontalWritingMode()
+               ? relativePositionOffset()
+               : relativePositionOffset().transposedSize();
+  }
 
-    // Populates StickyPositionConstraints, setting the sticky box rect, containing block rect and updating
-    // the constraint offsets according to the available space.
-    FloatRect computeStickyConstrainingRect() const;
-    void updateStickyPositionConstraints() const;
-    LayoutSize stickyPositionOffset() const;
+  // Populates StickyPositionConstraints, setting the sticky box rect, containing block rect and updating
+  // the constraint offsets according to the available space.
+  FloatRect computeStickyConstrainingRect() const;
+  void updateStickyPositionConstraints() const;
+  LayoutSize stickyPositionOffset() const;
 
-    LayoutSize offsetForInFlowPosition() const;
+  LayoutSize offsetForInFlowPosition() const;
 
-    // IE extensions. Used to calculate offsetWidth/Height.  Overridden by inlines (LayoutFlow)
-    // to return the remaining width on a given line (and the height of a single line).
-    virtual LayoutUnit offsetLeft(const Element*) const;
-    virtual LayoutUnit offsetTop(const Element*) const;
-    virtual LayoutUnit offsetWidth() const = 0;
-    virtual LayoutUnit offsetHeight() const = 0;
+  // IE extensions. Used to calculate offsetWidth/Height.  Overridden by inlines (LayoutFlow)
+  // to return the remaining width on a given line (and the height of a single line).
+  virtual LayoutUnit offsetLeft(const Element*) const;
+  virtual LayoutUnit offsetTop(const Element*) const;
+  virtual LayoutUnit offsetWidth() const = 0;
+  virtual LayoutUnit offsetHeight() const = 0;
 
-    int pixelSnappedOffsetLeft(const Element* parent) const { return roundToInt(offsetLeft(parent)); }
-    int pixelSnappedOffsetTop(const Element* parent) const { return roundToInt(offsetTop(parent)); }
-    virtual int pixelSnappedOffsetWidth(const Element*) const;
-    virtual int pixelSnappedOffsetHeight(const Element*) const;
+  int pixelSnappedOffsetLeft(const Element* parent) const {
+    return roundToInt(offsetLeft(parent));
+  }
+  int pixelSnappedOffsetTop(const Element* parent) const {
+    return roundToInt(offsetTop(parent));
+  }
+  virtual int pixelSnappedOffsetWidth(const Element*) const;
+  virtual int pixelSnappedOffsetHeight(const Element*) const;
 
-    bool hasSelfPaintingLayer() const;
-    PaintLayer* layer() const { return m_layer.get(); }
-    PaintLayerScrollableArea* getScrollableArea() const;
+  bool hasSelfPaintingLayer() const;
+  PaintLayer* layer() const { return m_layer.get(); }
+  PaintLayerScrollableArea* getScrollableArea() const;
 
-    virtual void updateFromStyle();
+  virtual void updateFromStyle();
 
-    // The type of PaintLayer to instantiate.
-    // Any value returned from this function other than NoPaintLayer
-    // will populate |m_layer|.
-    virtual PaintLayerType layerTypeRequired() const = 0;
+  // The type of PaintLayer to instantiate.
+  // Any value returned from this function other than NoPaintLayer
+  // will populate |m_layer|.
+  virtual PaintLayerType layerTypeRequired() const = 0;
 
-    // This will work on inlines to return the bounding box of all of the lines' border boxes.
-    virtual IntRect borderBoundingBox() const = 0;
+  // This will work on inlines to return the bounding box of all of the lines' border boxes.
+  virtual IntRect borderBoundingBox() const = 0;
 
-    virtual LayoutRect visualOverflowRect() const = 0;
+  virtual LayoutRect visualOverflowRect() const = 0;
 
-    // Checks if this box, or any of it's descendants, or any of it's continuations,
-    // will take up space in the layout of the page.
-    bool hasNonEmptyLayoutSize() const;
-    bool usesCompositedScrolling() const;
+  // Checks if this box, or any of it's descendants, or any of it's continuations,
+  // will take up space in the layout of the page.
+  bool hasNonEmptyLayoutSize() const;
+  bool usesCompositedScrolling() const;
 
-    // These return the CSS computed padding values.
-    LayoutUnit computedCSSPaddingTop() const { return computedCSSPadding(style()->paddingTop()); }
-    LayoutUnit computedCSSPaddingBottom() const { return computedCSSPadding(style()->paddingBottom()); }
-    LayoutUnit computedCSSPaddingLeft() const { return computedCSSPadding(style()->paddingLeft()); }
-    LayoutUnit computedCSSPaddingRight() const { return computedCSSPadding(style()->paddingRight()); }
-    LayoutUnit computedCSSPaddingBefore() const { return computedCSSPadding(style()->paddingBefore()); }
-    LayoutUnit computedCSSPaddingAfter() const { return computedCSSPadding(style()->paddingAfter()); }
-    LayoutUnit computedCSSPaddingStart() const { return computedCSSPadding(style()->paddingStart()); }
-    LayoutUnit computedCSSPaddingEnd() const { return computedCSSPadding(style()->paddingEnd()); }
-    LayoutUnit computedCSSPaddingOver() const { return computedCSSPadding(style()->paddingOver()); }
-    LayoutUnit computedCSSPaddingUnder() const { return computedCSSPadding(style()->paddingUnder()); }
+  // Checks if all of the background's layers can be painted as locally
+  // attached.
+  bool hasLocalEquivalentBackground() const;
 
-    // These functions are used during layout.
-    // - Table cells override them to include the intrinsic padding (see
-    // explanations in LayoutTableCell).
-    // - Table override them to exclude padding with collapsing borders.
-    virtual LayoutUnit paddingTop() const { return computedCSSPaddingTop(); }
-    virtual LayoutUnit paddingBottom() const { return computedCSSPaddingBottom(); }
-    virtual LayoutUnit paddingLeft() const { return computedCSSPaddingLeft(); }
-    virtual LayoutUnit paddingRight() const { return computedCSSPaddingRight(); }
-    virtual LayoutUnit paddingBefore() const { return computedCSSPaddingBefore(); }
-    virtual LayoutUnit paddingAfter() const { return computedCSSPaddingAfter(); }
-    virtual LayoutUnit paddingStart() const { return computedCSSPaddingStart(); }
-    virtual LayoutUnit paddingEnd() const { return computedCSSPaddingEnd(); }
-    LayoutUnit paddingOver() const { return computedCSSPaddingOver(); }
-    LayoutUnit paddingUnder() const { return computedCSSPaddingUnder(); }
+  // These return the CSS computed padding values.
+  LayoutUnit computedCSSPaddingTop() const {
+    return computedCSSPadding(style()->paddingTop());
+  }
+  LayoutUnit computedCSSPaddingBottom() const {
+    return computedCSSPadding(style()->paddingBottom());
+  }
+  LayoutUnit computedCSSPaddingLeft() const {
+    return computedCSSPadding(style()->paddingLeft());
+  }
+  LayoutUnit computedCSSPaddingRight() const {
+    return computedCSSPadding(style()->paddingRight());
+  }
+  LayoutUnit computedCSSPaddingBefore() const {
+    return computedCSSPadding(style()->paddingBefore());
+  }
+  LayoutUnit computedCSSPaddingAfter() const {
+    return computedCSSPadding(style()->paddingAfter());
+  }
+  LayoutUnit computedCSSPaddingStart() const {
+    return computedCSSPadding(style()->paddingStart());
+  }
+  LayoutUnit computedCSSPaddingEnd() const {
+    return computedCSSPadding(style()->paddingEnd());
+  }
+  LayoutUnit computedCSSPaddingOver() const {
+    return computedCSSPadding(style()->paddingOver());
+  }
+  LayoutUnit computedCSSPaddingUnder() const {
+    return computedCSSPadding(style()->paddingUnder());
+  }
 
-    virtual int borderTop() const { return style()->borderTopWidth(); }
-    virtual int borderBottom() const { return style()->borderBottomWidth(); }
-    virtual int borderLeft() const { return style()->borderLeftWidth(); }
-    virtual int borderRight() const { return style()->borderRightWidth(); }
-    virtual int borderBefore() const { return style()->borderBeforeWidth(); }
-    virtual int borderAfter() const { return style()->borderAfterWidth(); }
-    virtual int borderStart() const { return style()->borderStartWidth(); }
-    virtual int borderEnd() const { return style()->borderEndWidth(); }
-    int borderOver() const { return style()->borderOverWidth(); }
-    int borderUnder() const { return style()->borderUnderWidth(); }
+  // These functions are used during layout.
+  // - Table cells override them to include the intrinsic padding (see
+  // explanations in LayoutTableCell).
+  // - Table override them to exclude padding with collapsing borders.
+  virtual LayoutUnit paddingTop() const { return computedCSSPaddingTop(); }
+  virtual LayoutUnit paddingBottom() const {
+    return computedCSSPaddingBottom();
+  }
+  virtual LayoutUnit paddingLeft() const { return computedCSSPaddingLeft(); }
+  virtual LayoutUnit paddingRight() const { return computedCSSPaddingRight(); }
+  virtual LayoutUnit paddingBefore() const {
+    return computedCSSPaddingBefore();
+  }
+  virtual LayoutUnit paddingAfter() const { return computedCSSPaddingAfter(); }
+  virtual LayoutUnit paddingStart() const { return computedCSSPaddingStart(); }
+  virtual LayoutUnit paddingEnd() const { return computedCSSPaddingEnd(); }
+  LayoutUnit paddingOver() const { return computedCSSPaddingOver(); }
+  LayoutUnit paddingUnder() const { return computedCSSPaddingUnder(); }
 
-    int borderWidth() const { return borderLeft() + borderRight(); }
-    int borderHeight() const { return borderTop() + borderBottom(); }
+  virtual int borderTop() const { return style()->borderTopWidth(); }
+  virtual int borderBottom() const { return style()->borderBottomWidth(); }
+  virtual int borderLeft() const { return style()->borderLeftWidth(); }
+  virtual int borderRight() const { return style()->borderRightWidth(); }
+  virtual int borderBefore() const { return style()->borderBeforeWidth(); }
+  virtual int borderAfter() const { return style()->borderAfterWidth(); }
+  virtual int borderStart() const { return style()->borderStartWidth(); }
+  virtual int borderEnd() const { return style()->borderEndWidth(); }
+  int borderOver() const { return style()->borderOverWidth(); }
+  int borderUnder() const { return style()->borderUnderWidth(); }
 
-    // Insets from the border box to the inside of the border.
-    LayoutRectOutsets borderInsets() const { return LayoutRectOutsets(-borderTop(), -borderRight(), -borderBottom(), -borderLeft()); }
+  int borderWidth() const { return borderLeft() + borderRight(); }
+  int borderHeight() const { return borderTop() + borderBottom(); }
 
-    bool hasBorderOrPadding() const { return style()->hasBorder() || style()->hasPadding(); }
+  // Insets from the border box to the inside of the border.
+  LayoutRectOutsets borderInsets() const {
+    return LayoutRectOutsets(-borderTop(), -borderRight(), -borderBottom(),
+                             -borderLeft());
+  }
 
-    LayoutUnit borderAndPaddingStart() const { return borderStart() + paddingStart(); }
-    LayoutUnit borderAndPaddingBefore() const { return borderBefore() + paddingBefore(); }
-    LayoutUnit borderAndPaddingAfter() const { return borderAfter() + paddingAfter(); }
-    LayoutUnit borderAndPaddingOver() const { return borderOver() + paddingOver(); }
-    LayoutUnit borderAndPaddingUnder() const { return borderUnder() + paddingUnder(); }
+  bool hasBorderOrPadding() const {
+    return style()->hasBorder() || style()->hasPadding();
+  }
 
-    LayoutUnit borderAndPaddingHeight() const { return borderTop() + borderBottom() + paddingTop() + paddingBottom(); }
-    LayoutUnit borderAndPaddingWidth() const { return borderLeft() + borderRight() + paddingLeft() + paddingRight(); }
-    LayoutUnit borderAndPaddingLogicalHeight() const { return hasBorderOrPadding() ? borderAndPaddingBefore() + borderAndPaddingAfter() : LayoutUnit(); }
-    LayoutUnit borderAndPaddingLogicalWidth() const { return borderStart() + borderEnd() + paddingStart() + paddingEnd(); }
-    LayoutUnit borderAndPaddingLogicalLeft() const { return style()->isHorizontalWritingMode() ? borderLeft() + paddingLeft() : borderTop() + paddingTop(); }
+  LayoutUnit borderAndPaddingStart() const {
+    return borderStart() + paddingStart();
+  }
+  DISABLE_CFI_PERF LayoutUnit borderAndPaddingBefore() const {
+    return borderBefore() + paddingBefore();
+  }
+  DISABLE_CFI_PERF LayoutUnit borderAndPaddingAfter() const {
+    return borderAfter() + paddingAfter();
+  }
+  LayoutUnit borderAndPaddingOver() const {
+    return borderOver() + paddingOver();
+  }
+  LayoutUnit borderAndPaddingUnder() const {
+    return borderUnder() + paddingUnder();
+  }
 
-    LayoutUnit borderLogicalLeft() const { return LayoutUnit(style()->isHorizontalWritingMode() ? borderLeft() : borderTop()); }
-    LayoutUnit borderLogicalRight() const { return LayoutUnit(style()->isHorizontalWritingMode() ? borderRight() : borderBottom()); }
+  DISABLE_CFI_PERF LayoutUnit borderAndPaddingHeight() const {
+    return borderTop() + borderBottom() + paddingTop() + paddingBottom();
+  }
+  DISABLE_CFI_PERF LayoutUnit borderAndPaddingWidth() const {
+    return borderLeft() + borderRight() + paddingLeft() + paddingRight();
+  }
+  DISABLE_CFI_PERF LayoutUnit borderAndPaddingLogicalHeight() const {
+    return hasBorderOrPadding()
+               ? borderAndPaddingBefore() + borderAndPaddingAfter()
+               : LayoutUnit();
+  }
+  DISABLE_CFI_PERF LayoutUnit borderAndPaddingLogicalWidth() const {
+    return borderStart() + borderEnd() + paddingStart() + paddingEnd();
+  }
+  DISABLE_CFI_PERF LayoutUnit borderAndPaddingLogicalLeft() const {
+    return style()->isHorizontalWritingMode() ? borderLeft() + paddingLeft()
+                                              : borderTop() + paddingTop();
+  }
 
-    LayoutUnit paddingLogicalWidth() const { return paddingStart() + paddingEnd(); }
-    LayoutUnit paddingLogicalHeight() const { return paddingBefore() + paddingAfter(); }
+  LayoutUnit borderLogicalLeft() const {
+    return LayoutUnit(style()->isHorizontalWritingMode() ? borderLeft()
+                                                         : borderTop());
+  }
+  LayoutUnit borderLogicalRight() const {
+    return LayoutUnit(style()->isHorizontalWritingMode() ? borderRight()
+                                                         : borderBottom());
+  }
 
-    virtual LayoutRectOutsets marginBoxOutsets() const = 0;
-    virtual LayoutUnit marginTop() const = 0;
-    virtual LayoutUnit marginBottom() const = 0;
-    virtual LayoutUnit marginLeft() const = 0;
-    virtual LayoutUnit marginRight() const = 0;
-    virtual LayoutUnit marginBefore(const ComputedStyle* otherStyle = nullptr) const = 0;
-    virtual LayoutUnit marginAfter(const ComputedStyle* otherStyle = nullptr) const = 0;
-    virtual LayoutUnit marginStart(const ComputedStyle* otherStyle = nullptr) const = 0;
-    virtual LayoutUnit marginEnd(const ComputedStyle* otherStyle = nullptr) const = 0;
-    virtual LayoutUnit marginOver() const = 0;
-    virtual LayoutUnit marginUnder() const = 0;
-    LayoutUnit marginHeight() const { return marginTop() + marginBottom(); }
-    LayoutUnit marginWidth() const { return marginLeft() + marginRight(); }
-    LayoutUnit marginLogicalHeight() const { return marginBefore() + marginAfter(); }
-    LayoutUnit marginLogicalWidth() const { return marginStart() + marginEnd(); }
+  LayoutUnit paddingLogicalWidth() const {
+    return paddingStart() + paddingEnd();
+  }
+  LayoutUnit paddingLogicalHeight() const {
+    return paddingBefore() + paddingAfter();
+  }
 
-    bool hasInlineDirectionBordersPaddingOrMargin() const { return hasInlineDirectionBordersOrPadding() || marginStart() || marginEnd(); }
-    bool hasInlineDirectionBordersOrPadding() const { return borderStart() || borderEnd() || paddingStart() || paddingEnd(); }
+  virtual LayoutRectOutsets marginBoxOutsets() const = 0;
+  virtual LayoutUnit marginTop() const = 0;
+  virtual LayoutUnit marginBottom() const = 0;
+  virtual LayoutUnit marginLeft() const = 0;
+  virtual LayoutUnit marginRight() const = 0;
+  virtual LayoutUnit marginBefore(
+      const ComputedStyle* otherStyle = nullptr) const = 0;
+  virtual LayoutUnit marginAfter(
+      const ComputedStyle* otherStyle = nullptr) const = 0;
+  virtual LayoutUnit marginStart(
+      const ComputedStyle* otherStyle = nullptr) const = 0;
+  virtual LayoutUnit marginEnd(
+      const ComputedStyle* otherStyle = nullptr) const = 0;
+  virtual LayoutUnit marginOver() const = 0;
+  virtual LayoutUnit marginUnder() const = 0;
+  DISABLE_CFI_PERF LayoutUnit marginHeight() const {
+    return marginTop() + marginBottom();
+  }
+  DISABLE_CFI_PERF LayoutUnit marginWidth() const {
+    return marginLeft() + marginRight();
+  }
+  DISABLE_CFI_PERF LayoutUnit marginLogicalHeight() const {
+    return marginBefore() + marginAfter();
+  }
+  DISABLE_CFI_PERF LayoutUnit marginLogicalWidth() const {
+    return marginStart() + marginEnd();
+  }
 
-    virtual LayoutUnit containingBlockLogicalWidthForContent() const;
+  bool hasInlineDirectionBordersPaddingOrMargin() const {
+    return hasInlineDirectionBordersOrPadding() || marginStart() || marginEnd();
+  }
+  bool hasInlineDirectionBordersOrPadding() const {
+    return borderStart() || borderEnd() || paddingStart() || paddingEnd();
+  }
 
-    virtual void childBecameNonInline(LayoutObject* /*child*/) { }
+  virtual LayoutUnit containingBlockLogicalWidthForContent() const;
 
-    virtual bool boxShadowShouldBeAppliedToBackground(BackgroundBleedAvoidance, const InlineFlowBox* = nullptr) const;
+  virtual void childBecameNonInline(LayoutObject* /*child*/) {}
 
-    // Overridden by subclasses to determine line height and baseline position.
-    virtual LayoutUnit lineHeight(bool firstLine, LineDirectionMode, LinePositionMode = PositionOnContainingLine) const = 0;
-    virtual int baselinePosition(FontBaseline, bool firstLine, LineDirectionMode, LinePositionMode = PositionOnContainingLine) const = 0;
+  virtual bool boxShadowShouldBeAppliedToBackground(
+      BackgroundBleedAvoidance,
+      const InlineFlowBox* = nullptr) const;
 
-    const LayoutObject* pushMappingToContainer(const LayoutBoxModelObject* ancestorToStopAt, LayoutGeometryMap&) const override;
+  // Overridden by subclasses to determine line height and baseline position.
+  virtual LayoutUnit lineHeight(
+      bool firstLine,
+      LineDirectionMode,
+      LinePositionMode = PositionOnContainingLine) const = 0;
+  virtual int baselinePosition(
+      FontBaseline,
+      bool firstLine,
+      LineDirectionMode,
+      LinePositionMode = PositionOnContainingLine) const = 0;
 
-    void setSelectionState(SelectionState) override;
+  const LayoutObject* pushMappingToContainer(
+      const LayoutBoxModelObject* ancestorToStopAt,
+      LayoutGeometryMap&) const override;
 
-    void contentChanged(ContentChangeType);
-    bool hasAcceleratedCompositing() const;
+  void setSelectionState(SelectionState) override;
 
-    void computeLayerHitTestRects(LayerHitTestRects&) const override;
+  void contentChanged(ContentChangeType);
+  bool hasAcceleratedCompositing() const;
 
-    // Returns true if the background is painted opaque in the given rect.
-    // The query rect is given in local coordinate system.
-    virtual bool backgroundIsKnownToBeOpaqueInRect(const LayoutRect&) const { return false; }
+  void computeLayerHitTestRects(LayerHitTestRects&) const override;
 
-    void invalidateTreeIfNeeded(const PaintInvalidationState&) override;
+  // Returns true if the background is painted opaque in the given rect.
+  // The query rect is given in local coordinate system.
+  virtual bool backgroundIsKnownToBeOpaqueInRect(const LayoutRect&) const {
+    return false;
+  }
 
-    // http://www.w3.org/TR/css3-background/#body-background
-    // <html> root element with no background steals background from its first <body> child.
-    // The used background for such body element should be the initial value. (i.e. transparent)
-    bool backgroundStolenForBeingBody(const ComputedStyle* rootElementStyle = nullptr) const;
+  void invalidateTreeIfNeeded(const PaintInvalidationState&) override;
 
-protected:
-    void willBeDestroyed() override;
+  // http://www.w3.org/TR/css3-background/#body-background
+  // <html> root element with no background steals background from its first <body> child.
+  // The used background for such body element should be the initial value. (i.e. transparent)
+  bool backgroundStolenForBeingBody(
+      const ComputedStyle* rootElementStyle = nullptr) const;
 
-    LayoutPoint adjustedPositionRelativeTo(const LayoutPoint&, const Element*) const;
+ protected:
+  void willBeDestroyed() override;
 
-    // Returns the continuation associated with |this|.
-    // Returns nullptr if no continuation is associated with |this|.
-    //
-    // See the section about CONTINUATIONS AND ANONYMOUS LAYOUTBLOCKFLOWS in
-    // LayoutInline for more details about them.
-    //
-    // Our implementation uses a HashMap to store them to avoid paying the cost
-    // for each LayoutBoxModelObject (|continuationMap| in the cpp file).
-    LayoutBoxModelObject* continuation() const;
+  LayoutPoint adjustedPositionRelativeTo(const LayoutPoint&,
+                                         const Element*) const;
 
-    // Set the next link in the continuation chain.
-    //
-    // See continuation above for more details.
-    void setContinuation(LayoutBoxModelObject*);
+  // Returns the continuation associated with |this|.
+  // Returns nullptr if no continuation is associated with |this|.
+  //
+  // See the section about CONTINUATIONS AND ANONYMOUS LAYOUTBLOCKFLOWS in
+  // LayoutInline for more details about them.
+  //
+  // Our implementation uses a HashMap to store them to avoid paying the cost
+  // for each LayoutBoxModelObject (|continuationMap| in the cpp file).
+  LayoutBoxModelObject* continuation() const;
 
-    virtual LayoutSize accumulateInFlowPositionOffsets() const { return LayoutSize(); }
+  // Set the next link in the continuation chain.
+  //
+  // See continuation above for more details.
+  void setContinuation(LayoutBoxModelObject*);
 
-    LayoutRect localCaretRectForEmptyElement(LayoutUnit width, LayoutUnit textIndentOffset);
+  virtual LayoutSize accumulateInFlowPositionOffsets() const {
+    return LayoutSize();
+  }
 
-    bool hasAutoHeightOrContainingBlockWithAutoHeight() const;
-    LayoutBlock* containingBlockForAutoHeightDetection(Length logicalHeight) const;
+  LayoutRect localCaretRectForEmptyElement(LayoutUnit width,
+                                           LayoutUnit textIndentOffset);
 
-    void addOutlineRectsForNormalChildren(Vector<LayoutRect>&, const LayoutPoint& additionalOffset, IncludeBlockVisualOverflowOrNot) const;
-    void addOutlineRectsForDescendant(const LayoutObject& descendant, Vector<LayoutRect>&, const LayoutPoint& additionalOffset, IncludeBlockVisualOverflowOrNot) const;
+  bool hasAutoHeightOrContainingBlockWithAutoHeight() const;
+  LayoutBlock* containingBlockForAutoHeightDetection(
+      Length logicalHeight) const;
 
-    void addLayerHitTestRects(LayerHitTestRects&, const PaintLayer*, const LayoutPoint&, const LayoutRect&) const override;
+  void addOutlineRectsForNormalChildren(Vector<LayoutRect>&,
+                                        const LayoutPoint& additionalOffset,
+                                        IncludeBlockVisualOverflowOrNot) const;
+  void addOutlineRectsForDescendant(const LayoutObject& descendant,
+                                    Vector<LayoutRect>&,
+                                    const LayoutPoint& additionalOffset,
+                                    IncludeBlockVisualOverflowOrNot) const;
 
-    void styleWillChange(StyleDifference, const ComputedStyle& newStyle) override;
-    void styleDidChange(StyleDifference, const ComputedStyle* oldStyle) override;
+  void addLayerHitTestRects(LayerHitTestRects&,
+                            const PaintLayer*,
+                            const LayoutPoint&,
+                            const LayoutRect&) const override;
 
-    void invalidateStickyConstraints();
+  void styleWillChange(StyleDifference, const ComputedStyle& newStyle) override;
+  void styleDidChange(StyleDifference, const ComputedStyle* oldStyle) override;
 
-public:
-    // These functions are only used internally to manipulate the layout tree structure via remove/insert/appendChildNode.
-    // Since they are typically called only to move objects around within anonymous blocks (which only have layers in
-    // the case of column spans), the default for fullRemoveInsert is false rather than true.
-    void moveChildTo(LayoutBoxModelObject* toBoxModelObject, LayoutObject* child, LayoutObject* beforeChild, bool fullRemoveInsert = false);
-    void moveChildTo(LayoutBoxModelObject* toBoxModelObject, LayoutObject* child, bool fullRemoveInsert = false)
-    {
-        moveChildTo(toBoxModelObject, child, 0, fullRemoveInsert);
-    }
-    void moveAllChildrenTo(LayoutBoxModelObject* toBoxModelObject, bool fullRemoveInsert = false)
-    {
-        moveAllChildrenTo(toBoxModelObject, 0, fullRemoveInsert);
-    }
-    void moveAllChildrenTo(LayoutBoxModelObject* toBoxModelObject, LayoutObject* beforeChild, bool fullRemoveInsert = false)
-    {
-        moveChildrenTo(toBoxModelObject, slowFirstChild(), 0, beforeChild, fullRemoveInsert);
-    }
-    // Move all of the kids from |startChild| up to but excluding |endChild|. 0 can be passed as the |endChild| to denote
-    // that all the kids from |startChild| onwards should be moved.
-    void moveChildrenTo(LayoutBoxModelObject* toBoxModelObject, LayoutObject* startChild, LayoutObject* endChild, bool fullRemoveInsert = false)
-    {
-        moveChildrenTo(toBoxModelObject, startChild, endChild, 0, fullRemoveInsert);
-    }
-    virtual void moveChildrenTo(LayoutBoxModelObject* toBoxModelObject, LayoutObject* startChild, LayoutObject* endChild, LayoutObject* beforeChild, bool fullRemoveInsert = false);
+  void invalidateStickyConstraints();
 
-private:
-    void createLayer();
+ public:
+  // These functions are only used internally to manipulate the layout tree structure via remove/insert/appendChildNode.
+  // Since they are typically called only to move objects around within anonymous blocks (which only have layers in
+  // the case of column spans), the default for fullRemoveInsert is false rather than true.
+  void moveChildTo(LayoutBoxModelObject* toBoxModelObject,
+                   LayoutObject* child,
+                   LayoutObject* beforeChild,
+                   bool fullRemoveInsert = false);
+  void moveChildTo(LayoutBoxModelObject* toBoxModelObject,
+                   LayoutObject* child,
+                   bool fullRemoveInsert = false) {
+    moveChildTo(toBoxModelObject, child, 0, fullRemoveInsert);
+  }
+  void moveAllChildrenTo(LayoutBoxModelObject* toBoxModelObject,
+                         bool fullRemoveInsert = false) {
+    moveAllChildrenTo(toBoxModelObject, 0, fullRemoveInsert);
+  }
+  void moveAllChildrenTo(LayoutBoxModelObject* toBoxModelObject,
+                         LayoutObject* beforeChild,
+                         bool fullRemoveInsert = false) {
+    moveChildrenTo(toBoxModelObject, slowFirstChild(), 0, beforeChild,
+                   fullRemoveInsert);
+  }
+  // Move all of the kids from |startChild| up to but excluding |endChild|. 0 can be passed as the |endChild| to denote
+  // that all the kids from |startChild| onwards should be moved.
+  void moveChildrenTo(LayoutBoxModelObject* toBoxModelObject,
+                      LayoutObject* startChild,
+                      LayoutObject* endChild,
+                      bool fullRemoveInsert = false) {
+    moveChildrenTo(toBoxModelObject, startChild, endChild, 0, fullRemoveInsert);
+  }
+  virtual void moveChildrenTo(LayoutBoxModelObject* toBoxModelObject,
+                              LayoutObject* startChild,
+                              LayoutObject* endChild,
+                              LayoutObject* beforeChild,
+                              bool fullRemoveInsert = false);
 
-    LayoutUnit computedCSSPadding(const Length&) const;
-    bool isBoxModelObject() const final { return true; }
+ private:
+  void createLayer();
 
-    LayoutBoxModelObjectRareData& ensureRareData()
-    {
-        if (!m_rareData)
-            m_rareData = wrapUnique(new LayoutBoxModelObjectRareData());
-        return *m_rareData.get();
-    }
+  LayoutUnit computedCSSPadding(const Length&) const;
+  bool isBoxModelObject() const final { return true; }
 
-    bool hasAutoHeightOrContainingBlockWithAutoHeight(bool checkingContainingBlock) const;
+  LayoutBoxModelObjectRareData& ensureRareData() {
+    if (!m_rareData)
+      m_rareData = wrapUnique(new LayoutBoxModelObjectRareData());
+    return *m_rareData.get();
+  }
 
-    // The PaintLayer associated with this object.
-    // |m_layer| can be nullptr depending on the return value of layerTypeRequired().
-    std::unique_ptr<PaintLayer> m_layer;
+  bool hasAutoHeightOrContainingBlockWithAutoHeight(
+      bool checkingContainingBlock) const;
 
-    std::unique_ptr<LayoutBoxModelObjectRareData> m_rareData;
+  // The PaintLayer associated with this object.
+  // |m_layer| can be nullptr depending on the return value of layerTypeRequired().
+  std::unique_ptr<PaintLayer> m_layer;
+
+  std::unique_ptr<LayoutBoxModelObjectRareData> m_rareData;
 };
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutBoxModelObject, isBoxModelObject());
 
-} // namespace blink
+}  // namespace blink
 
-#endif // LayoutBoxModelObject_h
+#endif  // LayoutBoxModelObject_h

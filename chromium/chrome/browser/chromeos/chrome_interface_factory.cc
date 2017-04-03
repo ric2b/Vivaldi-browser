@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "ash/common/mojo_interface_factory.h"
 #include "ash/public/interfaces/wallpaper.mojom.h"
 #include "base/lazy_instance.h"
 #include "base/memory/weak_ptr.h"
@@ -14,11 +15,13 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/app_list/app_list_presenter_service.h"
+#include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/ash/chrome_wallpaper_manager.h"
 #include "chrome/browser/ui/ash/keyboard_ui_service.h"
+#include "chrome/browser/ui/ash/system_tray_client.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "content/public/common/mojo_shell_connection.h"
+#include "content/public/common/service_manager_connection.h"
 #include "mash/public/interfaces/launchable.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/shell/public/cpp/connection.h"
@@ -113,6 +116,11 @@ class FactoryImpl {
     launchable_->ProcessRequest(std::move(request));
   }
 
+  void BindRequest(ash::mojom::SystemTrayClientRequest request) {
+    system_tray_client_bindings_.AddBinding(SystemTrayClient::Get(),
+                                            std::move(request));
+  }
+
   void BindRequest(ash::mojom::WallpaperManagerRequest request) {
     if (!wallpaper_manager_)
       wallpaper_manager_.reset(new ChromeWallpaperManager);
@@ -131,6 +139,7 @@ class FactoryImpl {
   std::unique_ptr<KeyboardUIService> keyboard_ui_service_;
   mojo::BindingSet<keyboard::mojom::Keyboard> keyboard_bindings_;
   std::unique_ptr<ChromeLaunchable> launchable_;
+  mojo::BindingSet<ash::mojom::SystemTrayClient> system_tray_client_bindings_;
   std::unique_ptr<ChromeWallpaperManager> wallpaper_manager_;
   std::unique_ptr<AppListPresenterService> app_list_presenter_service_;
   mojo::BindingSet<app_list::mojom::AppListPresenter>
@@ -156,10 +165,19 @@ bool ChromeInterfaceFactory::OnConnect(const shell::Identity& remote_identity,
                                                      main_thread_task_runner_);
   FactoryImpl::AddFactory<mash::mojom::Launchable>(registry,
                                                    main_thread_task_runner_);
+  FactoryImpl::AddFactory<ash::mojom::SystemTrayClient>(
+      registry, main_thread_task_runner_);
   FactoryImpl::AddFactory<ash::mojom::WallpaperManager>(
       registry, main_thread_task_runner_);
   FactoryImpl::AddFactory<app_list::mojom::AppListPresenter>(
       registry, main_thread_task_runner_);
+
+  // In classic ash, the browser process provides ash services to itself.
+  if (!chrome::IsRunningInMash()) {
+    ash::mojo_interface_factory::RegisterInterfaces(registry,
+                                                    main_thread_task_runner_);
+  }
+
   return true;
 }
 

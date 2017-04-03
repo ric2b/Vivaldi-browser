@@ -36,6 +36,48 @@ const char kDeleteValue[] = "true";
 const char kDeviceIdKey[] = "device";
 const char kLoginHeader[] = "AidLogin";
 
+// Response constants.
+const char kErrorPrefix[] = "Error=";
+const char kInvalidParameters[] = "INVALID_PARAMETERS";
+const char kInternalServerError[] = "InternalServerError";
+const char kDeviceRegistrationError[] = "PHONE_REGISTRATION_ERROR";
+
+// Gets correct status from the error message.
+UnregistrationRequest::Status GetStatusFromError(const std::string& error) {
+  if (error.find(kInvalidParameters) != std::string::npos)
+    return UnregistrationRequest::INVALID_PARAMETERS;
+  if (error.find(kInternalServerError) != std::string::npos)
+    return UnregistrationRequest::INTERNAL_SERVER_ERROR;
+  if (error.find(kDeviceRegistrationError) != std::string::npos)
+    return UnregistrationRequest::DEVICE_REGISTRATION_ERROR;
+  // Should not be reached, unless the server adds new error types.
+  return UnregistrationRequest::UNKNOWN_ERROR;
+}
+
+// Determines whether to retry based on the status of the last request.
+bool ShouldRetryWithStatus(UnregistrationRequest::Status status) {
+  switch (status) {
+    case UnregistrationRequest::URL_FETCHING_FAILED:
+    case UnregistrationRequest::NO_RESPONSE_BODY:
+    case UnregistrationRequest::RESPONSE_PARSING_FAILED:
+    case UnregistrationRequest::INCORRECT_APP_ID:
+    case UnregistrationRequest::SERVICE_UNAVAILABLE:
+    case UnregistrationRequest::INTERNAL_SERVER_ERROR:
+    case UnregistrationRequest::HTTP_NOT_OK:
+      return true;
+    case UnregistrationRequest::SUCCESS:
+    case UnregistrationRequest::INVALID_PARAMETERS:
+    case UnregistrationRequest::DEVICE_REGISTRATION_ERROR:
+    case UnregistrationRequest::UNKNOWN_ERROR:
+    case UnregistrationRequest::REACHED_MAX_RETRIES:
+      return false;
+    case UnregistrationRequest::UNREGISTRATION_STATUS_COUNT:
+      NOTREACHED();
+      break;
+  }
+  return false;
+}
+
 }  // namespace
 
 UnregistrationRequest::RequestInfo::RequestInfo(uint64_t android_id,
@@ -136,14 +178,29 @@ void UnregistrationRequest::BuildRequestBody(std::string* body) {
 UnregistrationRequest::Status UnregistrationRequest::ParseResponse(
     const net::URLFetcher* source) {
   if (!source->GetStatus().is_success()) {
-    DVLOG(1) << "Fetcher failed";
+    DVLOG(1) << "Unregistration URL fetching failed.";
     return URL_FETCHING_FAILED;
+  }
+
+  std::string response;
+  if (!source->GetResponseAsString(&response)) {
+    DVLOG(1) << "Failed to get unregistration response body.";
+    return NO_RESPONSE_BODY;
+  }
+
+  // If we are able to parse a meaningful known error, let's do so. Note that
+  // some errors will have HTTP_OK response code!
+  if (response.find(kErrorPrefix) != std::string::npos) {
+    std::string error = response.substr(response.find(kErrorPrefix) +
+                                        arraysize(kErrorPrefix) - 1);
+    DVLOG(1) << "Unregistration response error message: " << error;
+    return GetStatusFromError(error);
   }
 
   net::HttpStatusCode response_status = static_cast<net::HttpStatusCode>(
       source->GetResponseCode());
   if (response_status != net::HTTP_OK) {
-    DVLOG(1) << "HTTP Status code is not OK, but: " << response_status;
+    DVLOG(1) << "Unregistration HTTP response code not OK: " << response_status;
     if (response_status == net::HTTP_SERVICE_UNAVAILABLE)
       return SERVICE_UNAVAILABLE;
     if (response_status == net::HTTP_INTERNAL_SERVER_ERROR)
@@ -152,7 +209,7 @@ UnregistrationRequest::Status UnregistrationRequest::ParseResponse(
   }
 
   DCHECK(custom_request_handler_.get());
-  return custom_request_handler_->ParseResponse(source);
+  return custom_request_handler_->ParseResponse(response);
 }
 
 void UnregistrationRequest::RetryWithBackoff() {
@@ -177,7 +234,7 @@ void UnregistrationRequest::RetryWithBackoff() {
 void UnregistrationRequest::OnURLFetchComplete(const net::URLFetcher* source) {
   UnregistrationRequest::Status status = ParseResponse(source);
 
-  DVLOG(1) << "UnregistrationRequestStauts: " << status;
+  DVLOG(1) << "UnregistrationRequestStatus: " << status;
 
   DCHECK(custom_request_handler_.get());
   custom_request_handler_->ReportUMAs(
@@ -188,13 +245,7 @@ void UnregistrationRequest::OnURLFetchComplete(const net::URLFetcher* source) {
   recorder_->RecordUnregistrationResponse(request_info_.app_id(),
                                           source_to_record_, status);
 
-  if (status == URL_FETCHING_FAILED ||
-      status == HTTP_NOT_OK ||
-      status == NO_RESPONSE_BODY ||
-      status == SERVICE_UNAVAILABLE ||
-      status == INTERNAL_SERVER_ERROR ||
-      status == INCORRECT_APP_ID ||
-      status == RESPONSE_PARSING_FAILED) {
+  if (ShouldRetryWithStatus(status)) {
     if (retries_left_ > 0) {
       RetryWithBackoff();
       return;
@@ -209,9 +260,6 @@ void UnregistrationRequest::OnURLFetchComplete(const net::URLFetcher* source) {
     DCHECK(custom_request_handler_.get());
     custom_request_handler_->ReportUMAs(status, 0, base::TimeDelta());
   }
-
-  // status == SUCCESS || INVALID_PARAMETERS || UNKNOWN_ERROR ||
-  //           REACHED_MAX_RETRIES
 
   callback_.Run(status);
 }

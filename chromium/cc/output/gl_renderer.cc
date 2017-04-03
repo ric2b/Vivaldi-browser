@@ -31,9 +31,9 @@
 #include "cc/output/context_provider.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/output/dynamic_geometry_binding.h"
-#include "cc/output/gl_frame_data.h"
 #include "cc/output/layer_quad.h"
 #include "cc/output/output_surface.h"
+#include "cc/output/output_surface_frame.h"
 #include "cc/output/render_surface_filters.h"
 #include "cc/output/renderer_settings.h"
 #include "cc/output/static_geometry_binding.h"
@@ -846,7 +846,8 @@ gfx::Rect GLRenderer::GetBackdropBoundingBoxForRenderPassQuad(
     const RenderPassDrawQuad* quad,
     const gfx::Transform& contents_device_transform,
     const gfx::QuadF* clip_region,
-    bool use_aa) {
+    bool use_aa,
+    gfx::Rect* unclipped_rect) {
   gfx::QuadF scaled_region;
   if (!GetScaledRegion(quad->rect, clip_region, &scaled_region)) {
     scaled_region = SharedGeometryQuad().BoundingBox();
@@ -880,6 +881,7 @@ gfx::Rect GLRenderer::GetBackdropBoundingBoxForRenderPassQuad(
     backdrop_rect.Inset(-1, -1, -1, -1);
   }
 
+  *unclipped_rect = backdrop_rect;
   backdrop_rect.Intersect(MoveFromDrawToWindowSpace(
       frame, frame->current_render_pass->output_rect));
   return backdrop_rect;
@@ -905,11 +907,17 @@ std::unique_ptr<ScopedResource> GLRenderer::GetBackdropTexture(
 sk_sp<SkImage> GLRenderer::ApplyBackgroundFilters(
     const RenderPassDrawQuad* quad,
     ScopedResource* background_texture,
-    const gfx::RectF& rect) {
+    const gfx::RectF& rect,
+    const gfx::RectF& unclipped_rect) {
   DCHECK(ShouldApplyBackgroundFilters(quad));
   auto use_gr_context = ScopedUseGrContext::Create(this);
+
+  gfx::Vector2dF clipping_offset =
+      (rect.top_right() - unclipped_rect.top_right()) +
+      (rect.bottom_left() - unclipped_rect.bottom_left());
   sk_sp<SkImageFilter> filter = RenderSurfaceFilters::BuildImageFilter(
-      quad->background_filters, gfx::SizeF(background_texture->size()));
+      quad->background_filters, gfx::SizeF(background_texture->size()),
+      clipping_offset);
 
   // TODO(senorblanco): background filters should be moved to the
   // makeWithFilter fast-path, and go back to calling ApplyImageFilter().
@@ -1130,9 +1138,10 @@ void GLRenderer::UpdateRPDQShadersForBlending(
     DCHECK(params->frame);
     // Compute a bounding box around the pixels that will be visible through
     // the quad.
+    gfx::Rect unclipped_rect;
     params->background_rect = GetBackdropBoundingBoxForRenderPassQuad(
         params->frame, quad, params->contents_device_transform,
-        params->clip_region, params->use_aa);
+        params->clip_region, params->use_aa, &unclipped_rect);
 
     if (!params->background_rect.IsEmpty()) {
       // The pixels from the filtered background should completely replace the
@@ -1149,9 +1158,9 @@ void GLRenderer::UpdateRPDQShadersForBlending(
       if (ShouldApplyBackgroundFilters(quad) && params->background_texture) {
         // Apply the background filters to R, so that it is applied in the
         // pixels' coordinate space.
-        params->background_image =
-            ApplyBackgroundFilters(quad, params->background_texture.get(),
-                                   gfx::RectF(params->background_rect));
+        params->background_image = ApplyBackgroundFilters(
+            quad, params->background_texture.get(),
+            gfx::RectF(params->background_rect), gfx::RectF(unclipped_rect));
         if (params->background_image) {
           params->background_image_id =
               skia::GrBackendObjectToGrGLTextureInfo(
@@ -1189,8 +1198,7 @@ void GLRenderer::UpdateRPDQShadersForBlending(
 bool GLRenderer::UpdateRPDQWithSkiaFilters(
     DrawRenderPassDrawQuadParams* params) {
   const RenderPassDrawQuad* quad = params->quad;
-  // TODO(senorblanco): Cache this value so that we don't have to do it for both
-  // the surface and its replica.  Apply filters to the contents texture.
+  // Apply filters to the contents texture.
   if (!quad->filters.IsEmpty()) {
     sk_sp<SkImageFilter> filter = RenderSurfaceFilters::BuildImageFilter(
         quad->filters, gfx::SizeF(params->contents_texture->size()));
@@ -2885,26 +2893,23 @@ void GLRenderer::DrawQuadGeometry(const gfx::Transform& projection_matrix,
   gl_->DrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
 }
 
-void GLRenderer::SwapBuffers(CompositorFrameMetadata metadata) {
+void GLRenderer::SwapBuffers(std::vector<ui::LatencyInfo> latency_info) {
   DCHECK(visible_);
 
   TRACE_EVENT0("cc,benchmark", "GLRenderer::SwapBuffers");
   // We're done! Time to swapbuffers!
 
-  gfx::Size surface_size = output_surface_->SurfaceSize();
-
-  CompositorFrame compositor_frame;
-  compositor_frame.metadata = std::move(metadata);
-  compositor_frame.gl_frame_data = base::WrapUnique(new GLFrameData);
-  compositor_frame.gl_frame_data->size = surface_size;
+  OutputSurfaceFrame output_frame;
+  output_frame.latency_info = std::move(latency_info);
+  output_frame.size = surface_size_for_swap_buffers_;
   if (use_partial_swap_) {
     // If supported, we can save significant bandwidth by only swapping the
     // damaged/scissored region (clamped to the viewport).
-    swap_buffer_rect_.Intersect(gfx::Rect(surface_size));
-    int flipped_y_pos_of_rect_bottom = surface_size.height() -
+    swap_buffer_rect_.Intersect(gfx::Rect(surface_size_for_swap_buffers_));
+    int flipped_y_pos_of_rect_bottom = surface_size_for_swap_buffers_.height() -
                                        swap_buffer_rect_.y() -
                                        swap_buffer_rect_.height();
-    compositor_frame.gl_frame_data->sub_buffer_rect =
+    output_frame.sub_buffer_rect =
         gfx::Rect(swap_buffer_rect_.x(),
                   FlippedRootFramebuffer() ? flipped_y_pos_of_rect_bottom
                                            : swap_buffer_rect_.y(),
@@ -2913,15 +2918,15 @@ void GLRenderer::SwapBuffers(CompositorFrameMetadata metadata) {
     // Expand the swap rect to the full surface unless it's empty, and empty
     // swap is allowed.
     if (!swap_buffer_rect_.IsEmpty() || !allow_empty_swap_) {
-      swap_buffer_rect_ = gfx::Rect(surface_size);
+      swap_buffer_rect_ = gfx::Rect(surface_size_for_swap_buffers_);
     }
-    compositor_frame.gl_frame_data->sub_buffer_rect = swap_buffer_rect_;
+    output_frame.sub_buffer_rect = swap_buffer_rect_;
   }
 
   swapping_overlay_resources_.push_back(std::move(pending_overlay_resources_));
   pending_overlay_resources_.clear();
 
-  output_surface_->SwapBuffers(std::move(compositor_frame));
+  output_surface_->SwapBuffers(std::move(output_frame));
 
   swap_buffer_rect_ = gfx::Rect();
 }
@@ -3887,7 +3892,7 @@ void GLRenderer::CopyRenderPassDrawQuadToOverlayResource(
   // requires creating a dummy DrawingFrame.
   {
     DrawingFrame frame;
-    gfx::Rect frame_rect = external_frame->device_viewport_rect;
+    gfx::Rect frame_rect(external_frame->device_viewport_size);
     force_drawing_frame_framebuffer_unflipped_ = true;
     InitializeViewport(&frame, frame_rect, frame_rect, frame_rect.size());
     force_drawing_frame_framebuffer_unflipped_ = false;
@@ -4034,9 +4039,10 @@ void GLRenderer::ScheduleRenderPassDrawQuad(
   transform.asColMajorf(gl_transform);
   unsigned filter = ca_layer_overlay->filter;
 
-  gl_->ScheduleCALayerSharedStateCHROMIUM(
-      ca_layer_overlay->shared_state->opacity, is_clipped, clip_rect,
-      sorting_context_id, gl_transform);
+  // The alpha has already been applied when copying the RPDQ to an IOSurface.
+  GLfloat alpha = 1;
+  gl_->ScheduleCALayerSharedStateCHROMIUM(alpha, is_clipped, clip_rect,
+                                          sorting_context_id, gl_transform);
   gl_->ScheduleCALayerCHROMIUM(
       texture_id, contents_rect, ca_layer_overlay->background_color,
       ca_layer_overlay->edge_aa_mask, bounds_rect, filter);

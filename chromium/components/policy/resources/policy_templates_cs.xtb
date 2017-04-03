@@ -32,8 +32,12 @@ Pokud je nastavena na hodnotu true nebo nastavena není, statistiky hlášeny bu
 Pokud je tato zásada nastavena, hostitel vzdáleného přístupu použije při připojování tuto adresu URL ke kontrole ověřovacích tokenů od klientů vzdáleného přístupu. Tuto zásadu je třeba používat v kombinaci se zásadou RemoteAccessHostTokenUrl.
 
 Na straně serveru tato funkce v současné době není k dispozici.</translation>
+<translation id="1093082332347834239">Pokud je zapnuto toto nastavení, hostitel vzdálené pomoci bude spuštěn v procesu s oprávněními <ph name="UIACCESS_PERMISSION_NAME" />. Vzdálení uživatelé tak na počítači místního uživatele budou moci provádět interakci s okny, která vyžadují zvýšená oprávnění.
+
+          Pokud je toto nastavení vypnuto nebo není nakonfigurováno, hostitel vzdálené pomoci poběží v kontextu uživatele a vzdálení uživatelé na počítači nebudou moci provádět interakci s okny, která vyžadují zvýšená oprávnění.</translation>
 <translation id="1096105751829466145">Výchozí poskytovatel vyhledávání</translation>
 <translation id="1103860406762205913">Aktivuje staré webové přihlašování.</translation>
+<translation id="1117535567637097036">Obslužné nástroje protokolů nastavené pomocí této zásady se nepoužívají při zpracovávání zpráv Intent systému Android.</translation>
 <translation id="1128903365609589950">Slouží ke konfiguraci adresáře, který bude <ph name="PRODUCT_NAME" /> používat k ukládání souborů do mezipaměti na disku.
 
       Pokud tuto zásadu nastavíte, <ph name="PRODUCT_NAME" /> bude používat stanovený adresář bez ohledu na to, zda uživatel zadal příznak „--disk-cache-dir“. Abyste předešli ztrátě dat a jiným neočekávaným chybám, nenastavujte tuto zásadu na kořenový adresář svazku ani na adresář používaný k dalším účelům, protože obsah adresáře spravuje prohlížeč <ph name="PRODUCT_NAME" />.
@@ -56,6 +60,13 @@ Na straně serveru tato funkce v současné době není k dispozici.</translat
 Není-li tato zásada nastavena, výchozí frekvence je 3 hodiny. Minimální povolená frekvence je 60 sekund.</translation>
 <translation id="1221359380862872747">Načíst konkrétní adresy URL při přihlášení do ukázky</translation>
 <translation id="1265053460044691532">Omezit dobu, po kterou se uživatel ověřený pomocí technologie SAML může přihlásit offline</translation>
+<translation id="127699919157094139">Deaktivuje v prohlížeči <ph name="PRODUCT_NAME" /> synchronizaci dat pomocí synchronizačních služeb hostovaných na Googlu a zabrání uživatelům ve změně tohoto nastavení.
+
+      Pokud toto nastavení aktivujete, uživatelé jej v prohlížeči <ph name="PRODUCT_NAME" /> nebudou moci změnit ani přepsat.
+
+      Pokud tuto zásadu ponecháte nenastavenou, uživatel bude moci zvolit, zda chce službu Google Sync používat či nikoliv.
+
+      Chcete-li službu Google Sync úplně zakázat, doporučujeme vám zakázat ji v administrátorské konzoli Google.</translation>
 <translation id="1291880496936992484">Upozornění: Po verzi 52 (přibližně v září 2016) bude šifrovací algoritmus RC4 z prohlížeče <ph name="PRODUCT_NAME" /> zcela odstraněn a tato zásada přestane fungovat.
 
       Pokud tato zásada není nastavena nebo je nastavena na hodnotu false, v protokolu TLS nebudou povoleny šifrovací sady RC4. Nastavením této zásady na hodnotu true je možné zajistit kompatibilitu se zastaralým serverem. Toto nastavení by však mělo být použito pouze jako dočasné nouzové opatření a server by měl být překonfigurován.</translation>
@@ -118,6 +129,14 @@ Pokud tuto zásadu nenastavíte, bude při prvním zobrazení obrazovky přihlá
 Pokud je tato zásada nastavena na hodnotu false nebo ponechána bez nastavení, jednotná plocha bude zakázána. V takovém případě uživatel funkci nemůže zapnout.</translation>
 <translation id="1474273443907024088">Zakázat optimalizaci TLS False Start</translation>
 <translation id="1477934438414550161">TLS 1.2</translation>
+<translation id="1484146587843605071">U hostitelů v tomto seznamu prohlížeč <ph name="PRODUCT_NAME" /> obejde všechny proxy servery. 
+
+          Tato zásada bude použita pouze v případě, že jste v zásadě „Zvolit způsob konfigurace nastavení proxy serveru“ zvolili ruční nastavení.
+
+          Pokud jste vybrali jiný režim nastavení zásad proxy serveru, tuto zásadu byste nastavovat neměli.
+
+          Podrobnější příklady naleznete na následující stránce:
+          <ph name="PROXY_HELP_URL" /></translation>
 <translation id="1504431521196476721">Vzdálené ověření identity</translation>
 <translation id="1509692106376861764">V prohlížečích <ph name="PRODUCT_NAME" /> verze 29 a novějších byla tato zásada zrušena.</translation>
 <translation id="1522425503138261032">Umožňuje webovým stránkám sledovat fyzickou polohu uživatele</translation>
@@ -137,6 +156,7 @@ Pokud je toto nastavení zakázáno nebo není nakonfigurováno, firemní uživa
 <translation id="166427968280387991">Proxy server</translation>
 <translation id="1675002386741412210">Podpora:</translation>
 <translation id="1679420586049708690">Veřejná relace pro automatické přihlášení</translation>
+<translation id="1680029600835707254">Tato zásada určuje, kdo může zahájit relaci systému <ph name="PRODUCT_OS_NAME" />. Nebrání uživatelům v přihlášení k dalším účtům Google v systému Android. Chcete-li tomu zabránit, nakonfigurujte zásadu <ph name="CLOUDDPC_ACCOUNT_MANAGEMENT_POLICY" /> specifickou pro Android (jako součást zásady <ph name="ARC_POLICY" />).</translation>
 <translation id="1689963000958717134">Umožňuje přenést nastavení sítě, která se budou používat pro všechny uživatele zařízení se systémem <ph name="PRODUCT_OS_NAME" />. Konfigurace sítě je řetězec ve formátu JSON, který se řídí definicí formátu Open Network Configuration popsanou na stránce <ph name="ONC_SPEC_URL" />.</translation>
 <translation id="1708496595873025510">Nastavit omezení pro načítání počáteční hodnoty variace</translation>
 <translation id="172374442286684480">Umožnit nastavení místních dat všem webům</translation>
@@ -156,6 +176,7 @@ Hostitel Vzdálené plochy Chrome je nativní služba, která je spuštěna v c
 
 Tyto zásady se použijí pouze v případě, že je nainstalován hostitel Vzdálené plochy Chrome.</translation>
 <translation id="1757688868319862958">Umožňuje službě <ph name="PRODUCT_NAME" /> spustit pluginy, které vyžadují autorizaci. Pokud toto nastavení povolíte, budou pluginy, které nejsou zastaralé, stále spuštěny. Je-li toto nastavení zakázáno nebo není nastaveno, uživatelé budou požádáni, aby povolili spuštění pluginů, které vyžadují autorizaci. Jedná se o pluginy, které mohou ohrozit bezpečnost.</translation>
+<translation id="1781356041596378058">Tato zásada také ovládá přístup k možnostem Pro vývojáře v systému Android. Pokud tuto zásadu nastavíte na hodnotu True, uživatelé nebudou mít přístup k sekci Pro vývojáře. Pokud tuto zásadu nastavíte na hodnotu False nebo ji nenastavíte, uživatelé budou moci možnosti Pro vývojáře otevřít tak, že v aplikaci Nastavení Android sedmkrát klepnou na číslo sestavení.</translation>
 <translation id="1803646570632580723">Seznam připnutých aplikací, které se zobrazují ve spouštěči</translation>
 <translation id="1808715480127969042">Blokovat soubory cookie na těchto stránkách</translation>
 <translation id="1827523283178827583">Použít pevně dané servery proxy</translation>
@@ -220,6 +241,7 @@ Tyto zásady se použijí pouze v případě, že je nainstalován hostitel Vzd
 
       Pokud tato zásada není nastavena, budou pro všechna nastavení použity výchozí hodnoty.</translation>
 <translation id="1964634611280150550">Anonymní režim zakázán</translation>
+<translation id="1964802606569741174">Tato zásada nemá vliv na aplikaci YouTube pro Android. Chcete-li na YouTube vynutit bezpečný režim, měli byste instalaci aplikace YouTube pro Android zakázat.</translation>
 <translation id="1969212217917526199">Přepíše zásady u ladicích sestavení hostitele vzdáleného připojení.
 
 Hodnota je analyzována jako slovník JSON s mapováním názvu zásady na hodnoty zásady.</translation>
@@ -237,6 +259,7 @@ Hodnota je analyzována jako slovník JSON s mapováním názvu zásady na hodno
       Upozorňujeme, že pokud platforma podporuje oznámení o zásadách, budou všechna výchozí nastavení i hodnota této zásady ignorovány a interval aktualizací bude nastaven na 24 hodin. Očekává se totiž, že při změně zásad bude aktualizace vynucena automaticky prostřednictvím oznámení.</translation>
 <translation id="2024476116966025075">Konfigurace povinného názvu domény pro klienty vzdáleného přístupu</translation>
 <translation id="2030905906517501646">Klíčové slovo výchozího poskytovatele vyhledávání</translation>
+<translation id="203096360153626918">Tato zásada nemá vliv na aplikace pro Android. Budou moci přejít do režimu celé obrazovky i v případě, že je tato zásada nastavena na hodnotu <ph name="FALSE" />.</translation>
 <translation id="206623763829450685">Určuje, která schémata ověření v protokolu HTTP bude prohlížeč <ph name="PRODUCT_NAME" /> podporovat.
 
           Zadat můžete hodnoty „basic“, „digest“, „ntlm“ a „negotiate“. Chcete-li zadat více hodnot, oddělte je čárkami.
@@ -259,6 +282,7 @@ Pokud tato zásada není nastavena, použije se výchozí hodnota 0 a uživatel
 <translation id="2166715102875984646">Deaktivovat podporu rozhraní API pro 3D grafiku</translation>
 <translation id="2168397434410358693">Prodleva nečinnosti při napájení ze sítě</translation>
 <translation id="2170233653554726857">Povolení optimalizace WPAD</translation>
+<translation id="2178899310296064282">Vynutit na YouTube alespoň střední nastavení omezeného režimu</translation>
 <translation id="2188979373208322108">Aktivuje v aplikaci <ph name="PRODUCT_NAME" /> panel záložek.
 
       Pokud toto nastavení aktivujete, zobrazí aplikace <ph name="PRODUCT_NAME" /> panel záložek.
@@ -298,6 +322,7 @@ Pokud tato zásada není nastavena, použije se výchozí hodnota 0 a uživatel
       Kontrolu pravopisu lze nicméně provést pomocí staženého slovníku. Tato zásada se vztahuje pouze na používání internetových služeb.
 
       Pokud toto nastavení není nakonfigurováno, uživatelé mohou zvolit, zda službu pro kontrolu pravopisu chtějí použít či nikoli.</translation>
+<translation id="2294382669900758280">Přehrávání videí v aplikacích Android není bráno v potaz ani v případě, že je tato zásada nastavena na hodnotu <ph name="TRUE" />.</translation>
 <translation id="2299220924812062390">Zadat seznam aktivovaných pluginů</translation>
 <translation id="2309390639296060546">Výchozí nastavení geolokace</translation>
 <translation id="2312134445771258233">Umožňuje konfigurovat stránky, které se načtou při spuštění.
@@ -478,6 +503,9 @@ Z prohlížeče <ph name="PRODUCT_NAME" /> verze 29 a novějších verzí bylo t
 <translation id="2623014935069176671">Počkat na první aktivitu uživatele</translation>
 <translation id="262740370354162807">Povolí odesílání dokumentů do služby <ph name="CLOUD_PRINT_NAME" /></translation>
 <translation id="2633084400146331575">Aktivovat hlasovou odezvu</translation>
+<translation id="2646290749315461919">Umožňuje nastavit, zda mohou webové stránky sledovat fyzickou polohu uživatele. Sledování fyzické polohy uživatelů lze nakonfigurovat tak, že bude ve výchozím nastavení povoleno nebo zakázáno. Také lze nastavit, že se při každém pokusu webových stránek o sledování fyzické polohy uživateli zobrazí výzva.
+
+         Není-li zásada nastavena, bude použita zásada AskGeolocation a uživatel ji bude moci změnit.</translation>
 <translation id="2650049181907741121">Akce při zavření víka</translation>
 <translation id="2655233147335439767">Určuje adresu URL vyhledávače, který bude použit při výchozím vyhledávání. Adresa URL by měla obsahovat řetězec <ph name="SEARCH_TERM_MARKER" />, který bude během dotazování nahrazen vyhledávacími dotazy uživatele.
 
@@ -492,12 +520,6 @@ Z prohlížeče <ph name="PRODUCT_NAME" /> verze 29 a novějších verzí bylo t
           Zásada bude dodržována pouze v případě, že je aktivní zásada DefaultSearchProviderEnabled.</translation>
 <translation id="2682225790874070339">Zakáže v aplikaci Soubory v systému <ph name="PRODUCT_OS_NAME" /> přístup k Disku.</translation>
 <translation id="268577405881275241">Aktivace funkce datové komprese proxy serveru</translation>
-<translation id="2692168654831544772">Zakáže pořizování snímků obrazovky.
-
-      Je-li tato zásada povolena, nelze pořizovat snímky obrazovky pomocí klávesových zkratek ani pomocí rozhraní API rozšíření.
-      Pořizování snímků obrazovky je zakázáno i u aplikací ARC.
-
-      Pokud je tato zásada zakázána nebo není nastavena, je pořizování snímků obrazovky povoleno.</translation>
 <translation id="2731627323327011390">Zakázat aplikacím ARC používání certifikátů systému <ph name="PRODUCT_OS_NAME" /></translation>
 <translation id="2742843273354638707">Skryje ze stránky Nová karta a ze spouštěče aplikací systému <ph name="PRODUCT_OS_NAME" /> aplikaci Internetový obchod Chrome a odkaz na zápatí.
 
@@ -528,6 +550,7 @@ Pokud toto nastavení deaktivujete, Bezpečné prohlížení nebude nikdy aktivn
 Pokud toto nastavení aktivujete nebo deaktivujete, uživatelé nebudou moci v prohlížeči <ph name="PRODUCT_NAME" /> změnit ani přepsat nastavení Povolit ochranu proti phishingu a malwaru.
 
 Pokud tuto zásadu ponecháte nenastavenou, bude tato možnost aktivována, ale uživatelé budou moci nastavení změnit.</translation>
+<translation id="2787173078141616821">Hlásit informace o stavu systému Android</translation>
 <translation id="2801230735743888564">Povolit uživatelům hrát hru s dinosaurem, když je zařízení offline.
 
       Je-li tato zásada nastavena na hodnotu False, uživatelé nemohou hrát hru s dinosaurem, když je zařízení offline. Pokud je tato zásada nastavena na hodnotu True, uživatelé hru s dinosaurem hrát mohou. Pokud tato zásada není nastavena, v zaregistrovaném systému Chrome OS uživatelé hru s dinosaurem hrát nemohou, ale za všech jiných okolností ji hrát mohou.</translation>
@@ -549,22 +572,6 @@ Počínaje prohlížečem <ph name="PRODUCT_NAME" /> 21 je instalace rozšířen
 Každá položka v tomto seznamu představuje vzor odpovídající typu rozšíření (viz stránky https://developer.chrome.com/extensions/match_patterns). Uživatelé budou moci jednoduše instalovat položky z jakékoli adresy, která odpovídá položce v tomto seznamu. V těchto vzorech musí být povoleno umístění souboru *.crx i stránka, ze které bude zahájeno stahování (tj. zdroj odkazu).
 
 Seznam zakázaných položek ExtensionInstallBlacklist je této zásadě nadřazen. Rozšíření v seznamu zakázaných položek nebude nainstalováno ani v případě, že bude pocházet ze stránek, které jsou uvedeny v tomto seznamu.</translation>
-<translation id="2813740161943223811">Podpora této zásady byla ukončena, použijte místo ní zásadu ProxyMode.
-
-          Umožňuje zadat proxy server, který bude prohlížeč <ph name="PRODUCT_NAME" /> používat, a brání uživatelům ve změně nastavení proxy serveru. Tento proxy server budou moci používat i aplikace ARC.
-
-          Pokud zvolíte, že proxy server nikdy používat nechcete a chcete se vždy připojovat přímo, všechny další možnosti budou ignorovány. 
-
-          Pokud zvolíte, že chcete použít systémové nastavení proxy serveru nebo jej zjistit automaticky, všechny další možnosti budou ignorovány.
-
-          Pokud zvolíte ruční nastavení proxy serveru, můžete v zásadách „Adresa (nebo adresa URL) proxy serveru“, „Adresa URL souboru PAC proxy serveru“ a „Seznam pravidel vynechání proxy serveru oddělených čárkami“ zadat další možnosti. Aplikacím ARC je k dispozici pouze proxy server HTTP s nejvyšší prioritou.
-
-          Podrobné příklady naleznete na následující stránce:
-          <ph name="PROXY_HELP_URL" />
-
-          Pokud aktivujete toto nastavení, prohlížeč <ph name="PRODUCT_NAME" /> bude ignorovat veškeré možnosti související s proxy serverem zadané na příkazovém řádku.
-
-          Pokud tato zásada nebude nastavena, uživatelé budou moci nastavení proxy serveru zvolit sami.</translation>
 <translation id="2818551149761607847">Konfiguruje obrázek avatara uživatele.
 
       Tato zásada umožňuje nakonfigurovat obrázek avatara, který na přihlašovací obrazovce představuje uživatele. Zásadu nastavíte zadáním adresy URL, ze které systém <ph name="PRODUCT_OS_NAME" /> může obrázek avatara stáhnout, a kryptografické hodnoty hash, která slouží k ověření integrity staženého obsahu. Obrázek musí být ve formátu JPEG a jeho velikost nesmí překročit 512 kB. Adresa URL musí být přístupná bez ověření.
@@ -602,9 +609,11 @@ Pokud zásadu nenastavíte, bude se považovat za aktivované (viz popis výše)
 <translation id="2850122204195089673">Zapnutí a automatické aktivování jednotné plochy (výchozí nastavení)</translation>
 <translation id="285480231336205327">Aktivovat vysoce kontrastní režim</translation>
 <translation id="2872961005593481000">Vypnout</translation>
+<translation id="2874209944580848064">Poznámka ohledně zařízení se systémem <ph name="PRODUCT_OS_NAME" />, která podporují aplikace pro Android:</translation>
 <translation id="2877225735001246144">Deaktivovat vyhledání záznamů CNAME při vyjednávání ověření protokolu Kerberos</translation>
 <translation id="2884728160143956392">Povolit soubory cookie pouze pro relaci na těchto stránkách</translation>
 <translation id="2893546967669465276">Odesílat systémové protokoly na server správy</translation>
+<translation id="2899002520262095963">Aplikace Android mohou používat konfigurace sítě a certifikáty CA nastavené pomocí této zásady, ale nemají přístup k některým možnostem konfigurace.</translation>
 <translation id="2906874737073861391">Seznam rozšíření AppPack</translation>
 <translation id="2908277604670530363">Maximální počet současných připojení k proxy serveru</translation>
 <translation id="2948087343485265211">Určuje, zda aktivita zvukových zařízení ovlivňuje správu napájení.
@@ -675,6 +684,7 @@ Pokud toto nastavení zakážete nebo ponecháte bez nastavení, stránky ověř
          Pokud zásadu nenastavíte, mohou uživatelé v aplikaci <ph name="PRODUCT_NAME" /> instalovat libovolná rozšíření.</translation>
 <translation id="316778957754360075">V prohlížečích <ph name="PRODUCT_NAME" /> verze 29 a novějších bylo toto nastavení zrušeno. Doporučený způsob, jak nastavit sbírky rozšíření nebo aplikací hostovaných organizací, je zahrnout web hostující balíčky CRX do seznamu ExtensionInstallSources a na webovou stránku umístit přímé odkazy pro stažení balíčků. Spouštěč pro danou webovou stránku lze vytvořit pomocí zásady ExtensionInstallForcelist.</translation>
 <translation id="3185009703220253572">od verze <ph name="SINCE_VERSION" /></translation>
+<translation id="3187220842205194486">Aplikace Android k podnikovým klíčům nemají přístup. Tato zásada na ně nemá vliv.</translation>
 <translation id="318812033927804102">Konfiguruje nastavení správy rozšíření prohlížeče <ph name="PRODUCT_NAME" />.
 
 Tato zásada řídí několik nastavení, včetně těch, která jsou konfigurována všemi existujícími zásadami pro rozšíření. Pokud je tato zásada nastavena, přepíše všechny starší nastavené zásady.
@@ -707,20 +717,26 @@ allowed_types: toto nastavení vytvoří seznam povolených rozšíření nebo a
 
 Tato zásada zatím není připravena k použití. Nepoužívejte ji prosím.
           </translation>
+<translation id="3201273385265130876">Umožňuje zadat proxy server, který bude prohlížeč <ph name="PRODUCT_NAME" /> používat, a brání uživatelům ve změně nastavení proxy serveru.
+
+          Pokud zvolíte, že proxy server nikdy používat nechcete a chcete se vždy připojovat přímo, všechny další možnosti budou ignorovány. 
+
+          Pokud zvolíte, že chcete použít systémové nastavení proxy serveru, všechny další možnosti budou ignorovány.
+
+          Pokud zvolíte, že chcete nastavení proxy serveru zjistit automaticky, všechny další možnosti budou ignorovány.
+
+          Pokud zvolíte režim proxy s pevně daným serverem, můžete v zásadách „Adresa (nebo adresa URL) proxy serveru“ a „Seznam pravidel vynechání proxy serveru oddělených čárkami“ zadat další možnosti. Aplikacím ARC je k dispozici pouze proxy server HTTP s nejvyšší prioritou.
+
+          Pokud zvolíte, že chcete používat skript .pac proxy serveru, musíte v zásadě Adresa URL souboru PAC proxy serveru zadat adresu URL skriptu.
+
+          Podrobné příklady naleznete na následující stránce:
+          <ph name="PROXY_HELP_URL" />.
+
+          Pokud aktivujete toto nastavení, prohlížeč <ph name="PRODUCT_NAME" /> a aplikace ARC budou ignorovat veškeré možnosti související s proxy serverem zadané na příkazovém řádku.
+
+          Pokud tato zásada nebude nastavena, uživatelé budou moci nastavení proxy serveru zvolit sami.</translation>
 <translation id="3205825995289802549">Při prvním spuštění maximalizovat první okno prohlížeče</translation>
 <translation id="3206731874112238027">Deaktivovat náhled tisku (podpora ukončena)</translation>
-<translation id="3208854390109736596">Umožňuje zadat proxy server, který bude prohlížeč <ph name="PRODUCT_NAME" /> používat, a brání uživatelům ve změně nastavení proxy serveru. Tento proxy server budou moci používat i aplikace ARC.
-
-      Pokud zvolíte, že proxy server nikdy používat nechcete a chcete se vždy připojovat přímo, všechny další možnosti budou ignorovány.
-
-      Pokud zvolíte, že chcete nastavení proxy serveru zjistit automaticky, všechny další možnosti budou ignorovány.
-
-      Podrobné příklady naleznete na následující stránce:
-      <ph name="PROXY_HELP_URL" />.
-
-      Pokud aktivujete toto nastavení, prohlížeč <ph name="PRODUCT_NAME" /> a aplikace ARC budou ignorovat veškeré možnosti související s proxy serverem zadané na příkazovém řádku.
-
-      Pokud tyto zásady ponecháte nenastavené, uživatelé budou moci zvolit vlastní nastavení proxy serveru.</translation>
 <translation id="3213821784736959823">Řídí, zda se v prohlížeči <ph name="PRODUCT_NAME" /> používá integrovaný klient DNS.
 
       Pokud je tato zásada nastavena na hodnotu true, bude použit integrovaný klient DNS (pokud je k dispozici).
@@ -734,6 +750,7 @@ Tato zásada zatím není připravena k použití. Nepoužívejte ji prosím.
 
      Není-li nastavena, může se uživatelům zobrazit výzva, zda chtějí domovskou stránku importovat, nebo může import probíhat automaticky.</translation>
 <translation id="3219421230122020860">Anonymní režim dostupný</translation>
+<translation id="3220624000494482595">Je-li terminálová aplikace aplikace Android, nebude mít nad verzí systému <ph name="PRODUCT_OS_NAME" /> kontrolu ani v případě, že je tato zásada nastavena na hodnotu <ph name="TRUE" />.</translation>
 <translation id="3236046242843493070">Vzory adres URL, ze kterých je možné instalovat rozšíření, aplikace a uživatelské skripty</translation>
 <translation id="3243309373265599239">Udává dobu nečinnosti uživatele, po které bude při napájení ze sítě snížen jas obrazovky.
 
@@ -765,15 +782,20 @@ Tato zásada zatím není připravena k použití. Nepoužívejte ji prosím.
 <translation id="3322771899429619102">Umožňuje nastavit seznam vzorů adres URL webových stránek, které mají povoleno generovat klíče. Vzory adres URL uvedené v zásadě KeygenBlockedForUrls tyto výjimky přepíšou.
 
 Pokud tuto zásadu nenastavíte, použije se pro všechny webové stránky globální výchozí hodnota buď ze zásady DefaultKeygenSetting (pokud je nastavena), nebo z osobního nastavení uživatele.</translation>
-<translation id="3337150554416948435">Umožňuje nastavit, zda weby mohou sledovat fyzickou polohu uživatelů. Sledování fyzické polohy uživatelů lze ve výchozím nastavení povolit nebo zakázat a také lze nastavit, aby se při každém pokusu webových stránek o sledování fyzické polohy uživateli zobrazila výzva.
+<translation id="3322902067538988734">Pokud je tato zásada nastavena na hodnotu True, uživatel se před použitím do prohlížeče <ph name="PRODUCT_NAME" /> musí přihlásit pomocí svého profilu. V tomto případě bude výchozí hodnota zásady BrowserGuestModeEnabled nastavena na False.
 
-          Pokud je tato zásada nastavena na hodnotu „BlockGeolocation“, je sdílení polohy pro aplikace ARC zakázáno.
-
-          Je-li tato zásada ponechána nenastavená, použije se hodnota „AskGeolocation“ a uživatel ji bude moci změnit.</translation>
+      Pokud je tato zásada nastavena na hodnotu False nebo není nakonfigurována, může uživatel prohlížeč <ph name="PRODUCT_NAME" /> používat bez přihlášení.</translation>
 <translation id="3381968327636295719">Používat ve výchozím nastavení hostitelský prohlížeč</translation>
 <translation id="3417418267404583991">Pokud je tato zásada nastavena na hodnotu True nebo není nastavena, povolí systém <ph name="PRODUCT_OS_NAME" /> přihlášení hosta. Přihlášení hosta jsou anonymní uživatelské relace a nevyžadují heslo.
 
       Je-li tato zásada nastavena na hodnotu False, systém <ph name="PRODUCT_OS_NAME" /> spuštění relací hosta nepovolí.</translation>
+<translation id="3418871497193485241">Vynutí minimální nastavení omezeného režimu na YouTube a znemožní uživatelům vybrat méně omezený režim.
+
+      Je-li tato zásada nastavena na hodnotu Přísný, bude na YouTube vždy aktivní přísný omezený režim.
+
+      Je-li tato zásada nastavena na hodnotu Střední, uživatel na YouTube bude moci vybrat pouze střední nebo přísný omezený režim, ale nebude moci omezený režim deaktivovat.
+
+      Pokud je tato zásada nastavena na hodnotu Vypnuto nebo není nastavena žádná hodnota, prohlížeč <ph name="PRODUCT_NAME" /> na YouTube omezený režim vynucovat nebude. Omezený režim však může být vynucován externími zásadami, například zásadami služby YouTube.</translation>
 <translation id="3428247105888806363">Aktivovat předvídání akcí sítě</translation>
 <translation id="3449886121729668969">Konfiguruje nastavení proxy serveru pro prohlížeč <ph name="PRODUCT_NAME" />. Tato nastavení proxy serveru budou k dispozici i aplikacím ARC.
 
@@ -788,15 +810,6 @@ Pokud tuto zásadu nenastavíte, použije se pro všechny webové stránky glob�
           Pokud je tato zásada nastavena na hodnotu True, prodlevy systému správy napájení a limit délky relace začnou běžet až poté, co je v relaci zaznamenána první aktivita uživatele.
 
           Pokud je tato zásada nastavena na hodnotu False nebo je ponechána nenastavená, prodlevy správy obsahu a limit délky relace začnou běžet ihned po zahájení relace.</translation>
-<translation id="3469657928310999477">U hostitelů v tomto seznamu prohlížeč <ph name="PRODUCT_NAME" /> obejde všechny proxy servery. 
-Aplikace ARC tento seznam budou moci používat jako seznam pravidel obcházení.
-
-          Tato zásada bude použita pouze v případě, že jste v zásadě „Zvolit způsob konfigurace nastavení proxy serveru“ zvolili ruční nastavení.
-
-          Pokud jste vybrali jiný režim nastavení zásad proxy serveru, tuto zásadu byste nastavovat neměli.
-
-          Podrobnější příklady naleznete na následující stránce:
-          <ph name="PROXY_HELP_URL" /></translation>
 <translation id="3478024346823118645">Při odhlášení smazat uživatelská data</translation>
 <translation id="348495353354674884">Aktivovat virtuální klávesnici</translation>
 <translation id="3496296378755072552">Správce hesel</translation>
@@ -834,13 +847,20 @@ Pokud tuto zásadu aktivujete nebo ji nenastavíte, uživatelé budou ve správc
 <translation id="3660562134618097814">Přenos souborů cookie od poskytovatele identity SAML při přihlášení</translation>
 <translation id="3709266154059827597">Konfigurace seznamu zakázaných položek instalace rozšíření</translation>
 <translation id="3711895659073496551">Pozastavit</translation>
-<translation id="3715448429089775791">Vynutí aktivaci Bezpečného režimu YouTube a brání uživatelům, aby toto nastavení změnili.
-
-Pokud toto nastavení aktivujete, Bezpečný režim na YouTube bude vždy aktivní.
-
-Pokud toto nastavení deaktivujete nebo ho ponecháte nenastavené, Bezpečný režim YouTube vynucen nebude.</translation>
 <translation id="3750220015372671395">Blokovat generování klíčů na těchto stránkách</translation>
 <translation id="3756011779061588474">Blokovat režim pro vývojáře</translation>
+<translation id="3758089716224084329">Umožňuje zadat proxy server, který bude prohlížeč <ph name="PRODUCT_NAME" /> používat, a brání uživatelům ve změně nastavení proxy serveru.
+
+      Pokud zvolíte, že proxy server nikdy používat nechcete a chcete se vždy připojovat přímo, všechny další možnosti budou ignorovány.
+
+      Pokud zvolíte, že chcete nastavení proxy serveru zjistit automaticky, všechny další možnosti budou ignorovány.
+
+      Podrobné příklady naleznete na následující stránce:
+      <ph name="PROXY_HELP_URL" />.
+
+      Pokud aktivujete toto nastavení, prohlížeč <ph name="PRODUCT_NAME" /> a aplikace ARC budou ignorovat veškeré možnosti související s proxy serverem zadané na příkazovém řádku.
+
+      Pokud tyto zásady ponecháte nenastavené, uživatelé budou moci zvolit vlastní nastavení proxy serveru.</translation>
 <translation id="3758249152301468420">Deaktivovat nástroje pro vývojáře</translation>
 <translation id="3765260570442823273">Doba zobrazení zprávy s upozorněním na odhlášení z důvodu nečinnosti</translation>
 <translation id="3768412594120638208">Řídí, jaké typy aplikací nebo rozšíření lze instalovat.
@@ -897,6 +917,9 @@ Pokud je toto nastavení ponecháno nenakonfigurované, nebudou ohledně přijat
 <translation id="384743459174066962">Umožňuje nastavit seznam vzorů adres URL stránek, které nemají povoleno otevírat vyskakovací okna.
 
            Pokud zásadu nenastavíte, použije se pro všechny webové stránky globální výchozí hodnota buď ze zásady DefaultPopupsSetting (pokud je nastavena), nebo z osobního nastavení uživatele.</translation>
+<translation id="3851039766298741586">Hlášení informací o aktivní relaci veřejného terminálu, jako je ID a verze aplikace.
+
+      Je-li tato zásada nastavena na hodnotu False, informace o relaci veřejného terminálu se hlásit nebudou. Pokud je nastavena na hodnotu True nebo nastavena není, informace o relaci veřejného terminálu se hlásit budou.</translation>
 <translation id="3859780406608282662">Přidá parametr k načítání počátečních hodnot variant v systému <ph name="PRODUCT_OS_NAME" />.
 
       Pokud je tato zásada nastavena, přidá se k adrese URL, která slouží k načítání počáteční hodnoty variant, parametr s názvem „restrict“. Hodnota parametru bude odpovídat hodnotě určené touto zásadou.
@@ -911,6 +934,13 @@ Pokud je toto nastavení ponecháno nenakonfigurované, nebudou ohledně přijat
 
           Tato zásada je respektována pouze v případě, že je aktivována zásada DefaultSearchProviderEnabled.</translation>
 <translation id="3864818549971490907">Výchozí nastavení pluginů</translation>
+<translation id="386487026071140458">Podpora této zásady byla ukončena. Použijte místo ní zásady <ph name="FORCEGOOGLESAFESEARCH_POLICY_NAME" /> a <ph name="FORCEYOUTUBERESTRICT_POLICY_NAME" />. Pokud je nastavena zásada <ph name="FORCEGOOGLESAFESEARCH_POLICY_NAME" />, <ph name="FORCEYOUTUBERESTRICT_POLICY_NAME" /> nebo <ph name="FORCEYOUTUBESAFETYMODE_POLICY_NAME" /> (podpora ukončena), je tato zásada ignorována.
+
+      Vynutí, aby při použití Vyhledávání Google bylo vždy aktivováno Bezpečné vyhledávání, a zabrání uživatelům toto nastavení změnit. Toto nastavení také vynutí střední omezený režim na YouTube.
+
+      Pokud zapnete toto nastavení, bude ve Vyhledávání Google vždy aktivováno Bezpečné vyhledávání a na YouTube bude vždy aktivován střední omezený režim.
+
+      Pokud toto nastavení vypnete nebo nenastavíte žádnou hodnotu, Bezpečné vyhledávání ve Vyhledávání Google a omezený režim na YouTube nebudou vynucovány.</translation>
 <translation id="3866249974567520381">Popis</translation>
 <translation id="3866530186104388232">Pokud je tato zásada nastavena na hodnotu True nebo není nastavena, zobrazí systém <ph name="PRODUCT_OS_NAME" /> na přihlašovací obrazovce existující uživatele a umožní vybrat jednoho z nich. Je-li tato zásada nastavena na hodnotu False, zobrazí systém <ph name="PRODUCT_OS_NAME" /> výzvu k zadání uživatelského jména a hesla.</translation>
 <translation id="3868347814555911633">Tato zásada je aktivní pouze v režimu prodeje.
@@ -928,15 +958,13 @@ Pokud je toto nastavení ponecháno nenakonfigurované, nebudou ohledně přijat
 
       Pokud tuto zásadu ponecháte nenastavenou, bude protokol SPDY k dispozici.</translation>
 <translation id="3891357445869647828">Povolit JavaScript</translation>
-<translation id="3898060089412156345">Povoluje nebo zakazuje záznam zvuku.
+<translation id="3891953007921334498">Deaktivuje nástroje pro vývojáře a konzoli JavaScriptu.
 
-Pokud je tato zásada aktivována nebo není nakonfigurována (výchozí nastavení), bude uživatel vyzván k udělení přístupu pro záznam zvuku (s výjimkou adres URL nakonfigurovaných v seznamu AudioCaptureAllowedUrls, kterým bude přístup udělen bez vyzvání).
+      Pokud toto nastavení aktivujete, nebude možné přistupovat k nástrojům pro vývojáře ani kontrolovat prvky webových stránek. Deaktivovány budou také veškeré klávesové zkratky a položky klasických či kontextových nabídek, pomocí kterých lze nástroje pro vývojáře nebo konzoli JavaScriptu otevřít.
 
-Pokud je tato zásada deaktivována, uživateli se výzva nikdy nezobrazí a záznam zvuku bude k dispozici pouze u adres URL uvedených na seznamu AudioCaptureAllowedUrls.
-U aplikací ARC je mikrofon trvale ztlumen.
-
-Tato zásada ovlivňuje kromě integrovaného mikrofonu i všechny ostatní zvukové vstupy.</translation>
+      Pokud tuto možnost deaktivujete nebo nenastavíte, umožníte uživatelům používat nástroje pro vývojáře nebo konzoli JavaScriptu.</translation>
 <translation id="3907986150060929099">Nastavit doporučené jazyky pro veřejnou relaci</translation>
+<translation id="3911737181201537215">Na protokolování prováděné systémem Android tato zásada nemá vliv.</translation>
 <translation id="391531815696899618">Pokud má hodnotu True, deaktivuje synchronizaci aplikace Soubory systému <ph name="PRODUCT_OS_NAME" /> s Diskem Google. Na Disk Google se v tomto případě nebudou nahrávat žádná data.
 
           Pokud má tato zásada hodnotu False nebo není nastavena, uživatelé budou moci přenášet soubory na Disk Google.</translation>
@@ -948,6 +976,7 @@ Tato zásada ovlivňuje kromě integrovaného mikrofonu i všechny ostatní zvu
 <translation id="3964909636571393861">Umožňuje přístup do seznamu adres URL</translation>
 <translation id="3965339130942650562">Časový limit před odhlášením nečinného uživatele</translation>
 <translation id="3967075520570946456">Aktivovat při prvním spuštění prohlížeče po přechodu na vyšší verzi OS zobrazení uvítací stránky</translation>
+<translation id="3968660816994975381">Tato zásada určuje, zda je do systému <ph name="PRODUCT_OS_NAME" /> možné přidávat nové uživatele. Nebrání uživatelům v přihlášení k dalším účtům Google v systému Android. Chcete-li tomu zabránit, nakonfigurujte zásadu <ph name="CLOUDDPC_ACCOUNT_MANAGEMENT_POLICY" /> specifickou pro Android (jako součást zásady <ph name="ARC_POLICY" />).</translation>
 <translation id="3973371701361892765">Nikdy poličku automaticky neskrývat</translation>
 <translation id="3984028218719007910">Určuje, zda systém <ph name="PRODUCT_OS_NAME" /> po odhlášení zachová místní data účtu. Pokud je tato zásada nastavena na hodnotu True, nebude systém <ph name="PRODUCT_OS_NAME" /> uchovávat žádné účty trvale a všechna data relace uživatele budou po odhlášení smazána. Pokud je tato zásada nastavena na hodnotu False, nebo není nastavena, může zařízení uchovat (šifrovaná) místní uživatelská data.</translation>
 <translation id="3994569321696536679">Aktivuje ve službě Google Apps funkci omezeného přihlašování prohlížeče <ph name="PRODUCT_NAME" /> a znemožní uživatelům toto nastavení změnit.
@@ -968,6 +997,7 @@ Pokud toto nastavení definujete, uživatel bude moci služby Google Apps (např
 
       Pokud je tato zásada nastavena na hodnotu false, uživatelé zvláštní nabídky nebudou moci uplatnit.</translation>
 <translation id="4010738624545340900">Povolit zobrazování dialogových oken pro výběr souboru</translation>
+<translation id="4020682745012723568">Aplikace Android k souborům cookie převedeným do profilu uživatele nemají přístup.</translation>
 <translation id="4025586928523884733">Blokuje soubory cookie třetích stran.
 
       Aktivací tohoto nastavení zabráníte tomu, aby prvky webové stránky, které nepocházejí z domény uvedené v adresním řádku prohlížeče, nastavovaly soubory cookie.
@@ -1026,7 +1056,9 @@ Tato zásada je určena k internímu použití prohlížečem <ph name="PRODUCT_
 <translation id="423797045246308574">Umožňuje nastavit seznam vzorů adres URL webových stránek, které nemají povoleno generovat klíče. Pokud je uveden vzor adres URL v zásadě KeygenAllowedForUrls, tato zásada tyto výjimky přepíše.
 
 Pokud tuto zásadu nenastavíte, použije se pro všechny webové stránky globální výchozí hodnota buď ze zásady DefaultKeygenSetting (pokud je nastavena), nebo z osobního nastavení uživatele.</translation>
+<translation id="4239720644496144453">Pro aplikace Android se mezipaměť nepoužívá. Pokud několik uživatelů nainstaluje stejnou aplikaci Android, stáhne se aplikace pro každého uživatele znovu.</translation>
 <translation id="4250680216510889253">Ne</translation>
+<translation id="4272136423200695428">Aktivuje vynucené přihlášení do prohlížeče <ph name="PRODUCT_NAME" />.</translation>
 <translation id="427632463972968153">Udává parametry, které se použijí při vyhledávání podle obrázku pomocí metody POST. Sestává z párů název–hodnota oddělených čárkou. Pokud je hodnotou parametr šablony (např. {imageThumbnail} v příkladu výše), bude nahrazen skutečnými údaji vyhledávacích dotazů.
 
           Tato zásada je nepovinná. Pokud není nastavena, požadavek na vyhledávání podle obrázku bude odeslán pomocí metody GET.
@@ -1062,6 +1094,7 @@ Samotná zásada je na výše uvedených platformách podporována. Funkce, kter
 <translation id="4449545651113180484">Otočit obrazovku ve směru hodinových ručiček o 270 stupňů</translation>
 <translation id="4467952432486360968">Blokovat soubory cookie třetích stran</translation>
 <translation id="4474167089968829729">Povolit ukládání hesel do správce hesel</translation>
+<translation id="4476769083125004742">Je-li tato zásada nastavena na možnost <ph name="BLOCK_GEOLOCATION_SETTING" />, aplikace Android nemají přístup k informacím o poloze. Pokud tuto zásadu nastavíte na jinou hodnotu nebo ji ponecháte nenastavenou a aplikace Android bude chtít získat přístup k informacím o poloze, zobrazí se uživateli žádost o schválení.</translation>
 <translation id="447686899376429408">Pokud je tato zásada nastavena na hodnotu True nebo není nastavena, budou uživatelé z prohlížeče moci odesílat karty, weby a obsah plochy. Je-li tato zásada nastavena na hodnotu False, tato možnost bude zakázána.</translation>
 <translation id="4480694116501920047">Vynutit Bezpečné vyhledávání</translation>
 <translation id="4482640907922304445">Zobrazí na liště aplikace <ph name="PRODUCT_NAME" /> tlačítko Domovská stránka.
@@ -1094,6 +1127,7 @@ Samotná zásada je na výše uvedených platformách podporována. Funkce, kter
 <translation id="4525521128313814366">Umožňuje nastavit seznam vzorů adres URL webových stránek, které nemají povoleno zobrazovat obrázky.
 
           Pokud zásadu nenastavíte, použije se pro všechny webové stránky globální výchozí hodnota buď ze zásady DefaultImagesSetting (pokud je nastavena), nebo z osobního nastavení uživatele.</translation>
+<translation id="4531706050939927436">Instalaci aplikací Android lze vynutit z administrátorské konzole pomocí Google Play. Tato zásada se na ně nevztahuje.</translation>
 <translation id="4534500438517478692">Název omezení Android:</translation>
 <translation id="4541530620466526913">Místní účty v zařízení</translation>
 <translation id="4555850956567117258">Aktivuje vzdálené ověření identity uživatele</translation>
@@ -1145,6 +1179,22 @@ Pokud tuto zásadu nastavíte, uživatelé ji nebudou moci změnit ani přepsat.
 
 Pokud ji ponecháte nenastavenou, velký kurzor bude ve výchozím nastavení deaktivován, ale uživatelé jej budou moci kdykoli aktivovat.</translation>
 <translation id="4807950475297505572">Bude odstraněno tolik uživatelů, od jejichž posledního použití uplynula nejdelší doba, kolik bude potřeba k uvolnění dostatečného množství místa.</translation>
+<translation id="4815725774537609998">Podpora této zásady byla ukončena, použijte místo ní zásadu ProxyMode.
+
+          Umožňuje zadat proxy server, který bude prohlížeč <ph name="PRODUCT_NAME" /> používat, a brání uživatelům ve změně nastavení proxy serveru.
+
+          Pokud zvolíte, že proxy server nikdy používat nechcete a chcete se vždy připojovat přímo, všechny další možnosti budou ignorovány. 
+
+          Pokud zvolíte, že chcete použít systémové nastavení proxy serveru nebo jej zjistit automaticky, všechny další možnosti budou ignorovány.
+
+          Pokud zvolíte ruční nastavení proxy serveru, můžete v zásadách „Adresa (nebo adresa URL) proxy serveru“, „Adresa URL souboru PAC proxy serveru“ a „Seznam pravidel vynechání proxy serveru oddělených čárkami“ zadat další možnosti. Aplikacím ARC je k dispozici pouze proxy server HTTP s nejvyšší prioritou.
+
+          Podrobné příklady naleznete na následující stránce:
+          <ph name="PROXY_HELP_URL" />.
+
+          Pokud aktivujete toto nastavení, prohlížeč <ph name="PRODUCT_NAME" /> bude ignorovat veškeré možnosti související s proxy serverem zadané na příkazovém řádku.
+
+          Pokud tato zásada nebude nastavena, uživatelé budou moci nastavení proxy serveru zvolit sami.</translation>
 <translation id="4816674326202173458">Povolit firemnímu uživateli být primárním i sekundárním uživatelem (výchozí chování pro nespravované uživatele)</translation>
 <translation id="4826326557828204741">Akce, která bude provedena, pokud bude dosaženo limitu doby nečinnosti při provozu na baterii</translation>
 <translation id="4834526953114077364">Bude odstraněno tolik uživatelů, od jejichž posledního použití uplynula nejdelší doba, kolik bude potřeba k uvolnění dostatečného množství volného místa. Odstraněni budou pouze uživatelé, kteří se během posledních 3 měsíců nepřihlásili.</translation>
@@ -1182,6 +1232,13 @@ Pokud ji ponecháte nenastavenou, lupa bude ve výchozím nastavení deaktivová
           Hodnota musí být pole slovníků JSON převedených na řetězce. Každý slovník musí mít tvar { "pattern": "$URL_PATTERN", "filter" : $FILTER }, kde $URL_PATTERN je vzor nastavení obsahu. $FILTER omezuje klientské certifikáty, ze kterých bude prohlížeč automaticky vybírat. Nezávisle na filtru budou vybrány pouze ty certifikáty, které odpovídají žádosti serveru o certifikát. Pokud má $FILTER tvar { "ISSUER": { "CN": "$ISSUER_CN" } }, budou navíc vybrány pouze ty klientské certifikáty, které byly vydány certifikátem s běžným názvem $ISSUER_CN. Pokud je $FILTER prázdný slovník {}, výběr klientských certifikátů není nijak dále omezen.
 
           Je-li tato zásada ponechána nenastavená, nebude se automatický výběr provádět pro žádný web.</translation>
+<translation id="4980301635509504364">Povoluje nebo zakazuje záznam videa.
+
+Pokud je tato zásada aktivní nebo není nakonfigurována (výchozí nastavení), uživatel bude vyzván k udělení přístupu pro záznam videa (s výjimkou adres URL nakonfigurovaných v seznamu VideoCaptureAllowedUrls, kterým bude přístup udělen bez vyzvání).
+
+Pokud je tato zásada deaktivována, uživateli se výzva nikdy nezobrazí a záznam videa bude k dispozici pouze u adres URL uvedených na seznamu VideoCaptureAllowedUrls.
+
+Tato zásada ovlivňuje kromě integrované webové kamery i všechny ostatní vstupy videa.</translation>
 <translation id="4980635395568992380">Typ údajů:</translation>
 <translation id="4983201894483989687">Povolit spouštění zastaralých pluginů</translation>
 <translation id="4988291787868618635">Akce prováděná po určité době nečinnosti</translation>
@@ -1193,11 +1250,6 @@ Pokud ji ponecháte nenastavenou, lupa bude ve výchozím nastavení deaktivová
       Není-li nastavena, může se uživatelům zobrazit výzva, zda chtějí historii importovat, nebo může import probíhat automaticky.</translation>
 <translation id="5056708224511062314">Deaktivace lupy</translation>
 <translation id="5067143124345820993">Seznam povolených uživatelů k přihlášení</translation>
-<translation id="510186355068252378">Deaktivuje synchronizaci dat v aplikaci <ph name="PRODUCT_NAME" /> prováděnou pomocí synchronizačních služeb hostovaných společností Google a znemožní uživatelům toto nastavení měnit.
-
-      Pokud toto nastavení aktivujete, uživatelé je v aplikaci <ph name="PRODUCT_NAME" /> nebudou moci změnit ani přepsat.
-
-       Pokud zásadu nenastavíte, budou si uživatelé moci vybrat, zda chtějí službu Google Sync použít, či nikoliv.</translation>
 <translation id="5105313908130842249">Prodleva uzamčení obrazovky při napájení z baterie</translation>
 <translation id="5111573778467334951">Akce, která bude provedena, pokud bude dosaženo limitu doby nečinnosti při provozu na baterii.
 
@@ -1235,6 +1287,7 @@ Pokud ji ponecháte nenastavenou, lupa bude ve výchozím nastavení deaktivová
 <translation id="5208240613060747912">Umožňuje nastavit seznam vzorů adres URL webových stránek, které nemají povoleno zobrazovat oznámení.
 
          Pokud zásadu nenastavíte, použije se pro všechny webové stránky globální výchozí hodnota buď ze zásady DefaultNotificationsSetting (pokud je nastavena), nebo z osobního nastavení uživatele.</translation>
+<translation id="5219844027738217407">U aplikací Android má tato zásada vliv pouze na mikrofon. Když je tato zásada nastavena na hodnotu True, je mikrofon pro všechny aplikace Android bez výjimky ztlumen.</translation>
 <translation id="5226033722357981948">Určuje, zda má být deaktivován nástroj pro vyhledávání pluginů</translation>
 <translation id="523505283826916779">Nastavení usnadnění přístupu</translation>
 <translation id="5255162913209987122">Doporučuje se</translation>
@@ -1281,6 +1334,13 @@ Pokud zásadu nastavíte, můžete nakonfigurovat, zda má uživatel oprávněn�
 
      Není-li nastavena, může se uživatelům zobrazit výzva, zda chtějí vyhledávač importovat, nebo může import probíhat automaticky.</translation>
 <translation id="5423197884968724595">Název omezení Android WebView:</translation>
+<translation id="543559563129402336">Podpora této zásady byla ukončena. Zvažte použití zásady <ph name="FORCEYOUTUBERESTRICT_POLICY_NAME" />, která tuto zásadu přepisuje a umožňuje přesnější vyladění.
+
+      Vynucuje střední nastavení omezeného režimu na YouTube a brání uživatelům ve změně tohoto nastavení.
+
+      Je-li toto nastavení aktivováno, bude vynucováno nastavení omezeného režimu YouTube alespoň na možnost Střední.
+
+      Pokud je toto nastavení zakázáno nebo není nastavena žádná hodnota, prohlížeč <ph name="PRODUCT_NAME" /> na YouTube omezený režim vynucovat nebude. Omezený režim však může být vynucován externími zásadami, například zásadami služby YouTube.</translation>
 <translation id="5447306928176905178">Povolit hlášení informací o paměti (velikost haldy JavaScriptu) stránce (podpora byla ukončena)</translation>
 <translation id="5457065417344056871">Povolit v prohlížeči režim hosta</translation>
 <translation id="5457924070961220141">Umožňuje nakonfigurovat výchozí modul vykreslování obsahu HTML, pokud je nainstalován plugin <ph name="PRODUCT_FRAME_NAME" />.
@@ -1326,18 +1386,12 @@ Až bude okamžité přihlašování podporovat všechny přihlašovací procesy
 
       Je-li tato zásada ponechána nenastavená, výchozí frekvence je tři minuty. Minimální frekvence je 30 sekund a maximální 24 hodin – hodnoty mimo tento rozsah budou přizpůsobeny příslušné hranici.</translation>
 <translation id="5535973522252703021">Seznam povolených serverů pro delegování ověření protokolu Kerberos</translation>
+<translation id="5559079916187891399">Tato zásada nemá vliv na aplikace Android.</translation>
 <translation id="5560039246134246593">Přidá parametr k načítání počáteční hodnoty variace v prohlížeči <ph name="PRODUCT_NAME" />.
 
       Je-li zásada stanovena, bude k adrese URL přidán parametr dotazu s názvem „omezit“, který se použije k načtení počáteční hodnoty variace. Hodnota parametru bude představovat hodnotu stanovenou v této zásadě.
 
      Pokud zásada stanovena není, adresa URL počáteční hodnoty variace se nezmění.</translation>
-<translation id="5563853101694018649">Deaktivuje nástroje pro vývojáře a konzoli JavaScriptu.
-
-      Pokud toto nastavení aktivujete, nebude možné používat nástroje pro vývojáře ani kontrolovat prvky webových stránek. Deaktivovány budou také veškeré klávesové zkratky a položky klasických či kontextových nabídek, pomocí kterých lze nástroje pro vývojáře nebo konzoli JavaScriptu otevřít.
-
-      Pokud tuto možnost deaktivujete nebo nenastavíte, umožníte uživatelům používat nástroje pro vývojáře nebo konzoli JavaScript.
-
-      V případě zařízení <ph name="PRODUCT_OS_NAME" />, která dokážou spouštět aplikace pro Android, tato zásada také řídí přístup k sekci Pro vývojáře Android. Pokud tuto zásadu nastavíte na hodnotu True, uživatelé nebudou mít přístup k sekci Pro vývojáře. Pokud tuto zásadu nastavíte na hodnotu False nebo ji nenastavíte, uživatelé budou moci sekci Pro vývojáře otevřít tak, že v aplikaci Nastavení Android sedmkrát klepnout na číslo sestavení.</translation>
 <translation id="556941986578702361">Řídí automatické skrývání poličky systému <ph name="PRODUCT_OS_NAME" />.
 
 Pokud je tato zásada nastavena na hodnotu AlwaysAutoHideShelf, polička se vždy automaticky skryje.
@@ -1392,6 +1446,7 @@ Pokud tato zásada není nastavena nebo je nastavena na hodnotu false, prohlíž
           Není-li tato zásada nastavena, bude použita výchozí doba.
 
           Hodnotu zásady zadávejte v milisekundách.</translation>
+<translation id="5795001131770861387">Povolí podporu protokolu HTTP/0.9 na jiných než výchozích portech</translation>
 <translation id="5809728392451418079">Nastavit viditelný název pro místní účty v zařízení</translation>
 <translation id="5814301096961727113">Nastavení výchozího stavu hlasové odezvy na přihlašovací obrazovce</translation>
 <translation id="5815129011704381141">Automaticky restartovat po aktualizaci</translation>
@@ -1439,6 +1494,7 @@ Tato zásada není k dispozici v instancích Windows, které nejsou připojen�
 <translation id="5893553533827140852">Pokud je toto nastavení povoleno, žádosti gnubby o ověření budou zprostředkovány přes připojení ke vzdálenému hostiteli.
 
           Pokud je toto nastavení zakázáno nebo není nakonfigurováno, žádosti gnubby o ověření nebudou zprostředkovány.</translation>
+<translation id="5898486742390981550">Když je přihlášeno několik uživatelů, může aplikace Android používat pouze primární uživatel.</translation>
 <translation id="5921713479449475707">Povolení stahování automatických aktualizací prostřednictvím protokolu HTTP</translation>
 <translation id="5921888683953999946">Nastavuje výchozí stav funkce usnadnění přístupu pomocí velkého kurzoru na přihlašovací obrazovce.
 
@@ -1454,11 +1510,18 @@ Pokud tuto zásadu nenastavíte, bude při prvním zobrazení přihlašovací ob
       Pokud toto nastavení aktivujete, bude Bezpečné vyhledávání při použití Vyhledávání Google vždy aktivní.
 
       Pokud toto nastavení deaktivujete nebo nenastavíte žádnou hodnotu, Bezpečné vyhledávání nebude při použití Vyhledávání Google vynuceno.</translation>
+<translation id="5937539742111853215">Tato zásada ovládá pouze režim pro vývojáře systému <ph name="PRODUCT_OS_NAME" />. Chcete-li uživatelům zabránit v přístupu k možnostem pro vývojáře systému Android, je třeba nastavit zásadu <ph name="DEVELOPER_TOOLS_POLICY" />.</translation>
 <translation id="5946082169633555022">Verze beta</translation>
 <translation id="5950205771952201658">Vzhledem k tomu, že online kontroly zamítnutých certifikátů nepřinášejí žádné efektivní bezpečnostní výhody a také snadno selhávají, jsou v prohlížeči <ph name="PRODUCT_NAME" /> verze 19 a vyšší ve výchozím nastavení deaktivovány. Nastavíte-li tuto zásadu na hodnotu True, obnoví se předchozí chování a budou prováděny online kontroly OCSP/CRL.
 
 Pokud tato zásada není nastavena nebo je nastavena na hodnotu False, <ph name="PRODUCT_NAME" /> nebude u verzí <ph name="PRODUCT_NAME" /> 19 a novějších provádět online kontroly zamítnutých certifikátů.</translation>
 <translation id="5966615072639944554">Rozšíření, která mohou používat rozhraní API vzdáleného ověření identity</translation>
+<translation id="5974970919245996815">Přehledy informací o stavu systému Android se odesílají zpět na server.
+
+      Pokud je tato zásada nastavena na hodnotu False, informace nebudou hlášeny.
+      Pokud je nastavena na hodnotu True nebo je ponechána nenastavená, informace budou hlášeny.
+
+      Tato zásada se používá pouze v případě, že jsou povoleny aplikace pro Android.</translation>
 <translation id="5983708779415553259">Výchozí chování pro stránky, které nejsou součástí žádného obsahového balíčku</translation>
 <translation id="5997543603646547632">Ve výchozím nastavení použít 24hodinový formát</translation>
 <translation id="6009903244351574348">Umožňuje pluginu <ph name="PRODUCT_FRAME_NAME" /> zpracovávat následující typy obsahu. 
@@ -1489,6 +1552,7 @@ Pokud je zásada nastavena na hodnotu false, hardwarová akcelerace bude zakáz�
 <translation id="6076099373507468537">Definuje seznam zařízení USB, která lze odpojit od ovladače jádra a použít přímo ve webové aplikaci prostřednictvím rozhraní chrome.usb API. Hodnotami jsou páry identifikátorů (dodavatel a produkt), které určují konkrétní hardwarové zařízení.
 
       Pokud tato zásada není nastavena, seznam odpojitelných zařízení USB je prázdný.</translation>
+<translation id="6093156968240188330">Při relacích vzdálené pomoci vzdáleným uživatelům povolit interakci s okny, která vyžadují zvýšená oprávnění</translation>
 <translation id="6095999036251797924">Udává dobu bez interakce uživatele, po jejímž uplynutí se při napájení ze sítě nebo z baterie uzamkne obrazovka.
 
           Pokud je tato doba nastavena na hodnotu vyšší než nula, udává, jak dlouho musí být uživatel neaktivní, než systém <ph name="PRODUCT_OS_NAME" /> uzamkne obrazovku.
@@ -1506,6 +1570,7 @@ Pokud je zásada nastavena na hodnotu false, hardwarová akcelerace bude zakáz�
 <translation id="6145799962557135888">Umožňuje nastavit seznam vzorů adres URL stránek, kterým je povoleno spouštět JavaScript.
 
           Pokud zásadu nenastavíte, použije se pro všechny webové stránky globální výchozí hodnota buď ze zásady DefaultJavaScriptSetting (pokud je nastavena), nebo z osobního nastavení uživatele.</translation>
+<translation id="614662973812186053">Tato zásada ovládá také shromažďování údajů o využití a diagnostických údajů systému Android.</translation>
 <translation id="6151775819333710697">
           Pokud je toto nastavení zapnuto, <ph name="PRODUCT_NAME" /> uživatelům může ukládat hesla a poskytovat je automaticky při dalším přihlášení na web.
 
@@ -1612,6 +1677,7 @@ Pokud tato zásada není nastavena, pro uživatele spravované organizací bude 
 
           Hodnotu zásady zadávejte v milisekundách. Maximální hodnota je nižší než prodleva režimu spánku.</translation>
 <translation id="6536600139108165863">Automaticky restartovat po vypnutí zařízení</translation>
+<translation id="6539246272469751178">Na aplikace Android tato zásada nemá vliv. Aplikace Android používají pro stažené soubory vždy výchozí adresář a k souborům, které systém <ph name="PRODUCT_OS_NAME" /> stáhl do jiného než výchozího adresáře, nemají přístup.</translation>
 <translation id="6544897973797372144">Pokud je tato zásada nastavena na hodnotu True a zásada ChromeOsReleaseChannel není určena, uživatelé smějí v zařízení změnit kanál verzí. Pokud je tato zásada nastavena hodnotu False, zařízení je uzamčeno v kanálu, ve kterém bylo naposledy nastaveno.
 
       Kanál vybraný uživatelem bude přepsán zásadou ChromeOsReleaseChannel, avšak je-li kanál zásady stabilnější než kanál nainstalovaný v zařízení, změní se kanál až ve chvíli, kdy bude pro stabilnější kanál k dispozici vyšší verze než pro kanál nainstalovaný k zařízení.</translation>
@@ -1715,6 +1781,7 @@ Hodnota této zásady se zadává v sekundách.</translation>
 <translation id="6828905844648501476">Pokud je tato zásada nastavena na hodnotu True nebo nastavena není, <ph name="PRODUCT_NAME" /> povolí přidávání osob ze správce uživatelů.
 
 Pokud je tato zásada nastavena na hodnotu False, <ph name="PRODUCT_NAME" /> nepovolí vytváření nových profilů ze správce profilů</translation>
+<translation id="685769593149966548">Vynutit přísný omezený režim pro YouTube</translation>
 <translation id="687046793986382807">V prohlížečích <ph name="PRODUCT_NAME" /> verze 35 a novějších byla tato zásada zrušena.
 
       Informace o paměti jsou stránce hlášeny bez ohledu na nastavení této možnosti. Velikosti jsou však hlášeny jen po určitých přírůstcích a frekvence aktualizací je z bezpečnostních důvodů omezena. Chcete-li získat přesná data v reálném čase, použijte prosím nástroje, jako je Telemetry.</translation>
@@ -1808,6 +1875,13 @@ Přečtěte si také o zásadě RemoteAccessHostClientDomain.</translation>
       Pokud toto nastavení aktivujete nebo deaktivujete, uživatelé je nebudou moci změnit ani přepsat.
 
       Pokud tuto zásadu ponecháte nenastavenou, uživatel bude moci zvolit, zda výzvu k odemknutí zařízení zadáním hesla chce zobrazovat, či nikoliv.</translation>
+<translation id="7109916642577279530">Povoluje nebo zakazuje záznam zvuku.
+
+Pokud je tato zásada aktivována nebo není nakonfigurována (výchozí nastavení), uživatel bude vyzván k udělení přístupu pro záznam zvuku (s výjimkou adres URL nakonfigurovaných v seznamu AudioCaptureAllowedUrls, kterým bude přístup udělen bez vyzvání).
+
+Pokud je tato zásada deaktivována, uživateli se výzva nikdy nezobrazí a záznam zvuku bude k dispozici pouze u adres URL uvedených na seznamu AudioCaptureAllowedUrls.
+
+Tato zásada ovlivňuje kromě integrovaného mikrofonu i všechny ostatní zvukové vstupy.</translation>
 <translation id="7115494316187648452">Určuje, zda je proces <ph name="PRODUCT_NAME" /> spuštěn při přihlášení do operačního systému a zda pokračuje v běhu i po uzavření posledního okna prohlížeče (což umožňuje, aby zůstaly aktivní aplikace na pozadí i aktuální relace prohlížení včetně všech souborů cookie). Proces na pozadí zobrazuje ikonu na hlavním panelu systému, kde jej lze kdykoli zavřít.
 
 Pokud je tato zásada nastavena na hodnotu true, režim na pozadí je aktivován a uživatel jej nemůže ovládat v nastaveních prohlížeče.
@@ -1945,6 +2019,7 @@ Pokud je tato zásada nastavena na hodnotu false, použití protokolu QUIC je za
 
           Pokud zásadu nenastavíte, použije se pro všechny webové stránky globální výchozí hodnota buď ze zásady DefaultPopupsSetting (pokud je nastavena), nebo z osobního nastavení uživatele.</translation>
 <translation id="7529144158022474049">Faktor zpoždění automatické aktualizace</translation>
+<translation id="7534199150025803530">Tato zásada nemá vliv na aplikaci Disk Google pro Android. Chcete-li zabránit používání Disku Google přes mobilní datové připojení, měli byste instalaci aplikace Disk Google pro Android zakázat.</translation>
 <translation id="7553535237300701827">Když je tato zásada nastavena, přihlašovací ověření bude v závislosti na hodnotě nastavení probíhat jedním z následujících způsobů:
 
       V případě nastavení na možnost GAIA proběhne přihlášení běžným ověřovacím procesem GAIA.
@@ -1963,6 +2038,7 @@ Pokud je tato zásada nastavena na hodnotu false, použití protokolu QUIC je za
       Pokud pro tuto zásadu nastavíte hodnotu 0, bude použita výchozí velikost mezipaměti, ale uživatel ji nebude moci změnit.
 
       Pokud tuto zásadu nenastavíte, bude použita výchozí velikost a uživatel ji bude moci přepsat pomocí příznaku  „--disk-cache-size“.</translation>
+<translation id="7604169113182304895">Aplikace Android se mohou samy rozhodnout, zda se tímto seznamem budou řídit. Nelze to u nich vynutit.</translation>
 <translation id="7612157962821894603">Celosystémové příznaky, které se použití při spuštění prohlížeče <ph name="PRODUCT_NAME" /></translation>
 <translation id="7614663184588396421">Seznam deaktivovaných schémat protokolu</translation>
 <translation id="7625444193696794922">Určuje, jaký kanál verzí by měl být v zařízení nastaven a uzamčen.</translation>
@@ -2007,6 +2083,13 @@ Tato zásada je určena k internímu použití prohlížečem <ph name="PRODUCT_
       Blokování interních adres URL s předponou „chrome://*“ nedoporučujeme, protože může vést k neočekávaným chybám.
 
       Není-li zásada nastavena, nebude v prohlížeči zakázána žádná adresa URL.</translation>
+<translation id="7724994675283793633">Tato zásada povolí protokol HTTP/0.9 na portech jiných než 80 pro HTTP a 443 pro HTTPS.
+
+      Tato zásada je ve výchozím nastavení vypnuta. Pokud ji zapnete, vystavíte tím uživatele bezpečnostnímu riziku popsanému na stránce https://crbug.com/600352.
+
+      Účelem této zásady je poskytnout organizacím čas k migraci existujících serverů na jiný protokol než HTTP/0.9 a v budoucnu bude odstraněna.
+
+      Pokud tato zásada není nastavena, protokol HTTP/0.9 bude na jiných než výchozích portech zakázán.</translation>
 <translation id="7749402620209366169">Namísto kódu PIN zadaného uživatelem aktivuje dvoufázové ověření hostitelů vzdáleného přístupu.
 
           Je-li toto nastavení zapnuto, uživatelé musejí při přihlašování k hostitelskému serveru zadat platný kód dvoufázového ověření.
@@ -2036,9 +2119,6 @@ Tato zásada je určena k internímu použití prohlížečem <ph name="PRODUCT_
 <translation id="7763479091692861127"> Typy připojení, které lze používat pro aktualizaci operačního systému. Aktualizace operačního systému může vzhledem k objemu dat velmi zatěžovat připojení a může mít za následek dodatečné poplatky. Z tohoto důvodu jsou ve výchozím nastavení zakázány pro typy připojení, které jsou považovány za nákladné, což je v současnosti mimo jiné připojení WiMax, Bluetooth nebo mobilní připojení.
       Podporované identifikátory typu připojení jsou „ethernet“, „wifi“, „wimax“, „bluetooth“ a „cellular“.</translation>
 <translation id="7763614521440615342">Zobrazovat na stránce Nová karta návrhy obsahu</translation>
-<translation id="7766336524667238790">Hlášení informací o aktivní relaci veřejného terminálu, např. ID a verze aplikace.
-
-Pokud je tato zásada nastavena na hodnotu False, informace o relaci se hlásit nebudou. Pokud je nastavena na hodnotu True nebo nastavena není, informace o relaci se hlásit budou.</translation>
 <translation id="7774768074957326919">Použít systémová nastavení proxy serveru</translation>
 <translation id="7775831859772431793">Zde můžete zadat adresu URL proxy serveru.
 
@@ -2089,17 +2169,9 @@ Pokud je tato zásada nastavena na hodnotu False, informace o relaci se hlásit
 <translation id="7882585827992171421">Tato zásada je aktivní pouze v režimu prodeje.
 
       Určuje ID rozšíření, které se použije jako spořič obrazovky na přihlašovací obrazovce. Rozšíření musí být součásti balíčku AppPack, který je pro tuto doménu nakonfigurován v rámci zásady DeviceAppPack.</translation>
+<translation id="7882857838942884046">Deaktivace služby Google Sync způsobí, že zálohování a obnovení systému Android nebude fungovat správně.</translation>
 <translation id="7882890448959833986">Potlačit upozornění ohledně nepodporovaného operačního systému</translation>
 <translation id="7912255076272890813">Konfigurovat povolené typy aplikací nebo rozšíření</translation>
-<translation id="7914271217607102111">Povoluje nebo zakazuje záznam videa.
-
-Pokud je tato zásada aktivní nebo není nakonfigurována (výchozí nastavení), bude uživatel vyzván k udělení přístupu pro záznam videa (s výjimkou adres URL nakonfigurovaných v seznamu VideoCaptureAllowedUrls, kterým bude přístup udělen bez vyzvání).
-Aplikace ARC budou moci získat přístup ke kameře, pokud jste jim udělili oprávnění.
-
-Pokud je tato zásada deaktivována, uživateli se výzva nikdy nezobrazí a záznam videa bude k dispozici pouze u adres URL uvedených na seznamu VideoCaptureAllowedUrls.
-Aplikace ARC ke kameře přístup mít nebudou.
-
-Mimo aplikace ARC má tato zásada dopad na všechny typy vstupů videa, nejen na integrovanou kameru.</translation>
 <translation id="7915236031252389808">Zde můžete zadat adresu URL souboru PAC proxy serveru.
 
           Tato zásada bude použita pouze v případě, že jste v části „Zvolte způsob konfigurace nastavení proxy serveru“ zvolili ruční nastavení proxy serveru.
@@ -2134,6 +2206,7 @@ Tato zásada není k dispozici v instancích Windows, které nejsou připojen�
           Pokud je toto nastavení zapnuto, může tento počítač objevit vzdálené hostitelské počítače a připojit se k nim i v případě, že jsou odděleny bránou firewall.
 
           Pokud je toto nastavení vypnuto a odchozí připojení UDP jsou filtrována bránou firewall, může se tento počítač připojit pouze k hostitelským počítačům v místní síti.</translation>
+<translation id="7986374692540430898">U aplikací Android nelze používání proxy serveru vynutit. Aplikacím Android je poskytnuta část nastavení serveru proxy a mohou se rozhodnout, zda tato nastavení budou respektovat. Další podrobnosti naleznete u zásady <ph name="PROXY_MODE_POLICY" />.</translation>
 <translation id="802147957407376460">Otočit obrazovku o 0 stupňů</translation>
 <translation id="8044493735196713914">Hlásit režim spuštění zařízení</translation>
 <translation id="8059164285174960932">Adresa URL, u které by klienti vzdáleného připojení měli obdržet ověřovací token</translation>
@@ -2153,6 +2226,7 @@ Tato zásada není k dispozici v instancích Windows, které nejsou připojen�
 
       Pokud zásadu nastavíte na hodnotu True, zařízení použije 24hodinový formát hodin. Pokud zásadu nastavíte na hodnotu False, zařízení použije 12hodinový formát hodin.
       Pokud zásadu nenastavíte, zařízení ve výchozím nastavení použije 24hodinový formát hodin.</translation>
+<translation id="8114382167597081590">Nevynucovat na YouTube omezený režim</translation>
 <translation id="8118665053362250806">Nastaví velikost mezipaměti médií na disku</translation>
 <translation id="8135937294926049787">Udává dobu nečinnosti uživatele, po které bude obrazovka při napájení ze sítě vypnuta.
 
@@ -2166,6 +2240,7 @@ Tato zásada není k dispozici v instancích Windows, které nejsou připojen�
 <translation id="8140204717286305802">Odesílá seznam síťových rozhraní s informacemi o typu a hardwarových adresách na server.
 
       Pokud je tato zásada nastavena na hodnotu false, seznam rozhraní odesílán nebude.</translation>
+<translation id="8141795997560411818">Tato zásada uživateli nezabrání v používání aplikace Disk Google pro Android. Chcete-li přístupu k Disku Google zabránit, měli byste také zakázat instalaci aplikace Disk Google pro Android.</translation>
 <translation id="8146727383888924340">Povolit uživatelům uplatnit při registraci systému Chrome OS nabídky</translation>
 <translation id="8148785525797916822">Potlačí upozornění, které se zobrazuje, když je prohlížeč <ph name="PRODUCT_NAME" /> spuštěn na počítači nebo v operačním systému, který již není podporován.</translation>
 <translation id="8148901634826284024">Aktivuje funkci usnadnění přístupu pomocí vysokého kontrastu.
@@ -2271,6 +2346,10 @@ Pokud je tato zásada nastavena na hodnotu false, prohlížeč uvítací stránk
 <translation id="8369602308428138533">Prodleva vypnutí obrazovky při napájení ze sítě</translation>
 <translation id="8382184662529825177">Povolit použití vzdáleného ověření identity k ochraně obsahu v zařízení</translation>
 <translation id="838870586332499308">Povolit datový roaming</translation>
+<translation id="8390049129576938611">Zakáže v prohlížeči <ph name="PRODUCT_NAME" /> interní prohlížeč souborů PDF. Soubory PDF se budou stahovat a uživatel je bude moci otevřít ve výchozí aplikaci.
+
+      Pokud tuto zásadu ponecháte nenastavenou nebo deaktivovanou, budou se soubory PDF otevírat pomocí pluginu PDF (pokud jej uživatel nezakáže).</translation>
+<translation id="8402079500086185021">Soubory PDF otevírat vždy externě</translation>
 <translation id="8412312801707973447">Zda se budou provádět online kontroly OCSP/CRL</translation>
 <translation id="8413348101535146315">Umožňuje ukončování procesů ve Správci úloh prohlížeče <ph name="PRODUCT_NAME" />.
 
@@ -2316,6 +2395,7 @@ Doporučený způsob nastavení zásad ve Windows je prostřednictvím objektu z
 <translation id="8587229956764455752">Povolit vytváření nových uživatelských účtů</translation>
 <translation id="8614804915612153606">Zakáže automatické aktualizace</translation>
 <translation id="8631434304112909927">naposledy ve verzi <ph name="UNTIL_VERSION" /></translation>
+<translation id="863319402127182273">U aplikací Android má tato zásada vliv pouze na vestavěný fotoaparát. Když je tato zásada nastavena na hodnotu True, je fotoaparát pro všechny aplikace Android bez výjimky zakázán.</translation>
 <translation id="8649763579836720255">Zařízení se systémem Chrome OS mohou pomocí vzdáleného ověření identity (ověřeného přístupu) získat certifikát vydaný certifikační autoritou Chrome OS, který hodnotí, zda je zařízení vhodné k přehrání chráněného obsahu. Proces zahrnuje odeslání informací o podpoře hardwaru certifikační autoritě Chrome OS, která zařízení jedinečně identifikuje.
 
           Pokud zásadu nastavíte na hodnotu False, zařízení nebude u chráněného obsahu používat vzdálené ověření identity, a chráněný obsah proto nemusí být možné přehrát.
@@ -2350,6 +2430,7 @@ Tato zásada není k dispozici v relacích Windows, které nejsou připojené 
 
           Tato zásada bude dodržována pouze v případě, že je aktivní zásada DefaultSearchProviderEnabled.</translation>
 <translation id="8731693562790917685">Nastavení obsahu umožňují určit, jakým způsobem bude zpracováván obsah určitého typu (například soubory cookie, obrázky nebo JavaScript).</translation>
+<translation id="8736538322216687231">Vynutit minimální nastavení omezeného režimu na YouTube</translation>
 <translation id="8749370016497832113">Aktivuje v prohlížeči <ph name="PRODUCT_NAME" /> mazání historie procházení a stahování a zabraňuje uživatelům, aby toto nastavení změnili.
 
      I když je tato zásada deaktivována, nelze zaručit, že bude historie procházení a stahování uchována: uživatelé mohou soubory upravovat nebo smazat přímo v databázi historie a také prohlížeč může některé nebo všechny položky historie kdykoliv smazat nebo archivovat.
@@ -2400,6 +2481,15 @@ Hodnota prodloužení musí být 100 % nebo více. Hodnoty, které by prodlevu 
 <translation id="8833109046074170275">Ověření prostřednictvím výchozího procesu GAIA</translation>
 <translation id="8838303810937202360"><ph name="PRODUCT_OS_NAME" /> 
 Pokud tato zásada není nakonfigurována nebo je hodnota nižší než 1 MB, <ph name="PRODUCT_OS_NAME" /> použije výchozí velikost mezipaměti.</translation>
+<translation id="8858120573534680488">U aplikací Android nelze používání proxy serveru vynutit. Aplikacím Android je poskytnuta část nastavení proxy serveru a aplikace se mohou rozhodnout, zda tato nastavení budou respektovat.
+
+          Pokud vyberete možnost „Nikdy proxy server nepoužívat“, budou aplikace Android informovány, že není nakonfigurován žádný proxy server.
+
+          Pokud vyberete možnost „Použít systémová nastavení proxy serveru“ nebo „Pevně daný proxy server“, obdrží aplikace Android adresu a port proxy serveru HTTP. 
+
+          Pokud vyberte možnost „Zjistit proxy server automaticky“, obdrží aplikace Android adresu URL skriptu http://wpad/wpad.dat. Žádná jiná část protokolu automatické detekce serveru proxy se nepoužije.
+
+          Pokud vyberete „skript proxy serveru ve formátu PAC“, obdrží aplikace Android adresu URL skriptu.</translation>
 <translation id="8858642179038618439">Vynutit Bezpečný režim YouTube</translation>
 <translation id="8864975621965365890">Potlačuje oznámení o ukončení podpory, která se zobrazuje, když je web vykreslován pomocí pluginu <ph name="PRODUCT_FRAME_NAME" />.</translation>
 <translation id="8870318296973696995">Domovská stránka</translation>
@@ -2417,13 +2507,6 @@ Pokud tuto zásadu nastavíte na hodnotu False, zařízení se nepokusí kontakt
 
 Pokud tuto zásadu nenakonfigurujete nebo nastavíte na hodnotu True,
 systém <ph name="PRODUCT_OS_NAME" /> bude sever Quirks automaticky kontaktovat, stahovat z něj dostupné konfigurační soubory a ukládat je do zařízení.Tyto soubory mohou sloužit například k vylepšení kvality zobrazení na připojených monitorech.</translation>
-<translation id="8905426178924715309">Podpora této zásady byla ukončena, použijte namísto ní zásady ForceGoogleSafeSearch a ForceYouTubeSafetyMode. Pokud je nastavena zásada ForceGoogleSafeSearch nebo ForceYouTubeSafetyMode, tato zásada bude ignorována.
-
-Vynutí, aby se při použití Vyhledávání Google vždy aktivovalo Bezpečné vyhledávání, a zabrání uživatelům toto nastavení změnit. Toto nastavení také vynutí bezpečný režim na YouTube.
-
-Pokud toto nastavení aktivujete, Bezpečné prohlížení ve Vyhledávání Google a na YouTube bude vždy aktivní.
-
-Pokud toto nastavení deaktivujete nebo nenastavíte žádnou hodnotu, Bezpečné vyhledávání nebude ve Vyhledávání Google a na YouTube vynucováno.</translation>
 <translation id="8906768759089290519">Aktivovat režim hosta</translation>
 <translation id="8908294717014659003">Umožňuje nastavit, zda webové stránky smějí používat zařízení pro pořizování mediálního obsahu. Přístup k zařízením pro pořizování mediálního obsahu může být povolen ve výchozím nastavení, nebo se uživateli může zobrazit dotaz pokaždé, když nějaké webové stránky budou chtít použít zařízení pro pořízení mediálního obsahu.
 
@@ -2457,27 +2540,10 @@ POZNÁMKA: Až do verze 45 byla tato zásada podporována pouze v režimu veře
 <translation id="9088444059179765143">Konfigurace metody automatického zjišťování časového pásma</translation>
 <translation id="9096086085182305205">Seznam povolených serverů pro ověřování</translation>
 <translation id="9098553063150791878">Zásady pro ověření v protokolu HTTP</translation>
+<translation id="9105265795073104888">Aplikace Android obdrží pouze část možností konfigurace proxy serveru. Aplikace Android se mohou samy rozhodnout, zda proxy server použijí. Použití proxy serveru u nich nelze vynutit.</translation>
 <translation id="9112897538922695510">Umožňuje zaregistrovat seznam obslužných nástrojů protokolů. Tato zásada může být pouze doporučena. Vlastnost |protocol| musí být nastavena na schéma jako „mailto“ a vlastnost |url| musí být nastavena na vzorec adresy URL aplikace, která schéma zpracovává. Vzorec může obsahovat specifikátor „%s“, který (bude-li zadán) bude nahrazen zpracovanou adresou URL.
 
           Obslužné nástroje protokolů zaregistrované pomocí této zásady budou sloučeny s obslužnými nástroji zaregistrovanými uživatelem a k dispozici budou všechny. Obslužné nástroje protokolů nainstalované zásadou může uživatel přepsat tím, že nainstaluje nový výchozí obslužný nástroj, avšak nemůže je odstranit.</translation>
-<translation id="913138516158420759">Umožňuje zadat proxy server, který bude prohlížeč <ph name="PRODUCT_NAME" /> používat, a brání uživatelům ve změně nastavení proxy serveru. Tento proxy server budou moci používat i aplikace ARC.
-
-          Pokud zvolíte, že proxy server nikdy používat nechcete a chcete se vždy připojovat přímo, všechny další možnosti budou ignorovány. 
-
-          Pokud zvolíte, že chcete použít systémové nastavení proxy serveru, všechny další možnosti budou ignorovány.
-
-          Pokud zvolíte, že se má proxy server zjistit automaticky, všechny další možnosti budou ignorovány.
-
-          Pokud zvolíte režim proxy s pevně daným serverem, můžete v zásadách „Adresa (nebo adresa URL) proxy serveru“ a „Seznam pravidel vynechání proxy serveru oddělených čárkami“ zadat další možnosti. Aplikacím ARC je k dispozici pouze proxy server HTTP s nejvyšší prioritou.
-
-          Pokud zvolíte, že chcete používat skript .pac proxy serveru, musíte v zásadě Adresa URL souboru PAC proxy serveru zadat adresu URL skriptu.
-
-          Podrobné příklady naleznete na následující stránce:
-          <ph name="PROXY_HELP_URL" />
-
-          Pokud aktivujete toto nastavení, prohlížeč <ph name="PRODUCT_NAME" /> a aplikace ARC budou ignorovat veškeré možnosti související s proxy serverem zadané na příkazovém řádku.
-
-          Pokud tato zásada nebude nastavena, uživatelé budou moci nastavení proxy serveru zvolit sami.</translation>
 <translation id="913195841488580904">Blokování přístupu k seznamu adres URL</translation>
 <translation id="9135033364005346124">Aktivovat proxy server služby <ph name="CLOUD_PRINT_NAME" /></translation>
 <translation id="9147029539363974059">Odesílá systémové protokoly na server správy, což umožňuje jejich kontrolu ze strany administrátorů.
@@ -2496,6 +2562,11 @@ Pokud je tato zásada nastavena na hodnotu true a uživatel vypne zařízení, s
 <translation id="9187743794267626640">Zakázat připojení externího úložiště</translation>
 <translation id="9197740283131855199">Procento, o které bude prodloužena prodleva ztmavení obrazovky, pokud uživatel po ztmavení provedete nějakou činnost</translation>
 <translation id="9200828125069750521">Parametry pro adresu URL obrázku používající metodu POST</translation>
+<translation id="9203071022800375458">Zakazuje pořizování snímků obrazovky.
+
+      Je-li zásada povolena, nelze pořizovat snímky obrazovky pomocí klávesových zkratek ani rozhraní API rozšíření.
+
+      Je-li zakázána, nebo není nastavena, pořizování snímků obrazovky je povoleno.</translation>
 <translation id="9217154963008402249">Frekvence odesílání sledovacích síťových paketů</translation>
 <translation id="922540222991413931">Konfigurovat zdroje instalací rozšíření, aplikací a uživatelských skriptů</translation>
 <translation id="924557436754151212">Importování uložených hesel z výchozího prohlížeče při prvním spuštění</translation>

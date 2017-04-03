@@ -275,6 +275,7 @@
 #define glUnmapBufferSubDataCHROMIUM GLES2_GET_FUN(UnmapBufferSubDataCHROMIUM)
 #define glMapBufferRange GLES2_GET_FUN(MapBufferRange)
 #define glUnmapBuffer GLES2_GET_FUN(UnmapBuffer)
+#define glFlushMappedBufferRange GLES2_GET_FUN(FlushMappedBufferRange)
 #define glMapTexSubImage2DCHROMIUM GLES2_GET_FUN(MapTexSubImage2DCHROMIUM)
 #define glUnmapTexSubImage2DCHROMIUM GLES2_GET_FUN(UnmapTexSubImage2DCHROMIUM)
 #define glResizeCHROMIUM GLES2_GET_FUN(ResizeCHROMIUM)
@@ -379,5 +380,7 @@
 #define glGetFragDataIndexEXT GLES2_GET_FUN(GetFragDataIndexEXT)
 #define glUniformMatrix4fvStreamTextureMatrixCHROMIUM \
   GLES2_GET_FUN(UniformMatrix4fvStreamTextureMatrixCHROMIUM)
+#define glSwapBuffersWithDamageCHROMIUM \
+  GLES2_GET_FUN(SwapBuffersWithDamageCHROMIUM)
 
 #endif  // GPU_GLES2_GL2CHROMIUM_AUTOGEN_H_

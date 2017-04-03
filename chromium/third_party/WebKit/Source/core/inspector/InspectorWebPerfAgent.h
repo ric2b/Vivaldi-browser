@@ -7,28 +7,56 @@
 
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
+#include "public/platform/WebThread.h"
+#include "public/platform/scheduler/base/task_time_observer.h"
 
 namespace blink {
 
+class DOMWindow;
 class ExecutionContext;
+class Frame;
 class LocalFrame;
+class Location;
 class InspectedFrames;
 
 // Inspector Agent for Web Performance APIs
-class CORE_EXPORT InspectorWebPerfAgent final : public GarbageCollectedFinalized<InspectorWebPerfAgent> {
-    WTF_MAKE_NONCOPYABLE(InspectorWebPerfAgent);
-public:
-    InspectorWebPerfAgent(InspectedFrames*);
-    ~InspectorWebPerfAgent();
-    DECLARE_VIRTUAL_TRACE();
+class CORE_EXPORT InspectorWebPerfAgent final
+    : public GarbageCollectedFinalized<InspectorWebPerfAgent>,
+      public WebThread::TaskObserver,
+      public scheduler::TaskTimeObserver {
+  WTF_MAKE_NONCOPYABLE(InspectorWebPerfAgent);
+  friend class InspectorWebPerfAgentTest;
 
-    void willExecuteScript(ExecutionContext*);
-    void didExecuteScript();
+ public:
+  explicit InspectorWebPerfAgent(LocalFrame*);
+  ~InspectorWebPerfAgent();
+  DECLARE_VIRTUAL_TRACE();
 
-private:
-    Member<InspectedFrames> m_inspectedFrames;
+  void enable();
+  void disable();
+
+  void willExecuteScript(ExecutionContext*);
+  void didExecuteScript();
+
+  // WebThread::TaskObserver implementation.
+  void willProcessTask() override;
+  void didProcessTask() override;
+
+  // scheduler::TaskTimeObserver implementation
+  void ReportTaskTime(scheduler::TaskQueue*,
+                      double startTime,
+                      double endTime) override;
+
+ private:
+  bool m_enabled;
+  std::pair<String, DOMWindow*> sanitizedAttribution(
+      const HeapHashSet<Member<Location>>& frameContextLocations,
+      Frame* observerFrame);
+
+  Member<LocalFrame> m_localFrame;
+  HeapHashSet<Member<Location>> m_frameContextLocations;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // InspectorWebPerfAgent_h
+#endif  // InspectorWebPerfAgent_h

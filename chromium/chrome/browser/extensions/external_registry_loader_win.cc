@@ -8,7 +8,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -187,9 +187,7 @@ ExternalRegistryLoader::LoadPrefsOnFileThread() {
 
 void ExternalRegistryLoader::LoadOnFileThread() {
   base::TimeTicks start_time = base::TimeTicks::Now();
-  std::unique_ptr<base::DictionaryValue> initial_prefs =
-      LoadPrefsOnFileThread();
-  prefs_.reset(initial_prefs.release());
+  prefs_ = LoadPrefsOnFileThread();
   LOCAL_HISTOGRAM_TIMES("Extensions.ExternalRegistryLoaderWin",
                         base::TimeTicks::Now() - start_time);
   BrowserThread::PostTask(

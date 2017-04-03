@@ -4,6 +4,8 @@
 
 #include "mojo/public/cpp/bindings/lib/binding_state.h"
 
+#include "mojo/public/cpp/bindings/lib/control_message_proxy.h"
+
 namespace mojo {
 namespace internal {
 
@@ -38,6 +40,18 @@ void SimpleBindingState::Close() {
   DestroyRouter();
 }
 
+void SimpleBindingState::CloseWithReason(uint32_t custom_reason,
+                                         const std::string& description) {
+  if (router_)
+    router_->control_message_proxy()->SendDisconnectReason(custom_reason,
+                                                           description);
+  Close();
+}
+
+void SimpleBindingState::FlushForTesting() {
+  router_->control_message_proxy()->FlushForTesting();
+}
+
 void SimpleBindingState::EnableTestingMode() {
   DCHECK(is_bound());
   router_->EnableTestingMode();
@@ -49,28 +63,21 @@ void SimpleBindingState::BindInternal(
     const char* interface_name,
     std::unique_ptr<MessageReceiver> request_validator,
     bool has_sync_methods,
-    MessageReceiverWithResponderStatus* stub) {
+    MessageReceiverWithResponderStatus* stub,
+    uint32_t interface_version) {
   FilterChain filters;
   filters.Append<MessageHeaderValidator>(interface_name);
   filters.Append(std::move(request_validator));
 
   router_ = new internal::Router(std::move(handle), std::move(filters),
-                                 has_sync_methods, std::move(runner));
+                                 has_sync_methods, std::move(runner),
+                                 interface_version);
   router_->set_incoming_receiver(stub);
-  router_->set_connection_error_handler(base::Bind(
-      &SimpleBindingState::RunConnectionErrorHandler, base::Unretained(this)));
 }
 
 void SimpleBindingState::DestroyRouter() {
-  router_->set_connection_error_handler(base::Closure());
   delete router_;
   router_ = nullptr;
-  connection_error_handler_.Reset();
-}
-
-void SimpleBindingState::RunConnectionErrorHandler() {
-  if (!connection_error_handler_.is_null())
-    connection_error_handler_.Run();
 }
 
 // -----------------------------------------------------------------------------
@@ -78,6 +85,12 @@ void SimpleBindingState::RunConnectionErrorHandler() {
 MultiplexedBindingState::MultiplexedBindingState() = default;
 
 MultiplexedBindingState::~MultiplexedBindingState() = default;
+
+void MultiplexedBindingState::AddFilter(
+    std::unique_ptr<MessageReceiver> filter) {
+  DCHECK(endpoint_client_);
+  endpoint_client_->AddFilter(std::move(filter));
+}
 
 bool MultiplexedBindingState::HasAssociatedInterfaces() const {
   return router_ ? router_->HasAssociatedEndpoints() : false;
@@ -104,7 +117,18 @@ void MultiplexedBindingState::Close() {
   endpoint_client_.reset();
   router_->CloseMessagePipe();
   router_ = nullptr;
-  connection_error_handler_.Reset();
+}
+
+void MultiplexedBindingState::CloseWithReason(uint32_t custom_reason,
+                                              const std::string& description) {
+  if (endpoint_client_)
+    endpoint_client_->control_message_proxy()->SendDisconnectReason(
+        custom_reason, description);
+  Close();
+}
+
+void MultiplexedBindingState::FlushForTesting() {
+  endpoint_client_->control_message_proxy()->FlushForTesting();
 }
 
 void MultiplexedBindingState::EnableTestingMode() {
@@ -117,25 +141,25 @@ void MultiplexedBindingState::BindInternal(
     scoped_refptr<base::SingleThreadTaskRunner> runner,
     const char* interface_name,
     std::unique_ptr<MessageReceiver> request_validator,
+    bool passes_associated_kinds,
     bool has_sync_methods,
-    MessageReceiverWithResponderStatus* stub) {
+    MessageReceiverWithResponderStatus* stub,
+    uint32_t interface_version) {
   DCHECK(!router_);
 
-  router_ = new internal::MultiplexRouter(false, std::move(handle), runner);
+  MultiplexRouter::Config config =
+      passes_associated_kinds
+          ? MultiplexRouter::MULTI_INTERFACE
+          : (has_sync_methods
+                 ? MultiplexRouter::SINGLE_INTERFACE_WITH_SYNC_METHODS
+                 : MultiplexRouter::SINGLE_INTERFACE);
+  router_ = new MultiplexRouter(std::move(handle), config, false, runner);
   router_->SetMasterInterfaceName(interface_name);
 
   endpoint_client_.reset(new InterfaceEndpointClient(
       router_->CreateLocalEndpointHandle(kMasterInterfaceId), stub,
-      std::move(request_validator), has_sync_methods, std::move(runner)));
-
-  endpoint_client_->set_connection_error_handler(
-      base::Bind(&MultiplexedBindingState::RunConnectionErrorHandler,
-                 base::Unretained(this)));
-}
-
-void MultiplexedBindingState::RunConnectionErrorHandler() {
-  if (!connection_error_handler_.is_null())
-    connection_error_handler_.Run();
+      std::move(request_validator), has_sync_methods, std::move(runner),
+      interface_version));
 }
 
 }  // namesapce internal

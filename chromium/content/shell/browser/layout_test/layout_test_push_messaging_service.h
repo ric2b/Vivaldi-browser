@@ -41,6 +41,7 @@ class LayoutTestPushMessagingService : public PushMessagingService {
   void GetEncryptionInfo(
       const GURL& origin,
       int64_t service_worker_registration_id,
+      const std::string& sender_id,
       const PushMessagingService::EncryptionInfoCallback& callback) override;
   blink::WebPushPermissionStatus GetPermissionStatus(const GURL& origin,
                                                      bool user_visible)
@@ -52,6 +53,8 @@ class LayoutTestPushMessagingService : public PushMessagingService {
                    const UnregisterCallback& callback) override;
 
  private:
+  bool is_subscribed_ = false;
+
   DISALLOW_COPY_AND_ASSIGN(LayoutTestPushMessagingService);
 };
 

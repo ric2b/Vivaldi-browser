@@ -54,11 +54,8 @@ using content::PlatformNotificationData;
 
 namespace {
 
+const char kNotificationId[] = "my-notification-id";
 const int kNotificationVibrationPattern[] = { 100, 200, 300 };
-
-#if !defined(OS_ANDROID)
-const int64_t kPersistentNotificationId = 42;
-#endif
 
 class MockDesktopNotificationDelegate
     : public content::DesktopNotificationDelegate {
@@ -80,6 +77,8 @@ class MockDesktopNotificationDelegate
  private:
   bool displayed_;
   bool clicked_;
+
+  DISALLOW_COPY_AND_ASSIGN(MockDesktopNotificationDelegate);
 };
 
 }  // namespace
@@ -87,14 +86,14 @@ class MockDesktopNotificationDelegate
 class PlatformNotificationServiceTest : public testing::Test {
  public:
   void SetUp() override {
-    profile_manager_.reset(
-        new TestingProfileManager(TestingBrowserProcess::GetGlobal()));
+    profile_manager_ = base::MakeUnique<TestingProfileManager>(
+        TestingBrowserProcess::GetGlobal());
     ASSERT_TRUE(profile_manager_->SetUp());
     profile_ = profile_manager_->CreateTestingProfile("Miguel");
-    std::unique_ptr<NotificationUIManager> ui_manager(
-        new StubNotificationUIManager);
-    std::unique_ptr<NotificationPlatformBridge> notification_bridge(
-        new StubNotificationPlatformBridge());
+    std::unique_ptr<NotificationUIManager> ui_manager =
+        base::MakeUnique<StubNotificationUIManager>();
+    std::unique_ptr<NotificationPlatformBridge> notification_bridge =
+        base::MakeUnique<StubNotificationPlatformBridge>();
 
     TestingBrowserProcess::GetGlobal()->SetNotificationUIManager(
         std::move(ui_manager));
@@ -126,7 +125,8 @@ class PlatformNotificationServiceTest : public testing::Test {
     MockDesktopNotificationDelegate* delegate =
         new MockDesktopNotificationDelegate();
 
-    service()->DisplayNotification(profile(), GURL("https://chrome.com/"),
+    service()->DisplayNotification(profile(), kNotificationId,
+                                   GURL("https://chrome.com/"),
                                    notification_data, NotificationResources(),
                                    base::WrapUnique(delegate), close_closure);
 
@@ -190,16 +190,13 @@ TEST_F(PlatformNotificationServiceTest, DisplayPageCloseClosure) {
   // delegate given that it'd result in a use-after-free.
 }
 
-// TODO(peter): Re-enable this test when //content is responsible for creating
-// the notification delegate ids.
-#if !defined(OS_ANDROID)
 TEST_F(PlatformNotificationServiceTest, PersistentNotificationDisplay) {
   PlatformNotificationData notification_data;
   notification_data.title = base::ASCIIToUTF16("My notification's title");
   notification_data.body = base::ASCIIToUTF16("Hello, world!");
 
   service()->DisplayPersistentNotification(
-      profile(), kPersistentNotificationId, GURL() /* service_worker_scope */,
+      profile(), kNotificationId, GURL() /* service_worker_scope */,
       GURL("https://chrome.com/"), notification_data, NotificationResources());
 
   ASSERT_EQ(1u, GetNotificationCount());
@@ -211,10 +208,9 @@ TEST_F(PlatformNotificationServiceTest, PersistentNotificationDisplay) {
   EXPECT_EQ("Hello, world!",
       base::UTF16ToUTF8(notification.message()));
 
-  service()->ClosePersistentNotification(profile(), kPersistentNotificationId);
+  service()->ClosePersistentNotification(profile(), kNotificationId);
   EXPECT_EQ(0u, GetNotificationCount());
 }
-#endif  // !defined(OS_ANDROID)
 
 TEST_F(PlatformNotificationServiceTest, DisplayPageNotificationMatches) {
   std::vector<int> vibration_pattern(
@@ -229,8 +225,9 @@ TEST_F(PlatformNotificationServiceTest, DisplayPageNotificationMatches) {
 
   MockDesktopNotificationDelegate* delegate
       = new MockDesktopNotificationDelegate();
-  service()->DisplayNotification(profile(), GURL("https://chrome.com/"),
-                                 notification_data, NotificationResources(),
+  service()->DisplayNotification(profile(), kNotificationId,
+                                 GURL("https://chrome.com/"), notification_data,
+                                 NotificationResources(),
                                  base::WrapUnique(delegate), nullptr);
 
   ASSERT_EQ(1u, GetNotificationCount());
@@ -259,16 +256,19 @@ TEST_F(PlatformNotificationServiceTest, DisplayPersistentNotificationMatches) {
   notification_data.vibration_pattern = vibration_pattern;
   notification_data.silent = true;
   notification_data.actions.resize(2);
+  notification_data.actions[0].type =
+      content::PLATFORM_NOTIFICATION_ACTION_TYPE_BUTTON;
   notification_data.actions[0].title = base::ASCIIToUTF16("Button 1");
+  notification_data.actions[1].type =
+      content::PLATFORM_NOTIFICATION_ACTION_TYPE_TEXT;
   notification_data.actions[1].title = base::ASCIIToUTF16("Button 2");
 
   NotificationResources notification_resources;
   notification_resources.action_icons.resize(notification_data.actions.size());
 
   service()->DisplayPersistentNotification(
-      profile(), 0u /* persistent notification */,
-      GURL() /* service_worker_scope */, GURL("https://chrome.com/"),
-      notification_data, notification_resources);
+      profile(), kNotificationId, GURL() /* service_worker_scope */,
+      GURL("https://chrome.com/"), notification_data, notification_resources);
 
   ASSERT_EQ(1u, GetNotificationCount());
 
@@ -285,7 +285,9 @@ TEST_F(PlatformNotificationServiceTest, DisplayPersistentNotificationMatches) {
   const auto& buttons = notification.buttons();
   ASSERT_EQ(2u, buttons.size());
   EXPECT_EQ("Button 1", base::UTF16ToUTF8(buttons[0].title));
+  EXPECT_EQ(message_center::ButtonType::BUTTON, buttons[0].type);
   EXPECT_EQ("Button 2", base::UTF16ToUTF8(buttons[1].title));
+  EXPECT_EQ(message_center::ButtonType::TEXT, buttons[1].type);
 }
 
 TEST_F(PlatformNotificationServiceTest, NotificationPermissionLastUsage) {
@@ -308,8 +310,8 @@ TEST_F(PlatformNotificationServiceTest, NotificationPermissionLastUsage) {
   base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(1));
 
   service()->DisplayPersistentNotification(
-      profile(), 42 /* sw_registration_id */, GURL() /* service_worker_scope */,
-      origin, PlatformNotificationData(), NotificationResources());
+      profile(), kNotificationId, GURL() /* service_worker_scope */, origin,
+      PlatformNotificationData(), NotificationResources());
 
   base::Time after_persistent_notification =
       HostContentSettingsMapFactory::GetForProfile(profile())->

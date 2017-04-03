@@ -52,6 +52,7 @@
 #include "components/proximity_auth/screenlock_bridge.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/signin/core/common/profile_management_switches.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/user_metrics.h"
@@ -59,7 +60,6 @@
 #include "content/public/browser/web_ui.h"
 #include "google_apis/gaia/gaia_auth_fetcher.h"
 #include "google_apis/gaia/gaia_constants.h"
-#include "grit/components_strings.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -69,7 +69,7 @@
 #include "ui/gfx/image/image_util.h"
 
 #if defined(USE_ASH)
-#include "ash/shell.h"
+#include "ash/shell.h"  // nogncheck
 #endif
 
 namespace {
@@ -469,11 +469,25 @@ void UserManagerScreenHandler::HandleAuthenticatedLaunchUser(
     }
   }
 
-  // In order to support the upgrade case where we have a local hash but no
-  // password token, the user perform a full online reauth.
-  UserManager::ShowReauthDialog(web_ui()->GetWebContents()->GetBrowserContext(),
-                                email_address_,
+  content::BrowserContext* browser_context =
+      web_ui()->GetWebContents()->GetBrowserContext();
+
+// In order to support the upgrade case where we have a local hash but no
+// password token, the user perform a full online reauth.
+// TODO(zmin): Remove the condition for MACOSX once user_manager_mac.cc is
+// updated.
+#if !defined(OS_MACOSX)
+  if (!email_address_.empty()) {
+    UserManager::ShowReauthDialog(browser_context, email_address_,
+                                  signin_metrics::Reason::REASON_UNLOCK);
+  } else {
+    // Fresh sign in via user manager without existing email address.
+    UserManager::ShowSigninDialog(browser_context, profile_path);
+  }
+#else
+  UserManager::ShowReauthDialog(browser_context, email_address_,
                                 signin_metrics::Reason::REASON_UNLOCK);
+#endif
 }
 
 void UserManagerScreenHandler::HandleRemoveUser(const base::ListValue* args) {

@@ -38,10 +38,11 @@ class GPU_EXPORT Buffer : public base::RefCounted<Buffer> {
     GLsizeiptr size;
     GLenum access;
     void* pointer;  // Pointer returned by driver.
-    scoped_refptr<gpu::Buffer> shm;  // Client side mem.
+    scoped_refptr<gpu::Buffer> shm;  // Client side mem buffer.
+    unsigned int shm_offset;  // Client side mem buffer offset.
 
-    MappedRange(GLintptr offset, GLsizeiptr size, GLenum access,
-                void* pointer, scoped_refptr<gpu::Buffer> shm);
+    MappedRange(GLintptr offset, GLsizeiptr size, GLenum access, void* pointer,
+                scoped_refptr<gpu::Buffer> shm, unsigned int shm_offset);
     ~MappedRange();
     void* GetShmPointer() const;
   };
@@ -60,6 +61,10 @@ class GPU_EXPORT Buffer : public base::RefCounted<Buffer> {
     return usage_;
   }
 
+  bool shadowed() const {
+    return !shadow_.empty();
+  }
+
   // Gets the maximum value in the buffer for the given range interpreted as
   // the given type. Returns false if offset and count are out of range.
   // offset is in bytes.
@@ -69,6 +74,13 @@ class GPU_EXPORT Buffer : public base::RefCounted<Buffer> {
 
   // Returns a pointer to shadowed data.
   const void* GetRange(GLintptr offset, GLsizeiptr size) const;
+
+  // Check if an offset, size range is valid for the current buffer.
+  bool CheckRange(GLintptr offset, GLsizeiptr size) const;
+
+  // Sets a range of this buffer's shadowed data. Returns false if offset/size
+  // is out of range.
+  bool SetRange(GLintptr offset, GLsizeiptr size, const GLvoid * data);
 
   bool IsDeleted() const {
     return deleted_;
@@ -83,8 +95,10 @@ class GPU_EXPORT Buffer : public base::RefCounted<Buffer> {
   }
 
   void SetMappedRange(GLintptr offset, GLsizeiptr size, GLenum access,
-                      void* pointer, scoped_refptr<gpu::Buffer> shm) {
-    mapped_range_.reset(new MappedRange(offset, size, access, pointer, shm));
+                      void* pointer, scoped_refptr<gpu::Buffer> shm,
+                      unsigned int shm_offset) {
+    mapped_range_.reset(
+        new MappedRange(offset, size, access, pointer, shm, shm_offset));
   }
 
   void RemoveMappedRange() {
@@ -145,8 +159,6 @@ class GPU_EXPORT Buffer : public base::RefCounted<Buffer> {
     initial_target_ = target;
   }
 
-  bool shadowed() const { return !shadow_.empty(); }
-
   void MarkAsDeleted() {
     deleted_ = true;
   }
@@ -166,16 +178,8 @@ class GPU_EXPORT Buffer : public base::RefCounted<Buffer> {
                bool use_shadow,
                bool is_client_side_array);
 
-  // Sets a range of data for this buffer. Returns false if the offset or size
-  // is out of range.
-  bool SetRange(
-    GLintptr offset, GLsizeiptr size, const GLvoid * data);
-
   // Clears any cache of index ranges.
   void ClearCache();
-
-  // Check if an offset, size range is valid for the current buffer.
-  bool CheckRange(GLintptr offset, GLsizeiptr size) const;
 
   // The manager that owns this Buffer.
   BufferManager* manager_;
@@ -248,18 +252,25 @@ class GPU_EXPORT BufferManager : public base::trace_event::MemoryDumpProvider {
   // Validates a glBufferData, and then calls DoBufferData if validation was
   // successful.
   void ValidateAndDoBufferData(
-    ContextState* context_state, GLenum target, GLsizeiptr size,
-    const GLvoid * data, GLenum usage);
+      ContextState* context_state, GLenum target, GLsizeiptr size,
+      const GLvoid * data, GLenum usage);
+
+  // Validates a glCopyBufferSubData, and then calls DoCopyBufferSubData if
+  // validation was successful.
+  void ValidateAndDoCopyBufferSubData(
+      ContextState* context_state, GLenum readtarget, GLenum writetarget,
+      GLintptr readoffset, GLintptr writeoffset, GLsizeiptr size);
 
   // Validates a glGetBufferParameteri64v, and then calls GetBufferParameteri64v
   // if validation was successful.
   void ValidateAndDoGetBufferParameteri64v(
-    ContextState* context_state, GLenum target, GLenum pname, GLint64* params);
+      ContextState* context_state, GLenum target, GLenum pname,
+      GLint64* params);
 
   // Validates a glGetBufferParameteriv, and then calls GetBufferParameteriv if
   // validation was successful.
   void ValidateAndDoGetBufferParameteriv(
-    ContextState* context_state, GLenum target, GLenum pname, GLint* params);
+      ContextState* context_state, GLenum target, GLenum pname, GLint* params);
 
   // Sets the target of a buffer. Returns false if the target can not be set.
   bool SetTarget(Buffer* buffer, GLenum target);
@@ -304,7 +315,7 @@ class GPU_EXPORT BufferManager : public base::trace_event::MemoryDumpProvider {
   void StartTracking(Buffer* buffer);
   void StopTracking(Buffer* buffer);
 
-  // Does a glBufferSubData and updates the approriate accounting.
+  // Does a glBufferSubData and updates the appropriate accounting.
   // Assumes the values have already been validated.
   void DoBufferSubData(
       ErrorState* error_state,
@@ -314,7 +325,7 @@ class GPU_EXPORT BufferManager : public base::trace_event::MemoryDumpProvider {
       GLsizeiptr size,
       const GLvoid* data);
 
-  // Does a glBufferData and updates the approprate accounting. Currently
+  // Does a glBufferData and updates the appropriate accounting.
   // Assumes the values have already been validated.
   void DoBufferData(
       ErrorState* error_state,
@@ -323,6 +334,17 @@ class GPU_EXPORT BufferManager : public base::trace_event::MemoryDumpProvider {
       GLsizeiptr size,
       GLenum usage,
       const GLvoid* data);
+
+  // Does a glCopyBufferSubData and updates the appropriate accounting.
+  // Assumes the values have already been validated.
+  void DoCopyBufferSubData(
+      Buffer* readbuffer,
+      GLenum readtarget,
+      GLintptr readoffset,
+      Buffer* writebuffer,
+      GLenum writetarget,
+      GLintptr writeoffset,
+      GLsizeiptr size);
 
   // Tests whether a shadow buffer needs to be used.
   bool UseShadowBuffer(GLenum target, GLenum usage);

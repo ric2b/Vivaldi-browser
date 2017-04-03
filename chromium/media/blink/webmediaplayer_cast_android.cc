@@ -12,7 +12,6 @@
 #include "media/blink/webmediaplayer_impl.h"
 #include "media/blink/webmediaplayer_params.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayerClient.h"
-#include "third_party/WebKit/public/platform/modules/mediasession/WebMediaSession.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -173,9 +172,8 @@ void WebMediaPlayerCast::Initialize(const GURL& url,
                                     blink::WebLocalFrame* frame,
                                     int delegate_id) {
   player_manager_->Initialize(MEDIA_PLAYER_TYPE_REMOTE_ONLY, player_id_, url,
-                              frame->document().firstPartyForCookies(), 0,
-                              frame->document().url(), true, delegate_id,
-                              blink::WebMediaSession::DefaultID);
+                              frame->document().firstPartyForCookies(),
+                              frame->document().url(), true, delegate_id);
   is_player_initialized_ = true;
 }
 
@@ -332,7 +330,6 @@ void WebMediaPlayerCast::OnRemoteRouteAvailabilityChanged(
 }
 
 void WebMediaPlayerCast::SuspendAndReleaseResources() {}
-void WebMediaPlayerCast::OnWaitingForDecryptionKey() {}
 
 bool WebMediaPlayerCast::hasVideo() const {
   return true;
@@ -341,16 +338,6 @@ bool WebMediaPlayerCast::hasVideo() const {
 bool WebMediaPlayerCast::paused() const {
   return paused_;
 }
-
-#if defined(VIDEO_HOLE)
-bool WebMediaPlayerCast::UpdateBoundaryRectangle() {
-  return false;
-}
-
-const gfx::RectF WebMediaPlayerCast::GetBoundaryRectangle() {
-  return gfx::RectF();
-}
-#endif  // defined(VIDEO_HOLE)
 
 void WebMediaPlayerCast::SetDeviceScaleFactor(float scale_factor) {
   device_scale_factor_ = scale_factor;

@@ -38,12 +38,9 @@ class CC_EXPORT LayerTreeSettings {
 
   RendererSettings renderer_settings;
   bool single_thread_proxy_scheduler = true;
-  // TODO(enne): Remove this after everything uses output surface begin frames.
-  bool use_external_begin_frame_source = false;
-  // TODO(enne): Temporary staging for unified begin frame source work.
-  bool use_output_surface_begin_frame_source = false;
   bool main_frame_before_activation_enabled = false;
   bool using_synchronous_renderer_compositor = false;
+  bool enable_latency_recovery = true;
   bool can_use_lcd_text = true;
   bool use_distance_field_text = false;
   bool gpu_rasterization_enabled = false;
@@ -91,11 +88,11 @@ class CC_EXPORT LayerTreeSettings {
   bool verify_clip_tree_calculations = false;
   bool verify_transform_tree_calculations = false;
   bool image_decode_tasks_enabled = false;
-  bool wait_for_beginframe_interval = true;
-  bool abort_commit_before_output_surface_creation = true;
+  bool abort_commit_before_compositor_frame_sink_creation = true;
   bool use_layer_lists = false;
   int max_staging_buffer_usage_in_bytes = 32 * 1024 * 1024;
-  ManagedMemoryPolicy memory_policy_;
+  ManagedMemoryPolicy gpu_memory_policy;
+  ManagedMemoryPolicy software_memory_policy;
   size_t gpu_decoded_image_budget_bytes = 96 * 1024 * 1024;
   size_t software_decoded_image_budget_bytes = 128 * 1024 * 1024;
   int max_preraster_distance_in_screen_pixels = 1000;
@@ -103,6 +100,7 @@ class CC_EXPORT LayerTreeSettings {
   // If set to true, the display item list will internally cache a SkPicture for
   // raster rather than directly using the display items.
   bool use_cached_picture_raster = true;
+  bool enable_color_correct_rendering = false;
 
   LayerTreeDebugState initial_debug_state;
 };

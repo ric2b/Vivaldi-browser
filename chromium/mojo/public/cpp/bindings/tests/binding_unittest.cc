@@ -64,7 +64,8 @@ void DoSetFlagAndRunClosure(bool* flag,
                             const base::Closure& closure,
                             Args... args) {
   *flag = true;
-  closure.Run();
+  if (!closure.is_null())
+    closure.Run();
 }
 
 template <typename... Args>
@@ -385,6 +386,65 @@ TEST_F(BindingTest, MessageFilter) {
   }
 }
 
+void Fail() {
+  FAIL() << "Unexpected connection error";
+}
+
+TEST_F(BindingTest, FlushForTesting) {
+  bool called = false;
+  sample::ServicePtr ptr;
+  auto request = GetProxy(&ptr);
+  ServiceImpl impl;
+  Binding<sample::Service> binding(&impl, std::move(request));
+  binding.set_connection_error_handler(base::Bind(&Fail));
+
+  ptr->Frobinate(nullptr, sample::Service::BazOptions::REGULAR, nullptr,
+                 SetFlagAndRunClosure<int32_t>(&called));
+  EXPECT_FALSE(called);
+  // Because the flush is sent from the binding, it only guarantees that the
+  // request has been received, not the response. The second flush waits for the
+  // response to be received.
+  binding.FlushForTesting();
+  binding.FlushForTesting();
+  EXPECT_TRUE(called);
+}
+
+TEST_F(BindingTest, FlushForTestingWithClosedPeer) {
+  bool called = false;
+  sample::ServicePtr ptr;
+  auto request = GetProxy(&ptr);
+  ServiceImpl impl;
+  Binding<sample::Service> binding(&impl, std::move(request));
+  binding.set_connection_error_handler(SetFlagAndRunClosure(&called));
+  ptr.reset();
+
+  EXPECT_FALSE(called);
+  binding.FlushForTesting();
+  EXPECT_TRUE(called);
+  binding.FlushForTesting();
+}
+
+TEST_F(BindingTest, ConnectionErrorWithReason) {
+  sample::ServicePtr ptr;
+  auto request = GetProxy(&ptr);
+  ServiceImpl impl;
+  Binding<sample::Service> binding(&impl, std::move(request));
+
+  base::RunLoop run_loop;
+  binding.set_connection_error_with_reason_handler(base::Bind(
+      [](const base::Closure& quit_closure, uint32_t custom_reason,
+         const std::string& description) {
+        EXPECT_EQ(1234u, custom_reason);
+        EXPECT_EQ("hello", description);
+        quit_closure.Run();
+      },
+      run_loop.QuitClosure()));
+
+  ptr.ResetWithReason(1234u, "hello");
+
+  run_loop.Run();
+}
+
 // StrongBindingTest -----------------------------------------------------------
 
 using StrongBindingTest = BindingTestBase;
@@ -395,43 +455,31 @@ TEST_F(StrongBindingTest, DestroyClosesMessagePipe) {
   base::RunLoop run_loop;
   bool encountered_error = false;
   bool was_deleted = false;
-  ServiceImpl impl(&was_deleted);
   sample::ServicePtr ptr;
   auto request = GetProxy(&ptr);
   ptr.set_connection_error_handler(
       SetFlagAndRunClosure(&encountered_error, run_loop.QuitClosure()));
   bool called = false;
   base::RunLoop run_loop2;
-  {
-    StrongBinding<sample::Service> binding(&impl, std::move(request));
-    ptr->Frobinate(nullptr, sample::Service::BazOptions::REGULAR, nullptr,
-                   SetFlagAndRunClosure<int32_t>(&called,
-                                                 run_loop2.QuitClosure()));
-    run_loop2.Run();
-    EXPECT_TRUE(called);
-    EXPECT_FALSE(encountered_error);
-  }
-  // Now that the StrongBinding is out of scope we should detect an error on the
-  // other end of the pipe.
+
+  auto binding = MakeStrongBinding(base::MakeUnique<ServiceImpl>(&was_deleted),
+                                   std::move(request));
+  ptr->Frobinate(
+      nullptr, sample::Service::BazOptions::REGULAR, nullptr,
+      SetFlagAndRunClosure<int32_t>(&called, run_loop2.QuitClosure()));
+  run_loop2.Run();
+  EXPECT_TRUE(called);
+  EXPECT_FALSE(encountered_error);
+  binding->Close();
+
+  // Now that the StrongBinding is closed we should detect an error on the other
+  // end of the pipe.
   run_loop.Run();
   EXPECT_TRUE(encountered_error);
-  // But destroying the StrongBinding doesn't destroy the object.
-  ASSERT_FALSE(was_deleted);
+
+  // Destroying the StrongBinding also destroys the impl.
+  ASSERT_TRUE(was_deleted);
 }
-
-class ServiceImplWithStrongBinding : public ServiceImpl {
- public:
-  ServiceImplWithStrongBinding(bool* was_deleted,
-                               InterfaceRequest<sample::Service> request)
-      : ServiceImpl(was_deleted), binding_(this, std::move(request)) {}
-
-  StrongBinding<sample::Service>& binding() { return binding_; }
-
- private:
-  StrongBinding<sample::Service> binding_;
-
-  DISALLOW_COPY_AND_ASSIGN(ServiceImplWithStrongBinding);
-};
 
 // Tests the typical case, where the implementation object owns the
 // StrongBinding (and should be destroyed on connection error).
@@ -452,37 +500,71 @@ TEST_F(StrongBindingTest, ConnectionErrorDestroysImpl) {
   EXPECT_TRUE(was_deleted);
 }
 
-// Tests that even when the implementation object owns the StrongBinding, that
-// the implementation can still be deleted (which should result in the message
-// pipe being closed). Also checks that the connection error handler doesn't get
-// called.
-TEST_F(StrongBindingTest, ExplicitDeleteImpl) {
-  bool ptr_error_handler_called = false;
+TEST_F(StrongBindingTest, FlushForTesting) {
+  bool called = false;
+  bool was_deleted = false;
   sample::ServicePtr ptr;
   auto request = GetProxy(&ptr);
-  base::RunLoop run_loop;
-  ptr.set_connection_error_handler(
-      SetFlagAndRunClosure(&ptr_error_handler_called, run_loop.QuitClosure()));
-  bool was_deleted = false;
-  ServiceImplWithStrongBinding* impl =
-      new ServiceImplWithStrongBinding(&was_deleted, std::move(request));
-  bool binding_error_handler_called = false;
-  impl->binding().set_connection_error_handler(
-      SetFlagAndRunClosure(&binding_error_handler_called));
+  auto binding = MakeStrongBinding(base::MakeUnique<ServiceImpl>(&was_deleted),
+                                   std::move(request));
+  binding->set_connection_error_handler(base::Bind(&Fail));
 
-  base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(ptr_error_handler_called);
+  ptr->Frobinate(nullptr, sample::Service::BazOptions::REGULAR, nullptr,
+                 SetFlagAndRunClosure<int32_t>(&called));
+  EXPECT_FALSE(called);
+  // Because the flush is sent from the binding, it only guarantees that the
+  // request has been received, not the response. The second flush waits for the
+  // response to be received.
+  ASSERT_TRUE(binding);
+  binding->FlushForTesting();
+  ASSERT_TRUE(binding);
+  binding->FlushForTesting();
+  EXPECT_TRUE(called);
   EXPECT_FALSE(was_deleted);
-
-  delete impl;
-  EXPECT_FALSE(ptr_error_handler_called);
+  ptr.reset();
+  ASSERT_TRUE(binding);
+  binding->set_connection_error_handler(base::Closure());
+  binding->FlushForTesting();
   EXPECT_TRUE(was_deleted);
-  was_deleted = false;  // It shouldn't be double-deleted!
-  run_loop.Run();
-  EXPECT_TRUE(ptr_error_handler_called);
-  EXPECT_FALSE(was_deleted);
+}
 
-  EXPECT_FALSE(binding_error_handler_called);
+TEST_F(StrongBindingTest, FlushForTestingWithClosedPeer) {
+  bool called = false;
+  bool was_deleted = false;
+  sample::ServicePtr ptr;
+  auto request = GetProxy(&ptr);
+  auto binding = MakeStrongBinding(base::MakeUnique<ServiceImpl>(&was_deleted),
+                                   std::move(request));
+  binding->set_connection_error_handler(SetFlagAndRunClosure(&called));
+  ptr.reset();
+
+  EXPECT_FALSE(called);
+  EXPECT_FALSE(was_deleted);
+  ASSERT_TRUE(binding);
+  binding->FlushForTesting();
+  EXPECT_TRUE(called);
+  EXPECT_TRUE(was_deleted);
+  ASSERT_FALSE(binding);
+}
+
+TEST_F(StrongBindingTest, ConnectionErrorWithReason) {
+  sample::ServicePtr ptr;
+  auto request = GetProxy(&ptr);
+  auto binding =
+      MakeStrongBinding(base::MakeUnique<ServiceImpl>(), std::move(request));
+  base::RunLoop run_loop;
+  binding->set_connection_error_with_reason_handler(base::Bind(
+      [](const base::Closure& quit_closure, uint32_t custom_reason,
+         const std::string& description) {
+        EXPECT_EQ(5678u, custom_reason);
+        EXPECT_EQ("hello", description);
+        quit_closure.Run();
+      },
+      run_loop.QuitClosure()));
+
+  ptr.ResetWithReason(5678u, "hello");
+
+  run_loop.Run();
 }
 
 }  // namespace

@@ -4,13 +4,12 @@
 
 #include "components/sync/driver/non_ui_data_type_controller.h"
 
-#include <memory>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
-#include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
@@ -30,14 +29,13 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace sync_driver {
+namespace syncer {
 
 class SyncClient;
 
 namespace {
 
 using base::WaitableEvent;
-using syncer::AUTOFILL_PROFILE;
 using testing::_;
 using testing::AtLeast;
 using testing::DoAll;
@@ -47,7 +45,7 @@ using testing::Return;
 using testing::SetArgumentPointee;
 using testing::StrictMock;
 
-const syncer::ModelType kType = AUTOFILL_PROFILE;
+const ModelType kType = AUTOFILL_PROFILE;
 
 ACTION_P(WaitOnEvent, event) {
   event->Wait();
@@ -61,43 +59,42 @@ ACTION_P(SaveChangeProcessor, scoped_change_processor) {
   scoped_change_processor->reset(arg2);
 }
 
-ACTION_P(GetWeakPtrToSyncableService, syncable_service) {
-  // Have to do this within an Action to ensure it's not evaluated on the wrong
-  // thread.
-  return syncable_service->AsWeakPtr();
-}
-
 class SharedChangeProcessorMock : public SharedChangeProcessor {
  public:
-  explicit SharedChangeProcessorMock(syncer::ModelType type)
+  explicit SharedChangeProcessorMock(ModelType type)
       : SharedChangeProcessor(type) {}
 
-  MOCK_METHOD5(Connect,
-               base::WeakPtr<syncer::SyncableService>(
-                   SyncClient*,
-                   GenericChangeProcessorFactory*,
-                   syncer::UserShare*,
-                   syncer::DataTypeErrorHandler*,
-                   const base::WeakPtr<syncer::SyncMergeResult>&));
+  base::WeakPtr<SyncableService> Connect(
+      SyncClient*,
+      GenericChangeProcessorFactory*,
+      UserShare*,
+      std::unique_ptr<DataTypeErrorHandler>,
+      const base::WeakPtr<SyncMergeResult>&) {
+    return std::move(connect_return_);
+  }
   MOCK_METHOD0(Disconnect, bool());
   MOCK_METHOD2(ProcessSyncChanges,
-               syncer::SyncError(const tracked_objects::Location&,
-                                 const syncer::SyncChangeList&));
+               SyncError(const tracked_objects::Location&,
+                         const SyncChangeList&));
   MOCK_CONST_METHOD2(GetAllSyncDataReturnError,
-                     syncer::SyncError(syncer::ModelType,
-                                       syncer::SyncDataList*));
+                     SyncError(ModelType, SyncDataList*));
   MOCK_METHOD0(GetSyncCount, int());
   MOCK_METHOD1(SyncModelHasUserCreatedNodes, bool(bool*));
   MOCK_METHOD0(CryptoReadyIfNecessary, bool());
   MOCK_CONST_METHOD1(GetDataTypeContext, bool(std::string*));
   MOCK_METHOD1(RecordAssociationTime, void(base::TimeDelta time));
 
+  void SetConnectReturn(base::WeakPtr<SyncableService> service) {
+    connect_return_ = service;
+  }
+
  protected:
-  virtual ~SharedChangeProcessorMock() {}
+  virtual ~SharedChangeProcessorMock() { DCHECK(!connect_return_); }
   MOCK_METHOD2(OnUnrecoverableError,
                void(const tracked_objects::Location&, const std::string&));
 
  private:
+  base::WeakPtr<SyncableService> connect_return_;
   DISALLOW_COPY_AND_ASSIGN(SharedChangeProcessorMock);
 };
 
@@ -108,18 +105,14 @@ class NonUIDataTypeControllerFake : public NonUIDataTypeController {
       NonUIDataTypeControllerMock* mock,
       SharedChangeProcessor* change_processor,
       scoped_refptr<base::SingleThreadTaskRunner> backend_task_runner)
-      : NonUIDataTypeController(base::ThreadTaskRunnerHandle::Get(),
-                                base::Closure(),
-                                sync_client),
+      : NonUIDataTypeController(kType, base::Closure(), sync_client),
         blocked_(false),
         mock_(mock),
         change_processor_(change_processor),
         backend_task_runner_(backend_task_runner) {}
+  ~NonUIDataTypeControllerFake() override {}
 
-  syncer::ModelType type() const override { return kType; }
-  syncer::ModelSafeGroup model_safe_group() const override {
-    return syncer::GROUP_DB;
-  }
+  ModelSafeGroup model_safe_group() const override { return GROUP_DB; }
 
   // Prevent tasks from being posted on the backend thread until
   // UnblockBackendTasks() is called.
@@ -138,6 +131,10 @@ class NonUIDataTypeControllerFake : public NonUIDataTypeController {
 
   SharedChangeProcessor* CreateSharedChangeProcessor() override {
     return change_processor_.get();
+  }
+
+  std::unique_ptr<DataTypeErrorHandler> CreateErrorHandler() override {
+    return NonUIDataTypeController::CreateErrorHandler();
   }
 
  protected:
@@ -160,8 +157,6 @@ class NonUIDataTypeControllerFake : public NonUIDataTypeController {
   }
 
  private:
-  ~NonUIDataTypeControllerFake() override {}
-
   struct PendingTask {
     PendingTask(const tracked_objects::Location& from_here,
                 const base::Closure& task)
@@ -189,8 +184,8 @@ class SyncNonUIDataTypeControllerTest : public testing::Test,
     backend_thread_.Start();
     change_processor_ = new SharedChangeProcessorMock(kType);
     // All of these are refcounted, so don't need to be released.
-    dtc_mock_ = new StrictMock<NonUIDataTypeControllerMock>();
-    non_ui_dtc_ = new NonUIDataTypeControllerFake(
+    dtc_mock_ = base::MakeUnique<StrictMock<NonUIDataTypeControllerMock>>();
+    non_ui_dtc_ = base::MakeUnique<NonUIDataTypeControllerFake>(
         this, dtc_mock_.get(), change_processor_.get(),
         backend_thread_.task_runner());
   }
@@ -223,14 +218,13 @@ class SyncNonUIDataTypeControllerTest : public testing::Test,
   }
 
   void SetAssociateExpectations() {
-    EXPECT_CALL(*change_processor_.get(), Connect(_, _, _, _, _))
-        .WillOnce(GetWeakPtrToSyncableService(&syncable_service_));
+    change_processor_->SetConnectReturn(syncable_service_.AsWeakPtr());
     EXPECT_CALL(*change_processor_.get(), CryptoReadyIfNecessary())
         .WillOnce(Return(true));
     EXPECT_CALL(*change_processor_.get(), SyncModelHasUserCreatedNodes(_))
         .WillOnce(DoAll(SetArgumentPointee<0>(true), Return(true)));
     EXPECT_CALL(*change_processor_.get(), GetAllSyncDataReturnError(_, _))
-        .WillOnce(Return(syncer::SyncError()));
+        .WillOnce(Return(SyncError()));
     EXPECT_CALL(*change_processor_.get(), GetSyncCount()).WillOnce(Return(0));
     EXPECT_CALL(*change_processor_.get(), RecordAssociationTime(_));
   }
@@ -265,11 +259,11 @@ class SyncNonUIDataTypeControllerTest : public testing::Test,
   StartCallbackMock start_callback_;
   ModelLoadCallbackMock model_load_callback_;
   // Must be destroyed after non_ui_dtc_.
-  syncer::FakeSyncableService syncable_service_;
-  scoped_refptr<NonUIDataTypeControllerFake> non_ui_dtc_;
-  scoped_refptr<NonUIDataTypeControllerMock> dtc_mock_;
+  FakeSyncableService syncable_service_;
+  std::unique_ptr<NonUIDataTypeControllerFake> non_ui_dtc_;
+  std::unique_ptr<NonUIDataTypeControllerMock> dtc_mock_;
   scoped_refptr<SharedChangeProcessorMock> change_processor_;
-  std::unique_ptr<syncer::SyncChangeProcessor> saved_change_processor_;
+  std::unique_ptr<SyncChangeProcessor> saved_change_processor_;
 };
 
 TEST_F(SyncNonUIDataTypeControllerTest, StartOk) {
@@ -284,14 +278,13 @@ TEST_F(SyncNonUIDataTypeControllerTest, StartOk) {
 
 TEST_F(SyncNonUIDataTypeControllerTest, StartFirstRun) {
   SetStartExpectations();
-  EXPECT_CALL(*change_processor_.get(), Connect(_, _, _, _, _))
-      .WillOnce(GetWeakPtrToSyncableService(&syncable_service_));
+  change_processor_->SetConnectReturn(syncable_service_.AsWeakPtr());
   EXPECT_CALL(*change_processor_.get(), CryptoReadyIfNecessary())
       .WillOnce(Return(true));
   EXPECT_CALL(*change_processor_.get(), SyncModelHasUserCreatedNodes(_))
       .WillOnce(DoAll(SetArgumentPointee<0>(false), Return(true)));
   EXPECT_CALL(*change_processor_.get(), GetAllSyncDataReturnError(_, _))
-      .WillOnce(Return(syncer::SyncError()));
+      .WillOnce(Return(SyncError()));
   EXPECT_CALL(*change_processor_.get(), RecordAssociationTime(_));
   SetActivateExpectations(DataTypeController::OK_FIRST_RUN);
   EXPECT_EQ(DataTypeController::NOT_RUNNING, non_ui_dtc_->state());
@@ -319,21 +312,19 @@ TEST_F(SyncNonUIDataTypeControllerTest, AbortDuringStartModels) {
 // cleanly.
 TEST_F(SyncNonUIDataTypeControllerTest, StartAssociationFailed) {
   SetStartExpectations();
-  EXPECT_CALL(*change_processor_.get(), Connect(_, _, _, _, _))
-      .WillOnce(GetWeakPtrToSyncableService(&syncable_service_));
+  change_processor_->SetConnectReturn(syncable_service_.AsWeakPtr());
   EXPECT_CALL(*change_processor_.get(), CryptoReadyIfNecessary())
       .WillOnce(Return(true));
   EXPECT_CALL(*change_processor_.get(), SyncModelHasUserCreatedNodes(_))
       .WillOnce(DoAll(SetArgumentPointee<0>(true), Return(true)));
   EXPECT_CALL(*change_processor_.get(), GetAllSyncDataReturnError(_, _))
-      .WillOnce(Return(syncer::SyncError()));
+      .WillOnce(Return(SyncError()));
   EXPECT_CALL(*change_processor_.get(), RecordAssociationTime(_));
   SetStartFailExpectations(DataTypeController::ASSOCIATION_FAILED);
   // Set up association to fail with an association failed error.
   EXPECT_EQ(DataTypeController::NOT_RUNNING, non_ui_dtc_->state());
-  syncable_service_.set_merge_data_and_start_syncing_error(
-      syncer::SyncError(FROM_HERE, syncer::SyncError::DATATYPE_ERROR,
-                        "Sync Error", non_ui_dtc_->type()));
+  syncable_service_.set_merge_data_and_start_syncing_error(SyncError(
+      FROM_HERE, SyncError::DATATYPE_ERROR, "Sync Error", non_ui_dtc_->type()));
   Start();
   WaitForDTC();
   EXPECT_EQ(DataTypeController::DISABLED, non_ui_dtc_->state());
@@ -346,8 +337,7 @@ TEST_F(SyncNonUIDataTypeControllerTest,
   SetStartExpectations();
   SetStartFailExpectations(DataTypeController::UNRECOVERABLE_ERROR);
   // Set up association to fail with an unrecoverable error.
-  EXPECT_CALL(*change_processor_.get(), Connect(_, _, _, _, _))
-      .WillOnce(GetWeakPtrToSyncableService(&syncable_service_));
+  change_processor_->SetConnectReturn(syncable_service_.AsWeakPtr());
   EXPECT_CALL(*change_processor_.get(), CryptoReadyIfNecessary())
       .WillRepeatedly(Return(true));
   EXPECT_CALL(*change_processor_.get(), SyncModelHasUserCreatedNodes(_))
@@ -362,8 +352,7 @@ TEST_F(SyncNonUIDataTypeControllerTest, StartAssociationCryptoNotReady) {
   SetStartExpectations();
   SetStartFailExpectations(DataTypeController::NEEDS_CRYPTO);
   // Set up association to fail with a NEEDS_CRYPTO error.
-  EXPECT_CALL(*change_processor_.get(), Connect(_, _, _, _, _))
-      .WillOnce(GetWeakPtrToSyncableService(&syncable_service_));
+  change_processor_->SetConnectReturn(syncable_service_.AsWeakPtr());
   EXPECT_CALL(*change_processor_.get(), CryptoReadyIfNecessary())
       .WillRepeatedly(Return(false));
   EXPECT_EQ(DataTypeController::NOT_RUNNING, non_ui_dtc_->state());
@@ -383,8 +372,7 @@ TEST_F(SyncNonUIDataTypeControllerTest, AbortDuringAssociation) {
       base::WaitableEvent::InitialState::NOT_SIGNALED);
 
   SetStartExpectations();
-  EXPECT_CALL(*change_processor_.get(), Connect(_, _, _, _, _))
-      .WillOnce(GetWeakPtrToSyncableService(&syncable_service_));
+  change_processor_->SetConnectReturn(syncable_service_.AsWeakPtr());
   EXPECT_CALL(*change_processor_.get(), CryptoReadyIfNecessary())
       .WillOnce(Return(true));
   EXPECT_CALL(*change_processor_.get(), SyncModelHasUserCreatedNodes(_))
@@ -392,9 +380,8 @@ TEST_F(SyncNonUIDataTypeControllerTest, AbortDuringAssociation) {
                       WaitOnEvent(&pause_db_thread),
                       SetArgumentPointee<0>(true), Return(true)));
   EXPECT_CALL(*change_processor_.get(), GetAllSyncDataReturnError(_, _))
-      .WillOnce(
-          Return(syncer::SyncError(FROM_HERE, syncer::SyncError::DATATYPE_ERROR,
-                                   "Disconnected.", kType)));
+      .WillOnce(Return(SyncError(FROM_HERE, SyncError::DATATYPE_ERROR,
+                                 "Disconnected.", kType)));
   EXPECT_CALL(*dtc_mock_.get(), StopModels());
   EXPECT_CALL(*change_processor_.get(), Disconnect())
       .WillOnce(DoAll(SignalEvent(&pause_db_thread), Return(true)));
@@ -422,8 +409,6 @@ TEST_F(SyncNonUIDataTypeControllerTest, StartAfterSyncShutdown) {
   Mock::VerifyAndClearExpectations(change_processor_.get());
   Mock::VerifyAndClearExpectations(dtc_mock_.get());
 
-  EXPECT_CALL(*change_processor_.get(), Connect(_, _, _, _, _))
-      .WillOnce(Return(base::WeakPtr<syncer::SyncableService>()));
   non_ui_dtc_->UnblockBackendTasks();
   WaitForDTC();
 }
@@ -468,7 +453,7 @@ TEST_F(SyncNonUIDataTypeControllerTest, StopStart) {
   EXPECT_EQ(DataTypeController::RUNNING, non_ui_dtc_->state());
 }
 
-TEST_F(SyncNonUIDataTypeControllerTest, OnSingleDataTypeUnrecoverableError) {
+TEST_F(SyncNonUIDataTypeControllerTest, OnUnrecoverableError) {
   SetStartExpectations();
   SetAssociateExpectations();
   SetActivateExpectations(DataTypeController::OK);
@@ -479,16 +464,15 @@ TEST_F(SyncNonUIDataTypeControllerTest, OnSingleDataTypeUnrecoverableError) {
 
   testing::Mock::VerifyAndClearExpectations(&start_callback_);
   EXPECT_CALL(model_load_callback_, Run(_, _));
-  syncer::SyncError error(FROM_HERE, syncer::SyncError::DATATYPE_ERROR, "error",
-                          non_ui_dtc_->type());
+  SyncError error(FROM_HERE, SyncError::DATATYPE_ERROR, "error",
+                  non_ui_dtc_->type());
   backend_thread_.task_runner()->PostTask(
       FROM_HERE,
-      base::Bind(
-          &NonUIDataTypeControllerFake::OnSingleDataTypeUnrecoverableError,
-          non_ui_dtc_.get(), error));
+      base::Bind(&DataTypeErrorHandler::OnUnrecoverableError,
+                 base::Passed(non_ui_dtc_->CreateErrorHandler()), error));
   WaitForDTC();
 }
 
 }  // namespace
 
-}  // namespace sync_driver
+}  // namespace syncer

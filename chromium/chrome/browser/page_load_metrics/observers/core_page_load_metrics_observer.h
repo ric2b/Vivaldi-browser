@@ -23,6 +23,7 @@ extern const char kHistogramFirstContentfulPaint[];
 extern const char kHistogramFirstMeaningfulPaint[];
 extern const char kHistogramParseDuration[];
 extern const char kHistogramParseBlockedOnScriptLoad[];
+extern const char kHistogramParseBlockedOnScriptExecution[];
 extern const char kHistogramParseStartToFirstMeaningfulPaint[];
 
 extern const char kBackgroundHistogramCommit[];
@@ -54,6 +55,7 @@ enum FirstMeaningfulPaintStatus {
   FIRST_MEANINGFUL_PAINT_BACKGROUNDED,
   FIRST_MEANINGFUL_PAINT_DID_NOT_REACH_NETWORK_STABLE,
   FIRST_MEANINGFUL_PAINT_USER_INTERACTION_BEFORE_FMP,
+  FIRST_MEANINGFUL_PAINT_DID_NOT_REACH_FIRST_CONTENTFUL_PAINT,
   FIRST_MEANINGFUL_PAINT_LAST_ENTRY
 };
 
@@ -69,7 +71,7 @@ class CorePageLoadMetricsObserver
   ~CorePageLoadMetricsObserver() override;
 
   // page_load_metrics::PageLoadMetricsObserver:
-  void OnCommit(content::NavigationHandle* navigation_handle) override;
+  ObservePolicy OnCommit(content::NavigationHandle* navigation_handle) override;
   void OnDomContentLoadedEventStart(
       const page_load_metrics::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;

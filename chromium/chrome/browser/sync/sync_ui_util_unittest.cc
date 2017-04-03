@@ -4,6 +4,8 @@
 
 #include <stddef.h>
 
+#include <memory>
+
 #include <set>
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
@@ -17,7 +19,7 @@
 #include "chrome/browser/sync/sync_ui_util.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/browser_sync/browser/profile_sync_service_mock.h"
+#include "components/browser_sync/profile_sync_service_mock.h"
 #include "components/signin/core/browser/fake_auth_status_provider.h"
 #include "components/signin/core/browser/fake_signin_manager.h"
 #include "components/signin/core/browser/signin_manager.h"
@@ -34,6 +36,8 @@ using ::testing::Return;
 using ::testing::ReturnRef;
 using ::testing::SetArgPointee;
 using ::testing::_;
+using browser_sync::ProfileSyncService;
+using browser_sync::ProfileSyncServiceMock;
 using content::BrowserThread;
 
 // A number of distinct states of the ProfileSyncService can be generated for
@@ -91,7 +95,7 @@ TEST_F(SyncUIUtilTest, PassphraseGlobalError) {
   std::unique_ptr<Profile> profile = MakeSignedInTestingProfile();
   ProfileSyncServiceMock service(
       CreateProfileSyncServiceParamsForTest(profile.get()));
-  browser_sync::SyncBackendHost::Status status;
+  syncer::SyncBackendHost::Status status;
   EXPECT_CALL(service, QueryDetailedSyncStatus(_))
               .WillRepeatedly(Return(false));
   EXPECT_CALL(service, IsPassphraseRequired())
@@ -111,7 +115,7 @@ TEST_F(SyncUIUtilTest, AuthAndPassphraseGlobalError) {
   std::unique_ptr<Profile> profile(MakeSignedInTestingProfile());
   ProfileSyncServiceMock service(
       CreateProfileSyncServiceParamsForTest(profile.get()));
-  browser_sync::SyncBackendHost::Status status;
+  syncer::SyncBackendHost::Status status;
   EXPECT_CALL(service, QueryDetailedSyncStatus(_))
               .WillRepeatedly(Return(false));
 
@@ -141,7 +145,7 @@ TEST_F(SyncUIUtilTest, AuthStateGlobalError) {
       CreateProfileSyncServiceParamsForTest(profile.get());
   NiceMock<ProfileSyncServiceMock> service(&init_params);
 
-  browser_sync::SyncBackendHost::Status status;
+  syncer::SyncBackendHost::Status status;
   EXPECT_CALL(service, QueryDetailedSyncStatus(_))
               .WillRepeatedly(Return(false));
 
@@ -155,8 +159,7 @@ TEST_F(SyncUIUtilTest, AuthStateGlobalError) {
     GoogleServiceAuthError::ACCOUNT_DISABLED,
     GoogleServiceAuthError::SERVICE_UNAVAILABLE,
     GoogleServiceAuthError::TWO_FACTOR,
-    GoogleServiceAuthError::REQUEST_CANCELED,
-    GoogleServiceAuthError::HOSTED_NOT_ALLOWED
+    GoogleServiceAuthError::REQUEST_CANCELED
   };
 
   for (size_t i = 0; i < arraysize(table); ++i) {
@@ -217,7 +220,7 @@ void GetDistinctCase(ProfileSyncServiceMock* service,
           .WillRepeatedly(Return(false));
       EXPECT_CALL(*service, IsFirstSetupInProgress())
           .WillRepeatedly(Return(true));
-      browser_sync::SyncBackendHost::Status status;
+      syncer::SyncBackendHost::Status status;
       EXPECT_CALL(*service, QueryDetailedSyncStatus(_))
           .WillRepeatedly(DoAll(SetArgPointee<0>(status), Return(false)));
       return;
@@ -229,7 +232,7 @@ void GetDistinctCase(ProfileSyncServiceMock* service,
           .WillRepeatedly(Return(false));
       EXPECT_CALL(*service, HasUnrecoverableError())
           .WillRepeatedly(Return(true));
-      browser_sync::SyncBackendHost::Status status;
+      syncer::SyncBackendHost::Status status;
       EXPECT_CALL(*service, QueryDetailedSyncStatus(_))
           .WillRepeatedly(DoAll(SetArgPointee<0>(status), Return(false)));
       return;
@@ -240,7 +243,7 @@ void GetDistinctCase(ProfileSyncServiceMock* service,
       EXPECT_CALL(*service, IsSyncActive()).WillRepeatedly(Return(true));
       EXPECT_CALL(*service, IsPassphraseRequired())
           .WillRepeatedly(Return(false));
-      browser_sync::SyncBackendHost::Status status;
+      syncer::SyncBackendHost::Status status;
       EXPECT_CALL(*service, QueryDetailedSyncStatus(_))
           .WillRepeatedly(DoAll(SetArgPointee<0>(status), Return(false)));
       EXPECT_CALL(*service, HasUnrecoverableError())
@@ -254,7 +257,7 @@ void GetDistinctCase(ProfileSyncServiceMock* service,
       EXPECT_CALL(*service, IsSyncActive()).WillRepeatedly(Return(true));
       EXPECT_CALL(*service, IsPassphraseRequired())
           .WillRepeatedly(Return(false));
-      browser_sync::SyncBackendHost::Status status;
+      syncer::SyncBackendHost::Status status;
       EXPECT_CALL(*service, QueryDetailedSyncStatus(_))
           .WillRepeatedly(DoAll(SetArgPointee<0>(status), Return(false)));
       provider->SetAuthError(
@@ -272,7 +275,7 @@ void GetDistinctCase(ProfileSyncServiceMock* service,
           .WillRepeatedly(Return(false));
       syncer::SyncProtocolError protocolError;
       protocolError.action = syncer::STOP_AND_RESTART_SYNC;
-      browser_sync::SyncBackendHost::Status status;
+      syncer::SyncBackendHost::Status status;
       status.sync_protocol_error = protocolError;
       EXPECT_CALL(*service, QueryDetailedSyncStatus(_))
           .WillRepeatedly(DoAll(SetArgPointee<0>(status), Return(false)));
@@ -284,7 +287,7 @@ void GetDistinctCase(ProfileSyncServiceMock* service,
       EXPECT_CALL(*service, IsFirstSetupComplete())
           .WillRepeatedly(Return(true));
       EXPECT_CALL(*service, IsSyncActive()).WillRepeatedly(Return(true));
-      browser_sync::SyncBackendHost::Status status;
+      syncer::SyncBackendHost::Status status;
       EXPECT_CALL(*service, QueryDetailedSyncStatus(_))
           .WillRepeatedly(DoAll(SetArgPointee<0>(status), Return(false)));
       EXPECT_CALL(*service, HasUnrecoverableError())
@@ -301,7 +304,7 @@ void GetDistinctCase(ProfileSyncServiceMock* service,
       EXPECT_CALL(*service, IsSyncActive()).WillRepeatedly(Return(true));
       EXPECT_CALL(*service, IsPassphraseRequired())
           .WillRepeatedly(Return(false));
-      browser_sync::SyncBackendHost::Status status;
+      syncer::SyncBackendHost::Status status;
       EXPECT_CALL(*service, QueryDetailedSyncStatus(_))
           .WillRepeatedly(DoAll(SetArgPointee<0>(status), Return(false)));
       EXPECT_CALL(*service, HasUnrecoverableError())
@@ -317,7 +320,7 @@ void GetDistinctCase(ProfileSyncServiceMock* service,
       EXPECT_CALL(*service, IsSyncActive()).WillRepeatedly(Return(false));
       EXPECT_CALL(*service, IsPassphraseRequired())
           .WillRepeatedly(Return(false));
-      browser_sync::SyncBackendHost::Status status;
+      syncer::SyncBackendHost::Status status;
       EXPECT_CALL(*service, QueryDetailedSyncStatus(_))
           .WillRepeatedly(DoAll(SetArgPointee<0>(status), Return(false)));
       EXPECT_CALL(*service, HasUnrecoverableError())

@@ -89,11 +89,9 @@ TEST_F(ChromeContentBrowserClientWindowTest, OpenURL) {
                   GURL("https://www.chromium.org") };
 
   for (const GURL& url : urls) {
-    content::OpenURLParams params(url,
-                                  content::Referrer(),
-                                  NEW_FOREGROUND_TAB,
-                                  ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
-                                  false);
+    content::OpenURLParams params(url, content::Referrer(),
+                                  WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                                  ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false);
     // TODO(peter): We should have more in-depth browser tests for the window
     // opening functionality, which also covers Android. This test can currently
     // only be ran on platforms where OpenURL is implemented synchronously.
@@ -301,7 +299,7 @@ class InstantNTPURLRewriteTest : public BrowserWithTestWindowTest {
   void SetUp() override {
     BrowserWithTestWindowTest::SetUp();
     field_trial_list_.reset(new base::FieldTrialList(
-        new metrics::SHA1EntropyProvider("42")));
+        base::MakeUnique<metrics::SHA1EntropyProvider>("42")));
   }
 
   void InstallTemplateURLWithNewTabPage(GURL new_tab_page_url) {
@@ -315,9 +313,8 @@ class InstantNTPURLRewriteTest : public BrowserWithTestWindowTest {
     data.SetShortName(base::ASCIIToUTF16("foo.com"));
     data.SetURL("http://foo.com/url?bar={searchTerms}");
     data.new_tab_url = new_tab_page_url.spec();
-    TemplateURL* template_url = new TemplateURL(data);
-    // Takes ownership.
-    template_url_service->Add(template_url);
+    TemplateURL* template_url =
+        template_url_service->Add(base::MakeUnique<TemplateURL>(data));
     template_url_service->SetUserSelectedDefaultSearchProvider(template_url);
   }
 
@@ -506,7 +503,7 @@ class ChromeContentBrowserClientClearSiteDataTest : public testing::Test {
     return base::WrapUnique(new MockBrowsingDataRemover(context));
   }
 
-  base::MessageLoop loop_;
+  content::TestBrowserThreadBundle thread_bundle_;
   TestingProfile profile_;
   bool finished_;
 };

@@ -10,16 +10,17 @@
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
- * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+ * DAMAGE.
  */
 
 #ifndef DefaultAudioDestinationNode_h
@@ -35,38 +36,38 @@ class BaseAudioContext;
 class ExceptionState;
 
 class DefaultAudioDestinationHandler final : public AudioDestinationHandler {
-public:
-    static PassRefPtr<DefaultAudioDestinationHandler> create(AudioNode&);
-    ~DefaultAudioDestinationHandler() override;
+ public:
+  static PassRefPtr<DefaultAudioDestinationHandler> create(AudioNode&);
+  ~DefaultAudioDestinationHandler() override;
 
-    // AudioHandler
-    void dispose() override;
-    void initialize() override;
-    void uninitialize() override;
-    void setChannelCount(unsigned long, ExceptionState&) override;
+  // AudioHandler
+  void dispose() override;
+  void initialize() override;
+  void uninitialize() override;
+  void setChannelCount(unsigned long, ExceptionState&) override;
 
-    // AudioDestinationHandler
-    void startRendering() override;
-    void stopRendering() override;
-    unsigned long maxChannelCount() const override;
+  // AudioDestinationHandler
+  void startRendering() override;
+  void stopRendering() override;
+  unsigned long maxChannelCount() const override;
 
-private:
-    explicit DefaultAudioDestinationHandler(AudioNode&);
-    void createDestination();
+ private:
+  explicit DefaultAudioDestinationHandler(AudioNode&);
+  void createDestination();
 
-    std::unique_ptr<AudioDestination> m_destination;
-    String m_inputDeviceId;
-    unsigned m_numberOfInputChannels;
+  std::unique_ptr<AudioDestination> m_destination;
+  String m_inputDeviceId;
+  unsigned m_numberOfInputChannels;
 };
 
 class DefaultAudioDestinationNode final : public AudioDestinationNode {
-public:
-    static DefaultAudioDestinationNode* create(BaseAudioContext*);
+ public:
+  static DefaultAudioDestinationNode* create(BaseAudioContext*);
 
-private:
-    explicit DefaultAudioDestinationNode(BaseAudioContext&);
+ private:
+  explicit DefaultAudioDestinationNode(BaseAudioContext&);
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // DefaultAudioDestinationNode_h
+#endif  // DefaultAudioDestinationNode_h

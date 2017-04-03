@@ -10,70 +10,57 @@
 
 namespace blink {
 
-void BitmapImageMetrics::countDecodedImageType(const String& type)
-{
-    DecodedImageType decodedImageType =
-        type == "jpg"  ? ImageJPEG :
-        type == "png"  ? ImagePNG  :
-        type == "gif"  ? ImageGIF  :
-        type == "webp" ? ImageWebP :
-        type == "ico"  ? ImageICO  :
-        type == "bmp"  ? ImageBMP  : DecodedImageType::ImageUnknown;
+void BitmapImageMetrics::countDecodedImageType(const String& type) {
+  DecodedImageType decodedImageType =
+      type == "jpg"
+          ? ImageJPEG
+          : type == "png"
+                ? ImagePNG
+                : type == "gif"
+                      ? ImageGIF
+                      : type == "webp"
+                            ? ImageWebP
+                            : type == "ico"
+                                  ? ImageICO
+                                  : type == "bmp"
+                                        ? ImageBMP
+                                        : DecodedImageType::ImageUnknown;
 
-    DEFINE_THREAD_SAFE_STATIC_LOCAL(EnumerationHistogram, decodedImageTypeHistogram, new EnumerationHistogram("Blink.DecodedImageType", DecodedImageTypeEnumEnd));
-    decodedImageTypeHistogram.count(decodedImageType);
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(
+      EnumerationHistogram, decodedImageTypeHistogram,
+      new EnumerationHistogram("Blink.DecodedImageType",
+                               DecodedImageTypeEnumEnd));
+  decodedImageTypeHistogram.count(decodedImageType);
 }
 
-void BitmapImageMetrics::countImageOrientation(const ImageOrientationEnum orientation)
-{
-    DEFINE_THREAD_SAFE_STATIC_LOCAL(EnumerationHistogram, orientationHistogram, new EnumerationHistogram("Blink.DecodedImage.Orientation", ImageOrientationEnumEnd));
-    orientationHistogram.count(orientation);
+void BitmapImageMetrics::countImageOrientation(
+    const ImageOrientationEnum orientation) {
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(
+      EnumerationHistogram, orientationHistogram,
+      new EnumerationHistogram("Blink.DecodedImage.Orientation",
+                               ImageOrientationEnumEnd));
+  orientationHistogram.count(orientation);
 }
 
-void BitmapImageMetrics::countGamma(SkColorSpace* colorSpace)
-{
-    DEFINE_THREAD_SAFE_STATIC_LOCAL(EnumerationHistogram, gammaNamedHistogram, new EnumerationHistogram("Blink.ColorSpace.Destination", GammaEnd));
+void BitmapImageMetrics::countGamma(SkColorSpace* colorSpace) {
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(
+      EnumerationHistogram, gammaNamedHistogram,
+      new EnumerationHistogram("Blink.ColorSpace.Destination", GammaEnd));
 
-    if (colorSpace) {
-        SkColorSpace::GammaNamed skGamma = colorSpace->gammaNamed();
-
-        Gamma gamma;
-        switch (skGamma) {
-        case SkColorSpace::kLinear_GammaNamed:
-            gamma = GammaLinear;
-            break;
-        case SkColorSpace::kSRGB_GammaNamed:
-            gamma = GammaSRGB;
-            break;
-        case SkColorSpace::k2Dot2Curve_GammaNamed:
-            gamma = Gamma2Dot2;
-            break;
-        case SkColorSpace::kInvalid_GammaNamed:
-            gamma = GammaInvalid;
-            break;
-        default:
-            if (colorSpace->gammasAreMatching()) {
-                if (colorSpace->gammasAreValues()) {
-                    gamma = GammaExponent;
-                } else if (colorSpace->gammasAreParams()) {
-                    gamma = GammaParametric;
-                } else if (colorSpace->gammasAreTables()) {
-                    gamma = GammaTable;
-                } else if (colorSpace->gammasAreNamed()) {
-                    gamma = GammaNamed;
-                } else {
-                    gamma = GammaFail;
-                }
-            } else {
-                gamma = GammaNonStandard;
-            }
-            break;
-        }
-
-        gammaNamedHistogram.count(gamma);
+  if (colorSpace) {
+    Gamma gamma;
+    if (colorSpace->gammaCloseToSRGB()) {
+      gamma = GammaSRGB;
+    } else if (colorSpace->gammaIsLinear()) {
+      gamma = GammaLinear;
     } else {
-        gammaNamedHistogram.count(GammaNull);
+      gamma = GammaNonStandard;
     }
+
+    gammaNamedHistogram.count(gamma);
+  } else {
+    gammaNamedHistogram.count(GammaNull);
+  }
 }
 
-} // namespace blink
+}  // namespace blink

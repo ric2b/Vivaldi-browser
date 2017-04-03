@@ -16,18 +16,17 @@
 #include "net/dns/dns_protocol.h"
 #include "net/dns/dns_response.h"
 #include "net/dns/dns_transaction.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 
 using base::TimeDelta;
 using content::BrowserThread;
 using net::AddressList;
-using net::BoundNetLog;
 using net::DnsClient;
 using net::DnsResponse;
 using net::DnsTransaction;
 using net::DnsTransactionFactory;
 using net::IPEndPoint;
-using net::NetLog;
+using net::NetLogWithSource;
 using net::NetworkChangeNotifier;
 
 namespace chrome_browser_net {
@@ -107,11 +106,10 @@ void DnsProbeRunner::RunProbe(const base::Closure& callback) {
   }
 
   transaction_ = factory->CreateTransaction(
-      kKnownGoodHostname,
-      net::dns_protocol::kTypeA,
+      kKnownGoodHostname, net::dns_protocol::kTypeA,
       base::Bind(&DnsProbeRunner::OnTransactionComplete,
                  weak_factory_.GetWeakPtr()),
-      BoundNetLog());
+      NetLogWithSource());
 
   transaction_->Start();
 }

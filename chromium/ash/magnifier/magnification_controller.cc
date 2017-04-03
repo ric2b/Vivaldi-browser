@@ -9,7 +9,6 @@
 
 #include "ash/common/accelerators/accelerator_controller.h"
 #include "ash/common/accessibility_delegate.h"
-#include "ash/common/ash_switches.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/wm_shell.h"
 #include "ash/display/root_window_transformers.h"
@@ -654,8 +653,11 @@ void MagnificationControllerImpl::OnMouseEvent(ui::MouseEvent* event) {
       SwitchTargetRootWindow(current_root, true);
     }
 
-    if (IsMagnified() && event->type() == ui::ET_MOUSE_MOVED)
+    if (IsMagnified() && event->type() == ui::ET_MOUSE_MOVED &&
+        event->pointer_details().pointer_type !=
+            ui::EventPointerType::POINTER_TYPE_PEN) {
       OnMouseMove(event->root_location());
+    }
   }
 }
 

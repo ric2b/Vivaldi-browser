@@ -7,7 +7,6 @@
 #include "base/location.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "components/sync/base/model_type.h"
 #include "components/sync/core/test/test_user_share.h"
 #include "components/sync/driver/change_processor_mock.h"
 #include "components/sync/driver/fake_sync_client.h"
@@ -17,7 +16,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace browser_sync {
+namespace syncer {
 
 namespace {
 
@@ -25,25 +24,13 @@ using ::testing::_;
 using ::testing::InSequence;
 using ::testing::Return;
 using ::testing::StrictMock;
-using syncer::FIRST_REAL_MODEL_TYPE;
-using syncer::AUTOFILL;
-using syncer::BOOKMARKS;
-using syncer::PREFERENCES;
-using syncer::THEMES;
-using syncer::NIGORI;
-using syncer::PASSWORDS;
-using syncer::MODEL_TYPE_COUNT;
-using syncer::ModelTypeSet;
-using syncer::ModelType;
-using syncer::ModelTypeFromInt;
 
 void TriggerChanges(SyncBackendRegistrar* registrar, ModelType type) {
-  registrar->OnChangesApplied(type, 0, NULL,
-                              syncer::ImmutableChangeRecordList());
+  registrar->OnChangesApplied(type, 0, NULL, ImmutableChangeRecordList());
   registrar->OnChangesComplete(type);
 }
 
-class RegistrarSyncClient : public sync_driver::FakeSyncClient {
+class RegistrarSyncClient : public FakeSyncClient {
  public:
   RegistrarSyncClient(
       const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner,
@@ -53,18 +40,18 @@ class RegistrarSyncClient : public sync_driver::FakeSyncClient {
         db_task_runner_(db_task_runner),
         file_task_runner_(file_task_runner) {}
 
-  scoped_refptr<syncer::ModelSafeWorker> CreateModelWorkerForGroup(
-      syncer::ModelSafeGroup group,
-      syncer::WorkerLoopDestructionObserver* observer) override {
+  scoped_refptr<ModelSafeWorker> CreateModelWorkerForGroup(
+      ModelSafeGroup group,
+      WorkerLoopDestructionObserver* observer) override {
     switch (group) {
-      case syncer::GROUP_UI:
+      case GROUP_UI:
         return new BrowserThreadModelWorker(ui_task_runner_, group, observer);
-      case syncer::GROUP_DB:
+      case GROUP_DB:
         return new BrowserThreadModelWorker(db_task_runner_, group, observer);
-      case syncer::GROUP_FILE:
+      case GROUP_FILE:
         return new BrowserThreadModelWorker(file_task_runner_, group, observer);
-      case syncer::GROUP_PASSIVE:
-        return new syncer::PassiveModelWorker(observer);
+      case GROUP_PASSIVE:
+        return new PassiveModelWorker(observer);
       default:
         return nullptr;
     }
@@ -79,13 +66,11 @@ class RegistrarSyncClient : public sync_driver::FakeSyncClient {
 // Flaky: https://crbug.com/498238
 class SyncBackendRegistrarTest : public testing::Test {
  public:
-  void TestNonUIDataTypeActivationAsync(sync_driver::ChangeProcessor* processor,
+  void TestNonUIDataTypeActivationAsync(ChangeProcessor* processor,
                                         base::WaitableEvent* done) {
-    registrar_->ActivateDataType(AUTOFILL, syncer::GROUP_DB, processor,
+    registrar_->ActivateDataType(AUTOFILL, GROUP_DB, processor,
                                  test_user_share_.user_share());
-    syncer::ModelSafeRoutingInfo expected_routing_info;
-    expected_routing_info[AUTOFILL] = syncer::GROUP_DB;
-    ExpectRoutingInfo(registrar_.get(), expected_routing_info);
+    ExpectRoutingInfo(registrar_.get(), {{AUTOFILL, GROUP_DB}});
     ExpectHasProcessorsForTypes(*registrar_, ModelTypeSet(AUTOFILL));
     TriggerChanges(registrar_.get(), AUTOFILL);
     done->Signal();
@@ -121,12 +106,11 @@ class SyncBackendRegistrarTest : public testing::Test {
     base::RunLoop().RunUntilIdle();
   }
 
-  void ExpectRoutingInfo(
-      SyncBackendRegistrar* registrar,
-      const syncer::ModelSafeRoutingInfo& expected_routing_info) {
-    syncer::ModelSafeRoutingInfo routing_info;
-    registrar->GetModelSafeRoutingInfo(&routing_info);
-    EXPECT_EQ(expected_routing_info, routing_info);
+  void ExpectRoutingInfo(SyncBackendRegistrar* registrar,
+                         const ModelSafeRoutingInfo& expected_routing_info) {
+    ModelSafeRoutingInfo actual_routing_info;
+    registrar->GetModelSafeRoutingInfo(&actual_routing_info);
+    EXPECT_EQ(expected_routing_info, actual_routing_info);
   }
 
   void ExpectHasProcessorsForTypes(const SyncBackendRegistrar& registrar,
@@ -136,6 +120,12 @@ class SyncBackendRegistrarTest : public testing::Test {
       EXPECT_EQ(types.Has(model_type),
                 registrar_->IsTypeActivatedForTest(model_type));
     }
+  }
+
+  size_t GetWorkersSize() {
+    std::vector<scoped_refptr<ModelSafeWorker>> workers;
+    registrar_->GetWorkers(&workers);
+    return workers.size();
   }
 
   const scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner() {
@@ -154,7 +144,7 @@ class SyncBackendRegistrarTest : public testing::Test {
   base::Thread db_thread_;
   base::Thread file_thread_;
 
-  syncer::TestUserShare test_user_share_;
+  TestUserShare test_user_share_;
   std::unique_ptr<RegistrarSyncClient> sync_client_;
   std::unique_ptr<SyncBackendRegistrar> registrar_;
 
@@ -164,32 +154,33 @@ class SyncBackendRegistrarTest : public testing::Test {
 TEST_F(SyncBackendRegistrarTest, ConstructorEmpty) {
   registrar_->SetInitialTypes(ModelTypeSet());
   EXPECT_FALSE(registrar_->IsNigoriEnabled());
-  {
-    std::vector<scoped_refptr<syncer::ModelSafeWorker>> workers;
-    registrar_->GetWorkers(&workers);
-    EXPECT_EQ(4u, workers.size());
-  }
-  ExpectRoutingInfo(registrar_.get(), syncer::ModelSafeRoutingInfo());
+  EXPECT_EQ(4u, GetWorkersSize());
+  ExpectRoutingInfo(registrar_.get(), ModelSafeRoutingInfo());
   ExpectHasProcessorsForTypes(*registrar_, ModelTypeSet());
 }
 
 TEST_F(SyncBackendRegistrarTest, ConstructorNonEmpty) {
-  const ModelTypeSet initial_types(BOOKMARKS, NIGORI, PASSWORDS);
   registrar_->RegisterNonBlockingType(BOOKMARKS);
-  registrar_->SetInitialTypes(initial_types);
+  registrar_->SetInitialTypes(ModelTypeSet(BOOKMARKS, NIGORI, PASSWORDS));
   EXPECT_TRUE(registrar_->IsNigoriEnabled());
-  {
-    std::vector<scoped_refptr<syncer::ModelSafeWorker>> workers;
-    registrar_->GetWorkers(&workers);
-    EXPECT_EQ(4u, workers.size());
-  }
-  {
-    syncer::ModelSafeRoutingInfo expected_routing_info;
-    expected_routing_info[BOOKMARKS] = syncer::GROUP_NON_BLOCKING;
-    expected_routing_info[NIGORI] = syncer::GROUP_PASSIVE;
-    // Passwords dropped because of no password store.
-    ExpectRoutingInfo(registrar_.get(), expected_routing_info);
-  }
+  EXPECT_EQ(4u, GetWorkersSize());
+  EXPECT_EQ(ModelTypeSet(NIGORI), registrar_->GetLastConfiguredTypes());
+  // Bookmarks dropped because it is nonblocking.
+  // Passwords dropped because of no password store.
+  ExpectRoutingInfo(registrar_.get(), {{NIGORI, GROUP_PASSIVE}});
+  ExpectHasProcessorsForTypes(*registrar_, ModelTypeSet());
+}
+
+TEST_F(SyncBackendRegistrarTest, ConstructorNonEmptyReversedInitialization) {
+  // The blocking types get to set initial types before NonBlocking types here.
+  registrar_->SetInitialTypes(ModelTypeSet(BOOKMARKS, NIGORI, PASSWORDS));
+  registrar_->RegisterNonBlockingType(BOOKMARKS);
+  EXPECT_TRUE(registrar_->IsNigoriEnabled());
+  EXPECT_EQ(4u, GetWorkersSize());
+  EXPECT_EQ(ModelTypeSet(NIGORI), registrar_->GetLastConfiguredTypes());
+  // Bookmarks dropped because it is nonblocking.
+  // Passwords dropped because of no password store.
+  ExpectRoutingInfo(registrar_.get(), {{NIGORI, GROUP_PASSIVE}});
   ExpectHasProcessorsForTypes(*registrar_, ModelTypeSet());
 }
 
@@ -200,31 +191,24 @@ TEST_F(SyncBackendRegistrarTest, ConfigureDataTypes) {
   // Add.
   const ModelTypeSet types1(BOOKMARKS, NIGORI, AUTOFILL);
   EXPECT_EQ(types1, registrar_->ConfigureDataTypes(types1, ModelTypeSet()));
-  {
-    syncer::ModelSafeRoutingInfo expected_routing_info;
-    expected_routing_info[BOOKMARKS] = syncer::GROUP_NON_BLOCKING;
-    expected_routing_info[NIGORI] = syncer::GROUP_PASSIVE;
-    expected_routing_info[AUTOFILL] = syncer::GROUP_PASSIVE;
-    ExpectRoutingInfo(registrar_.get(), expected_routing_info);
-  }
+  ExpectRoutingInfo(registrar_.get(), {{BOOKMARKS, GROUP_NON_BLOCKING},
+                                       {NIGORI, GROUP_PASSIVE},
+                                       {AUTOFILL, GROUP_PASSIVE}});
   ExpectHasProcessorsForTypes(*registrar_, ModelTypeSet());
   EXPECT_EQ(types1, registrar_->GetLastConfiguredTypes());
 
   // Add and remove.
   const ModelTypeSet types2(PREFERENCES, THEMES);
   EXPECT_EQ(types2, registrar_->ConfigureDataTypes(types2, types1));
-  {
-    syncer::ModelSafeRoutingInfo expected_routing_info;
-    expected_routing_info[PREFERENCES] = syncer::GROUP_PASSIVE;
-    expected_routing_info[THEMES] = syncer::GROUP_PASSIVE;
-    ExpectRoutingInfo(registrar_.get(), expected_routing_info);
-  }
+
+  ExpectRoutingInfo(registrar_.get(),
+                    {{PREFERENCES, GROUP_PASSIVE}, {THEMES, GROUP_PASSIVE}});
   ExpectHasProcessorsForTypes(*registrar_, ModelTypeSet());
   EXPECT_EQ(types2, registrar_->GetLastConfiguredTypes());
 
   // Remove.
   EXPECT_TRUE(registrar_->ConfigureDataTypes(ModelTypeSet(), types2).Empty());
-  ExpectRoutingInfo(registrar_.get(), syncer::ModelSafeRoutingInfo());
+  ExpectRoutingInfo(registrar_.get(), ModelSafeRoutingInfo());
   ExpectHasProcessorsForTypes(*registrar_, ModelTypeSet());
   EXPECT_EQ(ModelTypeSet(), registrar_->GetLastConfiguredTypes());
 }
@@ -236,7 +220,7 @@ TEST_F(SyncBackendRegistrarTest, ActivateDeactivateUIDataType) {
   // Should do nothing.
   TriggerChanges(registrar_.get(), BOOKMARKS);
 
-  StrictMock<sync_driver::ChangeProcessorMock> change_processor_mock;
+  StrictMock<ChangeProcessorMock> change_processor_mock;
   EXPECT_CALL(change_processor_mock, StartImpl());
   EXPECT_CALL(change_processor_mock, IsRunning()).WillRepeatedly(Return(true));
   EXPECT_CALL(change_processor_mock, ApplyChangesFromSyncModel(NULL, _, _));
@@ -246,20 +230,15 @@ TEST_F(SyncBackendRegistrarTest, ActivateDeactivateUIDataType) {
 
   const ModelTypeSet types(BOOKMARKS);
   EXPECT_EQ(types, registrar_->ConfigureDataTypes(types, ModelTypeSet()));
-  registrar_->ActivateDataType(BOOKMARKS, syncer::GROUP_UI,
-                               &change_processor_mock,
+  registrar_->ActivateDataType(BOOKMARKS, GROUP_UI, &change_processor_mock,
                                test_user_share_.user_share());
-  {
-    syncer::ModelSafeRoutingInfo expected_routing_info;
-    expected_routing_info[BOOKMARKS] = syncer::GROUP_UI;
-    ExpectRoutingInfo(registrar_.get(), expected_routing_info);
-  }
+  ExpectRoutingInfo(registrar_.get(), {{BOOKMARKS, GROUP_UI}});
   ExpectHasProcessorsForTypes(*registrar_, types);
 
   TriggerChanges(registrar_.get(), BOOKMARKS);
 
   registrar_->DeactivateDataType(BOOKMARKS);
-  ExpectRoutingInfo(registrar_.get(), syncer::ModelSafeRoutingInfo());
+  ExpectRoutingInfo(registrar_.get(), ModelSafeRoutingInfo());
   ExpectHasProcessorsForTypes(*registrar_, ModelTypeSet());
 
   // Should do nothing.
@@ -273,7 +252,7 @@ TEST_F(SyncBackendRegistrarTest, ActivateDeactivateNonUIDataType) {
   // Should do nothing.
   TriggerChanges(registrar_.get(), AUTOFILL);
 
-  StrictMock<sync_driver::ChangeProcessorMock> change_processor_mock;
+  StrictMock<ChangeProcessorMock> change_processor_mock;
   EXPECT_CALL(change_processor_mock, StartImpl());
   EXPECT_CALL(change_processor_mock, IsRunning()).WillRepeatedly(Return(true));
   EXPECT_CALL(change_processor_mock, ApplyChangesFromSyncModel(NULL, _, _));
@@ -293,7 +272,7 @@ TEST_F(SyncBackendRegistrarTest, ActivateDeactivateNonUIDataType) {
   done.Wait();
 
   registrar_->DeactivateDataType(AUTOFILL);
-  ExpectRoutingInfo(registrar_.get(), syncer::ModelSafeRoutingInfo());
+  ExpectRoutingInfo(registrar_.get(), ModelSafeRoutingInfo());
   ExpectHasProcessorsForTypes(*registrar_, ModelTypeSet());
 
   // Should do nothing.
@@ -306,16 +285,12 @@ TEST_F(SyncBackendRegistrarTest, ConfigureNonBlockingDataType) {
   registrar_->RegisterNonBlockingType(AUTOFILL);
   registrar_->RegisterNonBlockingType(BOOKMARKS);
 
-  ExpectRoutingInfo(registrar_.get(), syncer::ModelSafeRoutingInfo());
+  ExpectRoutingInfo(registrar_.get(), ModelSafeRoutingInfo());
   // Simulate that initial sync was already done for AUTOFILL.
   registrar_->AddRestoredNonBlockingType(AUTOFILL);
   // It should be added to routing info and set of configured types.
   EXPECT_EQ(ModelTypeSet(AUTOFILL), registrar_->GetLastConfiguredTypes());
-  {
-    syncer::ModelSafeRoutingInfo expected_routing_info;
-    expected_routing_info[AUTOFILL] = syncer::GROUP_NON_BLOCKING;
-    ExpectRoutingInfo(registrar_.get(), expected_routing_info);
-  }
+  ExpectRoutingInfo(registrar_.get(), {{AUTOFILL, GROUP_NON_BLOCKING}});
 
   // Configure two non-blocking types. Initial sync wasn't done for BOOKMARKS so
   // it should be included in types to be downloaded.
@@ -324,12 +299,8 @@ TEST_F(SyncBackendRegistrarTest, ConfigureNonBlockingDataType) {
       registrar_->ConfigureDataTypes(types_to_add, ModelTypeSet());
   EXPECT_EQ(ModelTypeSet(BOOKMARKS), newly_added_types);
   EXPECT_EQ(types_to_add, registrar_->GetLastConfiguredTypes());
-  {
-    syncer::ModelSafeRoutingInfo expected_routing_info;
-    expected_routing_info[AUTOFILL] = syncer::GROUP_NON_BLOCKING;
-    expected_routing_info[BOOKMARKS] = syncer::GROUP_NON_BLOCKING;
-    ExpectRoutingInfo(registrar_.get(), expected_routing_info);
-  }
+  ExpectRoutingInfo(registrar_.get(), {{AUTOFILL, GROUP_NON_BLOCKING},
+                                       {BOOKMARKS, GROUP_NON_BLOCKING}});
 }
 
 class SyncBackendRegistrarShutdownTest : public testing::Test {
@@ -393,7 +364,7 @@ class SyncBackendRegistrarShutdownTest : public testing::Test {
 class TestRegistrar : public SyncBackendRegistrar {
  public:
   explicit TestRegistrar(
-      sync_driver::SyncClient* sync_client,
+      SyncClient* sync_client,
       const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
       const scoped_refptr<base::SingleThreadTaskRunner>& db_thread,
       const scoped_refptr<base::SingleThreadTaskRunner>& file_thread,
@@ -458,4 +429,4 @@ TEST_F(SyncBackendRegistrarShutdownTest, BlockingShutdown) {
 
 }  // namespace
 
-}  // namespace browser_sync
+}  // namespace syncer

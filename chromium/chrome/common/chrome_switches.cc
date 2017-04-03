@@ -153,6 +153,9 @@ const char kDebugEnableFrameToggle[]        = "debug-enable-frame-toggle";
 // apps.
 const char kDebugPackedApps[]               = "debug-packed-apps";
 
+// Passes command line parameters to the DevTools front-end.
+const char kDevToolsFlags[]                 = "devtools-flags";
+
 // Triggers a plethora of diagnostic modes.
 const char kDiagnostics[]                   = "diagnostics";
 
@@ -169,9 +172,6 @@ const char kDisableAboutInSettings[]        = "disable-about-in-settings";
 // Disables the display of a banner allowing the user to add a web
 // app to their shelf (or platform-specific equivalent)
 const char kDisableAddToShelf[] = "disable-add-to-shelf";
-
-// Disables the experimental asynchronous DNS client.
-const char kDisableAsyncDns[]               = "disable-async-dns";
 
 // Disable several subsystems which run network requests in the background.
 // This is for use when doing network performance testing to avoid noise in the
@@ -220,6 +220,9 @@ const char kDisableDomainReliability[]      = "disable-domain-reliability";
 
 // Disable extensions.
 const char kDisableExtensions[]             = "disable-extensions";
+
+// Disable extensions except those specified in a comma-separated list.
+const char kDisableExtensionsExcept[] = "disable-extensions-except";
 
 // Disable checking for user opt-in for extensions that want to inject script
 // into file URLs (ie, always allow it). This is used during automated testing.
@@ -330,9 +333,6 @@ const char kEasyUnlockAppPath[]             = "easy-unlock-app-path";
 // Enables the display of a banner allowing the user to add a web
 // app to their shelf (or platform-specific equivalent)
 const char kEnableAddToShelf[] = "enable-add-to-shelf";
-
-// Enables all bookmarks view in bookmark manager.
-const char kEnableAllBookmarksView[] = "enable-all-bookmarks-view";
 
 // Enable OS integration for Chrome app file associations.
 const char kEnableAppsFileAssociations[]    = "enable-apps-file-associations";
@@ -627,16 +627,21 @@ const char kLoadExtension[]                 = "load-extension";
 // Makes Chrome default browser
 const char kMakeDefaultBrowser[]            = "make-default-browser";
 
+// Changes security chip behavior.
+const char kMaterialSecurityVerbose[] = "material-security-verbose";
+const char kMaterialSecurityVerboseShowAllAnimated[] = "show-all-animated";
+const char kMaterialSecurityVerboseShowAllNonAnimated[] =
+    "show-all-nonanimated";
+const char kMaterialSecurityVerboseShowNonSecureAnimated[] =
+    "show-nonsecure-animated";
+const char kMaterialSecurityVerboseShowNonSecureNonAnimated[] =
+    "show-nonsecure-nonanimated";
+
 // Forces the maximum disk space to be used by the media cache, in bytes.
 const char kMediaCacheSize[]                = "media-cache-size";
 
 // Enables Media Router.
 const char kMediaRouter[]                   = "media-router";
-
-// Enables histograming of tasks served by MessageLoop. See
-// about:histograms/Loop for results, which show frequency of messages on each
-// thread, including APC count, object signalling count, etc.
-const char kMessageLoopHistogrammer[]       = "message-loop-histogrammer";
 
 // Enables the recording of metrics reports but disables reporting. In contrast
 // to kDisableMetrics, this executes all the code that a normal client would
@@ -833,9 +838,7 @@ const char kQuicVersion[] = "quic-version";
 const char kRemoteDebuggingTargets[] = "remote-debugging-targets";
 
 // Indicates the last session should be restored on startup. This overrides the
-// preferences value and is primarily intended for testing. The value of this
-// switch is the number of tabs to wait until loaded before 'load completed' is
-// sent to the ui_test.
+// preferences value.
 const char kRestoreLastSession[]            = "restore-last-session";
 
 // Disable saving pages as HTML-only, disable saving pages as HTML Complete
@@ -868,6 +871,14 @@ const char kSbDisableExtensionBlacklist[] =
 // for ways to by-pass download protection.
 const char kSbManualDownloadBlacklist[] =
     "safebrowsing-manual-download-blacklist";
+
+const char kSecurityChipShowNonSecureOnly[] = "show-nonsecure-only";
+const char kSecurityChipShowAll[] = "show-all";
+
+const char kSecurityChipAnimation[] = "security-chip-animation";
+const char kSecurityChipAnimationNone[] = "none";
+const char kSecurityChipAnimationNonSecureOnly[] = "animate-nonsecure-only";
+const char kSecurityChipAnimationAll[] = "animate-all";
 
 // Causes the process to run as a service process.
 const char kServiceProcess[]                = "service";
@@ -1021,7 +1032,7 @@ const char kAuthAndroidNegotiateAccountType[] = "auth-spnego-account-type";
 const char kDisableAppLink[] = "disable-app-link";
 
 // Disables Contextual Search.
-const char kDisableContextualSearch[]        = "disable-contextual-search";
+const char kDisableContextualSearch[] = "disable-contextual-search";
 
 // Disable VR UI if supported.
 const char kDisableVrShell[] = "disable-vr-shell";
@@ -1034,7 +1045,11 @@ const char kEnableAccessibilityTabSwitcher[] =
 const char kEnableAppLink[] = "enable-app-link";
 
 // Enables Contextual Search.
-const char kEnableContextualSearch[]        = "enable-contextual-search";
+const char kEnableContextualSearch[] = "enable-contextual-search";
+
+// Enables Contextual Search UI integration with Contextual Cards data.
+const char kEnableContextualSearchContextualCardsBarIntegration[] =
+    "cs-contextual-cards-bar-integration";
 
 // Enables chrome hosted mode for Android.
 const char kEnableHostedMode[] = "enable-hosted-mode";
@@ -1075,14 +1090,6 @@ const char kNtpSwitchToExistingTab[] = "ntp-switch-to-existing-tab";
 const char kProgressBarAnimation[]          = "progress-bar-animation";
 
 // Specifies a particular tab management experiment to enable.
-const char kTabManagementExperimentTypeAnise[] =
-    "tab-management-experiment-type-anise";
-const char kTabManagementExperimentTypeBasil[] =
-    "tab-management-experiment-type-basil";
-const char kTabManagementExperimentTypeChive[] =
-    "tab-management-experiment-type-chive";
-const char kTabManagementExperimentTypeDill[] =
-    "tab-management-experiment-type-dill";
 const char kTabManagementExperimentTypeDisabled[] =
     "tab-management-experiment-type-disabled";
 const char kTabManagementExperimentTypeElderberry[] =
@@ -1114,9 +1121,6 @@ const char kPasswordStore[]                 = "password-store";
 // The same as the --class argument in X applications.  Overrides the WM_CLASS
 // window property with the given value.
 const char kWmClass[]                       = "class";
-
-// Updates X11DesktopHandler::wm_user_time_ms with the latest X server time.
-const char kWmUserTimeMs[]              = "wm-user-time-ms";
 #endif
 
 #if defined(OS_MACOSX)
@@ -1149,6 +1153,9 @@ const char kDisableMacViewsNativeAppWindows[] =
 
 // Disables Translate experimental new UX which replaces the infobar.
 const char kDisableTranslateNewUX[] = "disable-translate-new-ux";
+
+// Enable user metrics from within the installer.
+const char kEnableUserMetrics[] = "enable-user-metrics";
 
 // Enable the toolkit-views App Info dialog for Mac. This is accessible from
 // chrome://apps and chrome://extensions and is already enabled on non-mac.
@@ -1192,6 +1199,10 @@ const char kRelauncherProcess[]             = "relauncher";
 // image and move its disk image file to the trash.  The argument's value must
 // be a BSD device name of the form "diskN" or "diskNsM".
 const char kRelauncherProcessDMGDevice[]    = "dmg-device";
+
+// Indicates whether Chrome should be set as the default browser during
+// installation.
+const char kMakeChromeDefault[] = "make-chrome-default";
 #endif  // defined(OS_MACOSX)
 
 #if defined(OS_WIN)
@@ -1288,6 +1299,11 @@ bool AboutInSettingsEnabled() {
              ::switches::kDisableAboutInSettings);
 }
 
+bool ExtensionsDisabled(const base::CommandLine& command_line) {
+  return command_line.HasSwitch(switches::kDisableExtensions) ||
+         command_line.HasSwitch(switches::kDisableExtensionsExcept);
+}
+
 bool MdFeedbackEnabled() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       ::switches::kEnableMaterialDesignFeedback);
@@ -1316,7 +1332,7 @@ bool PowerOverlayEnabled() {
 #endif
 
 // -----------------------------------------------------------------------------
-// DO NOT ADD YOUR CRAP TO THE BOTTOM OF THIS FILE.
+// DO NOT ADD YOUR VERY NICE FLAGS TO THE BOTTOM OF THIS FILE.
 //
 // You were going to just dump your switches here, weren't you? Instead, please
 // put them in alphabetical order above, or in order inside the appropriate

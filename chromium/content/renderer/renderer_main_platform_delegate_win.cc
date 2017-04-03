@@ -63,11 +63,11 @@ void RendererMainPlatformDelegate::PlatformInitialize() {
     // cached and there's no more need to access the registry. If the sandbox
     // is disabled, we don't have to make this dummy call.
     std::unique_ptr<icu::TimeZone> zone(icu::TimeZone::createDefault());
-
-    InitializeDWriteFontProxy();
-
     WarmUpMediaFoundation();
   }
+
+  InitializeDWriteFontProxy();
+
   // TODO(robliao): This should use WebScreenInfo. See http://crbug.com/604555.
   blink::WebFontRendering::setDeviceScaleFactor(display::win::GetDPIScale());
 }

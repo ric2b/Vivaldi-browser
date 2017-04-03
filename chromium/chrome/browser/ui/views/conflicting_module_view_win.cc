@@ -4,20 +4,19 @@
 
 #include "chrome/browser/ui/views/conflicting_module_view_win.h"
 
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/layout_constants.h"
-#include "chrome/browser/win/enumerate_modules_model.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
+#include "chrome/grit/theme_resources.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/user_metrics.h"
-#include "grit/components_strings.h"
-#include "grit/theme_resources.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -44,6 +43,7 @@ ConflictingModuleView::ConflictingModuleView(views::View* anchor_view,
                                              const GURL& help_center_url)
     : BubbleDialogDelegateView(anchor_view, views::BubbleBorder::TOP_RIGHT),
       browser_(browser),
+      observer_(this),
       help_center_url_(help_center_url) {
   set_close_on_deactivate(false);
 
@@ -51,8 +51,7 @@ ConflictingModuleView::ConflictingModuleView(views::View* anchor_view,
   set_anchor_view_insets(gfx::Insets(
       GetLayoutConstant(LOCATION_BAR_BUBBLE_ANCHOR_VERTICAL_INSET), 0));
 
-  registrar_.Add(this, chrome::NOTIFICATION_MODULE_INCOMPATIBILITY_ICON_CHANGE,
-                 content::NotificationService::AllSources());
+  observer_.Add(EnumerateModulesModel::GetInstance());
 }
 
 // static
@@ -62,8 +61,8 @@ void ConflictingModuleView::MaybeShow(Browser* browser,
   if (done_checking)
     return;  // Only show the bubble once per launch.
 
-  EnumerateModulesModel* model = EnumerateModulesModel::GetInstance();
-  GURL url = model->GetFirstNotableConflict();
+  auto* model = EnumerateModulesModel::GetInstance();
+  GURL url = model->GetConflictUrl();
   if (!url.is_valid()) {
     done_checking = true;
     return;
@@ -116,9 +115,10 @@ void ConflictingModuleView::OnWidgetClosing(views::Widget* widget) {
 }
 
 bool ConflictingModuleView::Accept() {
-  browser_->OpenURL(content::OpenURLParams(
-      help_center_url_, content::Referrer(), NEW_FOREGROUND_TAB,
-      ui::PAGE_TRANSITION_LINK, false));
+  browser_->OpenURL(
+      content::OpenURLParams(help_center_url_, content::Referrer(),
+                             WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                             ui::PAGE_TRANSITION_LINK, false));
   EnumerateModulesModel::GetInstance()->AcknowledgeConflictNotification();
   return true;
 }
@@ -163,11 +163,7 @@ void ConflictingModuleView::GetAccessibleState(
   state->role = ui::AX_ROLE_ALERT_DIALOG;
 }
 
-void ConflictingModuleView::Observe(
-    int type,
-    const content::NotificationSource& source,
-    const content::NotificationDetails& details) {
-  DCHECK_EQ(chrome::NOTIFICATION_MODULE_INCOMPATIBILITY_ICON_CHANGE, type);
+void ConflictingModuleView::OnConflictsAcknowledged() {
   EnumerateModulesModel* model = EnumerateModulesModel::GetInstance();
   if (!model->ShouldShowConflictWarning())
     GetWidget()->Close();

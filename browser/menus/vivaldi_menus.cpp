@@ -190,7 +190,7 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
     case IDC_CONTENT_CONTEXT_OPENLINKBACKGROUNDTAB:
       openurl.Run(params.link_url,
         GetDocumentURL(params),
-        NEW_BACKGROUND_TAB,
+        WindowOpenDisposition::NEW_BACKGROUND_TAB,
         ui::PAGE_TRANSITION_LINK);
       break;
     case IDC_CONTENT_CONTEXT_RELOADIMAGE:
@@ -200,25 +200,25 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
     case IDC_VIV_OPEN_IMAGE_NEW_FOREGROUND_TAB:
       openurl.Run(params.src_url,
         GetDocumentURL(params),
-        NEW_FOREGROUND_TAB,
+        WindowOpenDisposition::NEW_FOREGROUND_TAB,
         ui::PAGE_TRANSITION_LINK);
       break;
     case IDC_VIV_OPEN_IMAGE_NEW_BACKGROUND_TAB:
       openurl.Run(params.src_url,
         GetDocumentURL(params),
-        NEW_BACKGROUND_TAB,
+        WindowOpenDisposition::NEW_BACKGROUND_TAB,
         ui::PAGE_TRANSITION_LINK);
       break;
     case IDC_VIV_OPEN_IMAGE_NEW_WINDOW:
       openurl.Run(params.src_url,
         GetDocumentURL(params),
-        NEW_WINDOW,
+        WindowOpenDisposition::NEW_WINDOW,
         ui::PAGE_TRANSITION_LINK);
       break;
     case IDC_VIV_OPEN_IMAGE_NEW_PRIVATE_WINDOW:
       openurl.Run(params.src_url,
         GetDocumentURL(params),
-        OFF_THE_RECORD,
+        WindowOpenDisposition::OFF_THE_RECORD,
         ui::PAGE_TRANSITION_LINK);
       break;
     case IDC_CONTENT_CONTEXT_PASTE_AND_GO:
@@ -228,7 +228,7 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
             ui::CLIPBOARD_TYPE_COPY_PASTE, &text);
 
         base::ListValue* args = new base::ListValue;
-        args->Append(new base::StringValue(text));
+        args->Append(base::MakeUnique<base::StringValue>(text));
         extensions::WebViewGuest* current_webviewguest =
             vivaldi::ui_tools::GetActiveWebViewGuest();
         if (current_webviewguest) {
@@ -241,8 +241,9 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
       WebViewGuest *vivGuestView =
           WebViewGuest::FromWebContents(source_web_contents);
       base::ListValue *args = new base::ListValue;
-      args->Append(new base::StringValue(keyword));
-      args->Append(new base::StringValue(params.keyword_url.spec()));
+      args->Append(base::MakeUnique<base::StringValue>(keyword));
+      args->Append(
+          base::MakeUnique<base::StringValue>(params.keyword_url.spec()));
 
       vivGuestView->CreateSearch(*args);
 

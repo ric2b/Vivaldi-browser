@@ -39,8 +39,6 @@ class BrowserAccessibilityManagerAuraLinux;
 class BrowserAccessibilityManagerMac;
 #endif
 
-class SiteInstance;
-
 // For testing.
 CONTENT_EXPORT ui::AXTreeUpdate MakeAXTreeUpdate(
     const ui::AXNodeData& node,
@@ -85,9 +83,6 @@ class CONTENT_EXPORT BrowserAccessibilityDelegate {
   virtual gfx::Rect AccessibilityGetViewBounds() const = 0;
   virtual gfx::Point AccessibilityOriginInScreen(
       const gfx::Rect& bounds) const = 0;
-  virtual gfx::Rect AccessibilityTransformToRootCoordSpace(
-      const gfx::Rect& bounds) = 0;
-  virtual SiteInstance* AccessibilityGetSiteInstance() = 0;
   virtual void AccessibilityHitTest(
       const gfx::Point& point) = 0;
   virtual void AccessibilitySetAccessibilityFocus(int acc_obj_id) = 0;
@@ -359,7 +354,10 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeDelegate {
   void OnTreeDataChanged(ui::AXTree* tree) override;
   void OnNodeWillBeDeleted(ui::AXTree* tree, ui::AXNode* node) override;
   void OnSubtreeWillBeDeleted(ui::AXTree* tree, ui::AXNode* node) override;
+  void OnNodeWillBeReparented(ui::AXTree* tree, ui::AXNode* node) override;
+  void OnSubtreeWillBeReparented(ui::AXTree* tree, ui::AXNode* node) override;
   void OnNodeCreated(ui::AXTree* tree, ui::AXNode* node) override;
+  void OnNodeReparented(ui::AXTree* tree, ui::AXNode* node) override;
   void OnNodeChanged(ui::AXTree* tree, ui::AXNode* node) override;
   void OnAtomicUpdateFinished(
       ui::AXTree* tree,

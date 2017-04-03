@@ -14,12 +14,20 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.res.Resources;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Rect;
+import android.graphics.drawable.shapes.OvalShape;
 import android.os.Binder;
 import android.os.Build;
 import android.os.IBinder;
 import android.support.v4.app.NotificationCompat;
 import android.text.TextUtils;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
@@ -48,9 +56,11 @@ public class DownloadNotificationService extends Service {
     static final String EXTRA_DOWNLOAD_NOTIFICATION_ID = "DownloadNotificationId";
     static final String EXTRA_DOWNLOAD_GUID = "DownloadGuid";
     static final String EXTRA_DOWNLOAD_FILE_NAME = "DownloadFileName";
+    static final String EXTRA_DOWNLOAD_FILE_PATH = "DownloadFilePath";
     static final String EXTRA_NOTIFICATION_DISMISSED = "NotificationDismissed";
     static final String EXTRA_DOWNLOAD_IS_OFF_THE_RECORD = "DownloadIsOffTheRecord";
     static final String EXTRA_DOWNLOAD_IS_OFFLINE_PAGE = "DownloadIsOfflinePage";
+    static final String EXTRA_IS_SUPPORTED_MIME_TYPE = "IsSupportedMimeType";
     static final String ACTION_DOWNLOAD_CANCEL =
             "org.chromium.chrome.browser.download.DOWNLOAD_CANCEL";
     static final String ACTION_DOWNLOAD_PAUSE =
@@ -84,6 +94,7 @@ public class DownloadNotificationService extends Service {
     private int mNextNotificationId;
     private int mNumAutoResumptionAttemptLeft;
     private boolean mStopPostingProgressNotifications;
+    private Bitmap mDownloadSuccessLargeIcon;
 
    /**
      * Class for clients to access.
@@ -326,16 +337,20 @@ public class DownloadNotificationService extends Service {
     /**
      * Add a download successful notification.
      * @param downloadGuid GUID of the download.
-     * @param fileName GUID of the download.
+     * @param filePath Full path to the download.
+     * @param fileName Filename of the download.
      * @param systemDownloadId Download ID assigned by system DownloadManager.
+     * @param isOfflinePage Whether the download is for offline page.
+     * @param isSupportedMimeType Whether the MIME type can be viewed inside browser.
      * @return ID of the successful download notification. Used for removing the notification when
      *         user click on the snackbar.
      */
     public int notifyDownloadSuccessful(
-            String downloadGuid, String fileName, long systemDownloadId, boolean isOfflinePage) {
+            String downloadGuid, String filePath, String fileName, long systemDownloadId,
+            boolean isOfflinePage, boolean isSupportedMimeType) {
         int notificationId = getNotificationId(downloadGuid);
         NotificationCompat.Builder builder = buildNotification(
-                android.R.drawable.stat_sys_download_done, fileName,
+                R.drawable.offline_pin, fileName,
                 mContext.getResources().getString(R.string.download_notification_completed));
         ComponentName component = new ComponentName(
                 mContext.getPackageName(), DownloadBroadcastReceiver.class.getName());
@@ -347,10 +362,18 @@ public class DownloadNotificationService extends Service {
             intent = new Intent(DownloadManager.ACTION_NOTIFICATION_CLICKED);
             long[] idArray = {systemDownloadId};
             intent.putExtra(DownloadManager.EXTRA_NOTIFICATION_CLICK_DOWNLOAD_IDS, idArray);
+            intent.putExtra(EXTRA_DOWNLOAD_FILE_PATH, filePath);
+            intent.putExtra(EXTRA_IS_SUPPORTED_MIME_TYPE, isSupportedMimeType);
         }
         intent.setComponent(component);
         builder.setContentIntent(PendingIntent.getBroadcast(
                 mContext, notificationId, intent, PendingIntent.FLAG_UPDATE_CURRENT));
+        if (mDownloadSuccessLargeIcon == null) {
+            Bitmap bitmap = BitmapFactory.decodeResource(
+                    mContext.getResources(), R.drawable.offline_pin);
+            mDownloadSuccessLargeIcon = getLargeNotificationIcon(bitmap);
+        }
+        builder.setLargeIcon(mDownloadSuccessLargeIcon);
         updateNotification(notificationId, builder.build());
         removeSharedPreferenceEntry(downloadGuid);
         mDownloadsInProgress.remove(downloadGuid);
@@ -451,6 +474,32 @@ public class DownloadNotificationService extends Service {
                 .setAutoCancel(true)
                 .setContentText(contentText);
         return builder;
+    }
+
+    private Bitmap getLargeNotificationIcon(Bitmap bitmap) {
+        Resources resources = mContext.getResources();
+        int height = (int) resources.getDimension(android.R.dimen.notification_large_icon_height);
+        int width = (int) resources.getDimension(android.R.dimen.notification_large_icon_width);
+        final OvalShape circle = new OvalShape();
+        circle.resize(width, height);
+        final Paint paint = new Paint();
+        paint.setColor(ApiCompatibilityUtils.getColor(resources, R.color.google_blue_grey_500));
+
+        final Bitmap result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(result);
+        circle.draw(canvas, paint);
+        float leftOffset = (width - bitmap.getWidth()) / 2f;
+        float topOffset = (height - bitmap.getHeight()) / 2f;
+        if (leftOffset >= 0 && topOffset >= 0) {
+            canvas.drawBitmap(bitmap, leftOffset, topOffset, null);
+        } else {
+            // Scale down the icon into the notification icon dimensions
+            canvas.drawBitmap(bitmap,
+                    new Rect(0, 0, bitmap.getWidth(), bitmap.getHeight()),
+                    new Rect(0, 0, width, height),
+                    null);
+        }
+        return result;
     }
 
     /**

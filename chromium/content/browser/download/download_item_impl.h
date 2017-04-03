@@ -22,7 +22,7 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/download_interrupt_reasons.h"
 #include "content/public/browser/download_item.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -50,7 +50,7 @@ class CONTENT_EXPORT DownloadItemImpl
   // outlives the DownloadItemImpl.
 
   // Constructing from persistent store:
-  // |bound_net_log| is constructed externally for our use.
+  // |net_log| is constructed externally for our use.
   DownloadItemImpl(DownloadItemImplDelegate* delegate,
                    const std::string& guid,
                    uint32_t id,
@@ -74,17 +74,17 @@ class CONTENT_EXPORT DownloadItemImpl
                    DownloadDangerType danger_type,
                    DownloadInterruptReason interrupt_reason,
                    bool opened,
-                   const net::BoundNetLog& bound_net_log);
+                   const net::NetLogWithSource& net_log);
 
   // Constructing for a regular download.
-  // |bound_net_log| is constructed externally for our use.
+  // |net_log| is constructed externally for our use.
   DownloadItemImpl(DownloadItemImplDelegate* delegate,
                    uint32_t id,
                    const DownloadCreateInfo& info,
-                   const net::BoundNetLog& bound_net_log);
+                   const net::NetLogWithSource& net_log);
 
   // Constructing for the "Save Page As..." feature:
-  // |bound_net_log| is constructed externally for our use.
+  // |net_log| is constructed externally for our use.
   DownloadItemImpl(
       DownloadItemImplDelegate* delegate,
       uint32_t id,
@@ -92,7 +92,7 @@ class CONTENT_EXPORT DownloadItemImpl
       const GURL& url,
       const std::string& mime_type,
       std::unique_ptr<DownloadRequestHandleInterface> request_handle,
-      const net::BoundNetLog& bound_net_log);
+      const net::NetLogWithSource& net_log);
 
   ~DownloadItemImpl() override;
 
@@ -201,8 +201,8 @@ class CONTENT_EXPORT DownloadItemImpl
   virtual base::WeakPtr<DownloadDestinationObserver>
       DestinationObserverAsWeakPtr();
 
-  // Get the download's BoundNetLog.
-  virtual const net::BoundNetLog& GetBoundNetLog() const;
+  // Get the download's NetLogWithSource.
+  virtual const net::NetLogWithSource& GetNetLogWithSource() const;
 
   // DownloadItemImpl routines only needed by SavePackage ----------------------
 
@@ -674,7 +674,7 @@ class CONTENT_EXPORT DownloadItemImpl
   std::string etag_;
 
   // Net log to use for this download.
-  const net::BoundNetLog bound_net_log_;
+  const net::NetLogWithSource net_log_;
 
   base::WeakPtrFactory<DownloadItemImpl> weak_ptr_factory_;
 

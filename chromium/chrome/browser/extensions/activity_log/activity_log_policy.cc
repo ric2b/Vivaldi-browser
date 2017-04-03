@@ -7,11 +7,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <utility>
+
 #include "base/files/file_path.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/strings/stringprintf.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
 #include "chrome/browser/extensions/activity_log/activity_action_constants.h"
@@ -24,14 +25,6 @@ using content::BrowserThread;
 
 namespace constants = activity_log_constants;
 
-namespace {
-// Obsolete database tables: these should be dropped from the database if
-// found.
-const char* const kObsoleteTables[] = {"activitylog_apis",
-                                       "activitylog_blocked",
-                                       "activitylog_urls"};
-}  // namespace
-
 namespace extensions {
 
 ActivityLogPolicy::ActivityLogPolicy(Profile* profile) {}
@@ -39,14 +32,13 @@ ActivityLogPolicy::ActivityLogPolicy(Profile* profile) {}
 ActivityLogPolicy::~ActivityLogPolicy() {}
 
 void ActivityLogPolicy::SetClockForTesting(std::unique_ptr<base::Clock> clock) {
-  testing_clock_.reset(clock.release());
+  testing_clock_ = std::move(clock);
 }
 
 base::Time ActivityLogPolicy::Now() const {
   if (testing_clock_)
     return testing_clock_->Now();
-  else
-    return base::Time::Now();
+  return base::Time::Now();
 }
 
 ActivityLogDatabasePolicy::ActivityLogDatabasePolicy(
@@ -76,9 +68,7 @@ sql::Connection* ActivityLogDatabasePolicy::GetDatabaseConnection() const {
 // static
 std::string ActivityLogPolicy::Util::Serialize(const base::Value* value) {
   std::string value_as_text;
-  if (!value) {
-    value_as_text = "";
-  } else {
+  if (value) {
     JSONStringValueSerializer serializer(&value_as_text);
     serializer.SerializeAndOmitBinaryValues(*value);
   }
@@ -154,29 +144,14 @@ void ActivityLogPolicy::Util::ComputeDatabaseTimeBounds(const base::Time& now,
                                                         int64_t* late_bound) {
   base::Time morning_midnight = now.LocalMidnight();
   if (days_ago == 0) {
-      *early_bound = morning_midnight.ToInternalValue();
-      *late_bound = base::Time::Max().ToInternalValue();
+    *early_bound = morning_midnight.ToInternalValue();
+    *late_bound = base::Time::Max().ToInternalValue();
   } else {
-      base::Time early_time = Util::AddDays(morning_midnight, -days_ago);
-      base::Time late_time = Util::AddDays(early_time, 1);
-      *early_bound = early_time.ToInternalValue();
-      *late_bound = late_time.ToInternalValue();
+    base::Time early_time = Util::AddDays(morning_midnight, -days_ago);
+    base::Time late_time = Util::AddDays(early_time, 1);
+    *early_bound = early_time.ToInternalValue();
+    *late_bound = late_time.ToInternalValue();
   }
-}
-
-// static
-bool ActivityLogPolicy::Util::DropObsoleteTables(sql::Connection* db) {
-  for (size_t i = 0; i < arraysize(kObsoleteTables); i++) {
-    const char* table_name = kObsoleteTables[i];
-    if (db->DoesTableExist(table_name)) {
-      std::string drop_statement =
-          base::StringPrintf("DROP TABLE %s", table_name);
-      if (!db->Execute(drop_statement.c_str())) {
-        return false;
-      }
-    }
-  }
-  return true;
 }
 
 }  // namespace extensions

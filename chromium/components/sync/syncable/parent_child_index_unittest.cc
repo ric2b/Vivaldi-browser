@@ -4,10 +4,9 @@
 
 #include "components/sync/syncable/parent_child_index.h"
 
-#include <list>
 #include <string>
 
-#include "base/stl_util.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "components/sync/syncable/entry_kernel.h"
 #include "components/sync/syncable/syncable_util.h"
@@ -18,17 +17,13 @@ namespace syncable {
 
 namespace {
 
-static const std::string kCacheGuid = "8HhNIHlEOCGQbIAALr9QEg==";
+const char kCacheGuid[] = "8HhNIHlEOCGQbIAALr9QEg==";
 
 }  // namespace
 
 class ParentChildIndexTest : public testing::Test {
  public:
-  void TearDown() override {
-    // To make memory management easier, we take ownership of all EntryKernels
-    // returned by our factory methods and delete them here.
-    base::STLDeleteElements(&owned_entry_kernels_);
-  }
+  void TearDown() override {}
 
   // Unfortunately, we can't use the regular Entry factory methods, because the
   // ParentChildIndex deals in EntryKernels.
@@ -55,7 +50,7 @@ class ParentChildIndexTest : public testing::Test {
     root->put(ID, syncable::Id::GetRoot());
     root->put(PARENT_ID, syncable::Id::GetRoot());
 
-    owned_entry_kernels_.push_back(root);
+    owned_entry_kernels_.push_back(base::WrapUnique(root));
     return root;
   }
 
@@ -75,7 +70,7 @@ class ParentChildIndexTest : public testing::Test {
     AddDefaultFieldValue(model_type, &specifics);
     folder->put(SPECIFICS, specifics);
 
-    owned_entry_kernels_.push_back(folder);
+    owned_entry_kernels_.push_back(base::WrapUnique(folder));
     return folder;
   }
 
@@ -101,7 +96,7 @@ class ParentChildIndexTest : public testing::Test {
     bm->put(UNIQUE_POSITION, unique_pos);
     bm->put(SERVER_UNIQUE_POSITION, unique_pos);
 
-    owned_entry_kernels_.push_back(bm);
+    owned_entry_kernels_.push_back(base::WrapUnique(bm));
     return bm;
   }
 
@@ -127,7 +122,7 @@ class ParentChildIndexTest : public testing::Test {
       item->put(SPECIFICS, specifics);
     }
 
-    owned_entry_kernels_.push_back(item);
+    owned_entry_kernels_.push_back(base::WrapUnique(item));
     return item;
   }
 
@@ -146,7 +141,7 @@ class ParentChildIndexTest : public testing::Test {
   ParentChildIndex index_;
 
  private:
-  std::list<EntryKernel*> owned_entry_kernels_;
+  std::vector<std::unique_ptr<EntryKernel>> owned_entry_kernels_;
 };
 
 TEST_F(ParentChildIndexTest, TestRootNode) {

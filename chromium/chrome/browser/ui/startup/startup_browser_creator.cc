@@ -56,6 +56,7 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
 #include "chrome/browser/ui/user_manager.h"
+#include "chrome/browser/ui/webui/options/reset_profile_settings_handler.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_result_codes.h"
@@ -77,7 +78,7 @@
 #include "net/base/port_util.h"
 
 #if defined(USE_ASH)
-#include "ash/shell.h"
+#include "ash/shell.h"  // nogncheck
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -91,7 +92,7 @@
 #endif
 
 #if defined(TOOLKIT_VIEWS) && defined(OS_LINUX)
-#include "ui/events/devices/x11/touch_factory_x11.h"
+#include "ui/events/devices/x11/touch_factory_x11.h"  // nogncheck
 #endif
 
 #if defined(OS_MACOSX)
@@ -100,10 +101,6 @@
 
 #if defined(OS_WIN)
 #include "chrome/browser/metrics/jumplist_metrics_win.h"
-#endif
-
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-#include "ui/views/widget/desktop_aura/x11_desktop_handler.h"
 #endif
 
 #if defined(ENABLE_PRINT_PREVIEW)
@@ -290,7 +287,7 @@ bool ShowUserManagerOnStartupIfNeeded(
   }
 
   // Show the User Manager.
-  profiles::UserManagerProfileSelected action =
+  profiles::UserManagerAction action =
       command_line.HasSwitch(switches::kShowAppList) ?
           profiles::USER_MANAGER_SELECT_PROFILE_APP_LAUNCHER :
           profiles::USER_MANAGER_SELECT_PROFILE_NO_ACTION;
@@ -525,22 +522,34 @@ std::vector<GURL> StartupBrowserCreator::GetURLsFromCommandLine(
     if (!url.is_valid())
       continue;
 
+    const GURL settings_url = GURL(chrome::kChromeUISettingsURL);
+    bool url_points_to_an_approved_settings_page = false;
+#if defined(OS_CHROMEOS)
+    // In ChromeOS, allow any settings page to be specified on the command line.
+    url_points_to_an_approved_settings_page =
+        url.GetOrigin() == settings_url.GetOrigin();
+#else
+    // Exposed for external cleaners to offer a settings reset to the
+    // user. The allowed URLs must match exactly.
+    const GURL reset_settings_url =
+        settings_url.Resolve(chrome::kResetProfileSettingsSubPage);
+    url_points_to_an_approved_settings_page = url == reset_settings_url;
+#if defined(OS_WIN)
+    // On Windows, also allow a hash for the Chrome Cleanup Tool.
+    const GURL reset_settings_url_with_cct_hash = reset_settings_url.Resolve(
+        std::string("#") +
+        options::ResetProfileSettingsHandler::kCctResetSettingsHash);
+    url_points_to_an_approved_settings_page =
+        url_points_to_an_approved_settings_page ||
+        url == reset_settings_url_with_cct_hash;
+#endif  // defined(OS_WIN)
+#endif  // defined(OS_CHROMEOS)
+
     ChildProcessSecurityPolicy* policy =
         ChildProcessSecurityPolicy::GetInstance();
     if (policy->IsWebSafeScheme(url.scheme()) ||
         url.SchemeIs(url::kFileScheme) ||
-#if defined(OS_CHROMEOS)
-        // In ChromeOS, allow any settings page to be specified on the command
-        // line. See ExistingUserController::OnLoginSuccess.
-        base::StartsWith(url.spec(), chrome::kChromeUISettingsURL,
-                         base::CompareCase::SENSITIVE) ||
-#else
-        // Exposed for external cleaners to offer a settings reset to the
-        // user. So the URL must match exactly, without any param or prefix.
-        (url.spec() ==
-         std::string(chrome::kChromeUISettingsURL) +
-             chrome::kResetProfileSettingsSubPage) ||
-#endif
+        url_points_to_an_approved_settings_page ||
         (url.spec().compare(url::kAboutBlankURL) == 0)) {
       urls.push_back(url);
     }
@@ -702,21 +711,6 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
         command_line.GetSwitchValueASCII(switches::kWinJumplistAction));
   }
 #endif  // defined(OS_WIN)
-
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-  // Our request to Activate may be discarded on some linux window
-  // managers unless given a recent timestamp, so update the timestamp if
-  // we were given one.
-  if (command_line.HasSwitch(switches::kWmUserTimeMs)) {
-    uint64_t time;
-    std::string switch_value =
-        command_line.GetSwitchValueASCII(switches::kWmUserTimeMs);
-    if (base::StringToUint64(switch_value, &time)) {
-      views::X11DesktopHandler::get()->set_wm_user_time_ms(
-          static_cast<Time>(time));
-    }
-  }
-#endif
 
   chrome::startup::IsProcessStartup is_process_startup = process_startup ?
       chrome::startup::IS_PROCESS_STARTUP :

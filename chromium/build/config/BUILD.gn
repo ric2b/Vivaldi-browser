@@ -73,10 +73,6 @@ config("feature_flags") {
     # TODO(brettw) should probably be "=1"
     defines += [ "ENABLE_PEPPER_CDMS" ]
   }
-  if (enable_browser_cdms) {
-    # TODO(brettw) should probably be "=1"
-    defines += [ "ENABLE_BROWSER_CDMS" ]
-  }
   if (enable_plugins) {
     defines += [ "ENABLE_PLUGINS=1" ]
   }
@@ -240,9 +236,6 @@ config("feature_flags") {
   if (enable_hangout_services_extension) {
     defines += [ "ENABLE_HANGOUT_SERVICES_EXTENSION=1" ]
   }
-  if (enable_video_hole) {
-    defines += [ "VIDEO_HOLE=1" ]
-  }
   if (safe_browsing_mode == 1) {
     defines += [ "FULL_SAFE_BROWSING" ]
     defines += [ "SAFE_BROWSING_CSD" ]
@@ -267,7 +260,6 @@ config("feature_flags") {
   if (is_syzyasan) {
     defines += [
       "SYZYASAN",
-      "MEMORY_TOOL_REPLACES_ALLOCATOR",
       "MEMORY_SANITIZER_INITIAL_SIZE",
     ]
   }

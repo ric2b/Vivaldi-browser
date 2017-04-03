@@ -4,20 +4,29 @@
 
 #include "core/dom/custom/CustomElementAdoptedCallbackReaction.h"
 
+#include "core/dom/Document.h"
 #include "core/dom/custom/CustomElementDefinition.h"
 
 namespace blink {
 
 CustomElementAdoptedCallbackReaction::CustomElementAdoptedCallbackReaction(
-    CustomElementDefinition* definition)
-    : CustomElementReaction(definition)
-{
-    DCHECK(definition->hasAdoptedCallback());
+    CustomElementDefinition* definition,
+    Document* oldOwner,
+    Document* newOwner)
+    : CustomElementReaction(definition),
+      m_oldOwner(oldOwner),
+      m_newOwner(newOwner) {
+  DCHECK(definition->hasAdoptedCallback());
 }
 
-void CustomElementAdoptedCallbackReaction::invoke(Element* element)
-{
-    m_definition->runAdoptedCallback(element);
+DEFINE_TRACE(CustomElementAdoptedCallbackReaction) {
+  CustomElementReaction::trace(visitor);
+  visitor->trace(m_oldOwner);
+  visitor->trace(m_newOwner);
 }
 
-} // namespace blink
+void CustomElementAdoptedCallbackReaction::invoke(Element* element) {
+  m_definition->runAdoptedCallback(element, m_oldOwner.get(), m_newOwner.get());
+}
+
+}  // namespace blink

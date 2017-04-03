@@ -13,8 +13,8 @@
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
-#include "blimp/client/core/blimp_client_switches.h"
 #include "blimp/client/core/session/assignment_source.h"
+#include "blimp/client/core/switches/blimp_client_switches.h"
 #include "blimp/common/switches.h"
 #include "blimp/engine/app/blimp_browser_main_parts.h"
 #include "blimp/engine/app/blimp_content_browser_client.h"
@@ -30,13 +30,13 @@
 namespace blimp {
 namespace {
 const char kTestDataFilePath[] = "blimp/test/data";
-const char kClientTokenFilePath[] = "blimp/test/data/test_client_token";
-const char kClientToken[] = "MyVoiceIsMyPassport";
+const char kClientAuthTokenFilePath[] = "blimp/test/data/test_client_token";
+const char kClientAuthToken[] = "MyVoiceIsMyPassport";
 }  // namespace
 
-
 BlimpBrowserTest::BlimpBrowserTest()
-    : completion_event_(base::WaitableEvent::ResetPolicy::MANUAL,
+    : engine_port_(0),
+      completion_event_(base::WaitableEvent::ResetPolicy::MANUAL,
                         base::WaitableEvent::InitialState::NOT_SIGNALED) {
   CreateTestServer(base::FilePath(FILE_PATH_LITERAL(kTestDataFilePath)));
 }
@@ -49,6 +49,12 @@ void BlimpBrowserTest::RunUntilCompletion() {
     content::RunAllPendingInMessageLoop(content::BrowserThread::UI);
   }
   completion_event_.Reset();
+}
+
+void BlimpBrowserTest::AllowUIWaits() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  allow_ui_waits_ =
+      base::MakeUnique<base::ThreadRestrictions::ScopedAllowWait>();
 }
 
 void BlimpBrowserTest::SignalCompletion() {
@@ -70,7 +76,7 @@ engine::BlimpEngineSession* BlimpBrowserTest::GetEngineSession() {
 
 client::Assignment BlimpBrowserTest::GetAssignment() {
   client::Assignment assignment;
-  assignment.client_token = kClientToken;
+  assignment.client_auth_token = kClientAuthToken;
   assignment.engine_endpoint =
       net::IPEndPoint(net::IPAddress::IPv4Localhost(), engine_port_);
   assignment.transport_protocol = client::Assignment::TransportProtocol::TCP;
@@ -89,8 +95,8 @@ void BlimpBrowserTest::SetUpCommandLine(base::CommandLine* command_line) {
 
   base::FilePath src_root;
   PathService::Get(base::DIR_SOURCE_ROOT, &src_root);
-  command_line->AppendSwitchASCII(kClientTokenPath,
-      src_root.Append(kClientTokenFilePath).value());
+  command_line->AppendSwitchASCII(
+      kClientAuthTokenPath, src_root.Append(kClientAuthTokenFilePath).value());
 }
 
 void BlimpBrowserTest::SetUpOnMainThread() {
@@ -102,6 +108,7 @@ void BlimpBrowserTest::SetUpOnMainThread() {
 }
 
 void BlimpBrowserTest::TearDownOnMainThread() {
+  allow_ui_waits_.reset();
   base::MessageLoop::current()->QuitWhenIdle();
 }
 

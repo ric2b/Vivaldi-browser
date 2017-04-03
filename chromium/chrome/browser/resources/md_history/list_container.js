@@ -22,6 +22,10 @@ Polymer({
     queryResult: Object,
   },
 
+  observers: [
+    'searchTermChanged_(queryState.searchTerm)',
+  ],
+
   listeners: {
     'history-list-scrolled': 'closeMenu_',
     'load-more-history': 'loadMoreHistory_',
@@ -36,6 +40,14 @@ Polymer({
   historyResult: function(info, results) {
     this.initializeResults_(info, results);
     this.closeMenu_();
+
+    if (info.term && !this.queryState.incremental) {
+      Polymer.IronA11yAnnouncer.requestAvailability();
+      this.fire('iron-announce', {
+        text:
+            md_history.HistoryItem.searchResultsTitle(results.length, info.term)
+      });
+    }
 
     if (this.selectedPage_ == 'grouped-list') {
       this.$$('#grouped-list').historyData = results;
@@ -75,7 +87,7 @@ Polymer({
     var lastVisitTime = 0;
     if (incremental) {
       var lastVisit = this.queryResult.results.slice(-1)[0];
-      lastVisitTime = lastVisit ? lastVisit.time : 0;
+      lastVisitTime = lastVisit ? Math.floor(lastVisit.time) : 0;
     }
 
     var maxResults =
@@ -123,9 +135,10 @@ Polymer({
     browserService.recordAction('RemoveSelected');
     if (this.queryState.searchTerm != '')
       browserService.recordAction('SearchResultRemove');
-    this.$.dialog.get().then(function(dialog) {
-      dialog.showModal();
-    });
+    this.$.dialog.get().showModal();
+
+    // TODO(dbeam): remove focus flicker caused by showModal() + focus().
+    this.$$('.action-button').focus();
   },
 
   /**
@@ -141,6 +154,14 @@ Polymer({
 
     this.queryHistory(false);
     this.fire('history-view-changed');
+  },
+
+  /** @private */
+  searchTermChanged_: function() {
+    this.queryHistory(false);
+    // TODO(tsergeant): Ignore incremental searches in this metric.
+    if (this.queryState.searchTerm)
+      md_history.BrowserService.getInstance().recordAction('Search');
   },
 
   /** @private */
@@ -202,15 +223,12 @@ Polymer({
    * Opens the overflow menu unless the menu is already open and the same button
    * is pressed.
    * @param {{detail: {item: !HistoryEntry, target: !HTMLElement}}} e
-   * @return {Promise<Element>}
    * @private
    */
   toggleMenu_: function(e) {
     var target = e.detail.target;
-    return this.$.sharedMenu.get().then(function(menu) {
-      /** @type {CrSharedMenuElement} */(menu).toggleMenu(
-        target, e.detail);
-    });
+    var menu = /** @type {CrSharedMenuElement} */this.$.sharedMenu.get();
+    menu.toggleMenu(target, e.detail);
   },
 
   /** @private */
@@ -219,7 +237,7 @@ Polymer({
         'EntryMenuShowMoreFromSite');
 
     var menu = assert(this.$.sharedMenu.getIfExists());
-    this.fire('search-domain', {domain: menu.itemData.item.domain});
+    this.set('queryState.searchTerm', menu.itemData.item.domain);
     menu.closeMenu();
   },
 
@@ -231,11 +249,13 @@ Polymer({
     var itemData = menu.itemData;
     browserService.deleteItems([itemData.item])
         .then(function(items) {
-          this.getSelectedList_().removeItemsByPath([itemData.path]);
-          // This unselect-all is to reset the toolbar when deleting a selected
-          // item. TODO(tsergeant): Make this automatic based on observing list
+          // This unselect-all resets the toolbar when deleting a selected item
+          // and clears selection state which can be invalid if items move
+          // around during deletion.
+          // TODO(tsergeant): Make this automatic based on observing list
           // modifications.
           this.fire('unselect-all');
+          this.getSelectedList_().removeItemsByPath([itemData.path]);
 
           var index = itemData.index;
           if (index == undefined)

@@ -15,6 +15,8 @@
 #include "net/base/host_port_pair.h"
 #include "net/base/net_errors.h"
 #include "net/dns/host_resolver_impl.h"
+#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 
 namespace net {
 
@@ -68,7 +70,7 @@ void ResolverThread::Run() {
                           DEFAULT_PRIORITY, addresses_,
                           base::Bind(&ResolverThread::OnResolutionComplete,
                                      weak_factory_.GetWeakPtr()),
-                          &request, BoundNetLog());
+                          &request, NetLogWithSource());
 
   if (rv_ != ERR_IO_PENDING)
     return;

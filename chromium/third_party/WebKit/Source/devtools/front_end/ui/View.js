@@ -250,6 +250,11 @@ WebInspector.ViewLocation.prototype = {
     showView: function(view, insertBefore) { },
 
     /**
+     * @param {!WebInspector.View} view
+     */
+    removeView: function(view) { },
+
+    /**
      * @return {!WebInspector.Widget}
      */
     widget: function() { }
@@ -614,9 +619,7 @@ WebInspector.ViewManager._TabbedLocation.prototype = {
      */
     enableMoreTabsButton: function()
     {
-        var toolbar = new WebInspector.Toolbar("drawer-toolbar");
-        toolbar.appendToolbarItem(new WebInspector.ToolbarMenuButton(this._appendTabsToMenu.bind(this)));
-        this._tabbedPane.insertBeforeTabStrip(toolbar.element);
+        this._tabbedPane.leftToolbar().appendToolbarItem(new WebInspector.ToolbarMenuButton(this._appendTabsToMenu.bind(this)));
         this._tabbedPane.disableOverflowMenu();
     },
 
@@ -697,6 +700,22 @@ WebInspector.ViewManager._TabbedLocation.prototype = {
         this._tabbedPane.selectTab(view.viewId());
         return this._materializeWidget(view);
     },
+
+    /**
+     * @param {!WebInspector.View} view
+     * @override
+     */
+    removeView: function(view)
+    {
+        if (!this._tabbedPane.hasTab(view.viewId()))
+            return;
+
+        delete view[WebInspector.ViewManager._Location.symbol];
+        this._manager._views.delete(view.viewId());
+        this._views.delete(view.viewId());
+        this._tabbedPane.closeTab(view.viewId());
+    },
+
 
     /**
      * @param {!WebInspector.Event} event
@@ -802,6 +821,22 @@ WebInspector.ViewManager._StackLocation.prototype = {
         this.appendView(view, insertBefore);
         var container = this._expandableContainers.get(view.viewId());
         return container._expand();
+    },
+
+    /**
+     * @param {!WebInspector.View} view
+     * @override
+     */
+    removeView: function(view)
+    {
+        var container = this._expandableContainers.get(view.viewId());
+        if (!container)
+            return;
+
+        container.detach();
+        this._expandableContainers.delete(view.viewId());
+        delete view[WebInspector.ViewManager._Location.symbol];
+        this._manager._views.delete(view.viewId());
     },
 
     /**

@@ -110,14 +110,8 @@ class ASH_EXPORT SystemTrayDelegate {
   // Called after SystemTray has been instantiated.
   virtual void Initialize();
 
-  // Returns true if system tray should be visible on startup.
-  virtual bool GetTrayVisibilityOnStartup();
-
   // Gets information about the active user.
   virtual LoginStatus GetUserLoginStatus() const;
-
-  // Shows UI for changing user's profile picture.
-  virtual void ChangeProfilePicture();
 
   // Returns the domain that manages the device, if it is enterprise-enrolled.
   virtual std::string GetEnterpriseDomain() const;
@@ -147,64 +141,18 @@ class ASH_EXPORT SystemTrayDelegate {
   // Fills |info| structure (which must not be null) with current update info.
   virtual void GetSystemUpdateInfo(UpdateInfo* info) const;
 
-  // Returns the desired hour clock type.
-  virtual base::HourClockType GetHourClockType() const;
-
-  // Shows settings.
-  virtual void ShowSettings();
-
   // Returns true if settings menu item should appear.
   virtual bool ShouldShowSettings();
 
-  // Shows the settings related to date, timezone etc.
-  virtual void ShowDateSettings();
-
   // Shows the dialog to set system time, date, and timezone.
   virtual void ShowSetTimeDialog();
-
-  // Shows the settings related to network. If |guid| is not empty,
-  // show the settings for the corresponding network.
-  virtual void ShowNetworkSettingsForGuid(const std::string& guid);
-
-  // Shows settings related to multiple displays.
-  virtual void ShowDisplaySettings();
-
-  // Shows settings related to power.
-  virtual void ShowPowerSettings();
-
-  // Shows the page that lets you disable performance tracing.
-  virtual void ShowChromeSlow();
 
   // Returns true if the notification for the display configuration change
   // should appear.
   virtual bool ShouldShowDisplayNotification();
 
-  // Shows settings related to input methods.
-  virtual void ShowIMESettings();
-
-  // Shows help.
-  virtual void ShowHelp();
-
-  // Show accessilibity help.
-  virtual void ShowAccessibilityHelp();
-
-  // Show the settings related to accessilibity.
-  virtual void ShowAccessibilitySettings();
-
-  // Shows the help center article for palette.
-  virtual void ShowPaletteHelp();
-
-  // Shows the settings related to the palette.
-  virtual void ShowPaletteSettings();
-
-  // Shows more information about public account mode.
-  virtual void ShowPublicAccountInfo();
-
   // Shows information about enterprise enrolled devices.
   virtual void ShowEnterpriseInfo();
-
-  // Shows information about supervised users.
-  virtual void ShowSupervisedUserInfo();
 
   // Shows login UI to add other users to this session.
   virtual void ShowUserLogin();
@@ -267,9 +215,6 @@ class ASH_EXPORT SystemTrayDelegate {
   // Returns whether the delegate has initiated a bluetooth discovery session.
   virtual bool GetBluetoothDiscovering();
 
-  // Shows UI for changing proxy settings.
-  virtual void ChangeProxySettings();
-
   // Returns CastConfigDelegate. May return nullptr.
   virtual CastConfigDelegate* GetCastConfigDelegate();
 
@@ -321,12 +266,6 @@ class ASH_EXPORT SystemTrayDelegate {
 
   // Returns VPNDelegate. May return nullptr.
   virtual VPNDelegate* GetVPNDelegate() const;
-
-  // Creates a system tray item for display settings.
-  // TODO(jamescook): Remove this when mus has support for display management
-  // and we have a DisplayManager equivalent. See http://crbug.com/548429
-  virtual std::unique_ptr<SystemTrayItem> CreateDisplayTrayItem(
-      SystemTray* tray);
 
   // Creates a system tray item for display rotation lock.
   // TODO(jamescook): Remove this when mus has support for display management

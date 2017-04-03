@@ -12,12 +12,14 @@
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "chrome/browser/chromeos/attestation/attestation_ca_client.h"
 #include "chrome/browser/chromeos/policy/affiliated_cloud_policy_invalidator.h"
 #include "chrome/browser/chromeos/policy/affiliated_invalidation_service_provider.h"
 #include "chrome/browser/chromeos/policy/affiliated_invalidation_service_provider_impl.h"
@@ -28,13 +30,14 @@
 #include "chrome/browser/chromeos/policy/device_local_account_policy_service.h"
 #include "chrome/browser/chromeos/policy/device_network_configuration_updater.h"
 #include "chrome/browser/chromeos/policy/enrollment_config.h"
-#include "chrome/browser/chromeos/policy/enterprise_install_attributes.h"
 #include "chrome/browser/chromeos/policy/remote_commands/affiliated_remote_commands_invalidator.h"
 #include "chrome/browser/chromeos/policy/server_backed_state_keys_broker.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
+#include "chrome/browser/chromeos/settings/install_attributes.h"
 #include "chrome/browser/policy/device_management_service_configuration.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/attestation/attestation_flow.h"
 #include "chromeos/chromeos_paths.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/cryptohome/async_method_caller.h"
@@ -46,6 +49,7 @@
 #include "chromeos/settings/cros_settings_names.h"
 #include "chromeos/settings/cros_settings_provider.h"
 #include "chromeos/settings/timezone_settings.h"
+#include "chromeos/system/statistics_provider.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_refresh_scheduler.h"
 #include "components/policy/core/common/proxy_policy_provider.h"
@@ -62,7 +66,7 @@ namespace policy {
 namespace {
 
 // Install attributes for tests.
-EnterpriseInstallAttributes* g_testing_install_attributes = NULL;
+chromeos::InstallAttributes* g_testing_install_attributes = nullptr;
 
 // Helper that returns a new SequencedTaskRunner backed by the blocking pool.
 // Each SequencedTaskRunner returned is independent from the others.
@@ -76,12 +80,12 @@ scoped_refptr<base::SequencedTaskRunner> GetBackgroundTaskRunner() {
 }  // namespace
 
 BrowserPolicyConnectorChromeOS::BrowserPolicyConnectorChromeOS()
-    : device_cloud_policy_manager_(NULL),
-      global_user_cloud_policy_provider_(NULL),
+    : device_cloud_policy_manager_(nullptr),
+      global_user_cloud_policy_provider_(nullptr),
       weak_ptr_factory_(this) {
   if (g_testing_install_attributes) {
     install_attributes_.reset(g_testing_install_attributes);
-    g_testing_install_attributes = NULL;
+    g_testing_install_attributes = nullptr;
   }
 
   // SystemSaltGetter or DBusThreadManager may be uninitialized on unit tests.
@@ -90,9 +94,9 @@ BrowserPolicyConnectorChromeOS::BrowserPolicyConnectorChromeOS()
   // (removing it now breaks tests). crbug.com/141016.
   if (chromeos::SystemSaltGetter::IsInitialized() &&
       chromeos::DBusThreadManager::IsInitialized()) {
-    state_keys_broker_.reset(new ServerBackedStateKeysBroker(
+    state_keys_broker_ = base::MakeUnique<ServerBackedStateKeysBroker>(
         chromeos::DBusThreadManager::Get()->GetSessionManagerClient(),
-        base::ThreadTaskRunnerHandle::Get()));
+        base::ThreadTaskRunnerHandle::Get());
 
     chromeos::CryptohomeClient* cryptohome_client =
         chromeos::DBusThreadManager::Get()->GetCryptohomeClient();
@@ -100,18 +104,18 @@ BrowserPolicyConnectorChromeOS::BrowserPolicyConnectorChromeOS()
     // Don't initialize install attributes if g_testing_install_attributes have
     // been injected.
     if (!install_attributes_) {
-      install_attributes_.reset(
-          new EnterpriseInstallAttributes(cryptohome_client));
+      install_attributes_ =
+          base::MakeUnique<chromeos::InstallAttributes>(cryptohome_client);
       base::FilePath install_attrs_file;
       CHECK(PathService::Get(chromeos::FILE_INSTALL_ATTRIBUTES,
                              &install_attrs_file));
       install_attributes_->Init(install_attrs_file);
     }
 
-    std::unique_ptr<DeviceCloudPolicyStoreChromeOS> device_cloud_policy_store(
-        new DeviceCloudPolicyStoreChromeOS(
+    std::unique_ptr<DeviceCloudPolicyStoreChromeOS> device_cloud_policy_store =
+        base::MakeUnique<DeviceCloudPolicyStoreChromeOS>(
             chromeos::DeviceSettingsService::Get(), install_attributes_.get(),
-            GetBackgroundTaskRunner()));
+            GetBackgroundTaskRunner());
     device_cloud_policy_manager_ = new DeviceCloudPolicyManagerChromeOS(
         std::move(device_cloud_policy_store),
         base::ThreadTaskRunnerHandle::Get(), state_keys_broker_.get());
@@ -132,8 +136,8 @@ void BrowserPolicyConnectorChromeOS::Init(
   local_state_ = local_state;
   ChromeBrowserPolicyConnector::Init(local_state, request_context);
 
-  affiliated_invalidation_service_provider_.reset(
-      new AffiliatedInvalidationServiceProviderImpl);
+  affiliated_invalidation_service_provider_ =
+      base::MakeUnique<AffiliatedInvalidationServiceProviderImpl>();
 
   if (device_cloud_policy_manager_) {
     // Note: for now the |device_cloud_policy_manager_| is using the global
@@ -146,8 +150,8 @@ void BrowserPolicyConnectorChromeOS::Init(
     RestartDeviceCloudPolicyInitializer();
   }
 
-  device_local_account_policy_service_.reset(
-      new DeviceLocalAccountPolicyService(
+  device_local_account_policy_service_ =
+      base::MakeUnique<DeviceLocalAccountPolicyService>(
           chromeos::DBusThreadManager::Get()->GetSessionManagerClient(),
           chromeos::DeviceSettingsService::Get(), chromeos::CrosSettings::Get(),
           affiliated_invalidation_service_provider_.get(),
@@ -155,17 +159,18 @@ void BrowserPolicyConnectorChromeOS::Init(
           GetBackgroundTaskRunner(),
           content::BrowserThread::GetTaskRunnerForThread(
               content::BrowserThread::IO),
-          request_context));
+          request_context);
   device_local_account_policy_service_->Connect(device_management_service());
   if (device_cloud_policy_manager_) {
-    device_cloud_policy_invalidator_.reset(new AffiliatedCloudPolicyInvalidator(
-        enterprise_management::DeviceRegisterRequest::DEVICE,
-        device_cloud_policy_manager_->core(),
-        affiliated_invalidation_service_provider_.get()));
-    device_remote_commands_invalidator_.reset(
-        new AffiliatedRemoteCommandsInvalidator(
+    device_cloud_policy_invalidator_ =
+        base::MakeUnique<AffiliatedCloudPolicyInvalidator>(
+            enterprise_management::DeviceRegisterRequest::DEVICE,
             device_cloud_policy_manager_->core(),
-            affiliated_invalidation_service_provider_.get()));
+            affiliated_invalidation_service_provider_.get());
+    device_remote_commands_invalidator_ =
+        base::MakeUnique<AffiliatedRemoteCommandsInvalidator>(
+            device_cloud_policy_manager_->core(),
+            affiliated_invalidation_service_provider_.get());
   }
 
   SetTimezoneIfPolicyAvailable();
@@ -178,8 +183,8 @@ void BrowserPolicyConnectorChromeOS::Init(
           chromeos::NetworkHandler::Get()->network_device_handler(),
           chromeos::CrosSettings::Get());
 
-  bluetooth_policy_handler_.reset(
-      new BluetoothPolicyHandler(chromeos::CrosSettings::Get()));
+  bluetooth_policy_handler_ =
+      base::MakeUnique<BluetoothPolicyHandler>(chromeos::CrosSettings::Get());
 }
 
 void BrowserPolicyConnectorChromeOS::PreShutdown() {
@@ -259,7 +264,7 @@ void BrowserPolicyConnectorChromeOS::SetDeviceCloudPolicyInitializerForTesting(
 
 // static
 void BrowserPolicyConnectorChromeOS::SetInstallAttributesForTesting(
-    EnterpriseInstallAttributes* attributes) {
+    chromeos::InstallAttributes* attributes) {
   DCHECK(!g_testing_install_attributes);
   g_testing_install_attributes = attributes;
 }
@@ -268,7 +273,7 @@ void BrowserPolicyConnectorChromeOS::SetInstallAttributesForTesting(
 void BrowserPolicyConnectorChromeOS::RemoveInstallAttributesForTesting() {
   if (g_testing_install_attributes) {
     delete g_testing_install_attributes;
-    g_testing_install_attributes = NULL;
+    g_testing_install_attributes = nullptr;
   }
 }
 
@@ -316,14 +321,23 @@ void BrowserPolicyConnectorChromeOS::SetTimezoneIfPolicyAvailable() {
 }
 
 void BrowserPolicyConnectorChromeOS::RestartDeviceCloudPolicyInitializer() {
-  device_cloud_policy_initializer_.reset(new DeviceCloudPolicyInitializer(
-      local_state_, device_management_service(), GetBackgroundTaskRunner(),
-      install_attributes_.get(), state_keys_broker_.get(),
-      device_cloud_policy_manager_->device_store(),
-      device_cloud_policy_manager_,
-      cryptohome::AsyncMethodCaller::GetInstance(),
-      chromeos::DBusThreadManager::Get()->GetCryptohomeClient()));
+  device_cloud_policy_initializer_ =
+      base::MakeUnique<DeviceCloudPolicyInitializer>(
+          local_state_, device_management_service(), GetBackgroundTaskRunner(),
+          install_attributes_.get(), state_keys_broker_.get(),
+          device_cloud_policy_manager_->device_store(),
+          device_cloud_policy_manager_,
+          cryptohome::AsyncMethodCaller::GetInstance(), CreateAttestationFlow(),
+          chromeos::system::StatisticsProvider::GetInstance());
   device_cloud_policy_initializer_->Init();
+}
+
+std::unique_ptr<chromeos::attestation::AttestationFlow>
+BrowserPolicyConnectorChromeOS::CreateAttestationFlow() {
+  return base::MakeUnique<chromeos::attestation::AttestationFlow>(
+      cryptohome::AsyncMethodCaller::GetInstance(),
+      chromeos::DBusThreadManager::Get()->GetCryptohomeClient(),
+      base::MakeUnique<chromeos::attestation::AttestationCAClient>());
 }
 
 chromeos::AffiliationIDSet

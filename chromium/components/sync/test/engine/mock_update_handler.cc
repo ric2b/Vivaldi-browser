@@ -6,8 +6,6 @@
 
 #include <string>
 
-#include "components/sync/base/model_type.h"
-
 namespace syncer {
 
 MockUpdateHandler::MockUpdateHandler(ModelType type)
@@ -40,7 +38,7 @@ SyncerError MockUpdateHandler::ProcessGetUpdatesResponse(
     const SyncEntityList& applicable_updates,
     StatusController* status) {
   progress_marker_.CopyFrom(progress_marker);
-  return syncer::SYNCER_OK;
+  return SYNCER_OK;
 }
 
 void MockUpdateHandler::ApplyUpdates(StatusController* status) {

@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <string>
 
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/after_startup_task_utils.h"
 #include "chrome/browser/profiles/profile.h"
@@ -15,7 +15,7 @@
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/common/search/search_urls.h"
 #include "chrome/common/url_constants.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/sync_sessions/sessions_sync_manager.h"
 #include "components/sync_sessions/sync_sessions_metrics.h"
 #include "content/public/browser/navigation_details.h"
@@ -186,11 +186,12 @@ NTPUserDataLogger::NTPUserDataLogger(content::WebContents* contents)
   // been used to populate the page, and we want to learn about its state when
   // the NTP is being generated.
   if (contents) {
-    ProfileSyncService* sync = ProfileSyncServiceFactory::GetForProfile(
-        Profile::FromBrowserContext(contents->GetBrowserContext()));
+    browser_sync::ProfileSyncService* sync =
+        ProfileSyncServiceFactory::GetForProfile(
+            Profile::FromBrowserContext(contents->GetBrowserContext()));
     if (sync) {
-      browser_sync::SessionsSyncManager* sessions =
-          static_cast<browser_sync::SessionsSyncManager*>(
+      sync_sessions::SessionsSyncManager* sessions =
+          static_cast<sync_sessions::SessionsSyncManager*>(
               sync->GetSessionsSyncableService());
       if (sessions) {
         sync_sessions::SyncSessionsMetrics::RecordYoungestForeignTabAgeOnNTP(

@@ -29,6 +29,8 @@ WebInspector.TimelineController.prototype = {
      */
     startRecording: function(captureCauses, enableJSSampling, captureMemory, capturePictures, captureFilmStrip)
     {
+        this._extensionTraceProviders = WebInspector.extensionServer.traceProviders().slice();
+
         function disabledByDefault(category)
         {
             return "disabled-by-default-" + category;
@@ -36,6 +38,7 @@ WebInspector.TimelineController.prototype = {
         var categoriesArray = [
             "-*",
             "devtools.timeline",
+            "v8.execute",
             disabledByDefault("devtools.timeline"),
             disabledByDefault("devtools.timeline.frame"),
             WebInspector.TracingModel.TopLevelEventCategory,
@@ -49,9 +52,9 @@ WebInspector.TimelineController.prototype = {
                                  disabledByDefault("ipc.flow"));
         }
         if (Runtime.experiments.isEnabled("timelineTracingJSProfile") && enableJSSampling) {
-            categoriesArray.push(disabledByDefault("v8.cpu_profile"));
+            categoriesArray.push(disabledByDefault("v8.cpu_profiler"));
             if (WebInspector.moduleSetting("highResolutionCpuProfiling").get())
-                categoriesArray.push(disabledByDefault("v8.cpu_profile.hires"));
+                categoriesArray.push(disabledByDefault("v8.cpu_profiler.hires"));
         }
         if (captureCauses || enableJSSampling)
             categoriesArray.push(disabledByDefault("devtools.timeline.stack"));
@@ -64,6 +67,9 @@ WebInspector.TimelineController.prototype = {
         }
         if (captureFilmStrip)
             categoriesArray.push(disabledByDefault("devtools.screenshot"));
+
+        for (var traceProvider of this._extensionTraceProviders)
+            traceProvider.start();
 
         var categories = categoriesArray.join(",");
         this._startRecordingWithCategories(categories, enableJSSampling);
@@ -79,6 +85,9 @@ WebInspector.TimelineController.prototype = {
         Promise.all(tracingStoppedPromises).then(() => this._allSourcesFinished());
 
         this._delegate.loadingStarted();
+
+        for (var traceProvider of this._extensionTraceProviders)
+            traceProvider.stop();
     },
 
     /**

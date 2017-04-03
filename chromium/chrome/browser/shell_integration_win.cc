@@ -221,21 +221,28 @@ base::string16 GetAppForProtocolUsingAssocQuery(const GURL& url) {
 }
 
 base::string16 GetAppForProtocolUsingRegistry(const GURL& url) {
-  const base::string16 cmd_key_path =
-      base::ASCIIToUTF16(url.scheme() + "\\shell\\open\\command");
-  base::win::RegKey cmd_key(HKEY_CLASSES_ROOT,
-                            cmd_key_path.c_str(),
-                            KEY_READ);
-  base::string16 application_to_launch;
-  if (cmd_key.ReadValue(NULL, &application_to_launch) == ERROR_SUCCESS) {
-    const base::string16 url_spec =
-        base::ASCIIToUTF16(url.possibly_invalid_spec());
-    base::ReplaceSubstringsAfterOffset(&application_to_launch,
-                                       0,
-                                       L"%1",
-                                       url_spec);
-    return application_to_launch;
+  base::string16 command_to_launch;
+
+  // First, try and extract the application's display name.
+  base::string16 cmd_key_path = base::ASCIIToUTF16(url.scheme());
+  base::win::RegKey cmd_key_name(HKEY_CLASSES_ROOT, cmd_key_path.c_str(),
+                                 KEY_READ);
+  if (cmd_key_name.ReadValue(NULL, &command_to_launch) == ERROR_SUCCESS &&
+      !command_to_launch.empty()) {
+    return command_to_launch;
   }
+
+  // Otherwise, parse the command line in the registry, and return the basename
+  // of the program path if it exists.
+  cmd_key_path = base::ASCIIToUTF16(url.scheme() + "\\shell\\open\\command");
+  base::win::RegKey cmd_key_exe(HKEY_CLASSES_ROOT, cmd_key_path.c_str(),
+                                KEY_READ);
+  if (cmd_key_exe.ReadValue(NULL, &command_to_launch) == ERROR_SUCCESS) {
+    base::CommandLine command_line(
+        base::CommandLine::FromString(command_to_launch));
+    return command_line.GetProgram().BaseName().value();
+  }
+
   return base::string16();
 }
 
@@ -401,8 +408,8 @@ class OpenSystemSettingsHelper {
   // Helper function to create a registry watcher for a given |key_path|. Do
   // nothing on initialization failure.
   void AddRegistryKeyWatcher(const wchar_t* key_path) {
-    auto reg_key = base::WrapUnique(
-        new base::win::RegKey(HKEY_CURRENT_USER, key_path, KEY_NOTIFY));
+    auto reg_key = base::MakeUnique<base::win::RegKey>(HKEY_CURRENT_USER,
+                                                       key_path, KEY_NOTIFY);
 
     if (reg_key->Valid() &&
         reg_key->StartWatching(
@@ -565,7 +572,7 @@ DefaultWebClientState GetDefaultBrowser() {
 // - HKCR\http\shell\open\command (XP)
 // - HKCU\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\
 //   http\UserChoice (Vista)
-// This method checks if Firefox is defualt browser by checking these
+// This method checks if Firefox is default browser by checking these
 // locations and returns true if Firefox traces are found there. In case of
 // error (or if Firefox is not found)it returns the default value which
 // is false.

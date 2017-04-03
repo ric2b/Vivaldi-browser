@@ -29,6 +29,17 @@ BrowserStateDataRemover::BrowserStateDataRemover(
 BrowserStateDataRemover::~BrowserStateDataRemover() {
 }
 
+// static
+void BrowserStateDataRemover::ClearData(ios::ChromeBrowserState* browser_state,
+                                        ProceduralBlock completion) {
+  // The user just changed the account and chose to clear the previously
+  // existing data. As browsing data is being cleared, it is fine to clear the
+  // last username, as there will be no data to be merged.
+  BrowserStateDataRemover* remover = new BrowserStateDataRemover(browser_state);
+  remover->SetForgetLastUsername();
+  remover->RemoveBrowserStateData(completion);
+}
+
 void BrowserStateDataRemover::SetForgetLastUsername() {
   forget_last_username_ = true;
 }
@@ -40,7 +51,8 @@ void BrowserStateDataRemover::RemoveBrowserStateData(ProceduralBlock callback) {
   base::scoped_nsobject<ClearBrowsingDataCommand> command(
       [[ClearBrowsingDataCommand alloc]
           initWithBrowserState:browser_state_
-                          mask:kRemoveAllDataMask]);
+                          mask:kRemoveAllDataMask
+                    timePeriod:browsing_data::ALL_TIME]);
 
   UIWindow* mainWindow = [[UIApplication sharedApplication] keyWindow];
   DCHECK(mainWindow);

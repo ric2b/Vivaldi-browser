@@ -52,6 +52,10 @@ RenderingTest::~RenderingTest() {
     window_->Detach();
 }
 
+ui::TouchHandleDrawable* RenderingTest::CreateDrawable() {
+  return nullptr;
+}
+
 void RenderingTest::SetUpTestHarness() {
   DCHECK(!browser_view_renderer_.get());
   DCHECK(!functor_.get());
@@ -90,7 +94,7 @@ void RenderingTest::RunTest() {
 
   ui_task_runner_->PostTask(
       FROM_HERE, base::Bind(&RenderingTest::StartTest, base::Unretained(this)));
-  message_loop_->Run();
+  run_loop_.Run();
 }
 
 void RenderingTest::StartTest() {
@@ -98,14 +102,7 @@ void RenderingTest::StartTest() {
 }
 
 void RenderingTest::EndTest() {
-  ui_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&RenderingTest::QuitMessageLoop, base::Unretained(this)));
-}
-
-void RenderingTest::QuitMessageLoop() {
-  DCHECK_EQ(base::MessageLoop::current(), message_loop_.get());
-  message_loop_->QuitWhenIdle();
+  ui_task_runner_->PostTask(FROM_HERE, run_loop_.QuitWhenIdleClosure());
 }
 
 content::SynchronousCompositor* RenderingTest::ActiveCompositor() const {

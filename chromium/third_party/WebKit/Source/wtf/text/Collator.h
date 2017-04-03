@@ -40,34 +40,38 @@ struct UCollator;
 namespace WTF {
 
 class WTF_EXPORT Collator {
-    WTF_MAKE_NONCOPYABLE(Collator);
-    USING_FAST_MALLOC(Collator);
-public:
-    enum Result { Equal = 0, Greater = 1, Less = -1 };
+  WTF_MAKE_NONCOPYABLE(Collator);
+  USING_FAST_MALLOC(Collator);
 
-    // From ICU's uloc.h (ULOC_FULLNAME_CAPACITY)
-    static const size_t ulocFullnameCapacity = 157;
+ public:
+  enum Result { Equal = 0, Greater = 1, Less = -1 };
 
-    Collator(const char* locale); // Parsing is lenient; e.g. language identifiers (such as "en-US") are accepted, too.
-    ~Collator();
-    void setOrderLowerFirst(bool);
+  // From ICU's uloc.h (ULOC_FULLNAME_CAPACITY)
+  static const size_t ulocFullnameCapacity = 157;
 
-    static std::unique_ptr<Collator> userDefault();
+  // Parsing is lenient; e.g. language identifiers (such as "en-US") are
+  // accepted, too.
+  explicit Collator(const char* locale);
 
-    Result collate(const ::UChar*, size_t, const ::UChar*, size_t) const;
+  ~Collator();
+  void setOrderLowerFirst(bool);
 
-private:
-    void createCollator() const;
-    void releaseCollator();
-    void setEquivalentLocale(const char*, char*);
-    mutable UCollator* m_collator;
+  static std::unique_ptr<Collator> userDefault();
 
-    char* m_locale;
-    char m_equivalentLocale[ulocFullnameCapacity];
-    bool m_lowerFirst;
+  Result collate(const ::UChar*, size_t, const ::UChar*, size_t) const;
+
+ private:
+  void createCollator() const;
+  void releaseCollator();
+  void setEquivalentLocale(const char*, char*);
+  mutable UCollator* m_collator;
+
+  char* m_locale;
+  char m_equivalentLocale[ulocFullnameCapacity];
+  bool m_lowerFirst;
 };
 
-} // namespace WTF
+}  // namespace WTF
 
 using WTF::Collator;
 

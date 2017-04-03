@@ -62,6 +62,7 @@
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
 #include "third_party/webrtc/api/mediaconstraintsinterface.h"
+#include "third_party/webrtc/api/videosourceproxy.h"
 #include "third_party/webrtc/base/ssladapter.h"
 #include "third_party/webrtc/modules/video_coding/codecs/h264/include/h264.h"
 
@@ -125,26 +126,6 @@ PeerConnectionDependencyFactory::CreateRTCPeerConnectionHandler(
   return new RTCPeerConnectionHandler(client, this);
 }
 
-WebRtcVideoCapturerAdapter*
-PeerConnectionDependencyFactory::CreateVideoCapturer(
-    bool is_screeencast) {
-  // We need to make sure the libjingle thread wrappers have been created
-  // before we can use an instance of a WebRtcVideoCapturerAdapter. This is
-  // since the base class of WebRtcVideoCapturerAdapter is a
-  // cricket::VideoCapturer and it uses the libjingle thread wrappers.
-  if (!GetPcFactory().get())
-    return NULL;
-  return new WebRtcVideoCapturerAdapter(is_screeencast);
-}
-
-scoped_refptr<webrtc::VideoTrackSourceInterface>
-PeerConnectionDependencyFactory::CreateVideoSource(
-    cricket::VideoCapturer* capturer) {
-  scoped_refptr<webrtc::VideoTrackSourceInterface> source =
-      GetPcFactory()->CreateVideoSource(capturer).get();
-  return source;
-}
-
 const scoped_refptr<webrtc::PeerConnectionFactoryInterface>&
 PeerConnectionDependencyFactory::GetPcFactory() {
   if (!pc_factory_.get())
@@ -168,7 +149,7 @@ void PeerConnectionDependencyFactory::CreatePeerConnectionFactory() {
 
   DVLOG(1) << "PeerConnectionDependencyFactory::CreatePeerConnectionFactory()";
 
-#if BUILDFLAG(RTC_USE_H264)
+#if BUILDFLAG(RTC_USE_H264) && !defined(MEDIA_DISABLE_FFMPEG)
   // Building /w |rtc_use_h264|, is the corresponding run-time feature enabled?
   if (base::FeatureList::IsEnabled(kWebRtcH264WithOpenH264FFmpeg)) {
     // |H264DecoderImpl| may be used which depends on FFmpeg, therefore we need
@@ -178,7 +159,9 @@ void PeerConnectionDependencyFactory::CreatePeerConnectionFactory() {
     // Feature is to be disabled, no need to make sure FFmpeg is initialized.
     webrtc::DisableRtcUseH264();
   }
-#endif
+#else
+  webrtc::DisableRtcUseH264();
+#endif  // BUILDFLAG(RTC_USE_H264) && !defined(MEDIA_DISABLE_FFMPEG)
 
   base::MessageLoop::current()->AddDestructionObserver(this);
   // To allow sending to the signaling/worker threads.
@@ -273,13 +256,6 @@ void PeerConnectionDependencyFactory::InitializeSignalingThread(
   factory_options.disable_sctp_data_channels = false;
   factory_options.disable_encryption =
       cmd_line->HasSwitch(switches::kDisableWebRtcEncryption);
-
-  // DTLS 1.2 is the default now but could be changed to 1.0 by the experiment.
-  factory_options.ssl_max_version = rtc::SSL_PROTOCOL_DTLS_12;
-  std::string group_name =
-      base::FieldTrialList::FindFullName("WebRTC-PeerConnectionDTLS1.2");
-  if (StartsWith(group_name, "Control", base::CompareCase::SENSITIVE))
-    factory_options.ssl_max_version = rtc::SSL_PROTOCOL_DTLS_10;
 
   pc_factory_->SetOptions(factory_options);
 
@@ -422,27 +398,24 @@ PeerConnectionDependencyFactory::CreateLocalMediaStream(
   return GetPcFactory()->CreateLocalMediaStream(label).get();
 }
 
+scoped_refptr<webrtc::VideoTrackSourceInterface>
+PeerConnectionDependencyFactory::CreateVideoTrackSourceProxy(
+    webrtc::VideoTrackSourceInterface* source) {
+  // PeerConnectionFactory needs to be instantiated to make sure that
+  // signaling_thread_ and worker_thread_ exist.
+  if (!PeerConnectionFactoryCreated())
+    CreatePeerConnectionFactory();
+
+  return webrtc::VideoTrackSourceProxy::Create(signaling_thread_,
+                                               worker_thread_, source)
+      .get();
+}
+
 scoped_refptr<webrtc::VideoTrackInterface>
 PeerConnectionDependencyFactory::CreateLocalVideoTrack(
     const std::string& id,
     webrtc::VideoTrackSourceInterface* source) {
   return GetPcFactory()->CreateVideoTrack(id, source).get();
-}
-
-scoped_refptr<webrtc::VideoTrackInterface>
-PeerConnectionDependencyFactory::CreateLocalVideoTrack(
-    const std::string& id, cricket::VideoCapturer* capturer) {
-  if (!capturer) {
-    LOG(ERROR) << "CreateLocalVideoTrack called with null VideoCapturer.";
-    return NULL;
-  }
-
-  // Create video source from the |capturer|.
-  scoped_refptr<webrtc::VideoTrackSourceInterface> source =
-      GetPcFactory()->CreateVideoSource(capturer, NULL).get();
-
-  // Create native track from the source.
-  return GetPcFactory()->CreateVideoTrack(id, source.get()).get();
 }
 
 webrtc::SessionDescriptionInterface*

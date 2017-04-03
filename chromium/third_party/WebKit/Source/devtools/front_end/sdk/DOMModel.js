@@ -275,7 +275,7 @@ WebInspector.DOMNode.prototype = {
      */
     isInsertionPoint: function()
     {
-        return !this.isXMLNode() && (this._nodeName === "SHADOW" || this._nodeName === "CONTENT");
+        return !this.isXMLNode() && (this._nodeName === "SHADOW" || this._nodeName === "CONTENT" || this._nodeName === "SLOT");
     },
 
     /**
@@ -1112,24 +1112,24 @@ WebInspector.DOMModel = function(target) {
     this._agent.enable();
 }
 
-/** @enum {string} */
+/** @enum {symbol} */
 WebInspector.DOMModel.Events = {
-    AttrModified: "AttrModified",
-    AttrRemoved: "AttrRemoved",
-    CharacterDataModified: "CharacterDataModified",
-    DOMMutated: "DOMMutated",
-    NodeInserted: "NodeInserted",
-    NodeInspected: "NodeInspected",
-    NodeHighlightedInOverlay: "NodeHighlightedInOverlay",
-    NodeRemoved: "NodeRemoved",
-    DocumentUpdated: "DocumentUpdated",
-    ChildNodeCountUpdated: "ChildNodeCountUpdated",
-    UndoRedoRequested: "UndoRedoRequested",
-    UndoRedoCompleted: "UndoRedoCompleted",
-    DistributedNodesChanged: "DistributedNodesChanged",
-    ModelSuspended: "ModelSuspended",
-    InspectModeWillBeToggled: "InspectModeWillBeToggled",
-    MarkersChanged: "MarkersChanged"
+    AttrModified: Symbol("AttrModified"),
+    AttrRemoved: Symbol("AttrRemoved"),
+    CharacterDataModified: Symbol("CharacterDataModified"),
+    DOMMutated: Symbol("DOMMutated"),
+    NodeInserted: Symbol("NodeInserted"),
+    NodeInspected: Symbol("NodeInspected"),
+    NodeHighlightedInOverlay: Symbol("NodeHighlightedInOverlay"),
+    NodeRemoved: Symbol("NodeRemoved"),
+    DocumentUpdated: Symbol("DocumentUpdated"),
+    ChildNodeCountUpdated: Symbol("ChildNodeCountUpdated"),
+    UndoRedoRequested: Symbol("UndoRedoRequested"),
+    UndoRedoCompleted: Symbol("UndoRedoCompleted"),
+    DistributedNodesChanged: Symbol("DistributedNodesChanged"),
+    ModelSuspended: Symbol("ModelSuspended"),
+    InspectModeWillBeToggled: Symbol("InspectModeWillBeToggled"),
+    MarkersChanged: Symbol("MarkersChanged")
 }
 
 /**
@@ -1733,6 +1733,36 @@ WebInspector.DOMModel.prototype = {
         if (this._searchId) {
             this._agent.discardSearchResults(this._searchId);
             delete this._searchId;
+        }
+    },
+
+    /**
+     * @param {!DOMAgent.NodeId} nodeId
+     * @return {!Promise<!Array<string>>}
+     */
+    classNamesPromise: function(nodeId)
+    {
+        return new Promise(promiseBody.bind(this));
+
+        /**
+         * @param {function(!Array<string>)} fulfill
+         * @this {WebInspector.DOMModel}
+         */
+        function promiseBody(fulfill)
+        {
+            this._agent.collectClassNamesFromSubtree(nodeId, classNamesCallback);
+
+            /**
+             * @param {?string} error
+             * @param {?Array<string>} classNames
+             */
+            function classNamesCallback(error, classNames)
+            {
+                if (!error && classNames)
+                    fulfill(classNames);
+                else
+                    fulfill([]);
+            }
         }
     },
 

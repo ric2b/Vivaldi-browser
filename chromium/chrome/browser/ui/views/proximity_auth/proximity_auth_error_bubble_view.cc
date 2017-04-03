@@ -7,9 +7,9 @@
 #include "base/lazy_instance.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/ui/proximity_auth/proximity_auth_error_bubble.h"
+#include "chrome/grit/theme_resources.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/web_contents.h"
-#include "grit/theme_resources.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/range/range.h"
@@ -138,7 +138,7 @@ void ProximityAuthErrorBubbleView::StyledLabelLinkClicked(
   if (!web_contents())
     return;
 
-  web_contents()->OpenURL(
-      content::OpenURLParams(link_url_, content::Referrer(), NEW_FOREGROUND_TAB,
-                             ui::PAGE_TRANSITION_LINK, false));
+  web_contents()->OpenURL(content::OpenURLParams(
+      link_url_, content::Referrer(), WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui::PAGE_TRANSITION_LINK, false));
 }

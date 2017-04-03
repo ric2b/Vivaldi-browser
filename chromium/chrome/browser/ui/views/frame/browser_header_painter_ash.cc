@@ -13,9 +13,9 @@
 #include "chrome/browser/ui/views/frame/browser_frame.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view_ash.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "grit/ash_resources.h"
-#include "grit/theme_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "third_party/skia/include/core/SkCanvas.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/base/material_design/material_design_controller.h"
@@ -34,8 +34,11 @@
 using views::Widget;
 
 namespace {
+
 // Color for the window title text.
-const SkColor kWindowTitleTextColor = SkColorSetRGB(40, 40, 40);
+const SkColor kNormalWindowTitleTextColor = SkColorSetRGB(40, 40, 40);
+const SkColor kIncognitoWindowTitleTextColor = SK_ColorWHITE;
+
 // Duration of crossfade animation for activating and deactivating frame.
 const int kActivationCrossfadeDurationMs = 200;
 
@@ -333,7 +336,8 @@ void BrowserHeaderPainterAsh::PaintTitleBar(gfx::Canvas* canvas) {
   title_bounds.set_x(view_->GetMirroredXForRect(title_bounds));
   canvas->DrawStringRectWithFlags(frame_->widget_delegate()->GetWindowTitle(),
                                   BrowserFrame::GetTitleFontList(),
-                                  kWindowTitleTextColor,
+                                  is_incognito_ ? kIncognitoWindowTitleTextColor
+                                                : kNormalWindowTitleTextColor,
                                   title_bounds,
                                   gfx::Canvas::NO_SUBPIXEL_RENDERING);
 }

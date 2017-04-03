@@ -4,7 +4,7 @@
 
 #include "chrome/browser/page_load_metrics/observers/google_captcha_observer.h"
 
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_util.h"
 #include "chrome/common/page_load_metrics/page_load_timing.h"
@@ -44,12 +44,13 @@ bool IsGoogleCaptcha(const GURL& url) {
 
 GoogleCaptchaObserver::GoogleCaptchaObserver() : saw_solution_(false) {}
 
-void GoogleCaptchaObserver::OnCommit(
-    content::NavigationHandle* navigation_handle) {
+page_load_metrics::PageLoadMetricsObserver::ObservePolicy
+GoogleCaptchaObserver::OnCommit(content::NavigationHandle* navigation_handle) {
   if (!navigation_handle->IsSamePage()
       && IsGoogleCaptcha(navigation_handle->GetURL())) {
     RecordGoogleCaptchaEvent(GOOGLE_CAPTCHA_SHOWN);
   }
+  return CONTINUE_OBSERVING;
 }
 
 void GoogleCaptchaObserver::OnRedirect(

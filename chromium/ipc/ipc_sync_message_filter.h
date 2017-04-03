@@ -17,6 +17,10 @@
 #include "ipc/ipc_sync_message.h"
 #include "ipc/message_filter.h"
 #include "ipc/mojo_event.h"
+#include "mojo/public/cpp/bindings/associated_group.h"
+#include "mojo/public/cpp/bindings/associated_interface_ptr.h"
+#include "mojo/public/cpp/bindings/associated_interface_request.h"
+#include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -33,19 +37,31 @@ class SyncChannel;
 // be used to send simultaneous synchronous messages from different threads.
 class IPC_EXPORT SyncMessageFilter : public MessageFilter, public Sender {
  public:
-  // MessageSender implementation.
+  // Sender implementation.
   bool Send(Message* message) override;
 
   // MessageFilter implementation.
-  void OnFilterAdded(Sender* sender) override;
+  void OnFilterAdded(Channel* channel) override;
   void OnChannelError() override;
   void OnChannelClosing() override;
   bool OnMessageReceived(const Message& message) override;
 
- protected:
-  SyncMessageFilter(base::WaitableEvent* shutdown_event,
-                    bool is_channel_send_thread_safe);
+  // Binds an associated interface proxy to an interface in the browser process.
+  // Interfaces acquired through this method are associated with the IPC Channel
+  // and as such retain FIFO with legacy IPC messages.
+  //
+  // NOTE: This must ONLY be called on the Channel's thread, after
+  // OnFilterAdded.
+  template <typename Interface>
+  void GetRemoteAssociatedInterface(
+      mojo::AssociatedInterfacePtr<Interface>* proxy) {
+    mojo::AssociatedInterfaceRequest<Interface> request =
+        mojo::GetProxy(proxy, &channel_associated_group_);
+    GetGenericRemoteAssociatedInterface(Interface::Name_, request.PassHandle());
+  }
 
+ protected:
+  explicit SyncMessageFilter(base::WaitableEvent* shutdown_event);
   ~SyncMessageFilter() override;
 
  private:
@@ -54,10 +70,6 @@ class IPC_EXPORT SyncMessageFilter : public MessageFilter, public Sender {
   friend class SyncChannel;
   friend class IOMessageLoopObserver;
 
-  void set_is_channel_send_thread_safe(bool is_channel_send_thread_safe) {
-    is_channel_send_thread_safe_ = is_channel_send_thread_safe;
-  }
-
   void SendOnIOThread(Message* message);
   // Signal all the pending sends as done, used in an error condition.
   void SignalAllEvents();
@@ -65,11 +77,13 @@ class IPC_EXPORT SyncMessageFilter : public MessageFilter, public Sender {
   void OnShutdownEventSignaled(base::WaitableEvent* event);
   void OnIOMessageLoopDestroyed();
 
-  // The channel to which this filter was added.
-  Sender* sender_;
+  // NOTE: This must ONLY be called on the Channel's thread.
+  void GetGenericRemoteAssociatedInterface(
+      const std::string& interface_name,
+      mojo::ScopedInterfaceEndpointHandle handle);
 
-  // Indicates if |sender_|'s Send method is thread-safe.
-  bool is_channel_send_thread_safe_;
+  // The channel to which this filter was added.
+  Channel* channel_;
 
   // The process's main thread.
   scoped_refptr<base::SingleThreadTaskRunner> listener_task_runner_;
@@ -97,6 +111,10 @@ class IPC_EXPORT SyncMessageFilter : public MessageFilter, public Sender {
   MojoEvent shutdown_mojo_event_;
 
   scoped_refptr<IOMessageLoopObserver> io_message_loop_observer_;
+
+  // The AssociatedGroup for the underlying channel, used to construct new
+  // associated interface endpoints.
+  mojo::AssociatedGroup channel_associated_group_;
 
   base::WeakPtrFactory<SyncMessageFilter> weak_factory_;
 

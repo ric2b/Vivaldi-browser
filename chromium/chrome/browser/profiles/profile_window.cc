@@ -38,7 +38,7 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/flags_ui/pref_service_flags_storage.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/account_reconcilor.h"
@@ -124,12 +124,13 @@ class BrowserAddedForProfileObserver : public chrome::BrowserListObserver {
 
 // Called after a |system_profile| is available to be used by the user manager.
 // Based on the value of |tutorial_mode| we determine a url to be displayed
-// by the webui and run the |callback|, if it exists. After opening a profile,
-// perform |profile_open_action|.
+// by the webui and run the |callback|, if it exists. Depending on the value of
+// |user_manager_action|, executes an action once the user manager displays or
+// after a profile is opened.
 void OnUserManagerSystemProfileCreated(
     const base::FilePath& profile_path_to_focus,
     profiles::UserManagerTutorialMode tutorial_mode,
-    profiles::UserManagerProfileSelected profile_open_action,
+    profiles::UserManagerAction user_manager_action,
     const base::Callback<void(Profile*, const std::string&)>& callback,
     Profile* system_profile,
     Profile::CreateStatus status) {
@@ -154,16 +155,19 @@ void OnUserManagerSystemProfileCreated(
     page += "#";
     page += net::EscapeUrlEncodedData(profile_path_to_focus.AsUTF8Unsafe(),
                                       false);
-  } else if (profile_open_action ==
+  } else if (user_manager_action ==
+             profiles::USER_MANAGER_OPEN_CREATE_USER_PAGE) {
+    page += profiles::kUserManagerOpenCreateUserPage;
+  } else if (user_manager_action ==
              profiles::USER_MANAGER_SELECT_PROFILE_TASK_MANAGER) {
     page += profiles::kUserManagerSelectProfileTaskManager;
-  } else if (profile_open_action ==
+  } else if (user_manager_action ==
              profiles::USER_MANAGER_SELECT_PROFILE_ABOUT_CHROME) {
     page += profiles::kUserManagerSelectProfileAboutChrome;
-  } else if (profile_open_action ==
+  } else if (user_manager_action ==
              profiles::USER_MANAGER_SELECT_PROFILE_CHROME_SETTINGS) {
     page += profiles::kUserManagerSelectProfileChromeSettings;
-  } else if (profile_open_action ==
+  } else if (user_manager_action ==
              profiles::USER_MANAGER_SELECT_PROFILE_APP_LAUNCHER) {
     page += profiles::kUserManagerSelectProfileAppLauncher;
   }
@@ -190,6 +194,7 @@ namespace profiles {
 
 // User Manager parameters are prefixed with hash.
 const char kUserManagerDisplayTutorial[] = "#tutorial";
+const char kUserManagerOpenCreateUserPage[] = "#create-user";
 const char kUserManagerSelectProfileTaskManager[] = "#task-manager";
 const char kUserManagerSelectProfileAboutChrome[] = "#about-chrome";
 const char kUserManagerSelectProfileChromeSettings[] = "#chrome-settings";
@@ -373,7 +378,8 @@ void CloseGuestProfileWindows() {
 
   if (profile) {
     BrowserList::CloseAllBrowsersWithProfile(
-        profile, base::Bind(&ProfileBrowserCloseSuccess));
+        profile, base::Bind(&ProfileBrowserCloseSuccess),
+        BrowserList::CloseCallback());
   }
 }
 
@@ -400,7 +406,8 @@ void LockProfile(Profile* profile) {
   DCHECK(profile);
   if (profile) {
     BrowserList::CloseAllBrowsersWithProfile(
-        profile, base::Bind(&LockBrowserCloseSuccess));
+        profile, base::Bind(&LockBrowserCloseSuccess),
+        BrowserList::CloseCallback());
   }
 }
 
@@ -444,13 +451,14 @@ bool IsLockAvailable(Profile* profile) {
 void CloseProfileWindows(Profile* profile) {
   DCHECK(profile);
   BrowserList::CloseAllBrowsersWithProfile(
-      profile, base::Bind(&ProfileBrowserCloseSuccess));
+      profile, base::Bind(&ProfileBrowserCloseSuccess),
+      BrowserList::CloseCallback());
 }
 
 void CreateSystemProfileForUserManager(
     const base::FilePath& profile_path_to_focus,
     profiles::UserManagerTutorialMode tutorial_mode,
-    profiles::UserManagerProfileSelected profile_open_action,
+    profiles::UserManagerAction user_manager_action,
     const base::Callback<void(Profile*, const std::string&)>& callback) {
   // Create the system profile, if necessary, and open the User Manager
   // from the system profile.
@@ -459,7 +467,7 @@ void CreateSystemProfileForUserManager(
       base::Bind(&OnUserManagerSystemProfileCreated,
                  profile_path_to_focus,
                  tutorial_mode,
-                 profile_open_action,
+                 user_manager_action,
                  callback),
       base::string16(),
       std::string(),

@@ -56,12 +56,7 @@ class RenderFrameHostTester {
   // RenderViewHostTestEnabler instance (see below) to do this.
   static RenderFrameHostTester* For(RenderFrameHost* host);
 
-  // If the given NavigationController has a pending main frame, returns it,
-  // otherwise NULL. This is an alternative to
-  // WebContentsTester::GetPendingMainFrame() when your WebContents was not
-  // created via a TestWebContents.
-  static RenderFrameHost* GetPendingForController(
-      NavigationController* controller);
+  static void CommitPendingLoad(NavigationController* controller);
 
   virtual ~RenderFrameHostTester() {}
 
@@ -132,6 +127,11 @@ class RenderFrameHostTester {
   // Simulates the SwapOut_ACK that fires if you commit a cross-site
   // navigation without making any network requests.
   virtual void SimulateSwapOutACK() = 0;
+
+  // Simulate a renderer-initiated navigation up until commit.
+  virtual void NavigateAndCommitRendererInitiated(int page_id,
+                                                  bool did_create_new_entry,
+                                                  const GURL& url) = 0;
 };
 
 // An interface and utility for driving tests of RenderViewHost.

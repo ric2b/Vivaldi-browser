@@ -12,15 +12,17 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/android/banners/app_banner_infobar_delegate_android.h"
 #include "chrome/browser/android/shortcut_helper.h"
+#include "chrome/browser/android/webapk/chrome_webapk_host.h"
+#include "chrome/browser/android/webapk/webapk_metrics.h"
+#include "chrome/browser/android/webapk/webapk_web_manifest_checker.h"
 #include "chrome/browser/banners/app_banner_metrics.h"
-#include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/manifest/manifest_icon_downloader.h"
 #include "chrome/browser/manifest/manifest_icon_selector.h"
-#include "chrome/browser/ui/android/infobars/app_banner_infobar_android.h"
 #include "chrome/common/chrome_constants.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/frame_navigate_params.h"
 #include "jni/AppBannerManager_jni.h"
+#include "net/base/url_util.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
 using base::android::ConvertJavaStringToUTF8;
@@ -33,10 +35,19 @@ DEFINE_WEB_CONTENTS_USER_DATA_KEY(banners::AppBannerManagerAndroid);
 
 namespace {
 
-const char kPlayPlatform[] = "play";
-const char kReferrerName[] = "referrer";
-const char kIdName[] = "id";
-const char kPlayInlineReferrer[] = "playinline=chrome_inline";
+std::unique_ptr<ShortcutInfo> CreateShortcutInfo(
+    const GURL& manifest_url,
+    const content::Manifest& manifest,
+    const GURL& icon_url) {
+  auto shortcut_info = base::MakeUnique<ShortcutInfo>(GURL());
+  if (!manifest.IsEmpty()) {
+    shortcut_info->UpdateFromManifest(manifest);
+    shortcut_info->manifest_url = manifest_url;
+    shortcut_info->icon_url = icon_url;
+    shortcut_info->UpdateSource(ShortcutInfo::SOURCE_APP_BANNER);
+  }
+  return shortcut_info;
+}
 
 }  // anonymous namespace
 
@@ -154,6 +165,14 @@ void AppBannerManagerAndroid::PerformInstallableCheck() {
     Stop();
   }
 
+  if (ChromeWebApkHost::AreWebApkEnabled()) {
+    if (!AreWebManifestUrlsWebApkCompatible(manifest_)) {
+      ReportStatus(web_contents(), URL_NOT_SUPPORTED_FOR_WEBAPK);
+      Stop();
+      return;
+    }
+  }
+
   // No native app banner was requested. Continue checking for a web app banner.
   AppBannerManager::PerformInstallableCheck();
 }
@@ -175,16 +194,13 @@ void AppBannerManagerAndroid::ShowBanner() {
   content::WebContents* contents = web_contents();
   DCHECK(contents);
 
-  infobars::InfoBar* infobar = nullptr;
   if (native_app_data_.is_null()) {
-    std::unique_ptr<AppBannerInfoBarDelegateAndroid> delegate(
-        new AppBannerInfoBarDelegateAndroid(
-            GetWeakPtr(), app_title_, manifest_url_, manifest_, icon_url_,
-            std::move(icon_), event_request_id()));
-
-    infobar = new AppBannerInfoBarAndroid(std::move(delegate),
-                                          manifest_.start_url);
-    if (infobar) {
+    if (AppBannerInfoBarDelegateAndroid::Create(
+            contents, GetWeakPtr(), app_title_,
+            CreateShortcutInfo(manifest_url_, manifest_, icon_url_),
+            std::move(icon_), event_request_id(),
+            ChromeWebApkHost::AreWebApkEnabled(),
+            webapk::INSTALL_SOURCE_BANNER)) {
       RecordDidShowBanner("AppBanner.WebApp.Shown");
       TrackDisplayEvent(DISPLAY_EVENT_WEB_APP_BANNER_CREATED);
       ReportStatus(contents, SHOWING_WEB_APP_BANNER);
@@ -192,24 +208,15 @@ void AppBannerManagerAndroid::ShowBanner() {
       ReportStatus(contents, FAILED_TO_CREATE_BANNER);
     }
   } else {
-    std::unique_ptr<AppBannerInfoBarDelegateAndroid> delegate(
-        new AppBannerInfoBarDelegateAndroid(
-            app_title_, native_app_data_, std::move(icon_), native_app_package_,
-            referrer_, event_request_id()));
-    infobar =
-        new AppBannerInfoBarAndroid(std::move(delegate), native_app_data_);
-    if (infobar) {
+    if (AppBannerInfoBarDelegateAndroid::Create(
+            contents, app_title_, native_app_data_, std::move(icon_),
+            native_app_package_, referrer_, event_request_id())) {
       RecordDidShowBanner("AppBanner.NativeApp.Shown");
       TrackDisplayEvent(DISPLAY_EVENT_NATIVE_APP_BANNER_CREATED);
       ReportStatus(contents, SHOWING_NATIVE_APP_BANNER);
     } else {
       ReportStatus(contents, FAILED_TO_CREATE_BANNER);
     }
-  }
-
-  if (infobar) {
-    InfoBarService::FromWebContents(contents)->AddInfoBar(
-        base::WrapUnique(infobar));
   }
 }
 
@@ -226,20 +233,18 @@ bool AppBannerManagerAndroid::CanHandleNonWebApp(const std::string& platform,
   if (java_banner_manager_.is_null())
     return false;
 
-  std::string id_from_app_url = ExtractQueryValueForName(url, kIdName);
+  std::string id_from_app_url = ExtractQueryValueForName(url, "id");
   if (id_from_app_url.size() && id != id_from_app_url) {
     ReportStatus(web_contents(), IDS_DO_NOT_MATCH);
     return false;
   }
 
-  std::string referrer = ExtractQueryValueForName(url, kReferrerName);
-
   // Attach the chrome_inline referrer value, prefixed with "&" if the referrer
   // is non empty.
-  if (referrer.empty())
-    referrer = kPlayInlineReferrer;
-  else
-    referrer.append("&").append(kPlayInlineReferrer);
+  std::string referrer = ExtractQueryValueForName(url, "referrer");
+  if (!referrer.empty())
+    referrer += "&";
+  referrer += "playinline=chrome_inline";
 
   ScopedJavaLocalRef<jstring> jurl(
       ConvertUTF8ToJavaString(env, validated_url_.spec()));
@@ -259,31 +264,23 @@ void AppBannerManagerAndroid::CreateJavaBannerManager() {
 
 bool AppBannerManagerAndroid::CheckPlatformAndId(const std::string& platform,
                                                  const std::string& id) {
-  if (platform != kPlayPlatform) {
-    ReportStatus(web_contents(), PLATFORM_NOT_SUPPORTED_ON_ANDROID);
-    return false;
-  }
-  if (id.empty()) {
-    ReportStatus(web_contents(), NO_ID_SPECIFIED);
-    return false;
-  }
-  return true;
+  const bool correct_platform = (platform == "play");
+  if (correct_platform && !id.empty())
+    return true;
+  ReportStatus(web_contents(),
+               correct_platform ? NO_ID_SPECIFIED
+                                : PLATFORM_NOT_SUPPORTED_ON_ANDROID);
+  return false;
 }
 
 std::string AppBannerManagerAndroid::ExtractQueryValueForName(
     const GURL& url,
     const std::string& name) {
-  url::Component query = url.parsed_for_possibly_invalid_spec().query;
-  url::Component key, value;
-  const char* url_spec = url.spec().c_str();
-
-  while (url::ExtractQueryKeyValue(url_spec, &query, &key, &value)) {
-    std::string key_str(url_spec, key.begin, key.len);
-    std::string value_str(url_spec, value.begin, value.len);
-    if (key_str == name)
-      return value_str;
+  for (net::QueryIterator it(url); !it.IsAtEnd(); it.Advance()) {
+    if (it.GetKey() == name)
+      return it.GetValue();
   }
-  return "";
+  return std::string();
 }
 
 // static
@@ -298,10 +295,8 @@ ScopedJavaLocalRef<jobject> GetJavaBannerManagerForWebContents(
     const JavaParamRef<jobject>& java_web_contents) {
   AppBannerManagerAndroid* manager = AppBannerManagerAndroid::FromWebContents(
       content::WebContents::FromJavaWebContents(java_web_contents));
-  if (!manager)
-    return ScopedJavaLocalRef<jobject>();
-
-  return ScopedJavaLocalRef<jobject>(manager->GetJavaBannerManager());
+  return manager? ScopedJavaLocalRef<jobject>(manager->GetJavaBannerManager())
+                : ScopedJavaLocalRef<jobject>();
 }
 
 // static

@@ -15,6 +15,7 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_types.h"
 #include "extensions/schema/history_private.h"
+#include "db/vivaldi_history_types.h"
 
 namespace extensions {
 
@@ -25,10 +26,13 @@ namespace OnVisitModified = vivaldi::history_private::OnVisitModified;
 
 using vivaldi::history_private::TopUrlItem;
 
-
 typedef std::vector<vivaldi::history_private::HistoryPrivateItem>
     HistoryItemList;
 namespace GetTopUrlsPerDay = vivaldi::history_private::GetTopUrlsPerDay;
+typedef std::vector<vivaldi::history_private::HistoryPrivateItem>
+    VisitsPrivateList;
+
+namespace VisitSearch = vivaldi::history_private::VisitSearch;
 typedef std::vector<vivaldi::history_private::TopUrlItem> TopSitesPerDayList;
 
 using bookmarks::BookmarkModel;
@@ -40,11 +44,11 @@ namespace {
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-double MilliSecondsFromTime(const base::Time &time) {
+double MilliSecondsFromTime(const base::Time& time) {
   return 1000 * time.ToDoubleT();
 }
 
-std::unique_ptr<HistoryPrivateItem> GetHistoryItem(const history::URLRow &row) {
+std::unique_ptr<HistoryPrivateItem> GetHistoryItem(const history::URLRow& row) {
   std::unique_ptr<HistoryPrivateItem> history_item(new HistoryPrivateItem());
 
   history_item->id = base::Int64ToString(row.id());
@@ -62,9 +66,9 @@ std::unique_ptr<HistoryPrivateItem> GetHistoryItem(const history::URLRow &row) {
 
 }  // namespace
 
-HistoryPrivateAPI::HistoryPrivateAPI(content::BrowserContext *context)
+HistoryPrivateAPI::HistoryPrivateAPI(content::BrowserContext* context)
     : browser_context_(context) {
-  EventRouter *event_router = EventRouter::Get(browser_context_);
+  EventRouter* event_router = EventRouter::Get(browser_context_);
   event_router->RegisterObserver(this, OnVisitModified::kEventName);
 }
 
@@ -79,7 +83,7 @@ static base::LazyInstance<BrowserContextKeyedAPIFactory<HistoryPrivateAPI>>
     g_factory = LAZY_INSTANCE_INITIALIZER;
 
 // static
-BrowserContextKeyedAPIFactory<HistoryPrivateAPI> *
+BrowserContextKeyedAPIFactory<HistoryPrivateAPI>*
 HistoryPrivateAPI::GetFactoryInstance() {
   return g_factory.Pointer();
 }
@@ -91,8 +95,8 @@ void BrowserContextKeyedAPIFactory<
   DependsOn(ExtensionsBrowserClient::Get()->GetExtensionSystemFactory());
 }
 
-void HistoryPrivateAPI::OnListenerAdded(const EventListenerInfo &details) {
-  Profile *profile = Profile::FromBrowserContext(browser_context_);
+void HistoryPrivateAPI::OnListenerAdded(const EventListenerInfo& details) {
+  Profile* profile = Profile::FromBrowserContext(browser_context_);
   history_event_router_.reset(new HistoryPrivateEventRouter(
       profile, HistoryServiceFactory::GetForProfile(
                    profile, ServiceAccessType::EXPLICIT_ACCESS)));
@@ -100,7 +104,8 @@ void HistoryPrivateAPI::OnListenerAdded(const EventListenerInfo &details) {
 }
 
 HistoryPrivateEventRouter::HistoryPrivateEventRouter(
-    Profile *profile, history::HistoryService *history_service)
+    Profile* profile,
+    history::HistoryService* history_service)
     : profile_(profile), history_service_observer_(this) {
   DCHECK(profile);
   history_service_observer_.Add(history_service);
@@ -109,11 +114,11 @@ HistoryPrivateEventRouter::HistoryPrivateEventRouter(
 HistoryPrivateEventRouter::~HistoryPrivateEventRouter() {}
 
 void HistoryPrivateEventRouter::OnURLsModified(
-    history::HistoryService *history_service,
-    const history::URLRows &changed_urls) {
+    history::HistoryService* history_service,
+    const history::URLRows& changed_urls) {
   OnVisitModified::Modified modified;
-  std::vector<std::string> *urls = new std::vector<std::string>();
-  for (const auto &row : changed_urls) {
+  std::vector<std::string>* urls = new std::vector<std::string>();
+  for (const auto& row : changed_urls) {
     urls->push_back(row.url().spec());
   }
   modified.urls.reset(urls);
@@ -124,7 +129,8 @@ void HistoryPrivateEventRouter::OnURLsModified(
 
 // Helper to actually dispatch an event to extension listeners.
 void HistoryPrivateEventRouter::DispatchEvent(
-    Profile *profile, const std::string &event_name,
+    Profile* profile,
+    const std::string& event_name,
     std::unique_ptr<base::ListValue> event_args) {
   if (profile && EventRouter::Get(profile)) {
     EventRouter::Get(profile)->BroadcastEvent(base::WrapUnique(
@@ -137,7 +143,7 @@ bool HistoryPrivateDbSearchFunction::RunAsyncImpl() {
   std::unique_ptr<DBSearch::Params> params(DBSearch::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  history::HistoryService *hs = HistoryServiceFactory::GetForProfile(
+  history::HistoryService* hs = HistoryServiceFactory::GetForProfile(
       GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
 
   int max_hits = 100;
@@ -145,7 +151,7 @@ bool HistoryPrivateDbSearchFunction::RunAsyncImpl() {
   if (params->query.max_results.get())
     max_hits = *params->query.max_results;
 
-  const char *sql_statement =
+  const char* sql_statement =
       "SELECT urls.id, urls.url, urls.title, urls.visit_count, "
       "urls.typed_count, urls.last_visit_time, urls.hidden "
       "FROM urls WHERE hidden = 0 "
@@ -162,7 +168,7 @@ bool HistoryPrivateDbSearchFunction::RunAsyncImpl() {
 }
 
 void HistoryPrivateDbSearchFunction::SearchComplete(
-    history::QueryResults *results) {
+    history::QueryResults* results) {
   HistoryItemList history_item_vec;
   if (results && !results->empty()) {
     for (history::QueryResults::URLResultVector::const_iterator iterator =
@@ -207,7 +213,7 @@ bool HistoryPrivateSearchFunction::RunAsyncImpl() {
     }
   }
 
-  history::HistoryService *hs = HistoryServiceFactory::GetForProfile(
+  history::HistoryService* hs = HistoryServiceFactory::GetForProfile(
       GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
 
   hs->QueryHistory(search_text, options,
@@ -218,8 +224,8 @@ bool HistoryPrivateSearchFunction::RunAsyncImpl() {
   return true;
 }
 
-HistoryPrivateItem GetHistoryAndVisitItem(const history::URLResult &row,
-                                          BookmarkModel *bookmark_model) {
+HistoryPrivateItem GetHistoryAndVisitItem(const history::URLResult& row,
+                                          BookmarkModel* bookmark_model) {
   HistoryPrivateItem history_item;
 
   if (row.visit_time().is_null()) {
@@ -244,10 +250,10 @@ HistoryPrivateItem GetHistoryAndVisitItem(const history::URLResult &row,
 }
 
 void HistoryPrivateSearchFunction::SearchComplete(
-  history::QueryResults* results) {
+    history::QueryResults* results) {
   HistoryItemList history_item_vec;
   BookmarkModel* model =
-        BookmarkModelFactory::GetForBrowserContext(GetProfile());
+      BookmarkModelFactory::GetForBrowserContext(GetProfile());
   if (results && !results->empty()) {
     for (const history::URLResult* item : *results)
       history_item_vec.push_back(GetHistoryAndVisitItem(*item, model));
@@ -271,7 +277,7 @@ bool HistoryPrivateDeleteVisitsFunction::RunAsyncImpl() {
   std::set<GURL> restrict_urls;
   restrict_urls.insert(url);
 
-  history::HistoryService *hs = HistoryServiceFactory::GetForProfile(
+  history::HistoryService* hs = HistoryServiceFactory::GetForProfile(
       GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
   hs->ExpireHistoryBetween(
       restrict_urls, start_time, end_time,
@@ -288,10 +294,10 @@ void HistoryPrivateDeleteVisitsFunction::DeleteVisitComplete() {
 
 bool HistoryPrivateGetTopUrlsPerDayFunction::RunAsyncImpl() {
   std::unique_ptr<GetTopUrlsPerDay::Params> params(
-    GetTopUrlsPerDay::Params::Create(*args_));
+      GetTopUrlsPerDay::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  history::HistoryService *hs = HistoryServiceFactory::GetForProfile(
+  history::HistoryService* hs = HistoryServiceFactory::GetForProfile(
       GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
   double number_of_days = kMaxResultsWithinDay;
   if (params->max_top_url_results)
@@ -307,22 +313,72 @@ bool HistoryPrivateGetTopUrlsPerDayFunction::RunAsyncImpl() {
 std::unique_ptr<TopUrlItem> GetTopUrlPerDay(history::UrlVisitCount visit) {
   std::unique_ptr<TopUrlItem> history_item(new TopUrlItem());
 
-  history_item->date = visit.date;
-  history_item->url = visit.url.spec();
-  history_item->number_of_visit.reset(new int(visit.count));
+  history_item->date = visit.date();
+  history_item->url = visit.url().spec();
+  history_item->number_of_visit.reset(new int(visit.count()));
 
   return history_item;
 }
 
 void HistoryPrivateGetTopUrlsPerDayFunction::TopUrlsComplete(
-    const history::TopUrlsPerDayList &results) {
-
+    const history::UrlVisitCount::TopUrlsPerDayList& results) {
   TopSitesPerDayList history_item_vec;
 
-  for (auto &item : results) {
+  for (auto& item : results) {
     history_item_vec.push_back(std::move(*(GetTopUrlPerDay(item))));
   }
   results_ = GetTopUrlsPerDay::Results::Create(history_item_vec);
+  SendAsyncResponse();
+}
+
+std::unique_ptr<HistoryPrivateItem> GetVisitsItem(
+    history::Visit visit,
+    BookmarkModel* bookmark_model) {
+  std::unique_ptr<HistoryPrivateItem> history_item(new HistoryPrivateItem());
+
+  history_item->id = visit.id();
+  history_item->url.reset(new std::string(visit.url().spec()));
+  history_item->title.reset(new std::string(base::UTF16ToUTF8(visit.title())));
+  history_item->visit_time.reset(
+      new double(MilliSecondsFromTime(visit.visit_time())));
+  history_item->is_bookmarked = bookmark_model->IsBookmarked(visit.url());
+  history_item->transition_type.reset(new std::string(visit.transition()));
+  return history_item;
+}
+
+bool HistoryPrivateVisitSearchFunction::RunAsyncImpl() {
+    std::unique_ptr<VisitSearch::Params> params(
+    VisitSearch::Params::Create(*args_));
+    EXTENSION_FUNCTION_VALIDATE(params.get());
+
+    std::string search_text = params->query.text;
+    history::QueryOptions options;
+
+    if (params->query.start_time.get())
+        options.begin_time = GetTime(*params->query.start_time);
+    if (params->query.end_time.get())
+        options.end_time = GetTime(*params->query.end_time);
+
+  history::HistoryService* hs = HistoryServiceFactory::GetForProfile(
+      GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
+
+  hs->VisitSearch(search_text, options,
+            base::Bind(&HistoryPrivateVisitSearchFunction::VisitsComplete,
+                        base::Unretained(this)));
+  return true;
+}
+
+// Callback for the history service to acknowledge visits search complete.
+void HistoryPrivateVisitSearchFunction::VisitsComplete(
+    const history::Visit::VisitsList& visit_list) {
+  VisitsPrivateList history_item_vec;
+  BookmarkModel* model =
+      BookmarkModelFactory::GetForBrowserContext(GetProfile());
+
+  for (auto& item : visit_list) {
+    history_item_vec.push_back(std::move(*(GetVisitsItem(item, model))));
+  }
+  results_ = VisitSearch::Results::Create(history_item_vec);
   SendAsyncResponse();
 }
 

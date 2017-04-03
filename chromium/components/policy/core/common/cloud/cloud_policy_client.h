@@ -24,10 +24,6 @@
 #include "components/policy/policy_export.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 
-namespace cryptohome {
-class AsyncMethodCaller;
-}
-
 namespace net {
 class URLRequestContextGetter;
 }
@@ -36,6 +32,7 @@ namespace policy {
 
 class DeviceManagementRequestJob;
 class DeviceManagementService;
+class SigningService;
 
 // Implements the core logic required to talk to the device management service.
 // Also keeps track of the current state of the association with the service,
@@ -83,18 +80,10 @@ class POLICY_EXPORT CloudPolicyClient {
     virtual void OnClientError(CloudPolicyClient* client) = 0;
   };
 
-  // Data signing interface.
-  class POLICY_EXPORT SigningService {
-   public:
-    using SigningCallback = base::Callback<void(bool success,
-        enterprise_management::SignedData signed_data)>;
-
-    // Signs |data| and calls |callback| with the signed data.
-    virtual void SignData(const std::string& data,
-                          const SigningCallback& callback) = 0;
-  };
-
-  // |provider| and |service| are weak pointers and it's the caller's
+  // If non-empty, |machine_id| and |machine_model| are passed to the server
+  // verbatim. As these reveal machine identity, they must only be used where
+  // this is appropriate (i.e. device policy, but not user policy). |service|
+  // and |signing_service| are weak pointers and it's the caller's
   // responsibility to keep them valid for the lifetime of CloudPolicyClient.
   // |verification_key_hash| contains an identifier telling the DMServer which
   // verification key to use. The |signing_service| is used to sign sensitive
@@ -213,6 +202,9 @@ class POLICY_EXPORT CloudPolicyClient {
 
   // Removes the specified observer.
   void RemoveObserver(Observer* observer);
+
+  const std::string& machine_id() const { return machine_id_; }
+  const std::string& machine_model() const { return machine_model_; }
 
   void set_submit_machine_id(bool submit_machine_id) {
     submit_machine_id_ = submit_machine_id;
@@ -392,11 +384,13 @@ class POLICY_EXPORT CloudPolicyClient {
   std::string dm_token_;
   DeviceMode device_mode_ = DEVICE_MODE_NOT_SET;
   std::string client_id_;
-  bool submit_machine_id_ = false;
   base::Time last_policy_timestamp_;
   int public_key_version_ = -1;
   bool public_key_version_valid_ = false;
   std::string robot_api_auth_code_;
+
+  // Whether to send |machine_id_| as part of policy fetch.
+  bool submit_machine_id_ = false;
 
   // Information for the latest policy invalidation received.
   int64_t invalidation_version_ = 0;

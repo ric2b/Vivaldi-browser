@@ -12,70 +12,66 @@
 namespace blink {
 
 class MediaQueryListEvent final : public Event {
-    DEFINE_WRAPPERTYPEINFO();
-public:
-    static MediaQueryListEvent* create()
-    {
-        return new MediaQueryListEvent;
-    }
+  DEFINE_WRAPPERTYPEINFO();
 
-    static MediaQueryListEvent* create(MediaQueryList* list)
-    {
-        return new MediaQueryListEvent(list);
-    }
+ public:
+  static MediaQueryListEvent* create(MediaQueryList* list) {
+    return new MediaQueryListEvent(list);
+  }
 
-    static MediaQueryListEvent* create(const String& media, bool matches)
-    {
-        return new MediaQueryListEvent(media, matches);
-    }
+  static MediaQueryListEvent* create(const String& media, bool matches) {
+    return new MediaQueryListEvent(media, matches);
+  }
 
-    static MediaQueryListEvent* create(const AtomicString& eventType, const MediaQueryListEventInit& initializer)
-    {
-        return new MediaQueryListEvent(eventType, initializer);
-    }
+  static MediaQueryListEvent* create(
+      const AtomicString& eventType,
+      const MediaQueryListEventInit& initializer) {
+    return new MediaQueryListEvent(eventType, initializer);
+  }
 
-    String media() const { return m_mediaQueryList ? m_mediaQueryList->media() : m_media; }
-    bool matches() const { return m_mediaQueryList ? m_mediaQueryList->matches() : m_matches; }
+  String media() const {
+    return m_mediaQueryList ? m_mediaQueryList->media() : m_media;
+  }
+  bool matches() const {
+    return m_mediaQueryList ? m_mediaQueryList->matches() : m_matches;
+  }
 
-    const AtomicString& interfaceName() const override { return EventNames::MediaQueryListEvent; }
+  const AtomicString& interfaceName() const override {
+    return EventNames::MediaQueryListEvent;
+  }
 
-    DEFINE_INLINE_VIRTUAL_TRACE()
-    {
-        Event::trace(visitor);
-        visitor->trace(m_mediaQueryList);
-    }
+  DEFINE_INLINE_VIRTUAL_TRACE() {
+    Event::trace(visitor);
+    visitor->trace(m_mediaQueryList);
+  }
 
-private:
-    MediaQueryListEvent()
-        : m_matches(false) { }
+ private:
+  MediaQueryListEvent(const String& media, bool matches)
+      : Event(EventTypeNames::change, false, false),
+        m_media(media),
+        m_matches(matches) {}
 
-    MediaQueryListEvent(const String& media, bool matches)
-        : Event(EventTypeNames::change, false, false)
-        , m_media(media)
-        , m_matches(matches) { }
+  explicit MediaQueryListEvent(MediaQueryList* list)
+      : Event(EventTypeNames::change, false, false),
+        m_mediaQueryList(list),
+        m_matches(false) {}
 
-    explicit MediaQueryListEvent(MediaQueryList* list)
-        : Event(EventTypeNames::change, false, false)
-        , m_mediaQueryList(list)
-        , m_matches(false) { }
+  MediaQueryListEvent(const AtomicString& eventType,
+                      const MediaQueryListEventInit& initializer)
+      : Event(eventType, initializer), m_matches(false) {
+    if (initializer.hasMedia())
+      m_media = initializer.media();
+    if (initializer.hasMatches())
+      m_matches = initializer.matches();
+  }
 
-    MediaQueryListEvent(const AtomicString& eventType, const MediaQueryListEventInit& initializer)
-        : Event(eventType, initializer)
-        , m_matches(false)
-    {
-        if (initializer.hasMedia())
-            m_media = initializer.media();
-        if (initializer.hasMatches())
-            m_matches = initializer.matches();
-    }
-
-    // We have m_media/m_matches for JS-created events; we use m_mediaQueryList
-    // for events that blink generates.
-    Member<MediaQueryList> m_mediaQueryList;
-    String m_media;
-    bool m_matches;
+  // We have m_media/m_matches for JS-created events; we use m_mediaQueryList
+  // for events that blink generates.
+  Member<MediaQueryList> m_mediaQueryList;
+  String m_media;
+  bool m_matches;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // MediaQueryListEvent_h
+#endif  // MediaQueryListEvent_h

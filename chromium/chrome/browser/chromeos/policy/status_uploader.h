@@ -15,7 +15,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
-#include "chrome/browser/media/media_capture_devices_dispatcher.h"
+#include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 
@@ -110,37 +110,6 @@ class StatusUploader : public MediaCaptureDevicesDispatcher::Observer {
   // Note: This should remain the last member so it'll be destroyed and
   // invalidate the weak pointers before any other members are destroyed.
   base::WeakPtrFactory<StatusUploader> weak_factory_;
-
-  // Small helper class for state tracking. Necessary because
-  // DeviceStatusCollector has two independent async calls for getting device
-  // and session status, but we need BOTH results before we can upload data.
-  class StatusGetter : public base::RefCountedThreadSafe<StatusGetter> {
-   public:
-    explicit StatusGetter(const base::WeakPtr<StatusUploader>& uploader);
-
-    void OnDeviceStatusReceived(
-        std::unique_ptr<enterprise_management::DeviceStatusReportRequest>
-            device_status);
-    void OnSessionStatusReceived(
-        std::unique_ptr<enterprise_management::SessionStatusReportRequest>
-            session_status);
-
-   private:
-    friend class RefCountedThreadSafe<StatusGetter>;
-    ~StatusGetter();
-
-    void CheckDone();
-
-    std::unique_ptr<enterprise_management::DeviceStatusReportRequest>
-        device_status_;
-    std::unique_ptr<enterprise_management::SessionStatusReportRequest>
-        session_status_;
-
-    base::WeakPtr<StatusUploader> uploader_;
-
-    bool device_status_response_received_;
-    bool session_status_response_received_;
-  };
 
   DISALLOW_COPY_AND_ASSIGN(StatusUploader);
 };

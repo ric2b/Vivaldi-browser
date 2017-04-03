@@ -125,10 +125,23 @@ IN_PROC_BROWSER_TEST_F(AutomationApiTest, Location) {
       << message_;
 }
 
+IN_PROC_BROWSER_TEST_F(AutomationApiTest, Location2) {
+  StartEmbeddedTestServer();
+  ASSERT_TRUE(RunExtensionSubtest("automation/tests/tabs", "location2.html"))
+      << message_;
+}
+
 IN_PROC_BROWSER_TEST_F(AutomationApiTest, BoundsForRange) {
   StartEmbeddedTestServer();
   ASSERT_TRUE(RunExtensionSubtest("automation/tests/tabs",
                                   "bounds_for_range.html"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(AutomationApiTest, LineStartOffsets) {
+  StartEmbeddedTestServer();
+  ASSERT_TRUE(
+      RunExtensionSubtest("automation/tests/tabs", "line_start_offsets.html"))
       << message_;
 }
 
@@ -160,14 +173,9 @@ IN_PROC_BROWSER_TEST_F(AutomationApiTest, DISABLED_Desktop) {
       << message_;
 }
 
-// TODO(crbug.com/615908): Flaky on CrOS sanitizers.
 #if defined(OS_CHROMEOS)
-#if defined(MEMORY_SANITIZER) || defined(ADDRESS_SANITIZER)
-#define MAYBE_DesktopInitialFocus DISABLED_DesktopInitialFocus
-#else
-#define MAYBE_DesktopInitialFocus DesktopInitialFocus
-#endif
-IN_PROC_BROWSER_TEST_F(AutomationApiTest, MAYBE_DesktopInitialFocus) {
+// TODO(crbug.com/615908): Flaky on CrOS sanitizers.
+IN_PROC_BROWSER_TEST_F(AutomationApiTest, DISABLED_DesktopInitialFocus) {
   ASSERT_TRUE(
       RunExtensionSubtest("automation/tests/desktop", "initial_focus.html"))
       << message_;

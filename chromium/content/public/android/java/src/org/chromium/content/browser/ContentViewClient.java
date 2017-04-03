@@ -11,6 +11,7 @@ import android.view.KeyEvent;
 import android.view.View.MeasureSpec;
 
 import org.chromium.base.Log;
+import org.chromium.base.metrics.RecordUserAction;
 
 /**
  *  Main callback class used by ContentView.
@@ -163,23 +164,11 @@ public class ContentViewClient {
         }
 
         try {
+            RecordUserAction.record("Android.ContentDetectorActivated");
             context.startActivity(intent);
         } catch (ActivityNotFoundException ex) {
             Log.w(TAG, "No application can handle %s", intentUrl);
         }
-    }
-
-    public ContentVideoViewEmbedder getContentVideoViewEmbedder() {
-        return null;
-    }
-
-    /**
-     * Called when BrowserMediaPlayerManager wants to load a media resource.
-     * @param url the URL of media resource to load.
-     * @return true to prevent the resource from being loaded.
-     */
-    public boolean shouldBlockMediaRequest(String url) {
-        return false;
     }
 
     /**
@@ -270,12 +259,5 @@ public class ContentViewClient {
      */
     public int getSystemWindowInsetBottom() {
         return 0;
-    }
-
-    /**
-     * Return the product version.
-     */
-    public String getProductVersion() {
-        return "";
     }
 }

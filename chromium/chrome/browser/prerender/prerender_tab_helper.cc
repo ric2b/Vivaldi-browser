@@ -5,7 +5,7 @@
 #include "chrome/browser/prerender/prerender_tab_helper.h"
 
 #include "base/bind.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "chrome/browser/prerender/prerender_histograms.h"
 #include "chrome/browser/prerender/prerender_manager.h"
@@ -41,7 +41,6 @@ PrerenderTabHelper::~PrerenderTabHelper() {
 }
 
 void PrerenderTabHelper::DidGetRedirectForResourceRequest(
-    content::RenderFrameHost* render_frame_host,
     const content::ResourceRedirectDetails& details) {
   if (details.resource_type != content::RESOURCE_TYPE_MAIN_FRAME)
     return;
@@ -130,8 +129,8 @@ void PrerenderTabHelper::MainFrameUrlDidChange(const GURL& url) {
 }
 
 PrerenderManager* PrerenderTabHelper::MaybeGetPrerenderManager() const {
-  return PrerenderManagerFactory::GetForProfile(
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext()));
+  return PrerenderManagerFactory::GetForBrowserContext(
+      web_contents()->GetBrowserContext());
 }
 
 bool PrerenderTabHelper::IsPrerendering() {

@@ -17,7 +17,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/metrics/user_metrics.h"
 #include "base/path_service.h"
@@ -32,10 +32,8 @@
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
 #include "chrome/browser/net/chrome_extensions_network_delegate.h"
 #include "chrome/browser/net/request_source_bandwidth_histograms.h"
-#include "chrome/browser/net/safe_search_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/task_manager/task_manager_interface.h"
-#include "chrome/common/chrome_constants.h"
 #include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
@@ -59,6 +57,8 @@
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
 #include "net/log/net_log.h"
+#include "net/log/net_log_event_type.h"
+#include "net/log/net_log_with_source.h"
 #include "net/url_request/url_request.h"
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
@@ -134,7 +134,7 @@ void RecordNetworkErrorHistograms(const net::URLRequest* request) {
     UMA_HISTOGRAM_SPARSE_SLOWLY("Net.HttpRequestCompletionErrorCodes",
                                 std::abs(request->status().error()));
 
-    if (request->load_flags() & net::LOAD_MAIN_FRAME) {
+    if (request->load_flags() & net::LOAD_MAIN_FRAME_DEPRECATED) {
       UMA_HISTOGRAM_SPARSE_SLOWLY(
           "Net.HttpRequestCompletionErrorCodes.MainFrame",
           std::abs(request->status().error()));
@@ -148,14 +148,14 @@ ChromeNetworkDelegate::ChromeNetworkDelegate(
     extensions::EventRouterForwarder* event_router,
     BooleanPrefMember* enable_referrers,
     const metrics::UpdateUsagePrefCallbackType& metrics_data_use_forwarder)
-    : profile_(NULL),
+    : profile_(nullptr),
       enable_referrers_(enable_referrers),
-      enable_do_not_track_(NULL),
-      force_google_safe_search_(NULL),
-      force_youtube_safety_mode_(NULL),
+      enable_do_not_track_(nullptr),
+      force_google_safe_search_(nullptr),
+      force_youtube_restrict_(nullptr),
       allowed_domains_for_apps_(nullptr),
-      url_blacklist_manager_(NULL),
-      domain_reliability_monitor_(NULL),
+      url_blacklist_manager_(nullptr),
+      domain_reliability_monitor_(nullptr),
       data_use_measurement_(metrics_data_use_forwarder),
       experimental_web_platform_features_enabled_(
           base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -196,7 +196,7 @@ void ChromeNetworkDelegate::InitializePrefsOnUIThread(
     BooleanPrefMember* enable_referrers,
     BooleanPrefMember* enable_do_not_track,
     BooleanPrefMember* force_google_safe_search,
-    BooleanPrefMember* force_youtube_safety_mode,
+    IntegerPrefMember* force_youtube_restrict,
     StringPrefMember* allowed_domains_for_apps,
     PrefService* pref_service) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -213,10 +213,9 @@ void ChromeNetworkDelegate::InitializePrefsOnUIThread(
     force_google_safe_search->MoveToThread(
         BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
   }
-  if (force_youtube_safety_mode) {
-    force_youtube_safety_mode->Init(prefs::kForceYouTubeSafetyMode,
-                                    pref_service);
-    force_youtube_safety_mode->MoveToThread(
+  if (force_youtube_restrict) {
+    force_youtube_restrict->Init(prefs::kForceYouTubeRestrict, pref_service);
+    force_youtube_restrict->MoveToThread(
         BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
   }
   if (allowed_domains_for_apps) {
@@ -240,6 +239,8 @@ int ChromeNetworkDelegate::OnBeforeURLRequest(
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
           "456327 URLRequest::ChromeNetworkDelegate::OnBeforeURLRequest"));
 
+  data_use_measurement_.OnBeforeURLRequest(request);
+
   // TODO(joaodasilva): This prevents extensions from seeing URLs that are
   // blocked. However, an extension might redirect the request to another URL,
   // which is not blocked.
@@ -252,7 +253,7 @@ int ChromeNetworkDelegate::OnBeforeURLRequest(
           request->url(), &error)) {
     // URL access blocked by policy.
     request->net_log().AddEvent(
-        net::NetLog::TYPE_CHROME_POLICY_ABORTED_REQUEST,
+        net::NetLogEventType::CHROME_POLICY_ABORTED_REQUEST,
         net::NetLog::StringCallback("url",
                                     &request->url().possibly_invalid_spec()));
     return error;
@@ -317,8 +318,16 @@ int ChromeNetworkDelegate::OnBeforeStartTransaction(
     net::URLRequest* request,
     const net::CompletionCallback& callback,
     net::HttpRequestHeaders* headers) {
-  if (force_youtube_safety_mode_ && force_youtube_safety_mode_->GetValue())
-    safe_search_util::ForceYouTubeSafetyMode(request, headers);
+  if (force_youtube_restrict_) {
+    int value = force_youtube_restrict_->GetValue();
+    static_assert(safe_search_util::YOUTUBE_RESTRICT_OFF == 0,
+                  "OFF must be first");
+    if (value > safe_search_util::YOUTUBE_RESTRICT_OFF &&
+        value < safe_search_util::YOUTUBE_RESTRICT_COUNT) {
+      safe_search_util::ForceYouTubeRestrict(request, headers,
+          static_cast<safe_search_util::YouTubeRestrictMode>(value));
+    }
+  }
 
   // NOTE(jarle@vivaldi.com): For the WhatsApp domain, provide a
   // Vivaldi-free useragent. This is a temp. workaround until WhatsApp
@@ -373,11 +382,13 @@ void ChromeNetworkDelegate::OnNetworkBytesReceived(net::URLRequest* request,
 #endif  // defined(ENABLE_TASK_MANAGER)
 
   ReportDataUsageStats(request, 0 /* tx_bytes */, bytes_received);
+  data_use_measurement_.OnNetworkBytesReceived(*request, bytes_received);
 }
 
 void ChromeNetworkDelegate::OnNetworkBytesSent(net::URLRequest* request,
                                                int64_t bytes_sent) {
   ReportDataUsageStats(request, bytes_sent, 0 /* rx_bytes */);
+  data_use_measurement_.OnNetworkBytesSent(*request, bytes_sent);
 }
 
 void ChromeNetworkDelegate::OnCompleted(net::URLRequest* request,
@@ -425,21 +436,19 @@ ChromeNetworkDelegate::OnAuthRequired(
 bool ChromeNetworkDelegate::OnCanGetCookies(
     const net::URLRequest& request,
     const net::CookieList& cookie_list) {
-  // NULL during tests, or when we're running in the system context.
+  // nullptr during tests, or when we're running in the system context.
   if (!cookie_settings_.get())
     return true;
 
   bool allow = cookie_settings_->IsReadingCookieAllowed(
       request.url(), request.first_party_for_cookies());
 
-  int render_process_id = -1;
-  int render_frame_id = -1;
-  if (content::ResourceRequestInfo::GetRenderFrameForRequest(
-          &request, &render_process_id, &render_frame_id)) {
+  const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(&request);
+  if (info) {
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
         base::Bind(&TabSpecificContentSettings::CookiesRead,
-                   render_process_id, render_frame_id,
+                   info->GetWebContentsGetterForRequest(),
                    request.url(), request.first_party_for_cookies(),
                    cookie_list, !allow));
   }
@@ -450,21 +459,19 @@ bool ChromeNetworkDelegate::OnCanGetCookies(
 bool ChromeNetworkDelegate::OnCanSetCookie(const net::URLRequest& request,
                                            const std::string& cookie_line,
                                            net::CookieOptions* options) {
-  // NULL during tests, or when we're running in the system context.
+  // nullptr during tests, or when we're running in the system context.
   if (!cookie_settings_.get())
     return true;
 
   bool allow = cookie_settings_->IsSettingCookieAllowed(
       request.url(), request.first_party_for_cookies());
 
-  int render_process_id = -1;
-  int render_frame_id = -1;
-  if (content::ResourceRequestInfo::GetRenderFrameForRequest(
-          &request, &render_process_id, &render_frame_id)) {
+  const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(&request);
+  if (info) {
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
         base::Bind(&TabSpecificContentSettings::CookieChanged,
-                   render_process_id, render_frame_id,
+                   info->GetWebContentsGetterForRequest(),
                    request.url(), request.first_party_for_cookies(),
                    cookie_line, *options, !allow));
   }
@@ -523,15 +530,6 @@ bool ChromeNetworkDelegate::OnCanAccessFile(const net::URLRequest& request,
   if (external_storage_path.IsParent(path))
     return true;
 
-  // Allow to load offline pages, which are stored in the $PROFILE_PATH/Offline
-  // Pages/archives.
-  if (!profile_path_.empty()) {
-    const base::FilePath offline_page_archives =
-        profile_path_.Append(chrome::kOfflinePageArchivesDirname);
-    if (offline_page_archives.IsParent(path))
-      return true;
-  }
-
   // Whitelist of other allowed directories.
   static const char* const kLocalAccessWhiteList[] = {
       "/sdcard",
@@ -556,7 +554,7 @@ bool ChromeNetworkDelegate::OnCanAccessFile(const net::URLRequest& request,
 bool ChromeNetworkDelegate::OnCanEnablePrivacyMode(
     const GURL& url,
     const GURL& first_party_for_cookies) const {
-  // NULL during tests, or when we're running in the system context.
+  // nullptr during tests, or when we're running in the system context.
   if (!cookie_settings_.get())
     return false;
 

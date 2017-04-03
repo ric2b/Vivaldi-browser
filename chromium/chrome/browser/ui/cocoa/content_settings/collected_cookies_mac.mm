@@ -11,6 +11,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
+#include "chrome/browser/content_settings/local_shared_objects_container.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
@@ -20,13 +21,13 @@
 #include "chrome/browser/ui/collected_cookies_infobar_delegate.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/web_contents.h"
-#include "grit/theme_resources.h"
 #include "third_party/apple_sample_code/ImageAndTextCell.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMNSAnimation+Duration.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMUILocalizerAndLayoutTweaker.h"
@@ -353,8 +354,11 @@ void CollectedCookiesMac::OnConstrainedWindowClosed(
   TabSpecificContentSettings* content_settings =
       TabSpecificContentSettings::FromWebContents(webContents_);
 
-  allowedTreeModel_ = content_settings->CreateAllowedCookiesTreeModel();
-  blockedTreeModel_ = content_settings->CreateBlockedCookiesTreeModel();
+  allowedTreeModel_ =
+      content_settings->allowed_local_shared_objects().CreateCookiesTreeModel();
+
+  blockedTreeModel_ =
+      content_settings->blocked_local_shared_objects().CreateCookiesTreeModel();
 
   // Convert the model's icons from Skia to Cocoa.
   std::vector<gfx::ImageSkia> skiaIcons;

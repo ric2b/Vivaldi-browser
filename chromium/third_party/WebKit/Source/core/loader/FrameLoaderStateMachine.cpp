@@ -14,7 +14,8 @@
  *     its contributors may be used to endorse or promote products derived
  *     from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
  * DISCLAIMED. IN NO EVENT SHALL APPLE OR ITS CONTRIBUTORS BE LIABLE FOR ANY
@@ -33,53 +34,45 @@
 
 namespace blink {
 
-
 FrameLoaderStateMachine::FrameLoaderStateMachine()
-    : m_state(CreatingInitialEmptyDocument)
-{
+    : m_state(CreatingInitialEmptyDocument) {}
+
+bool FrameLoaderStateMachine::committedFirstRealDocumentLoad() const {
+  return m_state >= CommittedFirstRealLoad;
 }
 
-bool FrameLoaderStateMachine::committedFirstRealDocumentLoad() const
-{
-    return m_state >= CommittedFirstRealLoad;
+bool FrameLoaderStateMachine::creatingInitialEmptyDocument() const {
+  return m_state == CreatingInitialEmptyDocument;
 }
 
-bool FrameLoaderStateMachine::creatingInitialEmptyDocument() const
-{
-    return m_state == CreatingInitialEmptyDocument;
+bool FrameLoaderStateMachine::committedMultipleRealLoads() const {
+  return m_state == CommittedMultipleRealLoads;
 }
 
-bool FrameLoaderStateMachine::committedMultipleRealLoads() const
-{
-    return m_state == CommittedMultipleRealLoads;
+bool FrameLoaderStateMachine::isDisplayingInitialEmptyDocument() const {
+  return m_state >= DisplayingInitialEmptyDocument &&
+         m_state < CommittedFirstRealLoad;
 }
 
-bool FrameLoaderStateMachine::isDisplayingInitialEmptyDocument() const
-{
-    return m_state >= DisplayingInitialEmptyDocument && m_state < CommittedFirstRealLoad;
+void FrameLoaderStateMachine::advanceTo(State state) {
+  DCHECK_LT(m_state, state);
+  m_state = state;
 }
 
-void FrameLoaderStateMachine::advanceTo(State state)
-{
-    ASSERT(m_state < state);
-    m_state = state;
-}
-
-String FrameLoaderStateMachine::toString() const
-{
-    switch (m_state) {
+String FrameLoaderStateMachine::toString() const {
+  switch (m_state) {
     case CreatingInitialEmptyDocument:
-        return "CreatingInitialEmptyDocument";
+      return "CreatingInitialEmptyDocument";
     case DisplayingInitialEmptyDocument:
-        return "DisplayingInitialEmptyDocument";
+      return "DisplayingInitialEmptyDocument";
     case CommittedFirstRealLoad:
-        return "CommittedFirstRealLoad";
+      return "CommittedFirstRealLoad";
     case CommittedMultipleRealLoads:
-        return "CommittedMultipleRealLoads";
+      return "CommittedMultipleRealLoads";
     default:
-        ASSERT_NOT_REACHED();
-    }
-    return "";
+      NOTREACHED();
+  }
+  return "";
 }
 
-} // namespace blink
+}  // namespace blink

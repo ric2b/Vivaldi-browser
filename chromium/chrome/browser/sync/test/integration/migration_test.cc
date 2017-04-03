@@ -13,7 +13,7 @@
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "chrome/common/pref_names.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/translate/core/browser/translate_prefs.h"
 
@@ -66,7 +66,6 @@ MigrationList MakeList(syncer::ModelType type1,
   return MakeList(MakeSet(type1), MakeSet(type2));
 }
 
-
 class MigrationTest : public SyncTest  {
  public:
   explicit MigrationTest(TestType test_type) : SyncTest(test_type) {}
@@ -91,9 +90,9 @@ class MigrationTest : public SyncTest  {
   syncer::ModelTypeSet GetPreferredDataTypes() {
     // ProfileSyncService must already have been created before we can call
     // GetPreferredDataTypes().
-    DCHECK(GetSyncService((0)));
+    DCHECK(GetSyncService(0));
     syncer::ModelTypeSet preferred_data_types =
-        GetSyncService((0))->GetPreferredDataTypes();
+        GetSyncService(0)->GetPreferredDataTypes();
     preferred_data_types.RemoveAll(syncer::ProxyTypes());
 
     // Supervised user data types will be "unready" during this test, so we
@@ -113,7 +112,7 @@ class MigrationTest : public SyncTest  {
     // Make sure all clients have the same preferred data types.
     for (int i = 1; i < num_clients(); ++i) {
       const syncer::ModelTypeSet other_preferred_data_types =
-          GetSyncService((i))->GetPreferredDataTypes();
+          GetSyncService(i)->GetPreferredDataTypes();
       EXPECT_EQ(other_preferred_data_types, preferred_data_types);
     }
     return preferred_data_types;
@@ -160,9 +159,8 @@ class MigrationTest : public SyncTest  {
   // types.
   void AwaitMigration(syncer::ModelTypeSet migrate_types) {
     for (int i = 0; i < num_clients(); ++i) {
-      MigrationWaiter waiter(migrate_types, migration_watchers_[i]);
-      waiter.Wait();
-      ASSERT_FALSE(waiter.TimedOut());
+      ASSERT_TRUE(
+          MigrationWaiter(migrate_types, migration_watchers_[i]).Wait());
     }
   }
 

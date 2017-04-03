@@ -341,7 +341,7 @@ cvox.ChromeVoxEditableTextBase.prototype.describeSelectionChanged =
   //   - one to speak
 
   if (this.isPassword) {
-    this.speak((new goog.i18n.MessageFormat(Msgs.getMsg('dot'))
+    this.speak((new goog.i18n.MessageFormat(Msgs.getMsg('bullet'))
         .format({'COUNT': 1})), evt.triggeredByUser);
     return;
   }
@@ -352,7 +352,14 @@ cvox.ChromeVoxEditableTextBase.prototype.describeSelectionChanged =
       this.speak(Msgs.getMsg('Unselected'), evt.triggeredByUser);
     } else if (this.getLineIndex(this.start) !=
         this.getLineIndex(evt.start)) {
-      this.describeLine(this.getLineIndex(evt.start), evt.triggeredByUser);
+      // Moved to a different line; read it.
+      var lineValue = this.getLine(this.getLineIndex(evt.start));
+      if (lineValue == '') {
+        lineValue = Msgs.getMsg('text_box_blank');
+      } else if (/^\s+$/.test(lineValue)) {
+        lineValue = Msgs.getMsg('text_box_whitespace');
+      }
+      this.speak(lineValue, evt.triggeredByUser);
     } else if (this.start == evt.start + 1 ||
         this.start == evt.start - 1) {
       // Moved by one character; read it.
@@ -419,22 +426,6 @@ cvox.ChromeVoxEditableTextBase.prototype.describeSelectionChanged =
   }
 };
 
-/**
- * Describes a line given a line index and whether it was user triggered.
- * @param {number} lineIndex
- * @param {boolean} triggeredByUser
- */
-cvox.ChromeVoxEditableTextBase.prototype.describeLine =
-    function(lineIndex, triggeredByUser) {
-  var lineValue = this.getLine(lineIndex);
-  if (lineValue == '') {
-    lineValue = Msgs.getMsg('text_box_blank');
-  } else if (/^\s+$/.test(lineValue)) {
-    lineValue = Msgs.getMsg('text_box_whitespace');
-  }
-  this.speak(lineValue, triggeredByUser);
-};
-
 
 /**
  * Describe a change where the text changes.
@@ -446,7 +437,7 @@ cvox.ChromeVoxEditableTextBase.prototype.describeTextChanged = function(evt) {
     personality = cvox.AbstractTts.PERSONALITY_DELETED;
   }
   if (this.isPassword) {
-    this.speak((new goog.i18n.MessageFormat(Msgs.getMsg('dot'))
+    this.speak((new goog.i18n.MessageFormat(Msgs.getMsg('bullet'))
         .format({'COUNT': 1})), evt.triggeredByUser, personality);
     return;
   }
@@ -529,7 +520,7 @@ cvox.ChromeVoxEditableTextBase.prototype.describeTextChanged = function(evt) {
       ((evtValue.length + 1) == value.length)) {
     // The user added text either to the beginning or the end.
     if (evtValue.length > value.length) {
-      if (evtValue.indexOf(value) == 0) {
+      if (evtValue.startsWith(value)) {
         this.speak(evtValue[evtValue.length - 1], evt.triggeredByUser,
                    personality);
         return;
@@ -540,7 +531,7 @@ cvox.ChromeVoxEditableTextBase.prototype.describeTextChanged = function(evt) {
     }
     // The user deleted text either from the beginning or the end.
     if (evtValue.length < value.length) {
-      if (value.indexOf(evtValue) == 0) {
+      if (value.startsWith(evtValue)) {
         this.speak(value[value.length - 1], evt.triggeredByUser, personality);
         return;
       } else if (value.indexOf(evtValue) == 1) {

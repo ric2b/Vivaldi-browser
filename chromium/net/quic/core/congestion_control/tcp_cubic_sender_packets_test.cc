@@ -134,6 +134,7 @@ class TcpCubicSenderPacketsTest : public ::testing::Test {
     bytes_in_flight_ -= kDefaultTCPMSS;
   }
 
+  QuicFlagSaver flags_;  // Save/restore all QUIC flag values.
   const QuicTime::Delta one_ms_;
   MockClock clock_;
   std::unique_ptr<TcpCubicSenderPacketsPeer> sender_;
@@ -507,41 +508,6 @@ TEST_F(TcpCubicSenderPacketsTest, RTOCongestionWindowNoRetransmission) {
   EXPECT_EQ(kDefaultWindowTCP, sender_->GetCongestionWindow());
 }
 
-TEST_F(TcpCubicSenderPacketsTest, RetransmissionDelay) {
-  const int64_t kRttMs = 10;
-  const int64_t kDeviationMs = 3;
-  EXPECT_EQ(QuicTime::Delta::Zero(), sender_->RetransmissionDelay());
-
-  sender_->rtt_stats_.UpdateRtt(QuicTime::Delta::FromMilliseconds(kRttMs),
-                                QuicTime::Delta::Zero(), clock_.Now());
-
-  // Initial value is to set the median deviation to half of the initial
-  // rtt, the median in then multiplied by a factor of 4 and finally the
-  // smoothed rtt is added which is the initial rtt.
-  QuicTime::Delta expected_delay =
-      QuicTime::Delta::FromMilliseconds(kRttMs + kRttMs / 2 * 4);
-  EXPECT_EQ(expected_delay, sender_->RetransmissionDelay());
-
-  for (int i = 0; i < 100; ++i) {
-    // Run to make sure that we converge.
-    sender_->rtt_stats_.UpdateRtt(
-        QuicTime::Delta::FromMilliseconds(kRttMs + kDeviationMs),
-        QuicTime::Delta::Zero(), clock_.Now());
-    sender_->rtt_stats_.UpdateRtt(
-        QuicTime::Delta::FromMilliseconds(kRttMs - kDeviationMs),
-        QuicTime::Delta::Zero(), clock_.Now());
-  }
-  expected_delay = QuicTime::Delta::FromMilliseconds(kRttMs + kDeviationMs * 4);
-
-  EXPECT_NEAR(kRttMs, sender_->rtt_stats_.smoothed_rtt().ToMilliseconds(), 1);
-  EXPECT_NEAR(expected_delay.ToMilliseconds(),
-              sender_->RetransmissionDelay().ToMilliseconds(), 1);
-  EXPECT_EQ(static_cast<int64_t>(
-                sender_->GetCongestionWindow() * kNumMicrosPerSecond /
-                sender_->rtt_stats_.smoothed_rtt().ToMicroseconds()),
-            sender_->BandwidthEstimate().ToBytesPerSecond());
-}
-
 TEST_F(TcpCubicSenderPacketsTest, SlowStartMaxSendWindow) {
   const QuicPacketCount kMaxCongestionWindowTCP = 50;
   const int kNumberOfAcks = 100;
@@ -633,50 +599,6 @@ TEST_F(TcpCubicSenderPacketsTest, TcpCubicResetEpochOnQuiescence) {
 
   // Quiescent time of 100 seconds
   clock_.AdvanceTime(QuicTime::Delta::FromMilliseconds(100000));
-
-  // Send new window of data and ack one packet. Cubic epoch should have
-  // been reset; ensure cwnd increase is not dramatic.
-  saved_cwnd = sender_->GetCongestionWindow();
-  SendAvailableSendWindow();
-  AckNPackets(1);
-  EXPECT_NEAR(saved_cwnd, sender_->GetCongestionWindow(), kDefaultTCPMSS);
-  EXPECT_GT(kMaxCongestionWindowBytes, sender_->GetCongestionWindow());
-}
-
-TEST_F(TcpCubicSenderPacketsTest, TcpCubicShiftedEpochOnQuiescence) {
-  ValueRestore<bool> old_flag(&FLAGS_shift_quic_cubic_epoch_when_app_limited,
-                              true);
-  const int kMaxCongestionWindow = 50;
-  const QuicByteCount kMaxCongestionWindowBytes =
-      kMaxCongestionWindow * kDefaultTCPMSS;
-  sender_.reset(
-      new TcpCubicSenderPacketsPeer(&clock_, false, kMaxCongestionWindow));
-
-  int num_sent = SendAvailableSendWindow();
-
-  // Make sure we fall out of slow start.
-  QuicByteCount saved_cwnd = sender_->GetCongestionWindow();
-  LoseNPackets(1);
-  EXPECT_GT(saved_cwnd, sender_->GetCongestionWindow());
-
-  // Ack the rest of the outstanding packets to get out of recovery.
-  for (int i = 1; i < num_sent; ++i) {
-    AckNPackets(1);
-  }
-  EXPECT_EQ(0u, bytes_in_flight_);
-
-  // Send a new window of data and ack all; cubic growth should occur.
-  saved_cwnd = sender_->GetCongestionWindow();
-  num_sent = SendAvailableSendWindow();
-  for (int i = 0; i < num_sent; ++i) {
-    AckNPackets(1);
-  }
-  EXPECT_LT(saved_cwnd, sender_->GetCongestionWindow());
-  EXPECT_GT(kMaxCongestionWindowBytes, sender_->GetCongestionWindow());
-  EXPECT_EQ(0u, bytes_in_flight_);
-
-  // Quiescent time of 100 seconds
-  clock_.AdvanceTime(QuicTime::Delta::FromSeconds(100));
 
   // Send new window of data and ack one packet. Cubic epoch should have
   // been reset; ensure cwnd increase is not dramatic.
@@ -958,7 +880,6 @@ TEST_F(TcpCubicSenderPacketsTest, NoPRR) {
 }
 
 TEST_F(TcpCubicSenderPacketsTest, PaceSlowerAboveCwnd) {
-  ValueRestore<bool> old_flag(&FLAGS_quic_rate_based_sending, true);
   QuicTime::Delta rtt(QuicTime::Delta::FromMilliseconds(60));
   sender_->rtt_stats_.UpdateRtt(rtt, QuicTime::Delta::Zero(), clock_.Now());
 
@@ -1040,6 +961,44 @@ TEST_F(TcpCubicSenderPacketsTest, DefaultMaxCwnd) {
   }
   EXPECT_EQ(kDefaultMaxCongestionWindowPackets,
             sender->GetCongestionWindow() / kDefaultTCPMSS);
+}
+
+TEST_F(TcpCubicSenderPacketsTest, LimitCwndIncreaseInCongestionAvoidance) {
+  FLAGS_quic_limit_cubic_cwnd_increase = true;
+  // Enable Cubic.
+  sender_.reset(new TcpCubicSenderPacketsPeer(
+      &clock_, false, kDefaultMaxCongestionWindowPackets));
+
+  int num_sent = SendAvailableSendWindow();
+
+  // Make sure we fall out of slow start.
+  QuicByteCount saved_cwnd = sender_->GetCongestionWindow();
+  LoseNPackets(1);
+  EXPECT_GT(saved_cwnd, sender_->GetCongestionWindow());
+
+  // Ack the rest of the outstanding packets to get out of recovery.
+  for (int i = 1; i < num_sent; ++i) {
+    AckNPackets(1);
+  }
+  EXPECT_EQ(0u, bytes_in_flight_);
+  // Send a new window of data and ack all; cubic growth should occur.
+  saved_cwnd = sender_->GetCongestionWindow();
+  num_sent = SendAvailableSendWindow();
+
+  // Ack packets until the CWND increases.
+  while (sender_->GetCongestionWindow() == saved_cwnd) {
+    AckNPackets(1);
+    SendAvailableSendWindow();
+  }
+  EXPECT_EQ(bytes_in_flight_, sender_->GetCongestionWindow());
+  saved_cwnd = sender_->GetCongestionWindow();
+
+  // Advance time 2 seconds waiting for an ack.
+  clock_.AdvanceTime(QuicTime::Delta::FromMilliseconds(2000));
+
+  // Ack one packet.  The CWND should increase by only one packet.
+  AckNPackets(1);
+  EXPECT_EQ(saved_cwnd + kDefaultTCPMSS, sender_->GetCongestionWindow());
 }
 
 }  // namespace test

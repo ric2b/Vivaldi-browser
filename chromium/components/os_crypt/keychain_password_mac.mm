@@ -11,6 +11,10 @@
 #include "base/rand_util.h"
 #include "crypto/apple_keychain.h"
 
+#ifdef VIVALDI_BUILD
+#define GOOGLE_CHROME_BUILD
+#endif  // VIVALDI_BUILD
+
 using crypto::AppleKeychain;
 
 namespace {
@@ -51,7 +55,7 @@ std::string KeychainPassword::GetPassword() const {
   // These two strings ARE indeed user facing.  But they are used to access
   // the encryption keyword.  So as to not lose encrypted data when system
   // locale changes we DO NOT LOCALIZE.
-#if defined(OFFICIAL_BUILD)
+#if defined(GOOGLE_CHROME_BUILD)
   const std::string service_name = "Chrome Safe Storage";
   const std::string account_name = "Chrome";
 #else
@@ -113,3 +117,7 @@ std::string KeychainPassword::GetPassword(
     return std::string();
   }
 }
+
+#ifndef GOOGLE_CHROME_BUILD
+#error GOOGLE_CHROME_BUILD must be set for Vivaldi builds
+#endif

@@ -31,9 +31,9 @@
 #ifndef WebFontDecoder_h
 #define WebFontDecoder_h
 
+#include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/core/SkTypeface.h"
 #include "wtf/Allocator.h"
-#include "wtf/RefPtr.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
@@ -41,23 +41,24 @@ namespace blink {
 class SharedBuffer;
 
 class WebFontDecoder final {
-    STACK_ALLOCATED();
-public:
-    WebFontDecoder()
-    {
-    }
+  STACK_ALLOCATED();
 
-    PassRefPtr<SkTypeface> decode(SharedBuffer*);
+ public:
+  WebFontDecoder() {}
 
-    static bool supportsFormat(const String&);
-    String getErrorString() const { return m_otsErrorString; }
+  sk_sp<SkTypeface> decode(SharedBuffer*);
 
-private:
-    void setErrorString(const String& errorString) { m_otsErrorString = errorString; }
+  static bool supportsFormat(const String&);
+  String getErrorString() const { return m_otsErrorString; }
 
-    String m_otsErrorString;
+ private:
+  void setErrorString(const String& errorString) {
+    m_otsErrorString = errorString;
+  }
+
+  String m_otsErrorString;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // WebFontDecoder_h
+#endif  // WebFontDecoder_h

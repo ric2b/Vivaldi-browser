@@ -1,7 +1,8 @@
 /*
     Copyright (C) 1998 Lars Knoll (knoll@mpi-hd.mpg.de)
     Copyright (C) 2001 Dirk Mueller <mueller@kde.org>
-    Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011 Apple Inc. All rights reserved.
+    Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011 Apple Inc. All
+    rights reserved.
 
     This library is free software; you can redistribute it and/or
     modify it under the terms of the GNU Library General Public
@@ -18,44 +19,48 @@
     the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
     Boston, MA 02110-1301, USA.
 
-    This class provides all functionality needed for loading images, style sheets and html
-    pages from the web. It has a memory cache for these objects.
+    This class provides all functionality needed for loading images, style
+    sheets and html pages from the web. It has a memory cache for these objects.
 */
 
 #ifndef ResourceClient_h
 #define ResourceClient_h
 
 #include "core/CoreExport.h"
+#include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
 class Resource;
 
-// TODO(Oilpan): Move ResourceClient to Oilpan's heap.
-class CORE_EXPORT ResourceClient {
-public:
-    enum ResourceClientType {
-        BaseResourceType,
-        FontType,
-        StyleSheetType,
-        DocumentType,
-        RawResourceType,
-        ScriptType
-    };
+class CORE_EXPORT ResourceClient : public GarbageCollectedMixin {
+ public:
+  enum ResourceClientType {
+    BaseResourceType,
+    FontType,
+    StyleSheetType,
+    DocumentType,
+    RawResourceType,
+    ScriptType
+  };
 
-    virtual ~ResourceClient() { }
-    virtual void notifyFinished(Resource*) { }
+  virtual ~ResourceClient() {}
+  virtual void notifyFinished(Resource*) {}
 
-    static bool isExpectedType(ResourceClient*) { return true; }
-    virtual ResourceClientType getResourceClientType() const { return BaseResourceType; }
+  static bool isExpectedType(ResourceClient*) { return true; }
+  virtual ResourceClientType getResourceClientType() const {
+    return BaseResourceType;
+  }
 
-    // Name for debugging, e.g. shown in memory-infra.
-    virtual String debugName() const = 0;
+  // Name for debugging, e.g. shown in memory-infra.
+  virtual String debugName() const = 0;
 
-protected:
-    ResourceClient() { }
+  DEFINE_INLINE_VIRTUAL_TRACE() {}
+
+ protected:
+  ResourceClient() {}
 };
-} // namespace blink
+}  // namespace blink
 
 #endif

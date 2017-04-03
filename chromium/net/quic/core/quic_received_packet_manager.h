@@ -13,6 +13,7 @@
 #include <deque>
 
 #include "base/macros.h"
+#include "net/base/net_export.h"
 #include "net/quic/core/quic_config.h"
 #include "net/quic/core/quic_framer.h"
 #include "net/quic/core/quic_protocol.h"
@@ -102,11 +103,9 @@ class NET_EXPORT_PRIVATE QuicReceivedPacketManager
   ~QuicReceivedPacketManager() override;
 
   // Updates the internal state concerning which packets have been received.
-  // bytes: the packet size in bytes including Quic Headers.
   // header: the packet header.
   // timestamp: the arrival time of the packet.
-  virtual void RecordPacketReceived(QuicByteCount bytes,
-                                    const QuicPacketHeader& header,
+  virtual void RecordPacketReceived(const QuicPacketHeader& header,
                                     QuicTime receipt_time);
 
   // Checks whether |packet_number| is missing and less than largest observed.

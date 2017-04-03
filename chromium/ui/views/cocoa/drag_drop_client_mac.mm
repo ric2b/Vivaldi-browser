@@ -79,6 +79,11 @@ void DragDropClientMac::StartDragAndDrop(
   const ui::OSExchangeDataProviderMac& provider =
       static_cast<const ui::OSExchangeDataProviderMac&>(data.provider());
 
+  // Release capture before beginning the dragging session. Capture may have
+  // been acquired on the mouseDown, but capture is not required during the
+  // dragging session and the mouseUp that would release it will be suppressed.
+  bridge_->ReleaseCapture();
+
   // Synthesize an event for dragging, since we can't be sure that
   // [NSApp currentEvent] will return a valid dragging event.
   NSWindow* window = bridge_->ns_window();
@@ -132,6 +137,8 @@ NSDragOperation DragDropClientMac::DragUpdate(id<NSDraggingInfo> sender) {
   if (!data_source_.get()) {
     data_source_.reset([[CocoaDragDropDataProvider alloc]
         initWithPasteboard:[sender draggingPasteboard]]);
+    operation_ = ui::DragDropTypes::NSDragOperationToDragOperation(
+        [sender draggingSourceOperationMask]);
   }
 
   drag_operation = drop_helper_.OnDragOver(
@@ -144,6 +151,8 @@ NSDragOperation DragDropClientMac::Drop(id<NSDraggingInfo> sender) {
   int drag_operation = drop_helper_.OnDrop(
       *[data_source_ data], LocationInView([sender draggingLocation]),
       operation_);
+  data_source_.reset();
+  operation_ = 0;
   return ui::DragDropTypes::DragOperationToNSDragOperation(drag_operation);
 }
 

@@ -89,10 +89,21 @@ void PageLoadMetricsObserverTestHarness::PopulateRequiredTimingFields(
   if (inout_timing->parse_start) {
     if (!inout_timing->parse_blocked_on_script_load_duration)
       inout_timing->parse_blocked_on_script_load_duration = base::TimeDelta();
+    if (!inout_timing->parse_blocked_on_script_execution_duration) {
+      inout_timing->parse_blocked_on_script_execution_duration =
+          base::TimeDelta();
+    }
     if (!inout_timing
-             ->parse_blocked_on_script_load_from_document_write_duration)
+             ->parse_blocked_on_script_load_from_document_write_duration) {
       inout_timing->parse_blocked_on_script_load_from_document_write_duration =
           base::TimeDelta();
+    }
+    if (!inout_timing
+             ->parse_blocked_on_script_execution_from_document_write_duration) {
+      inout_timing
+          ->parse_blocked_on_script_execution_from_document_write_duration =
+          base::TimeDelta();
+    }
   }
 }
 
@@ -102,7 +113,7 @@ void PageLoadMetricsObserverTestHarness::SetUp() {
   NavigateAndCommit(GURL("http://www.google.com"));
   observer_ = MetricsWebContentsObserver::CreateForWebContents(
       web_contents(),
-      base::WrapUnique(new TestPageLoadMetricsEmbedderInterface(this)));
+      base::MakeUnique<TestPageLoadMetricsEmbedderInterface>(this));
   web_contents()->WasShown();
 }
 

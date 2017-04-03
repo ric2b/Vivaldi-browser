@@ -53,7 +53,6 @@ class QuickLaunchUI : public views::WidgetDelegateView,
 
  private:
   // Overridden from views::WidgetDelegate:
-  views::View* GetContentsView() override { return this; }
   base::string16 GetWindowTitle() const override {
     // TODO(beng): use resources.
     return base::ASCIIToUTF16("QuickLaunch");
@@ -114,8 +113,8 @@ class QuickLaunchUI : public views::WidgetDelegateView,
     base::string16 working;
     base::TrimWhitespace(input, base::TRIM_ALL, &working);
     GURL url(working);
-    if (url.scheme() != "mojo" && url.scheme() != "exe")
-      working = base::ASCIIToUTF16("mojo:") + working;
+    if (url.scheme() != "service" && url.scheme() != "exe")
+      working = base::ASCIIToUTF16("service:") + working;
     return base::UTF16ToUTF8(working);
   }
 
@@ -188,7 +187,7 @@ void QuickLaunch::Launch(uint32_t what, mojom::LaunchMode how) {
     return;
   }
   catalog::mojom::CatalogPtr catalog;
-  connector()->ConnectToInterface("mojo:catalog", &catalog);
+  connector()->ConnectToInterface("service:catalog", &catalog);
 
   views::Widget* window = views::Widget::CreateWindowWithContextAndBounds(
       new QuickLaunchUI(this, connector(), std::move(catalog)),

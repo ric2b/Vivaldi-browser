@@ -2,26 +2,77 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/features.gni")
+
+if (is_android) {
+  import("//build/config/android/rules.gni")  # For generate_jni().
+}
+
 source_set("generic_sensor") {
   sources = [
     "platform_sensor.cc",
     "platform_sensor.h",
-    "platform_sensor_configuration.cc",
-    "platform_sensor_configuration.h",
+    "platform_sensor_android.cc",
+    "platform_sensor_android.h",
     "platform_sensor_provider.h",
+    "platform_sensor_provider_android.cc",
     "platform_sensor_provider_base.cc",
     "platform_sensor_provider_base.h",
     "platform_sensor_provider_default.cc",
-    "sensor_export.h",
     "sensor_impl.cc",
     "sensor_impl.h",
     "sensor_provider_impl.cc",
     "sensor_provider_impl.h",
   ]
 
-  defines = [ "DEVICE_GENERIC_SENSOR_IMPLEMENTATION" ]
-
   deps = [
+    "//base",
+    "//device/generic_sensor/public/interfaces",
+  ]
+
+  if (is_android) {
+    sources += [
+      "android/sensors_jni_registrar.cc",
+      "android/sensors_jni_registrar.h",
+    ]
+    sources -= [ "platform_sensor_provider_default.cc" ]
+
+    deps += [ ":jni_headers" ]
+  }
+}
+
+if (is_android) {
+  device_sensors_jni_sources = [
+    "android/java/src/org/chromium/device/sensors/PlatformSensor.java",
+    "android/java/src/org/chromium/device/sensors/PlatformSensorProvider.java",
+  ]
+
+  generate_jni("jni_headers") {
+    sources = device_sensors_jni_sources
+    jni_package = "device"
+  }
+
+  android_library("java") {
+    java_files = device_sensors_jni_sources
+
+    deps = [
+      "//base:base_java",
+      "//device/generic_sensor/public/interfaces:interfaces_java",
+    ]
+  }
+}
+
+static_library("testing") {
+  testonly = true
+  sources = [
+    "fake_platform_sensor.cc",
+    "fake_platform_sensor.h",
+    "fake_platform_sensor_provider.cc",
+    "fake_platform_sensor_provider.h",
+  ]
+
+  public_deps = [
+    ":generic_sensor",
     "//base",
     "//device/generic_sensor/public/interfaces",
   ]

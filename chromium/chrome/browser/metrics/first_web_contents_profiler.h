@@ -43,7 +43,6 @@ class FirstWebContentsProfiler : public content::WebContentsObserver {
     ABANDON_NAVIGATION_ERROR = 5,
     ENUM_MAX
   };
-
   explicit FirstWebContentsProfiler(content::WebContents* web_contents);
   ~FirstWebContentsProfiler() override = default;
 

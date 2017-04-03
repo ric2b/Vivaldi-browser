@@ -23,6 +23,7 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/history/core/browser/top_sites_observer.h"
+#include "components/keyed_service/core/refcounted_keyed_service.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/sessions/core/tab_restore_service_observer.h"
 #include "content/public/browser/browser_thread.h"
@@ -41,6 +42,7 @@ namespace extensions {
 class AppWindow;
 }
 
+class JumpListFactory;
 class PrefChangeRegistrar;
 class Profile;
 
@@ -63,10 +65,9 @@ using extensions::vivaldi::bookmarks_private::SpeedDialInfo;
 // Note. base::CancelableTaskTracker is not thread safe, so we
 // always delete JumpList on UI thread (the same thread it got constructed on).
 class JumpList : public sessions::TabRestoreServiceObserver,
-                 public content::NotificationObserver,
                  public history::TopSitesObserver,
-                 public base::NonThreadSafe,
-                 public base::RefCounted<JumpList> {
+                 public RefcountedKeyedService,
+                 public base::NonThreadSafe {
  public:
   struct JumpListData {
     JumpListData();
@@ -94,13 +95,6 @@ class JumpList : public sessions::TabRestoreServiceObserver,
     ShellLinkItemList speed_dials_;
   };
 
-  explicit JumpList(Profile* profile);
-
-  // NotificationObserver implementation.
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override;
-
   // Observer callback for TabRestoreService::Observer to notify when a tab is
   // added or removed.
   void TabRestoreServiceChanged(sessions::TabRestoreService* service) override;
@@ -118,6 +112,9 @@ class JumpList : public sessions::TabRestoreServiceObserver,
   // is destroyed.
   void Terminate();
 
+  // RefcountedKeyedService:
+  void ShutdownOnUIThread() override;
+
   // Returns true if the custom JumpList is enabled.
   // The custom jumplist works only on Windows 7 and above.
   static bool Enabled();
@@ -134,7 +131,8 @@ class JumpList : public sessions::TabRestoreServiceObserver,
   static scoped_refptr<ShellLinkItem> CreateShellLink();
 
  private:
-  friend class base::RefCounted<JumpList>;
+  friend JumpListFactory;
+  explicit JumpList(Profile* profile);  // Use JumpListFactory instead
   ~JumpList() override;
 
   // Creates a ShellLinkItem object from a tab (or a window) and add it to the
@@ -192,7 +190,6 @@ class JumpList : public sessions::TabRestoreServiceObserver,
   Profile* profile_;
 
   // Lives on the UI thread.
-  std::unique_ptr<content::NotificationRegistrar> registrar_;
   std::unique_ptr<PrefChangeRegistrar> pref_change_registrar_;
 
   // App id to associate with the jump list.

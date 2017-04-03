@@ -38,9 +38,9 @@ enum MediaStreamType {
   // Capture system audio (post-mix loopback stream).
   MEDIA_DESKTOP_AUDIO_CAPTURE,
 
-  // This is used for enumerating audio output devices.
-  // TODO(grunell): Output isn't really a part of media streams. Device
-  // enumeration should be decoupled from media streams and related code.
+  // TODO(guidou): This is used for device enumerations, but it is not a
+  // media stream type. Remove when handling of renderer-generated enumeration
+  // requests is removed from MediaStreamManager. See http://crbug.com/648183.
   MEDIA_DEVICE_AUDIO_OUTPUT,
 
   NUM_MEDIA_TYPES
@@ -94,18 +94,22 @@ CONTENT_EXPORT bool IsScreenCaptureMediaType(MediaStreamType type);
 struct CONTENT_EXPORT MediaStreamDevice {
   MediaStreamDevice();
 
-  MediaStreamDevice(
-      MediaStreamType type,
-      const std::string& id,
-      const std::string& name);
+  MediaStreamDevice(MediaStreamType type,
+                    const std::string& id,
+                    const std::string& name);
 
-  MediaStreamDevice(
-      MediaStreamType type,
-      const std::string& id,
-      const std::string& name,
-      int sample_rate,
-      int channel_layout,
-      int frames_per_buffer);
+  MediaStreamDevice(MediaStreamType type,
+                    const std::string& id,
+                    const std::string& name,
+                    const std::string& group_id);
+
+  MediaStreamDevice(MediaStreamType type,
+                    const std::string& id,
+                    const std::string& name,
+                    const std::string& group_id,
+                    int sample_rate,
+                    int channel_layout,
+                    int frames_per_buffer);
 
   MediaStreamDevice(const MediaStreamDevice& other);
 
@@ -128,6 +132,11 @@ struct CONTENT_EXPORT MediaStreamDevice {
 
   // The device's "friendly" name. Not guaranteed to be unique.
   std::string name;
+
+  // A unique identifier for the physical device this device is part of.
+  // Will be hashed before being sent to renderer.
+  // TODO(maxmorin): Add support for video devices as well.
+  std::string group_id;
 
   // Contains properties that match directly with those with the same name
   // in media::AudioParameters.

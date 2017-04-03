@@ -8,13 +8,17 @@
 namespace blink {
 
 enum class WebCachePolicy {
-    UseProtocolCachePolicy, // normal load
-    ValidatingCacheData, // reload
-    BypassingCache, // end-to-end reload
-    ReturnCacheDataElseLoad, // back/forward or encoding change - allow stale data
-    ReturnCacheDataDontLoad, // results of a post - allow stale data and only use cache
+  UseProtocolCachePolicy,   // normal load
+  ValidatingCacheData,      // reload
+  BypassingCache,           // end-to-end reload
+  ReturnCacheDataElseLoad,  // back/forward or encoding change - allow stale
+                            // data
+  ReturnCacheDataDontLoad,  // results of a post - allow stale data and only use
+                            // cache
+  BypassCacheLoadOnlyFromCache,  // for cache-only load when disable cache
+                                 // is enabled. Results in a network error.
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // WebCachePolicy_h
+#endif  // WebCachePolicy_h

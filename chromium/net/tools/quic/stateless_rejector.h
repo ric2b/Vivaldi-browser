@@ -17,6 +17,7 @@ namespace net {
 class StatelessRejector {
  public:
   enum State {
+    UNKNOWN,      // State has not yet been determined
     UNSUPPORTED,  // Stateless rejects are not supported
     FAILED,       // There was an error processing the CHLO.
     ACCEPTED,     // The CHLO was accepted
@@ -35,12 +36,23 @@ class StatelessRejector {
 
   ~StatelessRejector();
 
-  // Called when |chlo| is received for |connection_id| to determine
-  // if it should be statelessly rejected.
+  // Called when |chlo| is received for |connection_id|.
   void OnChlo(QuicVersion version,
               QuicConnectionId connection_id,
               QuicConnectionId server_designated_connection_id,
               const CryptoHandshakeMessage& chlo);
+
+  class ProcessDoneCallback {
+   public:
+    virtual ~ProcessDoneCallback() = default;
+    virtual void Run(std::unique_ptr<StatelessRejector> rejector) = 0;
+  };
+
+  // Perform processing to determine whether the CHLO received in OnChlo should
+  // be statelessly rejected, and invoke the callback once a decision has been
+  // made.
+  static void Process(std::unique_ptr<StatelessRejector> rejector,
+                      std::unique_ptr<ProcessDoneCallback> done_cb);
 
   // Returns the state of the rejector after OnChlo() has been called.
   State state() const { return state_; }
@@ -51,8 +63,11 @@ class StatelessRejector {
   // Returns the error details when state() returns FAILED.
   std::string error_details() const { return error_details_; }
 
+  // Returns the connection ID.
+  QuicConnectionId connection_id() const { return connection_id_; }
+
   // Returns the SREJ message when state() returns REJECTED.
-  const CryptoHandshakeMessage& reply() const { return reply_; }
+  const CryptoHandshakeMessage& reply() const { return *reply_; }
 
  private:
   // Helper class which is passed in to
@@ -60,9 +75,20 @@ class StatelessRejector {
   class ValidateCallback;
   friend class ValidateCallback;
 
+  class ProcessClientHelloCallback;
+  friend class ProcessClientHelloCallback;
+
   void ProcessClientHello(
-      const CryptoHandshakeMessage& client_hello,
-      const ValidateClientHelloResultCallback::Result& result);
+      scoped_refptr<ValidateClientHelloResultCallback::Result> result,
+      std::unique_ptr<StatelessRejector> rejector,
+      std::unique_ptr<StatelessRejector::ProcessDoneCallback> done_cb);
+
+  void ProcessClientHelloDone(
+      QuicErrorCode error,
+      const std::string& error_details,
+      std::unique_ptr<CryptoHandshakeMessage> message,
+      std::unique_ptr<StatelessRejector> rejector,
+      std::unique_ptr<StatelessRejector::ProcessDoneCallback> done_cb);
 
   State state_;
   QuicErrorCode error_;
@@ -78,10 +104,11 @@ class StatelessRejector {
   QuicRandom* random_;
   const QuicCryptoServerConfig* crypto_config_;
   QuicCompressedCertsCache* compressed_certs_cache_;
-  const CryptoHandshakeMessage* chlo_;
-  CryptoHandshakeMessage reply_;
+  CryptoHandshakeMessage chlo_;
+  std::unique_ptr<CryptoHandshakeMessage> reply_;
   CryptoFramer crypto_framer_;
   QuicCryptoProof proof_;
+  QuicCryptoNegotiatedParameters params_;
 
   DISALLOW_COPY_AND_ASSIGN(StatelessRejector);
 };

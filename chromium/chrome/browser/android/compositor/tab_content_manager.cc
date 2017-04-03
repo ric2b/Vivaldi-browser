@@ -41,7 +41,6 @@ typedef base::Callback<void(float, const SkBitmap&)> TabReadbackCallback;
 
 }  // namespace
 
-namespace chrome {
 namespace android {
 
 class TabContentManager::TabReadbackRequest {
@@ -112,10 +111,11 @@ TabContentManager::TabContentManager(JNIEnv* env,
                                      jint write_queue_max_size,
                                      jboolean use_approximation_thumbnail)
     : weak_java_tab_content_manager_(env, obj), weak_factory_(this) {
-  thumbnail_cache_ = base::WrapUnique(new ThumbnailCache(
-      (size_t)default_cache_size, (size_t)approximation_cache_size,
-      (size_t)compression_queue_max_size, (size_t)write_queue_max_size,
-      use_approximation_thumbnail));
+  thumbnail_cache_ = base::MakeUnique<ThumbnailCache>(
+      static_cast<size_t>(default_cache_size),
+      static_cast<size_t>(approximation_cache_size),
+      static_cast<size_t>(compression_queue_max_size),
+      static_cast<size_t>(write_queue_max_size), use_approximation_thumbnail);
   thumbnail_cache_->AddThumbnailCacheObserver(this);
 }
 
@@ -221,24 +221,23 @@ void TabContentManager::CacheTab(JNIEnv* env,
   content::WebContents* web_contents = tab_android->web_contents();
   DCHECK(web_contents);
 
-  if (thumbnail_cache_->CheckAndUpdateThumbnailMetaData(tab_id, url)) {
-    if (!web_contents->GetRenderViewHost() ||
-        !web_contents->GetRenderViewHost()->GetWidget() ||
-        !web_contents->GetRenderViewHost()
-             ->GetWidget()
-             ->CanCopyFromBackingStore() ||
-        pending_tab_readbacks_.find(tab_id) != pending_tab_readbacks_.end() ||
-        pending_tab_readbacks_.size() >= kMaxReadbacks) {
-      thumbnail_cache_->Remove(tab_id);
-      return;
-    }
+  if (!web_contents->GetRenderViewHost() ||
+      !web_contents->GetRenderViewHost()->GetWidget() ||
+      !web_contents->GetRenderViewHost()
+           ->GetWidget()
+           ->CanCopyFromBackingStore() ||
+      pending_tab_readbacks_.find(tab_id) != pending_tab_readbacks_.end() ||
+      pending_tab_readbacks_.size() >= kMaxReadbacks) {
+    return;
+  }
 
+  if (thumbnail_cache_->CheckAndUpdateThumbnailMetaData(tab_id, url)) {
     TabReadbackCallback readback_done_callback =
         base::Bind(&TabContentManager::PutThumbnailIntoCache,
                    weak_factory_.GetWeakPtr(), tab_id);
     pending_tab_readbacks_.set(
-        tab_id, base::WrapUnique(new TabReadbackRequest(
-                    web_contents, thumbnail_scale, readback_done_callback)));
+        tab_id, base::MakeUnique<TabReadbackRequest>(
+                    web_contents, thumbnail_scale, readback_done_callback));
   }
 }
 
@@ -349,4 +348,3 @@ jlong Init(JNIEnv* env,
 }
 
 }  // namespace android
-}  // namespace chrome

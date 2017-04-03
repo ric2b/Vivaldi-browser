@@ -19,7 +19,7 @@
 #include "net/cert/cert_verify_result.h"
 #include "net/cert/mock_cert_verifier.h"
 #include "net/cert/x509_certificate.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/test_data_directory.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -47,7 +47,7 @@ void VerifyCert(const std::string& cert_name,
       net::CertVerifier::RequestParams(cert.get(), hostname, 0, std::string(),
                                        net::CertificateList()),
       nullptr, verify_result, callback.callback(), &request,
-      net::BoundNetLog())));
+      net::NetLogWithSource())));
 }
 
 }  // namespace
@@ -107,7 +107,7 @@ TEST(CertVerifierCacheSerializerTest, RestoreMultipleEntriesIntoNewVerifier) {
       net::CertVerifier::RequestParams(combined_cert, example2_hostname, 0,
                                        std::string(), net::CertificateList()),
       nullptr, &verifier1_result2, callback.callback(), &request,
-      net::BoundNetLog())));
+      net::NetLogWithSource())));
 
   cronet_pb::CertVerificationCache cert_cache =
       SerializeCertVerifierCache(verifier);
@@ -135,7 +135,7 @@ TEST(CertVerifierCacheSerializerTest, RestoreMultipleEntriesIntoNewVerifier) {
       net::CertVerifier::RequestParams(combined_cert, example2_hostname, 0,
                                        std::string(), net::CertificateList()),
       nullptr, &verifier2_result2, callback.callback(), &request,
-      net::BoundNetLog())));
+      net::NetLogWithSource())));
 
   // CertVerifyResult for www2.example.com with |verifier2| should match
   // what was serialized with |verifier|.
@@ -415,7 +415,7 @@ TEST(CertVerifierCacheSerializerTest,
       net::CertVerifier::RequestParams(cert, "www.example.com", 0,
                                        std::string(), trust_anchors),
       nullptr, &verify_result, callback.callback(), &request,
-      net::BoundNetLog())));
+      net::NetLogWithSource())));
 
   cronet_pb::CertVerificationCache cert_cache =
       SerializeCertVerifierCache(verifier);

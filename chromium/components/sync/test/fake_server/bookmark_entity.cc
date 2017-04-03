@@ -4,19 +4,11 @@
 
 #include "components/sync/test/fake_server/bookmark_entity.h"
 
-#include <stdint.h>
-
-#include <string>
-
 #include "base/guid.h"
-#include "components/sync/base/model_type.h"
-#include "components/sync/protocol/sync.pb.h"
-#include "components/sync/test/fake_server/fake_server_entity.h"
 
 using std::string;
 
 namespace fake_server {
-
 namespace {
 
 // Returns true if and only if |client_entity| is a bookmark.
@@ -33,7 +25,7 @@ std::unique_ptr<FakeServerEntity> BookmarkEntity::CreateNew(
     const sync_pb::SyncEntity& client_entity,
     const string& parent_id,
     const string& client_guid) {
-  CHECK(client_entity.version() == 0) << "New entities must have version = 0.";
+  CHECK_EQ(0, client_entity.version()) << "New entities must have version = 0.";
   CHECK(IsBookmark(client_entity)) << "The given entity must be a bookmark.";
 
   const string id =
@@ -53,8 +45,8 @@ std::unique_ptr<FakeServerEntity> BookmarkEntity::CreateUpdatedVersion(
     const sync_pb::SyncEntity& client_entity,
     const FakeServerEntity& current_server_entity,
     const string& parent_id) {
-  CHECK(client_entity.version() != 0) << "Existing entities must not have a "
-                                      << "version = 0.";
+  CHECK_NE(0, client_entity.version()) << "Existing entities must not have a "
+                                       << "version = 0.";
   CHECK(IsBookmark(client_entity)) << "The given entity must be a bookmark.";
 
   const BookmarkEntity& current_bookmark_entity =
@@ -83,7 +75,7 @@ BookmarkEntity::BookmarkEntity(const string& id,
                                const string& parent_id,
                                int64_t creation_time,
                                int64_t last_modified_time)
-    : FakeServerEntity(id, syncer::BOOKMARKS, version, name),
+    : FakeServerEntity(id, string(), syncer::BOOKMARKS, version, name),
       originator_cache_guid_(originator_cache_guid),
       originator_client_item_id_(originator_client_item_id),
       unique_position_(unique_position),

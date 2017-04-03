@@ -11,23 +11,20 @@
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "base/sequenced_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "components/sync/api/fake_model_type_service.h"
-#include "components/sync/base/model_type.h"
+#include "components/sync/api/data_type_error_handler_mock.h"
+#include "components/sync/api/stub_model_type_service.h"
 #include "components/sync/core/activation_context.h"
-#include "components/sync/core/model_type_connector.h"
 #include "components/sync/core/shared_model_type_processor.h"
-#include "components/sync/core/test/data_type_error_handler_mock.h"
 #include "components/sync/engine_impl/model_type_registry.h"
 #include "components/sync/test/engine/mock_nudge_handler.h"
 #include "components/sync/test/engine/test_directory_setter_upper.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace syncer_v2 {
+namespace syncer {
 
 class ModelTypeConnectorProxyTest : public ::testing::Test,
-                                    FakeModelTypeService {
+                                    StubModelTypeService {
  public:
   ModelTypeConnectorProxyTest()
       : sync_task_runner_(base::ThreadTaskRunnerHandle::Get()),
@@ -35,8 +32,8 @@ class ModelTypeConnectorProxyTest : public ::testing::Test,
 
   void SetUp() override {
     dir_maker_.SetUp();
-    registry_.reset(new syncer::ModelTypeRegistry(
-        workers_, dir_maker_.directory(), &nudge_handler_));
+    registry_.reset(new ModelTypeRegistry(workers_, dir_maker_.directory(),
+                                          &nudge_handler_));
     connector_proxy_.reset(
         new ModelTypeConnectorProxy(sync_task_runner_, registry_->AsWeakPtr()));
   }
@@ -53,21 +50,20 @@ class ModelTypeConnectorProxyTest : public ::testing::Test,
 
   void OnSyncStarting(SharedModelTypeProcessor* processor) {
     processor->OnSyncStarting(
-        &error_handler_,
+        base::MakeUnique<DataTypeErrorHandlerMock>(),
         base::Bind(&ModelTypeConnectorProxyTest::OnReadyToConnect,
                    base::Unretained(this)));
   }
 
-  void OnReadyToConnect(syncer::SyncError error,
+  void OnReadyToConnect(SyncError error,
                         std::unique_ptr<ActivationContext> context) {
-    connector_proxy_->ConnectType(syncer::THEMES, std::move(context));
+    connector_proxy_->ConnectType(THEMES, std::move(context));
   }
 
   std::unique_ptr<SharedModelTypeProcessor> CreateModelTypeProcessor() {
     std::unique_ptr<SharedModelTypeProcessor> processor =
-        base::WrapUnique(new SharedModelTypeProcessor(syncer::THEMES, this));
-    processor->OnMetadataLoaded(syncer::SyncError(),
-                                base::MakeUnique<MetadataBatch>());
+        base::WrapUnique(new SharedModelTypeProcessor(THEMES, this));
+    processor->OnMetadataLoaded(SyncError(), base::MakeUnique<MetadataBatch>());
     return processor;
   }
 
@@ -76,11 +72,10 @@ class ModelTypeConnectorProxyTest : public ::testing::Test,
   scoped_refptr<base::SingleThreadTaskRunner> sync_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> type_task_runner_;
 
-  std::vector<scoped_refptr<syncer::ModelSafeWorker>> workers_;
-  syncer::TestDirectorySetterUpper dir_maker_;
-  syncer::MockNudgeHandler nudge_handler_;
-  std::unique_ptr<syncer::ModelTypeRegistry> registry_;
-  syncer::DataTypeErrorHandlerMock error_handler_;
+  std::vector<scoped_refptr<ModelSafeWorker>> workers_;
+  TestDirectorySetterUpper dir_maker_;
+  MockNudgeHandler nudge_handler_;
+  std::unique_ptr<ModelTypeRegistry> registry_;
 
   std::unique_ptr<ModelTypeConnectorProxy> connector_proxy_;
 };
@@ -135,4 +130,4 @@ TEST_F(ModelTypeConnectorProxyTest, SyncDisconnectsFirst) {
   DisableSync();
 }
 
-}  // namespace syncer_v2
+}  // namespace syncer

@@ -4,114 +4,110 @@
 
 #include "core/timing/Performance.h"
 
+#include "bindings/core/v8/PerformanceObserverCallback.h"
+#include "bindings/core/v8/V8BindingForTesting.h"
 #include "core/timing/PerformanceBase.h"
 #include "core/timing/PerformanceLongTaskTiming.h"
 #include "core/timing/PerformanceObserver.h"
-#include "core/timing/PerformanceObserverCallback.h"
 #include "core/timing/PerformanceObserverInit.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
 
 class TestPerformanceBase : public PerformanceBase {
-public:
-    TestPerformanceBase() : PerformanceBase(0) {}
-    ~TestPerformanceBase() {}
+ public:
+  TestPerformanceBase() : PerformanceBase(0) {}
+  ~TestPerformanceBase() {}
 
-    ExecutionContext* getExecutionContext() const override { return nullptr; }
+  ExecutionContext* getExecutionContext() const override { return nullptr; }
 
-    int numActiveObservers() { return m_activeObservers.size(); }
+  int numActiveObservers() { return m_activeObservers.size(); }
 
-    int numObservers() { return m_observers.size(); }
+  int numObservers() { return m_observers.size(); }
 
-    int numLongTaskTimingEntries()
-    {
-        return m_longTaskTimingBuffer.size();
-    }
+  bool hasPerformanceObserverFor(PerformanceEntry::EntryType entryType) {
+    return hasObserverFor(entryType);
+  }
 
-    DEFINE_INLINE_TRACE()
-    {
-        PerformanceBase::trace(visitor);
-    }
-};
-
-class MockPerformanceObserverCallback : public PerformanceObserverCallback {
-public:
-    MockPerformanceObserverCallback() {}
-    ~MockPerformanceObserverCallback() {}
-
-    void handleEvent(PerformanceObserverEntryList*, PerformanceObserver*) override {}
-    ExecutionContext* getExecutionContext() const override { return nullptr; }
-
-    DEFINE_INLINE_TRACE()
-    {
-        PerformanceObserverCallback::trace(visitor);
-    }
+  DEFINE_INLINE_TRACE() { PerformanceBase::trace(visitor); }
 };
 
 class PerformanceBaseTest : public ::testing::Test {
-protected:
-    void SetUp() override
-    {
-        m_base = new TestPerformanceBase();
-        m_cb = new MockPerformanceObserverCallback();
-        m_observer = PerformanceObserver::create(m_base, m_cb);
-    }
+ protected:
+  void initialize(ScriptState* scriptState) {
+    v8::Local<v8::Function> callback =
+        v8::Function::New(scriptState->context(), nullptr).ToLocalChecked();
+    m_base = new TestPerformanceBase();
+    m_cb =
+        PerformanceObserverCallback::create(scriptState->isolate(), callback);
+    m_observer = PerformanceObserver::create(scriptState, m_base, m_cb);
+  }
 
-    Persistent<TestPerformanceBase> m_base;
-    Persistent<PerformanceObserver> m_observer;
-    Persistent<MockPerformanceObserverCallback> m_cb;
+  int numPerformanceEntriesInObserver() {
+    return m_observer->m_performanceEntries.size();
+  }
+
+  Persistent<TestPerformanceBase> m_base;
+  Persistent<PerformanceObserver> m_observer;
+  Persistent<PerformanceObserverCallback> m_cb;
 };
 
-TEST_F(PerformanceBaseTest, Register)
-{
-    EXPECT_EQ(0, m_base->numObservers());
-    EXPECT_EQ(0, m_base->numActiveObservers());
+TEST_F(PerformanceBaseTest, Register) {
+  V8TestingScope scope;
+  initialize(scope.getScriptState());
 
-    m_base->registerPerformanceObserver(*m_observer.get());
-    EXPECT_EQ(1, m_base->numObservers());
-    EXPECT_EQ(0, m_base->numActiveObservers());
+  EXPECT_EQ(0, m_base->numObservers());
+  EXPECT_EQ(0, m_base->numActiveObservers());
 
-    m_base->unregisterPerformanceObserver(*m_observer.get());
-    EXPECT_EQ(0, m_base->numObservers());
-    EXPECT_EQ(0, m_base->numActiveObservers());
+  m_base->registerPerformanceObserver(*m_observer.get());
+  EXPECT_EQ(1, m_base->numObservers());
+  EXPECT_EQ(0, m_base->numActiveObservers());
+
+  m_base->unregisterPerformanceObserver(*m_observer.get());
+  EXPECT_EQ(0, m_base->numObservers());
+  EXPECT_EQ(0, m_base->numActiveObservers());
 }
 
-TEST_F(PerformanceBaseTest, Activate)
-{
-    EXPECT_EQ(0, m_base->numObservers());
-    EXPECT_EQ(0, m_base->numActiveObservers());
+TEST_F(PerformanceBaseTest, Activate) {
+  V8TestingScope scope;
+  initialize(scope.getScriptState());
 
-    m_base->registerPerformanceObserver(*m_observer.get());
-    EXPECT_EQ(1, m_base->numObservers());
-    EXPECT_EQ(0, m_base->numActiveObservers());
+  EXPECT_EQ(0, m_base->numObservers());
+  EXPECT_EQ(0, m_base->numActiveObservers());
 
-    m_base->activateObserver(*m_observer.get());
-    EXPECT_EQ(1, m_base->numObservers());
-    EXPECT_EQ(1, m_base->numActiveObservers());
+  m_base->registerPerformanceObserver(*m_observer.get());
+  EXPECT_EQ(1, m_base->numObservers());
+  EXPECT_EQ(0, m_base->numActiveObservers());
 
-    m_base->unregisterPerformanceObserver(*m_observer.get());
-    EXPECT_EQ(0, m_base->numObservers());
-    EXPECT_EQ(0, m_base->numActiveObservers());
+  m_base->activateObserver(*m_observer.get());
+  EXPECT_EQ(1, m_base->numObservers());
+  EXPECT_EQ(1, m_base->numActiveObservers());
+
+  m_base->unregisterPerformanceObserver(*m_observer.get());
+  EXPECT_EQ(0, m_base->numObservers());
+  EXPECT_EQ(0, m_base->numActiveObservers());
 }
 
-TEST_F(PerformanceBaseTest, AddLongTaskTiming)
-{
-    // Add a long task entry, but no observer registered.
-    m_base->addLongTaskTiming(1234, 5678, "www.foo.com/bar");
-    EXPECT_EQ(0, m_base->numLongTaskTimingEntries()); // has no effect
+TEST_F(PerformanceBaseTest, AddLongTaskTiming) {
+  V8TestingScope scope;
+  initialize(scope.getScriptState());
 
-    // Make an observer for longtask
-    NonThrowableExceptionState exceptionState;
-    PerformanceObserverInit options;
-    Vector<String> entryTypeVec;
-    entryTypeVec.append("longtask");
-    options.setEntryTypes(entryTypeVec);
-    m_observer->observe(options, exceptionState);
+  // Add a long task entry, but no observer registered.
+  m_base->addLongTaskTiming(1234, 5678, "www.foo.com/bar", nullptr);
+  EXPECT_FALSE(m_base->hasPerformanceObserverFor(PerformanceEntry::LongTask));
+  EXPECT_EQ(0, numPerformanceEntriesInObserver());  // has no effect
 
-    // Add a long task entry
-    m_base->addLongTaskTiming(1234, 5678, "www.foo.com/bar");
-    EXPECT_EQ(1, m_base->numLongTaskTimingEntries()); // added an entry
+  // Make an observer for longtask
+  NonThrowableExceptionState exceptionState;
+  PerformanceObserverInit options;
+  Vector<String> entryTypeVec;
+  entryTypeVec.append("longtask");
+  options.setEntryTypes(entryTypeVec);
+  m_observer->observe(options, exceptionState);
+
+  EXPECT_TRUE(m_base->hasPerformanceObserverFor(PerformanceEntry::LongTask));
+  // Add a long task entry
+  m_base->addLongTaskTiming(1234, 5678, "www.foo.com/bar", nullptr);
+  EXPECT_EQ(1, numPerformanceEntriesInObserver());  // added an entry
 }
-
-} // namespace blink
+}  // namespace blink

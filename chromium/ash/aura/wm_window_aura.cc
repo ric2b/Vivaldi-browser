@@ -8,6 +8,7 @@
 #include "ash/aura/wm_root_window_controller_aura.h"
 #include "ash/aura/wm_shell_aura.h"
 #include "ash/common/ash_constants.h"
+#include "ash/common/shelf/shelf_item_types.h"
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_layout_manager.h"
@@ -15,7 +16,6 @@
 #include "ash/common/wm_window_observer.h"
 #include "ash/common/wm_window_property.h"
 #include "ash/screen_util.h"
-#include "ash/shelf/shelf_util.h"
 #include "ash/shell.h"
 #include "ash/wm/resize_handle_window_targeter.h"
 #include "ash/wm/resize_shadow_controller.h"
@@ -26,6 +26,7 @@
 #include "ash/wm/window_util.h"
 #include "base/memory/ptr_util.h"
 #include "ui/aura/client/aura_constants.h"
+#include "ui/aura/client/focus_client.h"
 #include "ui/aura/client/window_tree_client.h"
 #include "ui/aura/layout_manager.h"
 #include "ui/aura/window.h"
@@ -48,7 +49,7 @@ DECLARE_WINDOW_PROPERTY_TYPE(ash::WmWindowAura*);
 
 namespace ash {
 
-DEFINE_OWNED_WINDOW_PROPERTY_KEY(ash::WmWindowAura, kWmWindowKey, nullptr);
+DEFINE_OWNED_WINDOW_PROPERTY_KEY(WmWindowAura, kWmWindowKey, nullptr);
 
 static_assert(aura::Window::kInitialId == kShellWindowId_Invalid,
               "ids must match");
@@ -135,6 +136,11 @@ const aura::Window* WmWindowAura::GetAuraWindow(const WmWindow* wm_window) {
                    : nullptr;
 }
 
+void WmWindowAura::Destroy() {
+  delete window_;
+  // WARNING: this has been deleted.
+}
+
 const WmWindow* WmWindowAura::GetRootWindow() const {
   return Get(window_->GetRootWindow());
 }
@@ -156,6 +162,10 @@ std::string WmWindowAura::GetName() const {
   return window_->name();
 }
 
+void WmWindowAura::SetTitle(const base::string16& title) {
+  window_->SetTitle(title);
+}
+
 base::string16 WmWindowAura::GetTitle() const {
   return window_->title();
 }
@@ -172,6 +182,14 @@ ui::wm::WindowType WmWindowAura::GetType() const {
   return window_->type();
 }
 
+int WmWindowAura::GetAppType() const {
+  return window_->GetProperty(aura::client::kAppType);
+}
+
+void WmWindowAura::SetAppType(int app_type) const {
+  window_->SetProperty(aura::client::kAppType, app_type);
+}
+
 bool WmWindowAura::IsBubble() {
   views::Widget* widget = views::Widget::GetWidgetForNativeView(window_);
   return widget->widget_delegate()->AsBubbleDialogDelegate() != nullptr;
@@ -179,6 +197,14 @@ bool WmWindowAura::IsBubble() {
 
 ui::Layer* WmWindowAura::GetLayer() {
   return window_->layer();
+}
+
+bool WmWindowAura::GetLayerTargetVisibility() {
+  return GetLayer()->GetTargetVisibility();
+}
+
+bool WmWindowAura::GetLayerVisible() {
+  return GetLayer()->visible();
 }
 
 display::Display WmWindowAura::GetDisplayNearestWindow() {
@@ -248,6 +274,10 @@ float WmWindowAura::GetTargetOpacity() const {
   return window_->layer()->GetTargetOpacity();
 }
 
+gfx::Rect WmWindowAura::GetMinimizeAnimationTargetBoundsInScreen() const {
+  return ash::GetMinimizeAnimationTargetBoundsInScreen(window_);
+}
+
 void WmWindowAura::SetTransform(const gfx::Transform& transform) {
   window_->SetTransform(transform);
 }
@@ -279,9 +309,35 @@ bool WmWindowAura::GetBoolProperty(WmWindowProperty key) {
   return false;
 }
 
+SkColor WmWindowAura::GetColorProperty(WmWindowProperty key) {
+  if (key == WmWindowProperty::TOP_VIEW_COLOR)
+    return window_->GetProperty(aura::client::kTopViewColor);
+
+  NOTREACHED();
+  return 0;
+}
+
+void WmWindowAura::SetColorProperty(WmWindowProperty key, SkColor value) {
+  if (key == WmWindowProperty::TOP_VIEW_COLOR) {
+    window_->SetProperty(aura::client::kTopViewColor, value);
+    return;
+  }
+
+  NOTREACHED();
+}
+
 int WmWindowAura::GetIntProperty(WmWindowProperty key) {
+  if (key == WmWindowProperty::MODAL_TYPE)
+    return window_->GetProperty(aura::client::kModalKey);
+
+  if (key == WmWindowProperty::SHELF_ICON_RESOURCE_ID)
+    return window_->GetProperty(kShelfIconResourceIdKey);
+
   if (key == WmWindowProperty::SHELF_ID)
-    return GetShelfIDForWindow(window_);
+    return window_->GetProperty(kShelfIDKey);
+
+  if (key == WmWindowProperty::SHELF_ITEM_TYPE)
+    return window_->GetProperty(kShelfItemTypeKey);
 
   if (key == WmWindowProperty::TOP_VIEW_INSET)
     return window_->GetProperty(aura::client::kTopViewInset);
@@ -291,8 +347,16 @@ int WmWindowAura::GetIntProperty(WmWindowProperty key) {
 }
 
 void WmWindowAura::SetIntProperty(WmWindowProperty key, int value) {
+  if (key == WmWindowProperty::SHELF_ICON_RESOURCE_ID) {
+    window_->SetProperty(kShelfIconResourceIdKey, value);
+    return;
+  }
   if (key == WmWindowProperty::SHELF_ID) {
-    SetShelfIDForWindow(value, window_);
+    window_->SetProperty(kShelfIDKey, value);
+    return;
+  }
+  if (key == WmWindowProperty::SHELF_ITEM_TYPE) {
+    window_->SetProperty(kShelfItemTypeKey, value);
     return;
   }
   if (key == WmWindowProperty::TOP_VIEW_INSET) {
@@ -301,20 +365,6 @@ void WmWindowAura::SetIntProperty(WmWindowProperty key, int value) {
   }
 
   NOTREACHED();
-}
-
-ShelfItemDetails* WmWindowAura::GetShelfItemDetails() {
-  return window_->GetProperty(kShelfItemDetailsKey);
-}
-
-void WmWindowAura::SetShelfItemDetails(const ShelfItemDetails& details) {
-  // |item_details| is owned by |window_|.
-  ShelfItemDetails* item_details = new ShelfItemDetails(details);
-  window_->SetProperty(kShelfItemDetailsKey, item_details);
-}
-
-void WmWindowAura::ClearShelfItemDetails() {
-  window_->ClearProperty(kShelfItemDetailsKey);
 }
 
 const wm::WindowState* WmWindowAura::GetWindowState() const {
@@ -339,7 +389,11 @@ void WmWindowAura::AddChild(WmWindow* window) {
   window_->AddChild(GetAuraWindow(window));
 }
 
-WmWindow* WmWindowAura::GetParent() {
+void WmWindowAura::RemoveChild(WmWindow* child) {
+  window_->RemoveChild(GetAuraWindow(child));
+}
+
+const WmWindow* WmWindowAura::GetParent() const {
   return Get(window_->parent());
 }
 
@@ -353,16 +407,23 @@ std::vector<WmWindow*> WmWindowAura::GetTransientChildren() {
 
 void WmWindowAura::SetLayoutManager(
     std::unique_ptr<WmLayoutManager> layout_manager) {
+  // See ~AuraLayoutManagerAdapter for why SetLayoutManager(nullptr) is called.
+  window_->SetLayoutManager(nullptr);
+  if (!layout_manager)
+    return;
+
   // |window_| takes ownership of AuraLayoutManagerAdapter.
   window_->SetLayoutManager(
-      layout_manager ? new AuraLayoutManagerAdapter(std::move(layout_manager))
-                     : nullptr);
+      new AuraLayoutManagerAdapter(window_, std::move(layout_manager)));
 }
 
 WmLayoutManager* WmWindowAura::GetLayoutManager() {
-  AuraLayoutManagerAdapter* adapter =
-      static_cast<AuraLayoutManagerAdapter*>(window_->layout_manager());
+  AuraLayoutManagerAdapter* adapter = AuraLayoutManagerAdapter::Get(window_);
   return adapter ? adapter->wm_layout_manager() : nullptr;
+}
+
+void WmWindowAura::SetVisibilityChangesAnimated() {
+  ::wm::SetWindowVisibilityChangesAnimated(window_);
 }
 
 void WmWindowAura::SetVisibilityAnimationType(int type) {
@@ -437,7 +498,7 @@ void WmWindowAura::SetBoundsDirectCrossFade(const gfx::Rect& bounds) {
   // Specify |set_bounds| to true here to keep the old bounds in the child
   // windows of |window|.
   std::unique_ptr<ui::LayerTreeOwner> old_layer_owner =
-      ::wm::RecreateLayers(window_, nullptr);
+      ::wm::RecreateLayers(window_);
   ui::Layer* old_layer = old_layer_owner->root();
   DCHECK(old_layer);
   ui::Layer* new_layer = window_->layer();
@@ -518,7 +579,11 @@ void WmWindowAura::SetRestoreOverrides(
 }
 
 void WmWindowAura::SetLockedToRoot(bool value) {
-  window_->SetProperty(kStayInSameRootWindowKey, value);
+  window_->SetProperty(kLockedToRootKey, value);
+}
+
+bool WmWindowAura::IsLockedToRoot() const {
+  return window_->GetProperty(kLockedToRootKey);
 }
 
 void WmWindowAura::SetCapture() {
@@ -569,6 +634,10 @@ void WmWindowAura::StackChildBelow(WmWindow* child, WmWindow* target) {
   window_->StackChildBelow(GetAuraWindow(child), GetAuraWindow(target));
 }
 
+void WmWindowAura::SetPinned(bool trusted) {
+  wm::PinWindow(window_, trusted);
+}
+
 void WmWindowAura::SetAlwaysOnTop(bool value) {
   window_->SetProperty(aura::client::kAlwaysOnTopKey, value);
 }
@@ -592,6 +661,10 @@ views::Widget* WmWindowAura::GetInternalWidget() {
 void WmWindowAura::CloseWidget() {
   DCHECK(GetInternalWidget());
   GetInternalWidget()->Close();
+}
+
+void WmWindowAura::SetFocused() {
+  aura::client::GetFocusClient(window_)->FocusWindow(window_);
 }
 
 bool WmWindowAura::IsFocused() const {
@@ -687,10 +760,6 @@ void WmWindowAura::SetChildrenUseExtendedHitRegion() {
       window_, mouse_extend, touch_extend));
 }
 
-void WmWindowAura::SetDescendantsStayInSameRootWindow(bool value) {
-  window_->SetProperty(kStayInSameRootWindowKey, true);
-}
-
 std::unique_ptr<views::View> WmWindowAura::CreateViewWithRecreatedLayers() {
   return base::MakeUnique<wm::WindowMirrorView>(this);
 }
@@ -768,18 +837,22 @@ void WmWindowAura::OnWindowPropertyChanged(aura::Window* window,
     return;
   }
   WmWindowProperty wm_property;
-  if (key == kSnapChildrenToPixelBoundary) {
-    wm_property = WmWindowProperty::SNAP_CHILDREN_TO_PIXEL_BOUNDARY;
-  } else if (key == aura::client::kAlwaysOnTopKey) {
+  if (key == aura::client::kAlwaysOnTopKey) {
     wm_property = WmWindowProperty::ALWAYS_ON_TOP;
-  } else if (key == kShelfID) {
-    wm_property = WmWindowProperty::SHELF_ID;
-  } else if (key == kShelfItemDetailsKey) {
-    wm_property = WmWindowProperty::SHELF_ITEM_DETAILS;
-  } else if (key == aura::client::kTopViewInset) {
-    wm_property = WmWindowProperty::TOP_VIEW_INSET;
   } else if (key == aura::client::kExcludeFromMruKey) {
     wm_property = WmWindowProperty::EXCLUDE_FROM_MRU;
+  } else if (key == aura::client::kModalKey) {
+    wm_property = WmWindowProperty::MODAL_TYPE;
+  } else if (key == kShelfIconResourceIdKey) {
+    wm_property = WmWindowProperty::SHELF_ICON_RESOURCE_ID;
+  } else if (key == kShelfIDKey) {
+    wm_property = WmWindowProperty::SHELF_ID;
+  } else if (key == kShelfItemTypeKey) {
+    wm_property = WmWindowProperty::SHELF_ITEM_TYPE;
+  } else if (key == kSnapChildrenToPixelBoundary) {
+    wm_property = WmWindowProperty::SNAP_CHILDREN_TO_PIXEL_BOUNDARY;
+  } else if (key == aura::client::kTopViewInset) {
+    wm_property = WmWindowProperty::TOP_VIEW_INSET;
   } else {
     return;
   }
@@ -804,6 +877,7 @@ void WmWindowAura::OnWindowDestroyed(aura::Window* window) {
 
 void WmWindowAura::OnWindowVisibilityChanging(aura::Window* window,
                                               bool visible) {
+  DCHECK_EQ(window, window_);
   FOR_EACH_OBSERVER(WmWindowObserver, observers_,
                     OnWindowVisibilityChanging(this, visible));
 }
@@ -811,7 +885,7 @@ void WmWindowAura::OnWindowVisibilityChanging(aura::Window* window,
 void WmWindowAura::OnWindowVisibilityChanged(aura::Window* window,
                                              bool visible) {
   FOR_EACH_OBSERVER(WmWindowObserver, observers_,
-                    OnWindowVisibilityChanged(this, visible));
+                    OnWindowVisibilityChanged(Get(window), visible));
 }
 
 void WmWindowAura::OnWindowTitleChanged(aura::Window* window) {

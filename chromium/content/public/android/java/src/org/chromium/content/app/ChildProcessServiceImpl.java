@@ -28,8 +28,7 @@ import org.chromium.base.library_loader.Linker;
 import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.content.browser.ChildProcessConstants;
 import org.chromium.content.browser.ChildProcessCreationParams;
-import org.chromium.content.browser.FileDescriptorInfo;
-import org.chromium.content.common.ContentSwitches;
+import org.chromium.content.common.FileDescriptorInfo;
 import org.chromium.content.common.IChildProcessCallback;
 import org.chromium.content.common.IChildProcessService;
 import org.chromium.content.common.SurfaceWrapper;
@@ -49,7 +48,6 @@ import java.util.concurrent.atomic.AtomicReference;
 public class ChildProcessServiceImpl {
     private static final String MAIN_THREAD_NAME = "ChildProcessMain";
     private static final String TAG = "ChildProcessService";
-    protected static final FileDescriptorInfo[] EMPTY_FILE_DESCRIPTOR_INFO = {};
     private IChildProcessCallback mCallback;
 
     // This is the native "Main" thread for the renderer / utility process.
@@ -65,7 +63,7 @@ public class ChildProcessServiceImpl {
     // Child library process type.
     private int mLibraryProcessType;
 
-    private static AtomicReference<Context> sContext = new AtomicReference<Context>(null);
+    private static AtomicReference<Context> sContext = new AtomicReference<>(null);
     private boolean mLibraryInitialized = false;
     // Becomes true once the service is bound. Access must synchronize around mMainThread.
     private boolean mIsBound = false;
@@ -121,7 +119,7 @@ public class ChildProcessServiceImpl {
         }
     };
 
-    // The ClassLoader for the host browser context.
+    // The ClassLoader for the host context.
     private ClassLoader mHostClassLoader;
 
     /* package */ static Context getContext() {
@@ -131,10 +129,10 @@ public class ChildProcessServiceImpl {
     /**
      * Loads Chrome's native libraries and initializes a ChildProcessServiceImpl.
      * @param context The application context.
-     * @param hostBrowserContext The context of the host browser (i.e. Chrome).
+     * @param hostContext The host context the library should be loaded with (i.e. Chrome).
      */
-    public void create(final Context context, final Context hostBrowserContext) {
-        mHostClassLoader = hostBrowserContext.getClassLoader();
+    public void create(final Context context, final Context hostContext) {
+        mHostClassLoader = hostContext.getClassLoader();
         Log.i(TAG, "Creating new ChildProcessService pid=%d", Process.myPid());
         if (sContext.get() != null) {
             throw new RuntimeException("Illegal child process reuse.");
@@ -181,7 +179,8 @@ public class ChildProcessServiceImpl {
 
                     boolean loadAtFixedAddressFailed = false;
                     try {
-                        LibraryLoader.get(mLibraryProcessType).loadNow(hostBrowserContext);
+                        LibraryLoader.get(mLibraryProcessType)
+                                .loadNowOverrideApplicationContext(hostContext);
                         isLoaded = true;
                     } catch (ProcessInitException e) {
                         if (requestedSharedRelro) {
@@ -195,7 +194,8 @@ public class ChildProcessServiceImpl {
                     if (!isLoaded && requestedSharedRelro) {
                         linker.disableSharedRelros();
                         try {
-                            LibraryLoader.get(mLibraryProcessType).loadNow(hostBrowserContext);
+                            LibraryLoader.get(mLibraryProcessType)
+                                    .loadNowOverrideApplicationContext(hostContext);
                             isLoaded = true;
                         } catch (ProcessInitException e) {
                             Log.e(TAG, "Failed to load native library on retry", e);
@@ -310,11 +310,6 @@ public class ChildProcessServiceImpl {
                 // http://stackoverflow.com/questions/8745893/i-dont-get-why-this-classcastexception-occurs
                 mFdInfos = new FileDescriptorInfo[fdInfosAsParcelable.length];
                 System.arraycopy(fdInfosAsParcelable, 0, mFdInfos, 0, fdInfosAsParcelable.length);
-            } else {
-                String processType = ContentSwitches.getSwitchValue(
-                        mCommandLineParams, ContentSwitches.SWITCH_PROCESS_TYPE);
-                assert ContentSwitches.SWITCH_DOWNLOAD_PROCESS.equals(processType);
-                mFdInfos = EMPTY_FILE_DESCRIPTOR_INFO;
             }
             Bundle sharedRelros = bundle.getBundle(Linker.EXTRA_LINKER_SHARED_RELROS);
             if (sharedRelros != null) {
@@ -364,6 +359,27 @@ public class ChildProcessServiceImpl {
             if (needRelease) {
                 surface.release();
             }
+        }
+    }
+
+    @SuppressWarnings("unused")
+    @CalledByNative
+    private void forwardSurfaceTextureForSurfaceRequest(
+            long requestTokenHigh, long requestTokenLow, SurfaceTexture surfaceTexture) {
+        if (mCallback == null) {
+            Log.e(TAG, "No callback interface has been provided.");
+            return;
+        }
+
+        Surface surface = new Surface(surfaceTexture);
+
+        try {
+            mCallback.forwardSurfaceForSurfaceRequest(requestTokenHigh, requestTokenLow, surface);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Unable to call forwardSurfaceForSurfaceRequest: %s", e);
+            return;
+        } finally {
+            surface.release();
         }
     }
 

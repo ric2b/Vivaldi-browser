@@ -16,12 +16,12 @@
 #include "chrome/browser/ui/webui/options/chromeos/core_chromeos_options_handler.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/browser_resources.h"
 #include "chromeos/chromeos_constants.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_message_handler.h"
-#include "grit/browser_resources.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/webui/jstemplate_builder.h"
 #include "ui/base/webui/web_ui_util.h"
@@ -42,8 +42,7 @@ class CertificateManagerDialogHTMLSource : public content::URLDataSource {
   std::string GetSource() const override;
   void StartDataRequest(
       const std::string& path,
-      int render_process_id,
-      int render_frame_id,
+      const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
       const content::URLDataSource::GotDataCallback& callback) override;
   std::string GetMimeType(const std::string&) const override {
     return "text/html";
@@ -70,8 +69,7 @@ std::string CertificateManagerDialogHTMLSource::GetSource() const {
 
 void CertificateManagerDialogHTMLSource::StartDataRequest(
     const std::string& path,
-    int render_process_id,
-    int render_frame_id,
+    const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
     const content::URLDataSource::GotDataCallback& callback) {
   scoped_refptr<base::RefCountedMemory> response_bytes;
   const std::string& app_locale = g_browser_process->GetApplicationLocale();

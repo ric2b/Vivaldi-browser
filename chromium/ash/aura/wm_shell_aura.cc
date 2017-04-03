@@ -29,6 +29,7 @@
 #include "ash/wm/screen_pinning_controller.h"
 #include "ash/wm/window_cycle_event_filter_aura.h"
 #include "ash/wm/window_util.h"
+#include "ash/wm/workspace/workspace_event_handler_aura.h"
 #include "base/memory/ptr_util.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/focus_client.h"
@@ -76,9 +77,15 @@ void WmShellAura::Shutdown() {
   WmShell::Shutdown();
 }
 
-WmWindow* WmShellAura::NewContainerWindow() {
+bool WmShellAura::IsRunningInMash() const {
+  return false;
+}
+
+WmWindow* WmShellAura::NewWindow(ui::wm::WindowType window_type,
+                                 ui::LayerType layer_type) {
   aura::Window* aura_window = new aura::Window(nullptr);
-  aura_window->Init(ui::LAYER_NOT_DRAWN);
+  aura_window->SetType(window_type);
+  aura_window->Init(layer_type);
   return WmWindowAura::Get(aura_window);
 }
 
@@ -109,7 +116,8 @@ WmWindow* WmShellAura::GetRootWindowForDisplayId(int64_t display_id) {
                                ->GetRootWindowForDisplayId(display_id));
 }
 
-const DisplayInfo& WmShellAura::GetDisplayInfo(int64_t display_id) const {
+const display::ManagedDisplayInfo& WmShellAura::GetDisplayInfo(
+    int64_t display_id) const {
   return Shell::GetInstance()->display_manager()->GetDisplayInfo(display_id);
 }
 
@@ -125,6 +133,12 @@ display::Display WmShellAura::GetFirstDisplay() const {
 
 bool WmShellAura::IsInUnifiedMode() const {
   return Shell::GetInstance()->display_manager()->IsInUnifiedMode();
+}
+
+bool WmShellAura::IsInUnifiedModeIgnoreMirroring() const {
+  return Shell::GetInstance()
+             ->display_manager()
+             ->current_default_multi_display_mode() == DisplayManager::UNIFIED;
 }
 
 bool WmShellAura::IsForceMaximizeOnFirstRun() {
@@ -183,11 +197,6 @@ void WmShellAura::RecordTaskSwitchMetric(TaskSwitchSource source) {
       source);
 }
 
-void WmShellAura::ShowContextMenu(const gfx::Point& location_in_screen,
-                                  ui::MenuSourceType source_type) {
-  Shell::GetInstance()->ShowContextMenu(location_in_screen, source_type);
-}
-
 std::unique_ptr<WindowResizer> WmShellAura::CreateDragWindowResizer(
     std::unique_ptr<WindowResizer> next_window_resizer,
     wm::WindowState* window_state) {
@@ -203,6 +212,11 @@ WmShellAura::CreateWindowCycleEventFilter() {
 std::unique_ptr<wm::MaximizeModeEventHandler>
 WmShellAura::CreateMaximizeModeEventHandler() {
   return base::WrapUnique(new wm::MaximizeModeEventHandlerAura);
+}
+
+std::unique_ptr<WorkspaceEventHandler> WmShellAura::CreateWorkspaceEventHandler(
+    WmWindow* workspace_window) {
+  return base::MakeUnique<WorkspaceEventHandlerAura>(workspace_window);
 }
 
 std::unique_ptr<ScopedDisableInternalMouseAndKeyboard>
@@ -262,8 +276,8 @@ void WmShellAura::RemoveDisplayObserver(WmDisplayObserver* observer) {
 }
 
 void WmShellAura::AddPointerWatcher(views::PointerWatcher* watcher,
-                                    bool wants_moves) {
-  pointer_watcher_adapter_->AddPointerWatcher(watcher, wants_moves);
+                                    views::PointerWatcherEventTypes events) {
+  pointer_watcher_adapter_->AddPointerWatcher(watcher, events);
 }
 
 void WmShellAura::RemovePointerWatcher(views::PointerWatcher* watcher) {

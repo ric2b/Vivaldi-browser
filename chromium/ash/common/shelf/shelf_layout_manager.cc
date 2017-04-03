@@ -23,7 +23,6 @@
 #include "ash/common/wm/wm_screen_util.h"
 #include "ash/common/wm_lookup.h"
 #include "ash/common/wm_root_window_controller.h"
-#include "ash/common/wm_root_window_controller_observer.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "base/auto_reset.h"
@@ -106,42 +105,6 @@ class ShelfLayoutManager::UpdateShelfObserver
   DISALLOW_COPY_AND_ASSIGN(UpdateShelfObserver);
 };
 
-// ShelfLayoutManager::RootWindowControllerObserverImpl ------------------------
-
-// NOTE: Some other layout managers also observe for OnShelfAlignmentChanged()
-// via WmRootWindowControllerObserver instead of via ShellObserver. There are
-// implicit assumptions that these layout managers run in order. In order to
-// preserve the ordering, OnShelfAlignmentChanged() is implemented here in terms
-// of a WmRootWindowControllerObserver instead of a ShellObserver. This gives us
-// a sane ordering (or at least ordering as we've always had it in ash).
-class ShelfLayoutManager::RootWindowControllerObserverImpl
-    : public WmRootWindowControllerObserver {
- public:
-  explicit RootWindowControllerObserverImpl(
-      ShelfLayoutManager* shelf_layout_manager)
-      : shelf_layout_manager_(shelf_layout_manager),
-        root_window_controller_(
-            WmLookup::Get()
-                ->GetWindowForWidget(shelf_layout_manager->shelf_widget())
-                ->GetRootWindowController()) {
-    root_window_controller_->AddObserver(this);
-  }
-  ~RootWindowControllerObserverImpl() override {
-    root_window_controller_->RemoveObserver(this);
-  }
-
-  // WmRootWindowControllerObserver:
-  void OnShelfAlignmentChanged() override {
-    shelf_layout_manager_->LayoutShelf();
-  }
-
- private:
-  ShelfLayoutManager* shelf_layout_manager_;
-  WmRootWindowController* root_window_controller_;
-
-  DISALLOW_COPY_AND_ASSIGN(RootWindowControllerObserverImpl);
-};
-
 // ShelfLayoutManager ----------------------------------------------------------
 
 ShelfLayoutManager::ShelfLayoutManager(ShelfWidget* shelf_widget,
@@ -156,9 +119,7 @@ ShelfLayoutManager::ShelfLayoutManager(ShelfWidget* shelf_widget,
       gesture_drag_auto_hide_state_(SHELF_AUTO_HIDE_SHOWN),
       update_shelf_observer_(NULL),
       chromevox_panel_height_(0),
-      duration_override_in_ms_(0),
-      root_window_controller_observer_(
-          new RootWindowControllerObserverImpl(this)) {
+      duration_override_in_ms_(0) {
   DCHECK(shelf_widget_);
   DCHECK(wm_shelf_);
   WmShell::Get()->AddShellObserver(this);
@@ -237,14 +198,10 @@ ShelfVisibilityState ShelfLayoutManager::CalculateShelfVisibility() {
 }
 
 void ShelfLayoutManager::UpdateVisibilityState() {
-  WmWindow* shelf_window = WmLookup::Get()->GetWindowForWidget(shelf_widget_);
-  WmRootWindowController* controller = shelf_window->GetRootWindowController();
   // Bail out early before the shelf is initialized or after it is destroyed.
-  if (!controller || !shelf_widget_->shelf() || in_shutdown_)
+  WmWindow* shelf_window = WmLookup::Get()->GetWindowForWidget(shelf_widget_);
+  if (in_shutdown_ || !wm_shelf_->IsShelfInitialized() || !shelf_window)
     return;
-  bool was_invisible_auto_hide_shelf = invisible_auto_hide_shelf_;
-  // Always reset to be safe.
-  invisible_auto_hide_shelf_ = false;
   if (state_.is_screen_locked || state_.is_adding_user_screen) {
     SetState(SHELF_VISIBLE);
   } else if (WmShell::Get()->IsPinned()) {
@@ -253,29 +210,18 @@ void ShelfLayoutManager::UpdateVisibilityState() {
     // TODO(zelidrag): Verify shelf drag animation still shows on the device
     // when we are in SHELF_AUTO_HIDE_ALWAYS_HIDDEN.
     wm::WorkspaceWindowState window_state(
-        controller->GetWorkspaceWindowState());
+        shelf_window->GetRootWindowController()->GetWorkspaceWindowState());
     switch (window_state) {
       case wm::WORKSPACE_WINDOW_STATE_FULL_SCREEN: {
-        switch (GetShelfModeForFullscreen()) {
-          case wm::WindowState::SHELF_HIDDEN:
-            SetState(SHELF_HIDDEN);
-            break;
-          case wm::WindowState::SHELF_AUTO_HIDE_INVISIBLE:
-            invisible_auto_hide_shelf_ = true;
-          case wm::WindowState::SHELF_AUTO_HIDE_VISIBLE:
-            if (was_invisible_auto_hide_shelf != invisible_auto_hide_shelf_ &&
-                state_.visibility_state == SHELF_AUTO_HIDE) {
-              // A hack to swtich the visibility state correctly
-              // between auto hide visible to auto hide invisible.
-              // TODO(oshima): Remove this once MD ash is launched.
-              SetState(SHELF_HIDDEN);
-            }
-            SetState(SHELF_AUTO_HIDE);
-            break;
+        if (IsShelfHiddenForFullscreen()) {
+          SetState(SHELF_HIDDEN);
+        } else {
+          // The shelf is sometimes not hidden when in immersive fullscreen.
+          // Force the shelf to be auto hidden in this case.
+          SetState(SHELF_AUTO_HIDE);
         }
         break;
       }
-
       case wm::WORKSPACE_WINDOW_STATE_MAXIMIZED:
         SetState(CalculateShelfVisibility());
         break;
@@ -458,6 +404,8 @@ void ShelfLayoutManager::OnKeyboardBoundsChanging(const gfx::Rect& new_bounds) {
     WmShell::Get()->SetDisplayWorkAreaInsets(window, gfx::Insets());
   }
 }
+
+void ShelfLayoutManager::OnKeyboardClosed() {}
 
 bool ShelfLayoutManager::IsHorizontalAlignment() const {
   return ::ash::IsHorizontalAlignment(GetAlignment());
@@ -811,7 +759,7 @@ void ShelfLayoutManager::UpdateTargetBoundsForGesture(
   } else {
     translate = gesture_drag_amount_;
   }
-  int shelf_insets = GetShelfInsetsForAutoHide();
+  int shelf_insets = GetShelfConstant(SHELF_INSETS_FOR_AUTO_HIDE);
   if (horizontal) {
     // Move and size the shelf with the gesture.
     int shelf_height = target_bounds->shelf_bounds_in_root.height() - translate;
@@ -888,7 +836,7 @@ gfx::Rect ShelfLayoutManager::GetAutoHideShowShelfRegionInScreen() const {
 
 ShelfAutoHideState ShelfLayoutManager::CalculateAutoHideState(
     ShelfVisibilityState visibility_state) const {
-  if (visibility_state != SHELF_AUTO_HIDE || !shelf_widget_->shelf())
+  if (visibility_state != SHELF_AUTO_HIDE || !wm_shelf_->IsShelfInitialized())
     return SHELF_AUTO_HIDE_HIDDEN;
 
   const int64_t shelf_display_id = WmLookup::Get()
@@ -1002,7 +950,7 @@ int ShelfLayoutManager::GetWorkAreaInsets(const State& state, int size) const {
   if (state.visibility_state == SHELF_VISIBLE)
     return size;
   if (state.visibility_state == SHELF_AUTO_HIDE)
-    return GetShelfInsetsForAutoHide();
+    return GetShelfConstant(SHELF_INSETS_FOR_AUTO_HIDE);
   return 0;
 }
 
@@ -1059,8 +1007,7 @@ float ShelfLayoutManager::ComputeTargetOpacity(const State& state) {
   // In Chrome OS Material Design, when shelf is hidden during auto hide state,
   // target bounds are also hidden. So the window can extend to the edge of
   // screen.
-  if (ash::MaterialDesignController::IsShelfMaterial() ||
-      invisible_auto_hide_shelf_) {
+  if (ash::MaterialDesignController::IsImmersiveModeMaterial()) {
     return (state.visibility_state == SHELF_AUTO_HIDE &&
             state.auto_hide_state == SHELF_AUTO_HIDE_SHOWN)
                ? 1.0f
@@ -1069,19 +1016,11 @@ float ShelfLayoutManager::ComputeTargetOpacity(const State& state) {
   return (state.visibility_state == SHELF_AUTO_HIDE) ? 1.0f : 0.0f;
 }
 
-ash::wm::WindowState::FullscreenShelfMode
-ShelfLayoutManager::GetShelfModeForFullscreen() const {
-  const WmWindow* fullscreen_window = wm::GetWindowForFullscreenMode(
-      WmLookup::Get()->GetWindowForWidget(shelf_widget_));
-  return fullscreen_window->GetWindowState()->shelf_mode_in_fullscreen();
-}
-
 bool ShelfLayoutManager::IsShelfHiddenForFullscreen() const {
   const WmWindow* fullscreen_window = wm::GetWindowForFullscreenMode(
       WmLookup::Get()->GetWindowForWidget(shelf_widget_));
   return fullscreen_window &&
-         fullscreen_window->GetWindowState()->shelf_mode_in_fullscreen() ==
-             ash::wm::WindowState::SHELF_HIDDEN;
+         fullscreen_window->GetWindowState()->hide_shelf_when_fullscreen();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1176,12 +1115,6 @@ void ShelfLayoutManager::CancelGestureDrag() {
   gesture_drag_status_ = GESTURE_DRAG_CANCEL_IN_PROGRESS;
   UpdateVisibilityState();
   gesture_drag_status_ = GESTURE_DRAG_NONE;
-}
-
-int ShelfLayoutManager::GetShelfInsetsForAutoHide() const {
-  if (invisible_auto_hide_shelf_)
-    return 0;
-  return GetShelfConstant(SHELF_INSETS_FOR_AUTO_HIDE);
 }
 
 }  // namespace ash

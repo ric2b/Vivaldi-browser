@@ -31,50 +31,90 @@
 #include "platform/geometry/FloatSize.h"
 #include "platform/graphics/Image.h"
 #include "platform/weborigin/KURL.h"
+#include "third_party/skia/include/core/SkRefCnt.h"
 
 namespace blink {
 
+// SVGImageForContainer contains a reference to an SVGImage and includes context
+// about how the image is being used (size, fragment identifier).
+//
+// The concrete size of an SVG image is calculated based on the image itself and
+// the dimensions where the image is used (see: SVGImage::concreteObjectSize).
+// This concrete size cannot be stored on the SVGImage itself because only a
+// single SVGImage is created per SVG image resource, but this SVGImage can be
+// referenced multiple times by containers of different sizes. Similarly, each
+// use of an image can have a different fragment identifier as part of its URL
+// (e.g., foo.svg#abc) which can influence rendering.
+//
+// For example, the following would create three SVGImageForContainers
+// referencing a single SVGImage for 'foo.svg':
+// <img src='foo.svg#a' width='20'>
+// <img src='foo.svg#a' width='10'>
+// <img src='foo.svg#b' width='10'>
+//
+// SVGImageForContainer stores this per-use information and delegates to the
+// SVGImage for how to draw the image.
 class SVGImageForContainer final : public Image {
-    USING_FAST_MALLOC(SVGImageForContainer);
-public:
-    static PassRefPtr<SVGImageForContainer> create(SVGImage* image, const IntSize& containerSize, float zoom, const KURL& url)
-    {
-        FloatSize containerSizeWithoutZoom(containerSize);
-        containerSizeWithoutZoom.scale(1 / zoom);
-        return adoptRef(new SVGImageForContainer(image, containerSizeWithoutZoom, zoom, url));
-    }
+  USING_FAST_MALLOC(SVGImageForContainer);
 
-    bool isTextureBacked() override;
-    IntSize size() const override;
+ public:
+  static PassRefPtr<SVGImageForContainer> create(SVGImage* image,
+                                                 const IntSize& containerSize,
+                                                 float zoom,
+                                                 const KURL& url) {
+    FloatSize containerSizeWithoutZoom(containerSize);
+    containerSizeWithoutZoom.scale(1 / zoom);
+    return adoptRef(
+        new SVGImageForContainer(image, containerSizeWithoutZoom, zoom, url));
+  }
 
-    bool usesContainerSize() const override { return m_image->usesContainerSize(); }
-    bool hasRelativeSize() const override { return m_image->hasRelativeSize(); }
+  bool isTextureBacked() override;
+  IntSize size() const override;
 
-    void draw(SkCanvas*, const SkPaint&, const FloatRect&, const FloatRect&, RespectImageOrientationEnum, ImageClampingMode) override;
+  bool usesContainerSize() const override {
+    return m_image->usesContainerSize();
+  }
+  bool hasRelativeSize() const override { return m_image->hasRelativeSize(); }
 
-    void drawPattern(GraphicsContext&, const FloatRect&, const FloatSize&, const FloatPoint&, SkXfermode::Mode, const FloatRect&, const FloatSize& repeatSpacing) override;
+  void draw(SkCanvas*,
+            const SkPaint&,
+            const FloatRect&,
+            const FloatRect&,
+            RespectImageOrientationEnum,
+            ImageClampingMode) override;
 
-    // FIXME: Implement this to be less conservative.
-    bool currentFrameKnownToBeOpaque(MetadataMode = UseCurrentMetadata) override { return false; }
+  void drawPattern(GraphicsContext&,
+                   const FloatRect&,
+                   const FloatSize&,
+                   const FloatPoint&,
+                   SkXfermode::Mode,
+                   const FloatRect&,
+                   const FloatSize& repeatSpacing) override;
 
-    PassRefPtr<SkImage> imageForCurrentFrame() override;
+  // FIXME: Implement this to be less conservative.
+  bool currentFrameKnownToBeOpaque(MetadataMode = UseCurrentMetadata) override {
+    return false;
+  }
 
-private:
-    SVGImageForContainer(SVGImage* image, const FloatSize& containerSize, float zoom, const KURL& url)
-        : m_image(image)
-        , m_containerSize(containerSize)
-        , m_zoom(zoom)
-        , m_url(url)
-    {
-    }
+  sk_sp<SkImage> imageForCurrentFrame() override;
 
-    void destroyDecodedData() override { }
+ private:
+  SVGImageForContainer(SVGImage* image,
+                       const FloatSize& containerSize,
+                       float zoom,
+                       const KURL& url)
+      : m_image(image),
+        m_containerSize(containerSize),
+        m_zoom(zoom),
+        m_url(url) {}
 
-    SVGImage* m_image;
-    const FloatSize m_containerSize;
-    const float m_zoom;
-    const KURL m_url;
+  void destroyDecodedData() override {}
+
+  SVGImage* m_image;
+  const FloatSize m_containerSize;
+  const float m_zoom;
+  const KURL m_url;
 };
-} // namespace blink
+}  // namespace blink
 
-#endif // SVGImageForContainer_h
+#endif  // SVGImageForContainer_h

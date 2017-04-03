@@ -117,7 +117,9 @@ DataReductionProxyBypassStats::~DataReductionProxyBypassStats() {
 }
 
 void DataReductionProxyBypassStats::OnUrlRequestCompleted(
-    const net::URLRequest* request, bool started) {
+    const net::URLRequest* request,
+    bool started,
+    int net_error) {
   DataReductionProxyTypeInfo proxy_info;
   // Ignore requests that did not use the data reduction proxy. The check for
   // LOAD_BYPASS_PROXY is necessary because the proxy_server() in the |request|
@@ -126,7 +128,7 @@ void DataReductionProxyBypassStats::OnUrlRequestCompleted(
   if (data_reduction_proxy_config_->WasDataReductionProxyUsed(request,
                                                               &proxy_info) &&
       (request->load_flags() & net::LOAD_BYPASS_PROXY) == 0 &&
-      request->status().status() == net::URLRequestStatus::SUCCESS) {
+      net_error == net::OK) {
     successful_requests_through_proxy_count_++;
     NotifyUnavailabilityIfChanged();
 
@@ -134,7 +136,7 @@ void DataReductionProxyBypassStats::OnUrlRequestCompleted(
     UMA_HISTOGRAM_COUNTS_100(
         "DataReductionProxy.SuccessfulRequestCompletionCounts",
         proxy_info.proxy_index);
-    if (request->load_flags() & net::LOAD_MAIN_FRAME) {
+    if (request->load_flags() & net::LOAD_MAIN_FRAME_DEPRECATED) {
       UMA_HISTOGRAM_COUNTS_100(
           "DataReductionProxy.SuccessfulRequestCompletionCounts.MainFrame",
           proxy_info.proxy_index);
@@ -168,7 +170,7 @@ void DataReductionProxyBypassStats::OnProxyFallback(
   DataReductionProxyTypeInfo data_reduction_proxy_info;
   if (bypassed_proxy.is_valid() && !bypassed_proxy.is_direct() &&
       data_reduction_proxy_config_->IsDataReductionProxy(
-          bypassed_proxy.host_port_pair(), &data_reduction_proxy_info)) {
+          bypassed_proxy, &data_reduction_proxy_info)) {
     proxy_net_errors_count_++;
 
     // To account for the case when the proxy is reachable for sometime, and
@@ -258,7 +260,8 @@ void DataReductionProxyBypassStats::RecordBypassedBytesHistograms(
   // proxy configuration resolves to anything other than direct:// for a URL,
   // the data reduction proxy will not be used.
   DCHECK(data_reduction_proxy_type_info.proxy_servers.empty());
-  if (!request.proxy_server().IsEmpty()) {
+  if (!request.proxy_server().is_valid() ||
+      !request.proxy_server().is_direct()) {
     RecordBypassedBytes(last_bypass_type_,
                         DataReductionProxyBypassStats::PROXY_OVERRIDDEN,
                         content_length);

@@ -16,25 +16,27 @@ class ScriptPromiseResolver;
 struct WebPushError;
 struct WebPushSubscription;
 
-// PushSubscriptionCallbacks is an implementation of WebPushSubscriptionCallbacks
-// that will resolve the underlying promise depending on the result passed to
-// the callback. It takes a ServiceWorkerRegistration in its constructor and
-// will pass it to the PushSubscription.
+// This class is an implementation of WebPushSubscriptionCallbacks that will
+// resolve the underlying promise depending on the result passed to the
+// callback. It takes a ServiceWorkerRegistration in its constructor and will
+// pass it to the PushSubscription.
 class PushSubscriptionCallbacks final : public WebPushSubscriptionCallbacks {
-    WTF_MAKE_NONCOPYABLE(PushSubscriptionCallbacks);
-    USING_FAST_MALLOC(PushSubscriptionCallbacks);
-public:
-    PushSubscriptionCallbacks(ScriptPromiseResolver*, ServiceWorkerRegistration*);
-    ~PushSubscriptionCallbacks() override;
+  WTF_MAKE_NONCOPYABLE(PushSubscriptionCallbacks);
+  USING_FAST_MALLOC(PushSubscriptionCallbacks);
 
-    void onSuccess(std::unique_ptr<WebPushSubscription>) override;
-    void onError(const WebPushError&) override;
+ public:
+  PushSubscriptionCallbacks(ScriptPromiseResolver*, ServiceWorkerRegistration*);
+  ~PushSubscriptionCallbacks() override;
 
-private:
-    Persistent<ScriptPromiseResolver> m_resolver;
-    Persistent<ServiceWorkerRegistration> m_serviceWorkerRegistration;
+  // WebPushSubscriptionCallbacks interface.
+  void onSuccess(std::unique_ptr<WebPushSubscription>) override;
+  void onError(const WebPushError&) override;
+
+ private:
+  Persistent<ScriptPromiseResolver> m_resolver;
+  Persistent<ServiceWorkerRegistration> m_serviceWorkerRegistration;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // PushSubscriptionCallbacks_h
+#endif  // PushSubscriptionCallbacks_h

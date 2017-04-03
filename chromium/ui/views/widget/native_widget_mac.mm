@@ -106,6 +106,7 @@ void NativeWidgetMac::OnWindowWillClose() {
   // is still a valid pointer, then reset it.
   if (bridge_) {
     delegate_->OnNativeWidgetDestroying();
+    [GetNativeWindow() setDelegate:nil];
     bridge_.reset();
   }
   delegate_->OnNativeWidgetDestroyed();
@@ -329,10 +330,6 @@ void NativeWidgetMac::StackAbove(gfx::NativeView native_view) {
 }
 
 void NativeWidgetMac::StackAtTop() {
-  NOTIMPLEMENTED();
-}
-
-void NativeWidgetMac::StackBelow(gfx::NativeView native_view) {
   NOTIMPLEMENTED();
 }
 

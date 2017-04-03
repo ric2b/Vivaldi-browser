@@ -8,6 +8,7 @@
 <translation id="1111673857033749125">Bokmerker som er lagret på de andre enhetene dine, vises her.</translation>
 <translation id="1121094540300013208">Bruks- og programstopprapporter</translation>
 <translation id="1137305377394488060">den siste timen</translation>
+<translation id="1146678959555564648">Slå på VR-modus</translation>
 <translation id="1178581264944972037">Stans midlertidig</translation>
 <translation id="1181037720776840403">Fjern</translation>
 <translation id="1197267115302279827">Flytt bokmerker</translation>
@@ -33,6 +34,7 @@ Du må ha slått på Bluetooth og Posisjon for å bruke det fysiske nettet.</tra
 <translation id="1376578503827013741">Beregner …</translation>
 <translation id="138361230106469022">Hei, <ph name="FULL_NAME" /></translation>
 <translation id="1383876407941801731">Søk</translation>
+<translation id="1384959399684842514">Nedlasting stanset midlertidig</translation>
 <translation id="1389974829397082527">Det er ingen bokmerker her</translation>
 <translation id="1404122904123200417">Innbygd i <ph name="WEBSITE_URL" /></translation>
 <translation id="1406000523432664303">«Ingen sporing»</translation>
@@ -103,9 +105,10 @@ Du må ha slått på Bluetooth og Posisjon for å bruke det fysiske nettet.</tra
 <translation id="213279576345780926">Lukket <ph name="TAB_TITLE" /></translation>
 <translation id="2138201775715568214">Leter etter Fysisk nett-sider i nærheten</translation>
 <translation id="2139186145475833000">Legg til på startsiden</translation>
+<translation id="2146738493024040262">Åpne instant-appen</translation>
 <translation id="2148716181193084225">I dag</translation>
+<translation id="2154484045852737596">Endre kortet</translation>
 <translation id="2154710561487035718">Kopier nettadresse</translation>
-<translation id="21570240866965662">Langsom tilkobling</translation>
 <translation id="219985413780390209">Beskytt deg selv og enheten din mot farlige nettsteder</translation>
 <translation id="2206488550163399966"><ph name="APP_NAME" />, nettprogram. <ph name="APP_URL" /></translation>
 <translation id="2268044343513325586">Finstem</translation>
@@ -159,6 +162,7 @@ Du kan kontrollere det fysiske nettet i Chrome-innstillingene.
 <translation id="2777555524387840389"><ph name="SECONDS" /> sekunder igjen</translation>
 <translation id="2781151931089541271">1 sekund igjen</translation>
 <translation id="2811892995384186721">Ser du ikke enheten din? <ph name="BEGIN_LINK" />Få hjelp<ph name="END_LINK" /></translation>
+<translation id="2833899785646504169">Kan ikke legge til</translation>
 <translation id="2836148919159985482">Trykk på tilbakeknappen for å avslutte fullskjerm.</translation>
 <translation id="2842985007712546952">Overordnet mappe</translation>
 <translation id="2870560284913253234">Nettsted</translation>
@@ -182,8 +186,8 @@ Du kan kontrollere det fysiske nettet i Chrome-innstillingene.
 <translation id="3036750288708366620"><ph name="BEGIN_LINK" />Få hjelp<ph name="END_LINK" /></translation>
 <translation id="3089395242580810162">Åpne i inkognitofane</translation>
 <translation id="3090193911106258841">Åpner lyd- og videoinngang</translation>
-<translation id="3117051980354074377">For å få bokmerkene dine fra de andre enhetene du bruker, logg på Chrome.</translation>
 <translation id="3137521801621304719">Avslutt inkognitomodus</translation>
+<translation id="3148434565183091099">Logg på Chrome for å få bokmerkene dine på alle enhetene du bruker.</translation>
 <translation id="3149891296864842641">Fraktalternativ</translation>
 <translation id="3177909033752230686">Språket siden er på:</translation>
 <translation id="3190152372525844641">Slå på tillatelsene for Chrome i <ph name="BEGIN_LINK" />Android-innstillingene<ph name="END_LINK" />.</translation>
@@ -218,6 +222,7 @@ Du kan kontrollere det fysiske nettet i Chrome-innstillingene.
 <translation id="3518985090088779359">Godta og fortsett</translation>
 <translation id="3522247891732774234">En oppdatering er tilgjengelig. Flere alternativer</translation>
 <translation id="3527085408025491307">Mappe</translation>
+<translation id="3542235761944717775"><ph name="KILOBYTES" /> kB er tilgjengelig</translation>
 <translation id="3549644494707163724">Kryptér alle synkroniserte data med din egen passordfrase for synkronisering</translation>
 <translation id="3590487821116122040">Nettstedslagring Chrome ikke tror er viktig (for eksempel områder uten lagrede innstillinger eller som du ikke besøker ofte)</translation>
 <translation id="360480449234699036">Finn ut mer om emner på nettsteder uten å forlate siden. «Trykk for å søke» sender et ord og den omkringliggende konteksten til Google Søk, slik at definisjoner, bilder, søkeresultater og annen informasjon blir sendt tilbake.
@@ -237,6 +242,7 @@ Hvis du vil endre søkeordet, kan du trykke på det og holde for å merke det. H
 <translation id="380076759404194828">{NUM_SELECTED,plural, =1{1 element er valgt}other{# elementer er valgt}}</translation>
 <translation id="3810838688059735925">Video</translation>
 <translation id="3810973564298564668">Administrer</translation>
+<translation id="3819178904835489326"><ph name="NUMBER_OF_DOWNLOADS" /> nedlastinger er slettet</translation>
 <translation id="3822502789641063741">Slette nettstedslagring?</translation>
 <translation id="3828029223314399057">Søk i bokmerker</translation>
 <translation id="3894427358181296146">Legg til en mappe</translation>
@@ -247,6 +253,7 @@ Hvis du vil endre søkeordet, kan du trykke på det og holde for å merke det. H
 <translation id="393697183122708255">Ingen aktiverte talesøk er tilgjengelige</translation>
 <translation id="3946611741043634542">Hvis du fortsetter, samtykker du i <ph name="BEGIN_LINK1" />vilkårene for bruk<ph name="END_LINK1" /> av Chrome og den tilhørende <ph name="BEGIN_LINK2" />merknaden om personvern<ph name="END_LINK2" />.</translation>
 <translation id="3950820424414687140">Logg på</translation>
+<translation id="3967822245660637423">Nedlasting fullført</translation>
 <translation id="397583555483684758">Synkroniseringen har sluttet å fungere</translation>
 <translation id="3988213473815854515">Posisjon er tillatt</translation>
 <translation id="3997476611815694295">Uviktig lagring</translation>
@@ -259,7 +266,6 @@ Hvis du vil endre søkeordet, kan du trykke på det og holde for å merke det. H
 <translation id="4095146165863963773">Slette appdataene?</translation>
 <translation id="4099578267706723511">Gjør Chrome bedre ved å sende bruksstatistikk og programstopprapporter til Google.</translation>
 <translation id="410351446219883937">Autoavspilling</translation>
-<translation id="411254640334432676">Nedlastingen mislyktes.</translation>
 <translation id="4113030288477039509">Styres av administratoren din</translation>
 <translation id="4165986682804962316">Nettstedsinnstillinger</translation>
 <translation id="4170011742729630528">Tjenesten er ikke tilgjengelig. Prøv på nytt senere.</translation>
@@ -276,11 +282,12 @@ Hvis du vil endre søkeordet, kan du trykke på det og holde for å merke det. H
 <translation id="4271185234001491831">Oversett aldri <ph name="LANGUAGE" /></translation>
 <translation id="4275663329226226506">Medier</translation>
 <translation id="4278390842282768270">Tillatt</translation>
+<translation id="4300272766492248925">Åpne appen</translation>
 <translation id="4307992518367153382">Generelt</translation>
-<translation id="4334294535648607276">Nedlastingen er fullført.</translation>
 <translation id="4351244548802238354">Lukk dialogboks</translation>
 <translation id="4376501731284077108">Ukontrollert</translation>
 <translation id="4378154925671717803">Telefon</translation>
+<translation id="4384468725000734951">Bruker Sogou til å søke</translation>
 <translation id="4412992751769744546">Tillat informasjonskapsler fra tredjeparter</translation>
 <translation id="4440256989292146959">Mer surfing for mindre penger</translation>
 <translation id="4452548195519783679">Satt som bokmerke i <ph name="FOLDER_NAME" /></translation>
@@ -294,7 +301,6 @@ Hvis du vil endre søkeordet, kan du trykke på det og holde for å merke det. H
 <translation id="4532845899244822526">Velg en mappe</translation>
 <translation id="4543661749405994812">Kopiér e-postadressen</translation>
 <translation id="4572422548854449519">Logg på en administrert konto</translation>
-<translation id="4576023202210315647">Behold fanen i Chrome</translation>
 <translation id="4581964774250883625">Du er nå i inkognitomodus.</translation>
 <translation id="4583164079174244168">{MINUTES,plural, =1{for # minutt siden}other{for # minutter siden}}</translation>
 <translation id="4605958867780575332">Elementet er fjernet: <ph name="ITEM_TITLE" /></translation>
@@ -323,6 +329,7 @@ Hvis du vil endre søkeordet, kan du trykke på det og holde for å merke det. H
 <translation id="4923459931733593730">Betaling</translation>
 <translation id="4941291666397027948">* indikerer obligatoriske felt</translation>
 <translation id="4943872375798546930">Ingen resultater</translation>
+<translation id="4958708863221495346"><ph name="URL_OF_THE_CURRENT_TAB" /> deler skjermen din</translation>
 <translation id="4961700429721424617">Du logger av en konto som administreres av <ph name="MANAGED_DOMAIN" />. Dette fører til at Chrome-dataene dine slettes fra denne enheten. De fortsetter imidlertid å være lagret i Google-kontoen din.</translation>
 <translation id="497421865427891073">Gå til neste</translation>
 <translation id="4988526792673242964">Sider</translation>
@@ -333,14 +340,13 @@ Hvis du vil endre søkeordet, kan du trykke på det og holde for å merke det. H
 <translation id="5039804452771397117">Tillat</translation>
 <translation id="5040262127954254034">Personvern</translation>
 <translation id="5063480226653192405">Bruk</translation>
+<translation id="5087580092889165836">Legg til et kort</translation>
 <translation id="5100237604440890931">Minimert – klikk for å utvide</translation>
 <translation id="510275257476243843">1 time igjen</translation>
-<translation id="5107381076085091558">Nedlastingen er satt på pause.</translation>
 <translation id="5127805178023152808">Synkronisering er slått av</translation>
 <translation id="5131405117025179004">Endre den lagrede kontoen</translation>
 <translation id="5138299137310274655">Denne siden er på <ph name="SOURCE_LANGUAGE" />. Vil du oversette den til <ph name="TARGET_LANGUAGE" />?</translation>
 <translation id="515227803646670480">Sletting av alle lagrede data</translation>
-<translation id="5152837197884366695"><ph name="APP_NAME" /> – <ph name="STYLE_BEGIN" />instant<ph name="STYLE_END" /></translation>
 <translation id="5156656584247937086">Dette er en barnekonto</translation>
 <translation id="5161254044473106830">Du må oppgi en tittel</translation>
 <translation id="5164482624172255778">Vil du at Google Chrome skal tilby seg å oversette sider på <ph name="LANGUAGE" /> fra dette nettstedet neste gang?</translation>
@@ -366,7 +372,6 @@ Hvis du vil endre søkeordet, kan du trykke på det og holde for å merke det. H
 <translation id="5345040418939504969">Slettet <ph name="BOOKMARK_TITLE" /></translation>
 <translation id="5345083863238459644">Posisjonstilgang er også <ph name="BEGIN_LINK" />slått av for denne enheten<ph name="END_LINK" />.</translation>
 <translation id="5372829067651257087">Nettadressen er kopiert.</translation>
-<translation id="5380554235172449987">Send aldri</translation>
 <translation id="5400569084694353794">Ved å bruke dette programmet samtykker du i Chromes <ph name="BEGIN_LINK1" />vilkår for bruk<ph name="END_LINK1" /> og <ph name="BEGIN_LINK2" />merknad om personvern<ph name="END_LINK2" />.</translation>
 <translation id="5414836363063783498">Bekrefter …</translation>
 <translation id="5423934151118863508">Sidene du besøker mest, vises her</translation>
@@ -376,7 +381,6 @@ Hvis du vil endre søkeordet, kan du trykke på det og holde for å merke det. H
 <translation id="5456381639095306749">Last ned siden</translation>
 <translation id="5487521232677179737">Slett data</translation>
 <translation id="5487729733663684359">Denne Android-versjonen har ikke lenger støtte for Chrome-oppdateringer.</translation>
-<translation id="5511351932351731210">Send alltid</translation>
 <translation id="5512137114520586844">Denne kontoen er administrert av <ph name="PARENT_NAME" />.</translation>
 <translation id="5527082711130173040">Chrome trenger posisjonstilgang for å søke etter enheter. <ph name="BEGIN_LINK1" />Oppdater tillatelsene<ph name="END_LINK1" />. Posisjonstilgang er også <ph name="BEGIN_LINK2" />slått av for denne enheten<ph name="END_LINK2" />.</translation>
 <translation id="5530766185686772672">Lukk inkognitofaner</translation>
@@ -423,6 +427,8 @@ Du er imidlertid ikke usynlig. Inkognito-modusen skjuler ikke surfingen din for 
 <translation id="5916664084637901428">På</translation>
 <translation id="5919204609460789179">Oppdater <ph name="PRODUCT_NAME" /> for å starte synkroniseringen</translation>
 <translation id="5939518447894949180">Tilbakestill</translation>
+<translation id="5942872142862698679">Bruker Google til å søke</translation>
+<translation id="6000066717592683814">Behold Google</translation>
 <translation id="6010869025736512584">Åpner videoinngang</translation>
 <translation id="6012342843556706400">Chrome må ha tilgang til posisjonen din for å kunne dele den med dette nettstedet.</translation>
 <translation id="6031101910111098835">Skjult – klikk for å vise</translation>
@@ -440,6 +446,7 @@ Du er imidlertid ikke usynlig. Inkognito-modusen skjuler ikke surfingen din for 
 <translation id="6159335304067198720"><ph name="PERCENT" /> datasparing</translation>
 <translation id="6165508094623778733">Les mer</translation>
 <translation id="6177390657002841081">Slå på Datasparing</translation>
+<translation id="617991007797131187">Chrome kan bruke Sogou for søk i Kina. Du kan endre dette i <ph name="BEGIN_LINK" />innstillingene<ph name="END_LINK" />.</translation>
 <translation id="6181444274883918285">Legg til et nettsted som unntak</translation>
 <translation id="6192792657125177640">Unntak</translation>
 <translation id="6232535412751077445">Hvis du slår på «Deaktivering av sporing», blir det sendt en forespørsel sammen med nettrafikken din. Hvilke virkninger dette eventuelt får, avhenger av om det aktuelle nettstedet svarer på forespørselen eller ikke, samt hvordan forespørselen tolkes.
@@ -459,9 +466,10 @@ Noen nettsteder kan for eksempel svare på denne forespørselen ved å vise deg 
 <translation id="6409731863280057959">Forgrunnsvinduer</translation>
 <translation id="641643625718530986">Skriv ut</translation>
 <translation id="6433490469411711332">Endre kontaktinformasjonen</translation>
+<translation id="6443118737398455446">Ugyldig utløpsdato</translation>
 <translation id="6447842834002726250">Informasjonskapsler</translation>
 <translation id="6448273550210938826">Nettadresse- og søkeforslag</translation>
-<translation id="6458785801851713928">Synkronisering er ikke tilgjengelig for domenet ditt.</translation>
+<translation id="6463070039183944536">Legger til …</translation>
 <translation id="6464825623202322042">Denne enheten</translation>
 <translation id="6475951671322991020">Last ned videoen</translation>
 <translation id="6477460825583319731">Ugyldig e-postadresse</translation>
@@ -471,6 +479,7 @@ Noen nettsteder kan for eksempel svare på denne forespørselen ved å vise deg 
 <translation id="654446541061731451">Velg en fane for beaming</translation>
 <translation id="6545017243486555795">Slett alle data</translation>
 <translation id="6550675742724504774">Alternativer</translation>
+<translation id="6560414384669816528">Søk med Sogou</translation>
 <translation id="656628257199996201">Oversett alltid <ph name="SOURCE_LANGUAGE" /></translation>
 <translation id="6571070086367343653">Rediger kredittkort</translation>
 <translation id="6573431926118603307">Faner du har åpnet i Chrome på de andre enhetene dine, vises her.</translation>
@@ -497,12 +506,10 @@ Noen nettsteder kan for eksempel svare på denne forespørselen ved å vise deg 
 <translation id="6831043979455480757">Oversett</translation>
 <translation id="6846298663435243399">Laster inn …</translation>
 <translation id="6850830437481525139"><ph name="TAB_COUNT" /> faner ble lukket</translation>
-<translation id="6857778194843072568">Bare send via Wi-Fi</translation>
 <translation id="6864459304226931083">Last ned bildet</translation>
 <translation id="6865313869410766144">Skjemadata lagret med autofyll</translation>
 <translation id="6868088497967843822">Logg på for å få bokmerkene, loggen, passordene og de andre innstillingene dine på alle enhetene du bruker.</translation>
 <translation id="6891858906296486776">{OPEN_TABS,plural, =1{%1$d åpen fane}other{%1$d åpne faner}}</translation>
-<translation id="6910211073230771657">Slettet</translation>
 <translation id="6945221475159498467">Velg</translation>
 <translation id="6963766334940102469">Slett bokmerker</translation>
 <translation id="6965382102122355670">OK</translation>
@@ -518,8 +525,8 @@ Noen nettsteder kan for eksempel svare på denne forespørselen ved å vise deg 
 <translation id="7026897394897382018">Slå på Datasparing</translation>
 <translation id="7029809446516969842">Passord</translation>
 <translation id="7031882061095297553">Synkroniser med</translation>
+<translation id="7040138676081995583">Åpne med</translation>
 <translation id="7053983685419859001">Blokkér</translation>
-<translation id="7056999826593229648">En langsom tilkobling ble oppdaget</translation>
 <translation id="7057058088140140610">Kredittkort og adresser ved bruk av Google Payments</translation>
 <translation id="7062545763355031412">Godta og bytt konto</translation>
 <translation id="7063006564040364415">Kunne ikke koble til synkroniseringstjeneren.</translation>
@@ -534,8 +541,6 @@ Noen nettsteder kan for eksempel svare på denne forespørselen ved å vise deg 
 <translation id="7208788139759694678">Datasparing er slått av</translation>
 <translation id="7243308994586599757">Du finner alternativer ved bunnen av skjermen</translation>
 <translation id="7244362611678346589"><ph name="SEARCH_ENGINE_URL" /> bruker posisjonen din for å vise lokale søkeresultater</translation>
-<translation id="7327835590071894791">Fanen din er nå i bakgrunnen.</translation>
-<translation id="7347770551817603360">Innhold uten nett</translation>
 <translation id="7353894246028566792">{NUM_SELECTED,plural, =1{Del 1 valgt element}other{Del # valgte elementer}}</translation>
 <translation id="7366340029385295517">Caster til <ph name="SCREEN_NAME" /></translation>
 <translation id="7375125077091615385">Type:</translation>
@@ -553,7 +558,6 @@ Noen nettsteder kan for eksempel svare på denne forespørselen ved å vise deg 
 Det kan hende Google-kontoen din har andre typer nettlesingslogger, for eksempel for søk og aktivitet fra andre Google-tjenester, på <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" />.</translation>
 <translation id="7493994139787901920"><ph name="VERSION" /> (oppdatert <ph name="TIME_SINCE_UPDATE" />)</translation>
 <translation id="7498271377022651285">Vent litt</translation>
-<translation id="7501135638693251872">Alle bokmerker</translation>
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7562080006725997899">Sletter nettlesingsdata</translation>
 <translation id="756809126120519699">Chrome-dataene er slettet</translation>
@@ -571,7 +575,6 @@ Det kan hende Google-kontoen din har andre typer nettlesingslogger, for eksempel
 <translation id="7658239707568436148">Avbryt</translation>
 <translation id="7665369617277396874">Legg til konto</translation>
 <translation id="7682287625158474539">Forsendelse</translation>
-<translation id="7690588279513156836">Last inn originalen</translation>
 <translation id="771135159654932189">Se hva som er i nærheten</translation>
 <translation id="7713873128508426081">Alltid tillatt</translation>
 <translation id="7764225426217299476">Legg til adresse</translation>
@@ -596,9 +599,11 @@ Det kan hende Google-kontoen din har andre typer nettlesingslogger, for eksempel
 <translation id="7998918019931843664">Åpne lukkede faner igjen</translation>
 <translation id="7999064672810608036">Er du sikker på at du vil slette alle lokale data, deriblant informasjonskapsler, og tilbakestille alle tillatelser for dette nettstedet?</translation>
 <translation id="8007176423574883786">Slått av for denne enheten</translation>
+<translation id="802154636333426148">Nedlastingen mislyktes</translation>
 <translation id="8026334261755873520">Slett nettleserdata</translation>
 <translation id="8035133914807600019">Ny mappe</translation>
 <translation id="8037750541064988519"><ph name="DAYS" /> dager igjen</translation>
+<translation id="8051695050440594747"><ph name="MEGABYTES" /> MB tilgjengelig</translation>
 <translation id="8063895661287329888">Kunne ikke legge til bokmerket.</translation>
 <translation id="8068648041423924542">Kan ikke velge sertifikat.</translation>
 <translation id="8069239273282989646">Etter komprimering</translation>
@@ -611,7 +616,6 @@ Det kan hende Google-kontoen din har andre typer nettlesingslogger, for eksempel
 <translation id="8137558756159375272">Trykk for å søke sender det valgte ordet og den aktive siden som kontekst til Google Søk. Du kan slå av dette i <ph name="BEGIN_LINK" />Innstillinger<ph name="END_LINK" />.</translation>
 <translation id="8168435359814927499">Innhold</translation>
 <translation id="8173098127580644436">tidenes morgen</translation>
-<translation id="8187025609458112874">Kan ikke dele slettede filer</translation>
 <translation id="8190358571722158785">1 dag igjen</translation>
 <translation id="8200772114523450471">Fortsett</translation>
 <translation id="8202097416529803614">Bestillingssammendrag</translation>
@@ -641,12 +645,14 @@ Det kan hende Google-kontoen din har andre typer nettlesingslogger, for eksempel
 <translation id="8518901949365209398">Dette nettstedet bruker en svak sikkerhetskonfigurasjon (SHA-1-signaturer). Det kan derfor hende at tilkoblingen mellom deg og nettstedet ikke er privat.</translation>
 <translation id="8523928698583292556">Slett lagrede passord</translation>
 <translation id="8525306231823319788">Full skjerm</translation>
+<translation id="85415543246899402"><ph name="MEGABYTES" /> MB er brukt</translation>
 <translation id="854522910157234410">Åpne denne siden</translation>
 <translation id="8562452229998620586">Lagrede passord listes opp her.</translation>
 <translation id="856481929701340285">Bruk skrivebordsversjon</translation>
 <translation id="857943718398505171">Tillatt (anbefales)</translation>
 <translation id="8583805026567836021">Fjerner kontodata …</translation>
 <translation id="8617240290563765734">Vil du åpne den foreslåtte nettadressen som er spesifisert i det nedlastede innholdet?</translation>
+<translation id="8618653050765576793"><ph name="KILOBYTES" /> kB er brukt</translation>
 <translation id="862875433388403934">Innhold (filmer, musikk osv.) som er lastet ned i andre apper, kan kanskje ikke spilles av lenger, før appene får nye lisenser basert på ny enhetslegitimasjon.
 
 For å få nye lisenser må du koble deg til Internett og spille av innholdet du har lastet ned.</translation>
@@ -659,6 +665,7 @@ For å få nye lisenser må du koble deg til Internett og spille av innholdet du
 <translation id="8719023831149562936">Kan ikke beame gjeldende fane</translation>
 <translation id="8725066075913043281">Prøv igjen</translation>
 <translation id="8730621377337864115">Ferdig</translation>
+<translation id="8748850008226585750">Innholdet er skjult</translation>
 <translation id="8812942424849541387">Kontrollér hvordan dette fungerer, i <ph name="BEGIN_LINK1" />innstillingene<ph name="END_LINK1" /></translation>
 <translation id="8820817407110198400">Bokmerker</translation>
 <translation id="883635517171802338">Blokkér nettsteder fra å vise forgrunnsvinduer (anbefales)</translation>
@@ -666,7 +673,6 @@ For å få nye lisenser må du koble deg til Internett og spille av innholdet du
 <translation id="8847988622838149491">USB</translation>
 <translation id="8853345339104747198"><ph name="TAB_TITLE" /> – fane</translation>
 <translation id="885701979325669005">Lagring</translation>
-<translation id="8872506776304248286">Åpne i appen</translation>
 <translation id="8901170036886848654">Fant ingen bokmerker</translation>
 <translation id="8909135823018751308">Del</translation>
 <translation id="8912362522468806198">Google-konto</translation>
@@ -681,7 +687,6 @@ For å få nye lisenser må du koble deg til Internett og spille av innholdet du
 <translation id="8986494364107987395">Send bruksstatistikk og programstopprapporter automatisk til Google</translation>
 <translation id="8998729206196772491">Du logger på med en konto som administreres av <ph name="MANAGED_DOMAIN" />, og du gir administratoren for dette domenet kontroll over Chrome-dataene dine. Dataene dine blir permanent knyttet til denne kontoen. Når du logger av Chrome, slettes dataene dine fra denne enheten, men de fortsetter å være lagret i Google-kontoen din.</translation>
 <translation id="9019902583201351841">Administrert av foreldrene dine</translation>
-<translation id="9020607083536754075">Lukk den aktive fanen og gå tilbake til den forrige appen</translation>
 <translation id="9038649477754266430">Bruk en prediksjonstjeneste for å laste inn sider raskere</translation>
 <translation id="9050666287014529139">Passordfrase</translation>
 <translation id="9060538597317784206">Vis <ph name="APP_NAME" />-appen i Play Butikk. Vurdering: <ph name="APP_RATING" />.</translation>

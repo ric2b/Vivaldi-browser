@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "net/base/net_export.h"
 #include "net/quic/core/crypto/quic_compressed_certs_cache.h"
 #include "net/quic/core/quic_crypto_server_stream.h"
 #include "net/quic/core/quic_protocol.h"
@@ -54,32 +55,18 @@ class NET_EXPORT_PRIVATE QuicServerSessionBase : public QuicSpdySession {
     // Called after the given connection is added to the time-wait std::list.
     virtual void OnConnectionAddedToTimeWaitList(
         QuicConnectionId connection_id) = 0;
-  };
 
-  // Provides helper functions for the session.
-  class Helper {
-   public:
-    virtual ~Helper() {}
-
-    // Given the current connection_id, generates a new ConnectionId to
-    // be returned with a stateless reject.
-    virtual QuicConnectionId GenerateConnectionIdForReject(
-        QuicConnectionId connection_id) const = 0;
-
-    // Returns true if |message|, which was received on |self_address| is
-    // acceptable according to the visitor's policy. Otherwise, returns false
-    // and populates |error_details|.
-    virtual bool CanAcceptClientHello(const CryptoHandshakeMessage& message,
-                                      const IPEndPoint& self_address,
-                                      std::string* error_details) const = 0;
+    // Called before a packet is going to be processed by |session|.
+    virtual void OnPacketBeingDispatchedToSession(
+        QuicServerSessionBase* session) = 0;
   };
 
   // Does not take ownership of |connection|. |crypto_config| must outlive the
-  // session.
+  // session. |helper| must outlive any created crypto streams.
   QuicServerSessionBase(const QuicConfig& config,
                         QuicConnection* connection,
                         Visitor* visitor,
-                        Helper* helper,
+                        QuicCryptoServerStream::Helper* helper,
                         const QuicCryptoServerConfig* crypto_config,
                         QuicCompressedCertsCache* compressed_certs_cache);
 
@@ -109,16 +96,6 @@ class NET_EXPORT_PRIVATE QuicServerSessionBase : public QuicSpdySession {
     serving_region_ = serving_region;
   }
 
-  bool server_push_enabled() const { return server_push_enabled_; }
-
-  // Delegates to the helper's GenerateConnectionIdForReject method.
-  QuicConnectionId GenerateConnectionIdForReject(
-      QuicConnectionId connection_id);
-
-  // Delegates to the helper's CanAcceptClientHello method.
-  bool CanAcceptClientHello(const CryptoHandshakeMessage& message,
-                            std::string* error_details);
-
  protected:
   // QuicSession methods(override them with return type of QuicSpdyStream*):
   QuicCryptoServerStreamBase* GetCryptoStream() override;
@@ -140,7 +117,9 @@ class NET_EXPORT_PRIVATE QuicServerSessionBase : public QuicSpdySession {
 
   const QuicCryptoServerConfig* crypto_config() { return crypto_config_; }
 
-  void set_server_push_enabled(bool enable) { server_push_enabled_ = enable; }
+  Visitor* visitor() { return visitor_; }
+
+  QuicCryptoServerStream::Helper* stream_helper() { return helper_; }
 
  private:
   friend class test::QuicServerSessionBasePeer;
@@ -154,7 +133,10 @@ class NET_EXPORT_PRIVATE QuicServerSessionBase : public QuicSpdySession {
 
   std::unique_ptr<QuicCryptoServerStreamBase> crypto_stream_;
   Visitor* visitor_;
-  Helper* helper_;
+
+  // Pointer to the helper used to create crypto server streams. Must outlive
+  // streams created via CreateQuicCryptoServerStream.
+  QuicCryptoServerStream::Helper* helper_;
 
   // Whether bandwidth resumption is enabled for this connection.
   bool bandwidth_resumption_enabled_;
@@ -177,10 +159,6 @@ class NET_EXPORT_PRIVATE QuicServerSessionBase : public QuicSpdySession {
   // should go away once we fix http://b//27897982
   int32_t BandwidthToCachedParameterBytesPerSecond(
       const QuicBandwidth& bandwidth);
-
-  // Set during handshake. If true, resources in x-associated-content and link
-  // headers will be pushed. see: go/gfe_server_push.
-  bool server_push_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicServerSessionBase);
 };

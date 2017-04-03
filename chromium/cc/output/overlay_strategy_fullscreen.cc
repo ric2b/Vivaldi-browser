@@ -13,7 +13,11 @@
 
 namespace cc {
 
-OverlayStrategyFullscreen::OverlayStrategyFullscreen() {}
+OverlayStrategyFullscreen::OverlayStrategyFullscreen(
+    OverlayCandidateValidator* capability_checker)
+    : capability_checker_(capability_checker) {
+  DCHECK(capability_checker);
+}
 
 OverlayStrategyFullscreen::~OverlayStrategyFullscreen() {}
 
@@ -48,10 +52,17 @@ bool OverlayStrategyFullscreen::Attempt(ResourceProvider* resource_provider,
     return false;
   }
 
-  candidate.plane_z_order = 1;
+  candidate.plane_z_order = 0;
   candidate.overlay_handled = true;
-  candidate_list->push_back(candidate);
-  quad_list->EraseAndInvalidateAllPointers(quad_list->begin());
+  OverlayCandidateList new_candidate_list;
+  new_candidate_list.push_back(candidate);
+  capability_checker_->CheckOverlaySupport(&new_candidate_list);
+  if (!new_candidate_list.front().overlay_handled)
+    return false;
+
+  candidate_list->swap(new_candidate_list);
+
+  render_pass->quad_list = QuadList();  // Remove all the quads
   return true;
 }
 

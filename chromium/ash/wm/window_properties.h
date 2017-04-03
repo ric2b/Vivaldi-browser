@@ -6,6 +6,7 @@
 #define ASH_WM_WINDOW_PROPERTIES_H_
 
 #include "ash/ash_export.h"
+#include "ash/common/shelf/shelf_item_types.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -25,6 +26,11 @@ class WindowState;
 
 // Alphabetical sort.
 
+// If this is set to true, the window stays in the same root window even if the
+// bounds outside of its root window is set.
+// This is exported as it's used in the tests.
+ASH_EXPORT extern const aura::WindowProperty<bool>* const kLockedToRootKey;
+
 // A property key which stores the bounds to restore a window to. These take
 // preference over the current bounds/state. This is used by e.g. the always
 // maximized mode window manager.
@@ -37,15 +43,19 @@ ASH_EXPORT extern const aura::WindowProperty<gfx::Rect*>* const
 ASH_EXPORT extern const aura::WindowProperty<ui::WindowShowState>* const
     kRestoreShowStateOverrideKey;
 
+// A property key to store the icon resource id for a window's shelf item.
+ASH_EXPORT extern const aura::WindowProperty<int>* const
+    kShelfIconResourceIdKey;
+
+// A property key to store the id for a window's shelf item.
+ASH_EXPORT extern const aura::WindowProperty<ShelfID>* const kShelfIDKey;
+
+// A property key to store the type of a window's shelf item.
+ASH_EXPORT extern const aura::WindowProperty<int>* const kShelfItemTypeKey;
+
 // Containers with this property (true) are aligned with physical pixel
 // boundary.
 extern const aura::WindowProperty<bool>* const kSnapChildrenToPixelBoundary;
-
-// If this is set to true, the window stays in the same root window
-// even if the bounds outside of its root window is set.
-// This is exported as it's used in the tests.
-ASH_EXPORT extern const aura::WindowProperty<bool>* const
-    kStayInSameRootWindowKey;
 
 // Property to tell if the container uses the screen coordinates.
 extern const aura::WindowProperty<bool>* const kUsesScreenCoordinatesKey;

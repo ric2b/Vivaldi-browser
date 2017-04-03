@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/net/referrer.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -15,7 +16,6 @@
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
-#include "content/browser/bluetooth/bluetooth_metrics.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
@@ -28,6 +28,10 @@ Browser* GetBrowser() {
   return browser_displayer.browser();
 }
 
+void RecordInteractionWithChooser(bool has_null_handler) {
+  UMA_HISTOGRAM_BOOLEAN("Bluetooth.Web.ChooserInteraction", has_null_handler);
+}
+
 }  // namespace
 
 BluetoothChooserController::BluetoothChooserController(
@@ -36,9 +40,7 @@ BluetoothChooserController::BluetoothChooserController(
     : ChooserController(owner,
                         IDS_BLUETOOTH_DEVICE_CHOOSER_PROMPT_ORIGIN,
                         IDS_BLUETOOTH_DEVICE_CHOOSER_PROMPT_EXTENSION_NAME),
-      event_handler_(event_handler),
-      no_devices_text_(l10n_util::GetStringUTF16(
-          IDS_BLUETOOTH_DEVICE_CHOOSER_NO_DEVICES_FOUND_PROMPT)) {}
+      event_handler_(event_handler) {}
 
 BluetoothChooserController::~BluetoothChooserController() {}
 
@@ -47,7 +49,8 @@ bool BluetoothChooserController::ShouldShowIconBeforeText() const {
 }
 
 base::string16 BluetoothChooserController::GetNoOptionsText() const {
-  return no_devices_text_;
+  return l10n_util::GetStringUTF16(
+      IDS_BLUETOOTH_DEVICE_CHOOSER_NO_DEVICES_FOUND_PROMPT);
 }
 
 base::string16 BluetoothChooserController::GetOkButtonLabel() const {
@@ -61,6 +64,14 @@ size_t BluetoothChooserController::NumOptions() const {
 
 int BluetoothChooserController::GetSignalStrengthLevel(size_t index) const {
   return devices_[index].signal_strength_level;
+}
+
+bool BluetoothChooserController::IsConnected(size_t index) const {
+  return devices_[index].is_connected;
+}
+
+bool BluetoothChooserController::IsPaired(size_t index) const {
+  return devices_[index].is_paired;
 }
 
 base::string16 BluetoothChooserController::GetOption(size_t index) const {
@@ -78,10 +89,18 @@ base::string16 BluetoothChooserController::GetOption(size_t index) const {
 }
 
 void BluetoothChooserController::RefreshOptions() {
+  RecordInteractionWithChooser(event_handler_.is_null());
   if (event_handler_.is_null())
     return;
   ClearAllDevices();
   event_handler_.Run(content::BluetoothChooser::Event::RESCAN, std::string());
+}
+
+void BluetoothChooserController::OpenAdapterOffHelpUrl() const {
+  GetBrowser()->OpenURL(content::OpenURLParams(
+      GURL(chrome::kBluetoothAdapterOffHelpURL), content::Referrer(),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false /* is_renderer_initialized */));
 }
 
 base::string16 BluetoothChooserController::GetStatus() const {
@@ -89,10 +108,8 @@ base::string16 BluetoothChooserController::GetStatus() const {
 }
 
 void BluetoothChooserController::Select(size_t index) {
+  RecordInteractionWithChooser(event_handler_.is_null());
   if (event_handler_.is_null()) {
-    content::RecordRequestDeviceOutcome(
-        content::UMARequestDeviceOutcome::
-            BLUETOOTH_CHOOSER_EVENT_HANDLER_INVALID);
     return;
   }
   DCHECK_LT(index, devices_.size());
@@ -101,6 +118,7 @@ void BluetoothChooserController::Select(size_t index) {
 }
 
 void BluetoothChooserController::Cancel() {
+  RecordInteractionWithChooser(event_handler_.is_null());
   if (event_handler_.is_null())
     return;
   event_handler_.Run(content::BluetoothChooser::Event::CANCELLED,
@@ -108,6 +126,7 @@ void BluetoothChooserController::Cancel() {
 }
 
 void BluetoothChooserController::Close() {
+  RecordInteractionWithChooser(event_handler_.is_null());
   if (event_handler_.is_null())
     return;
   event_handler_.Run(content::BluetoothChooser::Event::CANCELLED,
@@ -117,8 +136,8 @@ void BluetoothChooserController::Close() {
 void BluetoothChooserController::OpenHelpCenterUrl() const {
   GetBrowser()->OpenURL(content::OpenURLParams(
       GURL(chrome::kChooserBluetoothOverviewURL), content::Referrer(),
-      NEW_FOREGROUND_TAB, ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
-      false /* is_renderer_initialized */));
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false /* is_renderer_initialized */));
 }
 
 void BluetoothChooserController::OnAdapterPresenceChanged(
@@ -129,8 +148,6 @@ void BluetoothChooserController::OnAdapterPresenceChanged(
       NOTREACHED();
       break;
     case content::BluetoothChooser::AdapterPresence::POWERED_OFF:
-      no_devices_text_ =
-          l10n_util::GetStringUTF16(IDS_BLUETOOTH_DEVICE_CHOOSER_ADAPTER_OFF);
       status_text_ = base::string16();
       if (view()) {
         view()->OnAdapterEnabledChanged(
@@ -138,8 +155,6 @@ void BluetoothChooserController::OnAdapterPresenceChanged(
       }
       break;
     case content::BluetoothChooser::AdapterPresence::POWERED_ON:
-      no_devices_text_ = l10n_util::GetStringUTF16(
-          IDS_BLUETOOTH_DEVICE_CHOOSER_NO_DEVICES_FOUND_PROMPT);
       status_text_ =
           l10n_util::GetStringUTF16(IDS_BLUETOOTH_DEVICE_CHOOSER_RE_SCAN);
       if (view()) {
@@ -203,19 +218,20 @@ void BluetoothChooserController::AddOrUpdateDevice(
                      });
 
     DCHECK(device_it != devices_.end());
-    // http://crbug.com/543466 Update connection and paired status
-
     // When Bluetooth device scanning stops, the |signal_strength_level|
     // is -1, and in this case, should still use the previously stored
     // signal strength level value.
     if (signal_strength_level != -1)
       device_it->signal_strength_level = signal_strength_level;
+    device_it->is_connected = is_gatt_connected;
+    device_it->is_paired = is_paired;
     if (view())
       view()->OnOptionUpdated(device_it - devices_.begin());
     return;
   }
 
-  devices_.push_back({device_id, signal_strength_level});
+  devices_.push_back(
+      {device_id, signal_strength_level, is_gatt_connected, is_paired});
   device_id_to_name_map_.insert({device_id, device_name});
   ++device_name_counts_[device_name];
   if (view())
@@ -234,6 +250,7 @@ void BluetoothChooserController::RemoveDevice(const std::string& device_id) {
                    });
 
   if (device_it != devices_.end()) {
+    size_t index = device_it - devices_.begin();
     devices_.erase(device_it);
 
     const auto& it = device_name_counts_.find(name_it->second);
@@ -246,7 +263,7 @@ void BluetoothChooserController::RemoveDevice(const std::string& device_id) {
     device_id_to_name_map_.erase(name_it);
 
     if (view())
-      view()->OnOptionRemoved(device_it - devices_.begin());
+      view()->OnOptionRemoved(index);
   }
 }
 

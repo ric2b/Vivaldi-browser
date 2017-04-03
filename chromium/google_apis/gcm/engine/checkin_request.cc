@@ -6,7 +6,7 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "google_apis/gcm/monitoring/gcm_stats_recorder.h"
 #include "google_apis/gcm/protocol/checkin.pb.h"
@@ -58,10 +58,11 @@ std::string GetCheckinRequestStatusString(CheckinRequestStatus status) {
       return "RESPONSE_PARSING_FAILED";
     case ZERO_ID_OR_TOKEN:
       return "ZERO_ID_OR_TOKEN";
-    default:
+    case STATUS_COUNT:
       NOTREACHED();
-      return "UNKNOWN_STATUS";
+      break;
   }
+  return "UNKNOWN_STATUS";
 }
 
 // Records checkin status to both stats recorder and reports to UMA.

@@ -9,6 +9,7 @@ import android.test.InstrumentationTestCase;
 import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.StateChangeReason;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelContent;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager;
@@ -183,6 +184,7 @@ public class ReaderModeManagerTest extends InstrumentationTestCase {
      */
     @SmallTest
     @Feature({"ReaderModeManager"})
+    @RetryOnFailure
     public void testInfoBarEvents() {
         mPanel.requestPanelShow(StateChangeReason.UNKNOWN);
 
@@ -200,6 +202,7 @@ public class ReaderModeManagerTest extends InstrumentationTestCase {
      */
     @SmallTest
     @Feature({"ReaderModeManager"})
+    @RetryOnFailure
     public void testFullscreenEvents() {
         mPanel.requestPanelShow(StateChangeReason.UNKNOWN);
 
@@ -217,6 +220,7 @@ public class ReaderModeManagerTest extends InstrumentationTestCase {
      */
     @SmallTest
     @Feature({"ReaderModeManager"})
+    @RetryOnFailure
     public void testPanelOpenRecorded() {
         Tab tab = new Tab(0, false, null);
         mReaderManager.onShown(tab);
@@ -244,6 +248,7 @@ public class ReaderModeManagerTest extends InstrumentationTestCase {
      */
     @SmallTest
     @Feature({"ReaderModeManager"})
+    @RetryOnFailure
     public void testPanelCloseRecorded() {
         Tab tab = new Tab(0, false, null);
         mReaderManager.setShouldTrigger(false);

@@ -6,7 +6,7 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
-#include "cc/output/compositor_frame.h"
+#include "cc/output/output_surface_frame.h"
 #include "cc/scheduler/begin_frame_source.h"
 #include "cc/scheduler/delay_based_time_source.h"
 #include "cc/test/fake_output_surface_client.h"
@@ -84,14 +84,19 @@ class TestOutputSurface : public BrowserCompositorOutputSurface {
                                        std::move(vsync_manager),
                                        begin_frame_source,
                                        CreateTestValidatorOzone()) {
-    surface_size_ = gfx::Size(256, 256);
     device_scale_factor_ = 1.f;
   }
 
   void SetFlip(bool flip) { capabilities_.flipped_output_surface = flip; }
 
-  void SwapBuffers(cc::CompositorFrame frame) override {}
+  void EnsureBackbuffer() override {}
+  void DiscardBackbuffer() override {}
+  void BindFramebuffer() override {}
+  void SwapBuffers(cc::OutputSurfaceFrame frame) override {}
   uint32_t GetFramebufferCopyTextureFormat() override { return GL_RGB; }
+  bool IsDisplayedAsOverlayPlane() const override { return false; }
+  unsigned GetOverlayTextureId() const override { return 0; }
+  bool SurfaceIsSuspendForRecycle() const override { return false; }
 
   void OnReflectorChanged() override {
     if (!reflector_) {
@@ -118,6 +123,7 @@ class TestOutputSurface : public BrowserCompositorOutputSurface {
 };
 
 const gfx::Rect kSubRect(0, 0, 64, 64);
+const gfx::Size kSurfaceSize(256, 256);
 
 }  // namespace
 
@@ -148,13 +154,13 @@ class ReflectorImplTest : public testing::Test {
     compositor_->SetRootLayer(root_layer_.get());
     mirroring_layer_.reset(new ui::Layer(ui::LAYER_SOLID_COLOR));
     compositor_->root_layer()->Add(mirroring_layer_.get());
-    gfx::Size size = output_surface_->SurfaceSize();
-    mirroring_layer_->SetBounds(gfx::Rect(size.width(), size.height()));
+    output_surface_->Reshape(kSurfaceSize, 1.f, gfx::ColorSpace(), false);
+    mirroring_layer_->SetBounds(gfx::Rect(kSurfaceSize));
   }
 
   void SetUpReflector() {
-    reflector_ = base::WrapUnique(
-        new ReflectorImpl(compositor_.get(), mirroring_layer_.get()));
+    reflector_ = base::MakeUnique<ReflectorImpl>(compositor_.get(),
+                                                 mirroring_layer_.get());
     reflector_->OnSourceSurfaceReady(output_surface_.get());
   }
 
@@ -171,7 +177,9 @@ class ReflectorImplTest : public testing::Test {
     ImageTransportFactory::Terminate();
   }
 
-  void UpdateTexture() { reflector_->OnSourcePostSubBuffer(kSubRect); }
+  void UpdateTexture() {
+    reflector_->OnSourcePostSubBuffer(kSubRect, kSurfaceSize);
+  }
 
  protected:
   scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner_;
@@ -192,9 +200,8 @@ TEST_F(ReflectorImplTest, CheckNormalOutputSurface) {
   SetUpReflector();
   UpdateTexture();
   EXPECT_TRUE(mirroring_layer_->TextureFlipped());
-  gfx::Rect expected_rect =
-      kSubRect + gfx::Vector2d(0, output_surface_->SurfaceSize().height()) -
-      gfx::Vector2d(0, kSubRect.height());
+  gfx::Rect expected_rect = kSubRect + gfx::Vector2d(0, kSurfaceSize.height()) -
+                            gfx::Vector2d(0, kSubRect.height());
   EXPECT_EQ(expected_rect, mirroring_layer_->damaged_region());
 }
 

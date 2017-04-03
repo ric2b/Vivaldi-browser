@@ -13,6 +13,7 @@ import android.widget.LinearLayout;
 
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManagerWrapper;
@@ -95,7 +96,7 @@ public class ContextualSearchTapEventTest extends ChromeActivityTestCaseBase<Chr
         public void startSearchTermResolutionRequest(String selection) {
             // Skip native calls and immediately "resolve" the search term.
             onSearchTermResolutionResponse(
-                    true, 200, selection, selection, "", "", false, 0, 10, "");
+                    true, 200, selection, selection, "", "", false, 0, 10, "", "", "");
         }
 
         @Override
@@ -171,7 +172,7 @@ public class ContextualSearchTapEventTest extends ChromeActivityTestCaseBase<Chr
         private String mCurrentText;
 
         public StubbedContentViewCore(Context context) {
-            super(context);
+            super(context, "");
         }
 
         @Override
@@ -237,6 +238,7 @@ public class ContextualSearchTapEventTest extends ChromeActivityTestCaseBase<Chr
     @SmallTest
     @Feature({"ContextualSearch"})
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
+    @RetryOnFailure
     public void testTextTapFollowedByNonTextTap() {
         assertTrue(mPanelManager.getRequestPanelShowCount() == 0);
 

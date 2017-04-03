@@ -44,6 +44,8 @@ def main():
   parser.add_argument(
       '--isolated-script-test-output', type=argparse.FileType('w'),
       required=True)
+  parser.add_argument(
+      '--isolated-script-test-chartjson-output', required=False)
   parser.add_argument('--xvfb', help='Start xvfb.', action='store_true')
   args, rest_args = parser.parse_known_args()
   xvfb_proc = None
@@ -62,18 +64,32 @@ def main():
     tempfile_dir = tempfile.mkdtemp('telemetry')
     valid = True
     failures = []
+    chartjson_results_present = '--output-format=chartjson' in rest_args
+    chartresults = None
     try:
       rc = common.run_command([sys.executable] + rest_args + [
         '--output-dir', tempfile_dir,
         '--output-format=json'
       ], env=env)
-      tempfile_name = os.path.join(tempfile_dir, 'results.json')
-      with open(tempfile_name) as f:
-        results = json.load(f)
-      for value in results['per_page_values']:
-        if value['type'] == 'failure':
-          failures.append(results['pages'][str(value['page_id'])]['name'])
-      valid = bool(rc == 0 or failures)
+            # If we have also output chartjson read it in and return it.
+      # results-chart.json is the file name output by telemetry when the
+      # chartjson output format is included
+      if chartjson_results_present:
+        chart_tempfile_name = os.path.join(tempfile_dir, 'results-chart.json')
+        with open(chart_tempfile_name) as f:
+          chartresults = json.load(f)
+      # We need to get chartjson results first as this may be a disabled
+      # benchmark that was run
+      if (not chartjson_results_present or
+         (chartjson_results_present and chartresults.get('enabled', True))):
+        tempfile_name = os.path.join(tempfile_dir, 'results.json')
+        with open(tempfile_name) as f:
+          results = json.load(f)
+        for value in results['per_page_values']:
+          if value['type'] == 'failure':
+            failures.append(results['pages'][str(value['page_id'])]['name'])
+        valid = bool(rc == 0 or failures)
+
     except Exception:
       traceback.print_exc()
       valid = False
@@ -85,9 +101,14 @@ def main():
       if rc == 0:
         rc = 1  # Signal an abnormal exit.
 
+    if chartjson_results_present and args.isolated_script_test_chartjson_output:
+      chartjson_output_file = \
+        open(args.isolated_script_test_chartjson_output, 'w')
+      json.dump(chartresults, chartjson_output_file)
+
     json.dump({
         'valid': valid,
-        'failures': failures,
+        'failures': failures
     }, args.isolated_script_test_output)
     return rc
 

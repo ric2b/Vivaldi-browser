@@ -26,7 +26,7 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
@@ -149,18 +149,18 @@ bool ChildAccountService::SetActive(bool active) {
 
     settings_service->SetLocalSetting(
         supervised_users::kRecordHistoryIncludesSessionSync,
-        base::WrapUnique(new base::FundamentalValue(false)));
+        base::MakeUnique<base::FundamentalValue>(false));
 
     // In contrast to legacy SUs, child account SUs must sign in.
     settings_service->SetLocalSetting(
         supervised_users::kSigninAllowed,
-        base::WrapUnique(new base::FundamentalValue(true)));
+        base::MakeUnique<base::FundamentalValue>(true));
 
     // SafeSearch is controlled at the account level, so don't override it
     // client-side.
     settings_service->SetLocalSetting(
         supervised_users::kForceSafeSearch,
-        base::WrapUnique(new base::FundamentalValue(false)));
+        base::MakeUnique<base::FundamentalValue>(false));
 
 #if !defined(OS_CHROMEOS)
     // This is also used by user policies (UserPolicySigninService), but since
@@ -195,7 +195,7 @@ bool ChildAccountService::SetActive(bool active) {
 
   // Trigger a sync reconfig to enable/disable the right SU data types.
   // The logic to do this lives in the SupervisedUserSyncDataTypeController.
-  ProfileSyncService* sync_service =
+  browser_sync::ProfileSyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile_);
   if (sync_service->IsFirstSetupComplete())
     sync_service->ReconfigureDatatypeManager();

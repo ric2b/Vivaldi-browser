@@ -27,7 +27,8 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 """Generates a fake TestExpectations file consisting of flaky tests from the bot
-corresponding to the give port."""
+corresponding to the give port.
+"""
 
 import json
 import logging
@@ -109,7 +110,9 @@ class ResultsJSON(object):
 
 
 class BotTestExpectationsFactory(object):
-    RESULTS_URL_PREFIX = 'http://test-results.appspot.com/testfile?master=ChromiumWebkit&testtype=webkit_tests&name=results-small.json&builder='
+    RESULTS_URL_PREFIX = (
+        'http://test-results.appspot.com/testfile?master=chromium.webkit&'
+        'testtype=webkit_tests&name=results-small.json&builder=')
 
     def __init__(self, builders):
         self.builders = builders

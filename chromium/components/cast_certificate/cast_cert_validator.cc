@@ -67,11 +67,11 @@ class CastTrustStore {
   // storage.
   template <size_t N>
   void AddAnchor(const uint8_t (&data)[N]) {
+    net::CertErrors errors;
     scoped_refptr<net::ParsedCertificate> cert =
-        net::ParsedCertificate::CreateFromCertificateData(
-            data, N, net::ParsedCertificate::DataSource::EXTERNAL_REFERENCE,
-            {});
-    CHECK(cert);
+        net::ParsedCertificate::CreateWithoutCopyingUnsafe(data, N, {},
+                                                           &errors);
+    CHECK(cert) << errors.ToDebugString();
     // Enforce pathlen constraints and policies defined on the root certificate.
     scoped_refptr<net::TrustAnchor> anchor =
         net::TrustAnchor::CreateFromCertificateWithConstraints(std::move(cert));
@@ -116,7 +116,7 @@ net::der::Input AudioOnlyPolicyOid() {
 //   * Hashes: All SHA hashes including SHA-1 (despite being known weak).
 //   * RSA keys must have a modulus at least 2048-bits long.
 std::unique_ptr<net::SignaturePolicy> CreateCastSignaturePolicy() {
-  return base::WrapUnique(new net::SimpleSignaturePolicy(2048));
+  return base::MakeUnique<net::SimpleSignaturePolicy>(2048);
 }
 
 class CertVerificationContextImpl : public CertVerificationContext {
@@ -139,10 +139,11 @@ class CertVerificationContextImpl : public CertVerificationContext {
     // least 2048-bits long.
     auto signature_policy = CreateCastSignaturePolicy();
 
+    net::CertErrors errors;
     return net::VerifySignedData(
         *signature_algorithm, net::der::Input(data),
         net::der::BitString(net::der::Input(signature), 0),
-        net::der::Input(&spki_), signature_policy.get());
+        net::der::Input(&spki_), signature_policy.get(), &errors);
   }
 
   std::string GetCommonName() const override { return common_name_; }
@@ -254,7 +255,7 @@ net::ParseCertificateOptions GetCertParsingOptions() {
   return options;
 }
 
-// Verifies a cast device certficate given a chain of DER-encoded certificates.
+// Verifies a cast device certificate given a chain of DER-encoded certificates.
 bool VerifyDeviceCert(const std::vector<std::string>& certs,
                       const base::Time& time,
                       std::unique_ptr<CertVerificationContext>* context,
@@ -265,16 +266,13 @@ bool VerifyDeviceCert(const std::vector<std::string>& certs,
   if (certs.empty())
     return false;
 
-  // No reference to these ParsedCertificates is kept past the end of this
-  // function, so using EXTERNAL_REFERENCE here is safe.
+  net::CertErrors errors;
   scoped_refptr<net::ParsedCertificate> target_cert;
   net::CertIssuerSourceStatic intermediate_cert_issuer_source;
   for (size_t i = 0; i < certs.size(); ++i) {
-    scoped_refptr<net::ParsedCertificate> cert(
-        net::ParsedCertificate::CreateFromCertificateData(
-            reinterpret_cast<const uint8_t*>(certs[i].data()), certs[i].size(),
-            net::ParsedCertificate::DataSource::EXTERNAL_REFERENCE,
-            GetCertParsingOptions()));
+    scoped_refptr<net::ParsedCertificate> cert(net::ParsedCertificate::Create(
+        certs[i], GetCertParsingOptions(), &errors));
+    // TODO(eroman): Propagate/log these parsing errors.
     if (!cert)
       return false;
 
@@ -299,8 +297,10 @@ bool VerifyDeviceCert(const std::vector<std::string>& certs,
   path_builder.AddCertIssuerSource(&intermediate_cert_issuer_source);
   net::CompletionStatus rv = path_builder.Run(base::Closure());
   DCHECK_EQ(rv, net::CompletionStatus::SYNC);
-  if (!result.is_success())
+  if (!result.HasValidPath()) {
+    // TODO(crbug.com/634443): Log error information.
     return false;
+  }
 
   // Check properties of the leaf certificate (key usage, policy), and construct
   // a CertVerificationContext that uses its public key.
@@ -313,12 +313,7 @@ bool VerifyDeviceCert(const std::vector<std::string>& certs,
       return false;
     }
   } else {
-    if (result.paths.empty() ||
-        !result.paths[result.best_result_index]->is_success())
-      return false;
-
-    if (!crl->CheckRevocation(result.paths[result.best_result_index]->path,
-                              time)) {
+    if (!crl->CheckRevocation(result.GetBestValidPath()->path, time)) {
       return false;
     }
   }
@@ -352,8 +347,8 @@ std::unique_ptr<CertVerificationContext> CertVerificationContextImplForTest(
     const base::StringPiece& spki) {
   // Use a bogus CommonName, since this is just exposed for testing signature
   // verification by unittests.
-  return base::WrapUnique(
-      new CertVerificationContextImpl(net::der::Input(spki), "CommonName"));
+  return base::MakeUnique<CertVerificationContextImpl>(net::der::Input(spki),
+                                                       "CommonName");
 }
 
 }  // namespace cast_certificate

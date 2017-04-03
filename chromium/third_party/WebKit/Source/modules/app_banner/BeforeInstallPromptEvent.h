@@ -17,53 +17,66 @@ class BeforeInstallPromptEvent;
 class BeforeInstallPromptEventInit;
 class WebAppBannerClient;
 
-using UserChoiceProperty = ScriptPromiseProperty<Member<BeforeInstallPromptEvent>, Member<AppBannerPromptResult>, ToV8UndefinedGenerator>;
+using UserChoiceProperty =
+    ScriptPromiseProperty<Member<BeforeInstallPromptEvent>,
+                          Member<AppBannerPromptResult>,
+                          ToV8UndefinedGenerator>;
 
 class BeforeInstallPromptEvent final : public Event {
-    DEFINE_WRAPPERTYPEINFO();
-public:
-    ~BeforeInstallPromptEvent() override;
+  DEFINE_WRAPPERTYPEINFO();
 
-    // For EventModules.cpp
-    static BeforeInstallPromptEvent* create()
-    {
-        return new BeforeInstallPromptEvent();
-    }
+ public:
+  ~BeforeInstallPromptEvent() override;
 
-    static BeforeInstallPromptEvent* create(const AtomicString& name, ExecutionContext* executionContext, const Vector<String>& platforms, int requestId, WebAppBannerClient* client)
-    {
-        return new BeforeInstallPromptEvent(name, executionContext, platforms, requestId, client);
-    }
+  static BeforeInstallPromptEvent* create(const AtomicString& name,
+                                          ExecutionContext* executionContext,
+                                          const Vector<String>& platforms,
+                                          int requestId,
+                                          WebAppBannerClient* client) {
+    return new BeforeInstallPromptEvent(name, executionContext, platforms,
+                                        requestId, client);
+  }
 
-    static BeforeInstallPromptEvent* create(const AtomicString& name, const BeforeInstallPromptEventInit& init)
-    {
-        return new BeforeInstallPromptEvent(name, init);
-    }
+  static BeforeInstallPromptEvent* create(
+      const AtomicString& name,
+      const BeforeInstallPromptEventInit& init) {
+    return new BeforeInstallPromptEvent(name, init);
+  }
 
-    Vector<String> platforms() const;
-    ScriptPromise userChoice(ScriptState*);
-    ScriptPromise prompt(ScriptState*);
+  Vector<String> platforms() const;
+  ScriptPromise userChoice(ScriptState*);
+  ScriptPromise prompt(ScriptState*);
 
-    const AtomicString& interfaceName() const override;
-    void preventDefault() override;
+  const AtomicString& interfaceName() const override;
+  void preventDefault() override;
 
-    DECLARE_VIRTUAL_TRACE();
+  DECLARE_VIRTUAL_TRACE();
 
-private:
-    BeforeInstallPromptEvent();
-    BeforeInstallPromptEvent(const AtomicString& name, ExecutionContext*, const Vector<String>& platforms, int requestId, WebAppBannerClient*);
-    BeforeInstallPromptEvent(const AtomicString& name, const BeforeInstallPromptEventInit&);
+ private:
+  BeforeInstallPromptEvent(const AtomicString& name,
+                           ExecutionContext*,
+                           const Vector<String>& platforms,
+                           int requestId,
+                           WebAppBannerClient*);
+  BeforeInstallPromptEvent(const AtomicString& name,
+                           const BeforeInstallPromptEventInit&);
 
-    Vector<String> m_platforms;
+  Vector<String> m_platforms;
 
-    int m_requestId;
-    WebAppBannerClient* m_client;
-    Member<UserChoiceProperty> m_userChoice;
-    bool m_registered;
+  int m_requestId;
+  WebAppBannerClient* m_client;
+  Member<UserChoiceProperty> m_userChoice;
+  bool m_registered;
 };
 
-DEFINE_TYPE_CASTS(BeforeInstallPromptEvent, Event, event, event->interfaceName() == EventNames::BeforeInstallPromptEvent, event.interfaceName() == EventNames::BeforeInstallPromptEvent);
+DEFINE_TYPE_CASTS(BeforeInstallPromptEvent,
+                  Event,
+                  event,
+                  event->interfaceName() ==
+                      EventNames::BeforeInstallPromptEvent,
+                  event.interfaceName() ==
+                      EventNames::BeforeInstallPromptEvent);
 
-} // namespace blink
+}  // namespace blink
 
-#endif // BeforeInstallPromptEvent_h
+#endif  // BeforeInstallPromptEvent_h

@@ -15,13 +15,14 @@
 #include "ui/gfx/geometry/size.h"
 
 namespace cc {
-SurfaceFactory::SurfaceFactory(SurfaceManager* manager,
+SurfaceFactory::SurfaceFactory(const FrameSinkId& frame_sink_id,
+                               SurfaceManager* manager,
                                SurfaceFactoryClient* client)
-    : manager_(manager),
+    : frame_sink_id_(frame_sink_id),
+      manager_(manager),
       client_(client),
       holder_(client),
-      needs_sync_points_(true) {
-}
+      needs_sync_points_(true) {}
 
 SurfaceFactory::~SurfaceFactory() {
   if (!surface_map_.empty()) {
@@ -39,15 +40,16 @@ void SurfaceFactory::DestroyAll() {
   surface_map_.clear();
 }
 
-void SurfaceFactory::Create(const SurfaceId& surface_id) {
-  std::unique_ptr<Surface> surface(new Surface(surface_id, this));
+void SurfaceFactory::Create(const LocalFrameId& local_frame_id) {
+  std::unique_ptr<Surface> surface(base::MakeUnique<Surface>(
+      SurfaceId(frame_sink_id_, local_frame_id), this));
   manager_->RegisterSurface(surface.get());
-  DCHECK(!surface_map_.count(surface_id));
-  surface_map_[surface_id] = std::move(surface);
+  DCHECK(!surface_map_.count(local_frame_id));
+  surface_map_[local_frame_id] = std::move(surface);
 }
 
-void SurfaceFactory::Destroy(const SurfaceId& surface_id) {
-  OwningSurfaceMap::iterator it = surface_map_.find(surface_id);
+void SurfaceFactory::Destroy(const LocalFrameId& local_frame_id) {
+  OwningSurfaceMap::iterator it = surface_map_.find(local_frame_id);
   DCHECK(it != surface_map_.end());
   DCHECK(it->second->factory().get() == this);
   std::unique_ptr<Surface> surface(std::move(it->second));
@@ -56,44 +58,45 @@ void SurfaceFactory::Destroy(const SurfaceId& surface_id) {
     manager_->Destroy(std::move(surface));
 }
 
-void SurfaceFactory::SetPreviousFrameSurface(const SurfaceId& new_id,
-                                             const SurfaceId& old_id) {
+void SurfaceFactory::SetPreviousFrameSurface(const LocalFrameId& new_id,
+                                             const LocalFrameId& old_id) {
   OwningSurfaceMap::iterator it = surface_map_.find(new_id);
   DCHECK(it != surface_map_.end());
-  Surface* old_surface = manager_->GetSurfaceForId(old_id);
+  Surface* old_surface =
+      manager_->GetSurfaceForId(SurfaceId(frame_sink_id_, old_id));
   if (old_surface) {
     it->second->SetPreviousFrameSurface(old_surface);
   }
 }
 
-void SurfaceFactory::SubmitCompositorFrame(const SurfaceId& surface_id,
+void SurfaceFactory::SubmitCompositorFrame(const LocalFrameId& local_frame_id,
                                            CompositorFrame frame,
                                            const DrawCallback& callback) {
   TRACE_EVENT0("cc", "SurfaceFactory::SubmitCompositorFrame");
-  OwningSurfaceMap::iterator it = surface_map_.find(surface_id);
+  OwningSurfaceMap::iterator it = surface_map_.find(local_frame_id);
   DCHECK(it != surface_map_.end());
   DCHECK(it->second->factory().get() == this);
   it->second->QueueFrame(std::move(frame), callback);
-  if (!manager_->SurfaceModified(surface_id)) {
+  if (!manager_->SurfaceModified(SurfaceId(frame_sink_id_, local_frame_id))) {
     TRACE_EVENT_INSTANT0("cc", "Damage not visible.", TRACE_EVENT_SCOPE_THREAD);
     it->second->RunDrawCallbacks();
   }
 }
 
 void SurfaceFactory::RequestCopyOfSurface(
-    const SurfaceId& surface_id,
+    const LocalFrameId& local_frame_id,
     std::unique_ptr<CopyOutputRequest> copy_request) {
-  OwningSurfaceMap::iterator it = surface_map_.find(surface_id);
+  OwningSurfaceMap::iterator it = surface_map_.find(local_frame_id);
   if (it == surface_map_.end()) {
     copy_request->SendEmptyResult();
     return;
   }
   DCHECK(it->second->factory().get() == this);
   it->second->RequestCopyOfOutput(std::move(copy_request));
-  manager_->SurfaceModified(surface_id);
+  manager_->SurfaceModified(SurfaceId(frame_sink_id_, local_frame_id));
 }
 
-void SurfaceFactory::WillDrawSurface(const SurfaceId& id,
+void SurfaceFactory::WillDrawSurface(const LocalFrameId& id,
                                      const gfx::Rect& damage_rect) {
   client_->WillDrawSurface(id, damage_rect);
 }

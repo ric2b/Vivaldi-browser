@@ -279,7 +279,7 @@ std::vector<gfx::Rect> CalculateNonDraggableRegions(
   // RenderWidgetHostViewCocoa which is the view that normally receive these
   // calls (works fine in framed window mode). This need to be tested for each
   // chrome upgrade.
-  if (vivaldi::IsVivaldiRunning() && !base::mac::IsOSYosemiteOrLater()) {
+  if (vivaldi::IsVivaldiRunning() && !base::mac::IsAtLeastOS10_10()) {
     // 10.10 and later uses a modified view layout that will call the functions
     // automatically. See InstallView()
     if (event.type == NSEventTypeGesture ||
@@ -432,7 +432,7 @@ void NativeAppWindowCocoa::InstallView() {
 
     NSView* frameView = [[window() contentView] superview];
     [view setFrame:[frameView bounds]];
-    if (vivaldi::IsVivaldiRunning() && base::mac::IsOSYosemiteOrLater()) {
+    if (vivaldi::IsVivaldiRunning() && base::mac::IsAtLeastOS10_10()) {
       DCHECK([view
         respondsToSelector:@selector(VivaldiSetInFramelessContentView:)]);
       [view VivaldiSetInFramelessContentView:YES];

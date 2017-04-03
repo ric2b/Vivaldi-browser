@@ -30,9 +30,8 @@
 
 #include "platform/graphics/gpu/AcceleratedImageBufferSurface.h"
 
+#include "platform/graphics/gpu/SharedGpuContext.h"
 #include "platform/graphics/skia/SkiaUtils.h"
-#include "public/platform/Platform.h"
-#include "public/platform/WebGraphicsContext3DProvider.h"
 #include "skia/ext/texture_handle.h"
 #include "third_party/skia/include/gpu/GrContext.h"
 #include "wtf/PtrUtil.h"
@@ -40,36 +39,51 @@
 
 namespace blink {
 
-AcceleratedImageBufferSurface::AcceleratedImageBufferSurface(const IntSize& size, OpacityMode opacityMode, sk_sp<SkColorSpace> colorSpace)
-    : ImageBufferSurface(size, opacityMode, colorSpace)
-{
-    m_contextProvider = wrapUnique(Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
-    if (!m_contextProvider)
-        return;
-    GrContext* grContext = m_contextProvider->grContext();
-    if (!grContext)
-        return;
+AcceleratedImageBufferSurface::AcceleratedImageBufferSurface(
+    const IntSize& size,
+    OpacityMode opacityMode,
+    sk_sp<SkColorSpace> colorSpace)
+    : ImageBufferSurface(size, opacityMode, colorSpace) {
+  if (!SharedGpuContext::isValid())
+    return;
+  GrContext* grContext = SharedGpuContext::gr();
+  m_contextId = SharedGpuContext::contextId();
+  CHECK(grContext);
 
-    SkAlphaType alphaType = (Opaque == opacityMode) ? kOpaque_SkAlphaType : kPremul_SkAlphaType;
-    SkImageInfo info = SkImageInfo::MakeN32(size.width(), size.height(), alphaType);
-    SkSurfaceProps disableLCDProps(0, kUnknown_SkPixelGeometry);
-    m_surface = SkSurface::MakeRenderTarget(grContext, SkBudgeted::kYes, info, 0 /* sampleCount */,
-        Opaque == opacityMode ? nullptr : &disableLCDProps);
-    if (!m_surface.get())
-        return;
-    clear();
+  SkAlphaType alphaType =
+      (Opaque == opacityMode) ? kOpaque_SkAlphaType : kPremul_SkAlphaType;
+  SkImageInfo info =
+      SkImageInfo::MakeN32(size.width(), size.height(), alphaType);
+  SkSurfaceProps disableLCDProps(0, kUnknown_SkPixelGeometry);
+  m_surface = SkSurface::MakeRenderTarget(
+      grContext, SkBudgeted::kYes, info, 0 /* sampleCount */,
+      Opaque == opacityMode ? nullptr : &disableLCDProps);
+  if (!m_surface)
+    return;
+  clear();
+
+  // Always save an initial frame, to support resetting the top level matrix
+  // and clip.
+  m_surface->getCanvas()->save();
 }
 
-PassRefPtr<SkImage> AcceleratedImageBufferSurface::newImageSnapshot(AccelerationHint, SnapshotReason)
-{
-    return fromSkSp(m_surface->makeImageSnapshot());
+bool AcceleratedImageBufferSurface::isValid() const {
+  return m_surface && SharedGpuContext::isValid() &&
+         m_contextId == SharedGpuContext::contextId();
 }
 
-GLuint AcceleratedImageBufferSurface::getBackingTextureHandleForOverwrite()
-{
-    if (!m_surface)
-        return 0;
-    return skia::GrBackendObjectToGrGLTextureInfo(m_surface->getTextureHandle(SkSurface::kDiscardWrite_TextureHandleAccess))->fID;
+sk_sp<SkImage> AcceleratedImageBufferSurface::newImageSnapshot(AccelerationHint,
+                                                               SnapshotReason) {
+  return m_surface->makeImageSnapshot();
 }
 
-} // namespace blink
+GLuint AcceleratedImageBufferSurface::getBackingTextureHandleForOverwrite() {
+  if (!m_surface)
+    return 0;
+  return skia::GrBackendObjectToGrGLTextureInfo(
+             m_surface->getTextureHandle(
+                 SkSurface::kDiscardWrite_TextureHandleAccess))
+      ->fID;
+}
+
+}  // namespace blink

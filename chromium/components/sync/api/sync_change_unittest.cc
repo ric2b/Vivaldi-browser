@@ -5,7 +5,6 @@
 #include "components/sync/api/sync_change.h"
 
 #include <memory>
-#include <string>
 
 #include "base/message_loop/message_loop.h"
 #include "base/time/time.h"
@@ -89,19 +88,19 @@ TEST_F(SyncChangeTest, SyncerChanges) {
   pref_specifics->set_name("update");
   change_list.push_back(SyncChange(
       FROM_HERE, SyncChange::ACTION_UPDATE,
-      SyncData::CreateRemoteData(
-          1, update_specifics, base::Time(), syncer::AttachmentIdList(),
-          syncer::AttachmentServiceProxyForTest::Create())));
+      SyncData::CreateRemoteData(1, update_specifics, base::Time(),
+                                 AttachmentIdList(),
+                                 AttachmentServiceProxyForTest::Create())));
 
   // Create an add.
   sync_pb::EntitySpecifics add_specifics;
   pref_specifics = add_specifics.mutable_preference();
   pref_specifics->set_name("add");
-  change_list.push_back(
-      SyncChange(FROM_HERE, SyncChange::ACTION_ADD,
-                 SyncData::CreateRemoteData(
-                     2, add_specifics, base::Time(), syncer::AttachmentIdList(),
-                     syncer::AttachmentServiceProxyForTest::Create())));
+  change_list.push_back(SyncChange(
+      FROM_HERE, SyncChange::ACTION_ADD,
+      SyncData::CreateRemoteData(2, add_specifics, base::Time(),
+                                 AttachmentIdList(),
+                                 AttachmentServiceProxyForTest::Create())));
 
   // Create a delete.
   sync_pb::EntitySpecifics delete_specifics;
@@ -109,9 +108,9 @@ TEST_F(SyncChangeTest, SyncerChanges) {
   pref_specifics->set_name("add");
   change_list.push_back(SyncChange(
       FROM_HERE, SyncChange::ACTION_DELETE,
-      SyncData::CreateRemoteData(
-          3, delete_specifics, base::Time(), syncer::AttachmentIdList(),
-          syncer::AttachmentServiceProxyForTest::Create())));
+      SyncData::CreateRemoteData(3, delete_specifics, base::Time(),
+                                 AttachmentIdList(),
+                                 AttachmentServiceProxyForTest::Create())));
 
   ASSERT_EQ(3U, change_list.size());
 

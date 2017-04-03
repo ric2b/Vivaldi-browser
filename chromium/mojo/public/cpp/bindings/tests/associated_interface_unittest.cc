@@ -22,6 +22,7 @@
 #include "mojo/public/cpp/bindings/associated_interface_request.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/lib/multiplex_router.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/public/interfaces/bindings/tests/ping_service.mojom.h"
 #include "mojo/public/interfaces/bindings/tests/test_associated_interfaces.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -109,14 +110,34 @@ class AssociatedInterfaceTest : public testing::Test {
         ptr_info.version());
   }
 
-  template <typename T>
-  AssociatedInterfaceRequest<T> EmulatePassingAssociatedRequest(
-      AssociatedInterfaceRequest<T> request,
-      scoped_refptr<MultiplexRouter> target) {
-    ScopedInterfaceEndpointHandle handle = request.PassHandle();
-    CHECK(!handle.is_local());
-    return MakeAssociatedRequest<T>(
-        target->CreateLocalEndpointHandle(handle.release()));
+  void CreateRouterPair(scoped_refptr<MultiplexRouter>* router0,
+                        scoped_refptr<MultiplexRouter>* router1) {
+    MessagePipe pipe;
+    *router0 = new MultiplexRouter(std::move(pipe.handle0),
+                                   MultiplexRouter::MULTI_INTERFACE, true,
+                                   base::ThreadTaskRunnerHandle::Get());
+    *router1 = new MultiplexRouter(std::move(pipe.handle1),
+                                   MultiplexRouter::MULTI_INTERFACE, false,
+                                   base::ThreadTaskRunnerHandle::Get());
+  }
+
+  void CreateIntegerSenderWithExistingRouters(
+      scoped_refptr<MultiplexRouter> router0,
+      IntegerSenderAssociatedPtrInfo* ptr_info0,
+      scoped_refptr<MultiplexRouter> router1,
+      IntegerSenderAssociatedRequest* request1) {
+    router1->CreateAssociatedGroup()->CreateAssociatedInterface(
+        AssociatedGroup::WILL_PASS_PTR, ptr_info0, request1);
+    *ptr_info0 =
+        EmulatePassingAssociatedPtrInfo(std::move(*ptr_info0), router0);
+  }
+
+  void CreateIntegerSender(IntegerSenderAssociatedPtrInfo* ptr_info,
+                           IntegerSenderAssociatedRequest* request) {
+    scoped_refptr<MultiplexRouter> router0;
+    scoped_refptr<MultiplexRouter> router1;
+    CreateRouterPair(&router0, &router1);
+    CreateIntegerSenderWithExistingRouters(router1, ptr_info, router0, request);
   }
 
   // Okay to call from any thread.
@@ -160,30 +181,27 @@ base::Callback<void(int32_t)> ExpectValueSetFlagAndRunClosure(
       &DoExpectValueSetFlagAndRunClosure, expected_value, flag, closure);
 }
 
+void Fail() {
+  FAIL() << "Unexpected connection error";
+}
+
 TEST_F(AssociatedInterfaceTest, InterfacesAtBothEnds) {
   // Bind to the same pipe two associated interfaces, whose implementation lives
   // at different ends. Test that the two don't interfere with each other.
 
-  MessagePipe pipe;
-  scoped_refptr<MultiplexRouter> router0(new MultiplexRouter(
-      true, std::move(pipe.handle0), base::ThreadTaskRunnerHandle::Get()));
-  scoped_refptr<MultiplexRouter> router1(new MultiplexRouter(
-      false, std::move(pipe.handle1), base::ThreadTaskRunnerHandle::Get()));
+  scoped_refptr<MultiplexRouter> router0;
+  scoped_refptr<MultiplexRouter> router1;
+  CreateRouterPair(&router0, &router1);
 
   AssociatedInterfaceRequest<IntegerSender> request;
   IntegerSenderAssociatedPtrInfo ptr_info;
-
-  router0->CreateAssociatedGroup()->CreateAssociatedInterface(
-      AssociatedGroup::WILL_PASS_PTR, &ptr_info, &request);
-  ptr_info = EmulatePassingAssociatedPtrInfo(std::move(ptr_info), router1);
+  CreateIntegerSenderWithExistingRouters(router1, &ptr_info, router0, &request);
 
   IntegerSenderImpl impl0(std::move(request));
   AssociatedInterfacePtr<IntegerSender> ptr0;
   ptr0.Bind(std::move(ptr_info));
 
-  router0->CreateAssociatedGroup()->CreateAssociatedInterface(
-      AssociatedGroup::WILL_PASS_REQUEST, &ptr_info, &request);
-  request = EmulatePassingAssociatedRequest(std::move(request), router1);
+  CreateIntegerSenderWithExistingRouters(router0, &ptr_info, router1, &request);
 
   IntegerSenderImpl impl1(std::move(request));
   AssociatedInterfacePtr<IntegerSender> ptr1;
@@ -360,19 +378,15 @@ TEST_F(AssociatedInterfaceTest, MultiThreadAccess) {
 
   const int32_t kMaxValue = 1000;
   MessagePipe pipe;
-  scoped_refptr<MultiplexRouter> router0(new MultiplexRouter(
-      true, std::move(pipe.handle0), base::ThreadTaskRunnerHandle::Get()));
-  scoped_refptr<MultiplexRouter> router1(new MultiplexRouter(
-      false, std::move(pipe.handle1), base::ThreadTaskRunnerHandle::Get()));
+  scoped_refptr<MultiplexRouter> router0;
+  scoped_refptr<MultiplexRouter> router1;
+  CreateRouterPair(&router0, &router1);
 
   AssociatedInterfaceRequest<IntegerSender> requests[4];
   IntegerSenderAssociatedPtrInfo ptr_infos[4];
-
   for (size_t i = 0; i < 4; ++i) {
-    router0->CreateAssociatedGroup()->CreateAssociatedInterface(
-        AssociatedGroup::WILL_PASS_PTR, &ptr_infos[i], &requests[i]);
-    ptr_infos[i] =
-        EmulatePassingAssociatedPtrInfo(std::move(ptr_infos[i]), router1);
+    CreateIntegerSenderWithExistingRouters(router1, &ptr_infos[i], router0,
+                                           &requests[i]);
   }
 
   TestSender senders[4];
@@ -449,19 +463,15 @@ TEST_F(AssociatedInterfaceTest, FIFO) {
 
   const int32_t kMaxValue = 100;
   MessagePipe pipe;
-  scoped_refptr<MultiplexRouter> router0(new MultiplexRouter(
-      true, std::move(pipe.handle0), base::ThreadTaskRunnerHandle::Get()));
-  scoped_refptr<MultiplexRouter> router1(new MultiplexRouter(
-      false, std::move(pipe.handle1), base::ThreadTaskRunnerHandle::Get()));
+  scoped_refptr<MultiplexRouter> router0;
+  scoped_refptr<MultiplexRouter> router1;
+  CreateRouterPair(&router0, &router1);
 
   AssociatedInterfaceRequest<IntegerSender> requests[4];
   IntegerSenderAssociatedPtrInfo ptr_infos[4];
-
   for (size_t i = 0; i < 4; ++i) {
-    router0->CreateAssociatedGroup()->CreateAssociatedInterface(
-        AssociatedGroup::WILL_PASS_PTR, &ptr_infos[i], &requests[i]);
-    ptr_infos[i] =
-        EmulatePassingAssociatedPtrInfo(std::move(ptr_infos[i]), router1);
+    CreateIntegerSenderWithExistingRouters(router1, &ptr_infos[i], router0,
+                                           &requests[i]);
   }
 
   TestSender senders[4];
@@ -738,6 +748,249 @@ TEST_F(AssociatedInterfaceTest, BindingWithFilters) {
     EXPECT_EQ(3, a_status);
     EXPECT_EQ(3, b_status);
   }
+}
+
+TEST_F(AssociatedInterfaceTest, AssociatedPtrFlushForTesting) {
+  AssociatedInterfaceRequest<IntegerSender> request;
+  IntegerSenderAssociatedPtrInfo ptr_info;
+  CreateIntegerSender(&ptr_info, &request);
+
+  IntegerSenderImpl impl0(std::move(request));
+  AssociatedInterfacePtr<IntegerSender> ptr0;
+  ptr0.Bind(std::move(ptr_info));
+  ptr0.set_connection_error_handler(base::Bind(&Fail));
+
+  bool ptr0_callback_run = false;
+  ptr0->Echo(123, ExpectValueSetFlagAndRunClosure(
+                      123, &ptr0_callback_run, base::Bind(&base::DoNothing)));
+  ptr0.FlushForTesting();
+  EXPECT_TRUE(ptr0_callback_run);
+}
+
+void SetBool(bool* value) {
+  *value = true;
+}
+
+template <typename T>
+void SetBoolWithUnusedParameter(bool* value, T unused) {
+  *value = true;
+}
+
+TEST_F(AssociatedInterfaceTest, AssociatedPtrFlushForTestingWithClosedPeer) {
+  AssociatedInterfaceRequest<IntegerSender> request;
+  IntegerSenderAssociatedPtrInfo ptr_info;
+  CreateIntegerSender(&ptr_info, &request);
+
+  AssociatedInterfacePtr<IntegerSender> ptr0;
+  ptr0.Bind(std::move(ptr_info));
+  bool called = false;
+  ptr0.set_connection_error_handler(base::Bind(&SetBool, &called));
+  request = nullptr;
+
+  ptr0.FlushForTesting();
+  EXPECT_TRUE(called);
+  ptr0.FlushForTesting();
+}
+
+TEST_F(AssociatedInterfaceTest, AssociatedBindingFlushForTesting) {
+  AssociatedInterfaceRequest<IntegerSender> request;
+  IntegerSenderAssociatedPtrInfo ptr_info;
+  CreateIntegerSender(&ptr_info, &request);
+
+  IntegerSenderImpl impl0(std::move(request));
+  impl0.set_connection_error_handler(base::Bind(&Fail));
+  AssociatedInterfacePtr<IntegerSender> ptr0;
+  ptr0.Bind(std::move(ptr_info));
+
+  bool ptr0_callback_run = false;
+  ptr0->Echo(123, ExpectValueSetFlagAndRunClosure(
+                      123, &ptr0_callback_run, base::Bind(&base::DoNothing)));
+  // Because the flush is sent from the binding, it only guarantees that the
+  // request has been received, not the response. The second flush waits for the
+  // response to be received.
+  impl0.binding()->FlushForTesting();
+  impl0.binding()->FlushForTesting();
+  EXPECT_TRUE(ptr0_callback_run);
+}
+
+TEST_F(AssociatedInterfaceTest,
+       AssociatedBindingFlushForTestingWithClosedPeer) {
+  scoped_refptr<MultiplexRouter> router0;
+  scoped_refptr<MultiplexRouter> router1;
+  CreateRouterPair(&router0, &router1);
+
+  AssociatedInterfaceRequest<IntegerSender> request;
+  {
+    IntegerSenderAssociatedPtrInfo ptr_info;
+    CreateIntegerSenderWithExistingRouters(router1, &ptr_info, router0,
+                                           &request);
+  }
+
+  IntegerSenderImpl impl(std::move(request));
+  bool called = false;
+  impl.set_connection_error_handler(base::Bind(&SetBool, &called));
+  impl.binding()->FlushForTesting();
+  EXPECT_TRUE(called);
+  impl.binding()->FlushForTesting();
+}
+
+TEST_F(AssociatedInterfaceTest, BindingFlushForTesting) {
+  IntegerSenderConnectionPtr ptr;
+  IntegerSenderConnectionImpl impl(GetProxy(&ptr));
+  bool called = false;
+  ptr->AsyncGetSender(base::Bind(
+      &SetBoolWithUnusedParameter<IntegerSenderAssociatedPtrInfo>, &called));
+  EXPECT_FALSE(called);
+  impl.binding()->set_connection_error_handler(base::Bind(&Fail));
+  // Because the flush is sent from the binding, it only guarantees that the
+  // request has been received, not the response. The second flush waits for the
+  // response to be received.
+  impl.binding()->FlushForTesting();
+  impl.binding()->FlushForTesting();
+  EXPECT_TRUE(called);
+}
+
+TEST_F(AssociatedInterfaceTest, BindingFlushForTestingWithClosedPeer) {
+  IntegerSenderConnectionPtr ptr;
+  IntegerSenderConnectionImpl impl(GetProxy(&ptr));
+  bool called = false;
+  impl.binding()->set_connection_error_handler(base::Bind(&SetBool, &called));
+  ptr.reset();
+  EXPECT_FALSE(called);
+  impl.binding()->FlushForTesting();
+  EXPECT_TRUE(called);
+  impl.binding()->FlushForTesting();
+}
+
+TEST_F(AssociatedInterfaceTest, StrongBindingFlushForTesting) {
+  IntegerSenderConnectionPtr ptr;
+  auto binding =
+      MakeStrongBinding(base::MakeUnique<IntegerSenderConnectionImpl>(
+                            IntegerSenderConnectionRequest{}),
+                        GetProxy(&ptr));
+  bool called = false;
+  IntegerSenderAssociatedPtr sender_ptr;
+  ptr->GetSender(GetProxy(&sender_ptr, ptr.associated_group()));
+  sender_ptr->Echo(1, base::Bind(&SetBoolWithUnusedParameter<int>, &called));
+  EXPECT_FALSE(called);
+  // Because the flush is sent from the binding, it only guarantees that the
+  // request has been received, not the response. The second flush waits for the
+  // response to be received.
+  ASSERT_TRUE(binding);
+  binding->FlushForTesting();
+  ASSERT_TRUE(binding);
+  binding->FlushForTesting();
+  EXPECT_TRUE(called);
+}
+
+TEST_F(AssociatedInterfaceTest, StrongBindingFlushForTestingWithClosedPeer) {
+  IntegerSenderConnectionPtr ptr;
+  bool called = false;
+  auto binding =
+      MakeStrongBinding(base::MakeUnique<IntegerSenderConnectionImpl>(
+                            IntegerSenderConnectionRequest{}),
+                        GetProxy(&ptr));
+  binding->set_connection_error_handler(base::Bind(&SetBool, &called));
+  ptr.reset();
+  EXPECT_FALSE(called);
+  ASSERT_TRUE(binding);
+  binding->FlushForTesting();
+  EXPECT_TRUE(called);
+  ASSERT_FALSE(binding);
+}
+
+TEST_F(AssociatedInterfaceTest, PtrFlushForTesting) {
+  IntegerSenderConnectionPtr ptr;
+  IntegerSenderConnectionImpl impl(GetProxy(&ptr));
+  bool called = false;
+  ptr.set_connection_error_handler(base::Bind(&Fail));
+  ptr->AsyncGetSender(base::Bind(
+      &SetBoolWithUnusedParameter<IntegerSenderAssociatedPtrInfo>, &called));
+  EXPECT_FALSE(called);
+  ptr.FlushForTesting();
+  EXPECT_TRUE(called);
+}
+
+TEST_F(AssociatedInterfaceTest, PtrFlushForTestingWithClosedPeer) {
+  IntegerSenderConnectionPtr ptr;
+  GetProxy(&ptr);
+  bool called = false;
+  ptr.set_connection_error_handler(base::Bind(&SetBool, &called));
+  EXPECT_FALSE(called);
+  ptr.FlushForTesting();
+  EXPECT_TRUE(called);
+  ptr.FlushForTesting();
+}
+
+TEST_F(AssociatedInterfaceTest, AssociatedBindingConnectionErrorWithReason) {
+  AssociatedInterfaceRequest<IntegerSender> request;
+  IntegerSenderAssociatedPtrInfo ptr_info;
+  CreateIntegerSender(&ptr_info, &request);
+
+  IntegerSenderImpl impl(std::move(request));
+  AssociatedInterfacePtr<IntegerSender> ptr;
+  ptr.Bind(std::move(ptr_info));
+
+  base::RunLoop run_loop;
+  impl.binding()->set_connection_error_with_reason_handler(base::Bind(
+      [](const base::Closure& quit_closure, uint32_t custom_reason,
+         const std::string& description) {
+        EXPECT_EQ(123u, custom_reason);
+        EXPECT_EQ("farewell", description);
+        quit_closure.Run();
+      },
+      run_loop.QuitClosure()));
+
+  ptr.ResetWithReason(123u, "farewell");
+
+  run_loop.Run();
+}
+
+TEST_F(AssociatedInterfaceTest, AssociatedPtrConnectionErrorWithReason) {
+  AssociatedInterfaceRequest<IntegerSender> request;
+  IntegerSenderAssociatedPtrInfo ptr_info;
+  CreateIntegerSender(&ptr_info, &request);
+
+  IntegerSenderImpl impl(std::move(request));
+  AssociatedInterfacePtr<IntegerSender> ptr;
+  ptr.Bind(std::move(ptr_info));
+
+  base::RunLoop run_loop;
+  ptr.set_connection_error_with_reason_handler(base::Bind(
+      [](const base::Closure& quit_closure, uint32_t custom_reason,
+         const std::string& description) {
+        EXPECT_EQ(456u, custom_reason);
+        EXPECT_EQ("farewell", description);
+        quit_closure.Run();
+      },
+      run_loop.QuitClosure()));
+
+  impl.binding()->CloseWithReason(456u, "farewell");
+
+  run_loop.Run();
+}
+
+TEST_F(AssociatedInterfaceTest, AssociatedRequestResetWithReason) {
+  AssociatedInterfaceRequest<IntegerSender> request;
+  IntegerSenderAssociatedPtrInfo ptr_info;
+  CreateIntegerSender(&ptr_info, &request);
+
+  AssociatedInterfacePtr<IntegerSender> ptr;
+  ptr.Bind(std::move(ptr_info));
+
+  base::RunLoop run_loop;
+  ptr.set_connection_error_with_reason_handler(base::Bind(
+      [](const base::Closure& quit_closure, uint32_t custom_reason,
+         const std::string& description) {
+        EXPECT_EQ(789u, custom_reason);
+        EXPECT_EQ("long time no see", description);
+        quit_closure.Run();
+      },
+      run_loop.QuitClosure()));
+
+  request.ResetWithReason(789u, "long time no see");
+
+  run_loop.Run();
 }
 
 }  // namespace

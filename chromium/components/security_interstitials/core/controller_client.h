@@ -46,8 +46,9 @@ enum SecurityInterstitialCommands {
   CMD_DO_REPORT = 8,
   CMD_DONT_REPORT = 9,
   CMD_OPEN_REPORTING_PRIVACY = 10,
+  CMD_OPEN_WHITEPAPER = 11,
   // Report a phishing error
-  CMD_REPORT_PHISHING_ERROR = 11,
+  CMD_REPORT_PHISHING_ERROR = 12,
 };
 
 // Provides methods for handling commands from the user, which requires some
@@ -55,12 +56,13 @@ enum SecurityInterstitialCommands {
 // by the JavaScript error page.
 class ControllerClient {
  public:
-  ControllerClient();
+  explicit ControllerClient(std::unique_ptr<MetricsHelper> metrics_helper);
   virtual ~ControllerClient();
 
   // Handle the user's reporting preferences.
   void SetReportingPreference(bool report);
   void OpenExtendedReportingPrivacyPolicy();
+  void OpenExtendedReportingWhitepaper();
 
   // If available, open the operating system's date/time settings.
   virtual bool CanLaunchDateAndTimeSettings() = 0;
@@ -76,7 +78,6 @@ class ControllerClient {
   virtual void Reload() = 0;
 
   MetricsHelper* metrics_helper() const;
-  void set_metrics_helper(std::unique_ptr<MetricsHelper> metrics_helper);
 
   virtual void OpenUrlInCurrentTab(const GURL& url) = 0;
 

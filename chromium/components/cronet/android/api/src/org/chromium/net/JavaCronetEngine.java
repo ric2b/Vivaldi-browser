@@ -58,8 +58,9 @@ final class JavaCronetEngine extends CronetEngine {
     @Override
     public UrlRequest createRequest(String url, UrlRequest.Callback callback, Executor executor,
             int priority, Collection<Object> connectionAnnotations, boolean disableCache,
-            boolean disableConnectionMigration) {
-        return new JavaUrlRequest(callback, mExecutorService, executor, url, mUserAgent);
+            boolean disableConnectionMigration, boolean allowDirectExecutor) {
+        return new JavaUrlRequest(
+                callback, mExecutorService, executor, url, mUserAgent, allowDirectExecutor);
     }
 
     @Override
@@ -67,7 +68,7 @@ final class JavaCronetEngine extends CronetEngine {
             BidirectionalStream.Callback callback, Executor executor, String httpMethod,
             List<Map.Entry<String, String>> requestHeaders,
             @BidirectionalStream.Builder.StreamPriority int priority,
-            boolean delayRequestHeadersUntilFirstFlush) {
+            boolean delayRequestHeadersUntilFirstFlush, Collection<Object> connectionAnnotations) {
         throw new UnsupportedOperationException(
                 "Can't create a bidi stream - httpurlconnection doesn't have those APIs");
     }
@@ -108,7 +109,7 @@ final class JavaCronetEngine extends CronetEngine {
 
     @Override
     public int getEffectiveConnectionType() {
-        return EffectiveConnectionType.EFFECTIVE_CONNECTION_TYPE_UNKNOWN;
+        return EffectiveConnectionType.TYPE_UNKNOWN;
     }
 
     @Override

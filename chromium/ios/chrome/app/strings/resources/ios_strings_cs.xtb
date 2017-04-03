@@ -15,6 +15,7 @@
 <translation id="3335947283844343239">Znovu otevřít zavřenou kartu</translation>
 <translation id="3414292259312108062">Chrome toto heslo uloží ve vašich <ph name="BEGIN_LINK" />uložených heslech Google<ph name="END_LINK" /> a automaticky vám jej vyplní, abyste si jej nemuseli pamatovat.</translation>
 <translation id="3567664240939803299">Má funkce Google Smart Lock uložit vaše heslo pro tyto stránky?</translation>
+<translation id="3692781555820666866">Pokud je tento příznak aktivován, bude omnibox zahrnovat návrhy webových stránek, které jsou vysílány zařízeními v okolí.</translation>
 <translation id="385051799172605136">Zpět</translation>
 <translation id="4121993058175073134">Chcete-li odesílat data nástroje net-export, nakonfigurujte e-mailový účet v aplikaci Nastavení.</translation>
 <translation id="4399225372525667111">Chrome nemohl ověřit správnost adresy URL tohoto webu.</translation>
@@ -34,5 +35,6 @@
 <translation id="7456847797759667638">Otevřít umístění...</translation>
 <translation id="7481312909269577407">Vpřed</translation>
 <translation id="7484580869648358686">Upozornění: Tady není něco v pořádku!</translation>
+<translation id="7588950540487816470">Fyzický web</translation>
 <translation id="7961015016161918242">Nikdy</translation>
 </translationbundle>

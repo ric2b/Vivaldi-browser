@@ -47,7 +47,6 @@ ChannelProxy::Context::Context(
       listener_(listener),
       ipc_task_runner_(ipc_task_runner),
       channel_connected_called_(false),
-      channel_send_thread_safe_(false),
       message_filter_router_(new MessageFilterRouter()),
       peer_pid_(base::kNullProcessId),
       attachment_broker_endpoint_(false) {
@@ -77,7 +76,6 @@ void ChannelProxy::Context::CreateChannel(
   DCHECK_EQ(factory->GetIPCTaskRunner(), ipc_task_runner_);
   channel_id_ = factory->GetName();
   channel_ = factory->BuildChannel(this);
-  channel_send_thread_safe_ = channel_->IsSendThreadSafe();
   channel_->SetAttachmentBrokerEndpoint(attachment_broker_endpoint_);
 
   Channel::AssociatedInterfaceSupport* support =
@@ -112,6 +110,24 @@ bool ChannelProxy::Context::TryFilters(const Message& message) {
     return true;
   }
   return false;
+}
+
+// Called on the IPC::Channel thread
+void ChannelProxy::Context::PauseChannel() {
+  DCHECK(channel_);
+  channel_->Pause();
+}
+
+// Called on the IPC::Channel thread
+void ChannelProxy::Context::UnpauseChannel(bool flush) {
+  DCHECK(channel_);
+  channel_->Unpause(flush);
+}
+
+// Called on the IPC::Channel thread
+void ChannelProxy::Context::FlushChannel() {
+  DCHECK(channel_);
+  channel_->Flush();
 }
 
 // Called on the IPC::Channel thread
@@ -156,6 +172,15 @@ void ChannelProxy::Context::OnChannelError() {
   // See above comment about using listener_task_runner_ here.
   listener_task_runner_->PostTask(
       FROM_HERE, base::Bind(&Context::OnDispatchError, this));
+}
+
+// Called on the IPC::Channel thread
+void ChannelProxy::Context::OnAssociatedInterfaceRequest(
+    const std::string& interface_name,
+    mojo::ScopedInterfaceEndpointHandle handle) {
+  listener_task_runner_->PostTask(
+      FROM_HERE, base::Bind(&Context::OnDispatchAssociatedInterfaceRequest,
+                            this, interface_name, base::Passed(&handle)));
 }
 
 // Called on the IPC::Channel thread
@@ -348,6 +373,14 @@ void ChannelProxy::Context::OnDispatchBadMessage(const Message& message) {
     listener_->OnBadMessageReceived(message);
 }
 
+// Called on the listener's thread
+void ChannelProxy::Context::OnDispatchAssociatedInterfaceRequest(
+    const std::string& interface_name,
+    mojo::ScopedInterfaceEndpointHandle handle) {
+  if (listener_)
+    listener_->OnAssociatedInterfaceRequest(interface_name, std::move(handle));
+}
+
 void ChannelProxy::Context::ClearChannel() {
   base::AutoLock l(channel_lifetime_lock_);
   channel_.reset();
@@ -373,31 +406,14 @@ void ChannelProxy::Context::AddGenericAssociatedInterfaceForIOThread(
   }
   Channel::AssociatedInterfaceSupport* support =
       channel_->GetAssociatedInterfaceSupport();
-  DCHECK(support);
-  support->AddGenericAssociatedInterface(name, factory);
-}
-
-void ChannelProxy::Context::SendFromThisThread(Message* message) {
-  base::AutoLock l(channel_lifetime_lock_);
-  if (!channel_)
-    return;
-  DCHECK(channel_->IsSendThreadSafe());
-  channel_->Send(message);
+  if (support)
+    support->AddGenericAssociatedInterface(name, factory);
 }
 
 void ChannelProxy::Context::Send(Message* message) {
-  if (channel_send_thread_safe_) {
-    SendFromThisThread(message);
-    return;
-  }
-
   ipc_task_runner()->PostTask(
       FROM_HERE, base::Bind(&ChannelProxy::Context::OnSendMessage, this,
                             base::Passed(base::WrapUnique(message))));
-}
-
-bool ChannelProxy::Context::IsChannelSendThreadSafe() const {
-  return channel_send_thread_safe_;
 }
 
 // Called on the IPC::Channel thread
@@ -490,16 +506,32 @@ void ChannelProxy::Init(std::unique_ptr<ChannelFactory> factory,
     context_->CreateChannel(std::move(factory));
   } else {
     context_->ipc_task_runner()->PostTask(
-        FROM_HERE, base::Bind(&Context::CreateChannel, context_.get(),
+        FROM_HERE, base::Bind(&Context::CreateChannel, context_,
                               base::Passed(&factory)));
   }
 
   // complete initialization on the background thread
   context_->ipc_task_runner()->PostTask(
-      FROM_HERE, base::Bind(&Context::OnChannelOpened, context_.get()));
+      FROM_HERE,
+      base::Bind(&Context::OnChannelOpened, context_));
 
   did_init_ = true;
   OnChannelInit();
+}
+
+void ChannelProxy::Pause() {
+  context_->ipc_task_runner()->PostTask(
+      FROM_HERE, base::Bind(&Context::PauseChannel, context_));
+}
+
+void ChannelProxy::Unpause(bool flush) {
+  context_->ipc_task_runner()->PostTask(
+      FROM_HERE, base::Bind(&Context::UnpauseChannel, context_, flush));
+}
+
+void ChannelProxy::Flush() {
+  context_->ipc_task_runner()->PostTask(
+      FROM_HERE, base::Bind(&Context::FlushChannel, context_));
 }
 
 void ChannelProxy::Close() {
@@ -512,7 +544,7 @@ void ChannelProxy::Close() {
 
   if (context_->ipc_task_runner()) {
     context_->ipc_task_runner()->PostTask(
-        FROM_HERE, base::Bind(&Context::OnChannelClosed, context_.get()));
+        FROM_HERE, base::Bind(&Context::OnChannelClosed, context_));
   }
 }
 
@@ -548,7 +580,7 @@ void ChannelProxy::RemoveFilter(MessageFilter* filter) {
   DCHECK(CalledOnValidThread());
 
   context_->ipc_task_runner()->PostTask(
-      FROM_HERE, base::Bind(&Context::OnRemoveFilter, context_.get(),
+      FROM_HERE, base::Bind(&Context::OnRemoveFilter, context_,
                             base::RetainedRef(filter)));
 }
 
@@ -574,7 +606,7 @@ void ChannelProxy::GetGenericRemoteAssociatedInterface(
   DCHECK(did_init_);
   context_->ipc_task_runner()->PostTask(
       FROM_HERE, base::Bind(&Context::GetRemoteAssociatedInterface,
-                            context_.get(), name, base::Passed(&handle)));
+                            context_, name, base::Passed(&handle)));
 }
 
 void ChannelProxy::ClearIPCTaskRunner() {

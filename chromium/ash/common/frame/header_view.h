@@ -38,6 +38,8 @@ class ASH_EXPORT HeaderView : public views::View,
   explicit HeaderView(views::Widget* target_widget);
   ~HeaderView() override;
 
+  void set_is_immersive_delegate(bool value) { is_immersive_delegate_ = value; }
+
   // Schedules a repaint for the entire title.
   void SchedulePaintForTitle();
 
@@ -58,6 +60,8 @@ class ASH_EXPORT HeaderView : public views::View,
   void SizeConstraintsChanged();
 
   void SetFrameColors(SkColor active_frame_color, SkColor inactive_frame_color);
+  SkColor GetActiveFrameColor() const;
+  SkColor GetInactiveFrameColor() const;
 
   // views::View:
   void Layout() override;
@@ -98,6 +102,9 @@ class ASH_EXPORT HeaderView : public views::View,
   // The fraction of the header's height which is visible while in fullscreen.
   // This value is meaningless when not in fullscreen.
   double fullscreen_visible_fraction_;
+
+  // Has this instance been set as the ImmersiveFullscreenControllerDelegate?
+  bool is_immersive_delegate_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(HeaderView);
 };

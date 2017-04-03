@@ -50,10 +50,6 @@ struct CONTENT_EXPORT ResourceResponseInfo {
   // response's mime type.  This may be a derived value.
   std::string charset;
 
-  // An opaque string carrying security information pertaining to this
-  // response.  This may include information about the SSL connection used.
-  std::string security_info;
-
   // True if the resource was loaded in spite of certificate errors.
   bool has_major_certificate_errors;
 
@@ -93,7 +89,7 @@ struct CONTENT_EXPORT ResourceResponseInfo {
   bool was_fetched_via_spdy;
 
   // True if the response was delivered after NPN is negotiated.
-  bool was_npn_negotiated;
+  bool was_alpn_negotiated;
 
   // True if response could use alternate protocol. However, browser will
   // ignore the alternate protocol when spdy is not enabled on browser side.
@@ -102,15 +98,8 @@ struct CONTENT_EXPORT ResourceResponseInfo {
   // Information about the type of connection used to fetch this response.
   net::HttpResponseInfo::ConnectionInfo connection_info;
 
-  // True if the response was fetched via an explicit proxy (as opposed to a
-  // transparent proxy). The proxy could be any type of proxy, HTTP or SOCKS.
-  // Note: we cannot tell if a transparent proxy may have been involved. If
-  // true, |proxy_server| contains the name of the proxy server that was used.
-  bool was_fetched_via_proxy;
-  net::HostPortPair proxy_server;
-
-  // NPN protocol negotiated with the server.
-  std::string npn_negotiated_protocol;
+  // ALPN protocol negotiated with the server.
+  std::string alpn_negotiated_protocol;
 
   // Remote address of the socket which fetched this resource.
   net::HostPortPair socket_address;
@@ -158,6 +147,26 @@ struct CONTENT_EXPORT ResourceResponseInfo {
   // Effective connection type when the resource was fetched. This is populated
   // only for responses that correspond to main frame requests.
   net::EffectiveConnectionType effective_connection_type;
+
+  // DER-encoded X509Certificate certificate chain. Only present if the renderer
+  // process set report_raw_headers to true.
+  std::vector<std::string> certificate;
+
+  // Bitmask of status info of the SSL certificate. See cert_status_flags.h for
+  // values. Only present if the renderer process set report_raw_headers to
+  // true.
+  net::CertStatus cert_status;
+
+  // Information about the SSL connection itself. See
+  // ssl_connection_status_flags.h for values. The protocol version,
+  // ciphersuite, and compression in use are encoded within. Only present if
+  // the renderer process set report_raw_headers to true.
+  int ssl_connection_status;
+
+  // The key exchange group used by the SSL connection or zero if unknown or not
+  // applicable. Only present if the renderer process set report_raw_headers to
+  // true.
+  uint16_t ssl_key_exchange_group;
 
   // List of Signed Certificate Timestamps (SCTs) and their corresponding
   // validation status. Only present if the renderer process set

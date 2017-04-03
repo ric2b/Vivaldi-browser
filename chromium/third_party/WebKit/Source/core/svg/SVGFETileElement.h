@@ -22,28 +22,28 @@
 #define SVGFETileElement_h
 
 #include "core/svg/SVGFilterPrimitiveStandardAttributes.h"
-#include "platform/graphics/filters/FETile.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
 
 class SVGFETileElement final : public SVGFilterPrimitiveStandardAttributes {
-    DEFINE_WRAPPERTYPEINFO();
-public:
-    DECLARE_NODE_FACTORY(SVGFETileElement);
-    SVGAnimatedString* in1() { return m_in1.get(); }
+  DEFINE_WRAPPERTYPEINFO();
 
-    DECLARE_VIRTUAL_TRACE();
+ public:
+  DECLARE_NODE_FACTORY(SVGFETileElement);
+  SVGAnimatedString* in1() { return m_in1.get(); }
 
-private:
-    explicit SVGFETileElement(Document&);
+  DECLARE_VIRTUAL_TRACE();
 
-    void svgAttributeChanged(const QualifiedName&) override;
-    FilterEffect* build(SVGFilterBuilder*, Filter*) override;
+ private:
+  explicit SVGFETileElement(Document&);
 
-    Member<SVGAnimatedString> m_in1;
+  void svgAttributeChanged(const QualifiedName&) override;
+  FilterEffect* build(SVGFilterBuilder*, Filter*) override;
+
+  Member<SVGAnimatedString> m_in1;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // SVGFETileElement_h
+#endif  // SVGFETileElement_h

@@ -15,6 +15,7 @@
 <translation id="3335947283844343239">Iš naujo atidarykite uždarytą skirtuką</translation>
 <translation id="3414292259312108062">„Chrome“ išsaugos šį slaptažodį <ph name="BEGIN_LINK" />„Google“ išsaugotuose slaptažodžiuose<ph name="END_LINK" /> ir jis bus automatiškai įvestas už jus, kad jums nereikėtų jo įsiminti.</translation>
 <translation id="3567664240939803299">Ar norite, kad „Google Smart Lock“ išsaugotų svetainės slaptažodį?</translation>
+<translation id="3692781555820666866">Kai įgalinta, „omnibox“ juosta apims netoli jūsų esančių įrenginių tinklalapių transliacijos pasiūlymus.</translation>
 <translation id="385051799172605136">Grįžti</translation>
 <translation id="4121993058175073134">Jei n. siųsti tinklo eksp. duom., sukonf. el. pšt. pask. nust. progr.</translation>
 <translation id="4399225372525667111">„Chrome“ negali patikrinti, ar šios svetainės URL tinkamas.</translation>
@@ -34,5 +35,6 @@
 <translation id="7456847797759667638">Atidaryti vietą...</translation>
 <translation id="7481312909269577407">Persiųsti</translation>
 <translation id="7484580869648358686">Įspėjimas: kažkas čia ne taip!</translation>
+<translation id="7588950540487816470">Fizinis žiniatinklis</translation>
 <translation id="7961015016161918242">Niekada</translation>
 </translationbundle>

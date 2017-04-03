@@ -12,7 +12,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/plugins/plugin_filter_utils.h"
+#include "chrome/browser/plugins/plugin_utils.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/render_messages.h"
 #include "chrome/test/base/testing_profile.h"
@@ -22,9 +22,11 @@
 #include "content/public/browser/plugin_service.h"
 #include "content/public/browser/plugin_service_filter.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/common/content_constants.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/origin.h"
 
 using content::PluginService;
 
@@ -44,7 +46,7 @@ class FakePluginServiceFilter : public content::PluginServiceFilter {
                          int render_view_id,
                          const void* context,
                          const GURL& url,
-                         const GURL& policy_url,
+                         const url::Origin& main_frame_origin,
                          content::WebPluginInfo* plugin) override;
 
   bool CanLoadPlugin(int render_process_id,
@@ -63,7 +65,7 @@ bool FakePluginServiceFilter::IsPluginAvailable(
     int render_view_id,
     const void* context,
     const GURL& url,
-    const GURL& policy_url,
+    const url::Origin& main_frame_origin,
     content::WebPluginInfo* plugin) {
   std::map<base::FilePath, bool>::iterator it =
       plugin_state_.find(plugin->path);
@@ -144,9 +146,15 @@ class PluginInfoMessageFilterTest : public ::testing::Test {
         CONTENT_SETTING_BLOCK : CONTENT_SETTING_DEFAULT;
     bool is_default = !expected_is_default;
     bool is_managed = !expected_is_managed;
-    GetPluginContentSetting(host_content_settings_map_,
-                            content::WebPluginInfo(), url, url, plugin,
-                            &setting, &is_default, &is_managed);
+
+    // Pass in a fake Flash plugin info.
+    content::WebPluginInfo plugin_info(
+        base::ASCIIToUTF16(content::kFlashPluginName), base::FilePath(),
+        base::ASCIIToUTF16("1"), base::ASCIIToUTF16("Fake Flash"));
+
+    PluginUtils::GetPluginContentSetting(
+        host_content_settings_map_, plugin_info, url::Origin(url), url, plugin,
+        &setting, &is_default, &is_managed);
     EXPECT_EQ(expected_setting, setting);
     EXPECT_EQ(expected_is_default, is_default);
     EXPECT_EQ(expected_is_managed, is_managed);
@@ -171,9 +179,9 @@ TEST_F(PluginInfoMessageFilterTest, FindEnabledPlugin) {
     ChromeViewHostMsg_GetPluginInfo_Status status;
     content::WebPluginInfo plugin;
     std::string actual_mime_type;
-    EXPECT_TRUE(context()->FindEnabledPlugin(
-        0, GURL(), GURL(), "foo/bar", &status, &plugin, &actual_mime_type,
-        NULL));
+    EXPECT_TRUE(context()->FindEnabledPlugin(0, GURL(), url::Origin(),
+                                             "foo/bar", &status, &plugin,
+                                             &actual_mime_type, NULL));
     EXPECT_EQ(ChromeViewHostMsg_GetPluginInfo_Status::kAllowed, status);
     EXPECT_EQ(foo_plugin_path_.value(), plugin.path.value());
   }
@@ -183,9 +191,9 @@ TEST_F(PluginInfoMessageFilterTest, FindEnabledPlugin) {
     ChromeViewHostMsg_GetPluginInfo_Status status;
     content::WebPluginInfo plugin;
     std::string actual_mime_type;
-    EXPECT_TRUE(context()->FindEnabledPlugin(
-        0, GURL(), GURL(), "foo/bar", &status, &plugin, &actual_mime_type,
-        NULL));
+    EXPECT_TRUE(context()->FindEnabledPlugin(0, GURL(), url::Origin(),
+                                             "foo/bar", &status, &plugin,
+                                             &actual_mime_type, NULL));
     EXPECT_EQ(ChromeViewHostMsg_GetPluginInfo_Status::kAllowed, status);
     EXPECT_EQ(bar_plugin_path_.value(), plugin.path.value());
   }
@@ -197,9 +205,9 @@ TEST_F(PluginInfoMessageFilterTest, FindEnabledPlugin) {
     std::string actual_mime_type;
     std::string identifier;
     base::string16 plugin_name;
-    EXPECT_FALSE(context()->FindEnabledPlugin(
-        0, GURL(), GURL(), "foo/bar", &status, &plugin, &actual_mime_type,
-        NULL));
+    EXPECT_FALSE(context()->FindEnabledPlugin(0, GURL(), url::Origin(),
+                                              "foo/bar", &status, &plugin,
+                                              &actual_mime_type, NULL));
     EXPECT_EQ(ChromeViewHostMsg_GetPluginInfo_Status::kDisabled, status);
     EXPECT_EQ(foo_plugin_path_.value(), plugin.path.value());
   }
@@ -207,9 +215,9 @@ TEST_F(PluginInfoMessageFilterTest, FindEnabledPlugin) {
     ChromeViewHostMsg_GetPluginInfo_Status status;
     content::WebPluginInfo plugin;
     std::string actual_mime_type;
-    EXPECT_FALSE(context()->FindEnabledPlugin(
-        0, GURL(), GURL(), "baz/blurp", &status, &plugin, &actual_mime_type,
-        NULL));
+    EXPECT_FALSE(context()->FindEnabledPlugin(0, GURL(), url::Origin(),
+                                              "baz/blurp", &status, &plugin,
+                                              &actual_mime_type, NULL));
     EXPECT_EQ(ChromeViewHostMsg_GetPluginInfo_Status::kNotFound, status);
     EXPECT_EQ(FILE_PATH_LITERAL(""), plugin.path.value());
   }

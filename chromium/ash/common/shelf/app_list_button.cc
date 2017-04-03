@@ -9,11 +9,12 @@
 #include "ash/common/shelf/ink_drop_button_listener.h"
 #include "ash/common/shelf/shelf_constants.h"
 #include "ash/common/shelf/shelf_item_types.h"
-#include "ash/common/shelf/shelf_types.h"
 #include "ash/common/shelf/shelf_view.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shelf/wm_shelf_util.h"
 #include "ash/common/wm_shell.h"
+#include "ash/public/cpp/shelf_types.h"
+#include "ash/resources/vector_icons/vector_icons.h"
 #include "base/command_line.h"
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
@@ -23,7 +24,6 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/gfx/vector_icons_public.h"
 #include "ui/views/animation/square_ink_drop_ripple.h"
 #include "ui/views/painter.h"
 
@@ -47,9 +47,7 @@ AppListButton::AppListButton(InkDropButtonListener* listener,
     set_ink_drop_visible_opacity(kShelfInkDropVisibleOpacity);
   }
   SetAccessibleName(
-      app_list::switches::IsExperimentalAppListEnabled()
-          ? l10n_util::GetStringUTF16(IDS_ASH_SHELF_APP_LIST_LAUNCHER_TITLE)
-          : l10n_util::GetStringUTF16(IDS_ASH_SHELF_APP_LIST_TITLE));
+      l10n_util::GetStringUTF16(IDS_ASH_SHELF_APP_LIST_LAUNCHER_TITLE));
   SetSize(
       gfx::Size(GetShelfConstant(SHELF_SIZE), GetShelfConstant(SHELF_SIZE)));
   SetFocusPainter(views::Painter::CreateSolidFocusPainter(
@@ -146,7 +144,7 @@ void AppListButton::OnPaint(gfx::Canvas* canvas) {
 
   const gfx::ImageSkia& foreground_image =
       MaterialDesignController::IsShelfMaterial()
-          ? CreateVectorIcon(gfx::VectorIconId::SHELF_APPLIST, kShelfIconColor)
+          ? CreateVectorIcon(kShelfAppListIcon, kShelfIconColor)
           : *rb.GetImageNamed(IDR_ASH_SHELF_ICON_APPLIST).ToImageSkia();
 
   if (ash::MaterialDesignController::IsShelfMaterial()) {

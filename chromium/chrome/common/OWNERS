@@ -7,6 +7,10 @@ per-file pref_names.h=*
 per-file url_constants.cc=*
 per-file url_constants.h=*
 
+# This is for the common case of adding or renaming files. If you're doing
+# structural changes, use usual OWNERS rules.
+per-file BUILD.gn=*
+
 # Mac Sandbox profiles.
 per-file nacl_loader.sb=set noparent
 per-file nacl_loader.sb=rsesek@chromium.org
@@ -14,20 +18,13 @@ per-file nacl_loader.sb=rsesek@chromium.org
 per-file *_messages*.h=set noparent
 per-file *_messages*.h=file://ipc/SECURITY_OWNERS
 
+per-file *_param_traits*.*=set noparent
+per-file *_param_traits*.*=file://ipc/SECURITY_OWNERS
+
 # Changes to Mojo interfaces require a security review to avoid
 # introducing new sandbox escapes.
 per-file *.mojom=set noparent
 per-file *.mojom=file://ipc/SECURITY_OWNERS
-
-# Spellcheck files. Not using spellcheck* since it covers IPC messages too.
-per-file spellcheck_bdict_language.h=groby@chromium.org
-per-file spellcheck_bdict_language.h=rouslan@chromium.org
-per-file spellcheck_common*=groby@chromium.org
-per-file spellcheck_common*=rouslan@chromium.org
-per-file spellcheck_marker.h=groby@chromium.org
-per-file spellcheck_marker.h=rouslan@chromium.org
-per-file spellcheck_result.h=groby@chromium.org
-per-file spellcheck_result.h=rouslan@chromium.org
 
 #Content settings
 per-file content_settings*=markusheintz@chromium.org

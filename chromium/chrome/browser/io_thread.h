@@ -60,6 +60,10 @@ namespace data_usage {
 class DataUseAggregator;
 }
 
+namespace data_use_measurement {
+class ChromeDataUseAscriber;
+}
+
 namespace extensions {
 class EventRouterForwarder;
 }
@@ -128,6 +132,9 @@ class IOThread : public content::BrowserThreadDelegate {
     Globals();
     ~Globals();
 
+    // Ascribes all data use in Chrome to a source, such as page loads.
+    std::unique_ptr<data_use_measurement::ChromeDataUseAscriber>
+        data_use_ascriber;
     // Global aggregator of data use. It must outlive the
     // |system_network_delegate|.
     std::unique_ptr<data_usage::DataUseAggregator> data_use_aggregator;
@@ -222,10 +229,12 @@ class IOThread : public content::BrowserThreadDelegate {
   // Returns a getter for the URLRequestContext.  Only called on the UI thread.
   net::URLRequestContextGetter* system_url_request_context_getter();
 
-  // Clears the host cache.  Intended to be used to prevent exposing recently
+  // Clears the host cache. Intended to be used to prevent exposing recently
   // visited sites on about:net-internals/#dns and about:dns pages.  Must be
-  // called on the IO thread.
-  void ClearHostCache();
+  // called on the IO thread. If |host_filter| is not null, only hosts matched
+  // by it are deleted from the cache.
+  void ClearHostCache(
+      const base::Callback<bool(const std::string&)>& host_filter);
 
   const net::HttpNetworkSession::Params& NetworkSessionParams() const;
 
@@ -305,6 +314,7 @@ class IOThread : public content::BrowserThreadDelegate {
   static void ConfigureParamsFromFieldTrialsAndCommandLine(
       const base::CommandLine& command_line,
       bool is_quic_allowed_by_policy,
+      bool http_09_on_non_default_ports_enabled,
       net::HttpNetworkSession::Params* params);
 
   // TODO(willchan): Remove proxy script fetcher context since it's not
@@ -385,6 +395,9 @@ class IOThread : public content::BrowserThreadDelegate {
 
   // True if QUIC is allowed by policy.
   bool is_quic_allowed_by_policy_;
+
+  // True if HTTP/0.9 is allowed on non-default ports by policy.
+  bool http_09_on_non_default_ports_enabled_;
 
   const base::TimeTicks creation_time_;
 

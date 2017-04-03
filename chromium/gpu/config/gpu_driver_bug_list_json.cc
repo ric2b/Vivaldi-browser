@@ -19,7 +19,7 @@ const char kGpuDriverBugListJson[] = LONG_STRING_CONST(
 {
   "name": "gpu driver bug list",
   // Please update the version number whenever you change this file.
-  "version": "9.02",
+  "version": "9.15",
   "entries": [
     {
       "id": 1,
@@ -41,26 +41,6 @@ const char kGpuDriverBugListJson[] = LONG_STRING_CONST(
       "gl_vendor": "ARM.*",
       "features": [
         "use_client_side_arrays_for_stream_buffers"
-      ]
-    },
-    {
-      "id": 5,
-      "description": "Always call glUseProgram after a successful link to avoid a driver bug",
-      "cr_bugs": [349137],
-      "vendor_id": "0x10de",
-      "exceptions": [
-        {
-          "os": {
-            "type": "macosx",
-            "version": {
-              "op": ">=",
-              "value": "10.9"
-            }
-          }
-        }
-      ],
-      "features": [
-        "use_current_program_after_successful_link"
       ]
     },
     {
@@ -89,18 +69,6 @@ const char kGpuDriverBugListJson[] = LONG_STRING_CONST(
       "vendor_id": "0x10de",
       "features": [
         "needs_offscreen_buffer_workaround"
-      ]
-    },
-    {
-      "id": 16,
-      "description": "EXT_occlusion_query appears to be buggy with Intel GPUs on Linux",
-      "os": {
-        "type": "linux"
-      },
-      "vendor_id": "0x8086",
-      "disabled_extensions": [
-        "GL_ARB_occlusion_query2",
-        "GL_ARB_occlusion_query"
       ]
     },
     {
@@ -333,7 +301,11 @@ const char kGpuDriverBugListJson[] = LONG_STRING_CONST(
       "cr_bugs": [290391],
       "description": "Multisampled renderbuffer allocation must be validated on some Macs",
       "os": {
-        "type": "macosx"
+        "type": "macosx",
+        "version": {
+          "op": "<",
+          "value": "10.10"
+        }
       },
       "features": [
         "validate_multisample_buffer_allocation"
@@ -1485,11 +1457,7 @@ LONG_STRING_CONST(
         "type": "android"
       },
       "gl_vendor": "Qualcomm.*",
-      "gl_renderer": "Adreno \\(TM\\) 4.*",
-      "driver_version": {
-        "op": "<",
-        "value": "141.0"
-      },
+      "gl_renderer": "Adreno \\(TM\\) [45].*",
       "features": [
         "broken_egl_image_ref_counting"
       ]
@@ -1497,23 +1465,6 @@ LONG_STRING_CONST(
 )  // LONG_STRING_CONST macro
 // Avoid C2026 (string too big) error on VisualStudio.
 LONG_STRING_CONST(
-    {
-      "id": 146,
-      "description": "Crashes in D3D11 on specific AMD drivers",
-      "cr_bugs": [517040],
-      "os": {
-        "type": "win"
-      },
-      "vendor_id": "0x1002",
-      "driver_version": {
-        "op": "between",
-        "value": "15.200",
-        "value2": "15.201"
-      },
-      "features": [
-        "disable_d3d11"
-      ]
-    },
     {
       "id": 147,
       "description": "Limit max texure size to 4096 on all of Android",
@@ -1843,22 +1794,6 @@ LONG_STRING_CONST(
       ]
     },
     {
-      "id": 173,
-      "description": "Limit transparent visuals to drivers known to work",
-      "cr_bugs": [369209],
-      "os": {
-        "type": "linux"
-      },
-      "exceptions" : [
-        {
-          "driver_vendor": "Mesa"
-        }
-      ],
-      "features": [
-        "disable_transparent_visuals"
-      ]
-    },
-    {
       "id": 174,
       "description": "Adreno 4xx support for EXT_multisampled_render_to_texture is buggy on Android 7.0",
       "cr_bugs": [612474],
@@ -1947,15 +1882,67 @@ LONG_STRING_CONST(
     },
     {
       "id": 180,
-      "cr_bugs": [632461],
-      "description": "eglCreateImageKHR fails for L8 textures on PowerVR",
+      "cr_bugs": [579060,632461],
+      "description": "eglCreateImageKHR fails for one component textures on PowerVR",
       "os": {
         "type": "android"
       },
       "gl_vendor": "Imagination.*",
-      "gl_renderer": "PowerVR SGX.*",
+      "gl_renderer": "PowerVR .*",
       "features": [
-        "avda_no_eglimage_for_luminance_tex"
+        "avoid_one_component_egl_images"
+      ]
+    },
+    {
+      "id": 181,
+      "description": "glTexStorage* are buggy when base mipmap level is not 0",
+      "cr_bugs": [640506],
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x8086",
+      "features": [
+        "reset_base_mipmap_level_before_texstorage"
+      ]
+    },
+    {
+      "id": 182,
+      "cr_bugs": [638691],
+      "description": "Frequent hang in glClear on old android versions on Mali-T7xx",
+      "os": {
+        "type": "android",
+        "version": {
+          "op": "<",
+          "value": "6.0"
+        }
+      },
+      "gl_renderer": ".*Mali-T7.*",
+      "features": [
+        "gl_clear_broken"
+      ]
+    },
+    {
+      "id": 183,
+      "description": "Result of abs(i) where i is an integer in vertex shader is wrong",
+      "cr_bugs": [642227],
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x8086",
+      "features": [
+        "emulate_abs_int_function"
+      ]
+    },
+    {
+      "id": 184,
+      "description": "Rewrite texelFetchOffset to texelFetch for Intel Mac",
+      "cr_bugs": [642605],
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x8086",
+      "features": [
+        "rewrite_texelfetchoffset_to_texelfetch"
       ]
     },
     {
@@ -1968,6 +1955,33 @@ LONG_STRING_CONST(
       "vendor_id": "0x10de",
       "features": [
         "disable_dxgi_zero_copy_video"
+      ]
+    },
+    {
+      "id": 186,
+      "description": "Rewrite condition in for and while loops for Intel Mac",
+      "cr_bugs": [644669],
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x8086",
+      "features": [
+        "add_and_true_to_loop_condition"
+      ]
+    },
+    {
+      "id": 187,
+      "description": "Rewrite do-while loops to simpler constructs on Mac",
+      "cr_bugs": [644669],
+      "os": {
+        "type": "macosx",
+        "version": {
+          "op": "<",
+          "value": "10.11"
+        }
+      },
+      "features": [
+        "rewrite_do_while_loops"
       ]
     },
     {
@@ -1986,6 +2000,18 @@ LONG_STRING_CONST(
       ]
     },
     {
+      "id": 189,
+      "description": "Do TexImage2D first before CopyTexImage2D for cube map texture on Intel Mac",
+      "cr_bugs": [648197],
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x8086",
+      "features": [
+        "do_teximage_before_copyteximage_to_cube_map"
+      ]
+    },
+    {
       "id": 190,
       "description": "Disable partial swaps on Mesa drivers (detected with GL_VERSION)",
       "cr_bugs": [339493],
@@ -1997,8 +2023,25 @@ LONG_STRING_CONST(
       "features": [
         "disable_post_sub_buffers_for_onscreen_surfaces"
       ]
+    },
+    {
+      "id": 191,
+      "description": "ES3 support is unreliable on some older drivers",
+      "cr_bugs": [657925],
+      "os": {
+        "type": "android",
+        "version": {
+          "op": "<",
+          "value": "4.4"
+        }
+      },
+      "features": [
+        "disable_es3_gl_context"
+      ]
     }
   ]
+  // Please update the version number at beginning of this file whenever you
+  // change this file.
 }
 
 );  // LONG_STRING_CONST macro

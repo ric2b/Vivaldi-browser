@@ -98,8 +98,6 @@ IPC_STRUCT_BEGIN(IndexedDBHostMsg_DatabaseCreateTransaction_Params)
   IPC_STRUCT_MEMBER(int32_t, ipc_database_id)
   // The transaction id as minted by the frontend.
   IPC_STRUCT_MEMBER(int64_t, transaction_id)
-  // To get to WebIDBDatabaseCallbacks.
-  IPC_STRUCT_MEMBER(int32_t, ipc_database_callbacks_id)
   // The scope of the transaction.
   IPC_STRUCT_MEMBER(std::vector<int64_t>, object_store_ids)
   // The transaction mode.
@@ -445,9 +443,6 @@ IPC_MESSAGE_CONTROL4(IndexedDBMsg_CallbacksError,
                      int32_t /* ipc_callbacks_id */,
                      int /* code */,
                      base::string16 /* message */)
-IPC_MESSAGE_CONTROL2(IndexedDBMsg_CallbacksBlocked,
-                     int32_t /* ipc_thread_id */,
-                     int32_t /* ipc_callbacks_id */)
 IPC_MESSAGE_CONTROL3(IndexedDBMsg_CallbacksIntBlocked,
                      int32_t /* ipc_thread_id */,
                      int32_t /* ipc_callbacks_id */,
@@ -539,6 +534,13 @@ IPC_MESSAGE_CONTROL3(IndexedDBHostMsg_DatabaseDeleteObjectStore,
                      int64_t, /* transaction_id */
                      int64_t) /* object_store_id */
 
+// WebIDBDatabase::renameObjectStore() message.
+IPC_MESSAGE_CONTROL4(IndexedDBHostMsg_DatabaseRenameObjectStore,
+                     int32_t,        /* ipc_database_id */
+                     int64_t,        /* transaction_id */
+                     int64_t,        /* object_store_id */
+                     base::string16) /* new_name */
+
 // WebIDBDatabase::createTransaction() message.
 IPC_MESSAGE_CONTROL1(IndexedDBHostMsg_DatabaseCreateTransaction,
                      IndexedDBHostMsg_DatabaseCreateTransaction_Params)
@@ -612,6 +614,14 @@ IPC_MESSAGE_CONTROL4(IndexedDBHostMsg_DatabaseDeleteIndex,
                      int64_t, /* transaction_id */
                      int64_t, /* object_store_id */
                      int64_t) /* index_id */
+
+// WebIDBDatabase::renameIndex() message.
+IPC_MESSAGE_CONTROL5(IndexedDBHostMsg_DatabaseRenameIndex,
+                     int32_t,        /* ipc_database_id */
+                     int64_t,        /* transaction_id */
+                     int64_t,        /* object_store_id */
+                     int64_t,        /* index_id */
+                     base::string16) /* new_name */
 
 // WebIDBDatabase::abort() message.
 IPC_MESSAGE_CONTROL2(IndexedDBHostMsg_DatabaseAbort,

@@ -381,15 +381,16 @@ TEST_F('CursorsTest', 'MultiLineOffsetSelection', function() {
     secondLineCursor = new cursors.Cursor(secondLine, 1);
     assertEquals(7, secondLineCursor.selectionIndex_);
 
-    // Now, try selecting via node offsets.
-    // Slightly different than DOM selections (1-based index).
+    // Now, try selecting via node offsets. This defaults to index 0 and not
+    // index in parent because Blink accessibility selection doesn't always
+    // work.
     var cursor = new cursors.Cursor(root.firstChild, -1);
-    assertEquals(root, cursor.selectionNode_);
-    assertEquals(1, cursor.selectionIndex_);
+    assertEquals(root.firstChild, cursor.selectionNode_);
+    assertEquals(0, cursor.selectionIndex_);
 
     cursor = new cursors.Cursor(root.firstChild.nextSibling, -1);
-    assertEquals(root, cursor.selectionNode_);
-    assertEquals(2, cursor.selectionIndex_);
+    assertEquals(root.firstChild.nextSibling, cursor.selectionNode_);
+    assertEquals(0, cursor.selectionIndex_);
   });
 });
 
@@ -423,5 +424,37 @@ TEST_F('CursorsTest', 'InlineElementOffset', function() {
 
     var oRange = new cursors.Range(cur, curIntoO);
     oRange.select();
+  });
+});
+
+TEST_F('CursorsTest', 'ContentEquality', function() {
+  this.runWithLoadedTree(function() {/*!
+    <div role="region">this is a test</button>
+  */}, function(root) {
+    var region = root.firstChild;
+    assertEquals(RoleType.region, region.role);
+    var staticText = region.firstChild;
+    assertEquals(RoleType.staticText, staticText.role);
+    var inlineTextBox = staticText.firstChild;
+    assertEquals(RoleType.inlineTextBox, inlineTextBox.role);
+
+    var rootRange = cursors.Range.fromNode(root);
+    var regionRange = cursors.Range.fromNode(region);
+    var staticTextRange = cursors.Range.fromNode(staticText);
+    var inlineTextBoxRange = cursors.Range.fromNode(inlineTextBox);
+
+    // Positive cases.
+    assertTrue(regionRange.contentEquals(staticTextRange));
+    assertTrue(staticTextRange.contentEquals(regionRange));
+    assertTrue(inlineTextBoxRange.contentEquals(staticTextRange));
+    assertTrue(staticTextRange.contentEquals(inlineTextBoxRange));
+
+    // Negative cases.
+    assertFalse(rootRange.contentEquals(regionRange));
+    assertFalse(rootRange.contentEquals(staticTextRange));
+    assertFalse(rootRange.contentEquals(inlineTextBoxRange));
+    assertFalse(regionRange.contentEquals(rootRange));
+    assertFalse(staticTextRange.contentEquals(rootRange));
+    assertFalse(inlineTextBoxRange.contentEquals(rootRange));
   });
 });

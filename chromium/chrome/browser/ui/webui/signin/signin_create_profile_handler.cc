@@ -10,7 +10,7 @@
 
 #include "base/bind.h"
 #include "base/files/file_path.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_runner_util.h"
@@ -31,11 +31,12 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/user_manager.h"
 #include "chrome/browser/ui/webui/profile_helper.h"
+#include "chrome/browser/ui/webui/signin/signin_utils.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_error_controller.h"
 #include "components/strings/grit/components_strings.h"
@@ -366,7 +367,8 @@ void SigninCreateProfileHandler::CreateShortcutAndShowSuccess(
   dict.SetString("name", profile->GetPrefs()->GetString(prefs::kProfileName));
   dict.Set("filePath", base::CreateFilePathValue(profile->GetPath()));
 
-  bool open_new_window = true;
+  bool is_force_signin_enabled = signin::IsForceSigninEnabled();
+  bool open_new_window = !is_force_signin_enabled;
 
 #if defined(ENABLE_SUPERVISED_USERS)
   // If the new profile is a supervised user, instead of opening a new window
@@ -374,8 +376,12 @@ void SigninCreateProfileHandler::CreateShortcutAndShowSuccess(
   // dialog. If we are importing an existing supervised profile or creating a
   // new non-supervised user profile we don't show any confirmation, so open
   // the new window now.
-  open_new_window = profile_creation_type_ != SUPERVISED_PROFILE_CREATION;
-  dict.SetBoolean("showConfirmation", !open_new_window);
+
+  open_new_window =
+      open_new_window && profile_creation_type_ != SUPERVISED_PROFILE_CREATION;
+
+  dict.SetBoolean("showConfirmation",
+                  profile_creation_type_ == SUPERVISED_PROFILE_CREATION);
 
   bool is_supervised = profile_creation_type_ == SUPERVISED_PROFILE_CREATION ||
                        profile_creation_type_ == SUPERVISED_PROFILE_IMPORT;
@@ -398,6 +404,8 @@ void SigninCreateProfileHandler::CreateShortcutAndShowSuccess(
     // Opening the new window must be the last action, after all callbacks
     // have been run, to give them a chance to initialize the profile.
     OpenNewWindowForProfile(profile, Profile::CREATE_STATUS_INITIALIZED);
+  } else if (is_force_signin_enabled) {
+    OpenSigninDialogForProfile(profile);
   }
   profile_creation_type_ = NO_CREATION_IN_PROGRESS;
 }
@@ -412,6 +420,14 @@ void SigninCreateProfileHandler::OpenNewWindowForProfile(
       true,  // Create a first run window.
       profile,
       status);
+}
+
+void SigninCreateProfileHandler::OpenSigninDialogForProfile(Profile* profile) {
+// TODO(zmin): Remove the switcher once the UserManager API is finished on Mac.
+#if !defined(OS_MACOSX)
+  UserManager::ShowSigninDialog(web_ui()->GetWebContents()->GetBrowserContext(),
+                                profile->GetPath());
+#endif
 }
 
 void SigninCreateProfileHandler::ShowProfileCreationError(
@@ -590,12 +606,13 @@ void SigninCreateProfileHandler::LoadCustodianProfileCallback(
         // If sync is not yet fully initialized, the creation may take extra
         // time, so show a message. Import doesn't wait for an acknowledgment,
         // so it won't have the same potential delay.
-        ProfileSyncService* sync_service =
+        browser_sync::ProfileSyncService* sync_service =
             ProfileSyncServiceFactory::GetInstance()->GetForProfile(
                 custodian_profile);
-        ProfileSyncService::SyncStatusSummary status =
+        browser_sync::ProfileSyncService::SyncStatusSummary status =
             sync_service->QuerySyncStatusSummary();
-        if (status == ProfileSyncService::DATATYPES_NOT_INITIALIZED) {
+        if (status ==
+            browser_sync::ProfileSyncService::DATATYPES_NOT_INITIALIZED) {
           ShowProfileCreationWarning(l10n_util::GetStringUTF16(
               IDS_PROFILES_CREATE_SUPERVISED_JUST_SIGNED_IN));
         }

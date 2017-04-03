@@ -4,15 +4,14 @@
 
 #include "chrome/browser/ui/ash/volume_controller_chromeos.h"
 
-#include "ash/common/ash_switches.h"
 #include "base/command_line.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/extensions/api/system_private/system_private_api.h"
+#include "chrome/grit/browser_resources.h"
 #include "chromeos/audio/chromeos_sounds.h"
 #include "chromeos/chromeos_switches.h"
 #include "content/public/browser/user_metrics.h"
-#include "grit/browser_resources.h"
 #include "media/audio/sounds/sounds_manager.h"
 #include "ui/base/resource/resource_bundle.h"
 

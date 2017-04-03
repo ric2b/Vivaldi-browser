@@ -24,6 +24,9 @@ declare_args() {
   chrome_public_apk_load_library_from_apk =
       chromium_linker_supported &&
       (current_cpu == "arm64" || current_cpu == "x64")
+
+  # Enables ProGuard obfuscation of Chromium packages.
+  enable_proguard_obfuscation = false
 }
 
 default_chrome_public_jinja_variables = [
@@ -32,7 +35,6 @@ default_chrome_public_jinja_variables = [
   "enable_vr_shell=$enable_vr_shell",
 ]
 
-# GYP: //chrome/android/chrome_apk.gypi
 template("chrome_public_apk_tmpl") {
   android_apk(target_name) {
     forward_variables_from(invoker, "*")
@@ -44,19 +46,19 @@ template("chrome_public_apk_tmpl") {
       enable_multidex = true
     } else {
       proguard_enabled = true
-      _prev_proguard_configs = []
-      if (defined(proguard_configs)) {
-        _prev_proguard_configs = proguard_configs
+      if (!defined(proguard_configs)) {
+        proguard_configs = []
       }
-      proguard_configs = []
-      proguard_configs = _prev_proguard_configs + [
-                           "//chrome/android/java/proguard.flags",
-                           "//base/android/base_proguard_config.flags",
-                           "//base/android/release_proguard_config.flags",
-                         ]
-      if (enable_webvr) {
+      proguard_configs += [
+        "//chrome/android/java/proguard.flags",
+        "//base/android/proguard/chromium_apk.flags",
+        "//base/android/proguard/chromium_code.flags",
+      ]
+      if (enable_proguard_obfuscation) {
+        proguard_configs += [ "//chrome/android/java/proguard-obfuscate.flags" ]
+      } else {
         proguard_configs +=
-            [ "//third_party/gvr-android-sdk/proguard/base.flags" ]
+            [ "//chrome/android/java/proguard-dont-obfuscate.flags" ]
       }
     }
 
@@ -72,6 +74,49 @@ template("chrome_public_apk_tmpl") {
       if (!defined(enable_relocation_packing)) {
         enable_relocation_packing = chrome_public_apk_use_relocation_packer
       }
+    }
+  }
+}
+
+template("monochrome_public_apk_tmpl") {
+  chrome_public_apk_tmpl(target_name) {
+    # Always build 64-bit //android_webview:monochrome because Chrome runs
+    # in 32-bit mode.
+    if (android_64bit_target_cpu) {
+      shared_libraries = [ "//android_webview:monochrome" ]
+    } else {
+      shared_libraries = [ "//chrome/android:monochrome" ]
+    }
+    if (android_64bit_target_cpu && build_apk_secondary_abi) {
+      secondary_abi_shared_libraries =
+          [ "//chrome/android:monochrome_secondary_abi_lib" ]
+    }
+
+    alternative_locale_resource_dep = "//chrome/android:monochrome_locale_paks"
+
+    alternative_android_sdk_jar = webview_framework_jar
+    app_as_shared_lib = true
+    use_chromium_linker = false
+    requires_sdk_api_level_23 = true
+    enable_relocation_packing = true
+    extensions_to_not_compress = ".lpak,.pak,.bin,.dat"
+
+    # Configrations to make android load shared library from APK.
+    uncompress_shared_libraries = true
+    page_align_shared_libraries = true
+
+    forward_variables_from(invoker, "*")
+
+    if (!defined(deps)) {
+      deps = []
+    }
+    deps += [ "//android_webview/glue" ]
+
+    if (!is_java_debug) {
+      if (!defined(proguard_configs)) {
+        proguard_configs = []
+      }
+      proguard_configs += [ "//android_webview/apk/java/proguard.flags" ]
     }
   }
 }

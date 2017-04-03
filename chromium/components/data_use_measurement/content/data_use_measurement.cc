@@ -8,11 +8,16 @@
 #include "base/metrics/sparse_histogram.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
+#include "components/data_use_measurement/core/data_use_user_data.h"
 #include "content/public/browser/resource_request_info.h"
 #include "net/base/network_change_notifier.h"
 #include "net/base/upload_data_stream.h"
 #include "net/http/http_response_headers.h"
 #include "net/url_request/url_request.h"
+
+#if defined(OS_ANDROID)
+#include "net/android/traffic_stats.h"
+#endif
 
 namespace data_use_measurement {
 
@@ -42,6 +47,20 @@ void IncreaseSparseHistogramByValue(const std::string& name,
   histogram->AddCount(sample, value);
 }
 
+#if defined(OS_ANDROID)
+void IncrementLatencyHistogramByCount(const std::string& name,
+                                      const base::TimeDelta& latency,
+                                      int64_t count) {
+  base::HistogramBase* histogram_pointer = base::Histogram::FactoryTimeGet(
+      name,
+      base::TimeDelta::FromMilliseconds(1),  // Minimum sample
+      base::TimeDelta::FromHours(1),         // Maximum sample
+      50,                                    // Bucket count.
+      base::HistogramBase::kUmaTargetedHistogramFlag);
+  histogram_pointer->AddCount(latency.InMilliseconds(), count);
+}
+#endif
+
 }  // namespace
 
 DataUseMeasurement::DataUseMeasurement(
@@ -52,68 +71,135 @@ DataUseMeasurement::DataUseMeasurement(
       app_state_(base::android::APPLICATION_STATE_HAS_RUNNING_ACTIVITIES),
       app_listener_(new base::android::ApplicationStatusListener(
           base::Bind(&DataUseMeasurement::OnApplicationStateChange,
-                     base::Unretained(this))))
+                     base::Unretained(this)))),
+      rx_bytes_os_(0),
+      tx_bytes_os_(0),
+      bytes_transferred_since_last_traffic_stats_query_(0),
+      no_reads_since_background_(false)
 #endif
 {
 }
 
 DataUseMeasurement::~DataUseMeasurement(){};
 
+void DataUseMeasurement::OnBeforeURLRequest(net::URLRequest* request) {
+  DataUseUserData* data_use_user_data = reinterpret_cast<DataUseUserData*>(
+      request->GetUserData(DataUseUserData::kUserDataKey));
+  if (!data_use_user_data) {
+    data_use_user_data = new DataUseUserData(
+        DataUseUserData::ServiceName::NOT_TAGGED, CurrentAppState());
+    request->SetUserData(DataUseUserData::kUserDataKey, data_use_user_data);
+  }
+}
+
 void DataUseMeasurement::OnBeforeRedirect(const net::URLRequest& request,
                                           const GURL& new_location) {
   // Recording data use of request on redirects.
-  ReportDataUseUMA(request);
+  // TODO(rajendrant): May not be needed when http://crbug/651957 is fixed.
+  UpdateDataUsePrefs(request);
+}
+
+void DataUseMeasurement::OnNetworkBytesReceived(const net::URLRequest& request,
+                                                int64_t bytes_received) {
+  UMA_HISTOGRAM_COUNTS("DataUse.BytesReceived.Delegate", bytes_received);
+  ReportDataUseUMA(request, DOWNSTREAM, bytes_received);
+#if defined(OS_ANDROID)
+  bytes_transferred_since_last_traffic_stats_query_ += bytes_received;
+#endif
+}
+
+void DataUseMeasurement::OnNetworkBytesSent(const net::URLRequest& request,
+                                            int64_t bytes_sent) {
+  UMA_HISTOGRAM_COUNTS("DataUse.BytesSent.Delegate", bytes_sent);
+  ReportDataUseUMA(request, UPSTREAM, bytes_sent);
+#if defined(OS_ANDROID)
+  bytes_transferred_since_last_traffic_stats_query_ += bytes_sent;
+#endif
 }
 
 void DataUseMeasurement::OnCompleted(const net::URLRequest& request,
                                      bool started) {
   // TODO(amohammadkhan): Verify that there is no double recording in data use
   // of redirected requests.
-  ReportDataUseUMA(request);
+  UpdateDataUsePrefs(request);
+#if defined(OS_ANDROID)
+  MaybeRecordNetworkBytesOS();
+#endif
 }
 
-void DataUseMeasurement::ReportDataUseUMA(
-    const net::URLRequest& request) const {
-  // Counts rely on URLRequest::GetTotalReceivedBytes() and
-  // URLRequest::GetTotalSentBytes(), which does not include the send path,
-  // network layer overhead, TLS overhead, and DNS.
-  // TODO(amohammadkhan): Make these measured bytes more in line with number of
-  // bytes in lower levels.
-  int64_t total_upload_bytes = request.GetTotalSentBytes();
-  int64_t total_received_bytes = request.GetTotalReceivedBytes();
+void DataUseMeasurement::ReportDataUseUMA(const net::URLRequest& request,
+                                          TrafficDirection dir,
+                                          int64_t bytes) {
   bool is_user_traffic = IsUserInitiatedRequest(request);
-
   bool is_connection_cellular =
       net::NetworkChangeNotifier::IsConnectionCellular(
           net::NetworkChangeNotifier::GetConnectionType());
-  RecordUMAHistogramCount(
-      GetHistogramName(is_user_traffic ? "DataUse.TrafficSize.User"
-                                       : "DataUse.TrafficSize.System",
-                       UPSTREAM, is_connection_cellular),
-      total_upload_bytes);
-  RecordUMAHistogramCount(
-      GetHistogramName(is_user_traffic ? "DataUse.TrafficSize.User"
-                                       : "DataUse.TrafficSize.System",
-                       DOWNSTREAM, is_connection_cellular),
-      total_received_bytes);
 
-  DataUseUserData* attached_service_data = reinterpret_cast<DataUseUserData*>(
+  DataUseUserData* attached_service_data = static_cast<DataUseUserData*>(
+      request.GetUserData(DataUseUserData::kUserDataKey));
+  DataUseUserData::ServiceName service_name = DataUseUserData::NOT_TAGGED;
+  DataUseUserData::AppState old_app_state = DataUseUserData::FOREGROUND;
+  DataUseUserData::AppState new_app_state = DataUseUserData::UNKNOWN;
+
+  if (attached_service_data) {
+    service_name = attached_service_data->service_name();
+    old_app_state = attached_service_data->app_state();
+  }
+  if (old_app_state == CurrentAppState())
+    new_app_state = old_app_state;
+
+  if (attached_service_data && old_app_state != new_app_state)
+    attached_service_data->set_app_state(CurrentAppState());
+
+  RecordUMAHistogramCount(
+      GetHistogramName(is_user_traffic ? "DataUse.TrafficSize.User"
+                                       : "DataUse.TrafficSize.System",
+                       dir, new_app_state, is_connection_cellular),
+      bytes);
+
+  if (!is_user_traffic) {
+    ReportDataUsageServices(service_name, dir, new_app_state,
+                            is_connection_cellular, bytes);
+  }
+#if defined(OS_ANDROID)
+  if (dir == DOWNSTREAM && CurrentAppState() == DataUseUserData::BACKGROUND) {
+    DCHECK(!last_app_background_time_.is_null());
+
+    const base::TimeDelta time_since_background =
+        base::TimeTicks::Now() - last_app_background_time_;
+    IncrementLatencyHistogramByCount(
+        is_user_traffic ? "DataUse.BackgroundToDataRecievedPerByte.User"
+                        : "DataUse.BackgroundToDataRecievedPerByte.System",
+        time_since_background, bytes);
+    if (no_reads_since_background_) {
+      no_reads_since_background_ = false;
+      IncrementLatencyHistogramByCount(
+          is_user_traffic ? "DataUse.BackgroundToFirstDownstream.User"
+                          : "DataUse.BackgroundToFirstDownstream.System",
+          time_since_background, 1);
+    }
+  }
+#endif
+}
+
+void DataUseMeasurement::UpdateDataUsePrefs(
+    const net::URLRequest& request) const {
+  bool is_connection_cellular =
+      net::NetworkChangeNotifier::IsConnectionCellular(
+          net::NetworkChangeNotifier::GetConnectionType());
+
+  DataUseUserData* attached_service_data = static_cast<DataUseUserData*>(
       request.GetUserData(DataUseUserData::kUserDataKey));
   DataUseUserData::ServiceName service_name =
       attached_service_data ? attached_service_data->service_name()
                             : DataUseUserData::NOT_TAGGED;
-  if (!is_user_traffic) {
-    ReportDataUsageServices(service_name, UPSTREAM, is_connection_cellular,
-                            total_upload_bytes);
-    ReportDataUsageServices(service_name, DOWNSTREAM, is_connection_cellular,
-                            total_received_bytes);
-  }
 
   // Update data use prefs for cellular connections.
   if (!metrics_data_use_forwarder_.is_null()) {
     metrics_data_use_forwarder_.Run(
-        attached_service_data->GetServiceNameAsString(service_name),
-        total_upload_bytes + total_received_bytes, is_connection_cellular);
+        DataUseUserData::GetServiceNameAsString(service_name),
+        request.GetTotalSentBytes() + request.GetTotalReceivedBytes(),
+        is_connection_cellular);
   }
 }
 
@@ -134,27 +220,30 @@ bool DataUseMeasurement::IsUserInitiatedRequest(
 #if defined(OS_ANDROID)
 void DataUseMeasurement::OnApplicationStateChangeForTesting(
     base::android::ApplicationState application_state) {
-  app_state_ = application_state;
+  OnApplicationStateChange(application_state);
 }
 #endif
 
-DataUseMeasurement::AppState DataUseMeasurement::CurrentAppState() const {
+DataUseUserData::AppState DataUseMeasurement::CurrentAppState() const {
 #if defined(OS_ANDROID)
   if (app_state_ != base::android::APPLICATION_STATE_HAS_RUNNING_ACTIVITIES)
-    return BACKGROUND;
+    return DataUseUserData::BACKGROUND;
 #endif
   // If the OS is not Android, all the requests are considered Foreground.
-  return FOREGROUND;
+  return DataUseUserData::FOREGROUND;
 }
 
 std::string DataUseMeasurement::GetHistogramName(
     const char* prefix,
     TrafficDirection dir,
+    DataUseUserData::AppState app_state,
     bool is_connection_cellular) const {
-  AppState app_state = CurrentAppState();
   return base::StringPrintf(
       "%s.%s.%s.%s", prefix, dir == UPSTREAM ? "Upstream" : "Downstream",
-      app_state == BACKGROUND ? "Background" : "Foreground",
+      app_state == DataUseUserData::UNKNOWN
+          ? "Unknown"
+          : (app_state == DataUseUserData::FOREGROUND ? "Foreground"
+                                                      : "Background"),
       is_connection_cellular ? "Cellular" : "NotCellular");
 }
 
@@ -162,12 +251,52 @@ std::string DataUseMeasurement::GetHistogramName(
 void DataUseMeasurement::OnApplicationStateChange(
     base::android::ApplicationState application_state) {
   app_state_ = application_state;
+  if (app_state_ != base::android::APPLICATION_STATE_HAS_RUNNING_ACTIVITIES) {
+    last_app_background_time_ = base::TimeTicks::Now();
+    no_reads_since_background_ = true;
+    MaybeRecordNetworkBytesOS();
+  } else {
+    last_app_background_time_ = base::TimeTicks();
+  }
+}
+
+void DataUseMeasurement::MaybeRecordNetworkBytesOS() {
+  // Minimum number of bytes that should be reported by the network delegate
+  // before Android's TrafficStats API is queried (if Chrome is not in
+  // background). This reduces the overhead of repeatedly calling the API.
+  static const int64_t kMinDelegateBytes = 25000;
+
+  if (bytes_transferred_since_last_traffic_stats_query_ < kMinDelegateBytes &&
+      CurrentAppState() == DataUseUserData::FOREGROUND) {
+    return;
+  }
+  bytes_transferred_since_last_traffic_stats_query_ = 0;
+  int64_t bytes = 0;
+  // Query Android traffic stats directly instead of registering with the
+  // DataUseAggregator since the latter does not provide notifications for
+  // the incognito traffic.
+  if (net::android::traffic_stats::GetCurrentUidRxBytes(&bytes)) {
+    if (rx_bytes_os_ != 0) {
+      DCHECK_GE(bytes, rx_bytes_os_);
+      UMA_HISTOGRAM_COUNTS("DataUse.BytesReceived.OS", bytes - rx_bytes_os_);
+    }
+    rx_bytes_os_ = bytes;
+  }
+
+  if (net::android::traffic_stats::GetCurrentUidTxBytes(&bytes)) {
+    if (tx_bytes_os_ != 0) {
+      DCHECK_GE(bytes, tx_bytes_os_);
+      UMA_HISTOGRAM_COUNTS("DataUse.BytesSent.OS", bytes - tx_bytes_os_);
+    }
+    tx_bytes_os_ = bytes;
+  }
 }
 #endif
 
 void DataUseMeasurement::ReportDataUsageServices(
     DataUseUserData::ServiceName service,
     TrafficDirection dir,
+    DataUseUserData::AppState app_state,
     bool is_connection_cellular,
     int64_t message_size) const {
   RecordUMAHistogramCount(
@@ -175,7 +304,7 @@ void DataUseMeasurement::ReportDataUsageServices(
       message_size);
   if (message_size > 0) {
     IncreaseSparseHistogramByValue(
-        GetHistogramName("DataUse.MessageSize.AllServices", dir,
+        GetHistogramName("DataUse.MessageSize.AllServices", dir, app_state,
                          is_connection_cellular),
         service, message_size);
   }

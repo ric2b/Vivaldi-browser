@@ -2,15 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Closure compiler won't let this be declared inside cr.define().
-/** @enum {string} */
-var SourceType = {
-  WEBSTORE: 'webstore',
-  POLICY: 'policy',
-  SIDELOADED: 'sideloaded',
-  UNPACKED: 'unpacked',
-};
-
 cr.define('extensions', function() {
   /** @interface */
   var ItemDelegate = function() {};
@@ -50,13 +41,16 @@ cr.define('extensions', function() {
     setItemCollectsErrors: assertNotReached,
 
     /**
-     * @param {string} id,
+     * @param {string} id
      * @param {chrome.developerPrivate.ExtensionView} view
      */
     inspectItemView: assertNotReached,
 
     /** @param {string} id */
     repairItem: assertNotReached,
+
+    /** @param {string} id */
+    showItemOptionsPage: assertNotReached,
   };
 
   var Item = Polymer({
@@ -158,30 +152,11 @@ cr.define('extensions', function() {
     },
 
     /**
-     * @return {SourceType}
-     * @private
-     */
-    computeSource_: function() {
-      if (this.data.controlledInfo &&
-          this.data.controlledInfo.type ==
-              chrome.developerPrivate.ControllerType.POLICY) {
-        return SourceType.POLICY;
-      } else if (this.data.location ==
-                     chrome.developerPrivate.Location.THIRD_PARTY) {
-        return SourceType.SIDELOADED;
-      } else if (this.data.location ==
-                     chrome.developerPrivate.Location.UNPACKED) {
-        return SourceType.UNPACKED;
-      }
-      return SourceType.WEBSTORE;
-    },
-
-    /**
      * @return {string}
      * @private
      */
     computeSourceIndicatorIcon_: function() {
-      switch (this.computeSource_()) {
+      switch (extensions.getItemSource(this.data)) {
         case SourceType.POLICY:
           return 'communication:business';
         case SourceType.SIDELOADED:
@@ -199,17 +174,9 @@ cr.define('extensions', function() {
      * @private
      */
     computeSourceIndicatorText_: function() {
-      switch (this.computeSource_()) {
-        case SourceType.POLICY:
-          return loadTimeData.getString('itemSourcePolicy');
-        case SourceType.SIDELOADED:
-          return loadTimeData.getString('itemSourceSideloaded');
-        case SourceType.UNPACKED:
-          return loadTimeData.getString('itemSourceUnpacked');
-        case SourceType.WEBSTORE:
-          return '';
-      }
-      assertNotReached();
+      var sourceType = extensions.getItemSource(this.data);
+      return sourceType == SourceType.WEBSTORE ? '' :
+             extensions.getItemSourceString(sourceType);
     },
 
     /**

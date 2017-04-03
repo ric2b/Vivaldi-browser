@@ -84,6 +84,7 @@ class IPCAudioDecoder::InMemoryDataSource : public DataSource {
             uint8_t* data,
             const DataSource::ReadCB& read_cb) override;
   void Stop() override;
+  void Abort() override;
   bool GetSize(int64_t* size_out) override;
   bool IsStreaming() override;
   void SetBitrate(int bitrate) override;
@@ -127,6 +128,10 @@ void IPCAudioDecoder::InMemoryDataSource::Read(
 
 void IPCAudioDecoder::InMemoryDataSource::Stop() {
   stopped_ = true;
+}
+
+void IPCAudioDecoder::InMemoryDataSource::Abort() {
+  // Do nothing.
 }
 
 bool IPCAudioDecoder::InMemoryDataSource::GetSize(int64_t* size_out) {
@@ -180,7 +185,7 @@ bool IPCAudioDecoder::IsAvailable() {
     return false;
 
 #if defined(OS_MACOSX)
-  if (!base::mac::IsOSYosemiteOrLater())
+  if (!base::mac::IsAtLeastOS10_10())
     // The pre-10.10 PlatformMediaPipeline implementation decodes media by
     // playing them at the regular playback rate.  This is unacceptable for Web
     // Audio API.

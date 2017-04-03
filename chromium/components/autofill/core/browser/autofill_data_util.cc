@@ -18,6 +18,21 @@ namespace autofill {
 namespace data_util {
 
 namespace {
+// Mappings from Chrome card types to Payment Request API basic card payment
+// spec types and icons. Note that "generic" is not in the spec.
+// https://w3c.github.io/webpayments-methods-card/#method-id
+const PaymentRequestData kPaymentRequestData[]{
+    {"americanExpressCC", "amex", IDR_AUTOFILL_PR_AMEX},
+    {"dinersCC", "diners", IDR_AUTOFILL_PR_DINERS},
+    {"discoverCC", "discover", IDR_AUTOFILL_PR_DISCOVER},
+    {"jcbCC", "jcb", IDR_AUTOFILL_PR_JCB},
+    {"masterCardCC", "mastercard", IDR_AUTOFILL_PR_MASTERCARD},
+    {"unionPayCC", "unionpay", IDR_AUTOFILL_PR_UNIONPAY},
+    {"visaCC", "visa", IDR_AUTOFILL_PR_VISA},
+};
+const PaymentRequestData kGenericPaymentRequestData = {"genericCC", "generic",
+                                                       IDR_AUTOFILL_PR_GENERIC};
+
 const char* const name_prefixes[] = {
     "1lt",     "1st", "2lt", "2nd",    "3rd",  "admiral", "capt",
     "captain", "col", "cpt", "dr",     "gen",  "general", "lcdr",
@@ -118,16 +133,17 @@ size_t StartsWithAny(base::StringPiece16 name, const char** prefixes,
 // Returns true if |c| is a CJK (Chinese, Japanese, Korean) character, for any
 // of the CJK alphabets.
 bool IsCJKCharacter(UChar32 c) {
-  static const std::set<UScriptCode> kCjkScripts {
-    USCRIPT_HAN, // CJK logographs, used by all 3 (but rarely for Korean)
-    USCRIPT_HANGUL, // Korean alphabet
-    USCRIPT_KATAKANA, // A Japanese syllabary
-    USCRIPT_HIRAGANA, // A Japanese syllabary
-    USCRIPT_BOPOMOFO // Chinese semisyllabary, rarely used
-  };
   UErrorCode error = U_ZERO_ERROR;
-  UScriptCode script = uscript_getScript(c, &error);
-  return kCjkScripts.find(script) != kCjkScripts.end();
+  switch (uscript_getScript(c, &error)) {
+    case USCRIPT_HAN:  // CJK logographs, used by all 3 (but rarely for Korean)
+    case USCRIPT_HANGUL:    // Korean alphabet
+    case USCRIPT_KATAKANA:  // A Japanese syllabary
+    case USCRIPT_HIRAGANA:  // A Japanese syllabary
+    case USCRIPT_BOPOMOFO:  // Chinese semisyllabary, rarely used
+      return true;
+    default:
+      return false;
+  }
 }
 
 // Returns true if |c| is a Korean Hangul character.
@@ -381,6 +397,25 @@ bool ProfileMatchesFullName(const base::string16 full_name,
   }
 
   return false;
+}
+
+const PaymentRequestData& GetPaymentRequestData(const std::string& type) {
+  for (size_t i = 0; i < arraysize(kPaymentRequestData); ++i) {
+    if (type == kPaymentRequestData[i].card_type)
+      return kPaymentRequestData[i];
+  }
+  return kGenericPaymentRequestData;
+}
+
+const char* GetCardTypeForBasicCardPaymentType(
+    const std::string& basic_card_payment_type) {
+  for (size_t i = 0; i < arraysize(kPaymentRequestData); ++i) {
+    if (basic_card_payment_type ==
+        kPaymentRequestData[i].basic_card_payment_type) {
+      return kPaymentRequestData[i].card_type;
+    }
+  }
+  return kGenericPaymentRequestData.card_type;
 }
 
 }  // namespace data_util

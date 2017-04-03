@@ -571,9 +571,23 @@ TEST(WebInputEventBuilderMacTest, DomKeyFlagsChanged) {
   }
 }
 
+TEST(WebInputEventBuilderMacTest, ContextMenuKey) {
+  // Context menu is not defined but shows up as 0x6E.
+  const int kVK_ContextMenu = 0x6E;
+
+  const NSEventType kEventTypeToTest[] = {NSKeyDown, NSKeyUp};
+  for (auto flags : kEventTypeToTest) {
+    NSEvent* mac_event = BuildFakeKeyEvent(kVK_ContextMenu, 0, 0, flags);
+    WebKeyboardEvent web_event = WebKeyboardEventBuilder::Build(mac_event);
+    EXPECT_EQ(ui::DomKey::CONTEXT_MENU, web_event.domKey);
+    EXPECT_EQ(ui::VKEY_APPS, web_event.windowsKeyCode);
+  }
+}
+
 // Test that a ui::Event and blink::WebInputEvent made from the same NSEvent
 // have the same values for comparable fields.
 TEST(WebInputEventBuilderMacTest, ScrollWheelMatchesUIEvent) {
+  bool precise = false;
   CGFloat delta_x = 123;
   CGFloat delta_y = 321;
   NSPoint location = NSMakePoint(11, 22);
@@ -587,7 +601,10 @@ TEST(WebInputEventBuilderMacTest, ScrollWheelMatchesUIEvent) {
                                       defer:NO];
 
   NSEvent* mac_event = cocoa_test_event_utils::TestScrollEvent(
-      location, window, delta_x, delta_y);
+      location, window, delta_x, delta_y, precise, NSEventPhaseNone,
+      NSEventPhaseNone);
+  EXPECT_EQ(delta_x, [mac_event deltaX]);
+  EXPECT_EQ(delta_y, [mac_event deltaY]);
 
   blink::WebMouseWheelEvent web_event =
       content::WebMouseWheelEventBuilder::Build(mac_event,

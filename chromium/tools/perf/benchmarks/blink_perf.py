@@ -211,6 +211,15 @@ class BlinkPerfDOM(perf_benchmark.PerfBenchmark):
     path = os.path.join(BLINK_PERF_BASE_DIR, 'DOM')
     return CreateStorySetFromPath(path, SKIPPED_FILE)
 
+  @classmethod
+  def ShouldDisable(cls, possible_browser):
+    # http://crbug.com/652724
+    if (possible_browser.browser_type == 'reference' and
+        possible_browser.platform.GetOSName() in ['win', 'linux']):
+      return True
+
+    return False
+
 
 @benchmark.Disabled('win')  # http://crbug.com/588819
 class BlinkPerfEvents(perf_benchmark.PerfBenchmark):
@@ -227,6 +236,7 @@ class BlinkPerfEvents(perf_benchmark.PerfBenchmark):
 
 
 @benchmark.Disabled('win8')  # http://crbug.com/462350
+@benchmark.Disabled('win-reference')  # http://crbug.com/642884
 class BlinkPerfLayout(perf_benchmark.PerfBenchmark):
   tag = 'layout'
   test = _BlinkPerfMeasurement
@@ -317,7 +327,9 @@ class BlinkPerfXMLHttpRequest(perf_benchmark.PerfBenchmark):
 
 
 # Disabled on Windows and ChromeOS due to https://crbug.com/521887
-@benchmark.Disabled('win', 'chromeos')
+#@benchmark.Disabled('win', 'chromeos')
+# Disabling on remaining platforms due to heavy flake https://crbug.com/646938
+@benchmark.Disabled('all')
 class BlinkPerfPywebsocket(perf_benchmark.PerfBenchmark):
   """The blink_perf.pywebsocket tests measure turn-around-time of 10MB
   send/receive for XHR, Fetch API and WebSocket. We might ignore < 10%

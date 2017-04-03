@@ -319,14 +319,9 @@ If you update this file, be sure also to update google_chrome_strings.grd. -->
           Welcome to Chromium
         </message>
       </if>
-      <if expr="not chromeos">
-        <message name="IDS_EXTERNAL_PROTOCOL_INFORMATION" desc="General information about what Chrome is trying to do when opening this external protocol">
-          Chromium needs to launch an external application to handle <ph name="SCHEME">$1<ex>acrobat:</ex></ph> links. The link requested is <ph name="PROTOLINK">$2<ex>acrobat:yourpdf</ex></ph>.
-        </message>
-      </if>
       <if expr="chromeos">
-        <message name="IDS_EXTERNAL_PROTOCOL_INFORMATION" desc="General information about what Chrome is trying to do when opening this external protocol">
-          Chromium OS does not support launching an external application to handle <ph name="SCHEME">$1<ex>acrobat:</ex></ph> links. The link requested is <ph name="PROTOLINK">$2<ex>acrobat:yourpdf</ex></ph>.
+        <message name="IDS_EXTERNAL_PROTOCOL_TITLE" desc="External Protocol Dialog Title">
+          Chromium OS cannot open this page.
         </message>
       </if>
       <!-- Strings used to warn that an OS is not supported -->
@@ -437,6 +432,9 @@ Chromium is unable to recover your settings.
         </message>
         <message name="IDS_INSTALL_OS_ERROR" desc="Error displayed when any Windows API call fails and we do not have more specific information.">
           An operating system error occurred during installation. Please download Chromium again.
+        </message>
+        <message name="IDS_INSTALL_SINGLETON_ACQUISITION_FAILED" desc="Error displayed when the installer cannot run because another installer is already running.">
+          Another operation on Chromium is in progress. Please try again later.
         </message>
         <message name="IDS_INSTALL_TEMP_DIR_FAILED" desc="Error displayed when we fail to create temporary directory during installation.">
           The installer couldn't create a temporary directory. Please check for free disk space and permission to install software.
@@ -555,6 +553,14 @@ Chromium is unable to recover your settings.
       <message name="IDS_PROMPT_MALICIOUS_DOWNLOAD_CONTENT"
          desc="Message shown to the user to validate the download when the download content is classified to lead to malware by safebrowsing.">
         <ph name="FILE_NAME">$1<ex>malware.exe</ex></ph> is malicious, and Chromium has blocked it.
+      </message>
+      <message name="IDS_BLOCK_REASON_DANGEROUS_DOWNLOAD"
+         desc="Message shown to the user on chrome://downloads page to explain that this download is blocked because it is malware.">
+        This file is dangerous, so Chromium has blocked it.
+      </message>
+      <message name="IDS_BLOCK_REASON_UNWANTED_DOWNLOAD"
+         desc="Message shown to the user on chrome://downloads page to explain that this download is blocked because it is unwanted sofware.">
+        This file may be dangerous, so Chromium has blocked it.
       </message>
 
       <!-- Remove in-progress downloads confirmation dialog -->
@@ -892,14 +898,6 @@ Signing in anyway will merge Chromium information like bookmarks, history, and o
         <if expr="use_titlecase">
           <message name="IDS_APP_LIST_EXTENSIONS_UNINSTALL" desc="In Title Case: Title text for the context menu item of a non-platform-app app list item that removes the app.">
             Remove From Chromium...
-          </message>
-        </if>
-        <if expr="not chromeos">
-          <message name="IDS_APP_LIST_MESSAGE_TITLE" desc="Title given to the message displayed in the app launcher to say it is going away">
-            The Chromium App Launcher is going away.
-          </message>
-          <message name="IDS_APP_LIST_MESSAGE_TEXT" desc="The message body text displayed in the app launcher to say it is going away">
-            Use the <ph name="APPS_ICON_IMAGE">$1<ex>Apps</ex></ph> shortcut in the Chromium bookmarks bar to continue accessing your apps.
           </message>
         </if>
       </if>
@@ -1258,6 +1256,35 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@example.com</
         <message name="IDS_METRO_FLOW_LOGO_STRING_ALT"
                  desc="Alt text for the faded Chrome logo image.">
           Chromium logo
+        </message>
+      </if>
+
+      <!-- Welcome page (chrome://welcome) strings -->
+      <if expr="not chromeos and not is_android and not is_ios">
+        <message name="IDS_WELCOME_HEADER" desc="A message which will appear as the header on the Welcome UI if the user has never run Chromium before.">
+          Welcome to Chromium
+        </message>
+        <message name="IDS_WELCOME_HEADER_AFTER_FIRST_RUN" desc="A message which will appear as the header on the Welcome UI if the user has run Chromium before.">
+          Take Chromium everywhere
+        </message>
+      </if>
+
+      <!-- Windows 10 Welcome page strings -->
+      <if expr="is_win">
+        <message name="IDS_WIN10_WELCOME_HEADER" desc="A header on the Windows 10 Welcome UI if the user has never run Chromium before.">
+          Welcome to Chromium
+        </message>
+        <message name="IDS_WIN10_WELCOME_HEADER_AFTER_FIRST_RUN" desc="A header on the Windows 10 Welcome UI if the user has run Chromium before.">
+          Get to Chromium faster
+        </message>
+        <message name="IDS_WIN10_WELCOME_MAKE_DEFAULT_SUBHEADING" desc="A subheading on a section which gives instructions on how to make Chromium the default browser.">
+          Make Chromium your default browser
+        </message>
+        <message name="IDS_WIN10_WELCOME_PIN_SUBHEADING" desc="A subheading on a section which gives instructions on how to pin Chromium to the Windows 10 taskbar.">
+          Pin Chromium to your taskbar
+        </message>
+        <message name="IDS_WIN10_WELCOME_SELECT" desc="An instruction asking the user to select Chromium from an external list of apps.">
+          Select <ph name="SMALL_PRODUCT_LOGO">&lt;div class="logo-small"&gt;&lt;/div&gt;</ph> <ph name="BEGIN_BOLD">&lt;strong&gt;</ph>Chromium<ph name="END_BOLD">&lt;/strong&gt;</ph>
         </message>
       </if>
 

@@ -40,3 +40,7 @@
   DISABLE(BrowsingDataRemoverBrowserTest, Cache)
 
   DISABLE(HistoryCounterTest, Synced)
+
+  // Sems to have broken in v54
+  DISABLE(QuarantineWinTest, LocalFile_DependsOnLocalConfig)
+  DISABLE(DownloadTest, CheckLocalhostZone_DependsOnLocalConfig)

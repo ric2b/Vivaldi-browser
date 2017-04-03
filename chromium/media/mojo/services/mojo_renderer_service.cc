@@ -7,9 +7,12 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/optional.h"
+#include "media/base/audio_renderer_sink.h"
 #include "media/base/media_keys.h"
 #include "media/base/media_url_demuxer.h"
 #include "media/base/renderer.h"
+#include "media/base/video_renderer_sink.h"
 #include "media/mojo/services/demuxer_stream_provider_shim.h"
 #include "media/mojo/services/mojo_cdm_service_context.h"
 
@@ -18,14 +21,40 @@ namespace media {
 // Time interval to update media time.
 const int kTimeUpdateIntervalMs = 50;
 
+// static
+mojo::StrongBindingPtr<mojom::Renderer> MojoRendererService::Create(
+    base::WeakPtr<MojoCdmServiceContext> mojo_cdm_service_context,
+    scoped_refptr<AudioRendererSink> audio_sink,
+    std::unique_ptr<VideoRendererSink> video_sink,
+    std::unique_ptr<media::Renderer> renderer,
+    InitiateSurfaceRequestCB initiate_surface_request_cb,
+    mojo::InterfaceRequest<mojom::Renderer> request) {
+  MojoRendererService* service = new MojoRendererService(
+      mojo_cdm_service_context, std::move(audio_sink), std::move(video_sink),
+      std::move(renderer), initiate_surface_request_cb);
+
+  mojo::StrongBindingPtr<mojom::Renderer> binding =
+      mojo::MakeStrongBinding<mojom::Renderer>(base::WrapUnique(service),
+                                               std::move(request));
+
+  service->binding_ = binding;
+
+  return binding;
+}
+
 MojoRendererService::MojoRendererService(
     base::WeakPtr<MojoCdmServiceContext> mojo_cdm_service_context,
+    scoped_refptr<AudioRendererSink> audio_sink,
+    std::unique_ptr<VideoRendererSink> video_sink,
     std::unique_ptr<media::Renderer> renderer,
-    mojo::InterfaceRequest<mojom::Renderer> request)
-    : binding_(this, std::move(request)),
-      mojo_cdm_service_context_(mojo_cdm_service_context),
+    InitiateSurfaceRequestCB initiate_surface_request_cb)
+    : mojo_cdm_service_context_(mojo_cdm_service_context),
       state_(STATE_UNINITIALIZED),
+      playback_rate_(0),
+      audio_sink_(std::move(audio_sink)),
+      video_sink_(std::move(video_sink)),
       renderer_(std::move(renderer)),
+      initiate_surface_request_cb_(initiate_surface_request_cb),
       weak_factory_(this) {
   DVLOG(1) << __FUNCTION__;
   DCHECK(renderer_);
@@ -35,14 +64,16 @@ MojoRendererService::MojoRendererService(
 
 MojoRendererService::~MojoRendererService() {}
 
-void MojoRendererService::Initialize(mojom::RendererClientPtr client,
-                                     mojom::DemuxerStreamPtr audio,
-                                     mojom::DemuxerStreamPtr video,
-                                     const base::Optional<GURL>& url,
-                                     const InitializeCallback& callback) {
+void MojoRendererService::Initialize(
+    mojom::RendererClientAssociatedPtrInfo client,
+    mojom::DemuxerStreamPtr audio,
+    mojom::DemuxerStreamPtr video,
+    const base::Optional<GURL>& url,
+    const InitializeCallback& callback) {
   DVLOG(1) << __FUNCTION__;
   DCHECK_EQ(state_, STATE_UNINITIALIZED);
-  client_ = std::move(client);
+
+  client_.Bind(std::move(client));
   state_ = STATE_INITIALIZING;
 
   if (url == base::nullopt) {
@@ -81,6 +112,7 @@ void MojoRendererService::StartPlayingFrom(base::TimeDelta time_delta) {
 void MojoRendererService::SetPlaybackRate(double playback_rate) {
   DVLOG(2) << __FUNCTION__ << ": " << playback_rate;
   DCHECK(state_ == STATE_PLAYING || state_ == STATE_ERROR);
+  playback_rate_ = playback_rate;
   renderer_->SetPlaybackRate(playback_rate);
 }
 
@@ -182,26 +214,32 @@ void MojoRendererService::OnRendererInitializeDone(
 }
 
 void MojoRendererService::UpdateMediaTime(bool force) {
-  base::TimeDelta media_time = renderer_->GetMediaTime();
+  const base::TimeDelta media_time = renderer_->GetMediaTime();
   if (!force && media_time == last_media_time_)
     return;
 
-  client_->OnTimeUpdate(media_time, media_time);
+  base::TimeDelta max_time = media_time;
+  // Allow some slop to account for delays in scheduling time update tasks.
+  if (time_update_timer_.IsRunning() && (playback_rate_ > 0))
+    max_time += base::TimeDelta::FromMilliseconds(2 * kTimeUpdateIntervalMs);
+
+  client_->OnTimeUpdate(media_time, max_time, base::TimeTicks::Now());
   last_media_time_ = media_time;
 }
 
 void MojoRendererService::CancelPeriodicMediaTimeUpdates() {
   DVLOG(2) << __FUNCTION__;
-  UpdateMediaTime(false);
+
   time_update_timer_.Stop();
+  UpdateMediaTime(false);
 }
 
 void MojoRendererService::SchedulePeriodicMediaTimeUpdates() {
   DVLOG(2) << __FUNCTION__;
+
   UpdateMediaTime(true);
   time_update_timer_.Start(
-      FROM_HERE,
-      base::TimeDelta::FromMilliseconds(kTimeUpdateIntervalMs),
+      FROM_HERE, base::TimeDelta::FromMilliseconds(kTimeUpdateIntervalMs),
       base::Bind(&MojoRendererService::UpdateMediaTime, weak_this_, false));
 }
 
@@ -224,4 +262,16 @@ void MojoRendererService::OnCdmAttached(
   callback.Run(success);
 }
 
+void MojoRendererService::InitiateScopedSurfaceRequest(
+    const InitiateScopedSurfaceRequestCallback& callback) {
+  if (initiate_surface_request_cb_.is_null()) {
+    // |renderer_| is likely not of type MediaPlayerRenderer.
+    // This is an unexpected call, and the connection should be closed.
+    mojo::ReportBadMessage("Unexpected call to InitiateScopedSurfaceRequest.");
+    binding_->Close();
+    return;
+  }
+
+  callback.Run(initiate_surface_request_cb_.Run());
+}
 }  // namespace media

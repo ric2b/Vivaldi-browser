@@ -48,11 +48,9 @@ class WebUIDataSourceImpl::InternalDataSource : public URLDataSource {
   }
   void StartDataRequest(
       const std::string& path,
-      int render_process_id,
-      int render_frame_id,
+      const ResourceRequestInfo::WebContentsGetter& wc_getter,
       const URLDataSource::GotDataCallback& callback) override {
-    return parent_->StartDataRequest(path, render_process_id, render_frame_id,
-                                     callback);
+    return parent_->StartDataRequest(path, wc_getter, callback);
   }
   bool ShouldReplaceExistingSource() const override {
     return parent_->replace_existing_source_;
@@ -217,8 +215,7 @@ std::string WebUIDataSourceImpl::GetMimeType(const std::string& path) const {
 
 void WebUIDataSourceImpl::StartDataRequest(
     const std::string& path,
-    int render_process_id,
-    int render_frame_id,
+    const ResourceRequestInfo::WebContentsGetter& wc_getter,
     const URLDataSource::GotDataCallback& callback) {
   if (!filter_callback_.is_null() &&
       filter_callback_.Run(path, callback)) {
@@ -252,7 +249,8 @@ void WebUIDataSourceImpl::StartDataRequest(
   // TODO(dschuyler): improve filtering of which resource to run template
   // expansion upon. TODO(dbeam): make a streaming filter that works on gzipped
   // content.
-  if (GetMimeType(path) == "text/html" && !source()->IsGzipped(path)) {
+  if (response.get() && GetMimeType(path) == "text/html" &&
+      !source()->IsGzipped(path)) {
     std::string replaced = ui::ReplaceTemplateExpressions(
         base::StringPiece(response->front_as<char>(), response->size()),
         replacements_);

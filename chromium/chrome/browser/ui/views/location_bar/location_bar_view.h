@@ -109,8 +109,11 @@ class LocationBarView : public LocationBar,
     TEXT,
     SELECTED_TEXT,
     DEEMPHASIZED_TEXT,
-    EV_BUBBLE_TEXT_AND_BORDER,
+    SECURITY_CHIP_TEXT,
   };
+
+  // Width (and height) of icons in location bar.
+  static constexpr int kIconWidth = 16;
 
   // The location bar view's class name.
   static const char kViewClassName[];
@@ -123,8 +126,8 @@ class LocationBarView : public LocationBar,
 
   ~LocationBarView() override;
 
-  // Returns the color for the location bar border in MD windows and non-MD
-  // popup windows, given the window's |incognito| state.
+  // Returns the color for the location bar border given the window's
+  // |incognito| state.
   static SkColor GetBorderColor(bool incognito);
 
   // Initializes the LocationBarView.
@@ -185,9 +188,6 @@ class LocationBarView : public LocationBar,
   // Returns the screen coordinates of the omnibox (where the URL text appears,
   // not where the icons are shown).
   gfx::Point GetOmniboxViewOrigin() const;
-
-  // Returns the width of the location icon.
-  int GetLocationIconWidth() const;
 
   // Shows |text| as an inline autocompletion.  This is useful for IMEs, where
   // we can't show the autocompletion inside the actual OmniboxView.  See
@@ -250,7 +250,6 @@ class LocationBarView : public LocationBar,
 
   // ChromeOmniboxEditController:
   void UpdateWithoutTabRestore() override;
-  void ShowURL() override;
   ToolbarModel* GetToolbarModel() override;
   content::WebContents* GetWebContents() override;
 
@@ -276,7 +275,7 @@ class LocationBarView : public LocationBar,
 
   // Returns the total amount of space reserved above or below the content,
   // which is the vertical edge thickness plus the padding next to it.
-  int GetVerticalEdgeThicknessWithPadding() const;
+  int GetTotalVerticalPadding() const;
 
   // Updates |location_icon_view_| based on the current state and theme.
   void RefreshLocationIcon();
@@ -318,8 +317,18 @@ class LocationBarView : public LocationBar,
   // Returns true if the suggest text is valid.
   bool HasValidSuggestText() const;
 
+  // Returns text describing the URL's security level, to be placed in the
+  // security chip.
+  base::string16 GetSecurityText() const;
+
   bool ShouldShowKeywordBubble() const;
-  bool ShouldShowEVBubble() const;
+
+  // Returns true when the current page is explicitly secure or insecure.
+  // In these cases, we should show the state of the security chip.
+  bool ShouldShowSecurityChip() const;
+
+  // Returns true if the chip should be animated
+  bool ShouldAnimateSecurityChip() const;
 
   // Used to "reverse" the URL showing/hiding animations, since we use separate
   // animations whose curves are not true inverses of each other.  Based on the
@@ -364,7 +373,6 @@ class LocationBarView : public LocationBar,
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
   void OnFocus() override;
   void OnPaint(gfx::Canvas* canvas) override;
-  void PaintChildren(const ui::PaintContext& context) override;
 
   // views::DragController:
   void WriteDragDataForView(View* sender,
@@ -398,9 +406,6 @@ class LocationBarView : public LocationBar,
 
   // Our delegate.
   Delegate* delegate_;
-
-  // Object used to paint the border. Not used for material design.
-  std::unique_ptr<views::Painter> border_painter_;
 
   // An icon to the left of the edit field: the HTTPS lock, blank page icon,
   // search icon, EV HTTPS bubble, etc.
@@ -473,6 +478,12 @@ class LocationBarView : public LocationBar,
   // This is a debug state variable that stores if the WebContents was null
   // during the last RefreshPageAction.
   bool web_contents_null_at_last_refresh_;
+
+  // These allow toggling the verbose security state behavior via flags.
+  bool should_show_secure_state_;
+  bool should_show_nonsecure_state_;
+  bool should_animate_secure_state_;
+  bool should_animate_nonsecure_state_;
 
   DISALLOW_COPY_AND_ASSIGN(LocationBarView);
 };

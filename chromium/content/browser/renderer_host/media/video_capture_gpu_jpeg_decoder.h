@@ -18,7 +18,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "content/common/content_export.h"
-#include "media/capture/video/video_capture_device.h"
+#include "media/capture/video/video_capture_jpeg_decoder.h"
 #include "media/video/jpeg_decode_accelerator.h"
 
 namespace gpu {
@@ -39,44 +39,28 @@ namespace content {
 // on the same thread. JpegDecodeAccelerator::Client methods should be called on
 // the IO thread.
 class CONTENT_EXPORT VideoCaptureGpuJpegDecoder
-    : public media::JpegDecodeAccelerator::Client,
+    : public media::VideoCaptureJpegDecoder,
+      public media::JpegDecodeAccelerator::Client,
       public base::NonThreadSafe,
       public base::SupportsWeakPtr<VideoCaptureGpuJpegDecoder> {
  public:
-  // Enumeration of decoder status. The enumeration is published for clients to
-  // decide the behavior according to STATUS.
-  enum STATUS {
-    INIT_PENDING,  // Default value while waiting initialization finished.
-    INIT_PASSED,   // Initialization succeed.
-    FAILED,        // JPEG decode is not supported, initialization failed, or
-                   // decode error.
-  };
-
-  typedef base::Callback<void(
-      std::unique_ptr<media::VideoCaptureDevice::Client::Buffer>,
-      const scoped_refptr<media::VideoFrame>&)>
-      DecodeDoneCB;
-
   // |decode_done_cb| is called on the IO thread when decode succeed. This can
   // be on any thread. |decode_done_cb| is never called after
   // VideoCaptureGpuJpegDecoder is destroyed.
   explicit VideoCaptureGpuJpegDecoder(const DecodeDoneCB& decode_done_cb);
   ~VideoCaptureGpuJpegDecoder() override;
 
-  // Creates and intializes decoder asynchronously.
-  void Initialize();
-
-  // Returns initialization status.
-  STATUS GetStatus() const;
-
-  // Decodes a JPEG picture.
+  // Implementation of VideoCaptureJpegDecoder:
+  void Initialize() override;
+  STATUS GetStatus() const override;
   void DecodeCapturedData(
       const uint8_t* data,
       size_t in_buffer_size,
       const media::VideoCaptureFormat& frame_format,
       base::TimeTicks reference_time,
       base::TimeDelta timestamp,
-      std::unique_ptr<media::VideoCaptureDevice::Client::Buffer> out_buffer);
+      std::unique_ptr<media::VideoCaptureDevice::Client::Buffer> out_buffer)
+      override;
 
   // JpegDecodeAccelerator::Client implementation.
   // These will be called on IO thread.

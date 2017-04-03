@@ -4,30 +4,24 @@
 
 #include "components/sync/syncable/directory.h"
 
-#include <stddef.h>
-#include <stdint.h>
-
 #include <algorithm>
 #include <iterator>
 #include <utility>
 
 #include "base/base64.h"
 #include "base/guid.h"
-#include "base/metrics/histogram.h"
-#include "base/stl_util.h"
+#include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "components/sync/base/attachment_id_proto.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/base/unrecoverable_error_handler.h"
-#include "components/sync/syncable/entry.h"
-#include "components/sync/syncable/entry_kernel.h"
 #include "components/sync/syncable/in_memory_directory_backing_store.h"
 #include "components/sync/syncable/model_neutral_mutable_entry.h"
 #include "components/sync/syncable/on_disk_directory_backing_store.h"
 #include "components/sync/syncable/scoped_kernel_lock.h"
 #include "components/sync/syncable/scoped_parent_child_index_updater.h"
-#include "components/sync/syncable/syncable-inl.h"
 #include "components/sync/syncable/syncable_base_transaction.h"
 #include "components/sync/syncable/syncable_changes_version.h"
 #include "components/sync/syncable/syncable_read_transaction.h"
@@ -75,10 +69,7 @@ bool Directory::PersistedKernelInfo::HasEmptyDownloadProgress(
 Directory::SaveChangesSnapshot::SaveChangesSnapshot()
     : kernel_info_status(KERNEL_SHARE_INFO_INVALID) {}
 
-Directory::SaveChangesSnapshot::~SaveChangesSnapshot() {
-  base::STLDeleteElements(&dirty_metas);
-  base::STLDeleteElements(&delete_journals);
-}
+Directory::SaveChangesSnapshot::~SaveChangesSnapshot() {}
 
 bool Directory::SaveChangesSnapshot::HasUnsavedMetahandleChanges() const {
   return !dirty_metas.empty() || !metahandles_to_purge.empty() ||
@@ -102,10 +93,7 @@ Directory::Kernel::Kernel(
   DCHECK(transaction_observer.IsInitialized());
 }
 
-Directory::Kernel::~Kernel() {
-  base::STLDeleteContainerPairSecondPointers(metahandles_map.begin(),
-                                             metahandles_map.end());
-}
+Directory::Kernel::~Kernel() {}
 
 Directory::Directory(
     DirectoryBackingStore* store,
@@ -143,9 +131,9 @@ DirOpenResult Directory::Open(
 void Directory::InitializeIndices(MetahandlesMap* handles_map) {
   ScopedKernelLock lock(this);
   kernel_->metahandles_map.swap(*handles_map);
-  for (MetahandlesMap::const_iterator it = kernel_->metahandles_map.begin();
+  for (auto it = kernel_->metahandles_map.begin();
        it != kernel_->metahandles_map.end(); ++it) {
-    EntryKernel* entry = it->second;
+    EntryKernel* entry = it->second.get();
     if (ParentChildIndex::ShouldInclude(entry))
       kernel_->parent_child_index.Insert(entry);
     const int64_t metahandle = entry->ref(META_HANDLE);
@@ -185,14 +173,11 @@ DirOpenResult Directory::OpenImpl(
   // swap these later.
   Directory::MetahandlesMap tmp_handles_map;
 
-  // Avoids mem leaks on failure.  Harmlessly deletes the empty hash map after
-  // the swap in the success case.
-  base::STLValueDeleter<MetahandlesMap> deleter(&tmp_handles_map);
-
-  JournalIndex delete_journals;
+  std::unique_ptr<JournalIndex> delete_journals =
+      base::MakeUnique<JournalIndex>();
   MetahandleSet metahandles_to_purge;
 
-  DirOpenResult result = store_->Load(&tmp_handles_map, &delete_journals,
+  DirOpenResult result = store_->Load(&tmp_handles_map, delete_journals.get(),
                                       &metahandles_to_purge, &info);
   if (OPENED != result)
     return result;
@@ -200,7 +185,7 @@ DirOpenResult Directory::OpenImpl(
   DCHECK(!kernel_);
   kernel_ = new Kernel(name, info, delegate, transaction_observer);
   kernel_->metahandles_to_purge.swap(metahandles_to_purge);
-  delete_journal_.reset(new DeleteJournal(&delete_journals));
+  delete_journal_ = base::MakeUnique<DeleteJournal>(std::move(delete_journals));
   InitializeIndices(&tmp_handles_map);
 
   // Save changes back in case there are any metahandles to purge.
@@ -287,7 +272,7 @@ EntryKernel* Directory::GetEntryByHandle(const ScopedKernelLock& lock,
   MetahandlesMap::iterator found = kernel_->metahandles_map.find(metahandle);
   if (found != kernel_->metahandles_map.end()) {
     // Found it in memory.  Easy.
-    return found->second;
+    return found->second.get();
   }
   return NULL;
 }
@@ -367,7 +352,8 @@ bool Directory::InsertEntry(const ScopedKernelLock& lock,
   static const char error[] = "Entry already in memory index.";
 
   if (!SyncAssert(kernel_->metahandles_map
-                      .insert(std::make_pair(entry->ref(META_HANDLE), entry))
+                      .insert(std::make_pair(entry->ref(META_HANDLE),
+                                             base::WrapUnique(entry)))
                       .second,
                   FROM_HERE, error, trans)) {
     return false;
@@ -546,7 +532,7 @@ void Directory::TakeSnapshotForSaveChanges(SaveChangesSnapshot* snapshot) {
     if (!entry->is_dirty())
       continue;
     snapshot->dirty_metas.insert(snapshot->dirty_metas.end(),
-                                 new EntryKernel(*entry));
+                                 base::MakeUnique<EntryKernel>(*entry));
     DCHECK_EQ(1U, kernel_->dirty_metahandles.count(*i));
     // We don't bother removing from the index here as we blow the entire thing
     // in a moment, and it unnecessarily complicates iteration.
@@ -594,15 +580,17 @@ bool Directory::VacuumAfterSaveChanges(const SaveChangesSnapshot& snapshot) {
   WriteTransaction trans(FROM_HERE, VACUUM_AFTER_SAVE, this);
   ScopedKernelLock lock(this);
   // Now drop everything we can out of memory.
-  for (EntryKernelSet::const_iterator i = snapshot.dirty_metas.begin();
-       i != snapshot.dirty_metas.end(); ++i) {
+  for (auto i = snapshot.dirty_metas.begin(); i != snapshot.dirty_metas.end();
+       ++i) {
     MetahandlesMap::iterator found =
         kernel_->metahandles_map.find((*i)->ref(META_HANDLE));
     EntryKernel* entry =
-        (found == kernel_->metahandles_map.end() ? NULL : found->second);
+        (found == kernel_->metahandles_map.end() ? NULL : found->second.get());
     if (entry && SafeToPurgeFromMemory(&trans, entry)) {
       // We now drop deleted metahandles that are up to date on both the client
       // and the server.
+      std::unique_ptr<EntryKernel> unique_entry = std::move(found->second);
+
       size_t num_erased = 0;
       num_erased = kernel_->metahandles_map.erase(entry->ref(META_HANDLE));
       DCHECK_EQ(1u, num_erased);
@@ -623,8 +611,6 @@ bool Directory::VacuumAfterSaveChanges(const SaveChangesSnapshot& snapshot) {
         return false;
       RemoveFromAttachmentIndex(lock, entry->ref(META_HANDLE),
                                 entry->ref(ATTACHMENT_METADATA));
-
-      delete entry;
     }
     if (trans.unrecoverable_error_set())
       return false;
@@ -691,15 +677,18 @@ void Directory::UnapplyEntry(EntryKernel* entry) {
 void Directory::DeleteEntry(const ScopedKernelLock& lock,
                             bool save_to_journal,
                             EntryKernel* entry,
-                            EntryKernelSet* entries_to_journal) {
+                            OwnedEntryKernelSet* entries_to_journal) {
   int64_t handle = entry->ref(META_HANDLE);
   ModelType server_type =
       GetModelTypeFromSpecifics(entry->ref(SERVER_SPECIFICS));
 
   kernel_->metahandles_to_purge.insert(handle);
 
+  std::unique_ptr<EntryKernel> entry_ptr =
+      std::move(kernel_->metahandles_map[handle]);
+
   size_t num_erased = 0;
-  num_erased = kernel_->metahandles_map.erase(entry->ref(META_HANDLE));
+  num_erased = kernel_->metahandles_map.erase(handle);
   DCHECK_EQ(1u, num_erased);
   num_erased = kernel_->ids_map.erase(entry->ref(ID).value());
   DCHECK_EQ(1u, num_erased);
@@ -721,9 +710,7 @@ void Directory::DeleteEntry(const ScopedKernelLock& lock,
   RemoveFromAttachmentIndex(lock, handle, entry->ref(ATTACHMENT_METADATA));
 
   if (save_to_journal) {
-    entries_to_journal->insert(entry);
-  } else {
-    delete entry;
+    entries_to_journal->insert(std::move(entry_ptr));
   }
 }
 
@@ -738,9 +725,7 @@ bool Directory::PurgeEntriesWithTypeIn(ModelTypeSet disabled_types,
   {
     WriteTransaction trans(FROM_HERE, PURGE_ENTRIES, this);
 
-    EntryKernelSet entries_to_journal;
-    base::STLElementDeleter<EntryKernelSet> journal_deleter(
-        &entries_to_journal);
+    OwnedEntryKernelSet entries_to_journal;
 
     {
       ScopedKernelLock lock(this);
@@ -759,7 +744,7 @@ bool Directory::PurgeEntriesWithTypeIn(ModelTypeSet disabled_types,
 
       for (MetahandlesMap::iterator it = kernel_->metahandles_map.begin();
            it != kernel_->metahandles_map.end();) {
-        EntryKernel* entry = it->second;
+        EntryKernel* entry = it->second.get();
         const sync_pb::EntitySpecifics& local_specifics = entry->ref(SPECIFICS);
         const sync_pb::EntitySpecifics& server_specifics =
             entry->ref(SERVER_SPECIFICS);
@@ -861,8 +846,8 @@ void Directory::HandleSaveChangesFailure(const SaveChangesSnapshot& snapshot) {
   // cause lost data, if no other changes are made to the in-memory entries
   // that would cause the dirty bit to get set again. Setting the bit ensures
   // that SaveChanges will at least try again later.
-  for (EntryKernelSet::const_iterator i = snapshot.dirty_metas.begin();
-       i != snapshot.dirty_metas.end(); ++i) {
+  for (auto i = snapshot.dirty_metas.begin(); i != snapshot.dirty_metas.end();
+       ++i) {
     MetahandlesMap::iterator found =
         kernel_->metahandles_map.find((*i)->ref(META_HANDLE));
     if (found != kernel_->metahandles_map.end()) {
@@ -1088,7 +1073,7 @@ void Directory::GetMetaHandlesOfType(const ScopedKernelLock& lock,
   result->clear();
   for (MetahandlesMap::iterator it = kernel_->metahandles_map.begin();
        it != kernel_->metahandles_map.end(); ++it) {
-    EntryKernel* entry = it->second;
+    EntryKernel* entry = it->second.get();
     const ModelType entry_type =
         GetModelTypeFromSpecifics(entry->ref(SPECIFICS));
     if (entry_type == type)
@@ -1104,7 +1089,7 @@ void Directory::CollectMetaHandleCounts(
 
   for (MetahandlesMap::iterator it = kernel_->metahandles_map.begin();
        it != kernel_->metahandles_map.end(); ++it) {
-    EntryKernel* entry = it->second;
+    EntryKernel* entry = it->second.get();
     const ModelType type = GetModelTypeFromSpecifics(entry->ref(SPECIFICS));
     (*num_entries_by_type)[type]++;
     if (entry->ref(IS_DEL))
@@ -1124,7 +1109,7 @@ std::unique_ptr<base::ListValue> Directory::GetNodeDetailsForType(
       continue;
     }
 
-    EntryKernel* kernel = it->second;
+    EntryKernel* kernel = it->second.get();
     std::unique_ptr<base::DictionaryValue> node(
         kernel->ToValue(GetCryptographer(trans)));
 

@@ -8,12 +8,12 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/policy/device_policy_decoder_chromeos.h"
-#include "chrome/browser/chromeos/policy/enterprise_install_attributes.h"
 #include "chrome/browser/chromeos/policy/proto/chrome_device_policy.pb.h"
+#include "chrome/browser/chromeos/settings/install_attributes.h"
 #include "components/ownership/owner_key_util.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/proto/device_management_backend.pb.h"
@@ -24,7 +24,7 @@ namespace policy {
 
 DeviceCloudPolicyStoreChromeOS::DeviceCloudPolicyStoreChromeOS(
     chromeos::DeviceSettingsService* device_settings_service,
-    EnterpriseInstallAttributes* install_attributes,
+    chromeos::InstallAttributes* install_attributes,
     scoped_refptr<base::SequencedTaskRunner> background_task_runner)
     : device_settings_service_(device_settings_service),
       install_attributes_(install_attributes),
@@ -62,7 +62,8 @@ void DeviceCloudPolicyStoreChromeOS::Store(
   validator->ValidateAgainstCurrentPolicy(
       device_settings_service_->policy_data(),
       CloudPolicyValidatorBase::TIMESTAMP_FULLY_VALIDATED,
-      CloudPolicyValidatorBase::DM_TOKEN_REQUIRED);
+      CloudPolicyValidatorBase::DM_TOKEN_REQUIRED,
+      CloudPolicyValidatorBase::DEVICE_ID_REQUIRED);
   validator.release()->StartValidation(
       base::Bind(&DeviceCloudPolicyStoreChromeOS::OnPolicyToStoreValidated,
                  weak_factory_.GetWeakPtr()));
@@ -143,8 +144,7 @@ void DeviceCloudPolicyStoreChromeOS::UpdateFromService() {
   const chromeos::DeviceSettingsService::Status status =
       device_settings_service_->status();
 
-  const bool is_enterprise_managed = install_attributes_->IsEnterpriseDevice();
-  if (!is_enterprise_managed) {
+  if (!install_attributes_->IsEnterpriseDevice()) {
     status_ = STATUS_BAD_STATE;
     NotifyStoreError();
     return;
@@ -196,7 +196,7 @@ void DeviceCloudPolicyStoreChromeOS::UpdateFromService() {
         policy_->MergeFrom(*policy_data);
 
       PolicyMap new_policy_map;
-      if (is_enterprise_managed && is_managed()) {
+      if (is_managed()) {
         DecodeDevicePolicy(*device_settings_service_->device_settings(),
                            &new_policy_map);
       }

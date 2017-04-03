@@ -150,10 +150,8 @@ void DefaultHeaderPainter::PaintHeader(gfx::Canvas* canvas, Mode mode) {
       mode_ == MODE_INACTIVE && !UsesCustomFrameColors()) {
     PaintHighlightForInactiveRestoredWindow(canvas);
   }
-  if (frame_->widget_delegate() &&
-      frame_->widget_delegate()->ShouldShowWindowTitle()) {
+  if (frame_->widget_delegate()->ShouldShowWindowTitle())
     PaintTitleBar(canvas);
-  }
   if (!UsesCustomFrameColors())
     PaintHeaderContentSeparator(canvas);
 }
@@ -206,6 +204,14 @@ void DefaultHeaderPainter::SetFrameColors(SkColor active_frame_color,
   active_frame_color_ = active_frame_color;
   inactive_frame_color_ = inactive_frame_color;
   UpdateAllButtonImages();
+}
+
+SkColor DefaultHeaderPainter::GetActiveFrameColor() const {
+  return active_frame_color_;
+}
+
+SkColor DefaultHeaderPainter::GetInactiveFrameColor() const {
+  return inactive_frame_color_;
 }
 
 void DefaultHeaderPainter::UpdateLeftHeaderView(views::View* left_header_view) {

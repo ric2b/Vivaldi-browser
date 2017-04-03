@@ -5,14 +5,13 @@
 #ifndef SERVICES_UI_DISPLAY_PLATFORM_SCREEN_H_
 #define SERVICES_UI_DISPLAY_PLATFORM_SCREEN_H_
 
-#include <stdint.h>
-
 #include <memory>
 
-#include "base/callback.h"
+#include "base/macros.h"
+#include "services/ui/display/platform_screen_delegate.h"
 
-namespace gfx {
-class Rect;
+namespace shell {
+class InterfaceRegistry;
 }
 
 namespace display {
@@ -21,23 +20,32 @@ namespace display {
 // attached physical displays.
 class PlatformScreen {
  public:
-  using ConfiguredDisplayCallback =
-      base::Callback<void(int64_t, const gfx::Rect&)>;
+  PlatformScreen();
+  virtual ~PlatformScreen();
 
-  virtual ~PlatformScreen() {}
-
-  // Creates a PlatformScreen instance.
+  // Creates a singleton PlatformScreen instance.
   static std::unique_ptr<PlatformScreen> Create();
+  static PlatformScreen* GetInstance();
 
-  // Initializes platform specific screen resources.
-  virtual void Init() = 0;
+  // Registers Mojo interfaces provided.
+  virtual void AddInterfaces(shell::InterfaceRegistry* registry) = 0;
 
-  // ConfigurePhysicalDisplay() configures a single physical display and returns
-  // its id and bounds for it via |callback|.
-  virtual void ConfigurePhysicalDisplay(
-      const ConfiguredDisplayCallback& callback) = 0;
+  // Triggers initial display configuration to start. On device this will
+  // configuration the connected displays. Off device this will create one or
+  // more fake displays and pretend to configure them. A non-null |delegate|
+  // must be provided that will receive notifications when displays are added,
+  // removed or modified.
+  virtual void Init(PlatformScreenDelegate* delegate) = 0;
+
+  // Handle requests from the platform to close a display.
+  virtual void RequestCloseDisplay(int64_t display_id) = 0;
 
   virtual int64_t GetPrimaryDisplayId() const = 0;
+
+ private:
+  static PlatformScreen* instance_;  // Instance is not owned.
+
+  DISALLOW_COPY_AND_ASSIGN(PlatformScreen);
 };
 
 }  // namespace display

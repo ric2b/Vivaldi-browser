@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef CHROME_BROWSER_UI_SYNC_TAB_CONTENTS_SYNCED_TAB_DELEGATE_H_
-#define CHROME_BROWSER_UI_SYNC_TAB_CONTENTS_SYNCED_TAB_DELEGATE_H_
+#ifndef IOS_CHROME_BROWSER_SYNC_IOS_CHROME_SYNCED_TAB_DELEGATE_H_
+#define IOS_CHROME_BROWSER_SYNC_IOS_CHROME_SYNCED_TAB_DELEGATE_H_
+
+#include <string>
+#include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
@@ -12,7 +15,7 @@
 #include "ios/web/public/web_state/web_state_user_data.h"
 
 class IOSChromeSyncedTabDelegate
-    : public browser_sync::SyncedTabDelegate,
+    : public sync_sessions::SyncedTabDelegate,
       public web::WebStateUserData<IOSChromeSyncedTabDelegate> {
  public:
   ~IOSChromeSyncedTabDelegate() override;
@@ -32,7 +35,7 @@ class IOSChromeSyncedTabDelegate
       int i,
       sessions::SerializedNavigationEntry* serialized_entry) const override;
   bool ProfileIsSupervised() const override;
-  const std::vector<const sessions::SerializedNavigationEntry*>*
+  const std::vector<std::unique_ptr<const sessions::SerializedNavigationEntry>>*
   GetBlockedNavigations() const override;
   bool IsPlaceholderTab() const override;
   int GetSyncId() const override;
@@ -49,4 +52,4 @@ class IOSChromeSyncedTabDelegate
   DISALLOW_COPY_AND_ASSIGN(IOSChromeSyncedTabDelegate);
 };
 
-#endif  // CHROME_BROWSER_UI_SYNC_TAB_CONTENTS_SYNCED_TAB_DELEGATE_H_
+#endif  // IOS_CHROME_BROWSER_SYNC_IOS_CHROME_SYNCED_TAB_DELEGATE_H_

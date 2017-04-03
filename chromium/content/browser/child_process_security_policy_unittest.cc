@@ -141,6 +141,8 @@ TEST_F(ChildProcessSecurityPolicyTest, IsPseudoSchemeTest) {
   EXPECT_TRUE(p->IsPseudoScheme(url::kAboutScheme));
   EXPECT_TRUE(p->IsPseudoScheme(url::kJavaScriptScheme));
   EXPECT_TRUE(p->IsPseudoScheme(kViewSourceScheme));
+  EXPECT_TRUE(p->IsPseudoScheme(kHttpSuboriginScheme));
+  EXPECT_TRUE(p->IsPseudoScheme(kHttpsSuboriginScheme));
 
   EXPECT_FALSE(p->IsPseudoScheme("registered-pseudo-scheme"));
   p->RegisterPseudoScheme("registered-pseudo-scheme");
@@ -327,6 +329,36 @@ TEST_F(ChildProcessSecurityPolicyTest, JavaScriptTest) {
   EXPECT_FALSE(p->CanCommitURL(kRendererID, GURL("javascript:alert('xss')")));
   EXPECT_FALSE(
       p->CanSetAsOriginHeader(kRendererID, GURL("javascript:alert('xss')")));
+
+  p->Remove(kRendererID);
+}
+
+TEST_F(ChildProcessSecurityPolicyTest, SuboriginTest) {
+  ChildProcessSecurityPolicyImpl* p =
+      ChildProcessSecurityPolicyImpl::GetInstance();
+
+  p->Add(kRendererID);
+
+  // Suborigin URLs are not requestable or committable.
+  EXPECT_FALSE(
+      p->CanRequestURL(kRendererID, GURL("http-so://foobar.example.com")));
+  EXPECT_FALSE(
+      p->CanRequestURL(kRendererID, GURL("https-so://foobar.example.com")));
+  EXPECT_FALSE(
+      p->CanCommitURL(kRendererID, GURL("http-so://foobar.example.com")));
+  EXPECT_FALSE(
+      p->CanCommitURL(kRendererID, GURL("https-so://foobar.example.com")));
+
+  // It's not possible to grant suborigins requestable status.
+  p->GrantRequestURL(kRendererID, GURL("https-so://foobar.example.com"));
+  EXPECT_FALSE(
+      p->CanCommitURL(kRendererID, GURL("https-so://foobar.example.com")));
+
+  // Suborigin URLs are valid origin headers.
+  EXPECT_TRUE(p->CanSetAsOriginHeader(kRendererID,
+                                      GURL("http-so://foobar.example.com")));
+  EXPECT_TRUE(p->CanSetAsOriginHeader(kRendererID,
+                                      GURL("https-so://foobar.example.com")));
 
   p->Remove(kRendererID);
 }

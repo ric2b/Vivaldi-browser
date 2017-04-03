@@ -181,6 +181,7 @@ class ToolbarActionsModel
   void SetActionVisibility(const std::string& action_id, bool visible);
 
   // ComponentMigrationHelper::ComponentActionDelegate:
+  // AddComponentAction() is a no-op if |actions_initialized_| is false.
   void AddComponentAction(const std::string& action_id) override;
   void RemoveComponentAction(const std::string& action_id) override;
   bool HasComponentAction(const std::string& action_id) const override;
@@ -260,12 +261,11 @@ class ToolbarActionsModel
   bool HasItem(const ToolbarItem& item) const;
 
   // Adds |item| to the toolbar.  If the item has an existing preference for
-  // toolbar position, that will be used to determine its location.  If
-  // |is_component| is true, the item will be given a default postion of 0,
-  // otherwise the default is at the end of the visible items. If the toolbar is
-  // in highlighting mode, the item will not be visible until highlighting mode
-  // is exited.
-  void AddItem(const ToolbarItem& item, bool is_component);
+  // toolbar position, that will be used to determine its location. Otherwise
+  // it will be placed at the end of the visible items. If the toolbar is in
+  // highlighting mode, the item will not be visible until highlighting mode is
+  // exited.
+  void AddItem(const ToolbarItem& item);
 
   // Removes |item| from the toolbar.  If the toolbar is in highlighting mode,
   // the item is also removed from the highlighted list (if present).

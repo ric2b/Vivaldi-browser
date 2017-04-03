@@ -32,74 +32,57 @@
 #define ResourceOwner_h
 
 #include "core/fetch/Resource.h"
-#include <type_traits>
+#include "platform/heap/Handle.h"
 
 namespace blink {
 
-template <typename Client, bool isClientGarbageCollectedMixin>
-class ResourceOwnerBase;
+template <class R, class C>
+class GC_PLUGIN_IGNORE("https://crbug.com/652966") ResourceOwner;
 
-template <typename Client>
-class ResourceOwnerBase<Client, true> : public Client {
-public:
-    DEFINE_INLINE_VIRTUAL_TRACE()
-    {
-        Client::trace(visitor);
-    }
+template <class R, class C = typename R::ClientType>
+class ResourceOwner : public C {
+  USING_PRE_FINALIZER(ResourceOwner, clearResource);
+
+ public:
+  using ResourceType = R;
+  ~ResourceOwner() override {}
+  ResourceType* resource() const { return m_resource; }
+
+  DEFINE_INLINE_TRACE() {
+    visitor->trace(m_resource);
+    C::trace(visitor);
+  }
+
+ protected:
+  ResourceOwner() { ThreadState::current()->registerPreFinalizer(this); }
+
+  void setResource(
+      ResourceType*,
+      Resource::PreloadReferencePolicy = Resource::MarkAsReferenced);
+  void clearResource() { setResource(nullptr); }
+
+ private:
+  Member<ResourceType> m_resource;
 };
 
-// TODO(yhirano): Remove this template once all ResourceClients become
-// GarbageCollectedMixin.
-template <typename Client>
-class ResourceOwnerBase<Client, false> : public GarbageCollectedMixin, public Client {
-public:
-    DEFINE_INLINE_VIRTUAL_TRACE() {}
-};
+template <class R, class C>
+inline void ResourceOwner<R, C>::setResource(
+    R* newResource,
+    Resource::PreloadReferencePolicy preloadReferencePolicy) {
+  if (newResource == m_resource)
+    return;
 
-template<class R, class C = typename R::ClientType>
-class ResourceOwner : public ResourceOwnerBase<C, std::is_base_of<GarbageCollectedMixin, C>::value> {
-    USING_PRE_FINALIZER(ResourceOwner, clearResource);
-public:
-    using ResourceType = R;
-    ~ResourceOwner() override {}
-    ResourceType* resource() const { return m_resource; }
+  // Some ResourceClient implementations reenter this so
+  // we need to prevent double removal.
+  if (ResourceType* oldResource = m_resource.release())
+    oldResource->removeClient(this);
 
-    DEFINE_INLINE_TRACE()
-    {
-        visitor->trace(m_resource);
-        ResourceOwnerBase<C, std::is_base_of<GarbageCollectedMixin, C>::value>::trace(visitor);
-    }
-
-protected:
-    ResourceOwner()
-    {
-        ThreadState::current()->registerPreFinalizer(this);
-    }
-
-    void setResource(ResourceType*);
-    void clearResource() { setResource(nullptr); }
-
-private:
-    Member<ResourceType> m_resource;
-};
-
-template<class R, class C>
-inline void ResourceOwner<R, C>::setResource(R* newResource)
-{
-    if (newResource == m_resource)
-        return;
-
-    // Some ResourceClient implementations reenter this so
-    // we need to prevent double removal.
-    if (ResourceType* oldResource = m_resource.release())
-        oldResource->removeClient(this);
-
-    if (newResource) {
-        m_resource = newResource;
-        m_resource->addClient(this);
-    }
+  if (newResource) {
+    m_resource = newResource;
+    m_resource->addClient(this, preloadReferencePolicy);
+  }
 }
 
-} // namespace blink
+}  // namespace blink
 
 #endif

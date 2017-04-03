@@ -65,7 +65,6 @@
 <translation id="2359808026110333948">ادامه</translation>
 <translation id="2366718077645204424">دسترسی به میزبان امکان‌پذیر نیست. این احتمالاً به دلیل پیکربندی شبکه‌ای است که استفاده می‌کنید.</translation>
 <translation id="2370754117186920852"><ph name="OPTIONAL_OFFLINE_REASON" />  آخرین حضور آنلاین <ph name="RELATIVE_TIMESTAMP" />.</translation>
-<translation id="2498359688066513246">راهنمایی و بازخورد</translation>
 <translation id="2499160551253595098">‏با اجازه به ما جهت جمع‌آوری آمار مربوط به استفاده و گزارش‌های خرابی، کمک کنید تا کنترل دسک تاپ از راه دور Chrome را ارتقا دهیم.</translation>
 <translation id="2512228156274966424">‏توجه: برای اطمینان از اینکه همه میان‌برهای صفحه‌کلید در دسترس هستند، می‌توانید کنترل دسک‌تاپ از راه دور Chrome را روی «بازکردن به عنوان پنجره» پیکربندی کنید.</translation>
 <translation id="2540992418118313681">می‌خواهید این رایانه را برای کاربر دیگر جهت مشاهده و کنترل به اشتراک بگذارید؟</translation>
@@ -263,6 +262,7 @@
 <translation id="7948001860594368197">گزینه‌های صفحه</translation>
 <translation id="7970576581263377361">‏احراز هویت انجام نشد. لطفاً دوباره وارد سیستم Chromium شوید.</translation>
 <translation id="7981525049612125370">وقت جلسه راه دور تمام شد.</translation>
+<translation id="8041089156583427627">ارسال بازخورد</translation>
 <translation id="8041721485428375115">‏با بارگیری «نصب‌کننده میزبان کنترل دسک‌تاپ از راه دور Chrome»، موافقتتان را با <ph name="LINK_BEGIN" />شرایط خدمات<ph name="LINK_END" /> Google اعلام می‌کنید.</translation>
 <translation id="8073845705237259513">‏برای استفاده از کنترل دسک‌تاپ از راه دور Chrome، باید یک حساب Google به دستگاهتان اضافه کنید.</translation>
 <translation id="80739703311984697">‏میزبان راه دور از شما می‌خواهد که در وب سایت شخص ثالثی تأیید هویت شوید. برای ادامه، باید
@@ -287,6 +287,7 @@
 <translation id="8548209692293300397">‏قبلاً با <ph name="USER_NAME" /> (<ph name="USER_EMAIL" />) وارد سیستم شده بودید. برای دسترسی به رایانه‌های آن حساب، با آن حساب <ph name="LINK_BEGIN" />وارد Google Chrome شوید<ph name="LINK_END" /> و کنترل دسک تاپ از راه دور Chrome را دوباره نصب کنید.</translation>
 <translation id="8642984861538780905">متوسط</translation>
 <translation id="8712909229180978490">‏نمی‌توانم فایل‌های ذخیره شده‌ام را آنلاین در Google Drive ببینم.</translation>
+<translation id="8743328882720071828">می‌خواهید به <ph name="CLIENT_USERNAME" /> اجازه دهید که رایانه‌تان را ببیند و کنترل کند؟</translation>
 <translation id="8759753423332885148">بیشتر بیاموزید.</translation>
 <translation id="8791202241915690908">‏بارگیری نصب‌کننده میزبان Chromoting</translation>
 <translation id="894763922177556086">خوب</translation>

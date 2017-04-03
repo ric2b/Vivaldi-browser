@@ -9,7 +9,6 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_aura.h"
 #include "content/browser/renderer_host/ui_events_helper.h"
-#include "third_party/WebKit/public/platform/WebScreenInfo.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/events/event_processor.h"
@@ -24,9 +23,9 @@ namespace content {
 SyntheticGestureTargetAura::SyntheticGestureTargetAura(
     RenderWidgetHostImpl* host)
     : SyntheticGestureTargetBase(host) {
-  blink::WebScreenInfo screenInfo;
-  host->GetWebScreenInfo(&screenInfo);
-  device_scale_factor_ = screenInfo.deviceScaleFactor;
+  ScreenInfo screen_info;
+  host->GetScreenInfo(&screen_info);
+  device_scale_factor_ = screen_info.device_scale_factor;
 }
 
 void SyntheticGestureTargetAura::DispatchWebTouchEventToPlatform(
@@ -34,8 +33,6 @@ void SyntheticGestureTargetAura::DispatchWebTouchEventToPlatform(
     const ui::LatencyInfo& latency_info) {
   TouchEventWithLatencyInfo touch_with_latency(web_touch, latency_info);
   for (size_t i = 0; i < touch_with_latency.event.touchesLength; i++) {
-    touch_with_latency.event.touches[i].position.x *= device_scale_factor_;
-    touch_with_latency.event.touches[i].position.y *= device_scale_factor_;
     touch_with_latency.event.touches[i].radiusX *= device_scale_factor_;
     touch_with_latency.event.touches[i].radiusY *= device_scale_factor_;
   }
@@ -49,6 +46,15 @@ void SyntheticGestureTargetAura::DispatchWebTouchEventToPlatform(
   for (ScopedVector<ui::TouchEvent>::iterator iter = events.begin(),
       end = events.end(); iter != end; ++iter) {
     (*iter)->ConvertLocationToTarget(window, host->window());
+
+    // Apply the screen scale factor to the event location after it has been
+    // transformed to the target.
+    gfx::PointF device_location =
+        gfx::ScalePoint((*iter)->location_f(), device_scale_factor_);
+    gfx::PointF device_root_location =
+        gfx::ScalePoint((*iter)->root_location_f(), device_scale_factor_);
+    (*iter)->set_location_f(device_location);
+    (*iter)->set_root_location_f(device_root_location);
     ui::EventDispatchDetails details =
         host->event_processor()->OnEventFromSource(*iter);
     if (details.dispatcher_destroyed)
@@ -59,14 +65,13 @@ void SyntheticGestureTargetAura::DispatchWebTouchEventToPlatform(
 void SyntheticGestureTargetAura::DispatchWebMouseWheelEventToPlatform(
       const blink::WebMouseWheelEvent& web_wheel,
       const ui::LatencyInfo&) {
-  ui::MouseEvent mouse_event(ui::ET_MOUSEWHEEL, gfx::Point(), gfx::Point(),
-                             ui::EventTimeForNow(), ui::EF_NONE, ui::EF_NONE);
+  ui::MouseWheelEvent wheel_event(
+      gfx::Vector2d(web_wheel.deltaX, web_wheel.deltaY), gfx::Point(),
+      gfx::Point(), ui::EventTimeForNow(), ui::EF_NONE, ui::EF_NONE);
   gfx::PointF location(web_wheel.x * device_scale_factor_,
                        web_wheel.y * device_scale_factor_);
-  mouse_event.set_location_f(location);
-  mouse_event.set_root_location_f(location);
-  ui::MouseWheelEvent wheel_event(
-      mouse_event, web_wheel.deltaX, web_wheel.deltaY);
+  wheel_event.set_location_f(location);
+  wheel_event.set_root_location_f(location);
 
   aura::Window* window = GetWindow();
   wheel_event.ConvertLocationToTarget(window, window->GetRootWindow());

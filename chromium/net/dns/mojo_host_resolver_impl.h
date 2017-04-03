@@ -10,7 +10,7 @@
 #include "base/macros.h"
 #include "base/threading/thread_checker.h"
 #include "net/interfaces/host_resolver_service.mojom.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 
 namespace net {
 
@@ -24,7 +24,8 @@ class HostResolver;
 class MojoHostResolverImpl {
  public:
   // |resolver| is expected to outlive |this|.
-  MojoHostResolverImpl(net::HostResolver* resolver, const BoundNetLog& net_log);
+  MojoHostResolverImpl(net::HostResolver* resolver,
+                       const NetLogWithSource& net_log);
   ~MojoHostResolverImpl();
 
   void Resolve(interfaces::HostResolverRequestInfoPtr request_info,
@@ -41,8 +42,8 @@ class MojoHostResolverImpl {
   // Resolver for resolving incoming requests. Not owned.
   net::HostResolver* resolver_;
 
-  // The BoundNetLog to be passed to |resolver_| for all requests.
-  const BoundNetLog net_log_;
+  // The NetLogWithSource to be passed to |resolver_| for all requests.
+  const NetLogWithSource net_log_;
 
   // All pending jobs, so they can be cancelled when this service is destroyed.
   // Owns all jobs.

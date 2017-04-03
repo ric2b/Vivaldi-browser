@@ -13,7 +13,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
@@ -36,8 +36,9 @@
 namespace content {
 
 // Service Worker database keys. If a registration ID is stored, the stored
-// sender ID must be the one used to subscribe. Unfortunately, this isn't always
-// true of subscriptions previously stored in the database.
+// sender ID must be the one used to register. Unfortunately, this isn't always
+// true of pre-InstanceID registrations previously stored in the database, but
+// fortunately it's less important for their sender ID to be accurate.
 const char kPushSenderIdServiceWorkerKey[] = "push_sender_id";
 const char kPushRegistrationIdServiceWorkerKey[] = "push_registration_id";
 
@@ -89,6 +90,24 @@ bool IsApplicationServerKey(const std::string& sender_info) {
   return sender_info.size() == 65 && sender_info[0] == 0x04;
 }
 
+// Returns sender_info if non-empty, otherwise checks if stored_sender_id
+// may be used as a fallback and if so, returns stored_sender_id instead.
+//
+// This is in order to support the legacy way of subscribing from a service
+// worker (first subscribe from the document using a gcm_sender_id set in the
+// manifest, and then subscribe from the service worker with no key).
+//
+// An empty string will be returned if sender_info is empty and the fallback
+// is not a numeric gcm sender id.
+std::string FixSenderInfo(const std::string& sender_info,
+                          const std::string& stored_sender_id) {
+  if (!sender_info.empty())
+    return sender_info;
+  if (base::ContainsOnlyChars(stored_sender_id, "0123456789"))
+    return stored_sender_id;
+  return std::string();
+}
+
 }  // namespace
 
 struct PushMessagingMessageFilter::RegisterData {
@@ -136,6 +155,7 @@ class PushMessagingMessageFilter::Core {
   void GetEncryptionInfoOnUI(
       const GURL& origin,
       int64_t service_worker_registration_id,
+      const std::string& sender_id,
       const PushMessagingService::EncryptionInfoCallback& io_thread_callback);
 
   // Called (directly) from both the UI and IO threads.
@@ -280,31 +300,41 @@ void PushMessagingMessageFilter::OnSubscribe(
   }
   data.requesting_origin = service_worker_registration->pattern().GetOrigin();
 
+  DCHECK(!(data.options.sender_info.empty() && data.FromDocument()));
+
   service_worker_context_->GetRegistrationUserData(
       data.service_worker_registration_id,
-      {kPushRegistrationIdServiceWorkerKey},
+      {kPushRegistrationIdServiceWorkerKey, kPushSenderIdServiceWorkerKey},
       base::Bind(&PushMessagingMessageFilter::DidCheckForExistingRegistration,
                  weak_factory_io_to_io_.GetWeakPtr(), data));
 }
 
 void PushMessagingMessageFilter::DidCheckForExistingRegistration(
     const RegisterData& data,
-    const std::vector<std::string>& push_registration_id,
+    const std::vector<std::string>& push_registration_id_and_sender_id,
     ServiceWorkerStatusCode service_worker_status) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (service_worker_status == SERVICE_WORKER_OK) {
-    // TODO(johnme): Check that stored sender ID equals data.options.sender_info
-    // and throw an exception if they don't match.
-    DCHECK_EQ(1u, push_registration_id.size());
+    DCHECK_EQ(2u, push_registration_id_and_sender_id.size());
+    const auto& push_registration_id = push_registration_id_and_sender_id[0];
+    const auto& stored_sender_id = push_registration_id_and_sender_id[1];
+    std::string fixed_sender_id =
+        FixSenderInfo(data.options.sender_info, stored_sender_id);
+    if (fixed_sender_id.empty()) {
+      SendSubscriptionError(data, PUSH_REGISTRATION_STATUS_NO_SENDER_ID);
+      return;
+    }
+    // TODO(crbug.com/638924): Check that stored sender ID equals
+    // data.options.sender_info and throw an exception if they don't match.
     auto callback = base::Bind(
         &PushMessagingMessageFilter::DidGetEncryptionKeys,
-        weak_factory_io_to_io_.GetWeakPtr(), data, push_registration_id[0]);
-
+        weak_factory_io_to_io_.GetWeakPtr(), data, push_registration_id);
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
         base::Bind(&Core::GetEncryptionInfoOnUI,
                    base::Unretained(ui_core_.get()), data.requesting_origin,
-                   data.service_worker_registration_id, callback));
+                   data.service_worker_registration_id, fixed_sender_id,
+                   callback));
     return;
   }
   // TODO(johnme): The spec allows the register algorithm to reject with an
@@ -317,6 +347,8 @@ void PushMessagingMessageFilter::DidCheckForExistingRegistration(
                             base::Bind(&Core::RegisterOnUI,
                                        base::Unretained(ui_core_.get()), data));
   } else {
+    // There is no existing registration and the sender_info passed in was
+    // empty, but perhaps there is a stored sender id we can use.
     service_worker_context_->GetRegistrationUserData(
         data.service_worker_registration_id, {kPushSenderIdServiceWorkerKey},
         base::Bind(&PushMessagingMessageFilter::DidGetSenderIdFromStorage,
@@ -343,16 +375,24 @@ void PushMessagingMessageFilter::DidGetEncryptionKeys(
 
 void PushMessagingMessageFilter::DidGetSenderIdFromStorage(
     const RegisterData& data,
-    const std::vector<std::string>& sender_id,
+    const std::vector<std::string>& stored_sender_id,
     ServiceWorkerStatusCode service_worker_status) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (service_worker_status != SERVICE_WORKER_OK) {
     SendSubscriptionError(data, PUSH_REGISTRATION_STATUS_NO_SENDER_ID);
     return;
   }
-  DCHECK_EQ(1u, sender_id.size());
+  DCHECK_EQ(1u, stored_sender_id.size());
+  // We should only be here because no sender info was supplied to subscribe().
+  DCHECK(data.options.sender_info.empty());
+  std::string fixed_sender_id =
+      FixSenderInfo(data.options.sender_info, stored_sender_id[0]);
+  if (fixed_sender_id.empty()) {
+    SendSubscriptionError(data, PUSH_REGISTRATION_STATUS_NO_SENDER_ID);
+    return;
+  }
   RegisterData mutated_data = data;
-  mutated_data.options.sender_info = sender_id[0];
+  mutated_data.options.sender_info = fixed_sender_id;
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
       base::Bind(&Core::RegisterOnUI, base::Unretained(ui_core_.get()),
@@ -365,6 +405,8 @@ void PushMessagingMessageFilter::Core::RegisterOnUI(
   PushMessagingService* push_service = service();
   if (!push_service) {
     if (!is_incognito()) {
+      // This might happen if InstanceIDProfileService::IsInstanceIDEnabled
+      // returns false because the Instance ID kill switch was enabled.
       // TODO(johnme): Might be better not to expose the API in this case.
       BrowserThread::PostTask(
           BrowserThread::IO, FROM_HERE,
@@ -544,66 +586,31 @@ void PushMessagingMessageFilter::OnUnsubscribe(
   }
 
   service_worker_context_->GetRegistrationUserData(
-      service_worker_registration_id,
-      {kPushRegistrationIdServiceWorkerKey, kPushSenderIdServiceWorkerKey},
-      base::Bind(&PushMessagingMessageFilter::UnsubscribeHavingGottenIds,
+      service_worker_registration_id, {kPushSenderIdServiceWorkerKey},
+      base::Bind(&PushMessagingMessageFilter::UnsubscribeHavingGottenSenderId,
                  weak_factory_io_to_io_.GetWeakPtr(), request_id,
                  service_worker_registration_id,
                  service_worker_registration->pattern().GetOrigin()));
 }
 
-void PushMessagingMessageFilter::UnsubscribeHavingGottenIds(
+void PushMessagingMessageFilter::UnsubscribeHavingGottenSenderId(
     int request_id,
     int64_t service_worker_registration_id,
     const GURL& requesting_origin,
-    const std::vector<std::string>& push_subscription_and_sender_ids,
+    const std::vector<std::string>& sender_ids,
     ServiceWorkerStatusCode service_worker_status) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  // Note that the subscription ID (push_subscription_and_sender_ids[0]) is
-  // unused - we just needed to check if the database contained one.
-
-  switch (service_worker_status) {
-    case SERVICE_WORKER_OK:
-      DCHECK_EQ(2u, push_subscription_and_sender_ids.size());
-      BrowserThread::PostTask(
-          BrowserThread::UI, FROM_HERE,
-          base::Bind(&Core::UnregisterFromService,
-                     base::Unretained(ui_core_.get()), request_id,
-                     service_worker_registration_id, requesting_origin,
-                     push_subscription_and_sender_ids[1]));
-      break;
-    case SERVICE_WORKER_ERROR_NOT_FOUND:
-      // We did not find a registration, stop here and notify the renderer that
-      // it was a success even though we did not unregister.
-      DidUnregister(request_id,
-                    PUSH_UNREGISTRATION_STATUS_SUCCESS_WAS_NOT_REGISTERED);
-      break;
-    case SERVICE_WORKER_ERROR_FAILED:
-      DidUnregister(request_id, PUSH_UNREGISTRATION_STATUS_STORAGE_ERROR);
-      break;
-    case SERVICE_WORKER_ERROR_ABORT:
-    case SERVICE_WORKER_ERROR_START_WORKER_FAILED:
-    case SERVICE_WORKER_ERROR_PROCESS_NOT_FOUND:
-    case SERVICE_WORKER_ERROR_EXISTS:
-    case SERVICE_WORKER_ERROR_INSTALL_WORKER_FAILED:
-    case SERVICE_WORKER_ERROR_ACTIVATE_WORKER_FAILED:
-    case SERVICE_WORKER_ERROR_IPC_FAILED:
-    case SERVICE_WORKER_ERROR_NETWORK:
-    case SERVICE_WORKER_ERROR_SECURITY:
-    case SERVICE_WORKER_ERROR_EVENT_WAITUNTIL_REJECTED:
-    case SERVICE_WORKER_ERROR_STATE:
-    case SERVICE_WORKER_ERROR_TIMEOUT:
-    case SERVICE_WORKER_ERROR_SCRIPT_EVALUATE_FAILED:
-    case SERVICE_WORKER_ERROR_DISK_CACHE:
-    case SERVICE_WORKER_ERROR_REDUNDANT:
-    case SERVICE_WORKER_ERROR_DISALLOWED:
-    case SERVICE_WORKER_ERROR_MAX_VALUE:
-      NOTREACHED() << "Got unexpected error code: " << service_worker_status
-                   << " " << ServiceWorkerStatusToString(service_worker_status);
-      DidUnregister(request_id, PUSH_UNREGISTRATION_STATUS_STORAGE_ERROR);
-      break;
+  std::string sender_id;
+  if (service_worker_status == SERVICE_WORKER_OK) {
+    DCHECK_EQ(1u, sender_ids.size());
+    sender_id = sender_ids[0];
   }
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::Bind(&Core::UnregisterFromService, base::Unretained(ui_core_.get()),
+                 request_id, service_worker_registration_id, requesting_origin,
+                 sender_id));
 }
 
 void PushMessagingMessageFilter::Core::UnregisterFromService(
@@ -638,53 +645,10 @@ void PushMessagingMessageFilter::Core::DidUnregisterFromService(
     PushUnregistrationStatus unregistration_status) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  switch (unregistration_status) {
-    case PUSH_UNREGISTRATION_STATUS_SUCCESS_UNREGISTERED:
-    case PUSH_UNREGISTRATION_STATUS_SUCCESS_WAS_NOT_REGISTERED:
-    case PUSH_UNREGISTRATION_STATUS_PENDING_NETWORK_ERROR:
-    case PUSH_UNREGISTRATION_STATUS_PENDING_SERVICE_ERROR:
-      BrowserThread::PostTask(
-          BrowserThread::IO, FROM_HERE,
-          base::Bind(&PushMessagingMessageFilter::ClearRegistrationData,
-                     io_parent_, request_id, service_worker_registration_id,
-                     unregistration_status));
-      break;
-    case PUSH_UNREGISTRATION_STATUS_NO_SERVICE_WORKER:
-    case PUSH_UNREGISTRATION_STATUS_SERVICE_NOT_AVAILABLE:
-    case PUSH_UNREGISTRATION_STATUS_STORAGE_ERROR:
-    case PUSH_UNREGISTRATION_STATUS_NETWORK_ERROR:
-      NOTREACHED();
-      break;
-  }
-}
-
-void PushMessagingMessageFilter::ClearRegistrationData(
-    int request_id,
-    int64_t service_worker_registration_id,
-    PushUnregistrationStatus unregistration_status) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
-  service_worker_context_->ClearRegistrationUserData(
-      service_worker_registration_id, {kPushRegistrationIdServiceWorkerKey},
-      base::Bind(&PushMessagingMessageFilter::DidClearRegistrationData,
-                 weak_factory_io_to_io_.GetWeakPtr(), request_id,
-                 unregistration_status));
-}
-
-void PushMessagingMessageFilter::DidClearRegistrationData(
-    int request_id,
-    PushUnregistrationStatus unregistration_status,
-    ServiceWorkerStatusCode service_worker_status) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
-  if (service_worker_status != SERVICE_WORKER_OK &&
-      service_worker_status != SERVICE_WORKER_ERROR_NOT_FOUND) {
-    unregistration_status = PUSH_UNREGISTRATION_STATUS_STORAGE_ERROR;
-    DLOG(WARNING) << "Got unexpected error code: " << service_worker_status
-                  << " " << ServiceWorkerStatusToString(service_worker_status);
-  }
-
-  DidUnregister(request_id, unregistration_status);
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::Bind(&PushMessagingMessageFilter::DidUnregister, io_parent_,
+                 request_id, unregistration_status));
 }
 
 void PushMessagingMessageFilter::DidUnregister(
@@ -753,6 +717,11 @@ void PushMessagingMessageFilter::DidGetSubscription(
         break;
       }
 
+      ServiceWorkerRegistration* registration =
+          service_worker_context_->GetLiveRegistration(
+              service_worker_registration_id);
+      const GURL origin = registration->pattern().GetOrigin();
+
       const bool uses_standard_protocol =
           IsApplicationServerKey(push_subscription_id_and_sender_info[1]);
       const GURL endpoint = CreateEndpoint(
@@ -763,16 +732,12 @@ void PushMessagingMessageFilter::DidGetSubscription(
                      weak_factory_io_to_io_.GetWeakPtr(), request_id, endpoint,
                      push_subscription_id_and_sender_info[1]);
 
-      ServiceWorkerRegistration* registration =
-          service_worker_context_->GetLiveRegistration(
-              service_worker_registration_id);
-      const GURL origin = registration->pattern().GetOrigin();
-
       BrowserThread::PostTask(
           BrowserThread::UI, FROM_HERE,
           base::Bind(&Core::GetEncryptionInfoOnUI,
                      base::Unretained(ui_core_.get()), origin,
-                     service_worker_registration_id, callback));
+                     service_worker_registration_id,
+                     push_subscription_id_and_sender_info[1], callback));
 
       return;
     }
@@ -900,12 +865,13 @@ void PushMessagingMessageFilter::Core::GetPermissionStatusOnUI(
 void PushMessagingMessageFilter::Core::GetEncryptionInfoOnUI(
     const GURL& origin,
     int64_t service_worker_registration_id,
+    const std::string& sender_id,
     const PushMessagingService::EncryptionInfoCallback& io_thread_callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   PushMessagingService* push_service = service();
   if (push_service) {
     push_service->GetEncryptionInfo(
-        origin, service_worker_registration_id,
+        origin, service_worker_registration_id, sender_id,
         base::Bind(&ForwardEncryptionInfoToIOThreadProxy, io_thread_callback));
     return;
   }

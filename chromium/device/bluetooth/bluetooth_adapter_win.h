@@ -20,7 +20,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "device/bluetooth/bluetooth_adapter.h"
-#include "device/bluetooth/bluetooth_audio_sink.h"
 #include "device/bluetooth/bluetooth_discovery_session.h"
 #include "device/bluetooth/bluetooth_export.h"
 #include "device/bluetooth/bluetooth_task_manager_win.h"
@@ -71,14 +70,10 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterWin
       const ServiceOptions& options,
       const CreateServiceCallback& callback,
       const CreateServiceErrorCallback& error_callback) override;
-  void RegisterAudioSink(
-      const BluetoothAudioSink::Options& options,
-      const AcquiredCallback& callback,
-      const BluetoothAudioSink::ErrorCallback& error_callback) override;
   void RegisterAdvertisement(
       std::unique_ptr<BluetoothAdvertisement::Data> advertisement_data,
       const CreateAdvertisementCallback& callback,
-      const CreateAdvertisementErrorCallback& error_callback) override;
+      const AdvertisementErrorCallback& error_callback) override;
   BluetoothLocalGattService* GetGattService(
       const std::string& identifier) const override;
 

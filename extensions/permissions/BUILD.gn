@@ -3,4 +3,8 @@ source_set("permissions") {
     "vivaldi_api_permissions.cpp",
     "vivaldi_api_permissions.h",
   ]
+  deps = [
+    "//base:base",
+    "//extensions/common:common",
+  ]
 }

@@ -35,6 +35,7 @@
 #include "content/browser/service_worker/service_worker_metrics.h"
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/common/service_worker/embedded_worker_messages.h"
+#include "content/common/service_worker/embedded_worker_start_params.h"
 #include "content/common/service_worker/service_worker_messages.h"
 #include "content/common/service_worker/service_worker_type_converters.h"
 #include "content/common/service_worker/service_worker_utils.h"
@@ -317,9 +318,9 @@ ServiceWorkerVersion::ServiceWorkerVersion(
   DCHECK(context_);
   DCHECK(registration);
   DCHECK(script_url_.is_valid());
-  context_->AddLiveVersion(this);
   embedded_worker_ = context_->embedded_worker_registry()->CreateWorker();
   embedded_worker_->AddListener(this);
+  context_->AddLiveVersion(this);
 }
 
 ServiceWorkerVersion::~ServiceWorkerVersion() {
@@ -393,8 +394,9 @@ void ServiceWorkerVersion::RegisterStatusChangeCallback(
 ServiceWorkerVersionInfo ServiceWorkerVersion::GetInfo() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   ServiceWorkerVersionInfo info(
-      running_status(), status(), script_url(), registration_id(), version_id(),
-      embedded_worker()->process_id(), embedded_worker()->thread_id(),
+      running_status(), status(), fetch_handler_existence(), script_url(),
+      registration_id(), version_id(), embedded_worker()->process_id(),
+      embedded_worker()->thread_id(),
       embedded_worker()->worker_devtools_agent_route_id());
   for (const auto& controllee : controllee_map_) {
     const ServiceWorkerProviderHost* host = controllee.second;
@@ -550,11 +552,11 @@ int ServiceWorkerVersion::StartRequestWithCustomTimeout(
       << "Event of type " << static_cast<int>(event_type)
       << " can only be dispatched to an active worker: " << status();
 
-  PendingRequest* request = new PendingRequest(
-      error_callback, base::Time::Now(), base::TimeTicks::Now(), event_type);
-  int request_id = pending_requests_.Add(request);
+  int request_id = pending_requests_.Add(base::MakeUnique<PendingRequest>(
+      error_callback, base::Time::Now(), base::TimeTicks::Now(), event_type));
   TRACE_EVENT_ASYNC_BEGIN2("ServiceWorker", "ServiceWorkerVersion::Request",
-                           request, "Request id", request_id, "Event type",
+                           pending_requests_.Lookup(request_id), "Request id",
+                           request_id, "Event type",
                            ServiceWorkerMetrics::EventTypeToString(event_type));
   base::TimeTicks expiration_time = base::TimeTicks::Now() + timeout;
   timeout_queue_.push(
@@ -865,6 +867,10 @@ void ServiceWorkerVersion::OnScriptLoaded() {
 void ServiceWorkerVersion::OnScriptLoadFailed() {
   if (IsInstalled(status()))
     UMA_HISTOGRAM_BOOLEAN("ServiceWorker.ScriptLoadSuccess", false);
+}
+
+void ServiceWorkerVersion::OnRegisteredToDevToolsManager() {
+  FOR_EACH_OBSERVER(Listener, listeners_, OnDevToolsRoutingIdChanged(this));
 }
 
 void ServiceWorkerVersion::OnReportException(
@@ -1401,8 +1407,8 @@ void ServiceWorkerVersion::StartWorkerInternal() {
 
   StartTimeoutTimer();
 
-  std::unique_ptr<EmbeddedWorkerMsg_StartWorker_Params> params(
-      new EmbeddedWorkerMsg_StartWorker_Params());
+  std::unique_ptr<EmbeddedWorkerStartParams> params(
+      new EmbeddedWorkerStartParams());
   params->service_worker_version_id = version_id_;
   params->scope = scope_;
   params->script_url = script_url_;

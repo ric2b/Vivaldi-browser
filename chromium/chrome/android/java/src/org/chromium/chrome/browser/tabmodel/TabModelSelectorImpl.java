@@ -12,7 +12,6 @@ import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
-import org.chromium.chrome.browser.ntp.NativePageFactory;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabSelectionType;
@@ -156,7 +155,7 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
         ChromeTabCreator incognitoTabCreator = (ChromeTabCreator) mActivity.getTabCreator(true);
         TabModelImpl normalModel = new TabModelImpl(false, regularTabCreator, incognitoTabCreator,
                 mUma, mOrderController, mTabContentManager, mTabSaver, this, mIsUndoSupported);
-        TabModel incognitoModel = new OffTheRecordTabModel(new OffTheRecordTabModelImplCreator(
+        TabModel incognitoModel = new IncognitoTabModel(new IncognitoTabModelImplCreator(
                 regularTabCreator, incognitoTabCreator, mUma, mOrderController,
                 mTabContentManager, mTabSaver, this));
         initialize(isIncognitoSelected(), normalModel, incognitoModel);
@@ -195,11 +194,7 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
             @Override
             public void onPageLoadStarted(Tab tab, String url) {
                 String previousUrl = tab.getUrl();
-                if (NativePageFactory.isNativePageUrl(previousUrl, tab.isIncognito())) {
-                    mTabContentManager.invalidateTabThumbnail(tab.getId(), previousUrl);
-                } else {
-                    mTabContentManager.removeTabThumbnail(tab.getId());
-                }
+                mTabContentManager.invalidateTabThumbnail(tab.getId(), previousUrl);
             }
 
             @Override

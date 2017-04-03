@@ -11,7 +11,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/scoped_vector.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
@@ -718,11 +718,12 @@ void RTCVideoEncoder::Impl::ReturnEncodedImage(
     info.codecSpecific.VP8.keyIdx = -1;
   }
 
-  const int32_t retval =
-      encoded_image_callback_->Encoded(image, &info, &header);
-  if (retval < 0) {
-    DVLOG(2) << "ReturnEncodedImage(): encoded_image_callback_ returned "
-             << retval;
+  const auto result =
+      encoded_image_callback_->OnEncodedImage(image, &info, &header);
+  if (result.error != webrtc::EncodedImageCallback::Result::OK) {
+    DVLOG(2)
+        << "ReturnEncodedImage(): webrtc::EncodedImageCallback::Result.error = "
+        << result.error;
   }
 
   UseOutputBitstreamBufferId(bitstream_buffer_id);

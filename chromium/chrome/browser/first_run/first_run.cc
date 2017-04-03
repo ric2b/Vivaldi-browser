@@ -15,7 +15,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -88,6 +88,11 @@ uint16_t g_auto_import_state = first_run::AUTO_IMPORT_NONE;
 // Flags for functions of similar name.
 bool g_should_show_welcome_page = false;
 bool g_should_do_autofill_personal_data_manager_first_run = false;
+
+// Indicates whether this is first run. Populated when IsChromeFirstRun
+// is invoked, then used as a cache on subsequent calls.
+first_run::internal::FirstRunState g_first_run =
+    first_run::internal::FIRST_RUN_UNKNOWN;
 
 // This class acts as an observer for the ImporterProgressObserver::ImportEnded
 // callback. When the import process is started, certain errors may cause
@@ -327,12 +332,19 @@ bool IsOnWelcomePage(content::WebContents* contents) {
   // We have to check both the GetURL() similar to the other checks below, but
   // also the original request url because the welcome page we use is a
   // redirect.
-  GURL welcome_page(l10n_util::GetStringUTF8(IDS_WELCOME_PAGE_URL));
-  return contents->GetURL() == welcome_page ||
-         (contents->GetController().GetVisibleEntry() &&
-          contents->GetController()
-                  .GetVisibleEntry()
-                  ->GetOriginalRequestURL() == welcome_page);
+  // TODO(crbug.com/651465): Remove this once kUseConsolidatedStartupFlow is on
+  // by default.
+  const GURL deprecated_welcome_page(
+      l10n_util::GetStringUTF8(IDS_WELCOME_PAGE_URL));
+  if (contents->GetURL() == deprecated_welcome_page ||
+      (contents->GetController().GetVisibleEntry() &&
+       contents->GetController().GetVisibleEntry()->GetOriginalRequestURL() ==
+           deprecated_welcome_page)) {
+    return true;
+  }
+
+  const GURL welcome_page(chrome::kChromeUIWelcomeURL);
+  return contents->GetURL().GetWithEmptyPath() == welcome_page;
 }
 
 // Show the first run search engine bubble at the first appropriate opportunity.
@@ -497,8 +509,6 @@ void ProcessDefaultBrowserPolicy(bool make_chrome_default_for_user) {
 namespace first_run {
 namespace internal {
 
-FirstRunState g_first_run = FIRST_RUN_UNKNOWN;
-
 void SetupMasterPrefsFromInstallPrefs(
     const installer::MasterPreferences& install_prefs,
     MasterPrefs* out_prefs) {
@@ -619,6 +629,14 @@ bool IsOrganicFirstRun() {
 }
 #endif
 
+FirstRunState DetermineFirstRunState(bool has_sentinel,
+                                     bool force_first_run,
+                                     bool no_first_run) {
+  return (force_first_run || (!has_sentinel && !no_first_run))
+             ? FIRST_RUN_TRUE
+             : FIRST_RUN_FALSE;
+}
+
 }  // namespace internal
 
 MasterPrefs::MasterPrefs()
@@ -634,17 +652,15 @@ MasterPrefs::MasterPrefs()
 MasterPrefs::~MasterPrefs() {}
 
 bool IsChromeFirstRun() {
-  if (internal::g_first_run == internal::FIRST_RUN_UNKNOWN) {
-    internal::g_first_run = internal::FIRST_RUN_FALSE;
+  if (g_first_run == internal::FIRST_RUN_UNKNOWN) {
     const base::CommandLine* command_line =
         base::CommandLine::ForCurrentProcess();
-    if (command_line->HasSwitch(switches::kForceFirstRun) ||
-        (!command_line->HasSwitch(switches::kNoFirstRun) &&
-         !internal::IsFirstRunSentinelPresent())) {
-      internal::g_first_run = internal::FIRST_RUN_TRUE;
-    }
+    g_first_run = internal::DetermineFirstRunState(
+        internal::IsFirstRunSentinelPresent(),
+        command_line->HasSwitch(switches::kForceFirstRun),
+        command_line->HasSwitch(switches::kNoFirstRun));
   }
-  return internal::g_first_run == internal::FIRST_RUN_TRUE;
+  return g_first_run == internal::FIRST_RUN_TRUE;
 }
 
 #if defined(OS_MACOSX)

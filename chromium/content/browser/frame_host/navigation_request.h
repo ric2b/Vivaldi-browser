@@ -123,9 +123,7 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
     return dest_site_instance_.get();
   }
 
-  NavigationEntryImpl::RestoreType restore_type() const {
-    return restore_type_;
-  };
+  RestoreType restore_type() const { return restore_type_; };
 
   bool is_view_source() const { return is_view_source_; };
 
@@ -177,10 +175,10 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   void OnResponseStarted(
       const scoped_refptr<ResourceResponse>& response,
       std::unique_ptr<StreamHandle> body,
+      const SSLStatus& ssl_status,
       std::unique_ptr<NavigationData> navigation_data) override;
   void OnRequestFailed(bool has_stale_copy_in_cache, int net_error) override;
   void OnRequestStarted(base::TimeTicks timestamp) override;
-  void OnServiceWorkerEncountered() override;
 
   // Called when the NavigationThrottles have been checked by the
   // NavigationHandle.
@@ -212,10 +210,6 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   NavigationState state_;
 
 
-  // The parameters to send to the IO thread. |loader_| takes ownership of
-  // |info_| after calling BeginNavigation.
-  std::unique_ptr<NavigationRequestInfo> info_;
-
   std::unique_ptr<NavigationURLLoader> loader_;
 
   // These next items are used in browser-initiated navigations to store
@@ -223,7 +217,7 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   // creation time.
   scoped_refptr<SiteInstanceImpl> source_site_instance_;
   scoped_refptr<SiteInstanceImpl> dest_site_instance_;
-  NavigationEntryImpl::RestoreType restore_type_;
+  RestoreType restore_type_;
   bool is_view_source_;
   int bindings_;
 

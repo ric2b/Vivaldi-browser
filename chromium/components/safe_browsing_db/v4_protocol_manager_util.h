@@ -24,6 +24,17 @@ class HttpRequestHeaders;
 
 namespace safe_browsing {
 
+// The size of the hash prefix, in bytes. It should be between 4 to 32 (full
+// hash).
+typedef size_t PrefixSize;
+
+// The minimum expected size (in bytes) of a hash-prefix.
+const PrefixSize kMinHashPrefixLength = 4;
+
+// The maximum expected size (in bytes) of a hash-prefix. This represents the
+// length of a SHA256 hash.
+const PrefixSize kMaxHashPrefixLength = 32;
+
 // A hash prefix sent by the SafeBrowsing PVer4 service.
 typedef std::string HashPrefix;
 
@@ -52,48 +63,104 @@ struct V4ProtocolConfig {
   ~V4ProtocolConfig();
 };
 
+// Different types of threats that SafeBrowsing protects against. This is the
+// type that's returned to the clients of SafeBrowsing in Chromium.
+enum SBThreatType {
+  // No threat at all.
+  SB_THREAT_TYPE_SAFE,
+
+  // The URL is being used for phishing.
+  SB_THREAT_TYPE_URL_PHISHING,
+
+  // The URL hosts malware.
+  SB_THREAT_TYPE_URL_MALWARE,
+
+  // The URL hosts unwanted programs.
+  SB_THREAT_TYPE_URL_UNWANTED,
+
+  // The download URL is malware.
+  SB_THREAT_TYPE_BINARY_MALWARE_URL,
+
+  // Url detected by the client-side phishing model.  Note that unlike the
+  // above values, this does not correspond to a downloaded list.
+  SB_THREAT_TYPE_CLIENT_SIDE_PHISHING_URL,
+
+  // The Chrome extension or app (given by its ID) is malware.
+  SB_THREAT_TYPE_EXTENSION,
+
+  // Url detected by the client-side malware IP list. This IP list is part
+  // of the client side detection model.
+  SB_THREAT_TYPE_CLIENT_SIDE_MALWARE_URL,
+
+  // Url leads to a blacklisted resource script. Note that no warnings should be
+  // shown on this threat type, but an incident report might be sent.
+  SB_THREAT_TYPE_BLACKLISTED_RESOURCE,
+
+  // Url abuses a permission API.
+  SB_THREAT_TYPE_API_ABUSE,
+};
+
 // The information required to uniquely identify each list the client is
 // interested in maintaining and downloading from the SafeBrowsing servers.
 // For example, for digests of Malware binaries on Windows:
 // platform_type = WINDOWS,
 // threat_entry_type = EXECUTABLE,
 // threat_type = MALWARE
-struct UpdateListIdentifier {
+struct ListIdentifier {
  public:
-  PlatformType platform_type;
-  ThreatEntryType threat_entry_type;
-  ThreatType threat_type;
+  ListIdentifier(PlatformType, ThreatEntryType, ThreatType);
+  explicit ListIdentifier(const ListUpdateResponse&);
 
-  UpdateListIdentifier(PlatformType, ThreatEntryType, ThreatType);
-  explicit UpdateListIdentifier(const ListUpdateResponse&);
-
-  bool operator==(const UpdateListIdentifier& other) const;
-  bool operator!=(const UpdateListIdentifier& other) const;
+  bool operator==(const ListIdentifier& other) const;
+  bool operator!=(const ListIdentifier& other) const;
   size_t hash() const;
 
+  PlatformType platform_type() const { return platform_type_; }
+  ThreatEntryType threat_entry_type() const { return threat_entry_type_; }
+  ThreatType threat_type() const { return threat_type_; }
+
  private:
-  UpdateListIdentifier();
+  PlatformType platform_type_;
+  ThreatEntryType threat_entry_type_;
+  ThreatType threat_type_;
+
+  ListIdentifier();
 };
 
-std::ostream& operator<<(std::ostream& os, const UpdateListIdentifier& id);
+std::ostream& operator<<(std::ostream& os, const ListIdentifier& id);
 
-const UpdateListIdentifier GetUrlMalwareId();
-const UpdateListIdentifier GetUrlSocEngId();
-
-// The set of interesting lists and ASCII filenames for their hash prefix
-// stores. The stores are created inside the user-data directory.
-// For instance, the UpdateListIdentifier could be for URL expressions for UwS
-// on Windows platform, and the corresponding file on disk could be named:
-// "uws_win_url.store"
-// TODO(vakh): Find the canonical place where these are defined and update the
-// comment to point to that place.
-typedef base::hash_map<UpdateListIdentifier, std::string> StoreFileNameMap;
+PlatformType GetCurrentPlatformType();
+const ListIdentifier GetChromeUrlApiId();
+const ListIdentifier GetUrlMalwareId();
+const ListIdentifier GetUrlSocEngId();
 
 // Represents the state of each store.
-typedef base::hash_map<UpdateListIdentifier, std::string> StoreStateMap;
+typedef base::hash_map<ListIdentifier, std::string> StoreStateMap;
 
 // Sever response, parsed in vector form.
 typedef std::vector<std::unique_ptr<ListUpdateResponse>> ParsedServerResponse;
+
+// TODO(vakh): Consider using a std::pair for this.
+// Holds the hash prefix and the store that it matched in.
+struct StoreAndHashPrefix {
+ public:
+  ListIdentifier list_id;
+  HashPrefix hash_prefix;
+
+  explicit StoreAndHashPrefix(ListIdentifier, HashPrefix);
+  ~StoreAndHashPrefix();
+
+  bool operator==(const StoreAndHashPrefix& other) const;
+  bool operator!=(const StoreAndHashPrefix& other) const;
+  size_t hash() const;
+
+ private:
+  StoreAndHashPrefix();
+};
+
+// Used to track the hash prefix and the store in which a full hash's prefix
+// matched.
+typedef std::vector<StoreAndHashPrefix> StoreAndHashPrefixes;
 
 // Enumerate failures for histogramming purposes.  DO NOT CHANGE THE
 // ORDERING OF THESE VALUES.
@@ -181,7 +248,20 @@ class V4ProtocolManagerUtil {
 
   // Generate the set of FullHashes to check for |url|.
   static void UrlToFullHashes(const GURL& url,
-                              base::hash_set<FullHash>* full_hashes);
+                              std::unordered_set<FullHash>* full_hashes);
+
+  static bool FullHashToHashPrefix(const FullHash& full_hash,
+                                   PrefixSize prefix_size,
+                                   HashPrefix* hash_prefix);
+
+  static bool FullHashToSmallestHashPrefix(const FullHash& full_hash,
+                                           HashPrefix* hash_prefix);
+
+  static bool FullHashMatchesHashPrefix(const FullHash& full_hash,
+                                        const HashPrefix& hash_prefix);
+
+  static void SetClientInfoFromConfig(ClientInfo* client_info,
+                                      const V4ProtocolConfig& config);
 
  private:
   V4ProtocolManagerUtil(){};
@@ -217,13 +297,36 @@ class V4ProtocolManagerUtil {
   DISALLOW_COPY_AND_ASSIGN(V4ProtocolManagerUtil);
 };
 
+typedef std::unordered_set<ListIdentifier> StoresToCheck;
+
 }  // namespace safe_browsing
 
 namespace std {
 template <>
-struct hash<safe_browsing::UpdateListIdentifier> {
-  std::size_t operator()(const safe_browsing::UpdateListIdentifier& s) const {
-    return s.hash();
+struct hash<safe_browsing::PlatformType> {
+  std::size_t operator()(const safe_browsing::PlatformType& p) const {
+    return std::hash<unsigned int>()(p);
+  }
+};
+
+template <>
+struct hash<safe_browsing::ThreatEntryType> {
+  std::size_t operator()(const safe_browsing::ThreatEntryType& tet) const {
+    return std::hash<unsigned int>()(tet);
+  }
+};
+
+template <>
+struct hash<safe_browsing::ThreatType> {
+  std::size_t operator()(const safe_browsing::ThreatType& tt) const {
+    return std::hash<unsigned int>()(tt);
+  }
+};
+
+template <>
+struct hash<safe_browsing::ListIdentifier> {
+  std::size_t operator()(const safe_browsing::ListIdentifier& id) const {
+    return id.hash();
   }
 };
 }

@@ -22,6 +22,9 @@ struct VRPose {
   array<float, 3>? linearVelocity;
   array<float, 3>? angularAcceleration;
   array<float, 3>? linearAcceleration;
+  // The poseIndex is a sequential ID that's incremented on each distinct
+  // getPose result, it may wrap around for long sessions.
+  uint32 poseIndex;
 };
 
 struct VRDisplayCapabilities {
@@ -54,15 +57,30 @@ struct VRDisplay {
    VREyeParameters rightEye;
 };
 
+struct VRLayerBounds {
+   float left;
+   float top;
+   float width;
+   float height;
+};
+
 interface VRService {
   SetClient(VRServiceClient client);
 
   GetDisplays() => (array<VRDisplay> displays);
   [Sync]
-  GetPose(uint32 index) => (VRPose pose);
+  GetPose(uint32 index) => (VRPose? pose);
   ResetPose(uint32 index);
+
+  RequestPresent(uint32 index, bool secureOrigin) => (bool success);
+  ExitPresent(uint32 index);
+  SubmitFrame(uint32 index, VRPose? pose);
+  UpdateLayerBounds(uint32 index, VRLayerBounds leftBounds, VRLayerBounds rightBounds);
 };
 
 interface VRServiceClient {
   OnDisplayChanged(VRDisplay display);
+  OnExitPresent(uint32 index);
+  OnDisplayConnected(VRDisplay display);
+  OnDisplayDisconnected(uint32 index);
 };

@@ -25,7 +25,7 @@
 #include "net/tools/quic/quic_epoll_alarm_factory.h"
 #include "net/tools/quic/quic_epoll_connection_helper.h"
 #include "net/tools/quic/quic_packet_writer_wrapper.h"
-#include "net/tools/quic/quic_simple_server_session_helper.h"
+#include "net/tools/quic/quic_simple_crypto_server_stream_helper.h"
 #include "net/tools/quic/quic_time_wait_list_manager.h"
 #include "net/tools/quic/stateless_rejector.h"
 #include "net/tools/quic/test_tools/mock_quic_time_wait_list_manager.h"
@@ -41,7 +41,6 @@ using net::test::ConstructEncryptedPacket;
 using net::test::CryptoTestUtils;
 using net::test::MockQuicConnection;
 using net::test::MockQuicConnectionHelper;
-using net::test::ValueRestore;
 using std::ostream;
 using std::string;
 using std::vector;
@@ -53,6 +52,9 @@ using testing::WithoutArgs;
 using testing::_;
 
 static const size_t kDefaultMaxConnectionsInStore = 100;
+static const size_t kMaxConnectionsWithoutCHLO =
+    kDefaultMaxConnectionsInStore / 2;
+static const int16_t kMaxNumSessionsToCreate = 16;
 
 namespace net {
 namespace test {
@@ -87,7 +89,7 @@ class TestQuicSpdyServerSession : public QuicServerSessionBase {
       QuicCompressedCertsCache* compressed_certs_cache) override {
     return new QuicCryptoServerStream(
         crypto_config, compressed_certs_cache,
-        FLAGS_enable_quic_stateless_reject_support, this);
+        FLAGS_enable_quic_stateless_reject_support, this, stream_helper());
   }
 
   void SetCryptoStream(QuicCryptoServerStream* crypto_stream) {
@@ -96,6 +98,10 @@ class TestQuicSpdyServerSession : public QuicServerSessionBase {
 
   QuicCryptoServerStreamBase* GetCryptoStream() override {
     return crypto_stream_;
+  }
+
+  QuicCryptoServerStream::Helper* stream_helper() {
+    return QuicServerSessionBase::stream_helper();
   }
 
  private:
@@ -116,8 +122,9 @@ class TestDispatcher : public QuicDispatcher {
             version_manager,
             std::unique_ptr<QuicEpollConnectionHelper>(
                 new QuicEpollConnectionHelper(eps, QuicAllocator::BUFFER_POOL)),
-            std::unique_ptr<QuicServerSessionBase::Helper>(
-                new QuicSimpleServerSessionHelper(QuicRandom::GetInstance())),
+            std::unique_ptr<QuicCryptoServerStream::Helper>(
+                new QuicSimpleCryptoServerStreamHelper(
+                    QuicRandom::GetInstance())),
             std::unique_ptr<QuicEpollAlarmFactory>(
                 new QuicEpollAlarmFactory(eps))) {}
 
@@ -177,6 +184,9 @@ class QuicDispatcherTest : public ::testing::Test {
 
   void SetUp() override {
     dispatcher_->InitializeWithWriter(new QuicDefaultPacketWriter(1));
+    // Set the counter to some value to start with.
+    QuicDispatcherPeer::set_new_sessions_allowed_per_event_loop(
+        dispatcher_.get(), kMaxNumSessionsToCreate);
   }
 
   ~QuicDispatcherTest() override {}
@@ -305,6 +315,7 @@ class QuicDispatcherTest : public ::testing::Test {
     return client_hello.GetSerialized().AsStringPiece().as_string();
   }
 
+  QuicFlagSaver flags_;  // Save/restore all QUIC flag values.
   EpollServer eps_;
   QuicEpollConnectionHelper helper_;
   MockQuicConnectionHelper mock_helper_;
@@ -416,8 +427,8 @@ TEST_F(QuicDispatcherTest, TimeWaitListManager) {
   packet.nonce_proof = 132232;
   std::unique_ptr<QuicEncryptedPacket> encrypted(
       QuicFramer::BuildPublicResetPacket(packet));
-  std::unique_ptr<QuicReceivedPacket> received(
-      ConstructReceivedPacket(*encrypted, helper_.GetClock()->Now()));
+  std::unique_ptr<QuicReceivedPacket> received(ConstructReceivedPacket(
+      *encrypted, session1_->connection()->clock()->Now()));
   EXPECT_CALL(*session1_, OnConnectionClosed(QUIC_PUBLIC_RESET, _,
                                              ConnectionCloseSource::FROM_PEER))
       .Times(1)
@@ -522,11 +533,13 @@ class MockQuicCryptoServerStream : public QuicCryptoServerStream {
  public:
   MockQuicCryptoServerStream(const QuicCryptoServerConfig& crypto_config,
                              QuicCompressedCertsCache* compressed_certs_cache,
-                             QuicServerSessionBase* session)
+                             QuicServerSessionBase* session,
+                             QuicCryptoServerStream::Helper* helper)
       : QuicCryptoServerStream(&crypto_config,
                                compressed_certs_cache,
                                FLAGS_enable_quic_stateless_reject_support,
-                               session) {}
+                               session,
+                               helper) {}
   void set_handshake_confirmed_for_testing(bool handshake_confirmed) {
     handshake_confirmed_ = handshake_confirmed;
   }
@@ -607,7 +620,7 @@ class QuicDispatcherStatelessRejectTest
            GetParam().client_supports_statelesss_rejects;
   }
 
-  // Sets up dispatcher_, sesession1_, and crypto_stream1_ based on
+  // Sets up dispatcher_, session1_, and crypto_stream1_ based on
   // the test parameters.
   QuicServerSessionBase* CreateSessionBasedOnTestParams(
       QuicConnectionId connection_id,
@@ -618,7 +631,7 @@ class QuicDispatcherStatelessRejectTest
 
     crypto_stream1_ = new MockQuicCryptoServerStream(
         crypto_config_, QuicDispatcherPeer::GetCache(dispatcher_.get()),
-        session1_);
+        session1_, session1_->stream_helper());
     session1_->SetCryptoStream(crypto_stream1_);
     crypto_stream1_->set_handshake_confirmed_for_testing(
         GetParam().crypto_handshake_successful);
@@ -1160,10 +1173,14 @@ TEST_P(BufferedPacketStoreTest,
   InSequence s;
   server_address_ = IPEndPoint(Any4(), 5);
   // A bunch of non-CHLO should be buffered upon arrival.
-  for (size_t i = 1; i <= kDefaultMaxConnectionsInStore + 1; ++i) {
+  size_t kNumConnections = (FLAGS_quic_limit_num_new_sessions_per_epoll_loop
+                                ? kMaxConnectionsWithoutCHLO
+                                : kDefaultMaxConnectionsInStore) +
+                           1;
+  for (size_t i = 1; i <= kNumConnections; ++i) {
     IPEndPoint client_address(Loopback4(), i);
     QuicConnectionId conn_id = i;
-    if (i <= kDefaultMaxConnectionsInStore) {
+    if (i <= kNumConnections - 1) {
       // As they are on different connection, they should trigger
       // OnNewConnectionAdded(). The last packet should be dropped.
       EXPECT_CALL(*dispatcher_, OnNewConnectionAdded(conn_id));
@@ -1177,10 +1194,14 @@ TEST_P(BufferedPacketStoreTest,
 
   // Pop out the packet on last connection as it shouldn't be enqueued in store
   // as well.
-  data_connection_map_[kDefaultMaxConnectionsInStore + 1].pop_front();
+  data_connection_map_[kNumConnections].pop_front();
 
-  // Process CHLOs.
-  for (size_t i = 1; i <= kDefaultMaxConnectionsInStore + 1; ++i) {
+  // Reset session creation counter to ensure processing CHLO can always
+  // create session.
+  QuicDispatcherPeer::set_new_sessions_allowed_per_event_loop(dispatcher_.get(),
+                                                              kNumConnections);
+  // Process CHLOs to create session for these connections.
+  for (size_t i = 1; i <= kNumConnections; ++i) {
     IPEndPoint client_address(Loopback4(), i);
     QuicConnectionId conn_id = i;
     EXPECT_CALL(*dispatcher_, CreateQuicSession(conn_id, client_address))
@@ -1188,22 +1209,23 @@ TEST_P(BufferedPacketStoreTest,
             dispatcher_.get(), config_, conn_id, client_address, &mock_helper_,
             &mock_alarm_factory_, &crypto_config_,
             QuicDispatcherPeer::GetCache(dispatcher_.get()), &session1_)));
-    if (conn_id == kDefaultMaxConnectionsInStore + 1) {
+    if (conn_id == kNumConnections) {
       // The last CHLO should trigger OnNewConnectionAdded() since it's the
       // first packet arrives on that connection.
       EXPECT_CALL(*dispatcher_, OnNewConnectionAdded(conn_id));
     }
-    // First |kDefaultMaxConnectionsInStore| connections should have buffered
+    // First |kNumConnections| - 1 connections should have buffered
     // a packet in store. The rest should have been dropped.
-    if (i <= kDefaultMaxConnectionsInStore) {
-      EXPECT_CALL(
-          *reinterpret_cast<MockQuicConnection*>(session1_->connection()),
-          ProcessUdpPacket(_, client_address, _))
-          .Times(2)
-          .WillRepeatedly(testing::WithArg<2>(
-              Invoke(CreateFunctor(&QuicDispatcherTest::ValidatePacket,
-                                   base::Unretained(this), conn_id))));
-    }
+    size_t upper_limit = FLAGS_quic_limit_num_new_sessions_per_epoll_loop
+                             ? kMaxConnectionsWithoutCHLO
+                             : kDefaultMaxConnectionsInStore;
+    size_t num_packet_to_process = i <= upper_limit ? 2u : 1u;
+    EXPECT_CALL(*reinterpret_cast<MockQuicConnection*>(session1_->connection()),
+                ProcessUdpPacket(_, client_address, _))
+        .Times(num_packet_to_process)
+        .WillRepeatedly(testing::WithArg<2>(
+            Invoke(CreateFunctor(&QuicDispatcherTest::ValidatePacket,
+                                 base::Unretained(this), conn_id))));
     ProcessPacket(client_address, conn_id, true, false, SerializeFullCHLO());
   }
 }
@@ -1221,8 +1243,8 @@ TEST_P(BufferedPacketStoreTest, DeliverEmptyPackets) {
   ProcessPacket(client_address, conn_id, true, false, SerializeFullCHLO());
 }
 
-// Tests that by the time a retransmitted CHLO arrives, a connection for the
-// CHLO should already be created.
+// Tests that a retransmitted CHLO arrives after a connection for the
+// CHLO has been created.
 TEST_P(BufferedPacketStoreTest, ReceiveRetransmittedCHLO) {
   InSequence s;
   IPEndPoint client_address(Loopback4(), 1);
@@ -1279,6 +1301,210 @@ TEST_P(BufferedPacketStoreTest, ReceiveCHLOAfterExpiration) {
   ASSERT_TRUE(time_wait_list_manager_->IsConnectionIdInTimeWait(conn_id));
   EXPECT_CALL(*time_wait_list_manager_, ProcessPacket(_, _, conn_id, _, _));
   ProcessPacket(client_address, conn_id, true, false, SerializeFullCHLO());
+}
+
+TEST_P(BufferedPacketStoreTest, ProcessCHLOsUptoLimitAndBufferTheRest) {
+  FLAGS_quic_limit_num_new_sessions_per_epoll_loop = true;
+  // Process more than (|kMaxNumSessionsToCreate| +
+  // |kDefaultMaxConnectionsInStore|) CHLOs,
+  // the first |kMaxNumSessionsToCreate| should create connections immediately,
+  // the next |kDefaultMaxConnectionsInStore| should be buffered,
+  // the rest should be dropped.
+  QuicBufferedPacketStore* store =
+      QuicDispatcherPeer::GetBufferedPackets(dispatcher_.get());
+  const size_t kNumCHLOs =
+      kMaxNumSessionsToCreate + kDefaultMaxConnectionsInStore + 1;
+  for (size_t conn_id = 1; conn_id <= kNumCHLOs; ++conn_id) {
+    if (conn_id < kNumCHLOs) {
+      // Except the last connection, all connections for previous CHLOs should
+      // be regarded as newly added.
+      EXPECT_CALL(*dispatcher_, OnNewConnectionAdded(conn_id));
+    }
+    if (conn_id <= kMaxNumSessionsToCreate) {
+      EXPECT_CALL(*dispatcher_, CreateQuicSession(conn_id, client_addr_))
+          .WillOnce(testing::Return(CreateSession(
+              dispatcher_.get(), config_, conn_id, client_addr_, &mock_helper_,
+              &mock_alarm_factory_, &crypto_config_,
+              QuicDispatcherPeer::GetCache(dispatcher_.get()), &session1_)));
+      EXPECT_CALL(
+          *reinterpret_cast<MockQuicConnection*>(session1_->connection()),
+          ProcessUdpPacket(_, _, _))
+          .WillOnce(testing::WithArg<2>(
+              Invoke(CreateFunctor(&QuicDispatcherTest::ValidatePacket,
+                                   base::Unretained(this), conn_id))));
+    }
+    ProcessPacket(client_addr_, conn_id, true, false, SerializeFullCHLO());
+    if (conn_id <= kMaxNumSessionsToCreate + kDefaultMaxConnectionsInStore &&
+        conn_id > kMaxNumSessionsToCreate) {
+      EXPECT_TRUE(store->HasChloForConnection(conn_id));
+    } else {
+      // First |kMaxNumSessionsToCreate| CHLOs should be passed to new
+      // connections immediately, and the last CHLO should be dropped as the
+      // store is full.
+      EXPECT_FALSE(store->HasChloForConnection(conn_id));
+    }
+  }
+
+  // Graduately consume buffered CHLOs. The buffered connections should be
+  // created but the dropped one shouldn't.
+  for (size_t conn_id = kMaxNumSessionsToCreate + 1;
+       conn_id <= kMaxNumSessionsToCreate + kDefaultMaxConnectionsInStore;
+       ++conn_id) {
+    EXPECT_CALL(*dispatcher_, CreateQuicSession(conn_id, client_addr_))
+        .WillOnce(testing::Return(CreateSession(
+            dispatcher_.get(), config_, conn_id, client_addr_, &mock_helper_,
+            &mock_alarm_factory_, &crypto_config_,
+            QuicDispatcherPeer::GetCache(dispatcher_.get()), &session1_)));
+    EXPECT_CALL(*reinterpret_cast<MockQuicConnection*>(session1_->connection()),
+                ProcessUdpPacket(_, _, _))
+        .WillOnce(testing::WithArg<2>(
+            Invoke(CreateFunctor(&QuicDispatcherTest::ValidatePacket,
+                                 base::Unretained(this), conn_id))));
+  }
+  EXPECT_CALL(*dispatcher_, CreateQuicSession(kNumCHLOs, client_addr_))
+      .Times(0);
+
+  while (store->HasChlosBuffered()) {
+    dispatcher_->ProcessBufferedChlos(kMaxNumSessionsToCreate);
+  }
+
+  EXPECT_EQ(static_cast<size_t>(kMaxNumSessionsToCreate) +
+                kDefaultMaxConnectionsInStore,
+            session1_->connection_id());
+}
+
+// Duplicated CHLO shouldn't be buffered.
+TEST_P(BufferedPacketStoreTest, BufferDuplicatedCHLO) {
+  FLAGS_quic_limit_num_new_sessions_per_epoll_loop = true;
+  for (QuicConnectionId conn_id = 1; conn_id <= kMaxNumSessionsToCreate + 1;
+       ++conn_id) {
+    // Last CHLO will be buffered. Others will create connection right away.
+    if (conn_id <= kMaxNumSessionsToCreate) {
+      EXPECT_CALL(*dispatcher_, CreateQuicSession(conn_id, client_addr_))
+          .WillOnce(testing::Return(CreateSession(
+              dispatcher_.get(), config_, conn_id, client_addr_, &mock_helper_,
+              &mock_alarm_factory_, &crypto_config_,
+              QuicDispatcherPeer::GetCache(dispatcher_.get()), &session1_)));
+      EXPECT_CALL(
+          *reinterpret_cast<MockQuicConnection*>(session1_->connection()),
+          ProcessUdpPacket(_, _, _))
+          .WillOnce(testing::WithArg<2>(
+              Invoke(CreateFunctor(&QuicDispatcherTest::ValidatePacket,
+                                   base::Unretained(this), conn_id))));
+    }
+    ProcessPacket(client_addr_, conn_id, true, false, SerializeFullCHLO());
+  }
+  // Retransmit CHLO on last connection should be dropped.
+  QuicConnectionId last_connection = kMaxNumSessionsToCreate + 1;
+  ProcessPacket(client_addr_, last_connection, true, false,
+                SerializeFullCHLO());
+
+  size_t packets_buffered = 2;
+  if (!FLAGS_quic_buffer_packets_after_chlo) {
+    // The packet sent above is dropped when flag is off.
+    packets_buffered = 1;
+  }
+
+  // Reset counter and process buffered CHLO.
+  EXPECT_CALL(*dispatcher_, CreateQuicSession(last_connection, client_addr_))
+      .WillOnce(testing::Return(CreateSession(
+          dispatcher_.get(), config_, last_connection, client_addr_,
+          &mock_helper_, &mock_alarm_factory_, &crypto_config_,
+          QuicDispatcherPeer::GetCache(dispatcher_.get()), &session1_)));
+  // Only one packet(CHLO) should be process.
+  EXPECT_CALL(*reinterpret_cast<MockQuicConnection*>(session1_->connection()),
+              ProcessUdpPacket(_, _, _))
+      .Times(packets_buffered)
+      .WillRepeatedly(testing::WithArg<2>(
+          Invoke(CreateFunctor(&QuicDispatcherTest::ValidatePacket,
+                               base::Unretained(this), last_connection))));
+  dispatcher_->ProcessBufferedChlos(kMaxNumSessionsToCreate);
+}
+
+TEST_P(BufferedPacketStoreTest, BufferNonChloPacketsUptoLimitWithChloBuffered) {
+  FLAGS_quic_limit_num_new_sessions_per_epoll_loop = true;
+  QuicConnectionId last_connection_id = kMaxNumSessionsToCreate + 1;
+  for (QuicConnectionId conn_id = 1; conn_id <= last_connection_id; ++conn_id) {
+    // Last CHLO will be buffered. Others will create connection right away.
+    if (conn_id <= kMaxNumSessionsToCreate) {
+      EXPECT_CALL(*dispatcher_, CreateQuicSession(conn_id, client_addr_))
+          .WillOnce(testing::Return(CreateSession(
+              dispatcher_.get(), config_, conn_id, client_addr_, &mock_helper_,
+              &mock_alarm_factory_, &crypto_config_,
+              QuicDispatcherPeer::GetCache(dispatcher_.get()), &session1_)));
+      EXPECT_CALL(
+          *reinterpret_cast<MockQuicConnection*>(session1_->connection()),
+          ProcessUdpPacket(_, _, _))
+          .WillOnce(testing::WithArg<2>(
+              Invoke(CreateFunctor(&QuicDispatcherTest::ValidatePacket,
+                                   base::Unretained(this), conn_id))));
+    }
+    ProcessPacket(client_addr_, conn_id, true, false, SerializeFullCHLO());
+  }
+
+  // Process another |kDefaultMaxUndecryptablePackets| + 1 data packets. The
+  // last one should be dropped.
+  for (QuicPacketNumber packet_number = 2;
+       packet_number <= kDefaultMaxUndecryptablePackets + 2; ++packet_number) {
+    ProcessPacket(client_addr_, last_connection_id, true, false, "data packet");
+  }
+
+  // Reset counter and process buffered CHLO.
+  EXPECT_CALL(*dispatcher_, CreateQuicSession(last_connection_id, client_addr_))
+      .WillOnce(testing::Return(CreateSession(
+          dispatcher_.get(), config_, last_connection_id, client_addr_,
+          &mock_helper_, &mock_alarm_factory_, &crypto_config_,
+          QuicDispatcherPeer::GetCache(dispatcher_.get()), &session1_)));
+  // Only CHLO and following |kDefaultMaxUndecryptablePackets| data packets
+  // should be process.
+  EXPECT_CALL(*reinterpret_cast<MockQuicConnection*>(session1_->connection()),
+              ProcessUdpPacket(_, _, _))
+      .Times(kDefaultMaxUndecryptablePackets + 1)
+      .WillRepeatedly(testing::WithArg<2>(
+          Invoke(CreateFunctor(&QuicDispatcherTest::ValidatePacket,
+                               base::Unretained(this), last_connection_id))));
+  dispatcher_->ProcessBufferedChlos(kMaxNumSessionsToCreate);
+}
+
+// Tests that when dispatcher's packet buffer is full, a CHLO on connection
+// which doesn't have buffered CHLO should be buffered.
+TEST_P(BufferedPacketStoreTest, ReceiveCHLOForBufferedConnection) {
+  FLAGS_quic_limit_num_new_sessions_per_epoll_loop = true;
+  QuicBufferedPacketStore* store =
+      QuicDispatcherPeer::GetBufferedPackets(dispatcher_.get());
+
+  QuicConnectionId conn_id = 1;
+  ProcessPacket(client_addr_, conn_id, true, false, "data packet",
+                PACKET_8BYTE_CONNECTION_ID, PACKET_6BYTE_PACKET_NUMBER,
+                kDefaultPathId,
+                /*packet_number=*/1);
+  // Fill packet buffer to full with CHLOs on other connections. Need to feed
+  // extra CHLOs because the first |kMaxNumSessionsToCreate| are going to create
+  // session directly.
+  for (conn_id = 2;
+       conn_id <= kDefaultMaxConnectionsInStore + kMaxNumSessionsToCreate;
+       ++conn_id) {
+    if (conn_id <= kMaxNumSessionsToCreate + 1) {
+      EXPECT_CALL(*dispatcher_, CreateQuicSession(conn_id, client_addr_))
+          .WillOnce(testing::Return(CreateSession(
+              dispatcher_.get(), config_, conn_id, client_addr_, &mock_helper_,
+              &mock_alarm_factory_, &crypto_config_,
+              QuicDispatcherPeer::GetCache(dispatcher_.get()), &session1_)));
+      EXPECT_CALL(
+          *reinterpret_cast<MockQuicConnection*>(session1_->connection()),
+          ProcessUdpPacket(_, _, _))
+          .WillOnce(testing::WithArg<2>(
+              Invoke(CreateFunctor(&QuicDispatcherTest::ValidatePacket,
+                                   base::Unretained(this), conn_id))));
+    }
+    ProcessPacket(client_addr_, conn_id, true, false, SerializeFullCHLO());
+  }
+  EXPECT_FALSE(store->HasChloForConnection(/*connection_id=*/1));
+
+  // CHLO on connection 1 should still be buffered.
+  ProcessPacket(client_addr_, /*connection_id=*/1, true, false,
+                SerializeFullCHLO());
+  EXPECT_TRUE(store->HasChloForConnection(/*connection_id=*/1));
 }
 
 }  // namespace

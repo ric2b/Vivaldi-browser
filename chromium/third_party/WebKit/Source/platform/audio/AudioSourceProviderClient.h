@@ -10,16 +10,17 @@
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
- * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+ * DAMAGE.
  */
 
 #ifndef AudioSourceProviderClient_h
@@ -31,21 +32,22 @@
 namespace blink {
 
 class AudioSourceProviderClient : public GarbageCollectedMixin {
-public:
-    virtual void setFormat(size_t numberOfChannels, float sampleRate) = 0;
-    // Oilpan: Callers should keep this object alive during lock() and unlock().
-    virtual void lock() { }
-    virtual void unlock() { }
+ public:
+  virtual void setFormat(size_t numberOfChannels, float sampleRate) = 0;
+  // Oilpan: Callers should keep this object alive during lock() and unlock().
+  virtual void lock() {}
+  virtual void unlock() {}
 
-    // Called on the main thread when HTMLMediaElement::currentSrc() is
-    // changed.
-    virtual void onCurrentSrcChanged(const KURL& currentSrc) { }
+  // Called on the main thread when HTMLMediaElement::currentSrc() is
+  // changed.
+  virtual void onCurrentSrcChanged(const KURL& currentSrc) {}
 
-    DEFINE_INLINE_VIRTUAL_TRACE() { }
-protected:
-    virtual ~AudioSourceProviderClient() { }
+  DEFINE_INLINE_VIRTUAL_TRACE() {}
+
+ protected:
+  virtual ~AudioSourceProviderClient() {}
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // AudioSourceProviderClient_h
+#endif  // AudioSourceProviderClient_h

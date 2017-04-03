@@ -39,7 +39,7 @@ class ExtensionFetchTest : public ExtensionApiTest {
   const Extension* WriteFilesAndLoadTestExtension(TestExtensionDir* dir) {
     dir->WriteFile(FILE_PATH_LITERAL("text"), "text content");
     dir->WriteFile(FILE_PATH_LITERAL("bg.js"), "");
-    return LoadExtension(dir->unpacked_path());
+    return LoadExtension(dir->UnpackedPath());
   }
 
   // Returns |kFetchScript| with |url_expression| substituted as its test URL.
@@ -64,7 +64,7 @@ class ExtensionFetchTest : public ExtensionApiTest {
   // its WebContents.
   content::WebContents* CreateAndNavigateTab(const GURL& url) {
     chrome::NavigateParams params(browser(), url, ui::PAGE_TRANSITION_LINK);
-    params.disposition = NEW_FOREGROUND_TAB;
+    params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
     ui_test_utils::NavigateToURL(&params);
     return browser()->tab_strip_model()->GetActiveWebContents();
   }

@@ -31,22 +31,28 @@
 namespace WTF {
 
 class TextCodecUTF16 final : public TextCodec {
-public:
-    static void registerEncodingNames(EncodingNameRegistrar);
-    static void registerCodecs(TextCodecRegistrar);
+ public:
+  static void registerEncodingNames(EncodingNameRegistrar);
+  static void registerCodecs(TextCodecRegistrar);
 
-    TextCodecUTF16(bool littleEndian) : m_littleEndian(littleEndian), m_haveBufferedByte(false) {}
+  TextCodecUTF16(bool littleEndian) : m_littleEndian(littleEndian) {}
 
-    String decode(const char*, size_t length, FlushBehavior, bool stopOnError, bool& sawError) override;
-    CString encode(const UChar*, size_t length, UnencodableHandling) override;
-    CString encode(const LChar*, size_t length, UnencodableHandling) override;
+  String decode(const char*,
+                size_t length,
+                FlushBehavior,
+                bool stopOnError,
+                bool& sawError) override;
+  CString encode(const UChar*, size_t length, UnencodableHandling) override;
+  CString encode(const LChar*, size_t length, UnencodableHandling) override;
 
-private:
-    bool m_littleEndian;
-    bool m_haveBufferedByte;
-    unsigned char m_bufferedByte;
+ private:
+  bool m_littleEndian;
+  bool m_haveLeadByte = false;
+  unsigned char m_leadByte;
+  bool m_haveLeadSurrogate = false;
+  UChar m_leadSurrogate;
 };
 
-} // namespace WTF
+}  // namespace WTF
 
-#endif // TextCodecUTF16_h
+#endif  // TextCodecUTF16_h

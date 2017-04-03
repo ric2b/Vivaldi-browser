@@ -15,7 +15,9 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/libyuv/include/libyuv/convert.h"
 #include "third_party/skia/include/core/SkCanvas.h"
+#include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
+#include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/gpu/GrContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLInterface.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -206,8 +208,10 @@ SkCanvasVideoRendererTest::SkCanvasVideoRendererTest()
 SkCanvasVideoRendererTest::~SkCanvasVideoRendererTest() {}
 
 void SkCanvasVideoRendererTest::PaintWithoutFrame(SkCanvas* canvas) {
-  renderer_.Paint(nullptr, canvas, kNaturalRect, 0xFF,
-                  SkXfermode::kSrcOver_Mode, VIDEO_ROTATION_0, Context3D());
+  SkPaint paint;
+  paint.setFilterQuality(kLow_SkFilterQuality);
+  renderer_.Paint(nullptr, canvas, kNaturalRect, paint, VIDEO_ROTATION_0,
+                  Context3D());
 }
 
 void SkCanvasVideoRendererTest::Paint(
@@ -238,7 +242,10 @@ void SkCanvasVideoRendererTest::PaintRotated(
       media::FillYUV(video_frame.get(), 29, 255, 107);
       break;
   }
-  renderer_.Paint(video_frame, canvas, dest_rect, 0xFF, mode, video_rotation,
+  SkPaint paint;
+  paint.setXfermodeMode(mode);
+  paint.setFilterQuality(kLow_SkFilterQuality);
+  renderer_.Paint(video_frame, canvas, dest_rect, paint, video_rotation,
                   Context3D());
 }
 
@@ -536,7 +543,51 @@ TEST_F(SkCanvasVideoRendererTest, ContextLost) {
       PIXEL_FORMAT_UYVY, holders, base::Bind(MailboxHoldersReleased), size,
       gfx::Rect(size), size, kNoTimestamp);
 
-  renderer_.Paint(video_frame, &canvas, kNaturalRect, 0xFF,
-                  SkXfermode::kSrcOver_Mode, VIDEO_ROTATION_90, context_3d);
+  SkPaint paint;
+  paint.setFilterQuality(kLow_SkFilterQuality);
+  renderer_.Paint(video_frame, &canvas, kNaturalRect, paint, VIDEO_ROTATION_90,
+                  context_3d);
 }
+
+void EmptyCallback(const gpu::SyncToken& sync_token) {}
+
+TEST_F(SkCanvasVideoRendererTest, CorrectFrameSizeToVisibleRect) {
+  int fWidth{16}, fHeight{16};
+  SkImageInfo imInfo =
+      SkImageInfo::MakeN32(fWidth, fHeight, kOpaque_SkAlphaType);
+
+  sk_sp<const GrGLInterface> glInterface(GrGLCreateNullInterface());
+  sk_sp<GrContext> grContext(
+      GrContext::Create(kOpenGL_GrBackend,
+                        reinterpret_cast<GrBackendContext>(glInterface.get())));
+
+  sk_sp<SkSurface> skSurface =
+      SkSurface::MakeRenderTarget(grContext.get(), SkBudgeted::kYes, imInfo);
+  SkCanvas* canvas = skSurface->getCanvas();
+
+  TestGLES2Interface gles2;
+  Context3D context_3d(&gles2, grContext.get());
+  gfx::Size coded_size(fWidth, fHeight);
+  gfx::Size visible_size(fWidth / 2, fHeight / 2);
+
+  gpu::MailboxHolder mailbox_holders[VideoFrame::kMaxPlanes];
+  for (size_t i = 0; i < VideoFrame::kMaxPlanes; i++) {
+    mailbox_holders[i] = gpu::MailboxHolder(
+        gpu::Mailbox::Generate(), gpu::SyncToken(), GL_TEXTURE_RECTANGLE_ARB);
+  }
+
+  auto video_frame = VideoFrame::WrapNativeTextures(
+      PIXEL_FORMAT_I420, mailbox_holders, base::Bind(EmptyCallback), coded_size,
+      gfx::Rect(visible_size), visible_size,
+      base::TimeDelta::FromMilliseconds(4));
+
+  gfx::RectF visible_rect(visible_size.width(), visible_size.height());
+  SkPaint paint;
+  renderer_.Paint(video_frame, canvas, visible_rect, paint, VIDEO_ROTATION_0,
+                  context_3d);
+
+  EXPECT_EQ(fWidth / 2, renderer_.LastImageDimensionsForTesting().width());
+  EXPECT_EQ(fWidth / 2, renderer_.LastImageDimensionsForTesting().height());
+}
+
 }  // namespace media

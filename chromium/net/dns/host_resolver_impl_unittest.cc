@@ -32,6 +32,9 @@
 #include "net/dns/dns_client.h"
 #include "net/dns/dns_test_util.h"
 #include "net/dns/mock_host_resolver.h"
+#include "net/log/net_log_event_type.h"
+#include "net/log/net_log_source_type.h"
+#include "net/log/net_log_with_source.h"
 #include "net/log/test_net_log.h"
 #include "net/test/gtest_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -233,7 +236,7 @@ class Request {
     result_ = resolver_->Resolve(
         info_, priority_, &list_,
         base::Bind(&Request::OnComplete, base::Unretained(this)), &request_,
-        BoundNetLog());
+        NetLogWithSource());
     if (!list_.empty())
       EXPECT_THAT(result_, IsOk());
     return result_;
@@ -242,14 +245,14 @@ class Request {
   int ResolveFromCache() {
     DCHECK(resolver_);
     DCHECK(!request_);
-    return resolver_->ResolveFromCache(info_, &list_, BoundNetLog());
+    return resolver_->ResolveFromCache(info_, &list_, NetLogWithSource());
   }
 
   int ResolveStaleFromCache() {
     DCHECK(resolver_);
     DCHECK(!request_);
     return resolver_->ResolveStaleFromCache(info_, &list_, &staleness_,
-                                            BoundNetLog());
+                                            NetLogWithSource());
   }
 
   void ChangePriority(RequestPriority priority) {
@@ -459,7 +462,7 @@ class TestHostResolverImpl : public HostResolverImpl {
  private:
   const bool ipv6_reachable_;
 
-  bool IsIPv6Reachable(const BoundNetLog& net_log) override {
+  bool IsIPv6Reachable(const NetLogWithSource& net_log) override {
     return ipv6_reachable_;
   }
 };
@@ -562,8 +565,8 @@ class HostResolverImplTest : public testing::Test {
   // not start until released by |proc_->SignalXXX|.
   Request* CreateRequest(const HostResolver::RequestInfo& info,
                          RequestPriority priority) {
-    requests_.push_back(base::WrapUnique(new Request(
-        info, priority, requests_.size(), resolver_.get(), handler_.get())));
+    requests_.push_back(base::MakeUnique<Request>(
+        info, priority, requests_.size(), resolver_.get(), handler_.get()));
     return requests_.back().get();
   }
 
@@ -610,7 +613,7 @@ class HostResolverImplTest : public testing::Test {
     return HostResolverImpl::kMaximumDnsFailures;
   }
 
-  bool IsIPv6Reachable(const BoundNetLog& net_log) {
+  bool IsIPv6Reachable(const NetLogWithSource& net_log) {
     return resolver_->IsIPv6Reachable(net_log);
   }
 
@@ -1534,18 +1537,20 @@ TEST_F(HostResolverImplTest, IsIPv6Reachable) {
   resolver_.reset(new HostResolverImpl(DefaultOptions(), nullptr));
 
   // Verify that two consecutive calls return the same value.
-  TestNetLog net_log;
-  BoundNetLog bound_net_log = BoundNetLog::Make(&net_log, NetLog::SOURCE_NONE);
-  bool result1 = IsIPv6Reachable(bound_net_log);
-  bool result2 = IsIPv6Reachable(bound_net_log);
+  TestNetLog test_net_log;
+  NetLogWithSource net_log =
+      NetLogWithSource::Make(&test_net_log, NetLogSourceType::NONE);
+  bool result1 = IsIPv6Reachable(net_log);
+  bool result2 = IsIPv6Reachable(net_log);
   EXPECT_EQ(result1, result2);
 
   // Filter reachability check events and verify that there are two of them.
   TestNetLogEntry::List event_list;
-  net_log.GetEntries(&event_list);
+  test_net_log.GetEntries(&event_list);
   TestNetLogEntry::List probe_event_list;
   for (const auto& event : event_list) {
-    if (event.type == NetLog::TYPE_HOST_RESOLVER_IMPL_IPV6_REACHABILITY_CHECK) {
+    if (event.type ==
+        NetLogEventType::HOST_RESOLVER_IMPL_IPV6_REACHABILITY_CHECK) {
       probe_event_list.push_back(event);
     }
   }

@@ -1,5 +1,5 @@
 import("//vivaldi/gn/config/version.gni")
-import("//chrome/version.gni")
+import("//build/util/version.gni")
 
 static_library("browser") {
   public_deps = [
@@ -23,6 +23,7 @@ static_library("browser") {
     #"//vivaldi/base",
     "//base:base",
     "//chrome/app:chromium_strings",
+    "//chrome/app:command_ids",
     "//chrome/app:generated_resources",
     "//chrome/app:google_chrome_strings",
     "//chrome/browser:resources",
@@ -36,6 +37,7 @@ static_library("browser") {
     "//crypto:crypto",
     "//skia:skia",
     "//third_party/WebKit/public:blink_headers",
+    "//ui/events:events_base",
   ]
   if (is_win) {
     deps += [ "//vivaldi/third_party:sparkle" ]

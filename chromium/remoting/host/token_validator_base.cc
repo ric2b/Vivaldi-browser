@@ -43,6 +43,43 @@ namespace {
 const int kBufferSize = 4096;
 const char kCertIssuerWildCard[] = "*";
 
+// The certificate is valid if:
+// * The certificate issuer matches exactly |issuer| or the |issuer| is a
+//   wildcard. And
+// * |now| is within [valid_start, valid_expiry].
+bool IsCertificateValid(const std::string& issuer,
+                        const base::Time& now,
+                        const scoped_refptr<net::X509Certificate>& cert) {
+  return (issuer == kCertIssuerWildCard ||
+      issuer == cert->issuer().common_name) &&
+      cert->valid_start() <= now && cert->valid_expiry() > now;
+}
+
+// Returns true if the certificate |c1| is worse than |c2|.
+//
+// Criteria:
+// 1. An invalid certificate is always worse than a valid certificate.
+// 2. Invalid certificates are equally bad, in which case false will be
+//    returned.
+// 3. A certificate with earlier |valid_start| time is worse.
+// 4. When |valid_start| are the same, the certificate with earlier
+//    |valid_expiry| is worse.
+bool WorseThan(const std::string& issuer,
+               const base::Time& now,
+               const scoped_refptr<net::X509Certificate>& c1,
+               const scoped_refptr<net::X509Certificate>& c2) {
+  if (!IsCertificateValid(issuer, now, c2))
+    return false;
+
+  if (!IsCertificateValid(issuer, now, c1))
+    return true;
+
+  if (c1->valid_start() != c2->valid_start())
+    return c1->valid_start() < c2->valid_start();
+
+  return c1->valid_expiry() < c2->valid_expiry();
+}
+
 }  // namespace
 
 namespace remoting {
@@ -85,33 +122,36 @@ const std::string& TokenValidatorBase::token_scope() const {
 }
 
 // URLFetcherDelegate interface.
-void TokenValidatorBase::OnResponseStarted(net::URLRequest* source) {
+void TokenValidatorBase::OnResponseStarted(net::URLRequest* source,
+                                           int net_result) {
+  DCHECK_NE(net_result, net::ERR_IO_PENDING);
   DCHECK_EQ(request_.get(), source);
 
-  int bytes_read = 0;
-  request_->Read(buffer_.get(), kBufferSize, &bytes_read);
-  OnReadCompleted(request_.get(), bytes_read);
+  if (net_result != net::OK)
+    return;
+
+  int bytes_read = request_->Read(buffer_.get(), kBufferSize);
+  if (bytes_read > 0)
+    OnReadCompleted(request_.get(), bytes_read);
 }
 
 void TokenValidatorBase::OnReadCompleted(net::URLRequest* source,
-                                         int bytes_read) {
+                                         int net_result) {
+  DCHECK_NE(net_result, net::ERR_IO_PENDING);
   DCHECK_EQ(request_.get(), source);
 
-  do {
-    if (!request_->status().is_success() || bytes_read <= 0)
-      break;
-
-    data_.append(buffer_->data(), bytes_read);
-  } while (request_->Read(buffer_.get(), kBufferSize, &bytes_read));
-
-  const net::URLRequestStatus status = request_->status();
-
-  if (!status.is_io_pending()) {
-    retrying_request_ = false;
-    std::string shared_token = ProcessResponse();
-    request_.reset();
-    on_token_validated_.Run(shared_token);
+  while (net_result > 0) {
+    data_.append(buffer_->data(), net_result);
+    net_result = request_->Read(buffer_.get(), kBufferSize);
   }
+
+  if (net_result == net::ERR_IO_PENDING)
+    return;
+
+  retrying_request_ = false;
+  std::string shared_token = ProcessResponse(net_result);
+  request_.reset();
+  on_token_validated_.Run(shared_token);
 }
 
 void TokenValidatorBase::OnReceivedRedirect(
@@ -171,17 +211,29 @@ void TokenValidatorBase::OnCertificatesSelected(
     net::ClientCertStore* unused) {
   const std::string& issuer =
       third_party_auth_config_.token_validation_cert_issuer;
+
+  base::Time now = base::Time::Now();
+
+  auto best_match_position =
+      std::max_element(selected_certs->begin(), selected_certs->end(),
+                       std::bind(&WorseThan, issuer, now, std::placeholders::_1,
+                                 std::placeholders::_2));
+
+  if (best_match_position == selected_certs->end() ||
+      !IsCertificateValid(issuer, now, *best_match_position)) {
+    ContinueWithCertificate(nullptr, nullptr);
+  } else {
+    ContinueWithCertificate(
+        best_match_position->get(),
+        net::FetchClientCertPrivateKey(best_match_position->get()).get());
+  }
+}
+
+void TokenValidatorBase::ContinueWithCertificate(
+    net::X509Certificate* client_cert,
+    net::SSLPrivateKey* client_private_key) {
   if (request_) {
-    for (size_t i = 0; i < selected_certs->size(); ++i) {
-      net::X509Certificate* cert = (*selected_certs)[i].get();
-      if (issuer == kCertIssuerWildCard ||
-          issuer == cert->issuer().common_name) {
-        request_->ContinueWithCertificate(
-            cert, net::FetchClientCertPrivateKey(cert).get());
-        return;
-      }
-    }
-    request_->ContinueWithCertificate(nullptr, nullptr);
+    request_->ContinueWithCertificate(client_cert, client_private_key);
   }
 }
 
@@ -190,19 +242,17 @@ bool TokenValidatorBase::IsValidScope(const std::string& token_scope) {
   return token_scope == token_scope_;
 }
 
-std::string TokenValidatorBase::ProcessResponse() {
+std::string TokenValidatorBase::ProcessResponse(int net_result) {
   // Verify that we got a successful response.
-  net::URLRequestStatus status = request_->status();
-  if (!status.is_success()) {
-    LOG(ERROR) << "Error validating token, status=" << status.status()
-               << " err=" << status.error();
+  if (net_result != net::OK) {
+    LOG(ERROR) << "Error validating token, err=" << net_result;
     return std::string();
   }
 
   int response = request_->GetResponseCode();
   if (response != 200) {
-    LOG(ERROR)
-        << "Error " << response << " validating token: '" << data_ << "'";
+    LOG(ERROR) << "Error " << response << " validating token: '" << data_
+               << "'";
     return std::string();
   }
 
@@ -217,8 +267,8 @@ std::string TokenValidatorBase::ProcessResponse() {
   std::string token_scope;
   dict->GetStringWithoutPathExpansion("scope", &token_scope);
   if (!IsValidScope(token_scope)) {
-    LOG(ERROR) << "Invalid scope: '" << token_scope
-               << "', expected: '" << token_scope_ <<"'.";
+    LOG(ERROR) << "Invalid scope: '" << token_scope << "', expected: '"
+               << token_scope_ << "'.";
     return std::string();
   }
 

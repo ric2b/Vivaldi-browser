@@ -93,8 +93,7 @@ void TcpCubicSenderBase::SetFromConfig(const QuicConfig& config,
       // Use unity pacing instead of PRR.
       no_prr_ = true;
     }
-    if (FLAGS_quic_rate_based_sending &&
-        config.HasReceivedConnectionOptions() &&
+    if (config.HasReceivedConnectionOptions() &&
         ContainsQuicTag(config.ReceivedConnectionOptions(), kRATE)) {
       // Rate based sending experiment
       rate_based_sending_ = true;
@@ -237,13 +236,6 @@ QuicBandwidth TcpCubicSenderBase::BandwidthEstimate() const {
     return QuicBandwidth::Zero();
   }
   return QuicBandwidth::FromBytesAndTimeDelta(GetCongestionWindow(), srtt);
-}
-
-QuicTime::Delta TcpCubicSenderBase::RetransmissionDelay() const {
-  if (rtt_stats_->smoothed_rtt().IsZero()) {
-    return QuicTime::Delta::Zero();
-  }
-  return rtt_stats_->smoothed_rtt() + 4 * rtt_stats_->mean_deviation();
 }
 
 bool TcpCubicSenderBase::InSlowStart() const {

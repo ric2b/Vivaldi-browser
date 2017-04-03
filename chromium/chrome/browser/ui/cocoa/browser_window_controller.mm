@@ -60,6 +60,7 @@
 #import "chrome/browser/ui/cocoa/infobars/infobar_container_controller.h"
 #import "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field_editor.h"
 #import "chrome/browser/ui/cocoa/fullscreen_toolbar_controller.h"
+#include "chrome/browser/ui/cocoa/l10n_util.h"
 #import "chrome/browser/ui/cocoa/profiles/avatar_base_controller.h"
 #import "chrome/browser/ui/cocoa/profiles/avatar_button_controller.h"
 #import "chrome/browser/ui/cocoa/profiles/avatar_icon_controller.h"
@@ -81,8 +82,6 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/command.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/grit/generated_resources.h"
-#include "chrome/grit/locale_settings.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/managed/managed_bookmark_service.h"
 #include "components/signin/core/common/profile_management_switches.h"
@@ -95,17 +94,12 @@
 #include "content/public/browser/web_contents.h"
 #import "ui/base/cocoa/cocoa_base_utils.h"
 #import "ui/base/cocoa/nsview_additions.h"
-#include "ui/base/l10n/l10n_util.h"
-#include "ui/base/l10n/l10n_util_mac.h"
 #include "ui/display/screen.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
 #include "ui/gfx/mac/scoped_cocoa_disable_screen_updates.h"
 
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
-using l10n_util::GetStringUTF16;
-using l10n_util::GetNSStringWithFixup;
-using l10n_util::GetNSStringFWithFixup;
 
 // ORGANIZATION: This is a big file. It is (in principle) organized as follows
 // (in order):
@@ -450,6 +444,26 @@ bool IsTabDetachingInFullscreenEnabled() {
   [bookmarkBubbleController_ browserWillBeDestroyed];
 
   [super dealloc];
+}
+
+// Hack to address crbug.com/667274
+// On TouchBar MacBooks, the touch bar machinery retains a reference
+// to the browser window controller (which is an NSTouchBarProvider by
+// default) but doesn't release it if Chrome quits before it takes the
+// key window (for example, quitting from the Dock icon context menu.)
+//
+// If the window denies being a touch bar provider, it's never added
+// to the set of providers and the reference is never taken. This
+// prevents us from providing a touch bar from the window directly
+// but descendant responders can still provide one.
+//
+// rdar://29467717
+- (BOOL)conformsToProtocol:(Protocol*)protocol {
+  if ([protocol isEqual:NSProtocolFromString(@"NSFunctionBarProvider")] ||
+      [protocol isEqual:NSProtocolFromString(@"NSTouchBarProvider")]) {
+    return NO;
+  }
+  return [super conformsToProtocol:protocol];
 }
 
 - (gfx::Rect)enforceMinWindowSize:(gfx::Rect)bounds {
@@ -1669,7 +1683,10 @@ bool IsTabDetachingInFullscreenEnabled() {
       [[AvatarIconController alloc] initWithBrowser:browser_.get()]);
   }
   view = [avatarButtonController_ view];
-  [view setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
+  if (cocoa_l10n_util::ShouldDoExperimentalRTLLayout())
+    [view setAutoresizingMask:NSViewMaxXMargin | NSViewMinYMargin];
+  else
+    [view setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
   [view setHidden:![self shouldShowAvatar]];
 
   // Install the view.
@@ -1889,7 +1906,6 @@ willAnimateFromState:(BookmarkBar::State)oldState
 }
 
 - (void)updateFullscreenExitBubble {
-  [self layoutSubviews];
   [self showFullscreenExitBubbleIfNecessary];
 }
 
@@ -1944,7 +1960,7 @@ willAnimateFromState:(BookmarkBar::State)oldState
   // that the other monitors won't blank out.
   display::Screen* screen = display::Screen::GetScreen();
   BOOL hasMultipleMonitors = screen && screen->GetNumDisplays() > 1;
-  if (base::mac::IsOSYosemiteOrLater() &&
+  if (base::mac::IsAtLeastOS10_10() &&
       !(hasMultipleMonitors && ![NSScreen screensHaveSeparateSpaces])) {
     [self enterAppKitFullscreen];
   } else {

@@ -21,8 +21,6 @@
   [parser setDelegate:omahaParser];
   if (![parser parse]) {
     *error = [parser parserError];
-    // TODO: pass up error object to indicate error occurred so
-    // InstallerWindowController can create custom user error message.
     return nil;
   }
 
@@ -34,6 +32,10 @@
   }
 
   if ([completeDownloadURLs count] < 1) {
+    // TODO: The below error exists only so the caller of this method would
+    // catch the error created here. A better way to handle this is to make the
+    // error's contents inform what the installer will try next when it attempts
+    // to recover from an issue.
     *error = [NSError errorWithDomain:@"ChromeErrorDomain" code:1 userInfo:nil];
     return nil;
   }
@@ -41,10 +43,9 @@
   return completeDownloadURLs;
 }
 
-// Method implementation for XMLParserDelegate.
 // Searches the XML data for the tag "URL" and the subsequent "codebase"
 // attribute that indicates a URL follows. Copies each URL into an array.
-// Note that the URLs in the XML file are incomplete. They need the filename
+// NOTE: The URLs in the XML file are incomplete. They need the filename
 // appended to end. The second if statement checks for the tag "package" which
 // contains the filename needed to complete the URLs.
 - (void)parser:(NSXMLParser*)parser

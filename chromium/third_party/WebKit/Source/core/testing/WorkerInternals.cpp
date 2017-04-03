@@ -4,20 +4,21 @@
 
 #include "core/testing/WorkerInternals.h"
 
+#include "core/testing/OriginTrialsTest.h"
+
 namespace blink {
 
 // static
-WorkerInternals* WorkerInternals::create(ScriptState* scriptState)
-{
-    return new WorkerInternals(scriptState);
+WorkerInternals* WorkerInternals::create(ScriptState* scriptState) {
+  return new WorkerInternals(scriptState);
 }
 
-WorkerInternals::~WorkerInternals()
-{
+WorkerInternals::~WorkerInternals() {}
+
+WorkerInternals::WorkerInternals(ScriptState*) {}
+
+OriginTrialsTest* WorkerInternals::originTrialsTest() const {
+  return OriginTrialsTest::create();
 }
 
-WorkerInternals::WorkerInternals(ScriptState*)
-{
-}
-
-} // namespace blink
+}  // namespace blink

@@ -245,16 +245,8 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         # Tests for the default of using one locked shard even in the case of more than one child process.
         if not self.should_test_processes:
             return
-        save_env_webkit_test_max_locked_shards = None
-        if "WEBKIT_TEST_MAX_LOCKED_SHARDS" in os.environ:
-            save_env_webkit_test_max_locked_shards = os.environ["WEBKIT_TEST_MAX_LOCKED_SHARDS"]
-            del os.environ["WEBKIT_TEST_MAX_LOCKED_SHARDS"]
         _, regular_output, _ = logging_run(['--debug-rwt-logging', '--child-processes', '2'], shared_port=False)
-        try:
-            self.assertTrue(any(['1 locked' in line for line in regular_output.buflist]))
-        finally:
-            if save_env_webkit_test_max_locked_shards:
-                os.environ["WEBKIT_TEST_MAX_LOCKED_SHARDS"] = save_env_webkit_test_max_locked_shards
+        self.assertTrue(any('1 locked' in line for line in regular_output.buflist))
 
     def test_child_processes_2(self):
         if self.should_test_processes:
@@ -293,8 +285,12 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
                           ['failures/expected/exception.html', '--child-processes', '1'], tests_included=True)
 
         if self.should_test_processes:
-            self.assertRaises(BaseException, logging_run,
-                              ['--child-processes', '2', '--skipped=ignore', 'failures/expected/exception.html', 'passes/text.html'], tests_included=True, shared_port=False)
+            self.assertRaises(
+                BaseException,
+                logging_run,
+                ['--child-processes', '2', '--skipped=ignore', 'failures/expected/exception.html', 'passes/text.html'],
+                tests_included=True,
+                shared_port=False)
 
     def test_device_failure(self):
         # Test that we handle a device going offline during a test properly.
@@ -315,8 +311,9 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         self.assertEqual(details.exit_code, test_run_results.INTERRUPTED_EXIT_STATUS)
 
         if self.should_test_processes:
-            _, regular_output, _ = logging_run(['failures/expected/keyboard.html', 'passes/text.html',
-                                                '--child-processes', '2', '--skipped=ignore'], tests_included=True, shared_port=False)
+            _, regular_output, _ = logging_run(
+                ['failures/expected/keyboard.html', 'passes/text.html', '--child-processes', '2', '--skipped=ignore'],
+                tests_included=True, shared_port=False)
             self.assertTrue(any(['Interrupted, exiting' in line for line in regular_output.buflist]))
 
     def test_no_tests_found(self):
@@ -352,11 +349,21 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         tests_run = get_tests_run(['--order=random'] + tests_to_run)
         self.assertEqual(sorted(tests_to_run), sorted(tests_run))
 
-    def test_random_daily_seed_order(self):
-        tests_to_run = ['passes/audio.html', 'failures/expected/text.html',
-                        'failures/expected/missing_text.html', 'passes/args.html']
-        tests_run = get_tests_run(['--order=random-seeded'] + tests_to_run)
-        self.assertEqual(sorted(tests_to_run), sorted(tests_run))
+    def test_random_order_with_seed(self):
+        tests_to_run = [
+            'failures/expected/missing_text.html',
+            'failures/expected/text.html',
+            'passes/args.html',
+            'passes/audio.html',
+        ]
+        tests_run = get_tests_run(['--order=random', '--seed=5'] + sorted(tests_to_run))
+        expected_order = [
+            'failures/expected/missing_text.html',
+            'failures/expected/text.html',
+            'passes/audio.html',
+            'passes/args.html',
+        ]
+        self.assertEqual(tests_run, expected_order)
 
     def test_random_order_test_specified_multiple_times(self):
         tests_to_run = ['passes/args.html', 'passes/audio.html', 'passes/audio.html', 'passes/args.html']
@@ -499,6 +506,20 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         tests_run = get_tests_run(['--test-list=%s' % filename], host=host)
         self.assertEqual(['passes/text.html'], tests_run)
 
+    def test_gtest_shard_index(self):
+        tests_to_run = ['passes/error.html', 'passes/image.html', 'passes/platform_image.html', 'passes/text.html']
+        host = MockHost()
+
+        host.environ['GTEST_SHARD_INDEX'] = '0'
+        host.environ['GTEST_TOTAL_SHARDS'] = '1'
+        shard_0_tests_run = get_tests_run(tests_to_run, host=host)
+        self.assertEqual(shard_0_tests_run, ['passes/error.html', 'passes/image.html'])
+
+        host.environ['GTEST_SHARD_INDEX'] = '1'
+        host.environ['GTEST_TOTAL_SHARDS'] = '1'
+        shard_1_tests_run = get_tests_run(tests_to_run, host=host)
+        self.assertEqual(shard_1_tests_run, ['passes/platform_image.html', 'passes/text.html'])
+
     def test_smoke_test(self):
         host = MockHost()
         smoke_test_filename = test.LAYOUT_TEST_DIR + '/SmokeTests'
@@ -535,10 +556,10 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         # is missing, update the expected generic location.
         host = MockHost()
         details, _, _ = logging_run(['--no-show-results', '--retry-failures',
-                                       'failures/expected/missing_image.html',
-                                       'failures/unexpected/missing_text.html',
-                                       'failures/unexpected/text-image-checksum.html'],
-                                      tests_included=True, host=host)
+                                     'failures/expected/missing_image.html',
+                                     'failures/unexpected/missing_text.html',
+                                     'failures/unexpected/text-image-checksum.html'],
+                                    tests_included=True, host=host)
         self.assertEqual(details.exit_code, 2)
         json_string = host.filesystem.read_text_file('/tmp/layout-test-results/full_results.json')
         self.assertTrue(json_string.find(
@@ -759,7 +780,7 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
     def test_retrying_uses_retry_directories(self):
         host = MockHost()
         details, _, _ = logging_run(['--debug-rwt-logging', '--retry-failures',
-                                       'failures/unexpected/text-image-checksum.html'], tests_included=True, host=host)
+                                     'failures/unexpected/text-image-checksum.html'], tests_included=True, host=host)
         self.assertEqual(details.exit_code, 1)
         self.assertTrue(host.filesystem.exists('/tmp/layout-test-results/failures/unexpected/text-image-checksum-actual.txt'))
         self.assertTrue(
@@ -821,7 +842,7 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         _, err, _ = logging_run(['--details', 'virtual/virtual_passes/passes/reftest.html'], tests_included=True)
         self.assertTrue('ref: virtual/virtual_passes/passes/reftest-expected.html' in err.getvalue())
         self.assertTrue(
-            re.search('args: --virtual-arg\s*reference_args: --virtual-arg\s*ref:', err.getvalue()))
+            re.search(r'args: --virtual-arg\s*reference_args: --virtual-arg\s*ref:', err.getvalue()))
 
     def test_reftest_virtual_references_use_default_args(self):
         test_name = 'virtual/references_use_default_args/passes/reftest.html'
@@ -832,7 +853,7 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         self.assertEqual(test_result.test_name, test_name)
         self.assertEqual(test_result.references[0], 'passes/reftest-expected.html')
         # reference_args should be empty since we are using the default flags.
-        self.assertTrue(re.search('reference_args:\s*ref:', err.getvalue()))
+        self.assertTrue(re.search(r'reference_args:\s*ref:', err.getvalue()))
 
     def test_reftest_matching_text_expectation(self):
         test_name = 'passes/reftest.html'
@@ -1069,11 +1090,11 @@ Bug(foo) failures/unexpected/missing_audio.html [ NeedsManualRebaseline ]
 Bug(foo) failures/unexpected/missing_render_tree_dump.html [ Missing ]
 """)
         details, _, _ = logging_run(['--no-show-results',
-                                       'failures/unexpected/missing_text.html',
-                                       'failures/unexpected/missing_image.html',
-                                       'failures/unexpected/missing_audio.html',
-                                       'failures/unexpected/missing_render_tree_dump.html'],
-                                      tests_included=True, host=host, new_results=True, port_obj=port)
+                                     'failures/unexpected/missing_text.html',
+                                     'failures/unexpected/missing_image.html',
+                                     'failures/unexpected/missing_audio.html',
+                                     'failures/unexpected/missing_render_tree_dump.html'],
+                                    tests_included=True, host=host, new_results=True, port_obj=port)
         file_list = host.filesystem.written_files.keys()
         self.assertEqual(details.exit_code, 0)
         self.assertEqual(len(file_list), 8)

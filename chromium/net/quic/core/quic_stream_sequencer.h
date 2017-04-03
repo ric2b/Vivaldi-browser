@@ -10,6 +10,7 @@
 #include <map>
 
 #include "base/macros.h"
+#include "net/base/net_export.h"
 #include "net/quic/core/quic_protocol.h"
 #include "net/quic/core/quic_stream_sequencer_buffer.h"
 
@@ -79,6 +80,12 @@ class NET_EXPORT_PRIVATE QuicStreamSequencer {
   // automatically when the FIN is consumed (which may be immediately).
   void StopReading();
 
+  // Free the memory of underlying buffer.
+  void ReleaseBuffer();
+
+  // Free the memory of underlying buffer when no bytes remain in it.
+  void ReleaseBufferIfEmpty();
+
   // Number of bytes in the buffer right now.
   size_t NumBytesBuffered() const;
 
@@ -90,8 +97,6 @@ class NET_EXPORT_PRIVATE QuicStreamSequencer {
   int num_duplicate_frames_received() const {
     return num_duplicate_frames_received_;
   }
-
-  int num_early_frames_received() const { return num_early_frames_received_; }
 
   bool ignore_read_data() const { return ignore_read_data_; }
 
@@ -131,10 +136,6 @@ class NET_EXPORT_PRIVATE QuicStreamSequencer {
 
   // Count of the number of duplicate frames received.
   int num_duplicate_frames_received_;
-
-  // Count of the number of frames received before all previous frames were
-  // received.
-  int num_early_frames_received_;
 
   // Not owned.
   const QuicClock* clock_;

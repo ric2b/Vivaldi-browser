@@ -357,9 +357,8 @@ TestSuite.prototype.testNoScriptDuplicatesOnPanelSwitch = function()
     function checkNoDuplicates() {
         var uiSourceCodes = test.nonAnonymousUISourceCodes_();
         for (var i = 0; i < uiSourceCodes.length; i++) {
-            var scriptName = WebInspector.networkMapping.networkURL(uiSourceCodes[i]);
             for (var j = i + 1; j < uiSourceCodes.length; j++)
-                test.assertTrue(scriptName !== WebInspector.networkMapping.networkURL(uiSourceCodes[j]), "Found script duplicates: " + test.uiSourceCodesToString_(uiSourceCodes));
+                test.assertTrue(uiSourceCodes[i].url() !== uiSourceCodes[j].url(), "Found script duplicates: " + test.uiSourceCodesToString_(uiSourceCodes));
         }
     }
 
@@ -922,6 +921,31 @@ TestSuite.prototype.testWindowInitializedOnNavigateBack = function()
         this.fail(text);
 };
 
+TestSuite.prototype.testConsoleContextNames = function()
+{
+    var test = this;
+    test.takeControl();
+    this.showPanel("console").then(() => this._waitForExecutionContexts(2, onExecutionContexts.bind(this)));
+
+    function onExecutionContexts()
+    {
+        var consoleView = WebInspector.ConsoleView.instance();
+        var options = consoleView._consoleContextSelector._selectElement.options;
+        var values = [];
+        for (var i = 0; i < options.length; ++i)
+            values.push(options[i].value.trim());
+        test.assertEquals("top", values[0]);
+        test.assertEquals("Simple content script", values[1]);
+        test.releaseControl();
+    }
+}
+
+TestSuite.prototype.testDevToolsSharedWorker = function()
+{
+    this.takeControl();
+    WebInspector.TempFile.ensureTempStorageCleared().then(() => this.releaseControl());
+}
+
 TestSuite.prototype.waitForTestResultsInConsole = function()
 {
     var messages = WebInspector.multitargetConsoleModel.messages();
@@ -1051,7 +1075,7 @@ TestSuite.prototype.uiSourceCodesToString_ = function(uiSourceCodes)
 {
     var names = [];
     for (var i = 0; i < uiSourceCodes.length; i++)
-        names.push('"' + WebInspector.networkMapping.networkURL(uiSourceCodes[i]) + '"');
+        names.push('"' + uiSourceCodes[i].url() + '"');
     return names.join(",");
 };
 
@@ -1062,19 +1086,16 @@ TestSuite.prototype.uiSourceCodesToString_ = function(uiSourceCodes)
  */
 TestSuite.prototype.nonAnonymousUISourceCodes_ = function()
 {
-    function filterOutAnonymous(uiSourceCode)
-    {
-        return !!WebInspector.networkMapping.networkURL(uiSourceCode);
-    }
-
+    /**
+     * @param {!WebInspector.UISourceCode} uiSourceCode
+     */
     function filterOutService(uiSourceCode)
     {
         return !uiSourceCode.isFromServiceProject();
     }
 
     var uiSourceCodes = WebInspector.workspace.uiSourceCodes();
-    uiSourceCodes = uiSourceCodes.filter(filterOutService);
-    return uiSourceCodes.filter(filterOutAnonymous);
+    return uiSourceCodes.filter(filterOutService);
 };
 
 
@@ -1090,8 +1111,7 @@ TestSuite.prototype.evaluateInConsole_ = function(code, callback)
     {
         WebInspector.context.removeFlavorChangeListener(WebInspector.ExecutionContext, showConsoleAndEvaluate, this);
         var consoleView = WebInspector.ConsoleView.instance();
-        consoleView._prompt.setText(code);
-        consoleView._promptElement.dispatchEvent(TestSuite.createKeyEvent("Enter"));
+        consoleView._prompt._appendCommand(code);
 
         this.addSniffer(WebInspector.ConsoleView.prototype, "_consoleMessageAddedForTest",
             function(viewMessage) {
@@ -1173,6 +1193,20 @@ TestSuite.prototype._waitForTargets = function(n, callback)
             callback.call(null);
         else
             this.addSniffer(WebInspector.TargetManager.prototype, "addTarget", checkTargets.bind(this));
+    }
+}
+
+TestSuite.prototype._waitForExecutionContexts = function(n, callback)
+{
+    var runtimeModel = WebInspector.targetManager.mainTarget().runtimeModel;
+    checkForExecutionContexts.call(this);
+
+    function checkForExecutionContexts()
+    {
+        if (runtimeModel.executionContexts().length >= n)
+            callback.call(null);
+        else
+            this.addSniffer(WebInspector.RuntimeModel.prototype, "_executionContextCreated", checkForExecutionContexts.bind(this));
     }
 }
 

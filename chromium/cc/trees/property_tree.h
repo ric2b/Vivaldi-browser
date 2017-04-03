@@ -14,6 +14,7 @@
 #include "cc/animation/element_id.h"
 #include "cc/base/cc_export.h"
 #include "cc/base/synced_property.h"
+#include "cc/layers/layer_sticky_position_constraint.h"
 #include "cc/output/filter_operations.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/scroll_offset.h"
@@ -31,6 +32,7 @@ namespace proto {
 class PropertyTree;
 class PropertyTrees;
 class ScrollNodeData;
+class StickyPositionNodeData;
 class TreeNode;
 }  // namespace proto
 
@@ -122,6 +124,20 @@ class CC_EXPORT PropertyTree {
   PropertyTrees* property_trees_;
 };
 
+struct StickyPositionNodeData {
+  int scroll_ancestor;
+  LayerStickyPositionConstraint constraints;
+
+  // This is the offset that blink has already applied to counteract the main
+  // thread scroll offset of the scroll ancestor. We need to account for this
+  // by computing the additional offset necessary to keep the element stuck.
+  gfx::Vector2dF main_thread_offset;
+
+  StickyPositionNodeData() : scroll_ancestor(-1) {}
+  void ToProtobuf(proto::StickyPositionNodeData* proto) const;
+  void FromProtobuf(const proto::StickyPositionNodeData& proto);
+};
+
 class CC_EXPORT TransformTree final : public PropertyTree<TransformNode> {
  public:
   TransformTree();
@@ -205,9 +221,11 @@ class CC_EXPORT TransformTree final : public PropertyTree<TransformNode> {
   }
   float device_scale_factor() const { return device_scale_factor_; }
 
-  void SetDeviceTransform(const gfx::Transform& transform,
-                          gfx::PointF root_position);
-  void SetDeviceTransformScaleFactor(const gfx::Transform& transform);
+  void SetRootTransformsAndScales(float device_scale_factor,
+                                  float page_scale_factor_for_root,
+                                  const gfx::Transform& device_transform,
+                                  gfx::PointF root_position);
+
   float device_transform_scale_factor() const {
     return device_transform_scale_factor_;
   }
@@ -254,6 +272,8 @@ class CC_EXPORT TransformTree final : public PropertyTree<TransformNode> {
   const std::vector<TransformCachedNodeData>& cached_data() const {
     return cached_data_;
   }
+
+  StickyPositionNodeData* StickyPositionData(int node_id);
 
   void ToProtobuf(proto::PropertyTree* proto) const;
   void FromProtobuf(const proto::PropertyTree& proto,
@@ -303,6 +323,7 @@ class CC_EXPORT TransformTree final : public PropertyTree<TransformNode> {
   std::vector<int> nodes_affected_by_inner_viewport_bounds_delta_;
   std::vector<int> nodes_affected_by_outer_viewport_bounds_delta_;
   std::vector<TransformCachedNodeData> cached_data_;
+  std::vector<StickyPositionNodeData> sticky_position_data_;
 };
 
 class CC_EXPORT ClipTree final : public PropertyTree<ClipNode> {
@@ -312,7 +333,7 @@ class CC_EXPORT ClipTree final : public PropertyTree<ClipNode> {
   static const int kViewportNodeId = 1;
 
   void SetViewportClip(gfx::RectF viewport_rect);
-  gfx::RectF ViewportClip();
+  gfx::RectF ViewportClip() const;
 
   void ToProtobuf(proto::PropertyTree* proto) const;
   void FromProtobuf(const proto::PropertyTree& proto,
@@ -354,10 +375,8 @@ class CC_EXPORT EffectTree final : public PropertyTree<EffectNode> {
 
   int ClosestAncestorWithCopyRequest(int id) const;
 
-  void AddMaskOrReplicaLayerId(int id);
-  const std::vector<int>& mask_replica_layer_ids() const {
-    return mask_replica_layer_ids_;
-  }
+  void AddMaskLayerId(int id);
+  const std::vector<int>& mask_layer_ids() const { return mask_layer_ids_; }
 
   bool ContributesToDrawnSurface(int id);
 
@@ -376,9 +395,8 @@ class CC_EXPORT EffectTree final : public PropertyTree<EffectNode> {
   std::unordered_multimap<int, std::unique_ptr<CopyOutputRequest>>
       copy_requests_;
 
-  // Unsorted list of all mask, replica, and replica mask layer ids that
-  // effect nodes refer to.
-  std::vector<int> mask_replica_layer_ids_;
+  // Unsorted list of all mask layer ids that effect nodes refer to.
+  std::vector<int> mask_layer_ids_;
 };
 
 class CC_EXPORT ScrollTree final : public PropertyTree<ScrollNode> {
@@ -399,6 +417,11 @@ class CC_EXPORT ScrollTree final : public PropertyTree<ScrollNode> {
       ScrollOffsetMap;
 
   gfx::ScrollOffset MaxScrollOffset(int scroll_node_id) const;
+  void OnScrollOffsetAnimated(int layer_id,
+                              int transform_tree_index,
+                              int scroll_tree_index,
+                              const gfx::ScrollOffset& scroll_offset,
+                              LayerTreeImpl* layer_tree_impl);
   gfx::Size scroll_clip_layer_bounds(int scroll_node_id) const;
   ScrollNode* CurrentlyScrollingNode();
   const ScrollNode* CurrentlyScrollingNode() const;

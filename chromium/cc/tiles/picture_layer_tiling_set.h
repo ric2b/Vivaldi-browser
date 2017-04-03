@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 
+#include <list>
 #include <set>
 #include <vector>
 
@@ -44,7 +45,8 @@ class CC_EXPORT PictureLayerTilingSet {
       PictureLayerTilingClient* client,
       int tiling_interest_area_padding,
       float skewport_target_time_in_seconds,
-      int skewport_extrapolation_limit_in_screen_pixels);
+      int skewport_extrapolation_limit_in_screen_pixels,
+      float max_preraster_distance);
 
   ~PictureLayerTilingSet();
 
@@ -206,7 +208,8 @@ class CC_EXPORT PictureLayerTilingSet {
       PictureLayerTilingClient* client,
       int tiling_interest_area_padding,
       float skewport_target_time_in_seconds,
-      int skewport_extrapolation_limit_in_screen_pixels);
+      int skewport_extrapolation_limit_in_screen_pixels,
+      float max_preraster_distance);
 
   void CopyTilingsAndPropertiesFromPendingTwin(
       const PictureLayerTilingSet* pending_twin_set,
@@ -235,6 +238,7 @@ class CC_EXPORT PictureLayerTilingSet {
   const int skewport_extrapolation_limit_in_screen_pixels_;
   WhichTree tree_;
   PictureLayerTilingClient* client_;
+  const float max_preraster_distance_;
   // State saved for computing velocities based on finite differences.
   // .front() of the list refers to the most recent FrameVisibleRect.
   std::list<FrameVisibleRect> visible_rect_history_;

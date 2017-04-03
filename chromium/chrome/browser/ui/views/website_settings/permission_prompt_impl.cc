@@ -15,11 +15,11 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/views/exclusive_access_bubble_views.h"
-#include "chrome/browser/ui/views/website_settings/permission_selector_view.h"
-#include "chrome/browser/ui/views/website_settings/permission_selector_view_observer.h"
+#include "chrome/browser/ui/views/website_settings/permission_selector_row.h"
+#include "chrome/browser/ui/views/website_settings/permission_selector_row_observer.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/elide_url.h"
-#include "grit/components_strings.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/combobox_model.h"
@@ -64,7 +64,8 @@ class PermissionCombobox : public views::MenuButton,
     virtual void PermissionSelectionChanged(int index, bool allowed) = 0;
   };
 
-  PermissionCombobox(Listener* listener,
+  PermissionCombobox(Profile* profile,
+                     Listener* listener,
                      int index,
                      const GURL& url,
                      ContentSetting setting);
@@ -89,7 +90,8 @@ class PermissionCombobox : public views::MenuButton,
   std::unique_ptr<views::MenuRunner> menu_runner_;
 };
 
-PermissionCombobox::PermissionCombobox(Listener* listener,
+PermissionCombobox::PermissionCombobox(Profile* profile,
+                                       Listener* listener,
                                        int index,
                                        const GURL& url,
                                        ContentSetting setting)
@@ -97,6 +99,7 @@ PermissionCombobox::PermissionCombobox(Listener* listener,
       index_(index),
       listener_(listener),
       model_(new PermissionMenuModel(
+          profile,
           url,
           setting,
           base::Bind(&PermissionCombobox::PermissionChanged,
@@ -202,7 +205,6 @@ PermissionsBubbleDialogDelegateView::PermissionsBubbleDialogDelegateView(
       requests[0]->GetOrigin(),
       url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC);
 
-  ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
   bool show_persistence_toggle = true;
   for (size_t index = 0; index < requests.size(); index++) {
     DCHECK(index < accept_state.size());
@@ -224,13 +226,10 @@ PermissionsBubbleDialogDelegateView::PermissionsBubbleDialogDelegateView(
         views::BoxLayout::kHorizontal, views::kCheckboxIndent, 0,
         views::kItemLabelSpacing));
     views::ImageView* icon = new views::ImageView();
-    gfx::VectorIconId vector_id = requests[index]->GetVectorIconId();
+    gfx::VectorIconId vector_id = requests[index]->GetIconId();
     if (vector_id != gfx::VectorIconId::VECTOR_ICON_NONE) {
       icon->SetImage(
           gfx::CreateVectorIcon(vector_id, kIconSize, gfx::kChromeIconGrey));
-    } else {
-      icon->SetImage(bundle.GetImageSkiaNamed(requests.at(index)->GetIconId()));
-      icon->SetImageSize(gfx::Size(kIconSize, kIconSize));
     }
     icon->SetTooltipText(base::string16());  // Redundant with the text fragment
     label_container->AddChildView(icon);
@@ -245,7 +244,7 @@ PermissionsBubbleDialogDelegateView::PermissionsBubbleDialogDelegateView(
                               requests[index]->ShouldShowPersistenceToggle();
     if (requests.size() > 1) {
       PermissionCombobox* combobox = new PermissionCombobox(
-          this, index, requests[index]->GetOrigin(),
+          owner->GetProfile(), this, index, requests[index]->GetOrigin(),
           accept_state[index] ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK);
       row_layout->AddView(combobox);
       customize_comboboxes_.push_back(combobox);
@@ -482,4 +481,8 @@ void PermissionPromptImpl::Accept() {
 void PermissionPromptImpl::Deny() {
   if (delegate_)
     delegate_->Deny();
+}
+
+Profile* PermissionPromptImpl::GetProfile() {
+  return browser_->profile();
 }

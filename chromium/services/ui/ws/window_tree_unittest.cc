@@ -16,7 +16,7 @@
 #include "services/ui/common/types.h"
 #include "services/ui/common/util.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
-#include "services/ui/surfaces/surfaces_state.h"
+#include "services/ui/surfaces/display_compositor.h"
 #include "services/ui/ws/default_access_policy.h"
 #include "services/ui/ws/display_binding.h"
 #include "services/ui/ws/ids.h"
@@ -43,6 +43,8 @@ namespace ws {
 namespace test {
 namespace {
 
+const UserId kTestUserId1 = "2";
+
 std::string WindowIdToString(const WindowId& id) {
   return base::StringPrintf("%d,%d", id.client_id, id.window_id);
 }
@@ -66,6 +68,12 @@ ui::PointerEvent CreatePointerDownEvent(int x, int y) {
 ui::PointerEvent CreatePointerUpEvent(int x, int y) {
   return ui::PointerEvent(ui::TouchEvent(
       ui::ET_TOUCH_RELEASED, gfx::Point(x, y), 1, ui::EventTimeForNow()));
+}
+
+ui::PointerEvent CreatePointerWheelEvent(int x, int y) {
+  return ui::PointerEvent(
+      ui::MouseWheelEvent(gfx::Vector2d(), gfx::Point(x, y), gfx::Point(x, y),
+                          ui::EventTimeForNow(), ui::EF_NONE, ui::EF_NONE));
 }
 
 ui::PointerEvent CreateMouseMoveEvent(int x, int y) {
@@ -123,8 +131,7 @@ class WindowTreeTest : public testing::Test {
   ~WindowTreeTest() override {}
 
   ui::mojom::Cursor cursor_id() {
-    return static_cast<ui::mojom::Cursor>(
-        window_event_targeting_helper_.cursor_id());
+    return window_event_targeting_helper_.cursor();
   }
   Display* display() { return window_event_targeting_helper_.display(); }
   TestWindowTreeBinding* last_binding() {
@@ -331,10 +338,31 @@ TEST_F(WindowTreeTest, StartPointerWatcher) {
             ChangesToDescription1(*client->tracker()->changes())[0]);
   client->tracker()->changes()->clear();
 
+  // Create a pointer wheel event outside the bounds of the client.
+  ui::PointerEvent pointer_wheel = CreatePointerWheelEvent(5, 5);
+
+  // Pointer-wheel events are sent to the client.
+  DispatchEventAndAckImmediately(pointer_wheel);
+  ASSERT_EQ(1u, client->tracker()->changes()->size());
+  EXPECT_EQ("PointerWatcherEvent event_action=22 window=null",
+            ChangesToDescription1(*client->tracker()->changes())[0]);
+  client->tracker()->changes()->clear();
+
   // Stopping the watcher stops sending events to the client.
   WindowTreeTestApi(tree).StopPointerWatcher();
   DispatchEventAndAckImmediately(pointer_down);
   ASSERT_EQ(0u, client->tracker()->changes()->size());
+  DispatchEventAndAckImmediately(pointer_wheel);
+  ASSERT_EQ(0u, client->tracker()->changes()->size());
+
+  // Create a watcher for all events including move events.
+  WindowTreeTestApi(tree).StartPointerWatcher(true);
+
+  // Pointer-wheel events are sent to the client.
+  DispatchEventAndAckImmediately(pointer_wheel);
+  ASSERT_EQ(1u, client->tracker()->changes()->size());
+  EXPECT_EQ("PointerWatcherEvent event_action=22 window=null",
+            ChangesToDescription1(*client->tracker()->changes())[0]);
 }
 
 // Verifies PointerWatcher sees windows known to it.
@@ -1317,6 +1345,40 @@ TEST_F(WindowTreeTest, CaptureNotifiesWm) {
   ASSERT_TRUE(!embed_client->tracker()->changes()->empty());
   EXPECT_EQ("OnCaptureChanged new_window=null old_window=1,1",
             ChangesToDescription1(*embed_client->tracker()->changes())[0]);
+}
+
+using WindowTreeShutdownTest = testing::Test;
+
+// Makes sure WindowTreeClient doesn't get any messages during shutdown.
+TEST_F(WindowTreeShutdownTest, DontSendMessagesDuringShutdown) {
+  std::unique_ptr<TestWindowTreeClient> client;
+  {
+    // Create a tree with one window.
+    WindowServerTestHelper ws_test_helper;
+    WindowServer* window_server = ws_test_helper.window_server();
+    window_server->user_id_tracker()->AddUserId(kTestUserId1);
+    const int kNumHostsToCreate = 1;
+    ws_test_helper.window_server_delegate()->set_num_displays_to_create(
+        kNumHostsToCreate);
+
+    WindowManagerWindowTreeFactorySetTestApi(
+        window_server->window_manager_window_tree_factory_set())
+        .Add(kTestUserId1);
+    window_server->user_id_tracker()->SetActiveUserId(kTestUserId1);
+    TestWindowTreeBinding* test_binding =
+        ws_test_helper.window_server_delegate()->last_binding();
+    ASSERT_TRUE(test_binding);
+    WindowTree* tree = test_binding->tree();
+    const ClientWindowId window_id = BuildClientWindowId(tree, 2);
+    ASSERT_TRUE(tree->NewWindow(window_id, ServerWindow::Properties()));
+
+    // Release the client so that it survices shutdown.
+    client = test_binding->ReleaseClient();
+    client->tracker()->changes()->clear();
+  }
+
+  // Client should not have got any messages after shutdown.
+  EXPECT_TRUE(client->tracker()->changes()->empty());
 }
 
 }  // namespace test

@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
+#include "ios/public/provider/chrome/browser/ui/text_field_styling.h"
 
 namespace ios {
 
@@ -23,8 +24,12 @@ class TestChromeBrowserProvider : public ChromeBrowserProvider {
   static TestChromeBrowserProvider* GetTestProvider();
 
   // ChromeBrowserProvider:
+  void SetChromeIdentityServiceForTesting(
+      std::unique_ptr<ChromeIdentityService> service) override;
   ChromeIdentityService* GetChromeIdentityService() override;
   UpdatableResourceProvider* GetUpdatableResourceProvider() override;
+  UITextField<TextFieldStyling>* CreateStyledTextField(
+      CGRect frame) const override NS_RETURNS_RETAINED;
 
  private:
   std::unique_ptr<ChromeIdentityService> chrome_identity_service_;

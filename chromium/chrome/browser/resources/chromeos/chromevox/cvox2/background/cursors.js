@@ -97,12 +97,37 @@ cursors.Cursor.fromNode = function(node) {
 cursors.Cursor.prototype = {
   /**
    * Returns true if |rhs| is equal to this cursor.
+   * Use this for strict equality between cursors.
    * @param {!cursors.Cursor} rhs
    * @return {boolean}
    */
   equals: function(rhs) {
     return this.node === rhs.node &&
         this.index === rhs.index;
+  },
+
+  /**
+   * Returns true if |rhs| is equal to this cursor.
+   * Use this for loose equality between cursors where specific character-based
+   * indicies do not matter such as when processing node-targeted events.
+   * @param {!cursors.Cursor} rhs
+   * @return {boolean}
+   */
+  contentEquals: function(rhs) {
+    // First, normalize the two nodes so they both point to the first non-text
+    // node.
+    var lNode = this.node;
+    var rNode = rhs.node;
+    while (lNode && (lNode.role == RoleType.inlineTextBox ||
+        lNode.role == RoleType.staticText))
+      lNode = lNode.parent;
+    while (rNode && (rNode.role == RoleType.inlineTextBox ||
+        rNode.role == RoleType.staticText))
+      rNode = rNode.parent;
+
+    // Ignore indicies for now.
+
+    return lNode === rNode && lNode != undefined;
   },
 
   /**
@@ -140,8 +165,7 @@ cursors.Cursor.prototype = {
     if (!this.node)
       return null;
 
-    if (this.node.role == RoleType.inlineTextBox ||
-        this.index_ == cursors.NODE_INDEX)
+    if (this.node.role == RoleType.inlineTextBox)
       return this.node.parent;
 
     return this.node;
@@ -166,7 +190,9 @@ cursors.Cursor.prototype = {
         sibling = sibling.previousSibling;
       }
     } else if (this.index_ == cursors.NODE_INDEX) {
-      adjustedIndex = this.node.indexInParent + 1;
+      // Indicies of this kind are buggy. Set it to 0 (different than the DOM
+      // index in parent convention).
+      adjustedIndex = 0;
     }
     return adjustedIndex;
   },
@@ -479,12 +505,24 @@ cursors.Range.getDirection = function(rangeA, rangeB) {
 cursors.Range.prototype = {
   /**
    * Returns true if |rhs| is equal to this range.
+   * Use this for strict equality between ranges.
    * @param {!cursors.Range} rhs
    * @return {boolean}
    */
   equals: function(rhs) {
     return this.start_.equals(rhs.start) &&
         this.end_.equals(rhs.end);
+  },
+
+  /**
+   * Returns true if |rhs| is equal to this range.
+   * Use this for loose equality between ranges.
+   * @param {!cursors.Range} rhs
+   * @return {boolean}
+   */
+  contentEquals: function(rhs) {
+    return this.start_.contentEquals(rhs.start) &&
+        this.end_.contentEquals(rhs.end);
   },
 
   /**

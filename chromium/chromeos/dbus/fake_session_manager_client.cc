@@ -49,7 +49,9 @@ void FakeSessionManagerClient::EmitLoginPromptVisible() {
 }
 
 void FakeSessionManagerClient::RestartJob(
-    const std::vector<std::string>& argv) {}
+    int socket_fd,
+    const std::vector<std::string>& argv,
+    const VoidDBusMethodCallback& callback) {}
 
 void FakeSessionManagerClient::StartSession(
     const cryptohome::Identification& cryptohome_id) {
@@ -161,6 +163,7 @@ void FakeSessionManagerClient::CheckArcAvailability(
 
 void FakeSessionManagerClient::StartArcInstance(
     const cryptohome::Identification& cryptohome_id,
+    bool disable_boot_completed_broadcast,
     const ArcCallback& callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(callback, arc_available_));
@@ -176,6 +179,8 @@ void FakeSessionManagerClient::PrioritizeArcInstance(
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(callback, arc_available_));
 }
+
+void FakeSessionManagerClient::EmitArcBooted() {}
 
 void FakeSessionManagerClient::GetArcStartTime(
     const GetArcStartTimeCallback& callback) {

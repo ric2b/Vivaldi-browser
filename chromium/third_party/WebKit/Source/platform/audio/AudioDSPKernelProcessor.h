@@ -44,35 +44,39 @@ class AudioDSPKernel;
 class AudioProcessor;
 
 // AudioDSPKernelProcessor processes one input -> one output (N channels each)
-// It uses one AudioDSPKernel object per channel to do the processing, thus there is no cross-channel processing.
-// Despite this limitation it turns out to be a very common and useful type of processor.
+// It uses one AudioDSPKernel object per channel to do the processing, thus
+// there is no cross-channel processing.  Despite this limitation it turns out
+// to be a very common and useful type of processor.
 
 class PLATFORM_EXPORT AudioDSPKernelProcessor : public AudioProcessor {
-public:
-    // numberOfChannels may be later changed if object is not yet in an "initialized" state
-    AudioDSPKernelProcessor(float sampleRate, unsigned numberOfChannels);
+ public:
+  // numberOfChannels may be later changed if object is not yet in an
+  // "initialized" state
+  AudioDSPKernelProcessor(float sampleRate, unsigned numberOfChannels);
 
-    // Subclasses create the appropriate type of processing kernel here.
-    // We'll call this to create a kernel for each channel.
-    virtual std::unique_ptr<AudioDSPKernel> createKernel() = 0;
+  // Subclasses create the appropriate type of processing kernel here.
+  // We'll call this to create a kernel for each channel.
+  virtual std::unique_ptr<AudioDSPKernel> createKernel() = 0;
 
-    // AudioProcessor methods
-    void initialize() override;
-    void uninitialize() override;
-    void process(const AudioBus* source, AudioBus* destination, size_t framesToProcess) override;
-    void reset() override;
-    void setNumberOfChannels(unsigned) override;
-    unsigned numberOfChannels() const override { return m_numberOfChannels; }
+  // AudioProcessor methods
+  void initialize() override;
+  void uninitialize() override;
+  void process(const AudioBus* source,
+               AudioBus* destination,
+               size_t framesToProcess) override;
+  void reset() override;
+  void setNumberOfChannels(unsigned) override;
+  unsigned numberOfChannels() const override { return m_numberOfChannels; }
 
-    double tailTime() const override;
-    double latencyTime() const override;
+  double tailTime() const override;
+  double latencyTime() const override;
 
-protected:
-    Vector<std::unique_ptr<AudioDSPKernel>> m_kernels;
-    mutable Mutex m_processLock;
-    bool m_hasJustReset;
+ protected:
+  Vector<std::unique_ptr<AudioDSPKernel>> m_kernels;
+  mutable Mutex m_processLock;
+  bool m_hasJustReset;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // AudioDSPKernelProcessor_h
+#endif  // AudioDSPKernelProcessor_h

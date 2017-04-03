@@ -31,15 +31,15 @@ WebInspector.ColorSwatch.prototype = {
     },
 
     /**
-     * @param {string} colorText
+     * @param {!WebInspector.Color} color
      */
-    setColorText: function(colorText)
+    setColor: function(color)
     {
-        this._color = WebInspector.Color.parse(colorText);
-        console.assert(this._color, "Color text could not be parsed.");
+        this._color = color;
         this._format = this._color.format();
-        this._colorValueElement.textContent = this._color.asString(this._format);
-        this._swatchInner.style.backgroundColor = colorText;
+        var colorString = this._color.asString(this._format);
+        this._colorValueElement.textContent = colorString;
+        this._swatchInner.style.backgroundColor = colorString;
     },
 
     /**
@@ -97,8 +97,6 @@ WebInspector.ColorSwatch.prototype = {
 
         root.createChild("content");
         this._colorValueElement = this.createChild("span");
-
-        this.setColorText("white");
     },
 
     /**
@@ -164,20 +162,68 @@ WebInspector.ColorSwatch._nextColorFormat = function(color, curFormat)
     }
 }
 
-
-WebInspector.BezierSwatch = {}
+/**
+ * @constructor
+ * @extends {HTMLSpanElement}
+ */
+WebInspector.BezierSwatch = function()
+{
+}
 
 /**
- * @return {!Element}
+ * @return {!WebInspector.BezierSwatch}
  */
 WebInspector.BezierSwatch.create = function()
 {
-    var element = createElementWithClass("span", "bezier-icon");
-    var root = WebInspector.createShadowRootWithCoreStyles(element, "ui/bezierSwatch.css");
-    root.createChild("span", "bezier-swatch");
-    return element;
+    if (!WebInspector.BezierSwatch._constructor)
+        WebInspector.BezierSwatch._constructor = registerCustomElement("span", "bezier-swatch", WebInspector.BezierSwatch.prototype);
+
+    return /** @type {!WebInspector.BezierSwatch} */(new WebInspector.BezierSwatch._constructor());
 }
 
+WebInspector.BezierSwatch.prototype = {
+    /**
+     * @return {string}
+     */
+    bezierText: function()
+    {
+        return this._textElement.textContent;
+    },
+
+    /**
+     * @param {string} text
+     */
+    setBezierText: function(text)
+    {
+        this._textElement.textContent = text;
+    },
+
+    /**
+     * @param {boolean} hide
+     */
+    hideText: function(hide)
+    {
+        this._textElement.hidden = hide;
+    },
+
+    /**
+     * @return {!Element}
+     */
+    iconElement: function()
+    {
+        return this._iconElement;
+    },
+
+    createdCallback: function()
+    {
+        var root = WebInspector.createShadowRootWithCoreStyles(this, "ui/bezierSwatch.css");
+        this._iconElement = root.createChild("span", "bezier-swatch-icon");
+        this._textElement = this.createChild("span");
+        root.createChild("content");
+    },
+
+    __proto__: HTMLSpanElement.prototype
+}
 
 /**
  * @constructor
@@ -213,14 +259,14 @@ WebInspector.CSSShadowSwatch.prototype = {
     setCSSShadow: function(model)
     {
         this._model = model;
-        this._colorSwatch = null;
         this._contentElement.removeChildren();
         var results = WebInspector.TextUtils.splitStringByRegexes(model.asCSSText(), [/inset/g, WebInspector.Color.Regex]);
         for (var i = 0; i < results.length; i++) {
             var result = results[i];
             if (result.regexIndex === 1) {
-                this._colorSwatch = WebInspector.ColorSwatch.create();
-                this._colorSwatch.setColorText(result.value);
+                if (!this._colorSwatch)
+                    this._colorSwatch = WebInspector.ColorSwatch.create();
+                this._colorSwatch.setColor(model.color());
                 this._contentElement.appendChild(this._colorSwatch);
             } else {
                 this._contentElement.appendChild(createTextNode(result.value));
@@ -231,7 +277,7 @@ WebInspector.CSSShadowSwatch.prototype = {
     /**
      * @param {boolean} hide
      */
-    setTextHidden: function(hide)
+    hideText: function(hide)
     {
         this._contentElement.hidden = hide;
     },
@@ -245,7 +291,7 @@ WebInspector.CSSShadowSwatch.prototype = {
     },
 
     /**
-     * @return {!WebInspector.ColorSwatch}
+     * @return {?WebInspector.ColorSwatch}
      */
     colorSwatch: function()
     {

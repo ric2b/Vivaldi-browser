@@ -9,7 +9,7 @@
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/certificate_viewer.h"
@@ -30,6 +30,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
+#include "components/app_modal/javascript_dialog_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/syncable_prefs/pref_service_syncable.h"
@@ -200,12 +201,19 @@ GURL DecorateFrontendURL(const GURL& base_url) {
       frontend_url +
       ((frontend_url.find("?") == std::string::npos) ? "?" : "&") +
       "dockSide=undocked"); // TODO(dgozman): remove this support in M38.
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableDevToolsExperiments))
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kEnableDevToolsExperiments))
     url_string += "&experiments=true";
+
+  if (command_line->HasSwitch(switches::kDevToolsFlags)) {
+    url_string += "&" + command_line->GetSwitchValueASCII(
+        switches::kDevToolsFlags);
+  }
+
 #if defined(DEBUG_DEVTOOLS)
   url_string += "&debugFrontend=true";
 #endif  // defined(DEBUG_DEVTOOLS)
+
   return GURL(url_string);
 }
 
@@ -376,7 +384,9 @@ void DevToolsWindow::RegisterProfilePrefs(
   registry->RegisterBooleanPref(prefs::kDevToolsPortForwardingDefaultSet,
                                 false);
   registry->RegisterDictionaryPref(prefs::kDevToolsPortForwardingConfig);
-  registry->RegisterListPref(prefs::kDevToolsTargetDiscoveryConfig);
+  registry->RegisterBooleanPref(prefs::kDevToolsDiscoverTCPTargetsEnabled,
+                                true);
+  registry->RegisterListPref(prefs::kDevToolsTCPDiscoveryConfig);
   registry->RegisterDictionaryPref(prefs::kDevToolsPreferences);
 }
 
@@ -465,13 +475,49 @@ void DevToolsWindow::OpenDevToolsWindow(
 
 // static
 void DevToolsWindow::OpenDevToolsWindow(
+    scoped_refptr<content::DevToolsAgentHost> agent_host,
+    Profile* profile) {
+  if (!profile)
+    profile = Profile::FromBrowserContext(agent_host->GetBrowserContext());
+
+  if (!profile)
+    return;
+
+  std::string type = agent_host->GetType();
+  bool is_worker = type == DevToolsAgentHost::kTypeServiceWorker ||
+                   type == DevToolsAgentHost::kTypeSharedWorker;
+
+  if (!agent_host->GetFrontendURL().empty()) {
+    bool is_v8_only = type == "node";
+    DevToolsWindow::OpenExternalFrontend(profile, agent_host->GetFrontendURL(),
+                                         agent_host, is_worker, is_v8_only);
+    return;
+  }
+
+  if (is_worker) {
+    DevToolsWindow::OpenDevToolsWindowForWorker(profile, agent_host);
+    return;
+  }
+
+  if (type == content::DevToolsAgentHost::kTypeFrame) {
+    DevToolsWindow::OpenDevToolsWindowForFrame(profile, agent_host);
+    return;
+  }
+
+  content::WebContents* web_contents = agent_host->GetWebContents();
+  if (web_contents)
+    DevToolsWindow::OpenDevToolsWindow(web_contents);
+}
+
+// static
+void DevToolsWindow::OpenDevToolsWindow(
     content::WebContents* inspected_web_contents,
     const DevToolsToggleAction& action) {
   ToggleDevToolsWindow(inspected_web_contents, true, action, "");
 }
 
 // static
-void DevToolsWindow::OpenDevToolsWindow(
+void DevToolsWindow::OpenDevToolsWindowForFrame(
     Profile* profile,
     const scoped_refptr<content::DevToolsAgentHost>& agent_host) {
   DevToolsWindow* window = FindDevToolsWindow(agent_host.get());
@@ -567,11 +613,11 @@ void DevToolsWindow::InspectElement(
   base::TimeTicks start_time = base::TimeTicks::Now();
   // TODO(loislo): we should initiate DevTools window opening from within
   // renderer. Otherwise, we still can hit a race condition here.
-  if (agent->GetType() == content::DevToolsAgentHost::TYPE_WEB_CONTENTS) {
+  if (agent->GetType() == content::DevToolsAgentHost::kTypePage) {
     OpenDevToolsWindow(agent->GetWebContents());
   } else {
-    OpenDevToolsWindow(Profile::FromBrowserContext(agent->GetBrowserContext()),
-                       agent);
+    OpenDevToolsWindowForFrame(Profile::FromBrowserContext(
+                                   agent->GetBrowserContext()), agent);
   }
   DevToolsWindow* window = FindDevToolsWindow(agent.get());
   if (window) {
@@ -858,7 +904,7 @@ GURL DevToolsWindow::GetDevToolsURL(Profile* profile,
   }
   if (can_dock)
     url_string += "&can_dock=true";
-  return GURL(url_string);
+  return DevToolsUI::SanitizeFrontendURL(GURL(url_string));
 }
 
 // static
@@ -906,7 +952,8 @@ WebContents* DevToolsWindow::OpenURLFromTab(
   return main_web_contents_;
 }
 
-void DevToolsWindow::ShowCertificateViewer(int certificate_id) {
+void DevToolsWindow::ShowCertificateViewer(
+    scoped_refptr<net::X509Certificate> certificate) {
   WebContents* inspected_contents = is_docked_ ?
       GetInspectedWebContents() : main_web_contents_;
   Browser* browser = NULL;
@@ -914,7 +961,7 @@ void DevToolsWindow::ShowCertificateViewer(int certificate_id) {
   if (!FindInspectedBrowserAndTabIndex(inspected_contents, &browser, &tab))
     return;
   gfx::NativeWindow parent = browser->window()->GetNativeWindow();
-  ::ShowCertificateViewerByID(inspected_contents, parent, certificate_id);
+  ::ShowCertificateViewer(inspected_contents, parent, certificate.get());
 }
 
 void DevToolsWindow::ActivateContents(WebContents* contents) {
@@ -956,6 +1003,7 @@ void DevToolsWindow::AddNewContents(WebContents* source,
 }
 
 void DevToolsWindow::WebContentsCreated(WebContents* source_contents,
+                                        int opener_render_process_id,
                                         int opener_render_frame_id,
                                         const std::string& frame_name,
                                         const GURL& target_url,
@@ -1039,11 +1087,7 @@ void DevToolsWindow::HandleKeyboardEvent(
 
 content::JavaScriptDialogManager* DevToolsWindow::GetJavaScriptDialogManager(
     WebContents* source) {
-  WebContents* inspected_web_contents = GetInspectedWebContents();
-  return (inspected_web_contents && inspected_web_contents->GetDelegate())
-             ? inspected_web_contents->GetDelegate()
-                   ->GetJavaScriptDialogManager(inspected_web_contents)
-             : content::WebContentsDelegate::GetJavaScriptDialogManager(source);
+  return app_modal::JavaScriptDialogManager::GetInstance();
 }
 
 content::ColorChooser* DevToolsWindow::OpenColorChooser(
@@ -1067,6 +1111,12 @@ bool DevToolsWindow::PreHandleGestureEvent(
       event.type == blink::WebGestureEvent::GesturePinchEnd;
 }
 
+void DevToolsWindow::ShowCertificateViewerInDevTools(
+    content::WebContents* web_contents,
+    scoped_refptr<net::X509Certificate> certificate) {
+  ShowCertificateViewer(certificate);
+}
+
 void DevToolsWindow::ActivateWindow() {
   if (life_stage_ != kLoadCompleted)
     return;
@@ -1080,6 +1130,10 @@ void DevToolsWindow::CloseWindow() {
   DCHECK(is_docked_);
   life_stage_ = kClosing;
   main_web_contents_->DispatchBeforeUnload();
+}
+
+void DevToolsWindow::Inspect(scoped_refptr<content::DevToolsAgentHost> host) {
+  DevToolsWindow::OpenDevToolsWindow(host, profile_);
 }
 
 void DevToolsWindow::SetInspectedPageBounds(const gfx::Rect& rect) {
@@ -1136,9 +1190,9 @@ void DevToolsWindow::SetIsDocked(bool dock_requested) {
 }
 
 void DevToolsWindow::OpenInNewTab(const std::string& url) {
-  content::OpenURLParams params(
-      GURL(url), content::Referrer(), NEW_FOREGROUND_TAB,
-      ui::PAGE_TRANSITION_LINK, false);
+  content::OpenURLParams params(GURL(url), content::Referrer(),
+                                WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                                ui::PAGE_TRANSITION_LINK, false);
   WebContents* inspected_web_contents = GetInspectedWebContents();
   if (!inspected_web_contents || !inspected_web_contents->OpenURL(params)) {
     chrome::ScopedTabbedBrowserDisplayer displayer(profile_);

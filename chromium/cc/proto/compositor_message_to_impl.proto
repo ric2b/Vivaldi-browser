@@ -8,7 +8,6 @@ option optimize_for = LITE_RUNTIME;
 
 import "commit_earlyout_reason.proto";
 import "layer_tree_host.proto";
-import "layer_tree_settings.proto";
 import "rect.proto";
 
 package cc.proto;
@@ -47,25 +46,6 @@ message CompositorMessageToImpl {
     // see crbug/559338.
     UNKNOWN = 0;
 
-    // Client Initialization: When the remote server starts up it sends a
-    // CompositorMessageToImpl of type INITIALIZE_IMPL to the client. This
-    // message should be processed by the embedder of the client compositor to
-    // create the Remote Client LayerTreeHost. The compositor protocol
-    // guarantees that this will be the first message sent to the client. No
-    // messages can be sent from the client before the server is started.
-    INITIALIZE_IMPL = 1;
-
-    // Client Shutdown: When the remote server is shutting down it sends a
-    // CompositorMessageToImpl of type CLOSE_IMPL to the client. The message
-    // should be processed by the embedder of the client compositor to destroy
-    // the Remote Client LayerTreeHost. This is guaranteed to be the last
-    // message sent to the client. No messages can be sent from the client after
-    // the server has been shutdown.
-    CLOSE_IMPL = 2;
-
-    // Informs the client that a fling animation on the server has stopped.
-    MAIN_THREAD_HAS_STOPPED_FLINGING_ON_IMPL = 3;
-
     // Sent to the client to request a commit. The client will respond with
     // CompositorMessageToMain of type BEGIN_MAIN_FRAME.
     SET_NEEDS_COMMIT = 4;
@@ -90,9 +70,6 @@ message CompositorMessageToImpl {
 
   // Only one of the following fields will be set per CompositorMessageToImpl.
 
-  // Set for message Type::INITIALIZE_IMPL.
-  optional InitializeImpl initialize_impl_message = 2;
-
   // Set for message Type::SET_DEFER_COMMITS.
   optional SetDeferCommits defer_commits_message = 3;
 
@@ -104,13 +81,6 @@ message CompositorMessageToImpl {
 
   // Set for message Type::SET_NEEDS_REDRAW.
   optional SetNeedsRedraw set_needs_redraw_message = 6;
-}
-
-// The embedder of the remote client compositor should process the
-// InitializeImpl message to retrieve the LayerTreeSettings sent from the
-// server. The settings sent from the server may be modified by the embedder.
-message InitializeImpl {
-  optional LayerTreeSettings layer_tree_settings = 1;
 }
 
 message SetDeferCommits {

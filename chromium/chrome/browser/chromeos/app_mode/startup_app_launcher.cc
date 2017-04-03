@@ -312,9 +312,10 @@ void StartupAppLauncher::Observe(int type,
                                  const content::NotificationSource& source,
                                  const content::NotificationDetails& details) {
   DCHECK_EQ(extensions::NOTIFICATION_EXTENSION_UPDATE_FOUND, type);
-  using UpdateDetails = const std::pair<std::string, Version>;
+  using UpdateDetails = const std::pair<std::string, base::Version>;
   const std::string& id = content::Details<UpdateDetails>(details)->first;
-  const Version& version = content::Details<UpdateDetails>(details)->second;
+  const base::Version& version =
+      content::Details<UpdateDetails>(details)->second;
   VLOG(1) << "Found extension update id=" << id
           << " version=" << version.GetString();
   extension_update_found_ = true;
@@ -463,9 +464,9 @@ void StartupAppLauncher::LaunchApp() {
   }
 
   // Always open the app in a window.
-  OpenApplication(AppLaunchParams(profile_, extension,
-                                  extensions::LAUNCH_CONTAINER_WINDOW,
-                                  NEW_WINDOW, extensions::SOURCE_KIOSK));
+  OpenApplication(AppLaunchParams(
+      profile_, extension, extensions::LAUNCH_CONTAINER_WINDOW,
+      WindowOpenDisposition::NEW_WINDOW, extensions::SOURCE_KIOSK));
   KioskAppManager::Get()->InitSession(profile_, app_id_);
 
   user_manager::UserManager::Get()->SessionStarted();

@@ -4,37 +4,29 @@
 
 #include "chrome/browser/ui/views/location_bar/location_icon_view.h"
 
-#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ssl/chrome_security_state_model_client.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/website_settings/website_settings_popup_view.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
+#include "components/grit/components_scaled_resources.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
-#include "grit/components_scaled_resources.h"
-#include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/material_design/material_design_controller.h"
-#include "ui/gfx/color_palette.h"
 #include "ui/views/controls/label.h"
-#include "ui/views/painter.h"
 
-using content::NavigationController;
 using content::NavigationEntry;
 using content::WebContents;
 
 LocationIconView::LocationIconView(const gfx::FontList& font_list,
-                                   SkColor parent_background_color,
                                    LocationBarView* location_bar)
-    : IconLabelBubbleView(IDR_OMNIBOX_HTTPS_INVALID,
-                          font_list,
-                          parent_background_color,
-                          true),
+    : IconLabelBubbleView(font_list, true),
       suppress_mouse_released_action_(false),
-      location_bar_(location_bar) {
+      location_bar_(location_bar),
+      animation_(this) {
   set_id(VIEW_ID_LOCATION_ICON);
 
 #if defined(OS_MACOSX)
@@ -43,7 +35,7 @@ LocationIconView::LocationIconView(const gfx::FontList& font_list,
   SetFocusBehavior(FocusBehavior::ALWAYS);
 #endif
 
-  SetBackground(false);
+  animation_.SetSlideDuration(kOpenTimeMS);
 }
 
 LocationIconView::~LocationIconView() {
@@ -104,11 +96,7 @@ bool LocationIconView::GetTooltipText(const gfx::Point& p,
 }
 
 SkColor LocationIconView::GetTextColor() const {
-  return location_bar_->GetColor(LocationBarView::EV_BUBBLE_TEXT_AND_BORDER);
-}
-
-SkColor LocationIconView::GetBorderColor() const {
-  return GetTextColor();
+  return location_bar_->GetColor(LocationBarView::SECURITY_CHIP_TEXT);
 }
 
 bool LocationIconView::OnActivate(const ui::Event& event) {
@@ -125,9 +113,11 @@ bool LocationIconView::OnActivate(const ui::Event& event) {
   ChromeSecurityStateModelClient* model_client =
       ChromeSecurityStateModelClient::FromWebContents(contents);
   DCHECK(model_client);
+  security_state::SecurityStateModel::SecurityInfo security_info;
+  model_client->GetSecurityInfo(&security_info);
 
   location_bar_->delegate()->ShowWebsiteSettings(
-      contents, entry->GetVirtualURL(), model_client->GetSecurityInfo());
+      contents, entry->GetVirtualURL(), security_info);
   return true;
 }
 
@@ -138,12 +128,25 @@ gfx::Size LocationIconView::GetMinimumSizeForLabelText(
       GetSizeForLabelWidth(label.GetPreferredSize().width()));
 }
 
-void LocationIconView::SetBackground(bool should_show_ev) {
-  static const int kEvBackgroundImages[] = IMAGE_GRID(IDR_OMNIBOX_EV_BUBBLE);
-  if (should_show_ev)
-    SetBackgroundImageGrid(kEvBackgroundImages);
-  else
-    UnsetBackgroundImageGrid();
+void LocationIconView::SetSecurityState(bool should_show, bool should_animate) {
+  if (!should_animate) {
+    animation_.Reset(should_show);
+  } else if (should_show) {
+    animation_.Show();
+  } else {
+    animation_.Hide();
+  }
+  // The label text color may have changed.
+  OnNativeThemeChanged(GetNativeTheme());
+}
+
+double LocationIconView::WidthMultiplier() const {
+  return animation_.GetCurrentValue();
+}
+
+void LocationIconView::AnimationProgressed(const gfx::Animation*) {
+  location_bar_->Layout();
+  location_bar_->SchedulePaint();
 }
 
 void LocationIconView::ProcessLocatedEvent(const ui::LocatedEvent& event) {

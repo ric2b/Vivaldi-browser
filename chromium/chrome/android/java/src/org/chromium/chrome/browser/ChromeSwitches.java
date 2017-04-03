@@ -57,6 +57,10 @@ public abstract class ChromeSwitches {
     /** Enable Contextual Search. */
     public static final String ENABLE_CONTEXTUAL_SEARCH = "enable-contextual-search";
 
+    /** Contextual Search UI integration with Contextual Cards data.*/
+    public static final String CONTEXTUAL_SEARCH_CONTEXTUAL_CARDS_BAR_INTEGRATION =
+            "cs-contextual-cards-bar-integration";
+
     // How many thumbnails should we allow in the cache (per tab stack)?
     public static final String THUMBNAILS = "thumbnails";
 
@@ -122,12 +126,6 @@ public abstract class ChromeSwitches {
     public static final String DISABLE_DOMAIN_RELIABILITY = "disable-domain-reliability";
 
     /**
-     * Enable use of Android's built-in spellchecker.
-     * Native switch - switches::kEnableAndroidSpellChecker
-     */
-    public static final String ENABLE_ANDROID_SPELLCHECKER = "enable-android-spellchecker";
-
-    /**
      * Specifies Android phone page loading progress bar animation.
      * Native switch - switches::kProgressBarAnimation
      */
@@ -181,20 +179,12 @@ public abstract class ChromeSwitches {
      */
     public static final String HERB_FLAVOR_DISABLED_SWITCH =
             "tab-management-experiment-type-disabled";
-    public static final String HERB_FLAVOR_ANISE_SWITCH = "tab-management-experiment-type-anise";
-    public static final String HERB_FLAVOR_BASIL_SWITCH = "tab-management-experiment-type-basil";
-    public static final String HERB_FLAVOR_CHIVE_SWITCH = "tab-management-experiment-type-chive";
-    public static final String HERB_FLAVOR_DILL_SWITCH = "tab-management-experiment-type-dill";
     public static final String HERB_FLAVOR_ELDERBERRY_SWITCH =
             "tab-management-experiment-type-elderberry";
 
     public static final String HERB_FLAVOR_DEFAULT = "Default";
     public static final String HERB_FLAVOR_CONTROL = "Control";
     public static final String HERB_FLAVOR_DISABLED = "Disabled";
-    public static final String HERB_FLAVOR_ANISE = "Anise";
-    public static final String HERB_FLAVOR_BASIL = "Basil";
-    public static final String HERB_FLAVOR_CHIVE = "Chive";
-    public static final String HERB_FLAVOR_DILL = "Dill";
     public static final String HERB_FLAVOR_ELDERBERRY = "Elderberry";
 
     public static final String DISABLE_APP_LINK = "disable-app-link";
@@ -204,11 +194,6 @@ public abstract class ChromeSwitches {
      * Set the partner-defined homepage URL, for testing.
      */
     public static final String PARTNER_HOMEPAGE_FOR_TESTING = "partner-homepage-for-testing";
-
-    /**
-     * Enables the all bookmarks section in bookmark manager.
-     */
-    public static final String ENABLE_ALL_BOOKMARKS_VIEW = "enable-all-bookmarks-view";
 
     /**
      * Enables "Add to Home screen" to mint a WebApk.

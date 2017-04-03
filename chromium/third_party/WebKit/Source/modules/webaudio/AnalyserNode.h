@@ -10,16 +10,17 @@
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
- * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+ * DAMAGE.
  */
 
 #ifndef AnalyserNode_h
@@ -32,71 +33,84 @@
 namespace blink {
 
 class BaseAudioContext;
+class AnalyserOptions;
 class ExceptionState;
 
 class AnalyserHandler final : public AudioBasicInspectorHandler {
-public:
-    static PassRefPtr<AnalyserHandler> create(AudioNode&, float sampleRate);
-    ~AnalyserHandler() override;
+ public:
+  static PassRefPtr<AnalyserHandler> create(AudioNode&, float sampleRate);
+  ~AnalyserHandler() override;
 
-    // AudioHandler
-    void process(size_t framesToProcess) override;
+  // AudioHandler
+  void process(size_t framesToProcess) override;
 
-    unsigned fftSize() const { return m_analyser.fftSize(); }
-    void setFftSize(unsigned size, ExceptionState&);
+  unsigned fftSize() const { return m_analyser.fftSize(); }
+  void setFftSize(unsigned size, ExceptionState&);
 
-    unsigned frequencyBinCount() const { return m_analyser.frequencyBinCount(); }
+  unsigned frequencyBinCount() const { return m_analyser.frequencyBinCount(); }
 
-    void setMinDecibels(double k, ExceptionState&);
-    double minDecibels() const { return m_analyser.minDecibels(); }
+  void setMinDecibels(double k, ExceptionState&);
+  double minDecibels() const { return m_analyser.minDecibels(); }
 
-    void setMaxDecibels(double k, ExceptionState&);
-    double maxDecibels() const { return m_analyser.maxDecibels(); }
+  void setMaxDecibels(double k, ExceptionState&);
+  double maxDecibels() const { return m_analyser.maxDecibels(); }
 
-    void setSmoothingTimeConstant(double k, ExceptionState&);
-    double smoothingTimeConstant() const { return m_analyser.smoothingTimeConstant(); }
+  void setMinMaxDecibels(double min, double max, ExceptionState&);
 
-    void getFloatFrequencyData(DOMFloat32Array* array, double currentTime)
-    {
-        m_analyser.getFloatFrequencyData(array, currentTime);
-    }
-    void getByteFrequencyData(DOMUint8Array* array, double currentTime)
-    {
-        m_analyser.getByteFrequencyData(array, currentTime);
-    }
-    void getFloatTimeDomainData(DOMFloat32Array* array) { m_analyser.getFloatTimeDomainData(array); }
-    void getByteTimeDomainData(DOMUint8Array* array) { m_analyser.getByteTimeDomainData(array); }
+  void setSmoothingTimeConstant(double k, ExceptionState&);
+  double smoothingTimeConstant() const {
+    return m_analyser.smoothingTimeConstant();
+  }
 
-private:
-    AnalyserHandler(AudioNode&, float sampleRate);
+  void getFloatFrequencyData(DOMFloat32Array* array, double currentTime) {
+    m_analyser.getFloatFrequencyData(array, currentTime);
+  }
+  void getByteFrequencyData(DOMUint8Array* array, double currentTime) {
+    m_analyser.getByteFrequencyData(array, currentTime);
+  }
+  void getFloatTimeDomainData(DOMFloat32Array* array) {
+    m_analyser.getFloatTimeDomainData(array);
+  }
+  void getByteTimeDomainData(DOMUint8Array* array) {
+    m_analyser.getByteTimeDomainData(array);
+  }
 
-    RealtimeAnalyser m_analyser;
+ private:
+  AnalyserHandler(AudioNode&, float sampleRate);
+
+  RealtimeAnalyser m_analyser;
 };
 
 class AnalyserNode final : public AudioBasicInspectorNode {
-    DEFINE_WRAPPERTYPEINFO();
-public:
-    static AnalyserNode* create(BaseAudioContext&, ExceptionState&);
+  DEFINE_WRAPPERTYPEINFO();
 
-    unsigned fftSize() const;
-    void setFftSize(unsigned size, ExceptionState&);
-    unsigned frequencyBinCount() const;
-    void setMinDecibels(double, ExceptionState&);
-    double minDecibels() const;
-    void setMaxDecibels(double, ExceptionState&);
-    double maxDecibels() const;
-    void setSmoothingTimeConstant(double, ExceptionState&);
-    double smoothingTimeConstant() const;
-    void getFloatFrequencyData(DOMFloat32Array*);
-    void getByteFrequencyData(DOMUint8Array*);
-    void getFloatTimeDomainData(DOMFloat32Array*);
-    void getByteTimeDomainData(DOMUint8Array*);
+ public:
+  static AnalyserNode* create(BaseAudioContext&, ExceptionState&);
+  static AnalyserNode* create(BaseAudioContext*,
+                              const AnalyserOptions&,
+                              ExceptionState&);
 
-private:
-    AnalyserNode(BaseAudioContext&);
-    AnalyserHandler& analyserHandler() const;
+  unsigned fftSize() const;
+  void setFftSize(unsigned size, ExceptionState&);
+  unsigned frequencyBinCount() const;
+  void setMinDecibels(double, ExceptionState&);
+  double minDecibels() const;
+  void setMaxDecibels(double, ExceptionState&);
+  double maxDecibels() const;
+  void setSmoothingTimeConstant(double, ExceptionState&);
+  double smoothingTimeConstant() const;
+  void getFloatFrequencyData(DOMFloat32Array*);
+  void getByteFrequencyData(DOMUint8Array*);
+  void getFloatTimeDomainData(DOMFloat32Array*);
+  void getByteTimeDomainData(DOMUint8Array*);
+
+ private:
+  AnalyserNode(BaseAudioContext&);
+  AnalyserHandler& analyserHandler() const;
+
+  void setMinMaxDecibels(double min, double max, ExceptionState&);
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // AnalyserNode_h
+#endif  // AnalyserNode_h

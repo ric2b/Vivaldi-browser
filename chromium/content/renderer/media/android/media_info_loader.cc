@@ -8,7 +8,7 @@
 
 #include "base/bits.h"
 #include "base/callback_helpers.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebURLLoader.h"
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
@@ -90,17 +90,14 @@ void MediaInfoLoader::Start(blink::WebFrame* frame) {
 
 /////////////////////////////////////////////////////////////////////////////
 // blink::WebURLLoaderClient implementation.
-void MediaInfoLoader::willFollowRedirect(WebURLLoader* loader,
-                                         WebURLRequest& newRequest,
-                                         const WebURLResponse& redirectResponse,
-                                         int64_t encodedDataLength) {
+bool MediaInfoLoader::willFollowRedirect(
+    WebURLLoader* loader,
+    WebURLRequest& newRequest,
+    const WebURLResponse& redirectResponse) {
   // The load may have been stopped and |ready_cb| is destroyed.
   // In this case we shouldn't do anything.
-  if (ready_cb_.is_null()) {
-    // Set the url in the request to an invalid value (empty url).
-    newRequest.setURL(blink::WebURL());
-    return;
-  }
+  if (ready_cb_.is_null())
+    return false;
 
   // Only allow |single_origin_| if we haven't seen a different origin yet.
   if (single_origin_)
@@ -109,6 +106,8 @@ void MediaInfoLoader::willFollowRedirect(WebURLLoader* loader,
   url_ = newRequest.url();
   first_party_url_ = newRequest.firstPartyForCookies();
   allow_stored_credentials_ = newRequest.allowStoredCredentials();
+
+  return true;
 }
 
 void MediaInfoLoader::didSendData(

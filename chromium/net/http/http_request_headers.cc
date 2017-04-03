@@ -13,6 +13,7 @@
 #include "base/values.h"
 #include "net/http/http_log_util.h"
 #include "net/http/http_util.h"
+#include "net/log/net_log_capture_mode.h"
 
 namespace net {
 
@@ -89,9 +90,8 @@ void HttpRequestHeaders::Clear() {
 
 void HttpRequestHeaders::SetHeader(const base::StringPiece& key,
                                    const base::StringPiece& value) {
-  DCHECK(HttpUtil::IsValidHeaderName(key.as_string()));
-  // TODO(ricea): Revert this. See crbug.com/627398.
-  CHECK(HttpUtil::IsValidHeaderValue(value.as_string()));
+  DCHECK(HttpUtil::IsValidHeaderName(key));
+  DCHECK(HttpUtil::IsValidHeaderValue(value));
   HeaderVector::iterator it = FindHeader(key);
   if (it != headers_.end())
     it->value.assign(value.data(), value.size());
@@ -101,9 +101,8 @@ void HttpRequestHeaders::SetHeader(const base::StringPiece& key,
 
 void HttpRequestHeaders::SetHeaderIfMissing(const base::StringPiece& key,
                                             const base::StringPiece& value) {
-  DCHECK(HttpUtil::IsValidHeaderName(key.as_string()));
-  // TODO(ricea): Revert this. See crbug.com/627398.
-  CHECK(HttpUtil::IsValidHeaderValue(value.as_string()));
+  DCHECK(HttpUtil::IsValidHeaderName(key));
+  DCHECK(HttpUtil::IsValidHeaderValue(value));
   HeaderVector::iterator it = FindHeader(key);
   if (it == headers_.end())
     headers_.push_back(HeaderKeyValuePair(key, value));

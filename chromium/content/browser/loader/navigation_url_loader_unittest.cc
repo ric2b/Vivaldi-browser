@@ -20,6 +20,7 @@
 #include "content/browser/streams/stream_url_request_job.h"
 #include "content/common/navigation_params.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/navigation_ui_data.h"
 #include "content/public/browser/resource_context.h"
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
 #include "content/public/browser/stream_handle.h"
@@ -93,9 +94,8 @@ class NavigationURLLoaderTest : public testing::Test {
     job_factory_.SetProtocolHandler(
         "test", net::URLRequestTestJob::CreateProtocolHandler());
     job_factory_.SetProtocolHandler(
-        "blob",
-        base::WrapUnique(new StreamProtocolHandler(
-            StreamContext::GetFor(browser_context_.get())->registry())));
+        "blob", base::MakeUnique<StreamProtocolHandler>(
+                    StreamContext::GetFor(browser_context_.get())->registry()));
     request_context->set_job_factory(&job_factory_);
 
     // NavigationURLLoader is only used for browser-side navigations.
@@ -112,10 +112,11 @@ class NavigationURLLoaderTest : public testing::Test {
     common_params.url = url;
     std::unique_ptr<NavigationRequestInfo> request_info(
         new NavigationRequestInfo(common_params, begin_params, url,
-                                  url::Origin(url), true, false, -1));
+                                  url::Origin(url), true, false, false, -1));
 
-    return NavigationURLLoader::Create(
-        browser_context_.get(), std::move(request_info), nullptr, delegate);
+    return NavigationURLLoader::Create(browser_context_.get(),
+                                       std::move(request_info), nullptr,
+                                       nullptr, delegate);
   }
 
   // Helper function for fetching the body of a URL to a string.

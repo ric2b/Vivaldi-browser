@@ -8,11 +8,14 @@
 #include <memory>
 
 #include "ash/mus/disconnected_app_handler.h"
-#include "ash/mus/shelf_layout_manager_delegate.h"
 #include "ash/public/interfaces/container.mojom.h"
 #include "services/ui/public/cpp/window_observer.h"
 #include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "ui/display/display.h"
+
+namespace gfx {
+class Insets;
+}
 
 namespace shell {
 class Connector;
@@ -20,8 +23,6 @@ class Connector;
 
 namespace ash {
 
-class AlwaysOnTopController;
-class RootWindowControllerCommon;
 class WorkspaceLayoutManager;
 
 namespace mus {
@@ -35,19 +36,22 @@ class WmTestHelper;
 class WmWindowMus;
 
 // RootWindowController manages the windows and state for a single display.
-// RootWindowController is tied to the lifetime of the ui::Window it is
-// created with. It is assumed the RootWindowController is deleted once the
-// associated ui::Window is destroyed.
-class RootWindowController : public ShelfLayoutManagerDelegate {
+// RootWindowController takes ownership of the Window that it passed to it.
+class RootWindowController {
  public:
   RootWindowController(WindowManager* window_manager,
                        ui::Window* root,
                        const display::Display& display);
-  ~RootWindowController() override;
+  ~RootWindowController();
+
+  void Shutdown();
 
   shell::Connector* GetConnector();
 
   ui::Window* root() { return root_; }
+  WmRootWindowControllerMus* wm_root_window_controller() {
+    return wm_root_window_controller_.get();
+  }
 
   ui::Window* NewTopLevelWindow(
       std::map<std::string, std::vector<uint8_t>>* properties);
@@ -56,17 +60,11 @@ class RootWindowController : public ShelfLayoutManagerDelegate {
 
   WmWindowMus* GetWindowByShellWindowId(int id);
 
+  void SetWorkAreaInests(const gfx::Insets& insets);
+
   WindowManager* window_manager() { return window_manager_; }
 
   const display::Display& display() const { return display_; }
-
-  WorkspaceLayoutManager* workspace_layout_manager() {
-    return workspace_layout_manager_;
-  }
-
-  AlwaysOnTopController* always_on_top_controller() {
-    return always_on_top_controller_.get();
-  }
 
   WmShelfMus* wm_shelf() { return wm_shelf_.get(); }
 
@@ -77,9 +75,6 @@ class RootWindowController : public ShelfLayoutManagerDelegate {
   gfx::Rect CalculateDefaultBounds(ui::Window* window) const;
   gfx::Rect GetMaximizedWindowBounds() const;
 
-  // ShelfLayoutManagerDelegate:
-  void OnShelfWindowAvailable() override;
-
   // Creates the necessary set of layout managers in the shell windows.
   void CreateLayoutManagers();
 
@@ -89,16 +84,10 @@ class RootWindowController : public ShelfLayoutManagerDelegate {
 
   display::Display display_;
 
-  std::unique_ptr<RootWindowControllerCommon> root_window_controller_common_;
-
   std::unique_ptr<WmRootWindowControllerMus> wm_root_window_controller_;
   std::unique_ptr<WmShelfMus> wm_shelf_;
 
-  // Owned by the corresponding container.
-  WorkspaceLayoutManager* workspace_layout_manager_ = nullptr;
   std::map<ui::Window*, std::unique_ptr<LayoutManager>> layout_managers_;
-
-  std::unique_ptr<AlwaysOnTopController> always_on_top_controller_;
 
   std::unique_ptr<DisconnectedAppHandler> disconnected_app_handler_;
 

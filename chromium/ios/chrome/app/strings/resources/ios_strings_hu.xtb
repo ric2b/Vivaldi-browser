@@ -15,6 +15,7 @@
 <translation id="3335947283844343239">Bezárt lap megnyitása</translation>
 <translation id="3414292259312108062">A Chrome eltárolja ezt a jelszót a <ph name="BEGIN_LINK" />mentett Google-jelszavak<ph name="END_LINK" /> közé, és szükség esetén automatikusan beilleszti, így Önnek nem kell megjegyeznie.</translation>
 <translation id="3567664240939803299">Szeretné, hogy a Google Smart Lock mentse a webhely jelszavát?</translation>
+<translation id="3692781555820666866">Ha engedélyezve van, a cím- és keresősáv javaslatokat jelenít meg a közeli eszközök által sugárzott weboldalakról.</translation>
 <translation id="385051799172605136">Vissza</translation>
 <translation id="4121993058175073134">Net-export adatok küldéséhez, kérjük, konfigurálja e-mail fiókját a Beállítások alkalmazásban.</translation>
 <translation id="4399225372525667111">A Chrome nem tudja ellenőrizni, hogy az oldalhoz tartozó URL helyes-e.</translation>
@@ -34,5 +35,6 @@
 <translation id="7456847797759667638">Hely megnyitása...</translation>
 <translation id="7481312909269577407">Előre</translation>
 <translation id="7484580869648358686">Figyelem! Valami nincs rendben!</translation>
+<translation id="7588950540487816470">Fizikai web</translation>
 <translation id="7961015016161918242">Soha</translation>
 </translationbundle>

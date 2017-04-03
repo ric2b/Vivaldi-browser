@@ -27,6 +27,7 @@
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
+#include "gpu/command_buffer/service/progress_reporter.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_state_restorer.h"
@@ -315,6 +316,26 @@ GLuint ToGLuint(const void* ptr) {
 base::LazyInstance<const FormatTypeValidator>::Leaky g_format_type_validator =
     LAZY_INSTANCE_INITIALIZER;
 
+class ScopedResetPixelUnpackBuffer{
+ public:
+  explicit ScopedResetPixelUnpackBuffer(ContextState* state)
+      : buffer_(nullptr) {
+    buffer_ = state->bound_pixel_unpack_buffer.get();
+    if (buffer_) {
+      glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    }
+  }
+
+  ~ScopedResetPixelUnpackBuffer() {
+    if (buffer_) {
+      glBindBuffer(GL_PIXEL_UNPACK_BUFFER, buffer_->service_id());
+    }
+  }
+
+ private:
+    Buffer* buffer_;
+};
+
 }  // namespace anonymous
 
 TextureManager::DestructionObserver::DestructionObserver() {}
@@ -341,9 +362,16 @@ TextureManager::~TextureManager() {
 
 void TextureManager::Destroy(bool have_context) {
   have_context_ = have_context;
-  textures_.clear();
+
+  while (!textures_.empty()) {
+    textures_.erase(textures_.begin());
+    if (progress_reporter_)
+      progress_reporter_->ReportProgress();
+  }
   for (int ii = 0; ii < kNumDefaultTextures; ++ii) {
     default_textures_[ii] = NULL;
+    if (progress_reporter_)
+      progress_reporter_->ReportProgress();
   }
 
   if (have_context) {
@@ -353,10 +381,42 @@ void TextureManager::Destroy(bool have_context) {
   DCHECK_EQ(0u, memory_type_tracker_->GetMemRepresented());
 }
 
+TextureBase::TextureBase(GLuint service_id)
+    : service_id_(service_id), mailbox_manager_(nullptr) {}
+
+TextureBase::~TextureBase() {
+  DCHECK_EQ(nullptr, mailbox_manager_);
+}
+
+void TextureBase::DeleteFromMailboxManager() {
+  if (mailbox_manager_) {
+    mailbox_manager_->TextureDeleted(this);
+    mailbox_manager_ = nullptr;
+  }
+}
+
+void TextureBase::SetMailboxManager(MailboxManager* mailbox_manager) {
+  DCHECK(!mailbox_manager_ || mailbox_manager_ == mailbox_manager);
+  mailbox_manager_ = mailbox_manager;
+}
+
+TexturePassthrough::TexturePassthrough(GLuint service_id)
+    : TextureBase(service_id), have_context_(true) {}
+
+TexturePassthrough::~TexturePassthrough() {
+  DeleteFromMailboxManager();
+  if (have_context_) {
+    glDeleteTextures(1, &service_id_);
+  }
+}
+
+void TexturePassthrough::MarkContextLost() {
+  have_context_ = false;
+}
+
 Texture::Texture(GLuint service_id)
-    : mailbox_manager_(NULL),
+    : TextureBase(service_id),
       memory_tracking_ref_(NULL),
-      service_id_(service_id),
       owned_service_id_(service_id),
       cleared_(true),
       num_uncleared_mips_(0),
@@ -385,8 +445,7 @@ Texture::Texture(GLuint service_id)
       emulating_rgb_(false) {}
 
 Texture::~Texture() {
-  if (mailbox_manager_)
-    mailbox_manager_->TextureDeleted(this);
+  DeleteFromMailboxManager();
 }
 
 void Texture::AddTextureRef(TextureRef* ref) {
@@ -530,11 +589,17 @@ bool Texture::CanRenderWithSampler(const FeatureInfo* feature_info,
     const Texture::LevelInfo& first_level =
         face_infos_[0].level_infos[base_level_];
     if ((GLES2Util::GetChannelsForFormat(first_level.internal_format) &
-         (GLES2Util::kDepth | GLES2Util::kStencil)) != 0 ||
-        feature_info->validators()->compressed_texture_format.IsValid(
-            first_level.internal_format)) {
-      // TODO(zmo): The assumption that depth/stencil textures and compressed
-      // textures are all filterable may not be true in the future.
+         (GLES2Util::kDepth | GLES2Util::kStencil)) != 0) {
+      if (sampler_state.compare_mode == GL_NONE) {
+        // In ES2 with OES_depth_texture, such limitation isn't specified.
+        if (feature_info->IsES3Enabled()) {
+          return false;
+        }
+      }
+    } else if (feature_info->validators()->compressed_texture_format.IsValid(
+        first_level.internal_format)) {
+      // TODO(zmo): The assumption that compressed textures are all filterable
+      // may not be true in the future.
     } else {
       if (!Texture::TextureFilterable(feature_info,
                                       first_level.internal_format,
@@ -599,11 +664,6 @@ void Texture::AddToSignature(
   signature->append(TextureTag, sizeof(TextureTag));
   signature->append(reinterpret_cast<const char*>(&signature_data),
                     sizeof(signature_data));
-}
-
-void Texture::SetMailboxManager(MailboxManager* mailbox_manager) {
-  DCHECK(!mailbox_manager_ || mailbox_manager_ == mailbox_manager);
-  mailbox_manager_ = mailbox_manager;
 }
 
 void Texture::MarkMipmapsGenerated() {
@@ -1447,8 +1507,9 @@ bool Texture::ClearLevel(
     // For 3D textures, we always clear the entire texture.
     DCHECK(info.cleared_rect == gfx::Rect());
     bool cleared = decoder->ClearLevel3D(
-        this, info.target, info.level, info.format, info.type,
-        info.width, info.height, info.depth);
+        this, info.target, info.level,
+        TextureManager::AdjustTexFormat(decoder->GetFeatureInfo(), info.format),
+        info.type, info.width, info.height, info.depth);
     if (!cleared)
       return false;
   } else {
@@ -1486,8 +1547,10 @@ bool Texture::ClearLevel(
           // but only the decoder knows all the state (like unpack_alignment_)
           // that's needed to be able to call GL correctly.
           bool cleared = decoder->ClearLevel(
-              this, info.target, info.level, info.format, info.type,
-              rect.x(), rect.y(), rect.width(), rect.height());
+              this, info.target, info.level,
+              TextureManager::AdjustTexFormat(decoder->GetFeatureInfo(),
+                                              info.format),
+              info.type, rect.x(), rect.y(), rect.width(), rect.height());
           if (!cleared)
             return false;
         }
@@ -1731,7 +1794,8 @@ TextureManager::TextureManager(MemoryTracker* memory_tracker,
                                GLint max_rectangle_texture_size,
                                GLint max_3d_texture_size,
                                GLint max_array_texture_layers,
-                               bool use_default_textures)
+                               bool use_default_textures,
+                               ProgressReporter* progress_reporter)
     : memory_type_tracker_(new MemoryTypeTracker(memory_tracker)),
       memory_tracker_(memory_tracker),
       feature_info_(feature_info),
@@ -1759,13 +1823,19 @@ TextureManager::TextureManager(MemoryTracker* memory_tracker,
       num_images_(0),
       texture_count_(0),
       have_context_(true),
-      current_service_id_generation_(0) {
+      current_service_id_generation_(0),
+      progress_reporter_(progress_reporter) {
   for (int ii = 0; ii < kNumDefaultTextures; ++ii) {
     black_texture_ids_[ii] = 0;
   }
 }
 
 bool TextureManager::Initialize() {
+  // Reset PIXEL_UNPACK_BUFFER to avoid unrelated GL error on some GL drivers.
+  if (feature_info_->gl_version_info().is_es3_capable) {
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+  }
+
   // TODO(gman): The default textures have to be real textures, not the 0
   // texture because we simulate non shared resources on top of shared
   // resources and all contexts that share resource share the same default
@@ -2368,6 +2438,55 @@ bool TextureManager::ValidateTexImage(
   return true;
 }
 
+void TextureManager::DoCubeMapWorkaround(
+    DecoderTextureState* texture_state,
+    ContextState* state,
+    DecoderFramebufferState* framebuffer_state,
+    TextureRef* texture_ref,
+    const char* function_name,
+    const DoTexImageArguments& args) {
+  // This workaround code does not work with an unpack buffer bound.
+  ScopedResetPixelUnpackBuffer scoped_reset_pbo(state);
+
+  std::vector<GLenum> undefined_faces;
+  Texture* texture = texture_ref->texture();
+  if (texture_state->force_cube_complete) {
+    int width = 0;
+    int height = 0;
+    for (unsigned i = 0; i < 6; i++) {
+      GLenum target = static_cast<GLenum>(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i);
+      bool defined = texture->GetLevelSize(
+          target, args.level, &width, &height, nullptr);
+      if (!defined && target != args.target)
+        undefined_faces.push_back(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i);
+    }
+  } else {
+    DCHECK(args.target != GL_TEXTURE_CUBE_MAP_POSITIVE_X);
+    int width = 0;
+    int height = 0;
+    if (!texture->GetLevelSize(GL_TEXTURE_CUBE_MAP_POSITIVE_X, args.level,
+                               &width, &height, nullptr)) {
+      undefined_faces.push_back(GL_TEXTURE_CUBE_MAP_POSITIVE_X);
+    }
+  }
+  if (!memory_type_tracker_->EnsureGPUMemoryAvailable(
+          (undefined_faces.size() + 1) * args.pixels_size)) {
+    ERRORSTATE_SET_GL_ERROR(state->GetErrorState(), GL_OUT_OF_MEMORY,
+                            function_name, "out of memory");
+    return;
+  }
+  DoTexImageArguments new_args = args;
+  std::unique_ptr<char[]> zero(new char[args.pixels_size]);
+  memset(zero.get(), 0, args.pixels_size);
+  for (GLenum face : undefined_faces) {
+    new_args.target = face;
+    new_args.pixels = zero.get();
+    DoTexImage(texture_state, state, framebuffer_state,
+               function_name, texture_ref, new_args);
+    texture->MarkLevelAsInternalWorkaround(face, args.level);
+  }
+}
+
 void TextureManager::ValidateAndDoTexImage(
     DecoderTextureState* texture_state,
     ContextState* state,
@@ -2390,44 +2509,8 @@ void TextureManager::ValidateAndDoTexImage(
        (texture_state->force_cube_map_positive_x_allocation &&
         args.target != GL_TEXTURE_CUBE_MAP_POSITIVE_X));
   if (need_cube_map_workaround && !buffer) {
-    // TODO(zmo): The following code does not work with an unpack buffer bound.
-    std::vector<GLenum> undefined_faces;
-    if (texture_state->force_cube_complete) {
-      int width = 0;
-      int height = 0;
-      for (unsigned i = 0; i < 6; i++) {
-        GLenum target = static_cast<GLenum>(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i);
-        bool defined = texture->GetLevelSize(
-            target, args.level, &width, &height, nullptr);
-        if (!defined && target != args.target)
-          undefined_faces.push_back(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i);
-      }
-    } else {
-      DCHECK(texture_state->force_cube_map_positive_x_allocation &&
-             args.target != GL_TEXTURE_CUBE_MAP_POSITIVE_X);
-      int width = 0;
-      int height = 0;
-      if (!texture->GetLevelSize(GL_TEXTURE_CUBE_MAP_POSITIVE_X, args.level,
-                                 &width, &height, nullptr)) {
-        undefined_faces.push_back(GL_TEXTURE_CUBE_MAP_POSITIVE_X);
-      }
-    }
-    if (!memory_type_tracker_->EnsureGPUMemoryAvailable(
-            (undefined_faces.size() + 1) * args.pixels_size)) {
-      ERRORSTATE_SET_GL_ERROR(state->GetErrorState(), GL_OUT_OF_MEMORY,
-                              function_name, "out of memory");
-      return;
-    }
-    DoTexImageArguments new_args = args;
-    std::unique_ptr<char[]> zero(new char[args.pixels_size]);
-    memset(zero.get(), 0, args.pixels_size);
-    for (GLenum face : undefined_faces) {
-      new_args.target = face;
-      new_args.pixels = zero.get();
-      DoTexImage(texture_state, state, framebuffer_state,
-                 function_name, texture_ref, new_args);
-      texture->MarkLevelAsInternalWorkaround(face, args.level);
-    }
+    DoCubeMapWorkaround(texture_state, state, framebuffer_state,
+                        texture_ref, function_name, args);
   }
 
   if (texture_state->unpack_overlapping_rows_separately_unpack_buffer &&
@@ -3112,6 +3195,8 @@ void TextureManager::DumpTextureRef(base::trace_event::ProcessMemoryDump* pmd,
 
 GLenum TextureManager::ExtractFormatFromStorageFormat(GLenum internalformat) {
   switch (internalformat) {
+    case GL_COMPRESSED_R11_EAC:
+    case GL_COMPRESSED_SIGNED_R11_EAC:
     case GL_RED:
     case GL_R8:
     case GL_R8_SNORM:
@@ -3125,6 +3210,8 @@ GLenum TextureManager::ExtractFormatFromStorageFormat(GLenum internalformat) {
     case GL_R32UI:
     case GL_R32I:
       return GL_RED_INTEGER;
+    case GL_COMPRESSED_RG11_EAC:
+    case GL_COMPRESSED_SIGNED_RG11_EAC:
     case GL_RG:
     case GL_RG8:
     case GL_RG8_SNORM:
@@ -3142,6 +3229,9 @@ GLenum TextureManager::ExtractFormatFromStorageFormat(GLenum internalformat) {
     case GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG:
     case GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG:
     case GL_COMPRESSED_RGB_S3TC_DXT1_EXT:
+    case GL_COMPRESSED_RGB8_ETC2:
+    case GL_COMPRESSED_SRGB_S3TC_DXT1_EXT:
+    case GL_COMPRESSED_SRGB8_ETC2:
     case GL_ETC1_RGB8_OES:
     case GL_RGB:
     case GL_RGB8:
@@ -3164,11 +3254,18 @@ GLenum TextureManager::ExtractFormatFromStorageFormat(GLenum internalformat) {
       return GL_SRGB;
     case GL_ATC_RGBA_EXPLICIT_ALPHA_AMD:
     case GL_ATC_RGBA_INTERPOLATED_ALPHA_AMD:
+    case GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2:
+    case GL_COMPRESSED_RGBA8_ETC2_EAC:
     case GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG:
     case GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG:
     case GL_COMPRESSED_RGBA_S3TC_DXT1_EXT:
     case GL_COMPRESSED_RGBA_S3TC_DXT3_EXT:
     case GL_COMPRESSED_RGBA_S3TC_DXT5_EXT:
+    case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT:
+    case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT:
+    case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT:
+    case GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC:
+    case GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2:
     case GL_RGBA:
     case GL_RGBA8:
     case GL_SRGB8_ALPHA8:

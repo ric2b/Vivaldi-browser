@@ -1,0 +1,4 @@
+
+post_process_target("//components/history/core/browser:browser") {
+  public_deps += [ "//vivaldi/db" ]
+}

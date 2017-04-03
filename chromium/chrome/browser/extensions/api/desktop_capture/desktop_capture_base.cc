@@ -12,11 +12,11 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
-#include "chrome/browser/media/desktop_media_list_ash.h"
-#include "chrome/browser/media/desktop_streams_registry.h"
-#include "chrome/browser/media/media_capture_devices_dispatcher.h"
-#include "chrome/browser/media/native_desktop_media_list.h"
-#include "chrome/browser/media/tab_desktop_media_list.h"
+#include "chrome/browser/media/webrtc/desktop_media_list_ash.h"
+#include "chrome/browser/media/webrtc/desktop_streams_registry.h"
+#include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
+#include "chrome/browser/media/webrtc/native_desktop_media_list.h"
+#include "chrome/browser/media/webrtc/tab_desktop_media_list.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -133,8 +133,8 @@ bool DesktopCaptureChooseDesktopMediaFunctionBase::Execute(
     // Create a screens list.
     if (show_screens) {
 #if defined(USE_ASH)
-      screen_list = base::WrapUnique(
-          new DesktopMediaListAsh(DesktopMediaListAsh::SCREENS));
+      screen_list =
+          base::MakeUnique<DesktopMediaListAsh>(DesktopMediaListAsh::SCREENS);
 #endif
       if (!screen_list) {
         webrtc::DesktopCaptureOptions options =
@@ -143,16 +143,16 @@ bool DesktopCaptureChooseDesktopMediaFunctionBase::Execute(
         std::unique_ptr<webrtc::ScreenCapturer> screen_capturer(
             webrtc::ScreenCapturer::Create(options));
 
-        screen_list = base::WrapUnique(
-            new NativeDesktopMediaList(std::move(screen_capturer), nullptr));
+        screen_list = base::MakeUnique<NativeDesktopMediaList>(
+            std::move(screen_capturer), nullptr);
       }
     }
 
     // Create a windows list.
     if (show_windows) {
 #if defined(USE_ASH)
-      window_list = base::WrapUnique(
-          new DesktopMediaListAsh(DesktopMediaListAsh::WINDOWS));
+      window_list =
+          base::MakeUnique<DesktopMediaListAsh>(DesktopMediaListAsh::WINDOWS);
 #endif
       if (!window_list) {
         webrtc::DesktopCaptureOptions options =
@@ -161,13 +161,13 @@ bool DesktopCaptureChooseDesktopMediaFunctionBase::Execute(
         std::unique_ptr<webrtc::WindowCapturer> window_capturer(
             webrtc::WindowCapturer::Create(options));
 
-        window_list = base::WrapUnique(
-            new NativeDesktopMediaList(nullptr, std::move(window_capturer)));
+        window_list = base::MakeUnique<NativeDesktopMediaList>(
+            nullptr, std::move(window_capturer));
       }
     }
 
     if (show_tabs)
-      tab_list = base::WrapUnique(new TabDesktopMediaList());
+      tab_list = base::MakeUnique<TabDesktopMediaList>();
 
     DCHECK(screen_list || window_list || tab_list);
 
@@ -240,13 +240,14 @@ DesktopCaptureCancelChooseDesktopMediaFunctionBase::
 DesktopCaptureCancelChooseDesktopMediaFunctionBase::
     ~DesktopCaptureCancelChooseDesktopMediaFunctionBase() {}
 
-bool DesktopCaptureCancelChooseDesktopMediaFunctionBase::RunSync() {
+ExtensionFunction::ResponseAction
+DesktopCaptureCancelChooseDesktopMediaFunctionBase::Run() {
   int request_id;
   EXTENSION_FUNCTION_VALIDATE(args_->GetInteger(0, &request_id));
 
   DesktopCaptureRequestsRegistry::GetInstance()->CancelRequest(
       render_frame_host()->GetProcess()->GetID(), request_id);
-  return true;
+  return RespondNow(NoArguments());
 }
 
 DesktopCaptureRequestsRegistry::DesktopCaptureRequestsRegistry() {}

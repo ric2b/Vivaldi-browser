@@ -36,6 +36,8 @@ class InputHandlerWrapper : public ui::InputHandlerProxyClient {
     return &input_handler_proxy_;
   }
 
+  void NeedsMainFrame();
+
   // InputHandlerProxyClient implementation.
   void WillShutdown() override;
   void TransferActiveWheelFlingAnimation(
@@ -47,11 +49,10 @@ class InputHandlerWrapper : public ui::InputHandlerProxyClient {
       blink::WebGestureDevice deviceSource,
       const blink::WebFloatPoint& velocity,
       const blink::WebSize& cumulativeScroll) override;
-  void DidOverscroll(
-        const gfx::Vector2dF& accumulated_overscroll,
-        const gfx::Vector2dF& latest_overscroll_delta,
-        const gfx::Vector2dF& current_fling_velocity,
-        const gfx::PointF& causal_event_viewport_point) override;
+  void DidOverscroll(const gfx::Vector2dF& accumulated_overscroll,
+                     const gfx::Vector2dF& latest_overscroll_delta,
+                     const gfx::Vector2dF& current_fling_velocity,
+                     const gfx::PointF& causal_event_viewport_point) override;
   void DidStartFlinging() override;
   void DidStopFlinging() override;
   void DidAnimateForInput() override;

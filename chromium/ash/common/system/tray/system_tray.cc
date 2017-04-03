@@ -4,15 +4,17 @@
 
 #include "ash/common/system/tray/system_tray.h"
 
-#include "ash/common/ash_switches.h"
 #include "ash/common/key_event_watcher.h"
 #include "ash/common/login_status.h"
+#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shelf/wm_shelf_util.h"
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/system/cast/tray_cast.h"
 #include "ash/common/system/date/tray_date.h"
+#include "ash/common/system/tiles/tray_tiles.h"
+#include "ash/common/system/tray/system_tray_controller.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/system_tray_item.h"
 #include "ash/common/system/tray/tray_bubble_wrapper.h"
@@ -72,8 +74,9 @@ using views::TrayBubbleView;
 
 namespace ash {
 
-// The minimum width of the system tray menu width.
+// The minimum width of the system tray menu.
 const int kMinimumSystemTrayMenuWidth = 300;
+const int kMinimumSystemTrayMenuWidthMd = 332;
 
 // Class to initialize and manage the SystemTrayBubble and TrayBubbleWrapper
 // instances for a bubble.
@@ -208,11 +211,11 @@ void SystemTray::Shutdown() {
 }
 
 void SystemTray::CreateItems(SystemTrayDelegate* delegate) {
-  WmShell* wm_shell = WmShell::Get();
 #if !defined(OS_WIN)
   // Create user items for each possible user.
-  int maximum_user_profiles =
-      wm_shell->GetSessionStateDelegate()->GetMaximumNumberOfLoggedInUsers();
+  int maximum_user_profiles = WmShell::Get()
+                                  ->GetSessionStateDelegate()
+                                  ->GetMaximumNumberOfLoggedInUsers();
   for (int i = 0; i < maximum_user_profiles; i++)
     AddTrayItem(new TrayUser(this, i));
 
@@ -241,12 +244,6 @@ void SystemTray::CreateItems(SystemTrayDelegate* delegate) {
   AddTrayItem(new TrayBluetooth(this));
   tray_cast_ = new TrayCast(this);
   AddTrayItem(tray_cast_);
-  // TODO(jamescook): Remove this when mus has support for display management
-  // and we have a DisplayManager equivalent. See http://crbug.com/548429
-  std::unique_ptr<SystemTrayItem> tray_display =
-      delegate->CreateDisplayTrayItem(this);
-  if (tray_display)
-    AddTrayItem(tray_display.release());
   screen_capture_tray_item_ = new ScreenCaptureTrayItem(this);
   AddTrayItem(screen_capture_tray_item_);
   screen_share_tray_item_ = new ScreenShareTrayItem(this);
@@ -264,14 +261,15 @@ void SystemTray::CreateItems(SystemTrayDelegate* delegate) {
     AddTrayItem(tray_rotation_lock.release());
   AddTrayItem(new TraySettings(this));
   AddTrayItem(tray_update_);
+  if (MaterialDesignController::IsSystemTrayMenuMaterial())
+    AddTrayItem(new TrayTiles(this));
+  // TODO(tdanderson): Do not add |tray_date_| in material design.
   AddTrayItem(tray_date_);
 #elif defined(OS_WIN)
   AddTrayItem(tray_accessibility_);
   AddTrayItem(tray_update_);
   AddTrayItem(tray_date_);
 #endif
-
-  SetVisible(wm_shell->system_tray_delegate()->GetTrayVisibilityOnStartup());
 }
 
 void SystemTray::AddTrayItem(SystemTrayItem* item) {
@@ -423,6 +421,7 @@ bool SystemTray::IsMouseInNotificationBubble() const {
 bool SystemTray::CloseSystemBubble() const {
   if (!system_bubble_)
     return false;
+  CHECK(!activating_);
   system_bubble_->bubble()->Close();
   return true;
 }
@@ -541,7 +540,9 @@ void SystemTray::ShowItems(const std::vector<SystemTrayItem*>& items,
     full_system_tray_menu_ = items.size() > 1;
     // The menu width is fixed, and it is a per language setting.
     int menu_width = std::max(
-        kMinimumSystemTrayMenuWidth,
+        MaterialDesignController::IsSystemTrayMenuMaterial()
+            ? kMinimumSystemTrayMenuWidthMd
+            : kMinimumSystemTrayMenuWidth,
         WmShell::Get()->system_tray_delegate()->GetSystemTrayMenuWidth());
 
     TrayBubbleView::InitParams init_params(TrayBubbleView::ANCHOR_TYPE_TRAY,
@@ -565,7 +566,7 @@ void SystemTray::ShowItems(const std::vector<SystemTrayItem*>& items,
     // they are shown in a bubble by themselves.
     init_params.arrow_paint_type = views::BubbleBorder::PAINT_NORMAL;
     if (items.size() == 1 && items[0]->ShouldHideArrow())
-      init_params.arrow_paint_type = views::BubbleBorder::PAINT_TRANSPARENT;
+      init_params.arrow_paint_type = views::BubbleBorder::PAINT_NONE;
     SystemTrayBubble* bubble = new SystemTrayBubble(this, items, bubble_type);
 
     system_bubble_.reset(new SystemBubbleWrapper(bubble));
@@ -670,7 +671,7 @@ void SystemTray::UpdateWebNotifications() {
 base::string16 SystemTray::GetAccessibleTimeString(
     const base::Time& now) const {
   base::HourClockType hour_type =
-      WmShell::Get()->system_tray_delegate()->GetHourClockType();
+      WmShell::Get()->system_tray_controller()->hour_clock_type();
   return base::TimeFormatTimeOfDayWithHourClockType(now, hour_type,
                                                     base::kKeepAmPm);
 }
@@ -795,15 +796,22 @@ void SystemTray::CloseBubble(const ui::KeyEvent& key_event) {
 void SystemTray::ActivateAndStartNavigation(const ui::KeyEvent& key_event) {
   if (!system_bubble_)
     return;
+  activating_ = true;
   ActivateBubble();
-  if (!system_bubble_)
-    return;
+  activating_ = false;
+  // TODO(oshima): This is to troubleshoot the issue crbug.com/651242. Remove
+  // once the root cause is fixed.
+  CHECK(system_bubble_) << " the bubble was deleted while activaing it";
+
   views::Widget* widget = GetSystemBubble()->bubble_view()->GetWidget();
   widget->GetFocusManager()->OnKeyEvent(key_event);
 }
 
 void SystemTray::CreateKeyEventWatcher() {
   key_event_watcher_ = WmShell::Get()->CreateKeyEventWatcher();
+  // mustash does not yet support KeyEventWatcher. http://crbug.com/649600.
+  if (!key_event_watcher_)
+    return;
   key_event_watcher_->AddKeyEventCallback(
       ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE),
       base::Bind(&SystemTray::CloseBubble, base::Unretained(this)));
@@ -847,6 +855,7 @@ bool SystemTray::PerformAction(const ui::Event& event) {
 }
 
 void SystemTray::CloseSystemBubbleAndDeactivateSystemTray() {
+  CHECK(!activating_);
   activation_observer_.reset();
   key_event_watcher_.reset();
   system_bubble_.reset();

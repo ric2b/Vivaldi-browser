@@ -14,7 +14,7 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/stl_util.h"
+#include "base/memory/ptr_util.h"
 #include "ui/display/chromeos/x11/display_mode_x11.h"
 #include "ui/display/chromeos/x11/display_snapshot_x11.h"
 #include "ui/display/chromeos/x11/display_util_x11.h"
@@ -114,8 +114,6 @@ NativeDisplayDelegateX11::~NativeDisplayDelegateX11() {
     ui::PlatformEventSource::GetInstance()->RemovePlatformEventDispatcher(
         platform_event_dispatcher_.get());
   }
-
-  base::STLDeleteContainerPairSecondPointers(modes_.begin(), modes_.end());
 }
 
 void NativeDisplayDelegateX11::Initialize() {
@@ -282,10 +280,14 @@ void NativeDisplayDelegateX11::RemoveObserver(NativeDisplayObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
+display::FakeDisplayController*
+NativeDisplayDelegateX11::GetFakeDisplayController() {
+  return nullptr;
+}
+
 void NativeDisplayDelegateX11::InitModes() {
   CHECK(screen_) << "Server not grabbed";
 
-  base::STLDeleteContainerPairSecondPointers(modes_.begin(), modes_.end());
   modes_.clear();
 
   for (int i = 0; i < screen_->nmode; ++i) {
@@ -297,12 +299,10 @@ void NativeDisplayDelegateX11::InitModes() {
           (static_cast<float>(info.hTotal) * static_cast<float>(info.vTotal));
     }
 
-    modes_.insert(
-        std::make_pair(info.id,
-                       new DisplayModeX11(gfx::Size(info.width, info.height),
-                                          info.modeFlags & RR_Interlace,
-                                          refresh_rate,
-                                          info.id)));
+    modes_.insert(std::make_pair(
+        info.id, base::MakeUnique<DisplayModeX11>(
+                     gfx::Size(info.width, info.height),
+                     info.modeFlags & RR_Interlace, refresh_rate, info.id)));
   }
 }
 
@@ -312,7 +312,7 @@ DisplaySnapshotX11* NativeDisplayDelegateX11::InitDisplaySnapshot(
     std::set<RRCrtc>* last_used_crtcs,
     int index) {
   int64_t display_id = 0;
-  ui::EDIDParserX11 edid_parser(output);
+  display::EDIDParserX11 edid_parser(output);
   if (!edid_parser.GetDisplayId(static_cast<uint8_t>(index), &display_id))
     display_id = index;
 

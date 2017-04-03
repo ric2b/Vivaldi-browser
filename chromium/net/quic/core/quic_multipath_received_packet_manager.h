@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "net/base/net_export.h"
 #include "net/quic/core/quic_protocol.h"
 #include "net/quic/core/quic_received_packet_manager.h"
 
@@ -36,7 +37,6 @@ class NET_EXPORT_PRIVATE QuicMultipathReceivedPacketManager {
 
   // Records packet receipt information on path with |path_id|.
   void RecordPacketReceived(QuicPathId path_id,
-                            QuicByteCount bytes,
                             const QuicPacketHeader& header,
                             QuicTime receipt_time);
 

@@ -128,6 +128,10 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityCSSFontStyle) {
   RunCSSTest(FILE_PATH_LITERAL("font-style.html"));
 }
 
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityCSSFontFamily) {
+  RunCSSTest(FILE_PATH_LITERAL("font-family.html"));
+}
+
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityCSSLanguage) {
   RunCSSTest(FILE_PATH_LITERAL("language.html"));
 }
@@ -408,14 +412,14 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaMenuItem) {
 // crbug.com/442278 will stop creating new text elements representing title.
 // Re-baseline after the Blink change goes in
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
-                       DISABLED_AccessibilityAriaMenuItemCheckBox) {
+                       AccessibilityAriaMenuItemCheckBox) {
   RunAriaTest(FILE_PATH_LITERAL("aria-menuitemcheckbox.html"));
 }
 
 // crbug.com/442278 will stop creating new text elements representing title.
 // Re-baseline after the Blink change goes in
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
-                       DISABLED_AccessibilityAriaMenuItemRadio) {
+                       AccessibilityAriaMenuItemRadio) {
   RunAriaTest(FILE_PATH_LITERAL("aria-menuitemradio.html"));
 }
 
@@ -848,6 +852,12 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityFrameset) {
   RunHtmlTest(FILE_PATH_LITERAL("frameset.html"));
 }
 
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+                       AccessibilityFramesetPostEnable) {
+  enable_accessibility_after_navigating_ = true;
+  RunHtmlTest(FILE_PATH_LITERAL("frameset.html"));
+}
+
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityHead) {
   RunHtmlTest(FILE_PATH_LITERAL("head.html"));
 }
@@ -878,6 +888,12 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityI) {
 }
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityIframe) {
+  RunHtmlTest(FILE_PATH_LITERAL("iframe.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+                       AccessibilityIframePostEnable) {
+  enable_accessibility_after_navigating_ = true;
   RunHtmlTest(FILE_PATH_LITERAL("iframe.html"));
 }
 
@@ -956,6 +972,11 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityInputCheckBox) {
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
                        AccessibilityInputCheckBoxInMenu) {
   RunHtmlTest(FILE_PATH_LITERAL("input-checkbox-in-menu.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+                       AccessibilityInputCheckBoxLabel) {
+  RunHtmlTest(FILE_PATH_LITERAL("input-checkbox-label.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityInputColor) {

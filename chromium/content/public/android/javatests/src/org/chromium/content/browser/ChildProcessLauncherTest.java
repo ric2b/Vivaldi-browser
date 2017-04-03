@@ -16,6 +16,7 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.content.common.FileDescriptorInfo;
 
 import java.util.concurrent.Callable;
 
@@ -31,6 +32,12 @@ public class ChildProcessLauncherTest extends InstrumentationTestCase {
     private static final String EXTERNAL_APK_PACKAGE_NAME = "org.chromium.external.apk";
     private static final String DEFAULT_SANDBOXED_PROCESS_SERVICE =
             "org.chromium.content.app.SandboxedProcessService";
+
+    @Override
+    protected void setUp() throws Exception {
+        super.setUp();
+        LibraryLoader.get(LibraryProcessType.PROCESS_CHILD).ensureInitialized();
+    }
 
     /**
      *  Tests cleanup for a connection that fails to connect in the first place.
@@ -336,12 +343,5 @@ public class ChildProcessLauncherTest extends InstrumentationTestCase {
     private void triggerConnectionSetup(ChildProcessConnectionImpl connection) {
         ChildProcessLauncher.triggerConnectionSetup(connection, sProcessWaitArguments, 1,
                 new FileDescriptorInfo[0], ChildProcessLauncher.CALLBACK_FOR_RENDERER_PROCESS, 0);
-    }
-
-    @Override
-    protected void setUp() throws Exception {
-        super.setUp();
-        LibraryLoader.get(LibraryProcessType.PROCESS_CHILD)
-                .ensureInitialized(getInstrumentation().getTargetContext());
     }
 }

@@ -11,7 +11,7 @@
 #if defined(USE_AURA)
 #include "base/run_loop.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/common/mojo_shell_connection.h"
+#include "content/public/common/service_manager_connection.h"
 #include "services/shell/public/cpp/connector.h"
 #include "services/shell/runner/common/client_util.h"
 #include "services/ui/public/cpp/gpu_service.h"
@@ -45,12 +45,14 @@ void ChromeBrowserMainExtraPartsViews::ToolkitInitialized() {
 
 void ChromeBrowserMainExtraPartsViews::PreCreateThreads() {
 #if defined(USE_AURA) && !defined(OS_CHROMEOS)
-  display::Screen::SetScreenInstance(views::CreateDesktopScreen());
+  // The screen may have already been set in test initialization.
+  if (!display::Screen::GetScreen())
+    display::Screen::SetScreenInstance(views::CreateDesktopScreen());
 #endif
 }
 
-void ChromeBrowserMainExtraPartsViews::MojoShellConnectionStarted(
-    content::MojoShellConnection* connection) {
+void ChromeBrowserMainExtraPartsViews::ServiceManagerConnectionStarted(
+    content::ServiceManagerConnection* connection) {
   DCHECK(connection);
 #if defined(USE_AURA)
   if (shell::ShellIsRemote()) {
@@ -62,7 +64,7 @@ void ChromeBrowserMainExtraPartsViews::MojoShellConnectionStarted(
 
     input_device_client_.reset(new ui::InputDeviceClient());
     ui::mojom::InputDeviceServerPtr server;
-    connection->GetConnector()->ConnectToInterface("mojo:ui", &server);
+    connection->GetConnector()->ConnectToInterface("service:ui", &server);
     input_device_client_->Connect(std::move(server));
 
     window_manager_connection_ = views::WindowManagerConnection::Create(

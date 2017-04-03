@@ -10,11 +10,12 @@ import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.base.test.util.AdvancedMockContext;
 import org.chromium.base.test.util.DisabledTest;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.test.util.browser.signin.MockChangeEventChecker;
-import org.chromium.components.sync.signin.AccountManagerHelper;
-import org.chromium.components.sync.signin.ChromeSigninController;
-import org.chromium.components.sync.test.util.AccountHolder;
-import org.chromium.components.sync.test.util.MockAccountManager;
+import org.chromium.components.signin.AccountManagerHelper;
+import org.chromium.components.signin.ChromeSigninController;
+import org.chromium.components.signin.test.util.AccountHolder;
+import org.chromium.components.signin.test.util.MockAccountManager;
 
 /**
  * Instrumentation tests for {@link SigninHelper}.
@@ -35,6 +36,7 @@ public class SigninHelperTest extends InstrumentationTestCase {
     }
 
     @SmallTest
+    @RetryOnFailure
     public void testAccountsChangedPref() {
         assertEquals("Should never return true before the pref has ever been set.",
                 false, SigninHelper.checkAndClearAccountsChangedPref(mContext));
@@ -63,6 +65,7 @@ public class SigninHelperTest extends InstrumentationTestCase {
     }
 
     @SmallTest
+    @RetryOnFailure
     public void testSimpleAccountRename() {
         setSignedInAccountName("A");
         mEventChecker.insertRenameEvent("A", "B");
@@ -91,6 +94,7 @@ public class SigninHelperTest extends InstrumentationTestCase {
     }
 
     @SmallTest
+    @RetryOnFailure
     public void testNotSignedInAccountRename2() {
         setSignedInAccountName("A");
         mEventChecker.insertRenameEvent("B", "C");
@@ -100,6 +104,7 @@ public class SigninHelperTest extends InstrumentationTestCase {
     }
 
     @SmallTest
+    @RetryOnFailure
     public void testChainedAccountRename2() {
         setSignedInAccountName("A");
         mEventChecker.insertRenameEvent("Z", "Y"); // Unrelated.
@@ -112,6 +117,7 @@ public class SigninHelperTest extends InstrumentationTestCase {
     }
 
     @SmallTest
+    @RetryOnFailure
     public void testLoopedAccountRename() {
         setSignedInAccountName("A");
         mEventChecker.insertRenameEvent("Z", "Y"); // Unrelated.

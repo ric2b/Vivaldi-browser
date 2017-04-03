@@ -127,6 +127,10 @@ void CoreAudioDemuxer::Stop() {
   data_source_ = NULL;
 }
 
+void CoreAudioDemuxer::AbortPendingReads() {
+  url_protocol_->Abort();
+}
+
 DemuxerStream* CoreAudioDemuxer::GetStream(DemuxerStream::Type type) {
   switch (type) {
     case DemuxerStream::AUDIO:

@@ -10,16 +10,18 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/base/io_buffer.h"
 #include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
 #include "net/base/test_completion_callback.h"
+#include "net/log/net_log_event_type.h"
+#include "net/log/net_log_source.h"
 #include "net/log/test_net_log.h"
 #include "net/log/test_net_log_entry.h"
 #include "net/log/test_net_log_util.h"
@@ -169,7 +171,7 @@ void UDPSocketTest::ConnectTest(bool use_nonblocking_io) {
   CreateUDPAddress("127.0.0.1", kPort, &bind_address);
   TestNetLog server_log;
   std::unique_ptr<UDPServerSocket> server(
-      new UDPServerSocket(&server_log, NetLog::Source()));
+      new UDPServerSocket(&server_log, NetLogSource()));
   if (use_nonblocking_io)
     server->UseNonBlockingIO();
   server->AllowAddressReuse();
@@ -182,7 +184,7 @@ void UDPSocketTest::ConnectTest(bool use_nonblocking_io) {
   TestNetLog client_log;
   std::unique_ptr<UDPClientSocket> client(
       new UDPClientSocket(DatagramSocket::DEFAULT_BIND, RandIntCallback(),
-                          &client_log, NetLog::Source()));
+                          &client_log, NetLogSource()));
   if (use_nonblocking_io)
     client->UseNonBlockingIO();
 
@@ -231,33 +233,40 @@ void UDPSocketTest::ConnectTest(bool use_nonblocking_io) {
   server_log.GetEntries(&server_entries);
   EXPECT_EQ(5u, server_entries.size());
   EXPECT_TRUE(
-      LogContainsBeginEvent(server_entries, 0, NetLog::TYPE_SOCKET_ALIVE));
-  EXPECT_TRUE(LogContainsEvent(
-      server_entries, 1, NetLog::TYPE_UDP_BYTES_RECEIVED, NetLog::PHASE_NONE));
-  EXPECT_TRUE(LogContainsEvent(server_entries, 2, NetLog::TYPE_UDP_BYTES_SENT,
-                               NetLog::PHASE_NONE));
-  EXPECT_TRUE(LogContainsEvent(
-      server_entries, 3, NetLog::TYPE_UDP_BYTES_RECEIVED, NetLog::PHASE_NONE));
+      LogContainsBeginEvent(server_entries, 0, NetLogEventType::SOCKET_ALIVE));
+  EXPECT_TRUE(LogContainsEvent(server_entries, 1,
+                               NetLogEventType::UDP_BYTES_RECEIVED,
+                               NetLogEventPhase::NONE));
+  EXPECT_TRUE(LogContainsEvent(server_entries, 2,
+                               NetLogEventType::UDP_BYTES_SENT,
+                               NetLogEventPhase::NONE));
+  EXPECT_TRUE(LogContainsEvent(server_entries, 3,
+                               NetLogEventType::UDP_BYTES_RECEIVED,
+                               NetLogEventPhase::NONE));
   EXPECT_TRUE(
-      LogContainsEndEvent(server_entries, 4, NetLog::TYPE_SOCKET_ALIVE));
+      LogContainsEndEvent(server_entries, 4, NetLogEventType::SOCKET_ALIVE));
 
   // Check the client's log.
   TestNetLogEntry::List client_entries;
   client_log.GetEntries(&client_entries);
   EXPECT_EQ(7u, client_entries.size());
   EXPECT_TRUE(
-      LogContainsBeginEvent(client_entries, 0, NetLog::TYPE_SOCKET_ALIVE));
+      LogContainsBeginEvent(client_entries, 0, NetLogEventType::SOCKET_ALIVE));
   EXPECT_TRUE(
-      LogContainsBeginEvent(client_entries, 1, NetLog::TYPE_UDP_CONNECT));
-  EXPECT_TRUE(LogContainsEndEvent(client_entries, 2, NetLog::TYPE_UDP_CONNECT));
-  EXPECT_TRUE(LogContainsEvent(client_entries, 3, NetLog::TYPE_UDP_BYTES_SENT,
-                               NetLog::PHASE_NONE));
-  EXPECT_TRUE(LogContainsEvent(
-      client_entries, 4, NetLog::TYPE_UDP_BYTES_RECEIVED, NetLog::PHASE_NONE));
-  EXPECT_TRUE(LogContainsEvent(client_entries, 5, NetLog::TYPE_UDP_BYTES_SENT,
-                               NetLog::PHASE_NONE));
+      LogContainsBeginEvent(client_entries, 1, NetLogEventType::UDP_CONNECT));
   EXPECT_TRUE(
-      LogContainsEndEvent(client_entries, 6, NetLog::TYPE_SOCKET_ALIVE));
+      LogContainsEndEvent(client_entries, 2, NetLogEventType::UDP_CONNECT));
+  EXPECT_TRUE(LogContainsEvent(client_entries, 3,
+                               NetLogEventType::UDP_BYTES_SENT,
+                               NetLogEventPhase::NONE));
+  EXPECT_TRUE(LogContainsEvent(client_entries, 4,
+                               NetLogEventType::UDP_BYTES_RECEIVED,
+                               NetLogEventPhase::NONE));
+  EXPECT_TRUE(LogContainsEvent(client_entries, 5,
+                               NetLogEventType::UDP_BYTES_SENT,
+                               NetLogEventPhase::NONE));
+  EXPECT_TRUE(
+      LogContainsEndEvent(client_entries, 6, NetLogEventType::SOCKET_ALIVE));
 }
 
 TEST_F(UDPSocketTest, Connect) {
@@ -293,9 +302,9 @@ TEST_F(UDPSocketTest, Broadcast) {
 
   TestNetLog server1_log, server2_log;
   std::unique_ptr<UDPServerSocket> server1(
-      new UDPServerSocket(&server1_log, NetLog::Source()));
+      new UDPServerSocket(&server1_log, NetLogSource()));
   std::unique_ptr<UDPServerSocket> server2(
-      new UDPServerSocket(&server2_log, NetLog::Source()));
+      new UDPServerSocket(&server2_log, NetLogSource()));
   server1->AllowAddressReuse();
   server1->AllowBroadcast();
   server2->AllowAddressReuse();
@@ -356,19 +365,16 @@ class TestPrng {
 };
 
 TEST_F(UDPSocketTest, ConnectRandomBind) {
-  std::vector<UDPClientSocket*> sockets;
+  std::vector<std::unique_ptr<UDPClientSocket>> sockets;
   IPEndPoint peer_address;
   CreateUDPAddress("127.0.0.1", 53, &peer_address);
 
   // Create and connect sockets and save port numbers.
   std::deque<int> used_ports;
   for (int i = 0; i < kBindRetries; ++i) {
-    UDPClientSocket* socket =
-        new UDPClientSocket(DatagramSocket::DEFAULT_BIND,
-                            RandIntCallback(),
-                            NULL,
-                            NetLog::Source());
-    sockets.push_back(socket);
+    UDPClientSocket* socket = new UDPClientSocket(
+        DatagramSocket::DEFAULT_BIND, RandIntCallback(), NULL, NetLogSource());
+    sockets.push_back(base::WrapUnique(socket));
     EXPECT_THAT(socket->Connect(peer_address), IsOk());
 
     IPEndPoint client_address;
@@ -377,7 +383,6 @@ TEST_F(UDPSocketTest, ConnectRandomBind) {
   }
 
   // Free the last socket, its local port is still in |used_ports|.
-  delete sockets.back();
   sockets.pop_back();
 
   TestPrng test_prng(used_ports);
@@ -386,15 +391,13 @@ TEST_F(UDPSocketTest, ConnectRandomBind) {
 
   // Create a socket with random binding policy and connect.
   std::unique_ptr<UDPClientSocket> test_socket(new UDPClientSocket(
-      DatagramSocket::RANDOM_BIND, rand_int_cb, NULL, NetLog::Source()));
+      DatagramSocket::RANDOM_BIND, rand_int_cb, NULL, NetLogSource()));
   EXPECT_THAT(test_socket->Connect(peer_address), IsOk());
 
   // Make sure that the last port number in the |used_ports| was used.
   IPEndPoint client_address;
   EXPECT_THAT(test_socket->GetLocalAddress(&client_address), IsOk());
   EXPECT_EQ(used_ports.back(), client_address.port());
-
-  base::STLDeleteElements(&sockets);
 }
 
 // Return a privileged port (under 1024) so binding will fail.
@@ -416,7 +419,7 @@ TEST_F(UDPSocketTest, MAYBE_ConnectFail) {
 
   std::unique_ptr<UDPSocket> socket(new UDPSocket(DatagramSocket::RANDOM_BIND,
                                                   base::Bind(&PrivilegedRand),
-                                                  NULL, NetLog::Source()));
+                                                  NULL, NetLogSource()));
   int rv = socket->Open(peer_address.GetFamily());
   EXPECT_THAT(rv, IsOk());
   rv = socket->Connect(peer_address);
@@ -443,14 +446,14 @@ TEST_F(UDPSocketTest, VerifyConnectBindsAddr) {
   // Setup the first server to listen.
   IPEndPoint bind_address;
   CreateUDPAddress("127.0.0.1", kPort1, &bind_address);
-  UDPServerSocket server1(NULL, NetLog::Source());
+  UDPServerSocket server1(NULL, NetLogSource());
   server1.AllowAddressReuse();
   int rv = server1.Listen(bind_address);
   ASSERT_THAT(rv, IsOk());
 
   // Setup the second server to listen.
   CreateUDPAddress("127.0.0.1", kPort2, &bind_address);
-  UDPServerSocket server2(NULL, NetLog::Source());
+  UDPServerSocket server2(NULL, NetLogSource());
   server2.AllowAddressReuse();
   rv = server2.Listen(bind_address);
   ASSERT_THAT(rv, IsOk());
@@ -458,10 +461,8 @@ TEST_F(UDPSocketTest, VerifyConnectBindsAddr) {
   // Setup the client, connected to server 1.
   IPEndPoint server_address;
   CreateUDPAddress("127.0.0.1", kPort1, &server_address);
-  UDPClientSocket client(DatagramSocket::DEFAULT_BIND,
-                         RandIntCallback(),
-                         NULL,
-                         NetLog::Source());
+  UDPClientSocket client(DatagramSocket::DEFAULT_BIND, RandIntCallback(), NULL,
+                         NetLogSource());
   rv = client.Connect(server_address);
   EXPECT_THAT(rv, IsOk());
 
@@ -518,10 +519,8 @@ TEST_F(UDPSocketTest, ClientGetLocalPeerAddresses) {
     EXPECT_TRUE(ip_address.AssignFromIPLiteral(tests[i].local_address));
     IPEndPoint local_address(ip_address, 80);
 
-    UDPClientSocket client(DatagramSocket::DEFAULT_BIND,
-                           RandIntCallback(),
-                           NULL,
-                           NetLog::Source());
+    UDPClientSocket client(DatagramSocket::DEFAULT_BIND, RandIntCallback(),
+                           NULL, NetLogSource());
     int rv = client.Connect(remote_address);
     if (tests[i].may_fail && rv == ERR_ADDRESS_UNREACHABLE) {
       // Connect() may return ERR_ADDRESS_UNREACHABLE for IPv6
@@ -552,7 +551,7 @@ TEST_F(UDPSocketTest, ClientGetLocalPeerAddresses) {
 TEST_F(UDPSocketTest, ServerGetLocalAddress) {
   IPEndPoint bind_address;
   CreateUDPAddress("127.0.0.1", 0, &bind_address);
-  UDPServerSocket server(NULL, NetLog::Source());
+  UDPServerSocket server(NULL, NetLogSource());
   int rv = server.Listen(bind_address);
   EXPECT_THAT(rv, IsOk());
 
@@ -568,7 +567,7 @@ TEST_F(UDPSocketTest, ServerGetLocalAddress) {
 TEST_F(UDPSocketTest, ServerGetPeerAddress) {
   IPEndPoint bind_address;
   CreateUDPAddress("127.0.0.1", 0, &bind_address);
-  UDPServerSocket server(NULL, NetLog::Source());
+  UDPServerSocket server(NULL, NetLogSource());
   int rv = server.Listen(bind_address);
   EXPECT_THAT(rv, IsOk());
 
@@ -581,7 +580,7 @@ TEST_F(UDPSocketTest, ClientSetDoNotFragment) {
   for (std::string ip : {"127.0.0.1", "::1"}) {
     LOG(INFO) << "ip: " << ip;
     UDPClientSocket client(DatagramSocket::DEFAULT_BIND, RandIntCallback(),
-                           nullptr, NetLog::Source());
+                           nullptr, NetLogSource());
     IPAddress ip_address;
     EXPECT_TRUE(ip_address.AssignFromIPLiteral(ip));
     IPEndPoint remote_address(ip_address, 80);
@@ -605,7 +604,7 @@ TEST_F(UDPSocketTest, ServerSetDoNotFragment) {
     LOG(INFO) << "ip: " << ip;
     IPEndPoint bind_address;
     CreateUDPAddress(ip, 0, &bind_address);
-    UDPServerSocket server(nullptr, NetLog::Source());
+    UDPServerSocket server(nullptr, NetLogSource());
     int rv = server.Listen(bind_address);
     // May fail on IPv6 is IPv6 is not configure
     if (bind_address.address().IsIPv6() && rv == ERR_ADDRESS_INVALID)
@@ -625,7 +624,7 @@ TEST_F(UDPSocketTest, ServerSetDoNotFragment) {
 TEST_F(UDPSocketTest, CloseWithPendingRead) {
   IPEndPoint bind_address;
   CreateUDPAddress("127.0.0.1", 0, &bind_address);
-  UDPServerSocket server(NULL, NetLog::Source());
+  UDPServerSocket server(NULL, NetLogSource());
   int rv = server.Listen(bind_address);
   EXPECT_THAT(rv, IsOk());
 
@@ -657,10 +656,8 @@ TEST_F(UDPSocketTest, MAYBE_JoinMulticastGroup) {
   IPAddress group_ip;
   EXPECT_TRUE(group_ip.AssignFromIPLiteral(kGroup));
 
-  UDPSocket socket(DatagramSocket::DEFAULT_BIND,
-                   RandIntCallback(),
-                   NULL,
-                   NetLog::Source());
+  UDPSocket socket(DatagramSocket::DEFAULT_BIND, RandIntCallback(), NULL,
+                   NetLogSource());
   EXPECT_THAT(socket.Open(bind_address.GetFamily()), IsOk());
   EXPECT_THAT(socket.Bind(bind_address), IsOk());
   EXPECT_THAT(socket.JoinGroup(group_ip), IsOk());
@@ -678,10 +675,8 @@ TEST_F(UDPSocketTest, MulticastOptions) {
   IPEndPoint bind_address;
   CreateUDPAddress("0.0.0.0", kPort, &bind_address);
 
-  UDPSocket socket(DatagramSocket::DEFAULT_BIND,
-                   RandIntCallback(),
-                   NULL,
-                   NetLog::Source());
+  UDPSocket socket(DatagramSocket::DEFAULT_BIND, RandIntCallback(), NULL,
+                   NetLogSource());
   // Before binding.
   EXPECT_THAT(socket.SetMulticastLoopbackMode(false), IsOk());
   EXPECT_THAT(socket.SetMulticastLoopbackMode(true), IsOk());
@@ -705,10 +700,8 @@ TEST_F(UDPSocketTest, MulticastOptions) {
 TEST_F(UDPSocketTest, SetDSCP) {
   // Setup the server to listen.
   IPEndPoint bind_address;
-  UDPSocket client(DatagramSocket::DEFAULT_BIND,
-                   RandIntCallback(),
-                   NULL,
-                   NetLog::Source());
+  UDPSocket client(DatagramSocket::DEFAULT_BIND, RandIntCallback(), NULL,
+                   NetLogSource());
   // We need a real IP, but we won't actually send anything to it.
   CreateUDPAddress("8.8.8.8", 9999, &bind_address);
   int rv = client.Open(bind_address.GetFamily());
@@ -733,7 +726,7 @@ TEST_F(UDPSocketTest, SetDSCP) {
 
 TEST_F(UDPSocketTest, TestBindToNetwork) {
   UDPSocket socket(DatagramSocket::RANDOM_BIND, base::Bind(&PrivilegedRand),
-                   NULL, NetLog::Source());
+                   NULL, NetLogSource());
   ASSERT_EQ(OK, socket.Open(ADDRESS_FAMILY_IPV4));
   // Test unsuccessful binding, by attempting to bind to a bogus NetworkHandle.
   int rv = socket.BindToNetwork(65536);
@@ -862,10 +855,8 @@ TEST_F(UDPSocketTest, SetDSCPFake) {
   IPEndPoint bind_address;
   // We need a real IP, but we won't actually send anything to it.
   CreateUDPAddress("8.8.8.8", 9999, &bind_address);
-  UDPSocket client(DatagramSocket::DEFAULT_BIND,
-                   RandIntCallback(),
-                   NULL,
-                   NetLog::Source());
+  UDPSocket client(DatagramSocket::DEFAULT_BIND, RandIntCallback(), NULL,
+                   NetLogSource());
   int rv = client.SetDiffServCodePoint(DSCP_AF41);
   EXPECT_THAT(rv, IsError(ERR_SOCKET_NOT_CONNECTED));
 

@@ -16,7 +16,7 @@
 #include "net/base/address_family.h"
 #include "net/base/completion_callback.h"
 #include "net/base/net_export.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 #include "net/socket/socket_performance_watcher.h"
 
 namespace base {
@@ -29,6 +29,8 @@ class AddressList;
 class IOBuffer;
 class IPEndPoint;
 class SocketPosix;
+class NetLog;
+struct NetLogSource;
 
 class NET_EXPORT TCPSocketPosix {
  public:
@@ -37,7 +39,7 @@ class NET_EXPORT TCPSocketPosix {
   TCPSocketPosix(
       std::unique_ptr<SocketPerformanceWatcher> socket_performance_watcher,
       NetLog* net_log,
-      const NetLog::Source& source);
+      const NetLogSource& source);
   virtual ~TCPSocketPosix();
 
   int Open(AddressFamily family);
@@ -97,9 +99,9 @@ class NET_EXPORT TCPSocketPosix {
   //
   // TCPClientSocket may attempt to connect to multiple addresses until it
   // succeeds in establishing a connection. The corresponding log will have
-  // multiple NetLog::TYPE_TCP_CONNECT_ATTEMPT entries nested within a
-  // NetLog::TYPE_TCP_CONNECT. These methods set the start/end of
-  // NetLog::TYPE_TCP_CONNECT.
+  // multiple NetLogEventType::TCP_CONNECT_ATTEMPT entries nested within a
+  // NetLogEventType::TCP_CONNECT. These methods set the start/end of
+  // NetLogEventType::TCP_CONNECT.
   //
   // TODO(yzshen): Change logging format and let TCPClientSocket log the
   // start/end of a series of connect attempts itself.
@@ -108,7 +110,7 @@ class NET_EXPORT TCPSocketPosix {
 
   void SetTickClockForTesting(std::unique_ptr<base::TickClock> tick_clock);
 
-  const BoundNetLog& net_log() const { return net_log_; }
+  const NetLogWithSource& net_log() const { return net_log_; }
 
  private:
   // States that using a socket with TCP FastOpen can lead to.
@@ -246,7 +248,7 @@ class NET_EXPORT TCPSocketPosix {
 
   bool logging_multiple_connect_attempts_;
 
-  BoundNetLog net_log_;
+  NetLogWithSource net_log_;
 
   DISALLOW_COPY_AND_ASSIGN(TCPSocketPosix);
 };

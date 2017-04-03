@@ -23,7 +23,6 @@
 #include "chromecast/media/cma/backend/alsa/stream_mixer_alsa_input_impl.h"
 #include "media/base/audio_bus.h"
 #include "media/base/media_switches.h"
-#include "media/base/vector_math.h"
 
 #define RETURN_REPORT_ERROR(snd_func, ...)                        \
   do {                                                            \
@@ -764,6 +763,8 @@ bool StreamMixerAlsa::TryWriteFrames() {
     return false;
   }
 
+  const int min_frames_in_buffer =
+      output_samples_per_second_ * kMinBufferedDataMs / 1000;
   int chunk_size = output_samples_per_second_ * kMaxWriteSizeMs / 1000;
   std::vector<InputQueue*> active_inputs;
   for (auto&& input : inputs_) {
@@ -777,15 +778,13 @@ bool StreamMixerAlsa::TryWriteFrames() {
         return false;
       }
 
-      const int min_frames_in_buffer =
-          output_samples_per_second_ * kMinBufferedDataMs / 1000;
       int frames_in_buffer =
           alsa_buffer_size_ - alsa_->PcmStatusGetAvail(pcm_status_);
-      DCHECK_GE(frames_in_buffer, 0);
       if (alsa_->PcmStatusGetState(pcm_status_) == SND_PCM_STATE_XRUN ||
           frames_in_buffer < min_frames_in_buffer) {
         // If there has been (or soon will be) an underrun, continue without the
         // empty primary input stream.
+        input->OnSkipped();
         continue;
       }
 
@@ -794,16 +793,13 @@ bool StreamMixerAlsa::TryWriteFrames() {
           FROM_HERE, base::TimeDelta::FromMilliseconds(kMinBufferedDataMs / 2),
           base::Bind(&StreamMixerAlsa::WriteFrames, base::Unretained(this)));
       return false;
+    } else {
+      input->OnSkipped();
     }
   }
 
   if (active_inputs.empty()) {
-    // No inputs have any data to provide.
-    if (!inputs_.empty()) {
-      return false;  // If there are some inputs, don't fill with silence.
-    }
-
-    // If we have no inputs, fill with silence to avoid underrun.
+    // No inputs have any data to provide. Fill with silence to avoid underrun.
     chunk_size = kPreventUnderrunChunkSize;
     if (!mixed_ || mixed_->frames() < chunk_size) {
       mixed_ = ::media::AudioBus::Create(kNumOutputChannels, chunk_size);
@@ -830,10 +826,8 @@ bool StreamMixerAlsa::TryWriteFrames() {
   for (InputQueue* input : active_inputs) {
     input->GetResampledData(temp_.get(), chunk_size);
     for (int c = 0; c < kNumOutputChannels; ++c) {
-      float volume_scalar = input->volume_multiplier();
-      DCHECK(volume_scalar >= 0.0 && volume_scalar <= 1.0) << volume_scalar;
-      ::media::vector_math::FMAC(temp_->channel(c), volume_scalar, chunk_size,
-                                 mixed_->channel(c));
+      input->VolumeScaleAccumulate(c, temp_->channel(c), chunk_size,
+                                   mixed_->channel(c));
     }
   }
 

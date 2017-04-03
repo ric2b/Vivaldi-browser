@@ -10,6 +10,7 @@ import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
 import android.opengl.GLES20;
 import android.os.Build;
+import android.util.SparseArray;
 
 import org.chromium.base.Log;
 import org.chromium.base.annotations.JNINamespace;
@@ -32,6 +33,27 @@ public abstract class VideoCaptureCamera
         extends VideoCapture implements android.hardware.Camera.PreviewCallback {
     private static final String TAG = "VideoCapture";
     protected static final int GL_TEXTURE_EXTERNAL_OES = 0x8D65;
+
+    // Map of the equivalent color temperature in Kelvin for the White Balance setting. The
+    // values are a mixture of educated guesses and data from Android's Camera2 API. The
+    // temperatures must be ordered increasingly.
+    private static final SparseArray<String> COLOR_TEMPERATURES_MAP;
+    static {
+        COLOR_TEMPERATURES_MAP = new SparseArray<String>();
+        COLOR_TEMPERATURES_MAP.append(
+                2850, android.hardware.Camera.Parameters.WHITE_BALANCE_INCANDESCENT);
+        COLOR_TEMPERATURES_MAP.append(
+                2940, android.hardware.Camera.Parameters.WHITE_BALANCE_WARM_FLUORESCENT);
+        COLOR_TEMPERATURES_MAP.append(
+                3000, android.hardware.Camera.Parameters.WHITE_BALANCE_TWILIGHT);
+        COLOR_TEMPERATURES_MAP.append(
+                4230, android.hardware.Camera.Parameters.WHITE_BALANCE_FLUORESCENT);
+        COLOR_TEMPERATURES_MAP.append(
+                6000, android.hardware.Camera.Parameters.WHITE_BALANCE_CLOUDY_DAYLIGHT);
+        COLOR_TEMPERATURES_MAP.append(
+                6504, android.hardware.Camera.Parameters.WHITE_BALANCE_DAYLIGHT);
+        COLOR_TEMPERATURES_MAP.append(7000, android.hardware.Camera.Parameters.WHITE_BALANCE_SHADE);
+    };
 
     private final Object mPhotoTakenCallbackLock = new Object();
 
@@ -73,6 +95,19 @@ public abstract class VideoCaptureCamera
             return null;
         }
         return parameters;
+    }
+
+    private String getClosestWhiteBalance(int colorTemperature) {
+        int minDiff = Integer.MAX_VALUE;
+        String matchedTemperature = null;
+
+        for (int i = 0; i < COLOR_TEMPERATURES_MAP.size(); ++i) {
+            final int diff = Math.abs(colorTemperature - COLOR_TEMPERATURES_MAP.keyAt(i));
+            if (diff >= minDiff) continue;
+            minDiff = diff;
+            matchedTemperature = COLOR_TEMPERATURES_MAP.valueAt(i);
+        }
+        return matchedTemperature;
     }
 
     private class CrErrorCallback implements android.hardware.Camera.ErrorCallback {
@@ -342,7 +377,7 @@ public abstract class VideoCaptureCamera
 
         // Classify the Focus capabilities. In CONTINUOUS and SINGLE_SHOT, we can call
         // autoFocus(AutoFocusCallback) to configure region(s) to focus onto.
-        int jniFocusMode = AndroidMeteringMode.UNAVAILABLE;
+        int jniFocusMode = AndroidMeteringMode.NONE;
         if (focusMode.equals(android.hardware.Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO)
                 || focusMode.equals(
                            android.hardware.Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE)
@@ -360,22 +395,72 @@ public abstract class VideoCaptureCamera
         // Exposure is usually continuously updated except it not available at all, or if the
         // exposure compensation is locked, in which case we consider it as FIXED.
         int jniExposureMode = parameters.getMaxNumMeteringAreas() == 0
-                ? AndroidMeteringMode.UNAVAILABLE
+                ? AndroidMeteringMode.NONE
                 : AndroidMeteringMode.CONTINUOUS;
         if (parameters.isAutoExposureLockSupported() && parameters.getAutoExposureLock()) {
             jniExposureMode = AndroidMeteringMode.FIXED;
         }
         builder.setExposureMode(jniExposureMode);
 
-        // TODO(mcasas): https://crbug.com/518807 read the exposure compensation min and max
-        // values using getMinExposureCompensation() and getMaxExposureCompensation().
+        final float step = parameters.getExposureCompensationStep();
+        builder.setMinExposureCompensation(
+                Math.round(parameters.getMinExposureCompensation() * step * 100));
+        builder.setMaxExposureCompensation(
+                Math.round(parameters.getMaxExposureCompensation() * step * 100));
+        builder.setCurrentExposureCompensation(
+                Math.round(parameters.getExposureCompensation() * step * 100));
+
+        int jniWhiteBalanceMode = AndroidMeteringMode.NONE;
+        if (parameters.isAutoWhiteBalanceLockSupported()
+                && parameters.getSupportedWhiteBalance() != null) {
+            jniWhiteBalanceMode = parameters.getWhiteBalance()
+                            == android.hardware.Camera.Parameters.WHITE_BALANCE_AUTO
+                    ? AndroidMeteringMode.CONTINUOUS
+                    : AndroidMeteringMode.FIXED;
+        }
+        builder.setWhiteBalanceMode(jniWhiteBalanceMode);
+
+        builder.setMinColorTemperature(COLOR_TEMPERATURES_MAP.keyAt(0));
+        builder.setMaxColorTemperature(
+                COLOR_TEMPERATURES_MAP.keyAt(COLOR_TEMPERATURES_MAP.size() - 1));
+        if (jniWhiteBalanceMode == AndroidMeteringMode.FIXED) {
+            final int index = COLOR_TEMPERATURES_MAP.indexOfValue(parameters.getWhiteBalance());
+            if (index >= 0) builder.setCurrentColorTemperature(COLOR_TEMPERATURES_MAP.keyAt(index));
+        }
+
+        if (parameters.getSupportedFlashModes() == null) {
+            builder.setFillLightMode(AndroidFillLightMode.NONE);
+        } else {
+            switch (parameters.getFlashMode()) {
+                case android.hardware.Camera.Parameters.FLASH_MODE_OFF:
+                    builder.setFillLightMode(AndroidFillLightMode.OFF);
+                    break;
+                case android.hardware.Camera.Parameters.FLASH_MODE_AUTO:
+                    builder.setFillLightMode(AndroidFillLightMode.AUTO);
+                    break;
+                case android.hardware.Camera.Parameters.FLASH_MODE_RED_EYE:
+                    builder.setRedEyeReduction(true);
+                    builder.setFillLightMode(AndroidFillLightMode.AUTO);
+                    break;
+                case android.hardware.Camera.Parameters.FLASH_MODE_ON:
+                    builder.setFillLightMode(AndroidFillLightMode.FLASH);
+                    break;
+                case android.hardware.Camera.Parameters.FLASH_MODE_TORCH:
+                    builder.setFillLightMode(AndroidFillLightMode.TORCH);
+                    break;
+                default:
+                    builder.setFillLightMode(AndroidFillLightMode.NONE);
+            }
+        }
 
         return builder.build();
     }
 
     @Override
     public void setPhotoOptions(int zoom, int focusMode, int exposureMode, int width, int height,
-            float[] pointsOfInterest2D) {
+            float[] pointsOfInterest2D, boolean hasExposureCompensation, int exposureCompensation,
+            int whiteBalanceMode, int iso, boolean hasRedEyeReduction, boolean redEyeReduction,
+            int fillLightMode, int colorTemperature) {
         android.hardware.Camera.Parameters parameters = getCameraParameters(mCamera);
 
         if (parameters.isZoomSupported() && zoom > 0) {
@@ -402,12 +487,10 @@ public abstract class VideoCaptureCamera
         if (parameters.isAutoExposureLockSupported()) {
             if (exposureMode == AndroidMeteringMode.FIXED) {
                 parameters.setAutoExposureLock(true);
-            } else if (exposureMode != AndroidMeteringMode.UNAVAILABLE) {
+            } else if (exposureMode != AndroidMeteringMode.NONE) {
                 parameters.setAutoExposureLock(false);
             }
         }
-        // TODO(mcasas): https://crbug.com/518807 set the exposure compensation.
-
         if (width > 0) mPhotoWidth = width;
         if (height > 0) mPhotoHeight = height;
 
@@ -415,14 +498,15 @@ public abstract class VideoCaptureCamera
         if (mAreaOfInterest != null && !mAreaOfInterest.rect.isEmpty() && zoom > 0) {
             mAreaOfInterest = null;
         }
-        // Also clear |mAreaOfInterest| if the user sets it as UNAVAILABLE.
-        if (focusMode == AndroidMeteringMode.UNAVAILABLE
-                || exposureMode == AndroidMeteringMode.UNAVAILABLE) {
+        // Also clear |mAreaOfInterest| if the user sets it as NONE.
+        if (focusMode == AndroidMeteringMode.NONE || exposureMode == AndroidMeteringMode.NONE) {
             mAreaOfInterest = null;
         }
 
         // Update |mAreaOfInterest| if the camera supports and there are |pointsOfInterest2D|.
-        if (parameters.getMaxNumMeteringAreas() > 0 && pointsOfInterest2D.length > 0) {
+        final boolean pointsOfInterestSupported =
+                parameters.getMaxNumMeteringAreas() > 0 || parameters.getMaxNumFocusAreas() > 0;
+        if (pointsOfInterestSupported && pointsOfInterest2D.length > 0) {
             assert pointsOfInterest2D.length == 1 : "Only 1 point of interest supported";
             assert pointsOfInterest2D[0] <= 1.0 && pointsOfInterest2D[0] >= 0.0;
             assert pointsOfInterest2D[1] <= 1.0 && pointsOfInterest2D[1] >= 0.0;
@@ -440,7 +524,6 @@ public abstract class VideoCaptureCamera
                             Math.min(1000, centerX + regionWidth / 2),
                             Math.min(1000, centerY + regionHeight / 2)),
                     weight);
-
             Log.d(TAG, "Area of interest %s", mAreaOfInterest.rect.toString());
         }
         if (mAreaOfInterest != null) {
@@ -448,7 +531,58 @@ public abstract class VideoCaptureCamera
             parameters.setMeteringAreas(Arrays.asList(mAreaOfInterest));
         }
 
-        mCamera.setParameters(parameters);
+        if (hasExposureCompensation) {
+            final int unnormalizedExposureCompensation = Math.round(
+                    exposureCompensation / 100.0f / parameters.getExposureCompensationStep());
+            parameters.setExposureCompensation(unnormalizedExposureCompensation);
+        }
+
+        // |iso| setting is not supported, see explanation in getPhotoCapabilities().
+
+        // White Balance mode AndroidMeteringMode.SINGLE_SHOT is not supported.
+        // TODO(mcasas): support FIXED mode, i.e. the scene mode.
+        if (whiteBalanceMode == AndroidMeteringMode.CONTINUOUS
+                && parameters.getSupportedWhiteBalance() != null) {
+            // setWhiteBalance() will release the lock set with setAutoWhiteBalanceLock(), if any.
+            parameters.setWhiteBalance(android.hardware.Camera.Parameters.WHITE_BALANCE_AUTO);
+        } else if (whiteBalanceMode == AndroidMeteringMode.FIXED
+                && parameters.isAutoWhiteBalanceLockSupported()) {
+            parameters.setAutoWhiteBalanceLock(true);
+            if (colorTemperature > 0) {
+                final String closestSetting = getClosestWhiteBalance(colorTemperature);
+                if (closestSetting != null) parameters.setWhiteBalance(closestSetting);
+            }
+        }
+
+        // NONE is only used for getting capabilities, to signify "no flash unit". Ignore it.
+        if (parameters.getSupportedFlashModes() != null
+                && fillLightMode != AndroidFillLightMode.NOT_SET
+                && fillLightMode != AndroidFillLightMode.NONE) {
+            switch (fillLightMode) {
+                case AndroidFillLightMode.OFF:
+                    parameters.setFlashMode(android.hardware.Camera.Parameters.FLASH_MODE_OFF);
+                    break;
+                case AndroidFillLightMode.AUTO:
+                    parameters.setFlashMode(hasRedEyeReduction && redEyeReduction
+                                    ? android.hardware.Camera.Parameters.FLASH_MODE_RED_EYE
+                                    : android.hardware.Camera.Parameters.FLASH_MODE_AUTO);
+                    break;
+                case AndroidFillLightMode.FLASH:
+                    parameters.setFlashMode(android.hardware.Camera.Parameters.FLASH_MODE_ON);
+                    break;
+                case AndroidFillLightMode.TORCH:
+                    parameters.setFlashMode(android.hardware.Camera.Parameters.FLASH_MODE_TORCH);
+                    break;
+                default:
+            }
+        }
+
+        try {
+            mCamera.setParameters(parameters);
+        } catch (RuntimeException ex) {
+            Log.e(TAG, "setParameters: ", ex);
+            return;
+        }
 
         if (focusMode != AndroidMeteringMode.SINGLE_SHOT) return;
         mCamera.autoFocus(new android.hardware.Camera.AutoFocusCallback() {

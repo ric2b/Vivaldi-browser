@@ -7,65 +7,90 @@
 
 #include "WebCommon.h"
 #include "WebString.h"
+#include "WebVector.h"
+
+#include <memory>
+#include <string>
+#include <vector>
 
 namespace blink {
 
-class WebRTCStatsMemberIterator;
+class WebRTCStats;
 class WebRTCStatsMember;
 
-enum WebRTCStatsType {
-    WebRTCStatsTypeUnknown
-};
-
-enum WebRTCStatsMemberName {
-    WebRTCStatsMemberNameUnknown
-};
-
 enum WebRTCStatsMemberType {
-    WebRTCStatsMemberTypeInt,
-    WebRTCStatsMemberTypeInt64,
-    WebRTCStatsMemberTypeFloat,
-    WebRTCStatsMemberTypeString,
-    WebRTCStatsMemberTypeBool,
-    WebRTCStatsMemberTypeId,
+  WebRTCStatsMemberTypeInt32,   // int32_t
+  WebRTCStatsMemberTypeUint32,  // uint32_t
+  WebRTCStatsMemberTypeInt64,   // int64_t
+  WebRTCStatsMemberTypeUint64,  // uint64_t
+  WebRTCStatsMemberTypeDouble,  // double
+  WebRTCStatsMemberTypeString,  // WebString
+
+  WebRTCStatsMemberTypeSequenceInt32,   // WebVector<int32_t>
+  WebRTCStatsMemberTypeSequenceUint32,  // WebVector<uint32_t>
+  WebRTCStatsMemberTypeSequenceInt64,   // WebVector<int64_t>
+  WebRTCStatsMemberTypeSequenceUint64,  // WebVector<uint64_t>
+  WebRTCStatsMemberTypeSequenceDouble,  // WebVector<double>
+  WebRTCStatsMemberTypeSequenceString,  // WebVector<WebString>
+};
+
+class WebRTCStatsReport {
+ public:
+  virtual ~WebRTCStatsReport() {}
+  // Creates a new report object that is a handle to the same underlying stats
+  // report (the stats are not copied). The new report's iterator is reset,
+  // useful when needing multiple iterators.
+  virtual std::unique_ptr<WebRTCStatsReport> copyHandle() const = 0;
+
+  // Gets stats object by |id|, or null if no stats with that |id| exists.
+  virtual std::unique_ptr<WebRTCStats> getStats(WebString id) const = 0;
+  // The next stats object, or null if the end has been reached.
+  virtual std::unique_ptr<WebRTCStats> next() = 0;
 };
 
 class WebRTCStats {
-public:
-    virtual ~WebRTCStats() {}
+ public:
+  virtual ~WebRTCStats() {}
 
-    virtual WebString id() const = 0;
-    virtual WebRTCStatsType type() const = 0;
-    virtual WebString typeToString() const = 0;
-    virtual double timestamp() const = 0;
+  virtual WebString id() const = 0;
+  virtual WebString type() const = 0;
+  virtual double timestamp() const = 0;
 
-    // The caller owns the iterator. The iterator must not be used after
-    // the |WebRTCStats| that created it is destroyed.
-    virtual WebRTCStatsMemberIterator* iterator() const = 0;
+  virtual size_t membersCount() const = 0;
+  virtual std::unique_ptr<WebRTCStatsMember> getMember(size_t) const = 0;
 };
 
-class WebRTCStatsMemberIterator {
-public:
-    virtual ~WebRTCStatsMemberIterator() {}
-    virtual bool isEnd() const = 0;
-    virtual void next() = 0;
+class WebRTCStatsMember {
+ public:
+  virtual ~WebRTCStatsMember() {}
 
-    virtual WebRTCStatsMemberName name() const = 0;
-    virtual WebString displayName() const = 0;
+  virtual WebString name() const = 0;
+  virtual WebRTCStatsMemberType type() const = 0;
+  virtual bool isDefined() const = 0;
 
-    virtual WebRTCStatsMemberType type() const = 0;
-    // Value getters. No conversion is performed; the function must match the
-    // member's |type|.
-    virtual int valueInt() const = 0; // WebRTCStatsMemberTypeInt
-    virtual int64_t valueInt64() const = 0; // WebRTCStatsMemberTypeInt64
-    virtual float valueFloat() const = 0; // WebRTCStatsMemberTypeFloat
-    virtual WebString valueString() const = 0; // WebRTCStatsMemberTypeString
-    virtual bool valueBool() const = 0; // WebRTCStatsMemberTypeBool
-
-    // Converts the value to string (regardless of |type|).
-    virtual WebString valueToString() const = 0;
+  // Value getters. No conversion is performed; the function must match the
+  // member's |type|.
+  virtual int32_t valueInt32() const = 0;
+  virtual uint32_t valueUint32() const = 0;
+  virtual int64_t valueInt64() const = 0;
+  virtual uint64_t valueUint64() const = 0;
+  virtual double valueDouble() const = 0;
+  virtual WebString valueString() const = 0;
+  virtual WebVector<int32_t> valueSequenceInt32() const = 0;
+  virtual WebVector<uint32_t> valueSequenceUint32() const = 0;
+  virtual WebVector<int64_t> valueSequenceInt64() const = 0;
+  virtual WebVector<uint64_t> valueSequenceUint64() const = 0;
+  virtual WebVector<double> valueSequenceDouble() const = 0;
+  virtual WebVector<WebString> valueSequenceString() const = 0;
 };
 
-} // namespace blink
+class WebRTCStatsReportCallback {
+ public:
+  virtual ~WebRTCStatsReportCallback() {}
 
-#endif // WebRTCStats_h
+  virtual void OnStatsDelivered(std::unique_ptr<WebRTCStatsReport>) = 0;
+};
+
+}  // namespace blink
+
+#endif  // WebRTCStats_h

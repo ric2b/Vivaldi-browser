@@ -32,18 +32,24 @@
 
 namespace blink {
 
-PassRefPtr<AnimatableValue> AnimatableLengthPoint::interpolateTo(const AnimatableValue* value, double fraction) const
-{
-    const AnimatableLengthPoint* lengthPoint = toAnimatableLengthPoint(value);
-    return AnimatableLengthPoint::create(
-        AnimatableValue::interpolate(this->x(), lengthPoint->x(), fraction),
-        AnimatableValue::interpolate(this->y(), lengthPoint->y(), fraction));
+bool AnimatableLengthPoint::usesDefaultInterpolationWith(
+    const AnimatableValue* value) const {
+  const AnimatableLengthPoint* other = toAnimatableLengthPoint(value);
+  return this->x()->isUnknown() || other->x()->isUnknown();
 }
 
-bool AnimatableLengthPoint::equalTo(const AnimatableValue* value) const
-{
-    const AnimatableLengthPoint* lengthPoint = toAnimatableLengthPoint(value);
-    return x()->equals(lengthPoint->x()) && y()->equals(lengthPoint->y());
+PassRefPtr<AnimatableValue> AnimatableLengthPoint::interpolateTo(
+    const AnimatableValue* value,
+    double fraction) const {
+  const AnimatableLengthPoint* lengthPoint = toAnimatableLengthPoint(value);
+  return AnimatableLengthPoint::create(
+      AnimatableValue::interpolate(this->x(), lengthPoint->x(), fraction),
+      AnimatableValue::interpolate(this->y(), lengthPoint->y(), fraction));
 }
 
-} // namespace blink
+bool AnimatableLengthPoint::equalTo(const AnimatableValue* value) const {
+  const AnimatableLengthPoint* lengthPoint = toAnimatableLengthPoint(value);
+  return x()->equals(lengthPoint->x()) && y()->equals(lengthPoint->y());
+}
+
+}  // namespace blink

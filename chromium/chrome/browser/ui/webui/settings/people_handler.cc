@@ -13,7 +13,7 @@
 #include "base/i18n/time_formatting.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -37,20 +37,21 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_error_controller.h"
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "components/signin/core/browser/signin_metrics.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "components/signin/core/common/signin_pref_names.h"
+#include "components/strings/grit/components_strings.h"
+#include "components/sync/base/passphrase_type.h"
 #include "components/sync/driver/sync_prefs.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/gaia_constants.h"
-#include "grit/components_strings.h"
 #include "net/base/url_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
@@ -61,6 +62,7 @@
 #include "components/signin/core/browser/signin_manager.h"
 #endif
 
+using browser_sync::ProfileSyncService;
 using content::WebContents;
 using l10n_util::GetStringFUTF16;
 using l10n_util::GetStringUTF16;
@@ -810,7 +812,7 @@ void PeopleHandler::PushSyncPrefs() {
     // the sync types behind a checkbox are force-enabled? crbug.com/403326
   }
   PrefService* pref_service = profile_->GetPrefs();
-  sync_driver::SyncPrefs sync_prefs(pref_service);
+  syncer::SyncPrefs sync_prefs(pref_service);
   args.SetBoolean("syncAllDataTypes", sync_prefs.HasKeepEverythingSynced());
   args.SetBoolean(
       "paymentsIntegrationEnabled",
@@ -824,10 +826,12 @@ void PeopleHandler::PushSyncPrefs() {
   // UI even if no encrypted data types are enabled.
   args.SetBoolean("passphraseRequired", service->IsPassphraseRequired());
 
-  // To distinguish between FROZEN_IMPLICIT_PASSPHRASE and CUSTOM_PASSPHRASE
-  // we only set passphraseTypeIsCustom for CUSTOM_PASSPHRASE.
+  // To distinguish between PassphraseType::FROZEN_IMPLICIT_PASSPHRASE and
+  // PassphraseType::CUSTOM_PASSPHRASE
+  // we only set passphraseTypeIsCustom for PassphraseType::CUSTOM_PASSPHRASE.
   args.SetBoolean("passphraseTypeIsCustom",
-                  service->GetPassphraseType() == syncer::CUSTOM_PASSPHRASE);
+                  service->GetPassphraseType() ==
+                      syncer::PassphraseType::CUSTOM_PASSPHRASE);
   base::Time passphrase_time = service->GetExplicitPassphraseTime();
   syncer::PassphraseType passphrase_type = service->GetPassphraseType();
   if (!passphrase_time.is_null()) {
@@ -841,13 +845,13 @@ void PeopleHandler::PushSyncPrefs() {
         GetStringFUTF16(IDS_SYNC_ENTER_GOOGLE_PASSPHRASE_BODY_WITH_DATE,
                         passphrase_time_str));
     switch (passphrase_type) {
-      case syncer::FROZEN_IMPLICIT_PASSPHRASE:
+      case syncer::PassphraseType::FROZEN_IMPLICIT_PASSPHRASE:
         args.SetString(
             "fullEncryptionBody",
             GetStringFUTF16(IDS_SYNC_FULL_ENCRYPTION_BODY_GOOGLE_WITH_DATE,
                             passphrase_time_str));
         break;
-      case syncer::CUSTOM_PASSPHRASE:
+      case syncer::PassphraseType::CUSTOM_PASSPHRASE:
         args.SetString(
             "fullEncryptionBody",
             GetStringFUTF16(IDS_SYNC_FULL_ENCRYPTION_BODY_CUSTOM_WITH_DATE,
@@ -858,7 +862,7 @@ void PeopleHandler::PushSyncPrefs() {
                        GetStringUTF16(IDS_SYNC_FULL_ENCRYPTION_BODY_CUSTOM));
         break;
     }
-  } else if (passphrase_type == syncer::CUSTOM_PASSPHRASE) {
+  } else if (passphrase_type == syncer::PassphraseType::CUSTOM_PASSPHRASE) {
     args.SetString("fullEncryptionBody",
                    GetStringUTF16(IDS_SYNC_FULL_ENCRYPTION_BODY_CUSTOM));
   } else {

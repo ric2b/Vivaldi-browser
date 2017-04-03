@@ -21,6 +21,7 @@
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
 #include "net/http/mock_allow_http_auth_preferences.h"
+#include "net/log/net_log_with_source.h"
 #include "net/ssl/ssl_info.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -36,8 +37,9 @@ HttpAuthHandlerMock* CreateMockHandler(bool connection_based) {
                                          challenge_text.end());
   GURL origin("www.example.com");
   SSLInfo null_ssl_info;
-  EXPECT_TRUE(auth_handler->InitFromChallenge(
-      &challenge, HttpAuth::AUTH_SERVER, null_ssl_info, origin, BoundNetLog()));
+  EXPECT_TRUE(auth_handler->InitFromChallenge(&challenge, HttpAuth::AUTH_SERVER,
+                                              null_ssl_info, origin,
+                                              NetLogWithSource()));
   return auth_handler;
 }
 
@@ -138,7 +140,8 @@ TEST(HttpAuthTest, ChooseBestChallenge) {
     std::unique_ptr<HttpAuthHandler> handler;
     HttpAuth::ChooseBestChallenge(http_auth_handler_factory.get(), *headers,
                                   null_ssl_info, HttpAuth::AUTH_SERVER, origin,
-                                  disabled_schemes, BoundNetLog(), &handler);
+                                  disabled_schemes, NetLogWithSource(),
+                                  &handler);
 
     if (handler.get()) {
       EXPECT_EQ(tests[i].challenge_scheme, handler->auth_scheme());

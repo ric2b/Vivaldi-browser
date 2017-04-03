@@ -9,6 +9,7 @@
 #include "base/allocator/allocator_extension.h"
 #include "base/allocator/allocator_shim.h"
 #include "base/allocator/features.h"
+#include "base/debug/profiler.h"
 #include "base/trace_event/heap_profiler_allocation_context.h"
 #include "base/trace_event/heap_profiler_allocation_context_tracker.h"
 #include "base/trace_event/heap_profiler_allocation_register.h"
@@ -76,13 +77,19 @@ void HookFree(const AllocatorDispatch* self, void* address) {
   next->free_function(next, address);
 }
 
+size_t HookGetSizeEstimate(const AllocatorDispatch* self, void* address) {
+  const AllocatorDispatch* const next = self->next;
+  return next->get_size_estimate_function(next, address);
+}
+
 AllocatorDispatch g_allocator_hooks = {
-    &HookAlloc,         /* alloc_function */
-    &HookZeroInitAlloc, /* alloc_zero_initialized_function */
-    &HookllocAligned,   /* alloc_aligned_function */
-    &HookRealloc,       /* realloc_function */
-    &HookFree,          /* free_function */
-    nullptr,            /* next */
+    &HookAlloc,           /* alloc_function */
+    &HookZeroInitAlloc,   /* alloc_zero_initialized_function */
+    &HookllocAligned,     /* alloc_aligned_function */
+    &HookRealloc,         /* realloc_function */
+    &HookFree,            /* free_function */
+    &HookGetSizeEstimate, /* get_size_estimate_function */
+    nullptr,              /* next */
 };
 #endif  // BUILDFLAG(USE_EXPERIMENTAL_ALLOCATOR_SHIM)
 

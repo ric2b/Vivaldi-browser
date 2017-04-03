@@ -13,8 +13,9 @@
 <translation id="1103124106085518534">இப்போது முடிந்தது</translation>
 <translation id="1103523840287552314">எப்போதும் இந்த மொழியை மொழிபெயர் <ph name="LANGUAGE" /></translation>
 <translation id="1107591249535594099">இது தேர்ந்தெடுக்கப்பட்டால், விரைவாக படிவங்களை நிரப்புவதற்காக, Chrome இந்த கார்டின் பிரதியை சாதனத்தில் சேமிக்கும்.</translation>
-<translation id="1111153019813902504">சமீபத்திய புக்மார்க்ஸ்</translation>
+<translation id="1111153019813902504">சமீபத்திய புத்தகக்குறிகள்</translation>
 <translation id="1113869188872983271">&amp;மறுவரிசைப்படுத்தலைச் செயல்தவிர்</translation>
+<translation id="1126551341858583091">அகச் சேமிப்பகத்தில் <ph name="CRASH_SIZE" /> அளவு உள்ளது.</translation>
 <translation id="112840717907525620">கொள்கை தற்காலிக சேமிப்பு சரியாக உள்ளது</translation>
 <translation id="113188000913989374"><ph name="SITE" /> தெரிவிப்பது:</translation>
 <translation id="1132774398110320017">Chrome தன்னிரப்பி அமைப்புகள்...</translation>
@@ -79,7 +80,6 @@
 <translation id="1871208020102129563">நிலையான ப்ராக்ஸி சேவையகங்களைப் பயன்படுத்த ப்ராக்ஸி அமைக்கப்பட்டுள்ளது, .pac ஸ்கிரிப்ட் URL அல்ல.</translation>
 <translation id="1883255238294161206">பட்டியலைச் சுருக்கு</translation>
 <translation id="1898423065542865115">வடிகட்டுதல்</translation>
-<translation id="1911837502049945214"><ph name="HOST_NAME" /> உங்கள் உள்நுழைவுச் சான்றிதழை ஏற்கவில்லை அல்லது உங்கள் உள்நுழைவுச் சான்றிதழ் காலாவதியாகியிருக்கலாம்.</translation>
 <translation id="194030505837763158"><ph name="LINK" /> க்குச் செல்க</translation>
 <translation id="1962204205936693436"><ph name="DOMAIN" /> புத்தகக்குறிகள்</translation>
 <translation id="1973335181906896915">தொடராக்க பிழை</translation>
@@ -172,10 +172,8 @@
 <translation id="2824775600643448204">முகவரி மற்றும் தேடல் பட்டி</translation>
 <translation id="2826760142808435982">இந்த இணைப்பு <ph name="CIPHER" /> ஐப் பயன்படுத்தி குறியாக்கப்பட்டது, அங்கீகரிக்கப்பட்டது, ஒரு முக்கிய பரிமாற்ற செயல்முறையாக <ph name="KX" /> ஐப் பயன்படுத்துகிறது.</translation>
 <translation id="2835170189407361413">படிவத்தை அழி</translation>
-<translation id="2837049386027881519">TLS அல்லது SSL நெறிமுறையின் பழைய பதிப்பினைப் பயன்படுத்தி, இணைப்பை மீண்டும் முயற்சிக்க வேண்டும். இது பொதுவாக, சேவையகம் மிகப்பழைய மென்பொருளைப் பயன்படுத்துகிறது மற்றும் பிற பாதுகாப்புச் சிக்கல்கள் இருக்கலாமென்று பொருளாகும்.</translation>
 <translation id="284702764277384724"><ph name="HOST_NAME" /> இல் உள்ள சேவையகச் சான்றிதழ் போலியானது போல் தெரிகிறது.</translation>
 <translation id="2889159643044928134">மீண்டும் ஏற்ற வேண்டாம்</translation>
-<translation id="2896499918916051536">செருகுநிரல் ஆதரிக்கவில்லை.</translation>
 <translation id="2900469785430194048">நினைவகப் பற்றாக்குறையினால், Google Chrome இந்த இணையப்பக்கத்தைக் காட்டவில்லை.</translation>
 <translation id="2909946352844186028">பிணைய மாற்றம் கண்டறியப்பட்டது.</translation>
 <translation id="2922350208395188000">சேவையகச் சான்றிதழை சோதிக்க முடியவில்லை.</translation>
@@ -214,8 +212,10 @@
 <translation id="3254409185687681395">இந்தப் பக்கத்தை புக்மார்க் செய்க</translation>
 <translation id="3270847123878663523">&amp;மறுவரிசைப்படுத்தலைச் செயல்தவிர்</translation>
 <translation id="3286538390144397061">இப்போது மறுதொடக்கம் செய்க</translation>
+<translation id="3303855915957856445">தேடல் முடிவுகள் எதுவுமில்லை</translation>
 <translation id="3305707030755673451"><ph name="TIME" /> அன்று உங்கள் தரவு உங்கள் ஒத்திசைவு கடவுச்சொற்றொடரைக் கொண்டு முறைமையாக்கப்பட்டது. ஒத்திசைவைத் தொடங்க, அதை உள்ளிடவும்.</translation>
 <translation id="333371639341676808">இந்த பக்கம் கூடுதல் உரையாடல்களை உருவாக்குவதைத் தடு.</translation>
+<translation id="3338095232262050444">பாதுகாப்பானது</translation>
 <translation id="3340978935015468852">அமைப்புகள்</translation>
 <translation id="3345135638360864351">இந்தத் தளத்தை அணுகுவதற்கான கோரிக்கையை <ph name="NAME" />க்கு அனுப்ப முடியவில்லை. மீண்டும் முயற்சிக்கவும்.</translation>
 <translation id="3355823806454867987">ப்ராக்ஸி அமைப்புகளை மாற்றுக...</translation>
@@ -287,6 +287,7 @@
 <translation id="3963721102035795474">படித்தல் பயன்முறை</translation>
 <translation id="397105322502079400">கணக்கிடுகிறது...</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> தடுக்கப்பட்டுள்ளது</translation>
+<translation id="40103911065039147">{URL_count,plural, =1{அருகில் ஒரு இணையப் பக்கம் உள்ளது}other{அருகில் # இணையப் பக்கங்கள் உள்ளன}}</translation>
 <translation id="4021036232240155012">DNS என்பது இணையதளத்தின் பெயரை அதன் இணைய முகவரியாக மாற்றும் நெட்வொர்க் சேவையாகும்.</translation>
 <translation id="4030383055268325496">&amp;சேர்த்தலைச் செயல்தவிர்</translation>
 <translation id="404928562651467259">எச்சரிக்கை</translation>
@@ -317,11 +318,13 @@
 <translation id="4304224509867189079">உள்நுழை</translation>
 <translation id="432290197980158659">உள்ளமைக்கப்பட்ட எதிர்பார்ப்புகளுடன் பொருந்தாதச் சான்றிதழை சேவையகம் வழங்கியுள்ளது. உங்களைப் பாதுகாக்கும் நோக்கத்தில், குறிப்பிட்ட அதிக பாதுகாப்பான இணையதளங்களில் இந்த எதிர்பார்ப்புகள் அமைக்கப்படுகின்றன. <ph name="BEGIN_LEARN_MORE_LINK" />மேலும் அறிக<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="4325863107915753736">கட்டுரையைக் கண்டறிய முடியவில்லை</translation>
+<translation id="4331708818696583467">பாதுகாப்பற்றது</translation>
 <translation id="4372948949327679948">எதிர்பார்த்த <ph name="VALUE_TYPE" /> மதிப்பு.</translation>
 <translation id="4381091992796011497">பயனர் பெயர்:</translation>
 <translation id="4394049700291259645">முடக்கு</translation>
 <translation id="4395129973926795186"><ph name="START_DATE" /> முதல் <ph name="END_DATE" /> வரை</translation>
 <translation id="4406896451731180161">தேடல் முடிவுகள்</translation>
+<translation id="4432688616882109544"><ph name="HOST_NAME" /> உங்கள் உள்நுழைவுச் சான்றிதழை ஏற்கவில்லை அல்லது சான்றிதழ் வழங்கப்படாமல் இருக்கக்கூடும்.</translation>
 <translation id="443673843213245140">ப்ராக்ஸி பயன்பாடு முடக்கப்பட்டுள்ளது. ஆனால் வெளிப்படையான ப்ராக்ஸி உள்ளமைவு குறிப்பிடப்பட்டுள்ளது.</translation>
 <translation id="4458874409874303848">SafeSites</translation>
 <translation id="4461847750548395463">Google SafeSites இயக்கப்பட்டுள்ளதால் இந்தச் செய்தியைப் பார்க்கிறீர்கள்.</translation>
@@ -336,6 +339,7 @@
 <translation id="4589078953350245614"><ph name="DOMAIN" />க்குச் செல்ல முயன்றீர்கள், ஆனால் சேவையகம் தவறான சான்றிதழை வழங்கியுள்ளது. <ph name="BEGIN_LEARN_MORE_LINK" />மேலும் அறிக<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="4592951414987517459">நவீன சைபர் சூட்டைப் பயன்படுத்தி <ph name="DOMAIN" /> உடனான உங்கள் இணைப்பு என்க்ரிப்ட் செய்யப்பட்டது.</translation>
 <translation id="4594403342090139922">&amp;நீக்குதலைச் செயல்தவிர்</translation>
+<translation id="4627442949885028695">மற்றொரு சாதனத்திலிருந்து பார்த்தவை</translation>
 <translation id="4668929960204016307">,</translation>
 <translation id="4670097147947922288">நீட்டிப்புப் பக்கத்தைப் பார்க்கிறீர்கள்.</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
@@ -356,14 +360,15 @@
 <translation id="4880827082731008257">வரலாற்றில் தேடு</translation>
 <translation id="4884656795097055129">சரியான நேரத்தில் அதிக கட்டுரைகள் காட்டப்படும்.</translation>
 <translation id="4895877746940133817"><ph name="TYPE_1" />, <ph name="TYPE_2" />, <ph name="TYPE_3" /></translation>
+<translation id="4914479371620770914">{URL_count,plural, =1{மேலும் ஒரு இணையப் பக்கம்}other{மேலும் # இணையப் பக்கங்கள்}}</translation>
 <translation id="4923417429809017348">ஒரு அறியப்படாத மொழியிலிருந்து <ph name="LANGUAGE_LANGUAGE" /> -க்கு இந்தப் பக்கம் மொழிபெயர்க்கப்பட்டுள்ளது</translation>
 <translation id="4926049483395192435">கட்டாயம் குறிப்பிட வேண்டும்.</translation>
 <translation id="4930497775425430760">முதல் முறை நீங்கள் பார்வையிடும் புதிய தளங்களை உங்கள் பெற்றோர் அனுமதிக்க வேண்டும் என்பதால் இந்தச் செய்தியைப் பார்க்கிறீர்கள்.</translation>
 <translation id="495170559598752135">செயல்கள்</translation>
 <translation id="4958444002117714549">பட்டியலை விரி</translation>
 <translation id="4962322354953122629"><ph name="DOMAIN" /> என இந்தச் சேவையகத்தால் நிரூபிக்க முடியவில்லை. இதன் பாதுகாப்புச் சான்றிதழை Chrome நம்பவில்லை. இது தவறான உள்ளமைவால் ஏற்பட்டிருக்கலாம் அல்லது உங்கள் இணைப்பில் தீங்கிழைப்பவர் குறுக்கிட்டிருக்கலாம். <ph name="BEGIN_LEARN_MORE_LINK" />மேலும் அறிக<ph name="END_LEARN_MORE_LINK" />.</translation>
-<translation id="4986920000862467124">அனைத்தையும் படித்துவிட்டீர்கள்</translation>
 <translation id="498957508165411911"><ph name="ORIGINAL_LANGUAGE" /> இலிருந்து <ph name="TARGET_LANGUAGE" /> க்கு மொழிபெயர்க்கவா?</translation>
+<translation id="4989809363548539747">இந்தச் செருகுநிரல் ஆதரிக்கப்படவில்லை</translation>
 <translation id="5002932099480077015">இயக்கப்பட்டால், விரைவாகப் படிவத்தை நிரப்ப உங்கள் கார்டின் நகலை இச்சாதனத்தில் Chrome சேமித்து வைக்கும்.</translation>
 <translation id="5019198164206649151">தவறான நிலையில் மீட்பு சேமிப்பு உள்ளது</translation>
 <translation id="5023310440958281426">உங்கள் நிர்வாகியின் கொள்கைகளைச் சரிபார்க்கவும்</translation>
@@ -377,7 +382,6 @@
 <translation id="5089810972385038852">மாநிலம்</translation>
 <translation id="5095208057601539847">பிராந்தியம்</translation>
 <translation id="5115563688576182185">(64-பிட்)</translation>
-<translation id="5122371513570456792">'<ph name="SEARCH_STRING" />'க்காக <ph name="NUMBER_OF_RESULTS" /> <ph name="SEARCH_RESULTS" /> கிடைத்தன.</translation>
 <translation id="5141240743006678641">ஒத்திசைக்கப்பட்ட கடவுச்சொற்களை உங்கள் Google நற்சான்றுகள் மூலம் என்க்ரிப்ட் செய்யவும்</translation>
 <translation id="5145883236150621069">கொள்கைப் பதிலில் பிழைக் குறியீடு உள்ளது</translation>
 <translation id="5171045022955879922">தேடுக அல்லது URL-ஐத் தட்டச்சு செய்க</translation>
@@ -385,8 +389,8 @@
 <translation id="5179510805599951267"><ph name="ORIGINAL_LANGUAGE" /> இல் இல்லையா? இந்தப் பிழையை தெரிவிக்கவும்</translation>
 <translation id="5190835502935405962">புக்மார்க்குகள் பட்டி</translation>
 <translation id="5199729219167945352">சோதனைகள்</translation>
-<translation id="52060377617855516">{URL_count,plural, =1{1 இணையப் பக்கம் கண்டறியப்பட்டது}other{# இணையப் பக்கங்கள் கண்டறியப்பட்டன}}</translation>
 <translation id="5251803541071282808">மேகக்கணி</translation>
+<translation id="5277279256032773186">பணியில் Chromeஐப் பயன்படுத்துகிறீர்களா? வணிக நிறுவனங்கள் தங்களின் பணியாளர்களுக்கான Chrome அமைப்புகளை நிர்வகிக்கலாம். மேலும் அறிக</translation>
 <translation id="5299298092464848405">கொள்கையை அலசுவதில் பிழை</translation>
 <translation id="5300589172476337783">காண்பி</translation>
 <translation id="5308689395849655368">செயலிழப்பு புகாரளித்தல் முடக்கப்பட்டுள்ளது.</translation>
@@ -420,7 +424,6 @@
 <translation id="5622887735448669177">தளத்திலிருந்து வெளியேறவா?</translation>
 <translation id="5629630648637658800">கொள்கை அமைப்புகளை ஏற்றுவதில் தோல்வி</translation>
 <translation id="5631439013527180824">தவறான சாதன நிர்வாக டோக்கன்</translation>
-<translation id="5650551054760837876">தேடல் முடிவுகள் எதுவும் காணப்படவில்லை.</translation>
 <translation id="5677928146339483299">தடுக்கப்பட்டது</translation>
 <translation id="5710435578057952990">இந்த தளத்தின் அடையாளம் சரிபார்க்கப்படவில்லை.</translation>
 <translation id="5720705177508910913">நடப்புப் பயனர்</translation>
@@ -458,7 +461,6 @@
 <translation id="6150607114729249911">அச்சச்சோ! இந்தப் பக்கத்தைப் பார்வையிடலாமா என, உங்கள் பெற்றோர்களிடம் கேட்க வேண்டும்.</translation>
 <translation id="6151417162996330722">சேவை சான்றிதழ் நீண்ட செல்லுபடிக் காலத்தைக் கொண்டுள்ளது.</translation>
 <translation id="6165508094623778733">மேலும் அறிக</translation>
-<translation id="6180780615171238625">இந்தச் சான்றிதழ் ரத்துசெய்யப்பட்டதால், இப்போது <ph name="SITE" />க்குச் செல்ல முடியாது. பொதுவாக நெட்வொர்க் பிழைகளும் பாதிப்புகளும் தற்காலிகமானவையே. இந்தப் பக்கம் சிறிது நேரம் கழித்துச் செயல்படும். <ph name="BEGIN_LEARN_MORE_LINK" />மேலும் அறிக<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="6203231073485539293">உங்கள் இணைய இணைப்பைச் சரிபார்க்கவும்</translation>
 <translation id="6218753634732582820">Chromium இலிருந்து முகவரியை அகற்றவா?</translation>
 <translation id="6259156558325130047">&amp;மறுவரிசைப்படுத்தலை மீண்டும் செய்</translation>
@@ -486,6 +488,7 @@
 <translation id="647261751007945333">சாதனக் கொள்கைகள்</translation>
 <translation id="6489534406876378309">சிதைவுகளைப் பதிவேற்றுவதைத் தொடங்கு</translation>
 <translation id="6529602333819889595">&amp;நீக்குதலை மீண்டும் செய்</translation>
+<translation id="6534179046333460208">இயல்நிலை இணையப் பரிந்துரைகள்</translation>
 <translation id="6550675742724504774">விருப்பத்தேர்வுகள்</translation>
 <translation id="6593753688552673085"><ph name="UPPER_ESTIMATE" />க்கும் குறைவாக உள்ளது</translation>
 <translation id="6596325263575161958">குறியாக்க விருப்பங்கள்</translation>
@@ -519,8 +522,10 @@
 <translation id="6970216967273061347">மாவட்டம்</translation>
 <translation id="6973656660372572881">நிலையான ப்ராக்ஸி சேவையகங்களும் .pac ஸ்கிரிப்ட் URL ஆகிய இரண்டும் குறிப்பிடப்பட்டுள்ளது.</translation>
 <translation id="6989763994942163495">மேம்பட்ட அமைப்புகளைக் காண்பி...</translation>
+<translation id="7000990526846637657">வரலாறு உள்ளீடுகள் எதுவுமில்லை</translation>
 <translation id="7009986207543992532"><ph name="DOMAIN" />க்குச் செல்ல முயன்றீர்கள், ஆனால் நீண்ட செல்லுபடிக் காலத்தைக் கொண்ட சான்றிதழை சேவையகம் வழங்கியுள்ளது, இதுபோன்ற சான்றிதழ்கள் நம்பத்தக்கவையல்ல. <ph name="BEGIN_LEARN_MORE_LINK" />மேலும் அறிக<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="7012363358306927923">சீனா UnionPay</translation>
+<translation id="7012372675181957985">உங்கள் Google கணக்கு <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" /> என்ற தளத்தில் உலாவல் வரலாறு தொடர்பான பிற தகவல்களைக் கொண்டிருக்கக்கூடும்</translation>
 <translation id="7029809446516969842">கடவுச்சொற்கள்</translation>
 <translation id="7087282848513945231">மாகாணம்</translation>
 <translation id="7088615885725309056">பழையவை</translation>
@@ -546,6 +551,7 @@
 <translation id="7309308571273880165"><ph name="CRASH_TIME" /> அன்று சிதைவு அறிக்கை பெறப்பட்டது (பயனர் பதிவேற்றக் கோரியுள்ளார், இன்னும் பதிவேற்றப்படவில்லை)</translation>
 <translation id="7334320624316649418">&amp;மறுவரிசைப்படுத்தலை மீண்டும் செய்</translation>
 <translation id="733923710415886693">சான்றிதழ் வெளிப்படைத்தன்மை மூலம் சேவையகத்தின் சான்றிதழ் வெளியிடப்படவில்லை.</translation>
+<translation id="7351800657706554155"><ph name="SITE" /> இன் சான்றிதழ் ரத்துசெய்யப்பட்டதால், அதற்குச் செல்ல முடியாது. பொதுவாக நெட்வொர்க் பிழைகளும் பாதிப்புகளும் தற்காலிகமானவையே. இந்தப் பக்கம் சிறிது நேரம் கழித்துச் செயல்படும். <ph name="BEGIN_LEARN_MORE_LINK" />மேலும் அறிக<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="7353601530677266744">கட்டளை வரி</translation>
 <translation id="7372973238305370288">தேடல் முடிவு</translation>
 <translation id="7377249249140280793"><ph name="RELATIVE_DATE" /> - <ph name="FULL_DATE" /></translation>
@@ -564,6 +570,7 @@
 <translation id="7469372306589899959">கார்டை உறுதிசெய்கிறது</translation>
 <translation id="7481312909269577407">அடுத்த பக்கம்</translation>
 <translation id="7485870689360869515">தரவு எதுவும் இல்லை.</translation>
+<translation id="7508255263130623398">கிடைத்த பாலிசி சாதன ஐடி காலியாக உள்ளது அல்லது தற்போதைய சாதன ஐடியுடன் பொருந்தவில்லை</translation>
 <translation id="7514365320538308">பதிவிறக்கு</translation>
 <translation id="7518003948725431193">வலை முகவரிக்கான வலைப்பக்கங்கள் ஏதும் காணப்படவில்லை: <ph name="URL" /></translation>
 <translation id="7537536606612762813">கட்டாயம்</translation>
@@ -573,6 +580,7 @@
 <translation id="7568593326407688803">இந்தப் பக்கமானது<ph name="ORIGINAL_LANGUAGE" />இல் உள்ளது இதை மொழிபெயர்க்க விரும்புகிறீர்களா?</translation>
 <translation id="7569952961197462199">Chrome இலிருந்து கிரெடிட் கார்டை அகற்றவா?</translation>
 <translation id="7578104083680115302">Google இல் நீங்கள் சேமித்துள்ள கார்டுகளைப் பயன்படுத்தி பல தளங்களிலும் பயன்பாடுகளிலும் உங்களுடைய  சாதனங்களில் அனைத்திலும் விரைவாகப் பணம் செலுத்தலாம்.</translation>
+<translation id="7588950540487816470">இயல்நிலை இணையம்</translation>
 <translation id="7592362899630581445">பெயர் கட்டுப்பாடுகளைச் சேவையகத்தின் சான்றிதழ் மீறுகிறது.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> ஆல் தற்போது இந்தக் கோரிக்கையைக் கையாள முடியவில்லை.</translation>
 <translation id="7600965453749440009"><ph name="LANGUAGE" /> ஐ எப்போதும் மொழிபெயர்க்க வேண்டாம்</translation>
@@ -600,6 +608,7 @@
 <translation id="780301667611848630">தேவையில்லை</translation>
 <translation id="7805768142964895445">நிலை</translation>
 <translation id="7813600968533626083">Chrome இலிருந்து படிவப் பரிந்துரையை அகற்றவா?</translation>
+<translation id="7815407501681723534">'<ph name="SEARCH_STRING" />'க்கு <ph name="NUMBER_OF_RESULTS" /> <ph name="SEARCH_RESULTS" /> உள்ளன</translation>
 <translation id="785549533363645510">இருப்பினும், நீங்கள் மறைந்திருக்கமாட்டீர்கள். மறைநிலைக்குச் செல்வது பணிக்கமர்த்தும் நிறுவனம், இணையச் சேவை வழங்குநர் அல்லது நீங்கள் செல்லும் இணையதளங்களிடம் உங்கள் உலாவலை மறைக்காது.</translation>
 <translation id="7887683347370398519">CVCஐச் சோதித்து, மீண்டும் முயற்சிக்கவும்</translation>
 <translation id="7894616681410591072">அச்சசோ! இந்தப் பக்கத்தை அணுக, <ph name="NAME" /> இடம் அனுமதி கேட்க வேண்டும்.</translation>
@@ -615,7 +624,6 @@
 <translation id="7995512525968007366">குறிப்பிடப்படவில்லை</translation>
 <translation id="8012647001091218357">தற்போது எங்களால் உங்கள் பெற்றோர்களைத் தொடர்புகொள்ள முடியவில்லை. மீண்டும் முயற்சிக்கவும்.</translation>
 <translation id="8034522405403831421">இந்தப் பக்கம் <ph name="SOURCE_LANGUAGE" /> மொழியில் உள்ளது. இதை <ph name="TARGET_LANGUAGE" /> க்கு மொழிபெயர்க்கவா?</translation>
-<translation id="8034955203865359138">வரலாறு உள்ளீடுகள் இல்லை.</translation>
 <translation id="8088680233425245692">கட்டுரையைக் காட்டுவதில் தோல்வி.</translation>
 <translation id="8089520772729574115">1 மெ.பை. க்கும் குறைவாக உள்ளது</translation>
 <translation id="8091372947890762290">சேவையகத்தில் செயலாக்கம் நிலுவையிலுள்ளது</translation>
@@ -641,6 +649,7 @@
 <translation id="8349305172487531364">புக்மார்க் பட்டி</translation>
 <translation id="8363502534493474904">விமானப் பயன்முறையை முடக்குதல்</translation>
 <translation id="8364627913115013041">அமைக்கப்படவில்லை.</translation>
+<translation id="8380941800586852976">ஆபத்தானது</translation>
 <translation id="8412145213513410671">செயலிழப்புகள் (<ph name="CRASH_COUNT" />)</translation>
 <translation id="8412392972487953978">நீங்கள் கண்டிப்பாக ஒரே கடவுச்சொற்றொடரை இரு முறை உள்ளிட வேண்டும்.</translation>
 <translation id="8428213095426709021">அமைப்புகள்</translation>
@@ -667,7 +676,6 @@
 <translation id="8730621377337864115">முடிந்தது</translation>
 <translation id="8738058698779197622">பாதுகாப்பான இணைப்பை அமைக்க, கடிகாரம் சரியாக அமைக்கப்பட வேண்டும். இதற்குக் காரணம், இணையதளங்கள் தங்களைத் தானே அடையாளப்படுத்த பயன்படுத்தும் சான்றிதழ்கள் குறிப்பிட்ட காலநேரத்திற்கே செல்லுபடியாகும். உங்கள் சாதனத்தின் கடிகாரம் தவறாக இருந்தால், Chromium இந்தச் சான்றிதழ்களைச் சரிபார்க்காது.</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" />’s &lt;abbr id="dnsDefinition"&gt;DNS முகவரியைக்&lt;/abbr&gt; கண்டறிய முடியவில்லை. சிக்கலை ஆய்வு செய்கிறது.</translation>
-<translation id="8741995161408053644">உங்கள் Google கணக்கு <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" /> என்ற தளத்தில் உலாவல் வரலாறு தொடர்பான பிற தகவல்களைக் கொண்டிருக்கலாம்.</translation>
 <translation id="8790007591277257123">&amp;நீக்குதலை மீண்டும் செய்</translation>
 <translation id="8798099450830957504">இயல்புநிலை</translation>
 <translation id="8804164990146287819">தனியுரிமைக் கொள்கை</translation>

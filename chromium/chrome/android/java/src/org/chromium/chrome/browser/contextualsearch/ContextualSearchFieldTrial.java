@@ -31,8 +31,6 @@ public class ContextualSearchFieldTrial {
     private static final int PEEK_PROMO_DEFAULT_MAX_SHOW_COUNT = 10;
 
     private static final String DISABLE_SEARCH_TERM_RESOLUTION = "disable_search_term_resolution";
-    private static final String DISABLE_EXTRA_SEARCH_BAR_ANIMATIONS =
-            "disable_extra_search_bar_animations";
     private static final String ENABLE_BLACKLIST = "enable_blacklist";
 
     // Translation.  All these members are private, except for usage by testing.
@@ -60,6 +58,9 @@ public class ContextualSearchFieldTrial {
     @VisibleForTesting
     static final String ENABLE_SERVER_CONTROLLED_ONEBOX = "enable_server_controlled_onebox";
 
+    /** Hide Contextual Cards data.*/
+    private static final String HIDE_CONTEXTUAL_CARDS_DATA = "hide_contextual_cards_data";
+
     // Quick Answers.
     private static final String ENABLE_QUICK_ANSWERS = "enable_quick_answers";
 
@@ -71,10 +72,16 @@ public class ContextualSearchFieldTrial {
     // Set non-zero to establish an recent scroll suppression threshold for taps.
     private static final String RECENT_SCROLL_DURATION_MS = "recent_scroll_duration_ms";
     // TODO(donnd): remove all supporting code once short-lived data collection is done.
-    private static final String ENABLE_SCREEN_TOP_COLLECTION = "enable_screen_top_collection";
     private static final String SCREEN_TOP_SUPPRESSION_DPS = "screen_top_suppression_dps";
     private static final String ENABLE_BAR_OVERLAP_COLLECTION = "enable_bar_overlap_collection";
     private static final String BAR_OVERLAP_SUPPRESSION_ENABLED = "enable_bar_overlap_suppression";
+
+    // Safety switch for disabling online-detection.  Also used to disable detection when running
+    // tests.
+    @VisibleForTesting
+    static final String ONLINE_DETECTION_DISABLED = "disable_online_detection";
+
+    private static final String ENABLE_AMP_AS_SEPARATE_TAB = "enable_amp_as_separate_tab";
 
     // Cached values to avoid repeated and redundant JNI operations.
     private static Boolean sEnabled;
@@ -93,11 +100,14 @@ public class ContextualSearchFieldTrial {
     private static Boolean sIsQuickAnswersEnabled;
     private static Boolean sIsRecentScrollCollectionEnabled;
     private static Integer sRecentScrollDurationMs;
-    private static Boolean sIsScreenTopCollectionEnabled;
     private static Integer sScreenTopSuppressionDps;
     private static Boolean sIsBarOverlapCollectionEnabled;
     private static Boolean sIsBarOverlapSuppressionEnabled;
     private static Integer sSuppressionTaps;
+    private static Boolean sShouldHideContextualCardsData;
+    private static Boolean sIsContextualCardsBarIntegrationEnabled;
+    private static Boolean sIsOnlineDetectionDisabled;
+    private static Boolean sIsAmpAsSeparateTabEnabled;
 
     /**
      * Don't instantiate.
@@ -191,13 +201,6 @@ public class ContextualSearchFieldTrial {
             sIsPeekPromoEnabled = getBooleanParam(PEEK_PROMO_ENABLED);
         }
         return sIsPeekPromoEnabled.booleanValue();
-    }
-
-    /**
-     * @return Whether extra search bar animations are disabled.
-     */
-    static boolean areExtraSearchBarAnimationsDisabled() {
-        return getBooleanParam(DISABLE_EXTRA_SEARCH_BAR_ANIMATIONS);
     }
 
     /**
@@ -326,16 +329,6 @@ public class ContextualSearchFieldTrial {
     }
 
     /**
-     * @return Whether collecting metrics for tap triggering near the top of the screen is enabled.
-     */
-    static boolean isScreenTopCollectionEnabled() {
-        if (sIsScreenTopCollectionEnabled == null) {
-            sIsScreenTopCollectionEnabled = getBooleanParam(ENABLE_SCREEN_TOP_COLLECTION);
-        }
-        return sIsScreenTopCollectionEnabled.booleanValue();
-    }
-
-    /**
      * Gets a Y value limit that will suppress a Tap near the top of the screen.
      * Any Y value less than the limit will suppress the Tap trigger.
      * @return The Y value triggering limit in DPs, a value of zero will not limit.
@@ -384,6 +377,32 @@ public class ContextualSearchFieldTrial {
             sSuppressionTaps = getIntParamValueOrDefault(SUPPRESSION_TAPS, 0);
         }
         return sSuppressionTaps.intValue();
+    }
+
+    /**
+     * @return Whether to auto-promote clicks in the AMP carousel into a separate Tab.
+     */
+    static boolean isAmpAsSeparateTabEnabled() {
+        if (sIsAmpAsSeparateTabEnabled == null) {
+            sIsAmpAsSeparateTabEnabled = getBooleanParam(ENABLE_AMP_AS_SEPARATE_TAB);
+        }
+        return sIsAmpAsSeparateTabEnabled;
+    }
+
+    // TODO(donnd): Remove once bar-integration is fully landed if still unused (native only).
+    static boolean isContextualCardsBarIntegrationEnabled() {
+        if (sIsContextualCardsBarIntegrationEnabled == null) {
+            sIsContextualCardsBarIntegrationEnabled = getBooleanParam(
+                    ChromeSwitches.CONTEXTUAL_SEARCH_CONTEXTUAL_CARDS_BAR_INTEGRATION);
+        }
+        return sIsContextualCardsBarIntegrationEnabled;
+    }
+
+    static boolean shouldHideContextualCardsData() {
+        if (sShouldHideContextualCardsData == null) {
+            sShouldHideContextualCardsData = getBooleanParam(HIDE_CONTEXTUAL_CARDS_DATA);
+        }
+        return sShouldHideContextualCardsData;
     }
 
     // --------------------------------------------------------------------------------------------

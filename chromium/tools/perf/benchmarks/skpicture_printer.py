@@ -22,6 +22,8 @@ def _MatchPageSetName(story_set_name, story_set_base_dir):
   return None
 
 
+# Disabled because we do not plan on running this SKP benchmark on the perf
+# waterfall any time soon.
 @benchmark.Disabled('all')
 class SkpicturePrinter(perf_benchmark.PerfBenchmark):
 

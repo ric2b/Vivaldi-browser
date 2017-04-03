@@ -40,6 +40,9 @@ namespace content {
 
 namespace {
 
+const size_t kMaxQueryCacheResultBytes =
+    1024 * 1024 * 10;  // 10MB query cache limit
+
 // This class ensures that the cache and the entry have a lifetime as long as
 // the blob that is created to contain them.
 class CacheStorageCacheDataHandle
@@ -189,29 +192,6 @@ void ReadMetadataDidReadMetadata(disk_cache::Entry* entry,
 
 }  // namespace
 
-// The state needed to iterate all entries in the cache.
-struct CacheStorageCache::OpenAllEntriesContext {
-  OpenAllEntriesContext() : enumerated_entry(nullptr) {}
-  ~OpenAllEntriesContext() {
-    for (size_t i = 0, max = entries.size(); i < max; ++i) {
-      if (entries[i])
-        entries[i]->Close();
-    }
-    if (enumerated_entry)
-      enumerated_entry->Close();
-  }
-
-  // The vector of open entries in the backend.
-  Entries entries;
-
-  // Used for enumerating cache entries.
-  std::unique_ptr<disk_cache::Backend::Iterator> backend_iterator;
-  disk_cache::Entry* enumerated_entry;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(OpenAllEntriesContext);
-};
-
 // The state needed to pass between CacheStorageCache::Put callbacks.
 struct CacheStorageCache::PutContext {
   PutContext(std::unique_ptr<ServiceWorkerFetchRequest> request,
@@ -234,31 +214,41 @@ struct CacheStorageCache::PutContext {
   DISALLOW_COPY_AND_ASSIGN(PutContext);
 };
 
-struct CacheStorageCache::QueryCacheResults {
-  QueryCacheResults(std::unique_ptr<ServiceWorkerFetchRequest> request,
+struct CacheStorageCache::QueryCacheResult {
+  explicit QueryCacheResult(base::Time entry_time) : entry_time(entry_time) {}
+
+  std::unique_ptr<ServiceWorkerFetchRequest> request;
+  std::unique_ptr<ServiceWorkerResponse> response;
+  std::unique_ptr<storage::BlobDataHandle> blob_handle;
+  disk_cache::ScopedEntryPtr entry;
+  base::Time entry_time;
+};
+
+struct CacheStorageCache::QueryCacheContext {
+  QueryCacheContext(std::unique_ptr<ServiceWorkerFetchRequest> request,
                     const CacheStorageCacheQueryParams& options,
-                    const QueryCacheResultsCallback& callback)
+                    const QueryCacheCallback& callback)
       : request(std::move(request)),
         options(options),
         callback(callback),
-        out_requests(new Requests),
-        out_responses(new Responses),
-        out_blob_data_handles(new BlobDataHandles) {}
+        matches(base::MakeUnique<QueryCacheResults>()) {}
 
+  // Input to QueryCache
   std::unique_ptr<ServiceWorkerFetchRequest> request;
   CacheStorageCacheQueryParams options;
-  QueryCacheResultsCallback callback;
+  QueryCacheCallback callback;
   QueryCacheType query_type;
+  size_t estimated_out_bytes = 0;
 
-  std::unique_ptr<Requests> out_requests;
-  std::unique_ptr<Responses> out_responses;
-  std::unique_ptr<BlobDataHandles> out_blob_data_handles;
-  std::vector<disk_cache::ScopedEntryPtr> out_entries;
+  // Iteration state
+  std::unique_ptr<disk_cache::Backend::Iterator> backend_iterator;
+  disk_cache::Entry* enumerated_entry = nullptr;
 
-  std::unique_ptr<OpenAllEntriesContext> entries_context;
+  // Output of QueryCache
+  std::unique_ptr<std::vector<QueryCacheResult>> matches;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(QueryCacheResults);
+  DISALLOW_COPY_AND_ASSIGN(QueryCacheContext);
 };
 
 // static
@@ -525,6 +515,7 @@ CacheStorageCache::CacheStorageCache(
       blob_storage_context_(blob_context),
       scheduler_(
           new CacheStorageScheduler(CacheStorageSchedulerClient::CLIENT_CACHE)),
+      max_query_size_bytes_(kMaxQueryCacheResultBytes),
       memory_only_(path.empty()),
       weak_ptr_factory_(this) {
   DCHECK(!origin_.is_empty());
@@ -533,66 +524,11 @@ CacheStorageCache::CacheStorageCache(
   quota_manager_proxy_->NotifyOriginInUse(origin_);
 }
 
-void CacheStorageCache::OpenAllEntries(const OpenAllEntriesCallback& callback) {
-  std::unique_ptr<OpenAllEntriesContext> entries_context(
-      new OpenAllEntriesContext);
-  entries_context->backend_iterator = backend_->CreateIterator();
-  disk_cache::Backend::Iterator& iterator = *entries_context->backend_iterator;
-  disk_cache::Entry** enumerated_entry = &entries_context->enumerated_entry;
-
-  net::CompletionCallback open_entry_callback = base::Bind(
-      &CacheStorageCache::DidOpenNextEntry, weak_ptr_factory_.GetWeakPtr(),
-      base::Passed(std::move(entries_context)), callback);
-
-  int rv = iterator.OpenNextEntry(enumerated_entry, open_entry_callback);
-
-  if (rv != net::ERR_IO_PENDING)
-    open_entry_callback.Run(rv);
-}
-
-void CacheStorageCache::DidOpenNextEntry(
-    std::unique_ptr<OpenAllEntriesContext> entries_context,
-    const OpenAllEntriesCallback& callback,
-    int rv) {
-  if (rv == net::ERR_FAILED) {
-    DCHECK(!entries_context->enumerated_entry);
-    // Enumeration is complete, extract the requests from the entries.
-    callback.Run(std::move(entries_context), CACHE_STORAGE_OK);
-    return;
-  }
-
-  if (rv < 0) {
-    callback.Run(std::move(entries_context), CACHE_STORAGE_ERROR_STORAGE);
-    return;
-  }
-
-  if (backend_state_ != BACKEND_OPEN) {
-    callback.Run(std::move(entries_context), CACHE_STORAGE_ERROR_NOT_FOUND);
-    return;
-  }
-
-  // Store the entry.
-  entries_context->entries.push_back(entries_context->enumerated_entry);
-  entries_context->enumerated_entry = nullptr;
-
-  // Enumerate the next entry.
-  disk_cache::Backend::Iterator& iterator = *entries_context->backend_iterator;
-  disk_cache::Entry** enumerated_entry = &entries_context->enumerated_entry;
-  net::CompletionCallback open_entry_callback = base::Bind(
-      &CacheStorageCache::DidOpenNextEntry, weak_ptr_factory_.GetWeakPtr(),
-      base::Passed(std::move(entries_context)), callback);
-
-  rv = iterator.OpenNextEntry(enumerated_entry, open_entry_callback);
-
-  if (rv != net::ERR_IO_PENDING)
-    open_entry_callback.Run(rv);
-}
-
 void CacheStorageCache::QueryCache(
     std::unique_ptr<ServiceWorkerFetchRequest> request,
     const CacheStorageCacheQueryParams& options,
     QueryCacheType query_type,
-    const QueryCacheResultsCallback& callback) {
+    const QueryCacheCallback& callback) {
   DCHECK_NE(BACKEND_UNINITIALIZED, backend_state_);
   if (backend_state_ != BACKEND_OPEN) {
     callback.Run(CACHE_STORAGE_ERROR_STORAGE,
@@ -602,30 +538,24 @@ void CacheStorageCache::QueryCache(
 
   if (!options.ignore_method && request && !request->method.empty() &&
       request->method != "GET") {
-    callback.Run(CACHE_STORAGE_OK, base::MakeUnique<QueryCacheResults>(
-                                       std::move(request), options, callback));
+    callback.Run(CACHE_STORAGE_OK, base::MakeUnique<QueryCacheResults>());
     return;
   }
 
   ServiceWorkerFetchRequest* request_ptr = request.get();
+  std::unique_ptr<QueryCacheContext> query_cache_context(
+      new QueryCacheContext(std::move(request), options, callback));
+  query_cache_context->query_type = query_type;
 
-  std::unique_ptr<QueryCacheResults> query_cache_results(
-      new QueryCacheResults(std::move(request), options, callback));
-  query_cache_results->query_type = query_type;
-
-  if (query_cache_results->request &&
-      !query_cache_results->request->url.is_empty() && !options.ignore_search) {
-    // There is no need to scan the entire backend, just search for the exact
+  if (query_cache_context->request &&
+      !query_cache_context->request->url.is_empty() && !options.ignore_search) {
+    // There is no need to scan the entire backend, just open the exact
     // URL.
-    std::unique_ptr<disk_cache::Entry*> entry =
-        base::MakeUnique<disk_cache::Entry*>();
-    disk_cache::Entry** entry_ptr = entry.get();
-
+    disk_cache::Entry** entry_ptr = &query_cache_context->enumerated_entry;
     net::CompletionCallback open_entry_callback =
-        base::Bind(&CacheStorageCache::QueryCacheDidOpenEntry,
+        base::Bind(&CacheStorageCache::QueryCacheDidOpenFastPath,
                    weak_ptr_factory_.GetWeakPtr(),
-                   base::Passed(std::move(query_cache_results)),
-                   base::Passed(std::move(entry)));
+                   base::Passed(std::move(query_cache_context)));
     int rv = backend_->OpenEntry(request_ptr->url.spec(), entry_ptr,
                                  open_entry_callback);
     if (rv != net::ERR_IO_PENDING)
@@ -633,131 +563,189 @@ void CacheStorageCache::QueryCache(
     return;
   }
 
-  OpenAllEntries(base::Bind(&CacheStorageCache::QueryCacheDidOpenAllEntries,
-                            weak_ptr_factory_.GetWeakPtr(),
-                            base::Passed(std::move(query_cache_results))));
+  query_cache_context->backend_iterator = backend_->CreateIterator();
+  QueryCacheOpenNextEntry(std::move(query_cache_context));
 }
 
-void CacheStorageCache::QueryCacheDidOpenEntry(
-    std::unique_ptr<QueryCacheResults> query_cache_results,
-    std::unique_ptr<disk_cache::Entry*> entry,
+void CacheStorageCache::QueryCacheDidOpenFastPath(
+    std::unique_ptr<QueryCacheContext> query_cache_context,
     int rv) {
   if (rv != net::OK) {
-    QueryCacheResults* results = query_cache_results.get();
-    results->callback.Run(CACHE_STORAGE_OK, std::move(query_cache_results));
+    QueryCacheContext* results = query_cache_context.get();
+    results->callback.Run(CACHE_STORAGE_OK,
+                          std::move(query_cache_context->matches));
     return;
   }
-
-  std::unique_ptr<OpenAllEntriesContext> entries_context =
-      base::MakeUnique<OpenAllEntriesContext>();
-  entries_context->entries.push_back(*entry.get());
-  QueryCacheDidOpenAllEntries(std::move(query_cache_results),
-                              std::move(entries_context), CACHE_STORAGE_OK);
+  QueryCacheFilterEntry(std::move(query_cache_context), rv);
 }
 
-void CacheStorageCache::QueryCacheDidOpenAllEntries(
-    std::unique_ptr<QueryCacheResults> query_cache_results,
-    std::unique_ptr<OpenAllEntriesContext> entries_context,
-    CacheStorageError error) {
-  if (error != CACHE_STORAGE_OK) {
-    query_cache_results->callback.Run(error,
-                                      std::unique_ptr<QueryCacheResults>());
+void CacheStorageCache::QueryCacheOpenNextEntry(
+    std::unique_ptr<QueryCacheContext> query_cache_context) {
+  DCHECK_EQ(nullptr, query_cache_context->enumerated_entry);
+
+  if (!query_cache_context->backend_iterator) {
+    // Iteration is complete.
+    std::sort(query_cache_context->matches->begin(),
+              query_cache_context->matches->end(), QueryCacheResultCompare);
+
+    query_cache_context->callback.Run(CACHE_STORAGE_OK,
+                                      std::move(query_cache_context->matches));
     return;
   }
 
-  query_cache_results->entries_context.swap(entries_context);
-  Entries::iterator iter =
-      query_cache_results->entries_context->entries.begin();
-  QueryCacheProcessNextEntry(std::move(query_cache_results), iter);
+  disk_cache::Backend::Iterator& iterator =
+      *query_cache_context->backend_iterator;
+  disk_cache::Entry** enumerated_entry = &query_cache_context->enumerated_entry;
+  net::CompletionCallback open_entry_callback = base::Bind(
+      &CacheStorageCache::QueryCacheFilterEntry, weak_ptr_factory_.GetWeakPtr(),
+      base::Passed(std::move(query_cache_context)));
+
+  int rv = iterator.OpenNextEntry(enumerated_entry, open_entry_callback);
+
+  if (rv != net::ERR_IO_PENDING)
+    open_entry_callback.Run(rv);
 }
 
-void CacheStorageCache::QueryCacheProcessNextEntry(
-    std::unique_ptr<QueryCacheResults> query_cache_results,
-    const Entries::iterator& iter) {
-  if (iter == query_cache_results->entries_context->entries.end()) {
-    QueryCacheResultsCallback success_callback = query_cache_results->callback;
-    success_callback.Run(CACHE_STORAGE_OK, std::move(query_cache_results));
+void CacheStorageCache::QueryCacheFilterEntry(
+    std::unique_ptr<QueryCacheContext> query_cache_context,
+    int rv) {
+  if (rv == net::ERR_FAILED) {
+    // This is the indicator that iteration is complete.
+    query_cache_context->backend_iterator.reset();
+    QueryCacheOpenNextEntry(std::move(query_cache_context));
     return;
   }
 
-  if (query_cache_results->request &&
-      !query_cache_results->request->url.is_empty()) {
-    disk_cache::Entry* entry(*iter);
-    GURL requestURL = query_cache_results->request->url;
+  if (rv < 0) {
+    QueryCacheCallback callback = query_cache_context->callback;
+    callback.Run(CACHE_STORAGE_ERROR_STORAGE,
+                 std::move(query_cache_context->matches));
+    return;
+  }
+
+  disk_cache::ScopedEntryPtr entry(query_cache_context->enumerated_entry);
+  query_cache_context->enumerated_entry = nullptr;
+
+  if (backend_state_ != BACKEND_OPEN) {
+    QueryCacheCallback callback = query_cache_context->callback;
+    callback.Run(CACHE_STORAGE_ERROR_NOT_FOUND,
+                 std::move(query_cache_context->matches));
+    return;
+  }
+
+  if (query_cache_context->request &&
+      !query_cache_context->request->url.is_empty()) {
+    GURL requestURL = query_cache_context->request->url;
     GURL cachedURL = GURL(entry->GetKey());
 
-    if (query_cache_results->options.ignore_search) {
+    if (query_cache_context->options.ignore_search) {
       requestURL = RemoveQueryParam(requestURL);
       cachedURL = RemoveQueryParam(cachedURL);
     }
 
     if (cachedURL != requestURL) {
-      QueryCacheProcessNextEntry(std::move(query_cache_results), iter + 1);
+      QueryCacheOpenNextEntry(std::move(query_cache_context));
       return;
     }
   }
 
-  ReadMetadata(*iter,
+  disk_cache::Entry* entry_ptr = entry.get();
+  ReadMetadata(entry_ptr,
                base::Bind(&CacheStorageCache::QueryCacheDidReadMetadata,
                           weak_ptr_factory_.GetWeakPtr(),
-                          base::Passed(std::move(query_cache_results)), iter));
+                          base::Passed(std::move(query_cache_context)),
+                          base::Passed(std::move(entry))));
 }
 
 void CacheStorageCache::QueryCacheDidReadMetadata(
-    std::unique_ptr<QueryCacheResults> query_cache_results,
-    const Entries::iterator& iter,
+    std::unique_ptr<QueryCacheContext> query_cache_context,
+    disk_cache::ScopedEntryPtr entry,
     std::unique_ptr<CacheMetadata> metadata) {
-  disk_cache::ScopedEntryPtr entry(*iter);
-  *iter = nullptr;
-
   if (!metadata) {
     entry->Doom();
-    QueryCacheProcessNextEntry(std::move(query_cache_results), iter + 1);
+    QueryCacheOpenNextEntry(std::move(query_cache_context));
     return;
   }
 
-  ServiceWorkerFetchRequest request;
-  PopulateRequestFromMetadata(*metadata, GURL(entry->GetKey()), &request);
+  // If the entry was created before we started adding entry times, then
+  // default to using the Response object's time for sorting purposes.
+  int64_t entry_time = metadata->has_entry_time()
+                           ? metadata->entry_time()
+                           : metadata->response().response_time();
 
-  ServiceWorkerResponse response;
-  PopulateResponseMetadata(*metadata, &response);
+  query_cache_context->matches->push_back(
+      QueryCacheResult(base::Time::FromInternalValue(entry_time)));
+  QueryCacheResult* match = &query_cache_context->matches->back();
+  match->request = base::MakeUnique<ServiceWorkerFetchRequest>();
+  match->response = base::MakeUnique<ServiceWorkerResponse>();
+  PopulateRequestFromMetadata(*metadata, GURL(entry->GetKey()),
+                              match->request.get());
+  PopulateResponseMetadata(*metadata, match->response.get());
 
-  if (query_cache_results->request &&
-      !query_cache_results->options.ignore_vary &&
-      !VaryMatches(query_cache_results->request->headers, request.headers,
-                   response.headers)) {
-    QueryCacheProcessNextEntry(std::move(query_cache_results), iter + 1);
+  if (query_cache_context->request &&
+      !query_cache_context->options.ignore_vary &&
+      !VaryMatches(query_cache_context->request->headers,
+                   match->request->headers, match->response->headers)) {
+    query_cache_context->matches->pop_back();
+    QueryCacheOpenNextEntry(std::move(query_cache_context));
     return;
   }
 
-  if (query_cache_results->query_type == QueryCacheType::CACHE_ENTRIES) {
-    query_cache_results->out_entries.push_back(std::move(entry));
-    QueryCacheProcessNextEntry(std::move(query_cache_results), iter + 1);
-    return;
-  }
-  DCHECK_EQ(QueryCacheType::REQUESTS_AND_RESPONSES,
-            query_cache_results->query_type);
-
-  query_cache_results->out_requests->push_back(request);
-
-  if (entry->GetDataSize(INDEX_RESPONSE_BODY) == 0) {
-    query_cache_results->out_responses->push_back(response);
-    QueryCacheProcessNextEntry(std::move(query_cache_results), iter + 1);
+  if (query_cache_context->query_type == QueryCacheType::CACHE_ENTRIES) {
+    match->request.reset();
+    match->response.reset();
+    match->entry = std::move(entry);
+    QueryCacheOpenNextEntry(std::move(query_cache_context));
     return;
   }
 
-  if (!blob_storage_context_) {
-    query_cache_results->callback.Run(CACHE_STORAGE_ERROR_STORAGE,
+  query_cache_context->estimated_out_bytes +=
+      match->request->EstimatedStructSize();
+  if (query_cache_context->estimated_out_bytes > max_query_size_bytes_) {
+    query_cache_context->callback.Run(CACHE_STORAGE_ERROR_QUERY_TOO_LARGE,
                                       std::unique_ptr<QueryCacheResults>());
     return;
   }
 
-  std::unique_ptr<storage::BlobDataHandle> blob_data_handle =
-      PopulateResponseBody(std::move(entry), &response);
+  if (query_cache_context->query_type == QueryCacheType::REQUESTS) {
+    match->response.reset();
+    QueryCacheOpenNextEntry(std::move(query_cache_context));
+    return;
+  }
 
-  query_cache_results->out_responses->push_back(response);
-  query_cache_results->out_blob_data_handles->push_back(*blob_data_handle);
-  QueryCacheProcessNextEntry(std::move(query_cache_results), iter + 1);
+  DCHECK_EQ(QueryCacheType::REQUESTS_AND_RESPONSES,
+            query_cache_context->query_type);
+
+  query_cache_context->estimated_out_bytes +=
+      match->response->EstimatedStructSize();
+  if (query_cache_context->estimated_out_bytes > max_query_size_bytes_) {
+    query_cache_context->callback.Run(CACHE_STORAGE_ERROR_QUERY_TOO_LARGE,
+                                      std::unique_ptr<QueryCacheResults>());
+    return;
+  }
+
+  if (entry->GetDataSize(INDEX_RESPONSE_BODY) == 0) {
+    QueryCacheOpenNextEntry(std::move(query_cache_context));
+    return;
+  }
+
+  if (!blob_storage_context_) {
+    query_cache_context->callback.Run(CACHE_STORAGE_ERROR_STORAGE,
+                                      base::MakeUnique<QueryCacheResults>());
+    return;
+  }
+
+  std::unique_ptr<storage::BlobDataHandle> blob_data_handle =
+      PopulateResponseBody(std::move(entry), match->response.get());
+  match->blob_handle = std::move(blob_data_handle);
+
+  QueryCacheOpenNextEntry(std::move(query_cache_context));
+}
+
+// static
+bool CacheStorageCache::QueryCacheResultCompare(const QueryCacheResult& lhs,
+                                                const QueryCacheResult& rhs) {
+  return lhs.entry_time < rhs.entry_time;
 }
 
 void CacheStorageCache::MatchImpl(
@@ -790,15 +778,8 @@ void CacheStorageCache::MatchDidMatchAll(
   std::unique_ptr<ServiceWorkerResponse> response =
       base::MakeUnique<ServiceWorkerResponse>(match_all_responses->at(0));
 
-  std::unique_ptr<storage::BlobDataHandle> data_handle;
-  if (response->blob_size > 0) {
-    // NOTE: This assumes that MatchAll returns the handles in the same order
-    // as the responses.
-    data_handle =
-        base::MakeUnique<storage::BlobDataHandle>(match_all_handles->at(0));
-  }
-
-  callback.Run(CACHE_STORAGE_OK, std::move(response), std::move(data_handle));
+  callback.Run(CACHE_STORAGE_OK, std::move(response),
+               std::move(match_all_handles->at(0)));
 }
 
 void CacheStorageCache::MatchAllImpl(
@@ -828,8 +809,19 @@ void CacheStorageCache::MatchAllDidQueryCache(
     return;
   }
 
-  callback.Run(CACHE_STORAGE_OK, std::move(query_cache_results->out_responses),
-               std::move(query_cache_results->out_blob_data_handles));
+  std::unique_ptr<Responses> out_responses = base::MakeUnique<Responses>();
+  std::unique_ptr<BlobDataHandles> out_handles =
+      base::MakeUnique<BlobDataHandles>();
+  out_responses->reserve(query_cache_results->size());
+  out_handles->reserve(query_cache_results->size());
+
+  for (auto& result : *query_cache_results) {
+    out_responses->push_back(*result.response);
+    out_handles->push_back(std::move(result.blob_handle));
+  }
+
+  callback.Run(CACHE_STORAGE_OK, std::move(out_responses),
+               std::move(out_handles));
 }
 
 void CacheStorageCache::WriteSideDataDidGetQuota(
@@ -1054,6 +1046,7 @@ void CacheStorageCache::PutDidCreateEntry(
   }
 
   CacheMetadata metadata;
+  metadata.set_entry_time(base::Time::Now().ToInternalValue());
   CacheRequest* request_metadata = metadata.mutable_request();
   request_metadata->set_method(put_context->request->method);
   for (ServiceWorkerHeaderMap::const_iterator it =
@@ -1238,14 +1231,14 @@ void CacheStorageCache::DeleteDidQueryCache(
     return;
   }
 
-  if (query_cache_results->out_entries.empty()) {
+  if (query_cache_results->empty()) {
     callback.Run(CACHE_STORAGE_ERROR_NOT_FOUND);
     return;
   }
 
-  for (auto& entry : query_cache_results->out_entries) {
+  for (auto& result : *query_cache_results) {
+    disk_cache::ScopedEntryPtr entry = std::move(result.entry);
     entry->Doom();
-    entry.reset();
   }
 
   UpdateCacheSize();
@@ -1262,8 +1255,7 @@ void CacheStorageCache::KeysImpl(
     return;
   }
 
-  QueryCache(std::move(request), options,
-             QueryCacheType::REQUESTS_AND_RESPONSES,
+  QueryCache(std::move(request), options, QueryCacheType::REQUESTS,
              base::Bind(&CacheStorageCache::KeysDidQueryCache,
                         weak_ptr_factory_.GetWeakPtr(), callback));
 }
@@ -1277,7 +1269,12 @@ void CacheStorageCache::KeysDidQueryCache(
     return;
   }
 
-  callback.Run(CACHE_STORAGE_OK, std::move(query_cache_results->out_requests));
+  std::unique_ptr<Requests> out_requests = base::MakeUnique<Requests>();
+  out_requests->reserve(query_cache_results->size());
+  for (const auto& result : *query_cache_results)
+    out_requests->push_back(*result.request);
+
+  callback.Run(CACHE_STORAGE_OK, std::move(out_requests));
 }
 
 void CacheStorageCache::CloseImpl(const base::Closure& callback) {

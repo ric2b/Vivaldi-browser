@@ -5,7 +5,7 @@
 #include "chrome/browser/page_load_metrics/observers/from_gws_page_load_metrics_observer.h"
 #include <string>
 
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_util.h"
 #include "chrome/common/page_load_metrics/page_load_timing.h"
@@ -404,15 +404,18 @@ void FromGWSPageLoadMetricsLogger::SetProvisionalUrl(const GURL& url) {
 
 FromGWSPageLoadMetricsObserver::FromGWSPageLoadMetricsObserver() {}
 
-void FromGWSPageLoadMetricsObserver::OnStart(
+page_load_metrics::PageLoadMetricsObserver::ObservePolicy
+FromGWSPageLoadMetricsObserver::OnStart(
     content::NavigationHandle* navigation_handle,
     const GURL& currently_committed_url,
     bool started_in_foreground) {
   logger_.SetPreviouslyCommittedUrl(currently_committed_url);
   logger_.SetProvisionalUrl(navigation_handle->GetURL());
+  return CONTINUE_OBSERVING;
 }
 
-void FromGWSPageLoadMetricsObserver::OnCommit(
+page_load_metrics::PageLoadMetricsObserver::ObservePolicy
+FromGWSPageLoadMetricsObserver::OnCommit(
     content::NavigationHandle* navigation_handle) {
   // We'd like to also check navigation_handle->HasUserGesture() here, however
   // this signal is not carried forward for navigations that open links in new
@@ -427,6 +430,7 @@ void FromGWSPageLoadMetricsObserver::OnCommit(
           navigation_handle->GetPageTransition()));
 
   logger_.SetNavigationStart(navigation_handle->NavigationStart());
+  return CONTINUE_OBSERVING;
 }
 
 void FromGWSPageLoadMetricsObserver::OnDomContentLoadedEventStart(

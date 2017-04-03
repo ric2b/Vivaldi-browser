@@ -12,7 +12,6 @@
 #include "base/command_line.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/google/core/browser/google_switches.h"
 #include "components/pref_registry/testing_pref_service_syncable.h"
@@ -106,7 +105,7 @@ TEST_F(TemplateURLPrepopulateDataTest, UniqueIDs) {
   for (size_t i = 0; i < arraysize(kCountryIds); ++i) {
     prefs_.SetInteger(prefs::kCountryIDAtInstall, kCountryIds[i]);
     size_t default_index;
-    ScopedVector<TemplateURLData> urls =
+    std::vector<std::unique_ptr<TemplateURLData>> urls =
         TemplateURLPrepopulateData::GetPrepopulatedEngines(&prefs_,
                                                            &default_index);
     std::set<int> unique_ids;
@@ -132,14 +131,14 @@ TEST_F(TemplateURLPrepopulateDataTest, ProvidersFromPrefs) {
   entry->SetString("favicon_url", "http://foi.com/favicon.ico");
   entry->SetString("encoding", "UTF-8");
   entry->SetInteger("id", 1001);
-  overrides->Append(entry->DeepCopy());
+  overrides->Append(entry->CreateDeepCopy());
   prefs_.SetUserPref(prefs::kSearchProviderOverrides, overrides);
 
   int version = TemplateURLPrepopulateData::GetDataVersion(&prefs_);
   EXPECT_EQ(1, version);
 
   size_t default_index;
-  ScopedVector<TemplateURLData> t_urls =
+  std::vector<std::unique_ptr<TemplateURLData>> t_urls =
       TemplateURLPrepopulateData::GetPrepopulatedEngines(&prefs_,
                                                          &default_index);
 
@@ -163,7 +162,7 @@ TEST_F(TemplateURLPrepopulateDataTest, ProvidersFromPrefs) {
   entry->Set("alternate_urls", alternate_urls);
   entry->SetString("search_terms_replacement_key", "espv");
   overrides = new base::ListValue;
-  overrides->Append(entry->DeepCopy());
+  overrides->Append(entry->CreateDeepCopy());
   prefs_.SetUserPref(prefs::kSearchProviderOverrides, overrides);
 
   t_urls = TemplateURLPrepopulateData::GetPrepopulatedEngines(
@@ -187,17 +186,17 @@ TEST_F(TemplateURLPrepopulateDataTest, ProvidersFromPrefs) {
   // Test that subsequent providers are loaded even if an intermediate
   // provider has an incomplete configuration.
   overrides = new base::ListValue;
-  overrides->Append(entry->DeepCopy());
+  overrides->Append(entry->CreateDeepCopy());
   entry->SetInteger("id", 1002);
   entry->SetString("name", "bar");
   entry->SetString("keyword", "bark");
   entry->SetString("encoding", std::string());
-  overrides->Append(entry->DeepCopy());
+  overrides->Append(entry->CreateDeepCopy());
   entry->SetInteger("id", 1003);
   entry->SetString("name", "baz");
   entry->SetString("keyword", "bazk");
   entry->SetString("encoding", "UTF-8");
-  overrides->Append(entry->DeepCopy());
+  overrides->Append(entry->CreateDeepCopy());
   prefs_.SetUserPref(prefs::kSearchProviderOverrides, overrides);
 
   t_urls =
@@ -231,7 +230,7 @@ TEST_F(TemplateURLPrepopulateDataTest, ClearProvidersFromPrefs) {
   EXPECT_EQ(TemplateURLPrepopulateData::kCurrentDataVersion, version);
 
   size_t default_index;
-  ScopedVector<TemplateURLData> t_urls =
+  std::vector<std::unique_ptr<TemplateURLData>> t_urls =
       TemplateURLPrepopulateData::GetPrepopulatedEngines(&prefs_,
                                                          &default_index);
   ASSERT_FALSE(t_urls.empty());
@@ -260,7 +259,7 @@ TEST_F(TemplateURLPrepopulateDataTest, ProvidersFromPrepopulated) {
   // Use United States.
   prefs_.SetInteger(prefs::kCountryIDAtInstall, 'U'<<8|'S');
   size_t default_index;
-  ScopedVector<TemplateURLData> t_urls =
+  std::vector<std::unique_ptr<TemplateURLData>> t_urls =
       TemplateURLPrepopulateData::GetPrepopulatedEngines(&prefs_,
                                                          &default_index);
 

@@ -74,7 +74,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessDevToolsBrowserTest,
 
   list = DevToolsAgentHost::GetOrCreateAll();
   EXPECT_EQ(1U, list.size());
-  EXPECT_EQ(DevToolsAgentHost::TYPE_WEB_CONTENTS, list[0]->GetType());
+  EXPECT_EQ(DevToolsAgentHost::kTypePage, list[0]->GetType());
   EXPECT_EQ(main_url.spec(), list[0]->GetURL().spec());
 
   // Load same-site page into iframe.
@@ -84,7 +84,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessDevToolsBrowserTest,
 
   list = DevToolsAgentHost::GetOrCreateAll();
   EXPECT_EQ(1U, list.size());
-  EXPECT_EQ(DevToolsAgentHost::TYPE_WEB_CONTENTS, list[0]->GetType());
+  EXPECT_EQ(DevToolsAgentHost::kTypePage, list[0]->GetType());
   EXPECT_EQ(main_url.spec(), list[0]->GetURL().spec());
 
   // Load cross-site page into iframe.
@@ -96,10 +96,13 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessDevToolsBrowserTest,
 
   list = DevToolsAgentHost::GetOrCreateAll();
   EXPECT_EQ(2U, list.size());
-  EXPECT_EQ(DevToolsAgentHost::TYPE_WEB_CONTENTS, list[0]->GetType());
+  EXPECT_EQ(DevToolsAgentHost::kTypePage, list[0]->GetType());
   EXPECT_EQ(main_url.spec(), list[0]->GetURL().spec());
-  EXPECT_EQ(DevToolsAgentHost::TYPE_FRAME, list[1]->GetType());
+  EXPECT_EQ(DevToolsAgentHost::kTypePage, list[1]->GetType());
   EXPECT_EQ(cross_site_url.spec(), list[1]->GetURL().spec());
+  EXPECT_EQ(std::string(), list[0]->GetParentId());
+  EXPECT_EQ(list[0]->GetId(), list[1]->GetParentId());
+  EXPECT_NE(list[1]->GetId(), list[0]->GetId());
 
   // Attaching to both agent hosts.
   scoped_refptr<DevToolsAgentHost> child_host = list[1];
@@ -121,7 +124,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessDevToolsBrowserTest,
 
   list = DevToolsAgentHost::GetOrCreateAll();
   EXPECT_EQ(1U, list.size());
-  EXPECT_EQ(DevToolsAgentHost::TYPE_WEB_CONTENTS, list[0]->GetType());
+  EXPECT_EQ(DevToolsAgentHost::kTypePage, list[0]->GetType());
   EXPECT_EQ(main_url.spec(), list[0]->GetURL().spec());
   EXPECT_TRUE(child_client.closed());
   child_host->DetachClient(&child_client);
@@ -167,6 +170,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessDevToolsBrowserTest, AgentHostForFrames) {
   child_frame_agent =
       DevToolsAgentHost::GetOrCreateFor(child->current_frame_host());
   EXPECT_NE(page_agent.get(), child_frame_agent.get());
+  EXPECT_EQ(child_frame_agent->GetParentId(), page_agent->GetId());
+  EXPECT_NE(child_frame_agent->GetId(), page_agent->GetId());
 }
 
 IN_PROC_BROWSER_TEST_F(SitePerProcessDevToolsBrowserTest,
@@ -194,6 +199,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessDevToolsBrowserTest,
   scoped_refptr<DevToolsAgentHost> main_frame_agent =
       DevToolsAgentHost::GetOrCreateFor(root->current_frame_host());
   EXPECT_NE(main_frame_agent.get(), child_frame_agent.get());
+  EXPECT_EQ(child_frame_agent->GetParentId(), main_frame_agent->GetId());
+  EXPECT_NE(child_frame_agent->GetId(), main_frame_agent->GetId());
 
   // Agent for web contents should be the the main frame's one.
   scoped_refptr<DevToolsAgentHost> page_agent =

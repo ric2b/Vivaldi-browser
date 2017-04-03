@@ -20,6 +20,8 @@ namespace task_manager {
 
 namespace {
 
+constexpr uint32_t kKillProcessMinInstanceVersion = 1;
+
 base::string16 MakeTitle(const std::string& process_name,
                          arc::mojom::ProcessState process_state) {
   int name_template = IDS_TASK_MANAGER_ARC_PREFIX;
@@ -87,13 +89,14 @@ ArcProcessTask::ArcProcessTask(base::ProcessId pid,
 void ArcProcessTask::StartIconLoading() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  if (package_name_.empty())
-    return;
-
   scoped_refptr<arc::ActivityIconLoader> icon_loader = GetIconLoader();
   arc::ActivityIconLoader::GetResult result =
       arc::ActivityIconLoader::GetResult::FAILED_ARC_NOT_READY;
   if (icon_loader) {
+    // In some case, the package_name_ does not exists, it would be expected to
+    // get default process icon. For example, daemon processes in android
+    // container such like surfaceflinger, debuggerd or installd. Each of them
+    // would be shown on task manager but does not have a package name.
     std::vector<arc::ActivityIconLoader::ActivityName> activities = {
         {package_name_, kEmptyActivityName}};
     result = icon_loader->GetActivityIcons(
@@ -126,18 +129,12 @@ bool ArcProcessTask::IsKillable() {
 }
 
 void ArcProcessTask::Kill() {
-  arc::mojom::ProcessInstance* arc_process_instance =
-      arc::ArcBridgeService::Get()->process()->instance();
-  if (!arc_process_instance) {
-    LOG(ERROR) << "ARC process instance is not ready.";
+  auto* process_instance =
+      arc::ArcBridgeService::Get()->process()->GetInstanceForMethod(
+          "KillProcess", kKillProcessMinInstanceVersion);
+  if (!process_instance)
     return;
-  }
-  if (arc::ArcBridgeService::Get()->process()->version() < 1) {
-    LOG(ERROR) << "ARC KillProcess IPC is unavailable.";
-    return;
-  }
-  arc_process_instance->KillProcess(nspid_,
-                                    "Killed manually from Task Manager");
+  process_instance->KillProcess(nspid_, "Killed manually from Task Manager");
 }
 
 void ArcProcessTask::OnInstanceReady() {

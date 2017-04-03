@@ -27,7 +27,6 @@
 #include "third_party/WebKit/public/web/WebMediaDevicesRequest.h"
 #include "third_party/WebKit/public/web/WebUserMediaClient.h"
 #include "third_party/WebKit/public/web/WebUserMediaRequest.h"
-#include "third_party/webrtc/api/mediastreaminterface.h"
 
 namespace content {
 class PeerConnectionDependencyFactory;
@@ -65,8 +64,6 @@ class CONTENT_EXPORT UserMediaClientImpl
       const blink::WebUserMediaRequest& user_media_request) override;
   void requestMediaDevices(
       const blink::WebMediaDevicesRequest& media_devices_request) override;
-  void cancelMediaDevicesRequest(
-      const blink::WebMediaDevicesRequest& media_devices_request) override;
   void requestSources(
       const blink::WebMediaStreamTrackSourcesRequest& sources_request) override;
   void setMediaDeviceChangeObserver(
@@ -90,7 +87,7 @@ class CONTENT_EXPORT UserMediaClientImpl
   void OnDevicesChanged() override;
 
   // RenderFrameObserver override
-  void FrameWillClose() override;
+  void WillCommitProvisionalLoad() override;
 
  protected:
   // Called when |source| has been stopped from JavaScript.

@@ -50,6 +50,9 @@ SigninResourcesProvider* ChromeBrowserProvider::GetSigninResourcesProvider() {
   return nullptr;
 }
 
+void ChromeBrowserProvider::SetChromeIdentityServiceForTesting(
+    std::unique_ptr<ChromeIdentityService> service) {}
+
 ChromeIdentityService* ChromeBrowserProvider::GetChromeIdentityService() {
   return nullptr;
 }
@@ -94,12 +97,26 @@ void ChromeBrowserProvider::GetFaviconForURL(
     const std::vector<int>& desired_sizes_in_pixel,
     const favicon_base::FaviconResultsCallback& callback) const {}
 
+UITextField<TextFieldStyling>* ChromeBrowserProvider::CreateStyledTextField(
+    CGRect frame) const {
+  return nil;
+}
+
+id<AppRatingPrompt> ChromeBrowserProvider::CreateAppRatingPrompt() const {
+  return nil;
+}
+
+void ChromeBrowserProvider::InitializeCastService(id main_tab_model) const {}
+
+void ChromeBrowserProvider::AttachTabHelpers(web::WebState* web_state,
+                                             id tab) const {}
+
 bool ChromeBrowserProvider::IsSafeBrowsingEnabled(
     const base::Closure& on_update_callback) {
   return false;
 }
 
-std::unique_ptr<browser_sync::SyncedWindowDelegatesGetter>
+std::unique_ptr<sync_sessions::SyncedWindowDelegatesGetter>
 ChromeBrowserProvider::CreateSyncedWindowDelegatesGetter(
     ios::ChromeBrowserState* browser_state) {
   return nullptr;

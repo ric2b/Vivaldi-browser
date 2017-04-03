@@ -70,7 +70,19 @@ class ChannelAssociatedGroupController
     connector_->set_connection_error_handler(
         base::Bind(&ChannelAssociatedGroupController::OnPipeError,
                    base::Unretained(this)));
+  }
 
+  void Pause() {
+    DCHECK(!paused_);
+    paused_ = true;
+  }
+
+  void Unpause() {
+    DCHECK(paused_);
+    paused_ = false;
+  }
+
+  void FlushOutgoingMessages() {
     std::vector<mojo::Message> outgoing_messages;
     std::swap(outgoing_messages, outgoing_messages_);
     for (auto& message : outgoing_messages)
@@ -466,8 +478,7 @@ class ChannelAssociatedGroupController
   bool SendMessage(mojo::Message* message) {
     if (task_runner_->BelongsToCurrentThread()) {
       DCHECK(thread_checker_.CalledOnValidThread());
-      if (!connector_) {
-        // Pipe may not be bound yet, so we queue the message.
+      if (!connector_ || paused_) {
         outgoing_messages_.emplace_back(std::move(*message));
         return true;
       }
@@ -591,11 +602,9 @@ class ChannelAssociatedGroupController
     DCHECK(mojo::IsValidInterfaceId(id));
 
     base::AutoLock locker(lock_);
-    Endpoint* endpoint = GetEndpointForDispatch(id);
-    if (!endpoint)
-      return true;
-
-    mojo::InterfaceEndpointClient* client = endpoint->client();
+    Endpoint* endpoint = GetEndpointForDispatch(id, true /* create */);
+    mojo::InterfaceEndpointClient* client =
+        endpoint ? endpoint->client() : nullptr;
     if (!client || !endpoint->task_runner()->BelongsToCurrentThread()) {
       // No client has been bound yet or the client runs tasks on another
       // thread. We assume the other thread must always be the one on which
@@ -642,7 +651,7 @@ class ChannelAssociatedGroupController
     DCHECK(mojo::IsValidInterfaceId(id) && !mojo::IsMasterInterfaceId(id));
 
     base::AutoLock locker(lock_);
-    Endpoint* endpoint = GetEndpointForDispatch(id);
+    Endpoint* endpoint = GetEndpointForDispatch(id, false /* create */);
     if (!endpoint)
       return;
 
@@ -669,7 +678,8 @@ class ChannelAssociatedGroupController
     DCHECK(proxy_task_runner_->BelongsToCurrentThread());
 
     base::AutoLock locker(lock_);
-    Endpoint* endpoint = GetEndpointForDispatch(interface_id);
+    Endpoint* endpoint =
+        GetEndpointForDispatch(interface_id, false /* create */);
     if (!endpoint)
       return;
 
@@ -695,20 +705,16 @@ class ChannelAssociatedGroupController
       RaiseError();
   }
 
-  Endpoint* GetEndpointForDispatch(mojo::InterfaceId id) {
+  Endpoint* GetEndpointForDispatch(mojo::InterfaceId id, bool create) {
     lock_.AssertAcquired();
+    auto iter = endpoints_.find(id);
+    if (iter != endpoints_.end())
+      return iter->second.get();
+    if (!create)
+      return nullptr;
     bool inserted = false;
     Endpoint* endpoint = FindOrInsertEndpoint(id, &inserted);
-    if (inserted) {
-      MarkClosedAndMaybeRemove(endpoint);
-      if (!mojo::IsMasterInterfaceId(id))
-        control_message_proxy_.NotifyPeerEndpointClosed(id);
-      return nullptr;
-    }
-
-    if (endpoint->closed())
-      return nullptr;
-
+    DCHECK(inserted);
     return endpoint;
   }
 
@@ -752,6 +758,7 @@ class ChannelAssociatedGroupController
 
   scoped_refptr<base::SingleThreadTaskRunner> proxy_task_runner_;
   const bool set_interface_id_namespace_bit_;
+  bool paused_ = false;
   std::unique_ptr<mojo::Connector> connector_;
   mojo::FilterChain filters_;
   mojo::PipeControlMessageHandler control_message_handler_;
@@ -801,6 +808,18 @@ class MojoBootstrapImpl : public MojoBootstrap {
     controller_->CreateChannelEndpoints(&sender, &receiver);
 
     delegate_->OnPipesAvailable(std::move(sender), std::move(receiver));
+  }
+
+  void Pause() override {
+    controller_->Pause();
+  }
+
+  void Unpause() override {
+    controller_->Unpause();
+  }
+
+  void Flush() override {
+    controller_->FlushOutgoingMessages();
   }
 
   mojo::AssociatedGroup* GetAssociatedGroup() override {

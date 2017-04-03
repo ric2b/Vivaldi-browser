@@ -4,7 +4,6 @@
 
 #include "components/sync/engine_impl/cycle/nudge_tracker.h"
 
-#include <stddef.h>
 #include <stdint.h>
 
 #include <string>
@@ -745,8 +744,8 @@ TEST_F(NudgeTrackerTest, NudgeDelayTest) {
   EXPECT_GT(nudge_tracker_.RecordLocalChange(ModelTypeSet(BOOKMARKS)),
             base::TimeDelta());
 
-  // Sessions is longer than "slow nudge".
-  EXPECT_GT(nudge_tracker_.RecordLocalChange(ModelTypeSet(SESSIONS)),
+  // Sessions has a "slow nudge".
+  EXPECT_EQ(nudge_tracker_.RecordLocalChange(ModelTypeSet(SESSIONS)),
             nudge_tracker_.RecordLocalChange(ModelTypeSet(BOOKMARKS)));
 
   // Favicons have the same delay as sessions.
@@ -792,7 +791,7 @@ TEST_F(NudgeTrackerTest, NoTypesShorterThanDefault) {
   nudge_tracker_.SetDefaultNudgeDelay(base::TimeDelta::FromMilliseconds(500));
 
   std::map<ModelType, base::TimeDelta> delay_map;
-  ModelTypeSet protocol_types = syncer::ProtocolTypes();
+  ModelTypeSet protocol_types = ProtocolTypes();
   for (ModelTypeSet::Iterator iter = protocol_types.First(); iter.Good();
        iter.Inc()) {
     delay_map[iter.Get()] = base::TimeDelta();

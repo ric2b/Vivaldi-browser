@@ -24,7 +24,6 @@
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "content/browser/download/download_resource_handler.h"
 #include "content/browser/download/save_types.h"
 #include "content/browser/loader/global_routing_id.h"
 #include "content/browser/loader/resource_loader.h"
@@ -34,6 +33,7 @@
 #include "content/common/url_loader.mojom.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/resource_dispatcher_host.h"
+#include "content/public/browser/resource_request_info.h"
 #include "content/public/common/request_context_type.h"
 #include "content/public/common/resource_type.h"
 #include "ipc/ipc_message.h"
@@ -41,8 +41,6 @@
 #include "net/base/request_priority.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/url_request/url_request.h"
-
-class ResourceHandler;
 
 namespace base {
 class FilePath;
@@ -59,18 +57,18 @@ class ShareableFileReference;
 namespace content {
 class AppCacheService;
 class AsyncRevalidationManager;
-class CertStore;
 class LoaderDelegate;
 class NavigationURLLoaderImplCore;
+class NavigationUIData;
 class RenderFrameHostImpl;
 class ResourceContext;
 class ResourceDispatcherHostDelegate;
+class ResourceHandler;
 class ResourceMessageDelegate;
 class ResourceMessageFilter;
 class ResourceRequestInfoImpl;
 class ServiceWorkerNavigationHandleCore;
 struct CommonNavigationParams;
-struct DownloadSaveInfo;
 struct NavigationRequestInfo;
 struct Referrer;
 struct ResourceRequest;
@@ -79,10 +77,19 @@ namespace mojom {
 class URLLoader;
 }  // namespace mojom
 
+using CreateDownloadHandlerIntercept =
+    base::Callback<std::unique_ptr<ResourceHandler>(net::URLRequest*)>;
+
 class CONTENT_EXPORT ResourceDispatcherHostImpl
     : public ResourceDispatcherHost,
       public ResourceLoaderDelegate {
  public:
+  // This constructor should be used if we want downloads to work correctly.
+  // TODO(ananta)
+  // Work on moving creation of download handlers out of
+  // ResourceDispatcherHostImpl.
+  ResourceDispatcherHostImpl(
+      CreateDownloadHandlerIntercept download_handler_intercept);
   ResourceDispatcherHostImpl();
   ~ResourceDispatcherHostImpl() override;
 
@@ -128,27 +135,6 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   // Returns true if the message was a resource message that was processed.
   bool OnMessageReceived(const IPC::Message& message,
                          ResourceMessageFilter* filter);
-
-  DownloadInterruptReason BeginDownload(
-      std::unique_ptr<net::URLRequest> request,
-      const Referrer& referrer,
-      bool is_content_initiated,
-      ResourceContext* context,
-      int render_process_id,
-      int render_view_route_id,
-      int render_frame_route_id,
-      bool do_not_prompt_for_login);
-
-  // Initiates a save file from the browser process (as opposed to a resource
-  // request from the renderer or another child process).
-  void BeginSaveFile(const GURL& url,
-                     const Referrer& referrer,
-                     SaveItemId save_item_id,
-                     SavePackageId save_package_id,
-                     int child_id,
-                     int render_view_route_id,
-                     int render_frame_route_id,
-                     ResourceContext* context);
 
   // Cancels the given request if it still exists.
   void CancelRequest(int child_id, int request_id);
@@ -244,10 +230,13 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   // Must be called after the ResourceRequestInfo has been created
   // and associated with the request.
   // This is marked virtual so it can be overriden in testing.
+  // TODO(ananta)
+  // This method should be removed or moved outside this class.
   virtual std::unique_ptr<ResourceHandler> CreateResourceHandlerForDownload(
       net::URLRequest* request,
       bool is_content_initiated,
-      bool must_download);
+      bool must_download,
+      bool is_new_request);
 
   // Called to determine whether the response to |request| should be intercepted
   // and handled as a stream. Streams are used to pass direct access to a
@@ -282,9 +271,12 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
 
   // PlzNavigate: Begins a request for NavigationURLLoader. |loader| is the
   // loader to attach to the leaf resource handler.
-  void BeginNavigationRequest(ResourceContext* resource_context,
-                              const NavigationRequestInfo& info,
-                              NavigationURLLoaderImplCore* loader);
+  void BeginNavigationRequest(
+      ResourceContext* resource_context,
+      const NavigationRequestInfo& info,
+      std::unique_ptr<NavigationUIData> navigation_ui_data,
+      NavigationURLLoaderImplCore* loader,
+      ServiceWorkerNavigationHandleCore* service_worker_handle_core);
 
   int num_in_flight_requests_for_testing() const {
     return num_in_flight_requests_;
@@ -309,6 +301,35 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
       mojom::URLLoaderClientPtr url_loader_client,
       ResourceMessageFilter* filter);
 
+  // Helper function for initializing the |request| passed in. By initializing
+  // we mean setting the |referrer| on the |request|, associating the
+  // ResourceRequestInfoImpl structure with the |request|, etc.
+  // This function should be called for invoking the BeginURLRequest() function
+  // to initiate a URL request.
+  void InitializeURLRequest(net::URLRequest* request,
+                            const Referrer& referrer,
+                            bool is_download,
+                            int render_process_host_id,
+                            int render_view_routing_id,
+                            int render_frame_routing_id,
+                            ResourceContext* context);
+
+  // Helper function for initiating a URL request. The |is_download| and
+  // |is_content_initiated and |do_not_prompt_for_login| parameters are
+  // specific to download requests.
+  // TODO(ananta)
+  // Look into a better way of passing these parameters in.
+  // Please note that the InitializeURLRequest() function needs to be called
+  // called to initialize the request before calling this function.
+  void BeginURLRequest(std::unique_ptr<net::URLRequest> request,
+                       std::unique_ptr<ResourceHandler> handler,
+                       bool is_download,
+                       bool is_content_initiated,
+                       bool do_not_prompt_for_login,
+                       ResourceContext* context);
+
+  bool is_shutdown() const { return is_shutdown_; }
+
  private:
   friend class ResourceDispatcherHostTest;
 
@@ -322,6 +343,10 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
                            TestProcessCancelDetachableTimesOut);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessIgnoreCertErrorsBrowserTest,
                            CrossSiteRedirectCertificateStore);
+  FRIEND_TEST_ALL_PREFIXES(ResourceDispatcherHostTest, LoadInfo);
+  FRIEND_TEST_ALL_PREFIXES(ResourceDispatcherHostTest, LoadInfoSamePriority);
+  FRIEND_TEST_ALL_PREFIXES(ResourceDispatcherHostTest, LoadInfoUploadProgress);
+  FRIEND_TEST_ALL_PREFIXES(ResourceDispatcherHostTest, LoadInfoTwoRenderViews);
 
   struct OustandingRequestsStats {
     int memory_cost;
@@ -332,15 +357,20 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   friend class ResourceMessageDelegate;
 
   // Information about status of a ResourceLoader.
-  struct LoadInfo {
+  struct CONTENT_EXPORT LoadInfo {
+    LoadInfo();
+    LoadInfo(const LoadInfo& other);
+    ~LoadInfo();
+    ResourceRequestInfo::WebContentsGetter web_contents_getter;
     GURL url;
     net::LoadStateWithParam load_state;
     uint64_t upload_position;
     uint64_t upload_size;
   };
 
-  // Map from ProcessID+RouteID pair to the "most interesting" LoadState.
-  typedef std::map<GlobalRoutingID, LoadInfo> LoadInfoMap;
+  // Map from WebContents* to the "most interesting" LoadState.
+  typedef std::map<WebContents*, LoadInfo> LoadInfoMap;
+  typedef std::vector<LoadInfo> LoadInfoList;
 
   // Information about a HTTP header interceptor.
   struct HeaderInterceptorInfo {
@@ -378,7 +408,7 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   // A shutdown helper that runs on the IO thread.
   void OnShutdown();
 
-  // Helper function for regular and download requests.
+  // Helper function for URL requests.
   void BeginRequestInternal(std::unique_ptr<net::URLRequest> request,
                             std::unique_ptr<ResourceHandler> handler);
 
@@ -456,8 +486,18 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   // waiting for a host name to resolve implies being stuck.
   static bool LoadInfoIsMoreInteresting(const LoadInfo& a, const LoadInfo& b);
 
-  // Gets the most interesting LoadInfo for each GlobalRoutingID.
-  std::unique_ptr<LoadInfoMap> GetLoadInfoForAllRoutes();
+  // Picks the most interesting LoadInfos from the given array per WebContents
+  // and calls the delegate with them.
+  static void UpdateLoadStateOnUI(LoaderDelegate* loader_delegate,
+                                  std::unique_ptr<LoadInfoList> infos);
+
+  // Returns the most interesting LoadInfos from the given array per
+  // WebContents.
+  static std::unique_ptr<LoadInfoMap> PickMoreInterestingLoadInfos(
+      std::unique_ptr<LoadInfoList> infos);
+
+  // Gets all the LoadInfos for each pending request.
+  std::unique_ptr<LoadInfoList> GetLoadInfoForAllRoutes();
 
   // Checks all pending requests and updates the load info if necessary.
   void UpdateLoadInfo();
@@ -594,16 +634,6 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
                                int child_id,
                                bool is_sync_load);
 
-  // The certificate on a ResourceResponse is associated with a
-  // particular renderer process. As a transfer to a new process
-  // completes, the stored certificate has to be updated to reflect the
-  // new renderer process.
-  void UpdateResponseCertificateForTransfer(ResourceResponse* response,
-                                            const net::SSLInfo& ssl_info,
-                                            int child_id);
-
-  CertStore* GetCertStore();
-
   // Consults the RendererSecurity policy to determine whether the
   // ResourceDispatcherHostImpl should service this request.  A request might
   // be disallowed if the renderer is not authorized to retrieve the request
@@ -614,6 +644,18 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
                             const net::HttpRequestHeaders& headers,
                             ResourceMessageFilter* filter,
                             ResourceContext* resource_context);
+
+  // Notifies the ResourceDispatcherHostDelegate about a download having
+  // started. The function returns the |handler| passed in, if the download
+  // is not throttled. If the download is to be throttled (Decided by the
+  // delegate) the function returns a ThrottlingResourceHandler to handle the
+  // download.
+  std::unique_ptr<ResourceHandler> HandleDownloadStarted(
+      net::URLRequest* request,
+      std::unique_ptr<ResourceHandler> handler,
+      bool is_content_initiated,
+      bool must_download,
+      bool is_new_request);
 
   LoaderMap pending_loaders_;
 
@@ -702,12 +744,11 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
 
   std::unique_ptr<ResourceScheduler> scheduler_;
 
-  // Allows tests to use a mock CertStore. If set, the CertStore must
-  // outlive this ResourceDispatcherHostImpl.
-  CertStore* cert_store_for_testing_;
-
   // Used to invoke an interceptor for the HTTP header.
   HeaderInterceptorMap http_header_interceptor_map_;
+
+  // Points to the registered download handler intercept.
+  CreateDownloadHandlerIntercept create_download_handler_intercept_;
 
   DISALLOW_COPY_AND_ASSIGN(ResourceDispatcherHostImpl);
 };

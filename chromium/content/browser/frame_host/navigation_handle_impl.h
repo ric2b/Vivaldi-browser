@@ -8,6 +8,7 @@
 #include "content/public/browser/navigation_handle.h"
 
 #include <stddef.h>
+#include <string>
 
 #include "base/callback.h"
 #include "base/macros.h"
@@ -18,6 +19,7 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/navigation_data.h"
 #include "content/public/browser/navigation_throttle.h"
+#include "content/public/browser/ssl_status.h"
 #include "content/public/common/request_context_type.h"
 #include "url/gurl.h"
 
@@ -25,8 +27,11 @@ struct FrameHostMsg_DidCommitProvisionalLoad_Params;
 
 namespace content {
 
+class NavigationUIData;
 class NavigatorDelegate;
 class ResourceRequestBodyImpl;
+class ServiceWorkerContextWrapper;
+class ServiceWorkerNavigationHandle;
 
 // This class keeps track of a single navigation. It is created upon receipt of
 // a DidStartProvisionalLoad IPC in a RenderFrameHost. The RenderFrameHost owns
@@ -117,11 +122,23 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
       const GURL& new_referrer_url,
       bool new_is_external_protocol) override;
   NavigationThrottle::ThrottleCheckResult CallWillProcessResponseForTesting(
-      RenderFrameHost* render_frame_host) override;
+      RenderFrameHost* render_frame_host,
+      const std::string& raw_response_header) override;
+  void CallDidCommitNavigationForTesting(const GURL& url) override;
   bool WasStartedFromContextMenu() const override;
 
   NavigationData* GetNavigationData() override;
 
+  // The NavigatorDelegate to notify/query for various navigation events.
+  // Normally this is the WebContents, except if this NavigationHandle was
+  // created during a navigation to an interstitial page. In this case it will
+  // be the InterstitialPage itself.
+  //
+  // Note: due to the interstitial navigation case, all calls that can possibly
+  // expose the NavigationHandle to code outside of content/ MUST go though the
+  // NavigatorDelegate. In particular, the ContentBrowserClient should not be
+  // called directly form the NavigationHandle code. Thus, these calls will not
+  // expose the NavigationHandle when navigating to an InterstialPage.
   NavigatorDelegate* GetDelegate() const;
 
   RequestContextType GetRequestContextType() const;
@@ -165,6 +182,13 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
     return resource_request_body_;
   }
 
+  // PlzNavigate
+  void InitServiceWorkerHandle(
+      ServiceWorkerContextWrapper* service_worker_context);
+  ServiceWorkerNavigationHandle* service_worker_handle() const {
+    return service_worker_handle_.get();
+  }
+
   typedef base::Callback<void(NavigationThrottle::ThrottleCheckResult)>
       ThrottleChecksFinishedCallback;
 
@@ -203,6 +227,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   void WillProcessResponse(
       RenderFrameHostImpl* render_frame_host,
       scoped_refptr<net::HttpResponseHeaders> response_headers,
+      const SSLStatus& ssl_status,
       const ThrottleChecksFinishedCallback& callback);
 
   // Returns the FrameTreeNode this navigation is happening in.
@@ -225,6 +250,12 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // here.
   void set_navigation_data(std::unique_ptr<NavigationData> navigation_data) {
     navigation_data_ = std::move(navigation_data);
+  }
+
+  SSLStatus ssl_status() { return ssl_status_; }
+
+  NavigationUIData* navigation_ui_data() const {
+    return navigation_ui_data_.get();
   }
 
  private:
@@ -319,8 +350,19 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // This callback will be run when all throttle checks have been performed.
   ThrottleChecksFinishedCallback complete_callback_;
 
-  // Embedder data tied to this navigation.
+  // PlzNavigate
+  // Manages the lifetime of a pre-created ServiceWorkerProviderHost until a
+  // corresponding ServiceWorkerNetworkProvider is created in the renderer.
+  std::unique_ptr<ServiceWorkerNavigationHandle> service_worker_handle_;
+
+  // Embedder data from the IO thread tied to this navigation.
   std::unique_ptr<NavigationData> navigation_data_;
+
+  // PlzNavigate
+  // Embedder data from the UI thread tied to this navigation.
+  std::unique_ptr<NavigationUIData> navigation_ui_data_;
+
+  SSLStatus ssl_status_;
 
   // False by default unless the navigation started within a context menu.
   bool started_from_context_menu_;

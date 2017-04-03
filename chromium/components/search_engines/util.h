@@ -6,6 +6,7 @@
 #define COMPONENTS_SEARCH_ENGINES_UTIL_H_
 
 // This file contains utility functions for search engine functionality.
+
 #include <memory>
 #include <set>
 #include <string>
@@ -13,9 +14,6 @@
 
 #include "base/strings/string16.h"
 #include "components/search_engines/template_url_service.h"
-
-template <typename T>
-class ScopedVector;
 
 class KeywordWebDataService;
 class PrefService;
@@ -77,8 +75,8 @@ struct ActionsFromPrepopulateData {
 //
 // NOTE: Takes ownership of, and clears, |prepopulated_urls|.
 ActionsFromPrepopulateData CreateActionsFromCurrentPrepopulateData(
-    ScopedVector<TemplateURLData>* prepopulated_urls,
-    const TemplateURLService::TemplateURLVector& existing_urls,
+    std::vector<std::unique_ptr<TemplateURLData>>* prepopulated_urls,
+    const TemplateURLService::OwnedTemplateURLVector& existing_urls,
     const TemplateURL* default_search_provider);
 
 // Processes the results of KeywordWebDataService::GetKeywords, combining it
@@ -97,7 +95,7 @@ void GetSearchProvidersUsingKeywordResult(
     const WDTypedResult& result,
     KeywordWebDataService* service,
     PrefService* prefs,
-    TemplateURLService::TemplateURLVector* template_urls,
+    TemplateURLService::OwnedTemplateURLVector* template_urls,
     TemplateURL* default_search_provider,
     const SearchTermsData& search_terms_data,
     int* new_resource_keyword_version,
@@ -113,7 +111,7 @@ void GetSearchProvidersUsingKeywordResult(
 void GetSearchProvidersUsingLoadedEngines(
     KeywordWebDataService* service,
     PrefService* prefs,
-    TemplateURLService::TemplateURLVector* template_urls,
+    TemplateURLService::OwnedTemplateURLVector* template_urls,
     TemplateURL* default_search_provider,
     const SearchTermsData& search_terms_data,
     int* resource_keyword_version,
@@ -131,10 +129,14 @@ bool DeDupeEncodings(std::vector<std::string>* encodings);
 // so it's accessible by unittests.
 void RemoveDuplicatePrepopulateIDs(
     KeywordWebDataService* service,
-    const ScopedVector<TemplateURLData>& prepopulated_urls,
+    const std::vector<std::unique_ptr<TemplateURLData>>& prepopulated_urls,
     TemplateURL* default_search_provider,
-    TemplateURLService::TemplateURLVector* template_urls,
+    TemplateURLService::OwnedTemplateURLVector* template_urls,
     const SearchTermsData& search_terms_data,
     std::set<std::string>* removed_keyword_guids);
+
+TemplateURLService::OwnedTemplateURLVector::iterator FindTemplateURL(
+    TemplateURLService::OwnedTemplateURLVector* urls,
+    const TemplateURL* url);
 
 #endif  // COMPONENTS_SEARCH_ENGINES_UTIL_H_

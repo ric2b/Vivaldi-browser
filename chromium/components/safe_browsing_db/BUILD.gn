@@ -19,7 +19,6 @@ proto_library("v4_store_proto") {
   ]
 }
 
-# GYP version: components/safe_browsing_db.gypi:safe_browsing_metadata_proto
 proto_library("metadata_proto") {
   sources = [
     "metadata.proto",
@@ -42,7 +41,6 @@ group("safe_browsing_db") {
   deps = [
     ":safe_browsing_db_shared",
     ":v4_local_database_manager",
-    ":v4_update_protocol_manager",
   ]
 }
 
@@ -65,6 +63,7 @@ static_library("database_manager") {
     ":hit_report",
     ":util",
     ":v4_get_hash_protocol_manager",
+    ":v4_protocol_manager_util",
     "//base",
     "//content/public/browser",
     "//content/public/common",
@@ -154,8 +153,10 @@ static_library("util") {
     "util.cc",
     "util.h",
   ]
-  deps = [
+  public_deps = [
     ":v4_protocol_manager_util",
+  ]
+  deps = [
     "//base",
     "//crypto",
     "//net",
@@ -183,6 +184,16 @@ static_library("v4_database") {
   ]
 }
 
+static_library("v4_feature_list") {
+  sources = [
+    "v4_feature_list.cc",
+    "v4_feature_list.h",
+  ]
+  deps = [
+    "//base",
+  ]
+}
+
 static_library("v4_get_hash_protocol_manager") {
   sources = [
     "v4_get_hash_protocol_manager.cc",
@@ -195,6 +206,7 @@ static_library("v4_get_hash_protocol_manager") {
     ":util",
     ":v4_protocol_manager_util",
     "//base",
+    "//content/public/browser",
     "//net",
     "//url",
   ]
@@ -210,6 +222,8 @@ static_library("v4_local_database_manager") {
     ":hit_report",
     ":safebrowsing_proto",
     ":v4_database",
+    ":v4_feature_list",
+    ":v4_get_hash_protocol_manager",
     ":v4_protocol_manager_util",
     ":v4_update_protocol_manager",
     "//base",
@@ -224,8 +238,10 @@ source_set("v4_protocol_manager_util") {
     "v4_protocol_manager_util.cc",
     "v4_protocol_manager_util.h",
   ]
-  deps = [
+  public_deps = [
     ":safebrowsing_proto",
+  ]
+  deps = [
     "//base",
     "//net",
     "//url",
@@ -270,8 +286,61 @@ static_library("v4_update_protocol_manager") {
     ":util",
     ":v4_protocol_manager_util",
     "//base",
+    "//components/data_use_measurement/core",
     "//net",
     "//url",
+  ]
+}
+
+source_set("v4_database_unittest") {
+  testonly = true
+  sources = [
+    "v4_database_unittest.cc",
+  ]
+  deps = [
+    ":v4_database",
+    ":v4_store",
+    "//base",
+    "//base/test:test_support",
+    "//content/test:test_support",
+    "//testing/gtest",
+  ]
+}
+
+source_set("v4_get_hash_protocol_manager_unittest") {
+  testonly = true
+  sources = [
+    "v4_get_hash_protocol_manager_unittest.cc",
+  ]
+  deps = [
+    ":safebrowsing_proto",
+    ":util",
+    ":v4_database",
+    ":v4_get_hash_protocol_manager",
+    ":v4_local_database_manager",
+    "//base",
+    "//base/test:test_support",
+    "//content/test:test_support",
+    "//net",
+    "//net:test_support",
+    "//testing/gtest",
+  ]
+}
+
+source_set("v4_local_database_manager_unittest") {
+  testonly = true
+  sources = [
+    "v4_local_database_manager_unittest.cc",
+  ]
+  deps = [
+    ":v4_database",
+    ":v4_local_database_manager",
+    "//base",
+    "//base/test:test_support",
+    "//content/test:test_support",
+    "//net",
+    "//net:test_support",
+    "//testing/gtest",
   ]
 }
 

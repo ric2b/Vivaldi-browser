@@ -32,7 +32,6 @@
 #define WebSubstringUtil_h
 
 #include "../../platform/WebCommon.h"
-#include "public/web/WebFrame.h"
 
 #if __OBJC__
 @class NSAttributedString;
@@ -42,35 +41,35 @@ class NSAttributedString;
 
 namespace blink {
 
-class WebView;
+class WebFrameWidget;
+class WebLocalFrame;
 struct WebPoint;
 
 class WebSubstringUtil {
-public:
-    // Returns an autoreleased NSAttributedString that is the word under
-    // the given point, or nil on error.
-    // Upon return, |baselinePoint| is set to the left baseline point in
-    // AppKit coordinates.
-    BLINK_EXPORT static NSAttributedString* attributedWordAtPoint(WebView*,
-        WebPoint,
-        WebPoint& baselinePoint);
+ public:
+  // Returns an autoreleased NSAttributedString that is the word under
+  // the given point inside the given WebFrameWidget or nil on error.
+  // Upon return, |baselinePoint| is set to the left baseline point in
+  // AppKit coordinates.
+  BLINK_EXPORT static NSAttributedString*
+  attributedWordAtPoint(WebFrameWidget*, WebPoint, WebPoint& baselinePoint);
 
-    // Returns an autoreleased NSAttributedString that is a substring of the
-    // Frame at the given range, or nil on error.
-    BLINK_EXPORT static NSAttributedString* attributedSubstringInRange(WebLocalFrame*,
-        size_t location,
-        size_t length);
+  // Returns an autoreleased NSAttributedString that is a substring of the
+  // Frame at the given range, or nil on error.
+  BLINK_EXPORT static NSAttributedString*
+  attributedSubstringInRange(WebLocalFrame*, size_t location, size_t length);
 
-    // Returns an autoreleased NSAttributedString that is a substring of the
-    // Frame at the given range, or nil on error.
-    // It also gets the baseline point for the given range for showing
-    // dictionary lookup bubble.
-    BLINK_EXPORT static NSAttributedString* attributedSubstringInRange(WebLocalFrame*,
-        size_t location,
-        size_t length,
-        WebPoint* baselinePoint);
+  // Returns an autoreleased NSAttributedString that is a substring of the
+  // Frame at the given range, or nil on error.
+  // It also gets the baseline point for the given range for showing
+  // dictionary lookup bubble.
+  BLINK_EXPORT static NSAttributedString* attributedSubstringInRange(
+      WebLocalFrame*,
+      size_t location,
+      size_t length,
+      WebPoint* baselinePoint);
 };
 
-} // namespace blink
+}  // namespace blink
 
 #endif

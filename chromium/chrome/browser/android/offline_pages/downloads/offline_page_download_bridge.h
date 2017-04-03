@@ -61,7 +61,8 @@ class OfflinePageDownloadBridge : public DownloadUIAdapter::Observer {
   void StartDownload(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
-      const base::android::JavaParamRef<jobject>& j_tab);
+      const base::android::JavaParamRef<jobject>& j_tab,
+      const base::android::JavaParamRef<jstring>& j_downloads_label);
 
   void CancelDownload(JNIEnv* env,
                       const base::android::JavaParamRef<jobject>& obj,
@@ -82,10 +83,6 @@ class OfflinePageDownloadBridge : public DownloadUIAdapter::Observer {
   void ItemDeleted(const std::string& guid) override;
 
  private:
-  static void SavePageCallback(const DownloadUIItem& item,
-                               OfflinePageModel::SavePageResult result,
-                               int64_t offline_id);
-
   JavaObjectWeakGlobalRef weak_java_ref_;
   // Not owned.
   DownloadUIAdapter* download_ui_adapter_;

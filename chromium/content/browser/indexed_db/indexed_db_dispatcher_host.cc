@@ -95,6 +95,9 @@ void IndexedDBDispatcherHost::ResetDispatcherHosts() {
   // messages are processed.
   DCHECK(indexed_db_context_->TaskRunner()->RunsTasksOnCurrentThread());
 
+  // Prevent any pending connections from being processed.
+  is_open_ = false;
+
   // Note that we explicitly separate CloseAll() from destruction of the
   // DatabaseDispatcherHost, since CloseAll() can invoke callbacks which need to
   // be dispatched through database_dispatcher_host_.
@@ -246,6 +249,11 @@ void IndexedDBDispatcherHost::DropBlobData(const std::string& uuid) {
     blob_data_handle_map_.erase(iter);
   else
     --iter->second.second;
+}
+
+bool IndexedDBDispatcherHost::IsOpen() const {
+  DCHECK(indexed_db_context_->TaskRunner()->RunsTasksOnCurrentThread());
+  return is_open_;
 }
 
 IndexedDBCursor* IndexedDBDispatcherHost::GetCursorFromId(
@@ -504,6 +512,8 @@ bool IndexedDBDispatcherHost::DatabaseDispatcherHost::OnMessageReceived(
                         OnCreateObjectStore)
     IPC_MESSAGE_HANDLER(IndexedDBHostMsg_DatabaseDeleteObjectStore,
                         OnDeleteObjectStore)
+    IPC_MESSAGE_HANDLER(IndexedDBHostMsg_DatabaseRenameObjectStore,
+                        OnRenameObjectStore)
     IPC_MESSAGE_HANDLER(IndexedDBHostMsg_DatabaseCreateTransaction,
                         OnCreateTransaction)
     IPC_MESSAGE_HANDLER(IndexedDBHostMsg_DatabaseClose, OnClose)
@@ -524,6 +534,7 @@ bool IndexedDBDispatcherHost::DatabaseDispatcherHost::OnMessageReceived(
     IPC_MESSAGE_HANDLER(IndexedDBHostMsg_DatabaseClear, OnClear)
     IPC_MESSAGE_HANDLER(IndexedDBHostMsg_DatabaseCreateIndex, OnCreateIndex)
     IPC_MESSAGE_HANDLER(IndexedDBHostMsg_DatabaseDeleteIndex, OnDeleteIndex)
+    IPC_MESSAGE_HANDLER(IndexedDBHostMsg_DatabaseRenameIndex, OnRenameIndex)
     IPC_MESSAGE_HANDLER(IndexedDBHostMsg_DatabaseAbort, OnAbort)
     IPC_MESSAGE_HANDLER(IndexedDBHostMsg_DatabaseCommit, OnCommit)
     IPC_MESSAGE_UNHANDLED(handled = false)
@@ -561,6 +572,21 @@ void IndexedDBDispatcherHost::DatabaseDispatcherHost::OnDeleteObjectStore(
 
   connection->database()->DeleteObjectStore(
       parent_->HostTransactionId(transaction_id), object_store_id);
+}
+
+void IndexedDBDispatcherHost::DatabaseDispatcherHost::OnRenameObjectStore(
+    int32_t ipc_database_id,
+    int64_t transaction_id,
+    int64_t object_store_id,
+    const base::string16& new_name) {
+  DCHECK(parent_->context()->TaskRunner()->RunsTasksOnCurrentThread());
+  IndexedDBConnection* connection =
+      parent_->GetOrTerminateProcess(&map_, ipc_database_id);
+  if (!connection || !connection->IsConnected())
+    return;
+
+  connection->database()->RenameObjectStore(
+      parent_->HostTransactionId(transaction_id), object_store_id, new_name);
 }
 
 void IndexedDBDispatcherHost::DatabaseDispatcherHost::OnCreateTransaction(
@@ -952,6 +978,23 @@ void IndexedDBDispatcherHost::DatabaseDispatcherHost::OnDeleteIndex(
 
   connection->database()->DeleteIndex(
       parent_->HostTransactionId(transaction_id), object_store_id, index_id);
+}
+
+void IndexedDBDispatcherHost::DatabaseDispatcherHost::OnRenameIndex(
+    int32_t ipc_database_id,
+    int64_t transaction_id,
+    int64_t object_store_id,
+    int64_t index_id,
+    const base::string16& new_name) {
+  DCHECK(parent_->context()->TaskRunner()->RunsTasksOnCurrentThread());
+  IndexedDBConnection* connection =
+      parent_->GetOrTerminateProcess(&map_, ipc_database_id);
+  if (!connection || !connection->IsConnected())
+    return;
+
+  connection->database()->RenameIndex(
+      parent_->HostTransactionId(transaction_id), object_store_id, index_id,
+      new_name);
 }
 
 //////////////////////////////////////////////////////////////////////

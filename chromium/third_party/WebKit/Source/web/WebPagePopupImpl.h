@@ -42,88 +42,97 @@ class GraphicsLayer;
 class Page;
 class PagePopupChromeClient;
 class PagePopupClient;
-class PlatformKeyboardEvent;
 class WebLayerTreeView;
 class WebLayer;
 class WebViewImpl;
 class LocalDOMWindow;
 
-class WebPagePopupImpl final
-    : public WebPagePopup
-    , public PageWidgetEventHandler
-    , public PagePopup
-    , public RefCounted<WebPagePopupImpl> {
-    WTF_MAKE_NONCOPYABLE(WebPagePopupImpl);
-    USING_FAST_MALLOC(WebPagePopupImpl);
+class WebPagePopupImpl final : public WebPagePopup,
+                               public PageWidgetEventHandler,
+                               public PagePopup,
+                               public RefCounted<WebPagePopupImpl> {
+  WTF_MAKE_NONCOPYABLE(WebPagePopupImpl);
+  USING_FAST_MALLOC(WebPagePopupImpl);
 
-public:
-    ~WebPagePopupImpl() override;
-    bool initialize(WebViewImpl*, PagePopupClient*);
-    WebInputEventResult handleKeyEvent(const PlatformKeyboardEvent&);
-    void closePopup();
-    WebWidgetClient* widgetClient() const { return m_widgetClient; }
-    bool hasSamePopupClient(WebPagePopupImpl* other) { return other && m_popupClient == other->m_popupClient; }
-    LocalDOMWindow* window();
-    void layoutAndPaintAsync(WebLayoutAndPaintAsyncCallback*) override;
-    void compositeAndReadbackAsync(WebCompositeAndReadbackAsyncCallback*) override;
-    WebPoint positionRelativeToOwner() override;
-    void postMessage(const String& message) override;
-    void cancel();
+ public:
+  ~WebPagePopupImpl() override;
+  bool initialize(WebViewImpl*, PagePopupClient*);
+  void closePopup();
+  WebWidgetClient* widgetClient() const { return m_widgetClient; }
+  bool hasSamePopupClient(WebPagePopupImpl* other) {
+    return other && m_popupClient == other->m_popupClient;
+  }
+  LocalDOMWindow* window();
+  void layoutAndPaintAsync(WebLayoutAndPaintAsyncCallback*) override;
+  void compositeAndReadbackAsync(
+      WebCompositeAndReadbackAsyncCallback*) override;
+  WebPoint positionRelativeToOwner() override;
+  void postMessage(const String& message) override;
+  void cancel();
 
-private:
-    // WebWidget functions
-    void beginFrame(double lastFrameTimeMonotonic) override;
-    void updateAllLifecyclePhases() override;
-    void willCloseLayerTreeView() override;
-    void paint(WebCanvas*, const WebRect&) override;
-    void resize(const WebSize&) override;
-    void close() override;
-    WebInputEventResult handleInputEvent(const WebInputEvent&) override;
-    void setFocus(bool) override;
-    bool isPagePopup() const override { return true; }
-    bool isAcceleratedCompositingActive() const override { return m_isAcceleratedCompositingActive; }
+  // PageWidgetEventHandler functions.
+  WebInputEventResult handleKeyEvent(const WebKeyboardEvent&) override;
 
-    // PageWidgetEventHandler functions
-    WebInputEventResult handleKeyEvent(const WebKeyboardEvent&) override;
-    WebInputEventResult handleCharEvent(const WebKeyboardEvent&) override;
-    WebInputEventResult handleGestureEvent(const WebGestureEvent&) override;
-    void handleMouseDown(LocalFrame& mainFrame, const WebMouseEvent&) override;
-    WebInputEventResult handleMouseWheel(LocalFrame& mainFrame, const WebMouseWheelEvent&) override;
+ private:
+  // WebWidget functions
+  void beginFrame(double lastFrameTimeMonotonic) override;
+  void updateAllLifecyclePhases() override;
+  void willCloseLayerTreeView() override;
+  void paint(WebCanvas*, const WebRect&) override;
+  void resize(const WebSize&) override;
+  void close() override;
+  WebInputEventResult handleInputEvent(const WebInputEvent&) override;
+  void setFocus(bool) override;
+  bool isPagePopup() const override { return true; }
+  bool isAcceleratedCompositingActive() const override {
+    return m_isAcceleratedCompositingActive;
+  }
 
-    bool isViewportPointInWindow(int x, int y);
+  // PageWidgetEventHandler functions
+  WebInputEventResult handleCharEvent(const WebKeyboardEvent&) override;
+  WebInputEventResult handleGestureEvent(const WebGestureEvent&) override;
+  void handleMouseDown(LocalFrame& mainFrame, const WebMouseEvent&) override;
+  WebInputEventResult handleMouseWheel(LocalFrame& mainFrame,
+                                       const WebMouseWheelEvent&) override;
 
-    // PagePopup function
-    AXObject* rootAXObject() override;
-    void setWindowRect(const IntRect&) override;
+  bool isViewportPointInWindow(int x, int y);
 
-    explicit WebPagePopupImpl(WebWidgetClient*);
-    bool initializePage();
-    void destroyPage();
-    void setRootGraphicsLayer(GraphicsLayer*);
-    void setIsAcceleratedCompositingActive(bool enter);
+  // PagePopup function
+  AXObject* rootAXObject() override;
+  void setWindowRect(const IntRect&) override;
 
-    WebRect windowRectInScreen() const;
+  explicit WebPagePopupImpl(WebWidgetClient*);
+  bool initializePage();
+  void destroyPage();
+  void setRootGraphicsLayer(GraphicsLayer*);
+  void setIsAcceleratedCompositingActive(bool enter);
 
-    WebWidgetClient* m_widgetClient;
-    WebViewImpl* m_webView;
-    Persistent<Page> m_page;
-    Persistent<PagePopupChromeClient> m_chromeClient;
-    PagePopupClient* m_popupClient;
-    bool m_closing;
+  WebRect windowRectInScreen() const;
 
-    WebLayerTreeView* m_layerTreeView;
-    WebLayer* m_rootLayer;
-    GraphicsLayer* m_rootGraphicsLayer;
-    bool m_isAcceleratedCompositingActive;
+  WebWidgetClient* m_widgetClient;
+  WebViewImpl* m_webView;
+  Persistent<Page> m_page;
+  Persistent<PagePopupChromeClient> m_chromeClient;
+  PagePopupClient* m_popupClient;
+  bool m_closing;
 
-    friend class WebPagePopup;
-    friend class PagePopupChromeClient;
+  WebLayerTreeView* m_layerTreeView;
+  WebLayer* m_rootLayer;
+  GraphicsLayer* m_rootGraphicsLayer;
+  bool m_isAcceleratedCompositingActive;
+
+  friend class WebPagePopup;
+  friend class PagePopupChromeClient;
 };
 
-DEFINE_TYPE_CASTS(WebPagePopupImpl, WebWidget, widget, widget->isPagePopup(), widget.isPagePopup());
+DEFINE_TYPE_CASTS(WebPagePopupImpl,
+                  WebWidget,
+                  widget,
+                  widget->isPagePopup(),
+                  widget.isPagePopup());
 // WebPagePopupImpl is the only implementation of PagePopup, so no
 // further checking required.
 DEFINE_TYPE_CASTS(WebPagePopupImpl, PagePopup, popup, true, true);
 
-} // namespace blink
-#endif // WebPagePopupImpl_h
+}  // namespace blink
+#endif  // WebPagePopupImpl_h

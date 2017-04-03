@@ -21,6 +21,11 @@ namespace {
 const uint8_t kRed[] = {0xF0, 0x0, 0x0, 0xFF};
 const uint8_t kGreen[] = {0x0, 0xFF, 0x0, 0xFF};
 
+// These values are picked so that RGB -> YVU on the CPU converted
+// back to RGB on the GPU produces the original RGB values without
+// any error.
+const uint8_t kYvuColor[] = {0x10, 0x20, 0, 0xFF};
+
 template <gfx::BufferUsage usage, gfx::BufferFormat format>
 class GLImageOzoneNativePixmapTestDelegate {
  public:
@@ -38,11 +43,16 @@ class GLImageOzoneNativePixmapTestDelegate {
     if (usage == gfx::BufferUsage::GPU_READ_CPU_READ_WRITE) {
       auto client_pixmap = client_pixmap_factory_->ImportFromHandle(
           pixmap->ExportHandle(), size, usage);
-      void* data = client_pixmap->Map();
-      EXPECT_TRUE(data);
-      GLImageTestSupport::SetBufferDataToColor(
-          size.width(), size.height(), pixmap->GetDmaBufPitch(0), 0,
-          pixmap->GetBufferFormat(), color, static_cast<uint8_t*>(data));
+      bool mapped = client_pixmap->Map();
+      EXPECT_TRUE(mapped);
+
+      for (size_t plane = 0; plane < NumberOfPlanesForBufferFormat(format);
+           ++plane) {
+        void* data = client_pixmap->GetMemoryAddress(plane);
+        GLImageTestSupport::SetBufferDataToColor(
+            size.width(), size.height(), pixmap->GetDmaBufPitch(plane), plane,
+            pixmap->GetBufferFormat(), color, static_cast<uint8_t*>(data));
+      }
       client_pixmap->Unmap();
     }
 
@@ -57,7 +67,12 @@ class GLImageOzoneNativePixmapTestDelegate {
   unsigned GetTextureTarget() const { return GL_TEXTURE_EXTERNAL_OES; }
 
   const uint8_t* GetImageColor() {
-    return format == gfx::BufferFormat::R_8 ? kRed : kGreen;
+    if (format == gfx::BufferFormat::R_8) {
+      return kRed;
+    } else if (format == gfx::BufferFormat::YVU_420) {
+      return kYvuColor;
+    }
+    return kGreen;
   }
 
  private:
@@ -83,7 +98,10 @@ using GLImageBindTestTypes =
                        gfx::BufferFormat::BGRA_8888>,
                    GLImageOzoneNativePixmapTestDelegate<
                        gfx::BufferUsage::GPU_READ_CPU_READ_WRITE,
-                       gfx::BufferFormat::R_8>>;
+                       gfx::BufferFormat::R_8>,
+                   GLImageOzoneNativePixmapTestDelegate<
+                       gfx::BufferUsage::GPU_READ_CPU_READ_WRITE,
+                       gfx::BufferFormat::YVU_420>>;
 
 // These tests are disabled since the trybots are running with Ozone X11
 // implementation that doesn't support creating ClientNativePixmap.

@@ -27,12 +27,6 @@ namespace views {
 
 namespace {
 
-std::set<std::string> GetResourcePaths(const std::string& resource_file) {
-  std::set<std::string> paths;
-  paths.insert(resource_file);
-  return paths;
-}
-
 class MusViewsDelegate : public ViewsDelegate {
  public:
   MusViewsDelegate() {}
@@ -52,12 +46,24 @@ class MusViewsDelegate : public ViewsDelegate {
 }  // namespace
 
 AuraInit::AuraInit(shell::Connector* connector,
-                   const std::string& resource_file)
+                   const std::string& resource_file,
+                   const std::string& resource_file_200)
     : resource_file_(resource_file),
+      resource_file_200_(resource_file_200),
       env_(aura::Env::CreateInstance()),
       views_delegate_(new MusViewsDelegate) {
   ui::MaterialDesignController::Initialize();
   InitializeResources(connector);
+
+// Initialize the skia font code to go ask fontconfig underneath.
+#if defined(OS_LINUX)
+  font_loader_ = sk_make_sp<font_service::FontLoader>(connector);
+  SkFontConfigInterface::SetGlobal(font_loader_.get());
+#endif
+
+  // There is a bunch of static state in gfx::Font, by running this now,
+  // before any other apps load, we ensure all the state is set up.
+  gfx::Font();
 
   ui::InitializeInputMethodForTesting();
 }
@@ -75,13 +81,19 @@ AuraInit::~AuraInit() {
 }
 
 void AuraInit::InitializeResources(shell::Connector* connector) {
+  // Resources may have already been initialized (e.g. when 'chrome --mash' is
+  // used to launch the current app).
   if (ui::ResourceBundle::HasSharedInstance())
     return;
+
+  std::set<std::string> resource_paths({resource_file_});
+  if (!resource_file_200_.empty())
+    resource_paths.insert(resource_file_200_);
+
   catalog::ResourceLoader loader;
   filesystem::mojom::DirectoryPtr directory;
-  connector->ConnectToInterface("mojo:catalog", &directory);
-  CHECK(loader.OpenFiles(std::move(directory),
-        GetResourcePaths(resource_file_)));
+  connector->ConnectToInterface("service:catalog", &directory);
+  CHECK(loader.OpenFiles(std::move(directory), resource_paths));
   ui::RegisterPathProvider();
   base::File pak_file = loader.TakeFile(resource_file_);
   base::File pak_file_2 = pak_file.Duplicate();
@@ -89,16 +101,9 @@ void AuraInit::InitializeResources(shell::Connector* connector) {
       std::move(pak_file), base::MemoryMappedFile::Region::kWholeFile);
   ui::ResourceBundle::GetSharedInstance().AddDataPackFromFile(
       std::move(pak_file_2), ui::SCALE_FACTOR_100P);
-
-// Initialize the skia font code to go ask fontconfig underneath.
-#if defined(OS_LINUX)
-  font_loader_ = sk_make_sp<font_service::FontLoader>(connector);
-  SkFontConfigInterface::SetGlobal(font_loader_.get());
-#endif
-
-  // There is a bunch of static state in gfx::Font, by running this now,
-  // before any other apps load, we ensure all the state is set up.
-  gfx::Font();
+  if (!resource_file_200_.empty())
+    ui::ResourceBundle::GetSharedInstance().AddDataPackFromFile(
+        loader.TakeFile(resource_file_200_), ui::SCALE_FACTOR_200P);
 }
 
 }  // namespace views

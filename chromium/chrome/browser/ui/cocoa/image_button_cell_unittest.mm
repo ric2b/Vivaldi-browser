@@ -5,7 +5,7 @@
 #include "base/mac/scoped_nsobject.h"
 #import "chrome/browser/ui/cocoa/cocoa_test_helper.h"
 #import "chrome/browser/ui/cocoa/image_button_cell.h"
-#include "grit/theme_resources.h"
+#include "chrome/grit/theme_resources.h"
 
 namespace {
 
@@ -79,12 +79,12 @@ TEST_F(ImageButtonCellTest, DisplayWithDisabled) {
 }
 
 TEST_F(ImageButtonCellTest, NewImageCausesDisplay) {
-  [[view_ cell] setImageID:IDR_STOP
+  [[view_ cell] setImageID:IDR_FORWARD
             forButtonState:image_button_cell::kDefaultState];
   [view_ display];
   EXPECT_FALSE([view_ needsDisplay]);
 
-  [[view_ cell] setImageID:IDR_RELOAD
+  [[view_ cell] setImageID:IDR_FORWARD_D
             forButtonState:image_button_cell::kDefaultState];
   EXPECT_TRUE([view_ needsDisplay]);
 }

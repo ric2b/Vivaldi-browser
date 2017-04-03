@@ -13,7 +13,6 @@
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/signin_error_controller_factory.h"
@@ -28,16 +27,16 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_error_controller.h"
 #include "components/signin/core/browser/signin_manager_base.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/engine/cycle/sync_cycle_snapshot.h"
 #include "components/sync/protocol/proto_enum_conversions.h"
 #include "components/sync/protocol/sync_protocol_error.h"
 #include "google_apis/gaia/google_service_auth_error.h"
-#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if defined(OS_CHROMEOS)
@@ -47,6 +46,8 @@
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "components/sync/driver/sync_error_controller.h"
 #endif  // defined(OS_CHROMEOS)
+
+using browser_sync::ProfileSyncService;
 
 typedef GoogleServiceAuthError AuthError;
 
@@ -176,7 +177,7 @@ MessageType GetStatusInfo(Profile* profile,
         // otherwise show generic unrecoverable error message.
         ProfileSyncService::Status status;
         service->QueryDetailedSyncStatus(&status);
-        if (ShouldShowActionOnUI(status.sync_protocol_error)) {
+        if (browser_sync::ShouldShowActionOnUI(status.sync_protocol_error)) {
           GetStatusForActionableError(status.sync_protocol_error, status_label);
         } else {
           status_label->assign(l10n_util::GetStringFUTF16(
@@ -212,7 +213,7 @@ MessageType GetStatusInfo(Profile* profile,
       // We don't have an auth error. Check for an actionable error.
       ProfileSyncService::Status status;
       service->QueryDetailedSyncStatus(&status);
-      if (ShouldShowActionOnUI(status.sync_protocol_error)) {
+      if (browser_sync::ShouldShowActionOnUI(status.sync_protocol_error)) {
         if (status_label) {
           GetStatusForActionableError(status.sync_protocol_error,
                                       status_label);
@@ -286,7 +287,7 @@ MessageType GetStatusInfo(Profile* profile,
       result_type = SYNC_ERROR;
       ProfileSyncService::Status status;
       service->QueryDetailedSyncStatus(&status);
-      if (ShouldShowActionOnUI(status.sync_protocol_error)) {
+      if (browser_sync::ShouldShowActionOnUI(status.sync_protocol_error)) {
         if (status_label) {
           GetStatusForActionableError(status.sync_protocol_error,
               status_label);
@@ -463,7 +464,7 @@ AvatarSyncErrorType GetMessagesForAvatarSyncError(Profile* profile,
     }
 
     // Check for a sync passphrase error.
-    SyncErrorController* sync_error_controller =
+    syncer::SyncErrorController* sync_error_controller =
         service->sync_error_controller();
     if (sync_error_controller && sync_error_controller->HasError()) {
       *content_string_id = IDS_SYNC_ERROR_USER_MENU_PASSPHRASE_MESSAGE;

@@ -303,6 +303,7 @@ class QuicSentPacketManagerTest : public ::testing::TestWithParam<TestParams> {
     }
   }
 
+  QuicFlagSaver flags_;  // Save/restore all QUIC flag values.
   QuicSentPacketManager manager_;
   vector<QuicEncryptedPacket*> packets_;
   MockClock clock_;
@@ -563,50 +564,7 @@ TEST_P(QuicSentPacketManagerTest, AckOriginalTransmission) {
   {
     QuicAckFrame ack_frame = InitAckFrame(4);
     NackPackets(2, 3, &ack_frame);
-    EXPECT_CALL(*loss_algorithm, DetectLosses(_, _, _, _, _));
-    EXPECT_CALL(*loss_algorithm, SpuriousRetransmitDetected(_, _, _, 5));
-    manager_.OnIncomingAck(ack_frame, clock_.Now());
   }
-}
-
-TEST_P(QuicSentPacketManagerTest, AckPreviousTransmissionThenTruncatedAck) {
-  FLAGS_quic_loss_recovery_use_largest_acked = false;
-  if (!GetParam().missing) {
-    return;
-  }
-  SendDataPacket(1);
-  RetransmitAndSendPacket(1, 2);
-  RetransmitAndSendPacket(2, 3);
-  RetransmitAndSendPacket(3, 4);
-  SendDataPacket(5);
-  SendDataPacket(6);
-  SendDataPacket(7);
-  SendDataPacket(8);
-  SendDataPacket(9);
-
-  // Ack previous transmission
-  {
-    QuicAckFrame ack_frame = InitAckFrame(2);
-    NackPackets(1, 2, &ack_frame);
-    ExpectAck(2);
-    manager_.OnIncomingAck(ack_frame, clock_.Now());
-    EXPECT_TRUE(QuicSentPacketManagerPeer::IsUnacked(&manager_, 4));
-  }
-
-  // Truncated ack with 4 NACKs
-  {
-    QuicAckFrame ack_frame = InitAckFrame(6);
-    NackPackets(3, 7, &ack_frame);
-    ack_frame.is_truncated = true;
-    ExpectAckAndLoss(true, 1, 3);
-    manager_.OnIncomingAck(ack_frame, clock_.Now());
-  }
-
-  // High water mark will be raised.
-  QuicPacketNumber unacked[] = {4, 5, 6, 7, 8, 9};
-  VerifyUnackedPackets(unacked, arraysize(unacked));
-  QuicPacketNumber retransmittable[] = {5, 6, 7, 8, 9};
-  VerifyRetransmittablePackets(retransmittable, arraysize(retransmittable));
 }
 
 TEST_P(QuicSentPacketManagerTest, GetLeastUnacked) {
@@ -796,9 +754,7 @@ TEST_P(QuicSentPacketManagerTest, TailLossProbeThenRTO) {
 
   // Ensure the RTO is set based on the correct packet.
   rto_packet_time = clock_.Now();
-  EXPECT_CALL(*send_algorithm_, RetransmissionDelay())
-      .WillOnce(Return(QuicTime::Delta::FromSeconds(1)));
-  EXPECT_EQ(rto_packet_time + QuicTime::Delta::FromSeconds(1),
+  EXPECT_EQ(rto_packet_time + QuicTime::Delta::FromMilliseconds(500),
             manager_.GetRetransmissionTime());
 
   // Advance the time enough to ensure all packets are RTO'd.
@@ -1163,9 +1119,6 @@ TEST_P(QuicSentPacketManagerTest, TwoRetransmissionTimeoutsAckFirst) {
 
 TEST_P(QuicSentPacketManagerTest, OnPathDegrading) {
   SendDataPacket(1);
-  QuicTime::Delta delay = QuicTime::Delta::FromMilliseconds(500);
-  EXPECT_CALL(*send_algorithm_, RetransmissionDelay())
-      .WillRepeatedly(Return(delay));
   for (size_t i = 1; i < kMinTimeoutsBeforePathDegrading; ++i) {
     manager_.OnRetransmissionTimeout();
     RetransmitNextPacket(i + 2);
@@ -1204,6 +1157,48 @@ TEST_P(QuicSentPacketManagerTest, GetTransmissionTimeCryptoHandshake) {
 
   // The retransmission time should now be twice as far in the future.
   expected_time = clock_.Now() + srtt * 2 * 1.5;
+  EXPECT_EQ(expected_time, manager_.GetRetransmissionTime());
+}
+
+TEST_P(QuicSentPacketManagerTest,
+       GetConservativeTransmissionTimeCryptoHandshake) {
+  FLAGS_quic_conservative_handshake_retransmits = true;
+  QuicConfig config;
+  QuicTagVector options;
+  options.push_back(kCONH);
+  QuicConfigPeer::SetReceivedConnectionOptions(&config, options);
+  EXPECT_CALL(*send_algorithm_, SetFromConfig(_, _));
+  EXPECT_CALL(*network_change_visitor_, OnCongestionChange());
+  manager_.SetFromConfig(config);
+  // Calling SetFromConfig requires mocking out some send algorithm methods.
+  EXPECT_CALL(*send_algorithm_, PacingRate(_))
+      .WillRepeatedly(Return(QuicBandwidth::Zero()));
+  EXPECT_CALL(*send_algorithm_, GetCongestionWindow())
+      .WillRepeatedly(Return(10 * kDefaultTCPMSS));
+
+  SendCryptoPacket(1);
+
+  // Check the min.
+  RttStats* rtt_stats = const_cast<RttStats*>(manager_.GetRttStats());
+  rtt_stats->set_initial_rtt_us(1 * kNumMicrosPerMilli);
+  EXPECT_EQ(clock_.Now() + QuicTime::Delta::FromMilliseconds(25),
+            manager_.GetRetransmissionTime());
+
+  // Test with a standard smoothed RTT.
+  rtt_stats->set_initial_rtt_us(100 * kNumMicrosPerMilli);
+
+  QuicTime::Delta srtt =
+      QuicTime::Delta::FromMicroseconds(rtt_stats->initial_rtt_us());
+  QuicTime expected_time = clock_.Now() + 2 * srtt;
+  EXPECT_EQ(expected_time, manager_.GetRetransmissionTime());
+
+  // Retransmit the packet by invoking the retransmission timeout.
+  clock_.AdvanceTime(2 * srtt);
+  manager_.OnRetransmissionTimeout();
+  RetransmitNextPacket(2);
+
+  // The retransmission time should now be twice as far in the future.
+  expected_time = clock_.Now() + srtt * 2 * 2;
   EXPECT_EQ(expected_time, manager_.GetRetransmissionTime());
 }
 
@@ -1247,17 +1242,17 @@ TEST_P(QuicSentPacketManagerTest, GetTransmissionTimeTailLossProbe) {
 }
 
 TEST_P(QuicSentPacketManagerTest, GetTransmissionTimeSpuriousRTO) {
-  const_cast<RttStats*>(manager_.GetRttStats())
-      ->UpdateRtt(QuicTime::Delta::FromMilliseconds(100),
-                  QuicTime::Delta::Zero(), QuicTime::Zero());
+  RttStats* rtt_stats = const_cast<RttStats*>(manager_.GetRttStats());
+  rtt_stats->UpdateRtt(QuicTime::Delta::FromMilliseconds(100),
+                       QuicTime::Delta::Zero(), QuicTime::Zero());
+
   SendDataPacket(1);
   SendDataPacket(2);
   SendDataPacket(3);
   SendDataPacket(4);
 
-  QuicTime::Delta expected_rto_delay = QuicTime::Delta::FromMilliseconds(500);
-  EXPECT_CALL(*send_algorithm_, RetransmissionDelay())
-      .WillRepeatedly(Return(expected_rto_delay));
+  QuicTime::Delta expected_rto_delay =
+      rtt_stats->smoothed_rtt() + 4 * rtt_stats->mean_deviation();
   QuicTime expected_time = clock_.Now() + expected_rto_delay;
   EXPECT_EQ(expected_time, manager_.GetRetransmissionTime());
 
@@ -1302,8 +1297,10 @@ TEST_P(QuicSentPacketManagerTest, GetTransmissionTimeSpuriousRTO) {
 
 TEST_P(QuicSentPacketManagerTest, GetTransmissionDelayMin) {
   SendDataPacket(1);
-  EXPECT_CALL(*send_algorithm_, RetransmissionDelay())
-      .WillRepeatedly(Return(QuicTime::Delta::FromMilliseconds(1)));
+  // Provide a 1ms RTT sample.
+  const_cast<RttStats*>(manager_.GetRttStats())
+      ->UpdateRtt(QuicTime::Delta::FromMilliseconds(1), QuicTime::Delta::Zero(),
+                  QuicTime::Zero());
   QuicTime::Delta delay = QuicTime::Delta::FromMilliseconds(200);
 
   // If the delay is smaller than the min, ensure it exponentially backs off
@@ -1319,18 +1316,19 @@ TEST_P(QuicSentPacketManagerTest, GetTransmissionDelayMin) {
 }
 
 TEST_P(QuicSentPacketManagerTest, GetTransmissionDelayMax) {
-  EXPECT_CALL(*send_algorithm_, RetransmissionDelay())
-      .WillOnce(Return(QuicTime::Delta::FromSeconds(500)));
+  SendDataPacket(1);
+  // Provide a 60s RTT sample.
+  const_cast<RttStats*>(manager_.GetRttStats())
+      ->UpdateRtt(QuicTime::Delta::FromSeconds(60), QuicTime::Delta::Zero(),
+                  QuicTime::Zero());
 
   EXPECT_EQ(QuicTime::Delta::FromSeconds(60),
             QuicSentPacketManagerPeer::GetRetransmissionDelay(&manager_));
 }
 
-TEST_P(QuicSentPacketManagerTest, GetTransmissionDelay) {
+TEST_P(QuicSentPacketManagerTest, GetTransmissionDelayExponentialBackoff) {
   SendDataPacket(1);
   QuicTime::Delta delay = QuicTime::Delta::FromMilliseconds(500);
-  EXPECT_CALL(*send_algorithm_, RetransmissionDelay())
-      .WillRepeatedly(Return(delay));
 
   // Delay should back off exponentially.
   EXPECT_CALL(*network_change_visitor_, OnPathDegrading());
@@ -1341,6 +1339,40 @@ TEST_P(QuicSentPacketManagerTest, GetTransmissionDelay) {
     manager_.OnRetransmissionTimeout();
     RetransmitNextPacket(i + 2);
   }
+}
+
+TEST_F(QuicSentPacketManagerTest, RetransmissionDelay) {
+  RttStats* rtt_stats = const_cast<RttStats*>(manager_.GetRttStats());
+  const int64_t kRttMs = 250;
+  const int64_t kDeviationMs = 5;
+
+  rtt_stats->UpdateRtt(QuicTime::Delta::FromMilliseconds(kRttMs),
+                       QuicTime::Delta::Zero(), clock_.Now());
+
+  // Initial value is to set the median deviation to half of the initial rtt,
+  // the median in then multiplied by a factor of 4 and finally the smoothed rtt
+  // is added which is the initial rtt.
+  QuicTime::Delta expected_delay =
+      QuicTime::Delta::FromMilliseconds(kRttMs + kRttMs / 2 * 4);
+  EXPECT_EQ(expected_delay,
+            QuicSentPacketManagerPeer::GetRetransmissionDelay(&manager_));
+
+  for (int i = 0; i < 100; ++i) {
+    // Run to make sure that we converge.
+    rtt_stats->UpdateRtt(
+        QuicTime::Delta::FromMilliseconds(kRttMs + kDeviationMs),
+        QuicTime::Delta::Zero(), clock_.Now());
+    rtt_stats->UpdateRtt(
+        QuicTime::Delta::FromMilliseconds(kRttMs - kDeviationMs),
+        QuicTime::Delta::Zero(), clock_.Now());
+  }
+  expected_delay = QuicTime::Delta::FromMilliseconds(kRttMs + kDeviationMs * 4);
+
+  EXPECT_NEAR(kRttMs, rtt_stats->smoothed_rtt().ToMilliseconds(), 1);
+  EXPECT_NEAR(expected_delay.ToMilliseconds(),
+              QuicSentPacketManagerPeer::GetRetransmissionDelay(&manager_)
+                  .ToMilliseconds(),
+              1);
 }
 
 TEST_P(QuicSentPacketManagerTest, GetLossDelay) {
@@ -1399,16 +1431,14 @@ TEST_P(QuicSentPacketManagerTest, NegotiateCongestionControlFromOptions) {
   EXPECT_EQ(kReno, QuicSentPacketManagerPeer::GetSendAlgorithm(manager_)
                        ->GetCongestionControlType());
 
-// TODO(rtenneti): Enable the following code after BBR code is checked in.
-#if 0
   options.clear();
   options.push_back(kTBBR);
   QuicConfigPeer::SetReceivedConnectionOptions(&config, options);
   EXPECT_CALL(*network_change_visitor_, OnCongestionChange());
   manager_.SetFromConfig(config);
-  EXPECT_EQ(kBBR, QuicSentPacketManagerPeer::GetSendAlgorithm(
-      manager_)->GetCongestionControlType());
-#endif
+  // TODO(vasilvv): change this back to kBBR when the new version is in.
+  EXPECT_EQ(kCubic, QuicSentPacketManagerPeer::GetSendAlgorithm(manager_)
+                        ->GetCongestionControlType());
 
   options.clear();
   options.push_back(kBYTE);
@@ -1545,7 +1575,6 @@ TEST_P(QuicSentPacketManagerTest, NegotiateNewRTOFromOptionsAtClient) {
 }
 
 TEST_P(QuicSentPacketManagerTest, NegotiateUndoFromOptionsAtServer) {
-  FLAGS_quic_loss_recovery_use_largest_acked = true;
   EXPECT_FALSE(QuicSentPacketManagerPeer::GetUndoRetransmits(&manager_));
   QuicConfig config;
   QuicTagVector options;
@@ -1597,7 +1626,6 @@ TEST_P(QuicSentPacketManagerTest, NegotiateUndoFromOptionsAtServer) {
 }
 
 TEST_P(QuicSentPacketManagerTest, NegotiateUndoFromOptionsAtClient) {
-  FLAGS_quic_loss_recovery_use_largest_acked = true;
   EXPECT_FALSE(QuicSentPacketManagerPeer::GetUndoRetransmits(&manager_));
   QuicConfig client_config;
   QuicTagVector options;
@@ -1651,7 +1679,7 @@ TEST_P(QuicSentPacketManagerTest, ConnectionMigrationUnspecifiedChange) {
   EXPECT_EQ(2u, manager_.GetConsecutiveTlpCount());
 
   EXPECT_CALL(*send_algorithm_, OnConnectionMigration());
-  manager_.OnConnectionMigration(kDefaultPathId, UNSPECIFIED_CHANGE);
+  manager_.OnConnectionMigration(kDefaultPathId, IPV4_TO_IPV4_CHANGE);
 
   EXPECT_EQ(default_init_rtt, rtt_stats->initial_rtt_us());
   EXPECT_EQ(0u, manager_.GetConsecutiveRtoCount());
@@ -1695,7 +1723,6 @@ TEST_P(QuicSentPacketManagerTest, ConnectionMigrationPortChange) {
 }
 
 TEST_P(QuicSentPacketManagerTest, PathMtuIncreased) {
-  FLAGS_quic_no_mtu_discovery_ack_listener = true;
   EXPECT_CALL(*send_algorithm_, OnPacketSent(_, BytesInFlight(), 1, _, _))
       .Times(1)
       .WillOnce(Return(true));

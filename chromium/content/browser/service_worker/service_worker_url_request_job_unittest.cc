@@ -13,7 +13,6 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -123,9 +122,8 @@ std::unique_ptr<storage::BlobProtocolHandler> CreateMockBlobProtocolHandler(
     storage::BlobStorageContext* blob_storage_context) {
   // The FileSystemContext and task runner are not actually used but a
   // task runner is needed to avoid a DCHECK in BlobURLRequestJob ctor.
-  return base::WrapUnique(new storage::BlobProtocolHandler(
-      blob_storage_context, nullptr,
-      base::ThreadTaskRunnerHandle::Get().get()));
+  return base::MakeUnique<storage::BlobProtocolHandler>(
+      blob_storage_context, nullptr, base::ThreadTaskRunnerHandle::Get().get());
 }
 
 }  // namespace
@@ -309,7 +307,7 @@ class ServiceWorkerURLRequestJobTest
     // Simulate another worker kicking out the incumbent worker.  PostTask since
     // it might respond synchronously, and the MockURLRequestDelegate would
     // complain that the message loop isn't being run.
-    base::MessageLoop::current()->task_runner()->PostTask(
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(&ServiceWorkerVersion::SetStatus, version_,
                               ServiceWorkerVersion::REDUNDANT));
     base::RunLoop().RunUntilIdle();
@@ -579,7 +577,7 @@ TEST_F(ServiceWorkerURLRequestJobTest, StreamResponse) {
     expected_response += kTestData;
     stream->AddData(kTestData, sizeof(kTestData) - 1);
   }
-  stream->Finalize();
+  stream->Finalize(net::OK);
 
   EXPECT_FALSE(HasWork());
   base::RunLoop().RunUntilIdle();
@@ -629,7 +627,7 @@ TEST_F(ServiceWorkerURLRequestJobTest, StreamResponse_DelayedRegistration) {
     expected_response += kTestData;
     stream->AddData(kTestData, sizeof(kTestData) - 1);
   }
-  stream->Finalize();
+  stream->Finalize(net::OK);
 
   EXPECT_FALSE(HasWork());
   base::RunLoop().RunUntilIdle();
@@ -671,7 +669,7 @@ TEST_F(ServiceWorkerURLRequestJobTest, StreamResponse_QuickFinalize) {
     expected_response += kTestData;
     stream->AddData(kTestData, sizeof(kTestData) - 1);
   }
-  stream->Finalize();
+  stream->Finalize(net::OK);
   SetUpWithHelper(new StreamResponder(stream_url));
 
   version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
@@ -730,7 +728,7 @@ TEST_F(ServiceWorkerURLRequestJobTest, StreamResponse_Flush) {
     base::RunLoop().RunUntilIdle();
     EXPECT_EQ(expected_response, url_request_delegate_.response_data());
   }
-  stream->Finalize();
+  stream->Finalize(net::OK);
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(request_->status().is_success());
   EXPECT_EQ(200,
@@ -787,7 +785,7 @@ TEST_F(ServiceWorkerURLRequestJobTest, StreamResponseAndCancel) {
     expected_response += kTestData;
     stream->AddData(kTestData, sizeof(kTestData) - 1);
   }
-  stream->Finalize();
+  stream->Finalize(net::OK);
 
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(request_->status().is_success());
@@ -831,7 +829,7 @@ TEST_F(ServiceWorkerURLRequestJobTest,
   ASSERT_FALSE(stream_context->registry()->GetStream(stream_url).get());
   for (int i = 0; i < 1024; ++i)
     stream->AddData(kTestData, sizeof(kTestData) - 1);
-  stream->Finalize();
+  stream->Finalize(net::OK);
 
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(request_->status().is_success());

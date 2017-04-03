@@ -233,6 +233,9 @@ IN_PROC_BROWSER_TEST_F(LoggedInSpokenFeedbackTest, NavigateNotificationCenter) {
 
   EXPECT_TRUE(PerformAcceleratorAction(ash::SHOW_MESSAGE_CENTER_BUBBLE));
 
+  // Tab to request the initial focus.
+  SendKeyPress(ui::VKEY_TAB);
+
   // Wait for it to say "Notification Center, window".
   while ("Notification Center, window" != speech_monitor_.GetNextUtterance()) {
   }
@@ -341,10 +344,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, FocusShelf) {
   EnableChromeVox();
 
   EXPECT_TRUE(PerformAcceleratorAction(ash::FOCUS_SHELF));
-  if (app_list::switches::IsExperimentalAppListEnabled())
-    EXPECT_EQ("Launcher", speech_monitor_.GetNextUtterance());
-  else
-    EXPECT_EQ("Apps", speech_monitor_.GetNextUtterance());
+  EXPECT_EQ("Launcher", speech_monitor_.GetNextUtterance());
   EXPECT_EQ("Button", speech_monitor_.GetNextUtterance());
 
   EXPECT_EQ("Shelf", speech_monitor_.GetNextUtterance());
@@ -603,13 +603,8 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, MAYBE_ChromeVoxNavigateAndSelect) {
   EXPECT_EQ("Title", speech_monitor_.GetNextUtterance());
 }
 
-#if defined(MEMORY_SANITIZER)
-// Fails under MemorySanitizer: http://crbug.com/628060
-#define MAYBE_ChromeVoxStickyMode DISABLED_ChromeVoxStickyMode
-#else
-#define MAYBE_ChromeVoxStickyMode ChromeVoxStickyMode
-#endif
-IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, MAYBE_ChromeVoxStickyMode) {
+// http://crbug.com/628060
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DISABLED_ChromeVoxStickyMode) {
   LoadChromeVoxAndThenNavigateToURL(
       GURL("data:text/html;charset=utf-8,"
            "<label>Enter your name <input autofocus></label>"

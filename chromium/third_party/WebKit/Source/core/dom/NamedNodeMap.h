@@ -3,7 +3,8 @@
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
  *           (C) 2001 Peter Kelly (pmk@post.com)
  *           (C) 2001 Dirk Mueller (mueller@kde.org)
- * Copyright (C) 2003, 2004, 2005, 2006, 2008, 2010, 2013 Apple Inc. All rights reserved.
+ * Copyright (C) 2003, 2004, 2005, 2006, 2008, 2010, 2013 Apple Inc. All rights
+ * reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -34,44 +35,46 @@ namespace blink {
 class Attr;
 class ExceptionState;
 
-class NamedNodeMap final : public GarbageCollected<NamedNodeMap>, public ScriptWrappable {
-    DEFINE_WRAPPERTYPEINFO();
-    friend class Element;
-public:
-    static NamedNodeMap* create(Element* element)
-    {
-        return new NamedNodeMap(element);
-    }
+class NamedNodeMap final : public GarbageCollected<NamedNodeMap>,
+                           public ScriptWrappable {
+  DEFINE_WRAPPERTYPEINFO();
+  friend class Element;
 
-    // Public DOM interface.
+ public:
+  static NamedNodeMap* create(Element* element) {
+    return new NamedNodeMap(element);
+  }
 
-    Attr* getNamedItem(const AtomicString&) const;
-    Attr* removeNamedItem(const AtomicString& name, ExceptionState&);
+  // Public DOM interface.
 
-    Attr* getNamedItemNS(const AtomicString& namespaceURI, const AtomicString& localName) const;
-    Attr* removeNamedItemNS(const AtomicString& namespaceURI, const AtomicString& localName, ExceptionState&);
+  Attr* getNamedItem(const AtomicString&) const;
+  Attr* removeNamedItem(const AtomicString& name, ExceptionState&);
 
-    Attr* setNamedItem(Attr*, ExceptionState&);
-    Attr* setNamedItemNS(Attr*, ExceptionState&);
+  Attr* getNamedItemNS(const AtomicString& namespaceURI,
+                       const AtomicString& localName) const;
+  Attr* removeNamedItemNS(const AtomicString& namespaceURI,
+                          const AtomicString& localName,
+                          ExceptionState&);
 
-    Attr* item(unsigned index) const;
-    size_t length() const;
+  Attr* setNamedItem(Attr*, ExceptionState&);
+  Attr* setNamedItemNS(Attr*, ExceptionState&);
 
-    Element* element() const { return m_element; }
+  Attr* item(unsigned index) const;
+  size_t length() const;
 
-    DECLARE_TRACE();
+  Element* element() const { return m_element; }
 
-private:
-    explicit NamedNodeMap(Element* element)
-        : m_element(element)
-    {
-        // Only supports NamedNodeMaps with Element associated.
-        DCHECK(m_element);
-    }
+  DECLARE_TRACE();
 
-    Member<Element> m_element;
+ private:
+  explicit NamedNodeMap(Element* element) : m_element(element) {
+    // Only supports NamedNodeMaps with Element associated.
+    DCHECK(m_element);
+  }
+
+  Member<Element> m_element;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // NamedNodeMap_h
+#endif  // NamedNodeMap_h

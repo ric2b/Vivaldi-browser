@@ -326,7 +326,8 @@ void ProfileImpl::RegisterProfilePrefs(
   registry->RegisterBooleanPref(prefs::kSavingBrowserHistoryDisabled, false);
   registry->RegisterBooleanPref(prefs::kAllowDeletingBrowserHistory, true);
   registry->RegisterBooleanPref(prefs::kForceGoogleSafeSearch, false);
-  registry->RegisterBooleanPref(prefs::kForceYouTubeSafetyMode, false);
+  registry->RegisterIntegerPref(prefs::kForceYouTubeRestrict,
+                                safe_search_util::YOUTUBE_RESTRICT_OFF);
   registry->RegisterBooleanPref(prefs::kForceSessionSync, false);
   registry->RegisterStringPref(prefs::kAllowedDomainsForApps, std::string());
 
@@ -731,9 +732,9 @@ Profile::ProfileType ProfileImpl::GetProfileType() const {
 
 std::unique_ptr<content::ZoomLevelDelegate>
 ProfileImpl::CreateZoomLevelDelegate(const base::FilePath& partition_path) {
-  return base::WrapUnique(new ChromeZoomLevelPrefs(
+  return base::MakeUnique<ChromeZoomLevelPrefs>(
       GetPrefs(), GetPath(), partition_path,
-      zoom::ZoomEventManager::GetForBrowserContext(this)->GetWeakPtr()));
+      zoom::ZoomEventManager::GetForBrowserContext(this)->GetWeakPtr());
 }
 
 base::FilePath ProfileImpl::GetPath() const {
@@ -871,8 +872,8 @@ void ProfileImpl::OnPrefsLoaded(CreateMode create_mode, bool success) {
 }
 
 bool ProfileImpl::WasCreatedByVersionOrLater(const std::string& version) {
-  Version profile_version(ChromeVersionService::GetVersion(prefs_.get()));
-  Version arg_version(version);
+  base::Version profile_version(ChromeVersionService::GetVersion(prefs_.get()));
+  base::Version arg_version(version);
   return (profile_version.CompareTo(arg_version) >= 0);
 }
 

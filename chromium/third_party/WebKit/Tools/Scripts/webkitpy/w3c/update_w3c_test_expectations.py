@@ -11,12 +11,14 @@ Specifically, this class fetches results from try bots for the current CL, and:
 This is used as part of the w3c test auto-import process.
 """
 
+import argparse
+import copy
 import logging
 
-from webkitpy.common.net.buildbot import BuildBot, Build
 from webkitpy.common.net.git_cl import GitCL
 from webkitpy.common.net.rietveld import Rietveld
 from webkitpy.common.webkit_finder import WebKitFinder
+from webkitpy.layout_tests.models.test_expectations import TestExpectationLine
 from webkitpy.w3c.test_parser import TestParser
 
 _log = logging.getLogger(__name__)
@@ -29,14 +31,25 @@ class W3CExpectationsLineAdder(object):
         self.host.initialize_scm()
         self.finder = WebKitFinder(self.host.filesystem)
 
-    def run(self):
+    def run(self, args=None):
+        parser = argparse.ArgumentParser(description=__doc__)
+        parser.add_argument('-v', '--verbose', action='store_true', help='More verbose logging.')
+        args = parser.parse_args(args)
+        log_level = logging.DEBUG if args.verbose else logging.INFO
+        logging.basicConfig(level=log_level, format='%(message)s')
+
         issue_number = self.get_issue_number()
+        if issue_number == 'None':
+            _log.error('No issue on current branch.')
+            return 1
+
         try_bots = self.get_try_bots()
         rietveld = Rietveld(self.host.web)
         try_jobs = rietveld.latest_try_jobs(issue_number, try_bots)
+        _log.debug('Latest try jobs: %r', try_jobs)
 
         if not try_jobs:
-            print 'No Try Job information was collected.'
+            _log.error('No try job information was collected.')
             return 1
 
         test_expectations = {}
@@ -53,7 +66,7 @@ class W3CExpectationsLineAdder(object):
         return 0
 
     def get_issue_number(self):
-        return GitCL(self.host.executive).get_issue_number()
+        return GitCL(self.host).get_issue_number()
 
     def get_try_bots(self):
         return self.host.builders.all_try_builder_names()
@@ -245,37 +258,33 @@ class W3CExpectationsLineAdder(object):
     def write_to_test_expectations(self, line_list):
         """Writes to TestExpectations.
 
-        Writes the test expectations lines in |line_list| to the test
-        expectations file.
-
         The place in the file where the new lines are inserted is after a
         marker comment line. If this marker comment line is not found, it will
         be added to the end of the file.
 
         Args:
-            line_list: A list of w3c test expectations lines.
+            line_list: A list of lines to add to the TestExpectations file.
         """
+        _log.debug('Lines to write to TestExpectations: %r', line_list)
         port = self.host.port_factory.get()
-        expectations_file = port.path_to_generic_test_expectations_file()
-        comment_line = '# Tests added from W3C auto import bot'
-        file_contents = self.host.filesystem.read_text_file(expectations_file)
-        w3c_comment_line_index = file_contents.find(comment_line)
-        all_lines = ''
-        for line in line_list:
-            end_bracket_index = line.split().index(']')
-            test_name = line.split()[end_bracket_index + 1]
-            if test_name in file_contents:
-                continue
-            all_lines += str(line) + '\n'
-        all_lines = all_lines[:-1]
-        if w3c_comment_line_index == -1:
-            file_contents += '\n%s\n' % comment_line
-            file_contents += all_lines
+        expectations_file_path = port.path_to_generic_test_expectations_file()
+        marker_comment = '# Tests added from W3C auto import bot'
+        file_contents = self.host.filesystem.read_text_file(expectations_file_path)
+        marker_comment_index = file_contents.find(marker_comment)
+        line_list = [line for line in line_list if self._test_name_from_expectation_string(line) not in file_contents]
+        if not line_list:
+            return
+        if marker_comment_index == -1:
+            file_contents += '\n%s\n' % marker_comment
+            file_contents += '\n'.join(line_list)
         else:
-            end_of_comment_line = (file_contents[w3c_comment_line_index:].find('\n')) + w3c_comment_line_index
-            new_data = file_contents[: end_of_comment_line + 1] + all_lines + file_contents[end_of_comment_line:]
-            file_contents = new_data
-        self.host.filesystem.write_text_file(expectations_file, file_contents)
+            end_of_marker_line = (file_contents[marker_comment_index:].find('\n')) + marker_comment_index
+            file_contents = file_contents[:end_of_marker_line + 1] + '\n'.join(line_list) + file_contents[end_of_marker_line:]
+        self.host.filesystem.write_text_file(expectations_file_path, file_contents)
+
+    @staticmethod
+    def _test_name_from_expectation_string(expectation_string):
+        return TestExpectationLine.tokenize_line(filename='', expectation_string=expectation_string, line_number=0).name
 
     def get_expected_txt_files(self, tests_results):
         """Fetches new baseline files for tests that should be rebaselined.
@@ -293,8 +302,9 @@ class W3CExpectationsLineAdder(object):
             testharness.js tests that required new baselines to be downloaded
             from `webkit-patch rebaseline-from-try-jobs`.
         """
-        tests = self.host.executive.run_command(['git', 'diff', 'master', '--name-only']).splitlines()
-        tests_to_rebaseline, tests_results = self.get_tests_to_rebaseline(tests, tests_results)
+        modified_tests = self.get_modified_existing_tests()
+        tests_to_rebaseline, tests_results = self.get_tests_to_rebaseline(modified_tests, tests_results)
+        _log.debug('Tests to rebaseline: %r', tests_to_rebaseline)
         if tests_to_rebaseline:
             webkit_patch = self.host.filesystem.join(
                 self.finder.chromium_base(), self.finder.webkit_base(), self.finder.path_to_script('webkit-patch'))
@@ -304,10 +314,30 @@ class W3CExpectationsLineAdder(object):
                 'rebaseline-cl',
                 '--verbose',
                 '--no-trigger-jobs',
+                '--only-changed-tests',
             ] + tests_to_rebaseline)
+            # NOTE(qyearsley): If rebaseline-cl is changed to stage all new files
+            # with git, then this would be unnecessary and should be removed.
+            self.host.executive.run_command(['git', 'add', '--all'])
         return tests_results
 
-    def get_tests_to_rebaseline(self, tests, tests_results):
+    def get_modified_existing_tests(self):
+        """Returns a list of layout test names for layout tests that have been modified."""
+        diff_output = self.host.executive.run_command(
+            ['git', 'diff', 'origin/master', '--name-only', '-diff-filter=AMR'])  # Added, modified, and renamed files.
+        paths_from_chromium_root = diff_output.splitlines()
+        modified_tests = []
+        for path in paths_from_chromium_root:
+            absolute_path = self.host.filesystem.join(self.finder.chromium_base(), path)
+            if not self.host.filesystem.exists(absolute_path):
+                _log.warning('File does not exist: %s', absolute_path)
+                continue
+            test_path = self.finder.layout_test_name(path)
+            if test_path:
+                modified_tests.append(test_path)
+        return modified_tests
+
+    def get_tests_to_rebaseline(self, modified_tests, test_results):
         """Returns a list of tests to download new baselines for.
 
         Creates a list of tests to rebaseline depending on the tests' platform-
@@ -315,27 +345,36 @@ class W3CExpectationsLineAdder(object):
         due to a baseline mismatch (rather than crash or timeout).
 
         Args:
-            tests: A list of new imported tests.
-            tests_results: A dictionary of failing tests results.
+            modified_tests: A list of paths to modified files (which should
+                be added, removed or modified files in the imported w3c
+                directory), relative to the LayoutTests directory.
+            test_results: A dictionary of failing tests results.
 
         Returns:
-            A pair: A set of tests to be rebaselined, and an updated
-            tests_results dictionary. These tests to be rebaselined includes
-            both testharness.js tests and ref tests that failed some try job.
+            A pair: A set of tests to be rebaselined, and a modified copy of
+            the test results dictionary. The tests to be rebaselined should include
+            testharness.js tests that failed due to a baseline mismatch.
         """
+        test_results = copy.deepcopy(test_results)
         tests_to_rebaseline = set()
-        layout_tests_rel_path = self.host.filesystem.relpath(
-            self.finder.layout_tests_dir(), self.finder.chromium_base())
-        for test in tests:
-            test_path = self.host.filesystem.relpath(test, layout_tests_rel_path)
-            if self.is_js_test(test) and tests_results.get(test_path):
-                for platform in tests_results[test_path].keys():
-                    if tests_results[test_path][platform]['actual'] not in ['CRASH', 'TIMEOUT']:
-                        del tests_results[test_path][platform]
-                        tests_to_rebaseline.add(test_path)
-        return list(tests_to_rebaseline), tests_results
+        for test_path in modified_tests:
+            if not (self.is_js_test(test_path) and test_results.get(test_path)):
+                continue
+            for platform in test_results[test_path].keys():
+                if test_results[test_path][platform]['actual'] not in ['CRASH', 'TIMEOUT']:
+                    del test_results[test_path][platform]
+                    tests_to_rebaseline.add(test_path)
+        return sorted(tests_to_rebaseline), test_results
 
     def is_js_test(self, test_path):
-        absolute_path = self.host.filesystem.join(self.finder.chromium_base(), test_path)
+        """Checks whether a given file is a testharness.js test.
+
+        Args:
+            test_path: A file path relative to the layout tests directory.
+                This might correspond to a deleted file or a non-test.
+        """
+        absolute_path = self.host.filesystem.join(self.finder.layout_tests_dir(), test_path)
         test_parser = TestParser(absolute_path, self.host)
+        if not test_parser.test_doc:
+            return False
         return test_parser.is_jstest()

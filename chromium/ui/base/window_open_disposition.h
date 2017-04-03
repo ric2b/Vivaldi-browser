@@ -7,9 +7,10 @@
 
 #include "ui/base/ui_base_export.h"
 
-// A Java counterpart will be generated for this enum.
-// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.ui
-enum WindowOpenDisposition {
+// DEPRECATED: Instead of introducing new references to this enum, use
+// the generated ui::mojom::WindowOpenDisposition in
+// ui/base/mojo/window_open_disposition.mojom.h.
+enum class WindowOpenDisposition {
   UNKNOWN,
   CURRENT_TAB,
   // Indicates that only one tab with the url should exist in the same window.
@@ -22,7 +23,7 @@ enum WindowOpenDisposition {
   OFF_THE_RECORD,
   IGNORE_ACTION,
   // Update when adding a new disposition.
-  WINDOW_OPEN_DISPOSITION_LAST = IGNORE_ACTION
+  MAX_VALUE = IGNORE_ACTION
 };
 
 namespace ui {

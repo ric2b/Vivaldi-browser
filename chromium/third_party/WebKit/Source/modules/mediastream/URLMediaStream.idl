@@ -28,8 +28,12 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-// http://www.w3.org/TR/mediacapture-streams/#idl-def-URL
+// An old version of Media Capture and Streams defines URL.createObjectURL:
+// https://w3c.github.io/mediacapture-main/archives/20131017/getusermedia.html
+
+// TODO(foolip): Update link if it's revived in the spec:
+// https://github.com/w3c/mediacapture-main/issues/404
 
 partial interface URL {
-    [Exposed=(Window,DedicatedWorker,SharedWorker), CallWith=ExecutionContext] static DOMString? createObjectURL(MediaStream stream);
+    [Exposed=(Window,DedicatedWorker,SharedWorker), CallWith=ExecutionContext] static DOMString createObjectURL(MediaStream stream);
 };

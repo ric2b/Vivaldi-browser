@@ -9,6 +9,7 @@
 #include "media/base/media_log.h"
 #include "media/mojo/services/mojo_media_client.h"
 #include "media/mojo/services/service_factory_impl.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/shell/public/cpp/connection.h"
 #include "services/shell/public/cpp/connector.h"
 
@@ -37,7 +38,7 @@ bool MojoMediaApplication::OnConnect(const shell::Identity& remote_identity,
 }
 
 bool MojoMediaApplication::OnStop() {
-  mojo_media_client_->WillQuit();
+  mojo_media_client_.reset();
   return true;
 }
 
@@ -49,10 +50,15 @@ void MojoMediaApplication::Create(const shell::Identity& remote_identity,
 void MojoMediaApplication::CreateServiceFactory(
     mojom::ServiceFactoryRequest request,
     shell::mojom::InterfaceProviderPtr remote_interfaces) {
-  // The created object is owned by the pipe.
-  new ServiceFactoryImpl(std::move(request), std::move(remote_interfaces),
-                         media_log_, ref_factory_.CreateRef(),
-                         mojo_media_client_.get());
+  // Ignore request if service has already stopped.
+  if (!mojo_media_client_)
+    return;
+
+  mojo::MakeStrongBinding(
+      base::MakeUnique<ServiceFactoryImpl>(std::move(remote_interfaces),
+                                           media_log_, ref_factory_.CreateRef(),
+                                           mojo_media_client_.get()),
+      std::move(request));
 }
 
 }  // namespace media

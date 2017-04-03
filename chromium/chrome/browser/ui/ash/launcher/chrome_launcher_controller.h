@@ -14,6 +14,7 @@
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_app_menu_item.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_types.h"
+#include "chrome/browser/ui/ash/launcher/settings_window_observer.h"
 #include "extensions/common/constants.h"
 
 class AccountId;
@@ -24,7 +25,7 @@ class GURL;
 class LauncherItemController;
 
 namespace ash {
-class Shelf;
+class WmShelf;
 }
 
 namespace content {
@@ -234,7 +235,7 @@ class ChromeLauncherController {
   // shelf cannot be performed here, this is only a probability used for
   // animation predictions.
   virtual bool ShelfBoundsChangesProbablyWithUser(
-      ash::Shelf* shelf,
+      ash::WmShelf* shelf,
       const AccountId& account_id) const = 0;
 
   // Called when the user profile is fully loaded and ready to switch to.
@@ -248,6 +249,8 @@ class ChromeLauncherController {
 
  private:
   static ChromeLauncherController* instance_;
+
+  SettingsWindowObserver settings_window_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeLauncherController);
 };

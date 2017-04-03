@@ -81,9 +81,12 @@ IPAddress DualstackIPAddress(const IPAddress& ip) {
 
 class ValidateClientHelloHelper {
  public:
-  ValidateClientHelloHelper(ValidateClientHelloResultCallback::Result* result,
-                            ValidateClientHelloResultCallback* done_cb)
-      : result_(result), done_cb_(done_cb) {}
+  // Note: stores a pointer to a unique_ptr, and std::moves the unique_ptr when
+  // ValidationComplete is called.
+  ValidateClientHelloHelper(
+      scoped_refptr<ValidateClientHelloResultCallback::Result> result,
+      std::unique_ptr<ValidateClientHelloResultCallback>* done_cb)
+      : result_(std::move(result)), done_cb_(done_cb) {}
 
   ~ValidateClientHelloHelper() {
     QUIC_BUG_IF(done_cb_ != nullptr)
@@ -96,7 +99,7 @@ class ValidateClientHelloHelper {
       std::unique_ptr<ProofSource::Details> proof_source_details) {
     result_->error_code = error_code;
     result_->error_details = error_details;
-    done_cb_->Run(result_, std::move(proof_source_details));
+    (*done_cb_)->Run(std::move(result_), std::move(proof_source_details));
     DetachCallback();
   }
 
@@ -106,8 +109,8 @@ class ValidateClientHelloHelper {
   }
 
  private:
-  ValidateClientHelloResultCallback::Result* result_;
-  ValidateClientHelloResultCallback* done_cb_;
+  scoped_refptr<ValidateClientHelloResultCallback::Result> result_;
+  std::unique_ptr<ValidateClientHelloResultCallback>* done_cb_;
 
   DISALLOW_COPY_AND_ASSIGN(ValidateClientHelloHelper);
 };
@@ -116,12 +119,12 @@ class VerifyNonceIsValidAndUniqueCallback
     : public StrikeRegisterClient::ResultCallback {
  public:
   VerifyNonceIsValidAndUniqueCallback(
-      ValidateClientHelloResultCallback::Result* result,
+      scoped_refptr<ValidateClientHelloResultCallback::Result> result,
       std::unique_ptr<ProofSource::Details> proof_source_details,
-      ValidateClientHelloResultCallback* done_cb)
-      : result_(result),
+      std::unique_ptr<ValidateClientHelloResultCallback> done_cb)
+      : result_(std::move(result)),
         proof_source_details_(std::move(proof_source_details)),
-        done_cb_(done_cb) {}
+        done_cb_(std::move(done_cb)) {}
 
  protected:
   void RunImpl(bool nonce_is_valid_and_unique,
@@ -164,9 +167,9 @@ class VerifyNonceIsValidAndUniqueCallback
   }
 
  private:
-  ValidateClientHelloResultCallback::Result* result_;
+  scoped_refptr<ValidateClientHelloResultCallback::Result> result_;
   std::unique_ptr<ProofSource::Details> proof_source_details_;
-  ValidateClientHelloResultCallback* done_cb_;
+  std::unique_ptr<ValidateClientHelloResultCallback> done_cb_;
 
   DISALLOW_COPY_AND_ASSIGN(VerifyNonceIsValidAndUniqueCallback);
 };
@@ -177,6 +180,8 @@ const char QuicCryptoServerConfig::TESTING[] = "secret string for testing";
 ClientHelloInfo::ClientHelloInfo(const IPAddress& in_client_ip,
                                  QuicWallTime in_now)
     : client_ip(in_client_ip), now(in_now), valid_source_address_token(false) {}
+
+ClientHelloInfo::ClientHelloInfo(const ClientHelloInfo& other) = default;
 
 ClientHelloInfo::~ClientHelloInfo() {}
 
@@ -198,22 +203,19 @@ ValidateClientHelloResultCallback::ValidateClientHelloResultCallback() {}
 
 ValidateClientHelloResultCallback::~ValidateClientHelloResultCallback() {}
 
-void ValidateClientHelloResultCallback::Run(
-    const Result* result,
-    std::unique_ptr<ProofSource::Details> details) {
-  RunImpl(result->client_hello, *result, std::move(details));
-  delete result;
-  delete this;
-}
+ProcessClientHelloResultCallback::ProcessClientHelloResultCallback() {}
+
+ProcessClientHelloResultCallback::~ProcessClientHelloResultCallback() {}
 
 QuicCryptoServerConfig::ConfigOptions::ConfigOptions()
     : expiry_time(QuicWallTime::Zero()),
       channel_id_enabled(false),
-      token_binding_enabled(false),
       p256(false) {}
 
 QuicCryptoServerConfig::ConfigOptions::ConfigOptions(
     const ConfigOptions& other) = default;
+
+QuicCryptoServerConfig::ConfigOptions::~ConfigOptions() {}
 
 QuicCryptoServerConfig::QuicCryptoServerConfig(
     StringPiece source_address_token_secret,
@@ -233,9 +235,10 @@ QuicCryptoServerConfig::QuicCryptoServerConfig(
       source_address_token_lifetime_secs_(86400),
       server_nonce_strike_register_max_entries_(1 << 10),
       server_nonce_strike_register_window_secs_(120),
-      enable_serving_sct_(false) {
+      enable_serving_sct_(false),
+      rejection_observer_(nullptr) {
   DCHECK(proof_source_.get());
-  default_source_address_token_boxer_.SetKeys(
+  source_address_token_boxer_.SetKeys(
       {DeriveSourceAddressTokenKey(source_address_token_secret)});
 
   // Generate a random key and orbit for server nonces.
@@ -328,8 +331,8 @@ QuicServerConfigProtobuf* QuicCryptoServerConfig::GenerateConfig(
     msg.SetVector(kPDMD, QuicTagVector{kCHID});
   }
 
-  if (options.token_binding_enabled) {
-    msg.SetVector(kTBKP, QuicTagVector{kP256});
+  if (!options.token_binding_params.empty()) {
+    msg.SetVector(kTBKP, options.token_binding_params);
   }
 
   if (options.id.empty()) {
@@ -482,9 +485,9 @@ bool QuicCryptoServerConfig::SetConfigs(
   return ok;
 }
 
-void QuicCryptoServerConfig::SetDefaultSourceAddressTokenKeys(
+void QuicCryptoServerConfig::SetSourceAddressTokenKeys(
     const vector<string>& keys) {
-  default_source_address_token_boxer_.SetKeys(keys);
+  source_address_token_boxer_.SetKeys(keys);
 }
 
 void QuicCryptoServerConfig::GetConfigIds(vector<string>* scids) const {
@@ -502,12 +505,12 @@ void QuicCryptoServerConfig::ValidateClientHello(
     QuicVersion version,
     const QuicClock* clock,
     QuicCryptoProof* crypto_proof,
-    ValidateClientHelloResultCallback* done_cb) const {
+    std::unique_ptr<ValidateClientHelloResultCallback> done_cb) const {
   const QuicWallTime now(clock->WallNow());
 
-  ValidateClientHelloResultCallback::Result* result =
+  scoped_refptr<ValidateClientHelloResultCallback::Result> result(
       new ValidateClientHelloResultCallback::Result(client_hello, client_ip,
-                                                    now);
+                                                    now));
 
   StringPiece requested_scid;
   client_hello.GetStringPiece(kSCID, &requested_scid);
@@ -546,14 +549,48 @@ void QuicCryptoServerConfig::ValidateClientHello(
       crypto_proof->cert_sct = "";
     }
     EvaluateClientHello(server_ip, version, primary_orbit, requested_config,
-                        primary_config, crypto_proof, result, done_cb);
+                        primary_config, crypto_proof, result,
+                        std::move(done_cb));
   } else {
-    done_cb->Run(result, nullptr /* proof_source_details */);
+    done_cb->Run(result, /* details = */ nullptr);
   }
 }
 
-QuicErrorCode QuicCryptoServerConfig::ProcessClientHello(
-    const ValidateClientHelloResultCallback::Result& validate_chlo_result,
+class ProcessClientHelloHelper {
+ public:
+  explicit ProcessClientHelloHelper(
+      std::unique_ptr<ProcessClientHelloResultCallback>* done_cb)
+      : done_cb_(done_cb) {}
+
+  ~ProcessClientHelloHelper() {
+    QUIC_BUG_IF(done_cb_ != nullptr)
+        << "Deleting ProcessClientHelloHelper with a pending callback.";
+  }
+
+  void Fail(QuicErrorCode error, const string& error_details) {
+    (*done_cb_)->Run(error, error_details, nullptr, nullptr);
+    DetachCallback();
+  }
+
+  void Succeed(std::unique_ptr<CryptoHandshakeMessage> message,
+               std::unique_ptr<DiversificationNonce> diversification_nonce) {
+    (*done_cb_)->Run(QUIC_NO_ERROR, string(), std::move(message),
+                     std::move(diversification_nonce));
+    DetachCallback();
+  }
+
+  void DetachCallback() {
+    QUIC_BUG_IF(done_cb_ == nullptr) << "Callback already detached.";
+    done_cb_ = nullptr;
+  }
+
+ private:
+  std::unique_ptr<ProcessClientHelloResultCallback>* done_cb_;
+};
+
+void QuicCryptoServerConfig::ProcessClientHello(
+    scoped_refptr<ValidateClientHelloResultCallback::Result>
+        validate_chlo_result,
     bool reject_only,
     QuicConnectionId connection_id,
     const IPAddress& server_ip,
@@ -569,19 +606,22 @@ QuicErrorCode QuicCryptoServerConfig::ProcessClientHello(
     QuicCryptoProof* crypto_proof,
     QuicByteCount total_framing_overhead,
     QuicByteCount chlo_packet_size,
-    CryptoHandshakeMessage* out,
-    DiversificationNonce* out_diversification_nonce,
-    string* error_details) const {
-  DCHECK(error_details);
+    std::unique_ptr<ProcessClientHelloResultCallback> done_cb) const {
+  DCHECK(done_cb);
+
+  ProcessClientHelloHelper helper(&done_cb);
 
   const CryptoHandshakeMessage& client_hello =
-      validate_chlo_result.client_hello;
-  const ClientHelloInfo& info = validate_chlo_result.info;
+      validate_chlo_result->client_hello;
+  const ClientHelloInfo& info = validate_chlo_result->info;
 
+  string error_details;
   QuicErrorCode valid = CryptoUtils::ValidateClientHello(
-      client_hello, version, supported_versions, error_details);
-  if (valid != QUIC_NO_ERROR)
-    return valid;
+      client_hello, version, supported_versions, &error_details);
+  if (valid != QUIC_NO_ERROR) {
+    helper.Fail(valid, error_details);
+    return;
+  }
 
   StringPiece requested_scid;
   client_hello.GetStringPiece(kSCID, &requested_scid);
@@ -589,49 +629,92 @@ QuicErrorCode QuicCryptoServerConfig::ProcessClientHello(
 
   scoped_refptr<Config> requested_config;
   scoped_refptr<Config> primary_config;
+  bool no_primary_config = false;
   {
     base::AutoLock locked(configs_lock_);
 
-    if (!primary_config_.get()) {
-      *error_details = "No configurations loaded";
-      return QUIC_CRYPTO_INTERNAL_ERROR;
-    }
+    if (!primary_config_) {
+      no_primary_config = true;
+    } else {
+      if (!next_config_promotion_time_.IsZero() &&
+          next_config_promotion_time_.IsAfter(now)) {
+        SelectNewPrimaryConfig(now);
+        DCHECK(primary_config_.get());
+        DCHECK_EQ(configs_.find(primary_config_->id)->second, primary_config_);
+      }
 
-    if (!next_config_promotion_time_.IsZero() &&
-        next_config_promotion_time_.IsAfter(now)) {
-      SelectNewPrimaryConfig(now);
-      DCHECK(primary_config_.get());
-      DCHECK_EQ(configs_.find(primary_config_->id)->second, primary_config_);
+      // Use the config that the client requested in order to do key-agreement.
+      // Otherwise give it a copy of |primary_config_| to use.
+      primary_config = crypto_proof->config;
+      requested_config = GetConfigWithScid(requested_scid);
     }
-
-    // Use the config that the client requested in order to do key-agreement.
-    // Otherwise give it a copy of |primary_config_| to use.
-    primary_config = crypto_proof->config;
-    requested_config = GetConfigWithScid(requested_scid);
+  }
+  if (no_primary_config) {
+    helper.Fail(QUIC_CRYPTO_INTERNAL_ERROR, "No configurations loaded");
+    return;
   }
 
-  if (validate_chlo_result.error_code != QUIC_NO_ERROR) {
-    *error_details = validate_chlo_result.error_details;
-    return validate_chlo_result.error_code;
+  if (validate_chlo_result->error_code != QUIC_NO_ERROR) {
+    helper.Fail(validate_chlo_result->error_code,
+                validate_chlo_result->error_details);
+    return;
   }
 
-  out->Clear();
-
-  if (!ClientDemandsX509Proof(client_hello) && FLAGS_quic_require_x509) {
-    *error_details = "Missing or invalid PDMD";
-    return QUIC_UNSUPPORTED_PROOF_DEMAND;
+  if (!ClientDemandsX509Proof(client_hello)) {
+    helper.Fail(QUIC_UNSUPPORTED_PROOF_DEMAND, "Missing or invalid PDMD");
+    return;
   }
   DCHECK(proof_source_.get());
   string chlo_hash;
   CryptoUtils::HashHandshakeMessage(client_hello, &chlo_hash);
   // No need to get a new proof if one was already generated.
-  if (!crypto_proof->chain &&
-      !proof_source_->GetProof(server_ip, info.sni.as_string(),
-                               primary_config->serialized, version, chlo_hash,
-                               &crypto_proof->chain, &crypto_proof->signature,
-                               &crypto_proof->cert_sct)) {
-    return QUIC_HANDSHAKE_FAILED;
+  if (!crypto_proof->chain) {
+    if (!proof_source_->GetProof(server_ip, info.sni.as_string(),
+                                 primary_config->serialized, version, chlo_hash,
+                                 &crypto_proof->chain, &crypto_proof->signature,
+                                 &crypto_proof->cert_sct)) {
+      helper.Fail(QUIC_HANDSHAKE_FAILED, "Failed to get proof");
+      return;
+    }
   }
+
+  // Note: this split exists to facilitate a future change in which the async
+  // version of GetProof will be called.
+  helper.DetachCallback();
+  ProcessClientHelloAfterGetProof(
+      *validate_chlo_result, reject_only, connection_id, client_address,
+      version, supported_versions, use_stateless_rejects,
+      server_designated_connection_id, clock, rand, compressed_certs_cache,
+      params, crypto_proof, total_framing_overhead, chlo_packet_size,
+      requested_config, primary_config, std::move(done_cb));
+}
+
+void QuicCryptoServerConfig::ProcessClientHelloAfterGetProof(
+    const ValidateClientHelloResultCallback::Result& validate_chlo_result,
+    bool reject_only,
+    QuicConnectionId connection_id,
+    const IPEndPoint& client_address,
+    QuicVersion version,
+    const QuicVersionVector& supported_versions,
+    bool use_stateless_rejects,
+    QuicConnectionId server_designated_connection_id,
+    const QuicClock* clock,
+    QuicRandom* rand,
+    QuicCompressedCertsCache* compressed_certs_cache,
+    QuicCryptoNegotiatedParameters* params,
+    QuicCryptoProof* crypto_proof,
+    QuicByteCount total_framing_overhead,
+    QuicByteCount chlo_packet_size,
+    const scoped_refptr<Config>& requested_config,
+    const scoped_refptr<Config>& primary_config,
+    std::unique_ptr<ProcessClientHelloResultCallback> done_cb) const {
+  ProcessClientHelloHelper helper(&done_cb);
+
+  const CryptoHandshakeMessage& client_hello =
+      validate_chlo_result.client_hello;
+  const ClientHelloInfo& info = validate_chlo_result.info;
+  std::unique_ptr<DiversificationNonce> out_diversification_nonce(
+      new DiversificationNonce);
 
   StringPiece cert_sct;
   if (client_hello.GetStringPiece(kCertificateSCTTag, &cert_sct) &&
@@ -639,17 +722,24 @@ QuicErrorCode QuicCryptoServerConfig::ProcessClientHello(
     params->sct_supported_by_client = true;
   }
 
+  std::unique_ptr<CryptoHandshakeMessage> out(new CryptoHandshakeMessage);
   if (!info.reject_reasons.empty() || !requested_config.get()) {
-    BuildRejection(version, *primary_config, client_hello, info,
-                   validate_chlo_result.cached_network_params,
+    BuildRejection(version, clock->WallNow(), *primary_config, client_hello,
+                   info, validate_chlo_result.cached_network_params,
                    use_stateless_rejects, server_designated_connection_id, rand,
                    compressed_certs_cache, params, *crypto_proof,
-                   total_framing_overhead, chlo_packet_size, out);
-    return QUIC_NO_ERROR;
+                   total_framing_overhead, chlo_packet_size, out.get());
+    if (FLAGS_quic_export_rej_for_all_rejects &&
+        rejection_observer_ != nullptr) {
+      rejection_observer_->OnRejectionBuilt(info.reject_reasons, out.get());
+    }
+    helper.Succeed(std::move(out), std::move(out_diversification_nonce));
+    return;
   }
 
   if (reject_only) {
-    return QUIC_NO_ERROR;
+    helper.Succeed(std::move(out), std::move(out_diversification_nonce));
+    return;
   }
 
   const QuicTag* their_aeads;
@@ -660,8 +750,9 @@ QuicErrorCode QuicCryptoServerConfig::ProcessClientHello(
       client_hello.GetTaglist(kKEXS, &their_key_exchanges,
                               &num_their_key_exchanges) != QUIC_NO_ERROR ||
       num_their_aeads != 1 || num_their_key_exchanges != 1) {
-    *error_details = "Missing or invalid AEAD or KEXS";
-    return QUIC_INVALID_CRYPTO_MESSAGE_PARAMETER;
+    helper.Fail(QUIC_INVALID_CRYPTO_MESSAGE_PARAMETER,
+                "Missing or invalid AEAD or KEXS");
+    return;
   }
 
   size_t key_exchange_index;
@@ -672,8 +763,8 @@ QuicErrorCode QuicCryptoServerConfig::ProcessClientHello(
                                 num_their_key_exchanges,
                                 QuicUtils::LOCAL_PRIORITY,
                                 &params->key_exchange, &key_exchange_index)) {
-    *error_details = "Unsupported AEAD or KEXS";
-    return QUIC_CRYPTO_NO_SUPPORT;
+    helper.Fail(QUIC_CRYPTO_NO_SUPPORT, "Unsupported AEAD or KEXS");
+    return;
   }
 
   if (!requested_config->tb_key_params.empty()) {
@@ -690,23 +781,24 @@ QuicErrorCode QuicCryptoServerConfig::ProcessClientHello(
           break;
         }
       default:
-        *error_details = "Invalid Token Binding key parameter";
-        return QUIC_INVALID_CRYPTO_MESSAGE_PARAMETER;
+        helper.Fail(QUIC_INVALID_CRYPTO_MESSAGE_PARAMETER,
+                    "Invalid Token Binding key parameter");
+        return;
     }
   }
 
   StringPiece public_value;
   if (!client_hello.GetStringPiece(kPUBS, &public_value)) {
-    *error_details = "Missing public value";
-    return QUIC_INVALID_CRYPTO_MESSAGE_PARAMETER;
+    helper.Fail(QUIC_INVALID_CRYPTO_MESSAGE_PARAMETER, "Missing public value");
+    return;
   }
 
   const KeyExchange* key_exchange =
       requested_config->key_exchanges[key_exchange_index];
   if (!key_exchange->CalculateSharedKey(public_value,
                                         &params->initial_premaster_secret)) {
-    *error_details = "Invalid public value";
-    return QUIC_INVALID_CRYPTO_MESSAGE_PARAMETER;
+    helper.Fail(QUIC_INVALID_CRYPTO_MESSAGE_PARAMETER, "Invalid public value");
+    return;
   }
 
   if (!info.sni.empty()) {
@@ -727,8 +819,8 @@ QuicErrorCode QuicCryptoServerConfig::ProcessClientHello(
   hkdf_suffix.append(requested_config->serialized);
   DCHECK(proof_source_.get());
   if (crypto_proof->chain->certs.empty()) {
-    *error_details = "Failed to get certs";
-    return QUIC_CRYPTO_INTERNAL_ERROR;
+    helper.Fail(QUIC_CRYPTO_INTERNAL_ERROR, "Failed to get certs");
+    return;
   }
   hkdf_suffix.append(crypto_proof->chain->certs.at(0));
 
@@ -756,8 +848,9 @@ QuicErrorCode QuicCryptoServerConfig::ProcessClientHello(
                                  hkdf_input, Perspective::IS_SERVER,
                                  CryptoUtils::Diversification::Never(),
                                  &crypters, nullptr /* subkey secret */)) {
-      *error_details = "Symmetric key setup failed";
-      return QUIC_CRYPTO_SYMMETRIC_KEY_SETUP_FAILED;
+      helper.Fail(QUIC_CRYPTO_SYMMETRIC_KEY_SETUP_FAILED,
+                  "Symmetric key setup failed");
+      return;
     }
 
     char plaintext[kMaxPacketSize];
@@ -767,22 +860,24 @@ QuicErrorCode QuicCryptoServerConfig::ProcessClientHello(
         StringPiece() /* associated data */, cetv_ciphertext, plaintext,
         &plaintext_length, kMaxPacketSize);
     if (!success) {
-      *error_details = "CETV decryption failure";
-      return QUIC_INVALID_CRYPTO_MESSAGE_PARAMETER;
+      helper.Fail(QUIC_INVALID_CRYPTO_MESSAGE_PARAMETER,
+                  "CETV decryption failure");
+      return;
     }
     std::unique_ptr<CryptoHandshakeMessage> cetv(
         CryptoFramer::ParseMessage(StringPiece(plaintext, plaintext_length)));
     if (!cetv.get()) {
-      *error_details = "CETV parse error";
-      return QUIC_INVALID_CRYPTO_MESSAGE_PARAMETER;
+      helper.Fail(QUIC_INVALID_CRYPTO_MESSAGE_PARAMETER, "CETV parse error");
+      return;
     }
 
     StringPiece key, signature;
     if (cetv->GetStringPiece(kCIDK, &key) &&
         cetv->GetStringPiece(kCIDS, &signature)) {
       if (!ChannelIDVerifier::Verify(key, hkdf_input, signature)) {
-        *error_details = "ChannelID signature failure";
-        return QUIC_INVALID_CRYPTO_MESSAGE_PARAMETER;
+        helper.Fail(QUIC_INVALID_CRYPTO_MESSAGE_PARAMETER,
+                    "ChannelID signature failure");
+        return;
       }
 
       params->channel_id = key.as_string();
@@ -795,22 +890,23 @@ QuicErrorCode QuicCryptoServerConfig::ProcessClientHello(
   hkdf_input.append(QuicCryptoConfig::kInitialLabel, label_len);
   hkdf_input.append(hkdf_suffix);
 
-  string* subkey_secret = &params->initial_subkey_secret;
   CryptoUtils::Diversification diversification =
       CryptoUtils::Diversification::Never();
   if (version > QUIC_VERSION_32) {
-    rand->RandBytes(reinterpret_cast<char*>(out_diversification_nonce),
-                    sizeof(*out_diversification_nonce));
+    rand->RandBytes(out_diversification_nonce->data(),
+                    out_diversification_nonce->size());
     diversification =
-        CryptoUtils::Diversification::Now(out_diversification_nonce);
+        CryptoUtils::Diversification::Now(out_diversification_nonce.get());
   }
 
   if (!CryptoUtils::DeriveKeys(params->initial_premaster_secret, params->aead,
                                info.client_nonce, info.server_nonce, hkdf_input,
                                Perspective::IS_SERVER, diversification,
-                               &params->initial_crypters, subkey_secret)) {
-    *error_details = "Symmetric key setup failed";
-    return QUIC_CRYPTO_SYMMETRIC_KEY_SETUP_FAILED;
+                               &params->initial_crypters,
+                               &params->initial_subkey_secret)) {
+    helper.Fail(QUIC_CRYPTO_SYMMETRIC_KEY_SETUP_FAILED,
+                "Symmetric key setup failed");
+    return;
   }
 
   string forward_secure_public_value;
@@ -826,8 +922,9 @@ QuicErrorCode QuicCryptoServerConfig::ProcessClientHello(
         forward_secure_key_exchange->public_value().as_string();
     if (!forward_secure_key_exchange->CalculateSharedKey(
             public_value, &params->forward_secure_premaster_secret)) {
-      *error_details = "Invalid public value";
-      return QUIC_INVALID_CRYPTO_MESSAGE_PARAMETER;
+      helper.Fail(QUIC_INVALID_CRYPTO_MESSAGE_PARAMETER,
+                  "Invalid public value");
+      return;
     }
   }
 
@@ -849,8 +946,9 @@ QuicErrorCode QuicCryptoServerConfig::ProcessClientHello(
           forward_secure_hkdf_input, Perspective::IS_SERVER,
           CryptoUtils::Diversification::Never(),
           &params->forward_secure_crypters, &params->subkey_secret)) {
-    *error_details = "Symmetric key setup failed";
-    return QUIC_CRYPTO_SYMMETRIC_KEY_SETUP_FAILED;
+    helper.Fail(QUIC_CRYPTO_SYMMETRIC_KEY_SETUP_FAILED,
+                "Symmetric key setup failed");
+    return;
   }
 
   out->set_tag(kSHLO);
@@ -868,7 +966,7 @@ QuicErrorCode QuicCryptoServerConfig::ProcessClientHello(
   out->SetStringPiece(kCADR, address_coder.Encode());
   out->SetStringPiece(kPUBS, forward_secure_public_value);
 
-  return QUIC_NO_ERROR;
+  helper.Succeed(std::move(out), std::move(out_diversification_nonce));
 }
 
 scoped_refptr<QuicCryptoServerConfig::Config>
@@ -991,7 +1089,8 @@ void QuicCryptoServerConfig::SelectNewPrimaryConfig(
   }
 }
 
-class EvaluateClientHelloCallback : public ProofSource::Callback {
+class QuicCryptoServerConfig::EvaluateClientHelloCallback
+    : public ProofSource::Callback {
  public:
   EvaluateClientHelloCallback(
       const QuicCryptoServerConfig& config,
@@ -1002,8 +1101,9 @@ class EvaluateClientHelloCallback : public ProofSource::Callback {
       scoped_refptr<QuicCryptoServerConfig::Config> requested_config,
       scoped_refptr<QuicCryptoServerConfig::Config> primary_config,
       QuicCryptoProof* crypto_proof,
-      ValidateClientHelloResultCallback::Result* client_hello_state,
-      ValidateClientHelloResultCallback* done_cb)
+      scoped_refptr<ValidateClientHelloResultCallback::Result>
+          client_hello_state,
+      std::unique_ptr<ValidateClientHelloResultCallback> done_cb)
       : config_(config),
         found_error_(found_error),
         server_ip_(server_ip),
@@ -1012,8 +1112,8 @@ class EvaluateClientHelloCallback : public ProofSource::Callback {
         requested_config_(std::move(requested_config)),
         primary_config_(std::move(primary_config)),
         crypto_proof_(crypto_proof),
-        client_hello_state_(client_hello_state),
-        done_cb_(done_cb) {}
+        client_hello_state_(std::move(client_hello_state)),
+        done_cb_(std::move(done_cb)) {}
 
   void Run(bool ok,
            const scoped_refptr<ProofSource::Chain>& chain,
@@ -1028,7 +1128,7 @@ class EvaluateClientHelloCallback : public ProofSource::Callback {
     config_.EvaluateClientHelloAfterGetProof(
         found_error_, server_ip_, version_, primary_orbit_, requested_config_,
         primary_config_, crypto_proof_, std::move(details), !ok,
-        client_hello_state_, done_cb_);
+        client_hello_state_, std::move(done_cb_));
   }
 
  private:
@@ -1040,8 +1140,8 @@ class EvaluateClientHelloCallback : public ProofSource::Callback {
   const scoped_refptr<QuicCryptoServerConfig::Config> requested_config_;
   const scoped_refptr<QuicCryptoServerConfig::Config> primary_config_;
   QuicCryptoProof* crypto_proof_;
-  ValidateClientHelloResultCallback::Result* client_hello_state_;
-  ValidateClientHelloResultCallback* done_cb_;
+  scoped_refptr<ValidateClientHelloResultCallback::Result> client_hello_state_;
+  std::unique_ptr<ValidateClientHelloResultCallback> done_cb_;
 };
 
 void QuicCryptoServerConfig::EvaluateClientHello(
@@ -1051,9 +1151,9 @@ void QuicCryptoServerConfig::EvaluateClientHello(
     scoped_refptr<Config> requested_config,
     scoped_refptr<Config> primary_config,
     QuicCryptoProof* crypto_proof,
-    ValidateClientHelloResultCallback::Result* client_hello_state,
-    ValidateClientHelloResultCallback* done_cb) const {
-  ValidateClientHelloHelper helper(client_hello_state, done_cb);
+    scoped_refptr<ValidateClientHelloResultCallback::Result> client_hello_state,
+    std::unique_ptr<ValidateClientHelloResultCallback> done_cb) const {
+  ValidateClientHelloHelper helper(client_hello_state, &done_cb);
 
   const CryptoHandshakeMessage& client_hello = client_hello_state->client_hello;
   ClientHelloInfo* info = &(client_hello_state->info);
@@ -1131,7 +1231,7 @@ void QuicCryptoServerConfig::EvaluateClientHello(
           new EvaluateClientHelloCallback(
               *this, found_error, server_ip, version, primary_orbit,
               requested_config, primary_config, crypto_proof,
-              client_hello_state, done_cb));
+              client_hello_state, std::move(done_cb)));
       proof_source_->GetProof(server_ip, info->sni.as_string(),
                               serialized_config, version, chlo_hash,
                               std::move(cb));
@@ -1154,7 +1254,7 @@ void QuicCryptoServerConfig::EvaluateClientHello(
   EvaluateClientHelloAfterGetProof(
       found_error, server_ip, version, primary_orbit, requested_config,
       primary_config, crypto_proof, nullptr /* proof_source_details */,
-      get_proof_failed, client_hello_state, done_cb);
+      get_proof_failed, client_hello_state, std::move(done_cb));
   helper.DetachCallback();
 }
 
@@ -1168,9 +1268,9 @@ void QuicCryptoServerConfig::EvaluateClientHelloAfterGetProof(
     QuicCryptoProof* crypto_proof,
     std::unique_ptr<ProofSource::Details> proof_source_details,
     bool get_proof_failed,
-    ValidateClientHelloResultCallback::Result* client_hello_state,
-    ValidateClientHelloResultCallback* done_cb) const {
-  ValidateClientHelloHelper helper(client_hello_state, done_cb);
+    scoped_refptr<ValidateClientHelloResultCallback::Result> client_hello_state,
+    std::unique_ptr<ValidateClientHelloResultCallback> done_cb) const {
+  ValidateClientHelloHelper helper(client_hello_state, &done_cb);
   const CryptoHandshakeMessage& client_hello = client_hello_state->client_hello;
   ClientHelloInfo* info = &(client_hello_state->info);
 
@@ -1266,8 +1366,9 @@ void QuicCryptoServerConfig::EvaluateClientHelloAfterGetProof(
 
   strike_register_client->VerifyNonceIsValidAndUnique(
       info->client_nonce, info->now,
-      new VerifyNonceIsValidAndUniqueCallback(
-          client_hello_state, std::move(proof_source_details), done_cb));
+      new VerifyNonceIsValidAndUniqueCallback(client_hello_state,
+                                              std::move(proof_source_details),
+                                              std::move(done_cb)));
   helper.DetachCallback();
 }
 
@@ -1285,11 +1386,13 @@ bool QuicCryptoServerConfig::BuildServerConfigUpdateMessage(
     CryptoHandshakeMessage* out) const {
   string serialized;
   string source_address_token;
+  QuicWallTime expiry_time = QuicWallTime::Zero();
   const CommonCertSets* common_cert_sets;
   {
     base::AutoLock locked(configs_lock_);
     serialized = primary_config_->serialized;
     common_cert_sets = primary_config_->common_cert_sets;
+    expiry_time = primary_config_->expiry_time;
     source_address_token = NewSourceAddressToken(
         *primary_config_, previous_source_address_tokens, client_ip, rand,
         clock->WallNow(), cached_network_params);
@@ -1298,6 +1401,8 @@ bool QuicCryptoServerConfig::BuildServerConfigUpdateMessage(
   out->set_tag(kSCUP);
   out->SetStringPiece(kSCFG, serialized);
   out->SetStringPiece(kSourceAddressTokenTag, source_address_token);
+  out->SetValue(kSTTL,
+                expiry_time.AbsoluteDifference(clock->WallNow()).ToSeconds());
 
   scoped_refptr<ProofSource::Chain> chain;
   string signature;
@@ -1316,7 +1421,8 @@ bool QuicCryptoServerConfig::BuildServerConfigUpdateMessage(
   out->SetStringPiece(kPROF, signature);
   if (params.sct_supported_by_client && enable_serving_sct_) {
     if (cert_sct.empty()) {
-      DLOG(WARNING) << "SCT is expected but it is empty.";
+      DLOG(WARNING) << "SCT is expected but it is empty. sni: " << params.sni
+                    << " server_ip: " << server_ip.ToString();
     } else {
       out->SetStringPiece(kCertificateSCTTag, cert_sct);
     }
@@ -1435,6 +1541,7 @@ void QuicCryptoServerConfig::FinishBuildServerConfigUpdateMessage(
 
 void QuicCryptoServerConfig::BuildRejection(
     QuicVersion version,
+    QuicWallTime now,
     const Config& config,
     const CryptoHandshakeMessage& client_hello,
     const ClientHelloInfo& info,
@@ -1462,6 +1569,7 @@ void QuicCryptoServerConfig::BuildRejection(
       kSourceAddressTokenTag,
       NewSourceAddressToken(config, info.source_address_tokens, info.client_ip,
                             rand, info.now, &cached_network_params));
+  out->SetValue(kSTTL, config.expiry_time.AbsoluteDifference(now).ToSeconds());
   if (replay_protection_) {
     out->SetStringPiece(kServerNonceTag, NewServerNonce(rand, info.now));
   }
@@ -1471,7 +1579,7 @@ void QuicCryptoServerConfig::BuildRejection(
   out->SetVector(kRREJ, info.reject_reasons);
 
   // The client may have requested a certificate chain.
-  if (!ClientDemandsX509Proof(client_hello) && FLAGS_quic_require_x509) {
+  if (!ClientDemandsX509Proof(client_hello)) {
     QUIC_BUG << "x509 certificates not supported in proof demand";
     return;
   }
@@ -1503,14 +1611,9 @@ void QuicCryptoServerConfig::BuildRejection(
   // max_unverified_size is the number of bytes that the certificate chain,
   // signature, and (optionally) signed certificate timestamp can consume before
   // we will demand a valid source-address token.
-  const size_t old_max_unverified_size =
-      client_hello.size() * chlo_multiplier_ - kREJOverheadBytes;
-  const size_t new_max_unverified_size =
+  const size_t max_unverified_size =
       chlo_multiplier_ * (chlo_packet_size - total_framing_overhead) -
       kREJOverheadBytes;
-  const size_t max_unverified_size = FLAGS_quic_use_chlo_packet_size
-                                         ? new_max_unverified_size
-                                         : old_max_unverified_size;
   static_assert(kClientHelloMinimumSize * kMultiplier >= kREJOverheadBytes,
                 "overhead calculation may underflow");
   bool should_return_sct =
@@ -1529,13 +1632,11 @@ void QuicCryptoServerConfig::BuildRejection(
       }
     }
   } else {
-    if (FLAGS_quic_use_chlo_packet_size) {
-      DLOG(WARNING) << "Sending inchoate REJ for hostname: " << info.sni
-                    << " signature: " << crypto_proof.signature.size()
-                    << " cert: " << compressed.size() << " sct:" << sct_size
-                    << " total: " << total_size
-                    << " max: " << max_unverified_size;
-    }
+    DLOG(WARNING) << "Sending inchoate REJ for hostname: " << info.sni
+                  << " signature: " << crypto_proof.signature.size()
+                  << " cert: " << compressed.size() << " sct:" << sct_size
+                  << " total: " << total_size
+                  << " max: " << max_unverified_size;
   }
 }
 
@@ -1577,18 +1678,7 @@ QuicCryptoServerConfig::ParseConfigProtobuf(
 
   scoped_refptr<Config> config(new Config);
   config->serialized = protobuf->config();
-
-  if (!protobuf->has_source_address_token_secret_override()) {
-    // Use the default boxer.
-    config->source_address_token_boxer = &default_source_address_token_boxer_;
-  } else {
-    // Create override boxer instance.
-    CryptoSecretBoxer* boxer = new CryptoSecretBoxer;
-    boxer->SetKeys({DeriveSourceAddressTokenKey(
-        protobuf->source_address_token_secret_override())});
-    config->source_address_token_boxer_storage.reset(boxer);
-    config->source_address_token_boxer = boxer;
-  }
+  config->source_address_token_boxer = &source_address_token_boxer_;
 
   if (protobuf->has_primary_time()) {
     config->primary_time =
@@ -1737,6 +1827,13 @@ QuicCryptoServerConfig::ParseConfigProtobuf(
     config->key_exchanges.push_back(ka.release());
   }
 
+  uint64_t expiry_seconds;
+  if (msg->GetUint64(kEXPY, &expiry_seconds) != QUIC_NO_ERROR) {
+    LOG(WARNING) << "Server config message is missing EXPY";
+    return nullptr;
+  }
+  config->expiry_time = QuicWallTime::FromUNIXSeconds(expiry_seconds);
+
   return config;
 }
 
@@ -1807,9 +1904,9 @@ void QuicCryptoServerConfig::set_enable_serving_sct(bool enable_serving_sct) {
 }
 
 void QuicCryptoServerConfig::AcquirePrimaryConfigChangedCb(
-    PrimaryConfigChangedCallback* cb) {
+    std::unique_ptr<PrimaryConfigChangedCallback> cb) {
   base::AutoLock locked(configs_lock_);
-  primary_config_changed_cb_.reset(cb);
+  primary_config_changed_cb_ = std::move(cb);
 }
 
 string QuicCryptoServerConfig::NewSourceAddressToken(
@@ -2054,6 +2151,7 @@ QuicCryptoServerConfig::Config::Config()
     : channel_id_enabled(false),
       is_primary(false),
       primary_time(QuicWallTime::Zero()),
+      expiry_time(QuicWallTime::Zero()),
       priority(0),
       source_address_token_boxer(nullptr) {}
 

@@ -4,6 +4,9 @@
 
 #include "chrome/browser/ui/webui/site_settings_helper.h"
 
+#include <functional>
+#include <string>
+
 #include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "chrome/browser/permissions/chooser_context_base.h"
@@ -15,10 +18,13 @@
 
 namespace site_settings {
 
+const char kAppName[] = "appName";
+const char kAppId[] = "appId";
 const char kSetting[] = "setting";
 const char kOrigin[] = "origin";
 const char kPolicyProviderId[] = "policy";
 const char kSource[] = "source";
+const char kIncognito[] = "incognito";
 const char kEmbeddingOrigin[] = "embeddingOrigin";
 const char kPreferencesSource[] = "preference";
 const char kObject[] = "object";
@@ -74,13 +80,34 @@ std::string ContentSettingsTypeToGroupName(ContentSettingsType type) {
   return std::string();
 }
 
+// Add an "Allow"-entry to the list of |exceptions| for a |url_pattern| from
+// the web extent of a hosted |app|.
+void AddExceptionForHostedApp(const std::string& url_pattern,
+    const extensions::Extension& app, base::ListValue* exceptions) {
+  std::unique_ptr<base::DictionaryValue> exception(new base::DictionaryValue());
+
+  std::string setting_string =
+      content_settings::ContentSettingToString(CONTENT_SETTING_ALLOW);
+  DCHECK(!setting_string.empty());
+
+  exception->SetString(site_settings::kSetting, setting_string);
+  exception->SetString(site_settings::kOrigin, url_pattern);
+  exception->SetString(site_settings::kEmbeddingOrigin, url_pattern);
+  exception->SetString(site_settings::kSource, "HostedApp");
+  exception->SetBoolean(site_settings::kIncognito, false);
+  exception->SetString(kAppName, app.name());
+  exception->SetString(kAppId, app.id());
+  exceptions->Append(std::move(exception));
+}
+
 // Create a DictionaryValue* that will act as a data source for a single row
 // in a HostContentSettingsMap-controlled exceptions table (e.g., cookies).
 std::unique_ptr<base::DictionaryValue> GetExceptionForPage(
     const ContentSettingsPattern& pattern,
     const ContentSettingsPattern& secondary_pattern,
     const ContentSetting& setting,
-    const std::string& provider_name) {
+    const std::string& provider_name,
+    bool incognito) {
   base::DictionaryValue* exception = new base::DictionaryValue();
   exception->SetString(kOrigin, pattern.ToString());
   exception->SetString(kEmbeddingOrigin,
@@ -94,12 +121,15 @@ std::unique_ptr<base::DictionaryValue> GetExceptionForPage(
 
   exception->SetString(kSetting, setting_string);
   exception->SetString(kSource, provider_name);
+  exception->SetBoolean(kIncognito, incognito);
   return base::WrapUnique(exception);
 }
 
 void GetExceptionsFromHostContentSettingsMap(const HostContentSettingsMap* map,
                                              ContentSettingsType type,
                                              content::WebUI* web_ui,
+                                             bool incognito,
+                                             const std::string* filter,
                                              base::ListValue* exceptions) {
   ContentSettingsForOneType entries;
   map->GetSettingsForOneType(type, std::string(), &entries);
@@ -118,6 +148,9 @@ void GetExceptionsFromHostContentSettingsMap(const HostContentSettingsMap* map,
     // as well as normal content settings. Here, we use the incongnito settings
     // only.
     if (map->is_off_the_record() && !i->incognito)
+      continue;
+
+    if (filter && i->primary_pattern.ToString() != *filter)
       continue;
 
     all_patterns_settings[std::make_pair(i->primary_pattern, i->source)]
@@ -157,7 +190,7 @@ void GetExceptionsFromHostContentSettingsMap(const HostContentSettingsMap* map,
     const ContentSettingsPattern& secondary_pattern =
         parent == one_settings.end() ? primary_pattern : parent->first;
     this_provider_exceptions.push_back(GetExceptionForPage(
-        primary_pattern, secondary_pattern, parent_setting, source));
+        primary_pattern, secondary_pattern, parent_setting, source, incognito));
 
     // Add the "children" for any embedded settings.
     for (OnePatternSettings::const_iterator j = one_settings.begin();
@@ -168,7 +201,7 @@ void GetExceptionsFromHostContentSettingsMap(const HostContentSettingsMap* map,
 
       ContentSetting content_setting = j->second;
       this_provider_exceptions.push_back(GetExceptionForPage(
-          primary_pattern, j->first, content_setting, source));
+          primary_pattern, j->first, content_setting, source, incognito));
     }
   }
 
@@ -179,7 +212,7 @@ void GetExceptionsFromHostContentSettingsMap(const HostContentSettingsMap* map,
     auto& policy_exceptions = all_provider_exceptions
         [HostContentSettingsMap::GetProviderTypeFromSource(kPolicyProviderId)];
     DCHECK(policy_exceptions.empty());
-    GetPolicyAllowedUrls(type, &policy_exceptions, web_ui);
+    GetPolicyAllowedUrls(type, &policy_exceptions, web_ui, incognito);
   }
 
   for (auto& one_provider_exceptions : all_provider_exceptions) {
@@ -191,7 +224,8 @@ void GetExceptionsFromHostContentSettingsMap(const HostContentSettingsMap* map,
 void GetPolicyAllowedUrls(
     ContentSettingsType type,
     std::vector<std::unique_ptr<base::DictionaryValue>>* exceptions,
-    content::WebUI* web_ui) {
+    content::WebUI* web_ui,
+    bool incognito) {
   DCHECK(type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC ||
          type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA);
 
@@ -224,7 +258,7 @@ void GetPolicyAllowedUrls(
   for (const ContentSettingsPattern& pattern : patterns) {
     exceptions->push_back(GetExceptionForPage(pattern, ContentSettingsPattern(),
                                               CONTENT_SETTING_ALLOW,
-                                              kPolicyProviderId));
+                                              kPolicyProviderId, incognito));
   }
 }
 
@@ -242,6 +276,7 @@ std::unique_ptr<base::DictionaryValue> GetChooserExceptionForPage(
     const GURL& requesting_origin,
     const GURL& embedding_origin,
     const std::string& provider_name,
+    bool incognito,
     const std::string& name,
     const base::DictionaryValue* object) {
   std::unique_ptr<base::DictionaryValue> exception(new base::DictionaryValue());
@@ -255,6 +290,7 @@ std::unique_ptr<base::DictionaryValue> GetChooserExceptionForPage(
   exception->SetString(
       site_settings::kEmbeddingOrigin, embedding_origin.spec());
   exception->SetString(site_settings::kSource, provider_name);
+  exception->SetBoolean(kIncognito, incognito);
   if (object) {
     exception->SetString(kObjectName, name);
     exception->Set(kObject, object->CreateDeepCopy());
@@ -316,8 +352,9 @@ void GetChooserExceptionsFromProfile(
 
       for (const auto& sorted_objects_entry : sorted_objects) {
         this_provider_exceptions.push_back(GetChooserExceptionForPage(
-            requesting_origin, embedding_origin, source,
-            sorted_objects_entry.first, sorted_objects_entry.second));
+            requesting_origin, embedding_origin, source, incognito,
+            sorted_objects_entry.first,
+            sorted_objects_entry.second));
       }
     }
 
@@ -326,7 +363,8 @@ void GetChooserExceptionsFromProfile(
       // where |requesting_origin| has been embedded.
       this_provider_exceptions.push_back(
           GetChooserExceptionForPage(requesting_origin, requesting_origin,
-                                     source, std::string(), nullptr));
+                                     source, incognito, std::string(),
+                                     nullptr));
 
       // Add the "children" for any embedded settings.
       for (const auto& one_origin_objects_entry : one_origin_objects) {
@@ -339,7 +377,7 @@ void GetChooserExceptionsFromProfile(
 
         for (const auto& sorted_objects_entry : sorted_objects) {
           this_provider_exceptions.push_back(GetChooserExceptionForPage(
-              requesting_origin, embedding_origin, source,
+              requesting_origin, embedding_origin, source, incognito,
               sorted_objects_entry.first, sorted_objects_entry.second));
         }
       }

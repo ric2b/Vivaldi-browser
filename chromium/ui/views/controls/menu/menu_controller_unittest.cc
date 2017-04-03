@@ -5,9 +5,11 @@
 #include "ui/views/controls/menu/menu_controller.h"
 
 #include "base/callback.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "ui/aura/scoped_window_targeter.h"
 #include "ui/aura/window.h"
@@ -273,6 +275,7 @@ class MenuControllerTest : public ViewsTestBase {
   void SetUp() override {
     ViewsTestBase::SetUp();
     Init();
+    ASSERT_TRUE(base::MessageLoopForUI::IsCurrent());
   }
 
   void TearDown() override {
@@ -316,6 +319,21 @@ class MenuControllerTest : public ViewsTestBase {
     EXPECT_EQ(MenuController::EXIT_ALL, menu_controller_->exit_type());
   }
 #endif  // defined(USE_AURA)
+
+  // Verifies the state of the |menu_controller_| before destroying it.
+  void VerifyDragCompleteThenDestroy() {
+    EXPECT_FALSE(menu_controller()->drag_in_progress());
+    EXPECT_EQ(MenuController::EXIT_ALL, menu_controller()->exit_type());
+    DestroyMenuController();
+  }
+
+  // Setups |menu_controller_delegate_| to be destroyed when OnMenuClosed is
+  // called.
+  void TestDragCompleteThenDestroyOnMenuClosed() {
+    menu_controller_delegate_->set_on_menu_closed_callback(
+        base::Bind(&MenuControllerTest::VerifyDragCompleteThenDestroy,
+                   base::Unretained(this)));
+  }
 
   void TestAsynchronousNestedExitAll() {
     ASSERT_TRUE(test_message_loop_->is_running());
@@ -386,6 +404,12 @@ class MenuControllerTest : public ViewsTestBase {
         new MenuController(true, menu_controller_delegate_.get());
     menu_controller_->owner_ = owner_.get();
     menu_controller_->showing_ = true;
+  }
+
+  // Tests that the menu does not destroy itself when canceled during a drag.
+  void TestCancelAllDuringDrag() {
+    menu_controller_->CancelAll();
+    EXPECT_EQ(0, menu_controller_delegate_->on_menu_closed_called());
   }
 
  protected:
@@ -614,7 +638,7 @@ class MenuControllerTest : public ViewsTestBase {
 // Tests that an event targeter which blocks events will be honored by the menu
 // event dispatcher.
 TEST_F(MenuControllerTest, EventTargeter) {
-  base::MessageLoopForUI::current()->task_runner()->PostTask(
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(&MenuControllerTest::TestEventTargeter,
                             base::Unretained(this)));
   RunMenu();
@@ -637,11 +661,11 @@ TEST_F(MenuControllerTest, TouchIdsReleasedCorrectly) {
   event_generator()->PressTouchId(1);
   event_generator()->ReleaseTouchId(0);
 
-  base::MessageLoopForUI::current()->task_runner()->PostTask(
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(&MenuControllerTest::ReleaseTouchId,
                             base::Unretained(this), 1));
 
-  base::MessageLoopForUI::current()->task_runner()->PostTask(
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(&MenuControllerTest::PressKey,
                             base::Unretained(this), ui::VKEY_ESCAPE));
 
@@ -1089,17 +1113,34 @@ TEST_F(MenuControllerTest, AsynchronousPerformDrop) {
 TEST_F(MenuControllerTest, AsynchronousDragComplete) {
   MenuController* controller = menu_controller();
   controller->SetAsyncRun(true);
+  TestDragCompleteThenDestroyOnMenuClosed();
 
   controller->OnDragWillStart();
   controller->OnDragComplete(true);
 
-  EXPECT_FALSE(controller->drag_in_progress());
   TestMenuControllerDelegate* controller_delegate = menu_controller_delegate();
   EXPECT_EQ(1, controller_delegate->on_menu_closed_called());
   EXPECT_EQ(nullptr, controller_delegate->on_menu_closed_menu());
   EXPECT_EQ(internal::MenuControllerDelegate::NOTIFY_DELEGATE,
             controller_delegate->on_menu_closed_notify_type());
-  EXPECT_EQ(MenuController::EXIT_ALL, controller->exit_type());
+}
+
+// Tests that if Cancel is called during a drag, that OnMenuClosed is still
+// notified when the drag completes.
+TEST_F(MenuControllerTest, AsynchronousCancelDuringDrag) {
+  MenuController* controller = menu_controller();
+  controller->SetAsyncRun(true);
+  TestDragCompleteThenDestroyOnMenuClosed();
+
+  controller->OnDragWillStart();
+  controller->CancelAll();
+  controller->OnDragComplete(true);
+
+  TestMenuControllerDelegate* controller_delegate = menu_controller_delegate();
+  EXPECT_EQ(1, controller_delegate->on_menu_closed_called());
+  EXPECT_EQ(nullptr, controller_delegate->on_menu_closed_menu());
+  EXPECT_EQ(internal::MenuControllerDelegate::NOTIFY_DELEGATE,
+            controller_delegate->on_menu_closed_notify_type());
 }
 
 // Tests that if a menu is destroyed while drag operations are occuring, that
@@ -1223,7 +1264,7 @@ TEST_F(MenuControllerTest, AsynchronousTouchEventRepostEvent) {
 TEST_F(MenuControllerTest, AsynchronousNestedExitAll) {
   InstallTestMenuMessageLoop();
 
-  base::MessageLoopForUI::current()->task_runner()->PostTask(
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(&MenuControllerTest::TestAsynchronousNestedExitAll,
                             base::Unretained(this)));
 
@@ -1236,7 +1277,7 @@ TEST_F(MenuControllerTest, AsynchronousNestedExitAll) {
 TEST_F(MenuControllerTest, AsynchronousNestedExitOutermost) {
   InstallTestMenuMessageLoop();
 
-  base::MessageLoopForUI::current()->task_runner()->PostTask(
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::Bind(&MenuControllerTest::TestAsynchronousNestedExitOutermost,
                  base::Unretained(this)));
@@ -1335,7 +1376,7 @@ TEST_F(MenuControllerTest, NestedMessageLoopDiesWithNestedMenu) {
   std::unique_ptr<TestMenuControllerDelegate> nested_delegate(
       new TestMenuControllerDelegate());
   // This will nest an asynchronous menu, and then kill the nested message loop.
-  base::MessageLoopForUI::current()->task_runner()->PostTask(
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::Bind(&MenuControllerTest::TestNestedMessageLoopKillsItself,
                  base::Unretained(this), nested_delegate.get()));
@@ -1354,7 +1395,7 @@ TEST_F(MenuControllerTest, NestedMessageLoopDiesWithNestedMenu) {
 TEST_F(MenuControllerTest, SynchronousCancelEvent) {
   ExitMenuRun();
   // Post actual test to run once the menu has created a nested message loop.
-  base::MessageLoopForUI::current()->task_runner()->PostTask(
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::Bind(&MenuControllerTest::TestCancelEvent, base::Unretained(this)));
   int mouse_event_flags = 0;
@@ -1395,9 +1436,36 @@ TEST_F(MenuControllerTest, RunWithoutWidgetDoesntCrash) {
 // MenuController becomes active, that the exiting of drag does not cause a
 // crash.
 TEST_F(MenuControllerTest, MenuControllerReplacedDuringDrag) {
+  // This test creates two native widgets, but expects the child native widget
+  // to be able to reach up and use the parent native widget's aura
+  // objects. https://crbug.com/614037
+  if (IsMus())
+    return;
+
   TestDragDropClient drag_drop_client(
       base::Bind(&MenuControllerTest::TestMenuControllerReplacementDuringDrag,
                  base::Unretained(this)));
+  aura::client::SetDragDropClient(owner()->GetNativeWindow()->GetRootWindow(),
+                                  &drag_drop_client);
+  AddButtonMenuItems();
+  StartDrag();
+}
+
+// Tests that if a CancelAll is called during drag-and-drop that it does not
+// destroy the MenuController. On Windows and Linux this destruction also
+// destroys the Widget used for drag-and-drop, thereby ending the drag.
+TEST_F(MenuControllerTest, CancelAllDuringDrag) {
+  // This test creates two native widgets, but expects the child native widget
+  // to be able to reach up and use the parent native widget's aura
+  // objects. https://crbug.com/614037
+  if (IsMus())
+    return;
+
+  MenuController* controller = menu_controller();
+  controller->SetAsyncRun(true);
+
+  TestDragDropClient drag_drop_client(base::Bind(
+      &MenuControllerTest::TestCancelAllDuringDrag, base::Unretained(this)));
   aura::client::SetDragDropClient(owner()->GetNativeWindow()->GetRootWindow(),
                                   &drag_drop_client);
   AddButtonMenuItems();

@@ -254,6 +254,9 @@ class GeolocationBrowserTest : public InProcessBrowserTest {
   // Convenience method to look up the number of queued permission requests.
   int GetRequestQueueSize(PermissionRequestManager* manager);
 
+  // Toggle whether the prompt decision should be persisted.
+  void TogglePersist(bool persist);
+
  private:
   // Calls watchPosition() in JavaScript and accepts or denies the resulting
   // permission request. Returns the JavaScript response.
@@ -429,26 +432,29 @@ int GeolocationBrowserTest::GetRequestQueueSize(
   return static_cast<int>(manager->requests_.size());
 }
 
-// Tests ----------------------------------------------------------------------
-
-#if defined(OS_LINUX)
-// http://crbug.com/527437
-#define MAYBE_DisplaysPrompt DISABLED_DisplaysPrompt
-#else
-#define MAYBE_DisplaysPrompt DisplaysPrompt
-#endif
-IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, MAYBE_DisplaysPrompt) {
-  ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
-  ASSERT_TRUE(WatchPositionAndGrantPermission());
+void GeolocationBrowserTest::TogglePersist(bool persist) {
+  content::WebContents* web_contents =
+      current_browser()->tab_strip_model()->GetActiveWebContents();
+  PermissionRequestManager::FromWebContents(web_contents)
+      ->TogglePersist(persist);
 }
 
-#if defined(OS_LINUX)
-// http://crbug.com/527437
-#define MAYBE_Geoposition DISABLED_Geoposition
-#else
-#define MAYBE_Geoposition Geoposition
-#endif
-IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, MAYBE_Geoposition) {
+// Tests ----------------------------------------------------------------------
+
+IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, DisplaysPrompt) {
+  ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
+  ASSERT_TRUE(WatchPositionAndGrantPermission());
+
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            GetHostContentSettingsMap()->GetContentSetting(
+                current_url(), current_url(), CONTENT_SETTINGS_TYPE_GEOLOCATION,
+                std::string()));
+
+  // Ensure a second request doesn't create a prompt in this tab.
+  WatchPositionAndObservePermissionRequest(false);
+}
+
+IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, Geoposition) {
   ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
   ASSERT_TRUE(WatchPositionAndGrantPermission());
   ExpectPosition(fake_latitude(), fake_longitude());
@@ -458,15 +464,17 @@ IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, ErrorOnPermissionDenied) {
   ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
   EXPECT_TRUE(WatchPositionAndDenyPermission());
   ExpectValueFromScript(GetErrorCodePermissionDenied(), "geoGetLastError()");
+
+  EXPECT_EQ(CONTENT_SETTING_BLOCK,
+            GetHostContentSettingsMap()->GetContentSetting(
+                current_url(), current_url(), CONTENT_SETTINGS_TYPE_GEOLOCATION,
+                std::string()));
+
+  // Ensure a second request doesn't create a prompt in this tab.
+  WatchPositionAndObservePermissionRequest(false);
 }
 
-#if defined(OS_LINUX)
-// http://crbug.com/527437
-#define MAYBE_NoPromptForSecondTab DISABLED_NoPromptForSecondTab
-#else
-#define MAYBE_NoPromptForSecondTab NoPromptForSecondTab
-#endif
-IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, MAYBE_NoPromptForSecondTab) {
+IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, NoPromptForSecondTab) {
   ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
   ASSERT_TRUE(WatchPositionAndGrantPermission());
 
@@ -492,13 +500,7 @@ IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, NoPromptForDeniedOrigin) {
   ExpectValueFromScript(GetErrorCodePermissionDenied(), "geoGetLastError()");
 }
 
-#if defined(OS_LINUX)
-// http://crbug.com/527437
-#define MAYBE_NoPromptForAllowedOrigin DISABLED_NoPromptForAllowedOrigin
-#else
-#define MAYBE_NoPromptForAllowedOrigin NoPromptForAllowedOrigin
-#endif
-IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, MAYBE_NoPromptForAllowedOrigin) {
+IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, NoPromptForAllowedOrigin) {
   ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
   GetHostContentSettingsMap()->SetContentSettingDefaultScope(
       current_url(), current_url(), CONTENT_SETTINGS_TYPE_GEOLOCATION,
@@ -524,9 +526,7 @@ IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, NoPromptForOffTheRecord) {
   ExpectPosition(fake_latitude(), fake_longitude());
 }
 
-// http://crbug.com/523387
-IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest,
-                       DISABLED_NoLeakFromOffTheRecord) {
+IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, NoLeakFromOffTheRecord) {
   // The user is prompted in a fresh incognito profile, and when granted the
   // position gets to the script.
   ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_OFFTHERECORD));
@@ -540,13 +540,47 @@ IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest,
   ExpectPosition(fake_latitude(), fake_longitude());
 }
 
-#if defined(OS_LINUX)
-// http://crbug.com/527437
-#define MAYBE_IFramesWithFreshPosition DISABLED_IFramesWithFreshPosition
-#else
-#define MAYBE_IFramesWithFreshPosition IFramesWithFreshPosition
-#endif
-IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, MAYBE_IFramesWithFreshPosition) {
+IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, TogglePersistGranted) {
+  // Initialize and turn persistence off.
+  ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
+  TogglePersist(false);
+
+  ASSERT_TRUE(WatchPositionAndGrantPermission());
+  EXPECT_EQ(CONTENT_SETTING_ASK,
+            GetHostContentSettingsMap()->GetContentSetting(
+                current_url(), current_url(), CONTENT_SETTINGS_TYPE_GEOLOCATION,
+                std::string()));
+
+  // Expect the grant to be remembered at the blink layer, so a second request
+  // on this page doesn't create a request.
+  WatchPositionAndObservePermissionRequest(false);
+
+  // Navigate and ensure that a prompt is shown when we request again.
+  ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
+  WatchPositionAndObservePermissionRequest(true);
+}
+
+IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, TogglePersistBlocked) {
+  // Initialize and turn persistence off.
+  ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
+  TogglePersist(false);
+
+  ASSERT_TRUE(WatchPositionAndDenyPermission());
+  EXPECT_EQ(CONTENT_SETTING_ASK,
+            GetHostContentSettingsMap()->GetContentSetting(
+                current_url(), current_url(), CONTENT_SETTINGS_TYPE_GEOLOCATION,
+                std::string()));
+
+  // Expect the block to be remembered at the blink layer, so a second request
+  // on this page doesn't create a request.
+  WatchPositionAndObservePermissionRequest(false);
+
+  // Navigate and ensure that a prompt is shown when we request again.
+  ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
+  WatchPositionAndObservePermissionRequest(true);
+}
+
+IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, IFramesWithFreshPosition) {
   set_html_for_tests("/geolocation/two_iframes.html");
   ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
   LoadIFrames();
@@ -576,14 +610,7 @@ IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, MAYBE_IFramesWithFreshPosition) {
   ExpectPosition(fresh_position_latitude, fresh_position_longitude);
 }
 
-#if defined(OS_LINUX)
-// http://crbug.com/527437
-#define MAYBE_IFramesWithCachedPosition DISABLED_IFramesWithCachedPosition
-#else
-#define MAYBE_IFramesWithCachedPosition IFramesWithCachedPosition
-#endif
-IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest,
-                       MAYBE_IFramesWithCachedPosition) {
+IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, IFramesWithCachedPosition) {
   set_html_for_tests("/geolocation/two_iframes.html");
   ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
   LoadIFrames();
@@ -607,9 +634,7 @@ IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest,
   ExpectPosition(cached_position_latitude, cached_position_lognitude);
 }
 
-// http://crbug.com/523387
-IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest,
-                       DISABLED_CancelPermissionForFrame) {
+IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, CancelPermissionForFrame) {
   set_html_for_tests("/geolocation/two_iframes.html");
   ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
   LoadIFrames();
@@ -645,13 +670,7 @@ IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, InvalidUrlRequest) {
   ExpectValueFromScriptForFrame("1", "isAlive()", original_tab->GetMainFrame());
 }
 
-#if defined(OS_LINUX)
-// http://crbug.com/527437
-#define MAYBE_NoPromptBeforeStart DISABLED_NoPromptBeforeStart
-#else
-#define MAYBE_NoPromptBeforeStart NoPromptBeforeStart
-#endif
-IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, MAYBE_NoPromptBeforeStart) {
+IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, NoPromptBeforeStart) {
   // See http://crbug.com/42789
   set_html_for_tests("/geolocation/two_iframes.html");
   ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
@@ -675,13 +694,7 @@ IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, MAYBE_NoPromptBeforeStart) {
   ExpectPosition(fake_latitude(), fake_longitude());
 }
 
-#if defined(OS_LINUX)
-// http://crbug.com/527437
-#define MAYBE_TwoWatchesInOneFrame DISABLED_TwoWatchesInOneFrame
-#else
-#define MAYBE_TwoWatchesInOneFrame TwoWatchesInOneFrame
-#endif
-IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, MAYBE_TwoWatchesInOneFrame) {
+IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, TwoWatchesInOneFrame) {
   set_html_for_tests("/geolocation/two_watches.html");
   ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
 
@@ -729,13 +742,7 @@ IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, TabDestroyed) {
       current_browser()->tab_strip_model()->GetActiveWebContents(), script));
 }
 
-#if defined(OS_LINUX)
-// http://crbug.com/527437
-#define MAYBE_LastUsageUpdated DISABLED_LastUsageUpdated
-#else
-#define MAYBE_LastUsageUpdated LastUsageUpdated
-#endif
-IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, MAYBE_LastUsageUpdated) {
+IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, LastUsageUpdated) {
   ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
   base::SimpleTestClock* clock_ = new base::SimpleTestClock();
   GetHostContentSettingsMap()->SetPrefClockForTesting(

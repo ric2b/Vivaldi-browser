@@ -136,6 +136,7 @@ _SPECIFIC_OS_REVISION_NEGATIVE_FILTER['linux_53'] = [
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1418
     'ClickTest.testShouldOnlyFollowHrefOnce',
     'JavascriptEnabledDriverTest.testShouldFireOnChangeEventWhenSettingAnElementsValue',
+    'JavascriptEnabledDriverTest.testShouldBeAbleToClickOnSubmitButtons',
     'WindowSwitchingTest.testCanCloseWindowWhenMultipleWindowsAreOpen',
     'WindowSwitchingTest.testCanCallGetWindowHandlesAfterClosingAWindow',
     'WindowSwitchingTest.testCanCloseWindowAndSwitchBackToMainWindow',
@@ -253,6 +254,9 @@ _OS_NEGATIVE_FILTER['android:chromedriver_webview_shell'] = (
         'WindowSwitchingTest.*',
 
         'TakesScreenshotTest.testShouldCaptureScreenshot',
+        # TODO(gmanikpure): re-enable this test when we stop supporting
+        # WebView on KitKat.
+        'ClickTest.testCanClickAnImageMapArea',
     ]
 )
 

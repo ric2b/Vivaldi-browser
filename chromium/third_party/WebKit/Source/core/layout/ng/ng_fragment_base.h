@@ -6,56 +6,56 @@
 #define NGFragmentBase_h
 
 #include "core/CoreExport.h"
-#include "core/layout/ng/ng_constraint_space.h"
+#include "core/layout/ng/ng_physical_constraint_space.h"
+#include "core/layout/ng/ng_writing_mode.h"
+#include "core/layout/ng/ng_units.h"
 #include "platform/LayoutUnit.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Vector.h"
 
 namespace blink {
 
+class NGPhysicalFragmentBase;
+
 class CORE_EXPORT NGFragmentBase : public GarbageCollected<NGFragmentBase> {
  public:
-  enum NGFragmentType { FragmentBox = 0, FragmentText = 1 };
-
-  NGFragmentType Type() const { return static_cast<NGFragmentType>(type_); }
   NGWritingMode WritingMode() const {
     return static_cast<NGWritingMode>(writing_mode_);
   }
   NGDirection Direction() const { return static_cast<NGDirection>(direction_); }
 
   // Returns the border-box size.
-  LayoutUnit InlineSize() const { return size_.inline_size; }
-  LayoutUnit BlockSize() const { return size_.block_size; }
+  LayoutUnit InlineSize() const;
+  LayoutUnit BlockSize() const;
 
   // Returns the total size, including the contents outside of the border-box.
-  LayoutUnit InlineOverflow() const { return overflow_.inline_size; }
-  LayoutUnit BlockOverflow() const { return overflow_.block_size; }
+  LayoutUnit InlineOverflow() const;
+  LayoutUnit BlockOverflow() const;
 
   // Returns the offset relative to the parent fragement's content-box.
-  LayoutUnit InlineOffset() const { return offset_.inline_offset; }
-  LayoutUnit BlockOffset() const { return offset_.block_offset; }
+  LayoutUnit InlineOffset() const;
+  LayoutUnit BlockOffset() const;
 
-  // Should only be used by the parent fragement's layout.
-  void SetOffset(LayoutUnit inline_offset, LayoutUnit block_offset);
+  NGMarginStrut MarginStrut() const;
 
-  DEFINE_INLINE_TRACE_AFTER_DISPATCH() {}
+  NGPhysicalFragmentBase* PhysicalFragment() const {
+    return physical_fragment_;
+  };
+
   DECLARE_TRACE();
 
  protected:
-  NGFragmentBase(NGLogicalSize size,
-                 NGLogicalSize overflow,
-                 NGWritingMode,
-                 NGDirection,
-                 NGFragmentType);
+  NGFragmentBase(NGWritingMode writing_mode,
+                 NGDirection direction,
+                 NGPhysicalFragmentBase* physical_fragment)
+      : physical_fragment_(physical_fragment),
+        writing_mode_(writing_mode),
+        direction_(direction) {}
 
-  NGLogicalSize size_;
-  NGLogicalSize overflow_;
-  NGLogicalOffset offset_;
+  Member<NGPhysicalFragmentBase> physical_fragment_;
 
-  unsigned type_ : 1;
   unsigned writing_mode_ : 3;
   unsigned direction_ : 1;
-  unsigned has_been_placed_ : 1;
 };
 
 }  // namespace blink

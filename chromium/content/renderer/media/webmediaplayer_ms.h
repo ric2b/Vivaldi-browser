@@ -106,8 +106,7 @@ class CONTENT_EXPORT WebMediaPlayerMS
   // Methods for painting.
   void paint(blink::WebCanvas* canvas,
              const blink::WebRect& rect,
-             unsigned char alpha,
-             SkXfermode::Mode mode) override;
+             SkPaint& paint) override;
   media::SkCanvasVideoRenderer* GetSkCanvasVideoRenderer();
   void ResetCanvasCache();
 
@@ -147,7 +146,7 @@ class CONTENT_EXPORT WebMediaPlayerMS
   // WebMediaPlayerDelegate::Observer implementation.
   void OnHidden() override;
   void OnShown() override;
-  void OnSuspendRequested(bool must_suspend) override;
+  bool OnSuspendRequested(bool must_suspend) override;
   void OnPlay() override;
   void OnPause() override;
   void OnVolumeMultiplierUpdate(double multiplier) override;

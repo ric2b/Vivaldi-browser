@@ -25,7 +25,6 @@ group("All") {
   testonly = true
 
   deps = [
-    ":standalone",
     ":vivaldi",
     "//base:base_unittests",
     "//cc:cc_unittests",
@@ -41,12 +40,8 @@ group("All") {
     "//crypto:crypto_unittests",
     "//device:device_unittests",
     "//google_apis:google_apis_unittests",
-
-    #"//gpu/gles2_conform_support:gles2_conform_test",
     "//gpu:gpu_unittests",
     "//ipc:ipc_tests",
-
-    #"//gpu/ipc/service:gpu_ipc_service_unittests",
     "//jingle:jingle_unittests",
     "//media:media_unittests",
     "//media/cast:cast_unittests",
@@ -122,6 +117,7 @@ group("vivaldi") {
     output_name = "vivaldi.exe"
   }
   deps = [
+    ":standalone",
     "//chrome:chrome",
   ]
   if (is_mac || is_win) {

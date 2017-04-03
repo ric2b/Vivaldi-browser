@@ -12,7 +12,6 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "build/build_config.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/gfx/animation/throb_animation.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
@@ -92,7 +91,6 @@ namespace views {
 
 // static
 const int LabelButton::kHoverAnimationDurationMs = 170;
-const int LabelButton::kFocusRectInset = 3;
 const char LabelButton::kViewClassName[] = "LabelButton";
 
 LabelButton::LabelButton(ButtonListener* listener, const base::string16& text)
@@ -127,8 +125,7 @@ LabelButton::LabelButton(ButtonListener* listener, const base::string16& text)
   label_->SetHorizontalAlignment(gfx::ALIGN_TO_HEAD);
 
   // Inset the button focus rect from the actual border; roughly match Windows.
-  SetFocusPainter(Painter::CreateDashedFocusPainterWithInsets(gfx::Insets(
-      kFocusRectInset, kFocusRectInset, kFocusRectInset, kFocusRectInset)));
+  SetFocusPainter(Painter::CreateDashedFocusPainterWithInsets(gfx::Insets(3)));
 }
 
 LabelButton::~LabelButton() {}
@@ -390,7 +387,13 @@ void LabelButton::EnableCanvasFlippingForRTLUI(bool flip) {
 }
 
 std::unique_ptr<LabelButtonBorder> LabelButton::CreateDefaultBorder() const {
-  return PlatformStyle::CreateLabelButtonBorder(style());
+  if (style_ != Button::STYLE_TEXTBUTTON)
+    return base::MakeUnique<LabelButtonAssetBorder>(style_);
+  std::unique_ptr<LabelButtonBorder> border =
+      base::MakeUnique<LabelButtonBorder>();
+  border->set_insets(views::LabelButtonAssetBorder::GetDefaultInsetsForStyle(
+      style_));
+  return border;
 }
 
 void LabelButton::SetBorder(std::unique_ptr<Border> border) {
@@ -448,10 +451,9 @@ std::unique_ptr<views::InkDropRipple> LabelButton::CreateInkDropRipple() const {
   return GetText().empty()
              ? CreateDefaultInkDropRipple(
                    image()->GetMirroredBounds().CenterPoint())
-             : std::unique_ptr<views::InkDropRipple>(
-                   new views::FloodFillInkDropRipple(
-                       GetLocalBounds(), GetInkDropCenterBasedOnLastEvent(),
-                       GetInkDropBaseColor(), ink_drop_visible_opacity()));
+             : base::MakeUnique<views::FloodFillInkDropRipple>(
+                   GetLocalBounds(), GetInkDropCenterBasedOnLastEvent(),
+                   GetInkDropBaseColor(), ink_drop_visible_opacity());
 }
 
 std::unique_ptr<views::InkDropHighlight> LabelButton::CreateInkDropHighlight()

@@ -17,11 +17,6 @@ MockDownloadController::MockDownloadController()
 
 MockDownloadController::~MockDownloadController() {}
 
-void MockDownloadController::CreateGETDownload(
-    int render_process_id, int render_view_id,
-    bool must_download, const DownloadInfo& info) {
-}
-
 void MockDownloadController::OnDownloadStarted(
     content::DownloadItem* download_item) {
 }
@@ -31,11 +26,6 @@ void MockDownloadController::StartContextMenuDownload(
     content::WebContents* web_contents,
     bool is_link, const std::string& extra_headers) {
 }
-
-void MockDownloadController::DangerousDownloadValidated(
-    content::WebContents* web_contents,
-    const std::string& download_guid,
-    bool accept) {}
 
 void MockDownloadController::AcquireFileAccessPermission(
     content::WebContents* web_contents,

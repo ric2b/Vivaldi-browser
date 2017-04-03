@@ -158,8 +158,6 @@ component("media") {
     "filters/ivf_parser.h",
     "filters/jpeg_parser.cc",
     "filters/jpeg_parser.h",
-    "filters/media_source_state.cc",
-    "filters/media_source_state.h",
     "filters/memory_data_source.cc",
     "filters/memory_data_source.h",
     "filters/opus_audio_decoder.cc",
@@ -170,6 +168,8 @@ component("media") {
     "filters/pipeline_controller.h",
     "filters/source_buffer_range.cc",
     "filters/source_buffer_range.h",
+    "filters/source_buffer_state.cc",
+    "filters/source_buffer_state.h",
     "filters/source_buffer_stream.cc",
     "filters/source_buffer_stream.h",
     "filters/stream_parser_factory.cc",
@@ -201,6 +201,8 @@ component("media") {
     "formats/webm/webm_audio_client.h",
     "formats/webm/webm_cluster_parser.cc",
     "formats/webm/webm_cluster_parser.h",
+    "formats/webm/webm_colour_parser.cc",
+    "formats/webm/webm_colour_parser.h",
     "formats/webm/webm_constants.cc",
     "formats/webm/webm_constants.h",
     "formats/webm/webm_content_encodings.cc",
@@ -421,7 +423,7 @@ component("media") {
       "//media/base/android:media_jni_headers",
     ]
 
-    # Only 64 bit builds are using android-21 NDK library, check common.gypi
+    # Only 64 bit builds are using the android-21 NDK library.
     if (current_cpu == "arm64" || current_cpu == "x64" ||
         current_cpu == "mips64el") {
       sources += [
@@ -483,8 +485,6 @@ component("media") {
       "formats/mp4/track_run_iterator.h",
       "formats/mpeg/adts_constants.cc",
       "formats/mpeg/adts_constants.h",
-      "formats/mpeg/adts_header_parser.cc",
-      "formats/mpeg/adts_header_parser.h",
       "formats/mpeg/adts_stream_parser.cc",
       "formats/mpeg/adts_stream_parser.h",
       "formats/mpeg/mpeg1_audio_stream_parser.cc",
@@ -557,7 +557,7 @@ component("media") {
     "//base:i18n",
     "//base/third_party/dynamic_annotations",
     "//crypto",
-    "//crypto:platform",  # TODO(ajwong): This used to be provided by crypto.gyp via export_dependent_settings
+    "//crypto:platform",
     "//gpu/command_buffer/client:gles2_interface",
     "//gpu/command_buffer/common",
     "//skia",
@@ -612,6 +612,7 @@ test("media_unittests") {
     "filters/jpeg_parser_unittest.cc",
     "filters/memory_data_source_unittest.cc",
     "filters/pipeline_controller_unittest.cc",
+    "filters/source_buffer_state_unittest.cc",
     "filters/source_buffer_stream_unittest.cc",
     "filters/video_cadence_estimator_unittest.cc",
     "filters/video_decoder_selector_unittest.cc",
@@ -630,6 +631,7 @@ test("media_unittests") {
     "formats/webm/tracks_builder.h",
     "formats/webm/webm_cluster_parser_unittest.cc",
     "formats/webm/webm_content_encodings_client_unittest.cc",
+    "formats/webm/webm_crypto_helpers_unittest.cc",
     "formats/webm/webm_parser_unittest.cc",
     "formats/webm/webm_stream_parser_unittest.cc",
     "formats/webm/webm_tracks_parser_unittest.cc",
@@ -853,6 +855,8 @@ component("shared_memory_support") {
   sources = [
     "base/audio_bus.cc",
     "base/audio_bus.h",
+    "base/audio_latency.cc",
+    "base/audio_latency.h",
     "base/audio_parameters.cc",
     "base/audio_parameters.h",
     "base/audio_point.cc",
@@ -920,6 +924,7 @@ fuzzer_test("media_h264_parser_fuzzer") {
   deps = [
     ":media",
     "//base",
+    "//ui/gfx/geometry",
   ]
 }
 
@@ -956,4 +961,15 @@ fuzzer_test("media_vpx_video_decoder_fuzzer") {
   ]
   libfuzzer_options = [ "max_len = 400000" ]
   seed_corpus = "//media/test/data"
+}
+
+fuzzer_test("media_webm_muxer_fuzzer") {
+  sources = [
+    "muxers/webm_muxer_fuzzertest.cc",
+  ]
+  deps = [
+    ":media",
+    "//base",
+    "//third_party/libwebm",
+  ]
 }

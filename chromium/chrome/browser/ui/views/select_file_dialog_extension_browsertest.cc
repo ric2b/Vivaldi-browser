@@ -111,7 +111,7 @@ class SelectFileDialogExtensionBrowserTest : public ExtensionBrowserTest {
     base::FilePath tmp_path;
     PathService::Get(base::DIR_TEMP, &tmp_path);
     ASSERT_TRUE(tmp_dir_.CreateUniqueTempDirUnderPath(tmp_path));
-    downloads_dir_ = tmp_dir_.path().Append("Downloads");
+    downloads_dir_ = tmp_dir_.GetPath().Append("Downloads");
     base::CreateDirectory(downloads_dir_);
 
     // Must run after our setup because it actually runs the test.
@@ -366,7 +366,7 @@ IN_PROC_BROWSER_TEST_F(SelectFileDialogExtensionBrowserTest,
   chrome::NavigateParams p(browser(), GURL("http://www.google.com"),
                            ui::PAGE_TRANSITION_LINK);
   p.window_action = chrome::NavigateParams::SHOW_WINDOW;
-  p.disposition = SINGLETON_TAB;
+  p.disposition = WindowOpenDisposition::SINGLETON_TAB;
   chrome::Navigate(&p);
 
   // Press cancel button.

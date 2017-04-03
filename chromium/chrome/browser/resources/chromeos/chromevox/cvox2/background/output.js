@@ -58,13 +58,13 @@ var RoleType = chrome.automation.RoleType;
  */
 Output = function() {
   // TODO(dtseng): Include braille specific rules.
-  /** @type {!Array<!Spannable>} */
+  /** @type {!Array<!Spannable>} @private */
   this.speechBuffer_ = [];
-  /** @type {!Array<!Spannable>} */
+  /** @type {!Array<!Spannable>} @private */
   this.brailleBuffer_ = [];
-  /** @type {!Array<!Object>} */
+  /** @type {!Array<!Object>} @private */
   this.locations_ = [];
-  /** @type {function(?)} */
+  /** @type {function(?)} @private */
   this.speechEndCallback_;
 
   /**
@@ -186,7 +186,8 @@ Output.ROLE_INFO_ = {
     msgId: 'role_grid'
   },
   group: {
-    msgId: 'role_group'
+    msgId: 'role_group',
+    inherits: 'abstractContainer'
   },
   heading: {
     msgId: 'role_heading',
@@ -375,17 +376,6 @@ Output.STATE_INFO_ = {
       msgId: 'aria_expanded_false'
     }
   },
-  pressed: {
-    on: {
-      msgId: 'aria_pressed_true'
-    },
-    off: {
-      msgId: 'aria_pressed_false'
-    },
-        omitted: {
-      msgId: 'aria_pressed_false'
-    }
-  },
   visited: {
     on: {
       msgId: 'visited_state'
@@ -419,25 +409,31 @@ Output.RULES = {
       braille: ''
     },
     abstractContainer: {
-      enter: '$nameFromNode $role $description',
+      enter: '$nameFromNode $role $state $description',
       leave: '@exited_container($role)'
     },
     alert: {
-      speak: '!doNotInterrupt $role $descendants'
+      speak: '!doNotInterrupt $role $descendants $state'
     },
     alertDialog: {
       enter: '$nameFromNode $role $description',
-      speak: '$name $role $descendants'
+      speak: '$name $role $descendants $state'
     },
     cell: {
       enter: '@cell_summary($tableCellRowIndex, $tableCellColumnIndex) ' +
           '$node(tableColumnHeader)',
       speak: '@cell_summary($tableCellRowIndex, $tableCellColumnIndex) ' +
-          '$node(tableColumnHeader)'
+          '$node(tableColumnHeader) $state'
     },
     checkBox: {
       speak: '$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF)) ' +
-             '$name $role $checked $description'
+             '$name $role $checked $description $state'
+    },
+    client: {
+      speak: '$name'
+    },
+    date: {
+      enter: '$nameFromNode $role $description'
     },
     dialog: {
       enter: '$nameFromNode $role $description'
@@ -449,21 +445,31 @@ Output.RULES = {
     grid: {
       enter: '$nameFromNode $role $description'
     },
+    group: {
+      enter: '$nameFromNode $state $description',
+      speak: '$nameOrDescendants $value $state $description',
+      leave: ''
+    },
     heading: {
       enter: '!relativePitch(hierarchicalLevel) ' +
-          '$nameFromNode= @tag_h+$hierarchicalLevel',
-      speak: '!relativePitch(hierarchicalLevel)' +
-          ' $nameOrDescendants= @tag_h+$hierarchicalLevel'
+          '$nameFromNode= ' +
+          '$if($hierarchicalLevel, @tag_h+$hierarchicalLevel, $role) $state',
+      speak: '!relativePitch(hierarchicalLevel) ' +
+          '$nameOrDescendants= ' +
+          '$if($hierarchicalLevel, @tag_h+$hierarchicalLevel, $role) $state'
     },
     inlineTextBox: {
       speak: '$name='
     },
+    inputTime: {
+      enter: '$nameFromNode $role $description'
+    },
     link: {
-      enter: '$nameFromNode= $if($visited, @visited_link, $role)',
-      speak: '$name= $if($visited, @visited_link, $role) $description'
+      enter: '$nameFromNode= $role $state'
     },
     list: {
-      enter: '$role @@list_with_items($countChildren(listItem))'
+      enter: '$role @@list_with_items($countChildren(listItem))',
+      speak: '$descendants $role @@list_with_items($countChildren(listItem))'
     },
     listBox: {
       enter: '$nameFromNode ' +
@@ -472,19 +478,19 @@ Output.RULES = {
     },
     listBoxOption: {
       speak: '$name $role @describe_index($indexInParent, $parentChildCount) ' +
-          '$description'
+          '$description $state'
     },
     listItem: {
       enter: '$role'
     },
     menu: {
       enter: '$name $role',
-      speak: '$name $role @@list_with_items($countChildren(menuItem))'
+      speak: '$name $role @@list_with_items($countChildren(menuItem)) $state'
     },
     menuItem: {
       speak: '$name $role $if($haspopup, @has_submenu) ' +
           '@describe_index($indexInParent, $parentChildCount) ' +
-          '$description'
+          '$description $state'
     },
     menuItemCheckBox: {
       speak: '$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF)) ' +
@@ -506,8 +512,7 @@ Output.RULES = {
     },
     popUpButton: {
       speak: '$value $name $role @aria_has_popup ' +
-          '$if($collapsed, @aria_expanded_false, @aria_expanded_true) ' +
-          '$description'
+          '$state $description'
     },
     radioButton: {
       speak: '$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF)) ' +
@@ -528,32 +533,38 @@ Output.RULES = {
       enter: '$node(tableRowHeader)'
     },
     rowHeader: {
-      speak: '$descendants'
+      speak: '$descendants $state'
     },
     slider: {
-      speak: '$earcon(SLIDER) @describe_slider($value, $name) $description'
+      speak: '$earcon(SLIDER) @describe_slider($value, $name) $description ' +
+          '$state'
     },
     staticText: {
       speak: '$name='
     },
     tab: {
-      speak: '@describe_tab($name)'
+      speak: '@describe_tab($name) $state $description'
     },
     table: {
       enter: '@table_summary($name, $tableRowCount, $tableColumnCount) ' +
           '$node(tableHeader)'
     },
     tableHeaderContainer: {
-      speak: '$descendants'
+      speak: '$descendants $state $description'
     },
     textField: {
       speak: '$name $value $if($multiline, @tag_textarea, $if(' +
           '$inputType, $inputType, $role)) $description $state',
       braille: ''
     },
+        timer: {
+      speak: '$nameFromNode $descendants $value $state $description'
+    },
     toggleButton: {
       speak: '$if($pressed, $earcon(CHECK_ON), $earcon(CHECK_OFF)) ' +
-             '$name $role $pressed $description'
+          '$name $role ' +
+          '$if($pressed, @aria_pressed_true, @aria_pressed_false) ' +
+          '$description $state'
     },
     toolbar: {
       enter: '$name $role $description'
@@ -566,7 +577,7 @@ Output.RULES = {
           '@describe_index($indexInParent, $parentChildCount) ' +
           '@describe_depth($hierarchicalLevel)',
       speak: '$name ' +
-          '$role $expanded $collapsed ' +
+          '$role $state ' +
           '@describe_index($indexInParent, $parentChildCount) ' +
           '@describe_depth($hierarchicalLevel)'
     },
@@ -673,44 +684,24 @@ Output.EventType = {
 };
 
 /**
- * If true, the next speech utterance will flush instead of the normal
+ * If set, the next speech utterance will use this value instead of the normal
  * queueing mode.
- * @type {boolean}
+ * @type {cvox.QueueMode|undefined}
  * @private
  */
-Output.flushNextSpeechUtterance_ = false;
+Output.forceModeForNextSpeechUtterance_;
 
 /**
- * Calling this will make the next speech utterance flush even if it would
- * normally queue or do a category flush.
+ * Calling this will make the next speech utterance use |mode| even if it would
+ * normally queue or do a category flush. This differs from the |withQueueMode|
+ * instance method as it can apply to future output.
+   * @param {cvox.QueueMode} mode
  */
-Output.flushNextSpeechUtterance = function() {
-  Output.flushNextSpeechUtterance_ = true;
+Output.forceModeForNextSpeechUtterance = function(mode) {
+  Output.forceModeForNextSpeechUtterance_ = mode;
 };
 
 Output.prototype = {
-  /**
-   * Gets the spoken output with separator '|'.
-   * @return {!Spannable}
-   */
-  get speechOutputForTest() {
-    return this.speechBuffer_.reduce(function(prev, cur) {
-      if (prev === null)
-        return cur;
-      prev.append('|');
-      prev.append(cur);
-      return prev;
-    }, null);
-  },
-
-  /**
-   * Gets the output buffer for braille.
-   * @return {!Spannable}
-   */
-  get brailleOutputForTest() {
-    return this.createBrailleOutput_();
-  },
-
   /**
    * @return {boolean} True if there's any speech that will be output.
    */
@@ -892,6 +883,7 @@ Output.prototype = {
   /**
    * Triggers callback for a speech event.
    * @param {function()} callback
+   * @return {Output}
    */
   onSpeechEnd: function(callback) {
     this.speechEndCallback_ = function(opt_cleanupOnly) {
@@ -908,9 +900,10 @@ Output.prototype = {
     // Speech.
     var queueMode = this.queueMode_;
     this.speechBuffer_.forEach(function(buff, i, a) {
-      if (Output.flushNextSpeechUtterance_ && buff.length > 0) {
-        queueMode = cvox.QueueMode.FLUSH;
-        Output.flushNextSpeechUtterance_ = false;
+      if (Output.forceModeForNextSpeechUtterance_ !== undefined &&
+          buff.length > 0) {
+        queueMode = Output.forceModeForNextSpeechUtterance_;
+        Output.forceModeForNextSpeechUtterance_ = undefined;
       }
 
       var speechProps = {};
@@ -1060,23 +1053,6 @@ Output.prototype = {
           var earcon = node ? this.findEarcon_(node, opt_prevNode) : null;
           if (earcon)
             options.annotation.push(earcon);
-
-          // Reflect the selection here except when we're dealing with a node
-          // that has a value.
-          var selStart, selEnd;
-          if (node == node.root.anchorObject && node == node.root.focusObject) {
-            selStart = node.root.anchorOffset;
-            selEnd = node.root.focusOffset;
-          } else if (node == node.root.anchorObject) {
-            selStart = node.root.anchorOffset;
-            selEnd = selStart;
-          } else if (node == node.root.focusObject) {
-            selStart = node.root.focusOffset;
-            selEnd = selStart;
-          }
-          if (!node.value && goog.isDef(selStart) && goog.isDef(selEnd))
-            options.annotation.push(new Output.SelectionSpan(selStart, selEnd));
-
           this.append_(buff, node.name, options);
         } else if (token == 'nameFromNode') {
           if (chrome.automation.NameFromType[node.nameFrom] ==
@@ -1117,11 +1093,10 @@ Output.prototype = {
             this.append_(buff, String(count));
           }
         } else if (token == 'state') {
-          options.annotation.push(token);
           Object.getOwnPropertyNames(node.state).forEach(function(s) {
             var stateInfo = Output.STATE_INFO_[s];
             if (stateInfo && stateInfo.on)
-              this.append_(buff, Msgs.getMsg(stateInfo.on.msgId), options);
+              this.format_(node, '@' + stateInfo.on.msgId, buff);
           }.bind(this));
         } else if (token == 'find') {
           // Find takes two arguments: JSON query string and format string.
@@ -1433,6 +1408,7 @@ Output.prototype = {
          i++) {
       // This prevents very repetitive announcements.
       if (enteredRoleSet[formatPrevNode.role] ||
+          node.role == formatPrevNode.role ||
           localStorage['useVerboseMode'] == 'false')
         continue;
 
@@ -1674,12 +1650,7 @@ Output.prototype = {
             elem.end);
       });
       spansToRemove.forEach(result.removeSpan.bind(result));
-
-      // No separator needed if the previous result did end with our separator.
-      if (cur.toString()[cur.length - 1] == Output.SPACE || result.length == 0)
-        separator = '';
-      else
-        separator = Output.SPACE;
+      separator = Output.SPACE;
     });
     return result;
   },
@@ -1712,6 +1683,41 @@ Output.prototype = {
       }
     }
     return null;
+  },
+
+  /**
+   * Gets a human friendly string with the contents of output.
+   * @return {string}
+   */
+  toString: function() {
+    return this.speechBuffer_.reduce(function(prev, cur) {
+      if (prev === null)
+        return cur.toString();
+      prev += ' ' + cur.toString();
+      return prev;
+    }, null);
+  },
+
+  /**
+   * Gets the spoken output with separator '|'.
+   * @return {!Spannable}
+   */
+  get speechOutputForTest() {
+    return this.speechBuffer_.reduce(function(prev, cur) {
+      if (prev === null)
+        return cur;
+      prev.append('|');
+      prev.append(cur);
+      return prev;
+    }, null);
+  },
+
+  /**
+   * Gets the output buffer for braille.
+   * @return {!Spannable}
+   */
+  get brailleOutputForTest() {
+    return this.createBrailleOutput_();
   }
 };
 

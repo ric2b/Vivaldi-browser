@@ -7,6 +7,8 @@
 #include <map>
 #include <string>
 
+#include "base/rand_util.h"
+#include "net/base/arena.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -14,6 +16,8 @@ namespace net {
 
 using base::StringPiece;
 using std::string;
+using std::vector;
+using std::pair;
 using testing::ElementsAre;
 
 namespace test {
@@ -66,6 +70,39 @@ class HpackEncoderPeer {
     }
   }
 
+  // TODO(dahollings): Remove or clean up these methods when deprecating
+  // non-incremental encoding path.
+  static bool EncodeHeaderSet(HpackEncoder* encoder,
+                              const SpdyHeaderBlock& header_set,
+                              string* output,
+                              bool use_compression,
+                              bool use_incremental) {
+    if (use_incremental) {
+      return EncodeIncremental(encoder, header_set, output, use_compression);
+    } else {
+      return use_compression ? encoder->EncodeHeaderSet(header_set, output)
+                             : encoder->EncodeHeaderSetWithoutCompression(
+                                   header_set, output);
+    }
+  }
+
+  static bool EncodeIncremental(HpackEncoder* encoder,
+                                const SpdyHeaderBlock& header_set,
+                                string* output,
+                                bool use_compression) {
+    std::unique_ptr<HpackEncoder::ProgressiveEncoder> encoderator =
+        encoder->EncodeHeaderSet(header_set, use_compression);
+    string output_buffer;
+    encoderator->Next(base::RandInt(0, 15), &output_buffer);
+    while (encoderator->HasNext()) {
+      string second_buffer;
+      encoderator->Next(base::RandInt(0, 15), &second_buffer);
+      output_buffer.append(second_buffer);
+    }
+    *output = std::move(output_buffer);
+    return true;
+  }
+
  private:
   HpackEncoder* encoder_;
 };
@@ -76,17 +113,21 @@ namespace {
 
 using std::map;
 using testing::ElementsAre;
+using testing::Pair;
 
-class HpackEncoderTest : public ::testing::Test {
+class HpackEncoderTest : public ::testing::TestWithParam<bool> {
  protected:
   typedef test::HpackEncoderPeer::Representations Representations;
 
   HpackEncoderTest()
       : encoder_(ObtainHpackHuffmanTable()),
         peer_(&encoder_),
-        static_(peer_.table()->GetByIndex(1)) {}
+        static_(peer_.table()->GetByIndex(1)),
+        headers_storage_(1024 /* block size */) {}
 
   void SetUp() override {
+    use_incremental_ = GetParam();
+
     // Populate dynamic entries into the table fixture. For simplicity each
     // entry has name.size() + value.size() == 10.
     key_1_ = peer_.table()->TryAddEntry("key1", "value1");
@@ -99,6 +140,14 @@ class HpackEncoderTest : public ::testing::Test {
 
     // Disable Huffman coding by default. Most tests don't care about it.
     peer_.set_allow_huffman_compression(false);
+  }
+
+  void SaveHeaders(StringPiece name, StringPiece value) {
+    StringPiece n(headers_storage_.Memdup(name.data(), name.size()),
+                  name.size());
+    StringPiece v(headers_storage_.Memdup(value.data(), value.size()),
+                  value.size());
+    headers_observed_.push_back(make_pair(n, v));
   }
 
   void ExpectIndex(size_t index) {
@@ -139,7 +188,16 @@ class HpackEncoderTest : public ::testing::Test {
   void CompareWithExpectedEncoding(const SpdyHeaderBlock& header_set) {
     string expected_out, actual_out;
     expected_.TakeString(&expected_out);
-    EXPECT_TRUE(encoder_.EncodeHeaderSet(header_set, &actual_out));
+    EXPECT_TRUE(test::HpackEncoderPeer::EncodeHeaderSet(
+        &encoder_, header_set, &actual_out, true, use_incremental_));
+    EXPECT_EQ(expected_out, actual_out);
+  }
+  void CompareWithExpectedEncodingWithoutCompression(
+      const SpdyHeaderBlock& header_set) {
+    string expected_out, actual_out;
+    expected_.TakeString(&expected_out);
+    EXPECT_TRUE(test::HpackEncoderPeer::EncodeHeaderSet(
+        &encoder_, header_set, &actual_out, false, use_incremental_));
     EXPECT_EQ(expected_out, actual_out);
   }
   size_t IndexOf(const HpackEntry* entry) {
@@ -155,18 +213,30 @@ class HpackEncoderTest : public ::testing::Test {
   const HpackEntry* cookie_a_;
   const HpackEntry* cookie_c_;
 
+  UnsafeArena headers_storage_;
+  vector<pair<StringPiece, StringPiece>> headers_observed_;
+
   HpackOutputStream expected_;
+  bool use_incremental_;
 };
 
-TEST_F(HpackEncoderTest, SingleDynamicIndex) {
+INSTANTIATE_TEST_CASE_P(HpackEncoderTests, HpackEncoderTest, ::testing::Bool());
+
+TEST_P(HpackEncoderTest, SingleDynamicIndex) {
+  encoder_.SetHeaderListener([this](StringPiece name, StringPiece value) {
+    this->SaveHeaders(name, value);
+  });
+
   ExpectIndex(IndexOf(key_2_));
 
   SpdyHeaderBlock headers;
   headers[key_2_->name().as_string()] = key_2_->value().as_string();
   CompareWithExpectedEncoding(headers);
+  EXPECT_THAT(headers_observed_,
+              ElementsAre(Pair(key_2_->name(), key_2_->value())));
 }
 
-TEST_F(HpackEncoderTest, SingleStaticIndex) {
+TEST_P(HpackEncoderTest, SingleStaticIndex) {
   ExpectIndex(IndexOf(static_));
 
   SpdyHeaderBlock headers;
@@ -174,7 +244,7 @@ TEST_F(HpackEncoderTest, SingleStaticIndex) {
   CompareWithExpectedEncoding(headers);
 }
 
-TEST_F(HpackEncoderTest, SingleStaticIndexTooLarge) {
+TEST_P(HpackEncoderTest, SingleStaticIndexTooLarge) {
   peer_.table()->SetMaxSize(1);  // Also evicts all fixtures.
   ExpectIndex(IndexOf(static_));
 
@@ -185,7 +255,7 @@ TEST_F(HpackEncoderTest, SingleStaticIndexTooLarge) {
   EXPECT_EQ(0u, peer_.table_peer().dynamic_entries()->size());
 }
 
-TEST_F(HpackEncoderTest, SingleLiteralWithIndexName) {
+TEST_P(HpackEncoderTest, SingleLiteralWithIndexName) {
   ExpectIndexedLiteral(key_2_, "value3");
 
   SpdyHeaderBlock headers;
@@ -198,7 +268,7 @@ TEST_F(HpackEncoderTest, SingleLiteralWithIndexName) {
   EXPECT_EQ(new_entry->value(), "value3");
 }
 
-TEST_F(HpackEncoderTest, SingleLiteralWithLiteralName) {
+TEST_P(HpackEncoderTest, SingleLiteralWithLiteralName) {
   ExpectIndexedLiteral("key3", "value3");
 
   SpdyHeaderBlock headers;
@@ -210,7 +280,7 @@ TEST_F(HpackEncoderTest, SingleLiteralWithLiteralName) {
   EXPECT_EQ(new_entry->value(), "value3");
 }
 
-TEST_F(HpackEncoderTest, SingleLiteralTooLarge) {
+TEST_P(HpackEncoderTest, SingleLiteralTooLarge) {
   peer_.table()->SetMaxSize(1);  // Also evicts all fixtures.
 
   ExpectIndexedLiteral("key3", "value3");
@@ -224,7 +294,7 @@ TEST_F(HpackEncoderTest, SingleLiteralTooLarge) {
   EXPECT_EQ(0u, peer_.table_peer().dynamic_entries()->size());
 }
 
-TEST_F(HpackEncoderTest, EmitThanEvict) {
+TEST_P(HpackEncoderTest, EmitThanEvict) {
   // |key_1_| is toggled and placed into the reference set,
   // and then immediately evicted by "key3".
   ExpectIndex(IndexOf(key_1_));
@@ -236,7 +306,7 @@ TEST_F(HpackEncoderTest, EmitThanEvict) {
   CompareWithExpectedEncoding(headers);
 }
 
-TEST_F(HpackEncoderTest, CookieHeaderIsCrumbled) {
+TEST_P(HpackEncoderTest, CookieHeaderIsCrumbled) {
   ExpectIndex(IndexOf(cookie_a_));
   ExpectIndex(IndexOf(cookie_c_));
   ExpectIndexedLiteral(peer_.table()->GetByName("cookie"), "e=ff");
@@ -246,7 +316,7 @@ TEST_F(HpackEncoderTest, CookieHeaderIsCrumbled) {
   CompareWithExpectedEncoding(headers);
 }
 
-TEST_F(HpackEncoderTest, StringsDynamicallySelectHuffmanCoding) {
+TEST_P(HpackEncoderTest, StringsDynamicallySelectHuffmanCoding) {
   peer_.set_allow_huffman_compression(true);
 
   // Compactable string. Uses Huffman coding.
@@ -267,7 +337,11 @@ TEST_F(HpackEncoderTest, StringsDynamicallySelectHuffmanCoding) {
   EXPECT_EQ(expected_out, actual_out);
 }
 
-TEST_F(HpackEncoderTest, EncodingWithoutCompression) {
+TEST_P(HpackEncoderTest, EncodingWithoutCompression) {
+  encoder_.SetHeaderListener([this](StringPiece name, StringPiece value) {
+    this->SaveHeaders(name, value);
+  });
+
   // Implementation should internally disable.
   peer_.set_allow_huffman_compression(true);
 
@@ -280,13 +354,19 @@ TEST_F(HpackEncoderTest, EncodingWithoutCompression) {
   headers["cookie"] = "foo=bar; baz=bing";
   headers["hello"] = "goodbye";
 
-  string expected_out, actual_out;
-  expected_.TakeString(&expected_out);
-  encoder_.EncodeHeaderSetWithoutCompression(headers, &actual_out);
-  EXPECT_EQ(expected_out, actual_out);
+  CompareWithExpectedEncodingWithoutCompression(headers);
+
+  EXPECT_THAT(headers_observed_,
+              ElementsAre(Pair(":path", "/index.html"),
+                          Pair("cookie", "foo=bar; baz=bing"),
+                          Pair("hello", "goodbye")));
 }
 
-TEST_F(HpackEncoderTest, MultipleEncodingPasses) {
+TEST_P(HpackEncoderTest, MultipleEncodingPasses) {
+  encoder_.SetHeaderListener([this](StringPiece name, StringPiece value) {
+    this->SaveHeaders(name, value);
+  });
+
   // Pass 1.
   {
     SpdyHeaderBlock headers;
@@ -339,9 +419,22 @@ TEST_F(HpackEncoderTest, MultipleEncodingPasses) {
 
     CompareWithExpectedEncoding(headers);
   }
+
+  // clang-format off
+  EXPECT_THAT(headers_observed_,
+              ElementsAre(Pair("key1", "value1"),
+                          Pair("cookie", "a=bb"),
+                          Pair("key2", "value2"),
+                          Pair("cookie", "c=dd"),
+                          Pair("cookie", "e=ff"),
+                          Pair("key2", "value2"),
+                          Pair("cookie", "a=bb"),
+                          Pair("cookie", "b=cc"),
+                          Pair("cookie", "c=dd")));
+  // clang-format on
 }
 
-TEST_F(HpackEncoderTest, PseudoHeadersFirst) {
+TEST_P(HpackEncoderTest, PseudoHeadersFirst) {
   SpdyHeaderBlock headers;
   // A pseudo-header that should not be indexed.
   headers[":path"] = "/spam/eggs.html";
@@ -364,7 +457,7 @@ TEST_F(HpackEncoderTest, PseudoHeadersFirst) {
   CompareWithExpectedEncoding(headers);
 }
 
-TEST_F(HpackEncoderTest, CookieToCrumbs) {
+TEST_P(HpackEncoderTest, CookieToCrumbs) {
   test::HpackEncoderPeer peer(NULL);
   std::vector<StringPiece> out;
 
@@ -398,7 +491,7 @@ TEST_F(HpackEncoderTest, CookieToCrumbs) {
   EXPECT_THAT(out, ElementsAre("foo=1", "bar=2 ", "bar=3"));
 }
 
-TEST_F(HpackEncoderTest, DecomposeRepresentation) {
+TEST_P(HpackEncoderTest, DecomposeRepresentation) {
   test::HpackEncoderPeer peer(NULL);
   std::vector<StringPiece> out;
 
@@ -423,7 +516,7 @@ TEST_F(HpackEncoderTest, DecomposeRepresentation) {
 
 // Test that encoded headers do not have \0-delimited multiple values, as this
 // became disallowed in HTTP/2 draft-14.
-TEST_F(HpackEncoderTest, CrumbleNullByteDelimitedValue) {
+TEST_P(HpackEncoderTest, CrumbleNullByteDelimitedValue) {
   SpdyHeaderBlock headers;
   // A header field to be crumbled: "spam: foo\0bar".
   headers["spam"] = string("foo\0bar", 7);
@@ -437,7 +530,7 @@ TEST_F(HpackEncoderTest, CrumbleNullByteDelimitedValue) {
   CompareWithExpectedEncoding(headers);
 }
 
-TEST_F(HpackEncoderTest, HeaderTableSizeUpdate) {
+TEST_P(HpackEncoderTest, HeaderTableSizeUpdate) {
   encoder_.ApplyHeaderTableSizeSetting(1024);
   ExpectHeaderTableSizeUpdate(1024);
   ExpectIndexedLiteral("key3", "value3");
@@ -451,7 +544,7 @@ TEST_F(HpackEncoderTest, HeaderTableSizeUpdate) {
   EXPECT_EQ(new_entry->value(), "value3");
 }
 
-TEST_F(HpackEncoderTest, HeaderTableSizeUpdateWithMin) {
+TEST_P(HpackEncoderTest, HeaderTableSizeUpdateWithMin) {
   const size_t starting_size = peer_.table()->settings_size_bound();
   encoder_.ApplyHeaderTableSizeSetting(starting_size - 2);
   encoder_.ApplyHeaderTableSizeSetting(starting_size - 1);
@@ -470,7 +563,7 @@ TEST_F(HpackEncoderTest, HeaderTableSizeUpdateWithMin) {
   EXPECT_EQ(new_entry->value(), "value3");
 }
 
-TEST_F(HpackEncoderTest, HeaderTableSizeUpdateWithExistingSize) {
+TEST_P(HpackEncoderTest, HeaderTableSizeUpdateWithExistingSize) {
   encoder_.ApplyHeaderTableSizeSetting(peer_.table()->settings_size_bound());
   // No encoded size update.
   ExpectIndexedLiteral("key3", "value3");
@@ -484,7 +577,7 @@ TEST_F(HpackEncoderTest, HeaderTableSizeUpdateWithExistingSize) {
   EXPECT_EQ(new_entry->value(), "value3");
 }
 
-TEST_F(HpackEncoderTest, HeaderTableSizeUpdatesWithGreaterSize) {
+TEST_P(HpackEncoderTest, HeaderTableSizeUpdatesWithGreaterSize) {
   const size_t starting_size = peer_.table()->settings_size_bound();
   encoder_.ApplyHeaderTableSizeSetting(starting_size + 1);
   encoder_.ApplyHeaderTableSizeSetting(starting_size + 2);

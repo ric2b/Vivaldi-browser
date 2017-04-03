@@ -17,10 +17,10 @@
 #include "net/base/io_buffer.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
+#include "net/log/net_log_with_source.h"
 #include "net/udp/datagram_server_socket.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/webrtc/base/timing.h"
 
 using ::testing::_;
 using ::testing::DeleteArg;
@@ -29,14 +29,22 @@ using ::testing::Return;
 
 namespace {
 
-class FakeTiming : public rtc::Timing {
+// TODO(nisse): We can't currently use rtc::ScopedFakeClock, because
+// we don't link with webrtc rtc_base_tests_utils. So roll our own.
+
+// Creating an object of this class makes rtc::TimeMicros() and
+// related functions return zero unless the clock is advanced.
+class ScopedFakeClock : public rtc::ClockInterface {
  public:
-  FakeTiming() : now_(0.0) {}
-  double TimerNow() override { return now_; }
-  void set_now(double now) { now_ = now; }
+  ScopedFakeClock() { prev_clock_ = rtc::SetClockForTesting(this); }
+  ~ScopedFakeClock() override { rtc::SetClockForTesting(prev_clock_); }
+  // ClockInterface implementation.
+  uint64_t TimeNanos() const override { return time_nanos_; }
+  void SetTimeNanos(uint64_t time_nanos) { time_nanos_ = time_nanos; }
 
  private:
-  double now_;
+  ClockInterface* prev_clock_;
+  uint64_t time_nanos_ = 0;
 };
 
 class FakeDatagramServerSocket : public net::DatagramServerSocket {
@@ -131,7 +139,7 @@ class FakeDatagramServerSocket : public net::DatagramServerSocket {
     }
   }
 
-  const net::BoundNetLog& NetLog() const override { return net_log_; }
+  const net::NetLogWithSource& NetLog() const override { return net_log_; }
 
   void AllowAddressReuse() override { NOTIMPLEMENTED(); }
 
@@ -173,7 +181,7 @@ class FakeDatagramServerSocket : public net::DatagramServerSocket {
   net::IPEndPoint address_;
   std::deque<UDPPacket>* sent_packets_;
   std::deque<UDPPacket> incoming_packets_;
-  net::BoundNetLog net_log_;
+  net::NetLogWithSource net_log_;
 
   scoped_refptr<net::IOBuffer> recv_buffer_;
   net::IPEndPoint* recv_address_;
@@ -185,8 +193,7 @@ class FakeDatagramServerSocket : public net::DatagramServerSocket {
 std::unique_ptr<net::DatagramServerSocket> CreateFakeDatagramServerSocket(
     std::deque<FakeDatagramServerSocket::UDPPacket>* sent_packets,
     std::vector<uint16_t>* used_ports) {
-  return base::WrapUnique(
-      new FakeDatagramServerSocket(sent_packets, used_ports));
+  return base::MakeUnique<FakeDatagramServerSocket>(sent_packets, used_ports);
 }
 
 }  // namespace
@@ -211,9 +218,6 @@ class P2PSocketHostUdpTest : public testing::Test {
 
     dest1_ = ParseAddress(kTestIpAddress1, kTestPort1);
     dest2_ = ParseAddress(kTestIpAddress2, kTestPort2);
-
-    std::unique_ptr<rtc::Timing> timing(new FakeTiming());
-    throttler_.SetTiming(std::move(timing));
   }
 
   static FakeDatagramServerSocket* GetSocketFromHost(
@@ -222,6 +226,7 @@ class P2PSocketHostUdpTest : public testing::Test {
   }
 
   P2PMessageThrottler throttler_;
+  ScopedFakeClock fake_clock_;
   std::deque<FakeDatagramServerSocket::UDPPacket> sent_packets_;
   FakeDatagramServerSocket* socket_;  // Owned by |socket_host_|.
   std::unique_ptr<P2PSocketHostUdp> socket_host_;
@@ -409,6 +414,66 @@ TEST_F(P2PSocketHostUdpTest, ThrottleAfterLimitAfterReceive) {
   // |dest1| is known, we can send as many packets to it.
   socket_host_->Send(dest1_, packet1, options, 0);
   ASSERT_EQ(sent_packets_.size(), 4U);
+}
+
+// The fake clock mechanism used for this test doesn't work in component builds.
+// See: https://bugs.chromium.org/p/webrtc/issues/detail?id=6490
+#if defined(COMPONENT_BUILD)
+#define MAYBE_ThrottlingStopsAtExpectedTimes DISABLED_ThrottlingStopsAtExpectedTimes
+#else
+#define MAYBE_ThrottlingStopsAtExpectedTimes ThrottlingStopsAtExpectedTimes
+#endif
+// Test that once the limit is hit, the throttling stops at the expected time,
+// allowing packets to be sent again.
+TEST_F(P2PSocketHostUdpTest, MAYBE_ThrottlingStopsAtExpectedTimes) {
+  EXPECT_CALL(
+      sender_,
+      Send(MatchMessage(static_cast<uint32_t>(P2PMsg_OnSendComplete::ID))))
+      .Times(12)
+      .WillRepeatedly(DoAll(DeleteArg<0>(), Return(true)));
+
+  rtc::PacketOptions options;
+  std::vector<char> packet;
+  CreateStunRequest(&packet);
+  // Limit of 2 packets per second.
+  throttler_.SetSendIceBandwidth(packet.size() * 2);
+  socket_host_->Send(dest1_, packet, options, 0);
+  socket_host_->Send(dest2_, packet, options, 0);
+  EXPECT_EQ(2U, sent_packets_.size());
+
+  // These packets must be dropped by the throttler since the limit was hit and
+  // the time hasn't advanced.
+  socket_host_->Send(dest1_, packet, options, 0);
+  socket_host_->Send(dest2_, packet, options, 0);
+  EXPECT_EQ(2U, sent_packets_.size());
+
+  // Advance the time to 0.999 seconds; throttling should still just barely be
+  // active.
+  fake_clock_.SetTimeNanos(rtc::kNumNanosecsPerMillisec * 999);
+  socket_host_->Send(dest1_, packet, options, 0);
+  socket_host_->Send(dest2_, packet, options, 0);
+  EXPECT_EQ(2U, sent_packets_.size());
+
+  // After hitting the second mark, we should be able to send again.
+  // Add an extra millisecond to account for rounding errors.
+  fake_clock_.SetTimeNanos(rtc::kNumNanosecsPerMillisec * 1001);
+  socket_host_->Send(dest1_, packet, options, 0);
+  EXPECT_EQ(3U, sent_packets_.size());
+
+  // This time, hit the limit in the middle of the period.
+  fake_clock_.SetTimeNanos(rtc::kNumNanosecsPerMillisec * 1500);
+  socket_host_->Send(dest2_, packet, options, 0);
+  EXPECT_EQ(4U, sent_packets_.size());
+
+  // Again, throttling should be active until the next second mark.
+  fake_clock_.SetTimeNanos(rtc::kNumNanosecsPerMillisec * 1999);
+  socket_host_->Send(dest1_, packet, options, 0);
+  socket_host_->Send(dest2_, packet, options, 0);
+  EXPECT_EQ(4U, sent_packets_.size());
+  fake_clock_.SetTimeNanos(rtc::kNumNanosecsPerMillisec * 2002);
+  socket_host_->Send(dest1_, packet, options, 0);
+  socket_host_->Send(dest2_, packet, options, 0);
+  EXPECT_EQ(6U, sent_packets_.size());
 }
 
 // Verify that we can open UDP sockets listening in a given port range,

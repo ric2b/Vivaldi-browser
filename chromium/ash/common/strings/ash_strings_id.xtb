@@ -47,7 +47,6 @@ Tekan Shift + Alt untuk beralih.</translation>
 <translation id="2268813581635650749">Keluarkan semua pengguna</translation>
 <translation id="2297568595583585744">Baki status</translation>
 <translation id="2303600792989757991">Beralih ikhtisar jendela</translation>
-<translation id="2372145515558759244">Menyinkronkan aplikasi...</translation>
 <translation id="2391579633712104609">180°</translation>
 <translation id="2429753432712299108">Perangkat Bluetooth "<ph name="DEVICE_NAME" />" meminta izin untuk bersanding. Sebelum menerima, konfirmasikan bahwa kunci sandi ini ditampilkan pada perangkat tersebut: <ph name="PASSKEY" /></translation>
 <translation id="2475982808118771221">Terjadi kesalahan</translation>
@@ -61,7 +60,6 @@ Tekan Shift + Alt untuk beralih.</translation>
 <translation id="2727977024730340865">Dipasang ke pengisi daya rendah. Pengisian daya baterai mungkin tidak dapat diandalkan.</translation>
 <translation id="2761704814324807722">Baki status, waktu <ph name="TIME" />, <ph name="BATTERY" /></translation>
 <translation id="2792498699870441125">Alt+Telusuri</translation>
-<translation id="2805756323405976993">Apl</translation>
 <translation id="2819276065543622893">Anda akan dikeluarkan sekarang.</translation>
 <translation id="2825619548187458965">Rak</translation>
 <translation id="2844169650293029770">Perangkat USB-C (port depan sebelah kiri)</translation>
@@ -97,7 +95,6 @@ Tekan Telusuri atau Shift untuk membatalkan.</translation>
 <translation id="3621712662352432595">Setelan Audio</translation>
 <translation id="3625258641415618104">Tangkapan layar dinonaktifkan</translation>
 <translation id="3626281679859535460">Kecerahan</translation>
-<translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079"><ph name="DISPLAY_NAME" /> resolusi diubah menjadi <ph name="RESOLUTION" /></translation>
 <translation id="370649949373421643">Aktifkan Wi-Fi</translation>
 <translation id="3709443003275901162">9+</translation>
@@ -111,6 +108,8 @@ Tekan Telusuri atau Shift untuk membatalkan.</translation>
 <translation id="3866182280516392520">Alamat IPv6</translation>
 <translation id="3891340733213178823">Tekan Ctrl+Shift+Q dua kali untuk keluar.</translation>
 <translation id="3892641579809465218">Tampilan Internal</translation>
+<translation id="3893630138897523026">ChromeVox (masukan lisan)</translation>
+<translation id="3899995891769452915">Masukan suara</translation>
 <translation id="3963445509666917109">Pengeras Suara (Internal)</translation>
 <translation id="3967919079500697218">Kemampuan untuk membuat tangkapan layar telah dinonaktifkan oleh administrator Anda.</translation>
 <translation id="397105322502079400">Menghitung...</translation>
@@ -134,10 +133,8 @@ Tekan Telusuri atau Shift untuk membatalkan.</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl+Shift+Spasi</translation>
 <translation id="5045002648206642691">Setelan Google Drive...</translation>
-<translation id="511445211639755999"><ph name="RESOLUTION" />, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">Perangkat transmisi tersedia</translation>
 <translation id="5170568018924773124">Tampilkan dalam folder</translation>
-<translation id="5191140942132549112">TAMPILKAN PERTANYAAN</translation>
 <translation id="5222676887888702881">Keluar</translation>
 <translation id="5238774010593222950">Tidak dapat masuk ke akun lain.</translation>
 <translation id="532063867737390965">Setelan jaringan ini dinonaktifkan oleh administrator.</translation>
@@ -185,6 +182,7 @@ Tekan Shift + Alt untuk beralih.</translation>
 <translation id="6459472438155181876">Memperpanjang layar ke <ph name="DISPLAY_NAME" /></translation>
 <translation id="6490471652906364588">Perangkat USB-C (port sebelah kanan)</translation>
 <translation id="6501401484702599040">Mentransmisi layar ke <ph name="RECEIVER_NAME" /></translation>
+<translation id="6521655319214113338">Masukan tulisan tangan</translation>
 <translation id="6537270692134705506">Tangkap layar</translation>
 <translation id="6550675742724504774">Opsi</translation>
 <translation id="6585808820553845416">Sesi berakhir dalam <ph name="SESSION_TIME_REMAINING" />.</translation>
@@ -194,7 +192,6 @@ Tekan Shift + Alt untuk beralih.</translation>
 <translation id="6713285437468012787">Perangkat Bluetooth "<ph name="DEVICE_NAME" />" telah disandingkan dan kini tersedia bagi semua pengguna. Anda dapat menghapus penyandingan ini menggunakan Setelan.</translation>
 <translation id="6785414152754474415">Baterai sudah terisi <ph name="PERCENTAGE" />% dan masih mengisi.</translation>
 <translation id="683971173229319003">Search+L</translation>
-<translation id="68610848741840742">ChromeVox (Masukan lisan)</translation>
 <translation id="6911468394164995108">Bergabung dengan lainnya...</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6979158407327259162">Google Drive</translation>
@@ -217,8 +214,10 @@ Tekan Alt+Telusuri atau Shift untuk membatalkan.</translation>
 <translation id="743058460480092004">Kamera dan mikrofon sedang digunakan.</translation>
 <translation id="7510334386202674593">Ctrl+Shift+L</translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" /> tidak mendukung <ph name="SPECIFIED_RESOLUTION" />. Resolusi diubah menjadi <ph name="FALLBACK_RESOLUTION" /></translation>
+<translation id="7562368315689366235">Palet emoji</translation>
 <translation id="7573962313813535744">Mode digalangkan</translation>
 <translation id="7580671184200851182">Putar audio yang sama melalui semua speaker (audio mono)</translation>
+<translation id="7581273696622423628">Ikuti survei</translation>
 <translation id="7593891976182323525">Telusuri atau Shift</translation>
 <translation id="7649070708921625228">Bantuan</translation>
 <translation id="7692480393933218409">Mengisi daya perangkat USB-C yang tersambung</translation>

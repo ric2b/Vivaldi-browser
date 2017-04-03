@@ -47,7 +47,7 @@
     reset.
   </description>
 
-  <interface name="zwp_secure_output_v1" version="1">
+  <interface name="zcr_secure_output_v1" version="1">
     <description summary="secure output">
       The global interface exposing secure output capabilities is used
       to instantiate an interface extension for a wl_surface object.
@@ -76,14 +76,14 @@
 	is raised.
       </description>
 
-      <arg name="id" type="new_id" interface="zwp_security_v1"
+      <arg name="id" type="new_id" interface="zcr_security_v1"
 	   summary="the new security interface id"/>
       <arg name="surface" type="object" interface="wl_surface"
 	   summary="the surface"/>
     </request>
   </interface>
 
-  <interface name="zwp_security_v1" version="1">
+  <interface name="zcr_security_v1" version="1">
     <description summary="security interface to a wl_surface">
       An additional interface to a wl_surface object, which allows the
       client to specify that a surface should not appear in screenshots
@@ -113,6 +113,6 @@
 	and will be applied on the next wl_surface.commit.
       </description>
     </request>
-
   </interface>
+
 </protocol>

@@ -328,7 +328,14 @@ def MergeZips(output, inputs, exclude_patterns=None, path_transform=None):
   path_transform = path_transform or (lambda p, z: p)
   added_names = set()
 
-  with zipfile.ZipFile(output, 'w') as out_zip:
+  output_is_already_open = not isinstance(output, basestring)
+  if output_is_already_open:
+    assert isinstance(output, zipfile.ZipFile)
+    out_zip = output
+  else:
+    out_zip = zipfile.ZipFile(output, 'w')
+
+  try:
     for in_file in inputs:
       with zipfile.ZipFile(in_file, 'r') as in_zip:
         in_zip._expected_crc = None
@@ -339,8 +346,12 @@ def MergeZips(output, inputs, exclude_patterns=None, path_transform=None):
           dst_name = path_transform(info.filename, in_file)
           already_added = dst_name in added_names
           if not already_added and not MatchesGlob(dst_name, exclude_patterns):
-            AddToZipHermetic(out_zip, dst_name, data=in_zip.read(info))
+            AddToZipHermetic(out_zip, dst_name, data=in_zip.read(info),
+                             compress=info.compress_type != zipfile.ZIP_STORED)
             added_names.add(dst_name)
+  finally:
+    if not output_is_already_open:
+      out_zip.close()
 
 
 def PrintWarning(message):
@@ -420,14 +431,20 @@ def AddDepfileOption(parser):
   else:
     func = parser.add_argument
   func('--depfile',
-       help='Path to depfile. Must be specified as the action\'s first output.')
+       help='Path to depfile (refer to `gn help depfile`)')
 
 
-def WriteDepfile(path, dependencies):
-  with open(path, 'w') as depfile:
-    depfile.write(path)
+def WriteDepfile(depfile_path, first_gn_output, inputs=None, add_pydeps=True):
+  assert depfile_path != first_gn_output  # http://crbug.com/646165
+  inputs = inputs or []
+  if add_pydeps:
+    inputs = GetPythonDependencies() + inputs
+  MakeDirectory(os.path.dirname(depfile_path))
+  # Ninja does not support multiple outputs in depfiles.
+  with open(depfile_path, 'w') as depfile:
+    depfile.write(first_gn_output.replace(' ', '\\ '))
     depfile.write(': ')
-    depfile.write(' '.join(dependencies))
+    depfile.write(' '.join(i.replace(' ', '\\ ') for i in inputs))
     depfile.write('\n')
 
 
@@ -523,7 +540,8 @@ def CallAndWriteDepfileIfStale(function, options, record_path=None,
       all_depfile_deps = list(python_deps)
       if depfile_deps:
         all_depfile_deps.extend(depfile_deps)
-      WriteDepfile(options.depfile, all_depfile_deps)
+      WriteDepfile(options.depfile, output_paths[0], all_depfile_deps,
+                   add_pydeps=False)
     if stamp_file:
       Touch(stamp_file)
 

@@ -23,9 +23,9 @@
 #include "build/build_config.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/common/extensions/manifest_handlers/theme_handler.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/crx_file/id_util.h"
 #include "content/public/browser/browser_thread.h"
-#include "grit/theme_resources.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "ui/base/resource/data_pack.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -49,7 +49,7 @@ namespace {
 // theme packs that aren't int-equal to this. Increment this number if you
 // change default theme assets or if you need themes to recreate their generated
 // images (which are cached).
-const int kThemePackVersion = 42;
+const int kThemePackVersion = 43;
 
 // IDs that are in the DataPack won't clash with the positive integer
 // uint16_t. kHeaderID should always have the maximum value because we want the
@@ -102,76 +102,34 @@ struct PersistingImagesTable {
 
 // IDR_* resource names change whenever new resources are added; use persistent
 // IDs when storing to a cached pack.
-//
-// TODO(erg): The cocoa port is the last user of the IDR_*_[HP] variants. These
-// should be removed once the cocoa port no longer uses them.
 PersistingImagesTable kPersistingImages[] = {
     {PRS_THEME_FRAME, IDR_THEME_FRAME, "theme_frame"},
-    {PRS_THEME_FRAME_INACTIVE,
-     IDR_THEME_FRAME_INACTIVE,
+    {PRS_THEME_FRAME_INACTIVE, IDR_THEME_FRAME_INACTIVE,
      "theme_frame_inactive"},
-    {PRS_THEME_FRAME_INCOGNITO,
-     IDR_THEME_FRAME_INCOGNITO,
+    {PRS_THEME_FRAME_INCOGNITO, IDR_THEME_FRAME_INCOGNITO,
      "theme_frame_incognito"},
-    {PRS_THEME_FRAME_INCOGNITO_INACTIVE,
-     IDR_THEME_FRAME_INCOGNITO_INACTIVE,
+    {PRS_THEME_FRAME_INCOGNITO_INACTIVE, IDR_THEME_FRAME_INCOGNITO_INACTIVE,
      "theme_frame_incognito_inactive"},
     {PRS_THEME_TOOLBAR, IDR_THEME_TOOLBAR, "theme_toolbar"},
-    {PRS_THEME_TAB_BACKGROUND,
-     IDR_THEME_TAB_BACKGROUND,
+    {PRS_THEME_TAB_BACKGROUND, IDR_THEME_TAB_BACKGROUND,
      "theme_tab_background"},
 #if !defined(OS_MACOSX)
-    {PRS_THEME_TAB_BACKGROUND_INCOGNITO,
-     IDR_THEME_TAB_BACKGROUND_INCOGNITO,
+    {PRS_THEME_TAB_BACKGROUND_INCOGNITO, IDR_THEME_TAB_BACKGROUND_INCOGNITO,
      "theme_tab_background_incognito"},
 #endif
-    {PRS_THEME_TAB_BACKGROUND_V,
-     IDR_THEME_TAB_BACKGROUND_V,
+    {PRS_THEME_TAB_BACKGROUND_V, IDR_THEME_TAB_BACKGROUND_V,
      "theme_tab_background_v"},
-    {PRS_THEME_NTP_BACKGROUND,
-     IDR_THEME_NTP_BACKGROUND,
+    {PRS_THEME_NTP_BACKGROUND, IDR_THEME_NTP_BACKGROUND,
      "theme_ntp_background"},
     {PRS_THEME_FRAME_OVERLAY, IDR_THEME_FRAME_OVERLAY, "theme_frame_overlay"},
-    {PRS_THEME_FRAME_OVERLAY_INACTIVE,
-     IDR_THEME_FRAME_OVERLAY_INACTIVE,
+    {PRS_THEME_FRAME_OVERLAY_INACTIVE, IDR_THEME_FRAME_OVERLAY_INACTIVE,
      "theme_frame_overlay_inactive"},
-    {PRS_THEME_BUTTON_BACKGROUND,
-     IDR_THEME_BUTTON_BACKGROUND,
+    {PRS_THEME_BUTTON_BACKGROUND, IDR_THEME_BUTTON_BACKGROUND,
      "theme_button_background"},
-    {PRS_THEME_NTP_ATTRIBUTION,
-     IDR_THEME_NTP_ATTRIBUTION,
+    {PRS_THEME_NTP_ATTRIBUTION, IDR_THEME_NTP_ATTRIBUTION,
      "theme_ntp_attribution"},
-    {PRS_THEME_WINDOW_CONTROL_BACKGROUND,
-     IDR_THEME_WINDOW_CONTROL_BACKGROUND,
+    {PRS_THEME_WINDOW_CONTROL_BACKGROUND, IDR_THEME_WINDOW_CONTROL_BACKGROUND,
      "theme_window_control_background"},
-
-    // The rest of these entries have no key because they can't be overridden
-    // from the json manifest.
-    {15, IDR_BACK, NULL},
-    {16, IDR_BACK_D, NULL},
-    {17, IDR_BACK_H, NULL},
-    {18, IDR_BACK_P, NULL},
-    {19, IDR_FORWARD, NULL},
-    {20, IDR_FORWARD_D, NULL},
-    {21, IDR_FORWARD_H, NULL},
-    {22, IDR_FORWARD_P, NULL},
-    {23, IDR_HOME, NULL},
-    {24, IDR_HOME_H, NULL},
-    {25, IDR_HOME_P, NULL},
-    {26, IDR_RELOAD, NULL},
-    {27, IDR_RELOAD_H, NULL},
-    {28, IDR_RELOAD_P, NULL},
-    {29, IDR_STOP, NULL},
-    {30, IDR_STOP_D, NULL},
-    {31, IDR_STOP_H, NULL},
-    {32, IDR_STOP_P, NULL},
-    {33, IDR_TOOLS, NULL},
-    {34, IDR_TOOLS_H, NULL},
-    {35, IDR_TOOLS_P, NULL},
-    {36, IDR_MENU_DROPARROW, NULL},
-    {37, IDR_TOOLBAR_BEZEL_HOVER, NULL},
-    {38, IDR_TOOLBAR_BEZEL_PRESSED, NULL},
-    {39, IDR_TOOLS_BAR, NULL},
 };
 const size_t kPersistingImagesLength = arraysize(kPersistingImages);
 
@@ -1259,7 +1217,6 @@ bool BrowserThemePack::LoadRawBitmapsTo(
 void BrowserThemePack::CreateImages(ImageCache* images) const {
   CropImages(images);
   CreateFrameImages(images);
-  CreateTintedButtons(GetTintInternal(ThemeProperties::TINT_BUTTONS), images);
   CreateTabBackgroundImages(images);
 }
 
@@ -1333,28 +1290,6 @@ void BrowserThemePack::CreateFrameImages(ImageCache* images) const {
     }
   }
   MergeImageCaches(temp_output, images);
-}
-
-void BrowserThemePack::CreateTintedButtons(
-    const color_utils::HSL& button_tint,
-    ImageCache* processed_images) const {
-  if (button_tint.h != -1 || button_tint.s != -1 || button_tint.l != -1) {
-    ResourceBundle& rb = ResourceBundle::GetSharedInstance();
-    const std::set<int>& idr_ids =
-        ThemeProperties::GetTintableToolbarButtons();
-    for (std::set<int>::const_iterator it = idr_ids.begin();
-         it != idr_ids.end(); ++it) {
-      int prs_id = GetPersistentIDByIDR(*it);
-      DCHECK(prs_id > 0);
-
-      // Fetch the image by IDR...
-      gfx::Image& button = rb.GetImageNamed(*it);
-
-      // but save a version with the persistent ID.
-      (*processed_images)[prs_id] =
-          CreateHSLShiftedImage(button, button_tint);
-    }
-  }
 }
 
 void BrowserThemePack::CreateTabBackgroundImages(ImageCache* images) const {

@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_DEVTOOLS_DEVICE_PORT_FORWARDING_CONTROLLER_H_
 
 #include <map>
+#include <string>
 
 #include "base/macros.h"
 #include "chrome/browser/devtools/device/devtools_android_bridge.h"
@@ -23,12 +24,13 @@ class PortForwardingController {
   typedef DevToolsAndroidBridge::BrowserStatus BrowserStatus;
   typedef DevToolsAndroidBridge::ForwardingStatus ForwardingStatus;
 
-  PortForwardingController(Profile* profile, DevToolsAndroidBridge* bridge);
+  explicit PortForwardingController(Profile* profile);
 
   virtual ~PortForwardingController();
 
   ForwardingStatus DeviceListChanged(
-      const DevToolsAndroidBridge::RemoteDevices& devices);
+      const DevToolsAndroidBridge::CompleteDevices& complete_devices);
+  void CloseAllConnections();
 
  private:
   class Connection;
@@ -38,7 +40,6 @@ class PortForwardingController {
 
   void UpdateConnections();
 
-  DevToolsAndroidBridge* bridge_;
   PrefService* pref_service_;
   PrefChangeRegistrar pref_change_registrar_;
   Registry registry_;

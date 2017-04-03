@@ -12,8 +12,9 @@ class SavePageRequest;
 class RequestNotifier {
  public:
   // Status to return for failed notifications.
-  // TODO(petewil): Can we find a better name for this enum?
-  enum class SavePageStatus {
+  // NOTE: for any changes to the enum, please also update related switch code
+  // in RequestCoordinatorEventLogger.
+  enum class BackgroundSavePageResult {
     SUCCESS,
     PRERENDER_FAILURE,
     PRERENDER_CANCELED,
@@ -32,7 +33,7 @@ class RequestNotifier {
 
   // Notifies observers that |request| has been completed with |status|.
   virtual void NotifyCompleted(const SavePageRequest& request,
-                               SavePageStatus status) = 0;
+                               BackgroundSavePageResult status) = 0;
 
   // Notifies observers that |request| has been changed.
   virtual void NotifyChanged(const SavePageRequest& request) = 0;

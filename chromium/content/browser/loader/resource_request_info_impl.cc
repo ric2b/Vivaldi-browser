@@ -241,6 +241,10 @@ int ResourceRequestInfoImpl::GetRenderFrameID() const {
   return render_frame_id_;
 }
 
+int ResourceRequestInfoImpl::GetFrameTreeNodeId() const {
+  return frame_tree_node_id_;
+}
+
 bool ResourceRequestInfoImpl::IsMainFrame() const {
   return is_main_frame_;
 }
@@ -300,6 +304,10 @@ bool ResourceRequestInfoImpl::IsUsingLoFi() const {
 
 bool ResourceRequestInfoImpl::ShouldReportRawHeaders() const {
   return report_raw_headers_;
+}
+
+NavigationUIData* ResourceRequestInfoImpl::GetNavigationUIData() const {
+  return navigation_ui_data_.get();
 }
 
 void ResourceRequestInfoImpl::AssociateWithRequest(net::URLRequest* request) {

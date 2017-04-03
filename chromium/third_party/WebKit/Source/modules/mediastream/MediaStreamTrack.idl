@@ -10,17 +10,28 @@
  *     notice, this list of conditions and the following disclaimer in the
  *     documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
- * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+ * DAMAGE.
  */
+
+// https://w3c.github.io/mediacapture-main/#mediastreamtrack
+
+// TODO(foolip): Remove or standardize MediaStreamTrackState "muted".
+// https://crbug.com/651414
+enum MediaStreamTrackState {
+    "live",
+    "muted",
+    "ended"
+};
 
 [
     ActiveScriptWrappable,
@@ -31,15 +42,19 @@
     readonly attribute DOMString label;
     attribute boolean enabled;
     readonly attribute boolean muted;
-    [MeasureAs=MediaStreamTrackRemote] readonly attribute boolean remote;
-    readonly attribute DOMString readyState;
-
-    [CallWith=ExecutionContext, RaisesException, DeprecateAs=MediaStreamTrackGetSources] static void getSources(MediaStreamTrackSourcesCallback callback);
-    [ImplementedAs=stopTrack, RaisesException] void stop();
-    [CallWith=ExecutionContext] MediaStreamTrack clone();
-    [RuntimeEnabled=MediaConstraints] MediaTrackConstraints getConstraints();
-    [RuntimeEnabled=MediaGetSettings] MediaTrackSettings getSettings();
     attribute EventHandler onmute;
     attribute EventHandler onunmute;
+    readonly attribute MediaStreamTrackState readyState;
     attribute EventHandler onended;
+
+    [CallWith=ExecutionContext] MediaStreamTrack clone();
+    [ImplementedAs=stopTrack, RaisesException] void stop();
+    [RuntimeEnabled=MediaConstraints] MediaTrackConstraints getConstraints();
+    [RuntimeEnabled=MediaGetSettings] MediaTrackSettings getSettings();
+
+    // Non-standard APIs
+    [MeasureAs=MediaStreamTrackRemote] readonly attribute boolean remote;
+    // TODO(guidou): Remove MediaStreamTrack.getSources().
+    // https://crbug.com/649710
+    [CallWith=ExecutionContext, RaisesException, DeprecateAs=MediaStreamTrackGetSources] static void getSources(MediaStreamTrackSourcesCallback callback);
 };

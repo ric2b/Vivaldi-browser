@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.compositor.overlays.strip;
 
 import static org.chromium.chrome.browser.compositor.layouts.ChromeAnimation.AnimatableAnimation.createAnimation;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.res.Resources;
 import android.os.Handler;
@@ -214,6 +215,13 @@ public class StripLayoutHelper {
         mShouldCascadeTabs = screenWidthDp >= DeviceFormFactor.MINIMUM_TABLET_WIDTH_DP;
         mStripStacker = mShouldCascadeTabs ? mCascadingStripStacker : mScrollingStripStacker;
         mIsFirstLayoutPass = true;
+    }
+
+    /**
+     * Cleans up internal state.
+     */
+    public void destroy() {
+        mStripTabEventHandler.removeCallbacksAndMessages(null);
     }
 
     /**
@@ -806,6 +814,7 @@ public class StripLayoutHelper {
         resetResizeTimeout(false);
 
         if (mNewTabButton.click(x, y) && mModel != null) {
+            if (!mModel.isIncognito()) mModel.commitAllTabClosures();
             mTabCreator.launchNTP();
             return;
         }
@@ -852,6 +861,7 @@ public class StripLayoutHelper {
         mInteractingTab = null;
         mReorderState = REORDER_SCROLL_NONE;
         if (mNewTabButton.onUpOrCancel() && mModel != null) {
+            if (!mModel.isIncognito()) mModel.commitAllTabClosures();
             mTabCreator.launchNTP();
         }
     }
@@ -1504,6 +1514,7 @@ public class StripLayoutHelper {
         }
     }
 
+    @SuppressLint("HandlerLeak")
     private class StripTabEventHandler extends Handler {
         @Override
         public void handleMessage(Message m) {
@@ -1625,6 +1636,8 @@ public class StripLayoutHelper {
                                        * mContext.getResources().getDisplayMetrics().density)
                 - mTabMenu.getWidth()
                 - ((MarginLayoutParams) tabView.getLayoutParams()).leftMargin;
+        // Cap the horizontal offset so that the tab menu doesn't get drawn off screen.
+        horizontalOffset = Math.max(horizontalOffset, 0);
         mTabMenu.setHorizontalOffset(horizontalOffset);
 
         mTabMenu.show();

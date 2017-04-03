@@ -8,9 +8,7 @@
 #include <iterator>
 #include <ostream>
 #include <sstream>
-#include <vector>
 
-#include "base/compiler_specific.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
@@ -24,7 +22,7 @@
 #include "chrome/browser/ui/webui/signin/login_ui_test_utils.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_switches.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/invalidation/impl/p2p_invalidation_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager_base.h"
@@ -33,6 +31,7 @@
 #include "components/sync/engine/sync_string_conversions.h"
 #include "google_apis/gaia/gaia_constants.h"
 
+using browser_sync::ProfileSyncService;
 using syncer::SyncCycleSnapshot;
 
 namespace {
@@ -229,32 +228,26 @@ bool ProfileSyncServiceHarness::AwaitMutualSyncCycleCompletion(
 }
 
 bool ProfileSyncServiceHarness::AwaitGroupSyncCycleCompletion(
-    std::vector<ProfileSyncServiceHarness*>& partners) {
+    const std::vector<ProfileSyncServiceHarness*>& partners) {
   return AwaitQuiescence(partners);
 }
 
 // static
 bool ProfileSyncServiceHarness::AwaitQuiescence(
-    std::vector<ProfileSyncServiceHarness*>& clients) {
+    const std::vector<ProfileSyncServiceHarness*>& clients) {
   std::vector<ProfileSyncService*> services;
   if (clients.empty()) {
     return true;
   }
 
-  for (std::vector<ProfileSyncServiceHarness*>::iterator it = clients.begin();
-       it != clients.end(); ++it) {
-    services.push_back((*it)->service());
+  for (const ProfileSyncServiceHarness* harness : clients) {
+    services.push_back(harness->service());
   }
-  QuiesceStatusChangeChecker checker(services);
-  checker.Wait();
-  return !checker.TimedOut();
+  return QuiesceStatusChangeChecker(services).Wait();
 }
 
 bool ProfileSyncServiceHarness::AwaitBackendInitialization() {
-  BackendInitializeChecker checker(service());
-  checker.Wait();
-
-  if (checker.TimedOut()) {
+  if (!BackendInitializeChecker(service()).Wait()) {
     LOG(ERROR) << "BackendInitializeChecker timed out.";
     return false;
   }
@@ -280,10 +273,7 @@ bool ProfileSyncServiceHarness::AwaitBackendInitialization() {
 }
 
 bool ProfileSyncServiceHarness::AwaitSyncSetupCompletion() {
-  SyncSetupChecker checker(service());
-  checker.Wait();
-
-  if (checker.TimedOut()) {
+  if (!SyncSetupChecker(service()).Wait()) {
     LOG(ERROR) << "SyncSetupChecker timed out.";
     return false;
   }
@@ -474,7 +464,7 @@ bool ProfileSyncServiceHarness::IsTypePreferred(syncer::ModelType type) {
 
 std::string ProfileSyncServiceHarness::GetServiceStatus() {
   std::unique_ptr<base::DictionaryValue> value(
-      sync_driver::sync_ui_util::ConstructAboutInformation(
+      syncer::sync_ui_util::ConstructAboutInformation(
           service(), service()->signin(), chrome::GetChannel()));
   std::string service_status;
   base::JSONWriter::WriteWithOptions(

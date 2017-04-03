@@ -8,7 +8,6 @@
 
 #include "base/files/file_util.h"
 #import "base/mac/bind_objc_block.h"
-#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #import "base/test/ios/wait_util.h"
@@ -25,7 +24,7 @@ class DistillerViewerTest : public dom_distiller::DistillerViewerInterface {
                       const DistillationFinishedCallback& callback)
       : dom_distiller::DistillerViewerInterface(nil, nil) {
     std::vector<ImageInfo> images;
-    callback.Run(url, "html", images);
+    callback.Run(url, "html", images, "title");
   }
 
   void OnArticleReady(
@@ -73,7 +72,7 @@ class MockURLDownloader : public URLDownloader {
  private:
   void DownloadURL(GURL url, bool offlineURLExists) override {
     if (offlineURLExists) {
-      DownloadCompletionHandler(url, false);
+      DownloadCompletionHandler(url, std::string(), DOWNLOAD_EXISTS);
       return;
     }
     distiller_.reset(new DistillerViewerTest(
@@ -81,7 +80,10 @@ class MockURLDownloader : public URLDownloader {
         base::Bind(&URLDownloader::DistillerCallback, base::Unretained(this))));
   }
 
-  void OnEndDownload(const GURL& url, bool success) {
+  void OnEndDownload(const GURL& url,
+                     SuccessState success,
+                     const GURL& distilledURL,
+                     const std::string& title) {
     downloaded_files_.push_back(url);
   }
 
@@ -109,9 +111,7 @@ class URLDownloaderTest : public testing::Test {
   }
 
   void WaitUntilCondition(ConditionBlock condition) {
-    base::MessageLoop* messageLoop = base::MessageLoop::current();
-    DCHECK(messageLoop);
-    base::test::ios::WaitUntilCondition(condition, messageLoop,
+    base::test::ios::WaitUntilCondition(condition, true,
                                         base::TimeDelta::FromSeconds(1));
   }
 };

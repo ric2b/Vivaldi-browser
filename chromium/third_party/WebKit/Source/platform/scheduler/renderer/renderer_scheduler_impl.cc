@@ -17,6 +17,7 @@
 #include "platform/scheduler/base/virtual_time_domain.h"
 #include "platform/scheduler/child/scheduler_tqm_delegate.h"
 #include "platform/scheduler/renderer/auto_advancing_virtual_time_domain.h"
+#include "platform/scheduler/renderer/task_queue_throttler.h"
 #include "platform/scheduler/renderer/web_view_scheduler_impl.h"
 #include "platform/scheduler/renderer/webthread_impl_for_renderer_scheduler.h"
 
@@ -36,6 +37,10 @@ const double kShortIdlePeriodDurationPercentile = 50;
 // Amount of idle time left in a frame (as a ratio of the vsync interval) above
 // which main thread compositing can be considered fast.
 const double kFastCompositingIdleTimeThreshold = .2;
+constexpr base::TimeDelta kThreadLoadTrackerReportingInterval =
+    base::TimeDelta::FromMinutes(1);
+constexpr base::TimeDelta kThreadLoadTrackerWaitingPeriodBeforeReporting =
+    base::TimeDelta::FromMinutes(2);
 
 void ReportForegroundRendererTaskLoad(base::TimeTicks time, double load) {
   int load_percentage = static_cast<int>(load * 100);
@@ -53,6 +58,11 @@ void ReportBackgroundRendererTaskLoad(base::TimeTicks time, double load) {
                  "RendererScheduler.BackgroundRendererLoad", load_percentage);
 }
 
+base::TimeTicks MonotonicTimeInSecondsToTimeTicks(
+    double monotonicTimeInSeconds) {
+  return base::TimeTicks() + base::TimeDelta::FromSecondsD(
+      monotonicTimeInSeconds);
+}
 }  // namespace
 
 RendererSchedulerImpl::RendererSchedulerImpl(
@@ -81,7 +91,8 @@ RendererSchedulerImpl::RendererSchedulerImpl(
                         helper_.scheduler_tqm_delegate()->NowTicks()),
       policy_may_need_update_(&any_thread_lock_),
       weak_factory_(this) {
-  throttling_helper_.reset(new ThrottlingHelper(this, "renderer.scheduler"));
+  task_queue_throttler_.reset(
+      new TaskQueueThrottler(this, "renderer.scheduler"));
   update_policy_closure_ = base::Bind(&RendererSchedulerImpl::UpdatePolicy,
                                       weak_factory_.GetWeakPtr());
   end_renderer_hidden_idle_period_closure_.Reset(base::Bind(
@@ -99,7 +110,7 @@ RendererSchedulerImpl::RendererSchedulerImpl(
       this);
 
   helper_.SetObserver(this);
-  helper_.SetTaskTimeTracker(this);
+  helper_.AddTaskTimeObserver(this);
 }
 
 RendererSchedulerImpl::~RendererSchedulerImpl() {
@@ -118,6 +129,8 @@ RendererSchedulerImpl::~RendererSchedulerImpl() {
 
   if (virtual_time_domain_)
     UnregisterTimeDomain(virtual_time_domain_.get());
+
+  helper_.RemoveTaskTimeObserver(this);
 
   // Ensure the renderer scheduler was shut down explicitly, because otherwise
   // we could end up having stale pointers to the Blink heap which has been
@@ -144,10 +157,14 @@ RendererSchedulerImpl::MainThreadOnly::MainThreadOnly(
                           kShortIdlePeriodDurationPercentile),
       background_main_thread_load_tracker(
           now,
-          base::Bind(&ReportBackgroundRendererTaskLoad)),
+          base::Bind(&ReportBackgroundRendererTaskLoad),
+          kThreadLoadTrackerReportingInterval,
+          kThreadLoadTrackerWaitingPeriodBeforeReporting),
       foreground_main_thread_load_tracker(
           now,
-          base::Bind(&ReportForegroundRendererTaskLoad)),
+          base::Bind(&ReportForegroundRendererTaskLoad),
+          kThreadLoadTrackerReportingInterval,
+          kThreadLoadTrackerWaitingPeriodBeforeReporting),
       current_use_case(UseCase::NONE),
       timer_queue_suspend_count(0),
       navigation_task_expected_count(0),
@@ -192,7 +209,7 @@ void RendererSchedulerImpl::Shutdown() {
   MainThreadOnly().background_main_thread_load_tracker.RecordIdle(now);
   MainThreadOnly().foreground_main_thread_load_tracker.RecordIdle(now);
 
-  throttling_helper_.reset();
+  task_queue_throttler_.reset();
   helper_.Shutdown();
   MainThreadOnly().was_shutdown = true;
   MainThreadOnly().rail_mode_observer = nullptr;
@@ -245,7 +262,7 @@ scoped_refptr<TaskQueue> RendererSchedulerImpl::NewLoadingTaskRunner(
       MainThreadOnly().current_policy.loading_queue_policy.priority);
   if (MainThreadOnly().current_policy.loading_queue_policy.time_domain_type ==
       TimeDomainType::THROTTLED) {
-    throttling_helper_->IncreaseThrottleRefCount(loading_task_queue.get());
+    task_queue_throttler_->IncreaseThrottleRefCount(loading_task_queue.get());
   }
   loading_task_queue->AddTaskObserver(
       &MainThreadOnly().loading_task_cost_estimator);
@@ -270,7 +287,7 @@ scoped_refptr<TaskQueue> RendererSchedulerImpl::NewTimerTaskRunner(
       MainThreadOnly().current_policy.timer_queue_policy.priority);
   if (MainThreadOnly().current_policy.timer_queue_policy.time_domain_type ==
       TimeDomainType::THROTTLED) {
-    throttling_helper_->IncreaseThrottleRefCount(timer_task_queue.get());
+    task_queue_throttler_->IncreaseThrottleRefCount(timer_task_queue.get());
   }
   timer_task_queue->AddTaskObserver(
       &MainThreadOnly().timer_task_cost_estimator);
@@ -295,8 +312,8 @@ RendererSchedulerImpl::NewRenderWidgetSchedulingState() {
 
 void RendererSchedulerImpl::OnUnregisterTaskQueue(
     const scoped_refptr<TaskQueue>& task_queue) {
-  if (throttling_helper_.get())
-    throttling_helper_->UnregisterTaskQueue(task_queue.get());
+  if (task_queue_throttler_)
+    task_queue_throttler_->UnregisterTaskQueue(task_queue.get());
 
   if (loading_task_runners_.find(task_queue) != loading_task_runners_.end()) {
     task_queue->RemoveTaskObserver(
@@ -407,9 +424,7 @@ void RendererSchedulerImpl::SetAllRenderWidgetsHidden(bool hidden) {
   }
 
   // TODO(alexclarke): Should we update policy here?
-  TRACE_EVENT_OBJECT_SNAPSHOT_WITH_ID(
-      TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"), "RendererScheduler",
-      this, AsValue(helper_.scheduler_tqm_delegate()->NowTicks()));
+  CreateTraceEventObjectSnapshot();
 }
 
 void RendererSchedulerImpl::SetHasVisibleRenderWidgetWithTouchHandler(
@@ -627,6 +642,16 @@ void RendererSchedulerImpl::UpdateForInputEventOnCompositorThread(
       AnyThread().last_gesture_was_compositor_driven =
           input_event_state == InputEventState::EVENT_CONSUMED_BY_COMPOSITOR;
       AnyThread().awaiting_touch_start_response = false;
+      break;
+
+    case blink::WebInputEvent::MouseWheel:
+      AnyThread().last_gesture_was_compositor_driven =
+          input_event_state == InputEventState::EVENT_CONSUMED_BY_COMPOSITOR;
+      AnyThread().awaiting_touch_start_response = false;
+      // If the event was sent to the main thread, assume the default gesture is
+      // prevented until we see evidence otherwise.
+      AnyThread().default_gesture_prevented =
+          !AnyThread().last_gesture_was_compositor_driven;
       break;
 
     case blink::WebInputEvent::Undefined:
@@ -956,9 +981,7 @@ void RendererSchedulerImpl::UpdatePolicyLocked(UpdateType update_type) {
 
   // Tracing is done before the early out check, because it's quite possible we
   // will otherwise miss this information in traces.
-  TRACE_EVENT_OBJECT_SNAPSHOT_WITH_ID(
-      TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"), "RendererScheduler",
-      this, AsValueLocked(now));
+  CreateTraceEventObjectSnapshotLocked();
   TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"), "use_case",
                  use_case);
   TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"), "rail_mode",
@@ -1020,8 +1043,8 @@ void RendererSchedulerImpl::ApplyTaskQueuePolicy(
     const TaskQueuePolicy& old_task_queue_policy,
     const TaskQueuePolicy& new_task_queue_policy) const {
   if (old_task_queue_policy.is_enabled != new_task_queue_policy.is_enabled) {
-    throttling_helper_->SetQueueEnabled(task_queue,
-                                        new_task_queue_policy.is_enabled);
+    task_queue_throttler_->SetQueueEnabled(task_queue,
+                                           new_task_queue_policy.is_enabled);
   }
 
   if (old_task_queue_policy.priority != new_task_queue_policy.priority)
@@ -1030,10 +1053,10 @@ void RendererSchedulerImpl::ApplyTaskQueuePolicy(
   if (old_task_queue_policy.time_domain_type !=
       new_task_queue_policy.time_domain_type) {
     if (old_task_queue_policy.time_domain_type == TimeDomainType::THROTTLED) {
-      throttling_helper_->DecreaseThrottleRefCount(task_queue);
+      task_queue_throttler_->DecreaseThrottleRefCount(task_queue);
     } else if (new_task_queue_policy.time_domain_type ==
                TimeDomainType::THROTTLED) {
-      throttling_helper_->IncreaseThrottleRefCount(task_queue);
+      task_queue_throttler_->IncreaseThrottleRefCount(task_queue);
     } else if (new_task_queue_policy.time_domain_type ==
                TimeDomainType::VIRTUAL) {
       DCHECK(virtual_time_domain_);
@@ -1178,6 +1201,18 @@ RendererSchedulerImpl::AsValue(base::TimeTicks optional_now) const {
   return AsValueLocked(optional_now);
 }
 
+void RendererSchedulerImpl::CreateTraceEventObjectSnapshot() const {
+  TRACE_EVENT_OBJECT_SNAPSHOT_WITH_ID(
+      TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"), "RendererScheduler",
+      this, AsValue(helper_.scheduler_tqm_delegate()->NowTicks()));
+}
+
+void RendererSchedulerImpl::CreateTraceEventObjectSnapshotLocked() const {
+  TRACE_EVENT_OBJECT_SNAPSHOT_WITH_ID(
+      TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"), "RendererScheduler",
+      this, AsValueLocked(helper_.scheduler_tqm_delegate()->NowTicks()));
+}
+
 // static
 const char* RendererSchedulerImpl::ExpensiveTaskPolicyToString(
     ExpensiveTaskPolicy expensive_task_policy) {
@@ -1285,6 +1320,10 @@ RendererSchedulerImpl::AsValueLocked(base::TimeTicks optional_now) const {
 
   AnyThread().user_model.AsValueInto(state.get());
   render_widget_scheduler_signals_.AsValueInto(state.get());
+
+  state->BeginDictionary("task_queue_throttler");
+  task_queue_throttler_->AsValueInto(state.get(), optional_now);
+  state->EndDictionary();
 
   return std::move(state);
 }
@@ -1454,26 +1493,41 @@ void RendererSchedulerImpl::OnTriedToExecuteBlockedTask(
   }
 }
 
-void RendererSchedulerImpl::ReportTaskTime(base::TimeTicks start_time,
-                                           base::TimeTicks end_time) {
-  MainThreadOnly().queueing_time_estimator.OnToplevelTaskCompleted(start_time,
-                                                                   end_time);
-  MainThreadOnly().long_task_tracker.RecordLongTask(
-      start_time, end_time - start_time);
+void RendererSchedulerImpl::ReportTaskTime(TaskQueue* task_queue,
+                                           double start_time,
+                                           double end_time) {
+  // TODO(scheduler-dev): Remove conversions when Blink starts using
+  // base::TimeTicks instead of doubles for time.
+  base::TimeTicks start_time_ticks =
+      MonotonicTimeInSecondsToTimeTicks(start_time);
+  base::TimeTicks end_time_ticks = MonotonicTimeInSecondsToTimeTicks(end_time);
+
+  MainThreadOnly().queueing_time_estimator.OnToplevelTaskCompleted(
+      start_time_ticks, end_time_ticks);
+
+  task_queue_throttler()->OnTaskRunTimeReported(task_queue, start_time_ticks,
+                                                end_time_ticks);
+
   // We want to measure thread time here, but for efficiency reasons
   // we stick with wall time.
   MainThreadOnly().foreground_main_thread_load_tracker.RecordTaskTime(
-      start_time, end_time);
+      start_time_ticks, end_time_ticks);
   MainThreadOnly().background_main_thread_load_tracker.RecordTaskTime(
-      start_time, end_time);
+      start_time_ticks, end_time_ticks);
   // TODO(altimin): Per-page metrics should also be considered.
   UMA_HISTOGRAM_CUSTOM_COUNTS("RendererScheduler.TaskTime",
-                              (end_time - start_time).InMicroseconds(), 1,
+                              (end_time_ticks - start_time_ticks).InMicroseconds(), 1,
                               1000000, 50);
 }
 
-LongTaskTracker::LongTaskTiming RendererSchedulerImpl::GetLongTaskTiming() {
-  return MainThreadOnly().long_task_tracker.GetLongTaskTiming();
+void RendererSchedulerImpl::AddTaskTimeObserver(
+    TaskTimeObserver* task_time_observer) {
+  helper_.AddTaskTimeObserver(task_time_observer);
+}
+
+void RendererSchedulerImpl::RemoveTaskTimeObserver(
+    TaskTimeObserver* task_time_observer) {
+  helper_.RemoveTaskTimeObserver(task_time_observer);
 }
 
 void RendererSchedulerImpl::OnQueueingTimeForWindowEstimated(
@@ -1502,7 +1556,7 @@ void RendererSchedulerImpl::EnableVirtualTime() {
   for (const scoped_refptr<TaskQueue>& task_queue : unthrottled_task_runners_)
     task_queue->SetTimeDomain(time_domain);
 
-  throttling_helper_->EnableVirtualTime();
+  task_queue_throttler_->EnableVirtualTime();
 
   ForceUpdatePolicy();
 }

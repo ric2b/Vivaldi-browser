@@ -15,7 +15,7 @@
 #include "base/trace_event/trace_event.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/geometry/size_conversions.h"
-#include "ui/gfx/native_pixmap_handle_ozone.h"
+#include "ui/gfx/native_pixmap_handle.h"
 #include "ui/ozone/platform/drm/common/drm_util.h"
 #include "ui/ozone/platform/drm/gpu/drm_window.h"
 #include "ui/ozone/platform/drm/gpu/gbm_device.h"
@@ -75,6 +75,11 @@ int GbmBuffer::GetOffset(size_t index) const {
   return planes_[index].offset;
 }
 
+size_t GbmBuffer::GetSize(size_t index) const {
+  DCHECK_LT(index, planes_.size());
+  return planes_[index].size;
+}
+
 uint64_t GbmBuffer::GetFormatModifier(size_t index) const {
   DCHECK_LT(index, planes_.size());
   return planes_[index].modifier;
@@ -123,16 +128,20 @@ scoped_refptr<GbmBuffer> GbmBuffer::CreateBuffer(
     // kept open for the lifetime of the buffer.
     base::ScopedFD fd(gbm_bo_get_plane_fd(bo, i));
 
-    if (!fd.is_valid()) {
-      PLOG(ERROR) << "Failed to export buffer to dma_buf";
-      gbm_bo_destroy(bo);
-      return nullptr;
+    // TODO(dcastagna): support multiple fds.
+    // crbug.com/642410
+    if (!i) {
+      if (!fd.is_valid()) {
+        PLOG(ERROR) << "Failed to export buffer to dma_buf";
+        gbm_bo_destroy(bo);
+        return nullptr;
+      }
+      fds.emplace_back(std::move(fd));
     }
-    fds.emplace_back(std::move(fd));
 
-    planes.emplace_back(gbm_bo_get_plane_stride(bo, i),
-                        gbm_bo_get_plane_offset(bo, i),
-                        gbm_bo_get_plane_format_modifier(bo, i));
+    planes.emplace_back(
+        gbm_bo_get_plane_stride(bo, i), gbm_bo_get_plane_offset(bo, i),
+        gbm_bo_get_plane_size(bo, i), gbm_bo_get_plane_format_modifier(bo, i));
   }
   scoped_refptr<GbmBuffer> buffer(new GbmBuffer(
       gbm, bo, format, usage, std::move(fds), size, std::move(planes)));
@@ -216,6 +225,7 @@ gfx::NativePixmapHandle GbmPixmap::ExportHandle() {
           base::FileDescriptor(scoped_fd.release(), true /* auto_close */));
     }
     handle.planes.emplace_back(buffer_->GetStride(i), buffer_->GetOffset(i),
+                               buffer_->GetSize(i),
                                buffer_->GetFormatModifier(i));
   }
   return handle;

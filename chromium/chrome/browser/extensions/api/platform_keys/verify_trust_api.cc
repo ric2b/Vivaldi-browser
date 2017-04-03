@@ -17,7 +17,7 @@
 #include "net/cert/cert_verifier.h"
 #include "net/cert/cert_verify_result.h"
 #include "net/cert/x509_certificate.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 #include "net/ssl/ssl_config_service.h"
 
 namespace extensions {
@@ -184,7 +184,7 @@ void VerifyTrustAPI::IOPart::Verify(std::unique_ptr<Params> params,
 
   std::unique_ptr<net::CertVerifyResult> verify_result(
       new net::CertVerifyResult);
-  std::unique_ptr<net::BoundNetLog> net_log(new net::BoundNetLog);
+  std::unique_ptr<net::NetLogWithSource> net_log(new net::NetLogWithSource);
   const int flags = 0;
 
   std::string ocsp_response;

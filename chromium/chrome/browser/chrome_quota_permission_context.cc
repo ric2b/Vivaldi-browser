@@ -21,12 +21,13 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/web_contents.h"
-#include "grit/theme_resources.h"
 #include "storage/common/quota/quota_types.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/gfx/vector_icons_public.h"
 #include "url/gurl.h"
 
 #if defined(OS_ANDROID)
+#include "chrome/browser/android/android_theme_resources.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar.h"
@@ -55,7 +56,7 @@ class QuotaPermissionRequest : public PermissionRequest {
 
  private:
   // PermissionRequest:
-  int GetIconId() const override;
+  IconId GetIconId() const override;
   base::string16 GetMessageTextFragment() const override;
   GURL GetOrigin() const override;
   void PermissionGranted() override;
@@ -81,9 +82,13 @@ QuotaPermissionRequest::QuotaPermissionRequest(
 
 QuotaPermissionRequest::~QuotaPermissionRequest() {}
 
-int QuotaPermissionRequest::GetIconId() const {
+PermissionRequest::IconId QuotaPermissionRequest::GetIconId() const {
   // TODO(gbillock): get the proper image here
-  return IDR_INFOBAR_WARNING;
+#if defined(OS_ANDROID)
+  return IDR_ANDROID_INFOBAR_WARNING;
+#else
+  return gfx::VectorIconId::WARNING;
+#endif
 }
 
 base::string16 QuotaPermissionRequest::GetMessageTextFragment() const {

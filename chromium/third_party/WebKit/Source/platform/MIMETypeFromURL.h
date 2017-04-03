@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2011, 2012 Apple Inc. All rights reserved.
+ * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2011, 2012 Apple Inc.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -36,6 +37,6 @@ class KURL;
 PLATFORM_EXPORT String mimeTypeFromDataURL(const String& url);
 PLATFORM_EXPORT String mimeTypeFromURL(const KURL&);
 
-} // namespace blink
+}  // namespace blink
 
-#endif // MIMETypeFromURL_h
+#endif  // MIMETypeFromURL_h

@@ -38,6 +38,7 @@ class MEDIA_EXPORT CoreAudioDemuxer : public Demuxer {
   void Seek(base::TimeDelta time,
             const PipelineStatusCB& status_cb) override;
   void Stop() override;
+  void AbortPendingReads() override;
   DemuxerStream* GetStream(DemuxerStream::Type type) override;
   base::TimeDelta GetStartTime() const override;
   base::Time GetTimelineOffset() const override;

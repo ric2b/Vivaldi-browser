@@ -96,10 +96,12 @@ class PrecacheDatabaseTest : public testing::Test {
     precache_database_.reset(new PrecacheDatabase());
 
     ASSERT_TRUE(scoped_temp_dir_.CreateUniqueTempDir());
-    base::FilePath db_path = scoped_temp_dir_.path().Append(
+    base::FilePath db_path = scoped_temp_dir_.GetPath().Append(
         base::FilePath(FILE_PATH_LITERAL("precache_database")));
     ASSERT_TRUE(precache_database_->Init(db_path));
   }
+
+  void TearDown() override { precache_url_table()->DeleteAll(); }
 
   std::map<GURL, base::Time> GetActualURLTableMap() {
     // Flush any buffered writes so that the URL table will be up to date.
@@ -335,6 +337,8 @@ TEST_F(PrecacheDatabaseTest, FetchOverNetworkWithURLTableEntry) {
   ExpectNewSample("Precache.Latency.NonPrefetch.NonTopHosts",
                   kLatency.InMilliseconds());
   ExpectNewSample("Precache.CacheStatus.NonPrefetch", kFromNetwork);
+  ExpectNewSample("Precache.CacheStatus.NonPrefetch.FromPrecache",
+                  kFromNetwork);
   ExpectNoOtherSamples();
 }
 
@@ -348,6 +352,8 @@ TEST_F(PrecacheDatabaseTest, FetchFromCacheWithURLTableEntry_NonCellular) {
   ExpectNewSample("Precache.Latency.NonPrefetch", 0);
   ExpectNewSample("Precache.Latency.NonPrefetch.NonTopHosts", 0);
   ExpectNewSample("Precache.CacheStatus.NonPrefetch",
+                  HttpResponseInfo::CacheEntryStatus::ENTRY_USED);
+  ExpectNewSample("Precache.CacheStatus.NonPrefetch.FromPrecache",
                   HttpResponseInfo::CacheEntryStatus::ENTRY_USED);
   ExpectNewSample("Precache.Saved", kSize);
   ExpectNewSample("Precache.Saved.Freshness", kFreshnessBucket10K);
@@ -364,6 +370,8 @@ TEST_F(PrecacheDatabaseTest, FetchFromCacheWithURLTableEntry_Cellular) {
   ExpectNewSample("Precache.Latency.NonPrefetch", 0);
   ExpectNewSample("Precache.Latency.NonPrefetch.NonTopHosts", 0);
   ExpectNewSample("Precache.CacheStatus.NonPrefetch",
+                  HttpResponseInfo::CacheEntryStatus::ENTRY_USED);
+  ExpectNewSample("Precache.CacheStatus.NonPrefetch.FromPrecache",
                   HttpResponseInfo::CacheEntryStatus::ENTRY_USED);
   ExpectNewSample("Precache.Saved", kSize);
   ExpectNewSample("Precache.Saved.Cellular", kSize);

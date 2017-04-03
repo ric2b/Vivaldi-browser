@@ -19,6 +19,7 @@
 #include "url/gurl.h"
 
 using base::StringPiece;
+using base::ContainsKey;
 using std::string;
 using std::vector;
 
@@ -47,27 +48,41 @@ bool SpdyUtils::ParseHeaders(const char* data,
     return false;  // Headers were invalid.
   }
 
-  if (base::ContainsKey(*headers, "content-length")) {
-    // Check whether multiple values are consistent.
-    base::StringPiece content_length_header = (*headers)["content-length"];
-    vector<string> values =
-        base::SplitString(content_length_header, base::StringPiece("\0", 1),
-                          base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-    for (const string& value : values) {
-      int64_t new_value;
-      if (!base::StringToInt64(value, &new_value) || new_value < 0) {
-        return false;
-      }
-      if (*content_length < 0) {
-        *content_length = new_value;
-        continue;
-      }
-      if (new_value != *content_length) {
-        return false;
-      }
-    }
+  if (!ContainsKey(*headers, "content-length")) {
+    return true;
   }
 
+  return ExtractContentLengthFromHeaders(content_length, headers);
+}
+
+// static
+bool SpdyUtils::ExtractContentLengthFromHeaders(int64_t* content_length,
+                                                SpdyHeaderBlock* headers) {
+  if (!ContainsKey(*headers, "content-length")) {
+    return false;
+  }
+  // Check whether multiple values are consistent.
+  base::StringPiece content_length_header = (*headers)["content-length"];
+  vector<string> values =
+      base::SplitString(content_length_header, base::StringPiece("\0", 1),
+                        base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+  for (const string& value : values) {
+    int64_t new_value;
+    if (!base::StringToInt64(value, &new_value) || new_value < 0) {
+      DLOG(ERROR) << "Content length was either unparseable or negative.";
+      return false;
+    }
+    if (*content_length < 0) {
+      *content_length = new_value;
+      continue;
+    }
+    if (new_value != *content_length) {
+      DLOG(ERROR) << "Parsed content length " << new_value << " is "
+                  << "inconsistent with previously detected content length "
+                  << *content_length;
+      return false;
+    }
+  }
   return true;
 }
 
@@ -98,7 +113,7 @@ bool SpdyUtils::ParseTrailers(const char* data,
   for (const auto& trailer : *trailers) {
     base::StringPiece key = trailer.first;
     base::StringPiece value = trailer.second;
-    if (key.starts_with(":")) {
+    if (base::StartsWith(key, ":", base::CompareCase::INSENSITIVE_ASCII)) {
       DVLOG(1) << "Trailers must not contain pseudo-header: '" << key << "','"
                << value << "'.";
       return false;
@@ -127,51 +142,12 @@ bool SpdyUtils::CopyAndValidateHeaders(const QuicHeaderList& header_list,
       return false;
     }
 
-    if (FLAGS_chromium_http2_flag_use_new_spdy_header_block_header_joining) {
-      headers->AppendValueOrAddHeader(name, p.second);
-    } else {
-      auto iter = headers->find(name);
-      if (iter == headers->end()) {
-        (*headers)[name] = p.second;
-      } else {
-        // This header had multiple values, so it must be reconstructed.
-        StringPiece v = iter->second;
-        string s(v.data(), v.length());
-        if (name == "cookie") {
-          // Obeys section 8.1.2.5 in RFC 7540 for cookie reconstruction.
-          s.append("; ");
-        } else {
-          StringPiece("\0", 1).AppendToString(&s);
-        }
-        s.append(p.second);
-        headers->ReplaceOrAppendHeader(name, s);
-      }
-    }
+    headers->AppendValueOrAddHeader(name, p.second);
   }
 
-  if (base::ContainsKey(*headers, "content-length")) {
-    // Check whether multiple values are consistent.
-    StringPiece content_length_header = (*headers)["content-length"];
-    vector<string> values =
-        base::SplitString(content_length_header, base::StringPiece("\0", 1),
-                          base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-    for (const string& value : values) {
-      int64_t new_value;
-      if (!base::StringToInt64(value, &new_value) || new_value < 0) {
-        DLOG(ERROR) << "Content length was either unparseable or negative.";
-        return false;
-      }
-      if (*content_length < 0) {
-        *content_length = new_value;
-        continue;
-      }
-      if (new_value != *content_length) {
-        DLOG(ERROR) << "Parsed content length " << new_value << " is "
-                    << "inconsistent with previously detected content length "
-                    << *content_length;
-        return false;
-      }
-    }
+  if (ContainsKey(*headers, "content-length") &&
+      !ExtractContentLengthFromHeaders(content_length, headers)) {
+    return false;
   }
 
   DVLOG(1) << "Successfully parsed headers: " << headers->DebugString();
@@ -259,6 +235,25 @@ string SpdyUtils::GetHostNameFromHeaderBlock(const SpdyHeaderBlock& headers) {
 bool SpdyUtils::UrlIsValid(const SpdyHeaderBlock& headers) {
   string url(GetUrlFromHeaderBlock(headers));
   return url != "" && GURL(url).is_valid();
+}
+
+// static
+bool SpdyUtils::PopulateHeaderBlockFromUrl(const string url,
+                                           SpdyHeaderBlock* headers) {
+  (*headers)[":method"] = "GET";
+  size_t pos = url.find("://");
+  if (pos == string::npos) {
+    return false;
+  }
+  (*headers)[":scheme"] = url.substr(0, pos);
+  size_t start = pos + 3;
+  pos = url.find("/", start);
+  if (pos == string::npos) {
+    return false;
+  }
+  (*headers)[":authority"] = url.substr(start, pos - start);
+  (*headers)[":path"] = url.substr(pos);
+  return true;
 }
 
 }  // namespace net

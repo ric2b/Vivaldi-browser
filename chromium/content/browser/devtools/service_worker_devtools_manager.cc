@@ -4,6 +4,7 @@
 
 #include "content/browser/devtools/service_worker_devtools_manager.h"
 
+#include "content/browser/devtools/devtools_agent_host_impl.h"
 #include "content/browser/devtools/service_worker_devtools_agent_host.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
@@ -117,10 +118,8 @@ void ServiceWorkerDevToolsManager::WorkerReadyForInspection(
                     WorkerReadyForInspection(host.get()));
 
   // Then bring up UI for the ones not picked by other clients.
-  if (host->IsPausedForDebugOnStart() && !host->IsAttached()) {
-    host->Inspect(RenderProcessHost::FromID(worker_process_id)->
-        GetBrowserContext());
-  }
+  if (host->IsPausedForDebugOnStart() && !host->IsAttached())
+    static_cast<DevToolsAgentHostImpl*>(host.get())->Inspect();
 }
 
 void ServiceWorkerDevToolsManager::WorkerVersionInstalled(int worker_process_id,

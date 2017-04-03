@@ -200,7 +200,7 @@ class Git(SCM):
         return self._run_git(['log', '-1', '--grep=' + grep_str, '--date=iso', self.find_checkout_root(path)])
 
     def _commit_position_from_git_log(self, git_log):
-        match = re.search("^\s*Cr-Commit-Position:.*@\{#(?P<commit_position>\d+)\}", git_log, re.MULTILINE)
+        match = re.search(r"^\s*Cr-Commit-Position:.*@\{#(?P<commit_position>\d+)\}", git_log, re.MULTILINE)
         if not match:
             return ""
         return int(match.group('commit_position'))
@@ -214,7 +214,7 @@ class Git(SCM):
 
     def timestamp_of_revision(self, path, revision):
         git_log = self.most_recent_log_matching(self._commit_position_regex_for_timestamp() % revision, path)
-        match = re.search("^Date:\s*(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2}) ([+-])(\d{2})(\d{2})$", git_log, re.MULTILINE)
+        match = re.search(r"^Date:\s*(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2}) ([+-])(\d{2})(\d{2})$", git_log, re.MULTILINE)
         if not match:
             return ""
 
@@ -231,7 +231,8 @@ class Git(SCM):
     def create_patch(self, git_commit=None, changed_files=None):
         """Returns a byte array (str()) representing the patch file.
         Patch files are effectively binary since they may contain
-        files of multiple different encodings."""
+        files of multiple different encodings.
+        """
 
         # Put code changes at the top of the patch and layout tests
         # at the bottom, this makes for easier reviewing.
@@ -287,8 +288,8 @@ class Git(SCM):
     # These methods are git specific and are meant to provide support for the Git oriented workflow
     # that Blink is moving towards, hence there are no equivalent methods in the SVN class.
 
-    def pull(self):
-        self._run_git(['pull'])
+    def pull(self, timeout_seconds=None):
+        self._run_git(['pull'], timeout_seconds=timeout_seconds)
 
     def latest_git_commit(self):
         return self._run_git(['log', '-1', '--format=%H']).strip()
@@ -308,7 +309,7 @@ class Git(SCM):
 
     def _branch_tracking_remote_master(self):
         origin_info = self._run_git(['remote', 'show', 'origin', '-n'])
-        match = re.search("^\s*(?P<branch_name>\S+)\s+merges with remote master$", origin_info, re.MULTILINE)
+        match = re.search(r"^\s*(?P<branch_name>\S+)\s+merges with remote master$", origin_info, re.MULTILINE)
         if not match:
             raise ScriptError(message="Unable to find local branch tracking origin/master.")
         branch = str(match.group("branch_name"))

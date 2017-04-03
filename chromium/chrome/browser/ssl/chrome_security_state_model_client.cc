@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ssl/chrome_security_state_model_client.h"
 
+#include <openssl/ssl.h>
+
 #include <vector>
 
 #include "base/command_line.h"
@@ -19,13 +21,12 @@
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
 #include "chrome/grit/generated_resources.h"
-#include "content/public/browser/cert_store.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/security_style_explanation.h"
 #include "content/public/browser/security_style_explanations.h"
+#include "content/public/browser/ssl_status.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/origin_util.h"
-#include "content/public/common/ssl_status.h"
 #include "net/base/net_errors.h"
 #include "net/cert/x509_certificate.h"
 #include "net/ssl/ssl_cipher_suite_names.h"
@@ -53,7 +54,7 @@ SecurityStateModel::SecurityLevel GetSecurityLevelForSecurityStyle(
     case content::SECURITY_STYLE_UNAUTHENTICATED:
       return SecurityStateModel::NONE;
     case content::SECURITY_STYLE_AUTHENTICATION_BROKEN:
-      return SecurityStateModel::SECURITY_ERROR;
+      return SecurityStateModel::DANGEROUS;
     case content::SECURITY_STYLE_WARNING:
       // content currently doesn't use this style.
       NOTREACHED();
@@ -71,14 +72,15 @@ content::SecurityStyle SecurityLevelToSecurityStyle(
     SecurityStateModel::SecurityLevel security_level) {
   switch (security_level) {
     case SecurityStateModel::NONE:
+    case SecurityStateModel::HTTP_SHOW_WARNING:
       return content::SECURITY_STYLE_UNAUTHENTICATED;
     case SecurityStateModel::SECURITY_WARNING:
-    case SecurityStateModel::SECURITY_POLICY_WARNING:
+    case SecurityStateModel::SECURE_WITH_POLICY_INSTALLED_CERT:
       return content::SECURITY_STYLE_WARNING;
     case SecurityStateModel::EV_SECURE:
     case SecurityStateModel::SECURE:
       return content::SECURITY_STYLE_AUTHENTICATED;
-    case SecurityStateModel::SECURITY_ERROR:
+    case SecurityStateModel::DANGEROUS:
       return content::SECURITY_STYLE_AUTHENTICATION_BROKEN;
   }
 
@@ -92,8 +94,8 @@ void AddConnectionExplanation(
 
   // Avoid showing TLS details when we couldn't even establish a TLS connection
   // (e.g. for net errors) or if there was no real connection (some tests). We
-  // check the |cert_id| to see if there was a connection.
-  if (security_info.cert_id == 0 || security_info.connection_status == 0) {
+  // check the |connection_status| to see if there was a connection.
+  if (security_info.connection_status == 0) {
     return;
   }
 
@@ -116,6 +118,19 @@ void AddConnectionExplanation(
                     : l10n_util::GetStringFUTF16(IDS_CIPHER_WITH_MAC,
                                                  base::ASCIIToUTF16(cipher),
                                                  base::ASCIIToUTF16(mac));
+
+  // Include the key exchange group (previously known as curve) if specified.
+  //
+  // TODO(davidben): When TLS 1.3's new negotiation is implemented, omit the
+  // "key exchange" if empty and only display the group, which is the true key
+  // exchange. See https://crbug.com/639495.
+  if (security_info.key_exchange_group != 0) {
+    key_exchange_name = l10n_util::GetStringFUTF16(
+        IDS_SSL_KEY_EXCHANGE_WITH_GROUP, key_exchange_name,
+        base::ASCIIToUTF16(
+            SSL_get_curve_name(security_info.key_exchange_group)));
+  }
+
   if (security_info.obsolete_ssl_status == net::OBSOLETE_SSL_NONE) {
     security_style_explanations->secure_explanations.push_back(
         content::SecurityStyleExplanation(
@@ -167,7 +182,7 @@ void CheckSafeBrowsingStatus(content::NavigationEntry* entry,
   if (sb_ui_manager->IsUrlWhitelistedOrPendingForWebContents(
           entry->GetURL(), false, entry, web_contents, false)) {
     state->fails_malware_check = true;
-    state->initial_security_level = SecurityStateModel::SECURITY_ERROR;
+    state->initial_security_level = SecurityStateModel::DANGEROUS;
   }
 }
 
@@ -215,28 +230,53 @@ content::SecurityStyle ChromeSecurityStateModelClient::GetSecurityStyle(
         content::SecurityStyleExplanation(
             l10n_util::GetStringUTF8(IDS_MAJOR_SHA1),
             l10n_util::GetStringUTF8(IDS_MAJOR_SHA1_DESCRIPTION),
-            security_info.cert_id));
+            !!security_info.certificate));
   } else if (security_info.sha1_deprecation_status ==
              SecurityStateModel::DEPRECATED_SHA1_MINOR) {
     security_style_explanations->unauthenticated_explanations.push_back(
         content::SecurityStyleExplanation(
             l10n_util::GetStringUTF8(IDS_MINOR_SHA1),
             l10n_util::GetStringUTF8(IDS_MINOR_SHA1_DESCRIPTION),
-            security_info.cert_id));
+            !!security_info.certificate));
   }
 
-  security_style_explanations->ran_insecure_content =
+  // Record the presence of mixed content (HTTP subresources on an HTTPS
+  // page).
+  security_style_explanations->ran_mixed_content =
       security_info.mixed_content_status ==
           SecurityStateModel::CONTENT_STATUS_RAN ||
       security_info.mixed_content_status ==
           SecurityStateModel::CONTENT_STATUS_DISPLAYED_AND_RAN;
-  security_style_explanations->displayed_insecure_content =
+  security_style_explanations->displayed_mixed_content =
       security_info.mixed_content_status ==
           SecurityStateModel::CONTENT_STATUS_DISPLAYED ||
       security_info.mixed_content_status ==
           SecurityStateModel::CONTENT_STATUS_DISPLAYED_AND_RAN;
 
-  if (net::IsCertStatusError(security_info.cert_status)) {
+  bool is_cert_status_error = net::IsCertStatusError(security_info.cert_status);
+  bool is_cert_status_minor_error =
+      net::IsCertStatusMinorError(security_info.cert_status);
+
+  // If the main resource was loaded no certificate errors or only minor
+  // certificate errors, then record the presence of subresources with
+  // certificate errors. Subresource certificate errors aren't recorded
+  // when the main resource was loaded with major certificate errors
+  // because, in the common case, these subresource certificate errors
+  // would be duplicative with the main resource's error.
+  if (!is_cert_status_error || is_cert_status_minor_error) {
+    security_style_explanations->ran_content_with_cert_errors =
+        security_info.content_with_cert_errors_status ==
+            SecurityStateModel::CONTENT_STATUS_RAN ||
+        security_info.content_with_cert_errors_status ==
+            SecurityStateModel::CONTENT_STATUS_DISPLAYED_AND_RAN;
+    security_style_explanations->displayed_content_with_cert_errors =
+        security_info.content_with_cert_errors_status ==
+            SecurityStateModel::CONTENT_STATUS_DISPLAYED ||
+        security_info.content_with_cert_errors_status ==
+            SecurityStateModel::CONTENT_STATUS_DISPLAYED_AND_RAN;
+  }
+
+  if (is_cert_status_error) {
     base::string16 error_string = base::UTF8ToUTF16(net::ErrorToString(
         net::MapCertStatusToNetError(security_info.cert_status)));
 
@@ -244,13 +284,14 @@ content::SecurityStyle ChromeSecurityStateModelClient::GetSecurityStyle(
         l10n_util::GetStringUTF8(IDS_CERTIFICATE_CHAIN_ERROR),
         l10n_util::GetStringFUTF8(
             IDS_CERTIFICATE_CHAIN_ERROR_DESCRIPTION_FORMAT, error_string),
-        security_info.cert_id);
+        !!security_info.certificate);
 
-    if (net::IsCertStatusMinorError(security_info.cert_status))
+    if (is_cert_status_minor_error) {
       security_style_explanations->unauthenticated_explanations.push_back(
           explanation);
-    else
+    } else {
       security_style_explanations->broken_explanations.push_back(explanation);
+    }
   } else {
     // If the certificate does not have errors and is not using
     // deprecated SHA1, then add an explanation that the certificate is
@@ -262,7 +303,7 @@ content::SecurityStyle ChromeSecurityStateModelClient::GetSecurityStyle(
               l10n_util::GetStringUTF8(IDS_VALID_SERVER_CERTIFICATE),
               l10n_util::GetStringUTF8(
                   IDS_VALID_SERVER_CERTIFICATE_DESCRIPTION),
-              security_info.cert_id));
+              !!security_info.certificate));
     }
   }
 
@@ -279,19 +320,19 @@ content::SecurityStyle ChromeSecurityStateModelClient::GetSecurityStyle(
   return security_style;
 }
 
-const SecurityStateModel::SecurityInfo&
-ChromeSecurityStateModelClient::GetSecurityInfo() const {
-  return security_state_model_->GetSecurityInfo();
+void ChromeSecurityStateModelClient::GetSecurityInfo(
+    SecurityStateModel::SecurityInfo* result) const {
+  security_state_model_->GetSecurityInfo(result);
 }
 
 bool ChromeSecurityStateModelClient::RetrieveCert(
     scoped_refptr<net::X509Certificate>* cert) {
   content::NavigationEntry* entry =
       web_contents_->GetController().GetVisibleEntry();
-  if (!entry)
+  if (!entry || !entry->GetSSL().certificate)
     return false;
-  return content::CertStore::GetInstance()->RetrieveCert(
-      entry->GetSSL().cert_id, cert);
+  *cert = entry->GetSSL().certificate;
+  return true;
 }
 
 bool ChromeSecurityStateModelClient::UsedPolicyInstalledCertificate() {
@@ -331,9 +372,10 @@ void ChromeSecurityStateModelClient::GetVisibleSecurityState(
   const content::SSLStatus& ssl = entry->GetSSL();
   state->initial_security_level =
       GetSecurityLevelForSecurityStyle(ssl.security_style);
-  state->cert_id = ssl.cert_id;
+  state->certificate = ssl.certificate;
   state->cert_status = ssl.cert_status;
   state->connection_status = ssl.connection_status;
+  state->key_exchange_group = ssl.key_exchange_group;
   state->security_bits = ssl.security_bits;
   state->pkp_bypassed = ssl.pkp_bypassed;
   state->sct_verify_statuses.clear();
@@ -349,6 +391,12 @@ void ChromeSecurityStateModelClient::GetVisibleSecurityState(
          content::SSLStatus::DISPLAYED_CONTENT_WITH_CERT_ERRORS);
   state->ran_content_with_cert_errors =
       !!(ssl.content_status & content::SSLStatus::RAN_CONTENT_WITH_CERT_ERRORS);
+  state->displayed_password_field_on_http =
+      !!(ssl.content_status &
+         content::SSLStatus::DISPLAYED_PASSWORD_FIELD_ON_HTTP);
+  state->displayed_credit_card_field_on_http =
+      !!(ssl.content_status &
+         content::SSLStatus::DISPLAYED_CREDIT_CARD_FIELD_ON_HTTP);
 
   CheckSafeBrowsingStatus(entry, web_contents_, state);
 }

@@ -7,10 +7,9 @@
 #include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/base/math_util.h"
-#include "cc/output/compositor_frame.h"
-#include "cc/output/compositor_frame_metadata.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/output/output_surface.h"
+#include "cc/output/output_surface_frame.h"
 #include "cc/output/render_surface_filters.h"
 #include "cc/output/renderer_settings.h"
 #include "cc/output/software_output_device.h"
@@ -81,12 +80,12 @@ void SoftwareRenderer::FinishDrawingFrame(DrawingFrame* frame) {
   output_device_->EndPaint();
 }
 
-void SoftwareRenderer::SwapBuffers(CompositorFrameMetadata metadata) {
+void SoftwareRenderer::SwapBuffers(std::vector<ui::LatencyInfo> latency_info) {
   DCHECK(visible_);
   TRACE_EVENT0("cc,benchmark", "SoftwareRenderer::SwapBuffers");
-  CompositorFrame compositor_frame;
-  compositor_frame.metadata = std::move(metadata);
-  output_surface_->SwapBuffers(std::move(compositor_frame));
+  OutputSurfaceFrame output_frame;
+  output_frame.latency_info = std::move(latency_info);
+  output_surface_->SwapBuffers(std::move(output_frame));
 }
 
 bool SoftwareRenderer::FlippedFramebuffer(const DrawingFrame* frame) const {
@@ -657,7 +656,8 @@ SkBitmap SoftwareRenderer::GetBackdropBitmap(
 gfx::Rect SoftwareRenderer::GetBackdropBoundingBoxForRenderPassQuad(
     const DrawingFrame* frame,
     const RenderPassDrawQuad* quad,
-    const gfx::Transform& contents_device_transform) const {
+    const gfx::Transform& contents_device_transform,
+    gfx::Rect* unclipped_rect) const {
   DCHECK(ShouldApplyBackgroundFilters(quad));
   gfx::Rect backdrop_rect = gfx::ToEnclosingRect(
       MathUtil::MapClippedRect(contents_device_transform, QuadVertexRect()));
@@ -667,6 +667,7 @@ gfx::Rect SoftwareRenderer::GetBackdropBoundingBoxForRenderPassQuad(
   backdrop_rect =
       quad->background_filters.MapRectReverse(backdrop_rect, matrix);
 
+  *unclipped_rect = backdrop_rect;
   backdrop_rect.Intersect(MoveFromDrawToWindowSpace(
       frame, frame->current_render_pass->output_rect));
 
@@ -688,8 +689,9 @@ sk_sp<SkShader> SoftwareRenderer::GetBackgroundFilterShader(
       frame->window_matrix * frame->projection_matrix * quad_rect_matrix;
   contents_device_transform.FlattenTo2d();
 
+  gfx::Rect unclipped_rect;
   gfx::Rect backdrop_rect = GetBackdropBoundingBoxForRenderPassQuad(
-      frame, quad, contents_device_transform);
+      frame, quad, contents_device_transform, &unclipped_rect);
 
   // Figure out the transformations to move it back to pixel space.
   gfx::Transform contents_device_transform_inverse;
@@ -703,9 +705,13 @@ sk_sp<SkShader> SoftwareRenderer::GetBackgroundFilterShader(
   // Draw what's behind, and apply the filter to it.
   SkBitmap backdrop_bitmap = GetBackdropBitmap(backdrop_rect);
 
+  gfx::Vector2dF clipping_offset =
+      (unclipped_rect.top_right() - backdrop_rect.top_right()) +
+      (backdrop_rect.bottom_left() - unclipped_rect.bottom_left());
   sk_sp<SkImageFilter> filter = RenderSurfaceFilters::BuildImageFilter(
       quad->background_filters,
-      gfx::SizeF(backdrop_bitmap.width(), backdrop_bitmap.height()));
+      gfx::SizeF(backdrop_bitmap.width(), backdrop_bitmap.height()),
+      clipping_offset);
   sk_sp<SkImage> filter_backdrop_image =
       ApplyImageFilter(filter.get(), quad, backdrop_bitmap, nullptr);
 

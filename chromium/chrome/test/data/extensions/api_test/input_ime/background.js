@@ -33,19 +33,20 @@ function commitTextTest() {
 }
 
 
-function setCandidateWindowPropertiesTest() {
-  chrome.input.ime.setCandidateWindowProperties({
-    "engineID": "test",
-    "properties": {
-      "visible": true,
-      "cursorVisible": false,
-      "vertical": true,
-      "pageSize": 6,
-      "auxiliaryText": "notes",
-      "auxiliaryTextVisible": true
-    }
-  }, chrome.test.callbackPass());
-}
+// Disabled: crbug.com/641425.
+// function setCandidateWindowPropertiesTest() {
+//   chrome.input.ime.setCandidateWindowProperties({
+//     "engineID": "test",
+//     "properties": {
+//       "visible": true,
+//       "cursorVisible": false,
+//       "vertical": true,
+//       "pageSize": 6,
+//       "auxiliaryText": "notes",
+//       "auxiliaryTextVisible": true
+//     }
+//   }, chrome.test.callbackPass());
+// }
 
 
 function setCandidatesTest() {
@@ -79,50 +80,58 @@ function setCursorPositionTest() {
 }
 
 
+// Disabled: crbug.com/641425.
+// function setMenuItemsTest() {
+//   chrome.input.ime.setMenuItems({
+//     "engineID": "test",
+//     "items": [{
+//       "id": "Menu 1",
+//       "label": "Menu 1",
+//       "style": "check",
+//       "visible": true,
+//       "enabled": true
+//     }, {
+//       "id": "Menu 2",
+//       "label": "Menu 2",
+//       "style": "radio",
+//       "visible": true,
+//       "enabled": true
+//     }]
+//   }, chrome.test.callbackPass());
+// }
 
-function setMenuItemsTest() {
-  chrome.input.ime.setMenuItems({
-    "engineID": "test",
-    "items": [{
-      "id": "Menu 1",
-      "label": "Menu 1",
-      "style": "check",
-      "visible": true,
-      "enabled": true
-    }, {
-      "id": "Menu 2",
-      "label": "Menu 2",
-      "style": "radio",
-      "visible": true,
-      "enabled": true
-    }]
-  }, chrome.test.callbackPass());
-}
+// Disabled: crbug.com/641425.
+// function updateMenuItemsTest() {
+//   chrome.input.ime.updateMenuItems({
+//     "engineID": "test",
+//     "items": [{
+//       "id": "Menu 1",
+//       "enabled": false
+//     }, {
+//       "id": "Menu 2",
+//       "visible": false,
+//     }]
+//   }, chrome.test.callbackPass());
+// }
 
-function updateMenuItemsTest() {
-  chrome.input.ime.updateMenuItems({
-    "engineID": "test",
-    "items": [{
-      "id": "Menu 1",
-      "enabled": false
-    }, {
-      "id": "Menu 2",
-      "visible": false,
-    }]
-  }, chrome.test.callbackPass());
-}
+// Disabled: crbug.com/641425.
+// function deleteSurroundingText() {
+//   chrome.input.ime.deleteSurroundingText({
+//     "engineID": "test",
+//     "contextID": 1,
+//     "offset": -1,
+//     "length": 1
+//   }, chrome.test.callbackPass());
+// }
 
-function deleteSurroundingText() {
-  chrome.input.ime.deleteSurroundingText({
-    "engineID": "test",
-    "contextID": 1,
-    "offset": -1,
-    "length": 1
-  }, chrome.test.callbackPass());
-}
-
-chrome.test.runTests([setCompositionTest, clearCompositionTest,
-                      commitTextTest, setCandidateWindowPropertiesTest,
-                      setCandidatesTest, setCursorPositionTest,
-                      setMenuItemsTest, updateMenuItemsTest,
-                      deleteSurroundingText]);
+chrome.test.runTests([
+    setCompositionTest,
+    clearCompositionTest,
+    commitTextTest,
+    // setCandidateWindowPropertiesTest,
+    setCandidatesTest,
+    setCursorPositionTest,
+    // setMenuItemsTest,
+    // updateMenuItemsTest,
+    // deleteSurroundingText,
+]);

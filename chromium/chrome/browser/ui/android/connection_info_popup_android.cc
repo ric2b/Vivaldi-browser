@@ -14,13 +14,12 @@
 #include "chrome/browser/ssl/chrome_security_state_model_client.h"
 #include "chrome/browser/ui/website_settings/website_settings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/cert_store.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/ssl_status.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/ssl_status.h"
-#include "grit/components_strings.h"
 #include "jni/ConnectionInfoPopup_jni.h"
 #include "net/cert/x509_certificate.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -31,7 +30,6 @@ using base::android::ConvertUTF16ToJavaString;
 using base::android::GetClass;
 using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
-using content::CertStore;
 using content::WebContents;
 
 static ScopedJavaLocalRef<jobjectArray> GetCertificateChain(
@@ -43,11 +41,8 @@ static ScopedJavaLocalRef<jobjectArray> GetCertificateChain(
   if (!web_contents)
     return ScopedJavaLocalRef<jobjectArray>();
 
-  int cert_id =
-      web_contents->GetController().GetVisibleEntry()->GetSSL().cert_id;
-  scoped_refptr<net::X509Certificate> cert;
-  bool ok = CertStore::GetInstance()->RetrieveCert(cert_id, &cert);
-  CHECK(ok);
+  scoped_refptr<net::X509Certificate> cert =
+      web_contents->GetController().GetVisibleEntry()->GetSSL().certificate;
 
   std::vector<std::string> cert_chain;
   net::X509Certificate::OSCertHandles cert_handles =
@@ -98,11 +93,13 @@ ConnectionInfoPopupAndroid::ConnectionInfoPopupAndroid(
       ChromeSecurityStateModelClient::FromWebContents(web_contents);
   DCHECK(security_model_client);
 
+  security_state::SecurityStateModel::SecurityInfo security_info;
+  security_model_client->GetSecurityInfo(&security_info);
+
   presenter_.reset(new WebsiteSettings(
       this, Profile::FromBrowserContext(web_contents->GetBrowserContext()),
       TabSpecificContentSettings::FromWebContents(web_contents), web_contents,
-      nav_entry->GetURL(), security_model_client->GetSecurityInfo(),
-      content::CertStore::GetInstance()));
+      nav_entry->GetURL(), security_info));
 }
 
 ConnectionInfoPopupAndroid::~ConnectionInfoPopupAndroid() {
@@ -134,7 +131,7 @@ void ConnectionInfoPopupAndroid::SetIdentityInfo(
     // name from the provided certificate. If the organization name is not
     // available than the hostname of the site is used instead.
     std::string headline;
-    if (identity_info.cert_id) {
+    if (identity_info.certificate) {
       headline = identity_info.site_identity;
     }
 

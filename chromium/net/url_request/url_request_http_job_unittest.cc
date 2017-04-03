@@ -20,6 +20,7 @@
 #include "net/cookies/cookie_store_test_helpers.h"
 #include "net/http/http_transaction_factory.h"
 #include "net/http/http_transaction_test_util.h"
+#include "net/log/net_log_event_type.h"
 #include "net/log/test_net_log.h"
 #include "net/log/test_net_log_entry.h"
 #include "net/log/test_net_log_util.h"
@@ -162,7 +163,7 @@ TEST_F(URLRequestHttpJobWithMockSocketsTest,
   ASSERT_TRUE(request->is_pending());
   base::RunLoop().Run();
 
-  EXPECT_TRUE(request->status().is_success());
+  EXPECT_THAT(delegate.request_status(), IsOk());
   EXPECT_EQ(12, request->received_response_content_length());
   EXPECT_EQ(CountWriteBytes(writes, arraysize(writes)),
             request->GetTotalSentBytes());
@@ -191,7 +192,7 @@ TEST_F(URLRequestHttpJobWithMockSocketsTest,
   ASSERT_TRUE(request->is_pending());
   base::RunLoop().Run();
 
-  EXPECT_TRUE(request->status().is_success());
+  EXPECT_THAT(delegate.request_status(), IsOk());
   EXPECT_EQ(12, request->received_response_content_length());
   EXPECT_EQ(CountWriteBytes(writes, arraysize(writes)),
             request->GetTotalSentBytes());
@@ -222,7 +223,7 @@ TEST_F(URLRequestHttpJobWithMockSocketsTest, TestContentLengthFailedRequest) {
   ASSERT_TRUE(request->is_pending());
   base::RunLoop().Run();
 
-  EXPECT_EQ(URLRequestStatus::FAILED, request->status().status());
+  EXPECT_THAT(delegate.request_status(), IsError(ERR_FAILED));
   EXPECT_EQ(12, request->received_response_content_length());
   EXPECT_EQ(CountWriteBytes(writes, arraysize(writes)),
             request->GetTotalSentBytes());
@@ -254,7 +255,7 @@ TEST_F(URLRequestHttpJobWithMockSocketsTest,
   request->Start();
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_EQ(URLRequestStatus::CANCELED, request->status().status());
+  EXPECT_THAT(delegate.request_status(), IsError(ERR_ABORTED));
   EXPECT_EQ(12, request->received_response_content_length());
   EXPECT_EQ(CountWriteBytes(writes, arraysize(writes)),
             request->GetTotalSentBytes());
@@ -264,6 +265,131 @@ TEST_F(URLRequestHttpJobWithMockSocketsTest,
             network_delegate_.total_network_bytes_sent());
   EXPECT_EQ(CountReadBytes(reads, arraysize(reads)),
             network_delegate_.total_network_bytes_received());
+}
+
+TEST_F(URLRequestHttpJobWithMockSocketsTest,
+       TestRawHeaderSizeSuccessfullRequest) {
+  MockWrite writes[] = {MockWrite(kSimpleGetMockWrite)};
+
+  const std::string& response_header =
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Length: 12\r\n\r\n";
+  const std::string& content_data = "Test Content";
+
+  MockRead reads[] = {MockRead(response_header.c_str()),
+                      MockRead(content_data.c_str()),
+                      MockRead(net::SYNCHRONOUS, net::OK)};
+
+  StaticSocketDataProvider socket_data(reads, arraysize(reads), writes,
+                                       arraysize(writes));
+  socket_factory_.AddSocketDataProvider(&socket_data);
+
+  TestDelegate delegate;
+  std::unique_ptr<URLRequest> request = context_->CreateRequest(
+      GURL("http://www.example.com"), DEFAULT_PRIORITY, &delegate);
+
+  request->Start();
+  ASSERT_TRUE(request->is_pending());
+  base::RunLoop().Run();
+
+  EXPECT_EQ(net::OK, request->status().error());
+  EXPECT_EQ(static_cast<int>(content_data.size()),
+            request->received_response_content_length());
+  EXPECT_EQ(static_cast<int>(response_header.size()),
+            request->raw_header_size());
+  EXPECT_EQ(CountReadBytes(reads, arraysize(reads)),
+            request->GetTotalReceivedBytes());
+}
+
+TEST_F(URLRequestHttpJobWithMockSocketsTest,
+       TestRawHeaderSizeSuccessfull100ContinueRequest) {
+  MockWrite writes[] = {MockWrite(kSimpleGetMockWrite)};
+
+  const std::string& continue_header = "HTTP/1.1 100 Continue\r\n\r\n";
+  const std::string& response_header =
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Length: 12\r\n\r\n";
+  const std::string& content_data = "Test Content";
+
+  MockRead reads[] = {
+      MockRead(continue_header.c_str()), MockRead(response_header.c_str()),
+      MockRead(content_data.c_str()), MockRead(net::SYNCHRONOUS, net::OK)};
+
+  StaticSocketDataProvider socket_data(reads, arraysize(reads), writes,
+                                       arraysize(writes));
+  socket_factory_.AddSocketDataProvider(&socket_data);
+
+  TestDelegate delegate;
+  std::unique_ptr<URLRequest> request = context_->CreateRequest(
+      GURL("http://www.example.com"), DEFAULT_PRIORITY, &delegate);
+
+  request->Start();
+  ASSERT_TRUE(request->is_pending());
+  base::RunLoop().Run();
+
+  EXPECT_EQ(net::OK, request->status().error());
+  EXPECT_EQ(static_cast<int>(content_data.size()),
+            request->received_response_content_length());
+  EXPECT_EQ(static_cast<int>(continue_header.size() + response_header.size()),
+            request->raw_header_size());
+  EXPECT_EQ(CountReadBytes(reads, arraysize(reads)),
+            request->GetTotalReceivedBytes());
+}
+
+TEST_F(URLRequestHttpJobWithMockSocketsTest,
+       TestRawHeaderSizeFailureTruncatedHeaders) {
+  MockWrite writes[] = {MockWrite(kSimpleGetMockWrite)};
+  MockRead reads[] = {MockRead("HTTP/1.0 200 OK\r\n"
+                               "Content-Len"),
+                      MockRead(net::SYNCHRONOUS, net::OK)};
+
+  StaticSocketDataProvider socket_data(reads, arraysize(reads), writes,
+                                       arraysize(writes));
+  socket_factory_.AddSocketDataProvider(&socket_data);
+
+  TestDelegate delegate;
+  std::unique_ptr<URLRequest> request = context_->CreateRequest(
+      GURL("http://www.example.com"), DEFAULT_PRIORITY, &delegate);
+
+  delegate.set_cancel_in_response_started(true);
+  request->Start();
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_EQ(ERR_ABORTED, request->status().error());
+  EXPECT_EQ(0, request->received_response_content_length());
+  EXPECT_EQ(28, request->raw_header_size());
+  EXPECT_EQ(CountReadBytes(reads, arraysize(reads)),
+            request->GetTotalReceivedBytes());
+}
+
+TEST_F(URLRequestHttpJobWithMockSocketsTest,
+       TestRawHeaderSizeSuccessfullContinuiousRead) {
+  MockWrite writes[] = {MockWrite(kSimpleGetMockWrite)};
+  const std::string& header_data =
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Length: 12\r\n\r\n";
+  const std::string& content_data = "Test Content";
+  std::string single_read_content = header_data;
+  single_read_content.append(content_data);
+  MockRead reads[] = {MockRead(single_read_content.c_str())};
+
+  StaticSocketDataProvider socket_data(reads, arraysize(reads), writes,
+                                       arraysize(writes));
+  socket_factory_.AddSocketDataProvider(&socket_data);
+
+  TestDelegate delegate;
+  std::unique_ptr<URLRequest> request = context_->CreateRequest(
+      GURL("http://www.example.com"), DEFAULT_PRIORITY, &delegate);
+
+  request->Start();
+  base::RunLoop().Run();
+
+  EXPECT_EQ(net::OK, request->status().error());
+  EXPECT_EQ(static_cast<int>(content_data.size()),
+            request->received_response_content_length());
+  EXPECT_EQ(static_cast<int>(header_data.size()), request->raw_header_size());
+  EXPECT_EQ(CountReadBytes(reads, arraysize(reads)),
+            request->GetTotalReceivedBytes());
 }
 
 TEST_F(URLRequestHttpJobWithMockSocketsTest,
@@ -302,7 +428,7 @@ TEST_F(URLRequestHttpJobWithMockSocketsTest,
   ASSERT_TRUE(request->is_pending());
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_TRUE(request->status().is_success());
+  EXPECT_THAT(delegate.request_status(), IsOk());
   EXPECT_EQ(12, request->received_response_content_length());
   // Should not include the redirect.
   EXPECT_EQ(CountWriteBytes(final_writes, arraysize(final_writes)),
@@ -334,7 +460,7 @@ TEST_F(URLRequestHttpJobWithMockSocketsTest,
   request->Start();
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_EQ(URLRequestStatus::CANCELED, request->status().status());
+  EXPECT_THAT(delegate.request_status(), IsError(ERR_ABORTED));
   EXPECT_EQ(0, request->received_response_content_length());
   EXPECT_EQ(CountWriteBytes(writes, arraysize(writes)),
             request->GetTotalSentBytes());
@@ -359,7 +485,7 @@ TEST_F(URLRequestHttpJobWithMockSocketsTest,
   request->Cancel();
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_EQ(URLRequestStatus::CANCELED, request->status().status());
+  EXPECT_THAT(delegate.request_status(), IsError(ERR_ABORTED));
   EXPECT_EQ(0, request->received_response_content_length());
   EXPECT_EQ(0, request->GetTotalSentBytes());
   EXPECT_EQ(0, request->GetTotalReceivedBytes());
@@ -380,7 +506,7 @@ TEST_F(URLRequestHttpJobTest, TestCancelWhileReadingCookies) {
   request->Cancel();
   base::RunLoop().Run();
 
-  EXPECT_EQ(URLRequestStatus::CANCELED, request->status().status());
+  EXPECT_THAT(delegate.request_status(), IsError(ERR_ABORTED));
 }
 
 // Make sure that SetPriority actually sets the URLRequestHttpJob's
@@ -489,7 +615,7 @@ TEST_F(URLRequestHttpJobTest, HSTSInternalRedirectTest) {
       net_log_.GetEntries(&entries);
       int redirects = 0;
       for (const auto& entry : entries) {
-        if (entry.type == net::NetLog::TYPE_URL_REQUEST_REDIRECT_JOB) {
+        if (entry.type == net::NetLogEventType::URL_REQUEST_REDIRECT_JOB) {
           redirects++;
           std::string value;
           EXPECT_TRUE(entry.GetStringValue("reason", &value));
@@ -567,7 +693,7 @@ TEST_F(URLRequestHttpJobWithSdchSupportTest, GetDictionary) {
   request->Start();
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_TRUE(request->status().is_success());
+  EXPECT_THAT(delegate.request_status(), IsOk());
 
   // Second response should be from cache without notification of SdchObserver
   TestDelegate delegate2;
@@ -576,7 +702,7 @@ TEST_F(URLRequestHttpJobWithSdchSupportTest, GetDictionary) {
   request2->Start();
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_TRUE(request->status().is_success());
+  EXPECT_THAT(delegate2.request_status(), IsOk());
 
   // Cleanup manager.
   sdch_manager.RemoveObserver(&sdch_observer);
@@ -613,7 +739,7 @@ TEST_F(URLRequestHttpJobWithBrotliSupportTest, NoBrotliAdvertisementOverHttp) {
   request->Start();
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_TRUE(request->status().is_success());
+  EXPECT_THAT(delegate.request_status(), IsOk());
   EXPECT_EQ(12, request->received_response_content_length());
   EXPECT_EQ(CountWriteBytes(writes, arraysize(writes)),
             request->GetTotalSentBytes());
@@ -648,7 +774,7 @@ TEST_F(URLRequestHttpJobWithBrotliSupportTest, BrotliAdvertisement) {
   request->Start();
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_TRUE(request->status().is_success());
+  EXPECT_THAT(delegate.request_status(), IsOk());
   EXPECT_EQ(12, request->received_response_content_length());
   EXPECT_EQ(CountWriteBytes(writes, arraysize(writes)),
             request->GetTotalSentBytes());
@@ -724,7 +850,7 @@ class FakeWebSocketHandshakeStream : public WebSocketHandshakeStreamBase {
   // Fake implementation of HttpStreamBase methods.
   int InitializeStream(const HttpRequestInfo* request_info,
                        RequestPriority priority,
-                       const BoundNetLog& net_log,
+                       const NetLogWithSource& net_log,
                        const CompletionCallback& callback) override {
     initialize_stream_was_called_ = true;
     return ERR_IO_PENDING;
@@ -768,8 +894,9 @@ class FakeWebSocketHandshakeStream : public WebSocketHandshakeStreamBase {
 
   bool GetRemoteEndpoint(IPEndPoint* endpoint) override { return false; }
 
-  Error GetSignedEKMForTokenBinding(crypto::ECPrivateKey* key,
-                                    std::vector<uint8_t>* out) override {
+  Error GetTokenBindingSignature(crypto::ECPrivateKey* key,
+                                 TokenBindingType tb_type,
+                                 std::vector<uint8_t>* out) override {
     ADD_FAILURE();
     return ERR_NOT_IMPLEMENTED;
   }
@@ -779,10 +906,6 @@ class FakeWebSocketHandshakeStream : public WebSocketHandshakeStreamBase {
   void PopulateNetErrorDetails(NetErrorDetails* details) override { return; }
 
   void SetPriority(RequestPriority priority) override {}
-
-  UploadProgress GetUploadProgress() const override {
-    return UploadProgress();
-  }
 
   HttpStream* RenewStreamForAuth() override { return nullptr; }
 
@@ -798,8 +921,7 @@ class FakeWebSocketHandshakeStream : public WebSocketHandshakeStreamBase {
 TEST_F(URLRequestHttpJobWebSocketTest, RejectedWithoutCreateHelper) {
   req_->Start();
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(URLRequestStatus::FAILED, req_->status().status());
-  EXPECT_THAT(req_->status().error(), IsError(ERR_DISALLOWED_URL_SCHEME));
+  EXPECT_THAT(delegate_.request_status(), IsError(ERR_DISALLOWED_URL_SCHEME));
 }
 
 TEST_F(URLRequestHttpJobWebSocketTest, CreateHelperPassedThrough) {
@@ -816,7 +938,7 @@ TEST_F(URLRequestHttpJobWebSocketTest, CreateHelperPassedThrough) {
   req_->SetLoadFlags(LOAD_DISABLE_CACHE);
   req_->Start();
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(URLRequestStatus::IO_PENDING, req_->status().status());
+  EXPECT_THAT(delegate_.request_status(), IsError(ERR_IO_PENDING));
   EXPECT_TRUE(fake_handshake_stream->initialize_stream_was_called());
 }
 

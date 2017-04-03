@@ -7,6 +7,7 @@
 #include <map>
 #include <memory>
 
+#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/test/mock_entropy_provider.h"
 #include "components/variations/variations_associated_data.h"
@@ -21,7 +22,8 @@ class NetworkSessionConfiguratorTest : public testing::Test {
   NetworkSessionConfiguratorTest()
       : quic_user_agent_id_("Chrome/52.0.2709.0 Linux x86_64") {
     field_trial_list_.reset(
-        new base::FieldTrialList(new base::MockEntropyProvider()));
+        new base::FieldTrialList(
+            base::MakeUnique<base::MockEntropyProvider>()));
     variations::testing::ClearAllVariationParams();
   }
 
@@ -74,12 +76,11 @@ TEST_F(NetworkSessionConfiguratorTest, EnableQuicFromFieldTrialGroup) {
   EXPECT_FALSE(params_.quic_disable_disk_cache);
   EXPECT_FALSE(params_.quic_prefer_aes);
   EXPECT_TRUE(params_.enable_quic_alternative_service_with_different_host);
-  EXPECT_EQ(0, params_.quic_max_number_of_lossy_connections);
-  EXPECT_EQ(1.0f, params_.quic_packet_loss_threshold);
   EXPECT_TRUE(params_.quic_delay_tcp_race);
   EXPECT_FALSE(params_.quic_close_sessions_on_ip_change);
   EXPECT_EQ(net::kIdleConnectionTimeoutSeconds,
             params_.quic_idle_connection_timeout_seconds);
+  EXPECT_EQ(net::kPingTimeoutSecs, params_.quic_reduced_ping_timeout_seconds);
   EXPECT_EQ(net::kQuicYieldAfterDurationMilliseconds,
             params_.quic_packet_reader_yield_after_duration_milliseconds);
   EXPECT_FALSE(params_.quic_race_cert_verification);
@@ -140,6 +141,36 @@ TEST_F(NetworkSessionConfiguratorTest,
   ParseFieldTrials();
 
   EXPECT_EQ(300, params_.quic_idle_connection_timeout_seconds);
+}
+
+TEST_F(NetworkSessionConfiguratorTest,
+       NegativeQuicReducedPingTimeoutSecondsFieldTrialParams) {
+  std::map<std::string, std::string> field_trial_params;
+  field_trial_params["reduced_ping_timeout_seconds"] = "-5";
+  variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
+  base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
+  ParseFieldTrials();
+  EXPECT_EQ(net::kPingTimeoutSecs, params_.quic_reduced_ping_timeout_seconds);
+}
+
+TEST_F(NetworkSessionConfiguratorTest,
+       LargeQuicReducedPingTimeoutSecondsFieldTrialParams) {
+  std::map<std::string, std::string> field_trial_params;
+  field_trial_params["reduced_ping_timeout_seconds"] = "50";
+  variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
+  base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
+  ParseFieldTrials();
+  EXPECT_EQ(net::kPingTimeoutSecs, params_.quic_reduced_ping_timeout_seconds);
+}
+
+TEST_F(NetworkSessionConfiguratorTest,
+       QuicReducedPingTimeoutSecondsFieldTrialParams) {
+  std::map<std::string, std::string> field_trial_params;
+  field_trial_params["reduced_ping_timeout_seconds"] = "10";
+  variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
+  base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
+  ParseFieldTrials();
+  EXPECT_EQ(10, params_.quic_reduced_ping_timeout_seconds);
 }
 
 TEST_F(NetworkSessionConfiguratorTest,
@@ -354,30 +385,6 @@ TEST_F(NetworkSessionConfiguratorTest,
   ParseFieldTrials();
 
   EXPECT_TRUE(params_.enable_quic_alternative_service_with_different_host);
-}
-
-TEST_F(NetworkSessionConfiguratorTest,
-       QuicMaxNumberOfLossyConnectionsFieldTrialParams) {
-  std::map<std::string, std::string> field_trial_params;
-  field_trial_params["max_number_of_lossy_connections"] = "5";
-  variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
-  base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
-
-  ParseFieldTrials();
-
-  EXPECT_EQ(5, params_.quic_max_number_of_lossy_connections);
-}
-
-TEST_F(NetworkSessionConfiguratorTest,
-       QuicPacketLossThresholdFieldTrialParams) {
-  std::map<std::string, std::string> field_trial_params;
-  field_trial_params["packet_loss_threshold"] = "0.5";
-  variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
-  base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
-
-  ParseFieldTrials();
-
-  EXPECT_EQ(0.5f, params_.quic_packet_loss_threshold);
 }
 
 TEST_F(NetworkSessionConfiguratorTest, QuicReceiveBufferSize) {

@@ -9,7 +9,7 @@ cr.define('md_history.history_synced_tabs_test', function() {
   }
 
   function numWindowSeparators(card) {
-    return polymerSelectAll(card, ':not([hidden])#window-separator').length;
+    return polymerSelectAll(card, ':not([hidden]).window-separator').length;
   }
 
   function assertNoSyncedTabsMessageShown(manager, stringID) {
@@ -49,7 +49,7 @@ cr.define('md_history.history_synced_tabs_test', function() {
           assertEquals(
               'http://www.google.com',
               Polymer.dom(card.root)
-                  .querySelectorAll('.website-title')[0].children[0].$.container
+                  .querySelectorAll('.website-title')[0].children[0]
                   .textContent.trim());
           assertEquals(2, card.tabs.length);
         });
@@ -114,7 +114,7 @@ cr.define('md_history.history_synced_tabs_test', function() {
           assertEquals(
               'http://crbug.com/new',
               Polymer.dom(cards[0].root)
-                  .querySelectorAll('.website-title')[1].children[0].$.container
+                  .querySelectorAll('.website-title')[1].children[0]
                   .textContent.trim());
         });
       });
@@ -162,8 +162,15 @@ cr.define('md_history.history_synced_tabs_test', function() {
           assertEquals(
               'http://www.google.com',
               Polymer.dom(cards[0].root)
-                  .querySelectorAll('.website-title')[0].children[0].$.container
+                  .querySelectorAll('.website-title')[0].children[0]
                   .textContent.trim());
+
+          element.searchTerm = 'Sans';
+          return flush();
+        }).then(function() {
+          assertEquals(0, getCards(element).length);
+
+          assertNoSyncedTabsMessageShown(element, 'noSearchResults');
         });
       });
 
@@ -221,6 +228,94 @@ cr.define('md_history.history_synced_tabs_test', function() {
         });
       });
 
+      test('focus and keyboard nav', function() {
+        var sessionList = [
+          createSession('Nexus 5', [createWindow([
+                          'http://www.example.com', 'http://www.google.com'
+                        ])]),
+          createSession('Pixel C', [createWindow(['http://www.badssl.com'])]),
+          createSession('Potato', [createWindow(['http://www.wikipedia.org'])]),
+        ];
+
+        setForeignSessions(sessionList);
+
+        var lastFocused;
+        var cards;
+        var focused;
+        var onFocusHandler = element.focusGrid_.onFocus;
+        element.focusGrid_.onFocus = function(row, e) {
+          onFocusHandler.call(element.focusGrid_, row, e);
+          lastFocused = e.currentTarget;
+        };
+
+        return flush().then(function() {
+          cards = polymerSelectAll(element, 'history-synced-device-card');
+
+          focused = cards[0].$['menu-button'];
+          focused.focus();
+
+          // Go to the collapse button.
+          MockInteractions.pressAndReleaseKeyOn(focused, 39, [], 'ArrowRight');
+          focused = cards[0].$['collapse-button'];
+          assertEquals(focused, lastFocused);
+
+          // Go to the first url.
+          MockInteractions.pressAndReleaseKeyOn(focused, 40, [], 'ArrowDown');
+          focused = polymerSelectAll(cards[0], '.website-title')[0];
+          assertEquals(focused, lastFocused);
+
+          // Collapse the first card.
+          MockInteractions.pressAndReleaseKeyOn(focused, 38, [], 'ArrowUp');
+          focused = cards[0].$['collapse-button'];
+          assertEquals(focused, lastFocused);
+          MockInteractions.tap(focused);
+        }).then(function() {
+          // Pressing down goes to the next card.
+          MockInteractions.pressAndReleaseKeyOn(focused, 40, [], 'ArrowDown');
+          focused = cards[1].$['collapse-button'];
+          assertEquals(focused, lastFocused);
+
+          // Expand the first card.
+          MockInteractions.pressAndReleaseKeyOn(focused, 38, [], 'ArrowUp');
+          focused = cards[0].$['collapse-button'];
+          assertEquals(focused, lastFocused);
+          MockInteractions.tap(focused);
+        }).then(function() {
+          // First card's urls are focusable again.
+          MockInteractions.pressAndReleaseKeyOn(focused, 40, [], 'ArrowDown');
+          focused = polymerSelectAll(cards[0], '.website-title')[0];
+          assertEquals(focused, lastFocused);
+
+          // Remove the second URL from the first card.
+          sessionList[0].windows[0].tabs.splice(1, 1);
+          setForeignSessions(sessionList.slice());
+          return flush();
+        }).then(function() {
+          cards = polymerSelectAll(element, 'history-synced-device-card');
+
+          // Go to the next card's menu buttons.
+          MockInteractions.pressAndReleaseKeyOn(focused, 40, [], 'ArrowDown');
+          focused = cards[1].$['collapse-button'];
+          assertEquals(focused, lastFocused);
+
+          MockInteractions.pressAndReleaseKeyOn(focused, 38, [], 'ArrowUp');
+          focused = polymerSelectAll(cards[0], '.website-title')[0];
+          assertEquals(focused, lastFocused);
+
+          // Remove the second card.
+          sessionList.splice(1, 1);
+          setForeignSessions(sessionList.slice());
+          return flush();
+        }).then(function() {
+          cards = polymerSelectAll(element, 'history-synced-device-card');
+
+          // Pressing down goes to the next card.
+          MockInteractions.pressAndReleaseKeyOn(focused, 40, [], 'ArrowDown');
+          focused = cards[1].$['collapse-button'];
+          assertEquals(focused, lastFocused);
+        });
+      });
+
       test('click synced tab', function(done) {
         setForeignSessions(
             [createSession(
@@ -241,6 +336,18 @@ cr.define('md_history.history_synced_tabs_test', function() {
           var cards = getCards(element);
           var anchor = cards[0].root.querySelector('a');
           MockInteractions.tap(anchor, {emulateTouch: true});
+        });
+      });
+
+      test('show actions menu', function() {
+        setForeignSessions(
+            [createSession(
+                'Chromebook', [createWindow(['https://example.com'])])]);
+
+        return flush().then(function() {
+          var cards = getCards(element);
+          MockInteractions.tap(cards[0].$['menu-button']);
+          assertTrue(element.$.menu.getIfExists().menuOpen);
         });
       });
 

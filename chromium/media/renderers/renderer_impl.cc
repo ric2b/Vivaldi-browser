@@ -233,7 +233,7 @@ void RendererImpl::RestartStreamPlayback(DemuxerStream* stream,
   bool video = (stream->type() == DemuxerStream::VIDEO);
   DVLOG(1) << __func__ << (video ? " video" : " audio") << " stream=" << stream
            << " enabled=" << stream->enabled() << " time=" << time.InSecondsF();
-  if (state_ != STATE_PLAYING)
+  if ((state_ != STATE_PLAYING) || (audio_ended_ && video_ended_))
     return;
   if (stream->type() == DemuxerStream::VIDEO) {
     DCHECK(video_renderer_);
@@ -295,9 +295,9 @@ void RendererImpl::SetPlaybackRate(double playback_rate) {
     return;
 
   if (old_rate == 0 && playback_rate > 0)
-    video_renderer_->OnTimeStateChanged(true);
+    video_renderer_->OnTimeProgressing();
   else if (old_rate > 0 && playback_rate == 0)
-    video_renderer_->OnTimeStateChanged(false);
+    video_renderer_->OnTimeStopped();
 }
 
 void RendererImpl::SetVolume(float volume) {
@@ -609,7 +609,7 @@ bool RendererImpl::HandleRestartedStreamBufferingChanges(
         deferred_video_underflow_cb_.Cancel();
         video_buffering_state_ = new_buffering_state;
         if (playback_rate_ > 0)
-          video_renderer_->OnTimeStateChanged(true);
+          video_renderer_->OnTimeProgressing();
         return true;
       }
     }
@@ -766,7 +766,7 @@ void RendererImpl::PausePlayback() {
     time_source_->StopTicking();
   }
   if (playback_rate_ > 0 && video_renderer_)
-    video_renderer_->OnTimeStateChanged(false);
+    video_renderer_->OnTimeStopped();
 }
 
 void RendererImpl::StartPlayback() {
@@ -779,7 +779,7 @@ void RendererImpl::StartPlayback() {
   time_ticking_ = true;
   time_source_->StartTicking();
   if (playback_rate_ > 0 && video_renderer_)
-    video_renderer_->OnTimeStateChanged(true);
+    video_renderer_->OnTimeProgressing();
 }
 
 void RendererImpl::OnRendererEnded(DemuxerStream::Type type) {
@@ -797,7 +797,7 @@ void RendererImpl::OnRendererEnded(DemuxerStream::Type type) {
     DCHECK(!video_ended_);
     video_ended_ = true;
     DCHECK(video_renderer_);
-    video_renderer_->OnTimeStateChanged(false);
+    video_renderer_->OnTimeStopped();
   }
 
   RunEndedCallbackIfNeeded();

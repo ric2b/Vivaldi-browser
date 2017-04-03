@@ -23,12 +23,10 @@ class BlimpNavigationControllerImpl
       public NavigationFeature::NavigationFeatureDelegate {
  public:
   // The life time of |feature| must remain valid throughout |this|.
-  BlimpNavigationControllerImpl(BlimpNavigationControllerDelegate* delegate,
+  BlimpNavigationControllerImpl(int blimp_contents_id,
+                                BlimpNavigationControllerDelegate* delegate,
                                 NavigationFeature* feature);
   ~BlimpNavigationControllerImpl() override;
-
-  // For testing only.
-  void SetNavigationFeatureForTesting(NavigationFeature* feature);
 
   // BlimpNavigationController implementation.
   void LoadURL(const GURL& url) override;
@@ -38,7 +36,7 @@ class BlimpNavigationControllerImpl
   void GoBack() override;
   void GoForward() override;
   const GURL& GetURL() override;
-  const std::string& GetTitle();
+  const std::string& GetTitle() override;
 
  private:
   // NavigationFeatureDelegate implementation.
@@ -47,6 +45,9 @@ class BlimpNavigationControllerImpl
   void OnTitleChanged(int tab_id, const std::string& title) override;
   void OnLoadingChanged(int tab_id, bool loading) override;
   void OnPageLoadStatusUpdate(int tab_id, bool completed) override;
+
+  // The ID for the BlimpContentsImpl this is a controller for.
+  int blimp_contents_id_;
 
   // The |navigation_feature_| is responsible for sending and receiving the
   // navigation state to the server over the proto channel.

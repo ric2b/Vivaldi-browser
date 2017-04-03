@@ -20,7 +20,8 @@
 #include "net/base/net_export.h"
 #include "net/base/request_priority.h"
 #include "net/http/http_response_info.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_source.h"
+#include "net/log/net_log_with_source.h"
 #include "net/socket/client_socket_pool.h"
 #include "net/socket/connection_attempts.h"
 #include "net/socket/stream_socket.h"
@@ -82,7 +83,7 @@ class NET_EXPORT ClientSocketHandle {
            ClientSocketPool::RespectLimits respect_limits,
            const CompletionCallback& callback,
            PoolType* pool,
-           const BoundNetLog& net_log);
+           const NetLogWithSource& net_log);
 
   // An initialized handle can be reset, which causes it to return to the
   // un-initialized state.  This releases the underlying socket, which in the
@@ -219,7 +220,7 @@ class NET_EXPORT ClientSocketHandle {
   base::TimeTicks init_time_;
   base::TimeDelta setup_time_;
 
-  NetLog::Source requesting_source_;
+  NetLogSource requesting_source_;
 
   // Timing information is set when a connection is successfully established.
   LoadTimingInfo::ConnectTiming connect_timing_;
@@ -236,7 +237,7 @@ int ClientSocketHandle::Init(
     ClientSocketPool::RespectLimits respect_limits,
     const CompletionCallback& callback,
     PoolType* pool,
-    const BoundNetLog& net_log) {
+    const NetLogWithSource& net_log) {
   requesting_source_ = net_log.source();
 
   CHECK(!group_name.empty());

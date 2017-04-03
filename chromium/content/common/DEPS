@@ -1,6 +1,7 @@
 include_rules = [
   "-storage/browser",
 
+  "+device/base/synchronization",
   "+services/shell/public/cpp",
 
   # No inclusion of WebKit from the browser, other than strictly enum/POD,
@@ -30,6 +31,7 @@ include_rules = [
   "+third_party/WebKit/public/platform/modules/device_orientation/WebDeviceMotionData.h",
   "+third_party/WebKit/public/platform/modules/device_orientation/WebDeviceOrientationData.h",
   "+third_party/WebKit/public/platform/modules/indexeddb/WebIDBTypes.h",
+  "+third_party/WebKit/public/platform/modules/mediasession/media_session.mojom.h",
   "+third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h",
   "+third_party/WebKit/public/platform/modules/permissions/WebPermissionType.h",
   "+third_party/WebKit/public/platform/modules/push_messaging/WebPushError.h",

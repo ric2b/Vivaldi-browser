@@ -19,4 +19,15 @@ bool NavigatorDelegate::ShouldPreserveAbortedURLs() {
   return false;
 }
 
+ScopedVector<NavigationThrottle>
+NavigatorDelegate::CreateThrottlesForNavigation(
+    NavigationHandle* navigation_handle) {
+  return ScopedVector<NavigationThrottle>();
+}
+
+std::unique_ptr<NavigationUIData> NavigatorDelegate::GetNavigationUIData(
+    NavigationHandle* navigation_handle) {
+  return nullptr;
+}
+
 }  // namespace content

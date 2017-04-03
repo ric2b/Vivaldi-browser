@@ -11,7 +11,7 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -679,8 +679,8 @@ ACMatchClassifications HistoryURLProvider::ClassifyDescription(
     const base::string16& description) {
   base::string16 clean_description =
       bookmarks::CleanUpTitleForMatching(description);
-  TermMatches description_matches(SortAndDeoverlapMatches(
-      MatchTermInString(input_text, clean_description, 0)));
+  TermMatches description_matches(DeoverlapMatches(SortMatches(
+      MatchTermInString(input_text, clean_description, 0))));
   WordStarts description_word_starts;
   String16VectorFromString16(clean_description, false,
                              &description_word_starts);

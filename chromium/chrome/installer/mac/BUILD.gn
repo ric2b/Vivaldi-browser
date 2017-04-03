@@ -5,7 +5,7 @@
 import("//build/util/branding.gni")
 import("//build/util/version.gni")
 import("//build/config/features.gni")
-import("//chrome/version.gni")
+import("//build/util/version.gni")
 
 group("mac") {
   public_deps = [

@@ -14,11 +14,10 @@
 #include "components/google/core/browser/google_util.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/prefs/pref_service.h"
-#include "content/public/browser/cert_store.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/ssl_status.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/ssl_status.h"
 
 ChromeToolbarModelDelegate::ChromeToolbarModelDelegate() {}
 
@@ -77,18 +76,29 @@ ChromeToolbarModelDelegate::GetSecurityLevel() const {
   if (!web_contents)
     return security_state::SecurityStateModel::NONE;
   auto* client = ChromeSecurityStateModelClient::FromWebContents(web_contents);
-  return client->GetSecurityInfo().security_level;
+  security_state::SecurityStateModel::SecurityInfo security_info;
+  client->GetSecurityInfo(&security_info);
+  return security_info.security_level;
 }
 
 scoped_refptr<net::X509Certificate> ChromeToolbarModelDelegate::GetCertificate()
     const {
-  scoped_refptr<net::X509Certificate> cert;
   content::NavigationEntry* entry = GetNavigationEntry();
-  if (entry) {
-    content::CertStore::GetInstance()->RetrieveCert(entry->GetSSL().cert_id,
-                                                    &cert);
-  }
-  return cert;
+  if (!entry)
+    return scoped_refptr<net::X509Certificate>();
+  return entry->GetSSL().certificate;
+}
+
+bool ChromeToolbarModelDelegate::FailsMalwareCheck() const {
+  content::WebContents* web_contents = GetActiveWebContents();
+  // If there is no active WebContents (which can happen during toolbar
+  // initialization), so nothing can fail.
+  if (!web_contents)
+    return false;
+  security_state::SecurityStateModel::SecurityInfo security_info;
+  ChromeSecurityStateModelClient::FromWebContents(web_contents)
+      ->GetSecurityInfo(&security_info);
+  return security_info.fails_malware_check;
 }
 
 content::NavigationController*

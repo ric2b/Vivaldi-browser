@@ -28,6 +28,7 @@
 
 #include "base/bind.h"
 #include "base/containers/hash_tables.h"
+#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -40,10 +41,13 @@
 #include "base/threading/thread_checker.h"
 #include "base/timer/timer.h"
 #include "base/win/message_window.h"
+#include "base/win/windows_version.h"
 #include "device/usb/usb_ids.h"
+#include "media/midi/midi_manager_winrt.h"
 #include "media/midi/midi_message_queue.h"
 #include "media/midi/midi_message_util.h"
 #include "media/midi/midi_port_info.h"
+#include "media/midi/midi_switches.h"
 
 namespace media {
 namespace midi {
@@ -550,7 +554,7 @@ class MidiServiceWinImpl : public MidiServiceWin,
       return;
 
     switch (device_type) {
-      case base::SystemMonitor::DEVTYPE_AUDIO_CAPTURE:
+      case base::SystemMonitor::DEVTYPE_AUDIO:
       case base::SystemMonitor::DEVTYPE_VIDEO_CAPTURE:
         // Add case of other unrelated device types here.
         return;
@@ -1189,6 +1193,9 @@ void MidiManagerWin::OnReceiveMidiData(uint32_t port_index,
 }
 
 MidiManager* MidiManager::Create() {
+  if (base::FeatureList::IsEnabled(features::kMidiManagerWinrt) &&
+      base::win::GetVersion() >= base::win::VERSION_WIN10)
+    return new MidiManagerWinrt();
   return new MidiManagerWin();
 }
 

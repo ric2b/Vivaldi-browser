@@ -51,8 +51,7 @@ def stack(out_dir):
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument('command',
-                      choices=['gyp',
-                               'gn',
+                      choices=['gn',
                                'sync',
                                'build',
                                'install',
@@ -70,6 +69,8 @@ def main():
                       help='build for physical iphone')
   parser.add_argument('-r', '--release', action='store_true',
                       help='use release configuration')
+  parser.add_argument('-a', '--asan', action='store_true',
+                      help='use address sanitizer')
 
   options, extra_options_list = parser.parse_known_args()
   print options
@@ -79,27 +80,29 @@ def main():
   if is_os:
     target_os = 'ios'
     test_target = 'cronet_test'
-    gn_args = 'target_cpu = "x64" '
+    gn_args = 'is_cronet_build=true is_component_build=false '
     gn_extra = '--ide=xcode'
-    out_dir_suffix = '-iphonesimulator'
     if options.iphoneos:
-      gn_args = 'target_cpu = "arm64" '
+      gn_args += ' target_cpu="arm64" '
       out_dir_suffix = '-iphoneos'
+    else:
+      gn_args += ' target_cpu="x64" '
+      out_dir_suffix = '-iphonesimulator'
+      if options.asan:
+        gn_args += ' is_asan=true use_xcode_clang=true '
+        out_dir_suffix += '-asan'
   else:
     target_os = 'android'
     test_target = 'cronet_test_instrumentation_apk'
-    gn_args = 'use_errorprone_java_compiler=true '
+    gn_args = 'use_errorprone_java_compiler=true arm_use_neon=false '
     gn_extra = ''
     out_dir_suffix = ''
 
-  gyp_defines = 'GYP_DEFINES="OS=' + target_os + ' enable_websockets=0 '+ \
-      'disable_file_support=1 disable_ftp_support=1 '+ \
-      'enable_errorprone=1 use_platform_icu_alternatives=1 ' + \
-      'disable_brotli_filter=1 arm_neon=0"'
   gn_args += 'target_os="' + target_os + '" enable_websockets=false '+ \
       'disable_file_support=true disable_ftp_support=true '+ \
       'use_platform_icu_alternatives=true '+ \
-      'disable_brotli_filter=true is_component_build=false arm_use_neon=false'
+      'disable_brotli_filter=true is_component_build=false ' + \
+      'ignore_elf32_limitations=true'
 
   extra_options = ' '.join(extra_options_list)
   if options.gn:
@@ -116,12 +119,10 @@ def main():
   if options.out_dir:
     out_dir = options.out_dir
 
-  if (options.command=='gyp'):
-    return run (gyp_defines + ' gclient runhooks')
   if (options.command=='gn'):
     return run ('gn gen %s --args=\'%s\' %s' % (out_dir, gn_args, gn_extra))
   if (options.command=='sync'):
-    return run ('git pull --rebase && ' + gyp_defines + ' gclient sync')
+    return run ('git pull --rebase && gclient sync')
   if (options.command=='build'):
     return build(out_dir, test_target, extra_options)
   if (not is_os):

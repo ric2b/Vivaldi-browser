@@ -39,24 +39,20 @@ class TapSuppression extends ContextualSearchHeuristic {
         mIsSecondTap = previousTapState != null && previousTapState.wasSuppressed()
                 && !shouldHandleFirstTap();
 
-        boolean doSuppressTap = false;
-        if (mIsTapSuppressionEnabled) {
-            if (mIsSecondTap) {
-                boolean shouldHandle = shouldHandleSecondTap(previousTapState, x, y);
-                doSuppressTap = !shouldHandle;
-            } else {
-                doSuppressTap = !shouldHandleFirstTap();
-                if (doSuppressTap) {
-                    RecordUserAction.record("ContextualSearch.TapSuppressed.TapThresholdExceeded");
-                }
+        if (mIsSecondTap) {
+            boolean shouldHandle = shouldHandleSecondTap(previousTapState, x, y);
+            mIsConditionSatisfied = !shouldHandle;
+        } else {
+            mIsConditionSatisfied = !shouldHandleFirstTap();
+            if (mIsConditionSatisfied && mIsTapSuppressionEnabled) {
+                RecordUserAction.record("ContextualSearch.TapSuppressed.TapThresholdExceeded");
             }
         }
-        mIsConditionSatisfied = doSuppressTap;
     }
 
     @Override
-    protected boolean isConditionSatisfied() {
-        return mIsConditionSatisfied;
+    protected boolean isConditionSatisfiedAndEnabled() {
+        return mIsTapSuppressionEnabled && mIsConditionSatisfied;
     }
 
     @Override
@@ -69,7 +65,7 @@ class TapSuppression extends ContextualSearchHeuristic {
     }
 
     /**
-     * @return whether a first tap should be handled or not.
+     * @return Whether a first tap should be handled or not.
      */
     private boolean shouldHandleFirstTap() {
         return mTapsSinceOpen < mExperimentThresholdTaps;

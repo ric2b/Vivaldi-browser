@@ -12,7 +12,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "grit/components_strings.h"
+#include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "ui/strings/grit/ui_strings.h"
@@ -64,7 +64,7 @@ int ResourceMapCompare(const void* utf8Void,
 
   // Include the table here so it is a local static.  This header provides
   // kUIResources and kUIResourcesSize.
-#include "ui_localizer_table.h"
+#include "chrome/app/nibs/localizer_table.h"
 
   // Look up the string for the resource id to fetch.
   const char* utf8_key = [string UTF8String];

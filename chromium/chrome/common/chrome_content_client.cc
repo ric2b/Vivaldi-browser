@@ -35,7 +35,6 @@
 #include "chrome/common/secure_origin_whitelist.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/common_resources.h"
-#include "components/data_reduction_proxy/content/common/data_reduction_proxy_messages.h"
 #include "components/dom_distiller/core/url_constants.h"
 #include "components/version_info/version_info.h"
 #include "content/public/common/cdm_info.h"
@@ -54,6 +53,7 @@
 #if defined(OS_LINUX)
 #include <fcntl.h>
 #include "chrome/common/component_flash_hint_file_linux.h"
+#include "sandbox/linux/services/credentials.h"
 #endif  // defined(OS_LINUX)
 
 #if defined(OS_WIN)
@@ -232,28 +232,18 @@ void ComputeBuiltInPlugins(std::vector<content::PepperPluginInfo>* plugins) {
 // Creates a PepperPluginInfo for the specified plugin.
 // |path| is the full path to the plugin.
 // |version| is a string representation of the plugin version.
-// |is_debug| is whether the plugin is the debug version or not.
 // |is_external| is whether the plugin is supplied external to Chrome e.g. a
 //     system installation of Adobe Flash.
-// |is_bundled| distinguishes between component updated plugin and a bundled
-//     plugin.
 content::PepperPluginInfo CreatePepperFlashInfo(const base::FilePath& path,
                                                 const std::string& version,
-                                                bool is_debug,
-                                                bool is_external,
-                                                bool is_bundled) {
+                                                bool is_external) {
   content::PepperPluginInfo plugin;
 
   plugin.is_out_of_process = true;
   plugin.name = content::kFlashPluginName;
   plugin.path = path;
-#if defined(OS_WIN)
-  plugin.is_on_local_drive = !base::IsOnNetworkDrive(path);
-#endif
   plugin.permissions = chrome::kPepperFlashPermissions;
-  plugin.is_debug = is_debug;
   plugin.is_external = is_external;
-  plugin.is_bundled = is_bundled;
 
   std::vector<std::string> flash_version_numbers = base::SplitString(
       version, ".", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
@@ -315,19 +305,12 @@ bool GetCommandLinePepperFlash(content::PepperPluginInfo* plugin) {
 
 #endif // VIVALDI_RETRIEVE_PLUGINVERSION
 
-  *plugin = CreatePepperFlashInfo(base::FilePath(flash_path),
-                                  flash_version, false, true, false);
+  *plugin = CreatePepperFlashInfo(base::FilePath(flash_path), flash_version,
+                                  true);
   return true;
 }
 
 #if defined(OS_LINUX)
-// This function tests if DIR_USER_DATA can be accessed, as a simple check to
-// see if the zygote has been sandboxed at this point.
-bool IsUserDataDirAvailable() {
-  base::FilePath user_data_dir;
-  return PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
-}
-
 // This method is used on Linux only because of architectural differences in how
 // it loads the component updated flash plugin, and not because the other
 // platforms do not support component updated flash. On other platforms, the
@@ -351,7 +334,7 @@ bool GetComponentUpdatedPepperFlash(content::PepperPluginInfo* plugin) {
                         "bundled or system plugin.";
         return false;
       }
-      *plugin = CreatePepperFlashInfo(flash_path, version, false, false, false);
+      *plugin = CreatePepperFlashInfo(flash_path, version, false);
       return true;
     }
     LOG(ERROR)
@@ -391,15 +374,11 @@ bool GetSystemPepperFlash(content::PepperPluginInfo* plugin) {
   if (!manifest_value->GetAsDictionary(&manifest))
     return false;
 
-  Version version;
+  base::Version version;
   if (!chrome::CheckPepperFlashManifest(*manifest, &version))
     return false;
 
-  *plugin = CreatePepperFlashInfo(flash_filename,
-                                  version.GetString(),
-                                  chrome::IsSystemFlashScriptDebuggerPresent(),
-                                  true,
-                                  false);
+  *plugin = CreatePepperFlashInfo(flash_filename, version.GetString(), true);
   return true;
 }
 #endif  //  defined(ENABLE_PLUGINS)
@@ -488,16 +467,14 @@ content::PepperPluginInfo* ChromeContentClient::FindMostRecentPlugin(
   if (plugins.empty())
     return nullptr;
 
-  using PluginSortKey = std::tuple<base::Version, bool, bool, bool, bool>;
+  using PluginSortKey = std::tuple<base::Version, bool>;
 
   std::map<PluginSortKey, content::PepperPluginInfo*> plugin_map;
 
   for (auto* plugin : plugins) {
-    Version version(plugin->version);
+    base::Version version(plugin->version);
     DCHECK(version.IsValid());
-    plugin_map[PluginSortKey(version, plugin->is_debug,
-                             plugin->is_bundled, plugin->is_on_local_drive,
-                             !plugin->is_external)] = plugin;
+    plugin_map[PluginSortKey(version, plugin->is_external)] = plugin;
   }
 
   return plugin_map.rbegin()->second;
@@ -514,7 +491,7 @@ void ChromeContentClient::AddPepperPlugins(
   // is not always available. If it is not available, do not try and load any
   // flash plugin. The flash player, if any, preloaded before the sandbox
   // initialization will continue to be used.
-  if (!IsUserDataDirAvailable()) {
+  if (!sandbox::Credentials::HasFileSystemAccess()) {
     return;
   }
 #endif  // defined(OS_LINUX)
@@ -562,7 +539,7 @@ void ChromeContentClient::AddPepperPlugins(
             new content::PepperPluginInfo);
         content::PepperPluginInfo* plugin = extra_flash.get();
         *plugin = CreatePepperFlashInfo(base::FilePath(flash_filename),
-                                      "999.999.999.999", false, true, false);
+                                      "999.999.999.999", true);
         flash_versions.push_back(extra_flash.release());
         break;
       }
@@ -584,7 +561,7 @@ void ChromeContentClient::AddPepperPlugins(
     // better than any other hardcoded alternative.
     plugins->push_back(CreatePepperFlashInfo(
         base::FilePath::FromUTF8Unsafe(ChromeContentClient::kNotPresent),
-        FLAPPER_VERSION_STRING, false, false, true));
+        FLAPPER_VERSION_STRING, false));
 #endif  // defined(GOOGLE_CHROME_BUILD) && defined(FLAPPER_AVAILABLE)
   }
 #endif  // defined(ENABLE_PLUGINS)
@@ -646,11 +623,6 @@ void ChromeContentClient::AddAdditionalSchemes(
   savable_schemes->push_back(extensions::kExtensionResourceScheme);
   savable_schemes->push_back(chrome::kChromeSearchScheme);
   savable_schemes->push_back(dom_distiller::kDomDistillerScheme);
-}
-
-bool ChromeContentClient::CanSendWhileSwappedOut(const IPC::Message* message) {
-  return message->type() ==
-         DataReductionProxyViewHostMsg_IsDataReductionProxy::ID;
 }
 
 std::string ChromeContentClient::GetProduct() const {
@@ -747,9 +719,8 @@ bool ChromeContentClient::IsSupplementarySiteIsolationModeEnabled() {
 }
 
 content::OriginTrialPolicy* ChromeContentClient::GetOriginTrialPolicy() {
-  if (!origin_trial_policy_) {
-    origin_trial_policy_ = base::WrapUnique(new ChromeOriginTrialPolicy());
-  }
+  if (!origin_trial_policy_)
+    origin_trial_policy_ = base::MakeUnique<ChromeOriginTrialPolicy>();
   return origin_trial_policy_.get();
 }
 

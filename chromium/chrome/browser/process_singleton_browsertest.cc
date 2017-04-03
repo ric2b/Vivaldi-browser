@@ -152,7 +152,7 @@ class ProcessSingletonTest : public InProcessBrowserTest {
       chrome_starter_threads_[i].reset(new base::Thread("ChromeStarter"));
       ASSERT_TRUE(chrome_starter_threads_[i]->Start());
       chrome_starters_[i] = new ChromeStarter(
-          TestTimeouts::action_max_timeout(), temp_profile_dir_.path());
+          TestTimeouts::action_max_timeout(), temp_profile_dir_.GetPath());
     }
   }
 
@@ -262,7 +262,7 @@ IN_PROC_BROWSER_TEST_F(ProcessSingletonTest, DISABLED_StartupRaceCondition) {
 
       chrome_starter_threads_[i]->task_runner()->PostTask(
           FROM_HERE,
-          base::Bind(&ChromeStarter::StartChrome, chrome_starters_[i].get(),
+          base::Bind(&ChromeStarter::StartChrome, chrome_starters_[i],
                      &threads_waker_, first_run));
     }
 

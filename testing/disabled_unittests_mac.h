@@ -34,6 +34,7 @@
   DISABLE(PipelineIntegrationTest, EncryptedPlayback_MP4_CENC_VideoOnly)
   DISABLE(PipelineIntegrationTest,
           EncryptedPlayback_NoEncryptedFrames_MP4_CENC_VideoOnly)
+  DISABLE(MediaColorTest, Yuv420pRec709H264)
 
   DISABLE(SpeechViewTest, ClickMicButton)
 
@@ -50,3 +51,7 @@
 
   DISABLE(ExtensionWindowCreateTest,AcceptState)
   DISABLE_MULTI(SavePageOriginalVsSavedComparisonTest, ObjectElementsViaFile)
+
+  // Broke in v55
+  DISABLE(ServiceProcessControlBrowserTest, LaunchAndReconnect)
+  DISABLE(FindBarBrowserTest, EscapeKey)

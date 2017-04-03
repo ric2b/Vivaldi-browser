@@ -15,10 +15,9 @@
 #include "components/component_updater/configurator_impl.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/update_client/configurator.h"
+#include "components/update_client/update_query_params.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
-
-std::unique_ptr<TestingPrefServiceSimple> pref(new TestingPrefServiceSimple());
 
 namespace component_updater {
 
@@ -173,6 +172,15 @@ TEST_F(ChromeComponentUpdaterConfiguratorTest, TestEnabledComponentUpdates) {
   pref_service()->RemoveManagedPref(
       "component_updates.component_updates_enabled");
   EXPECT_TRUE(config->EnabledComponentUpdates());
+}
+
+TEST_F(ChromeComponentUpdaterConfiguratorTest, TestProdId) {
+  base::CommandLine cmdline(*base::CommandLine::ForCurrentProcess());
+  const auto config(MakeChromeComponentUpdaterConfigurator(&cmdline, nullptr,
+                                                           pref_service()));
+  EXPECT_STREQ(update_client::UpdateQueryParams::GetProdIdString(
+                   update_client::UpdateQueryParams::ProdId::CHROME),
+               config->GetProdId().c_str());
 }
 
 }  // namespace component_updater

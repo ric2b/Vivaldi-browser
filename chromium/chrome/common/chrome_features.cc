@@ -17,7 +17,7 @@ const base::Feature kArcMemoryManagement{
 #if defined(OS_WIN) || defined(OS_MACOSX)
 // Enables automatic tab discarding, when the system is in low memory state.
 const base::Feature kAutomaticTabDiscarding{"AutomaticTabDiscarding",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
 #endif  // defined(OS_WIN) || defined(OS_MACOSX)
 
 #if defined(OS_WIN) || defined(OS_LINUX)
@@ -47,6 +47,12 @@ const base::Feature kBlockSmallContent{"BlockSmallPluginContent",
 // their impact. See crbug.com/478209.
 const base::Feature kBrowserHangFixesExperiment{
     "BrowserHangFixesExperiment", base::FEATURE_DISABLED_BY_DEFAULT};
+
+#if defined(OS_WIN)
+// Disables the AutoImport feature on first run. See crbug.com/555550
+const base::Feature kDisableFirstRunAutoImportWin{
+    "DisableFirstRunAutoImport", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
 
 // Experiment to display a toggle allowing users to opt-out of persisting a
 // Grant or Deny decision in a permission prompt.
@@ -95,17 +101,19 @@ const base::Feature kPushMessagingBackgroundMode{
 
 // Enables or disables the Material Design version of chrome://history.
 const base::Feature kMaterialDesignHistory{
-    "MaterialDesignHistory", base::FEATURE_DISABLED_BY_DEFAULT};
+    "MaterialDesignHistory", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables or disables the Material Design version of chrome://settings.
 // Also affects chrome://help.
 const base::Feature kMaterialDesignSettings{
     "MaterialDesignSettings", base::FEATURE_DISABLED_BY_DEFAULT};
 
+#if defined(ENABLE_PLUGINS)
 // Prefer HTML content by hiding Flash from the list of plugins.
 // https://crbug.com/626728
 const base::Feature kPreferHtmlOverPlugins{"PreferHtmlOverPlugins",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
 
 #if defined(OS_CHROMEOS)
 // Runtime flag that indicates whether this leak detector should be enabled in
@@ -114,8 +122,20 @@ const base::Feature kRuntimeMemoryLeakDetector{
     "RuntimeMemoryLeakDetector", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_CHROMEOS)
 
+#if defined(ENABLE_PLUGINS)
+// Disables Plugin Power Saver when Flash is in ALLOW mode.
+const base::Feature kRunAllFlashInAllowMode{"RunAllFlashInAllowMode",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
 const base::Feature kSafeSearchUrlReporting{"SafeSearchUrlReporting",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+// Sets the visibility and animation of the security chip.
+const base::Feature kSecurityChip{"SecurityChip",
+                                  base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
 
 // A new user experience for transitioning into fullscreen and mouse pointer
 // lock states.
@@ -127,7 +147,7 @@ const base::Feature kSimplifiedFullscreenUI{"ViewsSimplifiedFullscreenUI",
 // performance by deferring some work on the critical path to a background
 // thread.
 const base::Feature kSyzyasanDeferredFree{"SyzyasanDeferredFree",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -138,6 +158,10 @@ const base::Feature kOptInImeMenu{"OptInImeMenu",
 // Enables or disables PIN quick unlock settings integration.
 const base::Feature kQuickUnlockPin{"QuickUnlockPin",
                                     base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables or disables emoji, handwriting and voice input on opt-in IME menu.
+const base::Feature kEHVInputOnImeMenu{"EmojiHandwritingVoiceInput",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_CHROMEOS)
 
 }  // namespace features

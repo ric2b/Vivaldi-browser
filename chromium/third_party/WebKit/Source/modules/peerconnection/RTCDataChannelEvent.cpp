@@ -10,61 +10,48 @@
  *     notice, this list of conditions and the following disclaimer in the
  *     documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
- * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include "modules/peerconnection/RTCDataChannelEvent.h"
 
 namespace blink {
 
-RTCDataChannelEvent* RTCDataChannelEvent::create()
-{
-    return new RTCDataChannelEvent;
+RTCDataChannelEvent* RTCDataChannelEvent::create(const AtomicString& type,
+                                                 bool canBubble,
+                                                 bool cancelable,
+                                                 RTCDataChannel* channel) {
+  return new RTCDataChannelEvent(type, canBubble, cancelable, channel);
 }
 
-RTCDataChannelEvent* RTCDataChannelEvent::create(const AtomicString& type, bool canBubble, bool cancelable, RTCDataChannel* channel)
-{
-    return new RTCDataChannelEvent(type, canBubble, cancelable, channel);
+RTCDataChannelEvent::RTCDataChannelEvent(const AtomicString& type,
+                                         bool canBubble,
+                                         bool cancelable,
+                                         RTCDataChannel* channel)
+    : Event(type, canBubble, cancelable), m_channel(channel) {}
+
+RTCDataChannelEvent::~RTCDataChannelEvent() {}
+
+RTCDataChannel* RTCDataChannelEvent::channel() const {
+  return m_channel.get();
 }
 
-
-RTCDataChannelEvent::RTCDataChannelEvent()
-{
+const AtomicString& RTCDataChannelEvent::interfaceName() const {
+  return EventNames::RTCDataChannelEvent;
 }
 
-RTCDataChannelEvent::RTCDataChannelEvent(const AtomicString& type, bool canBubble, bool cancelable, RTCDataChannel* channel)
-    : Event(type, canBubble, cancelable)
-    , m_channel(channel)
-{
+DEFINE_TRACE(RTCDataChannelEvent) {
+  visitor->trace(m_channel);
+  Event::trace(visitor);
 }
 
-RTCDataChannelEvent::~RTCDataChannelEvent()
-{
-}
-
-RTCDataChannel* RTCDataChannelEvent::channel() const
-{
-    return m_channel.get();
-}
-
-const AtomicString& RTCDataChannelEvent::interfaceName() const
-{
-    return EventNames::RTCDataChannelEvent;
-}
-
-DEFINE_TRACE(RTCDataChannelEvent)
-{
-    visitor->trace(m_channel);
-    Event::trace(visitor);
-}
-
-} // namespace blink
+}  // namespace blink

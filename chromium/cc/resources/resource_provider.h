@@ -96,12 +96,13 @@ class CC_EXPORT ResourceProvider
       size_t id_allocation_chunk_size,
       bool delegated_sync_points_required,
       bool use_gpu_memory_buffer_resources,
+      bool enable_color_correct_rendering,
       const BufferToTextureTargetMap& buffer_to_texture_target_map);
   ~ResourceProvider() override;
 
   void Initialize();
 
-  void DidLoseOutputSurface() { lost_output_surface_ = true; }
+  void DidLoseContextProvider() { lost_context_provider_ = true; }
 
   int max_texture_size() const { return max_texture_size_; }
   ResourceFormat best_texture_format() const { return best_texture_format_; }
@@ -130,6 +131,7 @@ class CC_EXPORT ResourceProvider
   ResourceType default_resource_type() const { return default_resource_type_; }
   ResourceType GetResourceType(ResourceId id);
   GLenum GetResourceTextureTarget(ResourceId id);
+  bool IsImmutable(ResourceId id);
   TextureHint GetTextureHint(ResourceId id);
 
   // Creates a resource of the default resource type.
@@ -275,11 +277,13 @@ class CC_EXPORT ResourceProvider
     GLenum target() const { return target_; }
     ResourceFormat format() const { return format_; }
     const gfx::Size& size() const { return size_; }
+    sk_sp<SkColorSpace> sk_color_space() const { return sk_color_space_; }
 
     const TextureMailbox& mailbox() const { return mailbox_; }
 
     void set_sync_token(const gpu::SyncToken& sync_token) {
       sync_token_ = sync_token;
+      has_sync_token_ = true;
     }
 
     void set_synchronized(bool synchronized) { synchronized_ = synchronized; }
@@ -293,8 +297,10 @@ class CC_EXPORT ResourceProvider
     gfx::Size size_;
     TextureMailbox mailbox_;
     gpu::SyncToken sync_token_;
+    bool has_sync_token_;
     bool synchronized_;
     base::ThreadChecker thread_checker_;
+    sk_sp<SkColorSpace> sk_color_space_;
 
     DISALLOW_COPY_AND_ASSIGN(ScopedWriteLockGL);
   };
@@ -382,11 +388,13 @@ class CC_EXPORT ResourceProvider
 
     SkBitmap& sk_bitmap() { return sk_bitmap_; }
     bool valid() const { return !!sk_bitmap_.getPixels(); }
+    sk_sp<SkColorSpace> sk_color_space() const { return sk_color_space_; }
 
    private:
     ResourceProvider* resource_provider_;
     ResourceId resource_id_;
     SkBitmap sk_bitmap_;
+    sk_sp<SkColorSpace> sk_color_space_;
     base::ThreadChecker thread_checker_;
 
     DISALLOW_COPY_AND_ASSIGN(ScopedWriteLockSoftware);
@@ -397,8 +405,8 @@ class CC_EXPORT ResourceProvider
     ScopedWriteLockGpuMemoryBuffer(ResourceProvider* resource_provider,
                                    ResourceId resource_id);
     ~ScopedWriteLockGpuMemoryBuffer();
-
     gfx::GpuMemoryBuffer* GetGpuMemoryBuffer();
+    sk_sp<SkColorSpace> sk_color_space() const { return sk_color_space_; }
 
    private:
     ResourceProvider* resource_provider_;
@@ -407,6 +415,7 @@ class CC_EXPORT ResourceProvider
     gfx::BufferUsage usage_;
     gfx::Size size_;
     std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer_;
+    sk_sp<SkColorSpace> sk_color_space_;
     base::ThreadChecker thread_checker_;
 
     DISALLOW_COPY_AND_ASSIGN(ScopedWriteLockGpuMemoryBuffer);
@@ -450,18 +459,6 @@ class CC_EXPORT ResourceProvider
 
     DISALLOW_COPY_AND_ASSIGN(SynchronousFence);
   };
-
-  // Acquire pixel buffer for resource. The pixel buffer can be used to
-  // set resource pixels without performing unnecessary copying.
-  void AcquirePixelBuffer(ResourceId resource);
-  void ReleasePixelBuffer(ResourceId resource);
-  // Map/unmap the acquired pixel buffer.
-  uint8_t* MapPixelBuffer(ResourceId id, int* stride);
-  void UnmapPixelBuffer(ResourceId id);
-  // Asynchronously update pixels from acquired pixel buffer.
-  void BeginSetPixels(ResourceId id);
-  void ForceSetPixelsToComplete(ResourceId id);
-  bool DidSetPixelsComplete(ResourceId id);
 
   // For tests only! This prevents detecting uninitialized reads.
   // Use SetPixels or LockForWrite to allocate implicitly.
@@ -647,8 +644,8 @@ class CC_EXPORT ResourceProvider
   Resource* LockForWrite(ResourceId id);
   void UnlockForWrite(Resource* resource);
 
-  static void PopulateSkBitmapWithResource(SkBitmap* sk_bitmap,
-                                           const Resource* resource);
+  void PopulateSkBitmapWithResource(SkBitmap* sk_bitmap,
+                                    const Resource* resource);
 
   void CreateMailboxAndBindResource(gpu::gles2::GLES2Interface* gl,
                                     Resource* resource);
@@ -679,11 +676,14 @@ class CC_EXPORT ResourceProvider
   gpu::gles2::GLES2Interface* ContextGL() const;
   bool IsGLContextLost() const;
 
+  // Returns null if |enable_color_correct_rendering_| is false.
+  sk_sp<SkColorSpace> GetResourceSkColorSpace(const Resource* resource) const;
+
   ContextProvider* compositor_context_provider_;
   SharedBitmapManager* shared_bitmap_manager_;
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager_;
   BlockingTaskRunner* blocking_main_thread_task_runner_;
-  bool lost_output_surface_;
+  bool lost_context_provider_;
   int highp_threshold_min_;
   ResourceId next_id_;
   ResourceMap resources_;
@@ -702,6 +702,7 @@ class CC_EXPORT ResourceProvider
   int max_texture_size_;
   ResourceFormat best_texture_format_;
   ResourceFormat best_render_buffer_format_;
+  const bool enable_color_correct_rendering_ = false;
 
   base::ThreadChecker thread_checker_;
 

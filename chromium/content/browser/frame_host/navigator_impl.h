@@ -59,10 +59,10 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
       const FrameHostMsg_DidCommitProvisionalLoad_Params& params) override;
   bool NavigateToPendingEntry(FrameTreeNode* frame_tree_node,
                               const FrameNavigationEntry& frame_entry,
-                              NavigationController::ReloadType reload_type,
+                              ReloadType reload_type,
                               bool is_same_document_history_load) override;
   bool NavigateNewChildFrame(RenderFrameHostImpl* render_frame_host,
-                             const std::string& unique_name) override;
+                             const GURL& default_url) override;
   void RequestOpenURL(RenderFrameHostImpl* render_frame_host,
                       const GURL& url,
                       bool uses_post,
@@ -96,6 +96,9 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
       const base::TimeTicks& renderer_before_unload_start_time,
       const base::TimeTicks& renderer_before_unload_end_time) override;
   void CancelNavigation(FrameTreeNode* frame_tree_node) override;
+  NavigationHandleImpl* GetNavigationHandleForFrameHost(
+      RenderFrameHostImpl* render_frame_host) override;
+  void DiscardPendingEntryIfNeeded(NavigationHandleImpl* handle) override;
 
  private:
   // Holds data used to track browser side navigation metrics.
@@ -110,7 +113,7 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
   bool NavigateToEntry(FrameTreeNode* frame_tree_node,
                        const FrameNavigationEntry& frame_entry,
                        const NavigationEntryImpl& entry,
-                       NavigationController::ReloadType reload_type,
+                       ReloadType reload_type,
                        bool is_same_document_history_load,
                        bool is_history_navigation_in_new_child,
                        bool is_pending_entry,
@@ -126,7 +129,7 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
                          const Referrer& dest_referrer,
                          const FrameNavigationEntry& frame_entry,
                          const NavigationEntryImpl& entry,
-                         NavigationController::ReloadType reload_type,
+                         ReloadType reload_type,
                          LoFiState lofi_state,
                          bool is_same_document_history_load,
                          bool is_history_navigation_in_new_child,
@@ -143,10 +146,6 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
   void DidStartMainFrameNavigation(const GURL& url,
                                    SiteInstanceImpl* site_instance,
                                    NavigationHandleImpl* navigation_handle);
-
-  // Called when a navigation has failed to discard the pending entry in order
-  // to avoid url spoofs.
-  void DiscardPendingEntryOnFailureIfNeeded(NavigationHandleImpl* handle);
 
   // The NavigationController that will keep track of session history for all
   // RenderFrameHost objects using this NavigatorImpl.

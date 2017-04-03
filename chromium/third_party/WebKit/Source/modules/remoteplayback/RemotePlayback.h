@@ -8,9 +8,11 @@
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "core/events/EventTarget.h"
+#include "modules/ModulesExport.h"
 #include "platform/heap/Handle.h"
 #include "public/platform/modules/remoteplayback/WebRemotePlaybackClient.h"
 #include "public/platform/modules/remoteplayback/WebRemotePlaybackState.h"
+#include "wtf/Compiler.h"
 #include "wtf/text/AtomicString.h"
 #include "wtf/text/WTFString.h"
 
@@ -22,45 +24,49 @@ class LocalFrame;
 class RemotePlaybackAvailability;
 class ScriptPromiseResolver;
 
-class RemotePlayback final
-    : public EventTargetWithInlineData
-    , public ActiveScriptWrappable
-    , private WebRemotePlaybackClient {
-    DEFINE_WRAPPERTYPEINFO();
-    USING_GARBAGE_COLLECTED_MIXIN(RemotePlayback);
-public:
-    static RemotePlayback* create(HTMLMediaElement&);
+class MODULES_EXPORT RemotePlayback final
+    : public EventTargetWithInlineData,
+      public ActiveScriptWrappable,
+      WTF_NON_EXPORTED_BASE(private WebRemotePlaybackClient) {
+  DEFINE_WRAPPERTYPEINFO();
+  USING_GARBAGE_COLLECTED_MIXIN(RemotePlayback);
 
-    // EventTarget implementation.
-    const WTF::AtomicString& interfaceName() const override;
-    ExecutionContext* getExecutionContext() const override;
+ public:
+  static RemotePlayback* create(HTMLMediaElement&);
 
-    ScriptPromise getAvailability(ScriptState*);
-    ScriptPromise connect(ScriptState*);
+  // EventTarget implementation.
+  const WTF::AtomicString& interfaceName() const override;
+  ExecutionContext* getExecutionContext() const override;
 
-    String state() const;
+  ScriptPromise getAvailability(ScriptState*);
+  ScriptPromise prompt(ScriptState*);
 
-    // ScriptWrappable implementation.
-    bool hasPendingActivity() const final;
+  String state() const;
 
-    DEFINE_ATTRIBUTE_EVENT_LISTENER(statechange);
+  // ScriptWrappable implementation.
+  bool hasPendingActivity() const final;
 
-    DECLARE_VIRTUAL_TRACE();
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(statechange);
 
-private:
-    explicit RemotePlayback(HTMLMediaElement&);
+  DECLARE_VIRTUAL_TRACE();
 
-    void stateChanged(WebRemotePlaybackState) override;
-    void availabilityChanged(bool available) override;
-    void connectCancelled() override;
+ private:
+  friend class RemotePlaybackTest;
 
-    WebRemotePlaybackState m_state;
-    bool m_availability;
-    HeapVector<Member<RemotePlaybackAvailability>> m_availabilityObjects;
-    Member<HTMLMediaElement> m_mediaElement;
-    HeapVector<Member<ScriptPromiseResolver>> m_connectPromiseResolvers;
+  explicit RemotePlayback(HTMLMediaElement&);
+
+  // WebRemotePlaybackClient implementation.
+  void stateChanged(WebRemotePlaybackState) override;
+  void availabilityChanged(bool available) override;
+  void promptCancelled() override;
+
+  WebRemotePlaybackState m_state;
+  bool m_availability;
+  HeapVector<Member<RemotePlaybackAvailability>> m_availabilityObjects;
+  Member<HTMLMediaElement> m_mediaElement;
+  Member<ScriptPromiseResolver> m_promptPromiseResolver;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // RemotePlayback_h
+#endif  // RemotePlayback_h

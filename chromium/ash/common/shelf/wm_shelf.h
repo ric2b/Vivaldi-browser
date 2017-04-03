@@ -9,7 +9,7 @@
 
 #include "ash/ash_export.h"
 #include "ash/common/shelf/shelf_layout_manager_observer.h"
-#include "ash/common/shelf/shelf_types.h"
+#include "ash/public/cpp/shelf_types.h"
 #include "base/observer_list.h"
 
 namespace gfx {
@@ -22,7 +22,6 @@ class GestureEvent;
 
 namespace ash {
 
-class Shelf;
 class ShelfLayoutManager;
 class ShelfLockingManager;
 class ShelfView;
@@ -40,14 +39,22 @@ class ASH_EXPORT WmShelf : public ShelfLayoutManagerObserver {
   // widget may not exist, or the shelf may not be visible.
   static WmShelf* ForWindow(WmWindow* window);
 
-  void SetShelf(Shelf* shelf);
-  void ClearShelf();
-  Shelf* shelf() const { return shelf_; }
+  virtual void CreateShelfWidget(WmWindow* root);
+  void ShutdownShelfWidget();
+  void DestroyShelfWidget();
 
-  virtual void SetShelfLayoutManager(ShelfLayoutManager* manager);
   ShelfLayoutManager* shelf_layout_manager() const {
     return shelf_layout_manager_;
   }
+
+  ShelfWidget* shelf_widget() { return shelf_widget_.get(); }
+
+  // Creates the shelf view.
+  void InitializeShelf();
+  void ShutdownShelf();
+
+  // True after the ShelfView has been created (e.g. after login).
+  bool IsShelfInitialized() const;
 
   // Returns the window showing the shelf.
   WmWindow* GetWindow();
@@ -133,7 +140,6 @@ class ASH_EXPORT WmShelf : public ShelfLayoutManagerObserver {
   void SetVirtualKeyboardBoundsForTesting(const gfx::Rect& bounds);
   ShelfLockingManager* GetShelfLockingManagerForTesting();
   ShelfView* GetShelfViewForTesting();
-  ShelfWidget* GetShelfWidgetForTesting();
 
  protected:
   WmShelf();
@@ -147,13 +153,15 @@ class ASH_EXPORT WmShelf : public ShelfLayoutManagerObserver {
                            BackgroundAnimatorChangeType change_type) override;
 
  private:
-  // Legacy shelf controller. Null before login and in secondary display init.
-  // Instance lifetimes are managed by ash::RootWindowController and WmShelfMus.
-  Shelf* shelf_ = nullptr;
-
   // Layout manager for the shelf container window. Instances are constructed by
   // ShelfWidget and lifetimes are managed by the container windows themselves.
   ShelfLayoutManager* shelf_layout_manager_ = nullptr;
+
+  std::unique_ptr<ShelfWidget> shelf_widget_;
+
+  // Internal implementation detail. Do not expose externally. Owned by views
+  // hierarchy. Null before login and in secondary display init.
+  ShelfView* shelf_view_ = nullptr;
 
   ShelfAlignment alignment_ = SHELF_ALIGNMENT_BOTTOM_LOCKED;
 

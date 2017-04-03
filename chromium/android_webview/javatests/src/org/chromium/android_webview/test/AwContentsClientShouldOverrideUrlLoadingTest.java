@@ -4,6 +4,7 @@
 
 package org.chromium.android_webview.test;
 
+import android.annotation.SuppressLint;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.util.Pair;
 
@@ -15,6 +16,7 @@ import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.content.browser.test.util.CallbackHelper;
 import org.chromium.content.browser.test.util.DOMUtils;
 import org.chromium.content.browser.test.util.TestCallbackHelperContainer.OnEvaluateJavaScriptResultHelper;
@@ -116,6 +118,7 @@ public class AwContentsClientShouldOverrideUrlLoadingTest extends AwTestBase {
                 "<div>Meta refresh redirect</div>");
     }
 
+    @SuppressLint("DefaultLocale")
     private String getHtmlForPageWithJsRedirectTo(String url, String method, int timeout) {
         return makeHtmlPageFrom(""
                 + "<script>"
@@ -775,6 +778,7 @@ public class AwContentsClientShouldOverrideUrlLoadingTest extends AwTestBase {
 
     @SmallTest
     @Feature({"AndroidWebView", "Navigation"})
+    @RetryOnFailure
     public void testCalledOnJavaScriptLocationDelayedAssignRedirect()
             throws Throwable {
         final String redirectTargetUrl = createRedirectTargetPage();
@@ -785,6 +789,7 @@ public class AwContentsClientShouldOverrideUrlLoadingTest extends AwTestBase {
 
     @SmallTest
     @Feature({"AndroidWebView", "Navigation"})
+    @RetryOnFailure
     public void testCalledOnJavaScriptLocationDelayedReplaceRedirect()
             throws Throwable {
         final String redirectTargetUrl = createRedirectTargetPage();

@@ -131,11 +131,6 @@
   <release seq="1" allow_pseudo="false">
     <messages fallback_to_english="true">
 
-      <!-- The default value for |WebPreference::uses_universal_detector|. -->
-      <message name="IDS_USES_UNIVERSAL_DETECTOR" use_name_for_id="true">
-        true
-      </message>
-
       <!-- The file name of the spellchecking dictionary without the extension (case-sensitive). -->
       <message name="IDS_SPELLCHECK_DICTIONARY" use_name_for_id="true">
         en-US
@@ -205,11 +200,6 @@
       </message>
       <message name="IDS_IMPORTLOCK_DIALOG_HEIGHT_LINES" use_name_for_id="true">
         8
-      </message>
-
-      <!-- Locale-dependent static encodings string -->
-      <message name="IDS_STATIC_ENCODING_LIST" use_name_for_id="true">
-        windows-1252
       </message>
 
       <!-- The URL for the the Welcome to Chrome page shown on first run. -->

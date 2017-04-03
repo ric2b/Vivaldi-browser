@@ -15,8 +15,12 @@ static_library("ui") {
       "dragging/drag_tab_handler_helper_mac.mm",
     ]
   }
+  public_configs = [ "//third_party/protobuf:using_proto" ]
   deps = [
+    "//base:base",
+    "//chrome/browser/extensions:extensions",
     "//components/translate/content/browser",
+    "//content/public/browser",
     "//skia",
   ]
 }

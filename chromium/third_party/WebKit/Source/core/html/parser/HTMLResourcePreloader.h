@@ -28,6 +28,7 @@
 
 #include "core/fetch/FetchRequest.h"
 #include "core/fetch/Resource.h"
+#include "core/html/parser/CSSPreloadScanner.h"
 #include "core/html/parser/PreloadRequest.h"
 #include "core/html/parser/ResourcePreloader.h"
 #include "core/loader/NetworkHintsInterface.h"
@@ -37,22 +38,29 @@
 
 namespace blink {
 
-class CORE_EXPORT HTMLResourcePreloader final : public GarbageCollected<HTMLResourcePreloader>, public ResourcePreloader {
-    WTF_MAKE_NONCOPYABLE(HTMLResourcePreloader);
-    friend class HTMLResourcePreloaderTest;
-public:
-    static HTMLResourcePreloader* create(Document&);
-    DECLARE_TRACE();
+class CORE_EXPORT HTMLResourcePreloader final
+    : public GarbageCollected<HTMLResourcePreloader>,
+      public ResourcePreloader {
+  WTF_MAKE_NONCOPYABLE(HTMLResourcePreloader);
+  friend class HTMLResourcePreloaderTest;
 
-protected:
-    void preload(std::unique_ptr<PreloadRequest>, const NetworkHintsInterface&) override;
+ public:
+  static HTMLResourcePreloader* create(Document&);
+  int countPreloads();
+  Document* document() { return m_document.get(); }
+  DECLARE_TRACE();
 
-private:
-    explicit HTMLResourcePreloader(Document&);
+ protected:
+  void preload(std::unique_ptr<PreloadRequest>,
+               const NetworkHintsInterface&) override;
 
-    Member<Document> m_document;
+ private:
+  explicit HTMLResourcePreloader(Document&);
+
+  Member<Document> m_document;
+  HeapHashSet<Member<CSSPreloaderResourceClient>> m_cssPreloaders;
 };
 
-} // namespace blink
+}  // namespace blink
 
 #endif

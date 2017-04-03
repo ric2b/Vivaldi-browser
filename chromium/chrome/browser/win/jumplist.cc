@@ -44,6 +44,7 @@
 #include "ui/gfx/icon_util.h"
 #include "ui/gfx/image/image_family.h"
 #include "url/gurl.h"
+
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "chrome/browser/web_applications/web_app.h"
@@ -290,7 +291,9 @@ JumpList::JumpListData::JumpListData() {}
 JumpList::JumpListData::~JumpListData() {}
 
 JumpList::JumpList(Profile* profile)
-    : profile_(profile),
+    : RefcountedKeyedService(content::BrowserThread::GetTaskRunnerForThread(
+          content::BrowserThread::UI)),
+      profile_(profile),
       jumplist_data_(new base::RefCountedData<JumpListData>),
       task_id_(base::CancelableTaskTracker::kBadTaskId),
       weak_ptr_factory_(this) {
@@ -326,14 +329,9 @@ JumpList::JumpList(Profile* profile)
     // your profile is empty. Ask TopSites to update itself when jumplist is
     // initialized.
     top_sites->SyncWithHistory();
-    registrar_.reset(new content::NotificationRegistrar);
     // Register as TopSitesObserver so that we can update ourselves when the
     // TopSites changes.
     top_sites->AddObserver(this);
-    // Register for notification when profile is destroyed to ensure that all
-    // observers are detatched at that time.
-    registrar_->Add(this, chrome::NOTIFICATION_PROFILE_DESTROYED,
-                    content::Source<Profile>(profile_));
   }
   tab_restore_service->AddObserver(this);
   pref_change_registrar_.reset(new PrefChangeRegistrar);
@@ -407,15 +405,6 @@ extensions::AppWindow* JumpList::GetAppWindow(Profile* profile) {
   return NULL;
 }
 
-void JumpList::Observe(int type,
-                       const content::NotificationSource& source,
-                       const content::NotificationDetails& details) {
-  DCHECK(CalledOnValidThread());
-  DCHECK_EQ(chrome::NOTIFICATION_PROFILE_DESTROYED, type);
-  // Profile was destroyed, do clean-up.
-  Terminate();
-}
-
 void JumpList::CancelPendingUpdate() {
   DCHECK(CalledOnValidThread());
   if (task_id_ != base::CancelableTaskTracker::kBadTaskId) {
@@ -436,10 +425,14 @@ void JumpList::Terminate() {
         TopSitesFactory::GetForProfile(profile_);
     if (top_sites)
       top_sites->RemoveObserver(this);
-    registrar_.reset();
     pref_change_registrar_.reset();
   }
   profile_ = NULL;
+}
+
+void JumpList::ShutdownOnUIThread() {
+  DCHECK(CalledOnValidThread());
+  Terminate();
 }
 
 void JumpList::OnMostVisitedURLsAvailable(

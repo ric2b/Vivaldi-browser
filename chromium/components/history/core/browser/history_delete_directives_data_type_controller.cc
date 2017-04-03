@@ -10,14 +10,11 @@
 namespace browser_sync {
 
 HistoryDeleteDirectivesDataTypeController::
-    HistoryDeleteDirectivesDataTypeController(
-        const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
-        const base::Closure& error_callback,
-        sync_driver::SyncClient* sync_client)
-    : sync_driver::UIDataTypeController(ui_thread,
-                                        error_callback,
-                                        syncer::HISTORY_DELETE_DIRECTIVES,
-                                        sync_client),
+    HistoryDeleteDirectivesDataTypeController(const base::Closure& dump_stack,
+                                              syncer::SyncClient* sync_client)
+    : syncer::UIDataTypeController(syncer::HISTORY_DELETE_DIRECTIVES,
+                                   dump_stack,
+                                   sync_client),
       sync_client_(sync_client) {}
 
 HistoryDeleteDirectivesDataTypeController::
@@ -25,10 +22,12 @@ HistoryDeleteDirectivesDataTypeController::
 }
 
 bool HistoryDeleteDirectivesDataTypeController::ReadyForStart() const {
+  DCHECK(CalledOnValidThread());
   return !sync_client_->GetSyncService()->IsEncryptEverythingEnabled();
 }
 
 bool HistoryDeleteDirectivesDataTypeController::StartModels() {
+  DCHECK(CalledOnValidThread());
   if (DisableTypeIfNecessary())
     return false;
   sync_client_->GetSyncService()->AddObserver(this);
@@ -36,6 +35,7 @@ bool HistoryDeleteDirectivesDataTypeController::StartModels() {
 }
 
 void HistoryDeleteDirectivesDataTypeController::StopModels() {
+  DCHECK(CalledOnValidThread());
   if (sync_client_->GetSyncService()->HasObserver(this))
     sync_client_->GetSyncService()->RemoveObserver(this);
 }
@@ -45,6 +45,7 @@ void HistoryDeleteDirectivesDataTypeController::OnStateChanged() {
 }
 
 bool HistoryDeleteDirectivesDataTypeController::DisableTypeIfNecessary() {
+  DCHECK(CalledOnValidThread());
   if (!sync_client_->GetSyncService()->IsSyncActive())
     return false;
 
@@ -58,7 +59,7 @@ bool HistoryDeleteDirectivesDataTypeController::DisableTypeIfNecessary() {
       syncer::SyncError::DATATYPE_POLICY_ERROR,
       "Delete directives not supported with encryption.",
       type());
-  OnSingleDataTypeUnrecoverableError(error);
+  CreateErrorHandler()->OnUnrecoverableError(error);
   return true;
 }
 

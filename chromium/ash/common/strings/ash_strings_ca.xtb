@@ -47,7 +47,6 @@ Premeu Maj+Alt per canviar-lo.</translation>
 <translation id="2268813581635650749">Tanca la sessió de tots els usuaris</translation>
 <translation id="2297568595583585744">Safata d'estat</translation>
 <translation id="2303600792989757991">Commuta la visió general de la finestra</translation>
-<translation id="2372145515558759244">S'estan sincronitzant les aplicacions...</translation>
 <translation id="2391579633712104609">180°</translation>
 <translation id="2429753432712299108">El dispositiu Bluetooth "<ph name="DEVICE_NAME" />" sol·licita permís per emparellar-se. Abans d'acceptar, comproveu que aquesta clau d'accés es mostri al dispositiu: <ph name="PASSKEY" />.</translation>
 <translation id="2475982808118771221">S'ha produït un error</translation>
@@ -61,7 +60,6 @@ Premeu Maj+Alt per canviar-lo.</translation>
 <translation id="2727977024730340865">S'ha connectat a un carregador de baix consum. És possible que la càrrega de la bateria no sigui fiable.</translation>
 <translation id="2761704814324807722">Safata d'estat. Hora: <ph name="TIME" />, <ph name="BATTERY" /></translation>
 <translation id="2792498699870441125">Alt+Cerca</translation>
-<translation id="2805756323405976993">Aplicacions</translation>
 <translation id="2819276065543622893">Ara se us tancarà la sessió.</translation>
 <translation id="2825619548187458965">Prestatge</translation>
 <translation id="2844169650293029770">Dispositiu USB-C (port frontal esquerre)</translation>
@@ -97,7 +95,6 @@ Premeu Cerca o Maj per cancel·lar.</translation>
 <translation id="3621712662352432595">Configuració d'àudio</translation>
 <translation id="3625258641415618104">Captures de pantalla desactivades</translation>
 <translation id="3626281679859535460">Brillantor</translation>
-<translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079">La resolució de <ph name="DISPLAY_NAME" /> ha canviat a <ph name="RESOLUTION" /></translation>
 <translation id="370649949373421643">Activa la Wi-Fi</translation>
 <translation id="3709443003275901162">Més de 9</translation>
@@ -111,6 +108,8 @@ Premeu Cerca o Maj per cancel·lar.</translation>
 <translation id="3866182280516392520">Adreça IPv6</translation>
 <translation id="3891340733213178823">Premeu Ctrl+Maj+Q dues vegades per tancar la sessió.</translation>
 <translation id="3892641579809465218">Pantalla interna</translation>
+<translation id="3893630138897523026">ChromeVox (comentaris de veu)</translation>
+<translation id="3899995891769452915">Entrada de veu</translation>
 <translation id="3963445509666917109">Altaveu (intern)</translation>
 <translation id="3967919079500697218">L'administrador ha desactivat l'opció per fer captures de pantalla.</translation>
 <translation id="397105322502079400">S’està calculant...</translation>
@@ -134,10 +133,8 @@ Premeu Cerca o Maj per cancel·lar.</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl + Maj + Espai</translation>
 <translation id="5045002648206642691">Configuració de Google Drive...</translation>
-<translation id="511445211639755999"><ph name="RESOLUTION" />, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">Dispositius d'emissió disponibles</translation>
 <translation id="5170568018924773124">Mostra a la carpeta</translation>
-<translation id="5191140942132549112">MOSTRA LES PREGUNTES</translation>
 <translation id="5222676887888702881">Tanca la sessió</translation>
 <translation id="5238774010593222950">No es pot iniciar la sessió a un altre compte.</translation>
 <translation id="532063867737390965">L'administrador ha desactivat aquesta configuració de xarxa.</translation>
@@ -185,6 +182,7 @@ Premeu Maj+Alt per canviar-lo.</translation>
 <translation id="6459472438155181876">S'està ampliant la pantalla a <ph name="DISPLAY_NAME" /></translation>
 <translation id="6490471652906364588">Dispositiu USB-C (port dret)</translation>
 <translation id="6501401484702599040">S'està emetent la pantalla a <ph name="RECEIVER_NAME" /></translation>
+<translation id="6521655319214113338">Entrada d'escriptura a mà</translation>
 <translation id="6537270692134705506">Captura la pantalla</translation>
 <translation id="6550675742724504774">Opcions</translation>
 <translation id="6585808820553845416">La sessió finalitzarà d'aquí a <ph name="SESSION_TIME_REMAINING" />.</translation>
@@ -194,7 +192,6 @@ Premeu Maj+Alt per canviar-lo.</translation>
 <translation id="6713285437468012787">El dispositiu Bluetooth "<ph name="DEVICE_NAME" />" s'ha emparellat i ja està disponible per a tots els usuaris. Podeu eliminar l'emparellament a la Configuració.</translation>
 <translation id="6785414152754474415">La bateria està carregada fins al <ph name="PERCENTAGE" />% i s'està carregant.</translation>
 <translation id="683971173229319003">Cerca + L</translation>
-<translation id="68610848741840742">ChromeVox (comentaris de veu)</translation>
 <translation id="6911468394164995108">Connecta't a una altra xarxa...</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6979158407327259162">Google Drive</translation>
@@ -217,8 +214,10 @@ Premeu Alt+Cerca o Maj per cancel·lar.</translation>
 <translation id="743058460480092004">La càmera i el micròfon s'estan utilitzant.</translation>
 <translation id="7510334386202674593">Ctrl + Maj + L</translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" /> no admet <ph name="SPECIFIED_RESOLUTION" />. S'ha canviat la resolució per <ph name="FALLBACK_RESOLUTION" />.</translation>
+<translation id="7562368315689366235">Paleta d'emoji</translation>
 <translation id="7573962313813535744">Mode acoblat</translation>
 <translation id="7580671184200851182">Reprodueix el mateix àudio per tots els altaveus (àudio mono)</translation>
+<translation id="7581273696622423628">Vull respondre a l'enquesta</translation>
 <translation id="7593891976182323525">Cerca o Maj</translation>
 <translation id="7649070708921625228">Ajuda</translation>
 <translation id="7692480393933218409">S'estan carregant els dispositius USB-C connectats</translation>

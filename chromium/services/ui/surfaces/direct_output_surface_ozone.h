@@ -16,18 +16,18 @@
 #include "ui/gfx/swap_result.h"
 #include "ui/gl/gl_surface.h"
 
+namespace cc {
+class CompositorFrame;
+class SyntheticBeginFrameSource;
+}
+
 namespace display_compositor {
 class BufferQueue;
 }
 
-namespace ui {
-class LatencyInfo;
-}  // namespace ui
-
-namespace cc {
-class CompositorFrame;
-class SyntheticBeginFrameSource;
-}  // namespace cc
+namespace gpu {
+class GpuMemoryBufferManager;
+}
 
 namespace ui {
 
@@ -43,6 +43,7 @@ class DirectOutputSurfaceOzone : public cc::OutputSurface {
       scoped_refptr<SurfacesContextProvider> context_provider,
       gfx::AcceleratedWidget widget,
       cc::SyntheticBeginFrameSource* synthetic_begin_frame_source,
+      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       uint32_t target,
       uint32_t internalformat);
 
@@ -52,16 +53,22 @@ class DirectOutputSurfaceOzone : public cc::OutputSurface {
 
  private:
   // cc::OutputSurface implementation.
-  void SwapBuffers(cc::CompositorFrame frame) override;
+  bool BindToClient(cc::OutputSurfaceClient* client) override;
+  void EnsureBackbuffer() override;
+  void DiscardBackbuffer() override;
   void BindFramebuffer() override;
+  void SwapBuffers(cc::OutputSurfaceFrame frame) override;
   uint32_t GetFramebufferCopyTextureFormat() override;
   void Reshape(const gfx::Size& size,
                float scale_factor,
                const gfx::ColorSpace& color_space,
                bool alpha) override;
+  cc::OverlayCandidateValidator* GetOverlayCandidateValidator() const override;
   bool IsDisplayedAsOverlayPlane() const override;
   unsigned GetOverlayTextureId() const override;
-  bool BindToClient(cc::OutputSurfaceClient* client) override;
+  bool SurfaceIsSuspendForRecycle() const override;
+  bool HasExternalStencilTest() const override;
+  void ApplyExternalStencil() override;
 
   // Taken from BrowserCompositor specific API.
   void OnUpdateVSyncParametersFromGpu(base::TimeTicks timebase,
@@ -73,6 +80,9 @@ class DirectOutputSurfaceOzone : public cc::OutputSurface {
   display_compositor::GLHelper gl_helper_;
   std::unique_ptr<display_compositor::BufferQueue> buffer_queue_;
   cc::SyntheticBeginFrameSource* const synthetic_begin_frame_source_;
+
+  gfx::Size reshape_size_;
+  gfx::Size swap_size_;
 
   base::WeakPtrFactory<DirectOutputSurfaceOzone> weak_ptr_factory_;
 };

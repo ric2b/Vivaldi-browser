@@ -8,13 +8,11 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "chrome/grit/generated_resources.h"
 #include "extensions/common/permissions/api_permission.h"
 #include "extensions/common/permissions/api_permission_set.h"
 #include "extensions/common/permissions/media_galleries_permission.h"
 #include "extensions/common/permissions/permissions_info.h"
 #include "extensions/common/permissions/settings_override_permission.h"
-#include "extensions/strings/grit/extensions_strings.h"
 
 namespace extensions {
 
@@ -33,7 +31,7 @@ std::vector<std::unique_ptr<APIPermissionInfo>>
 ChromeAPIPermissions::GetAllPermissions() const {
   // WARNING: If you are modifying a permission message in this list, be sure to
   // add the corresponding permission message rule to
-  // ChromePermissionMessageProvider::GetCoalescedPermissionMessages as well.
+  // ChromePermissionMessageProvider::GetPermissionMessages as well.
   APIPermissionInfo::InitInfo permissions_to_register[] = {
       // Register permissions for all extension types.
       {APIPermission::kBackground, "background"},

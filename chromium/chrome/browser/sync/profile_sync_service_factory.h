@@ -5,32 +5,44 @@
 #ifndef CHROME_BROWSER_SYNC_PROFILE_SYNC_SERVICE_FACTORY_H_
 #define CHROME_BROWSER_SYNC_PROFILE_SYNC_SERVICE_FACTORY_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
+
+class Profile;
 
 namespace base {
 template <typename T>
 struct DefaultSingletonTraits;
-}
+}  // namespace base
 
-namespace sync_driver {
-class SyncService;
-}
-
-class Profile;
+namespace browser_sync {
 class ProfileSyncService;
+}  // namespace browser_sync
+
+namespace syncer {
+class SyncClient;
+class SyncService;
+}  // namespace syncer
 
 class ProfileSyncServiceFactory : public BrowserContextKeyedServiceFactory {
  public:
-  static ProfileSyncService* GetForProfile(Profile* profile);
+  typedef base::Callback<std::unique_ptr<syncer::SyncClient>(Profile*)>
+      SyncClientFactory;
+
+  static browser_sync::ProfileSyncService* GetForProfile(Profile* profile);
   static bool HasProfileSyncService(Profile* profile);
 
   // Convenience method that returns the ProfileSyncService as a
-  // sync_driver::SyncService.
-  static sync_driver::SyncService* GetSyncServiceForBrowserContext(
+  // syncer::SyncService.
+  static syncer::SyncService* GetSyncServiceForBrowserContext(
       content::BrowserContext* context);
 
   static ProfileSyncServiceFactory* GetInstance();
+
+  // Overrides how the SyncClient is created for testing purposes.
+  static void SetSyncClientFactoryForTest(SyncClientFactory* client_factory);
 
  private:
   friend struct base::DefaultSingletonTraits<ProfileSyncServiceFactory>;
@@ -41,6 +53,10 @@ class ProfileSyncServiceFactory : public BrowserContextKeyedServiceFactory {
   // BrowserContextKeyedServiceFactory:
   KeyedService* BuildServiceInstanceFor(
       content::BrowserContext* context) const override;
+
+  // A factory function for overriding the way the SyncClient is created.
+  // This is a raw pointer so it can be statically initialized.
+  static SyncClientFactory* client_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ProfileSyncServiceFactory);
 };

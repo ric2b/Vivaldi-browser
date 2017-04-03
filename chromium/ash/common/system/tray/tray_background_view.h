@@ -9,8 +9,8 @@
 
 #include "ash/ash_export.h"
 #include "ash/common/shelf/shelf_background_animator_observer.h"
-#include "ash/common/shelf/shelf_types.h"
 #include "ash/common/system/tray/actionable_view.h"
+#include "ash/public/cpp/shelf_types.h"
 #include "base/macros.h"
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/views/bubble/tray_bubble_view.h"
@@ -43,7 +43,7 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
 
     void set_size(const gfx::Size& size) { size_ = size; }
 
-    void SetMargin(const gfx::Insets& margin);
+    void SetMargin(int main_axis_margin, int cross_axis_margin);
 
     // views::View:
     gfx::Size GetPreferredSize() const override;
@@ -60,7 +60,8 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
 
     ShelfAlignment alignment_;
     gfx::Size size_;
-    gfx::Insets margin_;
+    int main_axis_margin_ = 0;
+    int cross_axis_margin_ = 0;
 
     DISALLOW_COPY_AND_ASSIGN(TrayContainer);
   };

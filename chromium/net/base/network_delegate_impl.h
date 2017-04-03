@@ -9,6 +9,7 @@
 
 #include "base/strings/string16.h"
 #include "net/base/completion_callback.h"
+#include "net/base/net_export.h"
 #include "net/base/network_delegate.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/proxy/proxy_retry_info.h"
@@ -104,6 +105,9 @@ class NET_EXPORT NetworkDelegateImpl : public NetworkDelegate {
   void OnBeforeRedirect(URLRequest* request, const GURL& new_location) override;
 
   // This corresponds to URLRequestDelegate::OnResponseStarted.
+  void OnResponseStarted(URLRequest* request, int net_error) override;
+  // Deprecated.
+  // TODO(maksims): Remove this;
   void OnResponseStarted(URLRequest* request) override;
 
   // Called when bytes are received from the network, such as after receiving
@@ -129,6 +133,9 @@ class NET_EXPORT NetworkDelegateImpl : public NetworkDelegate {
   // Indicates that the URL request has been completed or failed.
   // |started| indicates whether the request has been started. If false,
   // some information like the socket address is not available.
+  void OnCompleted(URLRequest* request, bool started, int net_error) override;
+  // Deprecated.
+  // TODO(maksims): Remove this;
   void OnCompleted(URLRequest* request, bool started) override;
 
   // Called when an URLRequest is being destroyed. Note that the request is

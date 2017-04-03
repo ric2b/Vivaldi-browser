@@ -34,6 +34,8 @@
 #include "components/history/core/browser/visit_tracker.h"
 #include "sql/init_status.h"
 
+#include "db/vivaldi_history_types.h"
+
 class HistoryURLProvider;
 struct HistoryURLProviderParams;
 class SkBitmap;
@@ -218,7 +220,10 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
 
   // Computes the |num_hosts| most-visited hostnames per day. For all history
   // available. Returns an empty list if db_ is not initialized.
-  TopUrlsPerDayList TopUrlsPerDay(size_t num_hosts) const;
+  UrlVisitCount::TopUrlsPerDayList TopUrlsPerDay(size_t num_hosts) const;
+
+  Visit::VisitsList VisitSearch(const std::string& text_query,
+    const QueryOptions& options) const;
 
   // Gets the counts and last last time of URLs that belong to |origins| in the
   // history database. Origins that are not in the history database will be in
@@ -871,7 +876,7 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   bool segment_queried_;
 
   // List of QueuedHistoryDBTasks to run;
-  std::list<QueuedHistoryDBTask*> queued_history_db_tasks_;
+  std::list<std::unique_ptr<QueuedHistoryDBTask>> queued_history_db_tasks_;
 
   // Used to determine if a URL is bookmarked; may be null.
   std::unique_ptr<HistoryBackendClient> backend_client_;

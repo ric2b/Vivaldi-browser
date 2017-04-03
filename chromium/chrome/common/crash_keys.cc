@@ -16,7 +16,6 @@
 #include "chrome/common/chrome_switches.h"
 #include "components/flags_ui/flags_ui_switches.h"
 #include "content/public/common/content_switches.h"
-#include "ipc/ipc_switches.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/common/chrome_switches.h"
@@ -193,6 +192,16 @@ size_t RegisterChromeCrashKeys() {
     { "initrf_root_process_is_live", kSmallSize},
     { "initrf_root_proxy_is_live", kSmallSize},
 
+    // Temporary for https://crbug.com/626802.
+    { "newframe_routing_id", kSmallSize },
+    { "newframe_proxy_id", kSmallSize },
+    { "newframe_opener_id", kSmallSize },
+    { "newframe_parent_id", kSmallSize },
+    { "newframe_widget_id", kSmallSize },
+    { "newframe_widget_hidden", kSmallSize },
+    { "newframe_replicated_origin", kSmallSize },
+    { "newframe_oopifs_possible", kSmallSize },
+
     // Temporary for https://crbug.com/630103.
     { "origin_mismatch_url", crash_keys::kLargeSize },
     { "origin_mismatch_origin", crash_keys::kMediumSize },
@@ -265,14 +274,6 @@ static bool IsBoringSwitch(const std::string& flag) {
     switches::kFlagSwitchesBegin,
     switches::kFlagSwitchesEnd,
     switches::kLoggingLevel,
-#if defined(OS_WIN)
-    // This file is linked into both chrome.dll and chrome.exe. However //ipc
-    // is only in the .dll, so this needs to be a literal rather than the
-    // constant.
-    "channel",  // switches::kProcessChannelID
-#else
-    switches::kProcessChannelID,
-#endif
     switches::kProcessType,
     switches::kV,
     switches::kVModule,

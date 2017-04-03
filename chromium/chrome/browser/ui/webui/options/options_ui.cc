@@ -54,6 +54,8 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
+#include "chrome/grit/options_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_result.h"
 #include "components/strings/grit/components_strings.h"
@@ -63,8 +65,6 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_ui.h"
-#include "grit/options_resources.h"
-#include "grit/theme_resources.h"
 #include "net/base/escape.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -118,6 +118,7 @@ const char kLocalizedStringsFile[] = "strings.js";
 const char kOptionsBundleJsFile[]  = "options_bundle.js";
 
 #if defined(OS_CHROMEOS)
+constexpr char kIconsHTMLPath[] = "icons.html";
 constexpr char kPinKeyboardHTMLPath[] = "people_page/pin_keyboard.html";
 constexpr char kPinKeyboardJSPath[] = "people_page/pin_keyboard.js";
 constexpr char kPasswordPromptDialogHTMLPath[] =
@@ -162,8 +163,7 @@ class OptionsUIHTMLSource : public content::URLDataSource {
   std::string GetSource() const override;
   void StartDataRequest(
       const std::string& path,
-      int render_process_id,
-      int render_frame_id,
+      const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
       const content::URLDataSource::GotDataCallback& callback) override;
   std::string GetMimeType(const std::string&) const override;
   bool ShouldDenyXFrameOptions() const override;
@@ -195,8 +195,7 @@ std::string OptionsUIHTMLSource::GetSource() const {
 
 void OptionsUIHTMLSource::StartDataRequest(
     const std::string& path,
-    int render_process_id,
-    int render_frame_id,
+    const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
     const content::URLDataSource::GotDataCallback& callback) {
   scoped_refptr<base::RefCountedMemory> response_bytes;
   const std::string& app_locale = g_browser_process->GetApplicationLocale();
@@ -251,6 +250,7 @@ OptionsUIHTMLSource::~OptionsUIHTMLSource() {}
 
 void OptionsUIHTMLSource::CreateDataSourceMap() {
 #if defined(OS_CHROMEOS)
+  path_to_idr_map_[kIconsHTMLPath] = IDR_OPTIONS_ICONS_HTML;
   path_to_idr_map_[kPinKeyboardHTMLPath] = IDR_OPTIONS_PIN_KEYBOARD_HTML;
   path_to_idr_map_[kPinKeyboardJSPath] = IDR_OPTIONS_PIN_KEYBOARD_JS;
   path_to_idr_map_[kPasswordPromptDialogHTMLPath] =

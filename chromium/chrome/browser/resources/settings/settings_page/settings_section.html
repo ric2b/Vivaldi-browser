@@ -22,20 +22,28 @@
         color: var(--paper-grey-600);
         font-size: 13px;
         font-weight: 500;
+        margin-bottom: 0;
         margin-top: var(--settings-page-vertical-margin);
       }
 
       #card {
         @apply(--shadow-elevation-2dp);
         background-color: white;
+        border-radius: 2px;
         flex: 1;
         overflow: hidden;
+      }
+
+      :host(.expanded) #card {
+        border-radius: 0;
       }
 
       :host(.expanding) #card,
       :host(.collapsing) #card,
       :host(.expanded) #card {
         @apply(--shadow-elevation-4dp);
+        /* A stacking context constrains sliding sub-pages to the card. */
+        z-index: 0;
       }
 
       :host(:not(.expanding):not(.expanded)) #card {
@@ -52,7 +60,7 @@
       }
     </style>
     <div id="header">
-      <div class="title">{{pageTitle}}</div>
+      <h2 class="title">{{pageTitle}}</h2>
     </div>
     <div id="card">
       <content id="content"></content>

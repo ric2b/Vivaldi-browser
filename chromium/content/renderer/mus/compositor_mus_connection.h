@@ -5,15 +5,21 @@
 #ifndef CONTENT_RENDERER_MUS_COMPOSITOR_MUS_CONNECTION_H_
 #define CONTENT_RENDERER_MUS_COMPOSITOR_MUS_CONNECTION_H_
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "base/synchronization/lock.h"
 #include "content/common/content_export.h"
+#include "content/common/input/input_event_ack_state.h"
 #include "services/ui/public/cpp/input_event_handler.h"
 #include "services/ui/public/cpp/window.h"
 #include "services/ui/public/cpp/window_tree_client.h"
 #include "services/ui/public/cpp/window_tree_client_delegate.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "ui/events/blink/scoped_web_input_event.h"
+#include "ui/events/gestures/motion_event_aura.h"
 
 namespace ui {
 struct DidOverscrollParams;
@@ -62,16 +68,21 @@ class CONTENT_EXPORT CompositorMusConnection
   void OnConnectionLostOnMainThread();
 
   void OnWindowInputEventOnMainThread(
-      std::unique_ptr<blink::WebInputEvent> web_event,
+      ui::ScopedWebInputEvent web_event,
       const base::Callback<void(ui::mojom::EventResult)>& ack);
 
   void OnWindowInputEventAckOnMainThread(
       const base::Callback<void(ui::mojom::EventResult)>& ack,
       ui::mojom::EventResult result);
 
+  std::unique_ptr<blink::WebInputEvent> Convert(const ui::Event& event);
+
+  void DeleteWindowTreeClient();
+
   // WindowTreeClientDelegate implementation:
-  void OnDidDestroyClient(ui::WindowTreeClient* client) override;
   void OnEmbed(ui::Window* root) override;
+  void OnEmbedRootDestroyed(ui::Window* root) override;
+  void OnLostConnection(ui::WindowTreeClient* client) override;
   void OnPointerEventObserved(const ui::PointerEvent& event,
                               ui::Window* target) override;
 
@@ -81,13 +92,27 @@ class CONTENT_EXPORT CompositorMusConnection
       const ui::Event& event,
       std::unique_ptr<base::Callback<void(ui::mojom::EventResult)>>*
           ack_callback) override;
+  void DidHandleWindowInputEventAndOverscroll(
+      std::unique_ptr<base::Callback<void(ui::mojom::EventResult)>>
+          ack_callback,
+      InputEventAckState ack_state,
+      ui::ScopedWebInputEvent web_event,
+      const ui::LatencyInfo& latency_info,
+      std::unique_ptr<ui::DidOverscrollParams> overscroll_params);
 
   const int routing_id_;
+  // Use this lock when accessing |window_tree_client_|. Lock exists solely for
+  // DCHECK in destructor.
+  base::Lock window_tree_client_lock_;
+  std::unique_ptr<ui::WindowTreeClient> window_tree_client_;
   ui::Window* root_;
   scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner_;
   InputHandlerManager* const input_handler_manager_;
   std::unique_ptr<ui::WindowSurfaceBinding> window_surface_binding_;
+
+  // Stores the current state of the active pointers targeting this object.
+  ui::MotionEventAura pointer_state_;
 
   DISALLOW_COPY_AND_ASSIGN(CompositorMusConnection);
 };

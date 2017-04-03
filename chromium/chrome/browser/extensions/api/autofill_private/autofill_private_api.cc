@@ -14,7 +14,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/autofill_private/autofill_util.h"
 #include "chrome/common/extensions/api/autofill_private.h"
-#include "chrome/grit/generated_resources.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "extensions/browser/extension_function.h"
@@ -179,10 +178,8 @@ ExtensionFunction::ResponseAction AutofillPrivateSaveAddressFunction::Run() {
   autofill::PersonalDataManager* personal_data =
       autofill::PersonalDataManagerFactory::GetForProfile(
       chrome_details_.GetProfile());
-  if (!personal_data || !personal_data->IsDataLoaded()) {
-    error_ = kErrorDataUnavailable;
-    return RespondNow(NoArguments());
-  }
+  if (!personal_data || !personal_data->IsDataLoaded())
+    return RespondNow(Error(kErrorDataUnavailable));
 
   api::autofill_private::AddressEntry* address = &parameters->address;
 
@@ -368,10 +365,8 @@ ExtensionFunction::ResponseAction AutofillPrivateSaveCreditCardFunction::Run() {
   autofill::PersonalDataManager* personal_data =
       autofill::PersonalDataManagerFactory::GetForProfile(
       chrome_details_.GetProfile());
-  if (!personal_data || !personal_data->IsDataLoaded()) {
-    error_ = kErrorDataUnavailable;
-    return RespondNow(NoArguments());
-  }
+  if (!personal_data || !personal_data->IsDataLoaded())
+    return RespondNow(Error(kErrorDataUnavailable));
 
   api::autofill_private::CreditCardEntry* card = &parameters->card;
 
@@ -427,10 +422,8 @@ ExtensionFunction::ResponseAction AutofillPrivateRemoveEntryFunction::Run() {
   autofill::PersonalDataManager* personal_data =
       autofill::PersonalDataManagerFactory::GetForProfile(
       chrome_details_.GetProfile());
-  if (!personal_data || !personal_data->IsDataLoaded()) {
-    error_ = kErrorDataUnavailable;
-    return RespondNow(NoArguments());
-  }
+  if (!personal_data || !personal_data->IsDataLoaded())
+    return RespondNow(Error(kErrorDataUnavailable));
 
   personal_data->RemoveByGUID(parameters->guid);
 
@@ -479,10 +472,8 @@ ExtensionFunction::ResponseAction AutofillPrivateMaskCreditCardFunction::Run() {
   autofill::PersonalDataManager* personal_data =
       autofill::PersonalDataManagerFactory::GetForProfile(
       chrome_details_.GetProfile());
-  if (!personal_data || !personal_data->IsDataLoaded()) {
-    error_ = kErrorDataUnavailable;
-    return RespondNow(NoArguments());
-  }
+  if (!personal_data || !personal_data->IsDataLoaded())
+    return RespondNow(Error(kErrorDataUnavailable));
 
   personal_data->ResetFullServerCard(parameters->guid);
 

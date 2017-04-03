@@ -40,7 +40,7 @@ source_path = os.path.normpath(os.path.join(module_path, os.pardir, os.pardir,
 bindings_script_path = os.path.join(source_path, 'bindings', 'scripts')
 sys.path.append(bindings_script_path)  # for Source/bindings imports
 
-from code_generator_v8 import CodeGeneratorUnionType
+from code_generator_v8 import CodeGeneratorUnionType, CodeGeneratorCallbackFunction
 from compute_interfaces_info_individual import InterfaceInfoCollector
 from compute_interfaces_info_overall import compute_interfaces_info_overall, interfaces_info
 from idl_compiler import IdlCompilerDictionaryImpl, IdlCompilerV8
@@ -274,7 +274,15 @@ def bindings_tests(output_directory, verbose):
             output_dir=output_directory, target_component=component)
         outputs = generator.generate_code()
         for output_path, output_code in outputs:
-            write_file(output_code, output_path, only_if_changed=True)
+            write_file(output_code, output_path)
+
+    def generate_callback_function_impl(output_directory, component):
+        generator = CodeGeneratorCallbackFunction(
+            component_info_providers[component], cache_dir=None,
+            output_dir=output_directory, target_component=component)
+        outputs = generator.generate_code()
+        for output_path, output_code in outputs:
+            write_file(output_code, output_path)
 
     try:
         generate_interface_dependencies()
@@ -284,11 +292,12 @@ def bindings_tests(output_directory, verbose):
                 os.makedirs(output_dir)
 
             generate_union_type_containers(output_dir, component)
+            generate_callback_function_impl(output_dir, component)
 
             idl_compiler = IdlCompilerV8(
                 output_dir,
                 info_provider=component_info_providers[component],
-                only_if_changed=True)
+                target_component=component)
             if component == 'core':
                 partial_interface_output_dir = os.path.join(output_directory,
                                                             'modules')
@@ -297,14 +306,13 @@ def bindings_tests(output_directory, verbose):
                 idl_partial_interface_compiler = IdlCompilerV8(
                     partial_interface_output_dir,
                     info_provider=component_info_providers['modules'],
-                    only_if_changed=True,
                     target_component='modules')
             else:
                 idl_partial_interface_compiler = None
 
             dictionary_impl_compiler = IdlCompilerDictionaryImpl(
                 output_dir, info_provider=component_info_providers[component],
-                only_if_changed=True)
+                target_component=component)
 
             idl_filenames = []
             input_directory = os.path.join(test_input_directory, component)

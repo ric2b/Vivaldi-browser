@@ -216,11 +216,6 @@ const char kDefaultCharset[] = "intl.charset_default";
 // request.
 const char kAcceptLanguages[] = "intl.accept_languages";
 
-// The value to use for showing locale-dependent encoding list for different
-// locale, it's initialized from the corresponding string resource that is
-// stored in non-translatable part of the resource bundle.
-const char kStaticEncodings[] = "intl.static_encodings";
-
 // If these change, the corresponding enums in the extension API
 // experimental.fontSettings.json must also change.
 const char* const kWebKitScriptsForFontFamilyMaps[] = {
@@ -318,13 +313,9 @@ const char kWebKitSansSerifFontFamilyTraditionalHan[] =
 // WebKit preferences.
 const char kWebKitWebSecurityEnabled[] = "webkit.webprefs.web_security_enabled";
 const char kWebKitDomPasteEnabled[] = "webkit.webprefs.dom_paste_enabled";
-const char kWebKitUsesUniversalDetector[] =
-    "webkit.webprefs.uses_universal_detector";
 const char kWebKitTextAreasAreResizable[] =
     "webkit.webprefs.text_areas_are_resizable";
 const char kWebkitTabsToLinks[] = "webkit.webprefs.tabs_to_links";
-const char kWebKitAllowDisplayingInsecureContent[] =
-    "webkit.webprefs.allow_displaying_insecure_content";
 const char kWebKitAllowRunningInsecureContent[] =
     "webkit.webprefs.allow_running_insecure_content";
 #if defined(OS_ANDROID)
@@ -915,16 +906,6 @@ const char kEolNotificationDismissed[] = "eol_notification_dismissed";
 // visible on the toolbar.
 const char kShowHomeButton[] = "browser.show_home_button";
 
-// A string value which saves short list of recently user selected encodings
-// separated with comma punctuation mark.
-const char kRecentlySelectedEncoding[] = "profile.recently_selected_encodings";
-
-// Clear Browsing Data dialog preferences.
-const char kLastClearBrowsingDataTime[] =
-    "browser.last_clear_browsing_data_time";
-const char kClearBrowsingDataHistoryNoticeShownTimes[] =
-    "browser.clear_data.history_notice_shown_times";
-
 // Boolean pref to define the default setting for "block offensive words".
 // The old key value is kept to avoid unnecessary migration code.
 const char kSpeechRecognitionFilterProfanities[] =
@@ -937,11 +918,18 @@ const char kSavingBrowserHistoryDisabled[] = "history.saving_disabled";
 // permitted.
 const char kAllowDeletingBrowserHistory[] = "history.deleting_enabled";
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+// Whether the "Click here to clear your browsing data" tooltip promo has been
+// shown on the Material Design History page.
+const char kMdHistoryMenuPromoShown[] = "history.menu_promo_shown";
+#endif
+
 // Boolean controlling whether SafeSearch is mandatory for Google Web Searches.
 const char kForceGoogleSafeSearch[] = "settings.force_google_safesearch";
 
-// Boolean controlling whether Safety Mode is mandatory on YouTube.
-const char kForceYouTubeSafetyMode[] = "settings.force_youtube_safety_mode";
+// Integer controlling whether Restrict Mode (moderate/strict) is mandatory on
+// YouTube. See |safe_search_util::YouTubeRestrictMode| for possible values.
+const char kForceYouTubeRestrict[] = "settings.force_youtube_restrict";
 
 // Boolean controlling whether history is recorded via Session Sync
 // (for supervised users).
@@ -992,6 +980,10 @@ const char kPluginsDisabledPluginsExceptions[] =
 
 // List pref containing names of plugins that are enabled by policy.
 const char kPluginsEnabledPlugins[] = "plugins.plugins_enabled";
+
+// Whether Chrome should use its internal PDF viewer or not.
+const char kPluginsAlwaysOpenPdfExternally[] =
+    "plugins.always_open_pdf_externally";
 
 #if defined(ENABLE_PLUGINS)
 // Whether about:plugins is shown in the details mode or not.
@@ -1318,9 +1310,9 @@ const char kProfileCreatedByVersion[] = "profile.created_by_version";
 // them.
 const char kProfileInfoCache[] = "profile.info_cache";
 
-// Boolean that specifies whether or not crash reports are sent
-// over the network for analysis.
-#if defined(OS_ANDROID)
+// Deprecated preference for metric / crash reporting on Android. Use
+// kMetricsReportingEnabled instead.
+#if BUILDFLAG(ANDROID_JAVA_UI)
 const char kCrashReportingEnabled[] =
     "user_experience_metrics_crash.reporting_enabled";
 #endif
@@ -1537,9 +1529,13 @@ const char kDevToolsPortForwardingDefaultSet[] =
 // A dictionary of port->location pairs for port forwarding.
 const char kDevToolsPortForwardingConfig[] = "devtools.port_forwarding_config";
 
+// A boolean specifying whether or not Chrome will scan for available remote
+// debugging targets.
+const char kDevToolsDiscoverTCPTargetsEnabled[] =
+    "devtools.discover_tcp_targets";
+
 // A list of strings representing devtools target discovery servers.
-const char kDevToolsTargetDiscoveryConfig[] =
-    "devtools.target_discovery_config";
+const char kDevToolsTCPDiscoveryConfig[] = "devtools.tcp_discovery_config";
 
 // A dictionary with generic DevTools settings.
 const char kDevToolsPreferences[] = "devtools.preferences";
@@ -1745,10 +1741,6 @@ const char kAutoEnrollmentPowerLimit[] = "AutoEnrollmentPowerLimit";
 // them to the policy server.
 const char kDeviceActivityTimes[] = "device_status.activity_times";
 
-// A pref holding the last known location when device location reporting is
-// enabled.
-const char kDeviceLocation[] = "device_status.location";
-
 // A pref holding the value of the policy used to disable mounting of external
 // storage for the user.
 const char kExternalStorageDisabled[] = "hardware.external_storage_disabled";
@@ -1811,6 +1803,9 @@ const char kOobeComplete[] = "OobeComplete";
 // The name of the screen that has to be shown if OOBE has been interrupted.
 const char kOobeScreenPending[] = "OobeScreenPending";
 
+// If material design OOBE should be selected if OOBE has been interrupted.
+const char kOobeMdMode[] = "OobeMdModeEnabled";
+
 // A boolean pref to indicate if an eligible controller (either a Chrome OS
 // device, or an Android device) is detected during bootstrapping or
 // shark/remora setup process. A controller can help the device go through OOBE
@@ -1846,6 +1841,15 @@ const char kCustomizationDefaultWallpaperURL[] =
 // System uptime, when last logout started.
 // This is saved to file and cleared after chrome process starts.
 const char kLogoutStartedLast[] = "chromeos.logout-started";
+
+// The role of the device in the OOBE bootstrapping process. If it's a "slave"
+// device, then it's eligible to be enrolled by a "master" device (which could
+// be an Android app).
+const char kIsBootstrappingSlave[] = "is_oobe_bootstrapping_slave";
+
+// A preference that controlles Android status reporting.
+const char kReportArcStatusEnabled[] = "arc.status_reporting_enabled";
+
 #endif  // defined(OS_CHROMEOS)
 
 // Whether there is a Flash version installed that supports clearing LSO data.
@@ -2192,6 +2196,9 @@ const char kBrowserGuestModeEnabled[] = "profile.browser_guest_enabled";
 
 // Whether Adding a new Person is enabled within the user manager.
 const char kBrowserAddPersonEnabled[] = "profile.add_person_enabled";
+
+// Whether profile can be used before sign in.
+const char kForceBrowserSignin[] = "profile.force_browser_signin";
 
 // Device identifier used by Easy Unlock stored in local state. This id will be
 // combined with a user id, before being registered with the CryptAuth server,

@@ -13,6 +13,7 @@
 #include "blimp/client/public/blimp_client_context_delegate.h"
 #include "blimp/client/public/contents/blimp_contents.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "ui/gfx/native_widget_types.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/jni_android.h"
@@ -24,6 +25,7 @@ class SupportsUserData;
 
 namespace blimp {
 namespace client {
+class CompositorDependencies;
 
 // BlimpClientContext is the core class for the Blimp client. It provides hooks
 // for creating BlimpContents and other features that are per
@@ -44,18 +46,25 @@ class BlimpClientContext : public KeyedService {
   // operations.
   // The |file_thread_task_runner| must be the task runner to use for file
   // operations.
+  // |compositor_dependencies| is a support object that provides all embedder
+  // dependencies required by internal compositors.
   static BlimpClientContext* Create(
       scoped_refptr<base::SingleThreadTaskRunner> io_thread_task_runner,
-      scoped_refptr<base::SingleThreadTaskRunner> file_thread_task_runner);
+      scoped_refptr<base::SingleThreadTaskRunner> file_thread_task_runner,
+      std::unique_ptr<CompositorDependencies> compositor_dependencies);
 
   // The delegate provides all the required functionality from the embedder.
   virtual void SetDelegate(BlimpClientContextDelegate* delegate) = 0;
 
-  // Creates a new BlimpContents.
-  virtual std::unique_ptr<BlimpContents> CreateBlimpContents() = 0;
+  // Creates a new BlimpContents that will be shown in |window|.
+  // TODO(mlliu): Currently we want to have a single BlimpContents. If there is
+  // an existing contents, return nullptr (http://crbug.com/642558).
+  virtual std::unique_ptr<BlimpContents> CreateBlimpContents(
+      gfx::NativeWindow window) = 0;
 
   // Start authentication flow and connection to engine.
   virtual void Connect() = 0;
+  virtual void ConnectWithAssignment(const Assignment& assignment) = 0;
 
  protected:
   BlimpClientContext() = default;

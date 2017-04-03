@@ -13,6 +13,7 @@ import android.view.inputmethod.InputConnection;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 
@@ -20,12 +21,15 @@ import java.util.concurrent.Callable;
 
 /**
  * Integration tests for text input for Android L (or above) features.
+ * Note this inherits from ImeTest, so we run each test case twice, once with ImeThread feature and
+ * once without it.
  */
 @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
 @TargetApi(Build.VERSION_CODES.LOLLIPOP)
 public class ImeLollipopTest extends ImeTest {
     @MediumTest
     @Feature({"TextInput"})
+    @RetryOnFailure
     public void testUpdateCursorAnchorInfo() throws Throwable {
         requestCursorUpdates(InputConnection.CURSOR_UPDATE_MONITOR);
 

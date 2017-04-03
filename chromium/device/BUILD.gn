@@ -17,6 +17,7 @@ is_linux_without_udev = is_linux && !use_udev
 
 test("device_unittests") {
   sources = [
+    "base/synchronization/one_writer_seqlock_unittest.cc",
     "battery/battery_status_manager_win_unittest.cc",
     "battery/battery_status_service_unittest.cc",
     "bluetooth/bluetooth_adapter_mac_unittest.mm",
@@ -60,21 +61,23 @@ test("device_unittests") {
     "bluetooth/test/test_bluetooth_local_gatt_service_delegate.cc",
     "bluetooth/test/test_bluetooth_local_gatt_service_delegate.h",
     "gamepad/gamepad_provider_unittest.cc",
-    "nfc/nfc_chromeos_unittest.cc",
-    "nfc/nfc_ndef_record_unittest.cc",
+    "generic_sensor/platform_sensor_provider_unittest.cc",
     "test/run_all_unittests.cc",
   ]
 
   deps = [
     "//base/test:test_support",
+    "//base/third_party/dynamic_annotations:dynamic_annotations",
+    "//device/base/synchronization",
     "//device/battery",
     "//device/battery:mojo_bindings",
     "//device/bluetooth",
     "//device/bluetooth:mocks",
     "//device/gamepad",
     "//device/gamepad:test_helpers",
+    "//device/generic_sensor",
+    "//device/generic_sensor:testing",
     "//device/geolocation:unittests",
-    "//device/nfc",
     "//device/power_save_blocker",
     "//mojo/common",
     "//mojo/edk/system",
@@ -179,7 +182,6 @@ test("device_unittests") {
     sources += [
       "bluetooth/bluez/bluetooth_adapter_profile_bluez_unittest.cc",
       "bluetooth/bluez/bluetooth_advertisement_bluez_unittest.cc",
-      "bluetooth/bluez/bluetooth_audio_sink_bluez_unittest.cc",
       "bluetooth/bluez/bluetooth_bluez_unittest.cc",
       "bluetooth/bluez/bluetooth_gatt_bluez_unittest.cc",
       "bluetooth/bluez/bluetooth_service_attribute_value_bluez_unittest.cc",
@@ -257,11 +259,16 @@ if (is_android) {
   }
 
   junit_binary("device_junit_tests") {
-    java_files = [ "gamepad/android/junit/src/org/chromium/device/gamepad/GamepadMappingsTest.java" ]
+    java_files = [
+      "gamepad/android/junit/src/org/chromium/device/gamepad/GamepadMappingsTest.java",
+      "generic_sensor/android/junit/src/org/chromium/device/sensors/PlatformSensorAndProviderTest.java",
+    ]
     deps = [
       "//base:base_java",
       "//base:base_java_test_support",
       "//device/gamepad:java",
+      "//device/generic_sensor:java",
+      "//device/generic_sensor/public/interfaces:interfaces_java",
       "//third_party/android_tools:android_support_annotations_java",
     ]
     srcjar_deps = [ "//device/gamepad:java_enums_srcjar" ]

@@ -163,12 +163,16 @@
       * To get @ returned, set noSpecialChars = false
      */
     function normalizedKeyForEvent(keyEvent, noSpecialChars) {
-      // Fall back from .key, to .keyIdentifier, to .keyCode, and then to
-      // .detail.key to support artificial keyboard events.
-      return transformKey(keyEvent.key, noSpecialChars) ||
-        transformKeyIdentifier(keyEvent.keyIdentifier) ||
-        transformKeyCode(keyEvent.keyCode) ||
-        transformKey(keyEvent.detail ? keyEvent.detail.key : keyEvent.detail, noSpecialChars) || '';
+      // Fall back from .key, to .detail.key for artifical keyboard events,
+      // and then to deprecated .keyIdentifier and .keyCode.
+      if (keyEvent.key) {
+        return transformKey(keyEvent.key, noSpecialChars);
+      }
+      if (keyEvent.detail && keyEvent.detail.key) {
+        return transformKey(keyEvent.detail.key, noSpecialChars);
+      }
+      return transformKeyIdentifier(keyEvent.keyIdentifier) ||
+        transformKeyCode(keyEvent.keyCode) || '';
     }
 
     function keyComboMatchesEvent(keyCombo, event) {
@@ -300,7 +304,7 @@
       /**
        * To be used to express what combination of keys  will trigger the relative
        * callback. e.g. `keyBindings: { 'esc': '_onEscPressed'}`
-       * @type {Object}
+       * @type {!Object}
        */
       keyBindings: {},
 

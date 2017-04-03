@@ -14,6 +14,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/supports_user_data.h"
 #include "content/common/resource_request_body_impl.h"
+#include "content/public/browser/navigation_ui_data.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/resource_type.h"
@@ -79,6 +80,7 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   int GetRouteID() const override;
   int GetOriginPID() const override;
   int GetRenderFrameID() const override;
+  int GetFrameTreeNodeId() const override;
   bool IsMainFrame() const override;
   bool ParentIsMainFrame() const override;
   ResourceType GetResourceType() const override;
@@ -94,6 +96,7 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   bool IsDownload() const override;
   bool IsUsingLoFi() const override;
   bool ShouldReportRawHeaders() const;
+  NavigationUIData* GetNavigationUIData() const override;
 
   CONTENT_EXPORT void AssociateWithRequest(net::URLRequest* request);
 
@@ -197,6 +200,11 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
     initiated_in_secure_context_ = secure;
   }
 
+  void set_navigation_ui_data(
+      std::unique_ptr<NavigationUIData> navigation_ui_data) {
+    navigation_ui_data_ = std::move(navigation_ui_data);
+  }
+
   // Vivaldi specific
   void set_ask_for_save_target(bool ask) {
       ask_for_save_target_ = ask;
@@ -255,6 +263,7 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   const std::string original_headers_;
   scoped_refptr<ResourceRequestBodyImpl> body_;
   bool initiated_in_secure_context_;
+  std::unique_ptr<NavigationUIData> navigation_ui_data_;
 
   // Vivaldi additions to pass save info to defered downloads. blobs etc.
   bool ask_for_save_target_ = false;

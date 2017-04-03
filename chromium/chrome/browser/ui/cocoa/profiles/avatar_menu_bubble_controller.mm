@@ -16,7 +16,7 @@
 #import "chrome/browser/ui/cocoa/info_bubble_view.h"
 #import "chrome/browser/ui/cocoa/info_bubble_window.h"
 #include "chrome/grit/generated_resources.h"
-#include "grit/theme_resources.h"
+#include "chrome/grit/theme_resources.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMUILocalizerAndLayoutTweaker.h"
 #import "ui/base/cocoa/cocoa_base_utils.h"
 #import "ui/base/cocoa/controls/hyperlink_button_cell.h"
@@ -91,8 +91,9 @@ const CGFloat kSupervisedUserSpacing = 26.0;
 
 - (IBAction)switchToProfile:(id)sender {
   // Check the event flags to see if a new window should be crated.
-  bool always_create = ui::WindowOpenDispositionFromNSEvent(
-      [NSApp currentEvent]) == NEW_WINDOW;
+  bool always_create =
+      ui::WindowOpenDispositionFromNSEvent([NSApp currentEvent]) ==
+      WindowOpenDisposition::NEW_WINDOW;
   menu_->SwitchToProfile([sender menuIndex], always_create,
                          ProfileMetrics::SWITCH_PROFILE_ICON);
 }

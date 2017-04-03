@@ -4,6 +4,7 @@
 
 #include "content/browser/compositor/surface_utils.h"
 
+#include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/memory/ref_counted.h"
 #include "build/build_config.h"
@@ -158,12 +159,12 @@ void PrepareBitmapCopyOutputResult(
 
 namespace content {
 
-uint32_t AllocateSurfaceClientId() {
+cc::FrameSinkId AllocateFrameSinkId() {
 #if defined(OS_ANDROID)
-  return ContextProviderFactoryImpl::GetInstance()->AllocateSurfaceClientId();
+  return ContextProviderFactoryImpl::GetInstance()->AllocateFrameSinkId();
 #else
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
-  return factory->GetContextFactory()->AllocateSurfaceClientId();
+  return factory->GetContextFactory()->AllocateFrameSinkId();
 #endif
 }
 

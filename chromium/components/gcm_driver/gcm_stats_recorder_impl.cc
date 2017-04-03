@@ -50,10 +50,11 @@ std::string GetMessageSendStatusString(
       return "NO_CONNECTION_ON_ZERO_TTL";
     case gcm::MCSClient::TTL_EXCEEDED:
       return "TTL_EXCEEDED";
-    default:
+    case gcm::MCSClient::SEND_STATUS_COUNT:
       NOTREACHED();
-      return "UNKNOWN";
+      break;
   }
+  return "UNKNOWN";
 }
 
 // Helper for getting string representation of the
@@ -71,10 +72,13 @@ std::string GetConnectionResetReasonString(
       return "SOCKET_FAILURE";
     case gcm::ConnectionFactory::NETWORK_CHANGE:
       return "NETWORK_CHANGE";
-    default:
+    case gcm::ConnectionFactory::NEW_HEARTBEAT_INTERVAL:
+      return "NEW_HEARTBEAT_INTERVAL";
+    case gcm::ConnectionFactory::CONNECTION_RESET_COUNT:
       NOTREACHED();
-      return "UNKNOWN_REASON";
+      break;
   }
+  return "UNKNOWN_REASON";
 }
 
 // Helper for getting string representation of the RegistrationRequest::Status
@@ -98,14 +102,23 @@ std::string GetRegistrationStatusString(
       return "URL_FETCHING_FAILED";
     case gcm::RegistrationRequest::HTTP_NOT_OK:
       return "HTTP_NOT_OK";
-    case gcm::RegistrationRequest::RESPONSE_PARSING_FAILED:
-      return "RESPONSE_PARSING_FAILED";
+    case gcm::RegistrationRequest::NO_RESPONSE_BODY:
+      return "NO_RESPONSE_BODY";
     case gcm::RegistrationRequest::REACHED_MAX_RETRIES:
       return "REACHED_MAX_RETRIES";
-    default:
+    case gcm::RegistrationRequest::RESPONSE_PARSING_FAILED:
+      return "RESPONSE_PARSING_FAILED";
+    case gcm::RegistrationRequest::INTERNAL_SERVER_ERROR:
+      return "INTERNAL_SERVER_ERROR";
+    case gcm::RegistrationRequest::QUOTA_EXCEEDED:
+      return "QUOTA_EXCEEDED";
+    case gcm::RegistrationRequest::TOO_MANY_REGISTRATIONS:
+      return "TOO_MANY_REGISTRATIONS";
+    case gcm::RegistrationRequest::STATUS_COUNT:
       NOTREACHED();
-      return "UNKNOWN_STATUS";
+      break;
   }
+  return "UNKNOWN_STATUS";
 }
 
 // Helper for getting string representation of the RegistrationRequest::Status
@@ -135,10 +148,13 @@ std::string GetUnregistrationStatusString(
       return "UNKNOWN_ERROR";
     case gcm::UnregistrationRequest::REACHED_MAX_RETRIES:
       return "REACHED_MAX_RETRIES";
-    default:
+    case gcm::UnregistrationRequest::DEVICE_REGISTRATION_ERROR:
+      return "DEVICE_REGISTRATION_ERROR";
+    case gcm::UnregistrationRequest::UNREGISTRATION_STATUS_COUNT:
       NOTREACHED();
-      return "UNKNOWN_STATUS";
+      break;
   }
+  return "UNKNOWN_STATUS";
 }
 
 }  // namespace
@@ -400,6 +416,8 @@ void GCMStatsRecorderImpl::RecordDataMessageReceived(
     int message_byte_size,
     bool to_registered_app,
     ReceivedMessageType message_type) {
+  UMA_HISTOGRAM_BOOLEAN("GCM.DataMessageReceivedHasRegisteredApp",
+                        to_registered_app);
   if (to_registered_app)
     UMA_HISTOGRAM_COUNTS("GCM.DataMessageReceived", 1);
 
@@ -442,7 +460,7 @@ void GCMStatsRecorderImpl::RecordDataMessageReceived(
                     "Data msg received",
                     "No such registered app found");
   } else {
-    switch(message_type) {
+    switch (message_type) {
       case GCMStatsRecorderImpl::DATA_MESSAGE:
         RecordReceiving(app_id, from, message_byte_size, "Data msg received",
                         std::string());
@@ -451,8 +469,6 @@ void GCMStatsRecorderImpl::RecordDataMessageReceived(
         RecordReceiving(app_id, from, message_byte_size, "Data msg received",
                         "Message has been deleted on server");
         break;
-      default:
-        NOTREACHED();
     }
   }
 }

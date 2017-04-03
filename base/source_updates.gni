@@ -1,0 +1,16 @@
+
+post_process_target("//base:base") {
+  if (!defined(sources)) {
+    sources = []
+  }
+  sources += [
+    "//vivaldi/base/vivaldi_running.cpp",
+  ]
+}
+
+post_process_target("//base:base_static") {
+  sources += [
+    "//vivaldi/base/vivaldi_switches.cpp",
+    "//vivaldi/base/vivaldi_switches.h",
+  ]
+}

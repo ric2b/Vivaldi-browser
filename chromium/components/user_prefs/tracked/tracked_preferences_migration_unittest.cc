@@ -47,9 +47,11 @@ class SimpleInterceptablePrefFilter : public InterceptablePrefFilter {
  public:
   // PrefFilter remaining implementation.
   void FilterUpdate(const std::string& path) override { ADD_FAILURE(); }
-  void FilterSerializeData(
+  OnWriteCallbackPair FilterSerializeData(
       base::DictionaryValue* pref_store_contents) override {
     ADD_FAILURE();
+    return std::make_pair(base::Closure(),
+                          base::Callback<void(bool success)>());
   }
 
  private:
@@ -162,10 +164,8 @@ class TrackedPreferencesMigrationTest : public testing::Test {
     DCHECK(store);
 
     base::StringValue string_value(value);
-    pref_hash_store
-        ->BeginTransaction(std::unique_ptr<HashStoreContents>(
-            new DictionaryHashStoreContents(store)))
-        ->StoreHash(key, &string_value);
+    DictionaryHashStoreContents contents(store);
+    pref_hash_store->BeginTransaction(&contents)->StoreHash(key, &string_value);
   }
 
   // Returns true if the store opposite to |store_id| is observed for its next

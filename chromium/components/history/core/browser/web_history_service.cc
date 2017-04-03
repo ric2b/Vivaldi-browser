@@ -10,7 +10,7 @@
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -304,11 +304,11 @@ GURL GetQueryUrl(const base::string16& text_query,
 // Creates a DictionaryValue to hold the parameters for a deletion.
 // Ownership is passed to the caller.
 // |url| may be empty, indicating a time-range deletion.
-base::DictionaryValue* CreateDeletion(
+std::unique_ptr<base::DictionaryValue> CreateDeletion(
     const std::string& min_time,
     const std::string& max_time,
     const GURL& url) {
-  base::DictionaryValue* deletion = new base::DictionaryValue;
+  std::unique_ptr<base::DictionaryValue> deletion(new base::DictionaryValue);
   deletion->SetString("type", "CHROME_HISTORY");
   if (url.is_valid())
     deletion->SetString("url", url.spec());
@@ -512,8 +512,8 @@ void WebHistoryService::QueryOtherFormsOfBrowsingHistory(
       callback);
 
   // Find the Sync request URL.
-  GURL url =
-      GetSyncServiceURL(*base::CommandLine::ForCurrentProcess(), channel);
+  GURL url = syncer::GetSyncServiceURL(*base::CommandLine::ForCurrentProcess(),
+                                       channel);
   GURL::Replacements replace_path;
   std::string new_path =
       url.path() + kQueryOtherFormsOfBrowsingHistoryUrlSuffix;
@@ -524,7 +524,7 @@ void WebHistoryService::QueryOtherFormsOfBrowsingHistory(
   Request* request = CreateRequest(url, completion_callback);
 
   // Set the Sync-specific user agent.
-  std::string user_agent = MakeUserAgentForSync(
+  std::string user_agent = syncer::MakeUserAgentForSync(
       channel, ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET);
   request->SetUserAgent(user_agent);
 
@@ -563,13 +563,14 @@ void WebHistoryService::ExpireHistoryCompletionCallback(
     if (response_value)
       response_value->GetString("version_info", &server_version_info_);
   }
-  callback.Run(response_value.get() && success);
 
   // Inform the observers about the history deletion.
   if (response_value.get() && success) {
     FOR_EACH_OBSERVER(WebHistoryServiceObserver, observer_list_,
                       OnWebHistoryDeleted());
   }
+
+  callback.Run(response_value.get() && success);
 }
 
 void WebHistoryService::AudioHistoryCompletionCallback(

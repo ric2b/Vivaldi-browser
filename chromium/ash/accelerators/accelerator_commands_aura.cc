@@ -4,14 +4,13 @@
 
 #include "ash/accelerators/accelerator_commands_aura.h"
 
-#include "ash/common/display/display_info.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_window.h"
 #include "ash/display/display_manager.h"
-#include "ash/display/display_util.h"
 #include "ash/shell.h"
 #include "ash/wm/screen_pinning_controller.h"
 #include "base/metrics/user_metrics.h"
+#include "ui/display/manager/managed_display_info.h"
 
 namespace ash {
 namespace accelerators {
@@ -35,40 +34,13 @@ bool ZoomInternalDisplay(bool up) {
     base::RecordAction(base::UserMetricsAction("Accel_Scale_Ui_Down"));
 
   DisplayManager* display_manager = Shell::GetInstance()->display_manager();
-
-  int64_t display_id = display_manager->IsInUnifiedMode()
-                           ? DisplayManager::kUnifiedDisplayId
-                           : display_manager->GetDisplayIdForUIScaling();
-  const DisplayInfo& display_info = display_manager->GetDisplayInfo(display_id);
-
-  scoped_refptr<ManagedDisplayMode> mode;
-  if (display_manager->IsInUnifiedMode())
-    mode = GetDisplayModeForNextResolution(display_info, up);
-  else
-    mode = GetDisplayModeForNextUIScale(display_info, up);
-
-  if (!mode)
-    return false;
-  return display_manager->SetDisplayMode(display_id, mode);
+  return display_manager->ZoomInternalDisplay(up);
 }
 
 void ResetInternalDisplayZoom() {
   base::RecordAction(base::UserMetricsAction("Accel_Scale_Ui_Reset"));
   DisplayManager* display_manager = Shell::GetInstance()->display_manager();
-
-  if (display_manager->IsInUnifiedMode()) {
-    const DisplayInfo& display_info =
-        display_manager->GetDisplayInfo(DisplayManager::kUnifiedDisplayId);
-    const DisplayInfo::ManagedDisplayModeList& modes =
-        display_info.display_modes();
-    auto iter = std::find_if(modes.begin(), modes.end(),
-                             [](const scoped_refptr<ManagedDisplayMode>& mode) {
-                               return mode->native();
-                             });
-    display_manager->SetDisplayMode(DisplayManager::kUnifiedDisplayId, *iter);
-  } else {
-    SetDisplayUIScale(display_manager->GetDisplayIdForUIScaling(), 1.0f);
-  }
+  display_manager->ResetInternalDisplayZoom();
 }
 
 void Unpin() {

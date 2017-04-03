@@ -13,9 +13,14 @@
 #include "base/values.h"
 #include "net/base/net_errors.h"
 #include "net/log/net_log.h"
+#include "net/log/net_log_capture_mode.h"
+#include "net/log/net_log_event_type.h"
+#include "net/log/net_log_parameters_callback.h"
+#include "net/log/net_log_with_source.h"
 #include "net/proxy/proxy_resolver_error_observer.h"
 
 namespace net {
+
 namespace {
 
 // Returns event parameters for a PAC error message (line number + message).
@@ -34,24 +39,24 @@ class BindingsImpl : public ProxyResolverV8Tracing::Bindings {
   BindingsImpl(ProxyResolverErrorObserver* error_observer,
                HostResolver* host_resolver,
                NetLog* net_log,
-               const BoundNetLog& bound_net_log)
+               const NetLogWithSource& net_log_with_source)
       : error_observer_(error_observer),
         host_resolver_(host_resolver),
         net_log_(net_log),
-        bound_net_log_(bound_net_log) {}
+        net_log_with_source_(net_log_with_source) {}
 
   // ProxyResolverV8Tracing::Bindings overrides.
   void Alert(const base::string16& message) override {
     // Send to the NetLog.
     LogEventToCurrentRequestAndGlobally(
-        NetLog::TYPE_PAC_JAVASCRIPT_ALERT,
+        NetLogEventType::PAC_JAVASCRIPT_ALERT,
         NetLog::StringCallback("message", &message));
   }
 
   void OnError(int line_number, const base::string16& message) override {
     // Send the error to the NetLog.
     LogEventToCurrentRequestAndGlobally(
-        NetLog::TYPE_PAC_JAVASCRIPT_ERROR,
+        NetLogEventType::PAC_JAVASCRIPT_ERROR,
         base::Bind(&NetLogErrorCallback, line_number, &message));
     if (error_observer_)
       error_observer_->OnPACScriptError(line_number, message);
@@ -59,13 +64,15 @@ class BindingsImpl : public ProxyResolverV8Tracing::Bindings {
 
   HostResolver* GetHostResolver() override { return host_resolver_; }
 
-  BoundNetLog GetBoundNetLog() override { return bound_net_log_; }
+  NetLogWithSource GetNetLogWithSource() override {
+    return net_log_with_source_;
+  }
 
  private:
   void LogEventToCurrentRequestAndGlobally(
-      NetLog::EventType type,
-      const NetLog::ParametersCallback& parameters_callback) {
-    bound_net_log_.AddEvent(type, parameters_callback);
+      NetLogEventType type,
+      const NetLogParametersCallback& parameters_callback) {
+    net_log_with_source_.AddEvent(type, parameters_callback);
 
     // Emit to the global NetLog event stream.
     if (net_log_)
@@ -75,7 +82,7 @@ class BindingsImpl : public ProxyResolverV8Tracing::Bindings {
   ProxyResolverErrorObserver* error_observer_;
   HostResolver* host_resolver_;
   NetLog* net_log_;
-  BoundNetLog bound_net_log_;
+  NetLogWithSource net_log_with_source_;
 };
 
 class ProxyResolverV8TracingWrapper : public ProxyResolver {
@@ -90,7 +97,7 @@ class ProxyResolverV8TracingWrapper : public ProxyResolver {
                      ProxyInfo* results,
                      const CompletionCallback& callback,
                      RequestHandle* request,
-                     const BoundNetLog& net_log) override;
+                     const NetLogWithSource& net_log) override;
 
   void CancelRequest(RequestHandle request) override;
 
@@ -120,7 +127,7 @@ int ProxyResolverV8TracingWrapper::GetProxyForURL(
     ProxyInfo* results,
     const CompletionCallback& callback,
     RequestHandle* request,
-    const BoundNetLog& net_log) {
+    const NetLogWithSource& net_log) {
   resolver_impl_->GetProxyForURL(
       url, results, callback, request,
       base::WrapUnique(new BindingsImpl(error_observer_.get(), host_resolver_,
@@ -170,7 +177,7 @@ int ProxyResolverFactoryV8TracingWrapper::CreateProxyResolver(
   factory_impl_->CreateProxyResolverV8Tracing(
       pac_script,
       base::WrapUnique(new BindingsImpl(error_observer_local, host_resolver_,
-                                        net_log_, BoundNetLog())),
+                                        net_log_, NetLogWithSource())),
       v8_resolver_local,
       base::Bind(&ProxyResolverFactoryV8TracingWrapper::OnProxyResolverCreated,
                  base::Unretained(this), base::Passed(&v8_resolver), resolver,

@@ -18,7 +18,7 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -28,6 +28,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
 #include "chromeos/network/device_state.h"
@@ -36,14 +37,13 @@
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/network_state_handler_observer.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_message_handler.h"
-#include "grit/browser_resources.h"
-#include "grit/components_strings.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -150,8 +150,7 @@ class MobileSetupUIHTMLSource : public content::URLDataSource {
   std::string GetSource() const override;
   void StartDataRequest(
       const std::string& path,
-      int render_process_id,
-      int render_frame_id,
+      const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
       const content::URLDataSource::GotDataCallback& callback) override;
   std::string GetMimeType(const std::string&) const override {
     return "text/html";
@@ -267,8 +266,7 @@ std::string MobileSetupUIHTMLSource::GetSource() const {
 
 void MobileSetupUIHTMLSource::StartDataRequest(
     const std::string& path,
-    int render_process_id,
-    int render_frame_id,
+    const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
     const content::URLDataSource::GotDataCallback& callback) {
   NetworkHandler::Get()->network_configuration_handler()->GetShillProperties(
       path,

@@ -553,6 +553,7 @@ Druk op Alt + F om het menu van de Chrome-browser te openen.</translation>
 <translation id="6307969636681130414">Ingedrukt.</translation>
 <translation id="6324551002951139333">Grammaticafout ontdekt</translation>
 <translation id="6348657800373377022">Keuzelijst met invoervak</translation>
+<translation id="6350358010104919766">{COUNT,plural, =1{opsommingsteken}other{# opsommingstekens}}</translation>
 <translation id="6355910664415701303">Geen vorig lijstitem.</translation>
 <translation id="6364795331201459219">k6</translation>
 <translation id="6368143427468974988">Vorige kop</translation>
@@ -581,6 +582,7 @@ Druk op Alt + F om het menu van de Chrome-browser te openen.</translation>
 <translation id="6659594942844771486">Tabblad</translation>
 <translation id="667999046851023355">Document</translation>
 <translation id="6697092096875747123">Vorige keuzelijst met invoervak</translation>
+<translation id="6702609185760332517">{COUNT,plural, =1{uitroepteken}other{# uitroeptekens}}</translation>
 <translation id="6710213216561001401">Vorige</translation>
 <translation id="6714813999819678458">Vorige kop voor niveau 2</translation>
 <translation id="6716505898850596801">Functietoetsen</translation>
@@ -692,7 +694,6 @@ Druk op Alt + F om het menu van de Chrome-browser te openen.</translation>
 <translation id="794091007957014205">{COUNT,plural, =1{apenstaartje}other{# apenstaartjes}}</translation>
 <translation id="7965147473449754028">menu gesloten</translation>
 <translation id="7974390230414479278">Menu-item</translation>
-<translation id="8002119852008410879">{COUNT,plural, =1{uitroepteken}other{# uitroeptekens}}</translation>
 <translation id="8007540374018858731">k3</translation>
 <translation id="8009786657110126785">{COUNT,plural, =1{aanhalingsteken}other{# aanhalingstekens}}</translation>
 <translation id="8033827949643255796">geselecteerd</translation>

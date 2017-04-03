@@ -2,15 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/app/chrome_main_delegate.h"
+#include <stdint.h>
 
 #include "build/build_config.h"
+#include "base/time/time.h"
+#include "chrome/app/chrome_main_delegate.h"
 #include "chrome/common/features.h"
 #include "content/public/app/content_main.h"
 
 #if BUILDFLAG(ENABLE_PACKAGE_MASH_SERVICES)
 #include "base/command_line.h"
 #include "chrome/app/mash/mash_runner.h"
+#include "chrome/common/channel_info.h"
+#include "components/version_info/version_info.h"
 #endif
 
 #if defined(VIVALDI_BUILD)
@@ -27,7 +31,8 @@
 // We use extern C for the prototype DLLEXPORT to avoid C++ name mangling.
 extern "C" {
 DLLEXPORT int __cdecl ChromeMain(HINSTANCE instance,
-                                 sandbox::SandboxInterfaceInfo* sandbox_info);
+                                 sandbox::SandboxInterfaceInfo* sandbox_info,
+                                 int64_t exe_entry_point_ticks);
 }
 #elif defined(OS_POSIX)
 extern "C" {
@@ -38,9 +43,11 @@ int ChromeMain(int argc, const char** argv);
 
 #if defined(OS_WIN)
 DLLEXPORT int __cdecl ChromeMain(HINSTANCE instance,
-                                 sandbox::SandboxInterfaceInfo* sandbox_info) {
+                                 sandbox::SandboxInterfaceInfo* sandbox_info,
+                                 int64_t exe_entry_point_ticks) {
 #elif defined(OS_POSIX)
 int ChromeMain(int argc, const char** argv) {
+  int64_t exe_entry_point_ticks = 0;
 #endif
 #if defined(OS_WIN) && defined(ARCH_CPU_X86_64)
   // VS2013 only checks the existence of FMA3 instructions, not the enabled-ness
@@ -52,9 +59,11 @@ int ChromeMain(int argc, const char** argv) {
 #endif  // WIN && ARCH_CPU_X86_64
 
 #if defined(VIVALDI_BUILD)
-  VivaldiMainDelegate chrome_main_delegate;
+  VivaldiMainDelegate chrome_main_delegate(
+      base::TimeTicks::FromInternalValue(exe_entry_point_ticks));
 #else
-  ChromeMainDelegate chrome_main_delegate;
+  ChromeMainDelegate chrome_main_delegate(
+      base::TimeTicks::FromInternalValue(exe_entry_point_ticks));
 #endif
   content::ContentMainParams params(&chrome_main_delegate);
 
@@ -83,12 +92,16 @@ int ChromeMain(int argc, const char** argv) {
 #if !defined(OS_WIN)
   base::CommandLine::Init(params.argc, params.argv);
 #endif
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
-  // TODO(sky): only do this for dev builds and if on canary channel.
-  if (command_line.HasSwitch("mash"))
-    return MashMain();
-#endif
+
+  version_info::Channel channel = chrome::GetChannel();
+  if (channel == version_info::Channel::CANARY ||
+      channel == version_info::Channel::UNKNOWN) {
+    const base::CommandLine& command_line =
+        *base::CommandLine::ForCurrentProcess();
+    if (command_line.HasSwitch("mash"))
+      return MashMain();
+  }
+#endif  // BUILDFLAG(ENABLE_PACKAGE_MASH_SERVICES)
 
   int rv = content::ContentMain(params);
 

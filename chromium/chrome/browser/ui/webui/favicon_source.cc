@@ -15,13 +15,11 @@
 #include "chrome/browser/search/instant_io_context.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/grit/locale_settings.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/favicon_base/favicon_url_parser.h"
 #include "components/history/core/browser/top_sites.h"
 #include "components/sync_sessions/open_tabs_ui_delegate.h"
 #include "net/url_request/url_request.h"
-#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/layout.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/webui/web_ui_util.h"
@@ -64,8 +62,7 @@ std::string FaviconSource::GetSource() const {
 
 void FaviconSource::StartDataRequest(
     const std::string& path,
-    int render_process_id,
-    int render_frame_id,
+    const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
     const content::URLDataSource::GotDataCallback& callback) {
   favicon::FaviconService* favicon_service =
       FaviconServiceFactory::GetForProfile(profile_,
@@ -149,9 +146,9 @@ bool FaviconSource::ShouldServiceRequest(const net::URLRequest* request) const {
 
 bool FaviconSource::HandleMissingResource(const IconRequest& request) {
   // If the favicon is not available, try to use the synced favicon.
-  ProfileSyncService* sync_service =
+  browser_sync::ProfileSyncService* sync_service =
       ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile_);
-  sync_driver::OpenTabsUIDelegate* open_tabs =
+  sync_sessions::OpenTabsUIDelegate* open_tabs =
       sync_service ? sync_service->GetOpenTabsUIDelegate() : nullptr;
 
   scoped_refptr<base::RefCountedMemory> response;

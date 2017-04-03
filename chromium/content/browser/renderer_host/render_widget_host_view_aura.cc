@@ -432,7 +432,6 @@ RenderWidgetHostViewAura::RenderWidgetHostViewAura(RenderWidgetHost* host,
                                                    bool is_guest_view_hack)
     : host_(RenderWidgetHostImpl::From(host)),
       window_(nullptr),
-      delegated_frame_host_(new DelegatedFrameHost(this)),
       in_shutdown_(false),
       in_bounds_changed_(false),
       is_fullscreen_(false),
@@ -442,6 +441,8 @@ RenderWidgetHostViewAura::RenderWidgetHostViewAura(RenderWidgetHost* host,
       has_composition_text_(false),
       accept_return_character_(false),
       begin_frame_source_(nullptr),
+      needs_begin_frames_(false),
+      added_frame_observer_(false),
       synthetic_move_sent_(false),
       cursor_visibility_state_in_renderer_(UNKNOWN),
 #if defined(OS_WIN)
@@ -457,14 +458,26 @@ RenderWidgetHostViewAura::RenderWidgetHostViewAura(RenderWidgetHost* host,
       last_active_widget_process_id_(ChildProcessHost::kInvalidUniqueID),
       last_active_widget_routing_id_(MSG_ROUTING_NONE),
       weak_ptr_factory_(this) {
+  // GuestViews have two RenderWidgetHostViews and so we need to make sure
+  // we don't have FrameSinkId collisions.
+  ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
+  cc::FrameSinkId frame_sink_id =
+      is_guest_view_hack_
+          ? factory->GetContextFactory()->AllocateFrameSinkId()
+          : cc::FrameSinkId(
+                base::checked_cast<uint32_t>(host_->GetProcess()->GetID()),
+                base::checked_cast<uint32_t>(host_->GetRoutingID()));
+  delegated_frame_host_ =
+      base::MakeUnique<DelegatedFrameHost>(frame_sink_id, this);
+
   if (!is_guest_view_hack_)
     host_->SetView(this);
 
   // Let the page-level input event router know about our surface ID
   // namespace for surface-based hit testing.
   if (host_->delegate() && host_->delegate()->GetInputEventRouter()) {
-    host_->delegate()->GetInputEventRouter()->AddSurfaceClientIdOwner(
-        GetSurfaceClientId(), this);
+    host_->delegate()->GetInputEventRouter()->AddFrameSinkIdOwner(
+        GetFrameSinkId(), this);
   }
 
   // We should start observing the TextInputManager for IME-related events as
@@ -722,13 +735,22 @@ ui::TextInputClient* RenderWidgetHostViewAura::GetTextInputClient() {
 }
 
 void RenderWidgetHostViewAura::SetNeedsBeginFrames(bool needs_begin_frames) {
+  needs_begin_frames_ = needs_begin_frames;
+  UpdateNeedsBeginFramesInternal();
+}
+
+void RenderWidgetHostViewAura::UpdateNeedsBeginFramesInternal() {
   if (!begin_frame_source_)
     return;
 
-  if (needs_begin_frames)
+  if (added_frame_observer_ == needs_begin_frames_)
+    return;
+
+  if (needs_begin_frames_)
     begin_frame_source_->AddObserver(this);
   else
     begin_frame_source_->RemoveObserver(this);
+  added_frame_observer_ = needs_begin_frames_;
 }
 
 void RenderWidgetHostViewAura::OnBeginFrame(
@@ -1050,7 +1072,7 @@ void RenderWidgetHostViewAura::OnLegacyWindowDestroyed() {
 #endif
 
 void RenderWidgetHostViewAura::OnSwapCompositorFrame(
-    uint32_t output_surface_id,
+    uint32_t compositor_frame_sink_id,
     cc::CompositorFrame frame) {
   TRACE_EVENT0("content", "RenderWidgetHostViewAura::OnSwapCompositorFrame");
 
@@ -1075,7 +1097,7 @@ void RenderWidgetHostViewAura::OnSwapCompositorFrame(
     selection.end.SetEdge(end_edge_top, end_edge_bottom);
   }
 
-  delegated_frame_host_->SwapDelegatedFrame(output_surface_id,
+  delegated_frame_host_->SwapDelegatedFrame(compositor_frame_sink_id,
                                             std::move(frame));
   SelectionUpdated(selection.is_editable, selection.is_empty_text_form_control,
                    selection.start, selection.end);
@@ -1388,8 +1410,7 @@ void RenderWidgetHostViewAura::SetCompositionText(
 void RenderWidgetHostViewAura::ConfirmCompositionText() {
   if (text_input_manager_ && text_input_manager_->GetActiveWidget() &&
       has_composition_text_) {
-    text_input_manager_->GetActiveWidget()->ImeConfirmComposition(
-        base::string16(), gfx::Range::InvalidRange(), false);
+    text_input_manager_->GetActiveWidget()->ImeFinishComposingText(false);
   }
   has_composition_text_ = false;
 }
@@ -1405,8 +1426,11 @@ void RenderWidgetHostViewAura::InsertText(const base::string16& text) {
   DCHECK_NE(GetTextInputType(), ui::TEXT_INPUT_TYPE_NONE);
 
   if (text_input_manager_ && text_input_manager_->GetActiveWidget()) {
-    text_input_manager_->GetActiveWidget()->ImeConfirmComposition(
-        text, gfx::Range::InvalidRange(), false);
+    if (text.length())
+      text_input_manager_->GetActiveWidget()->ImeCommitText(
+          text, gfx::Range::InvalidRange(), 0);
+    else if (has_composition_text_)
+      text_input_manager_->GetActiveWidget()->ImeFinishComposingText(false);
   }
   has_composition_text_ = false;
 }
@@ -2006,7 +2030,7 @@ void RenderWidgetHostViewAura::OnMouseEvent(ui::MouseEvent* event) {
     event->SetHandled();
 }
 
-uint32_t RenderWidgetHostViewAura::SurfaceClientIdAtPoint(
+cc::FrameSinkId RenderWidgetHostViewAura::FrameSinkIdAtPoint(
     cc::SurfaceHittestDelegate* delegate,
     const gfx::Point& point,
     gfx::Point* transformed_point) {
@@ -2024,8 +2048,8 @@ uint32_t RenderWidgetHostViewAura::SurfaceClientIdAtPoint(
   // It is possible that the renderer has not yet produced a surface, in which
   // case we return our current namespace.
   if (id.is_null())
-    return GetSurfaceClientId();
-  return id.client_id();
+    return GetFrameSinkId();
+  return id.frame_sink_id();
 }
 
 void RenderWidgetHostViewAura::ProcessMouseEvent(
@@ -2075,7 +2099,9 @@ gfx::Point RenderWidgetHostViewAura::TransformPointToCoordSpaceForView(
                                                                   target_view);
 }
 
-void RenderWidgetHostViewAura::FocusedNodeChanged(bool editable) {
+void RenderWidgetHostViewAura::FocusedNodeChanged(
+    bool editable,
+    const gfx::Rect& node_bounds_in_screen) {
 #if defined(OS_WIN)
   if (!editable && virtual_keyboard_requested_) {
     virtual_keyboard_requested_ = false;
@@ -2414,7 +2440,6 @@ void RenderWidgetHostViewAura::CreateAuraWindow() {
   aura::client::SetTooltipText(window_, &tooltip_);
   aura::client::SetActivationDelegate(window_, this);
   aura::client::SetFocusChangeObserver(window_, this);
-  window_->set_layer_owner_delegate(delegated_frame_host_.get());
   display::Screen::GetScreen()->AddObserver(this);
 }
 
@@ -2513,8 +2538,7 @@ void RenderWidgetHostViewAura::FinishImeCompositionSession() {
     return;
 
   if (!!text_input_manager_ && !!text_input_manager_->GetActiveWidget()) {
-    text_input_manager_->GetActiveWidget()->ImeConfirmComposition(
-        base::string16(), gfx::Range::InvalidRange(), false);
+    text_input_manager_->GetActiveWidget()->ImeFinishComposingText(false);
   }
   ImeCancelComposition();
 }
@@ -2931,31 +2955,25 @@ void RenderWidgetHostViewAura::DelegatedFrameHostResizeLockWasReleased() {
 }
 
 void RenderWidgetHostViewAura::DelegatedFrameHostSendReclaimCompositorResources(
-    int output_surface_id,
+    int compositor_frame_sink_id,
     bool is_swap_ack,
     const cc::ReturnedResourceArray& resources) {
   host_->Send(new ViewMsg_ReclaimCompositorResources(
-      host_->GetRoutingID(), output_surface_id, is_swap_ack, resources));
+      host_->GetRoutingID(), compositor_frame_sink_id, is_swap_ack, resources));
 }
 
 void RenderWidgetHostViewAura::DelegatedFrameHostOnLostCompositorResources() {
   host_->ScheduleComposite();
 }
 
-void RenderWidgetHostViewAura::DelegatedFrameHostUpdateVSyncParameters(
-    const base::TimeTicks& timebase,
-    const base::TimeDelta& interval) {
-  host_->UpdateVSyncParameters(timebase, interval);
-}
-
 void RenderWidgetHostViewAura::SetBeginFrameSource(
     cc::BeginFrameSource* source) {
-  bool needs_begin_frames = host_->needs_begin_frames();
-  if (begin_frame_source_ && needs_begin_frames)
+  if (begin_frame_source_ && added_frame_observer_) {
     begin_frame_source_->RemoveObserver(this);
+    added_frame_observer_ = false;
+  }
   begin_frame_source_ = source;
-  if (begin_frame_source_ && needs_begin_frames)
-    begin_frame_source_->AddObserver(this);
+  UpdateNeedsBeginFramesInternal();
 }
 
 bool RenderWidgetHostViewAura::IsAutoResizeEnabled() const {
@@ -2974,8 +2992,8 @@ void RenderWidgetHostViewAura::UnlockCompositingSurface() {
   NOTIMPLEMENTED();
 }
 
-uint32_t RenderWidgetHostViewAura::GetSurfaceClientId() {
-  return delegated_frame_host_->GetSurfaceClientId();
+cc::FrameSinkId RenderWidgetHostViewAura::GetFrameSinkId() {
+  return delegated_frame_host_->GetFrameSinkId();
 }
 
 cc::SurfaceId RenderWidgetHostViewAura::SurfaceIdForTesting() const {

@@ -22,9 +22,12 @@ class WebDeviceMotionData;
 class WebDeviceOrientationData;
 class WebGamepad;
 class WebGamepads;
+class WebInputEvent;
 class WebLayer;
+class WebLocalFrame;
 struct WebSize;
 class WebView;
+class WebWidget;
 class WebURLResponse;
 }
 
@@ -32,9 +35,14 @@ namespace device {
 class BluetoothAdapter;
 }
 
+namespace gfx {
+class ICCProfile;
+}
+
 namespace test_runner {
 class WebFrameTestProxyBase;
 class WebViewTestProxyBase;
+class WebWidgetTestProxyBase;
 }
 
 namespace content {
@@ -60,21 +68,34 @@ test_runner::WebViewTestProxyBase* GetWebViewTestProxyBase(
     RenderView* render_view);
 
 // "Casts" |render_frame| to |WebFrameTestProxyBase|.  Caller has to ensure
-// that prior to construction of |render_frame|, EnableiewTestProxyCreation
+// that prior to construction of |render_frame|, EnableTestProxyCreation
 // was called.
 test_runner::WebFrameTestProxyBase* GetWebFrameTestProxyBase(
     RenderFrame* render_frame);
 
-// Enable injecting of a WebViewTestProxy between WebViews and RenderViews
-// and WebFrameTestProxy between WebFrames and RenderFrames.
+// Gets WebWidgetTestProxyBase associated with |frame| (either the view's widget
+// or the local root's frame widget).  Caller has to ensure that prior to
+// construction of |render_frame|, EnableTestProxyCreation was called.
+test_runner::WebWidgetTestProxyBase* GetWebWidgetTestProxyBase(
+    blink::WebLocalFrame* frame);
+
+// Enable injecting of a WebViewTestProxy between WebViews and RenderViews,
+// WebWidgetTestProxy between WebWidgets and RenderWidgets and WebFrameTestProxy
+// between WebFrames and RenderFrames.
 // |view_proxy_creation_callback| is invoked after creating WebViewTestProxy.
+// |widget_proxy_creation_callback| is invoked after creating
+// WebWidgetTestProxy.
 // |frame_proxy_creation_callback| is called after creating WebFrameTestProxy.
 using ViewProxyCreationCallback =
     base::Callback<void(RenderView*, test_runner::WebViewTestProxyBase*)>;
+using WidgetProxyCreationCallback =
+    base::Callback<void(blink::WebWidget*,
+                        test_runner::WebWidgetTestProxyBase*)>;
 using FrameProxyCreationCallback =
     base::Callback<void(RenderFrame*, test_runner::WebFrameTestProxyBase*)>;
 void EnableWebTestProxyCreation(
     const ViewProxyCreationCallback& view_proxy_creation_callback,
+    const WidgetProxyCreationCallback& widget_proxy_creation_callback,
     const FrameProxyCreationCallback& frame_proxy_creation_callback);
 
 typedef base::Callback<void(const blink::WebURLResponse& response,
@@ -118,8 +139,21 @@ void SetDeviceScaleFactor(RenderView* render_view, float factor);
 // Get the window to viewport scale.
 float GetWindowToViewportScale(RenderView* render_view);
 
+// Converts |event| from screen coordinates to coordinates used by the widget
+// associated with the |web_widget_test_proxy_base|.  Returns nullptr if no
+// transformation was necessary (e.g. for a keyboard event OR if widget requires
+// no scaling and has coordinates starting at (0,0)).
+std::unique_ptr<blink::WebInputEvent> TransformScreenToWidgetCoordinates(
+    test_runner::WebWidgetTestProxyBase* web_widget_test_proxy_base,
+    const blink::WebInputEvent& event);
+
+// Get the ICC profile for a given name string. This is not in the ICCProfile
+// class to avoid bloating the shipping build.
+gfx::ICCProfile GetTestingICCProfile(const std::string& name);
+
 // Set the device color profile associated with the profile |name|.
-void SetDeviceColorProfile(RenderView* render_view, const std::string& name);
+void SetDeviceColorProfile(
+    RenderView* render_view, const gfx::ICCProfile& icc_profile);
 
 // Sets the scan duration to 0.
 void SetTestBluetoothScanDuration();

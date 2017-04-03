@@ -32,7 +32,6 @@
 #include "ipc/ipc_message_macros.h"
 #include "net/base/io_buffer.h"
 #include "net/base/load_flags.h"
-#include "net/log/net_log.h"
 #include "net/url_request/redirect_info.h"
 
 using base::TimeDelta;
@@ -45,7 +44,7 @@ static int kBufferSize = 1024 * 512;
 static int kMinAllocationSize = 1024 * 4;
 static int kMaxAllocationSize = 1024 * 32;
 // The interval for calls to ReportUploadProgress.
-static int kUploadProgressIntervalMsec = 10;
+static int kUploadProgressIntervalMsec = 100;
 
 // Used when kOptimizeLoadingIPCForSmallResources is enabled.
 // Small resource typically issues two Read call: one for the content itself
@@ -313,7 +312,6 @@ bool AsyncResourceHandler::OnRequestRedirected(
   reported_transfer_size_ = 0;
   response->head.request_start = request()->creation_time();
   response->head.response_start = TimeTicks::Now();
-  response->head.encoded_data_length = request()->GetTotalReceivedBytes();
   // TODO(davidben): Is it necessary to pass the new first party URL for
   // cookies? The only case where it can change is top-level navigation requests
   // and hopefully those will eventually all be owned by the browser. It's
@@ -351,6 +349,7 @@ bool AsyncResourceHandler::OnResponseStarted(ResourceResponse* response,
   }
 
   NetLogObserver::PopulateResponseInfo(request(), response);
+  response->head.encoded_data_length = request()->raw_header_size();
 
   const HostZoomMapImpl* host_zoom_map =
       static_cast<const HostZoomMapImpl*>(info->filter()->GetHostZoomMap());
@@ -443,7 +442,11 @@ bool AsyncResourceHandler::OnReadCompleted(int bytes_read, bool* defer) {
     return false;
 
   int encoded_data_length = CalculateEncodedDataLengthToReport();
+  if (!first_chunk_read_)
+    encoded_data_length -= request()->raw_header_size();
+
   int encoded_body_length = CalculateEncodedBodyLengthToReport();
+  first_chunk_read_ = true;
 
   // Return early if InliningHelper handled the received data.
   if (inlining_helper_->SendInlinedDataIfApplicable(
@@ -491,7 +494,6 @@ void AsyncResourceHandler::OnDataDownloaded(int bytes_downloaded) {
 
 void AsyncResourceHandler::OnResponseCompleted(
     const net::URLRequestStatus& status,
-    const std::string& security_info,
     bool* defer) {
   const ResourceRequestInfoImpl* info = GetRequestInfo();
   if (!info->filter())
@@ -524,7 +526,6 @@ void AsyncResourceHandler::OnResponseCompleted(
   request_complete_data.error_code = error_code;
   request_complete_data.was_ignored_by_handler = was_ignored_by_handler;
   request_complete_data.exists_in_cache = request()->response_info().was_cached;
-  request_complete_data.security_info = security_info;
   request_complete_data.completion_time = TimeTicks::Now();
   request_complete_data.encoded_data_length =
       request()->GetTotalReceivedBytes();

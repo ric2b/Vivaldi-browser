@@ -53,10 +53,10 @@ WebInspector.RuntimeModel = function(target)
 
 /** @enum {symbol} */
 WebInspector.RuntimeModel.Events = {
-    ExecutionContextCreated: ("ExecutionContextCreated"),
-    ExecutionContextDestroyed: ("ExecutionContextDestroyed"),
-    ExecutionContextChanged: ("ExecutionContextChanged"),
-    ExecutionContextOrderChanged: ("ExecutionContextOrderChanged")
+    ExecutionContextCreated: Symbol("ExecutionContextCreated"),
+    ExecutionContextDestroyed: Symbol("ExecutionContextDestroyed"),
+    ExecutionContextChanged: Symbol("ExecutionContextChanged"),
+    ExecutionContextOrderChanged: Symbol("ExecutionContextOrderChanged")
 }
 
 WebInspector.RuntimeModel._privateScript = "private script";
@@ -496,8 +496,10 @@ WebInspector.ExecutionContext = function(target, id, name, origin, isDefault, fr
     this.debuggerModel = WebInspector.DebuggerModel.fromTarget(target);
     this.frameId = frameId;
 
+    this._label = name;
     var parsedUrl = origin.asParsedURL();
-    this._label = parsedUrl ? parsedUrl.lastPathComponentWithFragment() : name;
+    if (!this._label && parsedUrl)
+        this._label = parsedUrl.lastPathComponentWithFragment();
 }
 
 /**
@@ -684,7 +686,7 @@ WebInspector.ExecutionContext.prototype = {
                 else
                     object = this;
 
-                var resultSet = {};
+                var resultSet = { __proto__: null };
                 try {
                     for (var o = object; o; o = Object.getPrototypeOf(o)) {
                         if ((type === "array" || type === "typedarray") && o === object && ArrayBuffer.isView(o) && o.length > 9999)

@@ -242,9 +242,6 @@
     Set wallpaper...
   </message>
 
-  <message name="IDS_ASH_STATUS_TRAY_SETTINGS" desc="The label used for the settings item in the status tray.">
-    Settings
-  </message>
   <message name="IDS_ASH_STATUS_TRAY_SMS" desc="The label used in the status tray for SMS.">
     SMS
   </message>
@@ -296,14 +293,8 @@
   <message name="IDS_ASH_STATUS_TRAY_DISPLAY_ROTATED" desc="The label used in the tray to notify that the display rotation settings has changed.">
     <ph name="DISPLAY_NAME">$1</ph> was rotated to <ph name="ROTATION">$2</ph>
   </message>
-  <message name="IDS_ASH_STATUS_TRAY_DISPLAY_SINGLE_DISPLAY" desc="The label used in the tray to show a single display's configuration">
-    <ph name="DISPLAY_NAME">$1</ph>: <ph name="ANNOTATION">$2</ph>
-  </message>
   <message name="IDS_ASH_STATUS_TRAY_DISPLAY_ANNOTATED_NAME" desc="Label used to show a display name with annotation (like screen resolution or overscan info).">
     <ph name="DISPLAY_NAME">$1</ph> (<ph name="ANNOTATION">$2</ph>)
-  </message>
-  <message name="IDS_ASH_STATUS_TRAY_DISPLAY_ANNOTATION" desc="Label used to annotate the display's status like resolution or overscan flag.">
-    <ph name="RESOLUTION">$1</ph>, <ph name="OVERSCAN">$2</ph>
   </message>
   <message name="IDS_ASH_STATUS_TRAY_DISPLAY_ANNOTATION_OVERSCAN" desc="Label used to describe that the system notice that this display device may have overscan area.">
     overscan
@@ -495,7 +486,7 @@ Press Shift + Alt to switch.
     Let us know how we’re doing by answering a few questions.
   </message>
   <message name="IDS_ASH_HATS_NOTIFICATION_TAKE_SURVEY_BUTTON" desc="The title of the button in the notification for Happiness Tracking Survey to take the said survey.">
-    SHOW QUESTIONS
+    Take survey
   </message>
   <message name="IDS_ASH_IME_MENU_ACCESSIBLE_NAME" desc="The accessible text for opt-in IME menu icon in status tray.">
     IME menu button

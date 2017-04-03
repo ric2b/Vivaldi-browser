@@ -14,7 +14,6 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/stl_util.h"
-#include "dbus/file_descriptor.h"
 #include "device/bluetooth/dbus/bluetooth_media_client.h"
 #include "device/bluetooth/dbus/bluez_dbus_manager.h"
 #include "device/bluetooth/dbus/fake_bluetooth_adapter_client.h"
@@ -323,8 +322,8 @@ void FakeBluetoothMediaTransportClient::AcquireInternal(
   DCHECK((fds[0] > kInvalidFd) && (fds[1] > kInvalidFd));
   transport->input_fd.reset(new base::File(fds[0]));
 
-  dbus::FileDescriptor out_fd(fds[1]);
-  callback.Run(&out_fd, kDefaultReadMtu, kDefaultWriteMtu);
+  base::ScopedFD out_fd(fds[1]);
+  callback.Run(std::move(out_fd), kDefaultReadMtu, kDefaultWriteMtu);
   SetState(endpoint_path, "active");
 }
 

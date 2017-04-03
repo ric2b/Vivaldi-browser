@@ -201,9 +201,6 @@ void WebContentsObserverSanityChecker::DidFinishNavigation(
   CHECK(!(navigation_handle->HasCommitted() &&
           !navigation_handle->IsErrorPage()) ||
         navigation_handle->GetNetErrorCode() == net::OK);
-  CHECK(!(navigation_handle->HasCommitted() &&
-          navigation_handle->IsErrorPage()) ||
-        navigation_handle->GetNetErrorCode() != net::OK);
   CHECK_EQ(navigation_handle->GetWebContents(), web_contents());
 
   CHECK(!navigation_handle->HasCommitted() ||
@@ -274,12 +271,6 @@ void WebContentsObserverSanityChecker::DidFailLoad(
     int error_code,
     const base::string16& error_description,
     bool was_ignored_by_handler) {
-  AssertRenderFrameExists(render_frame_host);
-}
-
-void WebContentsObserverSanityChecker::DidGetRedirectForResourceRequest(
-    RenderFrameHost* render_frame_host,
-    const ResourceRedirectDetails& details) {
   AssertRenderFrameExists(render_frame_host);
 }
 

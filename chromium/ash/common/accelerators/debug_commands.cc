@@ -9,6 +9,8 @@
 #include "ash/common/shell_delegate.h"
 #include "ash/common/system/toast/toast_data.h"
 #include "ash/common/system/toast/toast_manager.h"
+#include "ash/common/wallpaper/wallpaper_controller.h"
+#include "ash/common/wallpaper/wallpaper_delegate.h"
 #include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
@@ -18,6 +20,8 @@
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/compositor/debug_utils.h"
+#include "ui/gfx/canvas.h"
+#include "ui/gfx/image/image_skia.h"
 #include "ui/views/debug_utils.h"
 #include "ui/views/widget/widget.h"
 
@@ -74,6 +78,47 @@ void HandlePrintWindowHierarchy() {
   }
 }
 
+gfx::ImageSkia CreateWallpaperImage(SkColor fill, SkColor rect) {
+  // TODO(oshima): Consider adding a command line option to control wallpaper
+  // images for testing. The size is randomly picked.
+  gfx::Size image_size(1366, 768);
+  gfx::Canvas canvas(image_size, 1.0f, true);
+  canvas.DrawColor(fill);
+  SkPaint paint;
+  paint.setColor(rect);
+  paint.setStrokeWidth(10);
+  paint.setStyle(SkPaint::kStroke_Style);
+  paint.setXfermodeMode(SkXfermode::kSrcOver_Mode);
+  canvas.DrawRoundRect(gfx::Rect(image_size), 100, paint);
+  return gfx::ImageSkia(canvas.ExtractImageRep());
+}
+
+void HandleToggleWallpaperMode() {
+  static int index = 0;
+  WallpaperController* wallpaper_controller =
+      WmShell::Get()->wallpaper_controller();
+  switch (++index % 4) {
+    case 0:
+      ash::WmShell::Get()->wallpaper_delegate()->InitializeWallpaper();
+      break;
+    case 1:
+      wallpaper_controller->SetWallpaperImage(
+          CreateWallpaperImage(SK_ColorRED, SK_ColorBLUE),
+          wallpaper::WALLPAPER_LAYOUT_STRETCH);
+      break;
+    case 2:
+      wallpaper_controller->SetWallpaperImage(
+          CreateWallpaperImage(SK_ColorBLUE, SK_ColorGREEN),
+          wallpaper::WALLPAPER_LAYOUT_CENTER);
+      break;
+    case 3:
+      wallpaper_controller->SetWallpaperImage(
+          CreateWallpaperImage(SK_ColorGREEN, SK_ColorRED),
+          wallpaper::WALLPAPER_LAYOUT_CENTER_CROPPED);
+      break;
+  }
+}
+
 #if defined(OS_CHROMEOS)
 
 void HandleToggleTouchpad() {
@@ -86,7 +131,7 @@ void HandleToggleTouchscreen() {
   ash::WmShell::Get()->delegate()->ToggleTouchscreen();
 }
 
-void HandleToggleToggleTouchView() {
+void HandleToggleTouchView() {
   MaximizeModeController* controller =
       WmShell::Get()->maximize_mode_controller();
   controller->EnableMaximizeModeWindowManager(
@@ -111,6 +156,11 @@ bool DebugAcceleratorsEnabled() {
       switches::kAshDebugShortcuts);
 }
 
+bool DeveloperAcceleratorsEnabled() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kAshDeveloperShortcuts);
+}
+
 void PerformDebugActionIfEnabled(AcceleratorAction action) {
   if (!DebugAcceleratorsEnabled())
     return;
@@ -129,9 +179,12 @@ void PerformDebugActionIfEnabled(AcceleratorAction action) {
       HandleToggleTouchscreen();
       break;
     case DEBUG_TOGGLE_TOUCH_VIEW:
-      HandleToggleToggleTouchView();
+      HandleToggleTouchView();
       break;
 #endif
+    case DEBUG_TOGGLE_WALLPAPER_MODE:
+      HandleToggleWallpaperMode();
+      break;
     case DEBUG_PRINT_LAYER_HIERARCHY:
       HandlePrintLayerHierarchy();
       break;

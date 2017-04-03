@@ -10,7 +10,6 @@
 #include <utility>
 #include <vector>
 
-#include "ash/common/ash_switches.h"
 #include "ash/shell.h"
 #include "base/bind.h"
 #include "base/callback.h"
@@ -53,6 +52,8 @@
 #include "chrome/browser/chromeos/login/helper.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker.h"
 #include "chrome/browser/chromeos/login/login_wizard.h"
+#include "chrome/browser/chromeos/login/quick_unlock/pin_storage.h"
+#include "chrome/browser/chromeos/login/quick_unlock/pin_storage_factory.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
@@ -119,7 +120,7 @@
 #include "chromeos/network/portal_detector/network_portal_detector_stub.h"
 #include "chromeos/system/statistics_provider.h"
 #include "chromeos/tpm/tpm_token_loader.h"
-#include "components/browser_sync/common/browser_sync_switches.h"
+#include "components/browser_sync/browser_sync_switches.h"
 #include "components/device_event_log/device_event_log.h"
 #include "components/metrics/metrics_service.h"
 #include "components/ownership/owner_key_util.h"
@@ -198,28 +199,36 @@ namespace internal {
 class DBusServices {
  public:
   explicit DBusServices(const content::MainFunctionParams& parameters) {
+    // Under mash, some D-Bus clients are owned by other processes.
+    DBusThreadManager::ProcessMask process_mask =
+        chrome::IsRunningInMash() ? DBusThreadManager::PROCESS_BROWSER
+                                  : DBusThreadManager::PROCESS_ALL;
+
     // Initialize DBusThreadManager for the browser. This must be done after
     // the main message loop is started, as it uses the message loop.
-    DBusThreadManager::Initialize();
+    DBusThreadManager::Initialize(process_mask);
 
     bluez::BluezDBusManager::Initialize(
         DBusThreadManager::Get()->GetSystemBus(),
-        chromeos::DBusThreadManager::Get()->IsUsingStub(
-            chromeos::DBusClientBundle::BLUETOOTH));
+        chromeos::DBusThreadManager::Get()->IsUsingFakes());
 
     PowerPolicyController::Initialize(
         DBusThreadManager::Get()->GetPowerManagerClient());
 
-    ScopedVector<CrosDBusService::ServiceProviderInterface> service_providers;
-    service_providers.push_back(ProxyResolutionServiceProvider::Create(
-        base::MakeUnique<ChromeProxyResolverDelegate>()));
-    service_providers.push_back(new DisplayPowerServiceProvider(
-        base::WrapUnique(new ChromeDisplayPowerServiceProviderDelegate)));
-    service_providers.push_back(new LivenessServiceProvider);
-    service_providers.push_back(new ScreenLockServiceProvider);
-    service_providers.push_back(new ConsoleServiceProvider(
-        base::WrapUnique(new ChromeConsoleServiceProviderDelegate)));
-    service_providers.push_back(new KioskInfoService);
+    CrosDBusService::ServiceProviderList service_providers;
+    service_providers.push_back(
+        base::WrapUnique(ProxyResolutionServiceProvider::Create(
+            base::MakeUnique<ChromeProxyResolverDelegate>())));
+    if (!chrome::IsRunningInMash()) {
+      // TODO(crbug.com/629707): revisit this with mustash dbus work.
+      service_providers.push_back(base::MakeUnique<DisplayPowerServiceProvider>(
+          base::MakeUnique<ChromeDisplayPowerServiceProviderDelegate>()));
+    }
+    service_providers.push_back(base::MakeUnique<LivenessServiceProvider>());
+    service_providers.push_back(base::MakeUnique<ScreenLockServiceProvider>());
+    service_providers.push_back(base::MakeUnique<ConsoleServiceProvider>(
+        base::MakeUnique<ChromeConsoleServiceProviderDelegate>()));
+    service_providers.push_back(base::MakeUnique<KioskInfoService>());
     CrosDBusService::Initialize(std::move(service_providers));
 
     // Initialize PowerDataCollector after DBusThreadManager is initialized.
@@ -469,6 +478,8 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
 
   media::SoundsManager::Create();
 
+  AccessibilityManager::Initialize();
+
   if (!chrome::IsRunningInMash()) {
     // Initialize magnification manager before ash tray is created. And this
     // must be placed after UserManager::SessionStarted();
@@ -476,7 +487,6 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
     // created. However, when running as a mus-client, an ash::Shell instance is
     // not created. These accessibility services should instead be exposed as
     // separate services. crbug.com/557401
-    AccessibilityManager::Initialize();
     MagnificationManager::Initialize();
   }
 
@@ -679,6 +689,11 @@ void ChromeBrowserMainPartsChromeos::PostProfileInit() {
   // Start watching for low disk space events to notify the user.
   low_disk_notification_.reset(new LowDiskNotification());
 
+  // Authenticate the user for PIN quick unlock.
+  PinStorage* pin_storage = PinStorageFactory::GetForProfile(profile());
+  if (pin_storage)
+    pin_storage->MarkStrongAuth();
+
   ChromeBrowserMainPartsLinux::PostProfileInit();
 }
 
@@ -736,6 +751,7 @@ void ChromeBrowserMainPartsChromeos::PostBrowserStart() {
     login_lock_state_notifier_.reset(new LoginLockStateNotifier);
     data_promo_notification_.reset(new DataPromoNotification());
 
+    // TODO(mash): Support EventRewriterController; see crbug.com/647781
     keyboard_event_rewriters_.reset(new EventRewriterController());
     keyboard_event_rewriters_->AddEventRewriter(
         std::unique_ptr<ui::EventRewriter>(new KeyboardDrivenEventRewriter()));

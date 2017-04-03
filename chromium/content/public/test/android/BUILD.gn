@@ -1,7 +1,6 @@
 import("//build/config/android/config.gni")
 import("//build/config/android/rules.gni")
 
-# GYP: //content/content_tests.gypi:test_support_content_jni_headers
 generate_jni("test_support_content_jni_headers") {
   jni_package = "content/public/test"
   sources = [
@@ -17,7 +16,6 @@ android_library("layouttest_java_support") {
   java_files = [ "javatests/src/org/chromium/content/browser/test/NestedSystemMessageHandler.java" ]
 }
 
-# GYP: //content/content_tests.gypi:content_java_test_support
 android_library("content_java_test_support") {
   testonly = true
   deps = [
@@ -26,6 +24,7 @@ android_library("content_java_test_support") {
     "//base:base_java_test_support",
     "//content/public/android:content_java",
     "//device/geolocation:geolocation_java_test_support",
+    "//ui/android:ui_java",
   ]
   java_files = [
     "javatests/src/org/chromium/content/browser/test/NativeLibraryTestBase.java",
@@ -38,8 +37,6 @@ android_library("content_java_test_support") {
     "javatests/src/org/chromium/content/browser/test/util/HistoryUtils.java",
     "javatests/src/org/chromium/content/browser/test/util/JavaScriptUtils.java",
     "javatests/src/org/chromium/content/browser/test/util/KeyUtils.java",
-    "javatests/src/org/chromium/content/browser/test/util/MockOrientationObserver.java",
-    "javatests/src/org/chromium/content/browser/test/util/OrientationChangeObserverCriteria.java",
     "javatests/src/org/chromium/content/browser/test/util/RenderProcessLimit.java",
     "javatests/src/org/chromium/content/browser/test/util/TestCallbackHelperContainer.java",
     "javatests/src/org/chromium/content/browser/test/util/TestContentViewClient.java",

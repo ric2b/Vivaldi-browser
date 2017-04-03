@@ -26,6 +26,7 @@
 #include "base/path_service.h"
 #include "base/process/launch.h"
 #include "base/process/memory.h"
+#include "base/process/process.h"
 #include "base/process/process_metrics.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -49,12 +50,14 @@
 #include "chrome/installer/setup/install.h"
 #include "chrome/installer/setup/install_worker.h"
 #include "chrome/installer/setup/installer_crash_reporting.h"
-#include "chrome/installer/setup/installer_metrics.h"
+#include "chrome/installer/setup/persistent_histogram_storage.h"
 #include "chrome/installer/setup/setup_constants.h"
+#include "chrome/installer/setup/setup_singleton.h"
 #include "chrome/installer/setup/setup_util.h"
 #include "chrome/installer/setup/uninstall.h"
 #include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/delete_after_reboot_helper.h"
+#include "chrome/installer/util/delete_old_versions.h"
 #include "chrome/installer/util/delete_tree_work_item.h"
 #include "chrome/installer/util/google_update_constants.h"
 #include "chrome/installer/util/google_update_settings.h"
@@ -406,14 +409,79 @@ void AddExistingMultiInstalls(const InstallationState& original_state,
   }
 }
 
+void RecordNumDeleteOldVersionsAttempsBeforeAbort(int num_attempts) {
+  UMA_HISTOGRAM_COUNTS_100(
+      "Setup.Install.NumDeleteOldVersionsAttemptsBeforeAbort", num_attempts);
+}
+
+// Repetitively attempts to delete all files that belong to old versions of
+// Chrome from |install_dir|. Waits 15 seconds before the first attempt and 5
+// minutes after each unsuccessful attempt. Returns when no files that belong to
+// an old version of Chrome remain or when another process tries to acquire the
+// SetupSingleton.
+installer::InstallStatus RepeatDeleteOldVersions(
+    const base::FilePath& install_dir,
+    const installer::SetupSingleton& setup_singleton) {
+  constexpr int kMaxNumAttempts = 12;
+  int num_attempts = 0;
+
+  while (num_attempts < kMaxNumAttempts) {
+    // Wait 15 seconds before the first attempt because trying to delete old
+    // files right away is likely to fail. Indeed, this is called in 2
+    // occasions:
+    // - When the installer fails to delete old files after a not-in-use update:
+    //   retrying immediately is likely to fail again.
+    // - When executables are successfully renamed on Chrome startup or
+    //   shutdown: old files can't be deleted because Chrome is still in use.
+    // Wait 5 minutes after an unsuccessful attempt because retrying immediately
+    // is likely to fail again.
+    const base::TimeDelta max_wait_time = num_attempts == 0
+                                              ? base::TimeDelta::FromSeconds(15)
+                                              : base::TimeDelta::FromMinutes(5);
+    if (setup_singleton.WaitForInterrupt(max_wait_time)) {
+      VLOG(1) << "Exiting --delete-old-versions process because another "
+                 "process tries to acquire the SetupSingleton.";
+      RecordNumDeleteOldVersionsAttempsBeforeAbort(num_attempts);
+      return installer::SETUP_SINGLETON_RELEASED;
+    }
+
+    const bool priority_was_changed_to_background =
+        base::Process::Current().SetProcessBackgrounded(true);
+    const bool delete_old_versions_success =
+        installer::DeleteOldVersions(install_dir);
+    if (priority_was_changed_to_background)
+      base::Process::Current().SetProcessBackgrounded(false);
+    ++num_attempts;
+
+    if (delete_old_versions_success) {
+      VLOG(1) << "Successfully deleted all old files from "
+                 "--delete-old-versions process.";
+      UMA_HISTOGRAM_COUNTS_100(
+          "Setup.Install.NumDeleteOldVersionsAttemptsBeforeSuccess",
+          num_attempts);
+      return installer::DELETE_OLD_VERSIONS_SUCCESS;
+    } else if (num_attempts == 1) {
+      VLOG(1) << "Failed to delete all old files from --delete-old-versions "
+                 "process. Will retry every five minutes.";
+    }
+  }
+
+  VLOG(1) << "Exiting --delete-old-versions process after retrying too many "
+             "times to delete all old files.";
+  DCHECK_EQ(num_attempts, kMaxNumAttempts);
+  RecordNumDeleteOldVersionsAttempsBeforeAbort(num_attempts);
+  return installer::DELETE_OLD_VERSIONS_TOO_MANY_ATTEMPTS;
+}
+
 // This function is called when --rename-chrome-exe option is specified on
 // setup.exe command line. This function assumes an in-use update has happened
 // for Chrome so there should be a file called new_chrome.exe on the file
 // system and a key called 'opv' in the registry. This function will move
 // new_chrome.exe to chrome.exe and delete 'opv' key in one atomic operation.
 // This function also deletes elevation policies associated with the old version
-// if they exist.
+// if they exist. |setup_exe| is the path to the current executable.
 installer::InstallStatus RenameChromeExecutables(
+    const base::FilePath& setup_exe,
     const InstallationState& original_state,
     InstallerState* installer_state) {
   // See what products are already installed in multi mode.  When we do the
@@ -474,7 +542,9 @@ installer::InstallStatus RenameChromeExecutables(
       ->set_best_effort(true);
 
   installer::InstallStatus ret = installer::RENAME_SUCCESSFUL;
-  if (!install_list->Do()) {
+  if (install_list->Do()) {
+    installer::LaunchDeleteOldVersionsProcess(setup_exe, *installer_state);
+  } else {
     LOG(ERROR) << "Renaming of executables failed. Rolling back any changes.";
     install_list->Rollback();
     ret = installer::RENAME_FAILED;
@@ -1114,9 +1184,9 @@ installer::InstallStatus RegisterDevChrome(
 // various tasks other than installation (renaming chrome.exe, showing eula
 // among others). This function returns true if any such command line option
 // has been found and processed (so setup.exe should exit at that point).
-bool HandleNonInstallCmdLineOptions(const InstallationState& original_state,
-                                    const base::FilePath& setup_exe,
+bool HandleNonInstallCmdLineOptions(const base::FilePath& setup_exe,
                                     const base::CommandLine& cmd_line,
+                                    InstallationState* original_state,
                                     InstallerState* installer_state,
                                     int* exit_code) {
   // This option is independent of all others so doesn't belong in the if/else
@@ -1153,18 +1223,17 @@ bool HandleNonInstallCmdLineOptions(const InstallationState& original_state,
           installer::switches::kUpdateSetupExe));
       VLOG(1) << "Opening archive " << compressed_archive.value();
       if (installer::ArchivePatchHelper::UncompressAndPatch(
-              temp_path.path(),
-              compressed_archive,
-              setup_exe,
+              temp_path.GetPath(), compressed_archive, setup_exe,
               cmd_line.GetSwitchValuePath(installer::switches::kNewSetupExe))) {
         status = installer::NEW_VERSION_UPDATED;
       }
       if (!temp_path.Delete()) {
         // PLOG would be nice, but Delete() doesn't leave a meaningful value in
         // the Windows last-error code.
-        LOG(WARNING) << "Scheduling temporary path " << temp_path.path().value()
+        LOG(WARNING) << "Scheduling temporary path "
+                     << temp_path.GetPath().value()
                      << " for deletion at reboot.";
-        ScheduleDirectoryForDeletion(temp_path.path());
+        ScheduleDirectoryForDeletion(temp_path.GetPath());
       }
     }
 
@@ -1183,7 +1252,7 @@ bool HandleNonInstallCmdLineOptions(const InstallationState& original_state,
 
     if (installer::EULA_REJECTED != *exit_code) {
       if (GoogleUpdateSettings::SetEULAConsent(
-              original_state, BrowserDistribution::GetDistribution(), true)) {
+              *original_state, BrowserDistribution::GetDistribution(), true)) {
         CreateEULASentinel(BrowserDistribution::GetDistribution());
       }
       // For a metro-originated launch, we now need to launch back into metro.
@@ -1210,7 +1279,7 @@ bool HandleNonInstallCmdLineOptions(const InstallationState& original_state,
     *exit_code = InstallUtil::GetInstallReturnCode(status);
   } else if (cmd_line.HasSwitch(installer::switches::kRegisterDevChrome)) {
     installer::InstallStatus status = RegisterDevChrome(
-        original_state, *installer_state, setup_exe, cmd_line);
+        *original_state, *installer_state, setup_exe, cmd_line);
     *exit_code = InstallUtil::GetInstallReturnCode(status);
   } else if (cmd_line.HasSwitch(installer::switches::kRegisterChromeBrowser)) {
     installer::InstallStatus status = installer::UNKNOWN_STATUS;
@@ -1260,10 +1329,26 @@ bool HandleNonInstallCmdLineOptions(const InstallationState& original_state,
       LOG(DFATAL) << "Can't register browser - Chrome distribution not found";
     }
     *exit_code = InstallUtil::GetInstallReturnCode(status);
-  } else if (cmd_line.HasSwitch(installer::switches::kRenameChromeExe)) {
-    // If --rename-chrome-exe is specified, we want to rename the executables
-    // and exit.
-    *exit_code = RenameChromeExecutables(original_state, installer_state);
+  } else if (cmd_line.HasSwitch(installer::switches::kDeleteOldVersions) ||
+             cmd_line.HasSwitch(installer::switches::kRenameChromeExe)) {
+    std::unique_ptr<installer::SetupSingleton> setup_singleton(
+        installer::SetupSingleton::Acquire(
+            cmd_line, MasterPreferences::ForCurrentProcess(), original_state,
+            installer_state));
+    if (!setup_singleton) {
+      *exit_code = installer::SETUP_SINGLETON_ACQUISITION_FAILED;
+    } else if (cmd_line.HasSwitch(installer::switches::kDeleteOldVersions)) {
+      // In multi-install mode, determine what products are installed to
+      // populate the target_path() used below.
+      AddExistingMultiInstalls(*original_state, installer_state);
+
+      *exit_code = RepeatDeleteOldVersions(installer_state->target_path(),
+                                           *setup_singleton);
+    } else {
+      DCHECK(cmd_line.HasSwitch(installer::switches::kRenameChromeExe));
+      *exit_code =
+          RenameChromeExecutables(setup_exe, *original_state, installer_state);
+    }
   } else if (cmd_line.HasSwitch(
                  installer::switches::kRemoveChromeRegistration)) {
     // This is almost reverse of --register-chrome-browser option above.
@@ -1828,7 +1913,7 @@ void GetRunningVivaldiProcesses(const std::wstring& path,
   HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, NULL);
   if (snapshot && Process32First(snapshot, &entry)) {
     while (Process32Next(snapshot, &entry)) {
-      if (!wcsicmp(entry.szExeFile, L"vivaldi.exe")) {
+      if (!wcsicmp(entry.szExeFile, installer::kChromeExe)) { // vivaldi.exe
         if (base::win::GetVersion() >= base::win::VERSION_VISTA &&
             fpQueryFullProcessImageName) {
           HANDLE process = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE,
@@ -1884,7 +1969,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
     return installer::CPU_NOT_SUPPORTED;
 
   // Persist histograms so they can be uploaded later.
-  installer::BeginPersistentHistogramStorage();
+  installer::PersistentHistogramStorage persistent_histogram_storage;
 
   // The exit manager is in charge of calling the dtors of singletons.
   base::AtExitManager exit_manager;
@@ -1908,15 +1993,17 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
   VLOG(1) << "Command Line: " << cmd_line.GetCommandLineString();
 
-  base::FilePath vivaldi_profile_path(cmd_line.GetSwitchValuePath(
-    installer::switches::kVivaldiInstallDir));
+  base::FilePath vivaldi_target_path(cmd_line.GetSwitchValuePath(
+      installer::switches::kVivaldiInstallDir));
+
   const bool is_vivaldi = cmd_line.HasSwitch(installer::switches::kVivaldi);
   const bool is_uninstall = cmd_line.HasSwitch(installer::switches::kUninstall);
   const bool is_vivaldi_update = cmd_line.HasSwitch(
-    installer::switches::kVivaldiUpdate);
+      installer::switches::kVivaldiUpdate);
   const bool is_standalone = cmd_line.HasSwitch(
-    installer::switches::kVivaldiStandalone);
-  const bool is_silent = cmd_line.HasSwitch(installer::switches::kVivaldiSilent);
+      installer::switches::kVivaldiStandalone);
+  const bool is_silent = 
+      cmd_line.HasSwitch(installer::switches::kVivaldiSilent);
 #if defined(VIVALDI_BUILD)
   // NOTE(jarle@vivaldi.com): From Chr-50, XP/Vista is unsupported.
   if (!InstallUtil::IsOSSupported()) {
@@ -1934,7 +2021,28 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   else
     install_type = installer::VivaldiInstallDialog::INSTALL_FOR_CURRENT_USER;
 
-  if (is_vivaldi && !is_vivaldi_update && !is_uninstall) {
+  // for silent installs, make sure we have an install path
+  if (is_silent && vivaldi_target_path.empty()) {
+    int csidl = 0;
+
+    if (install_type == installer::VivaldiInstallDialog::INSTALL_FOR_ALL_USERS)
+      csidl = CSIDL_PROGRAM_FILES;
+    else if (install_type ==
+        installer::VivaldiInstallDialog::INSTALL_FOR_CURRENT_USER)
+      csidl = CSIDL_LOCAL_APPDATA;
+
+    wchar_t szPath[MAX_PATH];
+    if (csidl && SUCCEEDED(::SHGetFolderPath(NULL, csidl, NULL, 0, szPath))) {
+      vivaldi_target_path = base::FilePath(szPath).Append(L"Vivaldi");
+      vivaldi_target_path =
+          vivaldi_target_path.Append(installer::kInstallBinaryDir);
+    } else {
+      LOG(ERROR) << "Vivaldi silent install failed: Install path empty.";
+      return installer::INSTALL_FAILED;
+    }
+  }
+
+  if (is_vivaldi && !(is_vivaldi_update || is_uninstall || is_silent)) {
     INITCOMMONCONTROLSEX iccx;
     iccx.dwSize = sizeof(iccx);
     iccx.dwICC = ICC_COOL_CLASSES | ICC_BAR_CLASSES | ICC_TREEVIEW_CLASSES |
@@ -1944,7 +2052,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
     installer::VivaldiInstallDialog dlg(instance,
                                         false,
                                         install_type,
-                                        vivaldi_profile_path);
+                                        vivaldi_target_path);
 
     const installer::VivaldiInstallDialog::DlgResult dlg_result =
       dlg.ShowModal();
@@ -1962,7 +2070,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
     base::FilePath path(dlg.GetDestinationFolder());
     cmd_line.AppendSwitchPath(installer::switches::kVivaldiInstallDir, path);
 
-    vivaldi_profile_path = path;
+    vivaldi_target_path = path;
 
     install_type = dlg.GetInstallType();
     switch (install_type)
@@ -1991,14 +2099,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
 
   if (is_vivaldi && !is_uninstall) {
     std::vector<DWORD> process_ids;
-    GetRunningVivaldiProcesses(vivaldi_profile_path.value(), process_ids);
+    GetRunningVivaldiProcesses(vivaldi_target_path.value(), process_ids);
     if (process_ids.size() > 0) {
       KillVivaldiProcesses(process_ids);
 
       const int MAX_WAIT_SECS = 10;
       for (int wait = MAX_WAIT_SECS * 10; wait > 0; --wait) {
         Sleep(100);
-        GetRunningVivaldiProcesses(vivaldi_profile_path.value(), process_ids);
+        GetRunningVivaldiProcesses(vivaldi_target_path.value(), process_ids);
         if (process_ids.empty())
           break;
       }
@@ -2008,7 +2116,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
           L"Vivaldi is still running.\n"
           L"Please close all Vivaldi windows before continuing install.",
           L"Vivaldi Installer", MB_RETRYCANCEL | MB_ICONEXCLAMATION);
-        GetRunningVivaldiProcesses(vivaldi_profile_path.value(), process_ids);
+        GetRunningVivaldiProcesses(vivaldi_target_path.value(), process_ids);
       }
       if (choice == IDCANCEL) {
         VLOG(1) << "Vivaldi: install cancelled due to running instances.";
@@ -2038,7 +2146,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
       // If installed, update the main install type.
       installer::VivaldiInstallDialog::InstallType inst_type;
       if (installer::VivaldiInstallDialog::IsVivaldiInstalled(
-          vivaldi_profile_path, inst_type)) {
+          vivaldi_target_path, inst_type)) {
         install_type = inst_type;
       }
     }
@@ -2056,10 +2164,18 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   InstallerState installer_state;
   installer_state.Initialize(cmd_line, prefs, original_state);
 
+  // make sure we use the correct installpath if running silently
+  if (is_silent && !vivaldi_target_path.empty())
+    installer_state.set_target_path_for_testing(vivaldi_target_path);
+
+  persistent_histogram_storage.set_storage_dir(
+      installer::PersistentHistogramStorage::GetReportedStorageDir(
+          installer_state.target_path()));
+
   if (!is_vivaldi) {
-    installer::ConfigureCrashReporting(installer_state);
-    installer::SetInitialCrashKeys(installer_state);
-    installer::SetCrashKeysFromCommandLine(cmd_line);
+  installer::ConfigureCrashReporting(installer_state);
+  installer::SetInitialCrashKeys(installer_state);
+  installer::SetCrashKeysFromCommandLine(cmd_line);
   }
 
   // Make sure the process exits cleanly on unexpected errors.
@@ -2067,8 +2183,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   base::EnableTerminationOnOutOfMemory();
   base::win::RegisterInvalidParamHandler();
   base::win::SetupCRT(cmd_line);
-
-  // const bool is_uninstall = cmd_line.HasSwitch(installer::switches::kUninstall);
 
   // Check to make sure current system is Win7 or later. If not, log
   // error message and get out.
@@ -2117,8 +2231,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   PathService::Get(base::FILE_EXE, &setup_exe);
 
   int exit_code = 0;
-  if (HandleNonInstallCmdLineOptions(
-          original_state, setup_exe, cmd_line, &installer_state, &exit_code)) {
+  if (HandleNonInstallCmdLineOptions(setup_exe, cmd_line, &original_state,
+                                     &installer_state, &exit_code)) {
     return exit_code;
   }
 
@@ -2158,6 +2272,20 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
       return installer::INSUFFICIENT_RIGHTS;
     }
   }
+
+  std::unique_ptr<installer::SetupSingleton> setup_singleton(
+      installer::SetupSingleton::Acquire(cmd_line, prefs, &original_state,
+                                         &installer_state));
+  if (!setup_singleton) {
+    installer_state.WriteInstallerResult(
+        installer::SETUP_SINGLETON_ACQUISITION_FAILED,
+        IDS_INSTALL_SINGLETON_ACQUISITION_FAILED_BASE, nullptr);
+    return installer::SETUP_SINGLETON_ACQUISITION_FAILED;
+  }
+  // Make sure we use the correct installpath if running silently (again).
+  // installer_state.target_path_ is reset by SetupSingleton::Acquire
+  if (is_silent && !vivaldi_target_path.empty())
+    installer_state.set_target_path_for_testing(vivaldi_target_path);
 
   if (is_vivaldi && !is_uninstall && !is_silent)
     progress_dlg.ShowModeless();
@@ -2217,26 +2345,24 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
     std::string dummy_str("// Vivaldi Standalone");
     int size = (int)dummy_str.size();
 
-    vivaldi_profile_path =
-      vivaldi_profile_path.Append(installer::kInstallBinaryDir);
-    vivaldi_profile_path =
-      vivaldi_profile_path.Append(installer::kStandaloneProfileHelper);
+    vivaldi_target_path =
+      vivaldi_target_path.Append(installer::kInstallBinaryDir);
+    vivaldi_target_path =
+      vivaldi_target_path.Append(installer::kStandaloneProfileHelper);
 
     if (base::WriteFile(
-      vivaldi_profile_path, dummy_str.c_str(), size) == size) {
+      vivaldi_target_path, dummy_str.c_str(), size) == size) {
       VLOG(1) << "Successfully wrote " <<
         installer::kStandaloneProfileHelper << " to " <<
-        vivaldi_profile_path.value();
+        vivaldi_target_path.value();
     }
     else {
       PLOG(ERROR) << "Error writing " << installer::kStandaloneProfileHelper <<
-        " to " << vivaldi_profile_path.value();
+        " to " << vivaldi_target_path.value();
       return installer::INSTALL_FAILED;
     }
   }
 
-  installer::EndPersistentHistogramStorage(installer_state.target_path(),
-                                           system_install);
   VLOG(1) << "Installation complete, returning: " << return_code;
 
   if (is_vivaldi && !is_uninstall && !is_silent) {

@@ -5,9 +5,11 @@
 #ifndef CHROME_BROWSER_CHROMEOS_FILE_MANAGER_FAKE_DISK_MOUNT_MANAGER_H_
 #define CHROME_BROWSER_CHROMEOS_FILE_MANAGER_FAKE_DISK_MOUNT_MANAGER_H_
 
+#include <queue>
 #include <string>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
@@ -51,6 +53,11 @@ class FakeDiskMountManager : public chromeos::disks::DiskMountManager {
     return unmount_requests_;
   }
 
+  // Emulates that all mount request finished.
+  // Return true if there was one or more mount request enqueued, or false
+  // otherwise.
+  bool FinishAllUnmountPathRequests();
+
   // DiskMountManager overrides.
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
@@ -66,6 +73,9 @@ class FakeDiskMountManager : public chromeos::disks::DiskMountManager {
                  const std::string& mount_label,
                  chromeos::MountType type,
                  chromeos::MountAccessMode access_mode) override;
+  // In order to simulate asynchronous invocation of callbacks after unmount
+  // is finished, |callback| will be invoked only when
+  // |FinishAllUnmountRequest()| is called.
   void UnmountPath(const std::string& mount_path,
                    chromeos::UnmountOptions options,
                    const UnmountPathCallback& callback) override;
@@ -74,12 +84,13 @@ class FakeDiskMountManager : public chromeos::disks::DiskMountManager {
       const std::string& device_path,
       const UnmountDeviceRecursivelyCallbackType& callback) override;
 
-  bool AddDiskForTest(Disk* disk) override;
+  bool AddDiskForTest(std::unique_ptr<Disk> disk) override;
   bool AddMountPointForTest(const MountPointInfo& mount_point) override;
   void InvokeDiskEventForTest(DiskEvent event, const Disk* disk);
 
  private:
   base::ObserverList<Observer> observers_;
+  std::queue<UnmountPathCallback> pending_unmount_callbacks_;
 
   DiskMap disks_;
   MountPointMap mount_points_;

@@ -22,7 +22,7 @@
 
 // TODO(foolip): All long types in this interfaces should be unsigned long.
 [
-    ActiveScriptWrappable, 
+    ActiveScriptWrappable,
     ConstructorCallWith=Document,
     NamedConstructor=Image(optional long width, optional long height),
 ] interface HTMLImageElement : HTMLElement {
@@ -46,8 +46,8 @@
     [CEReactions, Reflect] attribute DOMString name;
     [CEReactions, Reflect, URL] attribute DOMString lowsrc;
     [CEReactions, Reflect] attribute DOMString align;
-    [CEReactions, Reflect] attribute long hspace;
-    [CEReactions, Reflect] attribute long vspace;
+    [CEReactions, Reflect] attribute unsigned long hspace;
+    [CEReactions, Reflect] attribute unsigned long vspace;
     [CEReactions, Reflect, URL] attribute DOMString longDesc;
 
     [CEReactions, Reflect, TreatNullAs=EmptyString] attribute DOMString border;

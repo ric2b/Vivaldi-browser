@@ -16,7 +16,7 @@ namespace gpu {
 ProprietaryMediaGpuChannelManager::ProprietaryMediaGpuChannelManager(
                     const GpuPreferences& gpu_preferences,
                     GpuChannelManagerDelegate* delegate,
-                    GpuWatchdog* watchdog,
+                    GpuWatchdogThread* watchdog,
                     base::SingleThreadTaskRunner* task_runner,
                     base::SingleThreadTaskRunner* io_task_runner,
                     base::WaitableEvent* shutdown_event,

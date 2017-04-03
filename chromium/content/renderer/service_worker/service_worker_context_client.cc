@@ -9,7 +9,7 @@
 
 #include "base/lazy_instance.h"
 #include "base/logging.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_checker.h"
 #include "base/threading/thread_local.h"
@@ -178,7 +178,7 @@ struct ServiceWorkerContextClient::WorkerContextData {
       IDMap<blink::WebServiceWorkerSkipWaitingCallbacks, IDMapOwnPointer>;
   using SyncEventCallbacksMap =
       IDMap<const base::Callback<void(blink::mojom::ServiceWorkerEventStatus,
-                                      double /* dispatch_event_time */)>,
+                                      base::Time /* dispatch_event_time */)>,
             IDMapOwnPointer>;
 
   explicit WorkerContextData(ServiceWorkerContextClient* owner)
@@ -594,10 +594,10 @@ void ServiceWorkerContextClient::didHandleSyncEvent(
     return;
   if (result == blink::WebServiceWorkerEventResultCompleted) {
     callback->Run(blink::mojom::ServiceWorkerEventStatus::COMPLETED,
-                  event_dispatch_time);
+                  base::Time::FromDoubleT(event_dispatch_time));
   } else {
     callback->Run(blink::mojom::ServiceWorkerEventStatus::REJECTED,
-                  event_dispatch_time);
+                  base::Time::FromDoubleT(event_dispatch_time));
   }
   context_->sync_event_callbacks.Remove(request_id);
 }
@@ -799,8 +799,7 @@ void ServiceWorkerContextClient::OnFetchEvent(
     int event_finish_id,
     const ServiceWorkerFetchRequest& request) {
   blink::WebServiceWorkerRequest webRequest;
-  TRACE_EVENT0("ServiceWorker",
-               "ServiceWorkerContextClient::OnFetchEvent");
+  TRACE_EVENT0("ServiceWorker", "ServiceWorkerContextClient::OnFetchEvent");
   webRequest.setURL(blink::WebURL(request.url));
   webRequest.setMethod(blink::WebString::fromUTF8(request.method));
   for (ServiceWorkerHeaderMap::const_iterator it = request.headers.begin();
@@ -835,26 +834,24 @@ void ServiceWorkerContextClient::OnFetchEvent(
 
 void ServiceWorkerContextClient::OnNotificationClickEvent(
     int request_id,
-    int64_t persistent_notification_id,
+    const std::string& notification_id,
     const PlatformNotificationData& notification_data,
     int action_index) {
   TRACE_EVENT0("ServiceWorker",
                "ServiceWorkerContextClient::OnNotificationClickEvent");
   proxy_->dispatchNotificationClickEvent(
-      request_id,
-      persistent_notification_id,
-      ToWebNotificationData(notification_data),
-      action_index);
+      request_id, blink::WebString::fromUTF8(notification_id),
+      ToWebNotificationData(notification_data), action_index);
 }
 
 void ServiceWorkerContextClient::OnNotificationCloseEvent(
     int request_id,
-    int64_t persistent_notification_id,
+    const std::string& notification_id,
     const PlatformNotificationData& notification_data) {
   TRACE_EVENT0("ServiceWorker",
                "ServiceWorkerContextClient::OnNotificationCloseEvent");
   proxy_->dispatchNotificationCloseEvent(
-      request_id, persistent_notification_id,
+      request_id, blink::WebString::fromUTF8(notification_id),
       ToWebNotificationData(notification_data));
 }
 

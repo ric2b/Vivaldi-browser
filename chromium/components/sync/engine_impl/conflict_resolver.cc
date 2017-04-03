@@ -5,10 +5,9 @@
 #include "components/sync/engine_impl/conflict_resolver.h"
 
 #include <list>
-#include <set>
 #include <string>
 
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "components/sync/base/cryptographer.h"
 #include "components/sync/engine/cycle/update_counters.h"
 #include "components/sync/engine_impl/conflict_util.h"

@@ -17,6 +17,9 @@ from pylib.local.device import local_device_environment
 from pylib.local.device import local_device_test_run
 import tombstones
 
+
+_TAG = 'test_runner_py'
+
 TIMEOUT_ANNOTATIONS = [
   ('Manual', 10 * 60 * 60),
   ('IntegrationTest', 30 * 60),
@@ -64,7 +67,7 @@ class LocalDeviceInstrumentationTestRun(
       if not d:
         return device_root
       elif isinstance(d, list):
-        return posixpath.join(p if p else device_root for p in d)
+        return posixpath.join(*(p if p else device_root for p in d))
       else:
         return d
 
@@ -255,12 +258,18 @@ class LocalDeviceInstrumentationTestRun(
         add=flags.add, remove=flags.remove)
 
     try:
+      device.RunShellCommand(
+          ['log', '-p', 'i', '-t', _TAG, 'START %s' % test_name],
+          check_return=True)
       time_ms = lambda: int(time.time() * 1e3)
       start_ms = time_ms()
       output = device.StartInstrumentation(
           target, raw=True, extras=extras, timeout=timeout, retries=0)
-      duration_ms = time_ms() - start_ms
     finally:
+      device.RunShellCommand(
+          ['log', '-p', 'i', '-t', _TAG, 'END %s' % test_name],
+          check_return=True)
+      duration_ms = time_ms() - start_ms
       if flags:
         self._flag_changers[str(device)].Restore()
       if test_timeout_scale:
@@ -347,11 +356,10 @@ class LocalDeviceInstrumentationTestRun(
     if 'RetryOnFailure' in test.get('annotations', {}):
       return True
 
-    # TODO(jbudorick): Remove this log message and switch the return value to
-    # False after tests have been annotated with @RetryOnFailure.
-    # See crbug.com/619055 for more details.
-    logging.warning('Default retries are being phased out. crbug.com/619055')
-    return True
+    # TODO(jbudorick): Remove this log message once @RetryOnFailure has been
+    # enabled for a while. See crbug.com/619055 for more details.
+    logging.error('Default retries are being phased out. crbug.com/619055')
+    return False
 
   #override
   def _ShouldShard(self):

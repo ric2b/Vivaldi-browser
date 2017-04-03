@@ -8,7 +8,7 @@
 
 namespace content {
 
-void RenderWidgetHostDelegate::GetScreenInfo(blink::WebScreenInfo*) {}
+void RenderWidgetHostDelegate::GetScreenInfo(ScreenInfo*) {}
 
 bool RenderWidgetHostDelegate::PreHandleKeyboardEvent(
     const NativeWebKeyboardEvent& event,
@@ -75,6 +75,11 @@ TextInputManager* RenderWidgetHostDelegate::GetTextInputManager() {
 
 bool RenderWidgetHostDelegate::IsHidden() {
   return false;
+}
+
+RenderWidgetHostImpl* RenderWidgetHostDelegate::GetFullscreenRenderWidgetHost()
+    const {
+  return nullptr;
 }
 
 }  // namespace content

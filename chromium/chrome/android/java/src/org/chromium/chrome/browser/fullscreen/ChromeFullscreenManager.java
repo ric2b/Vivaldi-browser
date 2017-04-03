@@ -79,7 +79,6 @@ public class ChromeFullscreenManager
 
     private int mPersistentControlsCurrentToken;
     private long mCurrentShowTime;
-    private int mActivityShowToken = INVALID_TOKEN;
 
     private ObjectAnimator mControlAnimation;
     private boolean mCurrentAnimationIsShowing;
@@ -215,9 +214,7 @@ public class ChromeFullscreenManager
             // notification bar when this was done in onStart()).
             setPersistentFullscreenMode(false);
         } else if (newState == ActivityState.STARTED) {
-            // Force the controls to be shown until we get an update from a Tab.  This is a
-            // workaround for when the renderer is killed but the Tab is not notified.
-            mActivityShowToken = showControlsPersistentAndClearOldToken(mActivityShowToken);
+            showControlsTransient();
         } else if (newState == ActivityState.DESTROYED) {
             ApplicationStatus.unregisterActivityStateListener(this);
             ((BaseChromiumApplication) mWindow.getContext().getApplicationContext())
@@ -355,9 +352,7 @@ public class ChromeFullscreenManager
         return getControlOffset() > -mControlContainerHeight;
     }
 
-    /**
-     * @return The height of the top controls in pixels.
-     */
+    @Override
     public int getTopControlsHeight() {
         return mControlContainerHeight;
     }
@@ -619,13 +614,6 @@ public class ChromeFullscreenManager
 
     @Override
     public void setPositionsForTab(float controlsOffset, float contentOffset) {
-        // Once we get an update from a tab, clear the activity show token and allow the render
-        // to control the positions of the top controls.
-        if (mActivityShowToken != INVALID_TOKEN) {
-            hideControlsPersistent(mActivityShowToken);
-            mActivityShowToken = INVALID_TOKEN;
-        }
-
         float rendererControlOffset =
                 Math.round(Math.max(controlsOffset, -mControlContainerHeight));
         float rendererContentOffset = Math.min(

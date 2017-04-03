@@ -7,15 +7,14 @@
 
 import("//build/config/compiler/compiler.gni")
 import("//build/config/win/manifest.gni")
-import("//chrome/version.gni")
+import("//chrome/process_version_rc_template.gni")
 import("//testing/test.gni")
 
 ##------------------------------------------------------------------------------
 ## chrome_elf
 ##------------------------------------------------------------------------------
 
-process_version("chrome_elf_resources") {
-  template_file = chrome_version_rc_template
+process_version_rc_template("chrome_elf_resources") {
   sources = [
     "chrome_elf.ver",
   ]
@@ -34,9 +33,6 @@ windows_manifest("chrome_elf_manifest") {
 # in the world.
 shared_library("chrome_elf") {
   sources = [
-    "//chrome/app/chrome_crash_reporter_client_win.cc",
-    "//chrome/app/chrome_crash_reporter_client_win.h",
-    "//chrome/common/chrome_result_codes.h",
     "chrome_elf.def",
     "chrome_elf_main.cc",
     "chrome_elf_main.h",
@@ -45,31 +41,24 @@ shared_library("chrome_elf") {
     ":blacklist",
     ":chrome_elf_manifest",
     ":chrome_elf_resources",
-    ":chrome_elf_security",
     ":constants",
+    ":crash",
     ":hook_util",
     ":nt_registry",
-    "//base",
+    ":security",
     "//build/config/sanitizers:deps",
     "//chrome/install_static:install_static_util",
-    "//components/crash/content/app",
-    "//components/crash/core/common",
-    "//content/public/common:result_codes",
-    "//third_party/crashpad/crashpad/client:client",
   ]
   configs += [ "//build/config/win:windowed" ]
   configs -= [ "//build/config/win:console" ]
+
+  # Delay loads in this list will prevent user32.dll
+  # from loading too early.
   ldflags = [
-    "/NODEFAULTLIB:user32.lib",
+    "/DELAYLOAD:advapi32.dll",
     "/DELAYLOAD:dbghelp.dll",
-    "/DELAYLOAD:ole32.dll",
-    "/DELAYLOAD:psapi.dll",
     "/DELAYLOAD:rpcrt4.dll",
-    "/DELAYLOAD:shell32.dll",
-    "/DELAYLOAD:user32.dll",
-    "/DELAYLOAD:winhttp.dll",
     "/DELAYLOAD:winmm.dll",
-    "/DELAYLOAD:ws2_32.dll",
   ]
   if (current_cpu == "x86") {
     # Don"t set an x64 base address (to avoid breaking HE-ASLR).
@@ -81,7 +70,7 @@ shared_library("chrome_elf") {
 ## source sets
 ##------------------------------------------------------------------------------
 
-source_set("chrome_elf_security") {
+source_set("security") {
   sources = [
     "chrome_elf_security.cc",
     "chrome_elf_security.h",
@@ -130,30 +119,49 @@ static_library("blacklist") {
     "blacklist/blacklist.h",
     "blacklist/blacklist_interceptions.cc",
     "blacklist/blacklist_interceptions.h",
-    "blacklist/crashpad_helper.cc",
-    "blacklist/crashpad_helper.h",
   ]
   public_deps = [
     "//sandbox",
   ]
   deps = [
     ":constants",
+    ":crash",
     ":hook_util",
     ":nt_registry",
+    "//base:base_static",  # pe_image
     "//chrome/install_static:install_static_util",
+  ]
+}
 
-    # Still uses base/win/pe_image.h
-    "//base",
-    "//third_party/crashpad/crashpad/client:client",
+static_library("crash") {
+  sources = [
+    "../chrome/app/chrome_crash_reporter_client_win.cc",
+    "../chrome/app/chrome_crash_reporter_client_win.h",
+    "../chrome/common/chrome_result_codes.h",
+    "crash/crash_helper.cc",
+    "crash/crash_helper.h",
+  ]
+  deps = [
+    ":hook_util",
+    "//base:base",  # This needs to go.  DEP of app, crash_keys, client.
+    "//base:base_static",  # pe_image
+    "//chrome/install_static:install_static_util",
+    "//components/crash/content/app:app",
+    "//components/crash/core/common",  # crash_keys
+    "//content/public/common:result_codes",
+    "//third_party/crashpad/crashpad/client:client",  # DumpWithoutCrash
   ]
 }
 
 static_library("hook_util") {
   sources = [
-    "hook_util/thunk_getter.cc",
-    "hook_util/thunk_getter.h",
+    "../base/macros.h",
+    "hook_util/hook_util.cc",
+    "hook_util/hook_util.h",
   ]
   deps = [
+    ":nt_registry",  # utils
+    "//base:base_static",  # pe_image
     "//sandbox",
   ]
 }
@@ -187,6 +195,7 @@ test("chrome_elf_unittests") {
     "blacklist/test/blacklist_test.cc",
     "chrome_elf_util_unittest.cc",
     "elf_imports_unittest.cc",
+    "hook_util/test/hook_util_test.cc",
     "nt_registry/nt_registry_unittest.cc",
     "run_all_unittests.cc",
   ]
@@ -194,10 +203,12 @@ test("chrome_elf_unittests") {
   deps = [
     ":blacklist",
     ":blacklist_test_main_dll",
-    ":chrome_elf_security",
     ":constants",
+    ":crash",
     ":hook_util",
+    ":hook_util_test_dll",
     ":nt_registry",
+    ":security",
     "//base",
     "//base/test:test_support",
     "//chrome",
@@ -220,21 +231,20 @@ test("chrome_elf_unittests") {
     ":blacklist_test_dll_3",
     ":chrome_elf",
   ]
+
+  # Don't want the test-specific dependencies to affect ChromeElfLoadSanityTest.
+  # In particular, a few system DLLs cause user32 to be loaded, which is bad.
   ldflags = [
-    "/DELAYLOAD:dbghelp.dll",
+    "/DELAYLOAD:advapi32.dll",
     "/DELAYLOAD:ole32.dll",
-    "/DELAYLOAD:psapi.dll",
-    "/DELAYLOAD:rpcrt4.dll",
     "/DELAYLOAD:shell32.dll",
-    "/DELAYLOAD:shlwapi.dll",
     "/DELAYLOAD:user32.dll",
-    "/DELAYLOAD:winhttp.dll",
     "/DELAYLOAD:winmm.dll",
-    "/DELAYLOAD:ws2_32.dll",
   ]
 }
 
 shared_library("blacklist_test_main_dll") {
+  testonly = true
   sources = [
     "blacklist/test/blacklist_test_main_dll.cc",
     "blacklist/test/blacklist_test_main_dll.def",
@@ -246,21 +256,10 @@ shared_library("blacklist_test_main_dll") {
     "//build/config/sanitizers:deps",
     "//chrome/install_static:install_static_util",
   ]
-  ldflags = [
-    "/NODEFAULTLIB:user32.lib",
-    "/DELAYLOAD:dbghelp.dll",
-    "/DELAYLOAD:ole32.dll",
-    "/DELAYLOAD:psapi.dll",
-    "/DELAYLOAD:rpcrt4.dll",
-    "/DELAYLOAD:shell32.dll",
-    "/DELAYLOAD:user32.dll",
-    "/DELAYLOAD:winhttp.dll",
-    "/DELAYLOAD:winmm.dll",
-    "/DELAYLOAD:ws2_32.dll",
-  ]
 }
 
 loadable_module("blacklist_test_dll_1") {
+  testonly = true
   sources = [
     "blacklist/test/blacklist_test_dll_1.cc",
     "blacklist/test/blacklist_test_dll_1.def",
@@ -271,6 +270,7 @@ loadable_module("blacklist_test_dll_1") {
 }
 
 loadable_module("blacklist_test_dll_2") {
+  testonly = true
   sources = [
     "blacklist/test/blacklist_test_dll_2.cc",
     "blacklist/test/blacklist_test_dll_2.def",
@@ -286,8 +286,20 @@ loadable_module("blacklist_test_dll_2") {
 # which does), Ninja would get confused and always rebuild this target because
 # it sees a declared output file but that file doesn't exist on disk.
 loadable_module("blacklist_test_dll_3") {
+  testonly = true
   sources = [
     "blacklist/test/blacklist_test_dll_3.cc",
+  ]
+  deps = [
+    "//build/config/sanitizers:deps",
+  ]
+}
+
+shared_library("hook_util_test_dll") {
+  testonly = true
+  sources = [
+    "hook_util/test/hook_util_test_dll.cc",
+    "hook_util/test/hook_util_test_dll.h",
   ]
   deps = [
     "//build/config/sanitizers:deps",

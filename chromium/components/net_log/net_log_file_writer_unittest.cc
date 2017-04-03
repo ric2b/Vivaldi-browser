@@ -19,6 +19,7 @@
 #include "build/build_config.h"
 #include "components/net_log/chrome_net_log.h"
 #include "net/log/net_log_capture_mode.h"
+#include "net/log/net_log_event_type.h"
 #include "net/log/write_to_file_net_log_observer.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -47,7 +48,7 @@ class TestNetLogFileWriter : public NetLogFileWriter {
   bool GetNetExportLogBaseDirectory(base::FilePath* path) const override {
     if (lie_about_net_export_log_directory_)
       return false;
-    *path = net_log_temp_dir_.path();
+    *path = net_log_temp_dir_.GetPath();
     return true;
   }
 
@@ -388,7 +389,7 @@ TEST_F(NetLogFileWriterTest, CheckAddEvent) {
   VerifyFileAndStateAfterDoStart();
 
   // Log an event.
-  net_log_->AddGlobalEntry(net::NetLog::TYPE_CANCELLED);
+  net_log_->AddGlobalEntry(net::NetLogEventType::CANCELLED);
 
   net_log_file_writer_->ProcessCommand(NetLogFileWriter::DO_STOP);
   VerifyFileAndStateAfterDoStop();
@@ -432,7 +433,7 @@ TEST_F(NetLogFileWriterTest, CheckAddEventWithCustomPath) {
   VerifyFileAndStateAfterDoStart();
 
   // Log an event.
-  net_log_->AddGlobalEntry(net::NetLog::TYPE_CANCELLED);
+  net_log_->AddGlobalEntry(net::NetLogEventType::CANCELLED);
 
   net_log_file_writer_->ProcessCommand(NetLogFileWriter::DO_STOP);
   VerifyFileAndStateAfterDoStop();

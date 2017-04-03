@@ -6,13 +6,15 @@
 
 #include <stddef.h>
 
+#include <memory>
+
 #include "base/callback.h"
 #include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/background_sync/background_sync_permission_context.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/media/media_stream_device_permission_context.h"
 #include "chrome/browser/media/midi_permission_context.h"
+#include "chrome/browser/media/webrtc/media_stream_device_permission_context.h"
 #include "chrome/browser/notifications/notification_permission_context.h"
 #include "chrome/browser/permissions/permission_context_base.h"
 #include "chrome/browser/permissions/permission_manager_factory.h"
@@ -27,6 +29,10 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
+
+#if defined(ENABLE_PLUGINS)
+#include "chrome/browser/plugins/flash_permission_context.h"
+#endif
 
 #if defined(OS_ANDROID) || defined(OS_CHROMEOS)
 #include "chrome/browser/media/protected_media_identifier_permission_context.h"
@@ -99,6 +105,8 @@ ContentSettingsType PermissionTypeToContentSetting(PermissionType permission) {
       return CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA;
     case PermissionType::BACKGROUND_SYNC:
       return CONTENT_SETTINGS_TYPE_BACKGROUND_SYNC;
+    case PermissionType::FLASH:
+      return CONTENT_SETTINGS_TYPE_PLUGINS;
     case PermissionType::NUM:
       // This will hit the NOTREACHED below.
       break;
@@ -218,36 +226,40 @@ PermissionManager::PermissionManager(Profile* profile)
     : profile_(profile),
       weak_ptr_factory_(this) {
   permission_contexts_[PermissionType::MIDI_SYSEX] =
-      base::WrapUnique(new MidiPermissionContext(profile));
+      base::MakeUnique<MidiPermissionContext>(profile);
   permission_contexts_[PermissionType::PUSH_MESSAGING] =
-      base::WrapUnique(new NotificationPermissionContext(
-          profile, PermissionType::PUSH_MESSAGING));
+      base::MakeUnique<NotificationPermissionContext>(
+          profile, PermissionType::PUSH_MESSAGING);
   permission_contexts_[PermissionType::NOTIFICATIONS] =
-      base::WrapUnique(new NotificationPermissionContext(
-          profile, PermissionType::NOTIFICATIONS));
+      base::MakeUnique<NotificationPermissionContext>(
+          profile, PermissionType::NOTIFICATIONS);
 #if !BUILDFLAG(ANDROID_JAVA_UI)
   permission_contexts_[PermissionType::GEOLOCATION] =
-      base::WrapUnique(new GeolocationPermissionContext(profile));
+      base::MakeUnique<GeolocationPermissionContext>(profile);
 #else
   permission_contexts_[PermissionType::GEOLOCATION] =
-      base::WrapUnique(new GeolocationPermissionContextAndroid(profile));
+      base::MakeUnique<GeolocationPermissionContextAndroid>(profile);
 #endif
 #if defined(OS_CHROMEOS) || defined(OS_ANDROID)
   permission_contexts_[PermissionType::PROTECTED_MEDIA_IDENTIFIER] =
-      base::WrapUnique(new ProtectedMediaIdentifierPermissionContext(profile));
+      base::MakeUnique<ProtectedMediaIdentifierPermissionContext>(profile);
 #endif
   permission_contexts_[PermissionType::DURABLE_STORAGE] =
-      base::WrapUnique(new DurableStoragePermissionContext(profile));
+      base::MakeUnique<DurableStoragePermissionContext>(profile);
   permission_contexts_[PermissionType::AUDIO_CAPTURE] =
-      base::WrapUnique(new MediaStreamDevicePermissionContext(
+      base::MakeUnique<MediaStreamDevicePermissionContext>(
           profile, content::PermissionType::AUDIO_CAPTURE,
-          CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC));
+          CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC);
   permission_contexts_[PermissionType::VIDEO_CAPTURE] =
-      base::WrapUnique(new MediaStreamDevicePermissionContext(
+      base::MakeUnique<MediaStreamDevicePermissionContext>(
           profile, content::PermissionType::VIDEO_CAPTURE,
-          CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA));
+          CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA);
   permission_contexts_[PermissionType::BACKGROUND_SYNC] =
-      base::WrapUnique(new BackgroundSyncPermissionContext(profile));
+      base::MakeUnique<BackgroundSyncPermissionContext>(profile);
+#if defined(ENABLE_PLUGINS)
+  permission_contexts_[PermissionType::FLASH] =
+      base::MakeUnique<FlashPermissionContext>(profile);
+#endif
 }
 
 PermissionManager::~PermissionManager() {

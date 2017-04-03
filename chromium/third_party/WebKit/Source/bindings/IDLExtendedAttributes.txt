@@ -51,10 +51,12 @@ DoNotCheckConstants
 DoNotCheckSecurity=|Setter
 DoNotTestNewObject
 EnforceRange
+ExperimentalCallbackFunction
 Exposed=*
 FeaturePolicy=*
 FlexibleArrayBufferView
 Global=|*
+HTMLConstructor
 ImplementedAs=*
 ImplementedInPrivateScript
 Iterable
@@ -99,4 +101,4 @@ TreatNullAs=NullString|EmptyString
 TreatUndefinedAs=NullString
 URL
 Unforgeable
-Unscopeable
+Unscopable

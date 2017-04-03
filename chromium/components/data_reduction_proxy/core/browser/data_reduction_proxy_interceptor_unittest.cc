@@ -260,8 +260,7 @@ TEST_F(DataReductionProxyInterceptorWithServerTest, TestBypass) {
   EXPECT_TRUE(request->is_pending());
   base::RunLoop().Run();
 
-  EXPECT_EQ(net::URLRequestStatus::SUCCESS, request->status().status());
-  EXPECT_EQ(net::OK, request->status().error());
+  EXPECT_EQ(net::OK, delegate.request_status());
   EXPECT_EQ("hello", delegate.data_received());
 }
 
@@ -273,8 +272,7 @@ TEST_F(DataReductionProxyInterceptorWithServerTest, TestNoBypass) {
   EXPECT_TRUE(request->is_pending());
   base::RunLoop().Run();
 
-  EXPECT_EQ(net::URLRequestStatus::SUCCESS, request->status().status());
-  EXPECT_EQ(net::OK, request->status().error());
+  EXPECT_EQ(net::OK, delegate.request_status());
   EXPECT_EQ("hello", delegate.data_received());
 }
 
@@ -314,9 +312,7 @@ class DataReductionProxyInterceptorEndToEndTest : public testing::Test {
     return request;
   }
 
-  const net::TestDelegate& delegate() const {
-    return delegate_;
-  }
+  const net::TestDelegate& delegate() const { return delegate_; }
 
   net::MockClientSocketFactory* mock_socket_factory() {
     return &mock_socket_factory_;
@@ -356,11 +352,10 @@ TEST_F(DataReductionProxyInterceptorEndToEndTest, ResponseWithoutRetry) {
   std::unique_ptr<net::URLRequest> request =
       CreateAndExecuteRequest(GURL("http://foo.com"));
 
-  EXPECT_EQ(net::URLRequestStatus::SUCCESS, request->status().status());
+  EXPECT_EQ(net::OK, delegate().request_status());
   EXPECT_EQ(200, request->GetResponseCode());
   EXPECT_EQ(kBody, delegate().data_received());
-  EXPECT_EQ(origin().host_port_pair().ToString(),
-            request->proxy_server().ToString());
+  EXPECT_EQ(origin(), request->proxy_server());
 }
 
 TEST_F(DataReductionProxyInterceptorEndToEndTest, RedirectWithoutRetry) {
@@ -390,11 +385,10 @@ TEST_F(DataReductionProxyInterceptorEndToEndTest, RedirectWithoutRetry) {
   std::unique_ptr<net::URLRequest> request =
       CreateAndExecuteRequest(GURL("http://foo.com"));
 
-  EXPECT_EQ(net::URLRequestStatus::SUCCESS, request->status().status());
+  EXPECT_EQ(net::OK, delegate().request_status());
   EXPECT_EQ(200, request->GetResponseCode());
   EXPECT_EQ(kBody, delegate().data_received());
-  EXPECT_EQ(origin().host_port_pair().ToString(),
-            request->proxy_server().ToString());
+  EXPECT_EQ(origin(), request->proxy_server());
   // The redirect should have been processed and followed normally.
   EXPECT_EQ(1, delegate().received_redirect_count());
 }
@@ -425,7 +419,7 @@ TEST_F(DataReductionProxyInterceptorEndToEndTest, ResponseWithBypassAndRetry) {
   std::unique_ptr<net::URLRequest> request =
       CreateAndExecuteRequest(GURL("http://foo.com"));
 
-  EXPECT_EQ(net::URLRequestStatus::SUCCESS, request->status().status());
+  EXPECT_EQ(net::OK, delegate().request_status());
   EXPECT_EQ(200, request->GetResponseCode());
   EXPECT_EQ(kBody, delegate().data_received());
   EXPECT_FALSE(request->was_fetched_via_proxy());
@@ -472,7 +466,7 @@ TEST_F(DataReductionProxyInterceptorEndToEndTest, RedirectWithBypassAndRetry) {
   std::unique_ptr<net::URLRequest> request =
       CreateAndExecuteRequest(GURL("http://foo.com"));
 
-  EXPECT_EQ(net::URLRequestStatus::SUCCESS, request->status().status());
+  EXPECT_EQ(net::OK, delegate().request_status());
   EXPECT_EQ(200, request->GetResponseCode());
   EXPECT_EQ(kBody, delegate().data_received());
   EXPECT_FALSE(request->was_fetched_via_proxy());

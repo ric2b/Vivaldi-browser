@@ -75,6 +75,7 @@ public class ExternalNavigationHandlerTest extends NativeLibraryTestBase {
             "intent:///name/nm0000158#Intent;scheme=imdb;package=com.imdb.mobile;S."
             + ExternalNavigationHandler.EXTRA_MARKET_REFERRER + "="
             + ENCODED_MARKET_REFERRER + ";end";
+    private static final String INTENT_APP_PACKAGE_NAME = "com.imdb.mobile";
 
     private static final String PLUS_STREAM_URL = "https://plus.google.com/stream";
     private static final String CALENDAR_URL = "http://www.google.com/calendar";
@@ -115,9 +116,11 @@ public class ExternalNavigationHandlerTest extends NativeLibraryTestBase {
 
     @SmallTest
     public void testOrdinaryIncognitoUri() {
+        // http://crbug.com/587306: Don't prompt the user for capturing URLs in incognito, just keep
+        // it within the browser.
         checkUrl("http://youtube.com/")
                 .withIsIncognito(true)
-                .expecting(OverrideUrlLoadingResult.OVERRIDE_WITH_ASYNC_ACTION, START_INCOGNITO);
+                .expecting(OverrideUrlLoadingResult.NO_OVERRIDE, IGNORE);
     }
 
     @SmallTest
@@ -226,6 +229,14 @@ public class ExternalNavigationHandlerTest extends NativeLibraryTestBase {
         // http://crbug.com/162106 - Don't show the picker on reload.
         checkUrl("http://youtube.com/")
                 .withPageTransition(PageTransition.RELOAD)
+                .expecting(OverrideUrlLoadingResult.NO_OVERRIDE, IGNORE);
+    }
+
+    @SmallTest
+    public void testInWebapp() {
+        // Don't override if the URL is within the current webapp scope.
+        mDelegate.setIsWithinCurrentWebappScope(true);
+        checkUrl("http://youtube.com/")
                 .expecting(OverrideUrlLoadingResult.NO_OVERRIDE, IGNORE);
     }
 
@@ -505,6 +516,30 @@ public class ExternalNavigationHandlerTest extends NativeLibraryTestBase {
     }
 
     @SmallTest
+    public void testInstantAppsIntent_customTabRedirect() throws Exception {
+        TestContext context = new TestContext();
+        TabRedirectHandler redirectHandler = new TabRedirectHandler(context);
+        int transTypeLinkFromIntent = PageTransition.LINK | PageTransition.FROM_API;
+
+        // In Custom Tabs, if the first url is a redirect, don't allow it to intent out, unless
+        // the redirect is going to Instant Apps.
+        Intent fooIntent = Intent.parseUri("http://foo.com/", Intent.URI_INTENT_SCHEME);
+        fooIntent.putExtra(CustomTabsIntent.EXTRA_SESSION, "");
+        fooIntent.putExtra(CustomTabsIntent.EXTRA_ENABLE_INSTANT_APPS, true);
+        fooIntent.setPackage(context.getPackageName());
+        redirectHandler.updateIntent(fooIntent);
+        redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, false, false, 0, 0);
+        redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, true, false, 0, 0);
+
+        mDelegate.setCanHandleWithInstantApp(true);
+        checkUrl("http://instantappenabled.com")
+                .withPageTransition(transTypeLinkFromIntent)
+                .withIsRedirect(true)
+                .withRedirectHandler(redirectHandler)
+                .expecting(OverrideUrlLoadingResult.OVERRIDE_WITH_EXTERNAL_INTENT, IGNORE);
+    }
+
+    @SmallTest
     public void testFallbackUrl_IntentResolutionSucceeds() {
         // IMDB app is installed.
         mDelegate.setCanResolveActivity(true);
@@ -518,6 +553,23 @@ public class ExternalNavigationHandlerTest extends NativeLibraryTestBase {
         assertEquals(IMDB_APP_INTENT_FOR_TOM_HANKS, invokedIntent.getData().toString());
         assertNull("The invoked intent should not have browser_fallback_url\n",
                 invokedIntent.getStringExtra(ExternalNavigationHandler.EXTRA_BROWSER_FALLBACK_URL));
+        assertNull(mDelegate.getNewUrlAfterClobbering());
+        assertNull(mDelegate.getReferrerUrlForClobbering());
+    }
+
+    @SmallTest
+    public void testFallbackUrl_IntentResolutionSucceedsInIncognito() {
+        // IMDB app is installed.
+        mDelegate.setCanResolveActivity(true);
+
+        // Expect that the user is prompted to leave incognito mode.
+        checkUrl(INTENT_URL_WITH_FALLBACK_URL)
+                .withIsIncognito(true)
+                .withReferrer(SEARCH_RESULT_URL_FOR_TOM_HANKS)
+                .expecting(OverrideUrlLoadingResult.OVERRIDE_WITH_ASYNC_ACTION,
+                        START_INCOGNITO);
+
+        assertNull(mDelegate.startActivityIntent);
         assertNull(mDelegate.getNewUrlAfterClobbering());
         assertNull(mDelegate.getReferrerUrlForClobbering());
     }
@@ -980,7 +1032,7 @@ public class ExternalNavigationHandlerTest extends NativeLibraryTestBase {
             // should mimic the appropriate intent resolution intead.
             if (mQueryIntentOverride != null) {
                 if (mQueryIntentOverride.booleanValue()) {
-                    list.add(newResolveInfo("foo", "foo"));
+                    list.add(newResolveInfo(INTENT_APP_PACKAGE_NAME, INTENT_APP_PACKAGE_NAME));
                 } else {
                     return list;
                 }
@@ -1027,6 +1079,11 @@ public class ExternalNavigationHandlerTest extends NativeLibraryTestBase {
         }
 
         @Override
+        public boolean isWithinCurrentWebappScope(String url) {
+            return mIsWithinCurrentWebappScope;
+        }
+
+        @Override
         public int countSpecializedHandlers(List<ResolveInfo> resolveInfos) {
             return getSpecializedHandlers(resolveInfos).size();
         }
@@ -1039,6 +1096,7 @@ public class ExternalNavigationHandlerTest extends NativeLibraryTestBase {
             for (ResolveInfo info : infos) {
                 String packageName = info.activityInfo.packageName;
                 if (packageName.equals("youtube") || packageName.equals("calendar")
+                        || packageName.equals(INTENT_APP_PACKAGE_NAME)
                         || packageName.equals(COUNTERFEIT_WEBAPK_PACKAGE_NAME)
                         || packageName.equals(NATIVE_APP_PACKAGE_NAME)
                         || packageName.equals(WEBAPK_PACKAGE_NAME)
@@ -1070,12 +1128,12 @@ public class ExternalNavigationHandlerTest extends NativeLibraryTestBase {
         }
 
         @Override
-        public void startActivity(Intent intent) {
+        public void startActivity(Intent intent, boolean proxy) {
             startActivityIntent = intent;
         }
 
         @Override
-        public boolean startActivityIfNeeded(Intent intent) {
+        public boolean startActivityIfNeeded(Intent intent, boolean proxy) {
             // For simplicity, don't distinguish between startActivityIfNeeded and startActivity
             // until a test requires this distinction.
             startActivityIntent = intent;
@@ -1084,7 +1142,7 @@ public class ExternalNavigationHandlerTest extends NativeLibraryTestBase {
 
         @Override
         public void startIncognitoIntent(Intent intent, String referrerUrl, String fallbackUrl,
-                Tab tab, boolean needsToCloseTab) {
+                Tab tab, boolean needsToCloseTab, boolean proxy) {
             startIncognitoIntentCalled = true;
         }
 
@@ -1130,6 +1188,17 @@ public class ExternalNavigationHandlerTest extends NativeLibraryTestBase {
             return false;
         }
 
+        @Override
+        public boolean maybeLaunchInstantApp(Tab tab, String url, String referrerUrl,
+                boolean isIncomingRedirect) {
+            return mCanHandleWithInstantApp;
+        }
+
+        @Override
+        public boolean isSerpReferrer(String referrerUrl, Tab tab) {
+            return false;
+        }
+
         public void reset() {
             startActivityIntent = null;
             startIncognitoIntentCalled = false;
@@ -1152,6 +1221,14 @@ public class ExternalNavigationHandlerTest extends NativeLibraryTestBase {
             mIsChromeAppInForeground = value;
         }
 
+        public void setIsWithinCurrentWebappScope(boolean value) {
+            mIsWithinCurrentWebappScope = value;
+        }
+
+        public void setCanHandleWithInstantApp(boolean value) {
+            mCanHandleWithInstantApp = value;
+        }
+
         public Intent startActivityIntent = null;
         public boolean startIncognitoIntentCalled = false;
 
@@ -1160,7 +1237,9 @@ public class ExternalNavigationHandlerTest extends NativeLibraryTestBase {
 
         private String mNewUrlAfterClobbering;
         private String mReferrerUrlForClobbering;
+        private boolean mCanHandleWithInstantApp;
         public boolean mIsChromeAppInForeground = true;
+        public boolean mIsWithinCurrentWebappScope;
 
         public boolean shouldRequestFileAccess;
         public boolean startFileIntentCalled;

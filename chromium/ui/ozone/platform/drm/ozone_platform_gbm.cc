@@ -28,7 +28,6 @@
 #include "ui/ozone/platform/drm/gpu/drm_device_generator.h"
 #include "ui/ozone/platform/drm/gpu/drm_device_manager.h"
 #include "ui/ozone/platform/drm/gpu/drm_gpu_display_manager.h"
-#include "ui/ozone/platform/drm/gpu/drm_gpu_platform_support.h"
 #include "ui/ozone/platform/drm/gpu/drm_thread_message_proxy.h"
 #include "ui/ozone/platform/drm/gpu/drm_thread_proxy.h"
 #include "ui/ozone/platform/drm/gpu/gbm_surface_factory.h"
@@ -44,7 +43,6 @@
 #include "ui/ozone/platform/drm/host/drm_window_host_manager.h"
 #include "ui/ozone/platform/drm/mus_thread_proxy.h"
 #include "ui/ozone/public/cursor_factory_ozone.h"
-#include "ui/ozone/public/gpu_platform_support.h"
 #include "ui/ozone/public/gpu_platform_support_host.h"
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/public/ozone_switches.h"
@@ -100,8 +98,8 @@ class OzonePlatformGbm
   InputController* GetInputController() override {
     return event_factory_ozone_->input_controller();
   }
-  GpuPlatformSupport* GetGpuPlatformSupport() override {
-    return gpu_platform_support_.get();
+  IPC::MessageFilter* GetGpuMessageFilter() override {
+    return gpu_message_filter_.get();
   }
   GpuPlatformSupportHost* GetGpuPlatformSupportHost() override {
     return gpu_platform_support_host_.get();
@@ -112,18 +110,21 @@ class OzonePlatformGbm
   void AddInterfaces(shell::InterfaceRegistry* registry) override {
     registry->AddInterface<ozone::mojom::DeviceCursor>(this);
   }
-  // shell::InterfaceFactory<mojom::ozone::Cursor> implementation.
+  // shell::InterfaceFactory<ozone::mojom::DeviceCursor> implementation.
   void Create(const shell::Identity& remote_identity,
               ozone::mojom::DeviceCursorRequest request) override {
-    DCHECK(drm_thread_);
-    drm_thread_->AddBinding(std::move(request));
+    if (drm_thread_proxy_)
+      drm_thread_proxy_->AddBinding(std::move(request));
+    else
+      pending_cursor_requests_.push_back(std::move(request));
   }
   std::unique_ptr<PlatformWindow> CreatePlatformWindow(
       PlatformWindowDelegate* delegate,
       const gfx::Rect& bounds) override {
     GpuThreadAdapter* adapter = gpu_platform_support_host_.get();
     if (using_mojo_ || single_process_) {
-      DCHECK(drm_thread_) << "drm_thread_ should exist (and be running) here.";
+      DCHECK(drm_thread_proxy_)
+          << "drm_thread_proxy_ should exist (and be running) here.";
       adapter = mus_thread_proxy_.get();
     }
 
@@ -210,7 +211,7 @@ class OzonePlatformGbm
     InitializeGPU(default_params);
   }
   void InitializeGPU(const InitParams& args) override {
-    // TODO(rjkroege): services/ui should initalize this with a connector.
+    // TODO(rjkroege): services/ui should initialize this with a connector.
     // However, in-progress refactorings in services/ui make it difficult to
     // require this at present. Set using_mojo_ like below once this is
     // complete.
@@ -224,18 +225,21 @@ class OzonePlatformGbm
       scoped_refptr<DrmThreadMessageProxy> message_proxy(
           new DrmThreadMessageProxy());
       itmp = message_proxy.get();
-      gpu_platform_support_.reset(new DrmGpuPlatformSupport(message_proxy));
+      gpu_message_filter_ = std::move(message_proxy);
     }
 
     // NOTE: Can't start the thread here since this is called before sandbox
     // initialization in multi-process Chrome. In mus, we start the DRM thread.
-    drm_thread_.reset(new DrmThreadProxy());
-    drm_thread_->BindThreadIntoMessagingProxy(itmp);
+    drm_thread_proxy_.reset(new DrmThreadProxy());
+    drm_thread_proxy_->BindThreadIntoMessagingProxy(itmp);
 
-    surface_factory_.reset(new GbmSurfaceFactory(drm_thread_.get()));
+    surface_factory_.reset(new GbmSurfaceFactory(drm_thread_proxy_.get()));
     if (using_mojo_ || single_process_) {
       mus_thread_proxy_->StartDrmThread();
     }
+    for (auto& request : pending_cursor_requests_)
+      drm_thread_proxy_->AddBinding(std::move(request));
+    pending_cursor_requests_.clear();
   }
 
  private:
@@ -243,11 +247,12 @@ class OzonePlatformGbm
   bool single_process_;
 
   // Objects in the GPU process.
-  // TODO(rjk): rename drm_thread_ to drm_thread_proxy_;
-  std::unique_ptr<DrmThreadProxy> drm_thread_;
+  std::unique_ptr<DrmThreadProxy> drm_thread_proxy_;
   std::unique_ptr<GlApiLoader> gl_api_loader_;
   std::unique_ptr<GbmSurfaceFactory> surface_factory_;
-  std::unique_ptr<DrmGpuPlatformSupport> gpu_platform_support_;
+  scoped_refptr<IPC::MessageFilter> gpu_message_filter_;
+  // TODO(sad): Once the mus gpu process split happens, this can go away.
+  std::vector<ozone::mojom::DeviceCursorRequest> pending_cursor_requests_;
 
   // Objects in the Browser process.
   std::unique_ptr<DeviceManager> device_manager_;

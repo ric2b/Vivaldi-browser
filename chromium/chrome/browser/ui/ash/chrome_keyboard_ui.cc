@@ -11,7 +11,7 @@
 #include "ash/shell.h"
 #include "base/macros.h"
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
-#include "chrome/browser/media/media_capture_devices_dispatcher.h"
+#include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -95,12 +95,28 @@ class AshKeyboardControllerObserver
     new_bounds->SetInteger("top", bounds.y());
     new_bounds->SetInteger("width", bounds.width());
     new_bounds->SetInteger("height", bounds.height());
-    event_args->Append(new_bounds.release());
+    event_args->Append(std::move(new_bounds));
 
     std::unique_ptr<extensions::Event> event(new extensions::Event(
         extensions::events::VIRTUAL_KEYBOARD_PRIVATE_ON_BOUNDS_CHANGED,
         virtual_keyboard_private::OnBoundsChanged::kEventName,
         std::move(event_args)));
+    event->restrict_to_browser_context = context_;
+    router->BroadcastEvent(std::move(event));
+  }
+
+  void OnKeyboardClosed() override {
+    extensions::EventRouter* router = extensions::EventRouter::Get(context_);
+
+    if (!router->HasEventListener(
+            virtual_keyboard_private::OnKeyboardClosed::kEventName)) {
+      return;
+    }
+
+    std::unique_ptr<extensions::Event> event(new extensions::Event(
+        extensions::events::VIRTUAL_KEYBOARD_PRIVATE_ON_KEYBOARD_CLOSED,
+        virtual_keyboard_private::OnKeyboardClosed::kEventName,
+        base::WrapUnique(new base::ListValue())));
     event->restrict_to_browser_context = context_;
     router->BroadcastEvent(std::move(event));
   }
@@ -217,7 +233,7 @@ void ChromeKeyboardUI::SetUpdateInputType(ui::TextInputType type) {
   input_context->SetString("type",
                            virtual_keyboard_private::ToString(
                                TextInputTypeToGeneratedInputTypeEnum(type)));
-  event_args->Append(input_context.release());
+  event_args->Append(std::move(input_context));
 
   std::unique_ptr<extensions::Event> event(new extensions::Event(
       extensions::events::VIRTUAL_KEYBOARD_PRIVATE_ON_TEXT_INPUT_BOX_FOCUSED,

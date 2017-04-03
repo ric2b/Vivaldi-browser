@@ -454,9 +454,8 @@ class SafeBrowsingBlockingPageBrowserTest
     // Trigger the safe browsing interstitial page via a redirect in
     // "openWin()".
     ui_test_utils::NavigateToURLWithDisposition(
-        browser(),
-        GURL("javascript:" + open_function + "()"),
-        CURRENT_TAB,
+        browser(), GURL("javascript:" + open_function + "()"),
+        WindowOpenDisposition::CURRENT_TAB,
         ui_test_utils::BROWSER_TEST_WAIT_FOR_TAB);
     WebContents* contents =
         browser()->tab_strip_model()->GetActiveWebContents();
@@ -576,9 +575,11 @@ class SafeBrowsingBlockingPageBrowserTest
     ChromeSecurityStateModelClient* model_client =
         ChromeSecurityStateModelClient::FromWebContents(tab);
     ASSERT_TRUE(model_client);
-    EXPECT_EQ(security_state::SecurityStateModel::SECURITY_ERROR,
-              model_client->GetSecurityInfo().security_level);
-    EXPECT_TRUE(model_client->GetSecurityInfo().fails_malware_check);
+    security_state::SecurityStateModel::SecurityInfo security_info;
+    model_client->GetSecurityInfo(&security_info);
+    EXPECT_EQ(security_state::SecurityStateModel::DANGEROUS,
+              security_info.security_level);
+    EXPECT_TRUE(security_info.fails_malware_check);
     // TODO(felt): Restore this check when https://crbug.com/641187 is fixed.
     // EXPECT_EQ(cert_status, model_client->GetSecurityInfo().cert_status);
   }

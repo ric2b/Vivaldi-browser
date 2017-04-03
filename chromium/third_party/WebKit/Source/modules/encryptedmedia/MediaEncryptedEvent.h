@@ -32,35 +32,32 @@
 namespace blink {
 
 class MediaEncryptedEvent final : public Event {
-    DEFINE_WRAPPERTYPEINFO();
-public:
-    ~MediaEncryptedEvent() override;
+  DEFINE_WRAPPERTYPEINFO();
 
-    static MediaEncryptedEvent* create()
-    {
-        return new MediaEncryptedEvent;
-    }
+ public:
+  ~MediaEncryptedEvent() override;
 
-    static MediaEncryptedEvent* create(const AtomicString& type, const MediaEncryptedEventInit& initializer)
-    {
-        return new MediaEncryptedEvent(type, initializer);
-    }
+  static MediaEncryptedEvent* create(
+      const AtomicString& type,
+      const MediaEncryptedEventInit& initializer) {
+    return new MediaEncryptedEvent(type, initializer);
+  }
 
-    const AtomicString& interfaceName() const override;
+  const AtomicString& interfaceName() const override;
 
-    String initDataType() const { return m_initDataType; }
-    DOMArrayBuffer* initData() const { return m_initData.get(); }
+  String initDataType() const { return m_initDataType; }
+  DOMArrayBuffer* initData() const { return m_initData.get(); }
 
-    DECLARE_VIRTUAL_TRACE();
+  DECLARE_VIRTUAL_TRACE();
 
-private:
-    MediaEncryptedEvent();
-    MediaEncryptedEvent(const AtomicString& type, const MediaEncryptedEventInit& initializer);
+ private:
+  MediaEncryptedEvent(const AtomicString& type,
+                      const MediaEncryptedEventInit& initializer);
 
-    String m_initDataType;
-    Member<DOMArrayBuffer> m_initData;
+  String m_initDataType;
+  Member<DOMArrayBuffer> m_initData;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // MediaEncryptedEvent_h
+#endif  // MediaEncryptedEvent_h

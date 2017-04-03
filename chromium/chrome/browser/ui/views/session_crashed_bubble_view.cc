@@ -14,7 +14,7 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -360,16 +360,14 @@ void SessionCrashedBubbleView::StyledLabelLinkClicked(views::StyledLabel* label,
                                                       int event_flags) {
   browser_->OpenURL(content::OpenURLParams(
       GURL("https://support.google.com/chrome/answer/96817"),
-      content::Referrer(),
-      NEW_FOREGROUND_TAB,
-      ui::PAGE_TRANSITION_LINK,
-      false));
+      content::Referrer(), WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui::PAGE_TRANSITION_LINK, false));
   RecordBubbleHistogramValue(SESSION_CRASHED_BUBBLE_HELP);
 }
 
 void SessionCrashedBubbleView::DidStartNavigationToPendingEntry(
-      const GURL& url,
-      content::NavigationController::ReloadType reload_type) {
+    const GURL& url,
+    content::ReloadType reload_type) {
   started_navigation_ = true;
 }
 

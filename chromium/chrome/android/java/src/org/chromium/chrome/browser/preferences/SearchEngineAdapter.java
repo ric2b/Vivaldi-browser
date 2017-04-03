@@ -53,12 +53,7 @@ public class SearchEngineAdapter extends BaseAdapter implements LoadListener, On
          * one.
          * @param name Provides the name of it (with a simplified URL in parenthesis).
          */
-        void currentSearchEngineDetermined(String name);
-
-        /**
-         * Called when the dialog should be dismissed.
-         */
-        void onDismissDialog();
+        void currentSearchEngineDetermined(int selectedIndex);
     }
 
     // The current context.
@@ -76,6 +71,9 @@ public class SearchEngineAdapter extends BaseAdapter implements LoadListener, On
     // if current search engine is managed and set to something other than the pre-populated values.
     private int mSelectedSearchEnginePosition = -1;
 
+    // The position of the default search engine before user's action.
+    private int mInitialEnginePosition = -1;
+
     /**
      * Construct a SearchEngineAdapter.
      * @param context The current context.
@@ -88,6 +86,13 @@ public class SearchEngineAdapter extends BaseAdapter implements LoadListener, On
         mCallback = callback;
 
         initEntries();
+    }
+
+    /**
+     * @return The index of the selected engine before user's action.
+     */
+    public int getInitialSearchEnginePosition() {
+        return mInitialEnginePosition;
     }
 
     // Used for testing.
@@ -121,13 +126,10 @@ public class SearchEngineAdapter extends BaseAdapter implements LoadListener, On
                 mSelectedSearchEnginePosition = i;
             }
         }
+        mInitialEnginePosition = mSelectedSearchEnginePosition;
 
         // Report back what is selected.
-        String name = "";
-        if (mSelectedSearchEnginePosition > -1) {
-            name = mSearchEngines.get(mSelectedSearchEnginePosition).getShortName();
-        }
-        mCallback.currentSearchEngineDetermined(name);
+        mCallback.currentSearchEngineDetermined(toIndex(mSelectedSearchEnginePosition));
     }
 
     private int toIndex(int position) {
@@ -138,7 +140,7 @@ public class SearchEngineAdapter extends BaseAdapter implements LoadListener, On
 
     @Override
     public int getCount() {
-        return mSearchEngines.size();
+        return mSearchEngines == null ? 0 : mSearchEngines.size();
     }
 
     @Override
@@ -231,6 +233,7 @@ public class SearchEngineAdapter extends BaseAdapter implements LoadListener, On
     public void onTemplateUrlServiceLoaded() {
         TemplateUrlService.getInstance().unregisterLoadListener(this);
         initEntries();
+        notifyDataSetChanged();
     }
 
     // OnClickListener:
@@ -261,11 +264,9 @@ public class SearchEngineAdapter extends BaseAdapter implements LoadListener, On
 
         // Record the change in search engine.
         mSelectedSearchEnginePosition = position;
-        TemplateUrlService.getInstance().setSearchEngine(toIndex(mSelectedSearchEnginePosition));
 
         // Report the change back.
-        TemplateUrl templateUrl = mSearchEngines.get(mSelectedSearchEnginePosition);
-        mCallback.currentSearchEngineDetermined(templateUrl.getShortName());
+        mCallback.currentSearchEngineDetermined(toIndex(mSelectedSearchEnginePosition));
 
         notifyDataSetChanged();
     }
@@ -284,7 +285,6 @@ public class SearchEngineAdapter extends BaseAdapter implements LoadListener, On
             settingsIntent.putExtra(Preferences.EXTRA_SHOW_FRAGMENT_ARGUMENTS, fragmentArgs);
             mContext.startActivity(settingsIntent);
         }
-        mCallback.onDismissDialog();
     }
 
     private boolean locationEnabled(int position, boolean checkGeoHeader) {

@@ -27,6 +27,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/crash_keys.h"
 #include "chrome/common/pepper_permission_util.h"
+#include "chrome/common/prerender_types.h"
 #include "chrome/common/render_messages.h"
 #include "chrome/common/secure_origin_whitelist.h"
 #include "chrome/common/url_constants.h"
@@ -68,6 +69,7 @@
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
 #include "components/dom_distiller/content/renderer/distillability_agent.h"
 #include "components/dom_distiller/content/renderer/distiller_js_render_frame_observer.h"
+#include "components/dom_distiller/core/dom_distiller_switches.h"
 #include "components/dom_distiller/core/url_constants.h"
 #include "components/error_page/common/localized_error.h"
 #include "components/network_hints/renderer/prescient_networking_dispatcher.h"
@@ -114,8 +116,6 @@
 #include "ui/base/layout.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/webui/jstemplate_builder.h"
-#include "widevine_cdm_version.h"  // In SHARED_INTERMEDIATE_DIR.
-#include "renderer/vivaldi_render_view_observer.h"
 
 #if !defined(DISABLE_NACL)
 #include "components/nacl/common/nacl_constants.h"
@@ -132,6 +132,7 @@
 #endif
 
 #if defined(ENABLE_PLUGINS)
+#include "chrome/common/plugin_utils.h"
 #include "chrome/renderer/plugins/chrome_plugin_placeholder.h"
 #include "chrome/renderer/plugins/power_saver_info.h"
 #endif
@@ -155,6 +156,8 @@
 #if defined(ENABLE_WEBRTC)
 #include "chrome/renderer/media/webrtc_logging_message_filter.h"
 #endif
+
+#include "renderer/vivaldi_render_view_observer.h"
 
 using autofill::AutofillAgent;
 using autofill::PasswordAutofillAgent;
@@ -234,30 +237,6 @@ void AppendParams(const std::vector<base::string16>& additional_names,
 
   existing_names->swap(names);
   existing_values->swap(values);
-}
-
-// For certain sandboxed Pepper plugins, use the JavaScript Content Settings.
-bool ShouldUseJavaScriptSettingForPlugin(const WebPluginInfo& plugin) {
-  if (plugin.type != WebPluginInfo::PLUGIN_TYPE_PEPPER_IN_PROCESS &&
-      plugin.type != WebPluginInfo::PLUGIN_TYPE_PEPPER_OUT_OF_PROCESS) {
-    return false;
-  }
-
-#if !defined(DISABLE_NACL)
-  // Treat Native Client invocations like JavaScript.
-  if (plugin.name == ASCIIToUTF16(nacl::kNaClPluginName))
-    return true;
-#endif
-
-#if defined(WIDEVINE_CDM_AVAILABLE) && defined(ENABLE_PEPPER_CDMS)
-  // Treat CDM invocations like JavaScript.
-  if (plugin.name == ASCIIToUTF16(kWidevineCdmDisplayName)) {
-    DCHECK(plugin.type == WebPluginInfo::PLUGIN_TYPE_PEPPER_OUT_OF_PROCESS);
-    return true;
-  }
-#endif  // defined(WIDEVINE_CDM_AVAILABLE) && defined(ENABLE_PEPPER_CDMS)
-
-  return false;
 }
 #endif  // defined(ENABLE_PLUGINS)
 
@@ -362,7 +341,6 @@ void ChromeContentRendererClient::RenderThreadStarted() {
     thread->AddObserver(spellcheck_.get());
   }
 #endif
-  visited_link_slave_.reset(new visitedlink::VisitedLinkSlave());
 #if defined(FULL_SAFE_BROWSING)
   phishing_classifier_.reset(safe_browsing::PhishingClassifierFilter::Create());
 #endif
@@ -378,7 +356,6 @@ void ChromeContentRendererClient::RenderThreadStarted() {
 #if defined(FULL_SAFE_BROWSING)
   thread->AddObserver(phishing_classifier_.get());
 #endif
-  thread->AddObserver(visited_link_slave_.get());
   thread->AddObserver(prerender_dispatcher_.get());
   thread->AddObserver(subresource_filter_ruleset_dealer_.get());
   thread->AddObserver(SearchBouncer::GetInstance());
@@ -501,6 +478,9 @@ void ChromeContentRendererClient::RenderFrameCreated(
     // Only attach MainRenderFrameObserver to the main frame, since
     // we only want to log page load metrics for the main frame.
     new page_load_metrics::MetricsRenderFrameObserver(render_frame);
+    // Similarly, PageLoadHistograms are currently only collected for the main
+    // frame.
+    new PageLoadHistograms(render_frame);
   } else {
     // Avoid any race conditions from having the browser tell subframes that
     // they're prerendering.
@@ -514,9 +494,12 @@ void ChromeContentRendererClient::RenderFrameCreated(
   new dom_distiller::DistillerJsRenderFrameObserver(
       render_frame, chrome::ISOLATED_WORLD_ID_CHROME_INTERNAL);
 
-  // Create DistillabilityAgent to send distillability updates to
-  // DistillabilityDriver in the browser process.
-  new dom_distiller::DistillabilityAgent(render_frame);
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kEnableDistillabilityService)) {
+    // Create DistillabilityAgent to send distillability updates to
+    // DistillabilityDriver in the browser process.
+    new dom_distiller::DistillabilityAgent(render_frame);
+  }
 
   // Set up a mojo service to test if this page is a contextual search page.
   new contextual_search::OverlayJsRenderFrameObserver(render_frame);
@@ -540,7 +523,6 @@ void ChromeContentRendererClient::RenderViewCreated(
 #if defined(ENABLE_EXTENSIONS)
   ChromeExtensionsRendererClient::GetInstance()->RenderViewCreated(render_view);
 #endif
-  new PageLoadHistograms(render_view);
 #if defined(ENABLE_PRINTING)
   new printing::PrintWebViewHelper(
       render_view, std::unique_ptr<printing::PrintWebViewHelper::Delegate>(
@@ -588,9 +570,8 @@ bool ChromeContentRendererClient::OverrideCreatePlugin(
   GURL url(params.url);
 #if defined(ENABLE_PLUGINS)
   ChromeViewHostMsg_GetPluginInfo_Output output;
-  WebString top_origin = frame->top()->getSecurityOrigin().toString();
   render_frame->Send(new ChromeViewHostMsg_GetPluginInfo(
-      render_frame->GetRoutingID(), url, blink::WebStringToGURL(top_origin),
+      render_frame->GetRoutingID(), url, frame->top()->getSecurityOrigin(),
       orig_mime_type, &output));
   *plugin = CreatePlugin(render_frame, frame, params, output);
 #else  // !defined(ENABLE_PLUGINS)
@@ -830,6 +811,13 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
         placeholder = create_blocked_plugin(
             IDR_DISABLED_PLUGIN_HTML,
             l10n_util::GetStringFUTF16(IDS_PLUGIN_DISABLED, group_name));
+        break;
+      }
+      case ChromeViewHostMsg_GetPluginInfo_Status::kFlashHiddenPreferHtml: {
+        placeholder = create_blocked_plugin(
+            IDR_PREFER_HTML_PLUGIN_HTML,
+            l10n_util::GetStringFUTF16(IDS_PLUGIN_PREFER_HTML_BY_DEFAULT,
+                                       group_name));
         break;
       }
       case ChromeViewHostMsg_GetPluginInfo_Status::kOutdatedBlocked: {
@@ -1160,13 +1148,21 @@ bool ChromeContentRendererClient::WillSendRequest(
   return false;
 }
 
+bool ChromeContentRendererClient::IsPrefetchOnly(
+    content::RenderFrame* render_frame,
+    const blink::WebURLRequest& request) {
+  return prerender::PrerenderHelper::GetPrerenderMode(render_frame) ==
+         prerender::PREFETCH_ONLY;
+}
+
 unsigned long long ChromeContentRendererClient::VisitedLinkHash(
     const char* canonical_url, size_t length) {
-  return visited_link_slave_->ComputeURLFingerprint(canonical_url, length);
+  return chrome_observer_->visited_link_slave()->ComputeURLFingerprint(
+      canonical_url, length);
 }
 
 bool ChromeContentRendererClient::IsLinkVisited(unsigned long long link_hash) {
-  return visited_link_slave_->IsVisited(link_hash);
+  return chrome_observer_->visited_link_slave()->IsVisited(link_hash);
 }
 
 blink::WebPrescientNetworking*

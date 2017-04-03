@@ -27,6 +27,7 @@ class Window;
 namespace ash {
 namespace mus {
 
+class AshTestImplMus;
 class RootWindowController;
 class WmTestHelper;
 
@@ -69,9 +70,7 @@ class WmTestBase : public testing::Test {
   void TearDown() override;
 
  private:
-  // Returns the RootWindowControllers ordered by display id (which we assume
-  // correlates with creation order).
-  std::vector<RootWindowController*> GetRootsOrderedByDisplayId();
+  friend class AshTestImplMus;
 
   bool setup_called_ = false;
   bool teardown_called_ = false;

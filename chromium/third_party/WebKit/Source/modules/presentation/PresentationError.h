@@ -14,16 +14,19 @@ namespace blink {
 class DOMException;
 class ScriptPromiseResolver;
 
-// A container of methods taking care of WebPresentationError in WebCallbacks subclasses.
+// A container of methods taking care of WebPresentationError in WebCallbacks
+// subclasses.
 class PresentationError final {
-    STATIC_ONLY(PresentationError);
-public:
-    // For CallbackPromiseAdapter.
-    using WebType = const WebPresentationError&;
+  STATIC_ONLY(PresentationError);
 
-    static DOMException* take(ScriptPromiseResolver*, const WebPresentationError&);
+ public:
+  // For CallbackPromiseAdapter.
+  using WebType = const WebPresentationError&;
+
+  static DOMException* take(ScriptPromiseResolver*,
+                            const WebPresentationError&);
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // PresentationError_h
+#endif  // PresentationError_h

@@ -4,8 +4,6 @@
 
 #import "ios/web/public/test/earl_grey/web_view_matchers.h"
 
-#include <memory>
-
 #import <WebKit/WebKit.h>
 
 #include "base/mac/bind_objc_block.h"
@@ -15,6 +13,9 @@
 #include "base/test/ios/wait_util.h"
 #include "base/values.h"
 #include "ios/testing/earl_grey/wait_util.h"
+#import "ios/web/public/test/web_view_interaction_test_util.h"
+
+using web::test::ExecuteJavaScript;
 
 namespace {
 
@@ -24,32 +25,41 @@ char kGetDocumentBodyJavaScript[] =
 // Script that tests presence of css selector.
 char kTestCssSelectorJavaScriptTemplate[] = "!!document.querySelector(\"%s\");";
 
-// Synchronously returns the result of executed JavaScript.
-std::unique_ptr<base::Value> ExecuteScript(web::WebState* web_state,
-                                           const std::string& script) {
-  __block std::unique_ptr<base::Value> result;
-  __block bool did_finish = false;
-  web_state->ExecuteJavaScript(base::UTF8ToUTF16(script),
-                               base::BindBlock(^(const base::Value* value) {
-                                 if (value)
-                                   result = value->CreateDeepCopy();
-                                 did_finish = true;
-                               }));
+// Helper function for matching web views containing or not containing |text|,
+// depending on the value of |should_contain_text|.
+id<GREYMatcher> webViewWithText(std::string text,
+                                web::WebState* web_state,
+                                bool should_contain_text) {
+  MatchesBlock matches = ^BOOL(WKWebView*) {
+    __block BOOL did_succeed = NO;
+    NSDate* deadline =
+        [NSDate dateWithTimeIntervalSinceNow:testing::kWaitForUIElementTimeout];
+    while (([[NSDate date] compare:deadline] != NSOrderedDescending) &&
+           !did_succeed) {
+      std::unique_ptr<base::Value> value =
+          ExecuteJavaScript(web_state, kGetDocumentBodyJavaScript);
+      std::string body;
+      if (value && value->GetAsString(&body)) {
+        BOOL contains_text = body.find(text) != std::string::npos;
+        did_succeed = (contains_text == should_contain_text);
+      }
+      base::test::ios::SpinRunLoopWithMaxDelay(
+          base::TimeDelta::FromSecondsD(testing::kSpinDelaySeconds));
+    }
+    return did_succeed;
+  };
 
-  testing::WaitUntilCondition(testing::kWaitForJSCompletionTimeout, ^{
-    return did_finish;
-  });
+  DescribeToBlock describe = ^(id<GREYDescription> description) {
+    [description appendText:should_contain_text ? @"web view containing "
+                                                : @"web view not containing "];
+    [description appendText:base::SysUTF8ToNSString(text)];
+  };
 
-  // As result is marked __block, this return call does a copy and not a move
-  // (marking the variable as __block mean it is allocated in the block object
-  // and not the stack). Since the "return std::move()" pattern is discouraged
-  // use a local variable.
-  //
-  // Fixes the following compilation failure:
-  //   ../web_view_matchers.mm:ll:cc: error: call to implicitly-deleted copy
-  //       constructor of 'std::unique_ptr<base::Value>'
-  std::unique_ptr<base::Value> stack_result = std::move(result);
-  return stack_result;
+  return grey_allOf(webViewInWebState(web_state),
+                    [[[GREYElementMatcherBlock alloc]
+                        initWithMatchesBlock:matches
+                            descriptionBlock:describe] autorelease],
+                    nil);
 }
 
 }  // namespace
@@ -72,34 +82,12 @@ id<GREYMatcher> webViewInWebState(WebState* web_state) {
 }
 
 id<GREYMatcher> webViewContainingText(std::string text, WebState* web_state) {
-  MatchesBlock matches = ^BOOL(WKWebView*) {
-    __block BOOL did_succeed = NO;
-    NSDate* deadline =
-        [NSDate dateWithTimeIntervalSinceNow:testing::kWaitForUIElementTimeout];
-    while (([[NSDate date] compare:deadline] != NSOrderedDescending) &&
-           !did_succeed) {
-      std::unique_ptr<base::Value> value =
-          ExecuteScript(web_state, kGetDocumentBodyJavaScript);
-      std::string body;
-      if (value && value->GetAsString(&body)) {
-        did_succeed = body.find(text) != std::string::npos;
-      }
-      base::test::ios::SpinRunLoopWithMaxDelay(
-          base::TimeDelta::FromSecondsD(testing::kSpinDelaySeconds));
-    }
-    return did_succeed;
-  };
+  return webViewWithText(text, web_state, true);
+}
 
-  DescribeToBlock describe = ^(id<GREYDescription> description) {
-    [description appendText:@"web view containing "];
-    [description appendText:base::SysUTF8ToNSString(text)];
-  };
-
-  return grey_allOf(webViewInWebState(web_state),
-                    [[[GREYElementMatcherBlock alloc]
-                        initWithMatchesBlock:matches
-                            descriptionBlock:describe] autorelease],
-                    nil);
+id<GREYMatcher> webViewNotContainingText(std::string text,
+                                         WebState* web_state) {
+  return webViewWithText(text, web_state, false);
 }
 
 id<GREYMatcher> webViewContainingBlockedImage(std::string image_id,
@@ -120,7 +108,7 @@ id<GREYMatcher> webViewContainingBlockedImage(std::string image_id,
                            @"  width:imageWidth"
                            @"});",
                            base::SysUTF8ToNSString(image_id)];
-      std::unique_ptr<base::Value> value = ExecuteScript(
+      std::unique_ptr<base::Value> value = ExecuteJavaScript(
           web_state, base::SysNSStringToUTF8(kGetElementAttributesScript));
       std::string result;
       if (value && value->GetAsString(&result)) {
@@ -163,7 +151,7 @@ id<GREYMatcher> webViewCssSelector(std::string selector, WebState* web_state) {
         [NSDate dateWithTimeIntervalSinceNow:testing::kWaitForUIElementTimeout];
     while (([[NSDate date] compare:deadline] != NSOrderedDescending) &&
            !did_succeed) {
-      std::unique_ptr<base::Value> value = ExecuteScript(web_state, script);
+      std::unique_ptr<base::Value> value = ExecuteJavaScript(web_state, script);
       if (value)
         value->GetAsBoolean(&did_succeed);
       base::test::ios::SpinRunLoopWithMaxDelay(

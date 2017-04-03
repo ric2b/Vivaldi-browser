@@ -7,9 +7,9 @@ package org.chromium.chrome.browser.download.ui;
 import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Intent;
-import android.net.Uri;
+import android.content.res.Resources;
 import android.os.AsyncTask;
-import android.os.StrictMode;
+import android.support.graphics.drawable.VectorDrawableCompat;
 import android.support.v4.view.GravityCompat;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v4.widget.DrawerLayout.DrawerListener;
@@ -17,19 +17,17 @@ import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.RecyclerView.AdapterDataObserver;
 import android.support.v7.widget.Toolbar.OnMenuItemClickListener;
-import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ListView;
+import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.base.ContentUriUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.FileUtils;
-import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
@@ -38,9 +36,12 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.BasicNativePage;
 import org.chromium.chrome.browser.download.DownloadManagerService;
 import org.chromium.chrome.browser.download.DownloadUtils;
-import org.chromium.chrome.browser.download.ui.DownloadHistoryItemWrapper.OfflinePageItemWrapper;
 import org.chromium.chrome.browser.offlinepages.downloads.OfflinePageDownloadBridge;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.snackbar.Snackbar;
+import org.chromium.chrome.browser.snackbar.SnackbarManager;
+import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
+import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarManageable;
 import org.chromium.chrome.browser.widget.FadingShadow;
 import org.chromium.chrome.browser.widget.FadingShadowView;
 import org.chromium.chrome.browser.widget.LoadingView;
@@ -49,7 +50,10 @@ import org.chromium.ui.base.DeviceFormFactor;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 /**
  * Displays and manages the UI for the download manager.
@@ -76,11 +80,16 @@ public class DownloadManagerUi implements OnMenuItemClickListener {
     private static class DownloadBackendProvider implements BackendProvider {
         private OfflinePageDownloadBridge mOfflinePageBridge;
         private SelectionDelegate<DownloadHistoryItemWrapper> mSelectionDelegate;
+        private ThumbnailProvider mThumbnailProvider;
 
         DownloadBackendProvider() {
+            Resources resources = ContextUtils.getApplicationContext().getResources();
+            int iconSize = resources.getDimensionPixelSize(R.dimen.downloads_item_icon_size);
+
             mOfflinePageBridge = new OfflinePageDownloadBridge(
                     Profile.getLastUsedProfile().getOriginalProfile());
             mSelectionDelegate = new SelectionDelegate<DownloadHistoryItemWrapper>();
+            mThumbnailProvider = new ThumbnailProviderImpl(iconSize);
         }
 
         @Override
@@ -95,14 +104,68 @@ public class DownloadManagerUi implements OnMenuItemClickListener {
         }
 
         @Override
+        public ThumbnailProvider getThumbnailProvider() {
+            return mThumbnailProvider;
+        }
+
+        @Override
         public SelectionDelegate<DownloadHistoryItemWrapper> getSelectionDelegate() {
             return mSelectionDelegate;
         }
+
+        @Override
+        public void destroy() {
+            getOfflinePageBridge().destroy();
+
+            mThumbnailProvider.destroy();
+            mThumbnailProvider = null;
+        }
     }
 
-    private static final String TAG = "download_ui";
-    private static final String DEFAULT_MIME_TYPE = "*/*";
-    private static final String MIME_TYPE_DELIMITER = "/";
+    private class UndoDeletionSnackbarController implements SnackbarController {
+        @Override
+        public void onAction(Object actionData) {
+            @SuppressWarnings("unchecked")
+            List<DownloadHistoryItemWrapper> items = (List<DownloadHistoryItemWrapper>) actionData;
+
+            // Deletion was undone. Add items back to the adapter.
+            mHistoryAdapter.addItemsToAdapter(items);
+
+            RecordUserAction.record("Android.DownloadManager.UndoDelete");
+        }
+
+        @Override
+        public void onDismissNoAction(Object actionData) {
+            @SuppressWarnings("unchecked")
+            List<DownloadHistoryItemWrapper> items = (List<DownloadHistoryItemWrapper>) actionData;
+
+            // Deletion was not undone. Remove downloads from backend.
+            final ArrayList<File> filesToDelete = new ArrayList<>();
+
+            // Some types of DownloadHistoryItemWrappers delete their own files when #remove()
+            // is called. Determine which files are not deleted by the #remove() call.
+            for (int i = 0; i < items.size(); i++) {
+                DownloadHistoryItemWrapper wrappedItem  = items.get(i);
+                if (!wrappedItem.remove()) filesToDelete.add(wrappedItem.getFile());
+            }
+
+            // Delete the files associated with the download items (if necessary) using a single
+            // AsyncTask that batch deletes all of the files. The thread pool has a finite
+            // number of tasks that can be queued at once. If too many tasks are queued an
+            // exception is thrown. See crbug.com/643811.
+            if (filesToDelete.size() != 0) {
+                new AsyncTask<Void, Void, Void>() {
+                    @Override
+                    public Void doInBackground(Void... params) {
+                        FileUtils.batchDeleteFiles(filesToDelete);
+                        return null;
+                    }
+                }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+            }
+
+            RecordUserAction.record("Android.DownloadManager.Delete");
+        }
+    }
 
     private static BackendProvider sProviderForTests;
 
@@ -112,16 +175,16 @@ public class DownloadManagerUi implements OnMenuItemClickListener {
     private final BackendProvider mBackendProvider;
 
     private final Activity mActivity;
-    private final boolean mIsOffTheRecord;
     private final ViewGroup mMainView;
     private final DownloadManagerToolbar mToolbar;
     private final SpaceDisplay mSpaceDisplay;
     private final ListView mFilterView;
     private final RecyclerView mRecyclerView;
-    private final View mEmptyView;
+    private final TextView mEmptyView;
     private final LoadingView mLoadingView;
 
     private BasicNativePage mNativePage;
+    private UndoDeletionSnackbarController mUndoDeletionSnackbarController;
 
     private final AdapterDataObserver mAdapterObserver = new AdapterDataObserver() {
         @Override
@@ -142,13 +205,15 @@ public class DownloadManagerUi implements OnMenuItemClickListener {
     public DownloadManagerUi(
             Activity activity, boolean isOffTheRecord, ComponentName parentComponent) {
         mActivity = activity;
-        mIsOffTheRecord = isOffTheRecord;
         mBackendProvider =
                 sProviderForTests == null ? new DownloadBackendProvider() : sProviderForTests;
 
         mMainView = (ViewGroup) LayoutInflater.from(activity).inflate(R.layout.download_main, null);
 
-        mEmptyView = mMainView.findViewById(R.id.empty_view);
+        mEmptyView = (TextView) mMainView.findViewById(R.id.empty_view);
+        mEmptyView.setCompoundDrawablesWithIntrinsicBounds(null, VectorDrawableCompat
+                .create(activity.getResources(), R.drawable.downloads_big, activity.getTheme()),
+                null, null);
         mLoadingView = (LoadingView) mMainView.findViewById(R.id.loading_view);
         mLoadingView.showLoadingUI();
 
@@ -193,6 +258,8 @@ public class DownloadManagerUi implements OnMenuItemClickListener {
         }
 
         mToolbar.setTitle(R.string.menu_downloads);
+
+        mUndoDeletionSnackbarController = new UndoDeletionSnackbarController();
     }
 
     /**
@@ -211,7 +278,9 @@ public class DownloadManagerUi implements OnMenuItemClickListener {
             removeObserver(observer);
         }
 
-        mBackendProvider.getOfflinePageBridge().destroy();
+        dismissUndoDeletionSnackbars();
+
+        mBackendProvider.destroy();
 
         mHistoryAdapter.unregisterAdapterDataObserver(mAdapterObserver);
         mHistoryAdapter.unregisterAdapterDataObserver(mSpaceDisplay);
@@ -336,158 +405,70 @@ public class DownloadManagerUi implements OnMenuItemClickListener {
                 mBackendProvider.getSelectionDelegate().getSelectedItems();
         assert selectedItems.size() > 0;
 
-        Intent shareIntent = new Intent();
-        String intentAction;
-        ArrayList<Uri> itemUris = new ArrayList<Uri>();
-        StringBuilder offlinePagesString = new StringBuilder();
-        int selectedItemsFilterType = selectedItems.get(0).getFilterType();
-
-        String intentMimeType = "";
-        String[] intentMimeParts = {"", ""};
-
-        for (int i = 0; i < selectedItems.size(); i++) {
-            DownloadHistoryItemWrapper wrappedItem  = selectedItems.get(i);
-
-            if (wrappedItem instanceof OfflinePageItemWrapper) {
-                if (offlinePagesString.length() != 0) {
-                    offlinePagesString.append("\n");
-                }
-                offlinePagesString.append(wrappedItem.getUrl());
-            } else {
-                itemUris.add(getUriForItem(wrappedItem));
-            }
-
-            if (selectedItemsFilterType != wrappedItem.getFilterType()) {
-                selectedItemsFilterType = DownloadFilter.FILTER_ALL;
-            }
-
-            String mimeType = Intent.normalizeMimeType(wrappedItem.getMimeType());
-
-            // If a mime type was not retrieved from the backend or could not be normalized,
-            // set the mime type to the default.
-            if (TextUtils.isEmpty(mimeType)) {
-                intentMimeType = DEFAULT_MIME_TYPE;
-                continue;
-            }
-
-            // If the intent mime type has not been set yet, set it to the mime type for this item.
-            if (TextUtils.isEmpty(intentMimeType)) {
-                intentMimeType = mimeType;
-                if (!TextUtils.isEmpty(intentMimeType)) {
-                    intentMimeParts = intentMimeType.split(MIME_TYPE_DELIMITER);
-                    // Guard against invalid mime types.
-                    if (intentMimeParts.length != 2) intentMimeType = DEFAULT_MIME_TYPE;
-                }
-                continue;
-            }
-
-            // Either the mime type is already the default or it matches the current item's mime
-            // type. In either case, intentMimeType is already the correct value.
-            if (TextUtils.equals(intentMimeType, DEFAULT_MIME_TYPE)
-                    || TextUtils.equals(intentMimeType, mimeType)) {
-                continue;
-            }
-
-            String[] mimeParts = mimeType.split(MIME_TYPE_DELIMITER);
-            if (!TextUtils.equals(intentMimeParts[0], mimeParts[0])) {
-                // The top-level types don't match; fallback to the default mime type.
-                intentMimeType = DEFAULT_MIME_TYPE;
-            } else {
-                // The mime type should be {top-level type}/*
-                intentMimeType = intentMimeParts[0] + MIME_TYPE_DELIMITER + "*";
-            }
-        }
-
-        // Use Action_SEND if there is only one downloaded item or only text to share.
-        if (itemUris.size() == 0 || (itemUris.size() == 1 && offlinePagesString.length() == 0)) {
-            intentAction = Intent.ACTION_SEND;
-        } else {
-            intentAction = Intent.ACTION_SEND_MULTIPLE;
-        }
-
-        if (itemUris.size() == 1 && offlinePagesString.length() == 0) {
-            shareIntent.putExtra(Intent.EXTRA_STREAM, getUriForItem(selectedItems.get(0)));
-        } else {
-            shareIntent.putParcelableArrayListExtra(Intent.EXTRA_STREAM, itemUris);
-        }
-
-        if (offlinePagesString.length() != 0) {
-            shareIntent.putExtra(Intent.EXTRA_TEXT, offlinePagesString.toString());
-        }
-
-        shareIntent.setAction(intentAction);
-        shareIntent.setType(intentMimeType);
-        shareIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        mActivity.startActivity(Intent.createChooser(shareIntent,
+        mActivity.startActivity(Intent.createChooser(createShareIntent(),
                 mActivity.getString(R.string.share_link_chooser_title)));
 
         // TODO(twellington): ideally the intent chooser would be started with
         //                    startActivityForResult() and the selection would only be cleared after
         //                    receiving an OK response. See crbug.com/638916.
         mBackendProvider.getSelectionDelegate().clearSelection();
-
-        recordShareHistograms(selectedItems.size(), selectedItemsFilterType);
     }
 
-    private Uri getUriForItem(DownloadHistoryItemWrapper itemWrapper) {
-        Uri uri = null;
-
-        // #getContentUriFromFile causes a disk read when it calls into FileProvider#getUriForFile.
-        // Obtaining a content URI is on the critical path for creating a share intent after the
-        // user taps on the share button, so even if we were to run this method on a background
-        // thread we would have to wait. As it depends on user-selected items, we cannot
-        // know/preload which URIs we need until the user presses share.
-        StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
-        try {
-            // Try to obtain a content:// URI, which is preferred to a file:/// URI so that
-            // receiving apps don't attempt to determine the file's mime type (which often fails).
-            uri = ContentUriUtils.getContentUriFromFile(mActivity.getApplicationContext(),
-                    itemWrapper.getFile());
-        } catch (IllegalArgumentException e) {
-            Log.e(TAG, "Could not create content uri: " + e);
-        }
-        StrictMode.setThreadPolicy(oldPolicy);
-
-        if (uri == null) uri = Uri.fromFile(itemWrapper.getFile());
-
-        return uri;
+    /**
+     * @return An Intent to share the selected items.
+     */
+    @VisibleForTesting
+    public Intent createShareIntent() {
+        List<DownloadHistoryItemWrapper> selectedItems =
+                mBackendProvider.getSelectionDelegate().getSelectedItems();
+        return DownloadUtils.createShareIntent(selectedItems);
     }
 
     private void deleteSelectedItems() {
         List<DownloadHistoryItemWrapper> selectedItems =
                 mBackendProvider.getSelectionDelegate().getSelectedItems();
-        final ArrayList<File> filesToDelete = new ArrayList<>();
-
-        for (int i = 0; i < selectedItems.size(); i++) {
-            DownloadHistoryItemWrapper wrappedItem  = selectedItems.get(i);
-            if (!wrappedItem.remove()) filesToDelete.add(wrappedItem.getFile());
-        }
-
-        // Delete the files associated with the download items (if necessary) using a single
-        // AsyncTask that batch deletes all of the files. The thread pool has a finite number
-        // of tasks that can be queued at once. If too many tasks are queued an exception is
-        // thrown. See crbug.com/643811.
-        if (filesToDelete.size() != 0) {
-            new AsyncTask<Void, Void, Void>() {
-                @Override
-                public Void doInBackground(Void... params) {
-                    FileUtils.batchDeleteFiles(filesToDelete);
-                    return null;
-                }
-
-                @Override
-                public void onPostExecute(Void unused) {
-                    // More than one download item may be associated with the same file path.
-                    // Initiate a check for removed download files so that any download items
-                    // associated with the same path as a deleted item are updated.
-                    DownloadUtils.checkForExternallyRemovedDownloads(
-                            mBackendProvider, mIsOffTheRecord);
-                }
-            }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
-        }
+        final List<DownloadHistoryItemWrapper> itemsToDelete = getItemsForDeletion();
 
         mBackendProvider.getSelectionDelegate().clearSelection();
-        RecordUserAction.record("Android.DownloadManager.Delete");
+
+        if (itemsToDelete.isEmpty()) return;
+
+        mHistoryAdapter.removeItemsFromAdapter(itemsToDelete);
+
+        dismissUndoDeletionSnackbars();
+
+        boolean singleItemDeleted = selectedItems.size() == 1;
+        String snackbarText = singleItemDeleted ? selectedItems.get(0).getDisplayFileName() :
+                String.format(Locale.getDefault(), "%d", selectedItems.size());
+        int snackbarTemplateId = singleItemDeleted ? R.string.undo_bar_delete_message
+                : R.string.undo_bar_multiple_downloads_delete_message;
+
+        Snackbar snackbar = Snackbar.make(snackbarText, mUndoDeletionSnackbarController,
+                Snackbar.TYPE_ACTION, Snackbar.UMA_DOWNLOAD_DELETE_UNDO);
+        snackbar.setAction(mActivity.getString(R.string.undo), itemsToDelete);
+        snackbar.setTemplateText(mActivity.getString(snackbarTemplateId));
+
+        ((SnackbarManageable) mActivity).getSnackbarManager().showSnackbar(snackbar);
+    }
+
+    private List<DownloadHistoryItemWrapper> getItemsForDeletion() {
+        List<DownloadHistoryItemWrapper> selectedItems =
+                mBackendProvider.getSelectionDelegate().getSelectedItems();
+        List<DownloadHistoryItemWrapper> itemsToRemove = new ArrayList<>();
+        Set<String> filePathsToRemove = new HashSet<>();
+
+        for (DownloadHistoryItemWrapper item : selectedItems) {
+            if (!filePathsToRemove.contains(item.getFilePath())) {
+                List<DownloadHistoryItemWrapper> itemsForFilePath =
+                        mHistoryAdapter.getItemsForFilePath(item.getFilePath());
+                if (itemsForFilePath != null) {
+                    itemsToRemove.addAll(itemsForFilePath);
+                }
+                filePathsToRemove.add(item.getFilePath());
+            }
+        }
+
+        return itemsToRemove;
     }
 
     private void addDrawerListener(DrawerLayout drawer) {
@@ -511,12 +492,14 @@ public class DownloadManagerUi implements OnMenuItemClickListener {
         });
     }
 
-    private void recordShareHistograms(int count, int filterType) {
-        RecordHistogram.recordEnumeratedHistogram("Android.DownloadManager.Share.FileTypes",
-                filterType, DownloadFilter.FILTER_BOUNDARY);
+    private void dismissUndoDeletionSnackbars() {
+        ((SnackbarManageable) mActivity).getSnackbarManager().dismissSnackbars(
+                mUndoDeletionSnackbarController);
+    }
 
-        RecordHistogram.recordLinearCountHistogram("Android.DownloadManager.Share.Count",
-                count, 1, 20, 20);
+    @VisibleForTesting
+    public SnackbarManager getSnackbarManagerForTesting() {
+        return ((SnackbarManageable) mActivity).getSnackbarManager();
     }
 
     /** Returns the {@link DownloadManagerToolbar}. */

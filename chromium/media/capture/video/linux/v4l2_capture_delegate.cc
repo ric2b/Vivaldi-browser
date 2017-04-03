@@ -16,6 +16,7 @@
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "media/base/bind_to_current_loop.h"
+#include "media/capture/video/blob_utils.h"
 #include "media/capture/video/linux/video_capture_device_linux.h"
 
 namespace media {
@@ -36,6 +37,10 @@ const int kMjpegWidth = 640;
 const int kMjpegHeight = 480;
 // Typical framerate, in fps
 const int kTypicalFramerate = 30;
+
+// Constant used to multiply zoom values to avoid using floating point. Used to
+// scale both the readings (min, max, current) and the value to set it to.
+const int kZoomMultiplier = 100;
 
 // V4L2 color formats supported by V4L2CaptureDelegate derived classes.
 // This list is ordered by precedence of use -- but see caveats for MJPEG.
@@ -91,6 +96,28 @@ static void FillV4L2RequestBuffer(v4l2_requestbuffers* request_buffer,
 static std::string FourccToString(uint32_t fourcc) {
   return base::StringPrintf("%c%c%c%c", fourcc & 0xFF, (fourcc >> 8) & 0xFF,
                             (fourcc >> 16) & 0xFF, (fourcc >> 24) & 0xFF);
+}
+
+// Creates a mojom::RangePtr with the range of values (min, max, current) of the
+// user control associated with |control_id|. Returns an empty Range otherwise.
+static mojom::RangePtr RetrieveUserControlRange(int device_fd, int control_id) {
+  mojom::RangePtr capability = mojom::Range::New();
+
+  v4l2_queryctrl range = {};
+  range.id = control_id;
+  range.type = V4L2_CTRL_TYPE_INTEGER;
+  if (HANDLE_EINTR(ioctl(device_fd, VIDIOC_QUERYCTRL, &range)) < 0)
+    return mojom::Range::New();
+  capability->max = range.maximum;
+  capability->min = range.minimum;
+
+  v4l2_control current = {};
+  current.id = control_id;
+  if (HANDLE_EINTR(ioctl(device_fd, VIDIOC_G_CTRL, &current)) < 0)
+    return mojom::Range::New();
+  capability->current = current.value;
+
+  return capability;
 }
 
 // Class keeping track of a SPLANE V4L2 buffer, mmap()ed on construction and
@@ -321,6 +348,148 @@ void V4L2CaptureDelegate::StopAndDeAllocate() {
   client_.reset();
 }
 
+void V4L2CaptureDelegate::TakePhoto(
+    VideoCaptureDevice::TakePhotoCallback callback) {
+  DCHECK(v4l2_task_runner_->BelongsToCurrentThread());
+  take_photo_callbacks_.push(std::move(callback));
+}
+
+void V4L2CaptureDelegate::GetPhotoCapabilities(
+    VideoCaptureDevice::GetPhotoCapabilitiesCallback callback) {
+  DCHECK(v4l2_task_runner_->BelongsToCurrentThread());
+  if (!device_fd_.is_valid() || !is_capturing_)
+    return;
+
+  mojom::PhotoCapabilitiesPtr photo_capabilities =
+      mojom::PhotoCapabilities::New();
+
+  photo_capabilities->zoom =
+      RetrieveUserControlRange(device_fd_.get(), V4L2_CID_ZOOM_ABSOLUTE);
+
+  photo_capabilities->focus_mode = mojom::MeteringMode::NONE;
+  v4l2_control auto_focus_current = {};
+  auto_focus_current.id = V4L2_CID_FOCUS_AUTO;
+  if (HANDLE_EINTR(
+          ioctl(device_fd_.get(), VIDIOC_G_CTRL, &auto_focus_current)) >= 0) {
+    photo_capabilities->focus_mode = auto_focus_current.value
+                                         ? mojom::MeteringMode::CONTINUOUS
+                                         : mojom::MeteringMode::MANUAL;
+  }
+
+  photo_capabilities->exposure_mode = mojom::MeteringMode::NONE;
+  v4l2_control exposure_current = {};
+  exposure_current.id = V4L2_CID_EXPOSURE_AUTO;
+  if (HANDLE_EINTR(ioctl(device_fd_.get(), VIDIOC_G_CTRL, &exposure_current)) >=
+      0) {
+    photo_capabilities->exposure_mode =
+        exposure_current.value == V4L2_EXPOSURE_MANUAL
+            ? mojom::MeteringMode::MANUAL
+            : mojom::MeteringMode::CONTINUOUS;
+  }
+
+  photo_capabilities->white_balance_mode = mojom::MeteringMode::NONE;
+  v4l2_control white_balance_current = {};
+  white_balance_current.id = V4L2_CID_AUTO_WHITE_BALANCE;
+  if (HANDLE_EINTR(ioctl(device_fd_.get(), VIDIOC_G_CTRL,
+                         &white_balance_current)) >= 0) {
+    photo_capabilities->white_balance_mode =
+        white_balance_current.value ? mojom::MeteringMode::CONTINUOUS
+                                    : mojom::MeteringMode::MANUAL;
+  }
+
+  photo_capabilities->color_temperature = RetrieveUserControlRange(
+      device_fd_.get(), V4L2_CID_WHITE_BALANCE_TEMPERATURE);
+
+  photo_capabilities->iso = mojom::Range::New();
+  photo_capabilities->height = mojom::Range::New();
+  photo_capabilities->width = mojom::Range::New();
+  photo_capabilities->exposure_compensation = mojom::Range::New();
+  photo_capabilities->fill_light_mode = mojom::FillLightMode::NONE;
+  photo_capabilities->red_eye_reduction = false;
+
+  photo_capabilities->brightness =
+      RetrieveUserControlRange(device_fd_.get(), V4L2_CID_BRIGHTNESS);
+  photo_capabilities->contrast =
+      RetrieveUserControlRange(device_fd_.get(), V4L2_CID_CONTRAST);
+  photo_capabilities->saturation =
+      RetrieveUserControlRange(device_fd_.get(), V4L2_CID_SATURATION);
+  photo_capabilities->sharpness =
+      RetrieveUserControlRange(device_fd_.get(), V4L2_CID_SHARPNESS);
+
+  callback.Run(std::move(photo_capabilities));
+}
+
+void V4L2CaptureDelegate::SetPhotoOptions(
+    mojom::PhotoSettingsPtr settings,
+    VideoCaptureDevice::SetPhotoOptionsCallback callback) {
+  DCHECK(v4l2_task_runner_->BelongsToCurrentThread());
+  if (!device_fd_.is_valid() || !is_capturing_)
+    return;
+
+  if (settings->has_zoom) {
+    v4l2_control zoom_current = {};
+    zoom_current.id = V4L2_CID_ZOOM_ABSOLUTE;
+    zoom_current.value = settings->zoom / kZoomMultiplier;
+    if (HANDLE_EINTR(ioctl(device_fd_.get(), VIDIOC_S_CTRL, &zoom_current)) < 0)
+      DPLOG(ERROR) << "setting zoom to " << settings->zoom / kZoomMultiplier;
+  }
+
+  if (settings->has_white_balance_mode &&
+      (settings->white_balance_mode == mojom::MeteringMode::CONTINUOUS ||
+       settings->white_balance_mode == mojom::MeteringMode::MANUAL)) {
+    v4l2_control white_balance_set = {};
+    white_balance_set.id = V4L2_CID_AUTO_WHITE_BALANCE;
+    white_balance_set.value =
+        settings->white_balance_mode == mojom::MeteringMode::CONTINUOUS;
+    HANDLE_EINTR(ioctl(device_fd_.get(), VIDIOC_S_CTRL, &white_balance_set));
+  }
+
+  // Color temperature can only be applied if Auto White Balance is off.
+  if (settings->has_color_temperature) {
+    v4l2_control auto_white_balance_current = {};
+    auto_white_balance_current.id = V4L2_CID_AUTO_WHITE_BALANCE;
+    const int result = HANDLE_EINTR(
+        ioctl(device_fd_.get(), VIDIOC_G_CTRL, &auto_white_balance_current));
+    if (result >= 0 && !auto_white_balance_current.value) {
+      v4l2_control set_temperature = {};
+      set_temperature.id = V4L2_CID_WHITE_BALANCE_TEMPERATURE;
+      set_temperature.value = settings->color_temperature;
+      HANDLE_EINTR(ioctl(device_fd_.get(), VIDIOC_S_CTRL, &set_temperature));
+    }
+  }
+
+  if (settings->has_brightness) {
+    v4l2_control current = {};
+    current.id = V4L2_CID_BRIGHTNESS;
+    current.value = settings->brightness;
+    if (HANDLE_EINTR(ioctl(device_fd_.get(), VIDIOC_S_CTRL, &current)) < 0)
+      DPLOG(ERROR) << "setting brightness to " << settings->brightness;
+  }
+  if (settings->has_contrast) {
+    v4l2_control current = {};
+    current.id = V4L2_CID_CONTRAST;
+    current.value = settings->contrast;
+    if (HANDLE_EINTR(ioctl(device_fd_.get(), VIDIOC_S_CTRL, &current)) < 0)
+      DPLOG(ERROR) << "setting contrast to " << settings->contrast;
+  }
+  if (settings->has_saturation) {
+    v4l2_control current = {};
+    current.id = V4L2_CID_SATURATION;
+    current.value = settings->saturation;
+    if (HANDLE_EINTR(ioctl(device_fd_.get(), VIDIOC_S_CTRL, &current)) < 0)
+      DPLOG(ERROR) << "setting saturation to " << settings->saturation;
+  }
+  if (settings->has_sharpness) {
+    v4l2_control current = {};
+    current.id = V4L2_CID_SHARPNESS;
+    current.value = settings->sharpness;
+    if (HANDLE_EINTR(ioctl(device_fd_.get(), VIDIOC_S_CTRL, &current)) < 0)
+      DPLOG(ERROR) << "setting sharpness to " << settings->sharpness;
+  }
+
+  callback.Run(true);
+}
+
 void V4L2CaptureDelegate::SetRotation(int rotation) {
   DCHECK(v4l2_task_runner_->BelongsToCurrentThread());
   DCHECK(rotation >= 0 && rotation < 360 && rotation % 90 == 0);
@@ -394,14 +563,29 @@ void V4L2CaptureDelegate::DoCapture() {
     const scoped_refptr<BufferTracker>& buffer_tracker =
         buffer_tracker_pool_[buffer.index];
 
+    // There's a wide-spread issue where the kernel does not report accurate,
+    // monotonically-increasing timestamps in the v4l2_buffer::timestamp
+    // field (goo.gl/Nlfamz).
+    // Until this issue is fixed, just use the reference clock as a source of
+    // media timestamps.
     const base::TimeTicks now = base::TimeTicks::Now();
     if (first_ref_time_.is_null())
       first_ref_time_ = now;
     const base::TimeDelta timestamp = now - first_ref_time_;
-
     client_->OnIncomingCapturedData(buffer_tracker->start(),
                                     buffer_tracker->payload_size(),
                                     capture_format_, rotation_, now, timestamp);
+
+    while (!take_photo_callbacks_.empty()) {
+      VideoCaptureDevice::TakePhotoCallback cb =
+          std::move(take_photo_callbacks_.front());
+      take_photo_callbacks_.pop();
+
+      mojom::BlobPtr blob =
+          Blobify(buffer_tracker->start(), buffer.bytesused, capture_format_);
+      if (blob)
+        cb.Run(std::move(blob));
+    }
 
     if (HANDLE_EINTR(ioctl(device_fd_.get(), VIDIOC_QBUF, &buffer)) < 0) {
       SetErrorState(FROM_HERE, "Failed to enqueue capture buffer");

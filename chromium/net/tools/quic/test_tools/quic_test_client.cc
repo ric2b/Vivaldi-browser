@@ -131,7 +131,9 @@ BalsaHeaders* MungeHeaders(const BalsaHeaders* const_headers) {
   }
   BalsaHeaders* headers = new BalsaHeaders;
   headers->CopyFrom(*const_headers);
-  if (!uri.starts_with("https://") && !uri.starts_with("http://")) {
+  if (!base::StartsWith(uri, "https://",
+                        base::CompareCase::INSENSITIVE_ASCII) &&
+      !base::StartsWith(uri, "http://", base::CompareCase::INSENSITIVE_ASCII)) {
     // If we have a relative URL, set some defaults.
     string full_uri = "https://test.example.com";
     full_uri.append(uri.as_string());
@@ -179,15 +181,16 @@ MockableQuicClient::MockableQuicClient(
                  base::WrapUnique(
                      new RecordingProofVerifier(std::move(proof_verifier)))),
       override_connection_id_(0),
-      test_writer_(nullptr) {
-  ON_CALL(*this, ProcessPacket(_, _, _))
-      .WillByDefault(Invoke(this, &MockableQuicClient::ProcessPacketBase));
-}
+      test_writer_(nullptr),
+      track_last_incoming_packet_(false) {}
 
-void MockableQuicClient::ProcessPacketBase(const IPEndPoint& self_address,
-                                           const IPEndPoint& peer_address,
-                                           const QuicReceivedPacket& packet) {
+void MockableQuicClient::ProcessPacket(const IPEndPoint& self_address,
+                                       const IPEndPoint& peer_address,
+                                       const QuicReceivedPacket& packet) {
   QuicClient::ProcessPacket(self_address, peer_address, packet);
+  if (track_last_incoming_packet_) {
+    last_incoming_packet_.reset(packet.Clone());
+  }
 }
 
 MockableQuicClient::~MockableQuicClient() {
@@ -320,10 +323,10 @@ ssize_t QuicTestClient::GetOrCreateStreamAndSendRequest(
       return 1;
     if (rv == QUIC_PENDING) {
       // May need to retry request if asynchronous rendezvous fails.
-      auto* new_headers = new BalsaHeaders;
-      new_headers->CopyFrom(*headers);
-      push_promise_data_to_resend_.reset(
-          new TestClientDataToResend(new_headers, body, fin, this, delegate));
+      std::unique_ptr<SpdyHeaderBlock> new_headers(new SpdyHeaderBlock(
+          SpdyBalsaUtils::RequestHeadersToSpdyHeaders(*headers)));
+      push_promise_data_to_resend_.reset(new TestClientDataToResend(
+          std::move(new_headers), body, fin, this, delegate));
       return 1;
     }
   }
@@ -358,14 +361,15 @@ ssize_t QuicTestClient::GetOrCreateStreamAndSendRequest(
     ret = body.length();
   }
   if (FLAGS_enable_quic_stateless_reject_support) {
-    BalsaHeaders* new_headers = nullptr;
+    std::unique_ptr<SpdyHeaderBlock> new_headers;
     if (headers) {
-      new_headers = new BalsaHeaders;
-      new_headers->CopyFrom(*headers);
+      new_headers.reset(new SpdyHeaderBlock(
+          SpdyBalsaUtils::RequestHeadersToSpdyHeaders(*headers)));
     }
-    auto* data_to_resend =
-        new TestClientDataToResend(new_headers, body, fin, this, delegate);
-    client()->MaybeAddQuicDataToResend(data_to_resend);
+    std::unique_ptr<QuicClientBase::QuicDataToResend> data_to_resend(
+        new TestClientDataToResend(std::move(new_headers), body, fin, this,
+                                   delegate));
+    client()->MaybeAddQuicDataToResend(std::move(data_to_resend));
   }
   return ret;
 }
@@ -379,7 +383,7 @@ ssize_t QuicTestClient::SendMessage(const HTTPMessage& message) {
 
   // If we're not connected, try to find an sni hostname.
   if (!connected()) {
-    GURL url(message.headers()->request_uri().as_string());
+    GURL url(message.headers()->request_uri());
     if (override_sni_set_) {
       client_->set_server_id(QuicServerId(override_sni_, url.EffectiveIntPort(),
                                           PRIVACY_MODE_DISABLED));
@@ -735,12 +739,11 @@ void QuicTestClient::WaitForWriteToFlush() {
 }
 
 void QuicTestClient::TestClientDataToResend::Resend() {
-  test_client_->GetOrCreateStreamAndSendRequest(headers_, body_, fin_,
+  BalsaHeaders balsa_headers;
+  SpdyBalsaUtils::SpdyHeadersToRequestHeaders(*headers_, &balsa_headers);
+  test_client_->GetOrCreateStreamAndSendRequest(&balsa_headers, body_, fin_,
                                                 delegate_);
-  if (headers_ != nullptr) {
-    delete headers_;
-    headers_ = nullptr;
-  }
+  headers_.reset();
 }
 
 // static

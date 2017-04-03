@@ -24,7 +24,7 @@
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/prefs/pref_service.h"
@@ -142,8 +142,8 @@ std::unique_ptr<KeywordExtensionsDelegate>
 ChromeAutocompleteProviderClient::GetKeywordExtensionsDelegate(
     KeywordProvider* keyword_provider) {
 #if defined(ENABLE_EXTENSIONS)
-  return base::WrapUnique(
-      new KeywordExtensionsDelegateImpl(profile_, keyword_provider));
+  return base::MakeUnique<KeywordExtensionsDelegateImpl>(profile_,
+                                                         keyword_provider);
 #else
   return nullptr;
 #endif
@@ -210,7 +210,7 @@ bool ChromeAutocompleteProviderClient::SearchSuggestEnabled() const {
 }
 
 bool ChromeAutocompleteProviderClient::TabSyncEnabledAndUnencrypted() const {
-  return sync_driver::IsTabSyncEnabledAndUnencrypted(
+  return syncer::IsTabSyncEnabledAndUnencrypted(
       ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile_),
       profile_->GetPrefs());
 }

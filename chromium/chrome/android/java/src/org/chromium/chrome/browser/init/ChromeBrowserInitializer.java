@@ -12,7 +12,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Process;
 import android.os.StrictMode;
-import android.text.TextUtils;
 
 import com.squareup.leakcanary.LeakCanary;
 
@@ -42,7 +41,6 @@ import org.chromium.chrome.browser.services.GoogleServicesManager;
 import org.chromium.chrome.browser.tabmodel.document.DocumentTabModelImpl;
 import org.chromium.chrome.browser.webapps.ActivityAssigner;
 import org.chromium.chrome.browser.webapps.ChromeWebApkHost;
-import org.chromium.components.variations.VariationsAssociatedData;
 import org.chromium.content.app.ContentApplication;
 import org.chromium.content.browser.BrowserStartupController;
 import org.chromium.content.browser.ChildProcessCreationParams;
@@ -121,10 +119,9 @@ public class ChromeBrowserInitializer {
     public void handleSynchronousStartup() throws ProcessInitException {
         assert ThreadUtils.runningOnUiThread() : "Tried to start the browser on the wrong thread";
 
-        ChromeBrowserInitializer initializer = ChromeBrowserInitializer.getInstance(mApplication);
         BrowserParts parts = new EmptyBrowserParts();
-        initializer.handlePreNativeStartup(parts);
-        initializer.handlePostNativeStartup(false, parts);
+        handlePreNativeStartup(parts);
+        handlePostNativeStartup(false, parts);
     }
 
     /**
@@ -136,6 +133,7 @@ public class ChromeBrowserInitializer {
     public void handlePreNativeStartup(final BrowserParts parts) {
         assert ThreadUtils.runningOnUiThread() : "Tried to start the browser on the wrong thread";
 
+        ProcessInitializationHandler.getInstance().initializePreNative();
         preInflationStartup();
         parts.preInflationStartup();
         if (parts.isActivityFinishing()) return;
@@ -251,7 +249,7 @@ public class ChromeBrowserInitializer {
         initQueue.add(new NativeInitTask() {
             @Override
             public void initFunction() {
-                mApplication.initializeProcess();
+                ProcessInitializationHandler.getInstance().initializePostNative();
             }
         });
 
@@ -361,7 +359,7 @@ public class ChromeBrowserInitializer {
             mApplication.initCommandLine();
             LibraryLoader libraryLoader = LibraryLoader.get(LibraryProcessType.PROCESS_BROWSER);
             StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
-            libraryLoader.ensureInitialized(mApplication);
+            libraryLoader.ensureInitialized();
             StrictMode.setThreadPolicy(oldPolicy);
             libraryLoader.asyncPrefetchLibrariesToMemory();
             BrowserStartupController.get(mApplication, LibraryProcessType.PROCESS_BROWSER)
@@ -397,23 +395,19 @@ public class ChromeBrowserInitializer {
         mNativeInitializationComplete = true;
         ContentUriUtils.setFileProviderUtil(new FileProviderHelper());
 
-        if (TextUtils.equals("true", VariationsAssociatedData.getVariationParamValue(
-                MinidumpDirectoryObserver.MINIDUMP_EXPERIMENT_NAME, "Enabled"))) {
+        // Start the file observer to watch the minidump directory.
+        new AsyncTask<Void, Void, MinidumpDirectoryObserver>() {
+            @Override
+            protected MinidumpDirectoryObserver doInBackground(Void... params) {
+                return new MinidumpDirectoryObserver();
+            }
 
-            // Start the file observer to watch the minidump directory.
-            new AsyncTask<Void, Void, MinidumpDirectoryObserver>() {
-                @Override
-                protected MinidumpDirectoryObserver doInBackground(Void... params) {
-                    return new MinidumpDirectoryObserver();
-                }
-
-                @Override
-                protected void onPostExecute(MinidumpDirectoryObserver minidumpDirectoryObserver) {
-                    mMinidumpDirectoryObserver = minidumpDirectoryObserver;
-                    mMinidumpDirectoryObserver.startWatching();
-                }
-            }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
-        }
+            @Override
+            protected void onPostExecute(MinidumpDirectoryObserver minidumpDirectoryObserver) {
+                mMinidumpDirectoryObserver = minidumpDirectoryObserver;
+                mMinidumpDirectoryObserver.startWatching();
+            }
+        }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
 
     private void waitForDebuggerIfNeeded() {

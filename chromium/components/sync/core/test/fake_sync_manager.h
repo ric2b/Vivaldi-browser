@@ -5,7 +5,9 @@
 #ifndef COMPONENTS_SYNC_CORE_TEST_FAKE_SYNC_MANAGER_H_
 #define COMPONENTS_SYNC_CORE_TEST_FAKE_SYNC_MANAGER_H_
 
+#include <memory>
 #include <string>
+#include <vector>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -89,7 +91,7 @@ class FakeSyncManager : public SyncManager {
                        const base::Closure& ready_task,
                        const base::Closure& retry_task) override;
   void OnIncomingInvalidation(
-      syncer::ModelType type,
+      ModelType type,
       std::unique_ptr<InvalidationInterface> interface) override;
   void SetInvalidatorEnabled(bool invalidator_enabled) override;
   void AddObserver(Observer* observer) override;
@@ -98,22 +100,20 @@ class FakeSyncManager : public SyncManager {
   void SaveChanges() override;
   void ShutdownOnSyncThread(ShutdownReason reason) override;
   UserShare* GetUserShare() override;
-  std::unique_ptr<syncer_v2::ModelTypeConnector> GetModelTypeConnectorProxy()
-      override;
+  std::unique_ptr<ModelTypeConnector> GetModelTypeConnectorProxy() override;
   const std::string cache_guid() override;
   bool ReceivedExperiment(Experiments* experiments) override;
   bool HasUnsyncedItems() override;
   SyncEncryptionHandler* GetEncryptionHandler() override;
-  ScopedVector<syncer::ProtocolEvent> GetBufferedProtocolEvents() override;
-  std::unique_ptr<base::ListValue> GetAllNodesForType(
-      syncer::ModelType type) override;
+  std::vector<std::unique_ptr<ProtocolEvent>> GetBufferedProtocolEvents()
+      override;
   void RefreshTypes(ModelTypeSet types) override;
   void RegisterDirectoryTypeDebugInfoObserver(
-      syncer::TypeDebugInfoObserver* observer) override;
+      TypeDebugInfoObserver* observer) override;
   void UnregisterDirectoryTypeDebugInfoObserver(
-      syncer::TypeDebugInfoObserver* observer) override;
+      TypeDebugInfoObserver* observer) override;
   bool HasDirectoryTypeDebugInfoObserver(
-      syncer::TypeDebugInfoObserver* observer) override;
+      TypeDebugInfoObserver* observer) override;
   void RequestEmitDebugInfo() override;
   void ClearServerData(const ClearServerDataCallback& callback) override;
   void OnCookieJarChanged(bool account_mismatch, bool empty_jar) override;

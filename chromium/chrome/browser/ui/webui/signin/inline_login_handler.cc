@@ -14,11 +14,11 @@
 #include "chrome/browser/extensions/signin/gaia_auth_extension_loader.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/signin_promo.h"
-#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/signin_view_controller_delegate.h"
 #include "chrome/browser/ui/user_manager.h"
+#include "chrome/browser/ui/webui/signin/signin_utils.h"
 #include "chrome/common/pref_names.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -29,18 +29,6 @@
 #include "content/public/browser/web_ui.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/base/url_util.h"
-
-namespace {
-
-Browser* GetDesktopBrowser(content::WebUI* web_ui) {
-  Browser* browser = chrome::FindBrowserWithWebContents(
-      web_ui->GetWebContents());
-  if (!browser)
-    browser = chrome::FindLastActiveWithProfile(Profile::FromWebUI(web_ui));
-  return browser;
-}
-
-}  // namespace
 
 InlineLoginHandler::InlineLoginHandler() : weak_ptr_factory_(this) {}
 
@@ -207,15 +195,20 @@ void InlineLoginHandler::ContinueHandleInitializeMessage() {
   const GURL& current_url = web_ui()->GetWebContents()->GetURL();
   signin_metrics::AccessPoint access_point =
       signin::GetAccessPointForPromoURL(current_url);
-  signin_metrics::LogSigninAccessPointStarted(access_point);
+  signin_metrics::Reason reason =
+      signin::GetSigninReasonForPromoURL(current_url);
+
+  if (reason != signin_metrics::Reason::REASON_REAUTHENTICATION ||
+      reason != signin_metrics::Reason::REASON_UNLOCK ||
+      reason != signin_metrics::Reason::REASON_ADD_SECONDARY_ACCOUNT) {
+    signin_metrics::LogSigninAccessPointStarted(access_point);
+  }
   RecordSigninUserActionForAccessPoint(access_point);
   content::RecordAction(base::UserMetricsAction("Signin_SigninPage_Loading"));
 
   params.SetString("continueUrl", signin::GetLandingURL(access_point).spec());
 
   Profile* profile = Profile::FromWebUI(web_ui());
-  signin_metrics::Reason reason =
-      signin::GetSigninReasonForPromoURL(current_url);
   std::string default_email;
   if (reason == signin_metrics::Reason::REASON_SIGNIN_PRIMARY_ACCOUNT) {
     default_email =
@@ -278,14 +271,14 @@ void InlineLoginHandler::HandleSwitchToFullTabMessage(
 
 void InlineLoginHandler::HandleNavigationButtonClicked(
     const base::ListValue* args) {
-  Browser* browser = GetDesktopBrowser(web_ui());
+  Browser* browser = signin::GetDesktopBrowser(web_ui());
   DCHECK(browser);
 
   browser->signin_view_controller()->delegate()->PerformNavigation();
 }
 
 void InlineLoginHandler::HandleDialogClose(const base::ListValue* args) {
-  Browser* browser = GetDesktopBrowser(web_ui());
+  Browser* browser = signin::GetDesktopBrowser(web_ui());
   // If the dialog was opened in the User Manager browser will be null here.
   if (browser)
     browser->CloseModalSigninWindow();

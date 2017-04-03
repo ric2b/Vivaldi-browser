@@ -11,7 +11,6 @@
 #include "net/base/address_list.h"
 #include "net/base/net_errors.h"
 #include "net/dns/mojo_host_type_converters.h"
-#include "net/log/net_log.h"
 
 namespace net {
 namespace {
@@ -77,7 +76,7 @@ int HostResolverMojo::Resolve(const RequestInfo& info,
                               AddressList* addresses,
                               const CompletionCallback& callback,
                               std::unique_ptr<Request>* request,
-                              const BoundNetLog& source_net_log) {
+                              const NetLogWithSource& source_net_log) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(request);
   DVLOG(1) << "Resolve " << info.host_port_pair().ToString();
@@ -103,7 +102,7 @@ int HostResolverMojo::Resolve(const RequestInfo& info,
 
 int HostResolverMojo::ResolveFromCache(const RequestInfo& info,
                                        AddressList* addresses,
-                                       const BoundNetLog& source_net_log) {
+                                       const NetLogWithSource& source_net_log) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DVLOG(1) << "ResolveFromCache " << info.host_port_pair().ToString();
   return ResolveFromCacheInternal(info, CacheKeyForRequest(info), addresses);

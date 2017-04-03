@@ -12,6 +12,9 @@ static_library("extensions") {
     "permissions",
     "schema",
     "tools",
+    "//base:base",
+    "//chrome/browser/extensions:extensions",
+    "//extensions/browser:browser",
     "//skia",
   ]
   sources = [

@@ -13,8 +13,9 @@
 <translation id="1103124106085518534">เรียบร้อยแล้ว</translation>
 <translation id="1103523840287552314">แปลภาษา<ph name="LANGUAGE" />ทุกครั้ง</translation>
 <translation id="1107591249535594099">หากเลือก Chrome จะจัดเก็บสำเนาของบัตรบนอุปกรณ์นี้เพื่อการกรอกข้อมูลแบบฟอร์มอย่างรวดเร็ว</translation>
-<translation id="1111153019813902504">บุ๊กมาร์กล่าสุด</translation>
+<translation id="1111153019813902504">บุ๊กมาร์กที่เพิ่งดู</translation>
 <translation id="1113869188872983271">&amp;เลิกทำการจัดลำดับใหม่</translation>
+<translation id="1126551341858583091">ขนาดบนพื้นที่เก็บข้อมูลในเครื่องคือ <ph name="CRASH_SIZE" /></translation>
 <translation id="112840717907525620">แคชนโยบายใช้ได้</translation>
 <translation id="113188000913989374"><ph name="SITE" /> บอกว่า:</translation>
 <translation id="1132774398110320017">การตั้งค่าป้อนข้อความอัตโนมัติของ Chrome...</translation>
@@ -79,7 +80,6 @@
 <translation id="1871208020102129563">พร็อกซีถูกตั้งค่าให้ใช้พร็อกซีเซิร์ฟเวอร์แบบคงที่ ไม่ใช่ URL สคริปต์ .pac</translation>
 <translation id="1883255238294161206">ยุบรายการ</translation>
 <translation id="1898423065542865115">การกรอง</translation>
-<translation id="1911837502049945214"><ph name="HOST_NAME" /> ไม่ยอมรับใบรับรองการเข้าสู่ระบบหรือใบรับรองการเข้าสู่ระบบอาจหมดอายุแล้ว</translation>
 <translation id="194030505837763158">ไปที่ <ph name="LINK" /></translation>
 <translation id="1962204205936693436">บุ๊กมาร์กของ <ph name="DOMAIN" /></translation>
 <translation id="1973335181906896915">ข้อผิดพลาดในการจัดเรียง</translation>
@@ -172,10 +172,8 @@
 <translation id="2824775600643448204">ที่อยู่และแถบค้นหา</translation>
 <translation id="2826760142808435982">การเชื่อมต่อถูกเข้ารหัสและรับรองความถูกต้องโดยใช้ <ph name="CIPHER" /> และใช้ <ph name="KX" /> เป็นกลไกการแลกเปลี่ยนคีย์</translation>
 <translation id="2835170189407361413">ล้างฟอร์ม</translation>
-<translation id="2837049386027881519">การเชื่อมต่อจำเป็นต้องลองใหม่ด้วยการใช้โปรโตคอล TLS หรือ SSL รุ่นเก่ากว่านี้ ซึ่งโดยทั่วไปหมายความว่าเซิร์ฟเวอร์นี้กำลังใช้ซอฟต์แวร์รุ่นเก่ามากและอาจมีปัญหาด้านความปลอดภัยอื่นๆ</translation>
 <translation id="284702764277384724">ใบรับรองเซิร์ฟเวอร์ที่ <ph name="HOST_NAME" /> ดูเหมือนเป็นของปลอม</translation>
 <translation id="2889159643044928134">อย่าโหลดซ้ำ</translation>
-<translation id="2896499918916051536">ไม่สนับสนุนปลั๊กอินนี้</translation>
 <translation id="2900469785430194048">Google Chrome หน่วยความจำเต็มเมื่อพยายามแสดงหน้าเว็บนี้</translation>
 <translation id="2909946352844186028">ตรวจพบการเปลี่ยนแปลงเครือข่าย</translation>
 <translation id="2922350208395188000">ไม่สามารถตรวจสอบใบรับรองของเซิร์ฟเวอร์</translation>
@@ -217,8 +215,10 @@
 <translation id="3254409185687681395">บุ๊กมาร์กหน้านี้</translation>
 <translation id="3270847123878663523">&amp;เลิกทำการจัดลำดับใหม่</translation>
 <translation id="3286538390144397061">รีสตาร์ทเดี๋ยวนี้</translation>
+<translation id="3303855915957856445">ไม่พบผลการค้นหา</translation>
 <translation id="3305707030755673451">ข้อมูลของคุณได้รับการเข้ารหัสด้วยรหัสผ่านการซิงค์เมื่อวันที่ <ph name="TIME" /> โปรดป้อนรหัสผ่านเพื่อเริ่มซิงค์</translation>
 <translation id="333371639341676808">ป้องกันหน้านี้จากการสร้างการโต้ตอบเพิ่มเติม</translation>
+<translation id="3338095232262050444">ปลอดภัย</translation>
 <translation id="3340978935015468852">การตั้งค่า</translation>
 <translation id="3345135638360864351">ไม่สามารถส่งคำขอเข้าถึงไซต์นี้ไปยัง <ph name="NAME" /> ได้ โปรดลองอีกครั้ง</translation>
 <translation id="3355823806454867987">เปลี่ยนการตั้งค่าพร็อกซี...</translation>
@@ -290,6 +290,7 @@
 <translation id="3963721102035795474">โหมดนักอ่าน</translation>
 <translation id="397105322502079400">กำลังคำนวณ...</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> ถูกบล็อก</translation>
+<translation id="40103911065039147">{URL_count,plural, =1{มีหน้าเว็บ 1 หน้าใกล้ๆ}other{มีหน้าเว็บ # หน้าใกล้ๆ}}</translation>
 <translation id="4021036232240155012">DNS คือบริการเครือข่ายที่แปลชื่อของเว็บไซต์เป็นที่อยู่อินเทอร์เน็ต</translation>
 <translation id="4030383055268325496">&amp;เลิกทำการเพิ่ม</translation>
 <translation id="404928562651467259">คำเตือน</translation>
@@ -320,11 +321,13 @@
 <translation id="4304224509867189079">เข้าสู่ระบบ</translation>
 <translation id="432290197980158659">เซิร์ฟเวอร์แสดงใบรับรองที่ไม่ตรงกับการคาดการณ์ที่มีอยู่ การคาดการณ์เหล่านี้มีอยู่ในบางเว็บไซต์ที่มีการรักษาความปลอดภัยสูงเพื่อปกป้องคุณ <ph name="BEGIN_LEARN_MORE_LINK" />เรียนรู้เพิ่มเติม<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="4325863107915753736">การค้นหาบทความล้มเหลว</translation>
+<translation id="4331708818696583467">ไม่ปลอดภัย</translation>
 <translation id="4372948949327679948">ค่า <ph name="VALUE_TYPE" /> ที่คาดไว้</translation>
 <translation id="4381091992796011497">ชื่อผู้ใช้:</translation>
 <translation id="4394049700291259645">ปิดการใช้งาน</translation>
 <translation id="4395129973926795186"><ph name="START_DATE" /> ถึง <ph name="END_DATE" /></translation>
 <translation id="4406896451731180161">ผลการค้นหา</translation>
+<translation id="4432688616882109544"><ph name="HOST_NAME" /> ไม่ยอมรับใบรับรองการเข้าสู่ระบบหรือไม่ได้ให้ใบรับรองไว้</translation>
 <translation id="443673843213245140">การใช้พร็อกซีถูกปิดใช้งาน แต่มีการระบุการกำหนดค่าพร็อกซีอย่างชัดเจน</translation>
 <translation id="4458874409874303848">SafeSites</translation>
 <translation id="4461847750548395463">คุณเห็นข้อความนี้เนื่องจากมีการเปิดใช้ Google SafeSites</translation>
@@ -339,6 +342,7 @@
 <translation id="4589078953350245614">คุณพยายามเข้าถึง <ph name="DOMAIN" /> แต่เซิร์ฟเวอร์แสดงใบรับรองที่ไม่ถูกต้อง <ph name="BEGIN_LEARN_MORE_LINK" />เรียนรู้เพิ่มเติม<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="4592951414987517459">มีการเข้ารหัสการเชื่อมต่อของคุณกับ <ph name="DOMAIN" /> ด้วยชุดการเข้ารหัสที่ทันสมัย</translation>
 <translation id="4594403342090139922">&amp;เลิกทำการนำออก</translation>
+<translation id="4627442949885028695">ดำเนินการต่อจากอุปกรณ์อื่น</translation>
 <translation id="4668929960204016307">,</translation>
 <translation id="4670097147947922288">คุณกำลังดูหน้าส่วนขยาย</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
@@ -359,14 +363,15 @@
 <translation id="4880827082731008257">ค้นประวัติการเข้าชม</translation>
 <translation id="4884656795097055129">บทความอื่นๆ จะปรากฏขึ้นเมื่อถึงเวลาที่เหมาะสม</translation>
 <translation id="4895877746940133817"><ph name="TYPE_1" />, <ph name="TYPE_2" /> และ <ph name="TYPE_3" /></translation>
+<translation id="4914479371620770914">{URL_count,plural, =1{และหน้าเว็บอีก 1 หน้า}other{และหน้าเว็บอีก # หน้า}}</translation>
 <translation id="4923417429809017348">หน้านี้แปลจากภาษาที่ไม่รู้จักเป็นภาษา <ph name="LANGUAGE_LANGUAGE" /></translation>
 <translation id="4926049483395192435">ต้องระบุ</translation>
 <translation id="4930497775425430760">คุณเห็นข้อความนี้เนื่องจากต้องให้ผู้ปกครองอนุมัติการเข้าชมเว็บไซต์ใหม่ในครั้งแรกของคุณ</translation>
 <translation id="495170559598752135">การทำงาน</translation>
 <translation id="4958444002117714549">ขยายรายการ</translation>
 <translation id="4962322354953122629">เซิร์ฟเวอร์นี้พิสูจน์ไม่ได้ว่าเป็น <ph name="DOMAIN" /> เพราะ Chrome ไม่เชื่อถือใบรับรองความปลอดภัยของเซิร์ฟเวอร์นี้ สาเหตุอาจเกิดจากการกำหนดค่าผิดหรือผู้โจมตีขัดขวางการเชื่อมต่อของคุณ <ph name="BEGIN_LEARN_MORE_LINK" />เรียนรู้เพิ่มเติม<ph name="END_LEARN_MORE_LINK" /></translation>
-<translation id="4986920000862467124">อ่านทั้งหมดแล้ว</translation>
 <translation id="498957508165411911">แปลจาก <ph name="ORIGINAL_LANGUAGE" /> เป็น <ph name="TARGET_LANGUAGE" /> หรือไม่</translation>
+<translation id="4989809363548539747">ไม่รองรับปลั๊กอินนี้</translation>
 <translation id="5002932099480077015">หากเปิดใช้ Chrome จะเก็บสำเนาการ์ดของคุณในอุปกรณ์นี้เพื่อให้การกรอกฟอร์มทำได้เร็วขึ้น</translation>
 <translation id="5019198164206649151">ไม่สามารถจัดเก็บเนื่องจากระบบแบ็คเอนด์อยู่ในสถานะไม่ดี</translation>
 <translation id="5023310440958281426">ตรวจสอบนโยบายของผู้ดูแลระบบของคุณ</translation>
@@ -380,7 +385,6 @@
 <translation id="5089810972385038852">รัฐ</translation>
 <translation id="5095208057601539847">จังหวัด</translation>
 <translation id="5115563688576182185">(64 บิต)</translation>
-<translation id="5122371513570456792">พบ <ph name="NUMBER_OF_RESULTS" /><ph name="SEARCH_RESULTS" /> รายการสำหรับ "<ph name="SEARCH_STRING" />"</translation>
 <translation id="5141240743006678641">เข้ารหัสผ่านที่ซิงค์ด้วยข้อมูลรับรอง Google ของคุณ</translation>
 <translation id="5145883236150621069">มีรหัสข้อผิดพลาดในการตอบกลับนโยบาย</translation>
 <translation id="5171045022955879922">ค้นหาหรือพิมพ์ URL</translation>
@@ -388,8 +392,8 @@
 <translation id="5179510805599951267">หากไม่มีในภาษา <ph name="ORIGINAL_LANGUAGE" /> ให้รายงานข้อผิดพลาดนี้</translation>
 <translation id="5190835502935405962">แถบบุ๊กมาร์ก</translation>
 <translation id="5199729219167945352">การทดลอง</translation>
-<translation id="52060377617855516">{URL_count,plural, =1{พบหน้าเว็บ 1 หน้า}other{พบหน้าเว็บ # หน้า}}</translation>
 <translation id="5251803541071282808">ระบบคลาวด์</translation>
+<translation id="5277279256032773186">หากใช้ Chrome ที่ทำงาน ธุรกิจสามารถจัดการการตั้งค่า Chrome ให้พนักงานของตนได้ เรียนรู้เพิ่มเติม</translation>
 <translation id="5299298092464848405">ข้อผิดพลาดในการแยกวิเคราะห์นโยบาย</translation>
 <translation id="5300589172476337783">แสดง</translation>
 <translation id="5308689395849655368">การรายงานข้อขัดข้องถูกปิดใช้งาน</translation>
@@ -423,7 +427,6 @@
 <translation id="5622887735448669177">คุณต้องการออกจากเว็บไซต์นี้ใช่ไหม</translation>
 <translation id="5629630648637658800">ไม่สามารถโหลดการตั้งค่านโยบาย</translation>
 <translation id="5631439013527180824">โทเค็นการจัดการอุปกรณ์ไม่ถูกต้อง</translation>
-<translation id="5650551054760837876">ไม่พบผลลัพธ์การค้นหา</translation>
 <translation id="5677928146339483299">ถูกบล็อก</translation>
 <translation id="5710435578057952990">ข้อมูลประจำตัวของเว็บไซต์นี้ยังไม่ได้รับการยืนยัน</translation>
 <translation id="5720705177508910913">ผู้ใช้ปัจจุบัน</translation>
@@ -462,7 +465,6 @@
 <translation id="6150607114729249911">อ๊ะ! คุณต้องถามผู้ปกครองว่าสามารถเข้าชมหน้านี้ได้ไหม</translation>
 <translation id="6151417162996330722">ใบรับรองเซิร์ฟเวอร์มีระยะเวลาที่สามารถใช้ได้นานเกินไป</translation>
 <translation id="6165508094623778733">เรียนรู้เพิ่มเติม</translation>
-<translation id="6180780615171238625">คุณไม่สามารถเข้าชม <ph name="SITE" /> ได้ในขณะนี้ เนื่องจากใบรับรองนี้ถูกเพิกถอนแล้ว โดยปกติข้อผิดพลาดของเครือข่ายและการโจมตีจะเกิดขึ้นเพียงชั่วคราว หน้านี้จึงอาจจะใช้งานได้ในภายหลัง <ph name="BEGIN_LEARN_MORE_LINK" />เรียนรู้เพิ่มเติม<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="6203231073485539293">ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต</translation>
 <translation id="6218753634732582820">ต้องการนำที่อยู่ออกจาก Chromium ใช่ไหม</translation>
 <translation id="6259156558325130047">&amp;ทำซ้ำการจัดลำดับใหม่</translation>
@@ -490,6 +492,7 @@
 <translation id="647261751007945333">นโยบายอุปกรณ์</translation>
 <translation id="6489534406876378309">เริ่มอัปโหลดข้อขัดข้อง</translation>
 <translation id="6529602333819889595">&amp;ทำซ้ำการนำออก</translation>
+<translation id="6534179046333460208">คำแนะนำ Physical Web</translation>
 <translation id="6550675742724504774">ตัวเลือก</translation>
 <translation id="6593753688552673085">น้อยกว่า <ph name="UPPER_ESTIMATE" /></translation>
 <translation id="6596325263575161958">ตัวเลือกการเข้ารหัส</translation>
@@ -523,8 +526,10 @@
 <translation id="6970216967273061347">เขต</translation>
 <translation id="6973656660372572881">มีการระบุทั้งพร็อกซีเซิร์ฟเวอร์แบบคงที่และ URL สคริปต์ .pac ไว้</translation>
 <translation id="6989763994942163495">แสดงการตั้งค่าขั้นสูง...</translation>
+<translation id="7000990526846637657">ไม่พบข้อมูลประวัติการเข้าชม</translation>
 <translation id="7009986207543992532">คุณพยายามเข้าถึง <ph name="DOMAIN" /> แต่เซิร์ฟเวอร์แสดงใบรับรองที่มีระยะเวลาการใช้งานได้นานเกินกว่าจะเชื่อถือได้ <ph name="BEGIN_LEARN_MORE_LINK" />เรียนรู้เพิ่มเติม<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="7012363358306927923">China UnionPay</translation>
+<translation id="7012372675181957985">บัญชี Google ของคุณอาจมีประวัติการท่องเว็บในรูปแบบอื่นๆ ที่ <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" /></translation>
 <translation id="7029809446516969842">รหัสผ่าน</translation>
 <translation id="7087282848513945231">อำเภอ</translation>
 <translation id="7088615885725309056">เก่ากว่า</translation>
@@ -550,6 +555,7 @@
 <translation id="7309308571273880165">รายงานข้อขัดข้องเมื่อ <ph name="CRASH_TIME" /> (ผู้ใช้ขอการอัปโหลด ยังไม่ได้อัปโหลด)</translation>
 <translation id="7334320624316649418">&amp;ทำซ้ำการจัดลำดับใหม่</translation>
 <translation id="733923710415886693">ไม่มีการเปิดเผยใบรับรองของเซิร์ฟเวอร์ผ่านความโปร่งใสของใบรับรอง</translation>
+<translation id="7351800657706554155">คุณไม่สามารถเข้าชม <ph name="SITE" /> ได้ในขณะนี้ เนื่องจากใบรับรองของเว็บไซต์ถูกเพิกถอนแล้ว โดยปกติข้อผิดพลาดของเครือข่ายและการโจมตีจะเกิดขึ้นเพียงชั่วคราว หน้านี้จึงอาจจะใช้งานได้ในภายหลัง <ph name="BEGIN_LEARN_MORE_LINK" />เรียนรู้เพิ่มเติม<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="7353601530677266744">บรรทัดคำสั่ง </translation>
 <translation id="7372973238305370288">ผลการค้นหา</translation>
 <translation id="7377249249140280793"><ph name="RELATIVE_DATE" /> - <ph name="FULL_DATE" /></translation>
@@ -568,6 +574,7 @@
 <translation id="7469372306589899959">กำลังยืนยันบัตร</translation>
 <translation id="7481312909269577407">ส่งต่อ</translation>
 <translation id="7485870689360869515">ไม่พบข้อมูล</translation>
+<translation id="7508255263130623398">รหัสอุปกรณ์นโยบายที่ส่งกลับว่างเปล่าหรือไม่ตรงกับรหัสอุปกรณ์ปัจจุบัน</translation>
 <translation id="7514365320538308">ดาวน์โหลด</translation>
 <translation id="7518003948725431193">ไม่พบหน้าเว็บสำหรับที่อยู่เว็บ: <ph name="URL" /></translation>
 <translation id="7537536606612762813">จำเป็น</translation>
@@ -577,6 +584,7 @@
 <translation id="7568593326407688803">หน้าเว็บนี้เป็น<ph name="ORIGINAL_LANGUAGE" />คุณต้องการแปลหรือไม่</translation>
 <translation id="7569952961197462199">นำบัตรเครดิตออกจาก Chrome ไหม</translation>
 <translation id="7578104083680115302">ชำระเงินบนเว็บไซต์และแอปในอุปกรณ์ต่างๆ ได้อย่างรวดเร็วด้วยบัตรที่คุณได้บันทึกไว้กับ Google</translation>
+<translation id="7588950540487816470">Physical Web</translation>
 <translation id="7592362899630581445">ใบรับรองของเซิร์ฟเวอร์ละเมิดข้อกำหนดชื่อ</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> ไม่สามารถดำเนินการกับคำขอนี้ในขณะนี้</translation>
 <translation id="7600965453749440009">ไม่ต้องแปลภาษา<ph name="LANGUAGE" /></translation>
@@ -604,6 +612,7 @@
 <translation id="780301667611848630">ไม่ ขอบคุณ</translation>
 <translation id="7805768142964895445">สถานะ</translation>
 <translation id="7813600968533626083">นำคำแนะนำสำหรับแบบฟอร์มออกจาก Chrome ไหม</translation>
+<translation id="7815407501681723534">พบ<ph name="SEARCH_RESULTS" /> <ph name="NUMBER_OF_RESULTS" /> รายการสำหรับ "<ph name="SEARCH_STRING" />"</translation>
 <translation id="785549533363645510">อย่างไรก็ตาม ระบบยังมองเห็นคุณ การเข้าสู่โหมดไม่ระบุตัวตนไม่ได้เป็นการซ่อนการท่องเว็บจากนายจ้างของคุณ ผู้ให้บริการอินเทอร์เน็ต หรือเว็บไซต์ที่คุณเข้าชม</translation>
 <translation id="7887683347370398519">ตรวจสอบ CVC และลองอีกครั้ง</translation>
 <translation id="7894616681410591072">อ๊ะ! คุณต้องได้รับอนุญาตจาก <ph name="NAME" /> เพื่อเข้าถึงหน้านี้</translation>
@@ -613,13 +622,12 @@
 <translation id="7938958445268990899">ใบรับรองของเซิร์ฟเวอร์ยังไม่ถูกต้อง</translation>
 <translation id="7951415247503192394">(32 บิต)</translation>
 <translation id="7956713633345437162">บุ๊กมาร์กบนมือถือ</translation>
-<translation id="7961015016161918242">ไม่เคย</translation>
+<translation id="7961015016161918242">ไม่ต้องเลย</translation>
 <translation id="7962083544045318153">รหัสข้อขัดข้อง <ph name="CRASH_LOCAL_ID" /></translation>
 <translation id="7983301409776629893">แปล <ph name="ORIGINAL_LANGUAGE" /> เป็น <ph name="TARGET_LANGUAGE" /> เสมอ</translation>
 <translation id="7995512525968007366">ไม่ได้ระบุ</translation>
 <translation id="8012647001091218357">เราไม่สามารถติดต่อผู้ปกครองของคุณได้ในขณะนี้ โปรดลองอีกครั้ง</translation>
 <translation id="8034522405403831421">หน้าเว็บนี้อยู่ในภาษา<ph name="SOURCE_LANGUAGE" /> ต้องการแปลเป็นภาษา<ph name="TARGET_LANGUAGE" />ไหม</translation>
-<translation id="8034955203865359138">ไม่พบข้อมูลประวัติการเข้าชม</translation>
 <translation id="8088680233425245692">การดูบทความล้มเหลว</translation>
 <translation id="8089520772729574115">ไม่ถึง 1 MB</translation>
 <translation id="8091372947890762290">กำลังรอการเปิดใช้งานบนเซิร์ฟเวอร์</translation>
@@ -645,6 +653,7 @@
 <translation id="8349305172487531364">แถบบุ๊กมาร์ก</translation>
 <translation id="8363502534493474904">ปิดโหมดบนเครื่องบิน</translation>
 <translation id="8364627913115013041">ไม่ได้ตั้งค่า</translation>
+<translation id="8380941800586852976">อันตราย</translation>
 <translation id="8412145213513410671">ข้อขัดข้อง (<ph name="CRASH_COUNT" />)</translation>
 <translation id="8412392972487953978">คุณต้องป้อนข้อความรหัสผ่านที่เหมือนกันสองครั้ง</translation>
 <translation id="8428213095426709021">การตั้งค่า</translation>
@@ -671,10 +680,9 @@
 <translation id="8730621377337864115">เสร็จสิ้น</translation>
 <translation id="8738058698779197622">หากต้องเริ่มการเชื่อมต่อที่ปลอดภัย นาฬิกาจะต้องตั้งค่าไว้อย่างถูกต้อง เนื่องจากใบรับรองที่เว็บไซต์ใช้เพื่อระบุตนเองจะใช้ได้เฉพาะช่วงเวลาหนึ่งเท่านั้น นาฬิกาของอุปกรณ์ไม่ถูกต้อง Chromium จึงไม่สามารถยืนยันใบรับรองเหล่านี้ได้</translation>
 <translation id="8740359287975076522">ไม่พบ&lt;abbr id="dnsDefinition"&gt;ที่อยู่ DNS&lt;/abbr&gt; ของ <ph name="HOST_NAME" /> กำลังวินิจฉัยปัญหา</translation>
-<translation id="8741995161408053644">บัญชี Google ของคุณอาจมีประวัติการท่องเว็บในรูปแบบอื่นๆ ที่ <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" /></translation>
 <translation id="8790007591277257123">&amp;ทำซ้ำการนำออก</translation>
 <translation id="8798099450830957504">ค่าเริ่มต้น</translation>
-<translation id="8804164990146287819">นโยบายส่วนบุคคล</translation>
+<translation id="8804164990146287819">นโยบายความเป็นส่วนตัว</translation>
 <translation id="8820817407110198400">บุ๊กมาร์ก</translation>
 <translation id="8834246243508017242">เปิดใช้การป้อนข้อความอัตโนมัติโดยใช้รายชื่อติดต่อ…</translation>
 <translation id="883848425547221593">บุ๊กมาร์กอื่นๆ</translation>

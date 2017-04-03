@@ -7,7 +7,6 @@
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_lookup.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/shared/immersive_fullscreen_controller.h"
@@ -33,15 +32,12 @@ void ImmersiveContextAsh::OnEnteringOrExitingImmersive(
   WmWindow* window = WmLookup::Get()->GetWindowForWidget(controller->widget());
   wm::WindowState* window_state = window->GetWindowState();
   // Auto hide the shelf in immersive fullscreen instead of hiding it.
-  window_state->set_shelf_mode_in_fullscreen(
-      entering ? ash::wm::WindowState::SHELF_AUTO_HIDE_VISIBLE
-               : ash::wm::WindowState::SHELF_HIDDEN);
-
+  window_state->set_hide_shelf_when_fullscreen(!entering);
   // Update the window's immersive mode state for the window manager.
   window_state->set_in_immersive_fullscreen(entering);
 
   for (WmWindow* root_window : WmShell::Get()->GetAllRootWindows())
-    root_window->GetRootWindowController()->GetShelf()->UpdateVisibilityState();
+    WmShelf::ForWindow(root_window)->UpdateVisibilityState();
 }
 
 gfx::Rect ImmersiveContextAsh::GetDisplayBoundsInScreen(views::Widget* widget) {
@@ -49,9 +45,10 @@ gfx::Rect ImmersiveContextAsh::GetDisplayBoundsInScreen(views::Widget* widget) {
   return window->GetDisplayNearestWindow().bounds();
 }
 
-void ImmersiveContextAsh::AddPointerWatcher(views::PointerWatcher* watcher,
-                                            bool wants_moves) {
-  WmShell::Get()->AddPointerWatcher(watcher, wants_moves);
+void ImmersiveContextAsh::AddPointerWatcher(
+    views::PointerWatcher* watcher,
+    views::PointerWatcherEventTypes events) {
+  WmShell::Get()->AddPointerWatcher(watcher, events);
 }
 
 void ImmersiveContextAsh::RemovePointerWatcher(views::PointerWatcher* watcher) {

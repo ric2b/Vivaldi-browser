@@ -8,9 +8,8 @@
 
 #include "base/logging.h"
 #include "build/build_config.h"
-#include "cc/output/compositor_frame.h"
-#include "cc/output/gl_frame_data.h"
 #include "cc/output/output_surface_client.h"
+#include "cc/output/output_surface_frame.h"
 #include "cc/resources/resource_provider.h"
 #include "components/display_compositor/compositor_overlay_candidate_validator.h"
 #include "content/browser/compositor/reflector_impl.h"
@@ -22,9 +21,6 @@
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
 
-using cc::CompositorFrame;
-using cc::GLFrameData;
-using cc::ResourceProvider;
 using gpu::gles2::GLES2Interface;
 
 namespace content {
@@ -133,19 +129,17 @@ void OffscreenBrowserCompositorOutputSurface::BindFramebuffer() {
   }
 }
 
-GLenum
-OffscreenBrowserCompositorOutputSurface::GetFramebufferCopyTextureFormat() {
-  return GLCopyTextureInternalFormat(kFboTextureFormat);
-}
-
 void OffscreenBrowserCompositorOutputSurface::SwapBuffers(
-    cc::CompositorFrame frame) {
+    cc::OutputSurfaceFrame frame) {
+  gfx::Size surface_size = frame.size;
+  DCHECK(surface_size == surface_size_);
+  gfx::Rect swap_rect = frame.sub_buffer_rect;
+
   if (reflector_) {
-    if (frame.gl_frame_data->sub_buffer_rect ==
-        gfx::Rect(frame.gl_frame_data->size))
-      reflector_->OnSourceSwapBuffers();
+    if (swap_rect == gfx::Rect(surface_size))
+      reflector_->OnSourceSwapBuffers(surface_size);
     else
-      reflector_->OnSourcePostSubBuffer(frame.gl_frame_data->sub_buffer_rect);
+      reflector_->OnSourcePostSubBuffer(swap_rect, surface_size);
   }
 
   // TODO(oshima): sync with the reflector's SwapBuffersComplete
@@ -158,8 +152,29 @@ void OffscreenBrowserCompositorOutputSurface::SwapBuffers(
   gpu::SyncToken sync_token;
   gl->GenUnverifiedSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
   context_provider_->ContextSupport()->SignalSyncToken(
-      sync_token, base::Bind(&OutputSurface::OnSwapBuffersComplete,
-                             weak_ptr_factory_.GetWeakPtr()));
+      sync_token,
+      base::Bind(
+          &OffscreenBrowserCompositorOutputSurface::OnSwapBuffersComplete,
+          weak_ptr_factory_.GetWeakPtr()));
+}
+
+bool OffscreenBrowserCompositorOutputSurface::IsDisplayedAsOverlayPlane()
+    const {
+  return false;
+}
+
+unsigned OffscreenBrowserCompositorOutputSurface::GetOverlayTextureId() const {
+  return 0;
+}
+
+bool OffscreenBrowserCompositorOutputSurface::SurfaceIsSuspendForRecycle()
+    const {
+  return false;
+}
+
+GLenum
+OffscreenBrowserCompositorOutputSurface::GetFramebufferCopyTextureFormat() {
+  return GLCopyTextureInternalFormat(kFboTextureFormat);
 }
 
 void OffscreenBrowserCompositorOutputSurface::OnReflectorChanged() {
@@ -167,6 +182,10 @@ void OffscreenBrowserCompositorOutputSurface::OnReflectorChanged() {
     reflector_changed_ = true;
     EnsureBackbuffer();
   }
+}
+
+void OffscreenBrowserCompositorOutputSurface::OnSwapBuffersComplete() {
+  client_->DidSwapBuffersComplete();
 }
 
 }  // namespace content

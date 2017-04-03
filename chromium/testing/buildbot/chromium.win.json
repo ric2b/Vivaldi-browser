@@ -29,6 +29,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "ash_content_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "ash_unittests"
       },
       {
@@ -257,6 +263,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "media_blink_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "media_mojo_unittests"
       },
       {
         "swarming": {
@@ -538,6 +550,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "ash_content_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "ash_unittests"
       },
       {
@@ -750,6 +768,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "media_blink_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "media_mojo_unittests"
       },
       {
         "swarming": {
@@ -980,6 +1004,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "ash_content_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "ash_unittests"
       },
       {
@@ -1101,12 +1131,6 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "disable_outdated_build_detector_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
         "test": "display_unittests"
       },
       {
@@ -1220,6 +1244,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "media_blink_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "media_mojo_unittests"
       },
       {
         "swarming": {
@@ -1455,6 +1485,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "ash_content_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "ash_unittests"
       },
       {
@@ -1565,12 +1601,6 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "disable_outdated_build_detector_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
         "test": "events_unittests"
       },
       {
@@ -1645,6 +1675,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "media_blink_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "media_mojo_unittests"
       },
       {
         "swarming": {

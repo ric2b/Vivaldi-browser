@@ -1,7 +1,8 @@
 /*
  * Copyright (C) 2013 Google, Inc.
  * Copyright (C) 1999 Lars Knoll (knoll@kde.org)
- * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011 Apple Inc. All rights reserved.
+ * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011 Apple Inc.
+ * All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -33,13 +34,17 @@ class ComputedStyle;
 // and the web expects that we expose "adjusted" values when
 // for those property/element pairs.
 class StyleAdjuster {
-    STATIC_ONLY(StyleAdjuster);
-public:
-    static void adjustComputedStyle(ComputedStyle& styleToAdjust, const ComputedStyle& parentStyle, Element*);
-    static void adjustStyleForEditing(ComputedStyle&);
-    static void adjustStyleForAlignment(ComputedStyle&, const ComputedStyle& parentStyle);
+  STATIC_ONLY(StyleAdjuster);
+
+ public:
+  static void adjustComputedStyle(ComputedStyle& styleToAdjust,
+                                  const ComputedStyle& parentStyle,
+                                  Element*);
+  static void adjustStyleForEditing(ComputedStyle&);
+  static void adjustStyleForAlignment(ComputedStyle&,
+                                      const ComputedStyle& parentStyle);
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // StyleAdjuster_h
+#endif  // StyleAdjuster_h

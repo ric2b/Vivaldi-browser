@@ -10,6 +10,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/debug/alias.h"
 #include "base/guid.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -32,8 +33,8 @@ namespace shell {
 
 namespace {
 
-const char kCatalogName[] = "mojo:catalog";
-const char kServiceManagerName[] = "mojo:shell";
+const char kCatalogName[] = "service:catalog";
+const char kServiceManagerName[] = "service:shell";
 const char kCapabilityClass_UserID[] = "shell:user_id";
 const char kCapabilityClass_ClientProcess[] = "shell:client_process";
 const char kCapabilityClass_InstanceName[] = "shell:instance_name";
@@ -133,13 +134,6 @@ class ServiceManager::Instance
   }
 
   ~Instance() override {
-    if (parent_)
-      parent_->RemoveChild(this);
-    // |children_| will be modified during destruction.
-    std::set<Instance*> children = children_;
-    for (auto* child : children)
-      service_manager_->OnInstanceError(child);
-
     // Shutdown all bindings before we close the runner. This way the process
     // should see the pipes closed and exit, as well as waking up any potential
     // sync/WaitForIncomingResponse().
@@ -148,6 +142,10 @@ class ServiceManager::Instance
       pid_receiver_binding_.Close();
     connectors_.CloseAllBindings();
     service_manager_bindings_.CloseAllBindings();
+
+    // Notify the ServiceManager that this Instance is really going away.
+    service_manager_->OnInstanceStopped(identity_);
+
     // Release |runner_| so that if we are called back to OnRunnerCompleted()
     // we know we're in the destructor.
     std::unique_ptr<NativeRunner> runner = std::move(runner_);
@@ -156,16 +154,17 @@ class ServiceManager::Instance
 
   Instance* parent() { return parent_; }
 
-  void AddChild(Instance* child) {
-    children_.insert(child);
+  void AddChild(std::unique_ptr<Instance> child) {
     child->parent_ = this;
+    children_.insert(std::make_pair(child.get(), std::move(child)));
   }
 
   void RemoveChild(Instance* child) {
     auto it = children_.find(child);
     DCHECK(it != children_.end());
+
+    // Deletes |child|.
     children_.erase(it);
-    child->parent_ = nullptr;
   }
 
   bool ConnectToService(std::unique_ptr<ConnectParams>* connect_params) {
@@ -327,7 +326,7 @@ class ServiceManager::Instance
         LOG(ERROR) << "Instance: " << identity_.name() << " attempting "
                    << "to register an instance for a process it created for "
                    << "target: " << target.name() << " without the "
-                   << "mojo:shell{client_process} capability class.";
+                   << "service:shell{client_process} capability class.";
         callback.Run(mojom::ConnectResult::ACCESS_DENIED,
                      mojom::kInheritUserID);
         return false;
@@ -376,7 +375,7 @@ class ServiceManager::Instance
       LOG(ERROR) << "Instance: " << identity_.name() << " attempting to "
                   << "connect to " << target.name() << " using Instance name: "
                   << target.instance() << " without the "
-                  << "mojo:shell{instance_name} capability class.";
+                  << "service:shell{instance_name} capability class.";
       callback.Run(mojom::ConnectResult::ACCESS_DENIED, mojom::kInheritUserID);
       return false;
 
@@ -417,9 +416,11 @@ class ServiceManager::Instance
   void OnConnectionLost(base::WeakPtr<shell::ServiceManager> service_manager) {
     // Any time a Connector is lost or we lose the Service connection, it
     // may have been the last pipe using this Instance. If so, clean up.
-    if (service_manager && connectors_.empty() && !service_) {
-      // Deletes |this|.
-      service_manager->OnInstanceError(this);
+    if (service_manager && !service_) {
+      if (connectors_.empty())
+        service_manager->OnInstanceError(this);
+      else
+        service_manager->OnInstanceUnreachable(this);
     }
   }
 
@@ -456,7 +457,7 @@ class ServiceManager::Instance
   mojo::BindingSet<mojom::ServiceManager> service_manager_bindings_;
   base::ProcessId pid_ = base::kNullProcessId;
   Instance* parent_ = nullptr;
-  std::set<Instance*> children_;
+  InstanceMap children_;
   base::WeakPtrFactory<Instance> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(Instance);
@@ -486,9 +487,9 @@ ServiceManager::ServiceManager(
       weak_ptr_factory_(this) {
   mojom::ServicePtr service;
   mojom::ServiceRequest request = mojo::GetProxy(&service);
-  Instance* instance = CreateInstance(
+  service_manager_instance_ = CreateInstance(
       Identity(), CreateServiceManagerIdentity(), GetPermissiveCapabilities());
-  instance->StartWithService(std::move(service));
+  service_manager_instance_->StartWithService(std::move(service));
   singletons_.insert(kServiceManagerName);
   service_context_.reset(new ServiceContext(this, std::move(request)));
 
@@ -497,11 +498,15 @@ ServiceManager::ServiceManager(
 }
 
 ServiceManager::~ServiceManager() {
-  TerminateServiceManagerConnections();
-  // Terminate any remaining instances.
-  while (!identity_to_instance_.empty())
-    OnInstanceError(identity_to_instance_.begin()->second);
-  identity_to_resolver_.clear();
+  // Ensure we tear down the ServiceManager instance last. This is to avoid
+  // hitting bindings DCHECKs, since the ServiceManager or Catalog may at any
+  // given time own in-flight responders for Instances' Connector requests.
+  std::unique_ptr<Instance> service_manager_instance;
+  auto iter = root_instances_.find(service_manager_instance_);
+  DCHECK(iter != root_instances_.end());
+  service_manager_instance = std::move(iter->second);
+
+  root_instances_.clear();
 }
 
 void ServiceManager::SetInstanceQuitCallback(
@@ -577,23 +582,37 @@ mojom::Resolver* ServiceManager::GetResolver(const Identity& identity) {
   return resolver;
 }
 
-void ServiceManager::TerminateServiceManagerConnections() {
-  Instance* instance = GetExistingInstance(CreateServiceManagerIdentity());
-  if (instance)
-    OnInstanceError(instance);
+void ServiceManager::OnInstanceError(Instance* instance) {
+  // We never clean up the ServiceManager's own instance.
+  if (instance == service_manager_instance_)
+    return;
+
+  const Identity identity = instance->identity();
+  identity_to_instance_.erase(identity);
+
+  if (instance->parent()) {
+    // Deletes |instance|.
+    instance->parent()->RemoveChild(instance);
+  } else {
+    auto it = root_instances_.find(instance);
+    DCHECK(it != root_instances_.end());
+
+    // Deletes |instance|.
+    root_instances_.erase(it);
+  }
 }
 
-void ServiceManager::OnInstanceError(Instance* instance) {
-  const Identity identity = instance->identity();
-  // Remove the Service Manager.
-  auto it = identity_to_instance_.find(identity);
-  DCHECK(it != identity_to_instance_.end());
-  identity_to_instance_.erase(it);
-  listeners_.ForAllPtrs(
-      [this, identity](mojom::ServiceManagerListener* listener) {
-        listener->OnServiceStopped(identity);
-      });
-  delete instance;
+void ServiceManager::OnInstanceUnreachable(Instance* instance) {
+  // If an Instance becomes unreachable, new connection requests for this
+  // identity will elicit a new Instance instantiation. The unreachable instance
+  // remains alive.
+  identity_to_instance_.erase(instance->identity());
+}
+
+void ServiceManager::OnInstanceStopped(const Identity& identity) {
+  listeners_.ForAllPtrs([identity](mojom::ServiceManagerListener* listener) {
+    listener->OnServiceStopped(identity);
+  });
   if (!instance_quit_callback_.is_null())
     instance_quit_callback_.Run(identity);
 }
@@ -657,7 +676,7 @@ void ServiceManager::NotifyPIDAvailable(const Identity& identity,
 bool ServiceManager::ConnectToExistingInstance(
     std::unique_ptr<ConnectParams>* params) {
   Instance* instance = GetExistingInstance((*params)->target());
-  return !!instance && instance->ConnectToService(params);
+  return instance && instance->ConnectToService(params);
 }
 
 ServiceManager::Instance* ServiceManager::CreateInstance(
@@ -665,18 +684,29 @@ ServiceManager::Instance* ServiceManager::CreateInstance(
     const Identity& target,
     const CapabilitySpec& spec) {
   CHECK(target.user_id() != mojom::kInheritUserID);
-  Instance* instance = new Instance(this, target, spec);
-  DCHECK(identity_to_instance_.find(target) ==
-         identity_to_instance_.end());
+
+  std::unique_ptr<Instance> instance(new Instance(this, target, spec));
+  Instance* raw_instance = instance.get();
+
   Instance* source_instance = GetExistingInstance(source);
   if (source_instance)
-    source_instance->AddChild(instance);
-  identity_to_instance_[target] = instance;
-  mojom::ServiceInfoPtr info = instance->CreateServiceInfo();
+    source_instance->AddChild(std::move(instance));
+  else
+    root_instances_.insert(std::make_pair(raw_instance, std::move(instance)));
+
+  // NOTE: |instance| has been passed elsewhere. Use |raw_instance| from this
+  // point forward. It's safe for the extent of this method.
+
+  auto result =
+      identity_to_instance_.insert(std::make_pair(target, raw_instance));
+  DCHECK(result.second);
+
+  mojom::ServiceInfoPtr info = raw_instance->CreateServiceInfo();
   listeners_.ForAllPtrs([&info](mojom::ServiceManagerListener* listener) {
     listener->OnServiceCreated(info.Clone());
   });
-  return instance;
+
+  return raw_instance;
 }
 
 void ServiceManager::AddListener(mojom::ServiceManagerListenerPtr listener) {
@@ -737,8 +767,16 @@ void ServiceManager::OnGotResolvedName(std::unique_ptr<ConnectParams> params,
       result->qualifier != GetNamePath(result->resolved_name)) {
     instance_name = result->qualifier;
   }
-  Identity target(params->target().name(), params->target().user_id(),
-                  instance_name);
+  // |result->capabilities| can be null when there is no manifest, e.g. for URL
+  // types not resolvable by the resolver.
+  CapabilitySpec capabilities = GetPermissiveCapabilities();
+  if (result->capabilities.has_value())
+    capabilities = result->capabilities.value();
+
+  const std::string user_id = HasClass(capabilities, kCapabilityClass_AllUsers)
+                                  ? base::GenerateGUID()
+                                  : params->target().user_id();
+  const Identity target(params->target().name(), user_id, instance_name);
   params->set_target(target);
 
   // It's possible that when this manifest request was issued, another one was
@@ -748,11 +786,6 @@ void ServiceManager::OnGotResolvedName(std::unique_ptr<ConnectParams> params,
     return;
 
   Identity source = params->source();
-  // |result->capabilities| can be null when there is no manifest, e.g. for URL
-  // types not resolvable by the resolver.
-  CapabilitySpec capabilities = GetPermissiveCapabilities();
-  if (result->capabilities.has_value())
-    capabilities = result->capabilities.value();
 
   // Services that request "all_users" class from the Service Manager are
   // allowed to field connection requests from any user. They also run with a
@@ -763,7 +796,6 @@ void ServiceManager::OnGotResolvedName(std::unique_ptr<ConnectParams> params,
   Identity source_identity_for_creation;
   if (HasClass(capabilities, kCapabilityClass_AllUsers)) {
     singletons_.insert(target.name());
-    target.set_user_id(base::GenerateGUID());
     source_identity_for_creation = CreateServiceManagerIdentity();
   } else {
     source_identity_for_creation = params->source();
@@ -796,6 +828,20 @@ void ServiceManager::OnGotResolvedName(std::unique_ptr<ConnectParams> params,
                        instance_name);
       CreateServiceWithFactory(factory, target.name(), std::move(request));
     } else {
+      Identity source_instance_identity;
+      base::debug::Alias(&has_source_instance);
+      base::FilePath package_path = result->package_path;
+      base::debug::Alias(&package_path);
+      base::debug::Alias(&source);
+      base::debug::Alias(&target);
+      if (source_instance)
+        source_instance_identity = source_instance->identity();
+      base::debug::Alias(&source_instance_identity);
+#if defined(GOOGLE_CHROME_BUILD)
+      // We do not currently want to hit this code path in production, but it's
+      // happening somehow. https://crbug.com/649673.
+      CHECK(false);
+#endif
       instance->StartWithFilePath(result->package_path);
     }
   }

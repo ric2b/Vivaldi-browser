@@ -188,6 +188,8 @@ KeyboardController::~KeyboardController() {
   }
   if (input_method_)
     input_method_->RemoveObserver(this);
+  FOR_EACH_OBSERVER(KeyboardControllerObserver, observer_list_,
+                    OnKeyboardClosed());
   ui_->SetController(nullptr);
 }
 
@@ -486,6 +488,8 @@ void KeyboardController::ShowAnimationFinished() {
 
 void KeyboardController::HideAnimationFinished() {
   ui_->HideKeyboardContainer(container_.get());
+  FOR_EACH_OBSERVER(KeyboardControllerObserver, observer_list_,
+                    OnKeyboardHidden());
 }
 
 }  // namespace keyboard

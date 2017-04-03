@@ -5,7 +5,7 @@
 #ifndef COMPONENTS_SYNC_DRIVER_USER_SELECTABLE_SYNC_TYPE_H_
 #define COMPONENTS_SYNC_DRIVER_USER_SELECTABLE_SYNC_TYPE_H_
 
-namespace sync_driver {
+namespace syncer {
 namespace user_selectable_type {
 
 // An enumeration of the sync datatypes that are explicitly exposed to the user
@@ -57,13 +57,15 @@ enum UserSelectableSyncType {
   // FAVICON_TRACKING,
   // ARTICLE,
   // SYNCED_NOTIFICATION_APP_INFO,
-  // ARC_PACKAGE
+  // ARC_PACKAGE,
+  // PRINTERS
+  // READING_LIST
 
   // Number of sync datatypes exposed to the user via checboxes in the UI.
   SELECTABLE_DATATYPE_COUNT = 11,
 };
 
 }  // namespace user_selectable_type
-}  // namespace sync_driver
+}  // namespace syncer
 
 #endif  // COMPONENTS_SYNC_DRIVER_USER_SELECTABLE_SYNC_TYPE_H_

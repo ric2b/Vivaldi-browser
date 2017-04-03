@@ -117,6 +117,15 @@ void IPCDataSourceImpl::Stop() {
   }
 }
 
+void IPCDataSourceImpl::Abort() {
+  {
+    base::AutoLock auto_lock(lock_);
+
+    if (read_operation_.get() != NULL)
+      ReadOperation::Finish(std::move(read_operation_), NULL, kReadError);
+  }
+}
+
 bool IPCDataSourceImpl::GetSize(int64_t* size) {
   *size = size_;
   return size_ >= 0;

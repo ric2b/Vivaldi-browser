@@ -420,7 +420,6 @@ WebInspector.DeviceModeView.prototype = {
             var ctx = canvas.getContext("2d");
             canvas.width = outlineRect.width;
             canvas.height = outlineRect.height;
-            ctx.imageSmoothingEnabled = false;
 
             var promise = Promise.resolve();
             if (this._model.outlineImage())

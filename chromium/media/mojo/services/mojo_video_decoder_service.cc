@@ -22,18 +22,15 @@
 namespace media {
 
 MojoVideoDecoderService::MojoVideoDecoderService(
-    mojo::InterfaceRequest<mojom::VideoDecoder> request,
     MojoMediaClient* mojo_media_client)
-    : binding_(this, std::move(request)),
-      mojo_media_client_(mojo_media_client),
-      weak_factory_(this) {
+    : mojo_media_client_(mojo_media_client), weak_factory_(this) {
   weak_this_ = weak_factory_.GetWeakPtr();
 }
 
 MojoVideoDecoderService::~MojoVideoDecoderService() {}
 
 void MojoVideoDecoderService::Construct(
-    mojom::VideoDecoderClientPtr client,
+    mojom::VideoDecoderClientAssociatedPtrInfo client,
     mojo::ScopedDataPipeConsumerHandle decoder_buffer_pipe) {
   DVLOG(1) << __FUNCTION__;
 
@@ -44,7 +41,7 @@ void MojoVideoDecoderService::Construct(
   decoder_ = mojo_media_client_->CreateVideoDecoder(
       base::ThreadTaskRunnerHandle::Get());
 
-  client_ = std::move(client);
+  client_.Bind(std::move(client));
 
   mojo_decoder_buffer_reader_.reset(
       new MojoDecoderBufferReader(std::move(decoder_buffer_pipe)));

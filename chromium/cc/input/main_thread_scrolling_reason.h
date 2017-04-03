@@ -22,13 +22,16 @@ struct MainThreadScrollingReason {
   enum : uint32_t { kThreadedScrollingDisabled = 1 << 2 };
   enum : uint32_t { kScrollbarScrolling = 1 << 3 };
   enum : uint32_t { kPageOverlay = 1 << 4 };
-  enum : uint32_t { kAnimatingScrollOnMainThread = 1 << 13 };
-  enum : uint32_t { kHasStickyPositionObjects = 1 << 14 };
+  // This bit is set when any of the other main thread scrolling reasons cause
+  // an input event to be handled on the main thread, and the main thread
+  // blink::ScrollAnimator is in the middle of running a scroll offset
+  // animation. Note that a scroll handled by the main thread can result in an
+  // animation running on the main thread or on the compositor thread.
+  enum : uint32_t { kHandlingScrollFromMainThread = 1 << 13 };
   enum : uint32_t { kCustomScrollbarScrolling = 1 << 15 };
 
   // Transient scrolling reasons. These are computed for each scroll begin.
   enum : uint32_t { kNonFastScrollableRegion = 1 << 5 };
-  enum : uint32_t { kEventHandlers = 1 << 6 };
   enum : uint32_t { kFailedHitTest = 1 << 7 };
   enum : uint32_t { kNoScrollingLayer = 1 << 8 };
   enum : uint32_t { kNotScrollable = 1 << 9 };
@@ -45,8 +48,8 @@ struct MainThreadScrollingReason {
     uint32_t reasons_set_by_main_thread =
         kNotScrollingOnMain | kHasBackgroundAttachmentFixedObjects |
         kHasNonLayerViewportConstrainedObjects | kThreadedScrollingDisabled |
-        kScrollbarScrolling | kPageOverlay | kAnimatingScrollOnMainThread |
-        kHasStickyPositionObjects | kCustomScrollbarScrolling;
+        kScrollbarScrolling | kPageOverlay | kHandlingScrollFromMainThread |
+        kCustomScrollbarScrolling;
     return (reasons & reasons_set_by_main_thread) == reasons;
   }
 
@@ -54,9 +57,9 @@ struct MainThreadScrollingReason {
   // compositor.
   static bool CompositorCanSetScrollReasons(uint32_t reasons) {
     uint32_t reasons_set_by_compositor =
-        kNonFastScrollableRegion | kEventHandlers | kFailedHitTest |
-        kNoScrollingLayer | kNotScrollable | kContinuingMainThreadScroll |
-        kNonInvertibleTransform | kPageBasedScrolling;
+        kNonFastScrollableRegion | kFailedHitTest | kNoScrollingLayer |
+        kNotScrollable | kContinuingMainThreadScroll | kNonInvertibleTransform |
+        kPageBasedScrolling;
     return (reasons & reasons_set_by_compositor) == reasons;
   }
 
@@ -87,18 +90,14 @@ struct MainThreadScrollingReason {
       tracedValue->AppendString("Scrollbar scrolling");
     if (reasons & MainThreadScrollingReason::kPageOverlay)
       tracedValue->AppendString("Page overlay");
-    if (reasons & MainThreadScrollingReason::kAnimatingScrollOnMainThread)
-      tracedValue->AppendString("Animating scroll on main thread");
-    if (reasons & MainThreadScrollingReason::kHasStickyPositionObjects)
-      tracedValue->AppendString("Has sticky position objects");
+    if (reasons & MainThreadScrollingReason::kHandlingScrollFromMainThread)
+      tracedValue->AppendString("Handling scroll from main thread");
     if (reasons & MainThreadScrollingReason::kCustomScrollbarScrolling)
       tracedValue->AppendString("Custom scrollbar scrolling");
 
     // Transient scrolling reasons.
     if (reasons & MainThreadScrollingReason::kNonFastScrollableRegion)
       tracedValue->AppendString("Non fast scrollable region");
-    if (reasons & MainThreadScrollingReason::kEventHandlers)
-      tracedValue->AppendString("Event handlers");
     if (reasons & MainThreadScrollingReason::kFailedHitTest)
       tracedValue->AppendString("Failed hit test");
     if (reasons & MainThreadScrollingReason::kNoScrollingLayer)

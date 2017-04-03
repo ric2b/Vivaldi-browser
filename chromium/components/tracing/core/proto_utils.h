@@ -10,6 +10,7 @@
 #include <type_traits>
 
 #include "base/logging.h"
+#include "components/tracing/tracing_export.h"
 
 namespace tracing {
 namespace v2 {
@@ -17,11 +18,71 @@ namespace proto {
 
 // See https://developers.google.com/protocol-buffers/docs/encoding wire types.
 
-enum : uint32_t {
+enum FieldType : uint32_t {
   kFieldTypeVarInt = 0,
   kFieldTypeFixed64 = 1,
   kFieldTypeLengthDelimited = 2,
   kFieldTypeFixed32 = 5,
+};
+
+class ProtoFieldDescriptor {
+ public:
+  enum Type {
+    TYPE_INVALID = 0,
+    TYPE_DOUBLE = 1,
+    TYPE_FLOAT = 2,
+    TYPE_INT64 = 3,
+    TYPE_UINT64 = 4,
+    TYPE_INT32 = 5,
+    TYPE_FIXED64 = 6,
+    TYPE_FIXED32 = 7,
+    TYPE_BOOL = 8,
+    TYPE_STRING = 9,
+    TYPE_MESSAGE = 11,
+    // TYPE_GROUP = 10 is not supported.
+    TYPE_BYTES = 12,
+    TYPE_UINT32 = 13,
+    TYPE_ENUM = 14,
+    TYPE_SFIXED32 = 15,
+    TYPE_SFIXED64 = 16,
+    TYPE_SINT32 = 17,
+    TYPE_SINT64 = 18,
+  };
+
+  ProtoFieldDescriptor(const char* name,
+                       Type type,
+                       uint32_t number,
+                       bool is_repeated)
+      : name_(name), type_(type), number_(number), is_repeated_(is_repeated) {
+  }
+
+  const char* name() const {
+    return name_;
+  }
+
+  Type type() const {
+    return type_;
+  }
+
+  uint32_t number() const {
+    return number_;
+  }
+
+  bool is_repeated() const {
+    return is_repeated_;
+  }
+
+  bool is_valid() const {
+    return type_ != Type::TYPE_INVALID;
+  }
+
+ private:
+  const char* const name_;
+  const Type type_;
+  const uint32_t number_;
+  const bool is_repeated_;
+
+  DISALLOW_COPY_AND_ASSIGN(ProtoFieldDescriptor);
 };
 
 // Maximum message size supported: 256 MiB (4 x 7-bit due to varint encoding).
@@ -93,6 +154,26 @@ void StaticAssertSingleBytePreamble() {
   static_assert(field_id < 16,
                 "Proto field id too big to fit in a single byte preamble");
 };
+
+// Parses a VarInt from the encoded buffer [start, end). |end| is STL-style and
+// points one byte past the end of buffer.
+// The parsed int value is stored in the output arg |value|. Returns a pointer
+// to the next unconsumed byte (so start < retval <= end).
+TRACING_EXPORT const uint8_t* ParseVarInt(const uint8_t* start,
+                                          const uint8_t* end,
+                                          uint64_t* value);
+
+// Parses a protobuf field and computes its id, type and value.
+// Returns a pointer to the next unconsumed byte (|start| < retval <= end) that
+// is either the beginning of the next field or the end of the parent message.
+// In the case of a kFieldTypeLengthDelimited field, |field_intvalue| will store
+// the length of the payload (either a string or a nested message). In this
+// case, the start of the payload will be at (return value) - |field_intvalue|.
+TRACING_EXPORT const uint8_t* ParseField(const uint8_t* start,
+                                         const uint8_t* end,
+                                         uint32_t* field_id,
+                                         FieldType* field_type,
+                                         uint64_t* field_intvalue);
 
 }  // namespace proto
 }  // namespace v2

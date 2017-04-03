@@ -32,15 +32,14 @@
 #define DocumentWebSocketChannel_h
 
 #include "bindings/core/v8/SourceLocation.h"
-#include "core/dom/ContextLifecycleObserver.h"
 #include "core/fileapi/Blob.h"
 #include "core/fileapi/FileError.h"
 #include "modules/ModulesExport.h"
 #include "modules/websockets/WebSocketChannel.h"
+#include "modules/websockets/WebSocketHandle.h"
+#include "modules/websockets/WebSocketHandleClient.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
-#include "public/platform/modules/websockets/WebSocketHandle.h"
-#include "public/platform/modules/websockets/WebSocketHandleClient.h"
 #include "wtf/Deque.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
@@ -54,108 +53,135 @@ namespace blink {
 
 class Document;
 class WebSocketHandshakeRequest;
-class WebSocketHandshakeRequestInfo;
-class WebSocketHandshakeResponseInfo;
 
 // This class is a WebSocketChannel subclass that works with a Document in a
 // DOMWindow (i.e. works in the main thread).
-class MODULES_EXPORT DocumentWebSocketChannel final : public WebSocketChannel, public WebSocketHandleClient, public ContextLifecycleObserver {
-    USING_GARBAGE_COLLECTED_MIXIN(DocumentWebSocketChannel);
-public:
-    // You can specify the source file and the line number information
-    // explicitly by passing the last parameter.
-    // In the usual case, they are set automatically and you don't have to
-    // pass it.
-    // Specify handle explicitly only in tests.
-    static DocumentWebSocketChannel* create(Document* document, WebSocketChannelClient* client, std::unique_ptr<SourceLocation> location, WebSocketHandle *handle = 0)
-    {
-        return new DocumentWebSocketChannel(document, client, std::move(location), handle);
-    }
-    ~DocumentWebSocketChannel() override;
+class MODULES_EXPORT DocumentWebSocketChannel final
+    : public WebSocketChannel,
+      public WebSocketHandleClient {
+ public:
+  // You can specify the source file and the line number information
+  // explicitly by passing the last parameter.
+  // In the usual case, they are set automatically and you don't have to
+  // pass it.
+  // Specify handle explicitly only in tests.
+  static DocumentWebSocketChannel* create(
+      Document* document,
+      WebSocketChannelClient* client,
+      std::unique_ptr<SourceLocation> location,
+      WebSocketHandle* handle = 0) {
+    return new DocumentWebSocketChannel(document, client, std::move(location),
+                                        handle);
+  }
+  ~DocumentWebSocketChannel() override;
 
-    // WebSocketChannel functions.
-    bool connect(const KURL&, const String& protocol) override;
-    void send(const CString& message) override;
-    void send(const DOMArrayBuffer&, unsigned byteOffset, unsigned byteLength) override;
-    void send(PassRefPtr<BlobDataHandle>) override;
-    void sendTextAsCharVector(std::unique_ptr<Vector<char>> data) override;
-    void sendBinaryAsCharVector(std::unique_ptr<Vector<char>> data) override;
-    // Start closing handshake. Use the CloseEventCodeNotSpecified for the code
-    // argument to omit payload.
-    void close(int code, const String& reason) override;
-    void fail(const String& reason, MessageLevel, std::unique_ptr<SourceLocation>) override;
-    void disconnect() override;
+  // WebSocketChannel functions.
+  bool connect(const KURL&, const String& protocol) override;
+  void send(const CString& message) override;
+  void send(const DOMArrayBuffer&,
+            unsigned byteOffset,
+            unsigned byteLength) override;
+  void send(PassRefPtr<BlobDataHandle>) override;
+  void sendTextAsCharVector(std::unique_ptr<Vector<char>> data) override;
+  void sendBinaryAsCharVector(std::unique_ptr<Vector<char>> data) override;
+  // Start closing handshake. Use the CloseEventCodeNotSpecified for the code
+  // argument to omit payload.
+  void close(int code, const String& reason) override;
+  void fail(const String& reason,
+            MessageLevel,
+            std::unique_ptr<SourceLocation>) override;
+  void disconnect() override;
 
-    DECLARE_VIRTUAL_TRACE();
+  DECLARE_VIRTUAL_TRACE();
 
-private:
-    class BlobLoader;
-    class Message;
+ private:
+  class BlobLoader;
+  class Message;
 
-    enum MessageType {
-        MessageTypeText,
-        MessageTypeBlob,
-        MessageTypeArrayBuffer,
-        MessageTypeTextAsCharVector,
-        MessageTypeBinaryAsCharVector,
-        MessageTypeClose,
-    };
+  enum MessageType {
+    MessageTypeText,
+    MessageTypeBlob,
+    MessageTypeArrayBuffer,
+    MessageTypeTextAsCharVector,
+    MessageTypeBinaryAsCharVector,
+    MessageTypeClose,
+  };
 
-    struct ReceivedMessage {
-        bool isMessageText;
-        Vector<char> data;
-    };
+  struct ReceivedMessage {
+    bool isMessageText;
+    Vector<char> data;
+  };
 
-    DocumentWebSocketChannel(Document*, WebSocketChannelClient*, std::unique_ptr<SourceLocation>, WebSocketHandle*);
-    void sendInternal(WebSocketHandle::MessageType, const char* data, size_t totalSize, uint64_t* consumedBufferedAmount);
-    void processSendQueue();
-    void flowControlIfNecessary();
-    void failAsError(const String& reason) { fail(reason, ErrorMessageLevel, m_locationAtConstruction->clone()); }
-    void abortAsyncOperations();
-    void handleDidClose(bool wasClean, unsigned short code, const String& reason);
-    Document* document();
+  DocumentWebSocketChannel(Document*,
+                           WebSocketChannelClient*,
+                           std::unique_ptr<SourceLocation>,
+                           WebSocketHandle*);
+  void sendInternal(WebSocketHandle::MessageType,
+                    const char* data,
+                    size_t totalSize,
+                    uint64_t* consumedBufferedAmount);
+  void processSendQueue();
+  void flowControlIfNecessary();
+  void failAsError(const String& reason) {
+    fail(reason, ErrorMessageLevel, m_locationAtConstruction->clone());
+  }
+  void abortAsyncOperations();
+  void handleDidClose(bool wasClean, unsigned short code, const String& reason);
+  Document* document();
 
-    // WebSocketHandleClient functions.
-    void didConnect(WebSocketHandle*, const WebString& selectedProtocol, const WebString& extensions) override;
-    void didStartOpeningHandshake(WebSocketHandle*, const WebSocketHandshakeRequestInfo&) override;
-    void didFinishOpeningHandshake(WebSocketHandle*, const WebSocketHandshakeResponseInfo&) override;
-    void didFail(WebSocketHandle*, const WebString& message) override;
-    void didReceiveData(WebSocketHandle*, bool fin, WebSocketHandle::MessageType, const char* data, size_t /* size */) override;
-    void didClose(WebSocketHandle*, bool wasClean, unsigned short code, const WebString& reason) override;
-    void didReceiveFlowControl(WebSocketHandle*, int64_t quota) override;
-    void didStartClosingHandshake(WebSocketHandle*) override;
+  // WebSocketHandleClient functions.
+  void didConnect(WebSocketHandle*,
+                  const String& selectedProtocol,
+                  const String& extensions) override;
+  void didStartOpeningHandshake(WebSocketHandle*,
+                                PassRefPtr<WebSocketHandshakeRequest>) override;
+  void didFinishOpeningHandshake(WebSocketHandle*,
+                                 const WebSocketHandshakeResponse*) override;
+  void didFail(WebSocketHandle*, const String& message) override;
+  void didReceiveData(WebSocketHandle*,
+                      bool fin,
+                      WebSocketHandle::MessageType,
+                      const char* data,
+                      size_t) override;
+  void didClose(WebSocketHandle*,
+                bool wasClean,
+                unsigned short code,
+                const String& reason) override;
+  void didReceiveFlowControl(WebSocketHandle*, int64_t quota) override;
+  void didStartClosingHandshake(WebSocketHandle*) override;
 
-    // Methods for BlobLoader.
-    void didFinishLoadingBlob(DOMArrayBuffer*);
-    void didFailLoadingBlob(FileError::ErrorCode);
+  // Methods for BlobLoader.
+  void didFinishLoadingBlob(DOMArrayBuffer*);
+  void didFailLoadingBlob(FileError::ErrorCode);
 
-    // m_handle is a handle of the connection.
-    // m_handle == 0 means this channel is closed.
-    std::unique_ptr<WebSocketHandle> m_handle;
+  // m_handle is a handle of the connection.
+  // m_handle == 0 means this channel is closed.
+  std::unique_ptr<WebSocketHandle> m_handle;
 
-    // m_client can be deleted while this channel is alive, but this class
-    // expects that disconnect() is called before the deletion.
-    Member<WebSocketChannelClient> m_client;
-    KURL m_url;
-    // m_identifier > 0 means calling scriptContextExecution() returns a Document.
-    unsigned long m_identifier;
-    Member<BlobLoader> m_blobLoader;
-    HeapDeque<Member<Message>> m_messages;
-    Vector<char> m_receivingMessageData;
+  // m_client can be deleted while this channel is alive, but this class
+  // expects that disconnect() is called before the deletion.
+  Member<WebSocketChannelClient> m_client;
+  KURL m_url;
+  // m_identifier > 0 means calling scriptContextExecution() returns a Document.
+  unsigned long m_identifier;
+  Member<BlobLoader> m_blobLoader;
+  HeapDeque<Member<Message>> m_messages;
+  Vector<char> m_receivingMessageData;
+  Member<Document> m_document;
 
-    bool m_receivingMessageTypeIsText;
-    uint64_t m_sendingQuota;
-    uint64_t m_receivedDataSizeForFlowControl;
-    size_t m_sentSizeOfTopMessage;
+  bool m_receivingMessageTypeIsText;
+  uint64_t m_sendingQuota;
+  uint64_t m_receivedDataSizeForFlowControl;
+  size_t m_sentSizeOfTopMessage;
 
-    std::unique_ptr<SourceLocation> m_locationAtConstruction;
-    RefPtr<WebSocketHandshakeRequest> m_handshakeRequest;
+  std::unique_ptr<SourceLocation> m_locationAtConstruction;
+  RefPtr<WebSocketHandshakeRequest> m_handshakeRequest;
 
-    static const uint64_t receivedDataSizeForFlowControlHighWaterMark = 1 << 15;
+  static const uint64_t receivedDataSizeForFlowControlHighWaterMark = 1 << 15;
 };
 
 std::ostream& operator<<(std::ostream&, const DocumentWebSocketChannel*);
 
-} // namespace blink
+}  // namespace blink
 
-#endif // DocumentWebSocketChannel_h
+#endif  // DocumentWebSocketChannel_h

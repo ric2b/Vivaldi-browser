@@ -253,8 +253,8 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
     @Override
     public boolean shouldEmphasizeHttpsScheme() {
         int securityLevel = getSecurityLevel();
-        return securityLevel == ConnectionSecurityLevel.SECURITY_ERROR
-                || securityLevel == ConnectionSecurityLevel.SECURITY_POLICY_WARNING;
+        return securityLevel == ConnectionSecurityLevel.DANGEROUS
+                || securityLevel == ConnectionSecurityLevel.SECURE_WITH_POLICY_INSTALLED_CERT;
     }
 
     @Override
@@ -342,7 +342,7 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
                 setUrlBarHidden(false);
             }
         }
-        showOfflineBoltIfNecessary();
+        updateSecurityIcon(getSecurityLevel());
     }
 
     @Override
@@ -497,43 +497,34 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
 
         mSecurityIconType = securityLevel;
 
-        if (securityLevel == ConnectionSecurityLevel.NONE) {
-            mAnimDelegate.hideSecurityButton();
-        } else {
-            boolean isSmallDevice = !DeviceFormFactor.isTablet(getContext());
-            int id = LocationBarLayout.getSecurityIconResource(securityLevel, isSmallDevice);
-            if (id == 0) {
-                mSecurityButton.setImageDrawable(null);
-            } else {
-                // ImageView#setImageResource is no-op if given resource is the current one.
-                mSecurityButton.setImageResource(id);
-                mSecurityButton.setTint(
-                        LocationBarLayout.getColorStateList(securityLevel, getToolbarDataProvider(),
-                                getResources(), false /* omnibox is not opaque */));
-            }
-            mAnimDelegate.showSecurityButton();
-        }
-        mUrlBar.emphasizeUrl();
-        mUrlBar.invalidate();
-    }
-
-    private void showOfflineBoltIfNecessary() {
+        boolean isSmallDevice = !DeviceFormFactor.isTablet(getContext());
         boolean isOfflinePage = getCurrentTab() != null && getCurrentTab().isOfflinePage();
-        if (isOfflinePage == mShowsOfflinePage) return;
+
+        int id = LocationBarLayout.getSecurityIconResource(
+                securityLevel, isSmallDevice, isOfflinePage);
+        boolean showSecurityButton = true;
+        if (id == 0) {
+            // Hide the button if we don't have an actual icon to display.
+            showSecurityButton = false;
+            mSecurityButton.setImageDrawable(null);
+        } else {
+            // ImageView#setImageResource is no-op if given resource is the current one.
+            mSecurityButton.setImageResource(id);
+            mSecurityButton.setTint(
+                    LocationBarLayout.getColorStateList(securityLevel, getToolbarDataProvider(),
+                            getResources(), false /* omnibox is not opaque */));
+        }
 
         mShowsOfflinePage = isOfflinePage;
-        if (mShowsOfflinePage) {
-            // If we are showing an offline page, immediately update icon to offline bolt.
-            TintedDrawable bolt = TintedDrawable.constructTintedDrawable(
-                    getResources(), R.drawable.offline_bolt);
-            bolt.setTint(mUseDarkColors ? mDarkModeTint : mLightModeTint);
-            mSecurityButton.setImageDrawable(bolt);
+
+        if (showSecurityButton) {
             mAnimDelegate.showSecurityButton();
         } else {
-            // We are hiding the offline page so connection security information will change.
-            mSecurityIconType = ConnectionSecurityLevel.NONE;
             mAnimDelegate.hideSecurityButton();
         }
+
+        mUrlBar.emphasizeUrl();
+        mUrlBar.invalidate();
     }
 
     /**

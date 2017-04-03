@@ -38,9 +38,8 @@
  * @param {!NetworkAgent.LoaderId} loaderId
  * @param {!WebInspector.ResourceType} type
  * @param {string} mimeType
- * @param {boolean=} isHidden
  */
-WebInspector.Resource = function(target, request, url, documentURL, frameId, loaderId, type, mimeType, isHidden)
+WebInspector.Resource = function(target, request, url, documentURL, frameId, loaderId, type, mimeType)
 {
     WebInspector.SDKObject.call(this, target);
     this._request = request;
@@ -50,51 +49,12 @@ WebInspector.Resource = function(target, request, url, documentURL, frameId, loa
     this._loaderId = loaderId;
     this._type = type || WebInspector.resourceTypes.Other;
     this._mimeType = mimeType;
-    this._isHidden = isHidden;
 
     /** @type {?string} */ this._content;
     /** @type {boolean} */ this._contentEncoded;
     this._pendingContentCallbacks = [];
     if (this._request && !this._request.finished)
         this._request.addEventListener(WebInspector.NetworkRequest.Events.FinishedLoading, this._requestFinished, this);
-}
-
-/**
- * @param {?string} content
- * @param {string} mimeType
- * @param {boolean} contentEncoded
- * @param {?string=} charset
- * @return {?string}
- */
-WebInspector.Resource.contentAsDataURL = function(content, mimeType, contentEncoded, charset)
-{
-    const maxDataUrlSize = 1024 * 1024;
-    if (content === null || content.length > maxDataUrlSize)
-        return null;
-
-    return "data:" + mimeType + (charset ? ";charset=" + charset : "") + (contentEncoded ? ";base64" : "") + "," + content;
-}
-
-/**
- * @param {string} url
- * @param {string} mimeType
- * @param {!WebInspector.ContentProvider} contentProvider
- * @param {!Element} image
- */
-WebInspector.Resource.populateImageSource = function(url, mimeType, contentProvider, image)
-{
-    /**
-     * @param {?string} content
-     */
-    function onResourceContent(content)
-    {
-        var imageSrc = WebInspector.Resource.contentAsDataURL(content, mimeType, true);
-        if (imageSrc === null)
-            imageSrc = url;
-        image.src = imageSrc;
-    }
-
-    contentProvider.requestContent().then(onResourceContent);
 }
 
 WebInspector.Resource.prototype = {
@@ -263,7 +223,19 @@ WebInspector.Resource.prototype = {
      */
     populateImageSource: function(image)
     {
-        WebInspector.Resource.populateImageSource(this._url, this._mimeType, this, image);
+        /**
+         * @param {?string} content
+         * @this {WebInspector.Resource}
+         */
+        function onResourceContent(content)
+        {
+            var imageSrc = WebInspector.ContentProvider.contentAsDataURL(content, this._mimeType, true);
+            if (imageSrc === null)
+                imageSrc = this._url;
+            image.src = imageSrc;
+        }
+
+        this.requestContent().then(onResourceContent.bind(this));
     },
 
     _requestFinished: function()
@@ -338,15 +310,6 @@ WebInspector.Resource.prototype = {
 
         this.target().pageAgent().getResourceContent(this.frameId, this.url, resourceContentLoaded.bind(this));
     },
-
-    /**
-     * @return {boolean}
-     */
-    isHidden: function()
-    {
-        return !!this._isHidden;
-    },
-
 
     /**
      * @return {boolean}

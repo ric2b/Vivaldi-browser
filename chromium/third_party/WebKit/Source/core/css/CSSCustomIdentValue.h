@@ -7,46 +7,51 @@
 
 #include "core/CSSPropertyNames.h"
 #include "core/css/CSSValue.h"
+#include "wtf/text/AtomicString.h"
 
 namespace blink {
 
 class CSSCustomIdentValue : public CSSValue {
-public:
-    static CSSCustomIdentValue* create(const String& str)
-    {
-        return new CSSCustomIdentValue(str);
-    }
+ public:
+  static CSSCustomIdentValue* create(const AtomicString& str) {
+    return new CSSCustomIdentValue(str);
+  }
 
-    // TODO(sashab, timloh): Remove this and lazily parse the CSSPropertyID in isKnownPropertyID().
-    static CSSCustomIdentValue* create(CSSPropertyID id)
-    {
-        return new CSSCustomIdentValue(id);
-    }
+  // TODO(sashab, timloh): Remove this and lazily parse the CSSPropertyID in
+  // isKnownPropertyID().
+  static CSSCustomIdentValue* create(CSSPropertyID id) {
+    return new CSSCustomIdentValue(id);
+  }
 
-    String value() const { ASSERT(!isKnownPropertyID()); return m_string; }
-    bool isKnownPropertyID() const { return m_propertyId != CSSPropertyInvalid; }
-    CSSPropertyID valueAsPropertyID() const { ASSERT(isKnownPropertyID()); return m_propertyId; }
+  AtomicString value() const {
+    DCHECK(!isKnownPropertyID());
+    return m_string;
+  }
+  bool isKnownPropertyID() const { return m_propertyId != CSSPropertyInvalid; }
+  CSSPropertyID valueAsPropertyID() const {
+    DCHECK(isKnownPropertyID());
+    return m_propertyId;
+  }
 
-    String customCSSText() const;
+  String customCSSText() const;
 
-    bool equals(const CSSCustomIdentValue& other) const
-    {
-        return isKnownPropertyID() ? m_propertyId == other.m_propertyId : m_string == other.m_string;
-    }
+  bool equals(const CSSCustomIdentValue& other) const {
+    return isKnownPropertyID() ? m_propertyId == other.m_propertyId
+                               : m_string == other.m_string;
+  }
 
-    DECLARE_TRACE_AFTER_DISPATCH();
+  DECLARE_TRACE_AFTER_DISPATCH();
 
-private:
-    CSSCustomIdentValue(const String&);
-    CSSCustomIdentValue(CSSPropertyID);
+ private:
+  explicit CSSCustomIdentValue(const AtomicString&);
+  explicit CSSCustomIdentValue(CSSPropertyID);
 
-    // TODO(sashab): Change this to an AtomicString.
-    String m_string;
-    CSSPropertyID m_propertyId;
+  AtomicString m_string;
+  CSSPropertyID m_propertyId;
 };
 
 DEFINE_CSS_VALUE_TYPE_CASTS(CSSCustomIdentValue, isCustomIdentValue());
 
-} // namespace blink
+}  // namespace blink
 
-#endif // CSSCustomIdentValue_h
+#endif  // CSSCustomIdentValue_h

@@ -9,22 +9,22 @@ import android.app.Activity;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.payments.PaymentRequestImpl.PaymentRequestDismissObserver;
 import org.chromium.content.browser.ContentViewCore;
-import org.chromium.content.browser.InterfaceRegistry.ImplementationFactory;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.mojo.system.MojoException;
-import org.chromium.mojom.payments.PaymentDetails;
-import org.chromium.mojom.payments.PaymentErrorReason;
-import org.chromium.mojom.payments.PaymentMethodData;
-import org.chromium.mojom.payments.PaymentOptions;
-import org.chromium.mojom.payments.PaymentRequest;
-import org.chromium.mojom.payments.PaymentRequestClient;
+import org.chromium.payments.mojom.PaymentDetails;
+import org.chromium.payments.mojom.PaymentErrorReason;
+import org.chromium.payments.mojom.PaymentMethodData;
+import org.chromium.payments.mojom.PaymentOptions;
+import org.chromium.payments.mojom.PaymentRequest;
+import org.chromium.payments.mojom.PaymentRequestClient;
+import org.chromium.services.shell.InterfaceFactory;
 import org.chromium.ui.base.WindowAndroid;
 
 /**
  * Creates instances of PaymentRequest.
  */
-public class PaymentRequestFactory implements ImplementationFactory<PaymentRequest>,
-        PaymentRequestDismissObserver {
+public class PaymentRequestFactory
+        implements InterfaceFactory<PaymentRequest>, PaymentRequestDismissObserver {
     private final WebContents mWebContents;
     private boolean mIsPaymentRequestRunning;
 

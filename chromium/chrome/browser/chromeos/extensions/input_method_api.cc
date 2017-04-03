@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/extensions/input_method_api.h"
 
 #include <stddef.h>
+#include <memory>
 #include <set>
 #include <string>
 #include <utility>
@@ -30,7 +31,7 @@
 #include "chrome/common/extensions/api/input_method_private.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/chromeos_switches.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
 #include "extensions/browser/extension_function_registry.h"
 #include "extensions/browser/extension_system.h"
@@ -142,11 +143,11 @@ InputMethodPrivateGetInputMethodsFunction::Run() {
   for (size_t i = 0; i < input_methods->size(); ++i) {
     const chromeos::input_method::InputMethodDescriptor& input_method =
         (*input_methods)[i];
-    base::DictionaryValue* val = new base::DictionaryValue();
+    auto val = base::MakeUnique<base::DictionaryValue>();
     val->SetString("id", input_method.id());
     val->SetString("name", util->GetInputMethodLongName(input_method));
     val->SetString("indicator", util->GetInputMethodShortName(input_method));
-    output->Append(val);
+    output->Append(std::move(val));
   }
   return RespondNow(OneArgument(std::move(output)));
 #endif
@@ -211,7 +212,7 @@ InputMethodPrivateGetEncryptSyncEnabledFunction::Run() {
 #if !defined(OS_CHROMEOS)
   EXTENSION_FUNCTION_VALIDATE(false);
 #else
-  ProfileSyncService* profile_sync_service =
+  browser_sync::ProfileSyncService* profile_sync_service =
       ProfileSyncServiceFactory::GetForProfile(
           Profile::FromBrowserContext(browser_context()));
   if (!profile_sync_service)
@@ -289,8 +290,8 @@ InputMethodPrivateOpenOptionsPageFunction::Run() {
     if (!options_page_url.is_empty()) {
       Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
       content::OpenURLParams url_params(options_page_url, content::Referrer(),
-                                        SINGLETON_TAB, ui::PAGE_TRANSITION_LINK,
-                                        false);
+                                        WindowOpenDisposition::SINGLETON_TAB,
+                                        ui::PAGE_TRANSITION_LINK, false);
       browser->OpenURL(url_params);
     }
   }

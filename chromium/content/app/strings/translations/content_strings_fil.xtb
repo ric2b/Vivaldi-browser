@@ -1,12 +1,12 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fil">
-<translation id="1014825444426747588">blangko</translation>
 <translation id="1018939186200882850">item sa menu</translation>
 <translation id="1020833440720551630">i-mute ang audio track</translation>
 <translation id="10623998915015855">button sa pag-toggle</translation>
 <translation id="1088086359088493902">Segundo</translation>
 <translation id="1171774979989969504">Mangyaring magpasok ng email address.</translation>
+<translation id="1178581264944972037">I-pause</translation>
 <translation id="1188858454923323853">complementary</translation>
 <translation id="1206619573307042055">marquee</translation>
 <translation id="1206693055195146388">slider</translation>
@@ -25,6 +25,7 @@
 <translation id="1822429046913737220">AM/PM</translation>
 <translation id="1832974991323546415">i-play sa malayuang device</translation>
 <translation id="1842960171412779397">piliin</translation>
+<translation id="1854180393107901205">Ihinto ang pagka-cast</translation>
 <translation id="1880518467580572141">balangkas</translation>
 <translation id="1921819250265091946">dd</translation>
 <translation id="1930711995431081526">katayuan</translation>
@@ -39,6 +40,7 @@
 <translation id="2507943997699731163">Pakipunan ang field na ito.</translation>
 <translation id="2508569020611168319">listahan ng tab</translation>
 <translation id="2548326553472216322">Walang kamakailang mga paghahanap</translation>
+<translation id="2561842179657104141">magpakita ng higit pang kontrol sa media</translation>
 <translation id="2572483411312390101">i-play</translation>
 <translation id="2613802280814924224">Mangyaring maglagay ng isang wastong value. Ang pinakamalapit na wastong value ay <ph name="VALID_VALUE" />.</translation>
 <translation id="2653659639078652383">Isumite</translation>
@@ -71,6 +73,7 @@
 <translation id="3808586225841795776">termino</translation>
 <translation id="3822383571486410024">Pakihabaan ang text na ito hanggang <ph name="MIN_CHARACTERS" /> (na) character o higit pa (kasalukuyan kang gumagamit ng <ph name="CURRENT_LENGTH" /> (na) character).</translation>
 <translation id="383465348367842624">Hindi dapat naglalaman ng simbolong '<ph name="INVALIDCHARACTER" />' ang bahagi bago ang '<ph name="ATSIGN" />.'</translation>
+<translation id="3846214748874656680">Lumabas sa fullscreen</translation>
 <translation id="3924558731517983934">application</translation>
 <translation id="3960700977367013758">scroll bar</translation>
 <translation id="4103419683916926126">Milliseconds</translation>
@@ -91,6 +94,7 @@
 <translation id="479989351350248267">search</translation>
 <translation id="4812940957355064477">Mangyaring maglagay ng numero.</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> ang napili</translation>
+<translation id="4992066212339426712">I-unmute</translation>
 <translation id="49969490063480558">Mangyaring maglagay ng isang bahagi pagkatapos ng '<ph name="ATSIGN" />.' Hindi kumpleto ang '<ph name="INVALIDADDRESS" />.'</translation>
 <translation id="5034860022980953847">indicator ng pag-usad</translation>
 <translation id="5048533449481078685">Ilista ang marker</translation>
@@ -105,13 +109,17 @@
 <translation id="5468998798572797635">lumabas sa full screen</translation>
 <translation id="5476505524087279545">i-uncheck</translation>
 <translation id="5516424706154626233">picker ng petsa</translation>
+<translation id="5537725057119320332">I-cast</translation>
 <translation id="5546461542133609677">i-unmute</translation>
 <translation id="561939826962581046">oras</translation>
 <translation id="5641012560118721995">i-pause ang pag-playback</translation>
 <translation id="5643186887447432888">button</translation>
+<translation id="5677946354068040947">higit pang opsyon</translation>
+<translation id="57838592816432529">I-mute</translation>
 <translation id="583281660410589416">Hindi-alam</translation>
 <translation id="5843503607508392247">Iba pa...</translation>
 <translation id="5860033963881614850">Naka-off</translation>
+<translation id="588258955323874662">Fullscreen</translation>
 <translation id="5939518447894949180">I-reset</translation>
 <translation id="5944544982112848342">2048 (Pinakamataas na Marka)</translation>
 <translation id="5966707198760109579">Linggo</translation>
@@ -134,12 +142,14 @@
 <translation id="6692633176391053278">stepper</translation>
 <translation id="6739588121953935928">ruler</translation>
 <translation id="6755330956360078551">tooltip</translation>
+<translation id="6790428901817661496">I-play</translation>
 <translation id="6820355525329141109">Hindi ma-load ang plugin.</translation>
 <translation id="6843725295806269523">i-mute</translation>
 <translation id="6845533974506654842">pindutin</translation>
 <translation id="6853785296079745596">itago ang mga nakasarang caption</translation>
 <translation id="6885760532393684712">direktoryo</translation>
 <translation id="6934078000481955284">blockquote</translation>
+<translation id="6941933287844615239">i-download ang media</translation>
 <translation id="7057186640035488495">oras ng pelikula</translation>
 <translation id="709897737746224366">Pakitugma ang hiniling na format.</translation>
 <translation id="7223624360433298498">lumipas na oras</translation>
@@ -148,6 +158,7 @@
 <translation id="7364796246159120393">Pumili ng File</translation>
 <translation id="739024184232394898">Iba pa...</translation>
 <translation id="7491962110804786152">tab</translation>
+<translation id="7514365320538308">I-download</translation>
 <translation id="7673697353781729403">Oras</translation>
 <translation id="7720026100085573005">natitirang oras</translation>
 <translation id="7740016676195725605">ihinto ang pagpapakita ng mga nakasarang caption</translation>
@@ -164,6 +175,7 @@
 <translation id="819205353528511139">i-play ang pelikula sa full screen mode</translation>
 <translation id="8199524924445686405">yyyy</translation>
 <translation id="8244226242650769279">mapa ng imahe</translation>
+<translation id="8284326494547611709">Mga Caption</translation>
 <translation id="835897206747267392">Di-wastong halaga.</translation>
 <translation id="838869780401515933">I-tsek</translation>
 <translation id="8433900881053900389">toolbar</translation>

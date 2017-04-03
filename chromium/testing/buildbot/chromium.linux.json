@@ -1249,12 +1249,12 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "android_devices": "4",
+              "android_devices": "6",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
           ],
-          "hard_timeout": 960,
+          "hard_timeout": 1500,
           "shards": 1
         }
       }
@@ -1292,12 +1292,6 @@
       },
       {
         "test": "webapk_shell_apk_junit_tests"
-      }
-    ],
-    "scripts": [
-      {
-        "name": "webview_licenses",
-        "script": "webview_licenses.py"
       }
     ]
   },
@@ -1457,12 +1451,6 @@
       {
         "test": "webapk_client_junit_tests"
       }
-    ],
-    "scripts": [
-      {
-        "name": "webview_licenses",
-        "script": "webview_licenses.py"
-      }
     ]
   },
   "Blimp Linux (dbg)": {
@@ -1474,6 +1462,9 @@
         "test": "blimp_browsertests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": false
+        },
         "test": "blimp_unittests"
       }
     ]
@@ -1525,7 +1516,6 @@
       {
         "args": [
           "--enable-local-file-accesses",
-          "--enable-cma-media-pipeline",
           "--ozone-platform=cast",
           "--no-sandbox",
           "--test-launcher-jobs=1"
@@ -1591,6 +1581,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "media_blink_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "media_mojo_unittests"
       },
       {
         "swarming": {
@@ -1698,6 +1694,18 @@
         "test": "browser_tests"
       },
       {
+        "args": [
+          "--enable-browser-side-navigation",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/browser-side-navigation.linux.browser_tests.filter"
+        ],
+        "name": "browser_side_navigation_browser_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "shards": 5
+        },
+        "test": "browser_tests"
+      },
+      {
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -1778,6 +1786,16 @@
         "test": "content_site_isolation_browsertests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "content_unittests"
+      },
+      {
+        "args": [
+          "--enable-browser-side-navigation"
+        ],
+        "name": "browser_side_navigation_content_unittests",
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -1920,6 +1938,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "media_mojo_shell_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "media_mojo_unittests"
       },
       {
         "swarming": {
@@ -2102,6 +2126,16 @@
         "test": "unit_tests"
       },
       {
+        "args": [
+          "--enable-browser-side-navigation"
+        ],
+        "name": "browser_side_navigation_unit_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "unit_tests"
+      },
+      {
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -2175,10 +2209,6 @@
         "script": "checkdeps.py"
       },
       {
-        "name": "checklicenses",
-        "script": "checklicenses.py"
-      },
-      {
         "name": "checkperms",
         "script": "checkperms.py"
       },
@@ -2227,6 +2257,18 @@
         "test": "blimp_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "shards": 10
+        },
+        "test": "browser_tests"
+      },
+      {
+        "args": [
+          "--enable-browser-side-navigation",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/browser-side-navigation.linux.browser_tests.filter"
+        ],
+        "name": "browser_side_navigation_browser_tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "shards": 10
@@ -2288,6 +2330,27 @@
         "test": "content_browsertests"
       },
       {
+        "args": [
+          "--enable-browser-side-navigation",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/browser-side-navigation.linux.content_browsertests.filter"
+        ],
+        "name": "browser_side_navigation_content_browsertests",
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "content_browsertests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "content_unittests"
+      },
+      {
+        "args": [
+          "--enable-browser-side-navigation"
+        ],
+        "name": "browser_side_navigation_content_unittests",
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -2407,6 +2470,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "media_blink_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "media_mojo_unittests"
       },
       {
         "swarming": {
@@ -2538,6 +2607,16 @@
         "test": "ui_touch_selection_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "unit_tests"
+      },
+      {
+        "args": [
+          "--enable-browser-side-navigation"
+        ],
+        "name": "browser_side_navigation_unit_tests",
         "swarming": {
           "can_use_on_swarming_builders": true
         },

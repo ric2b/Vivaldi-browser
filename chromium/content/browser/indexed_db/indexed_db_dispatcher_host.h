@@ -115,6 +115,10 @@ class IndexedDBDispatcherHost : public BrowserMessageFilter {
 
   std::string HoldBlobData(const IndexedDBBlobInfo& blob_info);
 
+  // True if the channel is closing/closed and outstanding requests
+  // can be abandoned. Only access on IndexedDB thread.
+  bool IsOpen() const;
+
  private:
   // Friends to enable OnDestruct() delegation.
   friend class BrowserThread;
@@ -171,6 +175,10 @@ class IndexedDBDispatcherHost : public BrowserMessageFilter {
     void OnDeleteObjectStore(int32_t ipc_database_id,
                              int64_t transaction_id,
                              int64_t object_store_id);
+    void OnRenameObjectStore(int32_t ipc_database_id,
+                             int64_t transaction_id,
+                             int64_t object_store_id,
+                             const base::string16& new_name);
     void OnCreateTransaction(
         const IndexedDBHostMsg_DatabaseCreateTransaction_Params&);
     void OnClose(int32_t ipc_database_id);
@@ -209,6 +217,11 @@ class IndexedDBDispatcherHost : public BrowserMessageFilter {
                        int64_t transaction_id,
                        int64_t object_store_id,
                        int64_t index_id);
+    void OnRenameIndex(int32_t ipc_database_id,
+                       int64_t transaction_id,
+                       int64_t object_store_id,
+                       int64_t index_id,
+                       const base::string16& new_name);
 
     void OnAbort(int32_t ipc_database_id, int64_t transaction_id);
     void OnCommit(int32_t ipc_database_id, int64_t transaction_id);
@@ -307,6 +320,7 @@ class IndexedDBDispatcherHost : public BrowserMessageFilter {
       blob_data_handle_map_;
 
   // Only access on IndexedDB thread.
+  bool is_open_ = true;
   std::unique_ptr<DatabaseDispatcherHost> database_dispatcher_host_;
   std::unique_ptr<CursorDispatcherHost> cursor_dispatcher_host_;
 

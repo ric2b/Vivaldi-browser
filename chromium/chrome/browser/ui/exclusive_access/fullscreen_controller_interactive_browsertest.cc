@@ -30,7 +30,7 @@ using ui::PAGE_TRANSITION_TYPED;
 
 namespace {
 
-const base::FilePath::CharType* kSimpleFile = FILE_PATH_LITERAL("/simple.html");
+const base::FilePath::CharType* kSimpleFile = FILE_PATH_LITERAL("simple.html");
 
 }  // namespace
 
@@ -703,6 +703,7 @@ IN_PROC_BROWSER_TEST_F(FullscreenControllerInteractiveTest,
   // FullscreenControllerTest::ToggleTabFullscreen. This test verifies that
   // when running serially there is no flakiness.
 
+  EXPECT_TRUE(embedded_test_server()->Start());
   GURL url = embedded_test_server()->GetURL("/simple.html");
   AddTabAtIndex(0, url, PAGE_TRANSITION_TYPED);
 

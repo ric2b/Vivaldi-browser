@@ -231,15 +231,6 @@ void InputMethodChromeOS::CancelComposition(const TextInputClient* client) {
     ResetContext();
 }
 
-void InputMethodChromeOS::OnInputLocaleChanged() {
-  // Not supported.
-}
-
-std::string InputMethodChromeOS::GetInputLocale() {
-  // Not supported.
-  return "";
-}
-
 bool InputMethodChromeOS::IsCandidatePopupOpen() const {
   // TODO(yukishiino): Implement this method.
   return false;
@@ -456,6 +447,11 @@ void InputMethodChromeOS::CommitText(const std::string& text) {
   const base::string16 utf16_text = base::UTF8ToUTF16(text);
   if (utf16_text.empty())
     return;
+
+  if (!CanComposeInline()) {
+    // Hides the candidate window for preedit text.
+    UpdateCompositionText(CompositionText(), 0, false);
+  }
 
   // Append the text to the buffer, because commit signal might be fired
   // multiple times when processing a key event.

@@ -27,8 +27,8 @@
 #include "net/tools/quic/quic_epoll_connection_helper.h"
 #include "net/tools/quic/quic_in_memory_cache.h"
 #include "net/tools/quic/quic_packet_reader.h"
+#include "net/tools/quic/quic_simple_crypto_server_stream_helper.h"
 #include "net/tools/quic/quic_simple_dispatcher.h"
-#include "net/tools/quic/quic_simple_server_session_helper.h"
 #include "net/tools/quic/quic_socket_utils.h"
 
 #ifndef SO_RXQ_OVFL
@@ -47,6 +47,8 @@ const int kEpollFlags = EPOLLIN | EPOLLOUT | EPOLLET;
 const char kSourceAddressTokenSecret[] = "secret";
 
 }  // namespace
+
+const size_t kNumSessionsToCreatePerSocketEvent = 16;
 
 QuicServer::QuicServer(std::unique_ptr<ProofSource> proof_source)
     : QuicServer(std::move(proof_source),
@@ -152,8 +154,8 @@ QuicDispatcher* QuicServer::CreateQuicDispatcher() {
       config_, &crypto_config_, &version_manager_,
       std::unique_ptr<QuicEpollConnectionHelper>(new QuicEpollConnectionHelper(
           &epoll_server_, QuicAllocator::BUFFER_POOL)),
-      std::unique_ptr<QuicServerSessionBase::Helper>(
-          new QuicSimpleServerSessionHelper(QuicRandom::GetInstance())),
+      std::unique_ptr<QuicCryptoServerStream::Helper>(
+          new QuicSimpleCryptoServerStreamHelper(QuicRandom::GetInstance())),
       std::unique_ptr<QuicEpollAlarmFactory>(
           new QuicEpollAlarmFactory(&epoll_server_)));
 }
@@ -177,11 +179,24 @@ void QuicServer::OnEvent(int fd, EpollEvent* event) {
 
   if (event->in_events & EPOLLIN) {
     DVLOG(1) << "EPOLLIN";
+
+    if (FLAGS_quic_limit_num_new_sessions_per_epoll_loop &&
+        FLAGS_quic_buffer_packet_till_chlo) {
+      dispatcher_->ProcessBufferedChlos(kNumSessionsToCreatePerSocketEvent);
+    }
+
     bool more_to_read = true;
     while (more_to_read) {
       more_to_read = packet_reader_->ReadAndDispatchPackets(
-          fd_, port_, QuicEpollClock(&epoll_server_), dispatcher_.get(),
+          fd_, port_, false /* potentially_small_mtu */,
+          QuicEpollClock(&epoll_server_), dispatcher_.get(),
           overflow_supported_ ? &packets_dropped_ : nullptr);
+    }
+
+    if (FLAGS_quic_limit_num_new_sessions_per_epoll_loop &&
+        FLAGS_quic_buffer_packet_till_chlo && dispatcher_->HasChlosBuffered()) {
+      // Register EPOLLIN event to consume buffered CHLO(s).
+      event->out_ready_mask |= EPOLLIN;
     }
   }
   if (event->in_events & EPOLLOUT) {

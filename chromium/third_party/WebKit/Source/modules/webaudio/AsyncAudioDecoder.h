@@ -10,23 +10,23 @@
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
- * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+ * DAMAGE.
  */
 
 #ifndef AsyncAudioDecoder_h
 #define AsyncAudioDecoder_h
 
 #include "platform/heap/Handle.h"
-#include "public/platform/WebThread.h"
 #include "wtf/build_config.h"
 #include <memory>
 
@@ -39,29 +39,46 @@ class AudioBus;
 class DOMArrayBuffer;
 class ScriptPromiseResolver;
 
-// AsyncAudioDecoder asynchronously decodes audio file data from a DOMArrayBuffer in a worker thread.
-// Upon successful decoding, a completion callback will be invoked with the decoded PCM data in an AudioBuffer.
+// AsyncAudioDecoder asynchronously decodes audio file data from a
+// DOMArrayBuffer in the background thread. Upon successful decoding, a
+// completion callback will be invoked with the decoded PCM data in an
+// AudioBuffer.
 
 class AsyncAudioDecoder {
-    DISALLOW_NEW();
-    WTF_MAKE_NONCOPYABLE(AsyncAudioDecoder);
-public:
-    AsyncAudioDecoder();
-    ~AsyncAudioDecoder();
+  DISALLOW_NEW();
+  WTF_MAKE_NONCOPYABLE(AsyncAudioDecoder);
 
-    // Must be called on the main thread.  |decodeAsync| and callees must not modify any of the
-    // parameters except |audioData|.  They are used to associate this decoding instance with the
-    // caller to process the decoding appropriately when finished.
-    void decodeAsync(DOMArrayBuffer* audioData, float sampleRate, AudioBufferCallback* successCallback, AudioBufferCallback* errorCallback, ScriptPromiseResolver* , BaseAudioContext*);
+ public:
+  AsyncAudioDecoder(){};
+  ~AsyncAudioDecoder(){};
 
-private:
-    AudioBuffer* createAudioBufferFromAudioBus(AudioBus*);
-    static void decode(DOMArrayBuffer* audioData, float sampleRate, AudioBufferCallback* successCallback, AudioBufferCallback* errorCallback, ScriptPromiseResolver*, BaseAudioContext*);
-    static void notifyComplete(DOMArrayBuffer* audioData, AudioBufferCallback* successCallback, AudioBufferCallback* errorCallback, AudioBus*, ScriptPromiseResolver*, BaseAudioContext*);
+  // Must be called on the main thread.  |decodeAsync| and callees must not
+  // modify any of the parameters except |audioData|.  They are used to
+  // associate this decoding instance with the caller to process the decoding
+  // appropriately when finished.
+  void decodeAsync(DOMArrayBuffer* audioData,
+                   float sampleRate,
+                   AudioBufferCallback* successCallback,
+                   AudioBufferCallback* errorCallback,
+                   ScriptPromiseResolver*,
+                   BaseAudioContext*);
 
-    std::unique_ptr<WebThread> m_thread;
+ private:
+  AudioBuffer* createAudioBufferFromAudioBus(AudioBus*);
+  static void decodeOnBackgroundThread(DOMArrayBuffer* audioData,
+                                       float sampleRate,
+                                       AudioBufferCallback* successCallback,
+                                       AudioBufferCallback* errorCallback,
+                                       ScriptPromiseResolver*,
+                                       BaseAudioContext*);
+  static void notifyComplete(DOMArrayBuffer* audioData,
+                             AudioBufferCallback* successCallback,
+                             AudioBufferCallback* errorCallback,
+                             AudioBus*,
+                             ScriptPromiseResolver*,
+                             BaseAudioContext*);
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // AsyncAudioDecoder_h
+#endif  // AsyncAudioDecoder_h

@@ -234,20 +234,18 @@ void ImmersiveFullscreenController::OnPointerEventObserved(
     const gfx::Point& location_in_screen,
     views::Widget* target) {
   if (event.IsMousePointerEvent()) {
-    const ui::MouseEvent mouse_event(event);
-    OnMouseEvent(mouse_event, location_in_screen, target);
+    if (event.type() == ui::ET_POINTER_WHEEL_CHANGED) {
+      const ui::MouseWheelEvent mouse_wheel_event(event);
+      OnMouseEvent(mouse_wheel_event, location_in_screen, target);
+    } else {
+      const ui::MouseEvent mouse_event(event);
+      OnMouseEvent(mouse_event, location_in_screen, target);
+    }
   } else {
     DCHECK(event.IsTouchPointerEvent());
     const ui::TouchEvent touch_event(event);
     OnTouchEvent(touch_event, location_in_screen);
   }
-}
-
-void ImmersiveFullscreenController::OnMouseCaptureChanged() {
-  const ui::MouseEvent event(ui::ET_MOUSE_CAPTURE_CHANGED, gfx::Point(),
-                             gfx::Point(), ui::EventTimeForNow(), 0, 0);
-  OnMouseEvent(event, display::Screen::GetScreen()->GetCursorScreenPoint(),
-               nullptr);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -313,8 +311,8 @@ void ImmersiveFullscreenController::EnableWindowObservers(bool enable) {
     immersive_gesture_handler_ =
         ImmersiveHandlerFactory::Get()->CreateGestureHandler(this);
     widget_->AddObserver(this);
-    const bool wants_moves = true;
-    ImmersiveContext::Get()->AddPointerWatcher(this, wants_moves);
+    ImmersiveContext::Get()->AddPointerWatcher(
+        this, views::PointerWatcherEventTypes::MOVES);
   } else {
     ImmersiveContext::Get()->RemovePointerWatcher(this);
     widget_->RemoveObserver(this);

@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/test/test_simple_task_runner.h"
 #include "net/http/http_request_headers.h"
 #include "net/url_request/url_request.h"
@@ -28,8 +29,8 @@ class PolicyHeaderIOHelperTest : public testing::Test {
   ~PolicyHeaderIOHelperTest() override {}
 
   void SetUp() override {
-    helper_ = base::WrapUnique(new PolicyHeaderIOHelper(
-        kDMServerURL, kInitialPolicyHeader, task_runner_));
+    helper_ = base::MakeUnique<PolicyHeaderIOHelper>(
+        kDMServerURL, kInitialPolicyHeader, task_runner_);
     task_runner_->RunUntilIdle();
   }
   void TearDown() override {

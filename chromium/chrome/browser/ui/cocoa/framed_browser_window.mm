@@ -14,9 +14,10 @@
 #include "chrome/browser/themes/theme_service.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/browser_window_utils.h"
+#include "chrome/browser/ui/cocoa/l10n_util.h"
 #import "chrome/browser/ui/cocoa/tabs/tab_strip_controller.h"
 #import "chrome/browser/ui/cocoa/themed_window.h"
-#include "grit/theme_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "ui/base/cocoa/cocoa_base_utils.h"
 #include "ui/base/cocoa/nsgraphics_context_additions.h"
 #import "ui/base/cocoa/nsview_additions.h"
@@ -158,6 +159,11 @@ const CGFloat kWindowGradientHeight = 24.0;
       // fallthrough
     default:
       break;
+  }
+
+  if (cocoa_l10n_util::ShouldDoExperimentalRTLLayout()) {
+    buttonFrame.origin.x =
+        NSWidth([self frame]) - buttonFrame.origin.x - NSWidth([button frame]);
   }
 
   BOOL didPost = [button postsBoundsChangedNotifications];

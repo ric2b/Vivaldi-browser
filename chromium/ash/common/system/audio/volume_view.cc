@@ -13,6 +13,7 @@
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/system/tray/tray_popup_item_container.h"
 #include "ash/common/wm_shell.h"
+#include "ash/resources/vector_icons/vector_icons.h"
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
 #include "ui/accessibility/ax_view_state.h"
@@ -20,12 +21,12 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/gfx/vector_icons_public.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/separator.h"
+#include "ui/views/controls/slider.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/painter.h"
 
@@ -139,16 +140,23 @@ VolumeView::VolumeView(SystemTrayItem* owner,
   icon_->SetBorder(views::Border::CreateEmptyBorder(
       0, kTrayPopupPaddingHorizontal, 0, kExtraPaddingBetweenIconAndSlider));
   AddChildView(icon_);
+  slider_ = views::Slider::CreateSlider(
+      ash::MaterialDesignController::IsSystemTrayMenuMaterial(), this);
 
-  slider_ = new views::Slider(this, views::Slider::HORIZONTAL);
+  if (ash::MaterialDesignController::IsSystemTrayMenuMaterial()) {
+    slider_->SetBorder(views::Border::CreateEmptyBorder(
+        gfx::Insets(0, kTrayPopupSliderPaddingMD) + slider_->GetInsets()));
+  } else {
+    slider_->SetBorder(views::Border::CreateEmptyBorder(
+        0, 0, 0, kTrayPopupPaddingBetweenItems));
+  }
+
   slider_->set_focus_border_color(kFocusBorderColor);
   slider_->SetValue(
       static_cast<float>(audio_delegate_->GetOutputVolumeLevel()) / 100.0f);
   slider_->SetAccessibleName(
       ui::ResourceBundle::GetSharedInstance().GetLocalizedString(
           IDS_ASH_STATUS_TRAY_VOLUME));
-  slider_->SetBorder(
-      views::Border::CreateEmptyBorder(0, 0, 0, kTrayPopupPaddingBetweenItems));
   AddChildView(slider_);
   box_layout->SetFlexForView(slider_, 1);
 
@@ -170,8 +178,8 @@ VolumeView::VolumeView(SystemTrayItem* owner,
   more_->EnableCanvasFlippingForRTLUI(true);
 
   if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
-    more_->SetImage(gfx::CreateVectorIcon(
-        gfx::VectorIconId::SYSTEM_MENU_ARROW_RIGHT, kMenuIconColor));
+    more_->SetImage(
+        gfx::CreateVectorIcon(kSystemMenuArrowRightIcon, kMenuIconColor));
   } else {
     more_->SetImage(ui::ResourceBundle::GetSharedInstance()
                         .GetImageNamed(IDR_AURA_UBER_TRAY_MORE)
@@ -212,10 +220,11 @@ void VolumeView::SetVolumeLevel(float percent) {
 void VolumeView::UpdateDeviceTypeAndMore() {
   bool show_more = is_default_view_ && TrayAudio::ShowAudioDeviceMenu() &&
                    audio_delegate_->HasAlternativeSources();
-  slider_->SetBorder(views::Border::CreateEmptyBorder(
-      0, 0, 0, show_more ? kTrayPopupPaddingBetweenItems
-                         : kSliderRightPaddingToVolumeViewEdge));
-
+  if (!ash::MaterialDesignController::IsSystemTrayMenuMaterial()) {
+    slider_->SetBorder(views::Border::CreateEmptyBorder(
+        0, 0, 0, show_more ? kTrayPopupPaddingBetweenItems
+                           : kSliderRightPaddingToVolumeViewEdge));
+  }
   if (!show_more) {
     more_region_->SetVisible(false);
     return;

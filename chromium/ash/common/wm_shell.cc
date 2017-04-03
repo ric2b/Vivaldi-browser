@@ -23,14 +23,19 @@
 #include "ash/common/system/brightness_control_delegate.h"
 #include "ash/common/system/keyboard_brightness_control_delegate.h"
 #include "ash/common/system/toast/toast_manager.h"
+#include "ash/common/system/tray/system_tray_controller.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/system_tray_notifier.h"
+#include "ash/common/wallpaper/wallpaper_controller.h"
 #include "ash/common/wallpaper/wallpaper_delegate.h"
 #include "ash/common/wm/immersive_context_ash.h"
 #include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/common/wm/mru_window_tracker.h"
 #include "ash/common/wm/overview/window_selector_controller.h"
+#include "ash/common/wm/root_window_finder.h"
+#include "ash/common/wm/system_modal_container_layout_manager.h"
 #include "ash/common/wm/window_cycle_controller.h"
+#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_window.h"
 #include "base/bind.h"
 #include "base/logging.h"
@@ -60,7 +65,9 @@ WmShell* WmShell::Get() {
   return instance_;
 }
 
-void WmShell::Initialize() {
+void WmShell::Initialize(const scoped_refptr<base::SequencedWorkerPool>& pool) {
+  blocking_pool_ = pool;
+
   // Some delegates access WmShell during their construction. Create them here
   // instead of the WmShell constructor.
   accessibility_delegate_.reset(delegate_->CreateAccessibilityDelegate());
@@ -76,11 +83,15 @@ void WmShell::Initialize() {
   views::FocusManagerFactory::Install(new AshFocusManagerFactory);
 
   new_window_delegate_.reset(delegate_->CreateNewWindowDelegate());
+
+  wallpaper_controller_.reset(new WallpaperController(blocking_pool_));
 }
 
 void WmShell::Shutdown() {
-  // Accesses WmShell in its destructor.
+  // These members access WmShell in their destructors.
+  wallpaper_controller_.reset();
   accessibility_delegate_.reset();
+
   // ShelfWindowWatcher has window observers and a pointer to the shelf model.
   shelf_window_watcher_.reset();
   // ShelfItemDelegate subclasses it owns have complex cleanup to run (e.g. ARC
@@ -91,6 +102,19 @@ void WmShell::Shutdown() {
 
   // Balances the Install() in Initialize().
   views::FocusManagerFactory::Install(nullptr);
+}
+
+void WmShell::ShowContextMenu(const gfx::Point& location_in_screen,
+                              ui::MenuSourceType source_type) {
+  // Bail if there is no active user session or if the screen is locked.
+  if (GetSessionStateDelegate()->NumberOfLoggedInUsers() < 1 ||
+      GetSessionStateDelegate()->IsScreenLocked()) {
+    return;
+  }
+
+  WmWindow* root = wm::GetRootWindowAt(location_in_screen);
+  root->GetRootWindowController()->ShowContextMenu(location_in_screen,
+                                                   source_type);
 }
 
 void WmShell::CreateShelfDelegate() {
@@ -181,6 +205,8 @@ WmShell::WmShell(std::unique_ptr<ShellDelegate> shell_delegate)
       focus_cycler_(new FocusCycler),
       immersive_context_(base::MakeUnique<ImmersiveContextAsh>()),
       shelf_model_(new ShelfModel),  // Must create before ShelfDelegate.
+      system_tray_controller_(
+          new SystemTrayController(delegate_->GetShellConnector())),
       system_tray_notifier_(new SystemTrayNotifier),
       wallpaper_delegate_(delegate_->CreateWallpaperDelegate()),
       window_cycle_controller_(new WindowCycleController),
@@ -192,6 +218,10 @@ WmShell::WmShell(std::unique_ptr<ShellDelegate> shell_delegate)
 }
 
 WmShell::~WmShell() {}
+
+WmRootWindowController* WmShell::GetPrimaryRootWindowController() {
+  return GetPrimaryRootWindow()->GetRootWindowController();
+}
 
 WmWindow* WmShell::GetRootWindowForNewWindows() {
   if (scoped_root_window_for_new_windows_)
@@ -217,6 +247,30 @@ bool WmShell::IsSystemModalWindowOpen() {
     }
   }
   return false;
+}
+
+void WmShell::CreateModalBackground(WmWindow* window) {
+  for (WmWindow* root_window : GetAllRootWindows()) {
+    root_window->GetRootWindowController()
+        ->GetSystemModalLayoutManager(window)
+        ->CreateModalBackground();
+  }
+}
+
+void WmShell::OnModalWindowRemoved(WmWindow* removed) {
+  WmWindow::Windows root_windows = GetAllRootWindows();
+  for (WmWindow* root_window : root_windows) {
+    if (root_window->GetRootWindowController()
+            ->GetSystemModalLayoutManager(removed)
+            ->ActivateNextModalWindow()) {
+      return;
+    }
+  }
+  for (WmWindow* root_window : root_windows) {
+    root_window->GetRootWindowController()
+        ->GetSystemModalLayoutManager(removed)
+        ->DestroyModalBackground();
+  }
 }
 
 void WmShell::ShowAppList() {

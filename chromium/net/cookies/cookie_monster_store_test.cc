@@ -116,7 +116,7 @@ MockCookieMonsterDelegate::MockCookieMonsterDelegate() {
 void MockCookieMonsterDelegate::OnCookieChanged(
     const CanonicalCookie& cookie,
     bool removed,
-    CookieMonsterDelegate::ChangeCause cause) {
+    CookieStore::ChangeCause cause) {
   CookieNotification notification(cookie, removed);
   changes_.push_back(notification);
 }
@@ -260,7 +260,7 @@ std::unique_ptr<CookieMonster> CreateMonsterFromStoreForGC(
     store->AddCookie(*cc);
   }
 
-  return base::WrapUnique(new CookieMonster(store.get(), nullptr));
+  return base::MakeUnique<CookieMonster>(store.get(), nullptr);
 }
 
 MockSimplePersistentCookieStore::~MockSimplePersistentCookieStore() {

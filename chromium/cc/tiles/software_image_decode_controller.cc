@@ -13,6 +13,7 @@
 #include "base/format_macros.h"
 #include "base/macros.h"
 #include "base/memory/discardable_memory.h"
+#include "base/memory/memory_coordinator_client_registry.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
@@ -36,7 +37,11 @@ const size_t kMaxHighQualityImageSizeBytes = 64 * 1024 * 1024;
 
 // The number of entries to keep around in the cache. This limit can be breached
 // if more items are locked. That is, locked items ignore this limit.
-const size_t kMaxItemsInCache = 1000;
+// Depending on the memory state of the system, we limit the amount of items
+// differently.
+const size_t kNormalMaxItemsInCache = 1000;
+const size_t kThrottledMaxItemsInCache = 100;
+const size_t kSuspendedMaxItemsInCache = 0;
 
 // If the size of the original sized image breaches kMemoryRatioToSubrect but we
 // don't need to scale the image, consider caching only the needed subrect.
@@ -172,7 +177,8 @@ SoftwareImageDecodeController::SoftwareImageDecodeController(
     : decoded_images_(ImageMRUCache::NO_AUTO_EVICT),
       at_raster_decoded_images_(ImageMRUCache::NO_AUTO_EVICT),
       locked_images_budget_(locked_memory_limit_bytes),
-      format_(format) {
+      format_(format),
+      max_items_in_cache_(kNormalMaxItemsInCache) {
   // In certain cases, ThreadTaskRunnerHandle isn't set (Android Webview).
   // Don't register a dump provider in these cases.
   if (base::ThreadTaskRunnerHandle::IsSet()) {
@@ -180,6 +186,8 @@ SoftwareImageDecodeController::SoftwareImageDecodeController(
         this, "cc::SoftwareImageDecodeController",
         base::ThreadTaskRunnerHandle::Get());
   }
+  // Register this component with base::MemoryCoordinatorClientRegistry.
+  base::MemoryCoordinatorClientRegistry::GetInstance()->Register(this);
 }
 
 SoftwareImageDecodeController::~SoftwareImageDecodeController() {
@@ -189,6 +197,8 @@ SoftwareImageDecodeController::~SoftwareImageDecodeController() {
   // It is safe to unregister, even if we didn't register in the constructor.
   base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
       this);
+  // Unregister this component with memory_coordinator::ClientRegistry.
+  base::MemoryCoordinatorClientRegistry::GetInstance()->Unregister(this);
 }
 
 bool SoftwareImageDecodeController::GetTaskForImageAndRef(
@@ -742,8 +752,8 @@ void SoftwareImageDecodeController::UnrefAtRasterImage(const ImageKey& key) {
 void SoftwareImageDecodeController::ReduceCacheUsage() {
   TRACE_EVENT0("cc", "SoftwareImageDecodeController::ReduceCacheUsage");
   base::AutoLock lock(lock_);
-  size_t num_to_remove = (decoded_images_.size() > kMaxItemsInCache)
-                             ? (decoded_images_.size() - kMaxItemsInCache)
+  size_t num_to_remove = (decoded_images_.size() > max_items_in_cache_)
+                             ? (decoded_images_.size() - max_items_in_cache_)
                              : 0;
   for (auto it = decoded_images_.rbegin();
        num_to_remove != 0 && it != decoded_images_.rend();) {
@@ -1081,6 +1091,28 @@ void SoftwareImageDecodeController::MemoryBudget::ResetUsage() {
 size_t SoftwareImageDecodeController::MemoryBudget::GetCurrentUsageSafe()
     const {
   return current_usage_bytes_.ValueOrDie();
+}
+
+void SoftwareImageDecodeController::OnMemoryStateChange(
+    base::MemoryState state) {
+  {
+    base::AutoLock hold(lock_);
+    switch (state) {
+      case base::MemoryState::NORMAL:
+        max_items_in_cache_ = kNormalMaxItemsInCache;
+        break;
+      case base::MemoryState::THROTTLED:
+        max_items_in_cache_ = kThrottledMaxItemsInCache;
+        break;
+      case base::MemoryState::SUSPENDED:
+        max_items_in_cache_ = kSuspendedMaxItemsInCache;
+        break;
+      case base::MemoryState::UNKNOWN:
+        NOTREACHED();
+        return;
+    }
+  }
+  ReduceCacheUsage();
 }
 
 }  // namespace cc

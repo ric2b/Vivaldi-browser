@@ -4,7 +4,6 @@
 
 #include "headless/lib/browser/headless_browser_main_parts.h"
 
-#include "components/devtools_http_handler/devtools_http_handler.h"
 #include "headless/lib/browser/headless_browser_context_impl.h"
 #include "headless/lib/browser/headless_browser_impl.h"
 #include "headless/lib/browser/headless_devtools.h"
@@ -27,21 +26,24 @@ void PlatformExit() {
 }  // namespace
 
 HeadlessBrowserMainParts::HeadlessBrowserMainParts(HeadlessBrowserImpl* browser)
-    : browser_(browser) {}
+    : browser_(browser)
+    , devtools_http_handler_started_(false) {}
 
 HeadlessBrowserMainParts::~HeadlessBrowserMainParts() {}
 
 void HeadlessBrowserMainParts::PreMainMessageLoopRun() {
   if (browser_->options()->devtools_endpoint.address().IsValid()) {
-    devtools_http_handler_ =
-        CreateLocalDevToolsHttpHandler(browser_->options());
+    StartLocalDevToolsHttpHandler(browser_->options());
+    devtools_http_handler_started_ = true;
   }
   PlatformInitialize(browser_->options()->window_size);
 }
 
 void HeadlessBrowserMainParts::PostMainMessageLoopRun() {
-  devtools_http_handler_.reset();
-
+  if (devtools_http_handler_started_) {
+    StopLocalDevToolsHttpHandler();
+    devtools_http_handler_started_ = false;
+  }
   PlatformExit();
 }
 

@@ -10,6 +10,8 @@ import org.chromium.chrome.browser.contextualsearch.ContextualSearchBlacklist.Bl
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchHeuristics;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchUma;
 
+import java.util.Locale;
+
 /**
  * This class is responsible for all the logging related to Contextual Search.
  */
@@ -32,6 +34,14 @@ public class ContextualSearchPanelMetrics {
     private boolean mWasIconSpriteAnimated;
     private boolean mWasPanelOpenedBeyondPeek;
     private boolean mWasSelectionPartOfUrl;
+    private boolean mWasContextualCardsDataShown;
+    private boolean mWasSelectionAllCaps;
+    private boolean mDidSelectionStartWithCapital;
+    // Whether any Tap suppression heuristic was satisfied when the panel was shown.
+    private boolean mWasAnyHeuristicSatisfiedOnPanelShow;
+    // Time when the panel was triggered (not reset by a chained search).
+    // Panel transitions are animated so mPanelTriggerTimeNs will be less than mFirstPeekTimeNs.
+    private long mPanelTriggerTimeNs;
     // Time when the panel peeks into view (not reset by a chained search).
     // Used to log total time the panel is showing (not closed).
     private long mFirstPeekTimeNs;
@@ -76,6 +86,14 @@ public class ContextualSearchPanelMetrics {
         // so a local copy is created before the reset.
         boolean isSearchPanelFullyPreloaded = mIsSearchPanelFullyPreloaded;
 
+        if (toState == PanelState.CLOSED && mPanelTriggerTimeNs != 0
+                && reason == StateChangeReason.BASE_PAGE_SCROLL) {
+            long durationMs =
+                    (System.nanoTime() - mPanelTriggerTimeNs) / MILLISECONDS_TO_NANOSECONDS;
+            ContextualSearchUma.logDurationBetweenTriggerAndScroll(
+                    durationMs, mWasSearchContentViewSeen);
+        }
+
         if (isEndingSearch) {
             long durationMs = (System.nanoTime() - mFirstPeekTimeNs) / MILLISECONDS_TO_NANOSECONDS;
             ContextualSearchUma.logPanelViewDurationAction(durationMs);
@@ -95,6 +113,16 @@ public class ContextualSearchPanelMetrics {
                         mWasActivatedByTap);
             }
 
+            if (mWasContextualCardsDataShown) {
+                ContextualSearchUma.logContextualCardsResultsSeen(mWasSearchContentViewSeen);
+            }
+
+            if (mWasSelectionAllCaps && mWasActivatedByTap) {
+                ContextualSearchUma.logAllCapsResultsSeen(mWasSearchContentViewSeen);
+            } else if (mDidSelectionStartWithCapital && mWasActivatedByTap) {
+                ContextualSearchUma.logStartedWithCapitalResultsSeen(mWasSearchContentViewSeen);
+            }
+
             ContextualSearchUma.logBlacklistSeen(mBlacklistReason, mWasSearchContentViewSeen);
 
             ContextualSearchUma.logIconSpriteAnimated(mWasIconSpriteAnimated,
@@ -104,6 +132,14 @@ public class ContextualSearchPanelMetrics {
                 mResultsSeenExperiments.logResultsSeen(
                         mWasSearchContentViewSeen, mWasActivatedByTap);
                 mResultsSeenExperiments = null;
+            }
+
+            if (mWasActivatedByTap) {
+                boolean wasAnySuppressionHeuristicSatisfied =
+                        mWasAnyHeuristicSatisfiedOnPanelShow || mWasSelectionPartOfUrl
+                        || mWasSelectionAllCaps;
+                ContextualSearchUma.logAnyTapSuppressionHeuristicSatisfied(
+                        mWasSearchContentViewSeen, wasAnySuppressionHeuristicSatisfied);
             }
         }
 
@@ -122,6 +158,12 @@ public class ContextualSearchPanelMetrics {
             mIsSearchPanelFullyPreloaded = false;
             mWasActivatedByTap = reason == StateChangeReason.TEXT_SELECT_TAP;
             mBlacklistReason = BlacklistReason.NONE;
+            if (mWasActivatedByTap && mResultsSeenExperiments != null) {
+                mWasAnyHeuristicSatisfiedOnPanelShow =
+                        mResultsSeenExperiments.isAnyConditionSatisfiedForAggregrateLogging();
+            } else {
+                mWasAnyHeuristicSatisfiedOnPanelShow = false;
+            }
         }
         if (isFirstSearchView) {
             onSearchPanelFirstView();
@@ -180,6 +222,11 @@ public class ContextualSearchPanelMetrics {
             mHasExitedMaximized = false;
             mIsSerpNavigation = false;
             mWasSelectionPartOfUrl = false;
+            mWasContextualCardsDataShown = false;
+            mWasSelectionAllCaps = false;
+            mDidSelectionStartWithCapital = false;
+            mWasAnyHeuristicSatisfiedOnPanelShow = false;
+            mPanelTriggerTimeNs = 0;
         }
     }
 
@@ -226,6 +273,35 @@ public class ContextualSearchPanelMetrics {
      */
     public void setWasSelectionPartOfUrl(boolean wasPartOfUrl) {
         mWasSelectionPartOfUrl = wasPartOfUrl;
+    }
+
+    /**
+     * @param wasContextualCardsDataShown Whether Contextual Cards data was shown in the Contextual
+     *                                    Search Bar.
+     */
+    public void setWasContextualCardsDataShown(boolean wasContextualCardsDataShown) {
+        mWasContextualCardsDataShown = wasContextualCardsDataShown;
+    }
+
+    /**
+     * Should be called when the panel first starts showing.
+     */
+    public void onPanelTriggered() {
+        mPanelTriggerTimeNs = System.nanoTime();
+    }
+
+    /**
+     * @param selection The text that is selected when a selection is established.
+     */
+    public void onSelectionEstablished(String selection) {
+        // In some locales, there is no concept of an upper or lower case letter. Account for this
+        // by checking that the selected text is not equalivalet to selection#toLowerCase().
+        mWasSelectionAllCaps = selection.equals(selection.toUpperCase(Locale.getDefault()))
+                && !selection.equals(selection.toLowerCase(Locale.getDefault()));
+        String firstChar = String.valueOf(selection.charAt(0));
+        mDidSelectionStartWithCapital = firstChar.equals(
+                firstChar.toUpperCase(Locale.getDefault()))
+                && !firstChar.equals(firstChar.toLowerCase(Locale.getDefault()));
     }
 
     /**

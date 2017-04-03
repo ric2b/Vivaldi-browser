@@ -12,6 +12,7 @@
 #include "base/memory/singleton.h"
 #include "components/cast_certificate/proto/revocation.pb.h"
 #include "crypto/sha2.h"
+#include "net/cert/internal/cert_errors.h"
 #include "net/cert/internal/parse_certificate.h"
 #include "net/cert/internal/parsed_certificate.h"
 #include "net/cert/internal/path_builder.h"
@@ -23,8 +24,8 @@
 #include "net/cert/x509_certificate.h"
 #include "net/der/encode_values.h"
 #include "net/der/input.h"
-#include "net/der/parser.h"
 #include "net/der/parse_values.h"
+#include "net/der/parser.h"
 
 namespace cast_certificate {
 namespace {
@@ -62,11 +63,11 @@ class CastCRLTrustStore {
 
   CastCRLTrustStore() {
     // Initialize the trust store with the root certificate.
+    net::CertErrors errors;
     scoped_refptr<net::ParsedCertificate> cert =
-        net::ParsedCertificate::CreateFromCertificateData(
-            kCastCRLRootCaDer, sizeof(kCastCRLRootCaDer),
-            net::ParsedCertificate::DataSource::EXTERNAL_REFERENCE, {});
-    CHECK(cert);
+        net::ParsedCertificate::CreateWithoutCopyingUnsafe(
+            kCastCRLRootCaDer, sizeof(kCastCRLRootCaDer), {}, &errors);
+    CHECK(cert) << errors.ToDebugString();
     // Enforce pathlen constraints and policies defined on the root certificate.
     scoped_refptr<net::TrustAnchor> anchor =
         net::TrustAnchor::CreateFromCertificateWithConstraints(std::move(cert));
@@ -92,7 +93,7 @@ bool ConvertTimeSeconds(uint64_t seconds,
 // The required algorithms are:
 // RSASSA PKCS#1 v1.5 with SHA-256, using RSA keys 2048-bits or longer.
 std::unique_ptr<net::SignaturePolicy> CreateCastSignaturePolicy() {
-  return base::WrapUnique(new net::SimpleSignaturePolicy(2048));
+  return base::MakeUnique<net::SimpleSignaturePolicy>(2048);
 }
 
 // Verifies the CRL is signed by a trusted CRL authority at the time the CRL
@@ -107,13 +108,12 @@ bool VerifyCRL(const Crl& crl,
                net::TrustStore* trust_store,
                net::der::GeneralizedTime* overall_not_after) {
   // Verify the trust of the CRL authority.
+  net::CertErrors parse_errors;
   scoped_refptr<net::ParsedCertificate> parsed_cert =
-      net::ParsedCertificate::CreateFromCertificateData(
-          reinterpret_cast<const uint8_t*>(crl.signer_cert().data()),
-          crl.signer_cert().size(),
-          net::ParsedCertificate::DataSource::EXTERNAL_REFERENCE, {});
+      net::ParsedCertificate::Create(crl.signer_cert(), {}, &parse_errors);
   if (parsed_cert == nullptr) {
-    VLOG(2) << "CRL - Issuer certificate parsing failed.";
+    VLOG(2) << "CRL - Issuer certificate parsing failed:\n"
+            << parse_errors.ToDebugString();
     return false;
   }
 
@@ -125,11 +125,13 @@ bool VerifyCRL(const Crl& crl,
   auto signature_policy = CreateCastSignaturePolicy();
   std::unique_ptr<net::SignatureAlgorithm> signature_algorithm_type =
       net::SignatureAlgorithm::CreateRsaPkcs1(net::DigestAlgorithm::Sha256);
+  net::CertErrors verify_errors;
   if (!VerifySignedData(*signature_algorithm_type,
                         net::der::Input(&crl.tbs_crl()),
                         signature_value_bit_string, parsed_cert->tbs().spki_tlv,
-                        signature_policy.get())) {
-    VLOG(2) << "CRL - Signature verification failed.";
+                        signature_policy.get(), &verify_errors)) {
+    VLOG(2) << "CRL - Signature verification failed:\n"
+            << verify_errors.ToDebugString();
     return false;
   }
 
@@ -145,9 +147,9 @@ bool VerifyCRL(const Crl& crl,
                                     &result);
   net::CompletionStatus rv = path_builder.Run(base::Closure());
   DCHECK_EQ(rv, net::CompletionStatus::SYNC);
-  if (!result.is_success() || result.paths.empty() ||
-      !result.paths[result.best_result_index]->is_success()) {
+  if (!result.HasValidPath()) {
     VLOG(2) << "CRL - Issuer certificate verification failed.";
+    // TODO(crbug.com/634443): Log the error information.
     return false;
   }
   // There are no requirements placed on the leaf certificate having any
@@ -174,7 +176,7 @@ bool VerifyCRL(const Crl& crl,
   // "expiration" of the trust anchor is handled instead by its
   // presence in the trust store.
   *overall_not_after = not_after;
-  for (const auto& cert : result.paths[result.best_result_index]->path.certs) {
+  for (const auto& cert : result.GetBestValidPath()->path.certs) {
     net::der::GeneralizedTime cert_not_after = cert->tbs().validity_not_after;
     if (cert_not_after < *overall_not_after)
       *overall_not_after = cert_not_after;
@@ -338,7 +340,7 @@ std::unique_ptr<CastCRL> ParseAndVerifyCRL(const std::string& crl_proto,
       LOG(ERROR) << "CRL - Verification failed.";
       return nullptr;
     }
-    return base::WrapUnique(new CastCRLImpl(tbs_crl, overall_not_after));
+    return base::MakeUnique<CastCRLImpl>(tbs_crl, overall_not_after);
   }
   LOG(ERROR) << "No supported version of revocation data.";
   return nullptr;

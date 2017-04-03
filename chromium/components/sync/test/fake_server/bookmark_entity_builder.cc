@@ -6,23 +6,16 @@
 
 #include <stdint.h>
 
-#include <memory>
-#include <string>
-
 #include "base/guid.h"
 #include "base/memory/ptr_util.h"
 #include "base/time/time.h"
-#include "components/sync/base/model_type.h"
 #include "components/sync/base/time.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync/syncable/syncable_util.h"
 #include "components/sync/test/fake_server/bookmark_entity.h"
-#include "components/sync/test/fake_server/fake_server_entity.h"
-#include "url/gurl.h"
 
 using std::string;
-
 using syncer::syncable::GenerateSyncableBookmarkHash;
 
 // A version must be passed when creating a FakeServerEntity, but this value

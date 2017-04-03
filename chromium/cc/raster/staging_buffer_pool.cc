@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/memory/memory_coordinator_client_registry.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -14,6 +15,7 @@
 #include "cc/debug/traced_value.h"
 #include "cc/resources/scoped_resource.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "ui/gfx/gpu_memory_buffer_tracing.h"
 
 namespace cc {
 namespace {
@@ -141,6 +143,10 @@ StagingBufferPool::StagingBufferPool(base::SequencedTaskRunner* task_runner,
       this, "cc::StagingBufferPool", base::ThreadTaskRunnerHandle::Get());
   reduce_memory_usage_callback_ = base::Bind(
       &StagingBufferPool::ReduceMemoryUsage, weak_ptr_factory_.GetWeakPtr());
+
+  task_runner_->PostTask(
+      FROM_HERE, base::Bind(&StagingBufferPool::RegisterMemoryCoordinatorClient,
+                            weak_ptr_factory_.GetWeakPtr()));
 }
 
 StagingBufferPool::~StagingBufferPool() {
@@ -148,7 +154,15 @@ StagingBufferPool::~StagingBufferPool() {
       this);
 }
 
+void StagingBufferPool::RegisterMemoryCoordinatorClient() {
+  // Register this component with base::MemoryCoordinatorClientRegistry.
+  base::MemoryCoordinatorClientRegistry::GetInstance()->Register(this);
+}
+
 void StagingBufferPool::Shutdown() {
+  // Unregister this component with memory_coordinator::ClientRegistry.
+  base::MemoryCoordinatorClientRegistry::GetInstance()->Unregister(this);
+
   base::AutoLock lock(lock_);
   if (buffers_.empty())
     return;
@@ -406,6 +420,26 @@ void StagingBufferPool::ReleaseBuffersNotUsedSince(base::TimeTicks time) {
       RemoveStagingBuffer(busy_buffers_.front().get());
       busy_buffers_.pop_front();
     }
+  }
+}
+
+void StagingBufferPool::OnMemoryStateChange(base::MemoryState state) {
+  switch (state) {
+    case base::MemoryState::NORMAL:
+      // TODO(tasak): go back to normal state.
+      break;
+    case base::MemoryState::THROTTLED:
+      // TODO(tasak): make the limits of this component's caches smaller to
+      // save memory usage.
+      break;
+    case base::MemoryState::SUSPENDED: {
+      base::AutoLock lock(lock_);
+      // Release all buffers, regardless of how recently they were used.
+      ReleaseBuffersNotUsedSince(base::TimeTicks() + base::TimeDelta::Max());
+    } break;
+    case base::MemoryState::UNKNOWN:
+      // NOT_REACHED.
+      break;
   }
 }
 

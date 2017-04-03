@@ -15,6 +15,7 @@
 #include "net/base/request_priority.h"
 #include "net/base/test_completion_callback.h"
 #include "net/dns/mojo_host_type_converters.h"
+#include "net/log/net_log_with_source.h"
 #include "net/test/event_waiter.h"
 #include "net/test/gtest_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -167,9 +168,9 @@ class HostResolverMojoTest : public testing::Test {
   int Resolve(const HostResolver::RequestInfo& request_info,
               AddressList* result) {
     TestCompletionCallback callback;
-    return callback.GetResult(resolver_->Resolve(request_info, DEFAULT_PRIORITY,
-                                                 result, callback.callback(),
-                                                 &request_, BoundNetLog()));
+    return callback.GetResult(
+        resolver_->Resolve(request_info, DEFAULT_PRIORITY, result,
+                           callback.callback(), &request_, NetLogWithSource()));
   }
 
   std::unique_ptr<MockMojoHostResolver> mock_resolver_;
@@ -259,12 +260,12 @@ TEST_F(HostResolverMojoTest, Multiple) {
   std::unique_ptr<HostResolver::Request> request2;
   TestCompletionCallback callback1;
   TestCompletionCallback callback2;
-  ASSERT_EQ(ERR_IO_PENDING,
-            resolver_->Resolve(request_info1, DEFAULT_PRIORITY, &result1,
-                               callback1.callback(), &request1, BoundNetLog()));
-  ASSERT_EQ(ERR_IO_PENDING,
-            resolver_->Resolve(request_info2, DEFAULT_PRIORITY, &result2,
-                               callback2.callback(), &request2, BoundNetLog()));
+  ASSERT_EQ(ERR_IO_PENDING, resolver_->Resolve(request_info1, DEFAULT_PRIORITY,
+                                               &result1, callback1.callback(),
+                                               &request1, NetLogWithSource()));
+  ASSERT_EQ(ERR_IO_PENDING, resolver_->Resolve(request_info2, DEFAULT_PRIORITY,
+                                               &result2, callback2.callback(),
+                                               &request2, NetLogWithSource()));
   EXPECT_THAT(callback1.GetResult(ERR_IO_PENDING), IsOk());
   EXPECT_THAT(callback2.GetResult(ERR_IO_PENDING),
               IsError(ERR_NAME_NOT_RESOLVED));
@@ -322,7 +323,7 @@ TEST_F(HostResolverMojoTest, Cancel) {
   AddressList result;
   std::unique_ptr<HostResolver::Request> request;
   resolver_->Resolve(request_info, DEFAULT_PRIORITY, &result, base::Bind(&Fail),
-                     &request, BoundNetLog());
+                     &request, NetLogWithSource());
   request.reset();
   waiter_.WaitForEvent(ConnectionErrorSource::REQUEST);
   EXPECT_TRUE(result.empty());
@@ -355,8 +356,8 @@ TEST_F(HostResolverMojoTest, ResolveFromCache_Miss) {
   HostResolver::RequestInfo request_info(
       HostPortPair::FromString("example.com:8080"));
   AddressList result;
-  EXPECT_EQ(ERR_DNS_CACHE_MISS,
-            resolver_->ResolveFromCache(request_info, &result, BoundNetLog()));
+  EXPECT_EQ(ERR_DNS_CACHE_MISS, resolver_->ResolveFromCache(
+                                    request_info, &result, NetLogWithSource()));
   EXPECT_TRUE(result.empty());
 }
 
@@ -374,8 +375,8 @@ TEST_F(HostResolverMojoTest, ResolveFromCache_Hit) {
   EXPECT_EQ(1u, mock_resolver_->requests().size());
 
   result.clear();
-  EXPECT_EQ(OK,
-            resolver_->ResolveFromCache(request_info, &result, BoundNetLog()));
+  EXPECT_EQ(OK, resolver_->ResolveFromCache(request_info, &result,
+                                            NetLogWithSource()));
   ASSERT_EQ(2u, result.size());
   EXPECT_EQ(address_list[0], result[0]);
   EXPECT_EQ(address_list[1], result[1]);
@@ -397,8 +398,8 @@ TEST_F(HostResolverMojoTest, ResolveFromCache_CacheNotAllowed) {
 
   result.clear();
   request_info.set_allow_cached_response(false);
-  EXPECT_EQ(ERR_DNS_CACHE_MISS,
-            resolver_->ResolveFromCache(request_info, &result, BoundNetLog()));
+  EXPECT_EQ(ERR_DNS_CACHE_MISS, resolver_->ResolveFromCache(
+                                    request_info, &result, NetLogWithSource()));
   EXPECT_TRUE(result.empty());
 }
 

@@ -28,6 +28,7 @@
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
@@ -35,9 +36,11 @@
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/test_utils.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/browser/process_manager.h"
 #include "extensions/common/api/runtime.h"
 #include "extensions/common/extension_builder.h"
 #include "extensions/common/value_builder.h"
@@ -464,7 +467,7 @@ class ExternallyConnectableMessagingTest : public ExtensionApiTest {
     } else {
       dir->WriteFile(FILE_PATH_LITERAL("background.js"), "");
     }
-    return LoadExtension(dir->unpacked_path());
+    return LoadExtension(dir->UnpackedPath());
   }
 
   const char* common_manifest() {
@@ -1208,13 +1211,13 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, MessagingUserGesture) {
       "    function(msg, sender, reply) {\n"
       "      reply({result:chrome.test.isProcessingUserGesture()});\n"
       "    });");
-  const Extension* receiver = LoadExtension(receiver_dir.unpacked_path());
+  const Extension* receiver = LoadExtension(receiver_dir.UnpackedPath());
   ASSERT_TRUE(receiver);
 
   TestExtensionDir sender_dir;
   sender_dir.WriteManifest(kManifest);
   sender_dir.WriteFile(FILE_PATH_LITERAL("background.js"), "");
-  const Extension* sender = LoadExtension(sender_dir.unpacked_path());
+  const Extension* sender = LoadExtension(sender_dir.UnpackedPath());
   ASSERT_TRUE(sender);
 
   EXPECT_EQ("false",
@@ -1285,6 +1288,44 @@ IN_PROC_BROWSER_TEST_F(ExternallyConnectableMessagingTest,
 }
 
 #endif  // !defined(OS_WIN) - http://crbug.com/350517.
+
+// Tests that messages sent in the unload handler of a window arrive.
+IN_PROC_BROWSER_TEST_F(ExtensionApiTest, MessagingOnUnload) {
+  host_resolver()->AddRule("*", "127.0.0.1");
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  const Extension* extension =
+      LoadExtension(test_data_dir_.AppendASCII("messaging/on_unload"));
+  ExtensionTestMessageListener listener("listening", false);
+  ASSERT_TRUE(extension);
+  ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("example.com", "/empty.html"));
+  EXPECT_TRUE(listener.WaitUntilSatisfied());
+  ExtensionHost* background_host =
+      ProcessManager::Get(profile())->GetBackgroundHostForExtension(
+          extension->id());
+  ASSERT_TRUE(background_host);
+  content::WebContents* background_contents = background_host->host_contents();
+  ASSERT_TRUE(background_contents);
+  int message_count = -1;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractInt(
+      background_contents,
+      "window.domAutomationController.send(window.messageCount);",
+      &message_count));
+  // There shouldn't be any messages yet.
+  EXPECT_EQ(0, message_count);
+
+  content::WebContentsDestroyedWatcher destroyed_watcher(
+      browser()->tab_strip_model()->GetActiveWebContents());
+  chrome::CloseTab(browser());
+  destroyed_watcher.Wait();
+  base::RunLoop().RunUntilIdle();
+  // The extension should have sent a message from its unload handler.
+  ASSERT_TRUE(content::ExecuteScriptAndExtractInt(
+      background_contents,
+      "window.domAutomationController.send(window.messageCount);",
+      &message_count));
+  EXPECT_EQ(1, message_count);
+}
 
 }  // namespace
 

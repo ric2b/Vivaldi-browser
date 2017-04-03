@@ -6,13 +6,13 @@
 #define SERVICES_UI_GPU_DISPLAY_COMPOSITOR_COMPOSITOR_FRAME_SINK_IMPL_H_
 
 #include "base/memory/ref_counted.h"
+#include "cc/ipc/mojo_compositor_frame_sink.mojom.h"
 #include "cc/scheduler/begin_frame_source.h"
 #include "cc/surfaces/surface_factory.h"
 #include "cc/surfaces/surface_factory_client.h"
 #include "cc/surfaces/surface_id.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
-#include "services/ui/public/interfaces/gpu/display_compositor.mojom.h"
-#include "services/ui/surfaces/surfaces_state.h"
+#include "services/ui/surfaces/display_compositor.h"
 
 namespace ui {
 namespace gpu {
@@ -22,18 +22,18 @@ class CompositorFrameSinkDelegate;
 // A client presents visuals to screen by submitting CompositorFrames to a
 // CompositorFrameSink.
 class CompositorFrameSinkImpl : public cc::SurfaceFactoryClient,
-                                public mojom::CompositorFrameSink,
+                                public cc::mojom::MojoCompositorFrameSink,
                                 public cc::BeginFrameObserver {
  public:
   CompositorFrameSinkImpl(
       CompositorFrameSinkDelegate* delegate,
       int sink_id,
-      const scoped_refptr<SurfacesState>& surfaces_state,
+      const scoped_refptr<DisplayCompositor>& display_compositor,
       mojo::InterfaceRequest<mojom::CompositorFrameSink> request,
       mojom::CompositorFrameSinkClientPtr client);
   ~CompositorFrameSinkImpl() override;
 
-  // mojom::CompositorFrameSink implementation.
+  // cc::mojom::MojoCompositorFrameSink implementation.
   void SetNeedsBeginFrame(bool needs_begin_frame) override;
   void SubmitCompositorFrame(
       cc::CompositorFrame compositor_frame,
@@ -54,7 +54,7 @@ class CompositorFrameSinkImpl : public cc::SurfaceFactoryClient,
   void OnConnectionLost();
 
   CompositorFrameSinkDelegate* const delegate_;
-  scoped_refptr<SurfacesState> surfaces_state_;
+  scoped_refptr<DisplayCompositor> display_compositor_;
   const int sink_id_;
   cc::BeginFrameSource* begin_frame_source_;
   bool needs_begin_frame_;

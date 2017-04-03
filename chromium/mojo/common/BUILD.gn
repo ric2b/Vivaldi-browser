@@ -12,14 +12,12 @@ group("common") {
   ]
 }
 
-# GYP version: mojo/mojo_base.gyp:mojo_common_custom_types
 mojom("common_custom_types") {
   sources = [
     "common_custom_types.mojom",
   ]
 }
 
-# GYP version: mojo/mojo_base.gyp:mojo_common_lib
 component("common_base") {
   output_name = "mojo_common_lib"
 
@@ -44,7 +42,6 @@ component("common_base") {
   ]
 }
 
-# GYP version: mojo/mojo_base.gyp:mojo_test_common_custom_types
 mojom("test_common_custom_types") {
   sources = [
     "test_common_custom_types.mojom",
@@ -55,11 +52,11 @@ mojom("test_common_custom_types") {
   ]
 }
 
-# GYP version: mojo/mojo_base.gyp:mojo_common_unittests
 test("mojo_common_unittests") {
   deps = [
     ":common",
     ":common_custom_types",
+    ":struct_traits",
     ":test_common_custom_types",
     "//base",
     "//base:message_loop_tests",
@@ -86,5 +83,16 @@ test("mojo_common_perftests") {
     "//mojo/edk/test:run_all_perftests",
     "//mojo/public/cpp/test_support:test_utils",
     "//testing/gtest",
+  ]
+}
+
+source_set("struct_traits") {
+  sources = [
+    "common_custom_types_struct_traits.cc",
+    "common_custom_types_struct_traits.h",
+  ]
+  deps = [
+    ":common_custom_types_shared_cpp_sources",
+    "//base:base",
   ]
 }

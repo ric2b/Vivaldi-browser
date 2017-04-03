@@ -24,6 +24,7 @@
 #include "media/base/pipeline_status.h"
 #include "media/base/renderer.h"
 #include "media/base/renderer_client.h"
+#include "media/base/stream_parser.h"
 #include "media/base/text_track.h"
 #include "media/base/text_track_config.h"
 #include "media/base/time_source.h"
@@ -124,6 +125,7 @@ class MockDemuxer : public Demuxer {
   MOCK_METHOD1(CancelPendingSeek, void(base::TimeDelta));
   MOCK_METHOD2(Seek, void(base::TimeDelta time, const PipelineStatusCB& cb));
   MOCK_METHOD0(Stop, void());
+  MOCK_METHOD0(AbortPendingReads, void());
   MOCK_METHOD1(GetStream, DemuxerStream*(DemuxerStream::Type));
   MOCK_CONST_METHOD0(GetStartTime, base::TimeDelta());
   MOCK_CONST_METHOD0(GetTimelineOffset, base::Time());
@@ -243,7 +245,8 @@ class MockVideoRenderer : public VideoRenderer {
                     const PipelineStatusCB& init_cb));
   MOCK_METHOD1(Flush, void(const base::Closure& callback));
   MOCK_METHOD1(StartPlayingFrom, void(base::TimeDelta));
-  MOCK_METHOD1(OnTimeStateChanged, void(bool));
+  MOCK_METHOD0(OnTimeProgressing, void());
+  MOCK_METHOD0(OnTimeStopped, void());
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockVideoRenderer);
@@ -372,6 +375,29 @@ class MockCdmContext : public CdmContext {
   int cdm_id_ = CdmContext::kInvalidCdmId;
 
   DISALLOW_COPY_AND_ASSIGN(MockCdmContext);
+};
+
+class MockStreamParser : public StreamParser {
+ public:
+  MockStreamParser();
+  ~MockStreamParser() override;
+
+  // StreamParser interface
+  MOCK_METHOD8(
+      Init,
+      void(const InitCB& init_cb,
+           const NewConfigCB& config_cb,
+           const NewBuffersCB& new_buffers_cb,
+           bool ignore_text_track,
+           const EncryptedMediaInitDataCB& encrypted_media_init_data_cb,
+           const NewMediaSegmentCB& new_segment_cb,
+           const EndMediaSegmentCB& end_of_segment_cb,
+           const scoped_refptr<MediaLog>& media_log));
+  MOCK_METHOD0(Flush, void());
+  MOCK_METHOD2(Parse, bool(const uint8_t*, int));
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MockStreamParser);
 };
 
 }  // namespace media

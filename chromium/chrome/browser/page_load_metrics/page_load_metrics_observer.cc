@@ -12,6 +12,7 @@ PageLoadExtraInfo::PageLoadExtraInfo(
     bool started_in_foreground,
     bool user_gesture,
     const GURL& committed_url,
+    const GURL& start_url,
     const base::Optional<base::TimeDelta>& time_to_commit,
     UserAbortType abort_type,
     bool abort_user_initiated,
@@ -24,6 +25,7 @@ PageLoadExtraInfo::PageLoadExtraInfo(
       started_in_foreground(started_in_foreground),
       user_gesture(user_gesture),
       committed_url(committed_url),
+      start_url(start_url),
       time_to_commit(time_to_commit),
       abort_type(abort_type),
       abort_user_initiated(abort_user_initiated),
@@ -41,5 +43,24 @@ FailedProvisionalLoadInfo::FailedProvisionalLoadInfo(base::TimeDelta interval,
     : time_to_failed_provisional_load(interval), error(error) {}
 
 FailedProvisionalLoadInfo::~FailedProvisionalLoadInfo() {}
+
+PageLoadMetricsObserver::ObservePolicy PageLoadMetricsObserver::OnStart(
+    content::NavigationHandle* navigation_handle,
+    const GURL& currently_committed_url,
+    bool started_in_foreground) {
+  return CONTINUE_OBSERVING;
+}
+
+PageLoadMetricsObserver::ObservePolicy PageLoadMetricsObserver::OnCommit(
+    content::NavigationHandle* navigation_handle) {
+  return CONTINUE_OBSERVING;
+}
+
+PageLoadMetricsObserver::ObservePolicy
+PageLoadMetricsObserver::FlushMetricsOnAppEnterBackground(
+    const PageLoadTiming& timing,
+    const PageLoadExtraInfo& extra_info) {
+  return CONTINUE_OBSERVING;
+}
 
 }  // namespace page_load_metrics

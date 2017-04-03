@@ -15,6 +15,7 @@
 #include "platform/geometry/IntSize.h"
 #include "platform/graphics/paint/PaintArtifact.h"
 #include "platform/heap/Handle.h"
+#include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include <memory>
@@ -26,146 +27,110 @@ namespace blink {
 namespace {
 
 class MockChromeClient : public EmptyChromeClient {
-public:
-    MockChromeClient() : m_hasScheduledAnimation(false) { }
+ public:
+  MockChromeClient() : m_hasScheduledAnimation(false) {}
 
-    // ChromeClient
-    MOCK_METHOD1(didPaint, void(const PaintArtifact&));
-    MOCK_METHOD2(attachRootGraphicsLayer, void(GraphicsLayer*, LocalFrame* localRoot));
-    MOCK_METHOD2(setToolTip, void(const String&, TextDirection));
+  // ChromeClient
+  MOCK_METHOD2(attachRootGraphicsLayer,
+               void(GraphicsLayer*, LocalFrame* localRoot));
+  MOCK_METHOD3(mockSetToolTip, void(LocalFrame*, const String&, TextDirection));
+  void setToolTip(LocalFrame& frame,
+                  const String& tooltipText,
+                  TextDirection dir) override {
+    mockSetToolTip(&frame, tooltipText, dir);
+  }
 
-    void scheduleAnimation(Widget*) override { m_hasScheduledAnimation = true; }
-    bool m_hasScheduledAnimation;
+  void scheduleAnimation(Widget*) override { m_hasScheduledAnimation = true; }
+  bool m_hasScheduledAnimation;
 };
 
-class FrameViewTestBase
-    : public testing::Test
-    , public testing::WithParamInterface<FrameSettingOverrideFunction> {
-protected:
-    FrameViewTestBase()
-        : m_chromeClient(new MockChromeClient)
-    { }
+typedef bool TestParamRootLayerScrolling;
+class FrameViewTest
+    : public testing::WithParamInterface<TestParamRootLayerScrolling>,
+      private ScopedRootLayerScrollingForTest,
+      public testing::Test {
+ protected:
+  FrameViewTest()
+      : ScopedRootLayerScrollingForTest(GetParam()),
+        m_chromeClient(new MockChromeClient) {
+    EXPECT_CALL(chromeClient(), attachRootGraphicsLayer(_, _))
+        .Times(AnyNumber());
+  }
 
-    ~FrameViewTestBase()
-    {
-        testing::Mock::VerifyAndClearExpectations(&chromeClient());
-    }
+  ~FrameViewTest() {
+    testing::Mock::VerifyAndClearExpectations(&chromeClient());
+  }
 
-    void SetUp() override
-    {
-        Page::PageClients clients;
-        fillWithEmptyClients(clients);
-        clients.chromeClient = m_chromeClient.get();
-        m_pageHolder = DummyPageHolder::create(IntSize(800, 600), &clients);
-        m_pageHolder->page().settings().setAcceleratedCompositingEnabled(true);
-        if (GetParam())
-            (*GetParam())(m_pageHolder->page().settings());
-    }
+  void SetUp() override {
+    Page::PageClients clients;
+    fillWithEmptyClients(clients);
+    clients.chromeClient = m_chromeClient.get();
+    m_pageHolder = DummyPageHolder::create(IntSize(800, 600), &clients);
+    m_pageHolder->page().settings().setAcceleratedCompositingEnabled(true);
+  }
 
-    Document& document() { return m_pageHolder->document(); }
-    MockChromeClient& chromeClient() { return *m_chromeClient; }
+  Document& document() { return m_pageHolder->document(); }
+  MockChromeClient& chromeClient() { return *m_chromeClient; }
 
-private:
-    Persistent<MockChromeClient> m_chromeClient;
-    std::unique_ptr<DummyPageHolder> m_pageHolder;
+ private:
+  Persistent<MockChromeClient> m_chromeClient;
+  std::unique_ptr<DummyPageHolder> m_pageHolder;
 };
 
-class FrameViewTest : public FrameViewTestBase {
-protected:
-    FrameViewTest()
-    {
-        EXPECT_CALL(chromeClient(), attachRootGraphicsLayer(_, _)).Times(AnyNumber());
-    }
-};
+INSTANTIATE_TEST_CASE_P(All, FrameViewTest, ::testing::Bool());
 
-class FrameViewSlimmingPaintV2Test : public FrameViewTestBase {
-protected:
-    FrameViewSlimmingPaintV2Test()
-    {
-        // We shouldn't attach a root graphics layer. In this mode, that's not
-        // our responsibility.
-        EXPECT_CALL(chromeClient(), attachRootGraphicsLayer(_, _)).Times(0);
-    }
-
-    void SetUp() override
-    {
-        RuntimeEnabledFeatures::setSlimmingPaintV2Enabled(true);
-        FrameViewTestBase::SetUp();
-        document().view()->setParentVisible(true);
-        document().view()->setSelfVisible(true);
-    }
-
-    void TearDown() override
-    {
-        m_featuresBackup.restore();
-    }
-
-private:
-    RuntimeEnabledFeatures::Backup m_featuresBackup;
-};
-
-INSTANTIATE_TEST_CASE_P(All, FrameViewTest, ::testing::Values(
-    nullptr,
-    &RootLayerScrollsFrameSettingOverride));
-
-INSTANTIATE_TEST_CASE_P(All, FrameViewSlimmingPaintV2Test, ::testing::Values(
-    nullptr,
-    &RootLayerScrollsFrameSettingOverride));
-
-// These tests ensure that FrameView informs the ChromeClient of changes to the
-// paint artifact so that they can be shown to the user (e.g. via the
-// compositor).
-TEST_P(FrameViewSlimmingPaintV2Test, PaintOnce)
-{
-    EXPECT_CALL(chromeClient(), didPaint(_));
-    document().body()->setInnerHTML("Hello world", ASSERT_NO_EXCEPTION);
-    document().view()->updateAllLifecyclePhases();
+TEST_P(FrameViewTest, SetPaintInvalidationDuringUpdateAllLifecyclePhases) {
+  document().body()->setInnerHTML("<div id='a' style='color: blue'>A</div>",
+                                  ASSERT_NO_EXCEPTION);
+  document().view()->updateAllLifecyclePhases();
+  document().getElementById("a")->setAttribute(HTMLNames::styleAttr,
+                                               "color: green");
+  chromeClient().m_hasScheduledAnimation = false;
+  document().view()->updateAllLifecyclePhases();
+  EXPECT_FALSE(chromeClient().m_hasScheduledAnimation);
 }
 
-TEST_P(FrameViewSlimmingPaintV2Test, PaintAndRepaint)
-{
-    EXPECT_CALL(chromeClient(), didPaint(_)).Times(2);
-    document().body()->setInnerHTML("Hello", ASSERT_NO_EXCEPTION);
-    document().view()->updateAllLifecyclePhases();
-    document().body()->setInnerHTML("Hello world", ASSERT_NO_EXCEPTION);
-    document().view()->updateAllLifecyclePhases();
-}
-
-TEST_P(FrameViewTest, SetPaintInvalidationDuringUpdateAllLifecyclePhases)
-{
-    document().body()->setInnerHTML("<div id='a' style='color: blue'>A</div>", ASSERT_NO_EXCEPTION);
-    document().view()->updateAllLifecyclePhases();
-    document().getElementById("a")->setAttribute(HTMLNames::styleAttr, "color: green");
-    chromeClient().m_hasScheduledAnimation = false;
-    document().view()->updateAllLifecyclePhases();
-    EXPECT_FALSE(chromeClient().m_hasScheduledAnimation);
-}
-
-TEST_P(FrameViewTest, SetPaintInvalidationOutOfUpdateAllLifecyclePhases)
-{
-    document().body()->setInnerHTML("<div id='a' style='color: blue'>A</div>", ASSERT_NO_EXCEPTION);
-    document().view()->updateAllLifecyclePhases();
-    chromeClient().m_hasScheduledAnimation = false;
-    document().getElementById("a")->layoutObject()->setShouldDoFullPaintInvalidation();
-    EXPECT_TRUE(chromeClient().m_hasScheduledAnimation);
-    chromeClient().m_hasScheduledAnimation = false;
-    document().getElementById("a")->layoutObject()->setShouldDoFullPaintInvalidation();
-    EXPECT_TRUE(chromeClient().m_hasScheduledAnimation);
-    chromeClient().m_hasScheduledAnimation = false;
-    document().view()->updateAllLifecyclePhases();
-    EXPECT_FALSE(chromeClient().m_hasScheduledAnimation);
+TEST_P(FrameViewTest, SetPaintInvalidationOutOfUpdateAllLifecyclePhases) {
+  document().body()->setInnerHTML("<div id='a' style='color: blue'>A</div>",
+                                  ASSERT_NO_EXCEPTION);
+  document().view()->updateAllLifecyclePhases();
+  chromeClient().m_hasScheduledAnimation = false;
+  document()
+      .getElementById("a")
+      ->layoutObject()
+      ->setShouldDoFullPaintInvalidation();
+  EXPECT_TRUE(chromeClient().m_hasScheduledAnimation);
+  chromeClient().m_hasScheduledAnimation = false;
+  document()
+      .getElementById("a")
+      ->layoutObject()
+      ->setShouldDoFullPaintInvalidation();
+  EXPECT_TRUE(chromeClient().m_hasScheduledAnimation);
+  chromeClient().m_hasScheduledAnimation = false;
+  document().view()->updateAllLifecyclePhases();
+  EXPECT_FALSE(chromeClient().m_hasScheduledAnimation);
 }
 
 // If we don't hide the tooltip on scroll, it can negatively impact scrolling
 // performance. See crbug.com/586852 for details.
-TEST_P(FrameViewTest, HideTooltipWhenScrollPositionChanges)
-{
-    document().body()->setInnerHTML("<div style='width:1000px;height:1000px'></div>", ASSERT_NO_EXCEPTION);
-    document().view()->updateAllLifecyclePhases();
+TEST_P(FrameViewTest, HideTooltipWhenScrollPositionChanges) {
+  document().body()->setInnerHTML(
+      "<div style='width:1000px;height:1000px'></div>", ASSERT_NO_EXCEPTION);
+  document().view()->updateAllLifecyclePhases();
 
-    EXPECT_CALL(chromeClient(), setToolTip(String(), _));
-    document().view()->layoutViewportScrollableArea()->setScrollPosition(DoublePoint(1, 1), UserScroll);
+  EXPECT_CALL(chromeClient(), mockSetToolTip(document().frame(), String(), _));
+  document().view()->layoutViewportScrollableArea()->setScrollPosition(
+      DoublePoint(1, 1), UserScroll);
 }
 
-} // namespace
-} // namespace blink
+// NoOverflowInIncrementVisuallyNonEmptyPixelCount tests fail if the number of
+// pixels is calculated in 32-bit integer, because 65536 * 65536 would become 0
+// if it was calculated in 32-bit and thus it would be considered as empty.
+TEST_P(FrameViewTest, NoOverflowInIncrementVisuallyNonEmptyPixelCount) {
+  EXPECT_FALSE(document().view()->isVisuallyNonEmpty());
+  document().view()->incrementVisuallyNonEmptyPixelCount(IntSize(65536, 65536));
+  EXPECT_TRUE(document().view()->isVisuallyNonEmpty());
+}
+
+}  // namespace
+}  // namespace blink

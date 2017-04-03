@@ -53,17 +53,18 @@ WmWindow* GetSystemModalContainer(WmWindow* root, WmWindow* window) {
 WmWindow* GetContainerFromAlwaysOnTopController(WmWindow* root,
                                                 WmWindow* window) {
   return root->GetRootWindowController()
-      ->GetAlwaysOnTopController()
+      ->always_on_top_controller()
       ->GetContainer(window);
 }
 
 }  // namespace
 
 WmWindow* GetContainerForWindow(WmWindow* window) {
-  WmWindow* container = window->GetParent();
-  while (container && container->GetType() != ui::wm::WINDOW_TYPE_UNKNOWN)
-    container = container->GetParent();
-  return container;
+  WmWindow* parent = window->GetParent();
+  // The first parent with an explicit shell window ID is the container.
+  while (parent && parent->GetShellWindowId() == kShellWindowId_Invalid)
+    parent = parent->GetParent();
+  return parent;
 }
 
 WmWindow* GetDefaultParent(WmWindow* context,
@@ -105,6 +106,23 @@ WmWindow* GetDefaultParent(WmWindow* context,
       break;
   }
   return nullptr;
+}
+
+std::vector<WmWindow*> GetContainersFromAllRootWindows(
+    int container_id,
+    WmWindow* priority_root) {
+  std::vector<WmWindow*> containers;
+  for (WmWindow* root : WmShell::Get()->GetAllRootWindows()) {
+    WmWindow* container = root->GetChildByShellWindowId(container_id);
+    if (!container)
+      continue;
+
+    if (priority_root && priority_root->Contains(container))
+      containers.insert(containers.begin(), container);
+    else
+      containers.push_back(container);
+  }
+  return containers;
 }
 
 }  // namespace wm

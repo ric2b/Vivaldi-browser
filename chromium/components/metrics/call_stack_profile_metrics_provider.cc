@@ -38,13 +38,13 @@ namespace {
 // A set of profiles and the CallStackProfileMetricsProvider state associated
 // with them.
 struct ProfilesState {
-  ProfilesState(const CallStackProfileMetricsProvider::Params& params,
+  ProfilesState(const CallStackProfileParams& params,
                 const base::StackSamplingProfiler::CallStackProfiles& profiles,
                 base::TimeTicks start_timestamp);
 
   // The metrics-related parameters provided to
   // CallStackProfileMetricsProvider::GetProfilerCallback().
-  CallStackProfileMetricsProvider::Params params;
+  CallStackProfileParams params;
 
   // The call stack profiles collected by the profiler.
   base::StackSamplingProfiler::CallStackProfiles profiles;
@@ -57,7 +57,7 @@ struct ProfilesState {
 };
 
 ProfilesState::ProfilesState(
-    const CallStackProfileMetricsProvider::Params& params,
+    const CallStackProfileParams& params,
     const base::StackSamplingProfiler::CallStackProfiles& profiles,
     base::TimeTicks start_timestamp)
     : params(params),
@@ -186,10 +186,10 @@ PendingProfiles::~PendingProfiles() {}
 
 // Functions to process completed profiles ------------------------------------
 
-// Invoked on the profiler's thread. Provides the profiles to PendingProfiles to
-// append, if the collecting state allows.
-void ReceiveCompletedProfiles(
-    const CallStackProfileMetricsProvider::Params& params,
+// Will be invoked on either the main thread or the profiler's thread. Provides
+// the profiles to PendingProfiles to append, if the collecting state allows.
+void ReceiveCompletedProfilesImpl(
+    const CallStackProfileParams& params,
     base::TimeTicks start_timestamp,
     const StackSamplingProfiler::CallStackProfiles& profiles) {
   PendingProfiles::GetInstance()->CollectProfilesIfCollectionEnabled(
@@ -239,12 +239,12 @@ void CopySampleToProto(
 // Transcode |profile| into |proto_profile|.
 void CopyProfileToProto(
     const StackSamplingProfiler::CallStackProfile& profile,
-    bool preserve_sample_ordering,
+    CallStackProfileParams::SampleOrderingSpec ordering_spec,
     CallStackProfile* proto_profile) {
   if (profile.samples.empty())
     return;
 
-  if (preserve_sample_ordering) {
+  if (ordering_spec == CallStackProfileParams::PRESERVE_ORDER) {
     // Collapse only consecutive repeated samples together.
     CallStackProfile::Sample* current_sample_proto = nullptr;
     for (auto it = profile.samples.begin(); it != profile.samples.end(); ++it) {
@@ -289,43 +289,83 @@ void CopyProfileToProto(
       profile.sampling_period.InMilliseconds());
 }
 
-// Translates CallStackProfileMetricsProvider's trigger to the corresponding
+// Translates CallStackProfileParams's process to the corresponding
+// execution context Process.
+Process ToExecutionContextProcess(CallStackProfileParams::Process process) {
+  switch (process) {
+    case CallStackProfileParams::UNKNOWN_PROCESS:
+      return UNKNOWN_PROCESS;
+    case CallStackProfileParams::BROWSER_PROCESS:
+      return BROWSER_PROCESS;
+    case CallStackProfileParams::RENDERER_PROCESS:
+      return RENDERER_PROCESS;
+    case CallStackProfileParams::GPU_PROCESS:
+      return GPU_PROCESS;
+    case CallStackProfileParams::UTILITY_PROCESS:
+      return UTILITY_PROCESS;
+    case CallStackProfileParams::ZYGOTE_PROCESS:
+      return ZYGOTE_PROCESS;
+    case CallStackProfileParams::SANDBOX_HELPER_PROCESS:
+      return SANDBOX_HELPER_PROCESS;
+    case CallStackProfileParams::PPAPI_PLUGIN_PROCESS:
+      return PPAPI_PLUGIN_PROCESS;
+    case CallStackProfileParams::PPAPI_BROKER_PROCESS:
+      return PPAPI_BROKER_PROCESS;
+  }
+  NOTREACHED();
+  return UNKNOWN_PROCESS;
+}
+
+// Translates CallStackProfileParams's thread to the corresponding
+// SampledProfile TriggerEvent.
+Thread ToExecutionContextThread(CallStackProfileParams::Thread thread) {
+  switch (thread) {
+    case CallStackProfileParams::UNKNOWN_THREAD:
+      return UNKNOWN_THREAD;
+    case CallStackProfileParams::UI_THREAD:
+      return UI_THREAD;
+    case CallStackProfileParams::FILE_THREAD:
+      return FILE_THREAD;
+    case CallStackProfileParams::FILE_USER_BLOCKING_THREAD:
+      return FILE_USER_BLOCKING_THREAD;
+    case CallStackProfileParams::PROCESS_LAUNCHER_THREAD:
+      return PROCESS_LAUNCHER_THREAD;
+    case CallStackProfileParams::CACHE_THREAD:
+      return CACHE_THREAD;
+    case CallStackProfileParams::IO_THREAD:
+      return IO_THREAD;
+    case CallStackProfileParams::DB_THREAD:
+      return DB_THREAD;
+    case CallStackProfileParams::GPU_MAIN_THREAD:
+      return GPU_MAIN_THREAD;
+    case CallStackProfileParams::RENDER_THREAD:
+      return RENDER_THREAD;
+    case CallStackProfileParams::UTILITY_THREAD:
+      return UTILITY_THREAD;
+  }
+  NOTREACHED();
+  return UNKNOWN_THREAD;
+}
+
+// Translates CallStackProfileParams's trigger to the corresponding
 // SampledProfile TriggerEvent.
 SampledProfile::TriggerEvent ToSampledProfileTriggerEvent(
-    CallStackProfileMetricsProvider::Trigger trigger) {
+    CallStackProfileParams::Trigger trigger) {
   switch (trigger) {
-    case CallStackProfileMetricsProvider::UNKNOWN:
+    case CallStackProfileParams::UNKNOWN:
       return SampledProfile::UNKNOWN_TRIGGER_EVENT;
-      break;
-    case CallStackProfileMetricsProvider::PROCESS_STARTUP:
+    case CallStackProfileParams::PROCESS_STARTUP:
       return SampledProfile::PROCESS_STARTUP;
-      break;
-    case CallStackProfileMetricsProvider::JANKY_TASK:
+    case CallStackProfileParams::JANKY_TASK:
       return SampledProfile::JANKY_TASK;
-      break;
-    case CallStackProfileMetricsProvider::THREAD_HUNG:
+    case CallStackProfileParams::THREAD_HUNG:
       return SampledProfile::THREAD_HUNG;
-      break;
   }
   NOTREACHED();
   return SampledProfile::UNKNOWN_TRIGGER_EVENT;
 }
 
 }  // namespace
-
-// CallStackProfileMetricsProvider::Params ------------------------------------
-
-CallStackProfileMetricsProvider::Params::Params(
-    CallStackProfileMetricsProvider::Trigger trigger)
-    : Params(trigger, false) {
-}
-
-CallStackProfileMetricsProvider::Params::Params(
-    CallStackProfileMetricsProvider::Trigger trigger,
-    bool preserve_sample_ordering)
-    : trigger(trigger),
-      preserve_sample_ordering(preserve_sample_ordering) {
-}
 
 // CallStackProfileMetricsProvider --------------------------------------------
 
@@ -342,14 +382,24 @@ CallStackProfileMetricsProvider::~CallStackProfileMetricsProvider() {
 
 // This function can be invoked on an abitrary thread.
 base::StackSamplingProfiler::CompletedCallback
-CallStackProfileMetricsProvider::GetProfilerCallback(const Params& params) {
+CallStackProfileMetricsProvider::GetProfilerCallback(
+    const CallStackProfileParams& params) {
   // Ignore the profiles if the collection is disabled. If the collection state
   // changes while collecting, this will be detected by the callback and
   // profiles will be ignored at that point.
   if (!PendingProfiles::GetInstance()->IsCollectionEnabled())
     return base::Bind(&IgnoreCompletedProfiles);
 
-  return base::Bind(&ReceiveCompletedProfiles, params, base::TimeTicks::Now());
+  return base::Bind(&ReceiveCompletedProfilesImpl, params,
+                    base::TimeTicks::Now());
+}
+
+// static
+void CallStackProfileMetricsProvider::ReceiveCompletedProfiles(
+    const CallStackProfileParams& params,
+    base::TimeTicks start_timestamp,
+    const base::StackSamplingProfiler::CallStackProfiles& profiles) {
+  ReceiveCompletedProfilesImpl(params, start_timestamp, profiles);
 }
 
 void CallStackProfileMetricsProvider::OnRecordingEnabled() {
@@ -371,10 +421,13 @@ void CallStackProfileMetricsProvider::ProvideGeneralMetrics(
     for (const StackSamplingProfiler::CallStackProfile& profile :
              profiles_state.profiles) {
       SampledProfile* sampled_profile = uma_proto->add_sampled_profile();
+      sampled_profile->set_process(ToExecutionContextProcess(
+          profiles_state.params.process));
+      sampled_profile->set_thread(ToExecutionContextThread(
+          profiles_state.params.thread));
       sampled_profile->set_trigger_event(ToSampledProfileTriggerEvent(
           profiles_state.params.trigger));
-      CopyProfileToProto(profile,
-                         profiles_state.params.preserve_sample_ordering,
+      CopyProfileToProto(profile, profiles_state.params.ordering_spec,
                          sampled_profile->mutable_call_stack_profile());
     }
   }

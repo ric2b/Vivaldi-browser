@@ -34,8 +34,8 @@
 
 using device::BluetoothAdapter;
 using device::BluetoothAdapterFactory;
-using device::BluetoothAudioSink;
 using device::BluetoothDevice;
+using device::BluetoothDeviceType;
 using device::BluetoothDiscoveryFilter;
 using device::BluetoothDiscoverySession;
 using device::BluetoothUUID;
@@ -74,7 +74,7 @@ class FakeBluetoothProfileServiceProviderDelegate
 
   void NewConnection(
       const dbus::ObjectPath&,
-      std::unique_ptr<dbus::FileDescriptor>,
+      base::ScopedFD,
       const bluez::BluetoothProfileServiceProvider::Delegate::Options&,
       const ConfirmationCallback&) override {}
 
@@ -249,11 +249,6 @@ class BluetoothBlueZTest : public testing::Test {
     QuitMessageLoop();
   }
 
-  void AudioSinkAcquiredCallback(scoped_refptr<BluetoothAudioSink>) {
-    ++callback_count_;
-    QuitMessageLoop();
-  }
-
   void ProfileRegisteredCallback(BluetoothAdapterProfileBlueZ* profile) {
     adapter_profile_ = profile;
     ++callback_count_;
@@ -290,11 +285,6 @@ class BluetoothBlueZTest : public testing::Test {
   void ConnectErrorCallback(BluetoothDevice::ConnectErrorCode error) {
     ++error_callback_count_;
     last_connect_error_ = error;
-  }
-
-  void AudioSinkErrorCallback(BluetoothAudioSink::ErrorCode) {
-    ++error_callback_count_;
-    QuitMessageLoop();
   }
 
   void ErrorCompletionCallback(const std::string& error_message) {
@@ -2157,7 +2147,7 @@ TEST_F(BluetoothBlueZTest, DeviceProperties) {
   EXPECT_EQ(
       base::UTF8ToUTF16(bluez::FakeBluetoothDeviceClient::kPairedDeviceAlias),
       devices[idx]->GetNameForDisplay());
-  EXPECT_EQ(BluetoothDevice::DEVICE_COMPUTER, devices[idx]->GetDeviceType());
+  EXPECT_EQ(BluetoothDeviceType::COMPUTER, devices[idx]->GetDeviceType());
   EXPECT_TRUE(devices[idx]->IsPaired());
   EXPECT_FALSE(devices[idx]->IsConnected());
   EXPECT_FALSE(devices[idx]->IsConnecting());
@@ -2187,7 +2177,7 @@ TEST_F(BluetoothBlueZTest, DeviceClassChanged) {
   int idx = GetDeviceIndexByAddress(
       devices, bluez::FakeBluetoothDeviceClient::kPairedDeviceAddress);
   ASSERT_NE(-1, idx);
-  ASSERT_EQ(BluetoothDevice::DEVICE_COMPUTER, devices[idx]->GetDeviceType());
+  ASSERT_EQ(BluetoothDeviceType::COMPUTER, devices[idx]->GetDeviceType());
 
   // Install an observer; expect the DeviceChanged method to be called when
   // we change the class of the device.
@@ -2202,7 +2192,7 @@ TEST_F(BluetoothBlueZTest, DeviceClassChanged) {
   EXPECT_EQ(1, observer.device_changed_count());
   EXPECT_EQ(devices[idx], observer.last_device());
 
-  EXPECT_EQ(BluetoothDevice::DEVICE_MOUSE, devices[idx]->GetDeviceType());
+  EXPECT_EQ(BluetoothDeviceType::MOUSE, devices[idx]->GetDeviceType());
 }
 
 TEST_F(BluetoothBlueZTest, DeviceAppearance) {
@@ -2215,7 +2205,7 @@ TEST_F(BluetoothBlueZTest, DeviceAppearance) {
   int idx = GetDeviceIndexByAddress(
       devices, bluez::FakeBluetoothDeviceClient::kPairedDeviceAddress);
   ASSERT_NE(-1, idx);
-  ASSERT_EQ(BluetoothDevice::DEVICE_COMPUTER, devices[idx]->GetDeviceType());
+  ASSERT_EQ(BluetoothDeviceType::COMPUTER, devices[idx]->GetDeviceType());
 
   // Install an observer; expect the DeviceChanged method to be called when
   // we change the appearance of the device.
@@ -2271,7 +2261,7 @@ TEST_F(BluetoothBlueZTest, DeviceTypebyAppearanceNotBluetoothClass) {
   int idx = GetDeviceIndexByAddress(
       devices, bluez::FakeBluetoothDeviceClient::kPairedDeviceAddress);
   ASSERT_NE(-1, idx);
-  ASSERT_EQ(BluetoothDevice::DEVICE_COMPUTER, devices[idx]->GetDeviceType());
+  ASSERT_EQ(BluetoothDeviceType::COMPUTER, devices[idx]->GetDeviceType());
 
   // Install an observer; expect the DeviceChanged method to be called when
   // we change the appearance of the device.
@@ -2284,14 +2274,14 @@ TEST_F(BluetoothBlueZTest, DeviceTypebyAppearanceNotBluetoothClass) {
   // Let the device come without bluetooth_class.
   properties->bluetooth_class.ReplaceValue(0);  // DeviceChanged method called
   properties->appearance.ReplaceValue(0);       // DeviceChanged method called
-  EXPECT_EQ(BluetoothDevice::DEVICE_UNKNOWN, devices[idx]->GetDeviceType());
+  EXPECT_EQ(BluetoothDeviceType::UNKNOWN, devices[idx]->GetDeviceType());
   EXPECT_EQ(2, observer.device_changed_count());
   EXPECT_EQ(devices[idx], observer.last_device());
 
   // Set the device appearance as keyboard.
   properties->appearance.ReplaceValue(961);  // DeviceChanged method called
   properties->appearance.set_valid(true);
-  EXPECT_EQ(BluetoothDevice::DEVICE_KEYBOARD, devices[idx]->GetDeviceType());
+  EXPECT_EQ(BluetoothDeviceType::KEYBOARD, devices[idx]->GetDeviceType());
   EXPECT_EQ(3, observer.device_changed_count());
   EXPECT_EQ(devices[idx], observer.last_device());
   // When discovery is over, the value should be invalidated.
@@ -2300,12 +2290,12 @@ TEST_F(BluetoothBlueZTest, DeviceTypebyAppearanceNotBluetoothClass) {
   properties->NotifyPropertyChanged(properties->appearance.name());
   EXPECT_EQ(4, observer.device_changed_count());
   EXPECT_EQ(devices[idx], observer.last_device());
-  EXPECT_EQ(BluetoothDevice::DEVICE_UNKNOWN, devices[idx]->GetDeviceType());
+  EXPECT_EQ(BluetoothDeviceType::UNKNOWN, devices[idx]->GetDeviceType());
 
   // Change the device appearance to mouse.
   properties->appearance.ReplaceValue(962);  // DeviceChanged method called
   properties->appearance.set_valid(true);
-  EXPECT_EQ(BluetoothDevice::DEVICE_MOUSE, devices[idx]->GetDeviceType());
+  EXPECT_EQ(BluetoothDeviceType::MOUSE, devices[idx]->GetDeviceType());
   EXPECT_EQ(5, observer.device_changed_count());
   EXPECT_EQ(devices[idx], observer.last_device());
   // When discovery is over, the value should be invalidated.
@@ -2314,7 +2304,7 @@ TEST_F(BluetoothBlueZTest, DeviceTypebyAppearanceNotBluetoothClass) {
   properties->NotifyPropertyChanged(properties->appearance.name());
   EXPECT_EQ(6, observer.device_changed_count());
   EXPECT_EQ(devices[idx], observer.last_device());
-  EXPECT_EQ(BluetoothDevice::DEVICE_UNKNOWN, devices[idx]->GetDeviceType());
+  EXPECT_EQ(BluetoothDeviceType::UNKNOWN, devices[idx]->GetDeviceType());
 }
 
 TEST_F(BluetoothBlueZTest, DeviceNameChanged) {
@@ -4261,16 +4251,6 @@ TEST_F(BluetoothBlueZTest, Shutdown) {
   // CreateRfcommService will DCHECK after Shutdown().
   // CreateL2capService will DCHECK after Shutdown().
 
-  BluetoothAudioSink::Options audio_sink_options;
-  adapter_->RegisterAudioSink(
-      audio_sink_options,
-      base::Bind(&BluetoothBlueZTest::AudioSinkAcquiredCallback,
-                 base::Unretained(this)),
-      base::Bind(&BluetoothBlueZTest::AudioSinkErrorCallback,
-                 base::Unretained(this)));
-  EXPECT_EQ(0, callback_count_);
-  EXPECT_EQ(1, error_callback_count_--) << "RegisterAudioSink error";
-
   BluetoothAdapterBlueZ* adapter_bluez =
       static_cast<BluetoothAdapterBlueZ*>(adapter_.get());
   EXPECT_EQ(nullptr, adapter_bluez->GetDeviceWithPath(dbus::ObjectPath("")));
@@ -4326,15 +4306,6 @@ TEST_F(BluetoothBlueZTest, Shutdown) {
   adapter_bluez->OnRegisterAgentError("", "");
   adapter_bluez->OnRequestDefaultAgent();
   adapter_bluez->OnRequestDefaultAgentError("", "");
-
-  adapter_bluez->OnRegisterAudioSink(
-      base::Bind(&BluetoothBlueZTest::AudioSinkAcquiredCallback,
-                 base::Unretained(this)),
-      base::Bind(&BluetoothBlueZTest::AudioSinkErrorCallback,
-                 base::Unretained(this)),
-      scoped_refptr<device::BluetoothAudioSink>());
-  EXPECT_EQ(0, callback_count_);
-  EXPECT_EQ(1, error_callback_count_--) << "RegisterAudioSink error";
 
   // GetPairing will DCHECK after Shutdown().
   // SetAdapter will DCHECK after Shutdown().
@@ -4514,6 +4485,69 @@ TEST_F(BluetoothBlueZTest, Shutdown_OnStopDiscoveryError) {
   // and kNumberOfDiscoverySessions errors queued with AddDiscoverySession.
   EXPECT_EQ(0, callback_count_);
   EXPECT_EQ(1 + kNumberOfDiscoverySessions, error_callback_count_);
+}
+
+TEST_F(BluetoothBlueZTest, ServiceDataChanged) {
+  // Simulate a change of service data of a device.
+  GetAdapter();
+
+  BluetoothDevice* device = adapter_->GetDevice(
+      bluez::FakeBluetoothDeviceClient::kPairedDeviceAddress);
+
+  // Install an observer; expect the DeviceChanged method to be called
+  // when we change the service data.
+  TestBluetoothAdapterObserver observer(adapter_);
+
+  bluez::FakeBluetoothDeviceClient::Properties* properties =
+      fake_bluetooth_device_client_->GetProperties(dbus::ObjectPath(
+          bluez::FakeBluetoothDeviceClient::kPairedDevicePath));
+
+  properties->service_data.set_valid(true);
+
+  // Check that ServiceDataChanged is correctly invoke.
+  properties->service_data.ReplaceValue({{kGapUuid, {1, 2, 3}}});
+  EXPECT_EQ(1, observer.device_changed_count());
+  EXPECT_EQ(device, observer.last_device());
+  EXPECT_EQ(
+      BluetoothDevice::ServiceDataMap({{BluetoothUUID(kGapUuid), {1, 2, 3}}}),
+      device->GetServiceData());
+  EXPECT_EQ(BluetoothDevice::UUIDSet({BluetoothUUID(kGapUuid)}),
+            device->GetServiceDataUUIDs());
+  EXPECT_EQ(std::vector<uint8_t>({1, 2, 3}),
+            *(device->GetServiceDataForUUID(BluetoothUUID(kGapUuid))));
+
+  // Check that we can update service data with same uuid / add more uuid.
+  properties->service_data.ReplaceValue(
+      {{kGapUuid, {3, 2, 1}}, {kGattUuid, {1}}});
+  EXPECT_EQ(2, observer.device_changed_count());
+  EXPECT_EQ(device, observer.last_device());
+
+  EXPECT_EQ(
+      BluetoothDevice::ServiceDataMap({{BluetoothUUID(kGapUuid), {3, 2, 1}},
+                                       {BluetoothUUID(kGattUuid), {1}}}),
+      device->GetServiceData());
+  EXPECT_EQ(BluetoothDevice::UUIDSet(
+                {BluetoothUUID(kGapUuid), BluetoothUUID(kGattUuid)}),
+            device->GetServiceDataUUIDs());
+  EXPECT_EQ(std::vector<uint8_t>({3, 2, 1}),
+            *(device->GetServiceDataForUUID(BluetoothUUID(kGapUuid))));
+  EXPECT_EQ(std::vector<uint8_t>({1}),
+            *(device->GetServiceDataForUUID(BluetoothUUID(kGattUuid))));
+
+  // Check that we can remove uuid / change uuid with same data.
+  properties->service_data.ReplaceValue({{kPnpUuid, {3, 2, 1}}});
+  EXPECT_EQ(3, observer.device_changed_count());
+  EXPECT_EQ(device, observer.last_device());
+
+  EXPECT_EQ(
+      BluetoothDevice::ServiceDataMap({{BluetoothUUID(kPnpUuid), {3, 2, 1}}}),
+      device->GetServiceData());
+  EXPECT_EQ(BluetoothDevice::UUIDSet({BluetoothUUID(kPnpUuid)}),
+            device->GetServiceDataUUIDs());
+  EXPECT_EQ(std::vector<uint8_t>({3, 2, 1}),
+            *(device->GetServiceDataForUUID(BluetoothUUID(kPnpUuid))));
+  EXPECT_EQ(nullptr, device->GetServiceDataForUUID(BluetoothUUID(kGapUuid)));
+  EXPECT_EQ(nullptr, device->GetServiceDataForUUID(BluetoothUUID(kGattUuid)));
 }
 
 }  // namespace bluez

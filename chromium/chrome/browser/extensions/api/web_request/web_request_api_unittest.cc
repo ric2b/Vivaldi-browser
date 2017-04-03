@@ -53,6 +53,7 @@
 #include "net/base/upload_bytes_element_reader.h"
 #include "net/base/upload_file_element_reader.h"
 #include "net/dns/mock_host_resolver.h"
+#include "net/log/net_log_with_source.h"
 #include "net/log/test_net_log.h"
 #include "net/url_request/url_request_job_factory_impl.h"
 #include "net/url_request/url_request_test_util.h"
@@ -534,15 +535,15 @@ void ExtensionWebRequestTest::FireURLRequestWithData(
                                          true /* overwrite */);
   }
   std::vector<std::unique_ptr<net::UploadElementReader>> element_readers;
-  element_readers.push_back(base::WrapUnique(
-      new net::UploadBytesElementReader(&(bytes_1[0]), bytes_1.size())));
-  element_readers.push_back(base::WrapUnique(new net::UploadFileElementReader(
+  element_readers.push_back(base::MakeUnique<net::UploadBytesElementReader>(
+      &(bytes_1[0]), bytes_1.size()));
+  element_readers.push_back(base::MakeUnique<net::UploadFileElementReader>(
       base::ThreadTaskRunnerHandle::Get().get(), base::FilePath(), 0, 0,
-      base::Time())));
-  element_readers.push_back(base::WrapUnique(
-      new net::UploadBytesElementReader(&(bytes_2[0]), bytes_2.size())));
-  request->set_upload(base::WrapUnique(
-      new net::ElementsUploadDataStream(std::move(element_readers), 0)));
+      base::Time()));
+  element_readers.push_back(base::MakeUnique<net::UploadBytesElementReader>(
+      &(bytes_2[0]), bytes_2.size()));
+  request->set_upload(base::MakeUnique<net::ElementsUploadDataStream>(
+      std::move(element_readers), 0));
   ipc_sender_.PushTask(base::Bind(&base::DoNothing));
   request->Start();
 }
@@ -1547,7 +1548,7 @@ TEST(ExtensionWebRequestHelpersTest, TestCalculateOnAuthRequiredDelta) {
 TEST(ExtensionWebRequestHelpersTest, TestMergeCancelOfResponses) {
   EventResponseDeltas deltas;
   net::BoundTestNetLog capturing_net_log;
-  net::BoundNetLog net_log = capturing_net_log.bound();
+  net::NetLogWithSource net_log = capturing_net_log.bound();
   bool canceled = false;
 
   // Single event that does not cancel.
@@ -1573,7 +1574,7 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeCancelOfResponses) {
 TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeRequestResponses) {
   EventResponseDeltas deltas;
   net::BoundTestNetLog capturing_net_log;
-  net::BoundNetLog net_log = capturing_net_log.bound();
+  net::NetLogWithSource net_log = capturing_net_log.bound();
   WarningSet warning_set;
   GURL effective_new_url;
 
@@ -1654,7 +1655,7 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeRequestResponses) {
 TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeRequestResponses2) {
   EventResponseDeltas deltas;
   net::BoundTestNetLog capturing_net_log;
-  net::BoundNetLog net_log = capturing_net_log.bound();
+  net::NetLogWithSource net_log = capturing_net_log.bound();
   WarningSet warning_set;
   GURL effective_new_url;
 
@@ -1723,7 +1724,7 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeRequestResponses2) {
 TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeRequestResponses3) {
   EventResponseDeltas deltas;
   net::BoundTestNetLog capturing_net_log;
-  net::BoundNetLog net_log = capturing_net_log.bound();
+  net::NetLogWithSource net_log = capturing_net_log.bound();
   WarningSet warning_set;
   GURL effective_new_url;
 
@@ -1756,10 +1757,10 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeRequestResponses3) {
 
 TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeSendHeadersResponses) {
   net::HttpRequestHeaders base_headers;
-  base_headers.AddHeaderFromString("key1: value 1");
-  base_headers.AddHeaderFromString("key2: value 2");
+  base_headers.SetHeader("key1", "value 1");
+  base_headers.SetHeader("key2", "value 2");
   net::BoundTestNetLog capturing_net_log;
-  net::BoundNetLog net_log = capturing_net_log.bound();
+  net::NetLogWithSource net_log = capturing_net_log.bound();
   WarningSet warning_set;
   std::string header_value;
   EventResponseDeltas deltas;
@@ -1782,8 +1783,8 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeSendHeadersResponses) {
   linked_ptr<EventResponseDelta> d1(
       new EventResponseDelta("extid1", base::Time::FromInternalValue(2000)));
   d1->deleted_request_headers.push_back("key1");
-  d1->modified_request_headers.AddHeaderFromString("key2: value 3");
-  d1->modified_request_headers.AddHeaderFromString("key3: value 3");
+  d1->modified_request_headers.SetHeader("key2", "value 3");
+  d1->modified_request_headers.SetHeader("key3", "value 3");
   deltas.push_back(d1);
   deltas.sort(&InDecreasingExtensionInstallationTimeOrder);
   warning_set.clear();
@@ -1804,8 +1805,8 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeSendHeadersResponses) {
   linked_ptr<EventResponseDelta> d2(
       new EventResponseDelta("extid2", base::Time::FromInternalValue(1500)));
   // This one conflicts:
-  d2->modified_request_headers.AddHeaderFromString("key3: value 0");
-  d2->modified_request_headers.AddHeaderFromString("key4: value 4");
+  d2->modified_request_headers.SetHeader("key3", "value 0");
+  d2->modified_request_headers.SetHeader("key4", "value 4");
   deltas.push_back(d2);
   deltas.sort(&InDecreasingExtensionInstallationTimeOrder);
   warning_set.clear();
@@ -1828,8 +1829,8 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeSendHeadersResponses) {
   linked_ptr<EventResponseDelta> d3(
       new EventResponseDelta("extid3", base::Time::FromInternalValue(1000)));
   d3->deleted_request_headers.push_back("key1");
-  d3->modified_request_headers.AddHeaderFromString("key2: value 3");
-  d3->modified_request_headers.AddHeaderFromString("key5: value 5");
+  d3->modified_request_headers.SetHeader("key2", "value 3");
+  d3->modified_request_headers.SetHeader("key5", "value 5");
   deltas.push_back(d3);
   deltas.sort(&InDecreasingExtensionInstallationTimeOrder);
   warning_set.clear();
@@ -1855,7 +1856,7 @@ TEST(ExtensionWebRequestHelpersTest,
   base_headers.AddHeaderFromString(
       "Cookie: name=value; name2=value2; name3=\"value3\"");
   net::BoundTestNetLog capturing_net_log;
-  net::BoundNetLog net_log = capturing_net_log.bound();
+  net::NetLogWithSource net_log = capturing_net_log.bound();
   WarningSet warning_set;
   std::string header_value;
   EventResponseDeltas deltas;
@@ -1939,7 +1940,7 @@ std::string GetCookieExpirationDate(int delta_secs) {
 TEST(ExtensionWebRequestHelpersTest,
      TestMergeCookiesInOnHeadersReceivedResponses) {
   net::BoundTestNetLog capturing_net_log;
-  net::BoundNetLog net_log = capturing_net_log.bound();
+  net::NetLogWithSource net_log = capturing_net_log.bound();
   WarningSet warning_set;
   std::string header_value;
   EventResponseDeltas deltas;
@@ -2174,7 +2175,7 @@ TEST(ExtensionWebRequestHelpersTest,
 
 TEST(ExtensionWebRequestHelpersTest, TestMergeOnHeadersReceivedResponses) {
   net::BoundTestNetLog capturing_net_log;
-  net::BoundNetLog net_log = capturing_net_log.bound();
+  net::NetLogWithSource net_log = capturing_net_log.bound();
   WarningSet warning_set;
   std::string header_value;
   EventResponseDeltas deltas;
@@ -2274,7 +2275,7 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnHeadersReceivedResponses) {
 TEST(ExtensionWebRequestHelpersTest,
      TestMergeOnHeadersReceivedResponsesDeletion) {
   net::BoundTestNetLog capturing_net_log;
-  net::BoundNetLog net_log = capturing_net_log.bound();
+  net::NetLogWithSource net_log = capturing_net_log.bound();
   WarningSet warning_set;
   std::string header_value;
   EventResponseDeltas deltas;
@@ -2328,7 +2329,7 @@ TEST(ExtensionWebRequestHelpersTest,
      TestMergeOnHeadersReceivedResponsesRedirect) {
   EventResponseDeltas deltas;
   net::BoundTestNetLog capturing_net_log;
-  net::BoundNetLog net_log = capturing_net_log.bound();
+  net::NetLogWithSource net_log = capturing_net_log.bound();
   WarningSet warning_set;
 
   char base_headers_string[] =
@@ -2381,7 +2382,7 @@ TEST(ExtensionWebRequestHelpersTest,
 
 TEST(ExtensionWebRequestHelpersTest, TestMergeOnAuthRequiredResponses) {
   net::BoundTestNetLog capturing_net_log;
-  net::BoundNetLog net_log = capturing_net_log.bound();
+  net::NetLogWithSource net_log = capturing_net_log.bound();
   WarningSet warning_set;
   EventResponseDeltas deltas;
   base::string16 username = base::ASCIIToUTF16("foo");

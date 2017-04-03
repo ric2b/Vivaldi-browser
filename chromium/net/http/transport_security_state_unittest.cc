@@ -11,6 +11,7 @@
 #include "base/base64.h"
 #include "base/files/file_path.h"
 #include "base/json/json_reader.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/rand_util.h"
 #include "base/sha1.h"
@@ -31,7 +32,6 @@
 #include "net/cert/x509_cert_types.h"
 #include "net/cert/x509_certificate.h"
 #include "net/http/http_util.h"
-#include "net/log/net_log.h"
 #include "net/ssl/ssl_info.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/test_data_directory.h"
@@ -47,7 +47,7 @@ const char kSubdomain[] = "foo.example.test";
 const uint16_t kPort = 443;
 const char kReportUri[] = "http://report-example.test/test";
 const char kExpectCTStaticHostname[] = "preloaded-expect-ct.badssl.com";
-const char kExpectCTStaticReportURI[] = "https://report.badssl.com/expect-ct";
+const char kExpectCTStaticReportURI[] = "https://clients3.google.com/ct_upload";
 const char kExpectStapleStaticHostname[] = "preloaded-expect-staple.badssl.com";
 const char kExpectStapleStaticReportURI[] =
     "https://report.badssl.com/expect-staple";
@@ -2332,7 +2332,8 @@ TEST_F(TransportSecurityStateTest, RequireCTForSymantec) {
   // necessary.
   hashes.clear();
   hashes.push_back(HashValue(symantec_hash_value));
-  base::FieldTrialList field_trial_list(new base::MockEntropyProvider());
+  base::FieldTrialList field_trial_list(
+      base::MakeUnique<base::MockEntropyProvider>());
   base::FieldTrialList::CreateFieldTrial("EnforceCTForProblematicRoots",
                                          "disabled");
 

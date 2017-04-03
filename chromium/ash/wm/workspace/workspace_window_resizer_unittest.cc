@@ -12,6 +12,7 @@
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm/wm_event.h"
 #include "ash/common/wm/workspace/phantom_window_controller.h"
+#include "ash/common/wm/workspace_controller.h"
 #include "ash/display/display_manager.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
@@ -19,7 +20,6 @@
 #include "ash/test/display_manager_test_api.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm/workspace_controller.h"
 #include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -545,9 +545,6 @@ TEST_P(WorkspaceWindowResizerTest, MouseMoveWithTouchDrag) {
 
 // Assertions around dragging to the left/right edge of the screen.
 TEST_P(WorkspaceWindowResizerTest, Edge) {
-  if (!SupportsHostWindowResize())
-    return;
-
   // Resize host window to force insets update.
   UpdateDisplay("800x700");
   // TODO(varkha): Insets are reset after every drag because of
@@ -604,7 +601,7 @@ TEST_P(WorkspaceWindowResizerTest, Edge) {
   EXPECT_EQ(root_windows[0], window_->GetRootWindow());
   // Window is wide enough not to get docked right away.
   window_->SetBoundsInScreen(gfx::Rect(800, 10, 400, 60),
-                             ScreenUtil::GetSecondaryDisplay());
+                             display_manager()->GetSecondaryDisplay());
   EXPECT_EQ(root_windows[1], window_->GetRootWindow());
   {
     EXPECT_EQ("800,10 400x60", window_->GetBoundsInScreen().ToString());
@@ -821,7 +818,8 @@ TEST_P(WorkspaceWindowResizerTest, DontDragOffBottomWithMultiDisplay) {
 
   // Positions the secondary display at the bottom the primary display.
   Shell::GetInstance()->display_manager()->SetLayoutForCurrentDisplays(
-      test::CreateDisplayLayout(display::DisplayPlacement::BOTTOM, 0));
+      test::CreateDisplayLayout(display_manager(),
+                                display::DisplayPlacement::BOTTOM, 0));
 
   {
     window_->SetBounds(gfx::Rect(100, 200, 300, 20));

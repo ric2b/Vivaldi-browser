@@ -132,11 +132,12 @@ void Notes_Model::EndExtensiveChanges() {
 }
 
 Notes_Node *Notes_Model::AddNode(Notes_Node *parent, int index,
-                                 Notes_Node *node) {
+                                 std::unique_ptr<Notes_Node> node) {
+  Notes_Node *node_ptr = node.get();
   if (!parent)
     parent = &root_;
 
-  parent->Add(node, index);
+  parent->Add(std::move(node), index);
 
   if (store_.get())
     store_->ScheduleSave();
@@ -144,7 +145,7 @@ Notes_Node *Notes_Model::AddNode(Notes_Node *parent, int index,
   FOR_EACH_OBSERVER(NotesModelObserver, observers_,
                     NotesNodeAdded(this, parent, index));
 
-  return node;
+  return node_ptr;
 }
 
 Notes_Node *Notes_Model::AddNote(const Notes_Node *parent, int index,
@@ -155,12 +156,12 @@ Notes_Node *Notes_Model::AddNote(const Notes_Node *parent, int index,
 
   int64_t id = GetNewIndex();
 
-  Notes_Node *new_node = new Notes_Node(id);
+  std::unique_ptr<Notes_Node> new_node = base::MakeUnique<Notes_Node>(id);
   new_node->SetTitle(subject);
   new_node->SetContent(content);
   new_node->SetURL(url);
 
-  return AddNode(AsMutable(parent), index, new_node);
+  return AddNode(AsMutable(parent), index, std::move(new_node));
 }
 
 Notes_Node *Notes_Model::AddNote(const Notes_Node *parent, int index,
@@ -171,7 +172,7 @@ Notes_Node *Notes_Model::AddNote(const Notes_Node *parent, int index,
 
   int64_t id = GetNewIndex();
 
-  Notes_Node *new_node = new Notes_Node(id);
+  std::unique_ptr<Notes_Node> new_node = base::MakeUnique<Notes_Node>(id);
   new_node->SetTitle(note.title);
   new_node->SetCreationTime(note.creation_time);
 
@@ -181,7 +182,7 @@ Notes_Node *Notes_Model::AddNote(const Notes_Node *parent, int index,
     new_node->SetURL(note.url);
     new_node->SetContent(note.content);
   }
-  return AddNode(AsMutable(parent), index, new_node);
+  return AddNode(AsMutable(parent), index, std::move(new_node));
 }
 
 Notes_Node *Notes_Model::AddFolder(const Notes_Node *parent, int index,
@@ -190,11 +191,11 @@ Notes_Node *Notes_Model::AddFolder(const Notes_Node *parent, int index,
     return NULL;
 
   int64_t id = GetNewIndex();
-  Notes_Node *new_node = new Notes_Node(id);
+  std::unique_ptr<Notes_Node> new_node = base::MakeUnique<Notes_Node>(id);
   new_node->SetTitle(name);
   new_node->SetType(Notes_Node::FOLDER);
 
-  return AddNode(AsMutable(parent), index, new_node);
+  return AddNode(AsMutable(parent), index, std::move(new_node));
 }
 
 const Notes_Node *GetNodeByID(const Notes_Node *node, int64_t id) {
@@ -213,8 +214,7 @@ bool Notes_Model::Remove(Notes_Node *parent, int index) {
   if (!parent)
     return false;
   Notes_Node *node = parent->GetChild(index);
-  Notes_Node *deadnode = parent->Remove(node);
-  delete deadnode;
+  std::unique_ptr<Notes_Node> deadnode = parent->Remove(node);
   if (store_.get())
     store_->ScheduleSave();
   return true;
@@ -240,8 +240,11 @@ bool Notes_Model::Move(const Notes_Node *node, const Notes_Node *new_parent,
   if (old_parent == new_parent && index > old_index)
     index--;
 
+  Notes_Node *mutable_old_parent = AsMutable(old_parent);
+  std::unique_ptr<Notes_Node> owned_node =
+      mutable_old_parent->Remove(AsMutable(node));
   Notes_Node *mutable_new_parent = AsMutable(new_parent);
-  mutable_new_parent->Add(AsMutable(node), index);
+  mutable_new_parent->Add(std::move(owned_node), index);
 
   if (store_.get())
     store_->ScheduleSave();
@@ -255,19 +258,22 @@ Notes_Node* Notes_Model::GetTrashNode() {
     Notes_Node* child = root_node->GetChild(i);
     if (child->is_trash()) {
       // Move it to the end of the list.
-      child = root_node->Remove(child);
-      AddNode(root_node, root_node->child_count(), child);
+      std::unique_ptr<Notes_Node> owned_node =
+          root_node->Remove(AsMutable(child));
+      AddNode(root_node, root_node->child_count(), std::move(owned_node));
       return child;
     }
   }
-  Notes_Node* trash = new Notes_Node(GetNewIndex());
+  std::unique_ptr<Notes_Node> trash =
+      base::MakeUnique<Notes_Node>(GetNewIndex());
+  Notes_Node *trash_ptr = trash.get();
   if (trash) {
     trash->SetType(Notes_Node::TRASH);
     trash->SetTitle(
         l10n_util::GetStringUTF16(IDS_NOTES_TRASH_FOLDER_NAME));
-    AddNode(root_node, root_node->child_count(), trash);
+    AddNode(root_node, root_node->child_count(), std::move(trash));
   }
-  return trash;
+  return trash_ptr;
 }
 
 }  // namespace vivaldi

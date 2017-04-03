@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 1999 Lars Knoll (knoll@kde.org)
- * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011 Apple Inc. All rights reserved.
+ * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011 Apple Inc.
+ * All rights reserved.
  * Copyright (C) 2012 Google Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
@@ -38,37 +39,61 @@ class NinePieceImage;
 class BorderImageLengthBox;
 
 class CSSToStyleMap {
-    STATIC_ONLY(CSSToStyleMap);
-public:
-    static void mapFillAttachment(StyleResolverState&, FillLayer*, const CSSValue&);
-    static void mapFillClip(StyleResolverState&, FillLayer*, const CSSValue&);
-    static void mapFillComposite(StyleResolverState&, FillLayer*, const CSSValue&);
-    static void mapFillBlendMode(StyleResolverState&, FillLayer*, const CSSValue&);
-    static void mapFillOrigin(StyleResolverState&, FillLayer*, const CSSValue&);
-    static void mapFillImage(StyleResolverState&, FillLayer*, const CSSValue&);
-    static void mapFillRepeatX(StyleResolverState&, FillLayer*, const CSSValue&);
-    static void mapFillRepeatY(StyleResolverState&, FillLayer*, const CSSValue&);
-    static void mapFillSize(StyleResolverState&, FillLayer*, const CSSValue&);
-    static void mapFillXPosition(StyleResolverState&, FillLayer*, const CSSValue&);
-    static void mapFillYPosition(StyleResolverState&, FillLayer*, const CSSValue&);
-    static void mapFillMaskSourceType(StyleResolverState&, FillLayer*, const CSSValue&);
+  STATIC_ONLY(CSSToStyleMap);
 
-    static double mapAnimationDelay(const CSSValue&);
-    static Timing::PlaybackDirection mapAnimationDirection(const CSSValue&);
-    static double mapAnimationDuration(const CSSValue&);
-    static Timing::FillMode mapAnimationFillMode(const CSSValue&);
-    static double mapAnimationIterationCount(const CSSValue&);
-    static AtomicString mapAnimationName(const CSSValue&);
-    static EAnimPlayState mapAnimationPlayState(const CSSValue&);
-    static CSSTransitionData::TransitionProperty mapAnimationProperty(const CSSValue&);
-    static PassRefPtr<TimingFunction> mapAnimationTimingFunction(const CSSValue&, bool allowStepMiddle = false);
+ public:
+  static void mapFillAttachment(StyleResolverState&,
+                                FillLayer*,
+                                const CSSValue&);
+  static void mapFillClip(StyleResolverState&, FillLayer*, const CSSValue&);
+  static void mapFillComposite(StyleResolverState&,
+                               FillLayer*,
+                               const CSSValue&);
+  static void mapFillBlendMode(StyleResolverState&,
+                               FillLayer*,
+                               const CSSValue&);
+  static void mapFillOrigin(StyleResolverState&, FillLayer*, const CSSValue&);
+  static void mapFillImage(StyleResolverState&, FillLayer*, const CSSValue&);
+  static void mapFillRepeatX(StyleResolverState&, FillLayer*, const CSSValue&);
+  static void mapFillRepeatY(StyleResolverState&, FillLayer*, const CSSValue&);
+  static void mapFillSize(StyleResolverState&, FillLayer*, const CSSValue&);
+  static void mapFillXPosition(StyleResolverState&,
+                               FillLayer*,
+                               const CSSValue&);
+  static void mapFillYPosition(StyleResolverState&,
+                               FillLayer*,
+                               const CSSValue&);
+  static void mapFillMaskSourceType(StyleResolverState&,
+                                    FillLayer*,
+                                    const CSSValue&);
 
-    static void mapNinePieceImage(StyleResolverState&, CSSPropertyID, const CSSValue&, NinePieceImage&);
-    static void mapNinePieceImageSlice(StyleResolverState&, const CSSValue&, NinePieceImage&);
-    static BorderImageLengthBox mapNinePieceImageQuad(StyleResolverState&, const CSSValue&);
-    static void mapNinePieceImageRepeat(StyleResolverState&, const CSSValue&, NinePieceImage&);
+  static double mapAnimationDelay(const CSSValue&);
+  static Timing::PlaybackDirection mapAnimationDirection(const CSSValue&);
+  static double mapAnimationDuration(const CSSValue&);
+  static Timing::FillMode mapAnimationFillMode(const CSSValue&);
+  static double mapAnimationIterationCount(const CSSValue&);
+  static AtomicString mapAnimationName(const CSSValue&);
+  static EAnimPlayState mapAnimationPlayState(const CSSValue&);
+  static CSSTransitionData::TransitionProperty mapAnimationProperty(
+      const CSSValue&);
+  static PassRefPtr<TimingFunction> mapAnimationTimingFunction(
+      const CSSValue&,
+      bool allowStepMiddle = false);
+
+  static void mapNinePieceImage(StyleResolverState&,
+                                CSSPropertyID,
+                                const CSSValue&,
+                                NinePieceImage&);
+  static void mapNinePieceImageSlice(StyleResolverState&,
+                                     const CSSValue&,
+                                     NinePieceImage&);
+  static BorderImageLengthBox mapNinePieceImageQuad(StyleResolverState&,
+                                                    const CSSValue&);
+  static void mapNinePieceImageRepeat(StyleResolverState&,
+                                      const CSSValue&,
+                                      NinePieceImage&);
 };
 
-} // namespace blink
+}  // namespace blink
 
 #endif

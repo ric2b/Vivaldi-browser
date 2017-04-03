@@ -19,6 +19,7 @@
 #include "chrome/browser/supervised_user/supervised_user_site_list.h"
 #include "chrome/browser/supervised_user/supervised_users.h"
 #include "components/supervised_user_error_page/supervised_user_error_page.h"
+#include "third_party/re2/src/re2/re2.h"
 
 class GURL;
 class SupervisedUserBlacklist;
@@ -79,6 +80,11 @@ class SupervisedUserURLFilter
 
   // Normalizes a URL for matching purposes.
   static GURL Normalize(const GURL& url);
+
+  // For known "cache" URLs (e.g. from the AMP project CDN), this returns the
+  // embedded URL. For all other URLs, returns an empty GURL.
+  // TODO(treib): Merge this with Normalize().
+  GURL GetEmbeddedURL(const GURL& url) const;
 
   // Returns true if the URL has a standard scheme. Only URLs with standard
   // schemes are filtered.
@@ -174,6 +180,7 @@ class SupervisedUserURLFilter
 
  private:
   friend class base::RefCountedThreadSafe<SupervisedUserURLFilter>;
+  friend class SupervisedUserURLFilterTest;
   ~SupervisedUserURLFilter();
 
   void SetContents(std::unique_ptr<Contents> url_matcher);
@@ -206,6 +213,10 @@ class SupervisedUserURLFilter
   const SupervisedUserBlacklist* blacklist_;
 
   std::unique_ptr<SupervisedUserAsyncURLChecker> async_url_checker_;
+
+  re2::RE2 amp_cache_path_regex_;
+  re2::RE2 google_amp_viewer_path_regex_;
+  re2::RE2 google_web_cache_query_regex_;
 
   scoped_refptr<base::TaskRunner> blocking_task_runner_;
 

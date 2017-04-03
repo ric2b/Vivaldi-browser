@@ -8,11 +8,15 @@
 #include <utility>
 
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/devtools_agent_host.h"
+#include "content/public/browser/devtools_frontend_host.h"
 #include "content/public/browser/web_contents.h"
+#include "headless/grit/headless_lib_resources.h"
 #include "headless/lib/browser/headless_browser_context_impl.h"
 #include "headless/lib/browser/headless_browser_impl.h"
 #include "headless/lib/browser/headless_web_contents_impl.h"
 #include "headless/public/domains/browser.h"
+#include "ui/base/resource/resource_bundle.h"
 
 namespace headless {
 
@@ -59,6 +63,16 @@ base::DictionaryValue* HeadlessDevToolsManagerDelegate::HandleCommand(
   result->SetInteger("id", id);
   result->Set("result", std::move(cmd_result));
   return result.release();
+}
+
+std::string HeadlessDevToolsManagerDelegate::GetDiscoveryPageHTML() {
+  return ResourceBundle::GetSharedInstance().GetRawDataResource(
+      IDR_HEADLESS_LIB_DEVTOOLS_DISCOVERY_PAGE).as_string();
+}
+
+std::string HeadlessDevToolsManagerDelegate::GetFrontendResource(
+    const std::string& path) {
+  return content::DevToolsFrontendHost::GetFrontendResource(path).as_string();
 }
 
 std::unique_ptr<base::Value> HeadlessDevToolsManagerDelegate::CreateTarget(

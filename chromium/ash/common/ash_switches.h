@@ -21,6 +21,7 @@ namespace switches {
 ASH_EXPORT extern const char kAshAnimateFromBootSplashScreen[];
 ASH_EXPORT extern const char kAshCopyHostBackgroundAtBoot[];
 ASH_EXPORT extern const char kAshDebugShortcuts[];
+ASH_EXPORT extern const char kAshDeveloperShortcuts[];
 ASH_EXPORT extern const char kAshDisableMaximizeModeWindowBackdrop[];
 #if defined(OS_CHROMEOS)
 ASH_EXPORT extern const char kAshDisableScreenOrientationLock[];
@@ -30,30 +31,20 @@ ASH_EXPORT extern const char kAshDisableTouchExplorationMode[];
 ASH_EXPORT extern const char kAshEnableFullscreenAppList[];
 ASH_EXPORT extern const char kAshEnableMagnifierKeyScroller[];
 ASH_EXPORT extern const char kAshEnablePalette[];
-ASH_EXPORT extern const char kAshEnablePaletteExperimentalFeatures[];
 ASH_EXPORT extern const char kAshEnablePaletteOnAllDisplays[];
 ASH_EXPORT extern const char kAshEnableUnifiedDesktop[];
 #endif
 ASH_EXPORT extern const char kAshEnableTouchView[];
 ASH_EXPORT extern const char kAshEnableMirroredScreen[];
 ASH_EXPORT extern const char kAshDisableStableOverviewOrder[];
-ASH_EXPORT extern const char kAshEnableStableOverviewOrder[];
-ASH_EXPORT extern const char kAshEnableSoftwareMirroring[];
 ASH_EXPORT extern const char kAshEnableTouchViewTesting[];
 ASH_EXPORT extern const char kAshHideNotificationsForFactory[];
-ASH_EXPORT extern const char kAshHostWindowBounds[];
 ASH_EXPORT extern const char kAshMaterialDesign[];
 ASH_EXPORT extern const char kAshMaterialDesignDisabled[];
 ASH_EXPORT extern const char kAshMaterialDesignEnabled[];
 ASH_EXPORT extern const char kAshMaterialDesignExperimental[];
-ASH_EXPORT extern const char kAshMaxWindowsToUseMaskInOverview[];
-ASH_EXPORT extern const char kAshMaxWindowsToUseShapeInOverview[];
 ASH_EXPORT extern const char kAshTouchHud[];
-ASH_EXPORT extern const char kAshUseFirstDisplayAsInternal[];
 ASH_EXPORT extern const char kAuraLegacyPowerButton[];
-#if defined(OS_WIN)
-ASH_EXPORT extern const char kForceAshToDesktop[];
-#endif
 
 #if defined(OS_CHROMEOS)
 // True if the pointer (cursor) position should be kept inside root windows.

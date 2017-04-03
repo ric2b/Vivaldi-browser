@@ -27,59 +27,112 @@
 #ifndef CSSPreloadScanner_h
 #define CSSPreloadScanner_h
 
-#include "core/html/parser/HTMLResourcePreloader.h"
+#include "core/fetch/CSSStyleSheetResource.h"
+#include "core/fetch/ResourceOwner.h"
+#include "core/fetch/StyleSheetResourceClient.h"
 #include "core/html/parser/HTMLToken.h"
+#include "core/html/parser/PreloadRequest.h"
+#include "platform/heap/Handle.h"
 #include "wtf/text/StringBuilder.h"
 
 namespace blink {
 
 class SegmentedString;
+class HTMLResourcePreloader;
 
 class CSSPreloadScanner {
-    DISALLOW_NEW();
-    WTF_MAKE_NONCOPYABLE(CSSPreloadScanner);
-public:
-    CSSPreloadScanner();
-    ~CSSPreloadScanner();
+  DISALLOW_NEW();
+  WTF_MAKE_NONCOPYABLE(CSSPreloadScanner);
 
-    void reset();
+ public:
+  CSSPreloadScanner();
+  ~CSSPreloadScanner();
 
-    void scan(const HTMLToken::DataVector&, const SegmentedString&, PreloadRequestStream&, const KURL&);
-    void scan(const String&, const SegmentedString&, PreloadRequestStream&, const KURL&);
+  void reset();
 
-    void setReferrerPolicy(const ReferrerPolicy);
+  void scan(const HTMLToken::DataVector&,
+            const SegmentedString&,
+            PreloadRequestStream&,
+            const KURL&);
+  void scan(const String&,
+            const SegmentedString&,
+            PreloadRequestStream&,
+            const KURL&);
 
-private:
-    enum State {
-        Initial,
-        MaybeComment,
-        Comment,
-        MaybeCommentEnd,
-        RuleStart,
-        Rule,
-        AfterRule,
-        RuleValue,
-        AfterRuleValue,
-        DoneParsingImportRules,
-    };
+  void setReferrerPolicy(const ReferrerPolicy);
 
-    template<typename Char>
-    void scanCommon(const Char* begin, const Char* end, const SegmentedString&, PreloadRequestStream&, const KURL&);
+ private:
+  enum State {
+    Initial,
+    MaybeComment,
+    Comment,
+    MaybeCommentEnd,
+    RuleStart,
+    Rule,
+    AfterRule,
+    RuleValue,
+    AfterRuleValue,
+    DoneParsingImportRules,
+  };
 
-    inline void tokenize(UChar, const SegmentedString&);
-    void emitRule(const SegmentedString&);
+  template <typename Char>
+  void scanCommon(const Char* begin,
+                  const Char* end,
+                  const SegmentedString&,
+                  PreloadRequestStream&,
+                  const KURL&);
 
-    State m_state = Initial;
-    StringBuilder m_rule;
-    StringBuilder m_ruleValue;
+  inline void tokenize(UChar, const SegmentedString&);
+  void emitRule(const SegmentedString&);
 
-    ReferrerPolicy m_referrerPolicy = ReferrerPolicyDefault;
+  State m_state = Initial;
+  StringBuilder m_rule;
+  StringBuilder m_ruleValue;
 
-    // Below members only non-null during scan()
-    PreloadRequestStream* m_requests = nullptr;
-    const KURL* m_predictedBaseElementURL = nullptr;
+  ReferrerPolicy m_referrerPolicy = ReferrerPolicyDefault;
+
+  // Below members only non-null during scan()
+  PreloadRequestStream* m_requests = nullptr;
+  const KURL* m_predictedBaseElementURL = nullptr;
 };
 
-} // namespace blink
+// Each CSSPreloaderResourceClient keeps track of a single CSS resource, and
+// drives a CSSPreloadScanner as raw data arrives for it. This lets us preload
+// @import tags before parsing.
+class CORE_EXPORT CSSPreloaderResourceClient
+    : public GarbageCollectedFinalized<CSSPreloaderResourceClient>,
+      public ResourceOwner<CSSStyleSheetResource, StyleSheetResourceClient> {
+  USING_GARBAGE_COLLECTED_MIXIN(CSSPreloaderResourceClient);
+
+ public:
+  CSSPreloaderResourceClient(Resource*, HTMLResourcePreloader*);
+  ~CSSPreloaderResourceClient();
+  void setCSSStyleSheet(const String& href,
+                        const KURL& baseURL,
+                        const String& charset,
+                        const CSSStyleSheetResource*) override;
+  void didAppendFirstData(const CSSStyleSheetResource*) override;
+  String debugName() const override { return "CSSPreloaderResourceClient"; }
+
+  DECLARE_TRACE();
+
+ protected:
+  // Protected for tests, which don't want to initialize a fully featured
+  // DocumentLoader.
+  virtual void fetchPreloads(PreloadRequestStream& preloads);
+
+ private:
+  void scanCSS(const CSSStyleSheetResource*);
+
+  enum PreloadPolicy {
+    ScanOnly,
+    ScanAndPreload,
+  };
+
+  const PreloadPolicy m_policy;
+  WeakMember<HTMLResourcePreloader> m_preloader;
+};
+
+}  // namespace blink
 
 #endif

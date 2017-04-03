@@ -1,3 +1,11 @@
+<dom-module id="user-pod-template-shared-styles">
+  <template>
+    <link rel="stylesheet" href="user_pod_template.css">
+  </template>
+</dom-module>
+
+<style is="custom-style" include="user-pod-template-shared-styles"></style>
+
 <iron-iconset-svg name="user-pod" size="24">
   <svg>
     <defs>
@@ -28,7 +36,7 @@
   </div>
 </if>
   <div class="main-pane">
-    <div class="name-container pin-tag">
+    <div class="name-container">
       <div class="name"></div>
       <div class="learn-more-container">
         <div class="learn-more"></div>
@@ -48,7 +56,7 @@
                src="chrome://theme/IDR_LOGIN_PASSWORD_CAPS_LOCK" alt>
         </div>
         <paper-icon-button class="submit-button" disabled
-                           icon="user-pod:arrow-forward">
+                           icon="user-pod:arrow-forward" tabindex="-1">
         </paper-icon-button>
 </if>
       </div>

@@ -255,8 +255,7 @@ TEST_F(ActivityLogTest, LogPrerender) {
   GURL url("http://www.google.com");
 
   prerender::PrerenderManager* prerender_manager =
-      prerender::PrerenderManagerFactory::GetForProfile(
-          Profile::FromBrowserContext(profile()));
+      prerender::PrerenderManagerFactory::GetForBrowserContext(profile());
 
   const gfx::Size kSize(640, 480);
   std::unique_ptr<prerender::PrerenderHandle> prerender_handle(
@@ -430,6 +429,8 @@ class ActivityLogTestWithoutSwitch : public ActivityLogTest {
 };
 
 TEST_F(ActivityLogTestWithoutSwitch, TestShouldLog) {
+  static_cast<TestExtensionSystem*>(
+      ExtensionSystem::Get(profile()))->SetReady();
   ActivityLog* activity_log = ActivityLog::GetInstance(profile());
   scoped_refptr<const Extension> empty_extension =
       test_util::CreateEmptyExtension();

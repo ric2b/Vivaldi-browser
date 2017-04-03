@@ -40,13 +40,13 @@
       Relaunch and Powerwash
     </message>
     <message name="IDS_SETTINGS_UPGRADE_UPDATING" desc="Status label: Updating ChromiumOS or ChromeOS">
-      Updating your device
+      Updating your device (<ph name="PROGRESS_PERCENT">$1<ex>90%</ex></ph>)
     </message>
     <message name="IDS_SETTINGS_UPGRADE_SUCCESSFUL_RELAUNCH" desc="Status label: Successfully updated ChromiumOS/ChromeOS">
       Nearly up to date! Restart your device to finish updating.
     </message>
     <message name="IDS_SETTINGS_UPGRADE_UPDATING_CHANNEL_SWITCH" desc="Status label: Updating ChromiumOS/ChromeOS to a specified channel">
-      Updating your device to <ph name="CHANNEL_NAME">$1<ex>stable</ex></ph> channel
+      Updating your device to <ph name="CHANNEL_NAME">$1<ex>stable</ex></ph> channel (<ph name="PROGRESS_PERCENT">$2<ex>90%</ex></ph>)
     </message>
     <message name="IDS_SETTINGS_UPGRADE_SUCCESSFUL_CHANNEL_SWITCH" desc="Status label: Channel was successfully switched on ChromiumOS/ChromeOS">
       Channel changed. Restart your device to apply changes.
@@ -104,8 +104,14 @@
   <message name="IDS_SETTINGS_ACCESSIBILITY" desc="Name of the settings page which displays accessibility preferences.">
     Accessibility
   </message>
+  <message name="IDS_SETTINGS_ACCESSIBILITY_WEB_STORE" desc="Text for an external link explaining that additional accessibility features are found on the Chrome Web Store.">
+    Choose from the Chrome Web Store
+  </message>
   <message name="IDS_SETTINGS_MORE_FEATURES_LINK" desc="Link which opens page where users can install extensions which provide additional accessibility features.">
     Add accessibility features
+  </message>
+  <message name="IDS_SETTINGS_MORE_FEATURES_LINK_DESCRIPTION" desc="Description for the link about additional accessibility features.">
+    Enable accessibility features
   </message>
   <if expr="chromeos">
     <message name="IDS_SETTINGS_OPTIONS_IN_MENU_LABEL" desc="Label for checkbox which enables showing accessibility options in the system menu.">
@@ -171,8 +177,8 @@
   <message name="IDS_SETTINGS_SET_WALLPAPER" desc="Name of the control which allows the user to set the wallpaper.">
     Wallpaper
   </message>
-  <message name="IDS_SETTINGS_THEMES" desc="Name of the control which allows the user to get themes for the browser.">
-    Themes
+  <message name="IDS_SETTINGS_THEME" desc="Name of the control which allows the user to get a theme for the browser.">
+    Theme
   </message>
   <message name="IDS_SETTINGS_RESET_TO_DEFAULT_THEME" desc="Name of the control which resets the browser theme back to the default theme.">
     Reset to default
@@ -184,7 +190,7 @@
     Always show the bookmarks bar
   </message>
   <message name="IDS_SETTINGS_HOME_PAGE_NTP" desc="Description of the New Tab Page when set as the home page.">
-    New Tab Page
+    Use the New Tab Page
   </message>
   <message name="IDS_SETTINGS_OTHER" desc="Label of the input box for the home page.">
     Other
@@ -198,8 +204,8 @@
   <message name="IDS_SETTINGS_OPEN_WALLPAPER_APP" desc="Sub-label about opening the wallpaper app.">
     Open the wallpaper app
   </message>
-  <message name="IDS_SETTINGS_CHOOSE_FONTS_AND_ENCODING" desc="Sub-label about choosing font styles and text encoding.">
-    Choose font types and encoding
+  <message name="IDS_SETTINGS_CHOOSE_FONTS" desc="Sub-label about choosing font styles.">
+    Choose font types
   </message>
 
   <!-- Common -->
@@ -216,10 +222,10 @@
     Search settings
   </message>
   <message name="IDS_SETTINGS_SEARCH_NO_RESULTS" desc="Text description of a search that has no results.">
-    No matches were found.
+    No search results found
   </message>
   <message name="IDS_SETTINGS_SEARCH_NO_RESULTS_HELP" desc="Help text for a search that has no results.">
-    Go to <ph name="BEGIN_LINK_CHROMIUM">&lt;a target="_blank" href="$1"&gt;</ph>Google Chrome help<ph name="END_LINK_CHROMIUM">&lt;/a&gt;</ph> if you can't find what you're looking for.
+    Go to <ph name="BEGIN_LINK_CHROMIUM">&lt;a target="_blank" href="$1"&gt;</ph>Google Chrome help<ph name="END_LINK_CHROMIUM">&lt;/a&gt;</ph> if you can't find what you're looking for
   </message>
   <message name="IDS_SETTINGS_SETTINGS" desc="The settings page title.">
     Settings
@@ -362,6 +368,18 @@
   <message name="IDS_SETTINGS_PASSWORDS_PASSWORD" desc="Label for the saved password when editing a password.">
     Password
   </message>
+  <message name="IDS_SETTINGS_ADDRESS_NONE" desc="Placeholder that is shown when there are no addresses in the list of saved addresses.">
+    No addresses were found
+  </message>
+  <message name="IDS_SETTINGS_CREDIT_CARD_NONE" desc="Placeholder that is shown when there are no credit cards in the list of saved credit cards.">
+    No credit cards were found
+  </message>
+  <message name="IDS_SETTINGS_PASSWORDS_NONE" desc="Placeholder that is shown when there are no passwords in the list of saved passwords.">
+    No passwords were found
+  </message>
+  <message name="IDS_SETTINGS_PASSWORDS_EXCEPTIONS_NONE" desc="Placeholder text that is shown when there are no sites in the list of sites for which to never save passwords.">
+    Passwords saved for all websites
+  </message>
   <if expr="is_macosx">
     <then>
       <message name="IDS_SETTINGS_PASSWORDS_MANAGE_PASSWORDS" desc="Shown in the passwords section of settings. Descriptive text to inform that passwords can be accessed online. Has a link. Also notifies mac users that chrome will sync passwords to the OS's Keychain, so their passwords will be synced to other chrome profiles. 'Keychain' is the name of a program on Mac and should not be translated.">
@@ -380,6 +398,9 @@
     <message name="IDS_SETTINGS_DEFAULT_BROWSER" desc="Name of the Default Browser page, which allows users to set which browser will open .html files within the OS.">
       Default browser
     </message>
+    <message name="IDS_SETTINGS_DEFAULT_BROWSER_MAKE_DEFAULT_BUTTON" desc="Text of the button used to make Chrome the default browser on the user's system.">
+      Make default
+    </message>
   </if>
 
   <!-- Bluetooth Page -->
@@ -395,6 +416,9 @@
     </message>
     <message name="IDS_SETTINGS_BLUETOOTH_ENABLE" desc="Label for control to enable or disable bluetooth.">
       Enable Bluetooth
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_EXPAND_ACCESSIBILITY_LABEL" desc="Label for the button that toggles showing available bluetooth devices. Only visible by screen reader software.">
+      Show available bluetooth devices
     </message>
     <message name="IDS_SETTINGS_BLUETOOTH_REMOVE" desc="Label for removing (unpairing) a paired bluetooth device">
       Remove from list
@@ -480,6 +504,9 @@
     </message>
     <message name="IDS_SETTINGS_CERTIFICATE_MANAGER_YOUR_CERTIFICATES" desc="Label for the your certificates tab in certificate manager.">
       Your certificates
+    </message>
+    <message name="IDS_SETTINGS_CERTIFICATE_MANAGER_EXPAND_ACCESSIBILITY_LABEL" desc="Label for the button that toggles showing the certificates that are installed for a particular organization. Only visible by screen reader software.">
+      Show certificates for organization
     </message>
     <message name="IDS_SETTINGS_CERTIFICATE_MANAGER_YOUR_CERTIFICATES_DESCRIPTION" desc="Label for your certificates subtitle tab in certificate manager.">
       You have certificates from these organizations that identify you
@@ -725,8 +752,11 @@
   <message name="IDS_SETTINGS_PRINTING_NOTIFICATIONS_LABEL" desc="Label for the checkbox which enabled notifications when new printers are added to the user's network">
     Show notifications when new printers are detected on the network
   </message>
-  <message name="IDS_SETTINGS_PRINTING_MANAGE_CLOUD_PRINT_DEVICES" desc="Text for the button which allows users to manager their Google Cloud Print devices">
+  <message name="IDS_SETTINGS_PRINTING_MANAGE_CLOUD_PRINT_DEVICES" desc="Text for the button which allows users to manage their Google Cloud Print devices">
     Manage Cloud Print devices
+  </message>
+  <message name="IDS_SETTINGS_PRINTING_MANAGE_CLOUD_PRINT_DEVICES_DESCRIPTION" desc="Description for the button which allows users to manage their Google Cloud Print devices">
+    Add or remove printers
   </message>
   <if expr="chromeos">
     <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTERS" desc="In Printing Settings, the title of the CUPS printers setting section.">
@@ -753,6 +783,9 @@
     <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADVANCED" desc="Label for the toggle control to show/hide the advanced details of the printer.">
       Advanced
     </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADVANCED_ACCESSIBILITY_LABEL" desc="Label for the button that toggles showing the advanced printer options for a particular printer. Only visible by screen reader software.">
+      Show advanced printer options
+    </message>
     <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADVANCED_ADDRESS" desc="Label for the CUPS printer address in the Advanced section in the printer details page.">
       Address
     </message>
@@ -762,8 +795,11 @@
     <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_DETAILS_NAME" desc="Lable for the CUPS printer name in the printer details page.">
       Name
     </message>
-    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_DETAILS_MODEL" desc="Lable for the CUPS printer model in the printer details page.">
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_DETAILS_MODEL" desc="Label for the CUPS printer model in the printer details page.">
       Model
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_DETAILS_QUEUE" desc="Label for the CUPS printer queue in the manually add printer dialog.">
+      Queue
     </message>
     <message name="IDS_SETTINGS_PRINTING_CUPS_ADD_PRINTER_BUTTON_CANCEL" desc="Text for the button which cancels adding a CUPS printer.">
       Cancel
@@ -771,9 +807,78 @@
     <message name="IDS_SETTINGS_PRINTING_CUPS_ADD_PRINTER_BUTTON_ADD" desc="Text for the button which allows the user to add a CUPS printer.">
       Add
     </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_ADD_PRINTER_BUTTON_MANUAL_ADD" desc="Text for the button which allows the user to manually add a CUPS printer.">
+      Add Manually
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_ADD_PRINTER_BUTTON_DISCOVER_PRINTERS" desc="Text for the button which allows the user to go back to the printers discovery dialog.">
+      Add Nearby Printers
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_PROTOCOL_IPP" desc="The dropdown menu of the printer IPP protocol on the manually add printer dialog.">
+      Internet Printing Protocol (IPP)
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_PROTOCOL_IPPS" desc="The dropdown menu of the printer IPPS protocol on the manually add printer dialog.">
+      Internet Printing Protocol (IPPS)
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_PROTOCOL_HTTP" desc="The dropdown menu of the printer HTTP protocol on the manually add printer dialog.">
+      Internet Printing Protocol (HTTP)
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_PROTOCOL_HTTPS" desc="The dropdown menu of the printer HTTPS protocol on the manually add printer dialog.">
+      Internet Printing Protocol (HTTPS)
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_PROTOCOL_APP_SOCKET" desc="The dropdown menu of the printer TCP/IP protocol on the manually add printer dialog.">
+      AppSocket (TCP/IP)
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_PROTOCOL_LPD" desc="The dropdown menu of the printer LPD protocol on the manually add printer dialog.">
+      Line Printer Daemon (LPD)
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_PROTOCOL_USB" desc="The dropdown menu of the printer USB protocol on the manually add printer dialog.">
+      USB
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_CONFIGURING_MESSAGE" desc="The configuring-in-progress message shown in the configuring printer dialog.">
+      Configuring <ph name="PRINTER_NAME">$1<ex>printer</ex></ph> ...
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_SEARCHING_PRINTER" desc="The searching-in-progress message shown in the manually add printer dialog.">
+      Searching for printer...
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_NOT_FOUND_PRINTER" desc="The printer-not-found message shown in the manually add printer dialog.">
+      Printer not found
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_FOUND_PRINTER" desc="The printer-found message shown in the manually add printer dialog.">
+      Printer found
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_SELECT_MANUFACTURER_MODEL" desc="The message shown in the select manufacturer and model dialog.">
+      Could not detect your printer model. Select a manufacturer and model from the list.
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_MANUFACTURER" desc="Label for the dropdown menu to select a manufacturer for the printer.">
+      Manufacturer
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_SELECT_DRIVER" desc="Label for the file selector to manually select a PPD file from the user's file system.">
+      Or specify your own driver:
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_BUTTON_SELECT_DRIVER" desc="Text for the button which allows user to select a PPD file from the file system.">
+      Browse
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADDED_PRINTER_DONE_MESSAGE" desc="The message shown when a new printer is set up successfully.">
+      Added <ph name="PRINTER_NAME">$1<ex>printer</ex></ph>
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_NO_PRINTER_NEARBY" desc="The no-printer-found message shown in the auto discovery dialog.">
+      No printers nearby
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_SEARCHING_NEARBY_PRINTER" desc="The searching-in-progress message shown in the auto discovery dialog.">
+      Searching...
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADDED_PRINTER_ERROR_MESSAGE" desc="The message shown when a new printer is not set up successfully.">
+      Error adding printer
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADDED_PRINTER_TRY_AGAIN_MESSAGE" desc="The try-again message shown when a new printer is not set up successfully.">
+      Try again
+    </message>  
   </if>
   <message name="IDS_SETTINGS_PRINTING_CLOUD_PRINTERS" desc="In Printing Settings, the title of the google cloud printers setting section.">
     Google Cloud Print
+  </message>
+  <message name="IDS_SETTINGS_PRINTING_CLOUD_PRINTERS_DESCRIPTION" desc="In Printing Settings, the title description of the google cloud printers setting section.">
+    Setup cloud printing devices
   </message>
 
   <!-- Downloads Page -->
@@ -793,21 +898,21 @@
     Disconnect Google Drive account
   </message>
 
-  <!-- Date/time Page -->
-  <message name="IDS_SETTINGS_DATE_TIME" desc="Name of the settings page which displays date and time preferences.">
-    Date and time
-  </message>
-  <message name="IDS_SETTINGS_TIME_ZONE" desc="Label for the picker which allows users to choose their time zone.">
-    Time zone:
-  </message>
-  <message name="IDS_SETTINGS_USE_24_HOUR_CLOCK" desc="Label for the checkbox which enables a 24-hour clock (as opposed to a 12-hour clock).">
-    Use 24-hour clock
-  </message>
-  <message name="IDS_SETTINGS_DATE_TIME_SET_AUTOMATICALLY" desc="Text which explains that the date and time are automatically set.">
-    Date and time are set automatically.
-  </message>
-
   <if expr="chromeos">
+    <!-- Date/Time Page -->
+    <message name="IDS_SETTINGS_DATE_TIME" desc="Name of the settings page which displays date and time preferences.">
+      Date and time
+    </message>
+    <message name="IDS_SETTINGS_TIME_ZONE" desc="Label for the picker which allows users to choose their time zone.">
+      Time zone:
+    </message>
+    <message name="IDS_SETTINGS_TIME_ZONE_GEOLOCATION" desc="Label for the checkbox which enables setting the time zone automatically with the detected location of the device.">
+      Set time zone automatically using your location
+    </message>
+    <message name="IDS_SETTINGS_USE_24_HOUR_CLOCK" desc="Label for the checkbox which enables a 24-hour clock (as opposed to a 12-hour clock).">
+      Use 24-hour clock
+    </message>
+
     <!-- Easy Unlock Page -->
     <message name="IDS_SETTINGS_EASY_UNLOCK_SECTION_TITLE" desc="The title of the Easy Unlock section on the settings page.">
       Smart Lock (beta)
@@ -848,10 +953,8 @@
     <message name="IDS_SETTINGS_EASY_UNLOCK_TURN_OFF_RETRY" desc="The label text of the retry button on the Easy unlock turn off dialog when Easy unlock could not be turned off because there is a server error.">
       Retry
     </message>
-  </if>
 
-  <if expr="chromeos">
-    <!-- Internet Page -->
+    <!-- Strings specific to the Settings Internet Page -->
     <message name="IDS_SETTINGS_INTERNET" desc="Name of the settings page which displays internet preferences.">
       Internet connection
     </message>
@@ -861,17 +964,162 @@
     <message name="IDS_SETTINGS_INTERNET_KNOWN_NETWORKS" desc="Name of the settings page which displays the list of known networks.">
       Known Networks
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_CONNECTING" desc="Settings > Internet, text in network summary when the primary network is connecting.">
-      Connecting to <ph name="NAME">$1<ex>GoogleGuest</ex></ph>
+    <message name="IDS_SETTINGS_INTERNET_ADD_CONNECTION" desc="Settings > Internet > Add connection expanding section label.">
+      Add connection
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_DISABLED" desc="Settings > Internet, text in network summary when the network type is connected">
-      Disabled
+    <message name="IDS_SETTINGS_INTERNET_ADD_CONNECTION_EXPAND_ACCESSIBILITY_LABEL" desc="Label for the button that toggles showing the options for a new connection. Only visible by screen reader software.">
+      Add network connection
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_NOT_CONNECTED" desc="Settings > Internet, text in network summary when there is no network for the type.">
-      No network
+    <message name="IDS_SETTINGS_INTERNET_ADD_WIFI" desc="Settings > Internet > Add Wi-Fi label.">
+      Add Wi-Fi...
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_LIST_ITEM_CONNECTED" desc="Settings > Internet, text to show in a network list item that is connected.">
-      connected
+    <message name="IDS_SETTINGS_INTERNET_ADD_VPN" desc="Settings > Internet > Add VPN label.">
+      Add OpenVPN / L2TP...
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_ADD_THIRD_PARTY_VPN" desc="Settings > Internet > Add third party VPN label">
+      Add <ph name="PROVIDER_NAME">$1<ex>VPN Demo</ex></ph>...
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SECTION_ACCESS_POINT" desc="Settings > Internet > Network details: Access Point section label.">
+      Access Point
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SECTION_ADVANCED" desc="Settings > Internet > Network details: Advanced section label.">
+      Advanced
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SECTION_EXPAND_ACCESSIBILITY_LABEL" desc="Label for the button that toggles showing the advanced network options. Only visible by screen reader software.">
+      Show advanced network options
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SECTION_NAMESERVERS" desc="Settings > Internet > Network details: Nameservers section label.">
+      Nameservers
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SECTION_NETWORK" desc="Settings > Internet > Network details: Network section label.">
+      Network
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SECTION_PROXY" desc="Settings > Internet > Network details: Proxy section label.">
+      Proxy
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SECTION_WPAD" desc="Settings > Internet > Network details: Web Proxy Auto Discovery (WPAD) section label.">
+      Web Proxy Auto Discovery URL:
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SHARED" desc="Settings > Internet > Netwok details: Text to show when a network is shared.">
+      This network is shared with other users.
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_ENFORCED" desc="Settings > Internet > Netwok details: Text to show when a network proxy is policy enforced.">
+      This proxy is enforced by your administrator.
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_USE_SAME" desc="Settings > Internet > Netwok details: Label for checkbox indicating that a network proxy uses the same value for all protocols.">
+      Use the same proxy for all protocols
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_EXCEPTION_LIST" desc="Settings > Internet > Netwok details: Label for list of network proxy exceptions.">
+      Do not use the proxy settings for these hosts and domains:
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_ADD_EXCEPTION" desc="Settings > Internet > Netwok details: Label for button to add a network proxy exception.">
+      Add exception
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_CONNECTION_TYPE" desc="Settings > Internet > Netwok details: Label for proxy connection type dropdown.">
+      Connection type
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_AUTO_CONFIG" desc="Settings > Internet > Netwok details: Label for proxy autoconfiguration URL input.">
+      Autoconfiguration URL:
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_PROXY" desc="Settings > Internet > Netwok details: Label for all proxies.">
+      Proxy
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_HTTP_PROXY" desc="Settings > Internet > Netwok details: Label for HTTP proxy.">
+      HTTP Proxy
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_SHTTP_PROXY" desc="Settings > Internet > Netwok details: Label for SHTTP proxy.">
+      Secure HTTP Proxy
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_FTP_PROXY" desc="Settings > Internet > Netwok details: Label for FTP proxy.">
+      FTP Proxy
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_SOCKS_HOST" desc="Settings > Internet > Netwok details: Label for SOCKS host proxy.">
+      SOCKS Host
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_PORT" desc="Settings > Internet > Netwok details: Label for proxy port input.">
+      Port
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_CHANGE_PIN" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Label for buton to change the PIN.">
+      Change PIN
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_CARD_MISSING" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Message when SIM card is missing.">
+      Missing SIM card
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_CARD_LOCKED" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Message when SIM card is locked.">
+      SIM card is locked
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_LOCK_ENABLE" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Label for checkbox to enable SIM card locking.">
+      Enable SIM card locking (require PIN to use mobile data)
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_BUTTON_CHANGE" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Label for dialog button to change a PIN.">
+      Change
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_BUTTON_ENTER" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Label for dialog button to enter a PIN.">
+      Enter
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_BUTTON_UNLOCK" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Label for button to unlock the SIM card.">
+      Unlock
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_ENTER_PIN_TITLE" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Title for enter PIN dialog.">
+      Enter SIM PIN
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_CHANGE_PIN_TITLE" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Title for change PIN dialog.">
+      Change SIM PIN
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_LOCKED_TITLE" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Title for SIM locked dialog.">
+      SIM Card is locked
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_LOCKED_WARNING" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Warning for SIM locked dialog when PUK is required.">
+      Your SIM card will be permanently disabled if you cannot enter
+      the correct PIN Unlock Key.
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_ENTER_PIN" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Label for entering a PIN.">
+      Enter PIN
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_ENTER_OLD_PIN" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Label for entering an old (current) PIN.">
+      Enter old PIN
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_ENTER_NEW_PIN" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Label for entering a new PIN.">
+      Enter new PIN
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_RE_ENTER_NEW_PIN" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Label for re-entering a new PIN.">
+      Re-enter new PIN
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_ENTER_PUK" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Label for entering a PUK.">
+      Enter PIN Unlock Key
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PREFER" desc="Settings > Internet > Netwok details: Label for the checkbox determining whether a network is preferred over other networks.">
+      Prefer this network
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_AUTO_CONNECT" desc="Settings > Internet > Netwok details: Label for the checkbox determining whether to automatically connect to the network.">
+      Automatically connect to this network
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_IP_CONFIG_AUTO" desc="Settings > Internet > Netwok details: Label for the checkbox determining whether to automatically configure the network IP config.">
+      Configure IP address automatically
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_IP_ADDRESS" desc="Settings > Internet > Netwok details: Label for the network IP Address.">
+      IP Address
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_BUTTON_FORGET" desc="Settings > Internet > Netwok details: The label for the button to forget a network (remove from the list of known networks).">
+      Forget
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_BUTTON_VIEW_ACCOUNT" desc="Settings > Internet > Netwok details: The label for the button to view the account details for a Cellular network.">
+      View Account
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_BUTTON_ACTIVATE" desc="Settings > Internet > Netwok details: The label for the button to activate a Cellular network.">
+      Activate
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_BUTTON_CONFIGURE" desc="Settings > Internet > Netwok details: The label for the button to configure a network (change its settings).">
+      Configure
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_BUTTON_CONNECT" desc="Settings > Internet > Netwok details: The label for the button to connect to a network.">
+      Connect
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_BUTTON_DISCONNECT" desc="Settings > Internet > Netwok details: The label for the button to disconnect from a network.">
+      Disconnect
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_BUTTON_SAVE_APN" desc="Settings > Internet > Netwok details: The label for the button to save an APN configuration.">
+      Save
     </message>
     <message name="IDS_SETTINGS_NETWORK_TYPE_ETHERNET" desc="The ethernet network type.">
       Ethernet
@@ -891,9 +1139,6 @@
     <message name="IDS_SETTINGS_NETWORK_TYPE_VPN" desc="The vpn network type.">
       VPN
     </message>
-    <message name="IDS_SETTINGS_THIRD_PARTY_VPN_NAME_TEMPLATE" desc="Template for constructing the name of a VPN network that is handled by a third-party VPN provider from the provider name and the network name.">
-      <ph name="PROVIDER_NAME">$1<ex>OpenVPN</ex></ph>: <ph name="NETWORK_NAME">$2<ex>Work Network</ex></ph>
-    </message>
     <message name="IDS_SETTINGS_INTERNET_KNOWN_NETWORKS_BUTTON" desc="Text for button that opens the known networks subpage.">
       Known networks
     </message>
@@ -908,6 +1153,158 @@
     </message>
     <message name="IDS_SETTINGS_INTERNET_KNOWN_NETWORKS_ALL" desc="Title for list of all other (non preferred) networks.">
       All networks
+    </message>
+
+    <!-- Strings used in <cr-network-list>, used in Settings and OOBE -->
+    <message name="IDS_NETWORK_LIST_DISABLED" desc="Settings > Internet, text in network summary when the network type is connected">
+      Disabled
+    </message>
+    <message name="IDS_NETWORK_LIST_EXPAND_ACCESSIBILITY_LABEL" desc="Label for the button that toggles showing the list of available network connections. Only visible by screen reader software.">
+      Show available network connections
+    </message>
+    <message name="IDS_NETWORK_LIST_NOT_CONNECTED" desc="Settings > Internet, text in network summary when there is no network for the type.">
+      No network
+    </message>
+    <message name="IDS_NETWORK_LIST_CONNECTED" desc="Settings > Internet, text to show in a network list item that is connected.">
+      connected
+    </message>
+    <message name="IDS_NETWORK_LIST_CONNECTING" desc="Settings > Internet, text in network summary when the primary network is connecting.">
+      Connecting to <ph name="NAME">$1<ex>GoogleGuest</ex></ph>
+    </message>
+    <message name="IDS_NETWORK_LIST_THIRD_PARTY_VPN_NAME_TEMPLATE" desc="Template for constructing the name of a VPN network that is handled by a third-party VPN provider from the provider name and the network name.">
+      <ph name="PROVIDER_NAME">$1<ex>OpenVPN</ex></ph>: <ph name="NETWORK_NAME">$2<ex>Work Network</ex></ph>
+    </message>
+
+     <!-- Strings translating ONC (Open Network Configuration) properties -->
+     <!-- and translatable values. See onc_spec.html for more information. -->
+    <message name="IDS_ONC_IPV4_ADDRESS" desc="ONC Property label for ipv4-IPAddress">
+      IP address
+    </message>
+    <message name="IDS_ONC_IPV4_GATEWAY" desc="ONC Property label for ipv4-Gateway">
+      Gateway
+    </message>
+    <message name="IDS_ONC_IPV4_ROUTING_PREFIX" desc="ONC Property label for ipv4-RoutingPrefix">
+      Routing prefix
+    </message>
+    <message name="IDS_ONC_IPV6_ADDRESS" desc="ONC Property label for ipv6-Address">
+      IPv6 address
+    </message>
+    <message name="IDS_ONC_CELLULAR_ACTIVATION_STATE" desc="ONC Property label for Cellular.ActivationState">
+      Activation status
+    </message>
+    <message name="IDS_ONC_CELLULAR_ACTIVATION_STATE_ACTIVATED" desc="ONC Property value when Cellular.ActivationState = Activated">
+      Activated
+    </message>
+    <message name="IDS_ONC_CELLULAR_ACTIVATION_STATE_ACTIVATING" desc="ONC Property value when Cellular.ActivationState = Activating">
+      Activating
+    </message>
+    <message name="IDS_ONC_CELLULAR_ACTIVATION_STATE_NOT_ACTIVATED" desc="ONC Property value when Cellular.ActivationStat = NotActivated">
+      Not activated
+    </message>
+    <message name="IDS_ONC_CELLULAR_ACTIVATION_STATE_PARTIALLY_ACTIVATED" desc="ONC Property value when Cellular.ActivationState = PartiallyActivated">
+      Partially activated
+    </message>
+    <message name="IDS_ONC_CELLULAR_APN_ACCESS_POINT_NAME" desc="ONC Property label for APN-AccessPointName">
+      Access point name
+    </message>
+    <message name="IDS_ONC_CELLULAR_APN_ACCESS_POINT_NAME_NONE" desc="ONC Property label for APN-AccessPointName = none (or empty)">
+      None
+    </message>
+    <message name="IDS_ONC_CELLULAR_APN_USERNAME" desc="ONC Property label for APN-Username">
+      Username
+    </message>
+    <message name="IDS_ONC_CELLULAR_APN_PASSWORD" desc="ONC Property label for APN-Password">
+      Password
+    </message>
+    <message name="IDS_ONC_CELLULAR_CARRIER" desc="ONC Property label for Cellular.Carrier">
+      Carrier
+    </message>
+    <message name="IDS_ONC_CELLULAR_FAMILY" desc="ONC Property label for Cellular.Family">
+      Family
+    </message>
+    <message name="IDS_ONC_CELLULAR_FIRMWARE_REVISION" desc="ONC Property label for Cellular.FirmwareRevision">
+      Firmware revision
+    </message>
+    <message name="IDS_ONC_CELLULAR_HARDWARE_REVISION" desc="ONC Property label for Cellular.HardwareRevision">
+      Hardware revision
+    </message>
+    <message name="IDS_ONC_CELLULAR_HOME_PROVIDER_CODE" desc="ONC Property label for Cellular.HomeProvider.Code">
+      Home provider code
+    </message>
+    <message name="IDS_ONC_CELLULAR_HOME_PROVIDER_COUNTRY" desc="ONC Property label for Cellular.HomeProvider.Country">
+      Home provider country
+    </message>
+    <message name="IDS_ONC_CELLULAR_HOME_PROVIDER_NAME" desc="ONC Property label for Cellular.HomeProvider.Name">
+      Home provider name
+    </message>
+    <message name="IDS_ONC_CELLULAR_MANUFACTURER" desc="ONC Property label for Cellular.Manufacturer">
+      Manufacturer
+    </message>
+    <message name="IDS_ONC_CELLULAR_MODEL_ID" desc="ONC Property label for Cellular.ModelID">
+      Model ID
+    </message>
+    <message name="IDS_ONC_CELLULAR_NETWORK_TECHNOLOGY" desc="ONC Property label for Cellular.NetworkTechnology">
+      Technology
+    </message>
+    <message name="IDS_ONC_CELLULAR_PRL_VERSION" desc="ONC Property label for Cellular.PRLVersion">
+      PRL Version
+    </message>
+    <message name="IDS_ONC_CELLULAR_ROAMING_STATE" desc="ONC Property label for Cellular.RoamingState">
+      Roaming status
+    </message>
+    <message name="IDS_ONC_CELLULAR_ROAMING_STATE_HOME" desc="ONC Property value when OncCellular.RoamingState = Home">
+      Home network, not roaming
+    </message>
+    <message name="IDS_ONC_CELLULAR_ROAMING_STATE_ROAMING" desc="ONC Property value when OncCellular.RoamingState = Roaming">
+      Roaming
+    </message>
+    <message name="IDS_ONC_CELLULAR_SERVING_OPERATOR_CODE" desc="ONC Property label for Cellular.ServingOperator.Code">
+      Operator code
+    </message>
+    <message name="IDS_ONC_CELLULAR_SERVING_OPERATOR_NAME" desc="ONC Property label for Cellular.ServingOperator.Name">
+      Operator
+    </message>
+    <message name="IDS_ONC_CONNECTED" desc="Settings > Internet, text in network summary when a network is connected.">
+      Connected
+    </message>
+    <message name="IDS_ONC_CONNECTING" desc="Settings > Internet, text in network summary when a network is connecting.">
+      Connecting
+    </message>
+    <message name="IDS_ONC_NOT_CONNECTED" desc="Settings > Internet, text in network summary when a network is not connecting or connected.">
+      Not Connected
+    </message>
+    <message name="IDS_ONC_MAC_ADDRESS" desc="ONC Property label for MacAddress">
+      MAC address
+    </message>
+    <message name="IDS_ONC_RESTRICTED_CONNECTIVITY" desc="ONC Property label for RestrictedConnectivity">
+      Restricted IP
+    </message>
+    <message name="IDS_ONC_VPN_HOST" desc="ONC Property label for VPN.Host">
+      Host
+    </message>
+    <message name="IDS_ONC_VPN_L2TP_USERNAME" desc="ONC Property label for VPN.L2TP.Username">
+      Username
+    </message>
+    <message name="IDS_ONC_VPN_OPEN_VPN_USERNAME" desc="ONC Property label for VPN.OpenVPN.Username">
+      Username
+    </message>
+    <message name="IDS_ONC_VPN_THIRD_PARTY_VPN_PROVIDER_NAME" desc="ONC Property label for VPN.ThirdPartyVPN.ProviderName">
+      Provider name
+    </message>
+    <message name="IDS_ONC_VPN_TYPE" desc="ONC Property label for VPN.Type">
+      Provider type
+    </message>
+    <message name="IDS_ONC_WIFI_FREQUENCY" desc="ONC Property label for WiFi.Frequency">
+      Frequency
+    </message>
+    <message name="IDS_ONC_WIFI_SECURITY" desc="ONC Property label for WiFi.Security">
+      Security
+    </message>
+    <message name="IDS_ONC_WIFI_SIGNAL_STRENGTH" desc="ONC Property label for WiFi.SignalStrength">
+      Signal strength
+    </message>
+    <message name="IDS_ONC_WIMAX_EAP_IDENTITY" desc="ONC Property label for WiMAX.EAP.Identity">
+      Identity
     </message>
   </if>
 
@@ -957,8 +1354,14 @@
   <message name="IDS_SETTINGS_LANGUAGES_LANGUAGES_LIST_TITLE" desc="Title for the currently used language in the header for the collapsible list of languages.">
     Language
   </message>
+  <message name="IDS_SETTINGS_LANGUAGES_EXPAND_ACCESSIBILITY_LABEL" desc="Label for the button that toggles showing the language options. Only visible by screen reader software.">
+    Show language options
+  </message>
   <message name="IDS_SETTINGS_LANGUAGES_LANGUAGES_LIST_ORDERING_INSTRUCTIONS" desc="Explanatory message about ordering the list of languages.">
     Order languages based on your preference.
+  </message>
+  <message name="IDS_SETTINGS_LANGUAGES_LANGUAGES_LIST_MOVE_TO_TOP" desc="Label for the menu item that moves the language up to the top of the list of languages.">
+    Move to the top
   </message>
   <message name="IDS_SETTINGS_LANGUAGES_LANGUAGES_LIST_MOVE_UP" desc="Label for the menu item that moves the language up in the list of languages.">
     Move up
@@ -969,21 +1372,21 @@
   <message name="IDS_SETTINGS_LANGUAGES_LANGUAGES_LIST_REMOVE" desc="Label for the menu item to remove a language from the list of enabled languages.">
     Remove
   </message>
-  <message name="IDS_SETTINGS_LANGUAGES_LANGUAGES_LIST_LANGUAGE_DETAIL" desc="Label for the menu item which opens a sub-page that displays details for a language.">
-    Language settings
-  </message>
   <message name="IDS_SETTINGS_LANGUAGES_LANGUAGES_ADD" desc="Button under the list of enabled languages which opens a dialog that lets the user enable additional languages.">
     Add languages
   </message>
   <message name="IDS_SETTINGS_LANGUAGES_OFFER_TO_TRANSLATE_IN_THIS_LANGUAGE" desc="The label for a checkbox which indicates whether or not pages in this language should be translated by default.">
     Offer to translate pages in this language
   </message>
-  <message name="IDS_SETTINGS_LANGUAGES_CANNOT_TRANSLATE_IN_THIS_LANGUAGE" desc="The string displayed in the details for a language when the language cannot be translated from.">
-    This language cannot be translated
-  </message>
   <if expr="chromeos">
     <message name="IDS_SETTINGS_LANGUAGES_INPUT_METHODS_LIST_TITLE" desc="Title for the current input method in the header for the collapsible list of enabled input methods (keyboard layouts and input method editors).">
       Input method
+    </message>
+    <message name="IDS_SETTINGS_LANGUAGES_INPUT_METHOD_ENABLED" desc="Label underneath the currently active input method in the list of enabled input methods.">
+      Enabled
+    </message>
+    <message name="IDS_SETTINGS_LANGUAGES_INPUT_METHODS_EXPAND_ACCESSIBILITY_LABEL" desc="Label for the button that toggles showing the input options (keyboard and keyboard layouts). Only visible by screen reader software.">
+      Show input options
     </message>
     <message name="IDS_SETTINGS_LANGUAGES_INPUT_METHODS_MANAGE" desc="Button under the list of input methods which opens a sub-page that lets the user enable or disable keyboard layouts and input method editors.">
       Manage input methods
@@ -1004,6 +1407,9 @@
   <if expr="not is_macosx">
     <message name="IDS_SETTINGS_LANGUAGES_SPELL_CHECK_LIST_TITLE" desc="Title for the section containing the dropdown used to select the language to use for spell checking. The dropdown contains the enabled languages which support spell checking.">
       Spell check
+    </message>
+    <message name="IDS_SETTINGS_LANGUAGES_SPELL_CHECK_EXPAND_ACCESSIBILITY_LABEL" desc="Label for the button that toggles showing the spell check options. Only visible by screen reader software.">
+      Show spell check options
     </message>
     <message name="IDS_SETTINGS_LANGUAGES_SPELL_CHECK_SUMMARY_TWO_LANGUAGES" desc="Subtitle for the spell check section when spell check is enabled for two languages, listing those languages.">
       <ph name="LANGUAGE_1">$1<ex>English (United States)</ex></ph>, <ph name="LANGUAGE_2">$2<ex>Italian</ex></ph>
@@ -1090,6 +1496,9 @@
   <message name="IDS_SETTINGS_CLEAR_DATA" desc="Text for clear browsing data button in Privacy options">
     Clear browsing data
   </message>
+  <message name="IDS_SETTINGS_CLEAR_DATA_DESCRIPTION" desc="Description for clear browsing data button in Privacy options">
+    Control your browsing data
+  </message>
   <message name="IDS_SETTINGS_TITLE_AND_COUNT" desc="The title of a section in the settings page with a count of the total number of items in the section">
     <ph name="TITLE">$1<ex>Block</ex></ph> - <ph name="COUNT">$2<ex>42</ex></ph>
   </message>
@@ -1111,6 +1520,9 @@
   </message>
   <message name="IDS_SETTINGS_SEARCH_MANAGE_SEARCH_ENGINES" desc="Label for the Manage Search Engines button.">
     Manage search engines
+  </message>
+  <message name="IDS_SETTINGS_SEARCH_MANAGE_SEARCH_ENGINES_DESCRIPTION" desc="Description label for the Manage Search Engines button.">
+    Add, edit, or remove search engines
   </message>
   <message name="IDS_SETTINGS_SEARCH_OK_GOOGLE_LABEL" desc="Label for the checkbox which enables the OK Google hotword.">
     Enable "Ok Google" to start a voice search.
@@ -1209,8 +1621,8 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT" desc="Label for the javascript site settings.">
     Javascript
   </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_PLUGINS" desc="Label for the plugins site settings.">
-    Plugins
+  <message name="IDS_SETTINGS_SITE_SETTINGS_FLASH" desc="Label for the Flash site settings.">
+    Flash
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_POPUPS" desc="Label for the popups site settings.">
     Popups
@@ -1223,6 +1635,9 @@
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_FULLSCREEN" desc="Label for the fullscreen site settings.">
     Fullscreen
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_ZOOM_LEVELS" desc="Label for the Zoom levels category in site settings.">
+    Zoom levels
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_MAY_SAVE_COOKIES" desc="Label for the cookies option description site settings.">
     Sites can save and read cookie data
@@ -1260,14 +1675,23 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIES_ALLOW_SITES_RECOMMENDED" desc="The 'allow cookies' label in site settings -- the recommended setting for when sites want to read/write cookie information.">
     Allow sites to save and read cookie data (recommended)
   </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_PLUGINS_DETECT_IMPORTANT" desc="The 'detect and run important content' label in site settings.">
-    Detect and run important plugin content
+  <message name="IDS_SETTINGS_SITE_SETTINGS_FLASH_ALLOW" desc="The 'allow' label for Flash in site settings.">
+    Allow sites to run Flash
   </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_PLUGINS_DETECT_IMPORTANT_RECOMMENDED" desc="The 'detect and run important content' label in site settings -- the recommended setting for when sites want to run plugins.">
-    Detect and run important plugin content (recommended)
+  <message name="IDS_SETTINGS_SITE_SETTINGS_FLASH_BLOCK" desc="The 'block' label for Flash in site settings.">
+    Block sites from running Flash
   </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_PLUGINS_CHOOSE" desc="The 'let me choose' label in site settings.">
-    Let me choose when to run plugin content
+  <message name="IDS_SETTINGS_SITE_SETTINGS_FLASH_DETECT_IMPORTANT" desc="The 'detect and run important content' label in site settings.">
+    Run only important content
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_FLASH_DETECT_IMPORTANT_SUBTITLE" desc="The 'detect and run important content' subtitle label in site settings.">
+    Detect and run only important Flash content (recommended)
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_FLASH_ASK_BEFORE_RUNNING" desc="The 'ask before running' label for Flash in site settings.">
+    Ask first
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_FLASH_ASK_BEFORE_RUNNING_SUBTITLE" desc="The 'ask before running' subtitle label for Flash in site settings.">
+    Ask before allowing sites to run Flash (recommended)
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_BACKGROUND_SYNC_ALLOW_RECENTLY_CLOSED_SITES" desc="The allow label for background sync in site settings.">
     Allow recently closed sites to finish sending and receiving data
@@ -1380,11 +1804,26 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIE_REMOVE_ALL" desc="Label for the button to delete all cookies for a site.">
     Remove All
   </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIE_REMOVE_ALL_SHOWN" desc="Label for the button to delete all visible cookies for a site.">
+    Remove All Shown
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIE_SEARCH" desc="A placeholder label shown inside the Cookie Data filter textbox as a hint that the user can enter a substring to search for.">
+    Search cookies
+  </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_THIRD_PARTY_COOKIE" desc="Label for the Block 3rd-party cookie checkbox on the Cookies category.">
     Block third-party cookies.
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_THIRD_PARTY_COOKIE_SUBLABEL" desc="A sub-label below the Block 3rd-party cookie checkbox.">
     Prevent third-party websites from saving and reading cookie data.
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_DELETE_DATA_POST_SESSION" desc="Label for the checkbox that allows the user to automatically delete their data at the end of the browser session.">
+    Keep local data only until you quit your browser
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_ADOBE_FLASH_SETTINGS" desc="The text for the link that points the user to the Adobe Flash Player Storage settings on the web">
+    Adobe Flash Player Storage settings
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_LEARN_MORE" desc="The text for the link to learn more about how managing exceptions work for Site Settings categories">
+    Learn more
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_HANDLER_IS_DEFAULT" desc="A label showing that a certain handler for a given protocol is the default.">
     Default
@@ -1395,6 +1834,21 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_REMOVE" desc="A label for the action of removing (deleting) a certain handler.">
     Remove
   </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_INCOGNITO_ONLY" desc="A label for the checkbox to make the rule apply to the current incognito session only.">
+    Current incognito session only
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_INCOGNITO" desc="A label for a site rule that only applies to the current incognito session.">
+    Current incognito session
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_INCOGNITO_EMBEDDED" desc="A label for a site rule that specifies an embedded origin and only applies to the current incognito session.">
+    Current incognito session (<ph name="EMBEDDING">$1<ex>embedded on google.com</ex></ph>)
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_NO_ZOOMED_SITES" desc="A label explaining that no sites have a configured zoom in/out value.">
+    No sites have been zoomed in or out.
+  </message>
+  <message name="IDS_SETTINGS_SITE_DETAILS" desc="A title for the site settings details subpage.">
+    Site details
+  </message>
 
   <!-- Sync / People Page -->
   <message name="IDS_SETTINGS_PEOPLE" desc="Name of the settings page which manages Chrome's signed-in Google profile.">
@@ -1403,8 +1857,14 @@
   <message name="IDS_SETTINGS_PEOPLE_MANAGE_OTHER_PEOPLE" desc="Label for the button that opens the multi-profile user manager.">
     Manage other people
   </message>
+  <message name="IDS_SETTINGS_PEOPLE_MANAGE_OTHER_PEOPLE_DESCRIPTION" desc="Description for the button that opens the multi-profile user manager.">
+    Enable guest browsing
+  </message>
   <message name="IDS_SETTINGS_PEOPLE_MANAGE_SUPERVISED_USERS" desc="Label for the button that opens the supervised users dashboard.">
     Manage supervised users
+  </message>
+  <message name="IDS_SETTINGS_PEOPLE_MANAGE_SUPERVISED_USERS_DESCRIPTION" desc="Description for the button that opens the supervised users dashboard.">
+    Opens Supervised Users Dashboard
   </message>
   <message name="IDS_SETTINGS_CHANGE_PICTURE_PROFILE_PHOTO" desc="The text on the Google profile photo of the user.">
     Google Profile photo
@@ -1696,8 +2156,8 @@
   <message name="IDS_SETTINGS_CUSTOMIZE_FONTS" desc="Label for the customize fonts button in settings.">
     Customize fonts
   </message>
-  <message name="IDS_SETTINGS_FONTS_AND_ENCODING" desc="Title for the customize fonts page in settings.">
-    Fonts and encoding
+  <message name="IDS_SETTINGS_FONTS" desc="Title for the customize fonts page in settings.">
+    Fonts
   </message>
   <message name="IDS_SETTINGS_STANDARD_FONT_LABEL" desc="Label for the standard font dropdown menu in settings.">
     Standard font
@@ -1909,6 +2369,65 @@
     </message>
     <message name="IDS_SETTINGS_DISPLAY_OVERSCAN_SAVE" desc="Label for saving overscan calibration.">
       Save
+    </message>
+
+    <!-- Storage -->
+    <message name="IDS_SETTINGS_STORAGE_TITLE" desc="In Device Settings, the title for storage management.">
+      Storage management
+    </message>
+    <message name="IDS_SETTINGS_STORAGE_ITEM_IN_USE" desc="In Device Settings > Storage, label for the used storage size of Chrome OS internal storage.">
+      In use
+    </message>
+    <message name="IDS_SETTINGS_STORAGE_ITEM_AVAILABLE" desc="In Device Settings > Storage, label for the available storage size of Chrome OS internal storage.">
+      Available
+    </message>
+    <message name="IDS_SETTINGS_STORAGE_ITEM_DOWNLOADS" desc="In Device Settings > Storage, label for the size of Downloads directory.">
+      Downloads
+    </message>
+    <message name="IDS_SETTINGS_STORAGE_ITEM_DRIVE_CACHE" desc="In Device Settings > Storage, label for the size of Google Drive's offline files.">
+      Offline files
+    </message>
+    <message name="IDS_SETTINGS_STORAGE_ITEM_BROWSING_DATA" desc="In Device Settings > Storage, label for the size of browsing data.">
+      Browsing data
+    </message>
+    <message name="IDS_SETTINGS_STORAGE_ITEM_ANDROID" desc="In Device Settings > Storage, label for the total size of Android apps and cache.">
+      Android storage
+    </message>
+    <message name="IDS_SETTINGS_STORAGE_ITEM_OTHER_USERS" desc="In Device Settings > Storage, label for the total size of other users' data directories.">
+      Other users
+    </message>
+    <message name="IDS_SETTINGS_STORAGE_SIZE_CALCULATING" desc="In Device Settings > Storage, label for storage item's size indicating the size is being calculated.">
+      Calculating...
+    </message>
+    <message name="IDS_SETTINGS_STORAGE_SIZE_UNKNOWN" desc="In Device Settings > Storage, label for storage item's size indicating the size is unknown">
+      Unknown
+    </message>
+    <message name="IDS_SETTINGS_STORAGE_SPACE_LOW_MESSAGE_TITLE" desc="Title of a warning message indicating device's available disk space is low.">
+      Device is low on space
+    </message>
+    <message name="IDS_SETTINGS_STORAGE_SPACE_LOW_MESSAGE_LINE_1" desc="The first paragraph of a warning message indicating device's available disk space is low.">
+      To free up space, delete files from device storage.
+    </message>
+    <message name="IDS_SETTINGS_STORAGE_SPACE_LOW_MESSAGE_LINE_2" desc="The second paragraph of a warning message indicating device's available disk space is low.">
+      If space isn’t made available, users and data may be automatically removed.
+    </message>
+    <message name="IDS_SETTINGS_STORAGE_SPACE_CRITICALLY_LOW_MESSAGE_TITLE" desc="Title of a warning message indicating device's available disk space is critically low.">
+      Device space critically low
+    </message>
+    <message name="IDS_SETTINGS_STORAGE_SPACE_CRITICALLY_LOW_MESSAGE_LINE_1" desc="The first paragraph of a warning message indicating device's available disk space is critically low.">
+      Free up at least 512 MB of space or your device will become unresponsive. To free up space, delete files from device storage.
+    </message>
+    <message name="IDS_SETTINGS_STORAGE_SPACE_CRITICALLY_LOW_MESSAGE_LINE_2" desc="The second paragraph of a warning message indicating device's available disk space is critically low.">
+      If you don’t free up space, users and data may be automatically removed.
+    </message>
+    <message name="IDS_SETTINGS_STORAGE_CLEAR_DRIVE_CACHE_DIALOG_TITLE" desc="Title for the storage manager confirmation dialog tab to remove Google Drive offline files.">
+      Delete offline files?
+    </message>
+    <message name="IDS_SETTINGS_STORAGE_CLEAR_DRIVE_CACHE_DESCRIPTION" desc="Description in the storage manager confirmation dialog to remove Google Drive offline files.">
+      Temporary Google Drive offline files will be deleted. Files that you’ve set as available offline won’t be deleted from this device.
+    </message>
+    <message name="IDS_SETTINGS_STORAGE_DELETE_ALL_BUTTON_TITLE" desc="In storage manager confirmation dialog, label for the button to delete offline files.">
+      Delete files
     </message>
   </if>
 

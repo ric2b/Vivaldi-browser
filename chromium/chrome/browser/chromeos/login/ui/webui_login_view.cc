@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 
 #include "ash/common/focus_cycler.h"
+#include "ash/common/system/status_area_widget_delegate.h"
 #include "ash/common/system/tray/system_tray.h"
 #include "ash/common/wm_shell.h"
 #include "ash/shell.h"
@@ -24,8 +25,8 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
-#include "chrome/browser/media/media_capture_devices_dispatcher.h"
-#include "chrome/browser/media/media_stream_devices_controller.h"
+#include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
+#include "chrome/browser/media/webrtc/media_stream_devices_controller.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/renderer_preferences_util.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
@@ -53,6 +54,8 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/controls/webview/webview.h"
+#include "ui/views/focus/focus_manager.h"
+#include "ui/views/focus/focus_search.h"
 #include "ui/views/widget/widget.h"
 
 using content::NativeWebKeyboardEvent;
@@ -76,6 +79,7 @@ const char kAccelNameDeviceRequisitionShark[] = "device_requisition_shark";
 const char kAccelNameAppLaunchBailout[] = "app_launch_bailout";
 const char kAccelNameAppLaunchNetworkConfig[] = "app_launch_network_config";
 const char kAccelNameToggleEasyBootstrap[] = "toggle_easy_bootstrap";
+const char kAccelNameBootstrappingSlave[] = "bootstrapping_slave";
 
 // A class to change arrow key traversal behavior when it's alive.
 class ScopedArrowKeyTraversal {
@@ -96,6 +100,15 @@ class ScopedArrowKeyTraversal {
   DISALLOW_COPY_AND_ASSIGN(ScopedArrowKeyTraversal);
 };
 
+// A helper method returns status area widget delegate if exists,
+// otherwise nullptr.
+ash::StatusAreaWidgetDelegate* GetStatusAreaWidgetDelegate() {
+  ash::SystemTray* tray = ash::Shell::GetInstance()->GetPrimarySystemTray();
+  return tray ? static_cast<ash::StatusAreaWidgetDelegate*>(
+                    tray->GetWidget()->GetContentsView())
+              : nullptr;
+}
+
 }  // namespace
 
 namespace chromeos {
@@ -103,6 +116,59 @@ namespace chromeos {
 // static
 const char WebUILoginView::kViewClassName[] =
     "browser/chromeos/login/WebUILoginView";
+
+// WebUILoginView::CycleFocusTraversable ---------------------------------------
+class WebUILoginView::CycleFocusTraversable : public views::FocusTraversable {
+ public:
+  explicit CycleFocusTraversable(WebUILoginView* webui_login_view)
+      : cycle_focus_search_(webui_login_view, true, false) {}
+  ~CycleFocusTraversable() override {}
+
+  // views::FocusTraversable
+  views::FocusSearch* GetFocusSearch() override { return &cycle_focus_search_; }
+
+  views::FocusTraversable* GetFocusTraversableParent() override {
+    return nullptr;
+  }
+
+  views::View* GetFocusTraversableParentView() override { return nullptr; }
+
+ private:
+  views::FocusSearch cycle_focus_search_;
+
+  DISALLOW_COPY_AND_ASSIGN(CycleFocusTraversable);
+};
+
+// WebUILoginView::StatusAreaFocusTraversable ----------------------------------
+class WebUILoginView::StatusAreaFocusTraversable
+    : public views::FocusTraversable {
+ public:
+  StatusAreaFocusTraversable(
+      ash::StatusAreaWidgetDelegate* status_area_widget_delegate,
+      WebUILoginView* webui_login_view)
+      : webui_login_view_(webui_login_view),
+        status_area_focus_search_(status_area_widget_delegate, false, false) {}
+  ~StatusAreaFocusTraversable() override {}
+
+  // views::FocusTraversable
+  views::FocusSearch* GetFocusSearch() override {
+    return &status_area_focus_search_;
+  }
+
+  views::FocusTraversable* GetFocusTraversableParent() override {
+    return webui_login_view_->cycle_focus_traversable_.get();
+  }
+
+  views::View* GetFocusTraversableParentView() override {
+    return webui_login_view_->status_area_widget_host_;
+  }
+
+ private:
+  WebUILoginView* const webui_login_view_;
+  views::FocusSearch status_area_focus_search_;
+
+  DISALLOW_COPY_AND_ASSIGN(StatusAreaFocusTraversable);
+};
 
 // WebUILoginView public: ------------------------------------------------------
 
@@ -158,6 +224,10 @@ WebUILoginView::WebUILoginView()
                              ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN)] =
       kAccelNameAppLaunchNetworkConfig;
 
+  accel_map_[ui::Accelerator(
+      ui::VKEY_S, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN)] =
+      kAccelNameBootstrappingSlave;
+
   for (AccelMap::iterator i(accel_map_.begin()); i != accel_map_.end(); ++i)
     AddAccelerator(i->first);
 }
@@ -169,8 +239,13 @@ WebUILoginView::~WebUILoginView() {
 
   if (!chrome::IsRunningInMash() &&
       ash::Shell::GetInstance()->HasPrimaryStatusArea()) {
-    ash::Shell::GetInstance()->GetPrimarySystemTray()->
-        SetNextFocusableView(NULL);
+    views::Widget* tray_widget =
+        ash::Shell::GetInstance()->GetPrimarySystemTray()->GetWidget();
+    ash::StatusAreaWidgetDelegate* status_area_widget_delegate =
+        static_cast<ash::StatusAreaWidgetDelegate*>(
+            tray_widget->GetContentsView());
+    status_area_widget_delegate->set_custom_focus_traversable(nullptr);
+    status_area_widget_delegate->set_default_last_focusable_child(false);
   } else {
     NOTIMPLEMENTED();
   }
@@ -206,6 +281,9 @@ void WebUILoginView::Init() {
   content::RendererPreferences* prefs = web_contents->GetMutableRendererPrefs();
   renderer_preferences_util::UpdateFromSystemSettings(
       prefs, signin_profile, web_contents);
+
+  status_area_widget_host_ = new views::View;
+  AddChildView(status_area_widget_host_);
 }
 
 const char* WebUILoginView::GetClassName() const {
@@ -281,6 +359,19 @@ void WebUILoginView::LoadURL(const GURL & url) {
       ->GetWidget()
       ->GetView()
       ->SetBackgroundColor(SK_ColorTRANSPARENT);
+
+  // There is no Shell instance while running in mash.
+  if (chrome::IsRunningInMash())
+    return;
+
+  ash::StatusAreaWidgetDelegate* status_area_widget_delegate =
+      GetStatusAreaWidgetDelegate();
+  DCHECK(status_area_widget_delegate);
+  cycle_focus_traversable_.reset(new CycleFocusTraversable(this));
+  status_area_focus_traversable_.reset(
+      new StatusAreaFocusTraversable(status_area_widget_delegate, this));
+  status_area_widget_delegate->set_custom_focus_traversable(
+      status_area_focus_traversable_.get());
 }
 
 content::WebUI* WebUILoginView::GetWebUI() {
@@ -435,9 +526,11 @@ bool WebUILoginView::TakeFocus(content::WebContents* source, bool reverse) {
   if (chrome::IsRunningInMash())
     return true;
 
-  ash::SystemTray* tray = ash::Shell::GetInstance()->GetPrimarySystemTray();
-  if (tray && tray->GetWidget()->IsVisible()) {
-    tray->SetNextFocusableView(this);
+  ash::StatusAreaWidgetDelegate* status_area_widget_delegate =
+      GetStatusAreaWidgetDelegate();
+  if (status_area_widget_delegate &&
+      status_area_widget_delegate->GetWidget()->IsVisible()) {
+    status_area_widget_delegate->set_default_last_focusable_child(reverse);
     ash::WmShell::Get()->focus_cycler()->RotateFocus(
         reverse ? ash::FocusCycler::BACKWARD : ash::FocusCycler::FORWARD);
   }

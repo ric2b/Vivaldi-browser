@@ -22,6 +22,7 @@ cr.define('md_history.history_list_test', function() {
           createHistoryEntry('2016-03-14 9:00', 'https://www.google.com'),
           createHistoryEntry('2016-03-13', 'https://en.wikipedia.org')
         ];
+        TEST_HISTORY_RESULTS[2].starred = true;
 
         ADDITIONAL_RESULTS = [
           createHistoryEntry('2016-03-13 10:00', 'https://en.wikipedia.org'),
@@ -50,8 +51,7 @@ cr.define('md_history.history_list_test', function() {
           return flush();
         }).then(function() {
           MockInteractions.tap(app.$.toolbar.$$('#delete-button'));
-          return listContainer.$.dialog.get();
-        }).then(function(dialog) {
+          var dialog = listContainer.$.dialog.get();
           registerMessageCallback('removeVisits', this, function() {
             flush().then(function() {
               deleteComplete();
@@ -87,8 +87,8 @@ cr.define('md_history.history_list_test', function() {
           assertDeepEquals([false, false, false, false],
                            element.historyData_.map(i => i.selected));
 
-          assertFalse(items[2].$.checkbox.checked);
-          assertFalse(items[3].$.checkbox.checked);
+          assertFalse(items[2].selected);
+          assertFalse(items[3].selected);
         });
       });
 
@@ -242,7 +242,7 @@ cr.define('md_history.history_list_test', function() {
 
           // Check that the search term is bolded correctly in the history-item.
           assertGT(
-              title.children[0].$.container.innerHTML.indexOf('<b>google</b>'),
+              title.children[0].innerHTML.indexOf('<b>google</b>'),
               -1);
         });
       });
@@ -277,8 +277,7 @@ cr.define('md_history.history_list_test', function() {
 
           items = polymerSelectAll(element, 'history-item');
           MockInteractions.tap(items[0].$['menu-button']);
-          return app.$.history.$.sharedMenu.get();
-        }).then(function() {
+          app.$.history.$.sharedMenu.get();
           MockInteractions.tap(app.$.history.$$('#menuMoreButton'));
         });
       });
@@ -301,7 +300,10 @@ cr.define('md_history.history_list_test', function() {
         });
       });
 
-      test('scrolling history list causes toolbar shadow to appear', () => {
+      // TODO(calamity): Reenable this test after fixing flakiness.
+      // See http://crbug.com/640862.
+      test.skip('scrolling history list causes toolbar shadow to appear',
+                () => {
         for (var i = 0; i < 10; i++)
           app.historyResult(createHistoryInfo(), TEST_HISTORY_RESULTS);
         return flush().then(function() {
@@ -358,8 +360,7 @@ cr.define('md_history.history_list_test', function() {
         }).then(function() {
           MockInteractions.tap(app.$.toolbar.$$('#delete-button'));
 
-          return listContainer.$.dialog.get();
-        }).then(function(dialog) {
+          var dialog = listContainer.$.dialog.get();
           registerMessageCallback('removeVisits', this, function() {
             flush().then(function() {
               deleteComplete();
@@ -409,24 +410,29 @@ cr.define('md_history.history_list_test', function() {
                 'https://www.google.com',
                 'https://en.wikipedia.org',
               ], element.historyData_.map(item => item.title));
+
+              // Deletion should deselect all.
+              assertDeepEquals(
+                  [false, false, false],
+                  items.slice(0, 3).map(i => i.selected));
+
               done();
             });
           });
+
+          MockInteractions.tap(items[1].$.checkbox);
+          MockInteractions.tap(items[3].$.checkbox);
           MockInteractions.tap(items[1].$['menu-button']);
-          return app.$.history.$.sharedMenu.get();
-        }).then(function(menu) {
+          app.$.history.$.sharedMenu.get();
           MockInteractions.tap(app.$.history.$$('#menuRemoveButton'));
         });
       });
 
       test('deleting items using shortcuts', function(done) {
         var listContainer = app.$.history;
-        var dialog;
         app.historyResult(createHistoryInfo(), TEST_HISTORY_RESULTS);
-        listContainer.$.dialog.get().then(function(stampedDialog) {
-          dialog = stampedDialog;
-          return flush();
-        }).then(function() {
+        var dialog = listContainer.$.dialog.get();
+        return flush().then(function() {
           items = polymerSelectAll(element, 'history-item');
 
           // Dialog should not appear when there is no item selected.
@@ -504,6 +510,52 @@ cr.define('md_history.history_list_test', function() {
           });
 
           MockInteractions.tap(items[0].$.title);
+        });
+      });
+
+      test('focus and keyboard nav', function() {
+        app.historyResult(createHistoryInfo(), TEST_HISTORY_RESULTS);
+        return flush().then(function() {
+          var items = polymerSelectAll(element, 'history-item');
+
+          var focused = items[2].$.checkbox;
+          focused.focus();
+
+          MockInteractions.pressAndReleaseKeyOn(focused, 39, [], 'ArrowRight');
+          focused = items[2].$.title;
+          assertEquals(focused, element.lastFocused_);
+          assertTrue(items[2].row_.isActive());
+          assertFalse(items[3].row_.isActive());
+
+          MockInteractions.pressAndReleaseKeyOn(focused, 40, [], 'ArrowDown');
+          focused = items[3].$.title;
+          assertEquals(focused, element.lastFocused_);
+          assertFalse(items[2].row_.isActive());
+          assertTrue(items[3].row_.isActive());
+
+          MockInteractions.pressAndReleaseKeyOn(focused, 39, [], 'ArrowRight');
+          focused = items[3].$['menu-button'];
+          assertEquals(focused, element.lastFocused_);
+          assertFalse(items[2].row_.isActive());
+          assertTrue(items[3].row_.isActive());
+
+          MockInteractions.pressAndReleaseKeyOn(focused, 38, [], 'ArrowUp');
+          focused = items[2].$['menu-button'];
+          assertEquals(focused, element.lastFocused_);
+          assertTrue(items[2].row_.isActive());
+          assertFalse(items[3].row_.isActive());
+
+          MockInteractions.pressAndReleaseKeyOn(focused, 37, [], 'ArrowLeft');
+          focused = items[2].$$('#bookmark-star');
+          assertEquals(focused, element.lastFocused_);
+          assertTrue(items[2].row_.isActive());
+          assertFalse(items[3].row_.isActive());
+
+          MockInteractions.pressAndReleaseKeyOn(focused, 40, [], 'ArrowDown');
+          focused = items[3].$.title;
+          assertEquals(focused, element.lastFocused_);
+          assertFalse(items[2].row_.isActive());
+          assertTrue(items[3].row_.isActive());
         });
       });
 

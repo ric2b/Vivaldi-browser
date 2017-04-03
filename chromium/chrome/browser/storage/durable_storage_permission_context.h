@@ -17,7 +17,7 @@ class DurableStoragePermissionContext : public PermissionContextBase {
   ~DurableStoragePermissionContext() override = default;
 
   // PermissionContextBase implementation.
-  // Grant if requesting_origin is bookmarked or already granted.
+  // Grant if requesting_origin is bookmarked.
   void DecidePermission(content::WebContents* web_contents,
                         const PermissionRequestID& id,
                         const GURL& requesting_origin,
@@ -30,13 +30,6 @@ class DurableStoragePermissionContext : public PermissionContextBase {
   bool IsRestrictedToSecureOrigins() const override;
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(BookmarksOriginTest, Exists);
-  FRIEND_TEST_ALL_PREFIXES(BookmarksOriginTest, DoesntExist);
-
-  static bool IsOriginBookmarked(
-      const std::vector<bookmarks::BookmarkModel::URLAndTitle>& bookmarks,
-      const GURL& origin);
-
   DISALLOW_COPY_AND_ASSIGN(DurableStoragePermissionContext);
 };
 

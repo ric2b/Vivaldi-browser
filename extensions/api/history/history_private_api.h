@@ -7,6 +7,8 @@
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/profiles/profile.h"
 
+#include "db/vivaldi_history_database.h"
+
 namespace history {
 class QueryResults;
 }
@@ -122,10 +124,24 @@ class HistoryPrivateGetTopUrlsPerDayFunction :
   bool RunAsyncImpl() override;
 
   // Callback for the history service to acknowledge top url search complete.
-  void TopUrlsComplete(const history::TopUrlsPerDayList &host_counts);
+  void TopUrlsComplete(const history::UrlVisitCount::TopUrlsPerDayList
+    &host_counts);
 
-  //Default number of visit results within the day
+  // Default number of visit results within the day
   const int kMaxResultsWithinDay = 4;
+};
+
+class HistoryPrivateVisitSearchFunction :
+    public HistoryFunctionWithCallback {
+ public:
+        DECLARE_EXTENSION_FUNCTION("historyPrivate.visitSearch",
+  HISTORYPRIVATE_VISITSEARCH)
+
+ protected:
+  ~HistoryPrivateVisitSearchFunction() override {}
+  bool RunAsyncImpl() override;
+  // Callback for the history service to acknowledge visits search complete.
+  void VisitsComplete(const history::Visit::VisitsList &visit_list);
 };
 
 }  // namespace extensions

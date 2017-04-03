@@ -70,7 +70,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback) {
   ASSERT_TRUE(WaitUntilOnEnded());
 
 #if defined(OS_MACOSX)
-  if (base::mac::IsOSYosemiteOrLater()) {
+  if (base::mac::IsAtLeastOS10_10()) {
     EXPECT_EQ("e7832270a91e8de7945b5724eec2cbcb", GetVideoHash());
     EXPECT_EQ("-1.29,-0.84,-0.56,1.16,0.82,0.32,", GetAudioHash());
   } else {
@@ -96,7 +96,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_16x9_Aspect) {
   ASSERT_TRUE(WaitUntilOnEnded());
 
 #if defined(OS_MACOSX)
-  if (base::mac::IsOSYosemiteOrLater()) {
+  if (base::mac::IsAtLeastOS10_10()) {
     EXPECT_EQ("e9a2e53ef2c16757962cc58d37de69e7", GetVideoHash());
     EXPECT_EQ("-3.66,-2.08,0.22,2.09,0.64,-0.90,", GetAudioHash());
   } else {
@@ -121,7 +121,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_VideoOnly) {
   ASSERT_TRUE(WaitUntilOnEnded());
 
 #if defined(OS_MACOSX)
-  if (base::mac::IsOSYosemiteOrLater()) {
+  if (base::mac::IsAtLeastOS10_10()) {
     EXPECT_EQ("e7832270a91e8de7945b5724eec2cbcb", GetVideoHash());
   }
   // On OS X, the expected hashes can be different, because our solution
@@ -142,7 +142,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_MP3) {
   ASSERT_TRUE(WaitUntilOnEnded());
 
 #if defined(OS_MACOSX)
-  if (base::mac::IsOSYosemiteOrLater()) {
+  if (base::mac::IsAtLeastOS10_10()) {
     // TODO(wdzierzanowski): Sanitize this.
     // The current state of affairs on 10.10 is that these are the two hashes
     // that we ever get for this file, and which one we get in a particular run
@@ -173,7 +173,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_M4A) {
   ASSERT_TRUE(WaitUntilOnEnded());
 
 #if defined(OS_MACOSX)
-  if (base::mac::IsOSYosemiteOrLater()) {
+  if (base::mac::IsAtLeastOS10_10()) {
     EXPECT_EQ("-5.29,-5.47,-5.05,-4.33,-2.99,-3.79,", GetAudioHash());
   } else {
     // On OS X, the expected hashes can be different, because our solution
@@ -282,7 +282,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, DISABLED_DecodingError) {
 
 #if defined(OS_MACOSX)
   // AVPlayer hides the error.
-  if (base::mac::IsOSMavericks())
+  if (base::mac::IsOS10_9())
     return;
 #endif
 

@@ -24,19 +24,19 @@ class SingleThreadTaskRunner;
 namespace cc {
 class ChannelImpl;
 class ChannelMain;
-class LayerTreeHost;
+class LayerTreeHostInProcess;
 class ProxyImpl;
 class ProxyMain;
 
 // An implementation of ChannelMain and ChannelImpl that sends commands between
 // ProxyMain and ProxyImpl across thread boundaries.
 //
-// LayerTreeHost creates ThreadedChannel and passes the ownership to ProxyMain.
-// The object life cycle and communication across threads is as follows:
-//
+// LayerTreeHostInProcess creates ThreadedChannel and passes the ownership to
+// ProxyMain. The object life cycle and communication across threads is as
+// follows:
 //
 //           Main Thread              |               Impl Thread
-//   LayerTreeHost->InitializeProxy   |
+//   LayerTreeHostInProcess->InitializeProxy   |
 //               |                    |
 //        ProxyMain->Start()          |
 //               |              ThreadedChannel
@@ -50,12 +50,12 @@ class ProxyMain;
 //                                                          .
 //                                                          .
 //                                          ProxyImpl::ScheduledActionBegin
-//                                                     OutputSurfaceCreation
+//                                                   CompositorFrameSinkCreation
 //                                                          |
-//                                         ChannelImpl::RequestNewOutputSurface
+//                                    ChannelImpl::RequestNewCompositorFrameSink
 // ----------------------------------------------------------------------------
 //                                                          |
-// ProxyMain->RequestNewOutputSurface()<----PostTask--------
+// ProxyMain->RequestNewCompositorFrameSink()<----PostTask--------
 //              .
 //              .
 // ProxyMain->Stop()
@@ -87,7 +87,8 @@ class CC_EXPORT ThreadedChannel : public ChannelMain, public ChannelImpl {
   void UpdateTopControlsStateOnImpl(TopControlsState constraints,
                                     TopControlsState current,
                                     bool animate) override;
-  void InitializeOutputSurfaceOnImpl(OutputSurface* output_surface) override;
+  void InitializeCompositorFrameSinkOnImpl(
+      CompositorFrameSink* output_surface) override;
   void InitializeMutatorOnImpl(
       std::unique_ptr<LayerTreeMutator> mutator) override;
   void MainThreadHasStoppedFlingingOnImpl() override;
@@ -102,17 +103,16 @@ class CC_EXPORT ThreadedChannel : public ChannelMain, public ChannelImpl {
   void SetVisibleOnImpl(bool visible) override;
 
   // Blocking calls to ProxyImpl
-  void ReleaseOutputSurfaceOnImpl(CompletionEvent* completion) override;
+  void ReleaseCompositorFrameSinkOnImpl(CompletionEvent* completion) override;
   void MainFrameWillHappenOnImplForTesting(
       CompletionEvent* completion,
       bool* main_frame_will_happen) override;
   void NotifyReadyToCommitOnImpl(CompletionEvent* completion,
-                                 LayerTreeHost* layer_tree_host,
+                                 LayerTreeHostInProcess* layer_tree_host,
                                  base::TimeTicks main_thread_start_time,
                                  bool hold_commit_for_activation) override;
   void SynchronouslyInitializeImpl(
-      LayerTreeHost* layer_tree_host,
-      std::unique_ptr<BeginFrameSource> external_begin_frame_source) override;
+      LayerTreeHostInProcess* layer_tree_host) override;
   void SynchronouslyCloseImpl() override;
 
   // ChannelImpl Implementation
@@ -120,9 +120,9 @@ class CC_EXPORT ThreadedChannel : public ChannelMain, public ChannelImpl {
   void BeginMainFrameNotExpectedSoon() override;
   void DidCommitAndDrawFrame() override;
   void SetAnimationEvents(std::unique_ptr<AnimationEvents> events) override;
-  void DidLoseOutputSurface() override;
-  void RequestNewOutputSurface() override;
-  void DidInitializeOutputSurface(bool success) override;
+  void DidLoseCompositorFrameSink() override;
+  void RequestNewCompositorFrameSink() override;
+  void DidInitializeCompositorFrameSink(bool success) override;
   void DidCompletePageScaleAnimation() override;
   void BeginMainFrame(std::unique_ptr<BeginMainFrameAndCommitState>
                           begin_main_frame_state) override;
@@ -134,9 +134,8 @@ class CC_EXPORT ThreadedChannel : public ChannelMain, public ChannelImpl {
   // Virtual for testing.
   virtual std::unique_ptr<ProxyImpl> CreateProxyImpl(
       ChannelImpl* channel_impl,
-      LayerTreeHost* layer_tree_host,
-      TaskRunnerProvider* task_runner_provider,
-      std::unique_ptr<BeginFrameSource> external_begin_frame_source);
+      LayerTreeHostInProcess* layer_tree_host,
+      TaskRunnerProvider* task_runner_provider);
 
  private:
   // The members of this struct should be accessed on the main thread only.
@@ -172,10 +171,8 @@ class CC_EXPORT ThreadedChannel : public ChannelMain, public ChannelImpl {
   };
 
   // Called on impl thread.
-  void InitializeImplOnImpl(
-      CompletionEvent* completion,
-      LayerTreeHost* layer_tree_host,
-      std::unique_ptr<BeginFrameSource> external_begin_frame_source);
+  void InitializeImplOnImpl(CompletionEvent* completion,
+                            LayerTreeHostInProcess* layer_tree_host);
   void CloseImplOnImpl(CompletionEvent* completion);
 
   bool IsInitialized() const;

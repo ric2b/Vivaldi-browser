@@ -206,6 +206,12 @@ void WebBluetoothServiceImpl::SetClientConnectionErrorHandler(
   binding_.set_connection_error_handler(closure);
 }
 
+bool WebBluetoothServiceImpl::IsDevicePaired(
+    const std::string& device_address) {
+  return allowed_devices_map_.GetDeviceId(GetOrigin(), device_address) !=
+         nullptr;
+}
+
 void WebBluetoothServiceImpl::DidFinishNavigation(
     NavigationHandle* navigation_handle) {
   if (navigation_handle->HasCommitted() &&
@@ -322,16 +328,18 @@ void WebBluetoothServiceImpl::RequestDevice(
   RecordRequestDeviceOptions(options);
 
   if (!GetAdapter()) {
-    if (BluetoothAdapterFactoryWrapper::Get().IsBluetoothAdapterAvailable()) {
+    if (BluetoothAdapterFactoryWrapper::Get().IsLowEnergyAvailable()) {
       BluetoothAdapterFactoryWrapper::Get().AcquireAdapter(
           this, base::Bind(&WebBluetoothServiceImpl::RequestDeviceImpl,
                            weak_ptr_factory_.GetWeakPtr(),
                            base::Passed(std::move(options)), callback));
       return;
     }
-    RecordRequestDeviceOutcome(UMARequestDeviceOutcome::NO_BLUETOOTH_ADAPTER);
-    callback.Run(blink::mojom::WebBluetoothError::NO_BLUETOOTH_ADAPTER,
-                 nullptr /* device */);
+    RecordRequestDeviceOutcome(
+        UMARequestDeviceOutcome::BLUETOOTH_LOW_ENERGY_NOT_AVAILABLE);
+    callback.Run(
+        blink::mojom::WebBluetoothError::BLUETOOTH_LOW_ENERGY_NOT_AVAILABLE,
+        nullptr /* device */);
     return;
   }
   RequestDeviceImpl(std::move(options), callback, GetAdapter());

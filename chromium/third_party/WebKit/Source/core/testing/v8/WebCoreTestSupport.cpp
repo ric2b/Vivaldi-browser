@@ -25,10 +25,10 @@
 
 #include "core/testing/v8/WebCoreTestSupport.h"
 
+#include "bindings/core/v8/ConditionalFeatures.h"
 #include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/V8Binding.h"
-#include "bindings/core/v8/V8Internals.h"
-#include "bindings/core/v8/V8WorkerInternals.h"
+#include "bindings/core/v8/V8OriginTrialsTest.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/LocalFrame.h"
@@ -42,94 +42,85 @@ using namespace blink;
 namespace WebCoreTestSupport {
 
 namespace {
-blink::InstallOriginTrialsFunction s_originalInstallOriginTrialsFunction = nullptr;
+blink::InstallConditionalFeaturesFunction
+    s_originalInstallConditionalFeaturesFunction = nullptr;
 }
 
-v8::Local<v8::Value> createInternalsObject(v8::Local<v8::Context> context)
-{
-    ScriptState* scriptState = ScriptState::from(context);
-    v8::Local<v8::Object> global = scriptState->context()->Global();
-    ExecutionContext* executionContext = scriptState->getExecutionContext();
-    if (executionContext->isDocument())
-        return toV8(Internals::create(scriptState), global, scriptState->isolate());
-    if (executionContext->isWorkerGlobalScope())
-        return toV8(WorkerInternals::create(scriptState), global, scriptState->isolate());
-    return v8::Local<v8::Value>();
+v8::Local<v8::Value> createInternalsObject(v8::Local<v8::Context> context) {
+  ScriptState* scriptState = ScriptState::from(context);
+  v8::Local<v8::Object> global = scriptState->context()->Global();
+  ExecutionContext* executionContext = scriptState->getExecutionContext();
+  if (executionContext->isDocument())
+    return toV8(Internals::create(scriptState), global, scriptState->isolate());
+  if (executionContext->isWorkerGlobalScope())
+    return toV8(WorkerInternals::create(scriptState), global,
+                scriptState->isolate());
+  return v8::Local<v8::Value>();
 }
 
-void injectInternalsObject(v8::Local<v8::Context> context)
-{
-    ScriptState* scriptState = ScriptState::from(context);
-    ScriptState::Scope scope(scriptState);
-    v8::Local<v8::Object> global = scriptState->context()->Global();
-    v8::Local<v8::Value> internals = createInternalsObject(context);
-    if (internals.IsEmpty())
-        return;
+void injectInternalsObject(v8::Local<v8::Context> context) {
+  // Set conditional features installation function to
+  // |installConditionalFeaturesForTests|
+  if (!s_originalInstallConditionalFeaturesFunction) {
+    s_originalInstallConditionalFeaturesFunction =
+        setInstallConditionalFeaturesFunction(
+            installConditionalFeaturesForTests);
+  }
 
-    global->Set(scriptState->context(), v8AtomicString(scriptState->isolate(), Internals::internalsId), internals).ToChecked();
+  ScriptState* scriptState = ScriptState::from(context);
+  ScriptState::Scope scope(scriptState);
+  v8::Local<v8::Object> global = scriptState->context()->Global();
+  v8::Local<v8::Value> internals = createInternalsObject(context);
+  if (internals.IsEmpty())
+    return;
 
-    // Set origin trials installation function to |installOriginTrialsForTests|
-    if (!s_originalInstallOriginTrialsFunction) {
-        s_originalInstallOriginTrialsFunction = setInstallOriginTrialsFunction(installOriginTrialsForTests);
+  global
+      ->Set(scriptState->context(),
+            v8AtomicString(scriptState->isolate(), Internals::internalsId),
+            internals)
+      .ToChecked();
+}
+
+void installConditionalFeaturesForTests(
+    const WrapperTypeInfo* type,
+    const blink::ScriptState* scriptState,
+    v8::Local<v8::Object> prototypeObject,
+    v8::Local<v8::Function> interfaceObject) {
+  (*s_originalInstallConditionalFeaturesFunction)(
+      type, scriptState, prototypeObject, interfaceObject);
+
+  ExecutionContext* executionContext = scriptState->getExecutionContext();
+  OriginTrialContext* originTrialContext = OriginTrialContext::from(
+      executionContext, OriginTrialContext::DontCreateIfNotExists);
+
+  if (type == &V8OriginTrialsTest::wrapperTypeInfo) {
+    if (originTrialContext &&
+        originTrialContext->isFeatureEnabled("Frobulate")) {
+      V8OriginTrialsTest::installOriginTrialsSampleAPI(
+          scriptState->isolate(), scriptState->world(), v8::Local<v8::Object>(),
+          prototypeObject, interfaceObject);
     }
-
-    // If Origin Trials have been registered before the internals object was ready,
-    // then inject them into the context now
-    ExecutionContext* executionContext = toExecutionContext(context);
-    if (executionContext) {
-        OriginTrialContext* originTrialContext = OriginTrialContext::from(executionContext);
-        if (originTrialContext)
-            originTrialContext->initializePendingFeatures();
-    }
+  }
 }
 
-void installOriginTrialsForTests(ScriptState* scriptState)
-{
-    (*s_originalInstallOriginTrialsFunction)(scriptState);
+void resetInternalsObject(v8::Local<v8::Context> context) {
+  // This can happen if JavaScript is disabled in the main frame.
+  if (context.IsEmpty())
+    return;
 
-    v8::Local<v8::Context> context = scriptState->context();
-    ExecutionContext* executionContext = toExecutionContext(scriptState->context());
-    if (!executionContext->isDocument() && !executionContext->isWorkerGlobalScope())
-        return;
-    OriginTrialContext* originTrialContext = OriginTrialContext::from(executionContext, OriginTrialContext::DontCreateIfNotExists);
-    if (!originTrialContext)
-        return;
-
-    ScriptState::Scope scope(scriptState);
-    v8::Local<v8::Object> global = context->Global();
-    v8::Isolate* isolate = scriptState->isolate();
-
-    if (!originTrialContext->featureBindingsInstalled("Frobulate") && originTrialContext->isFeatureEnabled("Frobulate")) {
-        v8::Local<v8::String> internalsName = v8::String::NewFromOneByte(isolate, reinterpret_cast<const uint8_t*>("internals"), v8::NewStringType::kNormal).ToLocalChecked();
-        v8::Local<v8::Value> v8Internals = global->Get(context, internalsName).ToLocalChecked();
-        if (v8Internals->IsObject()) {
-            if (executionContext->isDocument())
-                V8Internals::installOriginTrialsSampleAPI(scriptState);
-            else if (executionContext->isWorkerGlobalScope())
-                V8WorkerInternals::installOriginTrialsSampleAPI(scriptState);
-            originTrialContext->setFeatureBindingsInstalled("Frobulate");
-        }
-    }
+  ScriptState* scriptState = ScriptState::from(context);
+  ScriptState::Scope scope(scriptState);
+  Document* document = toDocument(scriptState->getExecutionContext());
+  ASSERT(document);
+  LocalFrame* frame = document->frame();
+  // Should the document have been detached, the page is assumed being destroyed
+  // (=> no reset required.)
+  if (!frame)
+    return;
+  Page* page = frame->page();
+  ASSERT(page);
+  Internals::resetToConsistentState(page);
+  InternalSettings::from(*page)->resetToConsistentState();
 }
 
-void resetInternalsObject(v8::Local<v8::Context> context)
-{
-    // This can happen if JavaScript is disabled in the main frame.
-    if (context.IsEmpty())
-        return;
-
-    ScriptState* scriptState = ScriptState::from(context);
-    ScriptState::Scope scope(scriptState);
-    Document* document = toDocument(scriptState->getExecutionContext());
-    ASSERT(document);
-    LocalFrame* frame = document->frame();
-    // Should the document have been detached, the page is assumed being destroyed (=> no reset required.)
-    if (!frame)
-        return;
-    Page* page = frame->page();
-    ASSERT(page);
-    Internals::resetToConsistentState(page);
-    InternalSettings::from(*page)->resetToConsistentState();
-}
-
-} // namespace WebCoreTestSupport
+}  // namespace WebCoreTestSupport

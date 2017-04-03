@@ -1,0 +1,28 @@
+
+post_process_template("//chrome/browser:browser") {
+  sources += [
+    "//vivaldi/browser/menus/vivaldi_menu_enums.h",
+    "//vivaldi/browser/menus/vivaldi_menus.cpp",
+    "//vivaldi/browser/menus/vivaldi_menus.h",
+  ]
+  if (is_mac) {
+    sources += [
+      "//vivaldi/browser/mac/sparkle_util.h",
+      "//vivaldi/browser/mac/sparkle_util.mm",
+    ]
+  }
+}
+
+post_process_template("//chrome/browser/ui:ui") {
+  sources += [
+    "//vivaldi/browser/startup_vivaldi_browser.cpp",
+    "//vivaldi/browser/startup_vivaldi_browser.h",
+  ]
+}
+
+post_process_target("//chrome/common:constants") {
+  sources += [
+    "//vivaldi/browser/win/vivaldi_standalone.cpp",
+    "//vivaldi/browser/win/vivaldi_standalone.h",
+  ]
+}

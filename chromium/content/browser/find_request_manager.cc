@@ -91,11 +91,13 @@ FindRequestManager::FindRequestManager(WebContentsImpl* web_contents)
     : WebContentsObserver(web_contents),
       contents_(web_contents),
       current_session_id_(kInvalidId),
+      pending_find_next_reply_(nullptr),
       pending_active_match_ordinal_(false),
       number_of_matches_(0),
       active_frame_(nullptr),
       relative_active_match_ordinal_(0),
-      active_match_ordinal_(0) {}
+      active_match_ordinal_(0),
+      last_reported_id_(kInvalidId) {}
 
 FindRequestManager::~FindRequestManager() {}
 
@@ -149,11 +151,18 @@ void FindRequestManager::OnFindReply(RenderFrameHost* rfh,
   // Check for an update to the number of matches.
   if (number_of_matches != -1) {
     DCHECK_GE(number_of_matches, 0);
-    // Increment the global number of matches by the number of additional
-    // matches found for this frame.
     auto matches_per_frame_it = matches_per_frame_.find(rfh);
-    number_of_matches_ += number_of_matches - matches_per_frame_it->second;
-    matches_per_frame_it->second = number_of_matches;
+    if (int matches_delta = number_of_matches - matches_per_frame_it->second) {
+      // Increment the global number of matches by the number of additional
+      // matches found for this frame.
+      number_of_matches_ += matches_delta;
+      matches_per_frame_it->second = number_of_matches;
+
+      // The active match ordinal may need updating since the number of matches
+      // before the active match may have changed.
+      if (rfh != active_frame_)
+        UpdateActiveMatchOrdinal();
+    }
   }
 
   // Check for an update to the selection rect.
@@ -190,16 +199,21 @@ void FindRequestManager::OnFindReply(RenderFrameHost* rfh,
 
   // This is the final update for this frame for the current find operation.
 
-  pending_replies_.erase(rfh);
-  if (request_id == current_session_id_ && !pending_replies_.empty()) {
+  pending_initial_replies_.erase(rfh);
+  if (request_id == current_session_id_ && !pending_initial_replies_.empty()) {
     NotifyFindReply(request_id, false /* final_update */);
     return;
   }
-  DCHECK(request_id == current_session_id_ ||
-         current_request_.options.findNext);
 
   // This is the final update for the current find operation.
-  FinalUpdate(request_id, rfh);
+
+  if (request_id == current_request_.id && request_id != current_session_id_) {
+    DCHECK(current_request_.options.findNext);
+    DCHECK_EQ(pending_find_next_reply_, rfh);
+    pending_find_next_reply_ = nullptr;
+  }
+
+  FinalUpdateReceived(request_id, rfh);
 }
 
 void FindRequestManager::RemoveFrame(RenderFrameHost* rfh) {
@@ -218,6 +232,7 @@ void FindRequestManager::RemoveFrame(RenderFrameHost* rfh) {
   if (active_frame_ == rfh) {
     active_frame_ = nullptr;
     relative_active_match_ordinal_ = 0;
+    selection_rect_ = gfx::Rect();
   }
   UpdateActiveMatchOrdinal();
 
@@ -239,17 +254,28 @@ void FindRequestManager::RemoveFrame(RenderFrameHost* rfh) {
   RemoveFindMatchRectsPendingReply(rfh);
 #endif
 
-  if (pending_replies_.count(rfh)) {
+  // If no pending find replies are expected for the removed frame, then just
+  // report the updated results.
+  if (!pending_initial_replies_.count(rfh) && pending_find_next_reply_ != rfh) {
+    bool final_update =
+        pending_initial_replies_.empty() && !pending_find_next_reply_;
+    NotifyFindReply(current_session_id_, final_update);
+    return;
+  }
+
+  if (pending_initial_replies_.count(rfh)) {
     // A reply should not be expected from the removed frame.
-    pending_replies_.erase(rfh);
-    if (pending_replies_.empty()) {
-      FinalUpdate(current_request_.id, rfh);
-      return;
+    pending_initial_replies_.erase(rfh);
+    if (pending_initial_replies_.empty()) {
+      FinalUpdateReceived(current_session_id_, rfh);
     }
   }
 
-  NotifyFindReply(current_session_id_,
-                  pending_replies_.empty() /* final_update */);
+  if (pending_find_next_reply_ == rfh) {
+    // A reply should not be expected from the removed frame.
+    pending_find_next_reply_ = nullptr;
+    FinalUpdateReceived(current_request_.id, rfh);
+  }
 }
 
 #if defined(OS_ANDROID)
@@ -264,7 +290,7 @@ void FindRequestManager::ActivateNearestFindResult(float x, float y) {
   for (FrameTreeNode* node : contents_->GetFrameTree()->Nodes()) {
     RenderFrameHost* rfh = node->current_frame_host();
 
-    if (!CheckFrame(rfh))
+    if (!CheckFrame(rfh) || !rfh->IsRenderFrameLive())
       continue;
 
     activate_.pending_replies.insert(rfh);
@@ -299,7 +325,7 @@ void FindRequestManager::RequestFindMatchRects(int current_version) {
   for (FrameTreeNode* node : contents_->GetFrameTree()->Nodes()) {
     RenderFrameHost* rfh = node->current_frame_host();
 
-    if (!CheckFrame(rfh))
+    if (!CheckFrame(rfh) || !rfh->IsRenderFrameLive())
       continue;
 
     match_rects_.pending_replies.insert(rfh);
@@ -327,6 +353,15 @@ void FindRequestManager::OnFindMatchRectsReply(
 }
 #endif
 
+void FindRequestManager::DidFinishLoad(RenderFrameHost* rfh,
+                                       const GURL& validated_url) {
+  if (current_session_id_ == kInvalidId)
+    return;
+
+  RemoveFrame(rfh);
+  AddFrame(rfh, true /* force */);
+}
+
 void FindRequestManager::RenderFrameDeleted(RenderFrameHost* rfh) {
   RemoveFrame(rfh);
 }
@@ -343,7 +378,8 @@ void FindRequestManager::FrameDeleted(RenderFrameHost* rfh) {
 void FindRequestManager::Reset(const FindRequest& initial_request) {
   current_session_id_ = initial_request.id;
   current_request_ = initial_request;
-  pending_replies_.clear();
+  pending_initial_replies_.clear();
+  pending_find_next_reply_ = nullptr;
   pending_active_match_ordinal_ = true;
   matches_per_frame_.clear();
   number_of_matches_ = 0;
@@ -351,6 +387,7 @@ void FindRequestManager::Reset(const FindRequest& initial_request) {
   relative_active_match_ordinal_ = 0;
   active_match_ordinal_ = 0;
   selection_rect_ = gfx::Rect();
+  last_reported_id_ = kInvalidId;
 #if defined(OS_ANDROID)
   activate_ = ActivateNearestFindResultState();
   match_rects_.pending_replies.clear();
@@ -384,7 +421,7 @@ void FindRequestManager::FindInternal(const FindRequest& request) {
   // This is an initial find operation.
   Reset(request);
   for (FrameTreeNode* node : contents_->GetFrameTree()->Nodes())
-    AddFrame(node->current_frame_host());
+    AddFrame(node->current_frame_host(), false /* force */);
 }
 
 void FindRequestManager::AdvanceQueue(int request_id) {
@@ -400,17 +437,30 @@ void FindRequestManager::AdvanceQueue(int request_id) {
 
 void FindRequestManager::SendFindIPC(const FindRequest& request,
                                      RenderFrameHost* rfh) {
-  pending_replies_.insert(rfh);
+  DCHECK(CheckFrame(rfh));
+  DCHECK(rfh->IsRenderFrameLive());
+
+  if (request.options.findNext)
+    pending_find_next_reply_ = rfh;
+  else
+    pending_initial_replies_.insert(rfh);
+
   rfh->Send(new FrameMsg_Find(rfh->GetRoutingID(), request.id,
                               request.search_text, request.options));
 }
 
-void FindRequestManager::NotifyFindReply(int request_id,
-                                         bool final_update) const {
+void FindRequestManager::NotifyFindReply(int request_id, bool final_update) {
   if (request_id == kInvalidId) {
     NOTREACHED();
     return;
   }
+
+  // Ensure that replies are not reported with IDs lower than the ID of the
+  // latest request we have results from.
+  if (request_id < last_reported_id_)
+    request_id = last_reported_id_;
+  else
+    last_reported_id_ = request_id;
 
   contents_->NotifyFindReply(request_id, number_of_matches_, selection_rect_,
                              active_match_ordinal_, final_update);
@@ -437,7 +487,7 @@ RenderFrameHost* FindRequestManager::Traverse(RenderFrameHost* from_rfh,
       continue;
     RenderFrameHost* current_rfh = node->current_frame_host();
     if (!matches_only || matches_per_frame_.find(current_rfh)->second ||
-        pending_replies_.count(current_rfh)) {
+        pending_initial_replies_.count(current_rfh)) {
       // Note that if there is still a pending reply expected for this frame,
       // then it may have unaccounted matches and will not be skipped via
       // |matches_only|.
@@ -450,23 +500,24 @@ RenderFrameHost* FindRequestManager::Traverse(RenderFrameHost* from_rfh,
   return nullptr;
 }
 
-void FindRequestManager::AddFrame(RenderFrameHost* rfh) {
+void FindRequestManager::AddFrame(RenderFrameHost* rfh, bool force) {
   if (!rfh || !rfh->IsRenderFrameLive())
     return;
 
-  // A frame that is already being searched should not be added again.
-  DCHECK(!CheckFrame(rfh));
+  // A frame that is already being searched should not normally be added again.
+  DCHECK(force || !CheckFrame(rfh));
 
   matches_per_frame_[rfh] = 0;
 
   FindRequest request = current_request_;
   request.id = current_session_id_;
   request.options.findNext = false;
+  request.options.force = force;
   SendFindIPC(request, rfh);
 }
 
 bool FindRequestManager::CheckFrame(RenderFrameHost* rfh) const {
-  return rfh && rfh->IsRenderFrameLive() && matches_per_frame_.count(rfh);
+  return rfh && matches_per_frame_.count(rfh);
 }
 
 void FindRequestManager::UpdateActiveMatchOrdinal() {
@@ -490,11 +541,16 @@ void FindRequestManager::UpdateActiveMatchOrdinal() {
   active_match_ordinal_ += relative_active_match_ordinal_;
 }
 
-void FindRequestManager::FinalUpdate(int request_id, RenderFrameHost* rfh) {
+void FindRequestManager::FinalUpdateReceived(int request_id,
+                                             RenderFrameHost* rfh) {
   if (!number_of_matches_ ||
-      !pending_active_match_ordinal_ ||
-      request_id != current_request_.id) {
-    NotifyFindReply(request_id, true /* final_update */);
+      (active_match_ordinal_ && !pending_active_match_ordinal_) ||
+      pending_find_next_reply_) {
+    // All the find results for |request_id| are in and ready to report. Note
+    // that |final_update| will be set to false if there are still pending
+    // replies expected from the initial find request.
+    NotifyFindReply(request_id,
+                    pending_initial_replies_.empty() /* final_update */);
     AdvanceQueue(request_id);
     return;
   }
@@ -503,7 +559,7 @@ void FindRequestManager::FinalUpdate(int request_id, RenderFrameHost* rfh) {
   // request must be sent.
 
   RenderFrameHost* target_rfh;
-  if (current_request_.options.findNext) {
+  if (request_id == current_request_.id && current_request_.options.findNext) {
     // If this was a find next operation, then the active match will be in the
     // next frame with matches after this one.
     target_rfh = Traverse(rfh,

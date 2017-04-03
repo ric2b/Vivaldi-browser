@@ -5,8 +5,11 @@
 #ifndef COMPONENTS_AUTOFILL_CORE_BROWSER_PERSONAL_DATA_MANAGER_H_
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_PERSONAL_DATA_MANAGER_H_
 
+#include <list>
 #include <memory>
 #include <set>
+#include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
@@ -24,16 +27,15 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_member.h"
 #include "components/webdata/common/web_data_service_consumer.h"
+#if defined(OS_ANDROID)
+#include "net/url_request/url_request_context_getter.h"
+#endif
 
 class AccountTrackerService;
 class Browser;
 class PrefService;
 class RemoveAutofillTester;
 class SigninManagerBase;
-
-namespace sync_driver {
-class SyncService;
-}
 
 namespace autofill {
 class AutofillInteractiveTest;
@@ -47,6 +49,10 @@ namespace autofill_helper {
 void SetProfiles(int, std::vector<autofill::AutofillProfile>*);
 void SetCreditCards(int, std::vector<autofill::CreditCard>*);
 }  // namespace autofill_helper
+
+namespace syncer {
+class SyncService;
+}  // namespace syncer
 
 namespace autofill {
 
@@ -76,7 +82,7 @@ class PersonalDataManager : public KeyedService,
 
   // Called once the sync service is known to be instantiated. Note that it may
   // not be started, but it's preferences can be queried.
-  void OnSyncServiceInitialized(sync_driver::SyncService* sync_service);
+  void OnSyncServiceInitialized(syncer::SyncService* sync_service);
 
   // WebDataServiceConsumer:
   void OnWebDataServiceRequestDone(WebDataServiceBase::Handle h,
@@ -260,6 +266,20 @@ class PersonalDataManager : public KeyedService,
     NotifyPersonalDataChanged();
   }
 
+#if defined(OS_ANDROID)
+  // Sets the URL request context getter to be used when normalizing addresses
+  // with libaddressinput's address validator.
+  void SetURLRequestContextGetter(
+      net::URLRequestContextGetter* context_getter) {
+    context_getter_ = context_getter;
+  }
+
+  // Returns the class used to fetch the address validation rules.
+  net::URLRequestContextGetter* GetURLRequestContextGetter() const {
+    return context_getter_.get();
+  }
+#endif
+
  protected:
   // Only PersonalDataManagerFactory and certain tests can create instances of
   // PersonalDataManager.
@@ -334,6 +354,11 @@ class PersonalDataManager : public KeyedService,
   // The first time this is called, logs an UMA metric for the number of local
   // credit cards the user has. On subsequent calls, does nothing.
   void LogLocalCreditCardCount() const;
+
+  // The first time this is called, logs an UMA metric for the number of server
+  // credit cards the user has (both masked and unmasked). On subsequent calls,
+  // does nothing.
+  void LogServerCreditCardCounts() const;
 
   // Returns the value of the AutofillEnabled pref.
   virtual bool IsAutofillEnabled() const;
@@ -481,7 +506,11 @@ class PersonalDataManager : public KeyedService,
 
   // Whether we have already logged the number of local credit cards this
   // session.
-  mutable bool has_logged_credit_card_count_;
+  mutable bool has_logged_local_credit_card_count_;
+
+  // Whether we have already logged the number of server credit cards this
+  // session.
+  mutable bool has_logged_server_credit_card_counts_;
 
   // An observer to listen for changes to prefs::kAutofillEnabled.
   std::unique_ptr<BooleanPrefMember> enabled_pref_;
@@ -492,6 +521,12 @@ class PersonalDataManager : public KeyedService,
   // Set to true if autofill profile deduplication is enabled and needs to be
   // performed on the next data refresh.
   bool is_autofill_profile_dedupe_pending_ = false;
+
+#if defined(OS_ANDROID)
+  // The context for the request to be used to fetch libaddressinput's address
+  // validation rules.
+  scoped_refptr<net::URLRequestContextGetter> context_getter_;
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(PersonalDataManager);
 };

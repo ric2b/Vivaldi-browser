@@ -13,8 +13,8 @@
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/common/autofill_constants.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/navigation_details.h"
-#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(autofill::SaveCardBubbleControllerImpl);
@@ -227,9 +227,9 @@ void SaveCardBubbleControllerImpl::UpdateIcon() {
 }
 
 void SaveCardBubbleControllerImpl::OpenUrl(const GURL& url) {
-  web_contents()->OpenURL(
-      content::OpenURLParams(url, content::Referrer(), NEW_FOREGROUND_TAB,
-                             ui::PAGE_TRANSITION_LINK, false));
+  web_contents()->OpenURL(content::OpenURLParams(
+      url, content::Referrer(), WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui::PAGE_TRANSITION_LINK, false));
 }
 
 }  // namespace autofill

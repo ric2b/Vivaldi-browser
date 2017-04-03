@@ -19,6 +19,11 @@ const base::Feature kBrotliEncoding{"brotli-encoding",
 const base::Feature kCanvas2DImageChromium{"Canvas2DImageChromium",
                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Enables the compositing of scrolling content that supports painting the
+// background with the foreground, such that LCD text will still be enabled.
+const base::Feature kCompositeOpaqueScrollers{"CompositeOpaqueScrollers",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
+
 // Enables the credential management API:
 // https://w3c.github.io/webappsec-credential-management/
 const base::Feature kCredentialManagementAPI{"CredentialManagementAPI",
@@ -28,10 +33,6 @@ const base::Feature kCredentialManagementAPI{"CredentialManagementAPI",
 // --force-gpu-rasterization or --disable-gpu-rasterization.
 const base::Feature kDefaultEnableGpuRasterization{
     "DefaultEnableGpuRasterization", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Do not call SharedBuffer::unlock() (https://crbug.com/603791).
-const base::Feature kDoNotUnlockSharedBuffer{"DoNotUnlockSharedBuffer",
-                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Speculatively pre-evaluate Javascript which will likely use document.write to
 // load an external script. The feature extracts the written markup and sends it
@@ -49,11 +50,30 @@ const base::Feature kFeaturePolicy{"FeaturePolicy",
 const base::Feature kFontCacheScaling{"FontCacheScaling",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables a security restriction on iframes navigating their top frame.
+// When enabled, the navigation will only be permitted if the iframe is
+// same-origin to the top frame, or if a user gesture is being processed.
+const base::Feature kFramebustingNeedsSameOriginOrUserGesture{
+    "FramebustingNeedsSameOriginOrUserGesture",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables extended Gamepad API features like motion tracking and haptics.
+const base::Feature kGamepadExtensions{"GamepadExtensions",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
+
 // FeatureList definition for trials to enable the download button on
 // MediaDocument.
 const base::Feature kMediaDocumentDownloadButton{
     "MediaDocumentDownloadButton",
     base::FEATURE_DISABLED_BY_DEFAULT
+};
+
+// Enables the memory coordinator.
+// WARNING:
+// The memory coordinator is not ready for use and enabling this may cause
+// unexpected memory regression at this point. Please do not enable this.
+const base::Feature kMemoryCoordinator {
+  "MemoryCoordinator", base::FEATURE_DISABLED_BY_DEFAULT
 };
 
 // Enable the material design playback UI for media elements.  This is always
@@ -70,7 +90,7 @@ const base::Feature kNonValidatingReloadOnNormalReload{
 // See https://crbug.com/591245
 const base::Feature kNonValidatingReloadOnRefreshContent{
     "NonValidatingReloadOnRefreshContentV2",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 // An experiment to optimize resource loading IPC for small resources.
 // http://crbug.com/580928
@@ -81,10 +101,6 @@ const base::Feature kOptimizeLoadingIPCForSmallResources{
 // Origin Trials for controlling access to feature/API experiments.
 const base::Feature kOriginTrials{"OriginTrials",
                                   base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Paint optimizations including subsequence caching and empty phase skipping.
-const base::Feature kPaintOptimizations{"PaintOptimizations",
-                                        base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Whether the lookahead parser in Blink runs on the main thread.
 const base::Feature kParseHTMLOnMainThread{"ParseHTMLOnMainThread",
@@ -101,7 +117,16 @@ const base::Feature kPassiveEventListenersDueToFling{
 
 // Pointer events support.
 const base::Feature kPointerEvents{"PointerEvent",
-                                   base::FEATURE_DISABLED_BY_DEFAULT};
+                                   base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Whether pointer event capturing follow v1 spec instead of v2 proposal.
+// See https://rawgit.com/w3c/pointerevents/reduce-hit-tests/index.html.
+const base::Feature kPointerEventV1SpecCapturing{
+    "PointerEventV1SpecCapturing", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// RAF aligned input events support.
+const base::Feature kRafAlignedInputEvents{"RafAlignedInput",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
 // If Pepper 3D Image Chromium is allowed, this feature controls whether it is
 // enabled.
@@ -138,10 +163,6 @@ const base::Feature kTokenBinding{"token-binding",
 // Enables touchpad and wheel scroll latching.
 const base::Feature kTouchpadAndWheelScrollLatching{
     "TouchpadAndWheelScrollLatching", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Weak MemoryCache (https://crbug.com/603462).
-const base::Feature kWeakMemoryCache{"WeakMemoryCache",
-                                     base::FEATURE_DISABLED_BY_DEFAULT};
 
 // If WebGL Image Chromium is allowed, this feature controls whether it is
 // enabled.

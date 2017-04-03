@@ -28,14 +28,16 @@
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_constants.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/chromeos_constants.h"
 #include "components/login/base_screen_handler_utils.h"
 #include "components/login/localized_values_builder.h"
+#include "components/prefs/pref_service.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/version_info/version_info.h"
 #include "google_apis/google_api_keys.h"
-#include "grit/components_strings.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -159,6 +161,8 @@ void CoreOobeHandler::RegisterMessages() {
   AddCallback("headerBarVisible",
               &CoreOobeHandler::HandleHeaderBarVisible);
   AddCallback("raiseTabKeyEvent", &CoreOobeHandler::HandleRaiseTabKeyEvent);
+  AddCallback("setOobeBootstrappingSlave",
+              &CoreOobeHandler::HandleSetOobeBootstrappingSlave);
 }
 
 template <typename... Args>
@@ -303,8 +307,11 @@ void CoreOobeHandler::HandleSkipUpdateEnrollAfterEula() {
 void CoreOobeHandler::HandleUpdateCurrentScreen(const std::string& screen) {
   if (delegate_)
     delegate_->OnCurrentScreenChanged(screen);
-  KeyboardDrivenEventRewriter::GetInstance()->SetArrowToTabRewritingEnabled(
+  // TODO(mash): Support EventRewriterController; see crbug.com/647781
+  if (!chrome::IsRunningInMash()) {
+    KeyboardDrivenEventRewriter::GetInstance()->SetArrowToTabRewritingEnabled(
       screen == WizardController::kEulaScreenName);
+  }
 }
 
 void CoreOobeHandler::HandleEnableHighContrast(bool enabled) {
@@ -491,6 +498,16 @@ void CoreOobeHandler::HandleRaiseTabKeyEvent(bool reverse) {
   if (reverse)
     event.set_flags(ui::EF_SHIFT_DOWN);
   SendEventToProcessor(&event);
+}
+
+void CoreOobeHandler::HandleSetOobeBootstrappingSlave() {
+  const bool is_slave = g_browser_process->local_state()->GetBoolean(
+      prefs::kIsBootstrappingSlave);
+  if (is_slave)
+    return;
+  g_browser_process->local_state()->SetBoolean(prefs::kIsBootstrappingSlave,
+                                               true);
+  chrome::AttemptRestart();
 }
 
 void CoreOobeHandler::InitDemoModeDetection() {

@@ -29,6 +29,7 @@
 #include "components/sync/protocol/bookmark_specifics.pb.h"
 #include "components/sync/protocol/dictionary_specifics.pb.h"
 #include "components/sync/protocol/encryption.pb.h"
+#include "components/sync/protocol/entity_metadata.pb.h"
 #include "components/sync/protocol/experiments_specifics.pb.h"
 #include "components/sync/protocol/extension_setting_specifics.pb.h"
 #include "components/sync/protocol/extension_specifics.pb.h"
@@ -38,8 +39,10 @@
 #include "components/sync/protocol/nigori_specifics.pb.h"
 #include "components/sync/protocol/password_specifics.pb.h"
 #include "components/sync/protocol/preference_specifics.pb.h"
+#include "components/sync/protocol/printer_specifics.pb.h"
 #include "components/sync/protocol/priority_preference_specifics.pb.h"
 #include "components/sync/protocol/proto_enum_conversions.h"
+#include "components/sync/protocol/reading_list_specifics.pb.h"
 #include "components/sync/protocol/search_engine_specifics.pb.h"
 #include "components/sync/protocol/session_specifics.pb.h"
 #include "components/sync/protocol/sync.pb.h"
@@ -133,6 +136,13 @@ std::unique_ptr<base::DictionaryValue> EncryptedDataToValue(
   SET_STR(key_name);
   // TODO(akalin): Shouldn't blob be of type bytes instead of string?
   SET_BYTES(blob);
+  return value;
+}
+
+std::unique_ptr<base::DictionaryValue> PasswordSpecificsMetadataToValue(
+    const sync_pb::PasswordSpecificsMetadata& proto) {
+  std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
+  SET_STR(url);
   return value;
 }
 
@@ -277,6 +287,30 @@ std::unique_ptr<base::DictionaryValue> ArcPackageSpecificsToValue(
   SET_INT32(package_version);
   SET_INT64(last_backup_android_id);
   SET_INT64(last_backup_time);
+
+  return value;
+}
+
+std::unique_ptr<base::DictionaryValue> PrinterPPDDataToValue(
+    const sync_pb::PrinterPPDData& proto) {
+  std::unique_ptr<base::DictionaryValue> value =
+      base::MakeUnique<base::DictionaryValue>();
+  SET_INT32(id);
+  SET_STR(file_name);
+  SET_INT64(version_number);
+  SET_BOOL(from_quirks_server);
+  return value;
+}
+
+std::unique_ptr<base::DictionaryValue> ReadingListSpecificsToValue(
+    const sync_pb::ReadingListSpecifics& proto) {
+  std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
+  SET_STR(entry_id);
+  SET_STR(title);
+  SET_STR(url);
+  SET_INT64(creation_time_us);
+  SET_INT64(update_time_us);
+  SET_ENUM(status, GetReadingListEntryStatusString);
 
   return value;
 }
@@ -577,6 +611,7 @@ std::unique_ptr<base::DictionaryValue> NigoriSpecificsToValue(
   SET_BOOL(encrypt_articles);
   SET_BOOL(encrypt_app_list);
   SET_BOOL(encrypt_arc_package);
+  SET_BOOL(encrypt_reading_list);
   SET_BOOL(encrypt_everything);
   SET_BOOL(server_only_was_missing_keystore_migration_time);
   SET_BOOL(sync_tab_favicons);
@@ -607,6 +642,7 @@ std::unique_ptr<base::DictionaryValue> PasswordSpecificsToValue(
     const sync_pb::PasswordSpecifics& proto) {
   std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
   SET(encrypted, EncryptedDataToValue);
+  SET(unencrypted_metadata, PasswordSpecificsMetadataToValue);
   return value;
 }
 
@@ -615,6 +651,21 @@ std::unique_ptr<base::DictionaryValue> PreferenceSpecificsToValue(
   std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
   SET_STR(name);
   SET_STR(value);
+  return value;
+}
+
+std::unique_ptr<base::DictionaryValue> PrinterSpecificsToValue(
+    const sync_pb::PrinterSpecifics& proto) {
+  std::unique_ptr<base::DictionaryValue> value =
+      base::MakeUnique<base::DictionaryValue>();
+  SET_STR(id);
+  SET_STR(display_name);
+  SET_STR(description);
+  SET_STR(manufacturer);
+  SET_STR(model);
+  SET_STR(uri);
+  SET_STR(uuid);
+  SET(ppd, PrinterPPDDataToValue);
   return value;
 }
 
@@ -769,7 +820,9 @@ std::unique_ptr<base::DictionaryValue> EntitySpecificsToValue(
   SET_FIELD(nigori, NigoriSpecificsToValue);
   SET_FIELD(password, PasswordSpecificsToValue);
   SET_FIELD(preference, PreferenceSpecificsToValue);
+  SET_FIELD(printer, PrinterSpecificsToValue);
   SET_FIELD(priority_preference, PriorityPreferenceSpecificsToValue);
+  SET_FIELD(reading_list, ReadingListSpecificsToValue);
   SET_FIELD(search_engine, SearchEngineSpecificsToValue);
   SET_FIELD(session, SessionSpecificsToValue);
   SET_FIELD(synced_notification, SyncedNotificationSpecificsToValue);
@@ -1079,6 +1132,22 @@ std::unique_ptr<base::DictionaryValue> AttachmentIdProtoToValue(
     const sync_pb::AttachmentIdProto& proto) {
   std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
   SET_STR(unique_id);
+  return value;
+}
+
+std::unique_ptr<base::DictionaryValue> EntityMetadataToValue(
+    const sync_pb::EntityMetadata& proto) {
+  std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
+  SET_STR(client_tag_hash);
+  SET_STR(server_id);
+  SET_BOOL(is_deleted);
+  SET_INT64(sequence_number);
+  SET_INT64(acked_sequence_number);
+  SET_INT64(server_version);
+  SET_INT64(creation_time);
+  SET_INT64(modification_time);
+  SET_STR(specifics_hash);
+  SET_STR(base_specifics_hash);
   return value;
 }
 

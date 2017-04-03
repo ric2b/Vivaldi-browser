@@ -12,7 +12,7 @@
 #include "base/files/file_util.h"
 #include "base/i18n/icu_util.h"
 #include "base/logging.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/process/launch.h"
 #include "base/process/process.h"
 #include "base/strings/string_number_conversions.h"
@@ -259,7 +259,10 @@ void LaunchOnLauncherThread(const NotifyCallback& callback,
   // child termination.
 
 #if !defined(OS_MACOSX)
-  ZygoteHandle* zygote_handle = delegate->GetZygote();
+  ZygoteHandle* zygote_handle =
+      !base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kNoZygote)
+          ? delegate->GetZygote()
+          : nullptr;
   // If |zygote_handle| is null, a zygote should not be used.
   if (zygote_handle) {
     // This code runs on the PROCESS_LAUNCHER thread so race conditions are not

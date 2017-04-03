@@ -6,9 +6,9 @@
 
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/ui/app_list/start_page_service.h"
-#include "grit/components_scaled_resources.h"
-#include "grit/generated_resources.h"
-#include "grit/theme_resources.h"
+#include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
+#include "components/grit/components_scaled_resources.h"
 #include "ui/app_list/search_box_model.h"
 #include "ui/app_list/speech_ui_model.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -24,12 +24,12 @@ std::unique_ptr<SearchBoxModel::SpeechButtonProperty> CreateNewProperty(
     return nullptr;
 
   ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
-  return base::WrapUnique(new SearchBoxModel::SpeechButtonProperty(
+  return base::MakeUnique<SearchBoxModel::SpeechButtonProperty>(
       *bundle.GetImageSkiaNamed(IDR_APP_LIST_MIC_HOTWORD_ON),
       l10n_util::GetStringUTF16(IDS_APP_LIST_HOTWORD_LISTENING),
       *bundle.GetImageSkiaNamed(IDR_APP_LIST_MIC_HOTWORD_OFF),
       l10n_util::GetStringUTF16(IDS_APP_LIST_START_SPEECH_RECOGNITION),
-      l10n_util::GetStringUTF16(IDS_TOOLTIP_MIC_SEARCH)));
+      l10n_util::GetStringUTF16(IDS_TOOLTIP_MIC_SEARCH));
 }
 
 }  // namespace
@@ -41,8 +41,6 @@ SearchResourceManager::SearchResourceManager(Profile* profile,
       speech_ui_(speech_ui) {
   speech_ui_->AddObserver(this);
 
-  ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
-  search_box_->SetIcon(*bundle.GetImageSkiaNamed(IDR_OMNIBOX_SEARCH));
   search_box_->SetAccessibleName(
       l10n_util::GetStringUTF16(IDS_SEARCH_BOX_HINT));
   OnSpeechRecognitionStateChanged(speech_ui_->state());

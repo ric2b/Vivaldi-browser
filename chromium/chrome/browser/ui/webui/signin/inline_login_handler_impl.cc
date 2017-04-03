@@ -13,7 +13,7 @@
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -43,13 +43,13 @@
 #include "chrome/browser/ui/tab_modal_confirm_dialog_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/user_manager.h"
-#include "chrome/browser/ui/webui/signin/get_auth_frame.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
+#include "chrome/browser/ui/webui/signin/signin_utils.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/about_signin_internals.h"
 #include "components/signin/core/browser/account_tracker_service.h"
@@ -60,6 +60,7 @@
 #include "components/signin/core/browser/signin_metrics.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "components/signin/core/common/signin_pref_names.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_ui.h"
@@ -67,7 +68,6 @@
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "google_apis/gaia/gaia_urls.h"
-#include "grit/components_strings.h"
 #include "net/base/url_util.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -97,11 +97,9 @@ void RedirectToNtpOrAppsPage(content::WebContents* contents,
                    signin_metrics::AccessPoint::ACCESS_POINT_APPS_PAGE_LINK
                ? chrome::kChromeUIAppsURL
                : chrome::kChromeUINewTabURL);
-  content::OpenURLParams params(url,
-                                content::Referrer(),
-                                CURRENT_TAB,
-                                ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
-                                false);
+  content::OpenURLParams params(url, content::Referrer(),
+                                WindowOpenDisposition::CURRENT_TAB,
+                                ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false);
   contents->OpenURL(params);
 }
 
@@ -219,10 +217,8 @@ void ConfirmEmailDialogDelegate::OnClosed() {
 void ConfirmEmailDialogDelegate::OnLinkClicked(
     WindowOpenDisposition disposition) {
   content::OpenURLParams params(
-      GURL(chrome::kChromeSyncMergeTroubleshootingURL),
-      content::Referrer(),
-      NEW_POPUP,
-      ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
+      GURL(chrome::kChromeSyncMergeTroubleshootingURL), content::Referrer(),
+      WindowOpenDisposition::NEW_POPUP, ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
       false);
   // It is guaranteed that |web_contents_| is valid here because when it's
   // deleted, the dialog is immediately closed and no further action can be
@@ -332,7 +328,7 @@ void InlineSigninHelper::OnClientOAuthSuccess(const ClientOAuthResult& result) {
     }
     LogSigninReason(reason);
   } else {
-    ProfileSyncService* sync_service =
+    browser_sync::ProfileSyncService* sync_service =
         ProfileSyncServiceFactory::GetForProfile(profile_);
     SigninErrorController* error_controller =
         SigninErrorControllerFactory::GetForProfile(profile_);
@@ -429,8 +425,8 @@ void InlineSigninHelper::ConfirmEmailAction(
         handler_->SyncStarterCallback(
             OneClickSigninSyncStarter::SYNC_SETUP_FAILURE);
       }
-      chrome::ShowSettingsSubPage(browser,
-                                  std::string(chrome::kCreateProfileSubPage));
+      UserManager::Show(base::FilePath(), profiles::USER_MANAGER_NO_TUTORIAL,
+                        profiles::USER_MANAGER_OPEN_CREATE_USER_PAGE);
       break;
     case InlineSigninHelper::START_SYNC:
       content::RecordAction(
@@ -455,7 +451,7 @@ void InlineSigninHelper::ConfirmEmailAction(
 void InlineSigninHelper::OnClientOAuthFailure(
   const GoogleServiceAuthError& error) {
   if (handler_)
-    handler_->HandleLoginError(error.ToString());
+    handler_->HandleLoginError(error.ToString(), base::string16());
 
   AboutSigninInternals* about_signin_internals =
     AboutSigninInternalsFactory::GetForProfile(profile_);
@@ -782,7 +778,8 @@ void InlineLoginHandlerImpl::FinishCompleteLogin(
       if (params.handler) {
         params.handler->HandleLoginError(
             l10n_util::GetStringFUTF8(IDS_SYNC_WRONG_EMAIL,
-                                      base::UTF8ToUTF16(default_email)));
+                                      base::UTF8ToUTF16(default_email)),
+            base::UTF8ToUTF16(params.email));
       }
       return;
     }
@@ -824,8 +821,10 @@ void InlineLoginHandlerImpl::FinishCompleteLogin(
   bool can_offer = CanOffer(profile, can_offer_for, params.gaia_id,
                             params.email, &error_msg);
   if (!can_offer) {
-    if (params.handler)
-      params.handler->HandleLoginError(error_msg);
+    if (params.handler) {
+      params.handler->HandleLoginError(error_msg,
+                                       base::UTF8ToUTF16(params.email));
+    }
     return;
   }
 
@@ -870,15 +869,16 @@ void InlineLoginHandlerImpl::FinishCompleteLogin(
         "inline.login.closeDialog");
 }
 
-void InlineLoginHandlerImpl::HandleLoginError(const std::string& error_msg) {
+void InlineLoginHandlerImpl::HandleLoginError(const std::string& error_msg,
+                                              const base::string16& email) {
   SyncStarterCallback(OneClickSigninSyncStarter::SYNC_SETUP_FAILURE);
   Browser* browser = GetDesktopBrowser();
   Profile* profile = Profile::FromWebUI(web_ui());
 
   CloseModalSigninIfNeeded(this);
   if (browser && !error_msg.empty()) {
-    LoginUIServiceFactory::GetForProfile(profile)->
-        DisplayLoginResult(browser, base::UTF8ToUTF16(error_msg));
+    LoginUIServiceFactory::GetForProfile(profile)->DisplayLoginResult(
+        browser, base::UTF8ToUTF16(error_msg), email);
   }
 }
 

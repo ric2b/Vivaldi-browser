@@ -175,24 +175,25 @@ public class MinidumpUploadCallableTest extends CrashTestCase {
     }
 
     @SuppressFBWarnings("RV_RETURN_VALUE_IGNORED_BAD_PRACTICE")
-    @Override
-    protected void setUp() throws Exception {
-        super.setUp();
-        mUploadLog = new File(mCacheDir, CrashFileManager.CRASH_DUMP_LOGFILE);
-        // Delete all logs from previous runs if possible.
-        mUploadLog.delete();
-
-        createMinidumpFile();
-        mExpectedFileAfterUpload = new File(
-                mCrashDir,
-                mTestUpload.getName().replaceFirst("\\.dmp", ".up"));
+    private void setForcedUpload() throws Exception {
+        File renamed = new File(mCrashDir, mTestUpload.getName().replace(".dmp", ".forced"));
+        mTestUpload.renameTo(renamed);
+        // Update the filename that tests will refer to.
+        mTestUpload = renamed;
     }
 
     @SuppressFBWarnings("RV_RETURN_VALUE_IGNORED_BAD_PRACTICE")
     @Override
-    protected void tearDown() throws Exception {
-        if (mTestUpload.exists()) mTestUpload.delete();
-        super.tearDown();
+    protected void setUp() throws Exception {
+        super.setUp();
+        mUploadLog = new File(mCrashDir, CrashFileManager.CRASH_DUMP_LOGFILE);
+        // Delete all logs from previous runs if possible.
+        mUploadLog.delete();
+
+        // Any created files will be cleaned up as part of CrashTestCase::tearDown().
+        createMinidumpFile();
+        mExpectedFileAfterUpload =
+                new File(mCrashDir, mTestUpload.getName().replace(".dmp", ".up"));
     }
 
     @SmallTest
@@ -241,7 +242,11 @@ public class MinidumpUploadCallableTest extends CrashTestCase {
                 new MockMinidumpUploadCallable(httpURLConnectionFactory, testPermManager);
         assertEquals(MinidumpUploadCallable.UPLOAD_USER_DISABLED,
                 minidumpUploadCallable.call().intValue());
-        assertTrue(mExpectedFileAfterUpload.exists());
+
+        File expectedSkippedFileAfterUpload =
+                new File(mCrashDir, mTestUpload.getName().replace(".dmp", ".skipped"));
+        assertTrue(expectedSkippedFileAfterUpload.exists());
+        assertFalse(mExpectedFileAfterUpload.exists());
     }
 
     @SmallTest
@@ -289,7 +294,11 @@ public class MinidumpUploadCallableTest extends CrashTestCase {
                 new MockMinidumpUploadCallable(httpURLConnectionFactory, testPermManager);
         assertEquals(MinidumpUploadCallable.UPLOAD_DISABLED_BY_SAMPLING,
                 minidumpUploadCallable.call().intValue());
-        assertTrue(mExpectedFileAfterUpload.exists());
+
+        File expectedSkippedFileAfterUpload =
+                new File(mCrashDir, mTestUpload.getName().replace(".dmp", ".skipped"));
+        assertTrue(expectedSkippedFileAfterUpload.exists());
+        assertFalse(mExpectedFileAfterUpload.exists());
     }
 
     @SmallTest
@@ -365,6 +374,173 @@ public class MinidumpUploadCallableTest extends CrashTestCase {
         assertValidUploadLogEntry();
     }
 
+    @SmallTest
+    @Feature({"Android-AppBase"})
+    public void testCallWhenCurrentlyPermitted_ForcedUpload() throws Exception {
+        setForcedUpload();
+        CrashReportingPermissionManager testPermManager =
+                new MockCrashReportingPermissionManager() {
+                    {
+                        mIsInSample = true;
+                        mIsPermitted = true;
+                        mIsUserPermitted = true;
+                        mIsCommandLineDisabled = false;
+                        mIsLimited = false;
+                        mIsEnabledForTests = false;
+                    }
+                };
+
+        HttpURLConnectionFactory httpURLConnectionFactory = new TestHttpURLConnectionFactory();
+
+        MinidumpUploadCallable minidumpUploadCallable =
+                new MockMinidumpUploadCallable(httpURLConnectionFactory, testPermManager);
+        assertEquals(
+                MinidumpUploadCallable.UPLOAD_SUCCESS, minidumpUploadCallable.call().intValue());
+        assertTrue(mExpectedFileAfterUpload.exists());
+        assertValidUploadLogEntry();
+    }
+
+    @SmallTest
+    @Feature({"Android-AppBase"})
+    public void testCallNotPermittedByUser_ForcedUpload() throws Exception {
+        setForcedUpload();
+        CrashReportingPermissionManager testPermManager =
+                new MockCrashReportingPermissionManager() {
+                    {
+                        mIsInSample = true;
+                        mIsPermitted = false;
+                        mIsUserPermitted = false;
+                        mIsCommandLineDisabled = false;
+                        mIsLimited = false;
+                        mIsEnabledForTests = false;
+                    }
+                };
+
+        HttpURLConnectionFactory httpURLConnectionFactory = new TestHttpURLConnectionFactory();
+
+        MinidumpUploadCallable minidumpUploadCallable =
+                new MockMinidumpUploadCallable(httpURLConnectionFactory, testPermManager);
+        assertEquals(
+                MinidumpUploadCallable.UPLOAD_SUCCESS, minidumpUploadCallable.call().intValue());
+
+        File expectedSkippedFileAfterUpload =
+                new File(mCrashDir, mTestUpload.getName().replace(".forced", ".skipped"));
+        assertFalse(expectedSkippedFileAfterUpload.exists());
+        assertTrue(mExpectedFileAfterUpload.exists());
+    }
+
+    @SmallTest
+    @Feature({"Android-AppBase"})
+    public void testCallNotPermittedByCommandLine_ForcedUpload() throws Exception {
+        setForcedUpload();
+        CrashReportingPermissionManager testPermManager =
+                new MockCrashReportingPermissionManager() {
+                    {
+                        mIsInSample = true;
+                        mIsPermitted = true;
+                        mIsUserPermitted = true;
+                        mIsCommandLineDisabled = true;
+                        mIsLimited = false;
+                        mIsEnabledForTests = false;
+                    }
+                };
+
+        HttpURLConnectionFactory httpURLConnectionFactory = new FailHttpURLConnectionFactory();
+
+        MinidumpUploadCallable minidumpUploadCallable =
+                new MockMinidumpUploadCallable(httpURLConnectionFactory, testPermManager);
+        assertEquals(MinidumpUploadCallable.UPLOAD_COMMANDLINE_DISABLED,
+                minidumpUploadCallable.call().intValue());
+        assertFalse(mExpectedFileAfterUpload.exists());
+    }
+
+    @SmallTest
+    @Feature({"Android-AppBase"})
+    public void testCallPermittedButNotInSample_ForcedUpload() throws Exception {
+        setForcedUpload();
+        CrashReportingPermissionManager testPermManager =
+                new MockCrashReportingPermissionManager() {
+                    {
+                        mIsInSample = false;
+                        mIsPermitted = true;
+                        mIsUserPermitted = true;
+                        mIsCommandLineDisabled = false;
+                        mIsLimited = false;
+                        mIsEnabledForTests = false;
+                    }
+                };
+
+        HttpURLConnectionFactory httpURLConnectionFactory = new TestHttpURLConnectionFactory();
+
+        MinidumpUploadCallable minidumpUploadCallable =
+                new MockMinidumpUploadCallable(httpURLConnectionFactory, testPermManager);
+        assertEquals(
+                MinidumpUploadCallable.UPLOAD_SUCCESS, minidumpUploadCallable.call().intValue());
+
+        File expectedSkippedFileAfterUpload =
+                new File(mCrashDir, mTestUpload.getName().replace(".forced", ".skipped"));
+        assertFalse(expectedSkippedFileAfterUpload.exists());
+        assertTrue(mExpectedFileAfterUpload.exists());
+    }
+
+    @SmallTest
+    @Feature({"Android-AppBase"})
+    public void testCallPermittedButNotUnderCurrentCircumstances_ForcedUpload() throws Exception {
+        setForcedUpload();
+        CrashReportingPermissionManager testPermManager =
+                new MockCrashReportingPermissionManager() {
+                    {
+                        mIsInSample = true;
+                        mIsPermitted = false;
+                        mIsUserPermitted = true;
+                        mIsCommandLineDisabled = false;
+                        mIsLimited = false;
+                        mIsEnabledForTests = false;
+                    }
+                };
+
+        HttpURLConnectionFactory httpURLConnectionFactory = new TestHttpURLConnectionFactory();
+
+        MinidumpUploadCallable minidumpUploadCallable =
+                new MockMinidumpUploadCallable(httpURLConnectionFactory, testPermManager);
+        assertEquals(
+                MinidumpUploadCallable.UPLOAD_SUCCESS, minidumpUploadCallable.call().intValue());
+
+        File expectedSkippedFileAfterUpload =
+                new File(mCrashDir, mTestUpload.getName().replace(".forced", ".skipped"));
+        assertFalse(expectedSkippedFileAfterUpload.exists());
+        assertTrue(mExpectedFileAfterUpload.exists());
+    }
+
+    @SmallTest
+    @Feature({"Android-AppBase"})
+    public void testCrashUploadConstrainted_ForcedUpload() throws Exception {
+        setForcedUpload();
+        CrashReportingPermissionManager testPermManager =
+                new MockCrashReportingPermissionManager() {
+                    {
+                        mIsInSample = true;
+                        mIsPermitted = true;
+                        mIsUserPermitted = true;
+                        mIsCommandLineDisabled = false;
+                        mIsLimited = true;
+                        mIsEnabledForTests = false;
+                    }
+                };
+
+        HttpURLConnectionFactory httpURLConnectionFactory = new TestHttpURLConnectionFactory();
+
+        MinidumpUploadCallable minidumpUploadCallable =
+                new MockMinidumpUploadCallable(httpURLConnectionFactory, testPermManager);
+        assertEquals(
+                MinidumpUploadCallable.UPLOAD_SUCCESS, minidumpUploadCallable.call().intValue());
+
+        File expectedSkippedFileAfterUpload =
+                new File(mCrashDir, mTestUpload.getName().replace(".forced", ".skipped"));
+        assertFalse(expectedSkippedFileAfterUpload.exists());
+        assertTrue(mExpectedFileAfterUpload.exists());
+    }
+
     private void extendUploadFile(int numBytes) throws FileNotFoundException, IOException {
         FileOutputStream stream = null;
         try {
@@ -378,7 +554,7 @@ public class MinidumpUploadCallableTest extends CrashTestCase {
     }
 
     private void assertValidUploadLogEntry() throws IOException {
-        File logfile = new File(mCacheDir, CrashFileManager.CRASH_DUMP_LOGFILE);
+        File logfile = new File(mCrashDir, CrashFileManager.CRASH_DUMP_LOGFILE);
         BufferedReader input =  new BufferedReader(new FileReader(logfile));
         String line = null;
         String lastEntry = null;

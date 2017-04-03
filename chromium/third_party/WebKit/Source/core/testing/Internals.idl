@@ -36,6 +36,8 @@
     boolean isPreloaded(DOMString url);
     boolean isPreloadedBy(DOMString url, Document document);
     boolean isLoadingFromMemoryCache(DOMString url);
+    unsigned long getResourcePriority (DOMString url, Document document);
+    DOMString getResourceHeader (DOMString url, DOMString header, Document document);
 
     boolean isSharingStyle(Element element1, Element element2);
 
@@ -95,7 +97,7 @@
 
     // If the argument is omitted, the top-level document is used.
     boolean hasAutofocusRequest(optional Document document);
-    [RaisesException] DOMString[] formControlStateOfHistoryItem();
+    [RaisesException] sequence<DOMString> formControlStateOfHistoryItem();
     [RaisesException] void setFormControlStateOfHistoryItem(sequence<DOMString> values);
     readonly attribute Window pagePopupWindow;
 
@@ -108,6 +110,7 @@
     [RaisesException] Range markerRangeForNode(Node node, DOMString markerType, unsigned long index);
     [RaisesException] DOMString markerDescriptionForNode(Node node, DOMString markerType, unsigned long index);
     void addTextMatchMarker(Range range, boolean isActive);
+    [RaisesException] void addCompositionMarker(Range range, DOMString underlineColorValue, boolean thick, DOMString backgroundColorValue);
     void setMarkersActive(Node node, unsigned long startOffset, unsigned long endOffset, boolean active);
     void setMarkedTextMatchesAreHighlighted(Document document, boolean highlight);
 
@@ -185,6 +188,8 @@
     const unsigned short LAYER_TREE_INCLUDES_ROOT_LAYER = 8;
     const unsigned short LAYER_TREE_INCLUDES_CLIP_AND_SCROLL_PARENTS = 16;
     const unsigned short LAYER_TREE_INCLUDES_COMPOSITING_REASONS = 32;
+    const unsigned short OUTPUT_CHILDREN_AS_LAYER_LIST = 64;
+
     [RaisesException] DOMString layerTreeAsText(Document document, optional unsigned short flags);
     [RaisesException] DOMString elementLayerTreeAsText(Element element, optional unsigned short flags);
 
@@ -199,16 +204,17 @@
     unsigned long numberOfLiveNodes();
     unsigned long numberOfLiveDocuments();
     DOMString dumpRefCountedInstanceCounts();
-    unsigned long[] setMemoryCacheCapacities(unsigned long minDeadBytes, unsigned long maxDeadBytes, unsigned long totalBytes);
+    sequence<unsigned long> setMemoryCacheCapacities(unsigned long minDeadBytes, unsigned long maxDeadBytes, unsigned long totalBytes);
 
     DOMString counterValue(Element element);
     [RaisesException] long pageNumber(Element element, optional float pageWidth = 800, optional float pageHeight = 600);
-    DOMString[] shortcutIconURLs(Document document);
-    DOMString[] allIconURLs(Document document);
+    sequence<DOMString> shortcutIconURLs(Document document);
+    sequence<DOMString> allIconURLs(Document document);
     [RaisesException] long numberOfPages(optional double pageWidthInPixels = 800, optional double pageHeightInPixels = 600);
     [RaisesException] DOMString pageProperty(DOMString propertyName, long pageNumber);
     [RaisesException] DOMString pageSizeAndMarginsInPixels(long pageIndex, long width, long height, long marginTop, long marginRight, long marginBottom, long marginLeft);
 
+    [RaisesException] float pageScaleFactor();
     [RaisesException] void setPageScaleFactor(float scaleFactor);
     [RaisesException] void setPageScaleFactorLimits(float minScaleFactor, float maxScaleFactor);
 
@@ -231,7 +237,7 @@
     // into the binary of Release builds.
     PrivateScriptTest privateScriptTest();
 
-    DOMString[] getReferencedFilePaths();
+    sequence<DOMString> getReferencedFilePaths();
 
     // These functions both reset the tracked repaint rects. They are intended to be used in the following order:
     //  startTrackingRepaints(), repaintRectsAsText(), stopTrackingRepaints().
@@ -282,7 +288,7 @@
     [CallWith=ScriptState] Promise createResolvedPromise(any value);
     [CallWith=ScriptState] Promise createRejectedPromise(any reason);
     [CallWith=ScriptState] Promise addOneToPromise(Promise promise);
-    [CallWith=ScriptState, RaisesException] Promise promiseCheck(long arg1, boolean arg2, Dictionary arg3, DOMString arg4, DOMString[] arg5);
+    [CallWith=ScriptState, RaisesException] Promise promiseCheck(long arg1, boolean arg2, Dictionary arg3, DOMString arg4, sequence<DOMString> arg5);
     [CallWith=ScriptState] Promise promiseCheckWithoutExceptionState(Dictionary arg1, DOMString arg2, DOMString... variadic);
     [CallWith=ScriptState] Promise promiseCheckRange([EnforceRange] octet arg1);
     [CallWith=ScriptState] Promise promiseCheckOverload(Location arg1);
@@ -310,7 +316,8 @@
 
     DictionaryTest dictionaryTest();
     UnionTypesTest unionTypesTest();
-    [RaisesException] void setScrollChain(ScrollState scrollState, Element[] elements);
+    CallbackFunctionTest callbackFunctionTest();
+    [RaisesException] void setScrollChain(ScrollState scrollState, sequence<Element> elements);
     void forceBlinkGCWithoutV8GC();
 
     DOMString selectedHTMLForClipboard();
@@ -329,8 +336,8 @@
 
     iterable<long>;
 
-    [Unscopeable] readonly attribute DOMString unscopeableAttribute;
-    [Unscopeable] DOMString unscopeableMethod();
+    [Unscopable] readonly attribute DOMString unscopableAttribute;
+    [Unscopable] DOMString unscopableMethod();
 
     ClientRectList focusRingRects(Element element);
     ClientRectList outlineRects(Element element);
@@ -351,5 +358,9 @@
 
     DOMString getProgrammaticScrollAnimationState(Node node);
 
-    ClientRect visualRect(Node node);    
+    ClientRect visualRect(Node node);
+
+    OriginTrialsTest originTrialsTest();
+
+    void crash();
 };

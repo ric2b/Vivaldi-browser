@@ -42,7 +42,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
@@ -190,7 +190,7 @@ void SupervisedUserService::Init() {
       base::Bind(&SupervisedUserService::OnForceSessionSyncChanged,
                  base::Unretained(this)));
 
-  ProfileSyncService* sync_service =
+  browser_sync::ProfileSyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile_);
   // Can be null in tests.
   if (sync_service)
@@ -240,9 +240,12 @@ bool SupervisedUserService::AccessRequestsEnabled() {
 void SupervisedUserService::AddURLAccessRequest(
     const GURL& url,
     const SuccessCallback& callback) {
+  GURL effective_url = GetURLFilterForUIThread()->GetEmbeddedURL(url);
+  if (!effective_url.is_valid())
+    effective_url = url;
   AddPermissionRequestInternal(
       base::Bind(CreateURLAccessRequest,
-                 SupervisedUserURLFilter::Normalize(url)),
+                 SupervisedUserURLFilter::Normalize(effective_url)),
       callback, 0);
 }
 
@@ -442,7 +445,7 @@ void SupervisedUserService::URLFilterContext::SetDefaultFilteringBehavior(
       BrowserThread::IO,
       FROM_HERE,
       base::Bind(&SupervisedUserURLFilter::SetDefaultFilteringBehavior,
-                 io_url_filter_.get(), behavior));
+                 io_url_filter_, behavior));
 }
 
 void SupervisedUserService::URLFilterContext::LoadWhitelists(
@@ -586,7 +589,7 @@ void SupervisedUserService::SetActive(bool active) {
     theme_service->UseDefaultTheme();
 #endif
 
-  ProfileSyncService* sync_service =
+  browser_sync::ProfileSyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile_);
   sync_service->SetEncryptEverythingAllowed(!active_);
 
@@ -719,7 +722,7 @@ void SupervisedUserService::FinishSetupSyncWhenReady() {
     return;
 
   // Continue in FinishSetupSync() once the Sync backend has been initialized.
-  ProfileSyncService* service =
+  browser_sync::ProfileSyncService* service =
       ProfileSyncServiceFactory::GetForProfile(profile_);
   if (service->IsBackendInitialized()) {
     FinishSetupSync();
@@ -730,7 +733,7 @@ void SupervisedUserService::FinishSetupSyncWhenReady() {
 }
 
 void SupervisedUserService::FinishSetupSync() {
-  ProfileSyncService* service =
+  browser_sync::ProfileSyncService* service =
       ProfileSyncServiceFactory::GetForProfile(profile_);
   DCHECK(service->IsBackendInitialized());
 
@@ -974,7 +977,7 @@ void SupervisedUserService::Shutdown() {
   SetActive(false);
   sync_blocker_.reset();
 
-  ProfileSyncService* sync_service =
+  browser_sync::ProfileSyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile_);
 
   // Can be null in tests.
@@ -1252,7 +1255,7 @@ syncer::ModelTypeSet SupervisedUserService::GetPreferredDataTypes() const {
 
 #if !defined(OS_ANDROID)
 void SupervisedUserService::OnStateChanged() {
-  ProfileSyncService* service =
+  browser_sync::ProfileSyncService* service =
       ProfileSyncServiceFactory::GetForProfile(profile_);
   if (waiting_for_sync_initialization_ && service->IsBackendInitialized()) {
     waiting_for_sync_initialization_ = false;

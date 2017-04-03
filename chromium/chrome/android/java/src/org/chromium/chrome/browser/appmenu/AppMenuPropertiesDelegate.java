@@ -22,7 +22,6 @@ import org.chromium.chrome.browser.preferences.ManagedPreferencesUtils;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.ui.base.DeviceFormFactor;
 
@@ -110,10 +109,9 @@ public class AppMenuPropertiesDelegate {
                 MenuItem offlineMenuItem = menu.findItem(R.id.offline_page_id);
                 if (offlineMenuItem != null) {
                     if (DownloadUtils.isDownloadHomeEnabled()) {
-                        boolean isValidTab = !currentTab.isOfflinePage()
-                                && !currentTab.isShowingErrorPage()
-                                && !currentTab.isShowingInterstitialPage();
-                        offlineMenuItem.setEnabled(!isChromeScheme && !isIncognito && isValidTab);
+                        offlineMenuItem.setEnabled(
+                                DownloadUtils.isAllowedToDownloadPage(currentTab));
+
                         Drawable drawable = offlineMenuItem.getIcon();
                         if (drawable != null) {
                             int iconTint = ApiCompatibilityUtils.getColor(
@@ -136,9 +134,8 @@ public class AppMenuPropertiesDelegate {
             menu.findItem(R.id.move_to_other_window_menu_id).setVisible(
                     MultiWindowUtils.getInstance().isOpenInOtherWindowSupported(mActivity));
 
-            // Hide "Recent tabs" in incognito mode or when sync can't be enabled.
             MenuItem recentTabsMenuItem = menu.findItem(R.id.recent_tabs_menu_id);
-            recentTabsMenuItem.setVisible(!isIncognito && FeatureUtilities.canAllowSync(mActivity));
+            recentTabsMenuItem.setVisible(!isIncognito);
             recentTabsMenuItem.setTitle(R.string.menu_recent_tabs);
 
             MenuItem allBookmarksMenuItem = menu.findItem(R.id.all_bookmarks_menu_id);
@@ -176,6 +173,9 @@ public class AppMenuPropertiesDelegate {
             // Only display reader mode settings menu option if the current page is in reader mode.
             menu.findItem(R.id.reader_mode_prefs_id)
                     .setVisible(DomDistillerUrlUtils.isDistilledPage(currentTab.getUrl()));
+
+            // Only display the Enter VR button if VR Shell is enabled.
+            menu.findItem(R.id.enter_vr_id).setVisible(mActivity.isVrShellEnabled());
         }
 
         if (isOverviewMenu) {

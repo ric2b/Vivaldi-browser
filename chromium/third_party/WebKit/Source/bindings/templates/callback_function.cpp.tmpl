@@ -1,0 +1,70 @@
+{% from 'utilities.cpp.tmpl' import v8_value_to_local_cpp_value %}
+{% filter format_blink_cpp_source_code %}
+
+{% include 'copyright_block.txt' %}
+
+#include "{{cpp_class}}.h"
+
+{% for filename in cpp_includes %}
+#include "{{filename}}"
+{% endfor %}
+
+namespace blink {
+
+{{cpp_class}}::{{cpp_class}}(v8::Isolate* isolate, v8::Local<v8::Function> callback)
+    : m_callback(isolate, callback)
+{
+    DCHECK(!m_callback.isEmpty());
+    m_callback.setPhantom();
+}
+
+DEFINE_TRACE({{cpp_class}})
+{
+}
+
+bool {{cpp_class}}::call({{argument_declarations | join(', ')}})
+{
+    if (!scriptState->contextIsValid())
+        return false;
+
+    ExecutionContext* context = scriptState->getExecutionContext();
+    DCHECK(context);
+    if (context->activeDOMObjectsAreSuspended() || context->activeDOMObjectsAreStopped())
+        return false;
+
+    if (m_callback.isEmpty())
+        return false;
+
+    ScriptState::Scope scope(scriptState);
+
+    {% for argument in arguments %}
+    v8::Local<v8::Value> {{argument.argument_name}} = {{argument.cpp_value_to_v8_value}};
+    {% endfor %}
+
+    v8::Local<v8::Value> thisValue = toV8(scriptWrappable, scriptState->context()->Global(), scriptState->isolate());
+
+    {% if arguments %}
+    v8::Local<v8::Value> argv[] = { {{arguments | join(', ', 'argument_name')}} };
+    {% else %}
+    {# Empty array initializers are illegal, and don\'t compile in MSVC. #}
+    v8::Local<v8::Value> *argv = nullptr;
+    {% endif %}
+
+    v8::Local<v8::Value> v8ReturnValue;
+    v8::TryCatch exceptionCatcher(scriptState->isolate());
+    exceptionCatcher.SetVerbose(true);
+
+    if (V8ScriptRunner::callFunction(m_callback.newLocal(scriptState->isolate()), scriptState->getExecutionContext(), thisValue, {{arguments | length}}, argv, scriptState->isolate()).ToLocal(&v8ReturnValue))
+    {
+        {% if return_value %}
+        {{v8_value_to_local_cpp_value(return_value) | indent(8)}}
+        returnValue = cppValue;
+        {% endif %}
+        return true;
+    }
+    return false;
+}
+
+} // namespace blink
+
+{% endfilter %}{# format_blink_cpp_source_code #}

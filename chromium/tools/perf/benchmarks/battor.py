@@ -14,15 +14,19 @@ from telemetry import benchmark
 class _BattOrBenchmark(perf_benchmark.PerfBenchmark):
 
   def CreateTimelineBasedMeasurementOptions(self):
-    options = timeline_based_measurement.Options(
-        chrome_trace_category_filter.ChromeTraceCategoryFilter())
+    category_filter = chrome_trace_category_filter.ChromeTraceCategoryFilter(
+        filter_string='toplevel')
+    options = timeline_based_measurement.Options(category_filter)
     options.config.chrome_trace_config.category_filter.AddFilterString('rail')
+    # TODO(charliea): Reenable the CPU tracing agent once it no longer causes
+    # indefinite hangs on Windows.
+    # https://crbug.com/647443
     options.config.enable_battor_trace = True
     options.config.enable_chrome_trace = True
     options.config.enable_atrace_trace = True
     options.config.atrace_config.categories = ['sched']
-    options.config.enable_cpu_trace = True
-    options.SetTimelineBasedMetrics(['powerMetric', 'clockSyncLatencyMetric'])
+    options.SetTimelineBasedMetrics(
+        ['powerMetric', 'clockSyncLatencyMetric', 'cpuTimeMetric'])
     return options
 
   @classmethod
@@ -104,6 +108,7 @@ class BattOrPowerCases(_BattOrBenchmark):
     return 'battor.power_cases'
 
 
+@benchmark.Disabled('all')  # crbug.com/651384.
 class BattOrPowerCasesNoChromeTrace(_BattOrBenchmark):
   page_set = page_sets.power_cases.PowerCasesPageSet
 
@@ -130,3 +135,14 @@ class BattOrTrivialPages(_BattOrBenchmark):
   @classmethod
   def Name(cls):
     return 'battor.trivial_pages'
+
+@benchmark.Enabled('mac')
+class BattOrSteadyStatePages(_BattOrBenchmark):
+
+  def CreateStorySet(self, options):
+    # We want it to wait for 30 seconds to be comparable to legacy power tests.
+    return page_sets.IdleAfterLoadingStories(wait_in_seconds=30)
+
+  @classmethod
+  def Name(cls):
+    return 'battor.steady_state'

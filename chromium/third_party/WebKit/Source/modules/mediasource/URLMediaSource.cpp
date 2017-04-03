@@ -31,18 +31,21 @@
 #include "modules/mediasource/URLMediaSource.h"
 
 #include "core/dom/DOMURL.h"
+#include "core/frame/UseCounter.h"
 #include "modules/mediasource/MediaSource.h"
 
 namespace blink {
 
-String URLMediaSource::createObjectURL(ExecutionContext* executionContext, MediaSource* source)
-{
-    // Since WebWorkers cannot obtain MediaSource objects, we should be on the main thread.
-    DCHECK(isMainThread());
+String URLMediaSource::createObjectURL(ExecutionContext* executionContext,
+                                       MediaSource* source) {
+  // Since WebWorkers cannot obtain MediaSource objects, we should be on the
+  // main thread.
+  DCHECK(isMainThread());
+  DCHECK(executionContext);
+  DCHECK(source);
 
-    if (!executionContext)
-        return String();
-    return DOMURL::createPublicURL(executionContext, source);
+  UseCounter::count(executionContext, UseCounter::CreateObjectURLMediaSource);
+  return DOMURL::createPublicURL(executionContext, source);
 }
 
-} // namespace blink
+}  // namespace blink

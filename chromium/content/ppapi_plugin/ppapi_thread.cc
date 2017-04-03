@@ -15,7 +15,7 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/memory/discardable_memory_allocator.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
@@ -145,7 +145,6 @@ void PpapiThread::Shutdown() {
   if (plugin_entry_points_.shutdown_module)
     plugin_entry_points_.shutdown_module();
   blink_platform_impl_->Shutdown();
-  blink::Platform::shutdown();
 }
 
 bool PpapiThread::Send(IPC::Message* msg) {

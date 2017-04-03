@@ -41,17 +41,6 @@ namespace {
 const base::TimeDelta kStorageManagerStartingDelay =
     base::TimeDelta::FromSeconds(20);
 
-// This enum is used in an UMA histogram. Hence the entries here shouldn't
-// be deleted or re-ordered and new ones should be added to the end.
-enum ClearAllStatus {
-  CLEAR_ALL_SUCCEEDED,
-  STORE_RESET_FAILED,
-  STORE_RELOAD_FAILED,
-
-  // NOTE: always keep this entry at the end.
-  CLEAR_ALL_STATUS_COUNT
-};
-
 int64_t GenerateOfflineId() {
   return base::RandGenerator(std::numeric_limits<int64_t>::max()) + 1;
 }
@@ -236,23 +225,20 @@ void ReportPageHistogramAfterSave(
 
 void ReportPageHistogramsAfterDelete(
     const std::map<int64_t, OfflinePageItem>& offline_pages,
-    const std::vector<int64_t>& deleted_offline_ids,
+    const std::vector<OfflinePageItem>& deleted_pages,
     const base::Time& delete_time) {
   const int max_minutes = base::TimeDelta::FromDays(365).InMinutes();
   int64_t total_size = 0;
-  for (int64_t offline_id : deleted_offline_ids) {
-    auto iter = offline_pages.find(offline_id);
-    if (iter == offline_pages.end())
-      continue;
 
-    total_size += iter->second.file_size;
-    ClientId client_id = iter->second.client_id;
+  for (const auto& page : deleted_pages) {
+    total_size += page.file_size;
+    ClientId client_id = page.client_id;
 
     if (client_id.name_space == kDownloadNamespace) {
       int remaining_pages_with_url;
       GetMatchingURLCountAndMostRecentCreationTime(
-          offline_pages, iter->second.client_id.name_space, iter->second.url,
-          base::Time::Max(), &remaining_pages_with_url, nullptr);
+          offline_pages, page.client_id.name_space, page.url, base::Time::Max(),
+          &remaining_pages_with_url, nullptr);
       UMA_HISTOGRAM_CUSTOM_COUNTS(
           "OfflinePages.DownloadDeletedPageDuplicateCount",
           remaining_pages_with_url, 1, 20, 10);
@@ -264,37 +250,35 @@ void ReportPageHistogramsAfterDelete(
     base::HistogramBase* histogram = base::Histogram::FactoryGet(
         AddHistogramSuffix(client_id, "OfflinePages.PageLifetime"),
         1, max_minutes, 100, base::HistogramBase::kUmaTargetedHistogramFlag);
-    histogram->Add((delete_time - iter->second.creation_time).InMinutes());
+    histogram->Add((delete_time - page.creation_time).InMinutes());
 
     histogram = base::Histogram::FactoryGet(
         AddHistogramSuffix(
             client_id, "OfflinePages.DeletePage.TimeSinceLastOpen"),
         1, max_minutes, 100, base::HistogramBase::kUmaTargetedHistogramFlag);
-    histogram->Add((delete_time - iter->second.last_access_time).InMinutes());
+    histogram->Add((delete_time - page.last_access_time).InMinutes());
 
     histogram = base::Histogram::FactoryGet(
         AddHistogramSuffix(
             client_id, "OfflinePages.DeletePage.LastOpenToCreated"),
         1, max_minutes, 100, base::HistogramBase::kUmaTargetedHistogramFlag);
-    histogram->Add(
-        (iter->second.last_access_time - iter->second.creation_time).
-            InMinutes());
+    histogram->Add((page.last_access_time - page.creation_time).InMinutes());
 
     // Reported as Kb between 1Kb and 10Mb.
     histogram = base::Histogram::FactoryGet(
         AddHistogramSuffix(client_id, "OfflinePages.DeletePage.PageSize"),
         1, 10000, 50, base::HistogramBase::kUmaTargetedHistogramFlag);
-    histogram->Add(iter->second.file_size / 1024);
+    histogram->Add(page.file_size / 1024);
 
     histogram = base::Histogram::FactoryGet(
         AddHistogramSuffix(client_id, "OfflinePages.DeletePage.AccessCount"),
         1, 1000000, 50, base::HistogramBase::kUmaTargetedHistogramFlag);
-    histogram->Add(iter->second.access_count);
+    histogram->Add(page.access_count);
   }
 
-  if (deleted_offline_ids.size() > 1) {
+  if (deleted_pages.size() > 1) {
     UMA_HISTOGRAM_COUNTS("OfflinePages.BatchDelete.Count",
-                         static_cast<int32_t>(deleted_offline_ids.size()));
+                         static_cast<int32_t>(deleted_pages.size()));
     UMA_HISTOGRAM_MEMORY_KB(
         "OfflinePages.BatchDelete.TotalPageSize", total_size / 1024);
   }
@@ -373,7 +357,7 @@ void OfflinePageModelImpl::SavePage(
   }
 
   // If we already have an offline id, use it.  If not, generate one.
-  if (proposed_offline_id == 0ul)
+  if (proposed_offline_id == kInvalidOfflineId)
     proposed_offline_id = GenerateOfflineId();
 
   archiver->CreateArchive(
@@ -405,10 +389,10 @@ void OfflinePageModelImpl::MarkPageAccessedWhenLoadDone(int64_t offline_id) {
   offline_page_item.last_access_time = GetCurrentTime();
   offline_page_item.access_count++;
 
-  store_->AddOrUpdateOfflinePage(
-      offline_page_item,
-      base::Bind(&OfflinePageModelImpl::OnMarkPageAccesseDone,
-                 weak_ptr_factory_.GetWeakPtr(), offline_page_item));
+  std::vector<OfflinePageItem> items = { offline_page_item };
+  store_->UpdateOfflinePages(
+      items, base::Bind(&OfflinePageModelImpl::OnMarkPageAccesseDone,
+                        weak_ptr_factory_.GetWeakPtr(), offline_page_item));
 }
 
 void OfflinePageModelImpl::DeletePagesByOfflineId(
@@ -444,18 +428,6 @@ void OfflinePageModelImpl::DoDeletePagesByOfflineId(
                  weak_ptr_factory_.GetWeakPtr(), offline_ids, callback));
 }
 
-void OfflinePageModelImpl::ClearAll(const base::Closure& callback) {
-  DCHECK(is_loaded_);
-
-  std::vector<int64_t> offline_ids;
-  for (const auto& id_page_pair : offline_pages_)
-    offline_ids.push_back(id_page_pair.first);
-  DeletePagesByOfflineId(
-      offline_ids,
-      base::Bind(&OfflinePageModelImpl::OnRemoveAllFilesDoneForClearAll,
-                 weak_ptr_factory_.GetWeakPtr(), callback));
-}
-
 void OfflinePageModelImpl::DeleteCachedPagesByURLPredicate(
     const UrlPredicate& predicate,
     const DeletePageCallback& callback) {
@@ -471,36 +443,12 @@ void OfflinePageModelImpl::DoDeleteCachedPagesByURLPredicate(
 
   std::vector<int64_t> offline_ids;
   for (const auto& id_page_pair : offline_pages_) {
-    if (!IsUserRequestedPage(id_page_pair.second) &&
-        predicate.Run(id_page_pair.second.url))
+    if (IsRemovedOnCacheReset(id_page_pair.second) &&
+        predicate.Run(id_page_pair.second.url)) {
       offline_ids.push_back(id_page_pair.first);
-  }
-  DoDeletePagesByOfflineId(offline_ids, callback);
-}
-
-void OfflinePageModelImpl::HasPages(const std::string& name_space,
-                                    const HasPagesCallback& callback) {
-  RunWhenLoaded(base::Bind(&OfflinePageModelImpl::HasPagesAfterLoadDone,
-                           weak_ptr_factory_.GetWeakPtr(), name_space,
-                           callback));
-}
-
-void OfflinePageModelImpl::HasPagesAfterLoadDone(
-    const std::string& name_space,
-    const HasPagesCallback& callback) const {
-  DCHECK(is_loaded_);
-
-  bool has_pages = false;
-
-  for (const auto& id_page_pair : offline_pages_) {
-    if (id_page_pair.second.client_id.name_space == name_space &&
-        !id_page_pair.second.IsExpired()) {
-      has_pages = true;
-      break;
     }
   }
-
-  callback.Run(has_pages);
+  DoDeletePagesByOfflineId(offline_ids, callback);
 }
 
 void OfflinePageModelImpl::CheckPagesExistOffline(
@@ -610,44 +558,6 @@ const OfflinePageItem* OfflinePageModelImpl::MaybeGetPageByOfflineId(
              : nullptr;
 }
 
-void OfflinePageModelImpl::GetPageByOfflineURL(
-    const GURL& offline_url,
-    const SingleOfflinePageItemCallback& callback) {
-  RunWhenLoaded(
-      base::Bind(&OfflinePageModelImpl::GetPageByOfflineURLWhenLoadDone,
-                 weak_ptr_factory_.GetWeakPtr(), offline_url, callback));
-}
-
-void OfflinePageModelImpl::GetPageByOfflineURLWhenLoadDone(
-    const GURL& offline_url,
-    const SingleOfflinePageItemCallback& callback) const {
-  // Getting pages by offline URL does not exclude expired pages, as the caller
-  // already holds the offline URL and simply needs to look up a corresponding
-  // online URL.
-  const OfflinePageItem* result = nullptr;
-
-  for (const auto& id_page_pair : offline_pages_) {
-    if (id_page_pair.second.GetOfflineURL() == offline_url) {
-      result = &id_page_pair.second;
-      break;
-    }
-  }
-
-  callback.Run(result);
-}
-
-const OfflinePageItem* OfflinePageModelImpl::MaybeGetPageByOfflineURL(
-    const GURL& offline_url) const {
-  // Getting pages by offline URL does not exclude expired pages, as the caller
-  // already holds the offline URL and simply needs to look up a corresponding
-  // online URL.
-  for (const auto& id_page_pair : offline_pages_) {
-    if (id_page_pair.second.GetOfflineURL() == offline_url)
-      return &(id_page_pair.second);
-  }
-  return nullptr;
-}
-
 void OfflinePageModelImpl::GetPagesByOnlineURL(
     const GURL& online_url,
     const MultipleOfflinePageItemCallback& callback) {
@@ -661,9 +571,23 @@ void OfflinePageModelImpl::GetPagesByOnlineURLWhenLoadDone(
     const MultipleOfflinePageItemCallback& callback) const {
   std::vector<OfflinePageItem> result;
 
+  GURL::Replacements remove_params;
+  remove_params.ClearRef();
+
+  GURL online_url_without_fragment =
+        online_url.ReplaceComponents(remove_params);
+
   for (const auto& id_page_pair : offline_pages_) {
-    if (id_page_pair.second.url == online_url &&
-        !id_page_pair.second.IsExpired()) {
+    if (id_page_pair.second.IsExpired())
+      continue;
+    if (online_url == id_page_pair.second.url) {
+      result.push_back(id_page_pair.second);
+      continue;
+    }
+    // If the full URL does not match, try with the fragment identifier
+    // stripped.
+    if (online_url_without_fragment ==
+        id_page_pair.second.url.ReplaceComponents(remove_params)) {
       result.push_back(id_page_pair.second);
     }
   }
@@ -685,12 +609,7 @@ const OfflinePageItem* OfflinePageModelImpl::MaybeGetBestPageForOnlineURL(
 }
 
 void OfflinePageModelImpl::CheckMetadataConsistency() {
-  RunWhenLoaded(
-      base::Bind(&OfflinePageModelImpl::CheckMetadataConsistencyWhenLoadDone,
-                 weak_ptr_factory_.GetWeakPtr()));
-}
-
-void OfflinePageModelImpl::CheckMetadataConsistencyWhenLoadDone() {
+  DCHECK(is_loaded_);
   archive_manager_->GetAllArchives(
       base::Bind(&OfflinePageModelImpl::CheckMetadataConsistencyForArchivePaths,
                  weak_ptr_factory_.GetWeakPtr()));
@@ -701,6 +620,7 @@ void OfflinePageModelImpl::ExpirePages(
     const base::Time& expiration_time,
     const base::Callback<void(bool)>& callback) {
   std::vector<base::FilePath> paths_to_delete;
+  std::vector<OfflinePageItem> items_to_update;
   for (int64_t offline_id : offline_ids) {
     auto iter = offline_pages_.find(offline_id);
     if (iter == offline_pages_.end())
@@ -710,11 +630,14 @@ void OfflinePageModelImpl::ExpirePages(
     paths_to_delete.push_back(offline_page.file_path);
     offline_page.expiration_time = expiration_time;
 
-    store_->AddOrUpdateOfflinePage(
-        offline_page, base::Bind(&OfflinePageModelImpl::OnExpirePageDone,
-                                 weak_ptr_factory_.GetWeakPtr(), offline_id,
-                                 expiration_time));
+    items_to_update.push_back(offline_page);
   }
+
+  store_->UpdateOfflinePages(
+      items_to_update,
+      base::Bind(&OfflinePageModelImpl::OnExpirePageDone,
+                 weak_ptr_factory_.GetWeakPtr(), expiration_time));
+
   if (paths_to_delete.empty()) {
     callback.Run(true);
     return;
@@ -722,17 +645,20 @@ void OfflinePageModelImpl::ExpirePages(
   archive_manager_->DeleteMultipleArchives(paths_to_delete, callback);
 }
 
-void OfflinePageModelImpl::OnExpirePageDone(int64_t offline_id,
-                                            const base::Time& expiration_time,
-                                            bool success) {
-  UMA_HISTOGRAM_BOOLEAN("OfflinePages.ExpirePage.StoreUpdateResult", success);
-  if (!success)
-    return;
-  const auto& iter = offline_pages_.find(offline_id);
-  if (iter != offline_pages_.end()) {
+void OfflinePageModelImpl::OnExpirePageDone(
+    const base::Time& expiration_time,
+    std::unique_ptr<OfflinePagesUpdateResult> result) {
+  UMA_HISTOGRAM_BOOLEAN("OfflinePages.ExpirePage.StoreUpdateResult",
+                        result->updated_items.size() > 0);
+  for (const auto& expired_page : result->updated_items) {
+    const auto& iter = offline_pages_.find(expired_page.offline_id);
+    if (iter == offline_pages_.end())
+      continue;
+
     iter->second.expiration_time = expiration_time;
     ClientId client_id = iter->second.client_id;
-    offline_event_logger_.RecordPageExpired(std::to_string(offline_id));
+    offline_event_logger_.RecordPageExpired(
+        std::to_string(expired_page.offline_id));
     base::HistogramBase* histogram = base::Histogram::FactoryGet(
         AddHistogramSuffix(client_id, "OfflinePages.ExpirePage.PageLifetime"),
         1, base::TimeDelta::FromDays(30).InMinutes(), 50,
@@ -798,8 +724,8 @@ void OfflinePageModelImpl::OnCreateArchiveDone(const GURL& requested_url,
   OfflinePageItem offline_page_item(url, offline_id, client_id, file_path,
                                     file_size, start_time);
   offline_page_item.title = title;
-  store_->AddOrUpdateOfflinePage(
-      offline_page_item, base::Bind(&OfflinePageModelImpl::OnAddOfflinePageDone,
+  store_->AddOfflinePage(offline_page_item,
+                         base::Bind(&OfflinePageModelImpl::OnAddOfflinePageDone,
                                     weak_ptr_factory_.GetWeakPtr(), archiver,
                                     callback, offline_page_item));
 }
@@ -808,9 +734,9 @@ void OfflinePageModelImpl::OnAddOfflinePageDone(
     OfflinePageArchiver* archiver,
     const SavePageCallback& callback,
     const OfflinePageItem& offline_page,
-    bool success) {
+    ItemActionStatus status) {
   SavePageResult result;
-  if (success) {
+  if (status == ItemActionStatus::SUCCESS) {
     offline_pages_[offline_page.offline_id] = offline_page;
     result = SavePageResult::SUCCESS;
     ReportPageHistogramAfterSave(offline_pages_, offline_page,
@@ -818,6 +744,8 @@ void OfflinePageModelImpl::OnAddOfflinePageDone(
     offline_event_logger_.RecordPageSaved(
         offline_page.client_id.name_space, offline_page.url.spec(),
         std::to_string(offline_page.offline_id));
+  } else if (status == ItemActionStatus::ALREADY_EXISTS) {
+    result = SavePageResult::ALREADY_EXISTS;
   } else {
     result = SavePageResult::STORE_FAILURE;
   }
@@ -835,9 +763,9 @@ void OfflinePageModelImpl::OnAddOfflinePageDone(
 
 void OfflinePageModelImpl::OnMarkPageAccesseDone(
     const OfflinePageItem& offline_page_item,
-    bool success) {
+    std::unique_ptr<OfflinePagesUpdateResult> result) {
   // Update the item in the cache only upon success.
-  if (success)
+  if (result->updated_items.size() > 0)
     offline_pages_[offline_page_item.offline_id] = offline_page_item;
 
   // No need to fire OfflinePageModelChanged event since updating access info
@@ -849,8 +777,9 @@ void OfflinePageModelImpl::OnEnsureArchivesDirCreatedDone(
   UMA_HISTOGRAM_TIMES("OfflinePages.Model.ArchiveDirCreationTime",
                       base::TimeTicks::Now() - start_time);
 
-  store_->Load(base::Bind(&OfflinePageModelImpl::OnLoadDone,
-                          weak_ptr_factory_.GetWeakPtr(), start_time));
+  store_->GetOfflinePages(base::Bind(&OfflinePageModelImpl::OnLoadDone,
+                                     weak_ptr_factory_.GetWeakPtr(),
+                                     start_time));
 }
 
 void OfflinePageModelImpl::OnLoadDone(
@@ -964,33 +893,43 @@ void OfflinePageModelImpl::OnDeleteArchiveFilesDone(
   }
 
   store_->RemoveOfflinePages(
-      offline_ids,
-      base::Bind(&OfflinePageModelImpl::OnRemoveOfflinePagesDone,
-                 weak_ptr_factory_.GetWeakPtr(), offline_ids, callback));
+      offline_ids, base::Bind(&OfflinePageModelImpl::OnRemoveOfflinePagesDone,
+                              weak_ptr_factory_.GetWeakPtr(), callback));
 }
 
 void OfflinePageModelImpl::OnRemoveOfflinePagesDone(
-    const std::vector<int64_t>& offline_ids,
     const DeletePageCallback& callback,
-    bool success) {
-  ReportPageHistogramsAfterDelete(
-      offline_pages_, offline_ids, GetCurrentTime());
+    std::unique_ptr<OfflinePagesUpdateResult> result) {
+  ReportPageHistogramsAfterDelete(offline_pages_, result->updated_items,
+                                  GetCurrentTime());
 
-  for (int64_t offline_id : offline_ids) {
+  // This part of the loop is explicitly broken out, as it should be gone in
+  // fully asynchronous code.
+  for (const auto& page : result->updated_items) {
+    int64_t offline_id = page.offline_id;
     offline_event_logger_.RecordPageDeleted(std::to_string(offline_id));
     auto iter = offline_pages_.find(offline_id);
     if (iter == offline_pages_.end())
       continue;
-    FOR_EACH_OBSERVER(
-        Observer, observers_,
-        OfflinePageDeleted(iter->second.offline_id, iter->second.client_id));
     offline_pages_.erase(iter);
   }
 
-  // Deleting multiple pages always succeeds when it gets to this point.
-  InformDeletePageDone(callback, (success || offline_ids.size() > 1)
-                                     ? DeletePageResult::SUCCESS
-                                     : DeletePageResult::STORE_FAILURE);
+  for (const auto& page : result->updated_items) {
+    FOR_EACH_OBSERVER(Observer, observers_,
+                      OfflinePageDeleted(page.offline_id, page.client_id));
+  }
+
+  // TODO(fgorski): React the FAILED_INITIALIZATION, FAILED_RESET here.
+  // TODO(fgorski): We need a better callback interface for the Remove action on
+  // the this class. Currently removing an item that does not exist is
+  // considered a success, but not called out as such to the caller.
+  DeletePageResult delete_result;
+  if (result->store_state == StoreState::LOADED)
+    delete_result = DeletePageResult::SUCCESS;
+  else
+    delete_result = DeletePageResult::STORE_FAILURE;
+
+  InformDeletePageDone(callback, delete_result);
 }
 
 void OfflinePageModelImpl::InformDeletePageDone(
@@ -1065,50 +1004,6 @@ void OfflinePageModelImpl::OnDeleteOrphanedArchivesDone(
                         success);
 }
 
-void OfflinePageModelImpl::OnRemoveAllFilesDoneForClearAll(
-    const base::Closure& callback,
-    DeletePageResult result) {
-  store_->Reset(base::Bind(&OfflinePageModelImpl::OnResetStoreDoneForClearAll,
-                           weak_ptr_factory_.GetWeakPtr(), callback));
-}
-
-void OfflinePageModelImpl::OnResetStoreDoneForClearAll(
-    const base::Closure& callback,
-    bool success) {
-  DCHECK(success);
-  if (!success) {
-    offline_event_logger_.RecordStoreClearError();
-    UMA_HISTOGRAM_ENUMERATION("OfflinePages.ClearAllStatus2",
-                              STORE_RESET_FAILED, CLEAR_ALL_STATUS_COUNT);
-  }
-
-  offline_pages_.clear();
-  store_->Load(base::Bind(&OfflinePageModelImpl::OnReloadStoreDoneForClearAll,
-                          weak_ptr_factory_.GetWeakPtr(), callback));
-}
-
-void OfflinePageModelImpl::OnReloadStoreDoneForClearAll(
-    const base::Closure& callback,
-    OfflinePageMetadataStore::LoadStatus load_status,
-    const std::vector<OfflinePageItem>& offline_pages) {
-  DCHECK_EQ(OfflinePageMetadataStore::LOAD_SUCCEEDED, load_status);
-  UMA_HISTOGRAM_ENUMERATION(
-      "OfflinePages.ClearAllStatus2",
-      load_status == OfflinePageMetadataStore::LOAD_SUCCEEDED
-          ? CLEAR_ALL_SUCCEEDED
-          : STORE_RELOAD_FAILED,
-      CLEAR_ALL_STATUS_COUNT);
-
-  if (load_status == OfflinePageMetadataStore::LOAD_SUCCEEDED) {
-    offline_event_logger_.RecordStoreCleared();
-  } else {
-    offline_event_logger_.RecordStoreReloadError();
-  }
-
-  CacheLoadedData(offline_pages);
-  callback.Run();
-}
-
 void OfflinePageModelImpl::CacheLoadedData(
     const std::vector<OfflinePageItem>& offline_pages) {
   offline_pages_.clear();
@@ -1140,10 +1035,10 @@ void OfflinePageModelImpl::PostClearStorageIfNeededTask() {
                                        weak_ptr_factory_.GetWeakPtr())));
 }
 
-bool OfflinePageModelImpl::IsUserRequestedPage(
+bool OfflinePageModelImpl::IsRemovedOnCacheReset(
     const OfflinePageItem& offline_page) const {
-  return (offline_page.client_id.name_space == kAsyncNamespace ||
-          offline_page.client_id.name_space == kDownloadNamespace);
+  return policy_controller_->IsRemovedOnCacheReset(
+      offline_page.client_id.name_space);
 }
 
 void OfflinePageModelImpl::RunWhenLoaded(const base::Closure& task) {

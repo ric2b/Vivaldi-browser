@@ -35,15 +35,9 @@ SystemTrayDelegate::~SystemTrayDelegate() {}
 
 void SystemTrayDelegate::Initialize() {}
 
-bool SystemTrayDelegate::GetTrayVisibilityOnStartup() {
-  return false;
-}
-
 LoginStatus SystemTrayDelegate::GetUserLoginStatus() const {
   return LoginStatus::NOT_LOGGED_IN;
 }
-
-void SystemTrayDelegate::ChangeProfilePicture() {}
 
 std::string SystemTrayDelegate::GetEnterpriseDomain() const {
   return std::string();
@@ -79,49 +73,17 @@ void SystemTrayDelegate::GetSystemUpdateInfo(UpdateInfo* info) const {
   info->factory_reset_required = false;
 }
 
-base::HourClockType SystemTrayDelegate::GetHourClockType() const {
-  return base::k24HourClock;
-}
-
-void SystemTrayDelegate::ShowSettings() {}
-
 bool SystemTrayDelegate::ShouldShowSettings() {
   return false;
 }
 
-void SystemTrayDelegate::ShowDateSettings() {}
-
 void SystemTrayDelegate::ShowSetTimeDialog() {}
-
-void SystemTrayDelegate::ShowNetworkSettingsForGuid(const std::string& guid) {}
-
-void SystemTrayDelegate::ShowDisplaySettings() {}
-
-void SystemTrayDelegate::ShowPowerSettings() {}
-
-void SystemTrayDelegate::ShowChromeSlow() {}
 
 bool SystemTrayDelegate::ShouldShowDisplayNotification() {
   return false;
 }
 
-void SystemTrayDelegate::ShowIMESettings() {}
-
-void SystemTrayDelegate::ShowHelp() {}
-
-void SystemTrayDelegate::ShowAccessibilityHelp() {}
-
-void SystemTrayDelegate::ShowAccessibilitySettings() {}
-
-void SystemTrayDelegate::ShowPaletteHelp() {}
-
-void SystemTrayDelegate::ShowPaletteSettings() {}
-
-void SystemTrayDelegate::ShowPublicAccountInfo() {}
-
 void SystemTrayDelegate::ShowEnterpriseInfo() {}
-
-void SystemTrayDelegate::ShowSupervisedUserInfo() {}
 
 void SystemTrayDelegate::ShowUserLogin() {}
 
@@ -171,8 +133,6 @@ bool SystemTrayDelegate::GetBluetoothEnabled() {
 bool SystemTrayDelegate::GetBluetoothDiscovering() {
   return false;
 }
-
-void SystemTrayDelegate::ChangeProxySettings() {}
 
 CastConfigDelegate* SystemTrayDelegate::GetCastConfigDelegate() {
   return nullptr;
@@ -226,11 +186,6 @@ void SystemTrayDelegate::ShouldRebootOnShutdown(
     const RebootOnShutdownCallback& callback) {}
 
 VPNDelegate* SystemTrayDelegate::GetVPNDelegate() const {
-  return nullptr;
-}
-
-std::unique_ptr<SystemTrayItem> SystemTrayDelegate::CreateDisplayTrayItem(
-    SystemTray* tray) {
   return nullptr;
 }
 

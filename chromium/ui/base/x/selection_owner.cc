@@ -10,8 +10,8 @@
 
 #include "base/logging.h"
 #include "ui/base/x/selection_utils.h"
-#include "ui/base/x/x11_foreign_window_manager.h"
 #include "ui/base/x/x11_util.h"
+#include "ui/base/x/x11_window_event_manager.h"
 #include "ui/events/platform/x11/x11_event_source.h"
 
 namespace ui {
@@ -118,13 +118,9 @@ void SelectionOwner::RetrieveTargets(std::vector<XAtom>* targets) {
 
 void SelectionOwner::TakeOwnershipOfSelection(
     const SelectionFormatMap& data) {
-  // Save the last server timestamp seen from X, to satisfy requests for the
-  // TIMESTAMP target later…
-  acquired_selection_timestamp_ =
-      X11EventSource::GetInstance()->last_seen_server_time();
-  // …but always pass CurrentTime to XSetSelectionOwner to increase the chances
-  // of this succeeding.
-  XSetSelectionOwner(x_display_, selection_name_, x_window_, CurrentTime);
+  acquired_selection_timestamp_ = X11EventSource::GetInstance()->GetTimestamp();
+  XSetSelectionOwner(x_display_, selection_name_, x_window_,
+                     acquired_selection_timestamp_);
 
   if (XGetSelectionOwner(x_display_, selection_name_) == x_window_) {
     // The X server agrees that we are the selection owner. Commit our data.
@@ -273,17 +269,10 @@ bool SelectionOwner::ProcessTarget(XAtom target,
       base::TimeTicks timeout =
           base::TimeTicks::Now() +
           base::TimeDelta::FromMilliseconds(kIncrementalTransferTimeoutMs);
-      int foreign_window_manager_id =
-          ui::XForeignWindowManager::GetInstance()->RequestEvents(
-              requestor, PropertyChangeMask);
-      incremental_transfers_.push_back(
-          IncrementalTransfer(requestor,
-                              target,
-                              property,
-                              it->second,
-                              0,
-                              timeout,
-                              foreign_window_manager_id));
+      requestor_events_.reset(
+          new ui::XScopedEventSelector(requestor, PropertyChangeMask));
+      incremental_transfers_.push_back(IncrementalTransfer(
+          requestor, target, property, it->second, 0, timeout));
 
       // Start a timer to abort the data transfer in case that the selection
       // requestor does not support the INCR property or gets destroyed during
@@ -349,8 +338,8 @@ void SelectionOwner::AbortStaleIncrementalTransfers() {
 
 void SelectionOwner::CompleteIncrementalTransfer(
     std::vector<IncrementalTransfer>::iterator it) {
-  ui::XForeignWindowManager::GetInstance()->CancelRequest(
-      it->foreign_window_manager_id);
+  requestor_events_.reset();
+
   incremental_transfers_.erase(it);
 
   if (incremental_transfers_.empty())
@@ -377,16 +366,13 @@ SelectionOwner::IncrementalTransfer::IncrementalTransfer(
     XAtom property,
     const scoped_refptr<base::RefCountedMemory>& data,
     int offset,
-    base::TimeTicks timeout,
-    int foreign_window_manager_id)
+    base::TimeTicks timeout)
     : window(window),
       target(target),
       property(property),
       data(data),
       offset(offset),
-      timeout(timeout),
-      foreign_window_manager_id(foreign_window_manager_id) {
-}
+      timeout(timeout) {}
 
 SelectionOwner::IncrementalTransfer::IncrementalTransfer(
     const IncrementalTransfer& other) = default;

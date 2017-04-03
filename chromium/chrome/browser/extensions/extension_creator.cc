@@ -199,7 +199,7 @@ bool ExtensionCreator::CreateZip(const base::FilePath& extension_dir,
 
   scoped_refptr<ExtensionCreatorFilter> filter = new ExtensionCreatorFilter();
   const base::Callback<bool(const base::FilePath&)>& filter_cb =
-    base::Bind(&ExtensionCreatorFilter::ShouldPackageFile, filter.get());
+    base::Bind(&ExtensionCreatorFilter::ShouldPackageFile, filter);
   if (!zip::ZipWithFilterCallback(extension_dir, *zip_path, filter_cb)) {
     error_message_ =
         l10n_util::GetStringUTF8(IDS_EXTENSION_FAILED_DURING_PACKAGING);
@@ -321,7 +321,7 @@ bool ExtensionCreator::Run(const base::FilePath& extension_dir,
   base::FilePath zip_path;
   std::vector<uint8_t> signature;
   bool result = false;
-  if (CreateZip(extension_dir, temp_dir.path(), &zip_path) &&
+  if (CreateZip(extension_dir, temp_dir.GetPath(), &zip_path) &&
       SignZip(zip_path, key_pair.get(), &signature) &&
       WriteCRX(zip_path, key_pair.get(), signature, crx_path)) {
     result = true;

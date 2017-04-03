@@ -9,13 +9,13 @@
 #include "base/strings/string_split.h"
 #include "chrome/browser/chromeos/login/users/default_user_image/default_user_images.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user_manager.h"
-#include "grit/theme_resources.h"
-#include "grit/ui_chromeos_resources.h"
 #include "net/base/escape.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/chromeos/resources/grit/ui_chromeos_resources.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "url/third_party/mozilla/url_parse.h"
 
@@ -52,19 +52,19 @@ base::RefCountedMemory* GetUserImageInternal(const AccountId& account_id) {
   // for device scale factors up to 4. We do not use SCALE_FACTOR_NONE, as we
   // specifically want 100% scale images to not transmit more data than needed.
   if (user) {
-    if (user->has_image_bytes()) {
+    if (user->has_image_bytes())
       return new base::RefCountedBytes(user->image_bytes());
-    } else if (user->image_is_stub()) {
+    if (user->image_is_stub()) {
       return ResourceBundle::GetSharedInstance().LoadDataResourceBytesForScale(
           IDR_PROFILE_PICTURE_LOADING, ui::SCALE_FACTOR_100P);
-    } else if (user->HasDefaultImage()) {
+    }
+    if (user->HasDefaultImage()) {
       return ResourceBundle::GetSharedInstance().LoadDataResourceBytesForScale(
           chromeos::default_user_image::kDefaultImageResourceIDs
               [user->image_index()],
           ui::SCALE_FACTOR_100P);
-    } else {
-      NOTREACHED() << "User with custom image missing data bytes";
     }
+    NOTREACHED() << "User with custom image missing data bytes";
   }
   return ResourceBundle::GetSharedInstance().LoadDataResourceBytesForScale(
       IDR_LOGIN_DEFAULT_USER, ui::SCALE_FACTOR_100P);
@@ -92,8 +92,7 @@ std::string UserImageSource::GetSource() const {
 
 void UserImageSource::StartDataRequest(
     const std::string& path,
-    int render_process_id,
-    int render_frame_id,
+    const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
     const content::URLDataSource::GotDataCallback& callback) {
   std::string email;
   GURL url(chrome::kChromeUIUserImageURL + path);

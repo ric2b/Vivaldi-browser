@@ -34,6 +34,8 @@ public abstract class VideoCapture {
     // Native callback context variable.
     protected final long mNativeVideoCaptureDeviceAndroid;
 
+    protected boolean mUseBackgroundThreadForTesting = false;
+
     VideoCapture(Context context, int id, long nativeVideoCaptureDeviceAndroid) {
         mContext = context;
         mId = id;
@@ -55,12 +57,25 @@ public abstract class VideoCapture {
 
     /**
     * @param zoom Zoom level, should be ignored if 0.
-    * @param pointsOfInterest2D 2D normlized oints of interest, marshalled with
+    * @param focusMode Focus mode following AndroidMeteringMode enum.
+    * @param exposureMode Focus mode following AndroidMeteringMode enum.
+    * @param pointsOfInterest2D 2D normalized points of interest, marshalled with
     * x coordinate first followed by the y coordinate.
+    * @param hasExposureCompensation Indicates if |exposureCompensation| is set.
+    * @param exposureCompensation Adjustment to auto exposure, in x100 units. 0 means not adjusted.
+    * @param whiteBalanceMode White Balance mode following AndroidMeteringMode enum.
+    * @param iso Sensitivity to light. 0, which would be invalid, means ignore.
+    * @param hasRedEyeReduction Indicates if |redEyeReduction| is set.
+    * @param redEyeReduction Value of red eye reduction for the auto flash setting.
+    * @param fillLightMode Flash/Torch setting, following AndroidFillLightMode enum.
+    * @param colorTemperature White Balance reference temperature, valid if whiteBalanceMode is
+    * manual, and its value is larger than 0.
     */
     @CalledByNative
     public abstract void setPhotoOptions(int zoom, int focusMode, int exposureMode, int width,
-            int height, float[] pointsOfInterest2D);
+            int height, float[] pointsOfInterest2D, boolean hasExposureCompensation,
+            int exposureCompensation, int whiteBalanceMode, int iso, boolean hasRedEyeReduction,
+            boolean redEyeReduction, int fillLightMode, int colorTemperature);
 
     @CalledByNative
     public abstract boolean takePhoto(final long callbackId);
@@ -98,6 +113,11 @@ public abstract class VideoCapture {
         }
     }
 
+    @CalledByNative
+    public final void setTestMode() {
+        mUseBackgroundThreadForTesting = true;
+    }
+
     protected final int getCameraRotation() {
         int rotation = mInvertDeviceOrientationReadings ? (360 - getDeviceRotation())
                                                         : getDeviceRotation();
@@ -132,7 +152,8 @@ public abstract class VideoCapture {
 
     public native void nativeOnI420FrameAvailable(long nativeVideoCaptureDeviceAndroid,
             ByteBuffer yBuffer, int yStride, ByteBuffer uBuffer, ByteBuffer vBuffer,
-            int uvRowStride, int uvPixelStride, int width, int height, int rotation);
+            int uvRowStride, int uvPixelStride, int width, int height, int rotation,
+            long timestamp);
 
     // Method for VideoCapture implementations to signal an asynchronous error.
     public native void nativeOnError(long nativeVideoCaptureDeviceAndroid, String message);

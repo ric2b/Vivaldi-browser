@@ -14,6 +14,7 @@
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
+#include "base/trace_event/trace_event.h"
 
 namespace {
 
@@ -238,16 +239,16 @@ void LatencyInfo::AddLatencyNumberWithTimestampImpl(
       // originally created, e.g. the timestamp of its ORIGINAL/UI_COMPONENT,
       // not when we actually issue the ASYNC_BEGIN trace event.
       LatencyComponent begin_component;
-      int64_t ts = 0;
+      base::TimeTicks ts;
       if (FindLatency(INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT,
                       0,
                       &begin_component) ||
           FindLatency(INPUT_EVENT_LATENCY_UI_COMPONENT,
                       0,
                       &begin_component)) {
-        ts = begin_component.event_time.ToInternalValue();
+        ts = begin_component.event_time;
       } else {
-        ts = base::TimeTicks::Now().ToInternalValue();
+        ts = base::TimeTicks::Now();
       }
 
       if (trace_name_str) {

@@ -9,9 +9,11 @@
 
 #include <stdint.h>
 
+#include <cmath>
 #include <ostream>
 
 #include "base/compiler_specific.h"
+#include "net/base/net_export.h"
 #include "net/quic/core/quic_time.h"
 
 namespace net {
@@ -98,9 +100,16 @@ inline QuicBandwidth operator-(QuicBandwidth lhs, QuicBandwidth rhs) {
   return QuicBandwidth(lhs.bits_per_second_ - rhs.bits_per_second_);
 }
 inline QuicBandwidth operator*(QuicBandwidth lhs, float rhs) {
-  return QuicBandwidth(static_cast<int64_t>(lhs.bits_per_second_ * rhs));
+  return QuicBandwidth(
+      static_cast<int64_t>(std::llround(lhs.bits_per_second_ * rhs)));
 }
 inline QuicBandwidth operator*(float lhs, QuicBandwidth rhs) {
+  return rhs * lhs;
+}
+inline QuicByteCount operator*(QuicBandwidth lhs, QuicTime::Delta rhs) {
+  return lhs.ToBytesPerPeriod(rhs);
+}
+inline QuicByteCount operator*(QuicTime::Delta lhs, QuicBandwidth rhs) {
   return rhs * lhs;
 }
 

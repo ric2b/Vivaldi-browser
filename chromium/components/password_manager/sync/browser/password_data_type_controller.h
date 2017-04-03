@@ -8,7 +8,6 @@
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
 #include "components/sync/driver/non_ui_data_type_controller.h"
 #include "components/sync/driver/sync_service_observer.h"
 
@@ -16,41 +15,39 @@ namespace password_manager {
 class PasswordStore;
 }
 
-namespace sync_driver {
+namespace syncer {
 class SyncClient;
 }
 
 namespace browser_sync {
 
 // A class that manages the startup and shutdown of password sync.
-class PasswordDataTypeController : public sync_driver::NonUIDataTypeController,
-                                   public sync_driver::SyncServiceObserver {
+class PasswordDataTypeController : public syncer::NonUIDataTypeController,
+                                   public syncer::SyncServiceObserver {
  public:
+  // |dump_stack| is called when an unrecoverable error occurs.
   PasswordDataTypeController(
-      const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
-      const base::Closure& error_callback,
-      sync_driver::SyncClient* sync_client,
+      const base::Closure& dump_stack,
+      syncer::SyncClient* sync_client,
       const base::Closure& state_changed_callback,
       const scoped_refptr<password_manager::PasswordStore>& password_store);
+  ~PasswordDataTypeController() override;
 
   // NonFrontendDataTypeController implementation
-  syncer::ModelType type() const override;
   syncer::ModelSafeGroup model_safe_group() const override;
 
  protected:
-  ~PasswordDataTypeController() override;
-
   // NonUIDataTypeController interface.
   bool PostTaskOnBackendThread(const tracked_objects::Location& from_here,
                                const base::Closure& task) override;
   bool StartModels() override;
   void StopModels() override;
 
-  // sync_driver::SyncServiceObserver:
+  // syncer::SyncServiceObserver:
   void OnStateChanged() override;
 
  private:
-  sync_driver::SyncClient* const sync_client_;
+  syncer::SyncClient* const sync_client_;
   const base::Closure state_changed_callback_;
   scoped_refptr<password_manager::PasswordStore> password_store_;
 

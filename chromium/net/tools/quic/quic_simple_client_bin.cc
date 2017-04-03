@@ -56,7 +56,6 @@
 #include "net/cert/multi_log_ct_verifier.h"
 #include "net/http/http_request_info.h"
 #include "net/http/transport_security_state.h"
-#include "net/log/net_log.h"
 #include "net/quic/chromium/crypto/proof_verifier_chromium.h"
 #include "net/quic/core/quic_protocol.h"
 #include "net/quic/core/quic_server_id.h"
@@ -113,7 +112,7 @@ class FakeCertVerifier : public net::CertVerifier {
              net::CertVerifyResult* verify_result,
              const net::CompletionCallback& callback,
              std::unique_ptr<Request>* out_req,
-             const net::BoundNetLog& net_log) override {
+             const net::NetLogWithSource& net_log) override {
     return net::OK;
   }
 
@@ -318,7 +317,7 @@ int main(int argc, char* argv[]) {
   net::SpdyHeaderBlock header_block;
   net::CreateSpdyHeadersFromHttpRequest(request, request.extra_headers,
                                         /*direct=*/true, &header_block);
-  client.SendRequestAndWaitForResponse(request, body, /*fin=*/true);
+  client.SendRequestAndWaitForResponse(header_block, body, /*fin=*/true);
 
   // Print request and response details.
   if (!FLAGS_quiet) {

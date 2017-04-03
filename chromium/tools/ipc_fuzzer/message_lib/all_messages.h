@@ -16,7 +16,6 @@
 
 #include "chrome/common/all_messages.h"
 #include "components/autofill/content/common/autofill_message_generator.h"
-#include "components/content_settings/content/common/content_settings_message_generator.h"
 #if !defined(DISABLE_NACL)
 #include "components/nacl/common/nacl_host_messages.h"
 #endif
@@ -24,6 +23,5 @@
 #include "components/pdf/common/pdf_message_generator.h"
 #include "components/spellcheck/common/spellcheck_message_generator.h"
 #include "components/tracing/common/tracing_messages.h"
-#include "components/visitedlink/common/visitedlink_message_generator.h"
 #include "content/common/all_messages.h"
 #include "extensions/common/extension_message_generator.h"

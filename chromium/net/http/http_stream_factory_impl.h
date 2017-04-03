@@ -15,8 +15,8 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "net/base/host_port_pair.h"
+#include "net/base/net_export.h"
 #include "net/http/http_stream_factory.h"
-#include "net/log/net_log.h"
 #include "net/proxy/proxy_server.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/spdy/spdy_session_key.h"
@@ -25,6 +25,7 @@ namespace net {
 
 class HttpNetworkSession;
 class SpdySession;
+class NetLogWithSource;
 
 class NET_EXPORT_PRIVATE HttpStreamFactoryImpl : public HttpStreamFactory {
  public:
@@ -44,7 +45,7 @@ class NET_EXPORT_PRIVATE HttpStreamFactoryImpl : public HttpStreamFactory {
                                    const SSLConfig& server_ssl_config,
                                    const SSLConfig& proxy_ssl_config,
                                    HttpStreamRequest::Delegate* delegate,
-                                   const BoundNetLog& net_log) override;
+                                   const NetLogWithSource& net_log) override;
 
   HttpStreamRequest* RequestWebSocketHandshakeStream(
       const HttpRequestInfo& info,
@@ -53,7 +54,7 @@ class NET_EXPORT_PRIVATE HttpStreamFactoryImpl : public HttpStreamFactory {
       const SSLConfig& proxy_ssl_config,
       HttpStreamRequest::Delegate* delegate,
       WebSocketHandshakeStreamBase::CreateHelper* create_helper,
-      const BoundNetLog& net_log) override;
+      const NetLogWithSource& net_log) override;
 
   HttpStreamRequest* RequestBidirectionalStreamImpl(
       const HttpRequestInfo& info,
@@ -61,7 +62,7 @@ class NET_EXPORT_PRIVATE HttpStreamFactoryImpl : public HttpStreamFactory {
       const SSLConfig& server_ssl_config,
       const SSLConfig& proxy_ssl_config,
       HttpStreamRequest::Delegate* delegate,
-      const BoundNetLog& net_log) override;
+      const NetLogWithSource& net_log) override;
 
   void PreconnectStreams(int num_streams, const HttpRequestInfo& info) override;
   const HostMappingRules* GetHostMappingRules() const override;
@@ -101,7 +102,7 @@ class NET_EXPORT_PRIVATE HttpStreamFactoryImpl : public HttpStreamFactory {
       HttpStreamRequest::Delegate* delegate,
       WebSocketHandshakeStreamBase::CreateHelper* create_helper,
       HttpStreamRequest::StreamType stream_type,
-      const BoundNetLog& net_log);
+      const NetLogWithSource& net_log);
 
   // Called when a SpdySession is ready. It will find appropriate Requests and
   // fulfill them. |direct| indicates whether or not |spdy_session| uses a
@@ -110,10 +111,10 @@ class NET_EXPORT_PRIVATE HttpStreamFactoryImpl : public HttpStreamFactory {
                              bool direct,
                              const SSLConfig& used_ssl_config,
                              const ProxyInfo& used_proxy_info,
-                             bool was_npn_negotiated,
+                             bool was_alpn_negotiated,
                              NextProto negotiated_protocol,
                              bool using_spdy,
-                             const BoundNetLog& net_log);
+                             const NetLogWithSource& net_log);
 
   // Called when the Job detects that the endpoint indicated by the
   // Alternate-Protocol does not work. Lets the factory update

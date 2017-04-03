@@ -7,13 +7,12 @@
 #include <stdint.h>
 
 #include <memory>
-#include <string>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/location.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner.h"
 #include "components/sync/core/attachments/attachment_util.h"
 #include "components/sync/core_impl/attachments/proto/attachment_store.pb.h"
@@ -42,10 +41,10 @@ const int32_t kCurrentSchemaVersion = 1;
 const base::FilePath::CharType kLeveldbDirectory[] =
     FILE_PATH_LITERAL("leveldb");
 
-// Converts syncer::AttachmentStore::Component values into
+// Converts AttachmentStore::Component values into
 // attachment_store_pb::RecordMetadata::Component.
 attachment_store_pb::RecordMetadata::Component ComponentToProto(
-    syncer::AttachmentStore::Component component) {
+    AttachmentStore::Component component) {
   switch (component) {
     case AttachmentStore::MODEL_TYPE:
       return attachment_store_pb::RecordMetadata::MODEL_TYPE;

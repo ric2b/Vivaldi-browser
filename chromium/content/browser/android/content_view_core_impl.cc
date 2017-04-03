@@ -13,7 +13,7 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -72,6 +72,7 @@ using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertUTF16ToJavaString;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaParamRef;
+using base::android::JavaRef;
 using base::android::ScopedJavaLocalRef;
 using blink::WebGestureEvent;
 using blink::WebInputEvent;
@@ -204,11 +205,11 @@ ContentViewCore* ContentViewCore::FromWebContents(
 
 ContentViewCoreImpl::ContentViewCoreImpl(
     JNIEnv* env,
-    jobject obj,
+    const JavaRef<jobject>& obj,
     WebContents* web_contents,
-    const base::android::JavaRef<jobject>& view_android_delegate,
+    const JavaRef<jobject>& view_android_delegate,
     ui::WindowAndroid* window_android,
-    jobject java_bridge_retained_object_set)
+    const JavaRef<jobject>& java_bridge_retained_object_set)
     : WebContentsObserver(web_contents),
       java_ref_(env, obj),
       view_(view_android_delegate),
@@ -552,9 +553,7 @@ void ContentViewCoreImpl::OnGestureEventAck(const blink::WebGestureEvent& event,
     case WebInputEvent::GestureFlingStart:
       if (ack_result == INPUT_EVENT_ACK_STATE_CONSUMED) {
         // The view expects the fling velocity in pixels/s.
-        Java_ContentViewCore_onFlingStartEventConsumed(
-            env, j_obj, event.data.flingStart.velocityX * dpi_scale(),
-            event.data.flingStart.velocityY * dpi_scale());
+        Java_ContentViewCore_onFlingStartEventConsumed(env, j_obj);
       } else {
         // If a scroll ends with a fling, a SCROLL_END event is never sent.
         // However, if that fling went unconsumed, we still need to let the
@@ -583,8 +582,7 @@ void ContentViewCoreImpl::OnGestureEventAck(const blink::WebGestureEvent& event,
       break;
     case WebInputEvent::GestureTap:
       Java_ContentViewCore_onSingleTapEventAck(
-          env, j_obj, ack_result == INPUT_EVENT_ACK_STATE_CONSUMED,
-          event.x * dpi_scale(), event.y * dpi_scale());
+          env, j_obj, ack_result == INPUT_EVENT_ACK_STATE_CONSUMED);
       break;
     case WebInputEvent::GestureLongPress:
       if (ack_result == INPUT_EVENT_ACK_STATE_CONSUMED)
@@ -647,29 +645,25 @@ void ContentViewCoreImpl::OnSelectionEvent(ui::SelectionEventType event,
   if (j_obj.is_null())
     return;
 
-  gfx::PointF selection_anchor_pix =
-      gfx::ScalePoint(selection_anchor, dpi_scale());
-  gfx::RectF selection_rect_pix = gfx::ScaleRect(selection_rect, dpi_scale());
   Java_ContentViewCore_onSelectionEvent(
-      env, j_obj, event, selection_anchor_pix.x(), selection_anchor_pix.y(),
-      selection_rect_pix.x(), selection_rect_pix.y(),
-      selection_rect_pix.right(), selection_rect_pix.bottom());
+      env, j_obj, event, selection_anchor.x(), selection_anchor.y(),
+      selection_rect.x(), selection_rect.y(), selection_rect.right(),
+      selection_rect.bottom());
 }
 
-bool ContentViewCoreImpl::ShowPastePopup(int x_dip, int y_dip) {
+void ContentViewCoreImpl::ShowPastePopup(int x_dip, int y_dip) {
   RenderWidgetHostViewAndroid* view = GetRenderWidgetHostViewAndroid();
   if (!view)
-    return false;
+    return;
 
   view->OnShowingPastePopup(gfx::PointF(x_dip, y_dip));
 
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (obj.is_null())
-    return false;
-  return Java_ContentViewCore_showPastePopupWithFeedback(
-      env, obj, static_cast<jint>(x_dip * dpi_scale()),
-      static_cast<jint>(y_dip * dpi_scale()));
+    return;
+  Java_ContentViewCore_showPastePopup(env, obj, x_dip,
+                                      y_dip);
 }
 
 void ContentViewCoreImpl::StartContentIntent(const GURL& content_url,
@@ -711,16 +705,6 @@ ContentViewCoreImpl::CreateMotionEventSynthesizer() {
   if (obj.is_null())
     return ScopedJavaLocalRef<jobject>();
   return Java_ContentViewCore_createMotionEventSynthesizer(env, obj);
-}
-
-bool ContentViewCoreImpl::ShouldBlockMediaRequest(const GURL& url) {
-  JNIEnv* env = AttachCurrentThread();
-
-  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
-  if (obj.is_null())
-    return true;
-  ScopedJavaLocalRef<jstring> j_url = ConvertUTF8ToJavaString(env, url.spec());
-  return Java_ContentViewCore_shouldBlockMediaRequest(env, obj, j_url);
 }
 
 void ContentViewCoreImpl::DidStopFlinging() {
@@ -796,7 +780,7 @@ int ContentViewCoreImpl::GetBottomControlsHeightPix() const {
   ScopedJavaLocalRef<jobject> j_obj = java_ref_.get(env);
   if (j_obj.is_null())
     return 0;
-  return Java_ContentViewCore_getBottomControlsHeightPix(env, j_obj.obj());
+  return Java_ContentViewCore_getBottomControlsHeightPix(env, j_obj);
 }
 
 gfx::Size ContentViewCoreImpl::GetViewportSizeDip() const {
@@ -1181,17 +1165,6 @@ void ContentViewCoreImpl::PinchBy(JNIEnv* env,
   event.data.pinchUpdate.scale = delta;
 
   SendGestureEvent(event);
-}
-
-void ContentViewCoreImpl::SelectBetweenCoordinates(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    jfloat x1,
-    jfloat y1,
-    jfloat x2,
-    jfloat y2) {
-  SelectBetweenCoordinates(gfx::PointF(x1 / dpi_scale(), y1 / dpi_scale()),
-                           gfx::PointF(x2 / dpi_scale(), y2 / dpi_scale()));
 }
 
 void ContentViewCoreImpl::DismissTextHandles(JNIEnv* env,

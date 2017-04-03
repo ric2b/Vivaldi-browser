@@ -5,9 +5,11 @@
 #include "blimp/client/core/contents/blimp_contents_impl.h"
 
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/supports_user_data.h"
 #include "blimp/client/core/contents/tab_control_feature.h"
 #include "blimp/client/public/contents/blimp_contents_observer.h"
+#include "ui/gfx/native_widget_types.h"
 
 #if defined(OS_ANDROID)
 #include "blimp/client/core/contents/android/blimp_contents_impl_android.h"
@@ -23,14 +25,28 @@ const char kBlimpContentsImplAndroidKey[] = "blimp_contents_impl_android";
 #endif  // OS_ANDROID
 }
 
-BlimpContentsImpl::BlimpContentsImpl(int id,
-                                     TabControlFeature* tab_control_feature)
-    : navigation_controller_(this, nullptr),
+BlimpContentsImpl::BlimpContentsImpl(
+    int id,
+    gfx::NativeWindow window,
+    BlimpCompositorDependencies* compositor_deps,
+    ImeFeature* ime_feature,
+    NavigationFeature* navigation_feature,
+    RenderWidgetFeature* render_widget_feature,
+    TabControlFeature* tab_control_feature)
+    : navigation_controller_(id, this, navigation_feature),
+      document_manager_(id, render_widget_feature, compositor_deps),
       id_(id),
-      tab_control_feature_(tab_control_feature) {}
+      ime_feature_(ime_feature),
+      window_(window),
+      tab_control_feature_(tab_control_feature) {
+  blimp_contents_view_ =
+      BlimpContentsViewImpl::Create(this, document_manager_.layer());
+  ime_feature_->set_delegate(blimp_contents_view_->GetImeDelegate());
+}
 
 BlimpContentsImpl::~BlimpContentsImpl() {
   FOR_EACH_OBSERVER(BlimpContentsObserver, observers_, BlimpContentsDying());
+  ime_feature_->set_delegate(nullptr);
 }
 
 #if defined(OS_ANDROID)
@@ -56,12 +72,30 @@ BlimpNavigationControllerImpl& BlimpContentsImpl::GetNavigationController() {
   return navigation_controller_;
 }
 
+gfx::NativeWindow BlimpContentsImpl::GetNativeWindow() {
+  return window_;
+}
+
 void BlimpContentsImpl::AddObserver(BlimpContentsObserver* observer) {
   observers_.AddObserver(observer);
 }
 
 void BlimpContentsImpl::RemoveObserver(BlimpContentsObserver* observer) {
   observers_.RemoveObserver(observer);
+}
+
+BlimpContentsViewImpl* BlimpContentsImpl::GetView() {
+  return blimp_contents_view_.get();
+}
+
+void BlimpContentsImpl::Show() {
+  document_manager_.SetVisible(true);
+  UMA_HISTOGRAM_BOOLEAN("Blimp.Tab.Visible", true);
+}
+
+void BlimpContentsImpl::Hide() {
+  document_manager_.SetVisible(false);
+  UMA_HISTOGRAM_BOOLEAN("Blimp.Tab.Visible", false);
 }
 
 bool BlimpContentsImpl::HasObserver(BlimpContentsObserver* observer) {
@@ -71,6 +105,16 @@ bool BlimpContentsImpl::HasObserver(BlimpContentsObserver* observer) {
 void BlimpContentsImpl::OnNavigationStateChanged() {
   FOR_EACH_OBSERVER(BlimpContentsObserver, observers_,
                     OnNavigationStateChanged());
+}
+
+void BlimpContentsImpl::OnLoadingStateChanged(bool loading) {
+  FOR_EACH_OBSERVER(BlimpContentsObserver, observers_,
+                    OnLoadingStateChanged(loading));
+}
+
+void BlimpContentsImpl::OnPageLoadingStateChanged(bool loading) {
+  FOR_EACH_OBSERVER(BlimpContentsObserver, observers_,
+                    OnPageLoadingStateChanged(loading));
 }
 
 void BlimpContentsImpl::SetSizeAndScale(const gfx::Size& size,

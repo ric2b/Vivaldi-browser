@@ -10,16 +10,16 @@
  *     notice, this list of conditions and the following disclaimer in the
  *     documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
- * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #ifndef RTCStatsRequestImpl_h
@@ -38,33 +38,41 @@ class MediaStreamTrack;
 class RTCPeerConnection;
 class RTCStatsCallback;
 
-class RTCStatsRequestImpl final : public RTCStatsRequest, public ActiveDOMObject {
-    USING_GARBAGE_COLLECTED_MIXIN(RTCStatsRequestImpl);
-public:
-    static RTCStatsRequestImpl* create(ExecutionContext*, RTCPeerConnection*, RTCStatsCallback*, MediaStreamTrack*);
-    ~RTCStatsRequestImpl() override;
+class RTCStatsRequestImpl final : public RTCStatsRequest,
+                                  public ActiveDOMObject {
+  USING_GARBAGE_COLLECTED_MIXIN(RTCStatsRequestImpl);
 
-    RTCStatsResponseBase* createResponse() override;
-    bool hasSelector() override;
-    MediaStreamComponent* component() override;
+ public:
+  static RTCStatsRequestImpl* create(ExecutionContext*,
+                                     RTCPeerConnection*,
+                                     RTCStatsCallback*,
+                                     MediaStreamTrack*);
+  ~RTCStatsRequestImpl() override;
 
-    void requestSucceeded(RTCStatsResponseBase*) override;
+  RTCStatsResponseBase* createResponse() override;
+  bool hasSelector() override;
+  MediaStreamComponent* component() override;
 
-    // ActiveDOMObject
-    void stop() override;
+  void requestSucceeded(RTCStatsResponseBase*) override;
 
-    DECLARE_VIRTUAL_TRACE();
+  // ActiveDOMObject
+  void contextDestroyed() override;
 
-private:
-    RTCStatsRequestImpl(ExecutionContext*, RTCPeerConnection*, RTCStatsCallback*, MediaStreamTrack*);
+  DECLARE_VIRTUAL_TRACE();
 
-    void clear();
+ private:
+  RTCStatsRequestImpl(ExecutionContext*,
+                      RTCPeerConnection*,
+                      RTCStatsCallback*,
+                      MediaStreamTrack*);
 
-    Member<RTCStatsCallback> m_successCallback;
-    Member<MediaStreamComponent> m_component;
-    Member<RTCPeerConnection> m_requester;
+  void clear();
+
+  Member<RTCStatsCallback> m_successCallback;
+  Member<MediaStreamComponent> m_component;
+  Member<RTCPeerConnection> m_requester;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // RTCStatsRequestImpl_h
+#endif  // RTCStatsRequestImpl_h

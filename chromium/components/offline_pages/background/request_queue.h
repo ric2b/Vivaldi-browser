@@ -15,11 +15,14 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "components/offline_pages/background/save_page_request.h"
+#include "components/offline_pages/core/task_queue.h"
 #include "components/offline_pages/offline_page_item.h"
+#include "components/offline_pages/offline_store_types.h"
 
 namespace offline_pages {
 
 class RequestQueueStore;
+typedef StoreUpdateResult<SavePageRequest> UpdateRequestsResult;
 
 // Class responsible for managing save page requests.
 class RequestQueue {
@@ -32,6 +35,7 @@ class RequestQueue {
   enum class AddRequestResult {
     SUCCESS,
     STORE_FAILURE,
+    ALREADY_EXISTS,
     REQUEST_QUOTA_HIT,  // Cannot add a request with this namespace, as it has
                         // reached a quota of active requests.
   };
@@ -44,31 +48,21 @@ class RequestQueue {
                              // exist.
   };
 
-  // Type for a pair of request_id and result.
-  typedef std::vector<std::pair<int64_t, UpdateRequestResult>>
-      UpdateMultipleRequestResults;
-
   // Callback used for |GetRequests|.
   typedef base::Callback<void(GetRequestsResult,
-                              const std::vector<SavePageRequest>&)>
+                              std::vector<std::unique_ptr<SavePageRequest>>)>
       GetRequestsCallback;
 
   // Callback used for |AddRequest|.
   typedef base::Callback<void(AddRequestResult, const SavePageRequest& request)>
       AddRequestCallback;
 
+  // Callback used by |ChangeRequestsState|.
+  typedef base::Callback<void(std::unique_ptr<UpdateRequestsResult>)>
+      UpdateCallback;
+
   // Callback used by |UdpateRequest|.
   typedef base::Callback<void(UpdateRequestResult)> UpdateRequestCallback;
-
-  // Callback used by |ChangeState| for more than one update at a time.
-  typedef base::Callback<void(const UpdateMultipleRequestResults& results,
-                              const std::vector<SavePageRequest>& requests)>
-      UpdateMultipleRequestsCallback;
-
-  // Callback used by |RemoveRequests|.
-  typedef base::Callback<void(const UpdateMultipleRequestResults& results,
-                              const std::vector<SavePageRequest>& requests)>
-      RemoveRequestsCallback;
 
   explicit RequestQueue(std::unique_ptr<RequestQueueStore> store);
   ~RequestQueue();
@@ -93,22 +87,19 @@ class RequestQueue {
   // |callback|.  If a request id cannot be removed, this will still remove the
   // others.
   void RemoveRequests(const std::vector<int64_t>& request_ids,
-                      const RemoveRequestsCallback& callback);
+                      const UpdateCallback& callback);
 
-  // Changes the state to |new_state_ for requests matching the
+  // Changes the state to |new_state| for requests matching the
   // |request_ids|. Results are returned through |callback|.
-  // TODO(petewil): Instead of having one function per property,
-  // modify this to have a single update function that updates an entire
-  // request, and doesn't need to care what updates.
   void ChangeRequestsState(const std::vector<int64_t>& request_ids,
                            const SavePageRequest::RequestState new_state,
-                           const UpdateMultipleRequestsCallback& callback);
+                           const UpdateCallback& callback);
 
   void GetForUpdateDone(
       const RequestQueue::UpdateRequestCallback& update_callback,
       const SavePageRequest& update_request,
       bool success,
-      const std::vector<SavePageRequest>& requests);
+      std::vector<std::unique_ptr<SavePageRequest>> requests);
 
  private:
   // Callback used by |PurgeRequests|.
@@ -122,6 +113,9 @@ class RequestQueue {
   void PurgeRequests(const PurgeRequestsCallback& callback);
 
   std::unique_ptr<RequestQueueStore> store_;
+
+  // Task queue to serialize store access.
+  TaskQueue task_queue_;
 
   // Allows us to pass a weak pointer to callbacks.
   base::WeakPtrFactory<RequestQueue> weak_ptr_factory_;

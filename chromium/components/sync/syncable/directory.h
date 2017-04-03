@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include <deque>
+#include <memory>
 #include <set>
 #include <string>
 #include <unordered_map>
@@ -62,7 +63,8 @@ class Directory {
  public:
   typedef std::vector<int64_t> Metahandles;
 
-  typedef std::unordered_map<int64_t, EntryKernel*> MetahandlesMap;
+  typedef std::unordered_map<int64_t, std::unique_ptr<EntryKernel>>
+      MetahandlesMap;
   typedef std::unordered_map<std::string, EntryKernel*> IdsMap;
   typedef std::unordered_map<std::string, EntryKernel*> TagsMap;
   typedef std::string AttachmentIdUniqueId;
@@ -134,9 +136,9 @@ class Directory {
 
     KernelShareInfoStatus kernel_info_status;
     PersistedKernelInfo kernel_info;
-    EntryKernelSet dirty_metas;
+    OwnedEntryKernelSet dirty_metas;
     MetahandleSet metahandles_to_purge;
-    EntryKernelSet delete_journals;
+    OwnedEntryKernelSet delete_journals;
     MetahandleSet delete_journals_to_purge;
   };
 
@@ -169,9 +171,9 @@ class Directory {
     mutable base::Lock mutex;
 
     // Entries indexed by metahandle.  This container is considered to be the
-    // owner of all EntryKernels, which may be referened by the other
+    // owner of all EntryKernels, which may be referenced by the other
     // containers.  If you remove an EntryKernel from this map, you probably
-    // want to remove it from all other containers and delete it, too.
+    // want to remove it from all other containers.
     MetahandlesMap metahandles_map;
 
     // Entries indexed by id
@@ -607,7 +609,7 @@ class Directory {
   void DeleteEntry(const ScopedKernelLock& lock,
                    bool save_to_journal,
                    EntryKernel* entry,
-                   EntryKernelSet* entries_to_journal);
+                   OwnedEntryKernelSet* entries_to_journal);
 
   // A private version of the public GetMetaHandlesOfType for when you already
   // have a ScopedKernelLock.

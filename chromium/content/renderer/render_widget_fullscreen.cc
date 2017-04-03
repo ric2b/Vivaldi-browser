@@ -25,7 +25,7 @@ void RenderWidgetFullscreen::show(blink::WebNavigationPolicy) {
 
 RenderWidgetFullscreen::RenderWidgetFullscreen(
     CompositorDependencies* compositor_deps,
-    const blink::WebScreenInfo& screen_info)
+    const ScreenInfo& screen_info)
     : RenderWidget(compositor_deps,
                    blink::WebPopupTypeNone,
                    screen_info,
@@ -41,7 +41,7 @@ WebWidget* RenderWidgetFullscreen::CreateWebWidget() {
 }
 
 bool RenderWidgetFullscreen::Init(int32_t opener_id) {
-  DCHECK(!webwidget_);
+  DCHECK(!GetWebWidget());
 
   bool success = RenderWidget::DoInit(
       opener_id, CreateWebWidget(),

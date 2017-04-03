@@ -10,6 +10,7 @@
 #include "base/debug/alias.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/memory_coordinator_client_registry.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
@@ -17,6 +18,8 @@
 #include "base/values.h"
 #include "net/base/sdch_manager.h"
 #include "net/base/sdch_net_log_params.h"
+#include "net/log/net_log_event_type.h"
+#include "net/log/net_log_with_source.h"
 
 namespace net {
 
@@ -309,6 +312,7 @@ SdchOwner::SdchOwner(SdchManager* sdch_manager, URLRequestContext* context)
       creation_time_(clock_->Now()) {
   manager_->AddObserver(this);
   InitializePrefStore(pref_store_);
+  base::MemoryCoordinatorClientRegistry::GetInstance()->Register(this);
 }
 
 SdchOwner::~SdchOwner() {
@@ -337,6 +341,7 @@ SdchOwner::~SdchOwner() {
                               val / object_lifetime);
     }
   }
+  base::MemoryCoordinatorClientRegistry::GetInstance()->Unregister(this);
 }
 
 void SdchOwner::EnablePersistentStorage(
@@ -364,7 +369,7 @@ void SdchOwner::OnDictionaryFetched(base::Time last_used,
                                     int use_count,
                                     const std::string& dictionary_text,
                                     const GURL& dictionary_url,
-                                    const BoundNetLog& net_log,
+                                    const NetLogWithSource& net_log,
                                     bool was_from_cache) {
   struct DictionaryItem {
     base::Time last_used;
@@ -419,7 +424,7 @@ void SdchOwner::OnDictionaryFetched(base::Time last_used,
       max_total_dictionary_size_) {
     RecordDictionaryFate(DICTIONARY_FATE_FETCH_IGNORED_NO_SPACE);
     SdchManager::SdchErrorRecovery(SDCH_DICTIONARY_NO_ROOM);
-    net_log.AddEvent(NetLog::TYPE_SDCH_DICTIONARY_ERROR,
+    net_log.AddEvent(NetLogEventType::SDCH_DICTIONARY_ERROR,
                      base::Bind(&NetLogSdchDictionaryFetchProblemCallback,
                                 SDCH_DICTIONARY_NO_ROOM, dictionary_url, true));
     return;
@@ -434,7 +439,7 @@ void SdchOwner::OnDictionaryFetched(base::Time last_used,
   if (rv != SDCH_OK) {
     RecordDictionaryFate(DICTIONARY_FATE_FETCH_MANAGER_REFUSED);
     SdchManager::SdchErrorRecovery(rv);
-    net_log.AddEvent(NetLog::TYPE_SDCH_DICTIONARY_ERROR,
+    net_log.AddEvent(NetLogEventType::SDCH_DICTIONARY_ERROR,
                      base::Bind(&NetLogSdchDictionaryFetchProblemCallback, rv,
                                 dictionary_url, true));
     return;
@@ -672,7 +677,28 @@ void SdchOwner::SetFetcherForTesting(
 void SdchOwner::OnMemoryPressure(
     base::MemoryPressureListener::MemoryPressureLevel level) {
   DCHECK_NE(base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE, level);
+  ClearData();
+}
 
+void SdchOwner::OnMemoryStateChange(base::MemoryState state) {
+  // TODO(hajimehoshi): When the state changes, adjust the sizes of the caches
+  // to reduce the limits. SdchOwner doesn't have the ability to limit at
+  // present.
+  switch (state) {
+    case base::MemoryState::NORMAL:
+      break;
+    case base::MemoryState::THROTTLED:
+      ClearData();
+      break;
+    case base::MemoryState::SUSPENDED:
+    // Note: Not supported at present. Fall through.
+    case base::MemoryState::UNKNOWN:
+      NOTREACHED();
+      break;
+  }
+}
+
+void SdchOwner::ClearData() {
   for (DictionaryPreferenceIterator it(pref_store_); !it.IsAtEnd();
        it.Advance()) {
     int new_uses = it.use_count() - use_counts_at_load_[it.server_hash()];

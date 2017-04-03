@@ -28,17 +28,13 @@
 
 #include "platform/PlatformExport.h"
 #include "platform/graphics/Color.h"
-#include "wtf/PassRefPtr.h"
+#include "third_party/skia/include/core/SkRefCnt.h"
 
 class SkColorFilter;
 
 namespace blink {
 
-enum ColorSpace {
-    ColorSpaceDeviceRGB,
-    ColorSpaceSRGB,
-    ColorSpaceLinearRGB
-};
+enum ColorSpace { ColorSpaceDeviceRGB, ColorSpaceSRGB, ColorSpaceLinearRGB };
 
 namespace ColorSpaceUtilities {
 
@@ -47,16 +43,22 @@ namespace ColorSpaceUtilities {
 // If the conversion cannot be performed, or is a no-op (identity transform),
 // then 0 is returned.
 // (Note that a round-trip - f(B,A)[f(A,B)[x]] - is not lossless in general.)
-const uint8_t* getConversionLUT(ColorSpace dstColorSpace, ColorSpace srcColorSpace = ColorSpaceDeviceRGB);
+const uint8_t* getConversionLUT(ColorSpace dstColorSpace,
+                                ColorSpace srcColorSpace = ColorSpaceDeviceRGB);
 
-// Convert a Color assumed to be in the |srcColorSpace| into the |dstColorSpace|.
-Color convertColor(const Color& srcColor, ColorSpace dstColorSpace, ColorSpace srcColorSpace = ColorSpaceDeviceRGB);
+// Convert a Color assumed to be in the |srcColorSpace| into the
+// |dstColorSpace|.
+Color convertColor(const Color& srcColor,
+                   ColorSpace dstColorSpace,
+                   ColorSpace srcColorSpace = ColorSpaceDeviceRGB);
 
-// Create a color filter that will convert from |srcColorSpace| into |dstColorSpace|.
-PassRefPtr<SkColorFilter> createColorSpaceFilter(ColorSpace srcColorSpace, ColorSpace dstColorSpace);
+// Create a color filter that will convert from |srcColorSpace| into
+// |dstColorSpace|.
+sk_sp<SkColorFilter> createColorSpaceFilter(ColorSpace srcColorSpace,
+                                            ColorSpace dstColorSpace);
 
-} // namespace ColorSpaceUtilities
+}  // namespace ColorSpaceUtilities
 
-} // namespace blink
+}  // namespace blink
 
-#endif // ColorSpace_h
+#endif  // ColorSpace_h

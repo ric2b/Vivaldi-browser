@@ -1,12 +1,15 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-tabs/paper-tab.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-tabs/paper-tabs.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_toolbar/cr_toolbar.html">
+<link rel="import" href="chrome://history/browser_service.html">
 <link rel="import" href="chrome://history/icons.html">
 <link rel="import" href="chrome://history/shared_style.html">
+
+<!-- Lazy loaded: iron-dropdown, paper-button, paper-icon-button-light,
+  paper-tab, paper-tabs. -->
 
 <dom-module id="history-toolbar">
   <template>
@@ -36,11 +39,57 @@
       }
 
       cr-toolbar {
+        --cr-toolbar-field-end-padding: 0;
         --cr-toolbar-field-margin: var(--side-bar-width);
+        --cr-toolbar-right-content-wide: {
+          position: absolute;
+          right: 0;
+        };
+      }
+
+      :host-context([dir=rtl]) cr-toolbar {
+        --cr-toolbar-right-content-wide: {
+          position: absolute;
+          left: 0;
+        };
       }
 
       :host([has-drawer]) cr-toolbar {
         --cr-toolbar-field-margin: 0;
+      }
+
+      cr-toolbar .more-actions {
+        -webkit-margin-end: 12px;
+      }
+
+      #info-button {
+        /* Additional styles for unresolved <button>. */
+        background: none;
+        border: none;
+        color: inherit;
+        height: 32px;
+        margin: 6px;
+        outline: none;
+        padding: 0;
+        width: 32px;
+      }
+
+      #info-button-icon {
+        height: 20px;
+        width: 20px;
+      }
+
+      iron-dropdown {
+        margin-top: 28px;  /** Height of icon + 8px spacing. */
+      }
+
+      .dropdown-content {
+        @apply(--shadow-elevation-2dp);
+        background-color: white;
+        border-radius: 2px;
+        color: var(--paper-grey-800);
+        overflow: hidden;
+        padding: 12px 20px;
       }
 
       :host(:not([has-drawer])) #overlay-wrapper {
@@ -125,17 +174,44 @@
       }
     </style>
     <div id="toolbar-container">
-      <cr-toolbar id="main-toolbar" page-name="$i18n{title}"
-          clear-label="$i18n{clearSearch}" search-prompt="$i18n{searchPrompt}"
-          hidden$="[[itemsSelected_]]" spinner-active="[[spinnerActive]]"
-          show-menu="[[hasDrawer]]" menu-label="$i18n{historyMenuButton}"
-          on-search-changed="onSearchChanged_">
+      <cr-toolbar id="main-toolbar"
+          page-name="$i18n{title}"
+          clear-label="$i18n{clearSearch}"
+          search-prompt="$i18n{searchPrompt}"
+          hidden$="[[itemsSelected_]]"
+          spinner-active="[[spinnerActive]]"
+          show-menu="[[hasDrawer]]"
+          show-menu-promo="[[showMenuPromo_]]"
+          menu-label="$i18n{historyMenuButton}"
+          menu-promo="$i18n{menuPromo}"
+          close-menu-promo="$i18n{closeMenuPromo}"
+          on-search-changed="onSearchChanged_"
+          on-cr-menu-promo-shown="onMenuPromoShown_">
+        <div class="more-actions">
+          <template is="dom-if" if="[[showSyncNotice]]">
+            <button is="paper-icon-button-light" id="info-button"
+                on-click="onInfoButtonTap_"
+                aria-label="$i18n{hasSyncedResultsDescription}">
+              <iron-icon icon="history:info-outline" id="info-button-icon">
+              </iron-icon>
+            </button>
+          </template>
+        </div>
       </cr-toolbar>
+      <template is="cr-lazy-render" id="syncNotice">
+        <iron-dropdown vertical-align="top" horizontal-align="right"
+            allow-outside-scroll>
+          <div class="dropdown-content">
+            $i18nRaw{hasSyncedResults}
+          </div>
+        </iron-dropdown>
+      </template>
       <template is="dom-if" if="[[itemsSelected_]]">
         <div id="overlay-wrapper" hidden$="[[!itemsSelected_]]">
           <div id="overlay-buttons">
             <paper-icon-button icon="cr:clear" id="cancel-icon-button"
-                on-tap="onClearSelectionTap_"></paper-icon-button>
+                on-tap="onClearSelectionTap_" title="$i18n{cancel}">
+            </paper-icon-button>
             <div id="number-selected">[[numberOfItemsSelected_(count)]]</div>
             <paper-button id="cancel-button" on-tap="onClearSelectionTap_">
               $i18n{cancel}

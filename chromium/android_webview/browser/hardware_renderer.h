@@ -10,6 +10,7 @@
 #include "android_webview/browser/compositor_id.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "cc/surfaces/frame_sink_id.h"
 #include "cc/surfaces/surface_factory_client.h"
 #include "cc/surfaces/surface_id.h"
 
@@ -44,7 +45,7 @@ class HardwareRenderer : public cc::SurfaceFactoryClient {
   void ReturnResourcesInChildFrame();
   void ReturnResourcesToCompositor(const cc::ReturnedResourceArray& resources,
                                    const CompositorID& compositor_id,
-                                   uint32_t output_surface_id);
+                                   uint32_t compositor_frame_sink_id);
 
   void AllocateSurface();
   void DestroySurface();
@@ -66,14 +67,16 @@ class HardwareRenderer : public cc::SurfaceFactoryClient {
   std::unique_ptr<ChildFrame> child_frame_;
 
   const scoped_refptr<SurfacesInstance> surfaces_;
+  cc::FrameSinkId frame_sink_id_;
   const std::unique_ptr<cc::SurfaceIdAllocator> surface_id_allocator_;
   std::unique_ptr<cc::SurfaceFactory> surface_factory_;
-  cc::SurfaceId child_id_;
+  cc::LocalFrameId child_id_;
   CompositorID compositor_id_;
   // HardwareRenderer guarantees resources are returned in the order of
-  // output_surface_id, and resources for old output surfaces are dropped.
-  uint32_t last_committed_output_surface_id_;
-  uint32_t last_submitted_output_surface_id_;
+  // compositor_frame_sink_id, and resources for old output surfaces are
+  // dropped.
+  uint32_t last_committed_compositor_frame_sink_id_;
+  uint32_t last_submitted_compositor_frame_sink_id_;
 
   DISALLOW_COPY_AND_ASSIGN(HardwareRenderer);
 };

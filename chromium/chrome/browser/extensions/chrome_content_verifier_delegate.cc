@@ -13,7 +13,7 @@
 #include "base/command_line.h"
 #include "base/syslog_logging.h"
 #include "base/metrics/field_trial.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/version.h"
 #include "build/build_config.h"

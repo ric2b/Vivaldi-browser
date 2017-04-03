@@ -65,7 +65,6 @@ Para ver mais informações sobre privacidade, consulte a Política de Privacida
 <translation id="2359808026110333948">Continuar</translation>
 <translation id="2366718077645204424">Não é possível acessar o host. Isso se deve, provavelmente, à configuração da rede que você está usando.</translation>
 <translation id="2370754117186920852"><ph name="OPTIONAL_OFFLINE_REASON" />  Visto on-line pela última vez <ph name="RELATIVE_TIMESTAMP" />.</translation>
-<translation id="2498359688066513246">Central de ajuda e feedback</translation>
 <translation id="2499160551253595098">Ajude-nos a melhorar a Área de trabalho remota do Google Chrome por meio da coleta de estatísticas de uso e de relatórios de falhas.</translation>
 <translation id="2512228156274966424">OBSERVAÇÃO: para garantir que todos os atalhos do teclado estejam disponíveis, você pode configurar a Área de trabalho remota do Google Chrome para "Abrir como janela".</translation>
 <translation id="2540992418118313681">Gostaria de compartilhar este computador para que outro usuário o veja e controle?</translation>
@@ -264,6 +263,7 @@ remota do Google Chrome</translation>
 <translation id="7948001860594368197">Opções de tela</translation>
 <translation id="7970576581263377361">Falha na autenticação. Faça login novamente no Chromium.</translation>
 <translation id="7981525049612125370">A sessão remota expirou.</translation>
+<translation id="8041089156583427627">Enviar comentários</translation>
 <translation id="8041721485428375115">Ao fazer o download do instalador do host da Área de trabalho remota do Google Chrome, você concorda com os <ph name="LINK_BEGIN" />Termos de Serviço<ph name="LINK_END" /> do Google.</translation>
 <translation id="8073845705237259513">Para usar a Área de trabalho remota do Google, adicione uma Conta do Google a seu dispositivo.</translation>
 <translation id="80739703311984697">O host remoto requer a autenticação em um website de terceiros. Para continuar, é preciso conceder ao Chromoting acesso a permissões adicionais para acessar este endereço:</translation>
@@ -287,6 +287,7 @@ remota do Google Chrome</translation>
 <translation id="8548209692293300397">Você fez login anteriormente como <ph name="USER_NAME" /> (<ph name="USER_EMAIL" />).  Para acessar seus computadores nessa conta, <ph name="LINK_BEGIN" />faça login no Google Chrome<ph name="LINK_END" /> usando essa conta e reinstale a Área de trabalho remota do Google Chrome.</translation>
 <translation id="8642984861538780905">Regular</translation>
 <translation id="8712909229180978490">Não consigo ver meus arquivos salvos on-line no Google Drive.</translation>
+<translation id="8743328882720071828">Deseja permitir que <ph name="CLIENT_USERNAME" /> veja e controle seu computador?</translation>
 <translation id="8759753423332885148">Saiba mais.</translation>
 <translation id="8791202241915690908">Fazer o download do instalador do host do Chromoting</translation>
 <translation id="894763922177556086">Boa</translation>

@@ -8,40 +8,35 @@
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/dom/DOMHighResTimeStamp.h"
 #include "core/dom/DOMTimeStamp.h"
-#include "modules/ModulesExport.h"
+#include "modules/sensor/SensorProxy.h"
 
 namespace blink {
 
-class MODULES_EXPORT SensorReading : public GarbageCollectedFinalized<SensorReading>, public ScriptWrappable {
-    DEFINE_WRAPPERTYPEINFO();
+class ExecutionContext;
+class ScriptState;
 
-public:
-    static SensorReading* create()
-    {
-        return new SensorReading;
-    }
+class SensorReading : public GarbageCollectedFinalized<SensorReading>,
+                      public ScriptWrappable {
+  DEFINE_WRAPPERTYPEINFO();
 
-    static SensorReading* create(bool providesTimeStamp, DOMHighResTimeStamp timestamp)
-    {
-        return new SensorReading(providesTimeStamp, timestamp);
-    }
+ public:
+  DECLARE_VIRTUAL_TRACE();
 
-    virtual ~SensorReading();
+  DOMHighResTimeStamp timeStamp(ScriptState*) const;
 
-    DOMHighResTimeStamp timeStamp(bool& isNull);
+  // Returns 'true' if the current reading value is different than the given
+  // previous one; otherwise returns 'false'.
+  virtual bool isReadingUpdated(const SensorProxy::Reading& previous) const = 0;
 
-    void setTimeStamp(DOMHighResTimeStamp time) { m_timeStamp = time; }
+  virtual ~SensorReading();
 
-    DECLARE_VIRTUAL_TRACE();
+ protected:
+  explicit SensorReading(SensorProxy*);
 
-protected:
-    bool m_canProvideTimeStamp;
-    DOMHighResTimeStamp m_timeStamp;
-
-    SensorReading();
-    SensorReading(bool providesTimeStamp, DOMHighResTimeStamp timestamp);
+ protected:
+  Member<SensorProxy> m_sensorProxy;
 };
 
-} // namepsace blink
+}  // namepsace blink
 
-#endif // SensorReading_h
+#endif  // SensorReading_h

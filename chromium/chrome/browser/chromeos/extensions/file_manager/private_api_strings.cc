@@ -11,6 +11,7 @@
 #include "base/sys_info.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/file_manager/open_with_browser.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/system/statistics_provider.h"
 #include "extensions/common/extension_l10n_util.h"
@@ -184,8 +185,12 @@ void AddStringsForGallery(base::DictionaryValue* dict) {
   SET_STRING("GALLERY_EXPOSURE", IDS_FILE_BROWSER_GALLERY_EXPOSURE);
   SET_STRING("GALLERY_FILE_EXISTS", IDS_FILE_BROWSER_GALLERY_FILE_EXISTS);
   SET_STRING("GALLERY_FIXED", IDS_FILE_BROWSER_GALLERY_FIXED);
+  SET_STRING("GALLERY_FIXRATIO", IDS_FILE_BROWSER_GALLERY_FIXRATIO);
+  SET_STRING("GALLERY_HEIGHT", IDS_FILE_BROWSER_GALLERY_HEIGHT);
   SET_STRING("GALLERY_IMAGE_ERROR", IDS_FILE_BROWSER_GALLERY_IMAGE_ERROR);
   SET_STRING("GALLERY_IMAGE_OFFLINE", IDS_FILE_BROWSER_GALLERY_IMAGE_OFFLINE);
+  SET_STRING("GALLERY_RESIZE", IDS_FILE_BROWSER_GALLERY_RESIZE);
+  SET_STRING("GALLERY_INVALIDVALUE", IDS_FILE_BROWSER_GALLERY_INVALIDVALUE);
   SET_STRING("GALLERY_ITEMS_SELECTED", IDS_FILE_BROWSER_GALLERY_ITEMS_SELECTED);
   SET_STRING("GALLERY_NO_IMAGES", IDS_FILE_BROWSER_GALLERY_NO_IMAGES);
   SET_STRING("GALLERY_OK_LABEL", IDS_FILE_BROWSER_OK_LABEL);
@@ -211,6 +216,7 @@ void AddStringsForGallery(base::DictionaryValue* dict) {
   SET_STRING("GALLERY_THUMBNAIL", IDS_FILE_BROWSER_GALLERY_THUMBNAIL);
   SET_STRING("GALLERY_UNDO", IDS_FILE_BROWSER_GALLERY_UNDO);
   SET_STRING("GALLERY_DONE", IDS_FILE_BROWSER_GALLERY_DONE);
+  SET_STRING("GALLERY_WIDTH", IDS_FILE_BROWSER_GALLERY_WIDTH);
 }
 
 void AddStringsForMediaPlayer(base::DictionaryValue* dict) {
@@ -347,7 +353,7 @@ FileManagerPrivateGetStringsFunction::FileManagerPrivateGetStringsFunction() {
 FileManagerPrivateGetStringsFunction::~FileManagerPrivateGetStringsFunction() {
 }
 
-bool FileManagerPrivateGetStringsFunction::RunSync() {
+ExtensionFunction::ResponseAction FileManagerPrivateGetStringsFunction::Run() {
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
 
   AddStringsForDrive(dict.get());
@@ -467,6 +473,7 @@ bool FileManagerPrivateGetStringsFunction::RunSync() {
   SET_STRING("SORT_BUTTON_TOOLTIP", IDS_FILE_BROWSER_SORT_BUTTON_TOOLTIP);
   SET_STRING("DETAIL_BUTTON_TOOLTIP", IDS_FILE_BROWSER_DETAIL_BUTTON_TOOLTIP);
   SET_STRING("GEAR_BUTTON_TOOLTIP", IDS_FILE_BROWSER_GEAR_BUTTON_TOOLTIP);
+  SET_STRING("GET_INFO_BUTTON_LABEL", IDS_FILE_BROWSER_GET_INFO_BUTTON_LABEL);
   SET_STRING("HOSTED_OFFLINE_MESSAGE", IDS_FILE_BROWSER_HOSTED_OFFLINE_MESSAGE);
   SET_STRING("HOSTED_OFFLINE_MESSAGE_PLURAL",
              IDS_FILE_BROWSER_HOSTED_OFFLINE_MESSAGE_PLURAL);
@@ -676,10 +683,12 @@ bool FileManagerPrivateGetStringsFunction::RunSync() {
 
   dict->SetBoolean("PDF_VIEW_ENABLED",
                    file_manager::util::ShouldBeOpenedWithPlugin(
-                       GetProfile(), FILE_PATH_LITERAL(".pdf")));
+                       Profile::FromBrowserContext(browser_context()),
+                       FILE_PATH_LITERAL(".pdf")));
   dict->SetBoolean("SWF_VIEW_ENABLED",
                    file_manager::util::ShouldBeOpenedWithPlugin(
-                       GetProfile(), FILE_PATH_LITERAL(".swf")));
+                       Profile::FromBrowserContext(browser_context()),
+                       FILE_PATH_LITERAL(".swf")));
   dict->SetString("CHROMEOS_RELEASE_BOARD",
                   base::SysInfo::GetLsbReleaseBoard());
   dict->SetString(
@@ -703,9 +712,8 @@ bool FileManagerPrivateGetStringsFunction::RunSync() {
 
   const std::string& app_locale = g_browser_process->GetApplicationLocale();
   webui::SetLoadTimeDataDefaults(app_locale, dict.get());
-  SetResult(std::move(dict));
 
-  return true;
+  return RespondNow(OneArgument(std::move(dict)));
 }
 
 }  // namespace extensions

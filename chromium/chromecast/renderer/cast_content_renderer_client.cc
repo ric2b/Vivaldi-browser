@@ -5,30 +5,38 @@
 #include "chromecast/renderer/cast_content_renderer_client.h"
 
 #include <stdint.h>
+#include <string>
 
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chromecast/base/chromecast_switches.h"
 #include "chromecast/common/media/cast_media_client.h"
 #include "chromecast/crash/cast_crash_keys.h"
+#include "chromecast/renderer/cast_gin_runner.h"
 #include "chromecast/renderer/cast_media_load_deferrer.h"
-#include "chromecast/renderer/cast_render_thread_observer.h"
 #include "chromecast/renderer/key_systems_cast.h"
-#include "chromecast/renderer/media/chromecast_media_renderer_factory.h"
 #include "chromecast/renderer/media/media_caps_observer_impl.h"
 #include "components/network_hints/renderer/prescient_networking_dispatcher.h"
+#include "content/grit/content_resources.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/render_view.h"
+#include "gin/modules/module_registry.h"
+#include "gin/per_context_data.h"
+#include "gin/public/context_holder.h"
 #include "media/base/media.h"
 #include "services/shell/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/platform/WebColor.h"
 #include "third_party/WebKit/public/web/WebFrameWidget.h"
+#include "third_party/WebKit/public/web/WebKit.h"
+#include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebSettings.h"
 #include "third_party/WebKit/public/web/WebView.h"
+#include "ui/base/resource/resource_bundle.h"
 
 #if defined(OS_ANDROID)
 #include "media/base/android/media_codec_util.h"
@@ -76,8 +84,6 @@ void CastContentRendererClient::RenderThreadStarted() {
 
   chromecast::media::CastMediaClient::Initialize();
 
-  cast_observer_.reset(new CastRenderThreadObserver());
-
   prescient_networking_dispatcher_.reset(
       new network_hints::PrescientNetworkingDispatcher());
 
@@ -114,22 +120,6 @@ void CastContentRendererClient::AddSupportedKeySystems(
   AddChromecastKeySystems(key_systems_properties, false);
 }
 
-#if !defined(OS_ANDROID)
-std::unique_ptr<::media::RendererFactory>
-CastContentRendererClient::CreateMediaRendererFactory(
-    ::content::RenderFrame* render_frame,
-    ::media::GpuVideoAcceleratorFactories* gpu_factories,
-    const scoped_refptr<::media::MediaLog>& media_log) {
-  const base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
-  if (!cmd_line->HasSwitch(switches::kEnableCmaMediaPipeline))
-    return nullptr;
-
-  return std::unique_ptr<::media::RendererFactory>(
-      new chromecast::media::ChromecastMediaRendererFactory(
-          gpu_factories, render_frame->GetRoutingID()));
-}
-#endif
-
 blink::WebPrescientNetworking*
 CastContentRendererClient::GetPrescientNetworking() {
   return prescient_networking_dispatcher_.get();
@@ -146,6 +136,45 @@ void CastContentRendererClient::DeferMediaLoad(
 
   // Lifetime is tied to |render_frame| via content::RenderFrameObserver.
   new CastMediaLoadDeferrer(render_frame, closure);
+}
+
+void CastContentRendererClient::RunScriptsAtDocumentStart(
+    content::RenderFrame* render_frame) {
+  // This method enables Mojo bindings in JavaScript for Chromecast.
+
+  v8::HandleScope handle_scope(blink::mainThreadIsolate());
+  v8::Local<v8::Context> context =
+      render_frame->GetWebFrame()->mainWorldScriptContext();
+
+  // CastGinRunner manages its own lifetime.
+  CastGinRunner* runner = new CastGinRunner(render_frame);
+  gin::Runner::Scope scoper(runner);
+
+  // Initialize AMD API for Mojo.
+  render_frame->EnsureMojoBuiltinsAreAvailable(context->GetIsolate(), context);
+  gin::ModuleRegistry::InstallGlobals(context->GetIsolate(), context->Global());
+
+  // Inject JavaScript files in the correct dependency order.
+  static const int mojo_resource_ids[] = {
+      IDR_MOJO_UNICODE_JS,
+      IDR_MOJO_BUFFER_JS,
+      IDR_MOJO_CODEC_JS,
+      IDR_MOJO_CONNECTOR_JS,
+      IDR_MOJO_VALIDATOR_JS,
+      IDR_MOJO_ROUTER_JS,
+      IDR_MOJO_BINDINGS_JS,
+      IDR_MOJO_CONNECTION_JS,
+  };
+  for (size_t i = 0; i < arraysize(mojo_resource_ids); i++) {
+    ExecuteJavaScript(render_frame, mojo_resource_ids[i]);
+  }
+}
+
+void ExecuteJavaScript(content::RenderFrame* render_frame, int resource_id) {
+  const std::string& js_string = ui::ResourceBundle::GetSharedInstance()
+                                     .GetRawDataResource(resource_id)
+                                     .as_string();
+  render_frame->ExecuteJavaScript(base::UTF8ToUTF16(js_string));
 }
 
 }  // namespace shell

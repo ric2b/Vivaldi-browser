@@ -33,6 +33,7 @@ ColorSpace::TransferID all_transfers[] = {
     ColorSpace::TransferID::IEC61966_2_4, ColorSpace::TransferID::BT1361_ECG,
     ColorSpace::TransferID::IEC61966_2_1, ColorSpace::TransferID::BT2020_10,
     ColorSpace::TransferID::BT2020_12,    ColorSpace::TransferID::SMPTEST2084,
+    ColorSpace::TransferID::ARIB_STD_B67,
     // This one is weird as the non-linear numbers are not between 0 and 1.
     // TODO(hubbe): Test this separately.
     //  ColorSpace::TransferID::SMPTEST428_1,
@@ -52,8 +53,10 @@ ColorSpace::MatrixID all_matrices[] = {
     ColorSpace::MatrixID::YDZDX,
 };
 
-ColorSpace::RangeID all_ranges[] = {ColorSpace::RangeID::FULL,
-                                    ColorSpace::RangeID::LIMITED};
+ColorSpace::RangeID all_ranges[] = {ColorSpace::RangeID::UNSPECIFIED,
+                                    ColorSpace::RangeID::FULL,
+                                    ColorSpace::RangeID::LIMITED,
+                                    ColorSpace::RangeID::DERIVED};
 
 TEST(SimpleColorSpace, BT709toSRGB) {
   ColorSpace bt709 = ColorSpace::CreateREC709();

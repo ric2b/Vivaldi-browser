@@ -161,8 +161,8 @@ class FakeAutocompleteProviderClient : public MockAutocompleteProviderClient {
   FakeAutocompleteProviderClient(bool create_history_db) {
     set_template_url_service(base::MakeUnique<TemplateURLService>(nullptr, 0));
     if (history_dir_.CreateUniqueTempDir()) {
-      history_service_ = history::CreateHistoryService(
-          history_dir_.path(), create_history_db);
+      history_service_ = history::CreateHistoryService(history_dir_.GetPath(),
+                                                       create_history_db);
     }
   }
 
@@ -907,8 +907,8 @@ TEST_F(HistoryURLProviderTest, CullSearchResults) {
   data.SetKeyword(ASCIIToUTF16("TestEngine"));
   data.SetURL("http://testsearch.com/?q={searchTerms}");
   TemplateURLService* template_url_service = client_->GetTemplateURLService();
-  TemplateURL* template_url = new TemplateURL(data);
-  template_url_service->Add(template_url);
+  TemplateURL* template_url =
+      template_url_service->Add(base::MakeUnique<TemplateURL>(data));
   template_url_service->SetUserSelectedDefaultSearchProvider(template_url);
   template_url_service->Load();
 

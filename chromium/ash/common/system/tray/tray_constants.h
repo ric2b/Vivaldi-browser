@@ -24,13 +24,7 @@ extern const int kBubblePaddingVerticalSide;
 
 extern const int kTrayBubbleAnchorTopInsetBottomAnchor;
 
-extern const int kTrayImageItemHorizontalPaddingBottomAlignment;
 extern const int kTrayImageItemHorizontalPaddingVerticalAlignment;
-extern const int kTrayImageItemVerticalPaddingVerticalAlignment;
-
-extern const int kTrayImeIconSize;
-extern const int kTrayImeBottomRowPadding;
-extern const int kTrayImeBottomRowPaddingBetweenItems;
 
 ASH_EXPORT extern const int kTrayItemSize;
 
@@ -46,6 +40,10 @@ extern const int kTrayPopupPaddingHorizontal;
 extern const int kTrayPopupPaddingBetweenItems;
 extern const int kTrayPopupTextSpacingVertical;
 extern const int kTrayPopupUserCardVerticalPadding;
+
+// Padding used to adjust the slider position in volume row and brightness
+// row horizontally.
+extern const int kTrayPopupSliderPaddingMD;
 
 extern const int kTrayPopupDetailsIconWidth;
 extern const int kTrayPopupDetailsLabelExtraLeftMargin;
@@ -74,14 +72,17 @@ extern const int kNotificationIconWidth;
 extern const int kNotificationButtonWidth;
 extern const int kTrayNotificationContentsWidth;
 
-extern const int kMessageCenterBubblePadding;
-
 // Extra padding used to adjust hitting region around tray items.
 extern const int kHitRegionPadding;
 
 // Color and width of a line used to separate tray items in the shelf.
 extern const SkColor kSeparatorColor;
 extern const int kSeparatorWidth;
+
+// The color and height of the horizontal separator used in the material design
+// system menu (i.e., the vertical line used to separate elements horizontally).
+extern const SkColor kHorizontalSeparatorColor;
+extern const int kHorizontalSeparatorHeight;
 
 // The size and foreground color of the icons appearing in the material design
 // system tray.
@@ -92,6 +93,12 @@ extern const SkColor kTrayIconColor;
 // system menu.
 extern const int kMenuIconSize;
 extern const SkColor kMenuIconColor;
+// The size of buttons in the system menu.
+extern const int kMenuButtonSize;
+// The vertical padding for the system menu separator.
+extern const int kMenuSeparatorVerticalPadding;
+// The horizontal padding for the system menu separator.
+extern const int kMenuExtraMarginFromLeftEdge;
 
 enum TrayConstant {
   // A legacy height value used in non-MD calculations for applying additional
@@ -112,6 +119,12 @@ enum TrayConstant {
   // the shelf orientation, so this constant does not specify the true
   // user-visible button bounds.
   VIRTUAL_KEYBOARD_BUTTON_SIZE,
+
+  // The icon size of opt-in IME menu tray.
+  TRAY_IME_MENU_ICON,
+
+  // Extra padding used beside a single icon in the tray area of the shelf.
+  TRAY_IMAGE_ITEM_PADDING,
 };
 
 int GetTrayConstant(TrayConstant constant);

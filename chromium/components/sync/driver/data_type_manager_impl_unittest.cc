@@ -4,35 +4,27 @@
 
 #include "components/sync/driver/data_type_manager_impl.h"
 
-#include "base/compiler_specific.h"
+#include <memory>
+
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/core/activation_context.h"
 #include "components/sync/core/configure_reason.h"
-#include "components/sync/driver/backend_data_type_configurer.h"
 #include "components/sync/driver/data_type_encryption_handler.h"
 #include "components/sync/driver/data_type_manager_observer.h"
 #include "components/sync/driver/data_type_status_table.h"
 #include "components/sync/driver/fake_data_type_controller.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace sync_driver {
-
-using syncer::SyncError;
-using syncer::ModelType;
-using syncer::ModelTypeSet;
-using syncer::ModelTypeToString;
-using syncer::BOOKMARKS;
-using syncer::APPS;
-using syncer::PASSWORDS;
-using syncer::PREFERENCES;
-using syncer::NIGORI;
+namespace syncer {
 
 namespace {
 
 // Helper for unioning with control types.
 ModelTypeSet AddControlTypesTo(ModelTypeSet types) {
-  ModelTypeSet result = syncer::ControlTypes();
+  ModelTypeSet result = ControlTypes();
   result.PutAll(types);
   return result;
 }
@@ -75,8 +67,8 @@ class FakeBackendDataTypeConfigurer : public BackendDataTypeConfigurer {
   FakeBackendDataTypeConfigurer() : configure_call_count_(0) {}
   ~FakeBackendDataTypeConfigurer() override {}
 
-  syncer::ModelTypeSet ConfigureDataTypes(
-      syncer::ConfigureReason reason,
+  ModelTypeSet ConfigureDataTypes(
+      ConfigureReason reason,
       const DataTypeConfigStateMap& config_state_map,
       const base::Callback<void(ModelTypeSet, ModelTypeSet)>& ready_task,
       const base::Callback<void()>& retry_callback) override {
@@ -97,22 +89,22 @@ class FakeBackendDataTypeConfigurer : public BackendDataTypeConfigurer {
     return ready_types_;
   }
 
-  void ActivateDirectoryDataType(syncer::ModelType type,
-                                 syncer::ModelSafeGroup group,
+  void ActivateDirectoryDataType(ModelType type,
+                                 ModelSafeGroup group,
                                  ChangeProcessor* change_processor) override {
     activated_types_.Put(type);
   }
-  void DeactivateDirectoryDataType(syncer::ModelType type) override {
+  void DeactivateDirectoryDataType(ModelType type) override {
     activated_types_.Remove(type);
   }
 
-  void ActivateNonBlockingDataType(syncer::ModelType type,
-                                   std::unique_ptr<syncer_v2::ActivationContext>
-                                       activation_context) override {
+  void ActivateNonBlockingDataType(
+      ModelType type,
+      std::unique_ptr<ActivationContext> activation_context) override {
     // TODO(stanisc): crbug.com/515962: Add test coverage.
   }
 
-  void DeactivateNonBlockingDataType(syncer::ModelType type) override {
+  void DeactivateNonBlockingDataType(ModelType type) override {
     // TODO(stanisc): crbug.com/515962: Add test coverage.
   }
 
@@ -225,8 +217,7 @@ ModelTypeSet FakeDataTypeEncryptionHandler::GetEncryptedDataTypes() const {
 class TestDataTypeManager : public DataTypeManagerImpl {
  public:
   TestDataTypeManager(
-      const syncer::WeakHandle<syncer::DataTypeDebugInfoListener>&
-          debug_info_listener,
+      const WeakHandle<DataTypeDebugInfoListener>& debug_info_listener,
       BackendDataTypeConfigurer* configurer,
       const DataTypeController::TypeMap* controllers,
       const DataTypeEncryptionHandler* encryption_handler,
@@ -236,7 +227,7 @@ class TestDataTypeManager : public DataTypeManagerImpl {
                             encryption_handler,
                             configurer,
                             observer),
-        custom_priority_types_(syncer::ControlTypes()) {}
+        custom_priority_types_(ControlTypes()) {}
 
   void set_priority_types(const ModelTypeSet& priority_types) {
     custom_priority_types_ = priority_types;
@@ -271,9 +262,9 @@ class SyncDataTypeManagerImplTest : public testing::Test {
 
  protected:
   void SetUp() override {
-    dtm_.reset(new TestDataTypeManager(
-        syncer::WeakHandle<syncer::DataTypeDebugInfoListener>(), &configurer_,
-        &controllers_, &encryption_handler_, &observer_));
+    dtm_.reset(new TestDataTypeManager(WeakHandle<DataTypeDebugInfoListener>(),
+                                       &configurer_, &controllers_,
+                                       &encryption_handler_, &observer_));
   }
 
   void SetConfigureStartExpectation() { observer_.ExpectStart(); }
@@ -288,7 +279,7 @@ class SyncDataTypeManagerImplTest : public testing::Test {
 
   // Configure the given DTM with the given desired types.
   void Configure(DataTypeManagerImpl* dtm, const ModelTypeSet& desired_types) {
-    dtm->Configure(desired_types, syncer::CONFIGURE_REASON_RECONFIGURATION);
+    dtm->Configure(desired_types, CONFIGURE_REASON_RECONFIGURATION);
   }
 
   // Finish downloading for the given DTM. Should be done only after
@@ -299,27 +290,38 @@ class SyncDataTypeManagerImplTest : public testing::Test {
     EXPECT_EQ(DataTypeManager::CONFIGURING, dtm.state());
     ASSERT_FALSE(configurer_.last_ready_task().is_null());
     configurer_.last_ready_task().Run(
-        syncer::Difference(types_to_configure, failed_download_types),
+        Difference(types_to_configure, failed_download_types),
         failed_download_types);
   }
 
   // Adds a fake controller for the given type to |controllers_|.
   // Should be called only before setting up the DTM.
   void AddController(ModelType model_type) {
-    controllers_[model_type] = new FakeDataTypeController(model_type);
+    controllers_[model_type] =
+        base::MakeUnique<FakeDataTypeController>(model_type);
+  }
+
+  // Convenience method to create a controller and set some parameters.
+  void AddController(ModelType model_type,
+                     bool should_load_model_before_configure,
+                     bool should_delay_model_load) {
+    AddController(model_type);
+    GetController(model_type)
+        ->SetShouldLoadModelBeforeConfigure(should_load_model_before_configure);
+    if (should_delay_model_load) {
+      GetController(model_type)->SetDelayModelLoad();
+    }
   }
 
   // Gets the fake controller for the given type, which should have
   // been previously added via AddController().
-  scoped_refptr<FakeDataTypeController> GetController(
-      ModelType model_type) const {
+  FakeDataTypeController* GetController(ModelType model_type) const {
     DataTypeController::TypeMap::const_iterator it =
         controllers_.find(model_type);
     if (it == controllers_.end()) {
       return NULL;
     }
-    return make_scoped_refptr(
-        static_cast<FakeDataTypeController*>(it->second.get()));
+    return static_cast<FakeDataTypeController*>(it->second.get());
   }
 
   void FailEncryptionFor(ModelTypeSet encrypted_types) {
@@ -878,11 +880,11 @@ TEST_F(SyncDataTypeManagerImplTest, MigrateAll) {
   // Pretend we were told to migrate all types.
   ModelTypeSet to_migrate;
   to_migrate.Put(BOOKMARKS);
-  to_migrate.PutAll(syncer::ControlTypes());
+  to_migrate.PutAll(ControlTypes());
 
   SetConfigureStartExpectation();
   SetConfigureDoneExpectation(DataTypeManager::OK, DataTypeStatusTable());
-  dtm_->PurgeForMigration(to_migrate, syncer::CONFIGURE_REASON_MIGRATION);
+  dtm_->PurgeForMigration(to_migrate, CONFIGURE_REASON_MIGRATION);
   EXPECT_EQ(DataTypeManager::CONFIGURING, dtm_->state());
 
   // The DTM will call ConfigureDataTypes(), even though it is unnecessary.
@@ -916,8 +918,7 @@ TEST_F(SyncDataTypeManagerImplTest, ConfigureDuringPurge) {
 
   // Purge the Nigori type.
   SetConfigureStartExpectation();
-  dtm_->PurgeForMigration(ModelTypeSet(NIGORI),
-                          syncer::CONFIGURE_REASON_MIGRATION);
+  dtm_->PurgeForMigration(ModelTypeSet(NIGORI), CONFIGURE_REASON_MIGRATION);
   EXPECT_EQ(DataTypeManager::CONFIGURING, dtm_->state());
   observer_.ResetExpectations();
 
@@ -1159,7 +1160,7 @@ TEST_F(SyncDataTypeManagerImplTest, HighPriorityAssociationFailure) {
   // Reconfigure without PREFERENCES after the BOOKMARKS download completes,
   // then reconfigure with BOOKMARKS.
   configurer_.set_expected_configure_types(
-      BackendDataTypeConfigurer::CONFIGURE_ACTIVE, syncer::ControlTypes());
+      BackendDataTypeConfigurer::CONFIGURE_ACTIVE, ControlTypes());
   FinishDownload(*dtm_, ModelTypeSet(BOOKMARKS), ModelTypeSet());
   configurer_.set_expected_configure_types(
       BackendDataTypeConfigurer::CONFIGURE_ACTIVE, ModelTypeSet(BOOKMARKS));
@@ -1240,7 +1241,7 @@ TEST_F(SyncDataTypeManagerImplTest, FilterDesiredTypes) {
   SetConfigureStartExpectation();
   SetConfigureDoneExpectation(DataTypeManager::OK, DataTypeStatusTable());
 
-  ModelTypeSet expected_types = syncer::ControlTypes();
+  ModelTypeSet expected_types = ControlTypes();
   expected_types.Put(BOOKMARKS);
   // APPS is filtered out because there's no controller for it.
   configurer_.set_expected_configure_types(
@@ -1278,7 +1279,7 @@ TEST_F(SyncDataTypeManagerImplTest, ReenableAfterDataTypeError) {
 
   // Re-enable bookmarks.
   SetConfigureDoneExpectation(DataTypeManager::OK, DataTypeStatusTable());
-  dtm_->ReenableType(syncer::BOOKMARKS);
+  dtm_->ReenableType(BOOKMARKS);
 
   EXPECT_EQ(DataTypeManager::CONFIGURING, dtm_->state());
   FinishDownload(*dtm_, ModelTypeSet(), ModelTypeSet());
@@ -1290,7 +1291,7 @@ TEST_F(SyncDataTypeManagerImplTest, ReenableAfterDataTypeError) {
   EXPECT_EQ(DataTypeController::RUNNING, GetController(BOOKMARKS)->state());
 
   // Should do nothing.
-  dtm_->ReenableType(syncer::BOOKMARKS);
+  dtm_->ReenableType(BOOKMARKS);
 }
 
 TEST_F(SyncDataTypeManagerImplTest, UnreadyType) {
@@ -1335,8 +1336,8 @@ TEST_F(SyncDataTypeManagerImplTest, UnreadyType) {
 
 TEST_F(SyncDataTypeManagerImplTest, ModelLoadError) {
   AddController(BOOKMARKS);
-  GetController(BOOKMARKS)->SetModelLoadError(syncer::SyncError(
-      FROM_HERE, SyncError::DATATYPE_ERROR, "load error", BOOKMARKS));
+  GetController(BOOKMARKS)->SetModelLoadError(
+      SyncError(FROM_HERE, SyncError::DATATYPE_ERROR, "load error", BOOKMARKS));
 
   // Bookmarks is never started due to hitting a model load error.
   SetConfigureStartExpectation();
@@ -1365,9 +1366,10 @@ TEST_F(SyncDataTypeManagerImplTest, ErrorBeforeAssociation) {
                        ModelTypeSet()));
   Configure(dtm_.get(), ModelTypeSet(BOOKMARKS));
   FinishDownload(*dtm_, ModelTypeSet(), ModelTypeSet());
-  GetController(BOOKMARKS)->OnSingleDataTypeUnrecoverableError(
-      syncer::SyncError(FROM_HERE, SyncError::DATATYPE_ERROR, "bookmarks error",
-                        BOOKMARKS));
+  GetController(BOOKMARKS)->CreateErrorHandler()->OnUnrecoverableError(
+      SyncError(FROM_HERE, SyncError::DATATYPE_ERROR, "bookmarks error",
+                BOOKMARKS));
+  base::RunLoop().RunUntilIdle();
   FinishDownload(*dtm_, ModelTypeSet(BOOKMARKS), ModelTypeSet());
   FinishDownload(*dtm_, ModelTypeSet(), ModelTypeSet());  // Reconfig for error.
   EXPECT_EQ(DataTypeManager::CONFIGURED, dtm_->state());
@@ -1564,7 +1566,7 @@ TEST_F(SyncDataTypeManagerImplTest, CatchUpTypeAddedToConfigureClean) {
       AddControlTypesTo(ModelTypeSet(BOOKMARKS, PASSWORDS)));
 
   dtm_->Configure(ModelTypeSet(BOOKMARKS, PASSWORDS),
-                  syncer::CONFIGURE_REASON_CATCH_UP);
+                  CONFIGURE_REASON_CATCH_UP);
   EXPECT_EQ(DataTypeManager::CONFIGURING, dtm_->state());
 
   FinishDownload(*dtm_, ModelTypeSet(), ModelTypeSet());
@@ -1597,7 +1599,7 @@ TEST_F(SyncDataTypeManagerImplTest, CatchUpMultipleConfigureCalls) {
   configurer_.set_expected_configure_types(
       BackendDataTypeConfigurer::CONFIGURE_CLEAN,
       AddControlTypesTo(ModelTypeSet(BOOKMARKS)));
-  dtm_->Configure(ModelTypeSet(BOOKMARKS), syncer::CONFIGURE_REASON_CATCH_UP);
+  dtm_->Configure(ModelTypeSet(BOOKMARKS), CONFIGURE_REASON_CATCH_UP);
   EXPECT_EQ(DataTypeManager::CONFIGURING, dtm_->state());
 
   // Configure with both types before the first one completes. Both types should
@@ -1606,7 +1608,7 @@ TEST_F(SyncDataTypeManagerImplTest, CatchUpMultipleConfigureCalls) {
       BackendDataTypeConfigurer::CONFIGURE_CLEAN,
       AddControlTypesTo(ModelTypeSet(BOOKMARKS, PASSWORDS)));
   dtm_->Configure(ModelTypeSet(BOOKMARKS, PASSWORDS),
-                  syncer::CONFIGURE_REASON_RECONFIGURATION);
+                  CONFIGURE_REASON_RECONFIGURATION);
   EXPECT_EQ(DataTypeManager::CONFIGURING, dtm_->state());
 
   FinishDownload(*dtm_, ModelTypeSet(), ModelTypeSet());
@@ -1625,11 +1627,9 @@ TEST_F(SyncDataTypeManagerImplTest, CatchUpMultipleConfigureCalls) {
 }
 
 // Test that DataTypeManagerImpl delays configuration until all datatypes for
-//  which ShouldLoadModelBeforeConfigure() returns true loaded their models.
+// which ShouldLoadModelBeforeConfigure() returns true loaded their models.
 TEST_F(SyncDataTypeManagerImplTest, DelayConfigureForUSSTypes) {
-  AddController(BOOKMARKS);
-  GetController(BOOKMARKS)->SetShouldLoadModelBeforeConfigure(true);
-  GetController(BOOKMARKS)->SetDelayModelLoad();
+  AddController(BOOKMARKS, true, true);
 
   SetConfigureStartExpectation();
   SetConfigureDoneExpectation(DataTypeManager::OK, DataTypeStatusTable());
@@ -1655,4 +1655,25 @@ TEST_F(SyncDataTypeManagerImplTest, DelayConfigureForUSSTypes) {
   EXPECT_EQ(1U, configurer_.activated_types().Size());
 }
 
-}  // namespace sync_driver
+// Test that when encryption fails for a given type, the corresponding
+// controller is not told to register with its backend.
+TEST_F(SyncDataTypeManagerImplTest, RegisterWithBackendOnEncryptionError) {
+  AddController(BOOKMARKS, true, true);
+  AddController(PASSWORDS, true, true);
+  SetConfigureStartExpectation();
+
+  FailEncryptionFor(ModelTypeSet(BOOKMARKS));
+  Configure(dtm_.get(), ModelTypeSet(BOOKMARKS, PASSWORDS));
+  EXPECT_EQ(DataTypeManager::CONFIGURING, dtm_->state());
+  EXPECT_EQ(DataTypeController::NOT_RUNNING, GetController(BOOKMARKS)->state());
+  EXPECT_EQ(DataTypeController::MODEL_STARTING,
+            GetController(PASSWORDS)->state());
+  EXPECT_EQ(0, GetController(BOOKMARKS)->register_with_backend_call_count());
+  EXPECT_EQ(0, GetController(PASSWORDS)->register_with_backend_call_count());
+
+  dtm_->OnAllDataTypesReadyForConfigure();
+  EXPECT_EQ(0, GetController(BOOKMARKS)->register_with_backend_call_count());
+  EXPECT_EQ(1, GetController(PASSWORDS)->register_with_backend_call_count());
+}
+
+}  // namespace syncer

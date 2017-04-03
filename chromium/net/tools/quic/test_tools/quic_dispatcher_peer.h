@@ -47,6 +47,16 @@ class QuicDispatcherPeer {
   static const QuicDispatcher::SessionMap& session_map(
       QuicDispatcher* dispatcher);
 
+  static void set_new_sessions_allowed_per_event_loop(
+      QuicDispatcher* dispatcher,
+      size_t num_session_allowed);
+
+  static void SendPublicReset(QuicDispatcher* dispatcher,
+                              const IPEndPoint& server_address,
+                              const IPEndPoint& client_address,
+                              QuicConnectionId connection_id,
+                              QuicPacketNumber rejected_packet_number);
+
  private:
   DISALLOW_COPY_AND_ASSIGN(QuicDispatcherPeer);
 };

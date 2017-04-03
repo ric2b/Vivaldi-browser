@@ -623,8 +623,9 @@ WebInspector.StylePropertiesSection = function(parentPane, matchedStyles, style)
 
     this._titleElement = this.element.createChild("div", "styles-section-title " + (rule ? "styles-selector" : ""));
 
-    this.propertiesTreeOutline = new TreeOutline();
-    this.propertiesTreeOutline.element.classList.add("style-properties", "monospace");
+    this.propertiesTreeOutline = new TreeOutlineInShadow();
+    this.propertiesTreeOutline.registerRequiredCSS("elements/stylesSectionTree.css");
+    this.propertiesTreeOutline.element.classList.add("style-properties", "matched-styles", "monospace");
     this.propertiesTreeOutline.section = this;
     this.element.appendChild(this.propertiesTreeOutline.element);
 
@@ -673,9 +674,12 @@ WebInspector.StylePropertiesSection = function(parentPane, matchedStyles, style)
     if (this.navigable)
         this.element.classList.add("navigable");
 
-    if (!this.editable)
+    if (!this.editable) {
         this.element.classList.add("read-only");
+        this.propertiesTreeOutline.element.classList.add("read-only");
+    }
 
+    this._hoverableSelectorsMode = false;
     this._markSelectorMatches();
     this.onpopulate();
 }
@@ -687,6 +691,7 @@ WebInspector.StylePropertiesSection.prototype = {
     _setSectionHovered: function(isHovered)
     {
         this.element.classList.toggle("styles-panel-hovered", isHovered);
+        this.propertiesTreeOutline.element.classList.toggle("styles-panel-hovered", isHovered);
         if (this._hoverableSelectorsMode !== isHovered) {
             this._hoverableSelectorsMode = isHovered;
             this._markSelectorMatches();
@@ -710,6 +715,15 @@ WebInspector.StylePropertiesSection.prototype = {
         if (!this.editable)
             return;
         var items = [];
+
+        var textShadowButton = new WebInspector.ToolbarButton(WebInspector.UIString("Add text-shadow"), "text-shadow-toolbar-item");
+        textShadowButton.addEventListener("click", this._onInsertShadowPropertyClick.bind(this, "text-shadow"));
+        items.push(textShadowButton);
+
+        var boxShadowButton = new WebInspector.ToolbarButton(WebInspector.UIString("Add box-shadow"), "box-shadow-toolbar-item");
+        boxShadowButton.addEventListener("click", this._onInsertShadowPropertyClick.bind(this, "box-shadow"));
+        items.push(boxShadowButton);
+
         var colorButton = new WebInspector.ToolbarButton(WebInspector.UIString("Add color"), "foreground-color-toolbar-item");
         colorButton.addEventListener("click", this._onInsertColorPropertyClick.bind(this));
         items.push(colorButton);
@@ -879,6 +893,22 @@ WebInspector.StylePropertiesSection.prototype = {
         var rule = this._style.parentRule;
         var range = WebInspector.TextRange.createFromLocation(rule.style.range.endLine, rule.style.range.endColumn + 1);
         this._parentPane._addBlankSection(this, /** @type {string} */(rule.styleSheetId), range);
+    },
+
+    /**
+     * @param {string} propertyName
+     * @param {!WebInspector.Event} event
+     */
+    _onInsertShadowPropertyClick: function(propertyName, event)
+    {
+        event.consume(true);
+        var treeElement = this.addNewBlankProperty();
+        treeElement.property.name = propertyName;
+        treeElement.property.value = "0 0 black";
+        treeElement.updateTitle();
+        var shadowSwatchPopoverHelper = WebInspector.ShadowSwatchPopoverHelper.forTreeElement(treeElement);
+        if (shadowSwatchPopoverHelper)
+            shadowSwatchPopoverHelper.showPopover();
     },
 
     /**
@@ -1084,7 +1114,7 @@ WebInspector.StylePropertiesSection.prototype = {
             hasMatchingChild |= child._updateFilter();
 
         var regex = this._parentPane.filterRegex();
-        var hideRule = !hasMatchingChild && !!regex && !regex.test(this.element.textContent);
+        var hideRule = !hasMatchingChild && !!regex && !regex.test(this.element.deepTextContent());
         this.element.classList.toggle("hidden", hideRule);
         if (!hideRule && this._style.parentRule)
             this._markSelectorHighlights();
@@ -1226,6 +1256,10 @@ WebInspector.StylePropertiesSection.prototype = {
     _handleEmptySpaceClick: function(event)
     {
         if (!this.editable)
+            return;
+
+        var targetElement = event.deepElementFromPoint();
+        if (targetElement && !targetElement.isComponentSelectionCollapsed())
             return;
 
         if (!event.target.isComponentSelectionCollapsed())
@@ -1510,7 +1544,7 @@ WebInspector.StylePropertiesSection.prototype = {
         function updateSourceRanges(rule)
         {
             var doesAffectSelectedNode = this._matchedStyles.matchingSelectors(rule).length > 0;
-            this.element.classList.toggle("no-affect", !doesAffectSelectedNode);
+            this.propertiesTreeOutline.element.classList.toggle("no-affect", !doesAffectSelectedNode);
             this._matchedStyles.resetActiveProperties();
             this._parentPane._refreshUpdate(this);
         }
@@ -1696,7 +1730,7 @@ WebInspector.BlankStylePropertiesSection.prototype = {
             this._makeNormal(newRule);
 
             if (!doesSelectorAffectSelectedNode)
-                this.element.classList.add("no-affect");
+                this.propertiesTreeOutline.element.classList.add("no-affect");
 
             this._updateRuleOrigin();
             if (this.element.parentElement) // Might have been detached already.
@@ -1955,13 +1989,13 @@ WebInspector.StylePropertyTreeElement.prototype = {
 
         if (!this._editable()) {
             var swatch = WebInspector.ColorSwatch.create();
-            swatch.setColorText(text);
+            swatch.setColor(color);
             return swatch;
         }
 
         var swatchPopoverHelper = this._parentPane._swatchPopoverHelper;
         var swatch = WebInspector.ColorSwatch.create();
-        swatch.setColorText(text);
+        swatch.setColor(color);
         swatch.setFormat(WebInspector.Color.detectColorFormat(swatch.color()));
         var swatchIcon = new WebInspector.ColorSwatchPopoverIcon(this, swatchPopoverHelper, swatch);
 
@@ -2014,11 +2048,13 @@ WebInspector.StylePropertyTreeElement.prototype = {
      */
     _processBezier: function(text)
     {
-        var geometry = WebInspector.Geometry.CubicBezier.parse(text);
-        if (!geometry || !this._editable())
+        if (!this._editable() || !WebInspector.Geometry.CubicBezier.parse(text))
             return createTextNode(text);
         var swatchPopoverHelper = this._parentPane._swatchPopoverHelper;
-        return new WebInspector.BezierPopoverIcon(this, swatchPopoverHelper, text).element();
+        var swatch = WebInspector.BezierSwatch.create();
+        swatch.setBezierText(text);
+        new WebInspector.BezierPopoverIcon(this, swatchPopoverHelper, swatch);
+        return swatch;
     },
 
     /**
@@ -2046,8 +2082,9 @@ WebInspector.StylePropertyTreeElement.prototype = {
             var cssShadowSwatch = WebInspector.CSSShadowSwatch.create();
             cssShadowSwatch.setCSSShadow(shadows[i]);
             new WebInspector.ShadowSwatchPopoverHelper(this, swatchPopoverHelper, cssShadowSwatch);
-            if (cssShadowSwatch.colorSwatch())
-                var colorSwatchIcon = new WebInspector.ColorSwatchPopoverIcon(this, swatchPopoverHelper, cssShadowSwatch.colorSwatch());
+            var colorSwatch = cssShadowSwatch.colorSwatch();
+            if (colorSwatch)
+                new WebInspector.ColorSwatchPopoverIcon(this, swatchPopoverHelper, colorSwatch);
             container.appendChild(cssShadowSwatch);
         }
         return container;
@@ -2391,7 +2428,7 @@ WebInspector.StylePropertyTreeElement.prototype = {
             this.nameElement.normalize();
             this.valueElement.normalize();
 
-            this.editingCommitted(event.target.textContent, context, "forward");
+            this._editingCommitted(event.target.textContent, context, "forward");
         }
 
         /**
@@ -2412,7 +2449,7 @@ WebInspector.StylePropertyTreeElement.prototype = {
             var text = event.target.textContent;
             if (!context.isEditingName)
                 text = this.value || text;
-            this.editingCommitted(text, context, moveDirection);
+            this._editingCommitted(text, context, moveDirection);
         }
 
         this._originalPropertyText = this.property.propertyText;
@@ -2476,7 +2513,7 @@ WebInspector.StylePropertyTreeElement.prototype = {
                 break;
             case "forward":
             case "backward":
-                this.editingCommitted(event.target.textContent, context, result);
+                this._editingCommitted(event.target.textContent, context, result);
                 break;
             }
 
@@ -2517,7 +2554,7 @@ WebInspector.StylePropertyTreeElement.prototype = {
         if (isFieldInputTerminated) {
             // Enter or colon (for name)/semicolon outside of string (for value).
             event.consume(true);
-            this.editingCommitted(event.target.textContent, context, "forward");
+            this._editingCommitted(event.target.textContent, context, "forward");
             return;
         }
     },
@@ -2606,7 +2643,7 @@ WebInspector.StylePropertyTreeElement.prototype = {
      * @param {!WebInspector.StylePropertyTreeElement.Context} context
      * @param {string} moveDirection
      */
-    editingCommitted: function(userInput, context, moveDirection)
+    _editingCommitted: function(userInput, context, moveDirection)
     {
         this._removePrompt();
         this.editingEnded(context);
@@ -3058,7 +3095,7 @@ WebInspector.StylesSidebarPropertyRenderer.prototype = {
             return valueElement;
 
         if (this._shadowHandler && (this._propertyName === "box-shadow" || this._propertyName === "text-shadow" || this._propertyName === "-webkit-box-shadow")
-                && !WebInspector.CSSMetadata.VariableRegex.test(this._propertyValue) && Runtime.experiments.isEnabled("shadowEditor")) {
+                && !WebInspector.CSSMetadata.VariableRegex.test(this._propertyValue)) {
             valueElement.appendChild(this._shadowHandler(this._propertyValue, this._propertyName));
             valueElement.normalize();
             return valueElement;

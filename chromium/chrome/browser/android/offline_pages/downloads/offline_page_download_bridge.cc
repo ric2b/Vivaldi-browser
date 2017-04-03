@@ -11,9 +11,11 @@
 #include "base/guid.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "chrome/browser/android/offline_pages/downloads/offline_page_infobar_delegate.h"
 #include "chrome/browser/android/offline_pages/downloads/offline_page_notification_bridge.h"
 #include "chrome/browser/android/offline_pages/offline_page_mhtml_archiver.h"
 #include "chrome/browser/android/offline_pages/offline_page_model_factory.h"
+#include "chrome/browser/android/offline_pages/offline_page_utils.h"
 #include "chrome/browser/android/offline_pages/recent_tab_helper.h"
 #include "chrome/browser/android/offline_pages/request_coordinator_factory.h"
 #include "chrome/browser/android/tab_android.h"
@@ -21,6 +23,7 @@
 #include "chrome/browser/profiles/profile_android.h"
 #include "components/offline_pages/background/request_coordinator.h"
 #include "components/offline_pages/client_namespace_constants.h"
+#include "components/offline_pages/client_policy_controller.h"
 #include "components/offline_pages/downloads/download_ui_item.h"
 #include "components/offline_pages/offline_page_feature.h"
 #include "components/offline_pages/offline_page_model.h"
@@ -42,6 +45,169 @@ namespace offline_pages {
 namespace android {
 
 namespace {
+
+// TODO(dewittj): Move to Download UI Adapter.
+content::WebContents* GetWebContentsFromJavaTab(
+    const ScopedJavaGlobalRef<jobject>& j_tab_ref) {
+  JNIEnv* env = AttachCurrentThread();
+  TabAndroid* tab = TabAndroid::GetNativeTab(env, j_tab_ref);
+  if (!tab)
+    return nullptr;
+
+  return tab->web_contents();
+}
+
+// TODO(dewittj): Move to Download UI Adapter.
+OfflinePageModel* GetOfflinePageModelFromJavaTab(
+    const ScopedJavaGlobalRef<jobject>& j_tab_ref) {
+  content::WebContents* web_contents = GetWebContentsFromJavaTab(j_tab_ref);
+  if (!web_contents)
+    return nullptr;
+
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents->GetBrowserContext())
+          ->GetOriginalProfile();
+
+  return OfflinePageModelFactory::GetForBrowserContext(profile);
+}
+
+void SavePageIfNotNavigatedAway(const GURL& original_url,
+                                const ScopedJavaGlobalRef<jobject>& j_tab_ref) {
+  content::WebContents* web_contents = GetWebContentsFromJavaTab(j_tab_ref);
+  if (!web_contents)
+    return;
+
+  // This ignores fragment differences in URLs, bails out only if tab has
+  // navigated away and not just scrolled to a fragment.
+  GURL url = web_contents->GetLastCommittedURL();
+  if (!OfflinePageUtils::EqualsIgnoringFragment(url, original_url))
+    return;
+
+  offline_pages::ClientId client_id;
+  client_id.name_space = offline_pages::kDownloadNamespace;
+  client_id.id = base::GenerateGUID();
+  int64_t request_id = OfflinePageModel::kInvalidOfflineId;
+
+  if (offline_pages::IsBackgroundLoaderForDownloadsEnabled()) {
+    // Post disabled request before passing the download task to the tab helper.
+    // This will keep the request persisted in case Chrome is evicted from RAM
+    // or closed by the user.
+    // Note: the 'disabled' status is not persisted (stored in memory) so it
+    // automatically resets if Chrome is re-started.
+    offline_pages::RequestCoordinator* request_coordinator =
+        offline_pages::RequestCoordinatorFactory::GetForBrowserContext(
+            web_contents->GetBrowserContext());
+    request_id = request_coordinator->SavePageLater(
+        url, client_id, true,
+        RequestCoordinator::RequestAvailability::DISABLED_FOR_OFFLINER);
+  }
+
+  // Pass request_id to the current tab's helper to attempt download right from
+  // the tab. If unsuccessful, it'll enable the already-queued request for
+  // background offliner. Same will happen if Chrome is terminated since
+  // 'disabled' status of the request is RAM-stored info.
+  offline_pages::RecentTabHelper* tab_helper =
+      RecentTabHelper::FromWebContents(web_contents);
+  if (!tab_helper) {
+    if (request_id != OfflinePageModel::kInvalidOfflineId) {
+      offline_pages::RequestCoordinator* request_coordinator =
+          offline_pages::RequestCoordinatorFactory::GetForBrowserContext(
+              web_contents->GetBrowserContext());
+      request_coordinator->EnableForOffliner(request_id);
+    }
+    return;
+  }
+  tab_helper->ObserveAndDownloadCurrentPage(client_id, request_id);
+
+  OfflinePageNotificationBridge notification_bridge;
+  notification_bridge.ShowDownloadingToast();
+}
+
+void OnDeletePagesForInfoBar(const GURL& original_url,
+                             const ScopedJavaGlobalRef<jobject>& j_tab_ref,
+                             DeletePageResult result) {
+  SavePageIfNotNavigatedAway(original_url, j_tab_ref);
+}
+
+void DeletePagesForOverwrite(const GURL& original_url,
+                             const ScopedJavaGlobalRef<jobject>& j_tab_ref,
+                             const MultipleOfflinePageItemResult& pages) {
+  OfflinePageModel* model = GetOfflinePageModelFromJavaTab(j_tab_ref);
+  if (!model)
+    return;
+
+  std::vector<int64_t> offline_ids;
+  for (auto& page : pages) {
+    if (page.client_id.name_space == kDownloadNamespace ||
+        page.client_id.name_space == kAsyncNamespace) {
+      offline_ids.emplace_back(page.offline_id);
+    }
+  }
+
+  model->DeletePagesByOfflineId(
+      offline_ids, base::Bind(
+          &OnDeletePagesForInfoBar, original_url, j_tab_ref));
+}
+
+void OnInfoBarAction(const GURL& original_url,
+                     const ScopedJavaGlobalRef<jobject>& j_tab_ref,
+                     OfflinePageInfoBarDelegate::Action action) {
+  switch (action) {
+    case OfflinePageInfoBarDelegate::Action::CREATE_NEW:
+      SavePageIfNotNavigatedAway(original_url, j_tab_ref);
+      break;
+    case OfflinePageInfoBarDelegate::Action::OVERWRITE:
+      OfflinePageModel* offline_page_model =
+          GetOfflinePageModelFromJavaTab(j_tab_ref);
+      if (!offline_page_model)
+        return;
+
+      offline_page_model->GetPagesByOnlineURL(
+          original_url,
+          base::Bind(&DeletePagesForOverwrite, original_url, j_tab_ref));
+      break;
+  }
+}
+
+void RequestQueueDuplicateCheckDone(
+    const GURL& original_url,
+    const ScopedJavaGlobalRef<jobject>& j_tab_ref,
+    bool has_duplicates) {
+  if (has_duplicates) {
+    // TODO(fgorski): Additionally we could update existing request's expiration
+    // period, as it is still important. Alternative would be to actually take a
+    // snapshot on the spot, but that would only work if the page is loaded
+    // enough.
+    // This simply toasts that the item is downloading.
+    OfflinePageNotificationBridge notification_bridge;
+    notification_bridge.ShowDownloadingToast();
+    return;
+  }
+
+  SavePageIfNotNavigatedAway(original_url, j_tab_ref);
+}
+
+void ModelDuplicateCheckDone(const GURL& original_url,
+                             const ScopedJavaGlobalRef<jobject>& j_tab_ref,
+                             const std::string& downloads_label,
+                             bool has_duplicates) {
+  content::WebContents* web_contents = GetWebContentsFromJavaTab(j_tab_ref);
+  if (!web_contents)
+    return;
+
+  if (has_duplicates) {
+    OfflinePageInfoBarDelegate::Create(
+        base::Bind(&OnInfoBarAction, original_url, j_tab_ref), downloads_label,
+        original_url, web_contents);
+    return;
+  }
+
+  OfflinePageUtils::CheckExistenceOfRequestsWithURL(
+      Profile::FromBrowserContext(web_contents->GetBrowserContext())
+          ->GetOriginalProfile(),
+      kDownloadNamespace, original_url,
+      base::Bind(&RequestQueueDuplicateCheckDone, original_url, j_tab_ref));
+}
 
 void ToJavaOfflinePageDownloadItemList(
     JNIEnv* env,
@@ -69,30 +235,33 @@ ScopedJavaLocalRef<jobject> ToJavaOfflinePageDownloadItem(
 }
 
 std::vector<int64_t> FilterRequestsByGuid(
-    const std::vector<SavePageRequest>& requests,
-    const std::string& guid) {
+    std::vector<std::unique_ptr<SavePageRequest>> requests,
+    const std::string& guid,
+    ClientPolicyController* policy_controller) {
   std::vector<int64_t> request_ids;
-  for (const SavePageRequest& request : requests) {
-    if (request.client_id().id == guid &&
-        (request.client_id().name_space == kDownloadNamespace ||
-         request.client_id().name_space == kAsyncNamespace)) {
-      request_ids.push_back(request.request_id());
+  for (const auto& request : requests) {
+    if (request->client_id().id == guid &&
+        policy_controller->IsSupportedByDownload(
+            request->client_id().name_space)) {
+      request_ids.push_back(request->request_id());
     }
   }
   return request_ids;
 }
 
-void CancelRequestCallback(const RequestQueue::UpdateMultipleRequestResults&) {
+void CancelRequestCallback(const MultipleItemStatuses&) {
   // Results ignored here, as UI uses observer to update itself.
 }
 
-void CancelRequestsContinuation(content::BrowserContext* browser_context,
-                                const std::string& guid,
-                                const std::vector<SavePageRequest>& requests) {
+void CancelRequestsContinuation(
+    content::BrowserContext* browser_context,
+    const std::string& guid,
+    std::vector<std::unique_ptr<SavePageRequest>> requests) {
   RequestCoordinator* coordinator =
       RequestCoordinatorFactory::GetForBrowserContext(browser_context);
   if (coordinator) {
-    std::vector<int64_t> request_ids = FilterRequestsByGuid(requests, guid);
+    std::vector<int64_t> request_ids = FilterRequestsByGuid(
+        std::move(requests), guid, coordinator->GetPolicyController());
     coordinator->RemoveRequests(request_ids,
                                 base::Bind(&CancelRequestCallback));
   } else {
@@ -100,24 +269,28 @@ void CancelRequestsContinuation(content::BrowserContext* browser_context,
   }
 }
 
-void PauseRequestsContinuation(content::BrowserContext* browser_context,
-                               const std::string& guid,
-                               const std::vector<SavePageRequest>& requests) {
+void PauseRequestsContinuation(
+    content::BrowserContext* browser_context,
+    const std::string& guid,
+    std::vector<std::unique_ptr<SavePageRequest>> requests) {
   RequestCoordinator* coordinator =
       RequestCoordinatorFactory::GetForBrowserContext(browser_context);
   if (coordinator)
-    coordinator->PauseRequests(FilterRequestsByGuid(requests, guid));
+    coordinator->PauseRequests(FilterRequestsByGuid(
+        std::move(requests), guid, coordinator->GetPolicyController()));
   else
     LOG(WARNING) << "PauseRequestsContinuation has no valid coordinator.";
 }
 
-void ResumeRequestsContinuation(content::BrowserContext* browser_context,
-                                const std::string& guid,
-                                const std::vector<SavePageRequest>& requests) {
+void ResumeRequestsContinuation(
+    content::BrowserContext* browser_context,
+    const std::string& guid,
+    std::vector<std::unique_ptr<SavePageRequest>> requests) {
   RequestCoordinator* coordinator =
       RequestCoordinatorFactory::GetForBrowserContext(browser_context);
   if (coordinator)
-    coordinator->ResumeRequests(FilterRequestsByGuid(requests, guid));
+    coordinator->ResumeRequests(FilterRequestsByGuid(
+        std::move(requests), guid, coordinator->GetPolicyController()));
   else
     LOG(WARNING) << "ResumeRequestsContinuation has no valid coordinator.";
 }
@@ -141,18 +314,6 @@ OfflinePageDownloadBridge::~OfflinePageDownloadBridge() {}
 // static
 bool OfflinePageDownloadBridge::Register(JNIEnv* env) {
   return RegisterNativesImpl(env);
-}
-
-// static
-void OfflinePageDownloadBridge::SavePageCallback(
-    const DownloadUIItem& item,
-    OfflinePageModel::SavePageResult result,
-    int64_t offline_id) {
-  OfflinePageNotificationBridge notification_bridge;
-  if (result == SavePageResult::SUCCESS)
-    notification_bridge.NotifyDownloadSuccessful(item);
-  else
-    notification_bridge.NotifyDownloadFailed(item);
 }
 
 void OfflinePageDownloadBridge::Destroy(JNIEnv* env,
@@ -202,7 +363,9 @@ jlong OfflinePageDownloadBridge::GetOfflineIdByGuid(
 void OfflinePageDownloadBridge::StartDownload(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jobject>& j_tab) {
+    const JavaParamRef<jobject>& j_tab,
+    const JavaParamRef<jstring>& j_downloads_label) {
+  std::string downloads_label = ConvertJavaStringToUTF8(env, j_downloads_label);
   TabAndroid* tab = TabAndroid::GetNativeTab(env, j_tab);
   if (!tab)
     return;
@@ -212,47 +375,12 @@ void OfflinePageDownloadBridge::StartDownload(
     return;
 
   GURL url = web_contents->GetLastCommittedURL();
-  offline_pages::ClientId client_id;
-  client_id.name_space = offline_pages::kDownloadNamespace;
-  client_id.id = base::GenerateGUID();
 
-  // If the page is not loaded enough to be captured, submit a background loader
-  // request instead.
-  offline_pages::RecentTabHelper* tab_helper =
-      RecentTabHelper::FromWebContents(web_contents);
-  if (tab_helper &&
-      !tab_helper->is_page_ready_for_snapshot() &&
-      offline_pages::IsBackgroundLoaderForDownloadsEnabled()) {
-    // TODO(dimich): Improve this to wait for the page load if it is still going
-    // on. Pre-submit the request and if the load finishes and capture happens,
-    // remove request.
-    offline_pages::RequestCoordinator* request_coordinator =
-        offline_pages::RequestCoordinatorFactory::GetForBrowserContext(
-            tab->GetProfile()->GetOriginalProfile());
-    request_coordinator->SavePageLater(url, client_id, true);
-    return;
-  }
+  ScopedJavaGlobalRef<jobject> j_tab_ref(env, j_tab);
 
-  // Page is ready, capture it right from the tab.
-  offline_pages::OfflinePageModel* offline_page_model =
-      OfflinePageModelFactory::GetForBrowserContext(
-          tab->GetProfile()->GetOriginalProfile());
-  if (!offline_page_model)
-    return;
-
-  auto archiver =
-      base::MakeUnique<offline_pages::OfflinePageMHTMLArchiver>(web_contents);
-
-  DownloadUIItem item;
-  item.guid = client_id.id;
-  item.url = url;
-
-  OfflinePageNotificationBridge bridge;
-  bridge.NotifyDownloadProgress(item);
-
-  offline_page_model->SavePage(
-      url, client_id, 0ul, std::move(archiver),
-      base::Bind(&OfflinePageDownloadBridge::SavePageCallback, item));
+  OfflinePageUtils::CheckExistenceOfPagesWithURL(
+      tab->GetProfile()->GetOriginalProfile(), kDownloadNamespace, url,
+      base::Bind(&ModelDuplicateCheckDone, url, j_tab_ref, downloads_label));
 }
 
 void OfflinePageDownloadBridge::CancelDownload(

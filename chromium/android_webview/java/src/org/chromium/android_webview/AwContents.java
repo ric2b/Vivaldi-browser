@@ -47,6 +47,7 @@ import org.chromium.android_webview.permission.AwGeolocationCallback;
 import org.chromium.android_webview.permission.AwPermissionRequest;
 import org.chromium.base.LocaleUtils;
 import org.chromium.base.Log;
+import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.VisibleForTesting;
@@ -59,7 +60,6 @@ import org.chromium.content.browser.ContentViewClient;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.ContentViewStatics;
 import org.chromium.content.browser.SmartClipProvider;
-import org.chromium.content.common.CleanupReference;
 import org.chromium.content_public.browser.GestureStateListener;
 import org.chromium.content_public.browser.JavaScriptCallback;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -75,7 +75,6 @@ import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.base.WindowAndroid;
-import org.chromium.ui.gfx.DeviceDisplayInfo;
 
 import java.io.File;
 import java.lang.annotation.Annotation;
@@ -103,6 +102,7 @@ public class AwContents implements SmartClipProvider,
     private static final boolean TRACE = false;
     private static final int NO_WARN = 0;
     private static final int WARN = 1;
+    private static final String PRODUCT_VERSION = AwContentsStatics.getProductVersion();
 
     private static final String WEB_ARCHIVE_EXTENSION = ".mht";
     // The request code should be unique per WebView/AwContents object.
@@ -288,6 +288,9 @@ public class AwContents implements SmartClipProvider,
     private final AwSettings mSettings;
     private final ScrollAccessibilityHelper mScrollAccessibilityHelper;
 
+    private final ObserverList<PopupTouchHandleDrawable> mTouchHandleDrawables =
+            new ObserverList<>();
+
     private boolean mIsPaused;
     private boolean mIsViewVisible;
     private boolean mIsWindowVisible;
@@ -299,8 +302,6 @@ public class AwContents implements SmartClipProvider,
 
     private Bitmap mFavicon;
     private boolean mHasRequestedVisitedHistoryFromClient;
-    // TODO(boliu): This should be in a global context, not per webview.
-    private final double mDIPScale;
     // Whether this WebView is a popup.
     private boolean mIsPopupWindow = false;
 
@@ -355,8 +356,6 @@ public class AwContents implements SmartClipProvider,
     // Do not use directly, call isDestroyed() instead.
     private boolean mIsDestroyed = false;
 
-    private AwContentsDestroyRunnable mAwContentsDestroyRunnable;
-
     private static String sCurrentLocale = "";
 
     private static final class AwContentsDestroyRunnable implements Runnable {
@@ -364,7 +363,6 @@ public class AwContents implements SmartClipProvider,
         // Hold onto a reference to the window (via its wrapper), so that it is not destroyed
         // until we are done here.
         private final WindowAndroidWrapper mWindowAndroid;
-        private boolean mHasRun;
 
         private AwContentsDestroyRunnable(
                 long nativeAwContents, WindowAndroidWrapper windowAndroid) {
@@ -374,13 +372,7 @@ public class AwContents implements SmartClipProvider,
 
         @Override
         public void run() {
-            mHasRun = true;
             nativeDestroy(mNativeAwContents);
-        }
-
-        // TODO(boliu): Generalize this as a CleanupReference feature.
-        public boolean hasRun() {
-            return mHasRun;
         }
     }
 
@@ -765,17 +757,22 @@ public class AwContents implements SmartClipProvider,
         mInitialFunctor = new AwGLFunctor(mNativeDrawGLFunctorFactory, mContainerView);
         mCurrentFunctor = mInitialFunctor;
         mContentsClient = contentsClient;
+        mContentsClient.getCallbackHelper().setCancelCallbackPoller(
+                new AwContentsClientCallbackHelper.CancelCallbackPoller() {
+                    @Override
+                    public boolean cancelAllCallbacks() {
+                        return AwContents.this.isDestroyed(NO_WARN);
+                    }
+                });
         mAwViewMethods = new AwViewMethodsImpl();
         mFullScreenTransitionsState = new FullScreenTransitionsState(
                 mContainerView, mInternalAccessAdapter, mAwViewMethods);
         mContentViewClient = new AwContentViewClient(contentsClient, settings, this, mContext);
         mLayoutSizer = dependencyFactory.createLayoutSizer();
         mSettings = settings;
-        mDIPScale = DeviceDisplayInfo.create(mContext).getDIPScale();
         mLayoutSizer.setDelegate(new AwLayoutSizerDelegate());
-        mLayoutSizer.setDIPScale(mDIPScale);
         mWebContentsDelegate = new AwWebContentsDelegateAdapter(
-                this, contentsClient, mContentViewClient, mContext, mContainerView);
+                this, contentsClient, settings, mContext, mContainerView);
         mContentsClientBridge = new AwContentsClientBridge(mContext, contentsClient,
                 AwContentsStatics.getClientCertLookupTable());
         mZoomControls = new AwZoomControls(this);
@@ -804,7 +801,6 @@ public class AwContents implements SmartClipProvider,
         mDefaultVideoPosterRequestHandler = new DefaultVideoPosterRequestHandler(mContentsClient);
         mSettings.setDefaultVideoPosterURL(
                 mDefaultVideoPosterRequestHandler.getDefaultVideoPosterURL());
-        mSettings.setDIPScale(mDIPScale);
         mScrollOffsetManager =
                 dependencyFactory.createScrollOffsetManager(new AwScrollOffsetManagerDelegate());
         mScrollAccessibilityHelper = new ScrollAccessibilityHelper(mContainerView);
@@ -934,6 +930,9 @@ public class AwContents implements SmartClipProvider,
             mAwPdfExporter.setContainerView(mContainerView);
         }
         mWebContentsDelegate.setContainerView(mContainerView);
+        for (PopupTouchHandleDrawable drawable: mTouchHandleDrawables) {
+            drawable.onContainerViewChanged(newContainerView);
+        }
         onContainerViewChanged();
     }
 
@@ -1050,7 +1049,7 @@ public class AwContents implements SmartClipProvider,
         WebContents webContents = nativeGetWebContents(mNativeAwContents);
 
         mWindowAndroid = getWindowAndroid(mContext);
-        mContentViewCore = new ContentViewCore(mContext);
+        mContentViewCore = new ContentViewCore(mContext, PRODUCT_VERSION);
         mViewAndroidDelegate = new AwViewAndroidDelegate(mContainerView,
                 mContentViewCore.getRenderCoordinates());
         initializeContentViewCore(mContentViewCore, mContext, mViewAndroidDelegate,
@@ -1062,14 +1061,18 @@ public class AwContents implements SmartClipProvider,
         mNavigationController = mWebContents.getNavigationController();
         installWebContentsObserver();
         mSettings.setWebContents(webContents);
-        nativeSetDipScale(mNativeAwContents, (float) mDIPScale);
+
+        float dipScale = mContentViewCore.getDeviceScaleFactor();
+        nativeSetDipScale(mNativeAwContents, dipScale);
+        mLayoutSizer.setDIPScale(dipScale);
+        mSettings.setDIPScale(dipScale);
+
         updateContentViewCoreVisibility();
 
         // The native side object has been bound to this java instance, so now is the time to
         // bind all the native->java relationships.
-        mAwContentsDestroyRunnable =
-                new AwContentsDestroyRunnable(mNativeAwContents, mWindowAndroid);
-        mCleanupReference = new CleanupReference(this, mAwContentsDestroyRunnable);
+        mCleanupReference = new CleanupReference(
+                this, new AwContentsDestroyRunnable(mNativeAwContents, mWindowAndroid));
     }
 
     private void installWebContentsObserver() {
@@ -1222,16 +1225,11 @@ public class AwContents implements SmartClipProvider,
      * @return whether this instance of WebView is flagged as destroyed.
      */
     private boolean isDestroyed(int warnIfDestroyed) {
-        if (!mIsDestroyed) {
-            assert mContentViewCore != null;
-            assert mWebContents != null;
-            assert mNavigationController != null;
-            assert mNativeAwContents != 0;
-        } else if (warnIfDestroyed == WARN) {
+        if (mIsDestroyed && warnIfDestroyed == WARN) {
             Log.w(TAG, "Application attempted to call on a destroyed WebView", new Throwable());
         }
         boolean destroyRunnableHasRun =
-                mAwContentsDestroyRunnable != null && mAwContentsDestroyRunnable.hasRun();
+                mCleanupReference != null && mCleanupReference.hasCleanedUp();
         if (TRACE && destroyRunnableHasRun && !mIsDestroyed) {
             // Swallow the error. App developers are not going to do anything with an error msg.
             Log.d(TAG, "AwContents is kept alive past CleanupReference by finalizer");
@@ -2014,19 +2012,6 @@ public class AwContents implements SmartClipProvider,
         if (!isDestroyed(WARN)) mNavigationController.clearHistory();
     }
 
-    public String[] getHttpAuthUsernamePassword(String host, String realm) {
-        return mBrowserContext.getHttpAuthDatabase(mContext)
-                .getHttpAuthUsernamePassword(host, realm);
-    }
-
-    public void setHttpAuthUsernamePassword(String host, String realm, String username,
-            String password) {
-        if (TRACE) Log.i(TAG, "%s setHttpAuthUsernamePassword=%s", this, host);
-        if (isDestroyed(WARN)) return;
-        mBrowserContext.getHttpAuthDatabase(mContext)
-                .setHttpAuthUsernamePassword(host, realm, username, password);
-    }
-
     /**
      * @see android.webkit.WebView#getCertificate()
      */
@@ -2103,7 +2088,7 @@ public class AwContents implements SmartClipProvider,
      */
     public float getScale() {
         if (isDestroyed(WARN)) return 1;
-        return (float) (mPageScaleFactor * mDIPScale);
+        return (float) (mPageScaleFactor * mContentViewCore.getDeviceScaleFactor());
     }
 
     /**
@@ -2684,6 +2669,13 @@ public class AwContents implements SmartClipProvider,
         mFavicon = bitmap;
     }
 
+    @CalledByNative
+    private long onCreateTouchHandle() {
+        PopupTouchHandleDrawable drawable =
+                PopupTouchHandleDrawable.create(mTouchHandleDrawables, mContentViewCore);
+        return drawable.getNativeDrawable();
+    }
+
     /** Callback for generateMHTML. */
     @CalledByNative
     private static void generateMHTMLCallback(
@@ -2874,9 +2866,9 @@ public class AwContents implements SmartClipProvider,
         if (mPageScaleFactor != pageScaleFactor) {
             float oldPageScaleFactor = mPageScaleFactor;
             mPageScaleFactor = pageScaleFactor;
+            float dipScale = mContentViewCore.getDeviceScaleFactor();
             mContentsClient.getCallbackHelper().postOnScaleChangedScaled(
-                    (float) (oldPageScaleFactor * mDIPScale),
-                    (float) (mPageScaleFactor * mDIPScale));
+                    oldPageScaleFactor * dipScale, mPageScaleFactor * dipScale);
         }
     }
 
@@ -3102,10 +3094,10 @@ public class AwContents implements SmartClipProvider,
             if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
                 // Note this will trigger IPC back to browser even if nothing is
                 // hit.
+                float dipScale = mContentViewCore.getDeviceScaleFactor();
                 nativeRequestNewHitTestDataAt(mNativeAwContents,
-                        event.getX() / (float) mDIPScale,
-                        event.getY() / (float) mDIPScale,
-                        Math.max(event.getTouchMajor(), event.getTouchMinor()) / (float) mDIPScale);
+                        event.getX() / dipScale, event.getY() / dipScale,
+                        Math.max(event.getTouchMajor(), event.getTouchMinor()) / dipScale);
             }
 
             if (mOverScrollGlow != null) {

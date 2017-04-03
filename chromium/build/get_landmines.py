@@ -34,6 +34,7 @@ def print_landmines():
   if platform() == 'android':
     print 'Clobber: to handle new way of suppressing findbugs failures.'
     print 'Clobber to fix gyp not rename package name (crbug.com/457038)'
+    print 'Clobber to recalculate reversed dependency (crbug.com/639042)'
   if platform() == 'win':
     print 'Compile on cc_unittests fails due to symbols removed in r185063.'
   if platform() == 'linux':
@@ -44,7 +45,7 @@ def print_landmines():
     print ('Improper dependency for create_nmf.py broke in r240802, '
            'fixed in r240860.')
   if (platform() == 'win' and gyp_msvs_version().startswith('2015')):
-    print 'Switch to VS2015 Update 2'
+    print 'Switch to VS2015 Update 3'
   print 'Need to clobber everything due to an IDL change in r154579 (blink)'
   print 'Need to clobber everything due to gen file moves in r175513 (Blink)'
   if (platform() != 'ios'):

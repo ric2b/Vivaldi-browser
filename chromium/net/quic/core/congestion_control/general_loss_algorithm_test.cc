@@ -11,6 +11,7 @@
 #include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_unacked_packet_map.h"
 #include "net/quic/test_tools/mock_clock.h"
+#include "net/quic/test_tools/quic_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using std::vector;
@@ -43,6 +44,14 @@ class GeneralLossAlgorithmTest : public ::testing::Test {
                                    true);
   }
 
+  void SendAckPacket(QuicPacketNumber packet_number) {
+    SerializedPacket packet(kDefaultPathId, packet_number,
+                            PACKET_1BYTE_PACKET_NUMBER, nullptr, kDefaultLength,
+                            0, true, false);
+    unacked_packets_.AddSentPacket(&packet, 0, NOT_RETRANSMISSION, clock_.Now(),
+                                   false);
+  }
+
   void VerifyLosses(QuicPacketNumber largest_newly_acked,
                     QuicPacketNumber* losses_expected,
                     size_t num_losses) {
@@ -58,6 +67,7 @@ class GeneralLossAlgorithmTest : public ::testing::Test {
     }
   }
 
+  QuicFlagSaver flags_;  // Save/restore all QUIC flag values.
   QuicUnackedPacketMap unacked_packets_;
   GeneralLossAlgorithm loss_algorithm_;
   RttStats rtt_stats_;
@@ -182,6 +192,28 @@ TEST_F(GeneralLossAlgorithmTest, DontEarlyRetransmitNeuteredPacket) {
   EXPECT_EQ(QuicTime::Zero(), loss_algorithm_.GetLossTimeout());
 }
 
+TEST_F(GeneralLossAlgorithmTest, EarlyRetransmitWithLargerUnackablePackets) {
+  FLAGS_quic_largest_sent_retransmittable = true;
+  // Transmit 2 data packets and one ack.
+  SendDataPacket(1);
+  SendDataPacket(2);
+  SendAckPacket(3);
+  clock_.AdvanceTime(rtt_stats_.smoothed_rtt());
+
+  // Early retransmit when the final packet gets acked and the first is nacked.
+  unacked_packets_.IncreaseLargestObserved(2);
+  unacked_packets_.RemoveFromInFlight(2);
+  VerifyLosses(2, nullptr, 0);
+  EXPECT_EQ(clock_.Now() + 0.25 * rtt_stats_.smoothed_rtt(),
+            loss_algorithm_.GetLossTimeout());
+
+  // The packet should be lost once the loss timeout is reached.
+  clock_.AdvanceTime(0.25 * rtt_stats_.latest_rtt());
+  QuicPacketNumber lost[] = {1};
+  VerifyLosses(2, lost, arraysize(lost));
+  EXPECT_EQ(QuicTime::Zero(), loss_algorithm_.GetLossTimeout());
+}
+
 TEST_F(GeneralLossAlgorithmTest, AlwaysLosePacketSent1RTTEarlier) {
   // Transmit 1 packet and then wait an rtt plus 1ms.
   SendDataPacket(1);
@@ -285,7 +317,6 @@ TEST_F(GeneralLossAlgorithmTest, MultipleLossesAtOnce) {
 }
 
 TEST_F(GeneralLossAlgorithmTest, NoSpuriousLossesFromLargeReordering) {
-  FLAGS_quic_loss_recovery_use_largest_acked = true;
   loss_algorithm_.SetLossDetectionType(kTime);
   const size_t kNumSentPackets = 10;
   // Transmit 10 packets at once and then go forward an RTT.

@@ -70,7 +70,7 @@ class TestSessionStateDelegate : public SessionStateDelegate {
   // Updates the internal state that indicates whether the screen can be locked.
   // Locking will only actually be allowed when this value is |true| and there
   // is an active user.
-  void SetCanLockScreen(bool can_lock_screen);
+  static void SetCanLockScreen(bool can_lock_screen);
 
   // Updates |should_lock_screen_before_suspending_|.
   void SetShouldLockScreenBeforeSuspending(bool should_lock);
@@ -104,7 +104,7 @@ class TestSessionStateDelegate : public SessionStateDelegate {
   // The index for the activated user.
   int active_user_index_;
 
-  std::vector<MockUserInfo*> user_list_;
+  std::vector<std::unique_ptr<MockUserInfo>> user_list_;
 
   // The user manager to be used instead of the system instance.
   std::unique_ptr<TestUserManager> user_manager_;

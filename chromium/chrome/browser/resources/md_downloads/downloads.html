@@ -19,6 +19,11 @@
       display: flex;
       margin: 0;
     }
+
+    :root {
+      --downloads-card-margin: 24px;
+      --downloads-card-width: 640px;
+    }
   </style>
 </head>
 <body>
@@ -33,6 +38,7 @@
   <command id="undo-command" shortcut="Ctrl|z">
   <command id="find-command" shortcut="Ctrl|f">
 </if>
+  <link rel="import" href="chrome://resources/html/cr.html">
   <link rel="import" href="chrome://resources/html/polymer.html">
   <link rel="import" href="chrome://downloads/i18n_setup.html">
   <link rel="import" href="chrome://downloads/manager.html">

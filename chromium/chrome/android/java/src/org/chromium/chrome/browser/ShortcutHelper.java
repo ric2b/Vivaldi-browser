@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser;
 
+import android.annotation.SuppressLint;
 import android.app.ActivityManager;
 import android.content.Context;
 import android.content.Intent;
@@ -168,7 +169,7 @@ public class ShortcutHelper {
                 // process is complete, call back to native code to start the splash image
                 // download.
                 WebappRegistry.registerWebapp(
-                        context, id, new WebappRegistry.FetchWebappDataStorageCallback() {
+                        id, new WebappRegistry.FetchWebappDataStorageCallback() {
                             @Override
                             public void onWebappDataStorageRetrieved(WebappDataStorage storage) {
                                 storage.updateFromShortcutIntent(resultIntent);
@@ -235,8 +236,8 @@ public class ShortcutHelper {
     @SuppressWarnings("unused")
     @CalledByNative
     private static void storeWebappSplashImage(final String id, final Bitmap splashImage) {
-        WebappRegistry.getWebappDataStorage(ContextUtils.getApplicationContext(), id,
-                new WebappRegistry.FetchWebappDataStorageCallback() {
+        WebappRegistry.getWebappDataStorage(
+                id, new WebappRegistry.FetchWebappDataStorageCallback() {
                     @Override
                     public void onWebappDataStorageRetrieved(WebappDataStorage storage) {
                         if (storage == null) return;
@@ -336,6 +337,8 @@ public class ShortcutHelper {
      * @param context Context used to get the package manager.
      * @return if a shortcut can be added to the home screen under the current profile.
      */
+    // TODO(crbug.com/635567): Fix this properly.
+    @SuppressLint("WrongConstant")
     public static boolean isAddToHomeIntentSupported(Context context) {
         PackageManager pm = context.getPackageManager();
         Intent i = new Intent(INSTALL_SHORTCUT);
@@ -455,16 +458,13 @@ public class ShortcutHelper {
     }
 
     /**
-     * Returns true if WebAPKs are enabled and there is a WebAPK installed which can handle
-     * {@link url}.
+     * Returns the package name of the WebAPK if WebAPKs are enabled and there is an installed
+     * WebAPK which can handle {@link url}. Returns null otherwise.
      */
     @CalledByNative
-    private static boolean isWebApkInstalled(String url) {
-        if (!ChromeWebApkHost.isEnabled()) {
-            return false;
-        }
-        return WebApkValidator.queryWebApkPackage(ContextUtils.getApplicationContext(), url)
-                != null;
+    private static String queryWebApkPackage(String url) {
+        if (!ChromeWebApkHost.isEnabled()) return null;
+        return WebApkValidator.queryWebApkPackage(ContextUtils.getApplicationContext(), url);
     }
 
     /**

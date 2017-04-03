@@ -135,11 +135,10 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
                            content::WebPreferences* web_prefs) override;
   ScopedVector<content::NavigationThrottle> CreateThrottlesForNavigation(
       content::NavigationHandle* navigation_handle) override;
-#if defined(VIDEO_HOLE)
-  content::ExternalVideoSurfaceContainer*
-  OverrideCreateExternalVideoSurfaceContainer(
-      content::WebContents* web_contents) override;
-#endif
+  content::DevToolsManagerDelegate* GetDevToolsManagerDelegate() override;
+  void RegisterRenderFrameMojoInterfaces(
+      shell::InterfaceRegistry* registry,
+      content::RenderFrameHost* render_frame_host) override;
 
  private:
   // Android WebView currently has a single global (non-off-the-record) browser

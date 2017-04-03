@@ -18,6 +18,9 @@ namespace automationInternal {
 
     // The type of event that this update represents.
     DOMString eventType;
+
+    // The source of this event.
+    DOMString eventFrom;
   };
 
   // All possible actions that can be performed on automation nodes.
@@ -105,5 +108,7 @@ namespace automationInternal {
     static void onChildTreeID(long treeID, long nodeID);
 
     static void onNodesRemoved(long treeID, long[] nodeIDs);
+
+    static void onAccessibilityTreeSerializationError(long treeID);
   };
 };

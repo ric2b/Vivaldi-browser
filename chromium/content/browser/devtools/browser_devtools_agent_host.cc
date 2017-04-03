@@ -5,8 +5,8 @@
 #include "content/browser/devtools/browser_devtools_agent_host.h"
 
 #include "base/bind.h"
+#include "base/guid.h"
 #include "content/browser/devtools/devtools_protocol_handler.h"
-#include "content/browser/devtools/protocol/browser_handler.h"
 #include "content/browser/devtools/protocol/io_handler.h"
 #include "content/browser/devtools/protocol/memory_handler.h"
 #include "content/browser/devtools/protocol/system_info_handler.h"
@@ -25,7 +25,7 @@ scoped_refptr<DevToolsAgentHost> DevToolsAgentHost::CreateForBrowser(
 BrowserDevToolsAgentHost::BrowserDevToolsAgentHost(
     scoped_refptr<base::SingleThreadTaskRunner> tethering_task_runner,
     const CreateServerSocketCallback& socket_callback)
-    : browser_handler_(new devtools::browser::BrowserHandler()),
+    : DevToolsAgentHostImpl(base::GenerateGUID()),
       io_handler_(new devtools::io::IOHandler(GetIOContext())),
       memory_handler_(new devtools::memory::MemoryHandler()),
       system_info_handler_(new devtools::system_info::SystemInfoHandler()),
@@ -38,7 +38,6 @@ BrowserDevToolsAgentHost::BrowserDevToolsAgentHost(
           GetIOContext())),
       protocol_handler_(new DevToolsProtocolHandler(this)) {
   DevToolsProtocolDispatcher* dispatcher = protocol_handler_->dispatcher();
-  dispatcher->SetBrowserHandler(browser_handler_.get());
   dispatcher->SetIOHandler(io_handler_.get());
   dispatcher->SetMemoryHandler(memory_handler_.get());
   dispatcher->SetSystemInfoHandler(system_info_handler_.get());
@@ -55,8 +54,8 @@ void BrowserDevToolsAgentHost::Attach() {
 void BrowserDevToolsAgentHost::Detach() {
 }
 
-DevToolsAgentHost::Type BrowserDevToolsAgentHost::GetType() {
-  return TYPE_BROWSER;
+std::string BrowserDevToolsAgentHost::GetType() {
+  return kTypeBrowser;
 }
 
 std::string BrowserDevToolsAgentHost::GetTitle() {
@@ -73,6 +72,9 @@ bool BrowserDevToolsAgentHost::Activate() {
 
 bool BrowserDevToolsAgentHost::Close() {
   return false;
+}
+
+void BrowserDevToolsAgentHost::Reload() {
 }
 
 bool BrowserDevToolsAgentHost::DispatchProtocolMessage(

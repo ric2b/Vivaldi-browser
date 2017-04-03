@@ -84,9 +84,10 @@ UsersPrivateGetWhitelistedUsersFunction::Run() {
 
   user_manager::UserManager* user_manager = user_manager::UserManager::Get();
   const user_manager::UserList& users = user_manager->GetUsers();
-  for (user_manager::UserList::const_iterator it = users.begin();
-       it < users.end(); ++it)
-    email_list->AppendIfNotPresent(new base::StringValue((*it)->email()));
+  for (const auto* user : users) {
+    email_list->AppendIfNotPresent(
+        base::MakeUnique<base::StringValue>(user->email()));
+  }
 
   if (chromeos::OwnerSettingsServiceChromeOS* service =
           chromeos::OwnerSettingsServiceChromeOSFactory::GetForBrowserContext(
@@ -102,7 +103,7 @@ UsersPrivateGetWhitelistedUsersFunction::Run() {
         user_manager->GetUserDisplayEmail(AccountId::FromUserEmail(user.email));
     user.is_owner = chromeos::ProfileHelper::IsOwnerProfile(profile) &&
                     user.email == profile->GetProfileUserName();
-    user_list->Append(user.ToValue().release());
+    user_list->Append(user.ToValue());
   }
 
   return RespondNow(OneArgument(std::move(user_list)));

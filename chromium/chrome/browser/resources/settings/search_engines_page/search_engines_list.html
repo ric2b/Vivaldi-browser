@@ -1,6 +1,7 @@
+<link rel="import" href="chrome://resources/cr_elements/cr_scrollable_behavior.html">
+<link rel="import" href="chrome://resources/cr_elements/shared_style_css.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-list/iron-list.html">
-<link rel="import" href="chrome://resources/cr_elements/shared_style_css.html">
 <link rel="import" href="/search_engines_page/search_engine_entry.html">
 
 <dom-module id="settings-search-engines-list">
@@ -21,22 +22,28 @@
       }
 
       div#outer {
-        margin: var(--search-engines-list-margin);
+        @apply(--settings-list-frame-padding);
       }
 
-      ::content [is='action-link'] {
-        margin: var(--search-engines-list-item-vertical-space) 0;
+      settings-search-engine-entry {
+        border-top: var(--settings-separator-line);
+      }
+
+      settings-search-engine-entry:first-of-type {
+        border-top: none;
       }
     </style>
     <div id="outer">
       <content></content>
-      <iron-list items="[[engines]]" selectable>
-        <template>
-          <settings-search-engine-entry engine="[[item]]"
-              tabindex$="[[tabIndex]]">
-          </settings-search-engine-entry>
-        </template>
-      </iron-list>
+      <div id="container" class="scroll-container" scrollable>
+        <iron-list items="[[engines]]" scroll-target="container">
+          <template>
+            <settings-search-engine-entry engine="[[item]]"
+                tabindex$="[[tabIndex]]">
+            </settings-search-engine-entry>
+          </template>
+        </iron-list>
+      </div>
     </div>
   </template>
   <script src="search_engines_list.js"></script>

@@ -10,9 +10,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram.h"
-#include "base/values.h"
 #include "components/user_prefs/tracked/hash_store_contents.h"
-#include "components/user_prefs/tracked/pref_hash_store_transaction.h"
 
 class PrefHashStoreImpl::PrefHashStoreTransactionImpl
     : public PrefHashStoreTransaction {
@@ -20,10 +18,11 @@ class PrefHashStoreImpl::PrefHashStoreTransactionImpl
   // Constructs a PrefHashStoreTransactionImpl which can use the private
   // members of its |outer| PrefHashStoreImpl.
   PrefHashStoreTransactionImpl(PrefHashStoreImpl* outer,
-                               std::unique_ptr<HashStoreContents> storage);
+                               HashStoreContents* storage);
   ~PrefHashStoreTransactionImpl() override;
 
   // PrefHashStoreTransaction implementation.
+  base::StringPiece GetStoreUMASuffix() const override;
   ValueState CheckValue(const std::string& path,
                         const base::Value* value) const override;
   void StoreHash(const std::string& path, const base::Value* value) override;
@@ -41,7 +40,7 @@ class PrefHashStoreImpl::PrefHashStoreTransactionImpl
 
  private:
   PrefHashStoreImpl* outer_;
-  std::unique_ptr<HashStoreContents> contents_;
+  HashStoreContents* contents_;
 
   bool super_mac_valid_;
   bool super_mac_dirty_;
@@ -59,14 +58,43 @@ PrefHashStoreImpl::~PrefHashStoreImpl() {
 }
 
 std::unique_ptr<PrefHashStoreTransaction> PrefHashStoreImpl::BeginTransaction(
-    std::unique_ptr<HashStoreContents> storage) {
+    HashStoreContents* storage) {
   return std::unique_ptr<PrefHashStoreTransaction>(
       new PrefHashStoreTransactionImpl(this, std::move(storage)));
 }
 
+std::string PrefHashStoreImpl::ComputeMac(const std::string& path,
+                                          const base::Value* value) {
+  return pref_hash_calculator_.Calculate(path, value);
+}
+
+std::unique_ptr<base::DictionaryValue> PrefHashStoreImpl::ComputeSplitMacs(
+    const std::string& path,
+    const base::DictionaryValue* split_values) {
+  DCHECK(split_values);
+
+  std::string keyed_path(path);
+  keyed_path.push_back('.');
+  const size_t common_part_length = keyed_path.length();
+
+  std::unique_ptr<base::DictionaryValue> split_macs(new base::DictionaryValue);
+
+  for (base::DictionaryValue::Iterator it(*split_values); !it.IsAtEnd();
+       it.Advance()) {
+    // Keep the common part from the old |keyed_path| and replace the key to
+    // get the new |keyed_path|.
+    keyed_path.replace(common_part_length, std::string::npos, it.key());
+
+    split_macs->SetStringWithoutPathExpansion(
+        it.key(), ComputeMac(keyed_path, &it.value()));
+  }
+
+  return split_macs;
+}
+
 PrefHashStoreImpl::PrefHashStoreTransactionImpl::PrefHashStoreTransactionImpl(
     PrefHashStoreImpl* outer,
-    std::unique_ptr<HashStoreContents> storage)
+    HashStoreContents* storage)
     : outer_(outer),
       contents_(std::move(storage)),
       super_mac_valid_(false),
@@ -89,9 +117,13 @@ PrefHashStoreImpl::PrefHashStoreTransactionImpl::
   if (super_mac_dirty_ && outer_->use_super_mac_) {
     // Get the dictionary of hashes (or NULL if it doesn't exist).
     const base::DictionaryValue* hashes_dict = contents_->GetContents();
-    contents_->SetSuperMac(
-        outer_->pref_hash_calculator_.Calculate("", hashes_dict));
+    contents_->SetSuperMac(outer_->ComputeMac("", hashes_dict));
   }
+}
+
+base::StringPiece
+PrefHashStoreImpl::PrefHashStoreTransactionImpl::GetStoreUMASuffix() const {
+  return contents_->GetUMASuffix();
 }
 
 PrefHashStoreTransaction::ValueState
@@ -130,8 +162,7 @@ PrefHashStoreImpl::PrefHashStoreTransactionImpl::CheckValue(
 void PrefHashStoreImpl::PrefHashStoreTransactionImpl::StoreHash(
     const std::string& path,
     const base::Value* new_value) {
-  const std::string mac =
-      outer_->pref_hash_calculator_.Calculate(path, new_value);
+  const std::string mac = outer_->ComputeMac(path, new_value);
   contents_->SetMac(path, mac);
   super_mac_dirty_ = true;
 }
@@ -207,17 +238,16 @@ void PrefHashStoreImpl::PrefHashStoreTransactionImpl::StoreSplitHash(
   contents_->RemoveEntry(path);
 
   if (split_value) {
-    std::string keyed_path(path);
-    keyed_path.push_back('.');
-    const size_t common_part_length = keyed_path.length();
-    for (base::DictionaryValue::Iterator it(*split_value); !it.IsAtEnd();
+    std::unique_ptr<base::DictionaryValue> split_macs =
+        outer_->ComputeSplitMacs(path, split_value);
+
+    for (base::DictionaryValue::Iterator it(*split_macs); !it.IsAtEnd();
          it.Advance()) {
-      // Keep the common part from the old |keyed_path| and replace the key to
-      // get the new |keyed_path|.
-      keyed_path.replace(common_part_length, std::string::npos, it.key());
-      contents_->SetSplitMac(
-          path, it.key(),
-          outer_->pref_hash_calculator_.Calculate(keyed_path, &it.value()));
+      const base::StringValue* value_as_string;
+      bool is_string = it.value().GetAsString(&value_as_string);
+      DCHECK(is_string);
+
+      contents_->SetSplitMac(path, it.key(), value_as_string->GetString());
     }
   }
   super_mac_dirty_ = true;

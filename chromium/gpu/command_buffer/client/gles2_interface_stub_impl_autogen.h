@@ -850,6 +850,9 @@ void* GLES2InterfaceStub::MapBufferRange(GLenum /* target */,
 GLboolean GLES2InterfaceStub::UnmapBuffer(GLenum /* target */) {
   return 0;
 }
+void GLES2InterfaceStub::FlushMappedBufferRange(GLenum /* target */,
+                                                GLintptr /* offset */,
+                                                GLsizeiptr /* size */) {}
 void* GLES2InterfaceStub::MapTexSubImage2DCHROMIUM(GLenum /* target */,
                                                    GLint /* level */,
                                                    GLint /* xoffset */,
@@ -1155,4 +1158,8 @@ void GLES2InterfaceStub::UniformMatrix4fvStreamTextureMatrixCHROMIUM(
     GLint /* location */,
     GLboolean /* transpose */,
     const GLfloat* /* transform */) {}
+void GLES2InterfaceStub::SwapBuffersWithDamageCHROMIUM(GLint /* x */,
+                                                       GLint /* y */,
+                                                       GLint /* width */,
+                                                       GLint /* height */) {}
 #endif  // GPU_COMMAND_BUFFER_CLIENT_GLES2_INTERFACE_STUB_IMPL_AUTOGEN_H_

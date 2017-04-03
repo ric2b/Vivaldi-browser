@@ -47,11 +47,11 @@ void ThreadedChannel::UpdateTopControlsStateOnImpl(TopControlsState constraints,
                  constraints, current, animate));
 }
 
-void ThreadedChannel::InitializeOutputSurfaceOnImpl(
-    OutputSurface* output_surface) {
+void ThreadedChannel::InitializeCompositorFrameSinkOnImpl(
+    CompositorFrameSink* output_surface) {
   DCHECK(IsMainThread());
   ImplThreadTaskRunner()->PostTask(
-      FROM_HERE, base::Bind(&ProxyImpl::InitializeOutputSurfaceOnImpl,
+      FROM_HERE, base::Bind(&ProxyImpl::InitializeCompositorFrameSinkOnImpl,
                             proxy_impl_weak_ptr_, output_surface));
 }
 
@@ -116,10 +116,11 @@ void ThreadedChannel::SetVisibleOnImpl(bool visible) {
       base::Bind(&ProxyImpl::SetVisibleOnImpl, proxy_impl_weak_ptr_, visible));
 }
 
-void ThreadedChannel::ReleaseOutputSurfaceOnImpl(CompletionEvent* completion) {
+void ThreadedChannel::ReleaseCompositorFrameSinkOnImpl(
+    CompletionEvent* completion) {
   DCHECK(IsMainThread());
   ImplThreadTaskRunner()->PostTask(
-      FROM_HERE, base::Bind(&ProxyImpl::ReleaseOutputSurfaceOnImpl,
+      FROM_HERE, base::Bind(&ProxyImpl::ReleaseCompositorFrameSinkOnImpl,
                             proxy_impl_weak_ptr_, completion));
 }
 
@@ -135,7 +136,7 @@ void ThreadedChannel::MainFrameWillHappenOnImplForTesting(
 
 void ThreadedChannel::NotifyReadyToCommitOnImpl(
     CompletionEvent* completion,
-    LayerTreeHost* layer_tree_host,
+    LayerTreeHostInProcess* layer_tree_host,
     base::TimeTicks main_thread_start_time,
     bool hold_commit_for_activation) {
   DCHECK(IsMainThread());
@@ -147,8 +148,7 @@ void ThreadedChannel::NotifyReadyToCommitOnImpl(
 }
 
 void ThreadedChannel::SynchronouslyInitializeImpl(
-    LayerTreeHost* layer_tree_host,
-    std::unique_ptr<BeginFrameSource> external_begin_frame_source) {
+    LayerTreeHostInProcess* layer_tree_host) {
   TRACE_EVENT0("cc", "ThreadChannel::SynchronouslyInitializeImpl");
   DCHECK(IsMainThread());
   {
@@ -157,8 +157,7 @@ void ThreadedChannel::SynchronouslyInitializeImpl(
     ImplThreadTaskRunner()->PostTask(
         FROM_HERE,
         base::Bind(&ThreadedChannel::InitializeImplOnImpl,
-                   base::Unretained(this), &completion, layer_tree_host,
-                   base::Passed(&external_begin_frame_source)));
+                   base::Unretained(this), &completion, layer_tree_host));
     completion.Wait();
   }
   main().initialized = true;
@@ -221,24 +220,24 @@ void ThreadedChannel::SetAnimationEvents(
                             impl().proxy_main_weak_ptr, base::Passed(&events)));
 }
 
-void ThreadedChannel::DidLoseOutputSurface() {
+void ThreadedChannel::DidLoseCompositorFrameSink() {
   DCHECK(IsImplThread());
   MainThreadTaskRunner()->PostTask(
-      FROM_HERE,
-      base::Bind(&ProxyMain::DidLoseOutputSurface, impl().proxy_main_weak_ptr));
-}
-
-void ThreadedChannel::RequestNewOutputSurface() {
-  DCHECK(IsImplThread());
-  MainThreadTaskRunner()->PostTask(
-      FROM_HERE, base::Bind(&ProxyMain::RequestNewOutputSurface,
+      FROM_HERE, base::Bind(&ProxyMain::DidLoseCompositorFrameSink,
                             impl().proxy_main_weak_ptr));
 }
 
-void ThreadedChannel::DidInitializeOutputSurface(bool success) {
+void ThreadedChannel::RequestNewCompositorFrameSink() {
   DCHECK(IsImplThread());
   MainThreadTaskRunner()->PostTask(
-      FROM_HERE, base::Bind(&ProxyMain::DidInitializeOutputSurface,
+      FROM_HERE, base::Bind(&ProxyMain::RequestNewCompositorFrameSink,
+                            impl().proxy_main_weak_ptr));
+}
+
+void ThreadedChannel::DidInitializeCompositorFrameSink(bool success) {
+  DCHECK(IsImplThread());
+  MainThreadTaskRunner()->PostTask(
+      FROM_HERE, base::Bind(&ProxyMain::DidInitializeCompositorFrameSink,
                             impl().proxy_main_weak_ptr, success));
 }
 
@@ -260,23 +259,19 @@ void ThreadedChannel::BeginMainFrame(
 
 std::unique_ptr<ProxyImpl> ThreadedChannel::CreateProxyImpl(
     ChannelImpl* channel_impl,
-    LayerTreeHost* layer_tree_host,
-    TaskRunnerProvider* task_runner_provider,
-    std::unique_ptr<BeginFrameSource> external_begin_frame_source) {
+    LayerTreeHostInProcess* layer_tree_host,
+    TaskRunnerProvider* task_runner_provider) {
   DCHECK(IsImplThread());
   return base::MakeUnique<ProxyImpl>(channel_impl, layer_tree_host,
-                                     task_runner_provider,
-                                     std::move(external_begin_frame_source));
+                                     task_runner_provider);
 }
 
 void ThreadedChannel::InitializeImplOnImpl(
     CompletionEvent* completion,
-    LayerTreeHost* layer_tree_host,
-    std::unique_ptr<BeginFrameSource> external_begin_frame_source) {
+    LayerTreeHostInProcess* layer_tree_host) {
   DCHECK(IsImplThread());
   impl().proxy_impl =
-      CreateProxyImpl(this, layer_tree_host, task_runner_provider_,
-                      std::move(external_begin_frame_source));
+      CreateProxyImpl(this, layer_tree_host, task_runner_provider_);
   impl().proxy_impl_weak_factory =
       base::MakeUnique<base::WeakPtrFactory<ProxyImpl>>(
           impl().proxy_impl.get());

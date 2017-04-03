@@ -26,8 +26,8 @@
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/system/fake_statistics_provider.h"
 #include "chromeos/system/statistics_provider.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
-#include "components/browser_sync/common/browser_sync_switches.h"
+#include "components/browser_sync/browser_sync_switches.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager_base.h"
 #include "components/sync/api/fake_sync_change_processor.h"
@@ -71,11 +71,8 @@ class ExternalProviderImplChromeOSTest : public ExtensionServiceTestBase {
     extensions::ExternalProviderImpl::CreateExternalProviders(
         service_, profile_.get(), &providers);
 
-    for (ProviderCollection::iterator i = providers.begin();
-         i != providers.end();
-         ++i) {
-      service_->AddProviderForTesting(i->release());
-    }
+    for (std::unique_ptr<ExternalProviderInterface>& provider : providers)
+      service_->AddProviderForTesting(std::move(provider));
   }
 
   // ExtensionServiceTestBase overrides:
@@ -158,7 +155,7 @@ TEST_F(ExternalProviderImplChromeOSTest, PolicyDisabled) {
 
   // Log user in, start sync.
   TestingBrowserProcess::GetGlobal()->SetProfileManager(
-      new ProfileManagerWithoutInit(temp_dir().path()));
+      new ProfileManagerWithoutInit(temp_dir().GetPath()));
   SigninManagerBase* signin =
       SigninManagerFactory::GetForProfile(profile_.get());
   signin->SetAuthenticatedAccountInfo("gaia-id-test_user@gmail.com",
@@ -170,7 +167,7 @@ TEST_F(ExternalProviderImplChromeOSTest, PolicyDisabled) {
   service_->CheckForExternalUpdates();
 
   // Sync is dsabled by policy.
-  profile_->GetPrefs()->SetBoolean(sync_driver::prefs::kSyncManaged, true);
+  profile_->GetPrefs()->SetBoolean(syncer::prefs::kSyncManaged, true);
 
   content::WindowedNotificationObserver(
       extensions::NOTIFICATION_CRX_INSTALLER_DONE,

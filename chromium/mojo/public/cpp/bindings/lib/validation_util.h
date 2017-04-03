@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include "mojo/public/cpp/bindings/bindings_export.h"
 #include "mojo/public/cpp/bindings/lib/bindings_internal.h"
 #include "mojo/public/cpp/bindings/lib/serialization_util.h"
 #include "mojo/public/cpp/bindings/lib/validate_params.h"
@@ -46,30 +47,32 @@ bool ValidatePointer(const Pointer<T>& input,
 // |validation_context|. On success, the memory range is marked as occupied.
 // Note: Does not verify |version| or that |num_bytes| is correct for the
 // claimed version.
-bool ValidateStructHeaderAndClaimMemory(const void* data,
-                                        ValidationContext* validation_context);
+MOJO_CPP_BINDINGS_EXPORT bool ValidateStructHeaderAndClaimMemory(
+    const void* data,
+    ValidationContext* validation_context);
 
 // Validates that |data| contains a valid union header, in terms of alignment
-// and size. If not inlined, it checks that the memory range
-// [data, data + num_bytes) is not marked as occupied by other objects in
-// |validation_context|. On success, the memory range is marked as occupied.
-bool ValidateUnionHeaderAndClaimMemory(const void* data,
-                                       bool inlined,
-                                       ValidationContext* validation_context);
+// and size. It checks that the memory range [data, data + kUnionDataSize) is
+// not marked as occupied by other objects in |validation_context|. On success,
+// the memory range is marked as occupied.
+MOJO_CPP_BINDINGS_EXPORT bool ValidateNonInlinedUnionHeaderAndClaimMemory(
+    const void* data,
+    ValidationContext* validation_context);
 
 // Validates that the message is a request which doesn't expect a response.
-bool ValidateMessageIsRequestWithoutResponse(
+MOJO_CPP_BINDINGS_EXPORT bool ValidateMessageIsRequestWithoutResponse(
     const Message* message,
     ValidationContext* validation_context);
 
 // Validates that the message is a request expecting a response.
-bool ValidateMessageIsRequestExpectingResponse(
+MOJO_CPP_BINDINGS_EXPORT bool ValidateMessageIsRequestExpectingResponse(
     const Message* message,
     ValidationContext* validation_context);
 
 // Validates that the message is a response.
-bool ValidateMessageIsResponse(const Message* message,
-                               ValidationContext* validation_context);
+MOJO_CPP_BINDINGS_EXPORT bool ValidateMessageIsResponse(
+    const Message* message,
+    ValidationContext* validation_context);
 
 // Validates that the message payload is a valid struct of type ParamsType.
 template <typename ParamsType>
@@ -77,13 +80,6 @@ bool ValidateMessagePayload(const Message* message,
                             ValidationContext* validation_context) {
   return ParamsType::Validate(message->payload(), validation_context);
 }
-
-// The following methods validate control messages defined in
-// interface_control_messages.mojom.
-bool ValidateControlRequest(const Message* message,
-                            ValidationContext* validation_context);
-bool ValidateControlResponse(const Message* message,
-                             ValidationContext* validation_context);
 
 // The following Validate.*NonNullable() functions validate that the given
 // |input| is not null/invalid.
@@ -113,24 +109,28 @@ bool ValidateInlinedUnionNonNullable(const T& input,
   return false;
 }
 
-bool IsHandleOrInterfaceValid(const AssociatedInterface_Data& input);
-bool IsHandleOrInterfaceValid(const AssociatedInterfaceRequest_Data& input);
-bool IsHandleOrInterfaceValid(const Interface_Data& input);
-bool IsHandleOrInterfaceValid(const Handle_Data& input);
+MOJO_CPP_BINDINGS_EXPORT bool IsHandleOrInterfaceValid(
+    const AssociatedInterface_Data& input);
+MOJO_CPP_BINDINGS_EXPORT bool IsHandleOrInterfaceValid(
+    const AssociatedInterfaceRequest_Data& input);
+MOJO_CPP_BINDINGS_EXPORT bool IsHandleOrInterfaceValid(
+    const Interface_Data& input);
+MOJO_CPP_BINDINGS_EXPORT bool IsHandleOrInterfaceValid(
+    const Handle_Data& input);
 
-bool ValidateHandleOrInterfaceNonNullable(
+MOJO_CPP_BINDINGS_EXPORT bool ValidateHandleOrInterfaceNonNullable(
     const AssociatedInterface_Data& input,
     const char* error_message,
     ValidationContext* validation_context);
-bool ValidateHandleOrInterfaceNonNullable(
+MOJO_CPP_BINDINGS_EXPORT bool ValidateHandleOrInterfaceNonNullable(
     const AssociatedInterfaceRequest_Data& input,
     const char* error_message,
     ValidationContext* validation_context);
-bool ValidateHandleOrInterfaceNonNullable(
+MOJO_CPP_BINDINGS_EXPORT bool ValidateHandleOrInterfaceNonNullable(
     const Interface_Data& input,
     const char* error_message,
     ValidationContext* validation_context);
-bool ValidateHandleOrInterfaceNonNullable(
+MOJO_CPP_BINDINGS_EXPORT bool ValidateHandleOrInterfaceNonNullable(
     const Handle_Data& input,
     const char* error_message,
     ValidationContext* validation_context);
@@ -139,6 +139,12 @@ template <typename T>
 bool ValidateContainer(const Pointer<T>& input,
                        ValidationContext* validation_context,
                        const ContainerValidateParams* validate_params) {
+  ValidationContext::ScopedDepthTracker depth_tracker(validation_context);
+  if (validation_context->ExceedsMaxDepth()) {
+    ReportValidationError(validation_context,
+                          VALIDATION_ERROR_MAX_RECURSION_DEPTH);
+    return false;
+  }
   return ValidatePointer(input, validation_context) &&
          T::Validate(input.Get(), validation_context, validate_params);
 }
@@ -146,6 +152,12 @@ bool ValidateContainer(const Pointer<T>& input,
 template <typename T>
 bool ValidateStruct(const Pointer<T>& input,
                     ValidationContext* validation_context) {
+  ValidationContext::ScopedDepthTracker depth_tracker(validation_context);
+  if (validation_context->ExceedsMaxDepth()) {
+    ReportValidationError(validation_context,
+                          VALIDATION_ERROR_MAX_RECURSION_DEPTH);
+    return false;
+  }
   return ValidatePointer(input, validation_context) &&
          T::Validate(input.Get(), validation_context);
 }
@@ -153,24 +165,40 @@ bool ValidateStruct(const Pointer<T>& input,
 template <typename T>
 bool ValidateInlinedUnion(const T& input,
                           ValidationContext* validation_context) {
+  ValidationContext::ScopedDepthTracker depth_tracker(validation_context);
+  if (validation_context->ExceedsMaxDepth()) {
+    ReportValidationError(validation_context,
+                          VALIDATION_ERROR_MAX_RECURSION_DEPTH);
+    return false;
+  }
   return T::Validate(&input, validation_context, true);
 }
 
 template <typename T>
 bool ValidateNonInlinedUnion(const Pointer<T>& input,
                              ValidationContext* validation_context) {
+  ValidationContext::ScopedDepthTracker depth_tracker(validation_context);
+  if (validation_context->ExceedsMaxDepth()) {
+    ReportValidationError(validation_context,
+                          VALIDATION_ERROR_MAX_RECURSION_DEPTH);
+    return false;
+  }
   return ValidatePointer(input, validation_context) &&
          T::Validate(input.Get(), validation_context, false);
 }
 
-bool ValidateHandleOrInterface(const AssociatedInterface_Data& input,
-                               ValidationContext* validation_context);
-bool ValidateHandleOrInterface(const AssociatedInterfaceRequest_Data& input,
-                               ValidationContext* validation_context);
-bool ValidateHandleOrInterface(const Interface_Data& input,
-                               ValidationContext* validation_context);
-bool ValidateHandleOrInterface(const Handle_Data& input,
-                               ValidationContext* validation_context);
+MOJO_CPP_BINDINGS_EXPORT bool ValidateHandleOrInterface(
+    const AssociatedInterface_Data& input,
+    ValidationContext* validation_context);
+MOJO_CPP_BINDINGS_EXPORT bool ValidateHandleOrInterface(
+    const AssociatedInterfaceRequest_Data& input,
+    ValidationContext* validation_context);
+MOJO_CPP_BINDINGS_EXPORT bool ValidateHandleOrInterface(
+    const Interface_Data& input,
+    ValidationContext* validation_context);
+MOJO_CPP_BINDINGS_EXPORT bool ValidateHandleOrInterface(
+    const Handle_Data& input,
+    ValidationContext* validation_context);
 
 }  // namespace internal
 }  // namespace mojo

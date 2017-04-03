@@ -31,8 +31,8 @@
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/web_data_service_factory.h"
 #include "chrome/common/channel_info.h"
-#include "components/browser_sync/browser/profile_sync_components_factory_impl.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_components_factory_impl.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/network_time/network_time_tracker.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
@@ -51,6 +51,8 @@
 #if !defined(OS_ANDROID)
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
 #endif
+
+using browser_sync::ProfileSyncService;
 
 namespace {
 
@@ -82,15 +84,14 @@ ProfileSyncServiceFactory* ProfileSyncServiceFactory::GetInstance() {
 ProfileSyncService* ProfileSyncServiceFactory::GetForProfile(
     Profile* profile) {
   if (!ProfileSyncService::IsSyncAllowedByFlag())
-    return NULL;
+    return nullptr;
 
   return static_cast<ProfileSyncService*>(
       GetInstance()->GetServiceForBrowserContext(profile, true));
 }
 
 // static
-sync_driver::SyncService*
-ProfileSyncServiceFactory::GetSyncServiceForBrowserContext(
+syncer::SyncService* ProfileSyncServiceFactory::GetSyncServiceForBrowserContext(
     content::BrowserContext* context) {
   return GetForProfile(Profile::FromBrowserContext(context));
 }
@@ -154,7 +155,7 @@ KeyedService* ProfileSyncServiceFactory::BuildServiceInstanceFor(
   AboutSigninInternalsFactory::GetForProfile(profile);
 
   init_params.signin_wrapper =
-      base::WrapUnique(new SupervisedUserSigninManagerWrapper(profile, signin));
+      base::MakeUnique<SupervisedUserSigninManagerWrapper>(profile, signin);
   init_params.oauth2_token_service =
       ProfileOAuth2TokenServiceFactory::GetForProfile(profile);
   init_params.gaia_cookie_manager_service =
@@ -170,8 +171,12 @@ KeyedService* ProfileSyncServiceFactory::BuildServiceInstanceFor(
                                    ? ProfileSyncService::AUTO_START
                                    : ProfileSyncService::MANUAL_START;
 
-  init_params.sync_client =
-      base::WrapUnique(new browser_sync::ChromeSyncClient(profile));
+  if (!client_factory_) {
+    init_params.sync_client =
+        base::MakeUnique<browser_sync::ChromeSyncClient>(profile);
+  } else {
+    init_params.sync_client = client_factory_->Run(profile);
+  }
 
   init_params.network_time_update_callback = base::Bind(&UpdateNetworkTime);
   init_params.base_directory = profile->GetPath();
@@ -185,7 +190,7 @@ KeyedService* ProfileSyncServiceFactory::BuildServiceInstanceFor(
       content::BrowserThread::FILE);
   init_params.blocking_pool = content::BrowserThread::GetBlockingPool();
 
-  auto pss = base::WrapUnique(new ProfileSyncService(std::move(init_params)));
+  auto pss = base::MakeUnique<ProfileSyncService>(std::move(init_params));
 
   // Will also initialize the sync client.
   pss->Initialize();
@@ -194,5 +199,15 @@ KeyedService* ProfileSyncServiceFactory::BuildServiceInstanceFor(
 
 // static
 bool ProfileSyncServiceFactory::HasProfileSyncService(Profile* profile) {
-  return GetInstance()->GetServiceForBrowserContext(profile, false) != NULL;
+  return GetInstance()->GetServiceForBrowserContext(profile, false) != nullptr;
 }
+
+// static
+void ProfileSyncServiceFactory::SetSyncClientFactoryForTest(
+    SyncClientFactory* client_factory) {
+  client_factory_ = client_factory;
+}
+
+// static
+ProfileSyncServiceFactory::SyncClientFactory*
+    ProfileSyncServiceFactory::client_factory_ = nullptr;

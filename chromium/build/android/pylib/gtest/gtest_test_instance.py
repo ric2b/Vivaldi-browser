@@ -2,10 +2,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import HTMLParser
 import logging
 import os
 import re
 import tempfile
+import xml.etree.ElementTree
 
 from devil.android import apk_helper
 from pylib import constants
@@ -24,29 +26,6 @@ BROWSER_TEST_SUITES = [
 ]
 
 RUN_IN_SUB_THREAD_TEST_SUITES = ['net_unittests']
-
-
-_DEFAULT_ISOLATE_FILE_PATHS = {
-    'base_unittests': 'base/base_unittests.isolate',
-    'blink_heap_unittests':
-      'third_party/WebKit/Source/platform/heap/BlinkHeapUnitTests.isolate',
-    'blink_platform_unittests':
-      'third_party/WebKit/Source/platform/blink_platform_unittests.isolate',
-    'cc_perftests': 'cc/cc_perftests.isolate',
-    'components_browsertests': 'components/components_browsertests.isolate',
-    'components_unittests': 'components/components_unittests.isolate',
-    'content_browsertests': 'content/content_browsertests.isolate',
-    'content_unittests': 'content/content_unittests.isolate',
-    'media_perftests': 'media/media_perftests.isolate',
-    'media_unittests': 'media/media_unittests.isolate',
-    'midi_unittests': 'media/midi/midi_unittests.isolate',
-    'net_unittests': 'net/net_unittests.isolate',
-    'sql_unittests': 'sql/sql_unittests.isolate',
-    'ui_base_unittests': 'ui/base/ui_base_tests.isolate',
-    'unit_tests': 'chrome/unit_tests.isolate',
-    'webkit_unit_tests':
-      'third_party/WebKit/Source/web/WebKitUnitTests.isolate',
-}
 
 
 # Used for filtering large data deps at a finer grain than what's allowed in
@@ -192,6 +171,33 @@ def ParseGTestOutput(output):
   return results
 
 
+def ParseGTestXML(xml_content):
+  """Parse gtest XML result."""
+  results = []
+
+  html = HTMLParser.HTMLParser()
+
+  # TODO(jbudorick): Unclear how this handles crashes.
+  testsuites = xml.etree.ElementTree.fromstring(xml_content)
+  for testsuite in testsuites:
+    suite_name = testsuite.attrib['name']
+    for testcase in testsuite:
+      case_name = testcase.attrib['name']
+      result_type = base_test_result.ResultType.PASS
+      log = []
+      for failure in testcase:
+        result_type = base_test_result.ResultType.FAIL
+        log.append(html.unescape(failure.attrib['message']))
+
+      results.append(base_test_result.BaseTestResult(
+          '%s.%s' % (suite_name, case_name),
+          result_type,
+          int(float(testcase.attrib['time']) * 1000),
+          log=('\n'.join(log) if log else '')))
+
+  return results
+
+
 class GtestTestInstance(test_instance.TestInstance):
 
   def __init__(self, args, isolate_delegate, error_func):
@@ -250,12 +256,6 @@ class GtestTestInstance(test_instance.TestInstance):
     else:
       self._gtest_filter = None
 
-    if not args.isolate_file_path:
-      default_isolate_file_path = _DEFAULT_ISOLATE_FILE_PATHS.get(self._suite)
-      if default_isolate_file_path:
-        args.isolate_file_path = os.path.join(
-            host_paths.DIR_SOURCE_ROOT, default_isolate_file_path)
-
     if (args.isolate_file_path and
         not isolator.IsIsolateEmpty(args.isolate_file_path)):
       self._isolate_abs_path = os.path.abspath(args.isolate_file_path)
@@ -263,7 +263,8 @@ class GtestTestInstance(test_instance.TestInstance):
       self._isolated_abs_path = os.path.join(
           constants.GetOutDirectory(), '%s.isolated' % self._suite)
     else:
-      logging.warning('No isolate file provided. No data deps will be pushed.')
+      logging.warning('%s isolate file provided. No data deps will be pushed.',
+                      'Empty' if args.isolate_file_path else 'No')
       self._isolate_delegate = None
 
     if args.app_data_files:
@@ -278,6 +279,9 @@ class GtestTestInstance(test_instance.TestInstance):
       self._app_data_file_dir = None
 
     self._test_arguments = args.test_arguments
+
+    # TODO(jbudorick): Remove this once it's deployed.
+    self._enable_xml_result_parsing = args.enable_xml_result_parsing
 
   @property
   def activity(self):
@@ -298,6 +302,10 @@ class GtestTestInstance(test_instance.TestInstance):
   @property
   def app_files(self):
     return self._app_data_files
+
+  @property
+  def enable_xml_result_parsing(self):
+    return self._enable_xml_result_parsing
 
   @property
   def exe_dist_dir(self):

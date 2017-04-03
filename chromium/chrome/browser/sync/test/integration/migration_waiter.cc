@@ -4,6 +4,8 @@
 
 #include "chrome/browser/sync/test/integration/migration_waiter.h"
 
+#include <string>
+
 #include "base/logging.h"
 #include "chrome/browser/sync/test/integration/migration_watcher.h"
 
@@ -29,15 +31,6 @@ std::string MigrationWaiter::GetDebugMessage() const {
   return "Waiting to migrate (" + ModelTypeSetToString(expected_types_) +
          "); " + "Currently migrated: (" +
          ModelTypeSetToString(watcher_->GetMigratedTypes()) + ")";
-}
-
-void MigrationWaiter::Wait() {
-  if (IsExitConditionSatisfied()) {
-    DVLOG(1) << "Skipping wait: " << GetDebugMessage();
-    return;
-  }
-
-  StartBlockingWait();
 }
 
 void MigrationWaiter::OnMigrationStateChange() {

@@ -21,7 +21,7 @@
 #include "chrome/browser/ui/passwords/passwords_model_delegate.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "components/password_manager/core/browser/password_manager_constants.h"
 #include "components/password_manager/core/browser/password_store.h"
@@ -63,7 +63,7 @@ std::vector<autofill::PasswordForm> DeepCopyForms(
 
 password_bubble_experiment::SmartLockBranding GetSmartLockBrandingState(
     Profile* profile) {
-  const ProfileSyncService* sync_service =
+  const browser_sync::ProfileSyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile);
   return password_bubble_experiment::GetSmartLockBrandingState(sync_service);
 }
@@ -103,6 +103,10 @@ class ManagePasswordsBubbleModel::InteractionKeeper {
     clock_ = std::move(clock);
   }
 
+  void set_sign_in_promo_shown_count(int count) {
+    sign_in_promo_shown_count = count;
+  }
+
  private:
   // The way the bubble appeared.
   const password_manager::metrics_util::UIDisplayDisposition
@@ -125,6 +129,9 @@ class ManagePasswordsBubbleModel::InteractionKeeper {
   // Used to retrieve the current time, in base::Time units.
   std::unique_ptr<base::Clock> clock_;
 
+  // Number of times the sign-in promo was shown to the user.
+  int sign_in_promo_shown_count;
+
   DISALLOW_COPY_AND_ASSIGN(InteractionKeeper);
 };
 
@@ -136,7 +143,8 @@ ManagePasswordsBubbleModel::InteractionKeeper::InteractionKeeper(
       update_password_submission_event_(metrics_util::NO_UPDATE_SUBMISSION),
       sign_in_promo_dismissal_reason_(metrics_util::CHROME_SIGNIN_DISMISSED),
       interaction_stats_(std::move(stats)),
-      clock_(new base::DefaultClock) {}
+      clock_(new base::DefaultClock),
+      sign_in_promo_shown_count(0) {}
 
 void ManagePasswordsBubbleModel::InteractionKeeper::ReportInteractions(
     const ManagePasswordsBubbleModel* model) {
@@ -170,11 +178,11 @@ void ManagePasswordsBubbleModel::InteractionKeeper::ReportInteractions(
             password_manager::metrics_util::CHROME_SIGNIN_OK ||
         sign_in_promo_dismissal_reason_ ==
             password_manager::metrics_util::CHROME_SIGNIN_CANCEL) {
-      DCHECK(model->delegate_);
-      int show_count = model->GetProfile()->GetPrefs()->GetInteger(
-          password_manager::prefs::kNumberSignInPasswordPromoShown);
       UMA_HISTOGRAM_COUNTS_100("PasswordManager.SignInPromoCountTilClick",
-                               show_count);
+                               sign_in_promo_shown_count);
+    } else {
+      UMA_HISTOGRAM_COUNTS_100("PasswordManager.SignInPromoDismissalCount",
+                               sign_in_promo_shown_count);
     }
   } else if (model->state() !=
              password_manager::ui::PENDING_PASSWORD_UPDATE_STATE) {
@@ -436,7 +444,7 @@ bool ManagePasswordsBubbleModel::ShouldShowGoogleSmartLockWelcome() const {
 bool ManagePasswordsBubbleModel::ReplaceToShowSignInPromoIfNeeded() {
   DCHECK_EQ(password_manager::ui::PENDING_PASSWORD_STATE, state_);
   PrefService* prefs = GetProfile()->GetPrefs();
-  const ProfileSyncService* sync_service =
+  const browser_sync::ProfileSyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(GetProfile());
   if (password_bubble_experiment::ShouldShowChromeSignInPasswordPromo(
           prefs, sync_service)) {
@@ -446,8 +454,10 @@ bool ManagePasswordsBubbleModel::ReplaceToShowSignInPromoIfNeeded() {
     state_ = password_manager::ui::CHROME_SIGN_IN_PROMO_STATE;
     int show_count = prefs->GetInteger(
         password_manager::prefs::kNumberSignInPasswordPromoShown);
+    show_count++;
     prefs->SetInteger(password_manager::prefs::kNumberSignInPasswordPromoShown,
-                      show_count + 1);
+                      show_count);
+    interaction_keeper_->set_sign_in_promo_shown_count(show_count);
     return true;
   }
   return false;

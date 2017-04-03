@@ -23,6 +23,8 @@ Polymer({
       type: Boolean,
       value: false,
     },
+
+    lastFocused_: Object,
   },
 
   listeners: {
@@ -150,15 +152,6 @@ Polymer({
     return i == length - 1 ||
         this.historyData_[i].dateRelativeDay !=
         this.historyData_[i + 1].dateRelativeDay;
-  },
-
-  /**
-   * @param {number} index
-   * @return {boolean}
-   * @private
-   */
-  isFirstItem_: function(index) {
-    return index == 0;
   },
 
   /**

@@ -41,6 +41,7 @@
 #include "net/base/mime_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/origin.h"
 
 #if defined(ENABLE_PLUGINS)
 #include "content/public/browser/plugin_service.h"
@@ -252,7 +253,7 @@ class DownloadTargetDeterminerTest : public ChromeRenderViewHostTestHarness {
                             const DownloadTargetInfo* target_info);
 
   const base::FilePath& test_download_dir() const {
-    return test_download_dir_.path();
+    return test_download_dir_.GetPath();
   }
 
   const base::FilePath& test_virtual_dir() const {
@@ -1950,7 +1951,7 @@ class MockPluginServiceFilter : public content::PluginServiceFilter {
                          int render_view_id,
                          const void* context,
                          const GURL& url,
-                         const GURL& policy_url,
+                         const url::Origin& main_frame_origin,
                          content::WebPluginInfo* plugin) override {
     return MockPluginAvailable(plugin->path);
   }

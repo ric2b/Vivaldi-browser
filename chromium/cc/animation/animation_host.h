@@ -80,7 +80,8 @@ class CC_EXPORT AnimationHost {
   void SetMutatorHostClient(MutatorHostClient* client);
 
   void SetNeedsCommit();
-  void SetNeedsRebuildPropertyTrees();
+  void SetNeedsPushProperties();
+  bool needs_push_properties() const { return needs_push_properties_; }
 
   void PushPropertiesTo(AnimationHost* host_impl);
 
@@ -142,12 +143,14 @@ class CC_EXPORT AnimationHost {
 
   void ImplOnlyScrollAnimationCreate(ElementId element_id,
                                      const gfx::ScrollOffset& target_offset,
-                                     const gfx::ScrollOffset& current_offset);
+                                     const gfx::ScrollOffset& current_offset,
+                                     base::TimeDelta delayed_by);
   bool ImplOnlyScrollAnimationUpdateTarget(
       ElementId element_id,
       const gfx::Vector2dF& scroll_delta,
       const gfx::ScrollOffset& max_scroll_offset,
-      base::TimeTicks frame_monotonic_time);
+      base::TimeTicks frame_monotonic_time,
+      base::TimeDelta delayed_by);
 
   void ScrollAnimationAbort(bool needs_completion);
 
@@ -162,18 +165,8 @@ class CC_EXPORT AnimationHost {
   // element animations will no longer be ticked (since it's not active).
   void DidDeactivateElementAnimations(ElementAnimations* element_animations);
 
-  // Registers the given ElementAnimations as alive.
-  void RegisterElementAnimations(ElementAnimations* element_animations);
-  // Unregisters the given ElementAnimations as alive.
-  void UnregisterElementAnimations(ElementAnimations* element_animations);
-
   const ElementToAnimationsMap& active_element_animations_for_testing() const;
   const ElementToAnimationsMap& all_element_animations_for_testing() const;
-
-  bool animation_waiting_for_deletion() const {
-    return animation_waiting_for_deletion_;
-  }
-  void OnAnimationWaitingForDeletion();
 
  private:
   explicit AnimationHost(ThreadInstance thread_instance);
@@ -200,7 +193,7 @@ class CC_EXPORT AnimationHost {
   const ThreadInstance thread_instance_;
 
   bool supports_scroll_animations_;
-  bool animation_waiting_for_deletion_;
+  bool needs_push_properties_;
 
   DISALLOW_COPY_AND_ASSIGN(AnimationHost);
 };

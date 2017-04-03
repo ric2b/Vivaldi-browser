@@ -28,11 +28,11 @@
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/strings/grit/components_strings.h"
-#include "grit/browser_resources.h"
-#include "grit/theme_resources.h"
 #include "net/url_request/url_request.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -196,8 +196,7 @@ std::string LocalNtpSource::GetSource() const {
 
 void LocalNtpSource::StartDataRequest(
     const std::string& path,
-    int render_process_id,
-    int render_frame_id,
+    const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
     const content::URLDataSource::GotDataCallback& callback) {
   std::string stripped_path = StripParameters(path);
   if (stripped_path == kConfigDataFilename) {

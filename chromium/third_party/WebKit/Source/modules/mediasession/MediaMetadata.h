@@ -8,7 +8,6 @@
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "modules/ModulesExport.h"
 #include "platform/heap/Handle.h"
-#include "public/platform/modules/mediasession/WebMediaMetadata.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
@@ -19,30 +18,29 @@ class MediaMetadataInit;
 
 // Implementation of MediaMetadata interface from the Media Session API.
 class MODULES_EXPORT MediaMetadata final
-    : public GarbageCollectedFinalized<MediaMetadata>
-    , public ScriptWrappable {
-    DEFINE_WRAPPERTYPEINFO();
-public:
-    static MediaMetadata* create(ExecutionContext*, const MediaMetadataInit&);
+    : public GarbageCollectedFinalized<MediaMetadata>,
+      public ScriptWrappable {
+  DEFINE_WRAPPERTYPEINFO();
 
-    String title() const;
-    String artist() const;
-    String album() const;
-    const HeapVector<Member<MediaArtwork>>& artwork() const;
+ public:
+  static MediaMetadata* create(ExecutionContext*, const MediaMetadataInit&);
 
-    explicit operator WebMediaMetadata() const;
+  String title() const;
+  String artist() const;
+  String album() const;
+  const HeapVector<Member<MediaArtwork>>& artwork() const;
 
-    DECLARE_VIRTUAL_TRACE();
+  DECLARE_VIRTUAL_TRACE();
 
-private:
-    MediaMetadata(ExecutionContext*, const MediaMetadataInit&);
+ private:
+  MediaMetadata(ExecutionContext*, const MediaMetadataInit&);
 
-    String m_title;
-    String m_artist;
-    String m_album;
-    HeapVector<Member<MediaArtwork>> m_artwork;
+  String m_title;
+  String m_artist;
+  String m_album;
+  HeapVector<Member<MediaArtwork>> m_artwork;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // MediaMetadata_h
+#endif  // MediaMetadata_h

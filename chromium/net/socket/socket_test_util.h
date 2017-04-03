@@ -29,7 +29,7 @@
 #include "net/base/test_completion_callback.h"
 #include "net/http/http_auth_controller.h"
 #include "net/http/http_proxy_client_socket_pool.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 #include "net/socket/client_socket_factory.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/connection_attempts.h"
@@ -47,6 +47,8 @@ class RunLoop;
 }
 
 namespace net {
+
+class NetLog;
 
 const NetworkChangeNotifier::NetworkHandle kDefaultNetworkForTests = 1;
 const NetworkChangeNotifier::NetworkHandle kNewNetworkForTests = 2;
@@ -517,12 +519,12 @@ class MockClientSocketFactory : public ClientSocketFactory {
       DatagramSocket::BindType bind_type,
       const RandIntCallback& rand_int_cb,
       NetLog* net_log,
-      const NetLog::Source& source) override;
+      const NetLogSource& source) override;
   std::unique_ptr<StreamSocket> CreateTransportClientSocket(
       const AddressList& addresses,
       std::unique_ptr<SocketPerformanceWatcher> socket_performance_watcher,
       NetLog* net_log,
-      const NetLog::Source& source) override;
+      const NetLogSource& source) override;
   std::unique_ptr<SSLClientSocket> CreateSSLClientSocket(
       std::unique_ptr<ClientSocketHandle> transport_socket,
       const HostPortPair& host_and_port,
@@ -544,9 +546,10 @@ class MockClientSocketFactory : public ClientSocketFactory {
 
 class MockClientSocket : public SSLClientSocket {
  public:
-  // The BoundNetLog is needed to test LoadTimingInfo, which uses NetLog IDs as
+  // The NetLogWithSource is needed to test LoadTimingInfo, which uses NetLog
+  // IDs as
   // unique socket IDs.
-  explicit MockClientSocket(const BoundNetLog& net_log);
+  explicit MockClientSocket(const NetLogWithSource& net_log);
 
   // Socket implementation.
   int Read(IOBuffer* buf,
@@ -565,7 +568,7 @@ class MockClientSocket : public SSLClientSocket {
   bool IsConnectedAndIdle() const override;
   int GetPeerAddress(IPEndPoint* address) const override;
   int GetLocalAddress(IPEndPoint* address) const override;
-  const BoundNetLog& NetLog() const override;
+  const NetLogWithSource& NetLog() const override;
   void SetSubresourceSpeculation() override {}
   void SetOmniboxSpeculation() override {}
   bool WasNpnNegotiated() const override;
@@ -583,8 +586,9 @@ class MockClientSocket : public SSLClientSocket {
                            unsigned char* out,
                            unsigned int outlen) override;
   ChannelIDService* GetChannelIDService() const override;
-  Error GetSignedEKMForTokenBinding(crypto::ECPrivateKey* key,
-                                    std::vector<uint8_t>* out) override;
+  Error GetTokenBindingSignature(crypto::ECPrivateKey* key,
+                                 TokenBindingType tb_type,
+                                 std::vector<uint8_t>* out) override;
   crypto::ECPrivateKey* GetChannelIDKey() const override;
 
  protected:
@@ -598,7 +602,7 @@ class MockClientSocket : public SSLClientSocket {
   // Address of the "remote" peer we're connected to.
   IPEndPoint peer_addr_;
 
-  BoundNetLog net_log_;
+  NetLogWithSource net_log_;
 
  private:
   base::WeakPtrFactory<MockClientSocket> weak_factory_;
@@ -699,8 +703,9 @@ class MockSSLClientSocket : public MockClientSocket, public AsyncSocket {
 
   // SSLClientSocket implementation.
   void GetSSLCertRequestInfo(SSLCertRequestInfo* cert_request_info) override;
-  Error GetSignedEKMForTokenBinding(crypto::ECPrivateKey* key,
-                                    std::vector<uint8_t>* out) override;
+  Error GetTokenBindingSignature(crypto::ECPrivateKey* key,
+                                 TokenBindingType tb_type,
+                                 std::vector<uint8_t>* out) override;
   // This MockSocket does not implement the manual async IO feature.
   void OnReadComplete(const MockRead& data) override;
   void OnWriteComplete(int rv) override;
@@ -744,7 +749,7 @@ class MockUDPClientSocket : public DatagramClientSocket, public AsyncSocket {
   int GetPeerAddress(IPEndPoint* address) const override;
   int GetLocalAddress(IPEndPoint* address) const override;
   void UseNonBlockingIO() override;
-  const BoundNetLog& NetLog() const override;
+  const NetLogWithSource& NetLog() const override;
 
   // DatagramClientSocket implementation.
   int Connect(const IPEndPoint& address) override;
@@ -787,7 +792,7 @@ class MockUDPClientSocket : public DatagramClientSocket, public AsyncSocket {
   CompletionCallback pending_read_callback_;
   CompletionCallback pending_write_callback_;
 
-  BoundNetLog net_log_;
+  NetLogWithSource net_log_;
 
   base::WeakPtrFactory<MockUDPClientSocket> weak_factory_;
 
@@ -843,7 +848,7 @@ class ClientSocketPoolTest {
     requests_.push_back(base::WrapUnique(request));
     int rv = request->handle()->Init(group_name, socket_params, priority,
                                      respect_limits, request->callback(),
-                                     socket_pool, BoundNetLog());
+                                     socket_pool, NetLogWithSource());
     if (rv != ERR_IO_PENDING)
       request_order_.push_back(request);
     return rv;
@@ -932,7 +937,7 @@ class MockTransportClientSocketPool : public TransportClientSocketPool {
                     RespectLimits respect_limits,
                     ClientSocketHandle* handle,
                     const CompletionCallback& callback,
-                    const BoundNetLog& net_log) override;
+                    const NetLogWithSource& net_log) override;
 
   void CancelRequest(const std::string& group_name,
                      ClientSocketHandle* handle) override;
@@ -965,7 +970,7 @@ class MockSOCKSClientSocketPool : public SOCKSClientSocketPool {
                     RespectLimits respect_limits,
                     ClientSocketHandle* handle,
                     const CompletionCallback& callback,
-                    const BoundNetLog& net_log) override;
+                    const NetLogWithSource& net_log) override;
 
   void CancelRequest(const std::string& group_name,
                      ClientSocketHandle* handle) override;

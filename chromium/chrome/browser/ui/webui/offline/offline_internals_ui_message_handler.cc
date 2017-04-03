@@ -47,20 +47,19 @@ std::string OfflineInternalsUIMessageHandler::GetStringFromDeletePageResult(
   return "Unknown";
 }
 
-std::string OfflineInternalsUIMessageHandler::GetStringFromSavePageStatus() {
-  return "Available";
+std::string OfflineInternalsUIMessageHandler::GetStringFromDeleteRequestResults(
+    const offline_pages::MultipleItemStatuses& results) {
+  // If any requests failed, return "failure", else "success".
+  for (const auto& result : results) {
+    if (result.second == offline_pages::ItemActionStatus::STORE_ERROR)
+      return "Store failure, could not delete one or more requests";
+  }
+
+  return "Success";
 }
 
-void OfflineInternalsUIMessageHandler::HandleDeleteAllPages(
-    const base::ListValue* args) {
-  std::string callback_id;
-  CHECK(args->GetString(0, &callback_id));
-
-  // Pass back success because ClearAll doesn't return a status.
-  offline_page_model_->ClearAll(
-      base::Bind(&OfflineInternalsUIMessageHandler::HandleDeletedPagesCallback,
-                 weak_ptr_factory_.GetWeakPtr(), callback_id,
-                 offline_pages::DeletePageResult::SUCCESS));
+std::string OfflineInternalsUIMessageHandler::GetStringFromSavePageStatus() {
+  return "Available";
 }
 
 void OfflineInternalsUIMessageHandler::HandleDeleteSelectedPages(
@@ -86,12 +85,47 @@ void OfflineInternalsUIMessageHandler::HandleDeleteSelectedPages(
                  weak_ptr_factory_.GetWeakPtr(), callback_id));
 }
 
+void OfflineInternalsUIMessageHandler::HandleDeleteSelectedRequests(
+    const base::ListValue* args) {
+  std::string callback_id;
+  CHECK(args->GetString(0, &callback_id));
+
+  std::vector<int64_t> offline_ids;
+  const base::ListValue* offline_ids_from_arg = nullptr;
+  args->GetList(1, &offline_ids_from_arg);
+
+  for (size_t i = 0; i < offline_ids_from_arg->GetSize(); i++) {
+    std::string value;
+    offline_ids_from_arg->GetString(i, &value);
+    int64_t int_value;
+    base::StringToInt64(value, &int_value);
+    offline_ids.push_back(int_value);
+  }
+
+  // Call RequestCoordinator to delete them
+  if (request_coordinator_) {
+    request_coordinator_->RemoveRequests(
+        offline_ids,
+        base::Bind(
+            &OfflineInternalsUIMessageHandler::HandleDeletedRequestsCallback,
+            weak_ptr_factory_.GetWeakPtr(), callback_id));
+  }
+}
+
 void OfflineInternalsUIMessageHandler::HandleDeletedPagesCallback(
     std::string callback_id,
     offline_pages::DeletePageResult result) {
   ResolveJavascriptCallback(
       base::StringValue(callback_id),
       base::StringValue(GetStringFromDeletePageResult(result)));
+}
+
+void OfflineInternalsUIMessageHandler::HandleDeletedRequestsCallback(
+    std::string callback_id,
+    const offline_pages::MultipleItemStatuses& results) {
+  ResolveJavascriptCallback(
+      base::StringValue(callback_id),
+      base::StringValue(GetStringFromDeleteRequestResults(results)));
 }
 
 void OfflineInternalsUIMessageHandler::HandleStoredPagesCallback(
@@ -106,7 +140,7 @@ void OfflineInternalsUIMessageHandler::HandleStoredPagesCallback(
     offline_page->SetString("namespace", page.client_id.name_space);
     offline_page->SetDouble("size", page.file_size);
     offline_page->SetString("id", std::to_string(page.offline_id));
-    offline_page->SetString("filePath", page.GetOfflineURL().spec());
+    offline_page->SetString("filePath", page.file_path.MaybeAsASCII());
     offline_page->SetDouble("creationTime", page.creation_time.ToJsTime());
     offline_page->SetDouble("lastAccessTime", page.last_access_time.ToJsTime());
     offline_page->SetInteger("accessCount", page.access_count);
@@ -118,20 +152,21 @@ void OfflineInternalsUIMessageHandler::HandleStoredPagesCallback(
 void OfflineInternalsUIMessageHandler::HandleRequestQueueCallback(
     std::string callback_id,
     offline_pages::RequestQueue::GetRequestsResult result,
-    const std::vector<offline_pages::SavePageRequest>& requests) {
+    std::vector<std::unique_ptr<offline_pages::SavePageRequest>> requests) {
   base::ListValue save_page_requests;
   if (result == offline_pages::RequestQueue::GetRequestsResult::SUCCESS) {
     for (const auto& request : requests) {
       base::DictionaryValue* save_page_request = new base::DictionaryValue();
       save_page_requests.Append(save_page_request);
-      save_page_request->SetString("onlineUrl", request.url().spec());
+      save_page_request->SetString("onlineUrl", request->url().spec());
       save_page_request->SetDouble("creationTime",
-                                   request.creation_time().ToJsTime());
+                                   request->creation_time().ToJsTime());
       save_page_request->SetString("status", GetStringFromSavePageStatus());
-      save_page_request->SetString("namespace", request.client_id().name_space);
+      save_page_request->SetString("namespace",
+                                   request->client_id().name_space);
       save_page_request->SetDouble("lastAttempt",
-                                   request.last_attempt_time().ToJsTime());
-      save_page_request->SetString("id", std::to_string(request.request_id()));
+                                   request->last_attempt_time().ToJsTime());
+      save_page_request->SetString("id", std::to_string(request->request_id()));
     }
   }
   ResolveJavascriptCallback(base::StringValue(callback_id), save_page_requests);
@@ -173,7 +208,8 @@ void OfflineInternalsUIMessageHandler::HandleSetRecordPageModel(
     const base::ListValue* args) {
   bool should_record;
   CHECK(args->GetBoolean(0, &should_record));
-  offline_page_model_->GetLogger()->SetIsLogging(should_record);
+  if (offline_page_model_)
+    offline_page_model_->GetLogger()->SetIsLogging(should_record);
 }
 
 void OfflineInternalsUIMessageHandler::HandleGetNetworkStatus(
@@ -191,7 +227,8 @@ void OfflineInternalsUIMessageHandler::HandleSetRecordRequestQueue(
     const base::ListValue* args) {
   bool should_record;
   CHECK(args->GetBoolean(0, &should_record));
-  request_coordinator_->GetLogger()->SetIsLogging(should_record);
+  if (request_coordinator_)
+    request_coordinator_->GetLogger()->SetIsLogging(should_record);
 }
 
 void OfflineInternalsUIMessageHandler::HandleGetLoggingState(
@@ -202,9 +239,13 @@ void OfflineInternalsUIMessageHandler::HandleGetLoggingState(
 
   base::DictionaryValue result;
   result.SetBoolean("modelIsLogging",
-                    offline_page_model_->GetLogger()->GetIsLogging());
+                    offline_page_model_
+                        ? offline_page_model_->GetLogger()->GetIsLogging()
+                        : false);
   result.SetBoolean("queueIsLogging",
-                    request_coordinator_->GetLogger()->GetIsLogging());
+                    request_coordinator_
+                        ? request_coordinator_->GetLogger()->GetIsLogging()
+                        : false);
   ResolveJavascriptCallback(*callback_id, result);
 }
 
@@ -215,8 +256,10 @@ void OfflineInternalsUIMessageHandler::HandleGetEventLogs(
   CHECK(args->Get(0, &callback_id));
 
   std::vector<std::string> logs;
-  offline_page_model_->GetLogger()->GetLogs(&logs);
-  request_coordinator_->GetLogger()->GetLogs(&logs);
+  if (offline_page_model_)
+    offline_page_model_->GetLogger()->GetLogs(&logs);
+  if (request_coordinator_)
+    request_coordinator_->GetLogger()->GetLogs(&logs);
   std::sort(logs.begin(), logs.end());
 
   base::ListValue result;
@@ -230,31 +273,37 @@ void OfflineInternalsUIMessageHandler::HandleAddToRequestQueue(
   const base::Value* callback_id;
   CHECK(args->Get(0, &callback_id));
 
-  std::string url;
-  CHECK(args->GetString(1, &url));
+  if (request_coordinator_) {
+    std::string url;
+    CHECK(args->GetString(1, &url));
 
-  // To be visible in Downloads UI, these items need a well-formed GUID
-  // and AsyncNamespace in their ClientId.
-  std::ostringstream id_stream;
-  id_stream << base::GenerateGUID();
+    // To be visible in Downloads UI, these items need a well-formed GUID
+    // and AsyncNamespace in their ClientId.
+    std::ostringstream id_stream;
+    id_stream << base::GenerateGUID();
 
-  ResolveJavascriptCallback(
-      *callback_id,
-      base::FundamentalValue(request_coordinator_->SavePageLater(
-          GURL(url), offline_pages::ClientId(offline_pages::kAsyncNamespace,
-                                             id_stream.str()),
-          true)));
+    ResolveJavascriptCallback(
+        *callback_id,
+        base::FundamentalValue(request_coordinator_->SavePageLater(
+                GURL(url), offline_pages::ClientId(
+                               offline_pages::kAsyncNamespace, id_stream.str()),
+                true, offline_pages::RequestCoordinator::RequestAvailability::
+                          ENABLED_FOR_OFFLINER) > 0));
+  } else {
+    ResolveJavascriptCallback(*callback_id, base::FundamentalValue(false));
+  }
 }
 
 void OfflineInternalsUIMessageHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
-      "deleteAllPages",
-      base::Bind(&OfflineInternalsUIMessageHandler::HandleDeleteAllPages,
-                 weak_ptr_factory_.GetWeakPtr()));
-  web_ui()->RegisterMessageCallback(
       "deleteSelectedPages",
       base::Bind(&OfflineInternalsUIMessageHandler::HandleDeleteSelectedPages,
                  weak_ptr_factory_.GetWeakPtr()));
+  web_ui()->RegisterMessageCallback(
+      "deleteSelectedRequests",
+      base::Bind(
+          &OfflineInternalsUIMessageHandler::HandleDeleteSelectedRequests,
+          weak_ptr_factory_.GetWeakPtr()));
   web_ui()->RegisterMessageCallback(
       "getRequestQueue",
       base::Bind(&OfflineInternalsUIMessageHandler::HandleGetRequestQueue,

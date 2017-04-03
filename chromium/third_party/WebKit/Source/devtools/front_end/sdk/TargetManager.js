@@ -24,8 +24,9 @@ WebInspector.TargetManager = function()
 /** @enum {symbol} */
 WebInspector.TargetManager.Events = {
     InspectedURLChanged: Symbol("InspectedURLChanged"),
-    MainFrameNavigated: Symbol("MainFrameNavigated"),
     Load: Symbol("Load"),
+    MainFrameNavigated: Symbol("MainFrameNavigated"),
+    NameChanged: Symbol("NameChanged"),
     PageReloadRequested: Symbol("PageReloadRequested"),
     WillReloadPage: Symbol("WillReloadPage"),
     TargetDisposed: Symbol("TargetDisposed"),
@@ -190,8 +191,10 @@ WebInspector.TargetManager.prototype = {
     {
         var target = new WebInspector.Target(this, name, capabilitiesMask, connection, parentTarget);
 
+        var logAgent = target.hasLogCapability() ? target.logAgent() : null;
+
         /** @type {!WebInspector.ConsoleModel} */
-        target.consoleModel = new WebInspector.ConsoleModel(target);
+        target.consoleModel = new WebInspector.ConsoleModel(target, logAgent);
         /** @type {!WebInspector.RuntimeModel} */
         target.runtimeModel = new WebInspector.RuntimeModel(target);
 
@@ -222,8 +225,10 @@ WebInspector.TargetManager.prototype = {
 
         target.tracingManager = new WebInspector.TracingManager(target);
 
-        if (target.hasBrowserCapability())
-            target.serviceWorkerManager = new WebInspector.ServiceWorkerManager(target);
+        if (target.hasBrowserCapability()) {
+            target.subTargetsManager = new WebInspector.SubTargetsManager(target);
+            target.serviceWorkerManager = new WebInspector.ServiceWorkerManager(target, target.subTargetsManager);
+        }
 
         this.addTarget(target);
         return target;
@@ -262,7 +267,7 @@ WebInspector.TargetManager.prototype = {
             for (var i = 0; i < listeners.length; ++i) {
                 var model = target.model(listeners[i].modelClass);
                 if (model)
-                    model.addEventListener(pair[0], listeners[i].listener, listeners[i].thisObject);
+                    model.addEventListener(/** @type {symbol} */ (pair[0]), listeners[i].listener, listeners[i].thisObject);
             }
         }
 
@@ -298,7 +303,7 @@ WebInspector.TargetManager.prototype = {
             for (var i = 0; i < listeners.length; ++i) {
                 var model = target.model(listeners[i].modelClass);
                 if (model)
-                    model.removeEventListener(pair[0], listeners[i].listener, listeners[i].thisObject);
+                    model.removeEventListener(/** @type {symbol} */ (pair[0]), listeners[i].listener, listeners[i].thisObject);
             }
         }
     },

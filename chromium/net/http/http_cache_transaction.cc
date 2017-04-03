@@ -39,6 +39,7 @@
 #include "net/http/http_network_session.h"
 #include "net/http/http_request_info.h"
 #include "net/http/http_util.h"
+#include "net/log/net_log_event_type.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/ssl/ssl_config_service.h"
 
@@ -65,7 +66,7 @@ bool NonErrorResponse(int status_code) {
 
 void RecordNoStoreHeaderHistogram(int load_flags,
                                   const HttpResponseInfo* response) {
-  if (load_flags & LOAD_MAIN_FRAME) {
+  if (load_flags & LOAD_MAIN_FRAME_DEPRECATED) {
     UMA_HISTOGRAM_BOOLEAN(
         "Net.MainFrameNoStore",
         response->headers->HasHeaderValue("cache-control", "no-store"));
@@ -80,6 +81,21 @@ enum ExternallyConditionalizedType {
 };
 
 }  // namespace
+
+#define CACHE_STATUS_HISTOGRAMS(type)                                        \
+  do {                                                                       \
+    UMA_HISTOGRAM_ENUMERATION("HttpCache.Pattern" type, cache_entry_status_, \
+                              CacheEntryStatus::ENTRY_MAX);                  \
+    if (validation_request) {                                                \
+      UMA_HISTOGRAM_ENUMERATION("HttpCache.ValidationCause" type,            \
+                                validation_cause_, VALIDATION_CAUSE_MAX);    \
+    }                                                                        \
+    if (stale_request) {                                                     \
+      UMA_HISTOGRAM_COUNTS(                                                  \
+          "HttpCache.StaleEntry.FreshnessPeriodsSinceLastUsed" type,         \
+          freshness_periods_since_last_used);                                \
+    }                                                                        \
+  } while (0)
 
 struct HeaderNameAndValue {
   const char* name;
@@ -248,13 +264,13 @@ LoadState HttpCache::Transaction::GetWriterLoadState() const {
   return LOAD_STATE_WAITING_FOR_CACHE;
 }
 
-const BoundNetLog& HttpCache::Transaction::net_log() const {
+const NetLogWithSource& HttpCache::Transaction::net_log() const {
   return net_log_;
 }
 
 int HttpCache::Transaction::Start(const HttpRequestInfo* request,
                                   const CompletionCallback& callback,
-                                  const BoundNetLog& net_log) {
+                                  const NetLogWithSource& net_log) {
   DCHECK(request);
   DCHECK(!callback.is_null());
 
@@ -470,12 +486,6 @@ LoadState HttpCache::Transaction::GetLoadState() const {
     return cache_->GetLoadStateForPendingTransaction(this);
 
   return LOAD_STATE_IDLE;
-}
-
-UploadProgress HttpCache::Transaction::GetUploadProgress() const {
-  if (network_trans_.get())
-    return network_trans_->GetUploadProgress();
-  return final_upload_progress_;
 }
 
 void HttpCache::Transaction::SetQuicServerInfo(
@@ -877,13 +887,13 @@ int HttpCache::Transaction::DoLoop(int result) {
 int HttpCache::Transaction::DoGetBackend() {
   cache_pending_ = true;
   next_state_ = STATE_GET_BACKEND_COMPLETE;
-  net_log_.BeginEvent(NetLog::TYPE_HTTP_CACHE_GET_BACKEND);
+  net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_GET_BACKEND);
   return cache_->GetBackendForTransaction(this);
 }
 
 int HttpCache::Transaction::DoGetBackendComplete(int result) {
   DCHECK(result == OK || result == ERR_FAILED);
-  net_log_.EndEventWithNetErrorCode(NetLog::TYPE_HTTP_CACHE_GET_BACKEND,
+  net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_GET_BACKEND,
                                     result);
   cache_pending_ = false;
 
@@ -892,6 +902,10 @@ int HttpCache::Transaction::DoGetBackendComplete(int result) {
 
     // Requested cache access mode.
     if (effective_load_flags_ & LOAD_ONLY_FROM_CACHE) {
+      if (effective_load_flags_ & LOAD_BYPASS_CACHE) {
+        // The client has asked for nonsense.
+        return ERR_CACHE_MISS;
+      }
       mode_ = READ;
     } else if (effective_load_flags_ & LOAD_BYPASS_CACHE) {
       mode_ = WRITE;
@@ -965,7 +979,7 @@ int HttpCache::Transaction::DoOpenEntry() {
   DCHECK(!new_entry_);
   next_state_ = STATE_OPEN_ENTRY_COMPLETE;
   cache_pending_ = true;
-  net_log_.BeginEvent(NetLog::TYPE_HTTP_CACHE_OPEN_ENTRY);
+  net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_OPEN_ENTRY);
   first_cache_access_since_ = TimeTicks::Now();
   return cache_->OpenEntry(cache_key_, &new_entry_, this);
 }
@@ -974,7 +988,8 @@ int HttpCache::Transaction::DoOpenEntryComplete(int result) {
   // It is important that we go to STATE_ADD_TO_ENTRY whenever the result is
   // OK, otherwise the cache will end up with an active entry without any
   // transaction attached.
-  net_log_.EndEventWithNetErrorCode(NetLog::TYPE_HTTP_CACHE_OPEN_ENTRY, result);
+  net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_OPEN_ENTRY,
+                                    result);
   cache_pending_ = false;
   if (result == OK) {
     next_state_ = STATE_ADD_TO_ENTRY;
@@ -1016,12 +1031,13 @@ int HttpCache::Transaction::DoDoomEntry() {
   cache_pending_ = true;
   if (first_cache_access_since_.is_null())
     first_cache_access_since_ = TimeTicks::Now();
-  net_log_.BeginEvent(NetLog::TYPE_HTTP_CACHE_DOOM_ENTRY);
+  net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_DOOM_ENTRY);
   return cache_->DoomEntry(cache_key_, this);
 }
 
 int HttpCache::Transaction::DoDoomEntryComplete(int result) {
-  net_log_.EndEventWithNetErrorCode(NetLog::TYPE_HTTP_CACHE_DOOM_ENTRY, result);
+  net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_DOOM_ENTRY,
+                                    result);
   next_state_ = STATE_CREATE_ENTRY;
   cache_pending_ = false;
   if (result == ERR_CACHE_RACE)
@@ -1033,7 +1049,7 @@ int HttpCache::Transaction::DoCreateEntry() {
   DCHECK(!new_entry_);
   next_state_ = STATE_CREATE_ENTRY_COMPLETE;
   cache_pending_ = true;
-  net_log_.BeginEvent(NetLog::TYPE_HTTP_CACHE_CREATE_ENTRY);
+  net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_CREATE_ENTRY);
   return cache_->CreateEntry(cache_key_, &new_entry_, this);
 }
 
@@ -1041,7 +1057,7 @@ int HttpCache::Transaction::DoCreateEntryComplete(int result) {
   // It is important that we go to STATE_ADD_TO_ENTRY whenever the result is
   // OK, otherwise the cache will end up with an active entry without any
   // transaction attached.
-  net_log_.EndEventWithNetErrorCode(NetLog::TYPE_HTTP_CACHE_CREATE_ENTRY,
+  net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_CREATE_ENTRY,
                                     result);
   cache_pending_ = false;
   switch (result) {
@@ -1071,7 +1087,7 @@ int HttpCache::Transaction::DoAddToEntry() {
   DCHECK(new_entry_);
   cache_pending_ = true;
   next_state_ = STATE_ADD_TO_ENTRY_COMPLETE;
-  net_log_.BeginEvent(NetLog::TYPE_HTTP_CACHE_ADD_TO_ENTRY);
+  net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_ADD_TO_ENTRY);
   DCHECK(entry_lock_waiting_since_.is_null());
   entry_lock_waiting_since_ = TimeTicks::Now();
   int rv = cache_->AddTransactionToEntry(new_entry_, this);
@@ -1109,7 +1125,7 @@ int HttpCache::Transaction::DoAddToEntry() {
 }
 
 int HttpCache::Transaction::DoAddToEntryComplete(int result) {
-  net_log_.EndEventWithNetErrorCode(NetLog::TYPE_HTTP_CACHE_ADD_TO_ENTRY,
+  net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_ADD_TO_ENTRY,
                                     result);
   const TimeDelta entry_lock_wait =
       TimeTicks::Now() - entry_lock_waiting_since_;
@@ -1167,13 +1183,14 @@ int HttpCache::Transaction::DoCacheReadResponse() {
   io_buf_len_ = entry_->disk_entry->GetDataSize(kResponseInfoIndex);
   read_buf_ = new IOBuffer(io_buf_len_);
 
-  net_log_.BeginEvent(NetLog::TYPE_HTTP_CACHE_READ_INFO);
+  net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_READ_INFO);
   return entry_->disk_entry->ReadData(kResponseInfoIndex, 0, read_buf_.get(),
                                       io_buf_len_, io_callback_);
 }
 
 int HttpCache::Transaction::DoCacheReadResponseComplete(int result) {
-  net_log_.EndEventWithNetErrorCode(NetLog::TYPE_HTTP_CACHE_READ_INFO, result);
+  net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_READ_INFO,
+                                    result);
   if (result != io_buf_len_ ||
       !HttpCache::ParseResponseInfo(read_buf_->data(), io_buf_len_, &response_,
                                     &truncated_)) {
@@ -1423,7 +1440,7 @@ int HttpCache::Transaction::DoSuccessfulSendRequest() {
     // If we have an authentication response, we are exposed to weird things
     // hapenning if the user cancels the authentication before we receive
     // the new response.
-    net_log_.AddEvent(NetLog::TYPE_HTTP_CACHE_RE_SEND_PARTIAL_REQUEST);
+    net_log_.AddEvent(NetLogEventType::HTTP_CACHE_RE_SEND_PARTIAL_REQUEST);
     UpdateCacheEntryStatus(CacheEntryStatus::ENTRY_OTHER);
     SetResponse(HttpResponseInfo());
     ResetNetworkTransaction();
@@ -1551,7 +1568,6 @@ int HttpCache::Transaction::DoUpdateCachedResponseComplete(int result) {
       mode_ = READ;
     }
     // We no longer need the network transaction, so destroy it.
-    final_upload_progress_ = network_trans_->GetUploadProgress();
     ResetNetworkTransaction();
   } else if (entry_ && handling_206_ && truncated_ &&
              partial_->initial_validation()) {
@@ -1617,7 +1633,7 @@ int HttpCache::Transaction::DoTruncateCachedData() {
   if (!entry_)
     return OK;
   if (net_log_.IsCapturing())
-    net_log_.BeginEvent(NetLog::TYPE_HTTP_CACHE_WRITE_DATA);
+    net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_WRITE_DATA);
   // Truncate the stream.
   return WriteToEntry(kResponseContentIndex, 0, NULL, 0, io_callback_);
 }
@@ -1625,7 +1641,7 @@ int HttpCache::Transaction::DoTruncateCachedData() {
 int HttpCache::Transaction::DoTruncateCachedDataComplete(int result) {
   if (entry_) {
     if (net_log_.IsCapturing()) {
-      net_log_.EndEventWithNetErrorCode(NetLog::TYPE_HTTP_CACHE_WRITE_DATA,
+      net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_WRITE_DATA,
                                         result);
     }
   }
@@ -1640,14 +1656,14 @@ int HttpCache::Transaction::DoTruncateCachedMetadata() {
     return OK;
 
   if (net_log_.IsCapturing())
-    net_log_.BeginEvent(NetLog::TYPE_HTTP_CACHE_WRITE_INFO);
+    net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_WRITE_INFO);
   return WriteToEntry(kMetadataIndex, 0, NULL, 0, io_callback_);
 }
 
 int HttpCache::Transaction::DoTruncateCachedMetadataComplete(int result) {
   if (entry_) {
     if (net_log_.IsCapturing()) {
-      net_log_.EndEventWithNetErrorCode(NetLog::TYPE_HTTP_CACHE_WRITE_INFO,
+      net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_WRITE_INFO,
                                         result);
     }
   }
@@ -1686,7 +1702,7 @@ int HttpCache::Transaction::DoCacheReadMetadata() {
   response_.metadata =
       new IOBufferWithSize(entry_->disk_entry->GetDataSize(kMetadataIndex));
 
-  net_log_.BeginEvent(NetLog::TYPE_HTTP_CACHE_READ_INFO);
+  net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_READ_INFO);
   return entry_->disk_entry->ReadData(kMetadataIndex, 0,
                                       response_.metadata.get(),
                                       response_.metadata->size(),
@@ -1694,7 +1710,8 @@ int HttpCache::Transaction::DoCacheReadMetadata() {
 }
 
 int HttpCache::Transaction::DoCacheReadMetadataComplete(int result) {
-  net_log_.EndEventWithNetErrorCode(NetLog::TYPE_HTTP_CACHE_READ_INFO, result);
+  net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_READ_INFO,
+                                    result);
   if (result != response_.metadata->size())
     return OnCacheReadError(result, false);
   return OK;
@@ -1728,7 +1745,7 @@ int HttpCache::Transaction::DoCacheReadData() {
   next_state_ = STATE_CACHE_READ_DATA_COMPLETE;
 
   if (net_log_.IsCapturing())
-    net_log_.BeginEvent(NetLog::TYPE_HTTP_CACHE_READ_DATA);
+    net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_READ_DATA);
   if (partial_) {
     return partial_->CacheRead(entry_->disk_entry, read_buf_.get(), io_buf_len_,
                                io_callback_);
@@ -1741,7 +1758,7 @@ int HttpCache::Transaction::DoCacheReadData() {
 
 int HttpCache::Transaction::DoCacheReadDataComplete(int result) {
   if (net_log_.IsCapturing()) {
-    net_log_.EndEventWithNetErrorCode(NetLog::TYPE_HTTP_CACHE_READ_DATA,
+    net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_READ_DATA,
                                       result);
   }
 
@@ -1772,7 +1789,7 @@ int HttpCache::Transaction::DoCacheWriteData(int num_bytes) {
   write_len_ = num_bytes;
   if (entry_) {
     if (net_log_.IsCapturing())
-      net_log_.BeginEvent(NetLog::TYPE_HTTP_CACHE_WRITE_DATA);
+      net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_WRITE_DATA);
   }
 
   if (!entry_ || !num_bytes)
@@ -1786,7 +1803,7 @@ int HttpCache::Transaction::DoCacheWriteData(int num_bytes) {
 int HttpCache::Transaction::DoCacheWriteDataComplete(int result) {
   if (entry_) {
     if (net_log_.IsCapturing()) {
-      net_log_.EndEventWithNetErrorCode(NetLog::TYPE_HTTP_CACHE_WRITE_DATA,
+      net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_WRITE_DATA,
                                         result);
     }
   }
@@ -1838,7 +1855,7 @@ int HttpCache::Transaction::DoCacheWriteTruncatedResponseComplete(int result) {
 
 //-----------------------------------------------------------------------------
 
-void HttpCache::Transaction::SetRequest(const BoundNetLog& net_log,
+void HttpCache::Transaction::SetRequest(const NetLogWithSource& net_log,
                                         const HttpRequestInfo* request) {
   net_log_ = net_log;
   request_ = request;
@@ -1900,7 +1917,7 @@ void HttpCache::Transaction::SetRequest(const BoundNetLog& net_log,
     // Log the headers before request_ is modified.
     std::string empty;
     net_log_.AddEvent(
-        NetLog::TYPE_HTTP_CACHE_CALLER_REQUEST_HEADERS,
+        NetLogEventType::HTTP_CACHE_CALLER_REQUEST_HEADERS,
         base::Bind(&HttpRequestHeaders::NetLogCallback,
                    base::Unretained(&request_->extra_headers), &empty));
   }
@@ -2523,7 +2540,7 @@ int HttpCache::Transaction::WriteResponseInfoToEntry(bool truncated) {
     return OK;
 
   if (net_log_.IsCapturing())
-    net_log_.BeginEvent(NetLog::TYPE_HTTP_CACHE_WRITE_INFO);
+    net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_WRITE_INFO);
 
   // Do not cache no-store content.  Do not cache content with cert errors
   // either.  This is to prevent not reporting net errors when loading a
@@ -2538,7 +2555,7 @@ int HttpCache::Transaction::WriteResponseInfoToEntry(bool truncated) {
       IsCertStatusError(response_.ssl_info.cert_status)) {
     DoneWritingToEntry(false);
     if (net_log_.IsCapturing())
-      net_log_.EndEvent(NetLog::TYPE_HTTP_CACHE_WRITE_INFO);
+      net_log_.EndEvent(NetLogEventType::HTTP_CACHE_WRITE_INFO);
     return OK;
   }
 
@@ -2560,7 +2577,7 @@ int HttpCache::Transaction::OnWriteResponseInfoToEntryComplete(int result) {
   if (!entry_)
     return OK;
   if (net_log_.IsCapturing()) {
-    net_log_.EndEventWithNetErrorCode(NetLog::TYPE_HTTP_CACHE_WRITE_INFO,
+    net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_WRITE_INFO,
                                       result);
   }
 
@@ -2661,7 +2678,7 @@ int HttpCache::Transaction::DoPartialCacheReadCompleted(int result) {
 
 int HttpCache::Transaction::DoRestartPartialRequest() {
   // The stored data cannot be used. Get rid of it and restart this request.
-  net_log_.AddEvent(NetLog::TYPE_HTTP_CACHE_RESTART_PARTIAL_REQUEST);
+  net_log_.AddEvent(NetLogEventType::HTTP_CACHE_RESTART_PARTIAL_REQUEST);
 
   // WRITE + Doom + STATE_INIT_ENTRY == STATE_CREATE_ENTRY (without an attempt
   // to Doom the entry again).
@@ -2792,9 +2809,6 @@ void HttpCache::Transaction::RecordHistograms() {
     freshness_periods_since_last_used =
         (time_since_use * 1000) / stale_entry_freshness_;
 
-    UMA_HISTOGRAM_COUNTS("HttpCache.StaleEntry.FreshnessPeriodsSinceLastUsed",
-                         freshness_periods_since_last_used);
-
     if (validation_request) {
       int64_t age_in_freshness_periods =
           (stale_entry_age_ * 100) / stale_entry_freshness_;
@@ -2821,124 +2835,39 @@ void HttpCache::Transaction::RecordHistograms() {
     // Record the cache pattern by resource type. The type is inferred by
     // response header mime type, which could be incorrect, so this is just an
     // estimate.
-    if (mime_type == "text/html" && (request_->load_flags & LOAD_MAIN_FRAME)) {
-      UMA_HISTOGRAM_ENUMERATION("HttpCache.Pattern.MainFrameHTML",
-                                cache_entry_status_,
-                                CacheEntryStatus::ENTRY_MAX);
-      if (validation_request) {
-        UMA_HISTOGRAM_ENUMERATION("HttpCache.ValidationCause.MainFrameHTML",
-                                  validation_cause_, VALIDATION_CAUSE_MAX);
-      }
-      if (stale_request) {
-        UMA_HISTOGRAM_COUNTS(
-            "HttpCache.StaleEntry.FreshnessPeriodsSinceLastUsed.MainFrameHTML",
-            freshness_periods_since_last_used);
-      }
+    if (mime_type == "text/html" &&
+        (request_->load_flags & LOAD_MAIN_FRAME_DEPRECATED)) {
+      CACHE_STATUS_HISTOGRAMS(".MainFrameHTML");
     } else if (mime_type == "text/html") {
-      UMA_HISTOGRAM_ENUMERATION("HttpCache.Pattern.NonMainFrameHTML",
-                                cache_entry_status_,
-                                CacheEntryStatus::ENTRY_MAX);
-      if (validation_request) {
-        UMA_HISTOGRAM_ENUMERATION("HttpCache.ValidationCause.NonMainFrameHTML",
-                                  validation_cause_, VALIDATION_CAUSE_MAX);
-      }
-      if (stale_request) {
-        UMA_HISTOGRAM_COUNTS(
-            "HttpCache.StaleEntry.FreshnessPeriodsSinceLastUsed."
-            "NonMainFrameHTML",
-            freshness_periods_since_last_used);
-      }
+      CACHE_STATUS_HISTOGRAMS(".NonMainFrameHTML");
     } else if (mime_type == "text/css") {
-      UMA_HISTOGRAM_ENUMERATION("HttpCache.Pattern.CSS", cache_entry_status_,
-                                CacheEntryStatus::ENTRY_MAX);
-      if (validation_request) {
-        UMA_HISTOGRAM_ENUMERATION("HttpCache.ValidationCause.CSS",
-                                  validation_cause_, VALIDATION_CAUSE_MAX);
-      }
-      if (stale_request) {
-        UMA_HISTOGRAM_COUNTS(
-            "HttpCache.StaleEntry.FreshnessPeriodsSinceLastUsed.CSS",
-            freshness_periods_since_last_used);
-      }
+      CACHE_STATUS_HISTOGRAMS(".CSS");
     } else if (base::StartsWith(mime_type, "image/",
                                 base::CompareCase::SENSITIVE)) {
       int64_t content_length = response_headers->GetContentLength();
       if (content_length >= 0 && content_length < 100) {
-        UMA_HISTOGRAM_ENUMERATION("HttpCache.Pattern.TinyImage",
-                                  cache_entry_status_,
-                                  CacheEntryStatus::ENTRY_MAX);
-        if (validation_request) {
-          UMA_HISTOGRAM_ENUMERATION("HttpCache.ValidationCause.TinyImage",
-                                    validation_cause_, VALIDATION_CAUSE_MAX);
-        }
-        if (stale_request) {
-          UMA_HISTOGRAM_COUNTS(
-              "HttpCache.StaleEntry.FreshnessPeriodsSinceLastUsed.TinyImage",
-              freshness_periods_since_last_used);
-        }
+        CACHE_STATUS_HISTOGRAMS(".TinyImage");
       } else if (content_length >= 100) {
-        UMA_HISTOGRAM_ENUMERATION("HttpCache.Pattern.NonTinyImage",
-                                  cache_entry_status_,
-                                  CacheEntryStatus::ENTRY_MAX);
-        if (validation_request) {
-          UMA_HISTOGRAM_ENUMERATION("HttpCache.ValidationCause.NonTinyImage",
-                                    validation_cause_, VALIDATION_CAUSE_MAX);
-        }
-        if (stale_request) {
-          UMA_HISTOGRAM_COUNTS(
-              "HttpCache.StaleEntry.FreshnessPeriodsSinceLastUsed.NonTinyImage",
-              freshness_periods_since_last_used);
-        }
+        CACHE_STATUS_HISTOGRAMS(".NonTinyImage");
       }
-      UMA_HISTOGRAM_ENUMERATION("HttpCache.Pattern.Image", cache_entry_status_,
-                                CacheEntryStatus::ENTRY_MAX);
-      if (validation_request) {
-        UMA_HISTOGRAM_ENUMERATION("HttpCache.ValidationCause.Image",
-                                  validation_cause_, VALIDATION_CAUSE_MAX);
-      }
-      if (stale_request) {
-        UMA_HISTOGRAM_COUNTS(
-            "HttpCache.StaleEntry.FreshnessPeriodsSinceLastUsed.Image",
-            freshness_periods_since_last_used);
-      }
+      CACHE_STATUS_HISTOGRAMS(".Image");
     } else if (base::EndsWith(mime_type, "javascript",
                               base::CompareCase::SENSITIVE) ||
                base::EndsWith(mime_type, "ecmascript",
                               base::CompareCase::SENSITIVE)) {
-      UMA_HISTOGRAM_ENUMERATION("HttpCache.Pattern.JavaScript",
-                                cache_entry_status_,
-                                CacheEntryStatus::ENTRY_MAX);
-      if (validation_request) {
-        UMA_HISTOGRAM_ENUMERATION("HttpCache.ValidationCause.JavaScript",
-                                  validation_cause_, VALIDATION_CAUSE_MAX);
-      }
-      if (stale_request) {
-        UMA_HISTOGRAM_COUNTS(
-            "HttpCache.StaleEntry.FreshnessPeriodsSinceLastUsed.JavaScript",
-            freshness_periods_since_last_used);
-      }
+      CACHE_STATUS_HISTOGRAMS(".JavaScript");
     } else if (mime_type.find("font") != std::string::npos) {
-      UMA_HISTOGRAM_ENUMERATION("HttpCache.Pattern.Font", cache_entry_status_,
-                                CacheEntryStatus::ENTRY_MAX);
-      if (validation_request) {
-        UMA_HISTOGRAM_ENUMERATION("HttpCache.ValidationCause.Font",
-                                  validation_cause_, VALIDATION_CAUSE_MAX);
-      }
-      if (stale_request) {
-        UMA_HISTOGRAM_COUNTS(
-            "HttpCache.StaleEntry.FreshnessPeriodsSinceLastUsed.Font",
-            freshness_periods_since_last_used);
-      }
+      CACHE_STATUS_HISTOGRAMS(".Font");
+    } else if (base::StartsWith(mime_type, "audio/",
+                                base::CompareCase::SENSITIVE)) {
+      CACHE_STATUS_HISTOGRAMS(".Audio");
+    } else if (base::StartsWith(mime_type, "video/",
+                                base::CompareCase::SENSITIVE)) {
+      CACHE_STATUS_HISTOGRAMS(".Video");
     }
   }
 
-  UMA_HISTOGRAM_ENUMERATION("HttpCache.Pattern", cache_entry_status_,
-                            CacheEntryStatus::ENTRY_MAX);
-
-  if (validation_request) {
-    UMA_HISTOGRAM_ENUMERATION("HttpCache.ValidationCause", validation_cause_,
-                              VALIDATION_CAUSE_MAX);
-  }
+  CACHE_STATUS_HISTOGRAMS("");
 
   if (cache_entry_status_ == CacheEntryStatus::ENTRY_CANT_CONDITIONALIZE) {
     UMA_HISTOGRAM_ENUMERATION("HttpCache.CantConditionalizeCause",

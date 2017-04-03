@@ -6,11 +6,11 @@
 
 #include "chrome/browser/sync/test/integration/migration_waiter.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 
 MigrationWatcher::MigrationWatcher(ProfileSyncServiceHarness* harness)
     : harness_(harness), migration_waiter_(NULL) {
-  browser_sync::BackendMigrator* migrator =
+  syncer::BackendMigrator* migrator =
       harness_->service()->GetBackendMigratorForTest();
   // PSS must have a migrator after sync is setup and initial data type
   // configuration is complete.
@@ -22,9 +22,9 @@ MigrationWatcher::~MigrationWatcher() {
 }
 
 bool MigrationWatcher::HasPendingBackendMigration() const {
-  browser_sync::BackendMigrator* migrator =
+  syncer::BackendMigrator* migrator =
       harness_->service()->GetBackendMigratorForTest();
-  return migrator && migrator->state() != browser_sync::BackendMigrator::IDLE;
+  return migrator && migrator->state() != syncer::BackendMigrator::IDLE;
 }
 
 syncer::ModelTypeSet MigrationWatcher::GetMigratedTypes() const {

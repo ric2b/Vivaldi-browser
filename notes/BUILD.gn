@@ -17,7 +17,11 @@ source_set("notes") {
     "notesnode.h",
   ]
   deps = [
+    "//base:base",
+    "//components/keyed_service/core:core",
+    "//components/renderer_context_menu:renderer_context_menu",
     "//skia",
+    "//url:url",
     "//vivaldi/app:vivaldi_native_resources",
     "//vivaldi/app:vivaldi_unscaled_native_resources",
   ]

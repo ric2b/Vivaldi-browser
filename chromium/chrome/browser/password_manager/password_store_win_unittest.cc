@@ -129,7 +129,7 @@ class PasswordStoreWinTest : public testing::Test {
 
     profile_.reset(new TestingProfile());
 
-    base::FilePath path = temp_dir_.path().AppendASCII("web_data_test");
+    base::FilePath path = temp_dir_.GetPath().AppendASCII("web_data_test");
     wdbs_ = new WebDatabaseService(
         path, BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
         BrowserThread::GetTaskRunnerForThread(BrowserThread::DB));
@@ -166,15 +166,14 @@ class PasswordStoreWinTest : public testing::Test {
   }
 
   base::FilePath test_login_db_file_path() const {
-    return temp_dir_.path().Append(FILE_PATH_LITERAL("login_test"));
+    return temp_dir_.GetPath().Append(FILE_PATH_LITERAL("login_test"));
   }
 
   PasswordStoreWin* CreatePasswordStore() {
     return new PasswordStoreWin(
         base::ThreadTaskRunnerHandle::Get(),
         BrowserThread::GetTaskRunnerForThread(BrowserThread::DB),
-        base::WrapUnique(new LoginDatabase(test_login_db_file_path())),
-        wds_.get());
+        base::MakeUnique<LoginDatabase>(test_login_db_file_path()), wds_.get());
   }
 
   base::MessageLoopForUI message_loop_;

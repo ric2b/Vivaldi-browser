@@ -21,10 +21,12 @@ source_set("browser") {
     "signin/signin_error_provider.mm",
     "signin/signin_resources_provider.h",
     "signin/signin_resources_provider.mm",
+    "ui/app_rating_prompt.h",
     "ui/default_ios_web_view_factory.h",
     "ui/default_ios_web_view_factory.mm",
     "ui/infobar_view_delegate.h",
     "ui/infobar_view_protocol.h",
+    "ui/text_field_styling.h",
     "updatable_resource_provider.h",
     "updatable_resource_provider.mm",
   ]
@@ -46,6 +48,8 @@ source_set("test_support") {
   sources = [
     "signin/fake_chrome_identity.h",
     "signin/fake_chrome_identity.mm",
+    "signin/fake_chrome_identity_interaction_manager.h",
+    "signin/fake_chrome_identity_interaction_manager.mm",
     "signin/fake_chrome_identity_service.h",
     "signin/fake_chrome_identity_service.mm",
     "test_chrome_browser_provider.h",

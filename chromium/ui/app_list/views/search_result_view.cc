@@ -10,7 +10,6 @@
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_switches.h"
 #include "ui/app_list/search_result.h"
-#include "ui/app_list/views/progress_bar_view.h"
 #include "ui/app_list/views/search_result_actions_view.h"
 #include "ui/app_list/views/search_result_list_view.h"
 #include "ui/gfx/canvas.h"
@@ -20,6 +19,7 @@
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/menu/menu_runner.h"
+#include "ui/views/controls/progress_bar.h"
 
 namespace app_list {
 
@@ -80,7 +80,7 @@ SearchResultView::SearchResultView(SearchResultListView* list_view)
       icon_(new views::ImageView),
       badge_icon_(new views::ImageView),
       actions_view_(new SearchResultActionsView(this)),
-      progress_bar_(new ProgressBarView) {
+      progress_bar_(new views::ProgressBar) {
   icon_->set_interactive(false);
   badge_icon_->set_interactive(false);
 
@@ -246,15 +246,10 @@ void SearchResultView::OnPaint(gfx::Canvas* canvas) {
     return;
 
   gfx::Rect content_rect(rect);
-  if (!switches::IsExperimentalAppListEnabled())
-    content_rect.set_height(rect.height() - kBorderSize);
-
   const bool selected = list_view_->IsResultViewSelected(this);
   const bool hover = state() == STATE_HOVERED || state() == STATE_PRESSED;
 
-  canvas->FillRect(content_rect, switches::IsExperimentalAppListEnabled()
-                                     ? kCardBackgroundColor
-                                     : kContentsBackgroundColor);
+  canvas->FillRect(content_rect, kCardBackgroundColor);
 
   // Possibly call FillRect a second time (these colours are partially
   // transparent, so the previous FillRect is not redundant).
@@ -263,7 +258,7 @@ void SearchResultView::OnPaint(gfx::Canvas* canvas) {
   else if (hover)
     canvas->FillRect(content_rect, kHighlightedColor);
 
-  if (switches::IsExperimentalAppListEnabled() && !is_last_result_) {
+  if (!is_last_result_) {
     gfx::Rect line_rect = content_rect;
     line_rect.set_height(kBorderSize);
     line_rect.set_y(content_rect.bottom() - kBorderSize);

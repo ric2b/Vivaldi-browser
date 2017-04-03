@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/libgtk2ui/select_file_dialog_impl_gtk2.h"
 
+#include <gdk/gdkx.h>
 #include <gtk/gtk.h>
 #include <stddef.h>
 #include <sys/stat.h>
@@ -30,9 +31,10 @@
 #include "chrome/browser/ui/libgtk2ui/select_file_dialog_impl.h"
 #include "ui/aura/window_observer.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/events/platform/x11/x11_event_source.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 #include "ui/strings/grit/ui_strings.h"
-#include "ui/views/widget/desktop_aura/x11_desktop_handler.h"
+#include "ui/views/widget/desktop_aura/desktop_window_tree_host_x11.h"
 
 namespace {
 
@@ -46,6 +48,12 @@ gboolean FileFilterCaseInsensitive(const GtkFileFilterInfo* file_info,
 // Deletes |data| when gtk_file_filter_add_custom() is done with it.
 void OnFileFilterDataDestroyed(std::string* file_extension) {
   delete file_extension;
+}
+
+// Runs DesktopWindowTreeHostX11::EnableEventListening() when the file-picker
+// is closed.
+void OnFilePickerDestroy(base::Closure* callback) {
+  callback->Run();
 }
 
 }  // namespace
@@ -161,16 +169,26 @@ void SelectFileDialogImplGTK::SelectFileImpl(
 
   params_map_[dialog] = params;
 
-  // TODO(erg): Figure out how to fake GTK window-to-parent modality without
-  // having the parent be a real GtkWindow.
-  gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
+  // Disable input events handling in the host window to make this dialog modal.
+  aura::WindowTreeHost* host = owning_window->GetHost();
+  if (host) {
+    std::unique_ptr<base::Closure> callback =
+        views::DesktopWindowTreeHostX11::GetHostForXID(
+        host->GetAcceleratedWidget())->DisableEventListening(
+        GDK_WINDOW_XID(gtk_widget_get_window(dialog)));
+    // OnFilePickerDestroy() is called when |dialog| destroyed, which allows to
+    // invoke the callback function to re-enable events on the owning window.
+    g_object_set_data_full(G_OBJECT(dialog), "callback", callback.release(),
+        reinterpret_cast<GDestroyNotify>(OnFilePickerDestroy));
+    gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
+  }
 
   gtk_widget_show_all(dialog);
 
   // We need to call gtk_window_present after making the widgets visible to make
   // sure window gets correctly raised and gets focus.
-  int time = views::X11DesktopHandler::get()->wm_user_time_ms();
-  gtk_window_present_with_time(GTK_WINDOW(dialog), time);
+  gtk_window_present_with_time(
+      GTK_WINDOW(dialog), ui::X11EventSource::GetInstance()->GetTimestamp());
 }
 
 void SelectFileDialogImplGTK::AddFilters(GtkFileChooser* chooser) {

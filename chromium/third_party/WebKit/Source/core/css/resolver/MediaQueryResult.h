@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 1999 Lars Knoll (knoll@kde.org)
- * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011 Apple Inc. All rights reserved.
+ * Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011 Apple Inc.
+ * All rights reserved.
  * Copyright (C) 2013 Google Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
@@ -29,28 +30,23 @@
 namespace blink {
 
 class MediaQueryResult : public GarbageCollected<MediaQueryResult> {
-    WTF_MAKE_NONCOPYABLE(MediaQueryResult);
-public:
-    MediaQueryResult(const MediaQueryExp& expr, bool result)
-        : m_expression(&expr)
-        , m_result(result)
-    {
-    }
+  WTF_MAKE_NONCOPYABLE(MediaQueryResult);
 
-    DEFINE_INLINE_TRACE() { visitor->trace(m_expression); }
+ public:
+  MediaQueryResult(const MediaQueryExp& expr, bool result)
+      : m_expression(&expr), m_result(result) {}
 
-    const MediaQueryExp* expression() const
-    {
-        return m_expression;
-    }
+  DEFINE_INLINE_TRACE() { visitor->trace(m_expression); }
 
-    bool result() const { return m_result; }
+  const MediaQueryExp* expression() const { return m_expression; }
 
-private:
-    Member<const MediaQueryExp> m_expression;
-    bool m_result;
+  bool result() const { return m_result; }
+
+ private:
+  Member<const MediaQueryExp> m_expression;
+  bool m_result;
 };
 
-} // namespace blink
+}  // namespace blink
 
 #endif

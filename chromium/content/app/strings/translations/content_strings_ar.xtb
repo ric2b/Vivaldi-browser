@@ -1,12 +1,12 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ar">
-<translation id="1014825444426747588">فارغ</translation>
 <translation id="1018939186200882850">عنصر القائمة</translation>
 <translation id="1020833440720551630">كتم صوت المقطع الصوتي</translation>
 <translation id="10623998915015855">زر التبديل</translation>
 <translation id="1088086359088493902">ثوانٍ‬‬</translation>
 <translation id="1171774979989969504">الرجاء إدخال عنوان البريد الإلكتروني.</translation>
+<translation id="1178581264944972037">تعليق</translation>
 <translation id="1188858454923323853">تكميلي</translation>
 <translation id="1206619573307042055">صورة بها نص متحرك</translation>
 <translation id="1206693055195146388">شريط تمرير</translation>
@@ -25,6 +25,7 @@
 <translation id="1822429046913737220">صباحًا/مساءً</translation>
 <translation id="1832974991323546415">تشغيل على جهاز بعيد</translation>
 <translation id="1842960171412779397">الاختيار</translation>
+<translation id="1854180393107901205">إيقاف الإرسال</translation>
 <translation id="1880518467580572141">مخطط</translation>
 <translation id="1921819250265091946">يوم</translation>
 <translation id="1930711995431081526">الحالة</translation>
@@ -39,6 +40,7 @@
 <translation id="2507943997699731163">الرجاء ملء هذا الحقل.</translation>
 <translation id="2508569020611168319">قائمة علامات التبويب</translation>
 <translation id="2548326553472216322">لا عمليات بحث حديثة</translation>
+<translation id="2561842179657104141">عرض المزيد من عناصر التحكم في الوسائط</translation>
 <translation id="2572483411312390101">تشغيل</translation>
 <translation id="2613802280814924224">يُرجى إدخال قيمة صالحة. علمًا بأن أقرب قيمة صالحة هي <ph name="VALID_VALUE" />.</translation>
 <translation id="2653659639078652383">إرسال</translation>
@@ -71,6 +73,7 @@
 <translation id="3808586225841795776">عبارة</translation>
 <translation id="3822383571486410024">يُرجى إطالة هذا النص إلى <ph name="MIN_CHARACTERS" /> من الحروف أو أكثر (أنت تستخدم حاليًا <ph name="CURRENT_LENGTH" /> من الحروف).</translation>
 <translation id="383465348367842624">الجزء المتبوع بالعلامة "<ph name="ATSIGN" />" يجب ألا يشتمل على الرمز "<ph name="INVALIDCHARACTER" />".</translation>
+<translation id="3846214748874656680">خروج من عرض ملء الشاشة</translation>
 <translation id="3924558731517983934">التطبيق</translation>
 <translation id="3960700977367013758">شريط التمرير</translation>
 <translation id="4103419683916926126">مللي ثانية</translation>
@@ -91,6 +94,7 @@
 <translation id="479989351350248267">بحث</translation>
 <translation id="4812940957355064477">الرجاء إدخال عدد.</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> محددة</translation>
+<translation id="4992066212339426712">إعادة الصوت</translation>
 <translation id="49969490063480558">يُرجى إدخال الجزء الذي يلي العلامة "<ph name="ATSIGN" />"، حيث إن "<ph name="INVALIDADDRESS" />" غير مكتمل.</translation>
 <translation id="5034860022980953847">مؤشر التقدم</translation>
 <translation id="5048533449481078685">محدّد القائمة</translation>
@@ -105,13 +109,17 @@
 <translation id="5468998798572797635">إنهاء وضع ملء الشاشة</translation>
 <translation id="5476505524087279545">إزالة علامة الاختيار</translation>
 <translation id="5516424706154626233">منتقي التاريخ</translation>
+<translation id="5537725057119320332">إرسال</translation>
 <translation id="5546461542133609677">إعادة الصوت</translation>
 <translation id="561939826962581046">الوقت</translation>
 <translation id="5641012560118721995">إيقاف التشغيل مؤقتًا</translation>
 <translation id="5643186887447432888">زر</translation>
+<translation id="5677946354068040947">خيارات إضافية</translation>
+<translation id="57838592816432529">كتم الصوت</translation>
 <translation id="583281660410589416">غير معروف</translation>
 <translation id="5843503607508392247">آخر...</translation>
 <translation id="5860033963881614850">إيقاف</translation>
+<translation id="588258955323874662">ملء الشاشة</translation>
 <translation id="5939518447894949180">إعادة</translation>
 <translation id="5944544982112848342">2048 (درجة عالية)</translation>
 <translation id="5966707198760109579">الأسبوع</translation>
@@ -134,12 +142,14 @@
 <translation id="6692633176391053278">تخطي</translation>
 <translation id="6739588121953935928">مسطرة</translation>
 <translation id="6755330956360078551">تلميح</translation>
+<translation id="6790428901817661496">التشغيل</translation>
 <translation id="6820355525329141109">تعذر تحميل المكوّن الإضافي.</translation>
 <translation id="6843725295806269523">كتم الصوت</translation>
 <translation id="6845533974506654842">اضغط</translation>
 <translation id="6853785296079745596">إخفاء التسميات التوضيحية المغلقة</translation>
 <translation id="6885760532393684712">الدليل</translation>
 <translation id="6934078000481955284">علامة اقتباس فقرة</translation>
+<translation id="6941933287844615239">تنزيل وسائط</translation>
 <translation id="7057186640035488495">وقت الفيلم</translation>
 <translation id="709897737746224366">الرجاء مطابقة التنسيق المطلوب.</translation>
 <translation id="7223624360433298498">المدة المنقضية</translation>
@@ -148,6 +158,7 @@
 <translation id="7364796246159120393">اختيار ملفّ</translation>
 <translation id="739024184232394898">آخر...</translation>
 <translation id="7491962110804786152">علامة تبويب</translation>
+<translation id="7514365320538308">تنزيل</translation>
 <translation id="7673697353781729403">ساعات</translation>
 <translation id="7720026100085573005">المدة المتبقية</translation>
 <translation id="7740016676195725605">إيقاف عرض التسميات التوضيحية المغلقة</translation>
@@ -164,6 +175,7 @@
 <translation id="819205353528511139">تشغيل الفيلم في وضع ملء الشاشة</translation>
 <translation id="8199524924445686405">سنة</translation>
 <translation id="8244226242650769279">مخطّط صورة</translation>
+<translation id="8284326494547611709">التسميات التوضيحية</translation>
 <translation id="835897206747267392">قيمة غير صحيحة</translation>
 <translation id="838869780401515933">الاختيار</translation>
 <translation id="8433900881053900389">شريط الأدوات</translation>

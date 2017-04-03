@@ -23,10 +23,10 @@ build_ime = !is_ios
 # the host to load datapack and generate output in a format defined
 # by the platform (this is to support notifications).
 #
-# Introduce a standalone target that build on both 'host' and 'target'
-# toolset that just build the support to load datapack. The dependency
+# Introduce a standalone target that can build on both 'host' and 'target'
+# toolchains that just builds the support to load datapacks. The dependencies
 # should be kept minimal to have to build too many targets with multiple
-# toolsets.
+# toolchains.
 component("ui_data_pack") {
   sources = [
     "resource/data_pack.cc",
@@ -96,6 +96,8 @@ component("base") {
     "cocoa/controls/hyperlink_button_cell.mm",
     "cocoa/controls/hyperlink_text_view.h",
     "cocoa/controls/hyperlink_text_view.mm",
+    "cocoa/defaults_utils.h",
+    "cocoa/defaults_utils.mm",
     "cocoa/find_pasteboard.h",
     "cocoa/find_pasteboard.mm",
     "cocoa/flipped_view.h",
@@ -360,6 +362,7 @@ component("base") {
   defines = [ "UI_BASE_IMPLEMENTATION" ]
 
   public_deps = [
+    ":ui_data_pack",
     ":ui_features",
     "//base",
     "//skia",
@@ -375,7 +378,6 @@ component("base") {
     "//net",
     "//third_party/icu",
     "//third_party/zlib:zlib",
-    "//ui/base:ui_data_pack",
     "//ui/display",
     "//ui/events",
     "//ui/events/devices",
@@ -714,9 +716,9 @@ bundle_data("ui_base_unittests_bundle_data") {
   ]
 }
 
-# GYP version: ui/base/ui_base_tests.gyp:ui_base_unittests
 test("ui_base_unittests") {
   sources = [
+    "clipboard/clipboard_mac_unittest.mm",
     "clipboard/clipboard_util_mac_unittest.mm",
     "l10n/l10n_util_mac_unittest.mm",
     "l10n/l10n_util_unittest.cc",

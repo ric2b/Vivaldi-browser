@@ -470,17 +470,6 @@ class MostVisitedThumbnails
 // Map from host to visit count, sorted by visit count descending.
 typedef std::vector<std::pair<std::string, int>> TopHostsList;
 
-typedef struct UrlVisitCount {
-  std::string date;
-  GURL url;
-  int count;
-
-  UrlVisitCount(std::string date, GURL url, int count)
-      : date(date), url(url), count(count) {}
-} UrlVisitCount;
-
-typedef std::vector<UrlVisitCount> TopUrlsPerDayList;
-
 // Map from origins to a count of matching URLs and the last visited time to any
 // URL under that origin.
 typedef std::map<GURL, std::pair<int, base::Time>> OriginCountAndLastVisitMap;

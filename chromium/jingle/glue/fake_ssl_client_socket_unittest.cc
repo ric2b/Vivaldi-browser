@@ -18,7 +18,8 @@
 #include "net/base/io_buffer.h"
 #include "net/base/ip_address.h"
 #include "net/base/test_completion_callback.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_source.h"
+#include "net/log/net_log_with_source.h"
 #include "net/socket/socket_test_util.h"
 #include "net/socket/stream_socket.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -63,7 +64,7 @@ class MockClientSocket : public net::StreamSocket {
   MOCK_CONST_METHOD0(IsConnectedAndIdle, bool());
   MOCK_CONST_METHOD1(GetPeerAddress, int(net::IPEndPoint*));
   MOCK_CONST_METHOD1(GetLocalAddress, int(net::IPEndPoint*));
-  MOCK_CONST_METHOD0(NetLog, const net::BoundNetLog&());
+  MOCK_CONST_METHOD0(NetLog, const net::NetLogWithSource&());
   MOCK_METHOD0(SetSubresourceSpeculation, void());
   MOCK_METHOD0(SetOmniboxSpeculation, void());
   MOCK_CONST_METHOD0(WasEverUsed, bool());
@@ -102,7 +103,7 @@ class FakeSSLClientSocketTest : public testing::Test {
 
   std::unique_ptr<net::StreamSocket> MakeClientSocket() {
     return mock_client_socket_factory_.CreateTransportClientSocket(
-        net::AddressList(), NULL, NULL, net::NetLog::Source());
+        net::AddressList(), NULL, NULL, net::NetLogSource());
   }
 
   void SetData(const net::MockConnect& mock_connect,
@@ -283,7 +284,7 @@ TEST_F(FakeSSLClientSocketTest, PassThroughMethods) {
   const int kSendBufferSize = 20;
   net::IPEndPoint ip_endpoint(net::IPAddress::IPv4AllZeros(), 80);
   const int kPeerAddress = 30;
-  net::BoundNetLog net_log;
+  net::NetLogWithSource net_log;
   EXPECT_CALL(*mock_client_socket, SetReceiveBufferSize(kReceiveBufferSize));
   EXPECT_CALL(*mock_client_socket, SetSendBufferSize(kSendBufferSize));
   EXPECT_CALL(*mock_client_socket, GetPeerAddress(&ip_endpoint)).

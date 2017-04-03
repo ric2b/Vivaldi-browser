@@ -37,6 +37,7 @@
   DISABLE(FFmpegDemuxerTest, Read_AC3_Audio)
   DISABLE(FFmpegDemuxerTest, Read_EAC3_Audio)
   DISABLE(FFmpegDemuxerTest, Read_Mp4_Media_Track_Info)
+  DISABLE(FFmpegDemuxerTest, Read_Mp4_Multiple_Tracks)
   DISABLE(FFmpegDemuxerTest, Rotate_Metadata_0)
   DISABLE(FFmpegDemuxerTest, Rotate_Metadata_180)
   DISABLE(FFmpegDemuxerTest, Rotate_Metadata_270)
@@ -51,6 +52,7 @@
   DISABLE(EncryptedMediaSupportedTypesExternalClearKeyTest, Audio_MP4)
   DISABLE(EncryptedMediaSupportedTypesExternalClearKeyTest, Video_MP4)
   DISABLE_ALL(MediaCanPlayTypeTest)
+  DISABLE(MediaColorTest, Yuv420pH264)
 
   // Assume these fails due to switches::kExtensionActionRedesign being disabled
   DISABLE(ToolbarActionViewInteractiveUITest, TestClickingOnOverflowedAction)

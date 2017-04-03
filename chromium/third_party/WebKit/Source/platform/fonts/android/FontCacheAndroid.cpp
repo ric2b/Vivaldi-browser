@@ -39,24 +39,31 @@
 
 namespace blink {
 
-PassRefPtr<SimpleFontData> FontCache::fallbackFontForCharacter(const FontDescription& fontDescription, UChar32 c, const SimpleFontData*, FontFallbackPriority fallbackPriority)
-{
-    RefPtr<SkFontMgr> fm = adoptRef(SkFontMgr::RefDefault());
-    AtomicString familyName = getFamilyNameForCharacter(fm.get(), c, fontDescription, fallbackPriority);
-    if (familyName.isEmpty())
-        return getLastResortFallbackFont(fontDescription, DoNotRetain);
-    return fontDataFromFontPlatformData(getFontPlatformData(fontDescription, FontFaceCreationParams(familyName)), DoNotRetain);
+PassRefPtr<SimpleFontData> FontCache::fallbackFontForCharacter(
+    const FontDescription& fontDescription,
+    UChar32 c,
+    const SimpleFontData*,
+    FontFallbackPriority fallbackPriority) {
+  sk_sp<SkFontMgr> fm(SkFontMgr::RefDefault());
+  AtomicString familyName =
+      getFamilyNameForCharacter(fm.get(), c, fontDescription, fallbackPriority);
+  if (familyName.isEmpty())
+    return getLastResortFallbackFont(fontDescription, DoNotRetain);
+  return fontDataFromFontPlatformData(
+      getFontPlatformData(fontDescription, FontFaceCreationParams(familyName)),
+      DoNotRetain);
 }
 
 // static
-AtomicString FontCache::getGenericFamilyNameForScript(const AtomicString& familyName, const FontDescription& fontDescription)
-{
-    // If monospace, do not apply CJK hack to find i18n fonts, because
-    // i18n fonts are likely not monospace. Monospace is mostly used
-    // for code, but when i18n characters appear in monospace, system
-    // fallback can still render the characters.
-    if (familyName == FontFamilyNames::webkit_monospace)
-        return familyName;
+AtomicString FontCache::getGenericFamilyNameForScript(
+    const AtomicString& familyName,
+    const FontDescription& fontDescription) {
+  // If monospace, do not apply CJK hack to find i18n fonts, because
+  // i18n fonts are likely not monospace. Monospace is mostly used
+  // for code, but when i18n characters appear in monospace, system
+  // fallback can still render the characters.
+  if (familyName == FontFamilyNames::webkit_monospace)
+    return familyName;
 
   // The CJK hack below should be removed, at latest when we have
   // serif and sans-serif versions of CJK fonts. Until then, limit it
@@ -74,18 +81,19 @@ AtomicString FontCache::getGenericFamilyNameForScript(const AtomicString& family
     case USCRIPT_SIMPLIFIED_HAN:
     case USCRIPT_TRADITIONAL_HAN:
     case USCRIPT_KATAKANA_OR_HIRAGANA:
-        examplerChar = 0x4E00; // A common character in Japanese and Chinese.
-        break;
+      examplerChar = 0x4E00;  // A common character in Japanese and Chinese.
+      break;
     case USCRIPT_HANGUL:
-        examplerChar = 0xAC00;
-        break;
+      examplerChar = 0xAC00;
+      break;
     default:
-        // For other scripts, use the default generic family mapping logic.
-        return familyName;
-    }
+      // For other scripts, use the default generic family mapping logic.
+      return familyName;
+  }
 
-    RefPtr<SkFontMgr> fm = adoptRef(SkFontMgr::RefDefault());
-    return getFamilyNameForCharacter(fm.get(), examplerChar, fontDescription, FontFallbackPriority::Text);
+  sk_sp<SkFontMgr> fm(SkFontMgr::RefDefault());
+  return getFamilyNameForCharacter(fm.get(), examplerChar, fontDescription,
+                                   FontFallbackPriority::Text);
 }
 
-} // namespace blink
+}  // namespace blink

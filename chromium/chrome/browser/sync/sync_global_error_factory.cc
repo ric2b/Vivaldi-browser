@@ -10,7 +10,7 @@
 #include "chrome/browser/sync/sync_global_error.h"
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 
 #if defined(USE_ASH)
@@ -48,13 +48,13 @@ KeyedService* SyncGlobalErrorFactory::BuildServiceInstanceFor(
 #endif
 
   Profile* profile = static_cast<Profile*>(context);
-  ProfileSyncService* profile_sync_service =
+  browser_sync::ProfileSyncService* profile_sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile);
 
   if (!profile_sync_service)
     return NULL;
 
-  SyncErrorController* sync_error_controller =
+  syncer::SyncErrorController* sync_error_controller =
       profile_sync_service->sync_error_controller();
   if (!sync_error_controller)
     return NULL;

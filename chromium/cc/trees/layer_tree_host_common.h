@@ -80,6 +80,7 @@ class CC_EXPORT LayerTreeHostCommon {
         bool can_render_to_separate_surface,
         bool can_adjust_raster_scales,
         bool verify_clip_tree_calculations,
+        bool verify_visible_rect_calculations,
         bool verify_transform_tree_calculations,
         LayerImplList* render_surface_layer_list,
         PropertyTrees* property_trees);
@@ -98,6 +99,7 @@ class CC_EXPORT LayerTreeHostCommon {
     bool can_render_to_separate_surface;
     bool can_adjust_raster_scales;
     bool verify_clip_tree_calculations;
+    bool verify_visible_rect_calculations;
     bool verify_transform_tree_calculations;
     LayerImplList* render_surface_layer_list;
     PropertyTrees* property_trees;
@@ -185,11 +187,6 @@ void LayerTreeHostCommon::CallFunctionForEveryLayer(LayerTree* host,
     function(layer);
     if (Layer* mask_layer = layer->mask_layer())
       function(mask_layer);
-    if (Layer* replica_layer = layer->replica_layer()) {
-      function(replica_layer);
-      if (Layer* mask_layer = replica_layer->mask_layer())
-        function(mask_layer);
-    }
   }
 }
 
@@ -199,8 +196,7 @@ void LayerTreeHostCommon::CallFunctionForEveryLayer(LayerTreeImpl* tree_impl,
   for (auto* layer : *tree_impl)
     function(layer);
 
-  for (int id :
-       tree_impl->property_trees()->effect_tree.mask_replica_layer_ids()) {
+  for (int id : tree_impl->property_trees()->effect_tree.mask_layer_ids()) {
     function(tree_impl->LayerById(id));
   }
 }

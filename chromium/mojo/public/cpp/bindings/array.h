@@ -17,6 +17,7 @@
 #include "mojo/public/cpp/bindings/lib/array_internal.h"
 #include "mojo/public/cpp/bindings/lib/bindings_internal.h"
 #include "mojo/public/cpp/bindings/lib/clone_equals_util.h"
+#include "mojo/public/cpp/bindings/lib/hash_util.h"
 #include "mojo/public/cpp/bindings/lib/template_util.h"
 #include "mojo/public/cpp/bindings/type_converter.h"
 
@@ -133,6 +134,11 @@ class Array {
   // Sets the array to empty (even if previously it was null.)
   void SetToEmpty() { resize(0); }
 
+  // Ensures the underlying storage can store up to |size| elements without
+  // performing reallocations. This works like the reserve method of
+  // |std::vector|.
+  void reserve(size_t size) { vec_.reserve(size); }
+
   // Returns a const reference to the |std::vector| managed by this class. If
   // the array is null, this will be an empty vector.
   const std::vector<T>& storage() const { return vec_; }
@@ -180,6 +186,10 @@ class Array {
     if (is_null() != other.is_null())
       return false;
     return internal::Equals(vec_, other.vec_);
+  }
+
+  size_t Hash(size_t seed) const {
+    return is_null() ? seed : internal::Hash(seed, vec_);
   }
 
  private:

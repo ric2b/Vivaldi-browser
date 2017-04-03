@@ -15,6 +15,10 @@
 #include "base/macros.h"
 #include "ui/gfx/vector_icon_types.h"
 
+namespace gfx {
+struct VectorIcon;
+}
+
 namespace views {
 class View;
 }
@@ -45,6 +49,9 @@ class ASH_EXPORT PaletteTool {
 
     // Hide the entire palette. This should not change any tool state.
     virtual void HidePalette() = 0;
+
+    // Hide the entire palette without showing a hide animation.
+    virtual void HidePaletteImmediately() = 0;
 
     // Returns the root window.
     virtual WmWindow* GetWindow() = 0;
@@ -91,7 +98,7 @@ class ASH_EXPORT PaletteTool {
 
   // Returns an icon to use in the tray if this tool is active. Only one tool
   // (per-group) should ever have an active icon at any given time.
-  virtual gfx::VectorIconId GetActiveTrayIcon();
+  virtual const gfx::VectorIcon& GetActiveTrayIcon() const;
 
  protected:
   // Enables/disables the tool.

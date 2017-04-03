@@ -4,6 +4,7 @@
 
 #include "ui/views/mus/window_manager_connection.h"
 
+#include <set>
 #include <utility>
 
 #include "base/lazy_instance.h"
@@ -113,20 +114,20 @@ WindowManagerConnection::WindowManagerConnection(
   lazy_tls_ptr.Pointer()->Set(this);
 
   gpu_service_ = ui::GpuService::Create(connector, std::move(task_runner));
-  compositor_context_factory_.reset(
-      new views::SurfaceContextFactory(gpu_service_.get()));
+  compositor_context_factory_ =
+      base::MakeUnique<views::SurfaceContextFactory>(gpu_service_.get());
   aura::Env::GetInstance()->set_context_factory(
       compositor_context_factory_.get());
-  client_.reset(new ui::WindowTreeClient(this, nullptr, nullptr));
+  client_ = base::MakeUnique<ui::WindowTreeClient>(this, nullptr, nullptr);
   client_->ConnectViaWindowTreeFactory(connector_);
 
-  pointer_watcher_event_router_.reset(
-      new PointerWatcherEventRouter(client_.get()));
+  pointer_watcher_event_router_ =
+      base::MakeUnique<PointerWatcherEventRouter>(client_.get());
 
-  screen_.reset(new ScreenMus(this));
+  screen_ = base::MakeUnique<ScreenMus>(this);
   screen_->Init(connector);
 
-  std::unique_ptr<ClipboardMus> clipboard(new ClipboardMus);
+  std::unique_ptr<ClipboardMus> clipboard = base::MakeUnique<ClipboardMus>();
   clipboard->Init(connector);
   ui::Clipboard::SetClipboardForCurrentThread(std::move(clipboard));
 
@@ -140,12 +141,15 @@ WindowManagerConnection::WindowManagerConnection(
 
 void WindowManagerConnection::OnEmbed(ui::Window* root) {}
 
-void WindowManagerConnection::OnDidDestroyClient(ui::WindowTreeClient* client) {
-  if (client_.get() == client) {
-    client_.release();
-  } else {
-    DCHECK(!client_);
-  }
+void WindowManagerConnection::OnLostConnection(ui::WindowTreeClient* client) {
+  DCHECK_EQ(client, client_.get());
+  client_.reset();
+}
+
+void WindowManagerConnection::OnEmbedRootDestroyed(ui::Window* root) {
+  // Not called for WindowManagerConnection as WindowTreeClient isn't created by
+  // way of an Embed().
+  NOTREACHED();
 }
 
 void WindowManagerConnection::OnPointerEventObserved(

@@ -7,66 +7,73 @@
 
 #include "platform/graphics/paint/ClipPaintPropertyNode.h"
 #include "platform/graphics/paint/EffectPaintPropertyNode.h"
+#include "platform/graphics/paint/ScrollPaintPropertyNode.h"
 #include "platform/graphics/paint/TransformPaintPropertyNode.h"
 #include "wtf/HashFunctions.h"
 #include "wtf/HashTraits.h"
 
 namespace blink {
 
-// Represents the combination of transform, clip and effect nodes for a particular coordinate space.
-// See GeometryMapper.
-struct PropertyTreeState {
-    PropertyTreeState() : PropertyTreeState(nullptr, nullptr, nullptr) {}
+// A complete set of paint properties including those that are inherited from
+// other objects.  RefPtrs are used to guard against use-after-free bugs and
+// DCHECKs ensure PropertyTreeState never retains the last reference to a
+// property tree node.
+class PropertyTreeState {
+ public:
+  PropertyTreeState(const TransformPaintPropertyNode* transform,
+                    const ClipPaintPropertyNode* clip,
+                    const EffectPaintPropertyNode* effect,
+                    const ScrollPaintPropertyNode* scroll)
+      : m_transform(transform),
+        m_clip(clip),
+        m_effect(effect),
+        m_scroll(scroll) {
+    DCHECK(!m_transform->hasOneRef() && !m_clip->hasOneRef() &&
+           !m_effect->hasOneRef() && !m_scroll->hasOneRef());
+  }
 
-    PropertyTreeState(
-        const TransformPaintPropertyNode* transform,
-        const ClipPaintPropertyNode* clip,
-        const EffectPaintPropertyNode* effect)
-    : transform(transform), clip(clip), effect(effect) {}
+  const TransformPaintPropertyNode* transform() const {
+    DCHECK(!m_transform->hasOneRef());
+    return m_transform.get();
+  }
+  void setTransform(const TransformPaintPropertyNode* node) {
+    m_transform = node;
+    DCHECK(!node->hasOneRef());
+  }
 
-    RefPtr<const TransformPaintPropertyNode> transform;
-    RefPtr<const ClipPaintPropertyNode> clip;
-    RefPtr<const EffectPaintPropertyNode> effect;
+  const ClipPaintPropertyNode* clip() const {
+    DCHECK(!m_clip->hasOneRef());
+    return m_clip.get();
+  }
+  void setClip(const ClipPaintPropertyNode* node) {
+    m_clip = node;
+    DCHECK(!node->hasOneRef());
+  }
+
+  const EffectPaintPropertyNode* effect() const {
+    DCHECK(!m_effect->hasOneRef());
+    return m_effect.get();
+  }
+  void setEffect(const EffectPaintPropertyNode* node) {
+    m_effect = node;
+    DCHECK(!node->hasOneRef());
+  }
+
+  const ScrollPaintPropertyNode* scroll() const {
+    DCHECK(!m_scroll->hasOneRef());
+    return m_scroll.get();
+  }
+  void setScroll(const ScrollPaintPropertyNode* node) {
+    m_scroll = node;
+    DCHECK(!node->hasOneRef());
+  }
+
+ private:
+  RefPtr<const TransformPaintPropertyNode> m_transform;
+  RefPtr<const ClipPaintPropertyNode> m_clip;
+  RefPtr<const EffectPaintPropertyNode> m_effect;
+  RefPtr<const ScrollPaintPropertyNode> m_scroll;
 };
+}  // namespace blink
 
-template <class A>
-unsigned propertyTreeNodeDepth(const A* node)
-{
-    unsigned depth = 0;
-    while (node) {
-        depth++;
-        node = node->parent();
-    }
-    return depth;
-}
-
-template <class A>
-const A* propertyTreeNearestCommonAncestor(const A* a, const A* b)
-{
-    // Measure both depths.
-    unsigned depthA = propertyTreeNodeDepth<A>(a);
-    unsigned depthB = propertyTreeNodeDepth<A>(b);
-
-    // Make it so depthA >= depthB.
-    if (depthA < depthB) {
-        std::swap(a, b);
-        std::swap(depthA, depthB);
-    }
-
-    // Make it so depthA == depthB.
-    while (depthA > depthB) {
-        a = a->parent();
-        depthA--;
-    }
-
-    // Walk up until we find the ancestor.
-    while (a != b) {
-        a = a->parent();
-        b = b->parent();
-    }
-    return a;
-}
-
-} // namespace blink
-
-#endif // PropertyTreeState_h
+#endif  // PropertyTreeState_h

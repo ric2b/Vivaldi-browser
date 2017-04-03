@@ -12,6 +12,7 @@
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -286,12 +287,6 @@ const LocalizedErrorMap net_error_options[] = {
    SUGGEST_COMPLETE_SETUP,
    SHOW_NO_BUTTONS,
   },
-  {net::ERR_SSL_FALLBACK_BEYOND_MINIMUM_VERSION,
-   IDS_ERRORPAGES_HEADING_INSECURE_CONNECTION,
-   IDS_ERRORPAGES_SUMMARY_INVALID_RESPONSE,
-   SUGGEST_NONE,
-   SHOW_NO_BUTTONS,
-  },
   {net::ERR_SSL_VERSION_OR_CIPHER_MISMATCH,
    IDS_ERRORPAGES_HEADING_INSECURE_CONNECTION,
    IDS_ERRORPAGES_SUMMARY_SSL_VERSION_OR_CIPHER_MISMATCH,
@@ -504,13 +499,13 @@ void AddSingleEntryDictionaryToList(base::ListValue* list,
                                     const char* path,
                                     int message_id,
                                     bool insert_as_first_item) {
-  base::DictionaryValue* suggestion_list_item = new base::DictionaryValue;
+  auto suggestion_list_item = base::MakeUnique<base::DictionaryValue>();
   suggestion_list_item->SetString(path, l10n_util::GetStringUTF16(message_id));
 
   if (insert_as_first_item) {
-    list->Insert(0, suggestion_list_item);
+    list->Insert(0, std::move(suggestion_list_item));
   } else {
-    list->Append(suggestion_list_item);
+    list->Append(std::move(suggestion_list_item));
   }
 }
 
@@ -728,7 +723,7 @@ base::DictionaryValue* AddSuggestionDetailDictionaryToList(
     suggestion_list_item->SetString("body",
         l10n_util::GetStringUTF16(body_message_id));
   }
-  list->Append(suggestion_list_item);
+  list->Append(base::WrapUnique(suggestion_list_item));
   return suggestion_list_item;
 }
 

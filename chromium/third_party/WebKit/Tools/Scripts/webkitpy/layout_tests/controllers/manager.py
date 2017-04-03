@@ -253,11 +253,8 @@ class Manager(object):
         if self._options.order == 'natural':
             tests_to_run.sort(key=self._port.test_key)
         elif self._options.order == 'random':
-            random.shuffle(tests_to_run)
-        elif self._options.order == 'random-seeded':
-            rnd = random.Random()
-            rnd.seed(4)  # http://xkcd.com/221/
-            rnd.shuffle(tests_to_run)
+            tests_to_run.sort()
+            random.Random(self._options.seed).shuffle(tests_to_run)
 
         tests_to_run, tests_in_other_chunks = self._finder.split_into_chunks(tests_to_run)
         self._expectations.add_extra_skipped_tests(tests_in_other_chunks)
@@ -269,7 +266,8 @@ class Manager(object):
         return TestInput(test_file,
                          self._options.slow_time_out_ms if self._test_is_slow(test_file) else self._options.time_out_ms,
                          self._test_requires_lock(test_file),
-                         should_add_missing_baselines=(self._options.new_test_results and not self._test_is_expected_missing(test_file)))
+                         should_add_missing_baselines=(self._options.new_test_results and
+                                                       not self._test_is_expected_missing(test_file)))
 
     def _test_requires_lock(self, test_file):
         """Return True if the test needs to be locked when running multiple
@@ -282,7 +280,9 @@ class Manager(object):
 
     def _test_is_expected_missing(self, test_file):
         expectations = self._expectations.model().get_expectations(test_file)
-        return test_expectations.MISSING in expectations or test_expectations.NEEDS_REBASELINE in expectations or test_expectations.NEEDS_MANUAL_REBASELINE in expectations
+        return (test_expectations.MISSING in expectations or
+                test_expectations.NEEDS_REBASELINE in expectations or
+                test_expectations.NEEDS_MANUAL_REBASELINE in expectations)
 
     def _test_is_slow(self, test_file):
         return test_expectations.SLOW in self._expectations.model().get_expectations(test_file)
@@ -293,7 +293,8 @@ class Manager(object):
     def _rename_results_folder(self):
         try:
             timestamp = time.strftime(
-                "%Y-%m-%d-%H-%M-%S", time.localtime(self._filesystem.mtime(self._filesystem.join(self._results_directory, "results.html"))))
+                "%Y-%m-%d-%H-%M-%S", time.localtime(
+                    self._filesystem.mtime(self._filesystem.join(self._results_directory, "results.html"))))
         except (IOError, OSError) as e:
             # It might be possible that results.html was not generated in previous run, because the test
             # run was interrupted even before testing started. In those cases, don't archive the folder.
@@ -445,13 +446,13 @@ class Manager(object):
         sample_files = self._port.look_for_new_samples(crashed_processes, start_time)
         if sample_files:
             for test, sample_file in sample_files.iteritems():
-                writer = TestResultWriter(self._port._filesystem, self._port, self._port.results_directory(), test)
+                writer = TestResultWriter(self._filesystem, self._port, self._port.results_directory(), test)
                 writer.copy_sample_file(sample_file)
 
         crash_logs = self._port.look_for_new_crash_logs(crashed_processes, start_time)
         if crash_logs:
             for test, crash_log in crash_logs.iteritems():
-                writer = TestResultWriter(self._port._filesystem, self._port, self._port.results_directory(), test)
+                writer = TestResultWriter(self._filesystem, self._port, self._port.results_directory(), test)
                 writer.write_crash_log(crash_log)
 
     def _clobber_old_results(self):
@@ -471,8 +472,9 @@ class Manager(object):
         self._port.clobber_old_port_specific_results()
 
     def _tests_to_retry(self, run_results):
-        # TODO(ojan): This should also check that result.type != test_expectations.MISSING since retrying missing expectations is silly.
-        # But that's a bit tricky since we only consider the last retry attempt for the count of unexpected regressions.
+        # TODO(ojan): This should also check that result.type != test_expectations.MISSING
+        # since retrying missing expectations is silly. But that's a bit tricky since we
+        # only consider the last retry attempt for the count of unexpected regressions.
         return [result.test_name for result in run_results.unexpected_results_by_name.values(
         ) if result.type != test_expectations.PASS]
 

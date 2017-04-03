@@ -11,14 +11,18 @@
 #include "ash/common/shelf/shelf_background_animator.h"
 #include "ash/common/shelf/shelf_background_animator_observer.h"
 #include "ash/common/shelf/shelf_layout_manager_observer.h"
-#include "ash/common/shelf/shelf_types.h"
+#include "ash/public/cpp/shelf_types.h"
 #include "base/macros.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
 
+namespace app_list {
+class ApplicationDragAndDropHost;
+}
+
 namespace ash {
+class AppListButton;
 class FocusCycler;
-class Shelf;
 class ShelfLayoutManager;
 class ShelfView;
 class StatusAreaWidget;
@@ -30,10 +34,10 @@ class ASH_EXPORT ShelfWidget : public views::Widget,
                                public ShelfBackgroundAnimatorObserver,
                                public ShelfLayoutManagerObserver {
  public:
-  ShelfWidget(WmWindow* shelf_container,
-              WmWindow* status_container,
-              WmShelf* wm_shelf);
+  ShelfWidget(WmWindow* shelf_container, WmShelf* wm_shelf);
   ~ShelfWidget() override;
+
+  void CreateStatusAreaWidget(WmWindow* status_container);
 
   // Returns if shelf alignment option is enabled, and the user is able to
   // adjust the alignment (guest and supervised mode users cannot for example).
@@ -57,10 +61,6 @@ class ASH_EXPORT ShelfWidget : public views::Widget,
   // Causes shelf items to be slightly dimmed (e.g. when a window is maximized).
   void SetDimsShelf(bool dimming);
   bool GetDimsShelf() const;
-
-  // TODO(jamescook): Eliminate these.
-  Shelf* shelf() { return shelf_; }
-  void set_shelf(Shelf* shelf) { shelf_ = shelf; }
 
   ShelfLayoutManager* shelf_layout_manager() { return shelf_layout_manager_; }
   StatusAreaWidget* status_area_widget() const { return status_area_widget_; }
@@ -96,6 +96,12 @@ class ASH_EXPORT ShelfWidget : public views::Widget,
   // See WmShelf::GetScreenBoundsOfItemIconForWindow().
   gfx::Rect GetScreenBoundsOfItemIconForWindow(WmWindow* window);
 
+  // Returns the button that opens the app launcher.
+  AppListButton* GetAppListButton() const;
+
+  // Returns the ApplicationDragAndDropHost for this shelf.
+  app_list::ApplicationDragAndDropHost* GetDragAndDropHostForAppList();
+
   // Overridden from views::WidgetObserver:
   void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
 
@@ -124,8 +130,8 @@ class ASH_EXPORT ShelfWidget : public views::Widget,
 
   // Owned by the shelf container's window.
   ShelfLayoutManager* shelf_layout_manager_;
-  // Owned by the root window controller.
-  Shelf* shelf_;
+
+  // Owned by the native widget.
   StatusAreaWidget* status_area_widget_;
 
   // |delegate_view_| is the contents view of this widget and is cleaned up

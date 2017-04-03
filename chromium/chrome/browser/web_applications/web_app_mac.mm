@@ -15,7 +15,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/mac/foundation_util.h"
-#include "base/mac/launch_services_util.h"
+#import "base/mac/launch_services_util.h"
 #include "base/mac/mac_util.h"
 #include "base/mac/scoped_cftyperef.h"
 #include "base/mac/scoped_nsobject.h"
@@ -43,6 +43,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #import "chrome/common/mac/app_mode_common.h"
+#include "chrome/grit/chrome_unscaled_resources.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/crx_file/id_util.h"
 #include "components/version_info/version_info.h"
@@ -50,7 +51,6 @@
 #include "content/public/common/content_switches.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
-#include "grit/chrome_unscaled_resources.h"
 #import "skia/ext/skia_utils_mac.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -277,9 +277,10 @@ void LaunchShimOnFileThread(
       base::IntToString(base::GetCurrentProcId()));
   if (launched_after_rebuild)
     command_line.AppendSwitch(app_mode::kLaunchedAfterRebuild);
-  // Launch without activating (kLSLaunchDontSwitch).
+  // Launch without activating (NSWorkspaceLaunchWithoutActivation).
   base::mac::OpenApplicationWithPath(
-      shim_path, command_line, kLSLaunchDefaults | kLSLaunchDontSwitch, NULL);
+      shim_path, command_line,
+      NSWorkspaceLaunchDefault | NSWorkspaceLaunchWithoutActivation);
 }
 
 base::FilePath GetAppLoaderPath() {
@@ -693,7 +694,7 @@ size_t WebAppShortcutCreator::CreateShortcutsIn(
     return 0;
 
   base::FilePath app_name = GetShortcutBasename();
-  base::FilePath staging_path = scoped_temp_dir.path().Append(app_name);
+  base::FilePath staging_path = scoped_temp_dir.GetPath().Append(app_name);
   if (!BuildShortcut(staging_path))
     return 0;
 

@@ -4,14 +4,12 @@
 
 #include "components/sync_bookmarks/bookmark_model_associator.h"
 
-#include <memory>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/containers/hash_tables.h"
 #include "base/format_macros.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -40,7 +38,7 @@
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
 
-namespace browser_sync {
+namespace sync_bookmarks {
 
 // The sync protocol identifies top-level entities by means of well-known tags,
 // which should not be confused with titles.  Each tag corresponds to a
@@ -308,14 +306,14 @@ void BookmarkModelAssociator::Context::MarkForVersionUpdate(
 
 BookmarkModelAssociator::BookmarkModelAssociator(
     BookmarkModel* bookmark_model,
-    sync_driver::SyncClient* sync_client,
+    syncer::SyncClient* sync_client,
     syncer::UserShare* user_share,
-    syncer::DataTypeErrorHandler* unrecoverable_error_handler,
+    std::unique_ptr<syncer::DataTypeErrorHandler> unrecoverable_error_handler,
     bool expect_mobile_bookmarks_folder)
     : bookmark_model_(bookmark_model),
       sync_client_(sync_client),
       user_share_(user_share),
-      unrecoverable_error_handler_(unrecoverable_error_handler),
+      unrecoverable_error_handler_(std::move(unrecoverable_error_handler)),
       expect_mobile_bookmarks_folder_(expect_mobile_bookmarks_folder),
       weak_factory_(this) {
   DCHECK(bookmark_model_);
@@ -729,7 +727,7 @@ syncer::SyncError BookmarkModelAssociator::BuildAssociations(
   for (int i = index; i < parent_node->child_count(); ++i) {
     int64_t sync_child_id = BookmarkChangeProcessor::CreateSyncNode(
         parent_node, bookmark_model_, i, trans, this,
-        unrecoverable_error_handler_);
+        unrecoverable_error_handler_.get());
     if (syncer::kInvalidId == sync_child_id) {
       return unrecoverable_error_handler_->CreateAndUploadError(
           FROM_HERE, "Failed to create sync node.", model_type());
@@ -791,7 +789,7 @@ int BookmarkModelAssociator::RemoveSyncNodeHierarchy(
     syncer::SyncError error(FROM_HERE, syncer::SyncError::DATATYPE_ERROR,
                             "Could not lookup bookmark node for ID deletion.",
                             syncer::BOOKMARKS);
-    unrecoverable_error_handler_->OnSingleDataTypeUnrecoverableError(error);
+    unrecoverable_error_handler_->OnUnrecoverableError(error);
     return 0;
   }
 
@@ -946,7 +944,7 @@ void BookmarkModelAssociator::PersistAssociations() {
             syncer::SyncError::DATATYPE_ERROR,
             "Could not lookup bookmark node for ID persistence.",
             syncer::BOOKMARKS);
-        unrecoverable_error_handler_->OnSingleDataTypeUnrecoverableError(error);
+        unrecoverable_error_handler_->OnUnrecoverableError(error);
         return;
       }
       const BookmarkNode* node = GetChromeNodeFromSyncId(sync_id);
@@ -1015,4 +1013,4 @@ syncer::SyncError BookmarkModelAssociator::CheckModelSyncState(
   return syncer::SyncError();
 }
 
-}  // namespace browser_sync
+}  // namespace sync_bookmarks

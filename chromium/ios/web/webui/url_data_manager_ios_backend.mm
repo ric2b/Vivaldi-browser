@@ -17,6 +17,7 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
@@ -34,6 +35,10 @@
 #include "net/url_request/url_request_job.h"
 #include "net/url_request/url_request_job_factory.h"
 #include "url/url_util.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 using web::WebThread;
 
@@ -461,11 +466,11 @@ bool URLDataManagerIOSBackend::StartRequest(const net::URLRequest* request,
   // replies are put on the IO thread in the same order.
   base::MessageLoop* target_message_loop =
       web::WebThread::UnsafeGetMessageLoopForThread(web::WebThread::UI);
-  target_message_loop->PostTask(
+  target_message_loop->task_runner()->PostTask(
       FROM_HERE, base::Bind(&GetMimeTypeOnUI, base::RetainedRef(source), path,
                             job->weak_factory_.GetWeakPtr()));
 
-  target_message_loop->PostTask(
+  target_message_loop->task_runner()->PostTask(
       FROM_HERE, base::Bind(&URLDataManagerIOSBackend::CallStartRequest,
                             make_scoped_refptr(source), path, request_id));
   return true;

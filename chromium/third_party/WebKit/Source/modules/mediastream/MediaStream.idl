@@ -10,44 +10,41 @@
  *     notice, this list of conditions and the following disclaimer in the
  *     documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
- * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+ * DAMAGE.
  */
 
-// http://w3c.github.io/mediacapture-main/getusermedia.html#idl-def-MediaStream
+// https://w3c.github.io/mediacapture-main/#idl-def-mediastream
 
 [
     Constructor,
     Constructor(MediaStream stream),
-    Constructor(MediaStreamTrack[] tracks),
+    Constructor(sequence<MediaStreamTrack> tracks),
     ConstructorCallWith=ExecutionContext,
-    NoInterfaceObject,
 ] interface MediaStream : EventTarget {
-
     readonly attribute DOMString id;
-
     sequence<MediaStreamTrack> getAudioTracks();
     sequence<MediaStreamTrack> getVideoTracks();
     sequence<MediaStreamTrack> getTracks();
-
+    MediaStreamTrack? getTrackById(DOMString trackId);
     [RaisesException] void addTrack(MediaStreamTrack track);
     [RaisesException] void removeTrack(MediaStreamTrack track);
-    MediaStreamTrack getTrackById(DOMString trackId);
     [CallWith=ExecutionContext] MediaStream clone();
-
     [Measure] readonly attribute boolean active;
-
-    attribute EventHandler onactive;
-    attribute EventHandler oninactive;
-
     attribute EventHandler onaddtrack;
     attribute EventHandler onremovetrack;
+
+    // TODO(guidou): Remove the active and inactive events on MediaStream.
+    // https://crbug.com/649328
+    attribute EventHandler onactive;
+    attribute EventHandler oninactive;
 };

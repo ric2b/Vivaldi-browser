@@ -5,9 +5,9 @@
 #ifndef REMOTING_PROTOCOL_PROTOCOL_MOCK_OBJECTS_H_
 #define REMOTING_PROTOCOL_PROTOCOL_MOCK_OBJECTS_H_
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <map>
+#include <memory>
 #include <string>
 
 #include "base/location.h"
@@ -19,6 +19,7 @@
 #include "remoting/proto/internal.pb.h"
 #include "remoting/proto/video.pb.h"
 #include "remoting/protocol/authenticator.h"
+#include "remoting/protocol/channel_authenticator.h"
 #include "remoting/protocol/client_stub.h"
 #include "remoting/protocol/clipboard_stub.h"
 #include "remoting/protocol/connection_to_client.h"
@@ -30,9 +31,38 @@
 #include "remoting/protocol/transport.h"
 #include "remoting/protocol/video_stub.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "third_party/webrtc/libjingle/xmllite/xmlelement.h"
 
 namespace remoting {
 namespace protocol {
+
+class MockAuthenticator : public Authenticator {
+ public:
+  MockAuthenticator();
+  ~MockAuthenticator() override;
+
+  MOCK_CONST_METHOD0(state, Authenticator::State());
+  MOCK_CONST_METHOD0(started, bool());
+  MOCK_CONST_METHOD0(rejection_reason, Authenticator::RejectionReason());
+  MOCK_CONST_METHOD0(GetAuthKey, const std::string&());
+  MOCK_CONST_METHOD0(CreateChannelAuthenticatorPtr, ChannelAuthenticator*());
+  MOCK_METHOD2(ProcessMessage,
+               void(const buzz::XmlElement* message,
+                    const base::Closure& resume_callback));
+  MOCK_METHOD0(GetNextMessagePtr, buzz::XmlElement*());
+
+  std::unique_ptr<ChannelAuthenticator> CreateChannelAuthenticator()
+      const override {
+    return base::WrapUnique(CreateChannelAuthenticatorPtr());
+  }
+
+  std::unique_ptr<buzz::XmlElement> GetNextMessage() override {
+    return base::WrapUnique(GetNextMessagePtr());
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MockAuthenticator);
+};
 
 class MockConnectionToClientEventHandler
     : public ConnectionToClient::EventHandler {
@@ -40,21 +70,16 @@ class MockConnectionToClientEventHandler
   MockConnectionToClientEventHandler();
   ~MockConnectionToClientEventHandler() override;
 
-  MOCK_METHOD1(OnConnectionAuthenticating,
-               void(ConnectionToClient* connection));
-  MOCK_METHOD1(OnConnectionAuthenticated, void(ConnectionToClient* connection));
-  MOCK_METHOD1(CreateVideoStreams, void(ConnectionToClient* connection));
-  MOCK_METHOD1(OnConnectionChannelsConnected,
-               void(ConnectionToClient* connection));
-  MOCK_METHOD2(OnConnectionClosed,
-               void(ConnectionToClient* connection, ErrorCode error));
+  MOCK_METHOD0(OnConnectionAuthenticating, void());
+  MOCK_METHOD0(OnConnectionAuthenticated, void());
+  MOCK_METHOD0(CreateMediaStreams, void());
+  MOCK_METHOD0(OnConnectionChannelsConnected, void());
+  MOCK_METHOD1(OnConnectionClosed, void(ErrorCode error));
   MOCK_METHOD1(OnCreateVideoEncoder,
                void(std::unique_ptr<VideoEncoder>* encoder));
-  MOCK_METHOD2(OnInputEventReceived,
-               void(ConnectionToClient* connection, int64_t timestamp));
-  MOCK_METHOD3(OnRouteChange,
-               void(ConnectionToClient* connection,
-                    const std::string& channel_name,
+  MOCK_METHOD1(OnInputEventReceived, void(int64_t timestamp));
+  MOCK_METHOD2(OnRouteChange,
+               void(const std::string& channel_name,
                     const TransportRoute& route));
 
  private:

@@ -1,0 +1,159 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "chrome/common/stack_sampling_configuration.h"
+
+#include "base/rand_util.h"
+#include "chrome/common/channel_info.h"
+#include "components/version_info/version_info.h"
+
+namespace {
+
+// The profiler is currently only implemented for Windows x64, and only runs on
+// trunk, canary, and dev.
+bool IsProfilerSupported() {
+#if !defined(_WIN64)
+  return false;
+#else
+  const version_info::Channel channel = chrome::GetChannel();
+  return (channel == version_info::Channel::UNKNOWN ||
+          channel == version_info::Channel::CANARY ||
+          channel == version_info::Channel::DEV);
+#endif
+}
+
+}  // namespace
+
+StackSamplingConfiguration::StackSamplingConfiguration()
+    : configuration_(GenerateConfiguration()) {
+}
+
+base::StackSamplingProfiler::SamplingParams
+StackSamplingConfiguration::GetSamplingParams() const {
+  base::StackSamplingProfiler::SamplingParams params;
+  params.bursts = 1;
+  const base::TimeDelta duration = base::TimeDelta::FromSeconds(30);
+
+  switch (configuration_) {
+    case PROFILE_DISABLED:
+    case PROFILE_CONTROL:
+      params.initial_delay = base::TimeDelta::FromMilliseconds(0);
+      params.sampling_interval = base::TimeDelta::FromMilliseconds(0);
+      params.samples_per_burst = 0;
+      break;
+
+    case PROFILE_NO_SAMPLES:
+      params.initial_delay = duration;
+      params.sampling_interval = base::TimeDelta::FromMilliseconds(0);
+      params.samples_per_burst = 0;
+      break;
+
+    case PROFILE_5HZ:
+      params.initial_delay = base::TimeDelta::FromMilliseconds(0);
+      params.sampling_interval = base::TimeDelta::FromMilliseconds(200);
+      params.samples_per_burst = duration / params.sampling_interval;
+      break;
+
+    case PROFILE_10HZ:
+      params.initial_delay = base::TimeDelta::FromMilliseconds(0);
+      params.sampling_interval = base::TimeDelta::FromMilliseconds(100);
+      params.samples_per_burst = duration / params.sampling_interval;
+      break;
+
+    case PROFILE_100HZ:
+      params.initial_delay = base::TimeDelta::FromMilliseconds(0);
+      params.sampling_interval = base::TimeDelta::FromMilliseconds(10);
+      params.samples_per_burst = duration / params.sampling_interval;
+      break;
+  }
+  return params;
+}
+
+bool StackSamplingConfiguration::IsProfilerEnabled() const {
+  return (configuration_ != PROFILE_DISABLED &&
+          configuration_ != PROFILE_CONTROL);
+}
+
+bool StackSamplingConfiguration::GetSyntheticFieldTrial(
+    std::string* trial_name,
+    std::string* group_name) const {
+  if (!IsProfilerSupported())
+    return false;
+
+  *trial_name = "SyntheticStackProfilingConfiguration";
+  *group_name = std::string();
+  switch (configuration_) {
+    case PROFILE_DISABLED:
+      *group_name = "Disabled";
+      break;
+
+    case PROFILE_CONTROL:
+      *group_name = "Control";
+      break;
+
+    case PROFILE_NO_SAMPLES:
+      *group_name = "NoSamples";
+      break;
+
+    case PROFILE_5HZ:
+      *group_name = "5Hz";
+      break;
+
+    case PROFILE_10HZ:
+      *group_name = "10Hz";
+      break;
+
+    case PROFILE_100HZ:
+      *group_name = "100Hz";
+      break;
+  }
+
+  return !group_name->empty();
+}
+
+// static
+StackSamplingConfiguration::ProfileConfiguration
+StackSamplingConfiguration::GenerateConfiguration() {
+  if (!IsProfilerSupported())
+    return PROFILE_DISABLED;
+
+  // Enable the profiler in the intended ultimate production configuration for
+  // development/waterfall builds.
+  if (chrome::GetChannel() == version_info::Channel::UNKNOWN)
+    return PROFILE_10HZ;
+
+  // Enable according to the variations below in canary and dev.
+  if (chrome::GetChannel() == version_info::Channel::CANARY ||
+      chrome::GetChannel() == version_info::Channel::DEV) {
+    struct Variation {
+      ProfileConfiguration config;
+      int weight;
+    };
+
+    // Generate a configuration according to the associated weights.
+    const Variation variations[] = {
+      { PROFILE_10HZ, 100},
+      { PROFILE_CONTROL, 0},
+      { PROFILE_DISABLED, 0}
+    };
+
+    int total_weight = 0;
+    for (const Variation& variation : variations)
+      total_weight += variation.weight;
+    DCHECK_EQ(100, total_weight);
+
+    int chosen = base::RandInt(0, total_weight - 1);  // Max is inclusive.
+    int cumulative_weight = 0;
+    for (const Variation& variation : variations) {
+      if (chosen >= cumulative_weight &&
+          chosen < cumulative_weight + variation.weight) {
+        return variation.config;
+      }
+      cumulative_weight += variation.weight;
+    }
+    NOTREACHED();
+  }
+
+  return PROFILE_DISABLED;
+}

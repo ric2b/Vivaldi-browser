@@ -10,7 +10,6 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
@@ -19,7 +18,6 @@
 #include "components/sync/base/data_type_histogram.h"
 #include "components/sync/base/logging.h"
 #include "components/sync/engine_impl/backoff_delay_provider.h"
-#include "components/sync/engine_impl/syncer.h"
 #include "components/sync/protocol/proto_enum_conversions.h"
 #include "components/sync/protocol/sync.pb.h"
 
@@ -413,7 +411,7 @@ void SyncSchedulerImpl::ScheduleLocalRefreshRequest(
 }
 
 void SyncSchedulerImpl::ScheduleInvalidationNudge(
-    syncer::ModelType model_type,
+    ModelType model_type,
     std::unique_ptr<InvalidationInterface> invalidation,
     const tracked_objects::Location& nudge_location) {
   DCHECK(CalledOnValidThread());
@@ -426,7 +424,7 @@ void SyncSchedulerImpl::ScheduleInvalidationNudge(
   ScheduleNudgeImpl(nudge_delay, nudge_location);
 }
 
-void SyncSchedulerImpl::ScheduleInitialSyncNudge(syncer::ModelType model_type) {
+void SyncSchedulerImpl::ScheduleInitialSyncNudge(ModelType model_type) {
   DCHECK(CalledOnValidThread());
 
   SDVLOG(2) << "Scheduling non-blocking initial sync for "

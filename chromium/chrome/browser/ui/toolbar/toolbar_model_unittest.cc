@@ -16,8 +16,8 @@
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "components/toolbar/toolbar_model.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/ssl_status.h"
 #include "content/public/common/content_constants.h"
-#include "content/public/common/ssl_status.h"
 #include "content/public/common/url_constants.h"
 #include "ui/gfx/text_elider.h"
 
@@ -38,8 +38,8 @@ struct TestItem {
     base::ASCIIToUTF16("view-source:chrome://newtab")
   },
   {
-    GURL("chrome-extension://monkey/balls.html"),
-    base::ASCIIToUTF16("chrome-extension://monkey/balls.html")
+    GURL("chrome-extension://foo/bar.html"),
+    base::ASCIIToUTF16("chrome-extension://foo/bar.html")
   },
   {
     GURL(url::kAboutBlankURL),

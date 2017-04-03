@@ -21,7 +21,7 @@
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_thread_bundle.h"
-#include "content/public/test/test_mojo_service.mojom.h"
+#include "content/public/test/test_service.mojom.h"
 #include "content/public/test/test_utils.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/shell/public/cpp/interface_registry.h"
@@ -160,10 +160,11 @@ base::Time GetYesterday() {
          base::TimeDelta::FromSeconds(1);
 }
 
-class TestMojoServiceImpl : public mojom::TestMojoService {
+class TestServiceImpl : public mojom::TestService {
  public:
-  static void Create(mojo::InterfaceRequest<mojom::TestMojoService> request) {
-    new TestMojoServiceImpl(std::move(request));
+  static void Create(mojo::InterfaceRequest<mojom::TestService> request) {
+    mojo::MakeStrongBinding(base::WrapUnique(new TestServiceImpl),
+                            std::move(request));
   }
 
   void DoSomething(const DoSomethingCallback& callback) override {
@@ -182,12 +183,13 @@ class TestMojoServiceImpl : public mojom::TestMojoService {
     callback.Run(mojo::String(""));
   }
 
- private:
-  explicit TestMojoServiceImpl(
-      mojo::InterfaceRequest<mojom::TestMojoService> request)
-      : binding_(this, std::move(request)) {}
+  void CreateSharedBuffer(const std::string& message,
+                          const CreateSharedBufferCallback& callback) override {
+    NOTREACHED();
+  }
 
-  mojo::StrongBinding<mojom::TestMojoService> binding_;
+ private:
+  explicit TestServiceImpl() {}
 };
 
 }  // namespace
@@ -246,7 +248,7 @@ class ServiceWorkerVersionTest : public testing::Test {
   }
 
   virtual std::unique_ptr<MessageReceiver> GetMessageReceiver() {
-    return base::WrapUnique(new MessageReceiver());
+    return base::MakeUnique<MessageReceiver>();
   }
 
   void TearDown() override {
@@ -335,7 +337,7 @@ class ServiceWorkerFailToStartTest : public ServiceWorkerVersionTest {
   }
 
   std::unique_ptr<MessageReceiver> GetMessageReceiver() override {
-    return base::WrapUnique(new MessageReceiverDisallowStart());
+    return base::MakeUnique<MessageReceiverDisallowStart>();
   }
 
  private:
@@ -360,7 +362,7 @@ class ServiceWorkerStallInStoppingTest : public ServiceWorkerVersionTest {
   ServiceWorkerStallInStoppingTest() : ServiceWorkerVersionTest() {}
 
   std::unique_ptr<MessageReceiver> GetMessageReceiver() override {
-    return base::WrapUnique(new MessageReceiverDisallowStop());
+    return base::MakeUnique<MessageReceiverDisallowStop>();
   }
 
  private:
@@ -373,7 +375,7 @@ class MessageReceiverMojoTestService : public MessageReceiver {
   ~MessageReceiverMojoTestService() override {}
 
   void OnSetupMojo(shell::InterfaceRegistry* registry) override {
-    registry->AddInterface(base::Bind(&TestMojoServiceImpl::Create));
+    registry->AddInterface(base::Bind(&TestServiceImpl::Create));
   }
 
  private:
@@ -385,7 +387,7 @@ class ServiceWorkerVersionWithMojoTest : public ServiceWorkerVersionTest {
   ServiceWorkerVersionWithMojoTest() : ServiceWorkerVersionTest() {}
 
   std::unique_ptr<MessageReceiver> GetMessageReceiver() override {
-    return base::WrapUnique(new MessageReceiverMojoTestService());
+    return base::MakeUnique<MessageReceiverMojoTestService>();
   }
 
  private:
@@ -1202,8 +1204,8 @@ TEST_F(ServiceWorkerVersionWithMojoTest, MojoService) {
   int request_id = version_->StartRequest(
       ServiceWorkerMetrics::EventType::SYNC,
       CreateReceiverOnCurrentThread(&status, runner->QuitClosure()));
-  base::WeakPtr<mojom::TestMojoService> service =
-      version_->GetMojoServiceForRequest<mojom::TestMojoService>(request_id);
+  base::WeakPtr<mojom::TestService> service =
+      version_->GetMojoServiceForRequest<mojom::TestService>(request_id);
   service->DoSomething(runner->QuitClosure());
   runner->Run();
 
@@ -1228,8 +1230,8 @@ TEST_F(ServiceWorkerVersionTest, NonExistentMojoService) {
   int request_id = version_->StartRequest(
       ServiceWorkerMetrics::EventType::SYNC,
       CreateReceiverOnCurrentThread(&status, runner->QuitClosure()));
-  base::WeakPtr<mojom::TestMojoService> service =
-      version_->GetMojoServiceForRequest<mojom::TestMojoService>(request_id);
+  base::WeakPtr<mojom::TestService> service =
+      version_->GetMojoServiceForRequest<mojom::TestService>(request_id);
   service->DoSomething(runner->QuitClosure());
   runner->Run();
 

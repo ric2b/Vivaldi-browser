@@ -4,9 +4,9 @@
 
 #include "components/sync/device_info/device_info_service.h"
 
+#include <algorithm>
 #include <set>
 #include <utility>
-#include <vector>
 
 #include "base/bind.h"
 #include "base/location.h"
@@ -17,30 +17,17 @@
 #include "components/sync/api/sync_error.h"
 #include "components/sync/base/time.h"
 #include "components/sync/core/data_batch_impl.h"
-#include "components/sync/core/simple_metadata_change_list.h"
 #include "components/sync/device_info/device_info_util.h"
-#include "components/sync/protocol/data_type_state.pb.h"
+#include "components/sync/protocol/model_type_state.pb.h"
 #include "components/sync/protocol/sync.pb.h"
 
-namespace sync_driver_v2 {
+namespace syncer {
 
 using base::Time;
 using base::TimeDelta;
-using syncer::SyncError;
-using syncer_v2::DataBatchImpl;
-using syncer_v2::EntityChange;
-using syncer_v2::EntityChangeList;
-using syncer_v2::EntityData;
-using syncer_v2::EntityDataMap;
-using syncer_v2::MetadataBatch;
-using syncer_v2::MetadataChangeList;
-using syncer_v2::ModelTypeStore;
-using syncer_v2::SimpleMetadataChangeList;
-using sync_driver::DeviceInfo;
-using sync_driver::DeviceInfoUtil;
-using sync_pb::DataTypeState;
 using sync_pb::DeviceInfoSpecifics;
 using sync_pb::EntitySpecifics;
+using sync_pb::ModelTypeState;
 
 using Record = ModelTypeStore::Record;
 using RecordList = ModelTypeStore::RecordList;
@@ -48,10 +35,10 @@ using Result = ModelTypeStore::Result;
 using WriteBatch = ModelTypeStore::WriteBatch;
 
 DeviceInfoService::DeviceInfoService(
-    sync_driver::LocalDeviceInfoProvider* local_device_info_provider,
+    LocalDeviceInfoProvider* local_device_info_provider,
     const StoreFactoryFunction& callback,
     const ChangeProcessorFactory& change_processor_factory)
-    : ModelTypeService(change_processor_factory, syncer::DEVICE_INFO),
+    : ModelTypeService(change_processor_factory, DEVICE_INFO),
       local_device_info_provider_(local_device_info_provider) {
   DCHECK(local_device_info_provider);
 
@@ -110,7 +97,7 @@ SyncError DeviceInfoService::MergeSyncData(
         // This device is valid right now and this entry is about to be
         // committed, use this as an opportunity to refresh the timestamp.
         all_data_[local_guid]->set_last_updated_timestamp(
-            syncer::TimeToProtoTime(Time::Now()));
+            TimeToProtoTime(Time::Now()));
       }
     } else {
       // Remote data wins conflicts.
@@ -196,8 +183,7 @@ std::string DeviceInfoService::GetClientTag(const EntityData& entity_data) {
   return DeviceInfoUtil::SpecificsToTag(entity_data.specifics.device_info());
 }
 
-std::string DeviceInfoService::GetStorageKey(
-    const syncer_v2::EntityData& entity_data) {
+std::string DeviceInfoService::GetStorageKey(const EntityData& entity_data) {
   DCHECK(entity_data.specifics.has_device_info());
   return entity_data.specifics.device_info().cache_guid();
 }
@@ -230,8 +216,9 @@ std::unique_ptr<DeviceInfo> DeviceInfoService::GetDeviceInfo(
   return CopyToModel(*iter->second);
 }
 
-ScopedVector<DeviceInfo> DeviceInfoService::GetAllDeviceInfo() const {
-  ScopedVector<DeviceInfo> list;
+std::vector<std::unique_ptr<DeviceInfo>> DeviceInfoService::GetAllDeviceInfo()
+    const {
+  std::vector<std::unique_ptr<DeviceInfo>> list;
 
   for (ClientIdToSpecifics::const_iterator iter = all_data_.begin();
        iter != all_data_.end(); ++iter) {
@@ -399,9 +386,9 @@ void DeviceInfoService::OnReadAllMetadata(
   }
 
   std::unique_ptr<MetadataBatch> batch(new MetadataBatch());
-  DataTypeState state;
+  ModelTypeState state;
   if (state.ParseFromString(global_metadata)) {
-    batch->SetDataTypeState(state);
+    batch->SetModelTypeState(state);
   } else {
     // TODO(skym): How bad is this scenario? We may be able to just give an
     // empty batch to the processor and we'll treat corrupted data type state
@@ -474,7 +461,7 @@ void DeviceInfoService::SendLocalData() {
 
   std::unique_ptr<DeviceInfoSpecifics> specifics =
       CopyToSpecifics(*local_device_info_provider_->GetLocalDeviceInfo());
-  specifics->set_last_updated_timestamp(syncer::TimeToProtoTime(Time::Now()));
+  specifics->set_last_updated_timestamp(TimeToProtoTime(Time::Now()));
 
   std::unique_ptr<MetadataChangeList> metadata_change_list =
       CreateMetadataChangeList();
@@ -528,10 +515,10 @@ void DeviceInfoService::ReportStartupErrorToSync(const std::string& msg) {
 Time DeviceInfoService::GetLastUpdateTime(
     const DeviceInfoSpecifics& specifics) {
   if (specifics.has_last_updated_timestamp()) {
-    return syncer::ProtoTimeToTime(specifics.last_updated_timestamp());
+    return ProtoTimeToTime(specifics.last_updated_timestamp());
   } else {
     return Time();
   }
 }
 
-}  // namespace sync_driver_v2
+}  // namespace syncer

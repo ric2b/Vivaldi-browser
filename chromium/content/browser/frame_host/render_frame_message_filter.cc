@@ -160,7 +160,7 @@ class RenderFrameMessageFilter::OpenChannelToPpapiBrokerCallback
     delete this;
   }
 
-  bool OffTheRecord() override { return filter_->incognito_; }
+  bool Incognito() override { return filter_->incognito_; }
 
  private:
   scoped_refptr<RenderFrameMessageFilter> filter_;
@@ -195,7 +195,7 @@ class RenderFrameMessageFilter::OpenChannelToPpapiPluginCallback
     SendReplyAndDeleteThis();
   }
 
-  bool OffTheRecord() override { return filter()->incognito_; }
+  bool Incognito() override { return filter()->incognito_; }
 
   ResourceContext* GetResourceContext() override { return context_; }
 
@@ -441,6 +441,12 @@ void RenderFrameMessageFilter::GetCookies(int render_frame_id,
         net::CookieOptions::SameSiteCookieMode::DO_NOT_INCLUDE);
   }
 
+  // If we crash here, figure out what URL the renderer was requesting.
+  // http://crbug.com/99242
+  char url_buf[128];
+  base::strlcpy(url_buf, url.spec().c_str(), arraysize(url_buf));
+  base::debug::Alias(url_buf);
+
   net::URLRequestContext* context = GetRequestContextForURL(url);
   context->cookie_store()->GetCookieListWithOptionsAsync(
       url, options,
@@ -452,6 +458,7 @@ void RenderFrameMessageFilter::GetCookies(int render_frame_id,
 
 void RenderFrameMessageFilter::OnGetPlugins(
     bool refresh,
+    const url::Origin& main_frame_origin,
     IPC::Message* reply_msg) {
   // Don't refresh if the specified threshold has not been passed.  Note that
   // this check is performed before off-loading to the file thread.  The reason
@@ -470,12 +477,14 @@ void RenderFrameMessageFilter::OnGetPlugins(
     }
   }
 
-  PluginServiceImpl::GetInstance()->GetPlugins(base::Bind(
-      &RenderFrameMessageFilter::GetPluginsCallback, this, reply_msg));
+  PluginServiceImpl::GetInstance()->GetPlugins(
+      base::Bind(&RenderFrameMessageFilter::GetPluginsCallback, this, reply_msg,
+                 main_frame_origin));
 }
 
 void RenderFrameMessageFilter::GetPluginsCallback(
     IPC::Message* reply_msg,
+    const url::Origin& main_frame_origin,
     const std::vector<WebPluginInfo>& all_plugins) {
   // Filter the plugin list.
   PluginServiceFilter* filter = PluginServiceImpl::GetInstance()->GetFilter();
@@ -486,12 +495,11 @@ void RenderFrameMessageFilter::GetPluginsCallback(
   // In this loop, copy the WebPluginInfo (and do not use a reference) because
   // the filter might mutate it.
   for (WebPluginInfo plugin : all_plugins) {
-    if (!filter || filter->IsPluginAvailable(child_process_id,
-                                             routing_id,
-                                             resource_context_,
-                                             GURL(),
-                                             GURL(),
-                                             &plugin)) {
+    // TODO(crbug.com/621724): Pass an url::Origin instead of a GURL.
+    if (!filter ||
+        filter->IsPluginAvailable(child_process_id, routing_id,
+                                  resource_context_, main_frame_origin.GetURL(),
+                                  main_frame_origin, &plugin)) {
       plugins.push_back(plugin);
     }
   }
@@ -503,16 +511,16 @@ void RenderFrameMessageFilter::GetPluginsCallback(
 void RenderFrameMessageFilter::OnGetPluginInfo(
     int render_frame_id,
     const GURL& url,
-    const GURL& page_url,
+    const url::Origin& main_frame_origin,
     const std::string& mime_type,
     bool* found,
     WebPluginInfo* info,
     std::string* actual_mime_type) {
   bool allow_wildcard = true;
   *found = plugin_service_->GetPluginInfo(
-      render_process_id_, render_frame_id, resource_context_,
-      url, page_url, mime_type, allow_wildcard,
-      nullptr, info, actual_mime_type);
+      render_process_id_, render_frame_id, resource_context_, url,
+      main_frame_origin, mime_type, allow_wildcard, nullptr, info,
+      actual_mime_type);
 }
 
 void RenderFrameMessageFilter::OnOpenChannelToPepperPlugin(

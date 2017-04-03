@@ -40,7 +40,7 @@ pin-keyboard {
   z-index: 0;
 }
 
-#account_picker.flying-pods .pod {
+.account-picker.flying-pods .pod {
   transition: all 180ms;
 }
 
@@ -193,17 +193,11 @@ html[dir=rtl] .main-pane {
 }
 
 .name-container {
-  transition: transform 180ms,
-              opacity 180ms ease-in-out 180ms,
-              visibility 180ms ease-in-out 180ms;
-  opacity : 1;
-  visibility: visible;
+  transition: transform 180ms;
 }
 
-.name-container.pin-enabled {
-  opacity : 0;
-  transition: none;
-  visibility: hidden;
+.pod.focused .name-container {
+  display: none;
 }
 
 .pod.focused.multiprofiles-policy-applied .name-container {
@@ -408,6 +402,10 @@ html[dir=rtl] .main-pane {
 
 .interactive-custom-icon {
   cursor: pointer;
+}
+
+.pod[auth-type='onlineSignIn'] .custom-icon-container {
+  display: none;
 }
 
 .custom-icon-container {
@@ -653,10 +651,6 @@ html[dir=rtl] .action-box-area.active ~ .action-box-menu {
 .action-box-remove-user-warning-table-numbers {
   color: #757575;
   text-align: end;
-}
-
-.remove-warning-button {
-  font-weight: bold;
 }
 
 /* Hide dialog elements not in a correct category. Only combinations currently

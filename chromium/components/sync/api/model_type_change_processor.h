@@ -8,26 +8,25 @@
 #include <memory>
 #include <string>
 
+#include "components/sync/api/data_type_error_handler.h"
 #include "components/sync/api/entity_data.h"
 #include "components/sync/api/sync_error_factory.h"
 #include "components/sync/core/activation_context.h"
 
 namespace syncer {
-class DataTypeErrorHandler;
 class SyncError;
 }  // namespace syncer
 
-namespace syncer_v2 {
+namespace syncer {
 
 class MetadataBatch;
 class MetadataChangeList;
 
 // Interface used by the ModelTypeService to inform sync of local
 // changes.
-class ModelTypeChangeProcessor : public syncer::SyncErrorFactory {
+class ModelTypeChangeProcessor : public SyncErrorFactory {
  public:
-  typedef base::Callback<void(syncer::SyncError,
-                              std::unique_ptr<ActivationContext>)>
+  typedef base::Callback<void(SyncError, std::unique_ptr<ActivationContext>)>
       StartCallback;
 
   ModelTypeChangeProcessor();
@@ -47,7 +46,7 @@ class ModelTypeChangeProcessor : public syncer::SyncErrorFactory {
 
   // Accept the initial sync metadata loaded by the service. This should be
   // called as soon as the metadata is available to the service.
-  virtual void OnMetadataLoaded(syncer::SyncError error,
+  virtual void OnMetadataLoaded(SyncError error,
                                 std::unique_ptr<MetadataBatch> batch) = 0;
 
   // Indicates that sync wants to connect a sync worker to this processor. Once
@@ -56,14 +55,15 @@ class ModelTypeChangeProcessor : public syncer::SyncErrorFactory {
   // inform sync of any unrecoverable errors after calling |callback|, and it is
   // guaranteed to outlive the processor. StartCallback takes a SyncError and an
   // ActivationContext; the context should be nullptr iff the error is set.
-  virtual void OnSyncStarting(syncer::DataTypeErrorHandler* error_handler,
-                              const StartCallback& callback) = 0;
+  virtual void OnSyncStarting(
+      std::unique_ptr<DataTypeErrorHandler> error_handler,
+      const StartCallback& callback) = 0;
 
   // Indicates that sync is being disabled permanently for this data type. All
   // metadata should be erased from storage.
   virtual void DisableSync() = 0;
 };
 
-}  // namespace syncer_v2
+}  // namespace syncer
 
 #endif  // COMPONENTS_SYNC_API_MODEL_TYPE_CHANGE_PROCESSOR_H_

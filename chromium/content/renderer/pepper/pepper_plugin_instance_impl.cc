@@ -11,7 +11,7 @@
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -1160,7 +1160,7 @@ bool PepperPluginInstanceImpl::HandleInputEvent(
 
   bool rv = false;
   if (LoadInputEventInterface()) {
-    PP_InputEvent_Class event_class = ClassifyInputEvent(event.type);
+    PP_InputEvent_Class event_class = ClassifyInputEvent(event);
     if (!event_class)
       return false;
 
@@ -2241,7 +2241,7 @@ bool PepperPluginInstanceImpl::SimulateIMEEvent(
     case PP_INPUTEVENT_TYPE_IME_TEXT:
       if (!render_frame_)
         return false;
-      render_frame_->SimulateImeConfirmComposition(
+      render_frame_->SimulateImeCommitText(
           base::UTF8ToUTF16(input_event.character_text), gfx::Range());
       break;
     default:
@@ -2978,7 +2978,7 @@ PP_ExternalPluginResult PepperPluginInstanceImpl::ResetAsProxied(
   original_instance_interface_.reset(instance_interface_.release());
 
   base::Callback<const void*(const char*)> get_plugin_interface_func =
-      base::Bind(&PluginModule::GetPluginInterface, module_.get());
+      base::Bind(&PluginModule::GetPluginInterface, module_);
   PPP_Instance_Combined* ppp_instance_combined =
       PPP_Instance_Combined::Create(get_plugin_interface_func);
   if (!ppp_instance_combined) {

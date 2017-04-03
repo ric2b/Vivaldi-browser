@@ -11,7 +11,6 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/stl_util.h"
 #include "services/ui/ws/default_access_policy.h"
 #include "services/ui/ws/display.h"
 #include "services/ui/ws/display_manager.h"
@@ -130,7 +129,7 @@ void WindowTree::ConfigureWindowManager() {
   DCHECK(!window_manager_internal_);
   window_manager_internal_ = binding_->GetWindowManager();
   window_manager_internal_->OnConnect(id_);
-  window_manager_state_.reset(new WindowManagerState(this));
+  window_manager_state_ = base::MakeUnique<WindowManagerState>(this);
 }
 
 const ServerWindow* WindowTree::GetWindow(const WindowId& id) const {
@@ -182,6 +181,13 @@ const DisplayManager* WindowTree::display_manager() const {
   return window_server_->display_manager();
 }
 
+void WindowTree::PrepareForWindowServerShutdown() {
+  window_manager_internal_client_binding_.reset();
+  binding_->ResetClientForShutdown();
+  if (window_manager_internal_)
+    window_manager_internal_ = binding_->GetWindowManager();
+}
+
 void WindowTree::AddRootForWindowManager(const ServerWindow* root) {
   DCHECK(window_manager_internal_);
   const ClientWindowId client_window_id(WindowIdToTransportId(root->id()));
@@ -202,7 +208,7 @@ void WindowTree::OnWindowDestroyingTreeImpl(WindowTree* tree) {
   if (event_source_wms_ && event_source_wms_->window_tree() == tree)
     event_source_wms_ = nullptr;
 
-  // Notify our client if |tree| was embedded in any of our views.
+  // Notify our client if |tree| was embedded in any of our windows.
   for (const auto* tree_root : tree->roots_) {
     const bool owns_tree_root = tree_root->id().client_id == id_;
     if (owns_tree_root) {
@@ -292,6 +298,28 @@ bool WindowTree::AddTransientWindow(const ClientWindowId& window_id,
     return window->AddTransientWindow(transient_window);
   }
   return false;
+}
+
+bool WindowTree::DeleteWindow(const ClientWindowId& window_id) {
+  ServerWindow* window = GetWindowByClientId(window_id);
+  if (!window)
+    return false;
+
+  if (roots_.count(window) > 0) {
+    // Deleting a root behaves as an unembed.
+    window_server_->OnTreeMessagedClient(id_);
+    RemoveRoot(window, RemoveRootReason::UNEMBED);
+    return true;
+  }
+
+  if (!access_policy_->CanDeleteWindow(window) &&
+      !ShouldRouteToWindowManager(window)) {
+    return false;
+  }
+
+  // Have the owner of the tree service the actual delete.
+  WindowTree* tree = window_server_->GetTreeWithId(window->id().client_id);
+  return tree && tree->DeleteWindowImpl(this, window);
 }
 
 bool WindowTree::SetModal(const ClientWindowId& window_id) {
@@ -472,6 +500,11 @@ void WindowTree::OnAccelerator(uint32_t accelerator_id,
                                           ui::Event::Clone(event));
 }
 
+void WindowTree::OnDisplayDestroying(int64_t display_id) {
+  DCHECK(window_manager_internal_);
+  window_manager_internal_->WmDisplayRemoved(display_id);
+}
+
 void WindowTree::ClientJankinessChanged(WindowTree* tree) {
   tree->janky_ = !tree->janky_;
   // Don't inform the client if it is the source of jank (which generally only
@@ -605,7 +638,7 @@ void WindowTree::ProcessWindowReorder(const ServerWindow* window,
   window_server_->OnTreeMessagedClient(id_);
 }
 
-void WindowTree::ProcessWindowDeleted(const ServerWindow* window,
+void WindowTree::ProcessWindowDeleted(ServerWindow* window,
                                       bool originated_change) {
   if (window->id().client_id == id_)
     created_window_map_.erase(window->id());
@@ -665,7 +698,7 @@ void WindowTree::ProcessWindowOpacityChanged(const ServerWindow* window,
 }
 
 void WindowTree::ProcessCursorChanged(const ServerWindow* window,
-                                      int32_t cursor_id,
+                                      mojom::Cursor cursor_id,
                                       bool originated_change) {
   if (originated_change)
     return;
@@ -673,8 +706,7 @@ void WindowTree::ProcessCursorChanged(const ServerWindow* window,
   if (!IsWindowKnown(window, &client_window_id))
     return;
 
-  client()->OnWindowPredefinedCursorChanged(client_window_id.id,
-                                            mojom::Cursor(cursor_id));
+  client()->OnWindowPredefinedCursorChanged(client_window_id.id, cursor_id);
 }
 
 void WindowTree::ProcessFocusChanged(const ServerWindow* old_focused_window,
@@ -887,8 +919,7 @@ void WindowTree::RemoveFromKnown(const ServerWindow* window,
     RemoveFromKnown(child, local_windows);
 }
 
-void WindowTree::RemoveRoot(const ServerWindow* window,
-                            RemoveRootReason reason) {
+void WindowTree::RemoveRoot(ServerWindow* window, RemoveRootReason reason) {
   DCHECK(roots_.count(window) > 0);
   roots_.erase(window);
 
@@ -910,6 +941,21 @@ void WindowTree::RemoveRoot(const ServerWindow* window,
   RemoveFromKnown(window, &local_windows);
   for (size_t i = 0; i < local_windows.size(); ++i)
     local_windows[i]->parent()->Remove(local_windows[i]);
+
+  if (reason == RemoveRootReason::UNEMBED) {
+    // Notify the owner of the window it no longer has a client embedded in it.
+    // Owner is null in the case of the windowmanager unembedding itself from
+    // a root.
+    WindowTree* owning_tree =
+        window_server_->GetTreeWithId(window->id().client_id);
+    if (owning_tree) {
+      DCHECK(owning_tree && owning_tree != this);
+      owning_tree->client()->OnEmbeddedAppDisconnected(
+          owning_tree->ClientWindowIdForWindow(window).id);
+    }
+
+    window->OnEmbeddedAppDisconnected();
+  }
 }
 
 Array<mojom::WindowDataPtr> WindowTree::WindowsToWindowDatas(
@@ -990,7 +1036,9 @@ void WindowTree::DestroyWindows() {
     if (transient_parent)
       transient_parent->RemoveTransientWindow(pair.second);
   }
-  base::STLDeleteValues(&created_window_map_copy);
+
+  for (auto& window_pair : created_window_map_copy)
+    delete window_pair.second;
 }
 
 bool WindowTree::CanEmbed(const ClientWindowId& window_id) const {
@@ -1050,7 +1098,8 @@ bool WindowTree::EventMatchesPointerWatcher(const ui::Event& event) const {
   if (pointer_watcher_want_moves_ && event.type() == ui::ET_POINTER_MOVED)
     return true;
   return event.type() == ui::ET_POINTER_DOWN ||
-         event.type() == ui::ET_POINTER_UP;
+         event.type() == ui::ET_POINTER_UP ||
+         event.type() == ui::ET_POINTER_WHEEL_CHANGED;
 }
 
 void WindowTree::NewWindow(
@@ -1109,17 +1158,8 @@ void WindowTree::NewTopLevelWindow(
 }
 
 void WindowTree::DeleteWindow(uint32_t change_id, Id transport_window_id) {
-  ServerWindow* window =
-      GetWindowByClientId(ClientWindowId(transport_window_id));
-  bool success = false;
-  bool should_close = window && (access_policy_->CanDeleteWindow(window) ||
-                                 ShouldRouteToWindowManager(window));
-  if (should_close) {
-    WindowTree* tree =
-        window_server_->GetTreeWithId(window->id().client_id);
-    success = tree && tree->DeleteWindowImpl(this, window);
-  }
-  client()->OnChangeCompleted(change_id, success);
+  client()->OnChangeCompleted(
+      change_id, DeleteWindow(ClientWindowId(transport_window_id)));
 }
 
 void WindowTree::AddWindow(uint32_t change_id, Id parent_id, Id child_id) {
@@ -1292,8 +1332,10 @@ void WindowTree::AttachSurface(Id transport_window_id,
       GetWindowByClientId(ClientWindowId(transport_window_id));
   const bool success =
       window && access_policy_->CanSetWindowSurface(window, type);
-  if (!success)
+  if (!success) {
+    DVLOG(1) << "request to AttachSurface failed";
     return;
+  }
   window->CreateSurface(type, std::move(surface), std::move(client));
 }
 
@@ -1385,6 +1427,16 @@ void WindowTree::SetHitTestMask(Id transport_window_id,
     window->ClearHitTestMask();
 }
 
+void WindowTree::SetCanAcceptDrops(Id window_id, bool accepts_drops) {
+  ServerWindow* window = GetWindowByClientId(ClientWindowId(window_id));
+  if (!window || !access_policy_->CanSetAcceptDrops(window)) {
+    DVLOG(1) << "SetAcceptsDrops failed";
+    return;
+  }
+
+  window->SetCanAcceptDrops(accepts_drops);
+}
+
 void WindowTree::Embed(Id transport_window_id,
                        mojom::WindowTreeClientPtr client,
                        uint32_t flags,
@@ -1450,6 +1502,76 @@ void WindowTree::GetCursorLocationMemory(
       GetCursorLocationMemory());
 }
 
+void WindowTree::PerformDragDrop(
+    uint32_t change_id,
+    Id source_window_id,
+    mojo::Map<mojo::String, mojo::Array<uint8_t>> drag_data,
+    uint32_t drag_operation) {
+  ServerWindow* window = GetWindowByClientId(ClientWindowId(source_window_id));
+  bool success = window && access_policy_->CanInitiateDragLoop(window);
+  if (!success || !ShouldRouteToWindowManager(window)) {
+    // We need to fail this move loop change, otherwise the client will just be
+    // waiting for |change_id|.
+    DVLOG(1) << "PerformDragDrop failed (access denied).";
+    OnChangeCompleted(change_id, false);
+    return;
+  }
+
+  WindowManagerDisplayRoot* display_root = GetWindowManagerDisplayRoot(window);
+  if (!display_root) {
+    // The window isn't parented. There's nothing to do.
+    DVLOG(1) << "PerformDragDrop failed (window unparented).";
+    OnChangeCompleted(change_id, false);
+    return;
+  }
+
+  if (window_server_->in_move_loop() || window_server_->in_drag_loop()) {
+    // Either the window manager is servicing a window drag or we're servicing
+    // a drag and drop operation. We can't start a second drag.
+    DVLOG(1) << "PerformDragDrop failed (already performing a drag).";
+    OnChangeCompleted(change_id, false);
+    return;
+  }
+
+  // TODO(erg): Dealing with |drag_representation| is hard, so we're going to
+  // deal with that later.
+
+  // Here, we need to dramatically change how the mouse pointer works. Once
+  // we've started a drag drop operation, cursor events don't go to windows as
+  // normal.
+  WindowManagerState* wms = display_root->window_manager_state();
+  window_server_->StartDragLoop(change_id, window, this);
+  wms->SetDragDropSourceWindow(this, window, this, std::move(drag_data),
+                               drag_operation);
+}
+
+void WindowTree::CancelDragDrop(Id window_id) {
+  ServerWindow* window = GetWindowByClientId(ClientWindowId(window_id));
+  if (!window) {
+    DVLOG(1) << "CancelDragDrop failed (no window)";
+    return;
+  }
+
+  if (window != window_server_->GetCurrentDragLoopWindow()) {
+    DVLOG(1) << "CancelDragDrop failed (not the drag loop window)";
+    return;
+  }
+
+  if (window_server_->GetCurrentDragLoopInitiator() != this) {
+    DVLOG(1) << "CancelDragDrop failed (not the drag initiator)";
+    return;
+  }
+
+  WindowManagerDisplayRoot* display_root = GetWindowManagerDisplayRoot(window);
+  if (!display_root) {
+    DVLOG(1) << "CancelDragDrop failed (no such window manager display root)";
+    return;
+  }
+
+  WindowManagerState* wms = display_root->window_manager_state();
+  wms->CancelDragDrop();
+}
+
 void WindowTree::PerformWindowMove(uint32_t change_id,
                                    Id window_id,
                                    ui::mojom::MoveLoopSource source,
@@ -1459,6 +1581,7 @@ void WindowTree::PerformWindowMove(uint32_t change_id,
   if (!success || !ShouldRouteToWindowManager(window)) {
     // We need to fail this move loop change, otherwise the client will just be
     // waiting for |change_id|.
+    DVLOG(1) << "PerformWindowMove failed (access denied).";
     OnChangeCompleted(change_id, false);
     return;
   }
@@ -1466,13 +1589,15 @@ void WindowTree::PerformWindowMove(uint32_t change_id,
   WindowManagerDisplayRoot* display_root = GetWindowManagerDisplayRoot(window);
   if (!display_root) {
     // The window isn't parented. There's nothing to do.
+    DVLOG(1) << "PerformWindowMove failed (window unparented).";
     OnChangeCompleted(change_id, false);
     return;
   }
 
-  if (window_server_->in_move_loop()) {
-    // A window manager is already servicing a move loop; we can't start a
-    // second one.
+  if (window_server_->in_move_loop() || window_server_->in_drag_loop()) {
+    // Either the window manager is servicing a window drag or we're servicing
+    // a drag and drop operation. We can't start a second drag.
+    DVLOG(1) << "PerformWindowMove failed (already performing a drag).";
     OnChangeCompleted(change_id, false);
     return;
   }
@@ -1496,18 +1621,26 @@ void WindowTree::PerformWindowMove(uint32_t change_id,
 void WindowTree::CancelWindowMove(Id window_id) {
   ServerWindow* window = GetWindowByClientId(ClientWindowId(window_id));
   bool success = window && access_policy_->CanInitiateMoveLoop(window);
-  if (!success)
+  if (!success) {
+    DVLOG(1) << "CancelWindowMove failed (no window / access denied)";
     return;
+  }
 
-  if (window != window_server_->GetCurrentMoveLoopWindow())
+  if (window != window_server_->GetCurrentMoveLoopWindow()) {
+    DVLOG(1) << "CancelWindowMove failed (not the move loop window)";
     return;
+  }
 
-  if (window_server_->GetCurrentMoveLoopInitiator() != this)
+  if (window_server_->GetCurrentMoveLoopInitiator() != this) {
+    DVLOG(1) << "CancelWindowMove failed (not the move loop initiator)";
     return;
+  }
 
   WindowManagerDisplayRoot* display_root = GetWindowManagerDisplayRoot(window);
-  if (!display_root)
+  if (!display_root) {
+    DVLOG(1) << "CancelWindowMove failed (no such window manager display root)";
     return;
+  }
 
   WindowManagerState* wms = display_root->window_manager_state();
   wms->window_tree()->window_manager_internal_->WmCancelMoveLoop(
@@ -1677,6 +1810,105 @@ bool WindowTree::IsWindowRootOfAnotherTreeForAccessPolicy(
     const ServerWindow* window) const {
   WindowTree* tree = window_server_->GetTreeWithRoot(window);
   return tree && tree != this;
+}
+
+void WindowTree::OnDragCompleted(bool success, uint32_t action_taken) {
+  DCHECK(window_server_->in_drag_loop());
+
+  if (window_server_->GetCurrentDragLoopInitiator() != this)
+    return;
+
+  uint32_t change_id = window_server_->GetCurrentDragLoopChangeId();
+  ServerWindow* window = window_server_->GetCurrentDragLoopWindow();
+  WindowManagerDisplayRoot* display_root = GetWindowManagerDisplayRoot(window);
+  if (!display_root)
+    return;
+
+  window_server_->EndDragLoop();
+  WindowManagerState* wms = display_root->window_manager_state();
+  wms->EndDragDrop();
+
+  client()->OnPerformDragDropCompleted(change_id, success, action_taken);
+}
+
+ServerWindow* WindowTree::GetWindowById(const WindowId& id) {
+  return GetWindow(id);
+}
+
+DragTargetConnection* WindowTree::GetDragTargetForWindow(
+    const ServerWindow* window) {
+  if (!window)
+    return nullptr;
+  DragTargetConnection* connection = window_server_->GetTreeWithRoot(window);
+  if (connection)
+    return connection;
+  return window_server_->GetTreeWithId(window->id().client_id);
+}
+
+void WindowTree::PerformOnDragDropStart(
+    mojo::Map<mojo::String, mojo::Array<uint8_t>> mime_data) {
+  client()->OnDragDropStart(std::move(mime_data));
+}
+
+void WindowTree::PerformOnDragEnter(
+    const ServerWindow* window,
+    uint32_t event_flags,
+    const gfx::Point& cursor_offset,
+    uint32_t effect_bitmask,
+    const base::Callback<void(uint32_t)>& callback) {
+  ClientWindowId client_window_id;
+  if (!IsWindowKnown(window, &client_window_id)) {
+    NOTREACHED();
+    callback.Run(0);
+    return;
+  }
+  client()->OnDragEnter(client_window_id.id, event_flags, cursor_offset,
+                        effect_bitmask, callback);
+}
+
+void WindowTree::PerformOnDragOver(
+    const ServerWindow* window,
+    uint32_t event_flags,
+    const gfx::Point& cursor_offset,
+    uint32_t effect_bitmask,
+    const base::Callback<void(uint32_t)>& callback) {
+  ClientWindowId client_window_id;
+  if (!IsWindowKnown(window, &client_window_id)) {
+    NOTREACHED();
+    callback.Run(0);
+    return;
+  }
+  client()->OnDragOver(client_window_id.id, event_flags, cursor_offset,
+                       effect_bitmask, callback);
+}
+
+void WindowTree::PerformOnDragLeave(const ServerWindow* window) {
+  ClientWindowId client_window_id;
+  if (!IsWindowKnown(window, &client_window_id)) {
+    NOTREACHED();
+    return;
+  }
+  client()->OnDragLeave(client_window_id.id);
+}
+
+void WindowTree::PerformOnCompleteDrop(
+    const ServerWindow* window,
+    uint32_t event_flags,
+    const gfx::Point& cursor_offset,
+    uint32_t effect_bitmask,
+    const base::Callback<void(uint32_t)>& callback) {
+  ClientWindowId client_window_id;
+  if (!IsWindowKnown(window, &client_window_id)) {
+    NOTREACHED();
+    callback.Run(0);
+    return;
+  }
+  client()->OnCompleteDrop(client_window_id.id, event_flags, cursor_offset,
+                           effect_bitmask, callback);
+}
+
+void WindowTree::PerformOnDragDropDone() {
+  client()->OnDragDropDone();
 }
 
 }  // namespace ws

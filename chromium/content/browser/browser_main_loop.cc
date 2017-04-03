@@ -19,7 +19,7 @@
 #include "base/memory/memory_pressure_monitor.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/pending_task.h"
 #include "base/power_monitor/power_monitor.h"
@@ -36,8 +36,6 @@
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "components/memory_coordinator/browser/memory_coordinator.h"
-#include "components/memory_coordinator/common/memory_coordinator_features.h"
 #include "components/tracing/browser/trace_config_file.h"
 #include "components/tracing/common/process_metrics_memory_dump_provider.h"
 #include "components/tracing/common/trace_to_console.h"
@@ -45,6 +43,7 @@
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/device_sensors/device_sensor_service.h"
 #include "content/browser/dom_storage/dom_storage_area.h"
+#include "content/browser/download/download_resource_handler.h"
 #include "content/browser/download/save_file_manager.h"
 #include "content/browser/gamepad/gamepad_service.h"
 #include "content/browser/gpu/browser_gpu_channel_host_factory.h"
@@ -57,22 +56,22 @@
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/loader_delegate_impl.h"
 #include "content/browser/media/media_internals.h"
-#include "content/browser/mojo/mojo_shell_context.h"
 #include "content/browser/net/browser_online_state_observer.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
+#include "content/browser/service_manager/service_manager_context.h"
 #include "content/browser/speech/speech_recognition_manager_impl.h"
 #include "content/browser/startup_task_runner.h"
-#include "content/browser/time_zone_monitor.h"
 #include "content/browser/utility_process_host_impl.h"
 #include "content/browser/webui/content_web_ui_controller_factory.h"
 #include "content/browser/webui/url_data_manager.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/host_discardable_shared_memory_manager.h"
 #include "content/common/host_shared_bitmap_manager.h"
-#include "content/common/mojo/mojo_shell_connection_impl.h"
+#include "content/common/service_manager/service_manager_connection_impl.h"
 #include "content/public/browser/browser_main_parts.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/gpu_data_manager_observer.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/tracing_controller.h"
 #include "content/public/common/content_client.h"
@@ -80,6 +79,7 @@
 #include "content/public/common/main_function_params.h"
 #include "content/public/common/result_codes.h"
 #include "device/battery/battery_status_service.h"
+#include "device/time_zone_monitor/time_zone_monitor.h"
 #include "media/base/media.h"
 #include "media/base/user_input_monitor.h"
 #include "media/midi/midi_manager.h"
@@ -108,6 +108,7 @@
 #include "components/tracing/common/graphics_memory_dump_provider_android.h"
 #include "content/browser/android/browser_startup_controller.h"
 #include "content/browser/android/browser_surface_texture_manager.h"
+#include "content/browser/android/scoped_surface_request_manager.h"
 #include "content/browser/android/tracing_controller_android.h"
 #include "content/browser/media/android/browser_media_player_manager.h"
 #include "content/browser/renderer_host/context_provider_factory_impl_android.h"
@@ -184,7 +185,6 @@
 #include "gpu/config/gpu_driver_bug_workaround_type.h"
 #include "ui/base/x/x11_util_internal.h"  // nogncheck
 #include "ui/gfx/x/x11_connection.h"  // nogncheck
-#include "ui/gfx/x/x11_switches.h"  // nogncheck
 #include "ui/gfx/x/x11_types.h"  // nogncheck
 #endif
 
@@ -207,6 +207,11 @@ namespace {
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
 void SetupSandbox(const base::CommandLine& parsed_command_line) {
   TRACE_EVENT0("startup", "SetupSandbox");
+  if (parsed_command_line.HasSwitch(switches::kNoZygote)) {
+    CHECK(parsed_command_line.HasSwitch(switches::kNoSandbox))
+        << "--no-sandbox should be used together with --no--zygote";
+    return;
+  }
 
   // Tickle the sandbox host and zygote host so they fork now.
   RenderSandboxHostLinux::GetInstance()->Init();
@@ -365,6 +370,44 @@ base::win::MemoryPressureMonitor* CreateWinMemoryPressureMonitor(
 
 }  // namespace
 
+#if defined(USE_X11) && !defined(OS_CHROMEOS)
+namespace internal {
+
+// Forwards GPUInfo updates to ui::XVisualManager
+class GpuDataManagerVisualProxy : public GpuDataManagerObserver {
+ public:
+  explicit GpuDataManagerVisualProxy(GpuDataManagerImpl* gpu_data_manager)
+      : gpu_data_manager_(gpu_data_manager) {
+    gpu_data_manager_->AddObserver(this);
+  }
+
+  ~GpuDataManagerVisualProxy() override {
+    gpu_data_manager_->RemoveObserver(this);
+  }
+
+  void OnGpuInfoUpdate() override {
+    gpu::GPUInfo gpu_info = gpu_data_manager_->GetGPUInfo();
+    if (!ui::XVisualManager::GetInstance()->OnGPUInfoChanged(
+            gpu_info.software_rendering ||
+                !gpu_data_manager_->GpuAccessAllowed(nullptr),
+            gpu_info.system_visual, gpu_info.rgba_visual)) {
+      // The GPU process sent back bad visuals, which should never happen.
+      auto* gpu_process_host = GpuProcessHost::Get(
+          GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED, false);
+      if (gpu_process_host)
+        gpu_process_host->ForceShutdown();
+    }
+  }
+
+ private:
+  GpuDataManagerImpl* gpu_data_manager_;
+
+  DISALLOW_COPY_AND_ASSIGN(GpuDataManagerVisualProxy);
+};
+
+}  // namespace internal
+#endif
+
 // The currently-running BrowserMainLoop.  There can be one or zero.
 BrowserMainLoop* g_current_browser_main_loop = NULL;
 
@@ -468,17 +511,16 @@ void BrowserMainLoop::EarlyInitialization() {
   if (parts_)
     parts_->PreEarlyInitialization();
 
-#if defined(OS_MACOSX)
-  // We use quite a few file descriptors for our IPC, and the default limit on
-  // the Mac is low (256), so bump it up.
-  base::SetFdLimit(1024);
-#elif defined(OS_LINUX)
+#if defined(OS_MACOSX) || defined(OS_LINUX)
+  // We use quite a few file descriptors for our IPC as well as disk the disk
+  // cache,and the default limit on the Mac is low (256), so bump it up.
+
   // Same for Linux. The default various per distro, but it is 1024 on Fedora.
   // Low soft limits combined with liberal use of file descriptors means power
   // users can easily hit this limit with many open tabs. Bump up the limit to
   // an arbitrarily high number. See https://crbug.com/539567
   base::SetFdLimit(8192);
-#endif  // default(OS_MACOSX)
+#endif  // defined(OS_MACOSX) || defined(OS_LINUX)
 
 #if defined(OS_WIN)
   net::EnsureWinsockInit();
@@ -629,6 +671,8 @@ void BrowserMainLoop::PostMainMessageLoopStart() {
     if (parsed_command_line_.HasSwitch(switches::kSingleProcess)) {
       gpu::SurfaceTextureManager::SetInstance(
           gpu::InProcessSurfaceTextureManager::GetInstance());
+      gpu::ScopedSurfaceRequestConduit::SetInstance(
+          ScopedSurfaceRequestManager::GetInstance());
     } else {
       gpu::SurfaceTextureManager::SetInstance(
           BrowserSurfaceTextureManager::GetInstance());
@@ -715,10 +759,6 @@ int BrowserMainLoop::PreCreateThreads() {
       parsed_command_line_));
 #endif
 
-  if (memory_coordinator::IsEnabled()) {
-    memory_coordinator_.reset(new memory_coordinator::MemoryCoordinator);
-  }
-
 #if defined(ENABLE_PLUGINS)
   // Prior to any processing happening on the IO thread, we create the
   // plugin service as it is predominantly used from the IO thread,
@@ -748,27 +788,12 @@ int BrowserMainLoop::PreCreateThreads() {
   // It's unsafe to append the gpu command line switches to the global
   // CommandLine::ForCurrentProcess object after threads are created.
   // 2) Must be after parts_->PreCreateThreads to pick up chrome://flags.
-  GpuDataManagerImpl::GetInstance()->Initialize();
+  GpuDataManagerImpl* gpu_data_manager = GpuDataManagerImpl::GetInstance();
+  gpu_data_manager->Initialize();
 
 #if defined(USE_X11) && !defined(OS_CHROMEOS)
-  // PreCreateThreads is called before CreateStartupTasks which starts the gpu
-  // process.
-  bool enable_transparent_visuals = false;
-
-  // Prevent this flag to be turned off later since it is only used here.
-  if (!GpuDataManagerImpl::GetInstance()->IsCompleteGpuInfoAvailable()) {
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        "disable_transparent_visuals");
-  }
-
-  Visual* visual = NULL;
-  int depth = 0;
-  ui::ChooseVisualForWindow(enable_transparent_visuals, &visual, &depth);
-  DCHECK(depth > 0);
-  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kWindowDepth, base::IntToString(depth));
-  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kX11VisualID, base::UintToString(visual->visualid));
+  gpu_data_manager_visual_proxy_.reset(
+      new internal::GpuDataManagerVisualProxy(gpu_data_manager));
 #endif
 
 #if !defined(GOOGLE_CHROME_BUILD) || defined(OS_ANDROID)
@@ -787,12 +812,12 @@ void BrowserMainLoop::CreateStartupTasks() {
   // First time through, we really want to create all the tasks
   if (!startup_task_runner_.get()) {
 #if defined(OS_ANDROID)
-    startup_task_runner_ = base::WrapUnique(
-        new StartupTaskRunner(base::Bind(&BrowserStartupComplete),
-                              base::ThreadTaskRunnerHandle::Get()));
+    startup_task_runner_ = base::MakeUnique<StartupTaskRunner>(
+        base::Bind(&BrowserStartupComplete),
+        base::ThreadTaskRunnerHandle::Get());
 #else
-    startup_task_runner_ = base::WrapUnique(new StartupTaskRunner(
-        base::Callback<void(int)>(), base::ThreadTaskRunnerHandle::Get()));
+    startup_task_runner_ = base::MakeUnique<StartupTaskRunner>(
+        base::Callback<void(int)>(), base::ThreadTaskRunnerHandle::Get());
 #endif
     StartupTask pre_create_threads =
         base::Bind(&BrowserMainLoop::PreCreateThreads, base::Unretained(this));
@@ -1016,7 +1041,6 @@ void BrowserMainLoop::ShutdownThreadsAndCleanUp() {
   }
 
   memory_pressure_monitor_.reset();
-  memory_coordinator_.reset();
 
 #if defined(OS_MACOSX)
   BrowserCompositorMac::DisableRecyclingForShutdown();
@@ -1042,7 +1066,7 @@ void BrowserMainLoop::ShutdownThreadsAndCleanUp() {
 #endif
 
   // Shutdown Mojo shell and IPC.
-  mojo_shell_context_.reset();
+  service_manager_context_.reset();
   mojo_ipc_support_.reset();
 
   // Must be size_t so we can subtract from it.
@@ -1284,7 +1308,13 @@ int BrowserMainLoop::BrowserThreadsStarted() {
   {
     TRACE_EVENT0("startup",
       "BrowserMainLoop::BrowserThreadsStarted:InitResourceDispatcherHost");
-    resource_dispatcher_host_.reset(new ResourceDispatcherHostImpl());
+    // TODO(ananta)
+    // We register an interceptor on the ResourceDispatcherHostImpl instance to
+    // intercept requests to create handlers for download requests. We need to
+    // find a better way to achieve this. Ideally we don't want knowledge of
+    // downloads in ResourceDispatcherHostImpl.
+    resource_dispatcher_host_.reset(new ResourceDispatcherHostImpl(
+        base::Bind(&DownloadResourceHandler::Create)));
     GetContentClient()->browser()->ResourceDispatcherHostCreated();
 
     loader_delegate_.reset(new LoaderDelegateImpl());
@@ -1316,7 +1346,8 @@ int BrowserMainLoop::BrowserThreadsStarted() {
   {
     TRACE_EVENT0("startup",
                  "BrowserMainLoop::BrowserThreadsStarted::TimeZoneMonitor");
-    time_zone_monitor_ = TimeZoneMonitor::Create();
+    time_zone_monitor_ =
+        device::TimeZoneMonitor::Create(file_thread_->task_runner());
   }
 
   {
@@ -1440,12 +1471,14 @@ void BrowserMainLoop::InitializeMojo() {
       BrowserThread::UnsafeGetMessageLoopForThread(BrowserThread::IO)
           ->task_runner()));
 
-  mojo_shell_context_.reset(new MojoShellContext);
+  service_manager_context_.reset(new ServiceManagerContext);
 #if defined(OS_MACOSX)
   mojo::edk::SetMachPortProvider(MachBroker::GetInstance());
 #endif  // defined(OS_MACOSX)
-  if (parts_)
-    parts_->MojoShellConnectionStarted(MojoShellConnection::GetForProcess());
+  if (parts_) {
+    parts_->ServiceManagerConnectionStarted(
+        ServiceManagerConnection::GetForProcess());
+  }
 }
 
 base::FilePath BrowserMainLoop::GetStartupTraceFileName(

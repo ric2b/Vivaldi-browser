@@ -33,10 +33,13 @@ extern const char kHistogramDOMContentLoadedEventFiredSuffix[];
 extern const char kHistogramFirstLayoutSuffix[];
 extern const char kHistogramLoadEventFiredSuffix[];
 extern const char kHistogramFirstContentfulPaintSuffix[];
+extern const char kHistogramFirstMeaningfulPaintSuffix[];
 extern const char kHistogramFirstImagePaintSuffix[];
 extern const char kHistogramFirstPaintSuffix[];
 extern const char kHistogramFirstTextPaintSuffix[];
 extern const char kHistogramParseStartSuffix[];
+extern const char kHistogramParseBlockedOnScriptLoadSuffix[];
+extern const char kHistogramParseDurationSuffix[];
 
 }  // namespace internal
 
@@ -49,7 +52,7 @@ class DataReductionProxyMetricsObserver
   ~DataReductionProxyMetricsObserver() override;
 
   // page_load_metrics::PageLoadMetricsObserver:
-  void OnCommit(content::NavigationHandle* navigation_handle) override;
+  ObservePolicy OnCommit(content::NavigationHandle* navigation_handle) override;
   void OnComplete(const page_load_metrics::PageLoadTiming& timing,
                   const page_load_metrics::PageLoadExtraInfo& info) override;
   void OnDomContentLoadedEventStart(
@@ -71,8 +74,13 @@ class DataReductionProxyMetricsObserver
   void OnFirstContentfulPaint(
       const page_load_metrics::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& info) override;
+  void OnFirstMeaningfulPaint(
+      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::PageLoadExtraInfo& info) override;
   void OnParseStart(const page_load_metrics::PageLoadTiming& timing,
                     const page_load_metrics::PageLoadExtraInfo& info) override;
+  void OnParseStop(const page_load_metrics::PageLoadTiming& timing,
+                   const page_load_metrics::PageLoadExtraInfo& info) override;
 
  private:
   // Gets the default DataReductionProxyPingbackClient. Overridden in testing.

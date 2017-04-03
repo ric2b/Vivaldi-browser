@@ -28,10 +28,10 @@
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/bookmarks/managed/managed_bookmark_service.h"
 #include "components/prefs/pref_service.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/undo/bookmark_undo_service.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/user_metrics.h"
-#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
 using base::UserMetricsAction;
@@ -145,15 +145,15 @@ void BookmarkContextMenuController::ExecuteCommand(int id, int event_flags) {
     case IDC_BOOKMARK_BAR_OPEN_ALL_NEW_WINDOW: {
       WindowOpenDisposition initial_disposition;
       if (id == IDC_BOOKMARK_BAR_OPEN_ALL) {
-        initial_disposition = NEW_BACKGROUND_TAB;
+        initial_disposition = WindowOpenDisposition::NEW_BACKGROUND_TAB;
         content::RecordAction(
             UserMetricsAction("BookmarkBar_ContextMenu_OpenAll"));
       } else if (id == IDC_BOOKMARK_BAR_OPEN_ALL_NEW_WINDOW) {
-        initial_disposition = NEW_WINDOW;
+        initial_disposition = WindowOpenDisposition::NEW_WINDOW;
         content::RecordAction(
             UserMetricsAction("BookmarkBar_ContextMenu_OpenAllInNewWindow"));
       } else {
-        initial_disposition = OFF_THE_RECORD;
+        initial_disposition = WindowOpenDisposition::OFF_THE_RECORD;
         content::RecordAction(
             UserMetricsAction("BookmarkBar_ContextMenu_OpenAllIncognito"));
       }

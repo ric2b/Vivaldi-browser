@@ -64,9 +64,14 @@ class IncludeNode(base.Node):
 
     # We have no control over code that calles ToRealPath later, so convert
     # the path to be relative against our basedir.
-    if self.attrs.get('use_base_dir', 'true') != 'true':
-      self.attrs['file'] = util.PathSearcher.LocatePath(self.attrs['file'])
+    if self.attrs.get('use_base_dir', 'true') not in ['true', 'false']:
+      if "${" not in self.attrs['file']:
+        self.attrs['file'] = util.PathSearcher.LocatePath(
+          os.path.join(self.attrs.get('use_base_dir', self.attrs['file'])))
       return os.path.relpath(self.attrs['file'], self.GetRoot().GetBaseDir())
+
+    if "${" not in self.attrs['file']:
+      self.attrs['file'] = util.PathSearcher.LocatePath(self.attrs['file'])
 
     return self.attrs['file']
 

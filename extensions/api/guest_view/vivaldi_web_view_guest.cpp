@@ -4,13 +4,13 @@
 
 #include "app/vivaldi_apptools.h"
 #include "chrome/common/render_messages.h"
+#include "chrome/browser/extensions/api/web_navigation/web_navigation_api.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/site_settings_helper.h"
-#include "components/content_settings/content/common/content_settings_messages.h"
 #include "components/guest_view/browser/guest_view_event.h"
 #include "components/guest_view/browser/guest_view_manager.h"
 #include "components/web_cache/browser/web_cache_manager.h"
@@ -18,9 +18,9 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
 #include "extensions/browser/view_type_utils.h"
+#include "extensions/helper/vivaldi_init_helpers.h"
 #include "net/cert/x509_certificate.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "content/public/browser/cert_store.h"
 
 #include "chrome/browser/ssl/chrome_security_state_model_client.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -32,6 +32,10 @@
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "prefs/vivaldi_pref_names.h"
+
+#if defined(USE_AURA)
+#include "ui/aura/window.h"
+#endif
 
 #define ROCKER_GESTURES
 
@@ -81,11 +85,11 @@ static std::string SSLStateToString(SecurityStateModel::SecurityLevel status) {
     // HTTPS, but unable to check certificate revocation status or with insecure
     // content on the page
     return "security_warning";
-  case SecurityStateModel::SECURITY_POLICY_WARNING:
+  case SecurityStateModel::SECURE_WITH_POLICY_INSTALLED_CERT:
     // HTTPS, but the certificate verification chain is anchored on a certificate
     // that was installed by the system administrator
     return "security_policy_warning";
-  case SecurityStateModel::SECURITY_ERROR:
+  case SecurityStateModel::DANGEROUS:
     // Attempted HTTPS and failed, page not authenticated
     return "security_error";
   default:
@@ -219,10 +223,23 @@ void WebViewGuest::ToggleFullscreenModeForTab(
 
   extensions::AppWindow* app_win = GetAppWindow();
   if (app_win) {
-
     extensions::NativeAppWindow* native_app_window = app_win->GetBaseWindow();
     ui::WindowShowState current_window_state =
         native_app_window->GetRestoredState();
+#if defined(USE_AURA)
+    PrefService *pref_service =
+        Profile::FromBrowserContext(web_contents->GetBrowserContext())
+        ->GetPrefs();
+    bool hide_cursor =
+        pref_service->GetBoolean(vivaldiprefs::kHideMouseCursorInFullscreen);
+    if (hide_cursor && enter_fullscreen) {
+      aura::Window *window =
+          static_cast<aura::Window *>(web_contents->GetNativeView());
+      cursor_hider_.reset(new CursorHider(window->GetRootWindow()));
+    } else {
+      cursor_hider_.reset(nullptr);
+    }
+#endif // USE_AURA
 
     if (enter_fullscreen) {
       window_state_prior_to_fullscreen_ = current_window_state;
@@ -343,10 +360,13 @@ void WebViewGuest::ShowPageInfo(gfx::Point pos) {
   DCHECK(security_info);
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
 
-  if (browser->window())
+  if (browser->window()) {
+    security_state::SecurityStateModel::SecurityInfo security_state;
+    security_info->GetSecurityInfo(&security_state);
     browser->window()->VivaldiShowWebsiteSettingsAt(
       Profile::FromBrowserContext(web_contents()->GetBrowserContext()),
-      web_contents(), url, security_info->GetSecurityInfo(), pos);
+      web_contents(), url, security_state, pos);
+  }
 
 }
 
@@ -394,8 +414,10 @@ void WebViewGuest::VisibleSSLStateChanged(const WebContents* source) {
   if (!security_model)
     return;
 
+  security_state::SecurityStateModel::SecurityInfo security_state;
+  security_model->GetSecurityInfo(&security_state);
   SecurityStateModel::SecurityLevel current_level =
-    security_model->GetSecurityInfo().security_level;
+      security_state.security_level;
   args->SetString("SSLState", SSLStateToString(current_level));
 
   content::NavigationController& controller =
@@ -403,9 +425,7 @@ void WebViewGuest::VisibleSSLStateChanged(const WebContents* source) {
   content::NavigationEntry* entry = controller.GetVisibleEntry();
   if (entry) {
 
-    scoped_refptr<net::X509Certificate> cert;
-    content::CertStore::GetInstance()->RetrieveCert(entry->GetSSL().cert_id,
-                                                    &cert);
+    scoped_refptr<net::X509Certificate> cert(security_state.certificate);
 
     // EV are required to have an organization name and country.
     if (cert.get() && (!cert.get()->subject().organization_names.empty() &&
@@ -589,7 +609,6 @@ bool WebViewGuest::OnMouseEvent(const blink::WebMouseEvent& mouse_event) {
     return true;
   }*/
 #endif // MOUSE_GESTURES
-
   return false;
 }
 
@@ -692,8 +711,9 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
     add_types |= TabStripModel::ADD_PINNED;
   chrome::NavigateParams navigate_params(
     browser, guest->web_contents());
-  navigate_params.disposition =
-    active ? NEW_FOREGROUND_TAB : NEW_BACKGROUND_TAB;
+  navigate_params.disposition = active ?
+      WindowOpenDisposition::NEW_FOREGROUND_TAB :
+      WindowOpenDisposition::NEW_BACKGROUND_TAB;
   navigate_params.tabstrip_index = index;
   navigate_params.tabstrip_add_types = add_types;
   navigate_params.source_contents = web_contents();
@@ -776,10 +796,11 @@ content::SecurityStyle WebViewGuest::GetSecurityStyle(
 }
 
 void WebViewGuest::ShowCertificateViewerInDevTools(
-    content::WebContents *web_contents, int cert_id) {
+    content::WebContents *web_contents,
+    scoped_refptr<net::X509Certificate> certificate) {
   Browser *browser = chrome::FindBrowserWithWebContents(web_contents);
   if (browser) {
-    browser->ShowCertificateViewerInDevTools(web_contents, cert_id);
+    browser->ShowCertificateViewerInDevTools(web_contents, certificate);
   }
 }
 
@@ -800,4 +821,53 @@ void WebViewGuest::AllowRunningInsecureContent() {
       web_contents()->GetMainFrame()->GetRoutingID()));
 }
 
+void WebViewGuest::OnMouseEnter() {
+#if defined(USE_AURA)
+  // Reset the timer so that the hiding sequence starts over.
+  if (cursor_hider_.get()) {
+    cursor_hider_.get()->Reset();
+  }
+#endif // USE_AURA
+}
+
+void WebViewGuest::OnMouseLeave() {
+#if defined(USE_AURA)
+  // Stop hiding the mouse cursor if the mouse leaves the view.
+  if (cursor_hider_.get()) {
+    cursor_hider_.get()->Stop();
+  }
+#endif // USE_AURA
+}
+
 } // namespace extensions
+
+////////////////////////////////////////////////////////////////////////////////
+// Bridge helpers to allow usage of component code in the browser.
+////////////////////////////////////////////////////////////////////////////////
+namespace guest_view {
+
+// Vivaldi helper function that is declared in
+// src/components/guest_view/browser/guest_view_base.h.
+// Returns true if a Browser object owns and manage the lifecycle of the
+// |content::WebContents|
+bool HandOverToBrowser(content::WebContents* contents) {
+  // gisli@vivaldi.com:  In case of Vivaldi view the view is not
+  // an owner of the web contents (the browser object owns it).
+  Browser* browser = chrome::FindBrowserWithWebContents(contents);
+  if (browser) {
+    // Hand the web contents over to the browser.
+    contents->SetDelegate(browser);
+  }
+  return !!browser;
+}
+
+// declared in src/components/guest_view/browser/guest_view_base.h
+void AttachWebContentsObservers(content::WebContents* contents) {
+  if (vivaldi::IsVivaldiRunning()) {
+    extensions::WebNavigationTabObserver::CreateForWebContents(
+        contents);
+    vivaldi::InitHelpers(contents);
+  }
+}
+
+}

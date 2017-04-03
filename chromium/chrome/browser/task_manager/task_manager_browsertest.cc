@@ -246,7 +246,7 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, KillTab) {
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(1, MatchAnyTab()));
 
   // Tab should reappear in task manager upon reload.
-  chrome::Reload(browser(), CURRENT_TAB);
+  chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(1, MatchTab("title1.html")));
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(2, MatchAnyTab()));
 }
@@ -299,7 +299,8 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, NavigateAwayFromHungRenderer) {
   // Now navigate this tab to a different site. This should wind up in a
   // different renderer process, so it should complete and show up in the task
   // manager.
-  tab2->OpenURL(content::OpenURLParams(url3, content::Referrer(), CURRENT_TAB,
+  tab2->OpenURL(content::OpenURLParams(url3, content::Referrer(),
+                                       WindowOpenDisposition::CURRENT_TAB,
                                        ui::PAGE_TRANSITION_TYPED, false));
 
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(1, MatchTab("iframe test")));
@@ -744,7 +745,7 @@ IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest, KillSubframe) {
   GURL main_url(embedded_test_server()->GetURL(
       "/cross-site/a.com/iframe_cross_site.html"));
   browser()->OpenURL(content::OpenURLParams(main_url, content::Referrer(),
-                                            CURRENT_TAB,
+                                            WindowOpenDisposition::CURRENT_TAB,
                                             ui::PAGE_TRANSITION_TYPED, false));
 
   ASSERT_NO_FATAL_FAILURE(
@@ -800,7 +801,7 @@ IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest, NavigateToSubframeProcess) {
   GURL a_dotcom(embedded_test_server()->GetURL(
       "/cross-site/a.com/iframe_cross_site.html"));
   browser()->OpenURL(content::OpenURLParams(a_dotcom, content::Referrer(),
-                                            CURRENT_TAB,
+                                            WindowOpenDisposition::CURRENT_TAB,
                                             ui::PAGE_TRANSITION_TYPED, false));
 
   ASSERT_NO_FATAL_FAILURE(
@@ -823,7 +824,7 @@ IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest, NavigateToSubframeProcess) {
       embedded_test_server()->GetURL("/cross-site/b.com/iframe.html"));
 
   browser()->OpenURL(content::OpenURLParams(b_dotcom, content::Referrer(),
-                                            CURRENT_TAB,
+                                            WindowOpenDisposition::CURRENT_TAB,
                                             ui::PAGE_TRANSITION_TYPED, false));
 
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(1, MatchTab("iframe test")));
@@ -846,7 +847,7 @@ IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest,
       embedded_test_server()->GetURL("/cross-site/b.com/iframe.html"));
 
   browser()->OpenURL(content::OpenURLParams(b_dotcom, content::Referrer(),
-                                            CURRENT_TAB,
+                                            WindowOpenDisposition::CURRENT_TAB,
                                             ui::PAGE_TRANSITION_TYPED, false));
 
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(1, MatchTab("iframe test")));
@@ -858,7 +859,7 @@ IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest,
   GURL a_dotcom(embedded_test_server()->GetURL(
       "/cross-site/a.com/iframe_cross_site.html"));
   browser()->OpenURL(content::OpenURLParams(a_dotcom, content::Referrer(),
-                                            CURRENT_TAB,
+                                            WindowOpenDisposition::CURRENT_TAB,
                                             ui::PAGE_TRANSITION_TYPED, false));
 
   ASSERT_NO_FATAL_FAILURE(
@@ -900,7 +901,7 @@ IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest,
   GURL a_dotcom(embedded_test_server()->GetURL(
       "/cross-site/a.com/iframe_cross_site.html"));
   browser()->OpenURL(content::OpenURLParams(a_dotcom, content::Referrer(),
-                                            CURRENT_TAB,
+                                            WindowOpenDisposition::CURRENT_TAB,
                                             ui::PAGE_TRANSITION_TYPED, false));
 
   ASSERT_NO_FATAL_FAILURE(
@@ -959,9 +960,9 @@ IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest,
   // Navigate the tab to a page on a.com with cross-process subframes.
   GURL a_dotcom_with_iframes(embedded_test_server()->GetURL(
       "/cross-site/a.com/iframe_cross_site.html"));
-  browser()->OpenURL(content::OpenURLParams(a_dotcom_with_iframes,
-                                            content::Referrer(), CURRENT_TAB,
-                                            ui::PAGE_TRANSITION_TYPED, false));
+  browser()->OpenURL(content::OpenURLParams(
+      a_dotcom_with_iframes, content::Referrer(),
+      WindowOpenDisposition::CURRENT_TAB, ui::PAGE_TRANSITION_TYPED, false));
 
   ASSERT_NO_FATAL_FAILURE(
       WaitForTaskManagerRows(1, MatchTab("cross-site iframe test")));
@@ -981,9 +982,9 @@ IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest,
   // the subframe processes should disappear.
   GURL a_dotcom_simple(
       embedded_test_server()->GetURL("/cross-site/a.com/title2.html"));
-  browser()->OpenURL(content::OpenURLParams(a_dotcom_simple,
-                                            content::Referrer(), CURRENT_TAB,
-                                            ui::PAGE_TRANSITION_TYPED, false));
+  browser()->OpenURL(content::OpenURLParams(
+      a_dotcom_simple, content::Referrer(), WindowOpenDisposition::CURRENT_TAB,
+      ui::PAGE_TRANSITION_TYPED, false));
   ASSERT_NO_FATAL_FAILURE(
       WaitForTaskManagerRows(1, MatchTab("Title Of Awesomeness")));
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(0, MatchAnySubframe()));
@@ -1002,7 +1003,7 @@ IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest, OrderingOfDependentRows) {
   GURL a_with_frames(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b,b,c(d,a,b,c))"));
   browser()->OpenURL(content::OpenURLParams(a_with_frames, content::Referrer(),
-                                            CURRENT_TAB,
+                                            WindowOpenDisposition::CURRENT_TAB,
                                             ui::PAGE_TRANSITION_TYPED, false));
 
   if (ShouldExpectSubframes()) {
@@ -1030,9 +1031,10 @@ IN_PROC_BROWSER_TEST_P(TaskManagerOOPIFBrowserTest, OrderingOfDependentRows) {
   // Opening a new tab should appear below the existing tab.
   GURL other_tab_url(embedded_test_server()->GetURL(
       "d.com", "/cross_site_iframe_factory.html?d(a(c(b)))"));
-  browser()->OpenURL(content::OpenURLParams(other_tab_url, content::Referrer(),
-                                            NEW_FOREGROUND_TAB,
-                                            ui::PAGE_TRANSITION_TYPED, false));
+  browser()->OpenURL(
+      content::OpenURLParams(other_tab_url, content::Referrer(),
+                             WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                             ui::PAGE_TRANSITION_TYPED, false));
 
   ASSERT_NO_FATAL_FAILURE(
       WaitForTaskManagerRows(2, MatchTab("Cross-site iframe factory")));

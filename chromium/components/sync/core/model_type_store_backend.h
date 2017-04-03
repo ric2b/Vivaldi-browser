@@ -20,7 +20,7 @@ class Env;
 class WriteBatch;
 }  // namespace leveldb
 
-namespace syncer_v2 {
+namespace syncer {
 
 // ModelTypeStoreBackend handles operations with leveldb. It is oblivious of the
 // fact that it is called from separate thread (with the exception of ctor),
@@ -67,7 +67,7 @@ class ModelTypeStoreBackend
   friend class base::RefCountedThreadSafe<ModelTypeStoreBackend>;
   friend class ModelTypeStoreBackendTest;
 
-  ModelTypeStoreBackend(const std::string& path);
+  explicit ModelTypeStoreBackend(const std::string& path);
   ~ModelTypeStoreBackend();
 
   // In some scenarios ModelTypeStoreBackend holds ownership of env. Typical
@@ -103,6 +103,6 @@ class ModelTypeStoreBackend
   DISALLOW_COPY_AND_ASSIGN(ModelTypeStoreBackend);
 };
 
-}  // namespace syncer_v2
+}  // namespace syncer
 
 #endif  // COMPONENTS_SYNC_CORE_MODEL_TYPE_STORE_BACKEND_H_

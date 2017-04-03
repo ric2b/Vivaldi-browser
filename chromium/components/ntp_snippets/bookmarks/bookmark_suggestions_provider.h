@@ -19,7 +19,7 @@ class PrefService;
 
 namespace gfx {
 class Image;
-}
+}  // namespace gfx
 
 namespace ntp_snippets {
 
@@ -39,8 +39,8 @@ class BookmarkSuggestionsProvider : public ContentSuggestionsProvider,
   // ContentSuggestionsProvider implementation.
   CategoryStatus GetCategoryStatus(Category category) override;
   CategoryInfo GetCategoryInfo(Category category) override;
-  void DismissSuggestion(const std::string& suggestion_id) override;
-  void FetchSuggestionImage(const std::string& suggestion_id,
+  void DismissSuggestion(const ContentSuggestion::ID& suggestion_id) override;
+  void FetchSuggestionImage(const ContentSuggestion::ID& suggestion_id,
                             const ImageFetchedCallback& callback) override;
   void ClearHistory(
       base::Time begin,
@@ -68,7 +68,7 @@ class BookmarkSuggestionsProvider : public ContentSuggestionsProvider,
                          int new_index) override {}
   void BookmarkNodeAdded(bookmarks::BookmarkModel* model,
                          const bookmarks::BookmarkNode* parent,
-                         int index) override {}
+                         int index) override;
   void BookmarkNodeRemoved(
       bookmarks::BookmarkModel* model,
       const bookmarks::BookmarkNode* parent,

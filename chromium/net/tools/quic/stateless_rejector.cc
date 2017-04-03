@@ -4,6 +4,7 @@
 
 #include "net/tools/quic/stateless_rejector.h"
 
+#include "net/quic/core/quic_bug_tracker.h"
 #include "net/quic/core/quic_crypto_server_stream.h"
 #include "net/quic/core/quic_flags.h"
 
@@ -12,20 +13,24 @@ namespace net {
 class StatelessRejector::ValidateCallback
     : public ValidateClientHelloResultCallback {
  public:
-  explicit ValidateCallback(StatelessRejector* rejector)
-      : rejector_(rejector) {}
+  explicit ValidateCallback(
+      std::unique_ptr<StatelessRejector> rejector,
+      std::unique_ptr<StatelessRejector::ProcessDoneCallback> cb)
+      : rejector_(std::move(rejector)), cb_(std::move(cb)) {}
 
   ~ValidateCallback() override {}
 
-  void RunImpl(const CryptoHandshakeMessage& client_hello,
-               const Result& result,
-               std::unique_ptr<ProofSource::Details> /* proof_source_details */)
+  void Run(scoped_refptr<Result> result,
+           std::unique_ptr<ProofSource::Details> /* proof_source_details */)
       override {
-    rejector_->ProcessClientHello(client_hello, result);
+    StatelessRejector* rejector_ptr = rejector_.get();
+    rejector_ptr->ProcessClientHello(std::move(result), std::move(rejector_),
+                                     std::move(cb_));
   }
 
  private:
-  StatelessRejector* rejector_;
+  std::unique_ptr<StatelessRejector> rejector_;
+  std::unique_ptr<StatelessRejector::ProcessDoneCallback> cb_;
 };
 
 StatelessRejector::StatelessRejector(
@@ -38,7 +43,7 @@ StatelessRejector::StatelessRejector(
     QuicByteCount chlo_packet_size,
     const IPEndPoint& client_address,
     const IPEndPoint& server_address)
-    : state_(FAILED),
+    : state_(UNKNOWN),
       error_(QUIC_INTERNAL_ERROR),
       version_(version),
       versions_(versions),
@@ -49,8 +54,7 @@ StatelessRejector::StatelessRejector(
       clock_(clock),
       random_(random),
       crypto_config_(crypto_config),
-      compressed_certs_cache_(compressed_certs_cache),
-      chlo_(nullptr) {}
+      compressed_certs_cache_(compressed_certs_cache) {}
 
 StatelessRejector::~StatelessRejector() {}
 
@@ -60,6 +64,7 @@ void StatelessRejector::OnChlo(QuicVersion version,
                                const CryptoHandshakeMessage& message) {
   DCHECK_EQ(kCHLO, message.tag());
   DCHECK_NE(connection_id, server_designated_connection_id);
+  DCHECK_EQ(state_, UNKNOWN);
 
   if (!FLAGS_enable_quic_stateless_reject_support ||
       !FLAGS_quic_use_cheap_stateless_rejects ||
@@ -71,37 +76,85 @@ void StatelessRejector::OnChlo(QuicVersion version,
 
   connection_id_ = connection_id;
   server_designated_connection_id_ = server_designated_connection_id;
-  chlo_ = &message;
-
-  crypto_config_->ValidateClientHello(
-      message, client_address_.address(), server_address_.address(), version_,
-      clock_, &proof_, new ValidateCallback(this));
+  chlo_ = message;  // Note: copies the message
 }
 
+void StatelessRejector::Process(std::unique_ptr<StatelessRejector> rejector,
+                                std::unique_ptr<ProcessDoneCallback> done_cb) {
+  // If we were able to make a decision about this CHLO based purely on the
+  // information available in OnChlo, just invoke the done callback immediately.
+  if (rejector->state() != UNKNOWN) {
+    done_cb->Run(std::move(rejector));
+    return;
+  }
+
+  StatelessRejector* rejector_ptr = rejector.get();
+  rejector_ptr->crypto_config_->ValidateClientHello(
+      rejector_ptr->chlo_, rejector_ptr->client_address_.address(),
+      rejector_ptr->server_address_.address(), rejector_ptr->version_,
+      rejector_ptr->clock_, &rejector_ptr->proof_,
+      std::unique_ptr<ValidateCallback>(
+          new ValidateCallback(std::move(rejector), std::move(done_cb))));
+}
+
+class StatelessRejector::ProcessClientHelloCallback
+    : public ProcessClientHelloResultCallback {
+ public:
+  ProcessClientHelloCallback(
+      std::unique_ptr<StatelessRejector> rejector,
+      std::unique_ptr<StatelessRejector::ProcessDoneCallback> done_cb)
+      : rejector_(std::move(rejector)), done_cb_(std::move(done_cb)) {}
+
+  void Run(
+      QuicErrorCode error,
+      const std::string& error_details,
+      std::unique_ptr<CryptoHandshakeMessage> message,
+      std::unique_ptr<DiversificationNonce> diversification_nonce) override {
+    StatelessRejector* rejector_ptr = rejector_.get();
+    rejector_ptr->ProcessClientHelloDone(
+        error, error_details, std::move(message), std::move(rejector_),
+        std::move(done_cb_));
+  }
+
+ private:
+  std::unique_ptr<StatelessRejector> rejector_;
+  std::unique_ptr<StatelessRejector::ProcessDoneCallback> done_cb_;
+};
+
 void StatelessRejector::ProcessClientHello(
-    const CryptoHandshakeMessage& client_hello,
-    const ValidateClientHelloResultCallback::Result& result) {
-  QuicCryptoNegotiatedParameters params;
-  DiversificationNonce diversification_nonce;
-  QuicErrorCode error = crypto_config_->ProcessClientHello(
+    scoped_refptr<ValidateClientHelloResultCallback::Result> result,
+    std::unique_ptr<StatelessRejector> rejector,
+    std::unique_ptr<StatelessRejector::ProcessDoneCallback> done_cb) {
+  std::unique_ptr<ProcessClientHelloCallback> cb(
+      new ProcessClientHelloCallback(std::move(rejector), std::move(done_cb)));
+  crypto_config_->ProcessClientHello(
       result,
       /*reject_only=*/true, connection_id_, server_address_.address(),
       client_address_, version_, versions_,
       /*use_stateless_rejects=*/true, server_designated_connection_id_, clock_,
-      random_, compressed_certs_cache_, &params, &proof_,
+      random_, compressed_certs_cache_, &params_, &proof_,
       QuicCryptoStream::CryptoMessageFramingOverhead(version_),
-      chlo_packet_size_, &reply_, &diversification_nonce, &error_details_);
+      chlo_packet_size_, std::move(cb));
+}
+
+void StatelessRejector::ProcessClientHelloDone(
+    QuicErrorCode error,
+    const std::string& error_details,
+    std::unique_ptr<CryptoHandshakeMessage> message,
+    std::unique_ptr<StatelessRejector> rejector,
+    std::unique_ptr<StatelessRejector::ProcessDoneCallback> done_cb) {
+  reply_ = std::move(message);
+
   if (error != QUIC_NO_ERROR) {
     error_ = error;
-    return;
-  }
-
-  if (reply_.tag() == kSREJ) {
+    error_details_ = error_details;
+    state_ = FAILED;
+  } else if (reply_->tag() == kSREJ) {
     state_ = REJECTED;
-    return;
+  } else {
+    state_ = ACCEPTED;
   }
-
-  state_ = ACCEPTED;
+  done_cb->Run(std::move(rejector));
 }
 
 }  // namespace net

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/bind.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -74,8 +75,7 @@ class MockWebMediaPlayer : public blink::WebMediaPlayer,
 
   void paint(blink::WebCanvas* canvas,
              const blink::WebRect& paint_rectangle,
-             unsigned char alpha,
-             SkXfermode::Mode mode) override {
+             SkPaint&) override {
     // We could fill in |canvas| with a meaningful pattern in ARGB and verify
     // that is correctly captured (as I420) by HTMLVideoElementCapturerSource
     // but I don't think that'll be easy/useful/robust, so just let go here.

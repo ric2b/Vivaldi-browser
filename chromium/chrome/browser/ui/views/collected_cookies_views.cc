@@ -15,6 +15,7 @@
 #include "chrome/browser/browsing_data/cookies_tree_model.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
+#include "chrome/browser/content_settings/local_shared_objects_container.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
@@ -23,15 +24,15 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/web_contents.h"
-#include "grit/components_strings.h"
-#include "grit/theme_resources.h"
 #include "net/cookies/canonical_cookie.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -334,7 +335,7 @@ views::View* CollectedCookiesViews::CreateAllowedPane() {
   allowed_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
 
   allowed_cookies_tree_model_ =
-      content_settings->CreateAllowedCookiesTreeModel();
+      content_settings->allowed_local_shared_objects().CreateCookiesTreeModel();
   allowed_cookies_tree_ = new views::TreeView();
   allowed_cookies_tree_->SetModel(allowed_cookies_tree_model_.get());
   allowed_cookies_tree_->SetRootShown(false);
@@ -406,7 +407,7 @@ views::View* CollectedCookiesViews::CreateBlockedPane() {
   blocked_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   blocked_label_->SizeToFit(kTreeViewWidth);
   blocked_cookies_tree_model_ =
-      content_settings->CreateBlockedCookiesTreeModel();
+      content_settings->blocked_local_shared_objects().CreateCookiesTreeModel();
   blocked_cookies_tree_ = new views::TreeView();
   blocked_cookies_tree_->SetModel(blocked_cookies_tree_model_.get());
   blocked_cookies_tree_->SetRootShown(false);
@@ -497,8 +498,10 @@ void CollectedCookiesViews::EnableControls() {
 }
 
 void CollectedCookiesViews::ShowCookieInfo() {
-  ui::TreeModelNode* node = allowed_cookies_tree_->GetSelectedNode();
-  if (!node)
+  ui::TreeModelNode* node = allowed_cookies_tree_->IsDrawn() ?
+                            allowed_cookies_tree_->GetSelectedNode() : nullptr;
+
+  if (!node && blocked_cookies_tree_->IsDrawn())
     node = blocked_cookies_tree_->GetSelectedNode();
 
   if (node) {

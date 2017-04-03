@@ -8,10 +8,13 @@
 #include <stdint.h>
 
 #include "base/macros.h"
+#include "base/time/default_tick_clock.h"
+#include "base/unguessable_token.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/renderer.h"
+#include "media/base/time_delta_interpolator.h"
 #include "media/mojo/interfaces/renderer.mojom.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/associated_binding.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -56,10 +59,20 @@ class MojoRenderer : public Renderer, public mojom::RendererClient {
   bool HasAudio() override;
   bool HasVideo() override;
 
+  using ReceiveSurfaceRequestTokenCB =
+      base::Callback<void(const base::UnguessableToken&)>;
+
+  // Asks |remote_renderer_| to register a request in the browser's
+  // ScopedSurfaceRequestManager, and returns the request's token.
+  void InitiateScopedSurfaceRequest(
+      const ReceiveSurfaceRequestTokenCB& receive_request_token_cb);
+
  private:
   // mojom::RendererClient implementation, dispatched on the
   // |task_runner_|.
-  void OnTimeUpdate(base::TimeDelta time, base::TimeDelta max_time) override;
+  void OnTimeUpdate(base::TimeDelta time,
+                    base::TimeDelta max_time,
+                    base::TimeTicks capture_time) override;
   void OnBufferingStateChange(mojom::BufferingState state) override;
   void OnEnded() override;
   void OnError() override;
@@ -132,7 +145,7 @@ class MojoRenderer : public Renderer, public mojom::RendererClient {
   mojom::RendererPtr remote_renderer_;
 
   // Binding for RendererClient, bound to the |task_runner_|.
-  mojo::Binding<RendererClient> binding_;
+  mojo::AssociatedBinding<RendererClient> client_binding_;
 
   bool encountered_error_ = false;
 
@@ -140,9 +153,10 @@ class MojoRenderer : public Renderer, public mojom::RendererClient {
   base::Closure flush_cb_;
   CdmAttachedCB cdm_attached_cb_;
 
-  // Lock used to serialize access for |time_|.
+  // Lock used to serialize access for |time_interpolator_|.
   mutable base::Lock lock_;
-  base::TimeDelta time_;
+  base::DefaultTickClock media_clock_;
+  media::TimeDeltaInterpolator media_time_interpolator_;
 
   DISALLOW_COPY_AND_ASSIGN(MojoRenderer);
 };

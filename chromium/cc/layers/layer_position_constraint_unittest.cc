@@ -73,7 +73,7 @@ class LayerPositionConstraintTest : public testing::Test {
         great_grand_child_impl_(nullptr) {
     layer_tree_host_->InitializeForTesting(
         TaskRunnerProvider::Create(nullptr, nullptr),
-        std::unique_ptr<Proxy>(new FakeProxy), nullptr);
+        std::unique_ptr<Proxy>(new FakeProxy));
     CreateTreeForTest();
     fixed_to_top_left_.set_is_fixed_position(true);
     fixed_to_bottom_right_.set_is_fixed_position(true);
@@ -200,8 +200,7 @@ class LayerPositionConstraintTest : public testing::Test {
             ->property_trees()
             ->scroll_tree.SetScrollOffsetDeltaForTesting(layer_impl->id(),
                                                          delta))
-      layer_impl->layer_tree_impl()->DidUpdateScrollOffset(
-          layer_impl->id(), layer_impl->transform_tree_index());
+      layer_impl->layer_tree_impl()->DidUpdateScrollOffset(layer_impl->id());
   }
 };
 

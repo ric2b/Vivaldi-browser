@@ -14,7 +14,7 @@
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -30,6 +30,7 @@
 #include "content/renderer/media/rtc_data_channel_handler.h"
 #include "content/renderer/media/rtc_dtmf_sender_handler.h"
 #include "content/renderer/media/webrtc/peer_connection_dependency_factory.h"
+#include "content/renderer/media/webrtc/rtc_stats.h"
 #include "content/renderer/media/webrtc/webrtc_media_stream_adapter.h"
 #include "content/renderer/media/webrtc_audio_device_impl.h"
 #include "content/renderer/media/webrtc_uma_histograms.h"
@@ -40,10 +41,10 @@
 #include "third_party/WebKit/public/platform/WebRTCConfiguration.h"
 #include "third_party/WebKit/public/platform/WebRTCDataChannelInit.h"
 #include "third_party/WebKit/public/platform/WebRTCICECandidate.h"
+#include "third_party/WebKit/public/platform/WebRTCLegacyStats.h"
 #include "third_party/WebKit/public/platform/WebRTCOfferOptions.h"
 #include "third_party/WebKit/public/platform/WebRTCSessionDescription.h"
 #include "third_party/WebKit/public/platform/WebRTCSessionDescriptionRequest.h"
-#include "third_party/WebKit/public/platform/WebRTCStats.h"
 #include "third_party/WebKit/public/platform/WebRTCVoidRequest.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/webrtc/pc/mediasession.h"
@@ -460,38 +461,26 @@ class SetSessionDescriptionRequest
   SessionDescriptionRequestTracker tracker_;
 };
 
-blink::WebRTCStatsType WebRTCStatsTypeFromStatsType(
-    webrtc::StatsReport::StatsType name) {
-  // TODO(hbos): Translate StatsType -> WebRTCStatsType. crbug.com/627816
-  return blink::WebRTCStatsTypeUnknown;
-}
-
-blink::WebRTCStatsMemberName WebRTCStatsMemberNameFromStatsValueName(
-    webrtc::StatsReport::StatsValueName name) {
-  // TODO(hbos): Translate StatsValueName -> WebRTCStatsMemberName.
-  // crbug.com/627816
-  return blink::WebRTCStatsMemberNameUnknown;
-}
-
-blink::WebRTCStatsMemberType WebRTCStatsMemberTypeFromStatsValueType(
+blink::WebRTCLegacyStatsMemberType
+WebRTCLegacyStatsMemberTypeFromStatsValueType(
     webrtc::StatsReport::Value::Type type) {
   switch (type) {
     case StatsReport::Value::kInt:
-      return blink::WebRTCStatsMemberTypeInt;
+      return blink::WebRTCLegacyStatsMemberTypeInt;
     case StatsReport::Value::kInt64:
-      return blink::WebRTCStatsMemberTypeInt64;
+      return blink::WebRTCLegacyStatsMemberTypeInt64;
     case StatsReport::Value::kFloat:
-      return blink::WebRTCStatsMemberTypeFloat;
+      return blink::WebRTCLegacyStatsMemberTypeFloat;
     case StatsReport::Value::kString:
     case StatsReport::Value::kStaticString:
-      return blink::WebRTCStatsMemberTypeString;
+      return blink::WebRTCLegacyStatsMemberTypeString;
     case StatsReport::Value::kBool:
-      return blink::WebRTCStatsMemberTypeBool;
+      return blink::WebRTCLegacyStatsMemberTypeBool;
     case StatsReport::Value::kId:
-      return blink::WebRTCStatsMemberTypeId;
+      return blink::WebRTCLegacyStatsMemberTypeId;
   }
   NOTREACHED();
-  return blink::WebRTCStatsMemberTypeInt;
+  return blink::WebRTCLegacyStatsMemberTypeInt;
 }
 
 // Class mapping responses from calls to libjingle
@@ -524,25 +513,23 @@ class StatsResponse : public webrtc::StatsObserver {
   }
 
  private:
-  class Report : public blink::WebRTCStats {
+  class Report : public blink::WebRTCLegacyStats {
    public:
-    class MemberIterator : public blink::WebRTCStatsMemberIterator {
+    class MemberIterator : public blink::WebRTCLegacyStatsMemberIterator {
      public:
       MemberIterator(const StatsReport::Values::const_iterator& it,
                      const StatsReport::Values::const_iterator& end)
           : it_(it), end_(end) {}
 
-      // blink::WebRTCStatsMemberIterator
+      // blink::WebRTCLegacyStatsMemberIterator
       bool isEnd() const override { return it_ == end_; }
       void next() override { ++it_; }
-      blink::WebRTCStatsMemberName name() const override {
-        return WebRTCStatsMemberNameFromStatsValueName(it_->second->name);
-      }
-      blink::WebString displayName() const override {
+      blink::WebString name() const override {
         return blink::WebString::fromUTF8(it_->second->display_name());
       }
-      blink::WebRTCStatsMemberType type() const override {
-        return WebRTCStatsMemberTypeFromStatsValueType(it_->second->type());
+      blink::WebRTCLegacyStatsMemberType type() const override {
+        return WebRTCLegacyStatsMemberTypeFromStatsValueType(
+            it_->second->type());
       }
       int valueInt() const override {
         return it_->second->int_val();
@@ -591,20 +578,17 @@ class StatsResponse : public webrtc::StatsObserver {
       DCHECK(thread_checker_.CalledOnValidThread());
     }
 
-    // blink::WebRTCStats
+    // blink::WebRTCLegacyStats
     blink::WebString id() const override {
       return blink::WebString::fromUTF8(id_);
     }
-    blink::WebRTCStatsType type() const override {
-      return WebRTCStatsTypeFromStatsType(type_);
-    }
-    blink::WebString typeToString() const override {
+    blink::WebString type() const override {
       return blink::WebString::fromUTF8(type_name_);
     }
     double timestamp() const override {
       return timestamp_;
     }
-    blink::WebRTCStatsMemberIterator* iterator() const override {
+    blink::WebRTCLegacyStatsMemberIterator* iterator() const override {
       return new MemberIterator(values_.cbegin(), values_.cend());
     }
 
@@ -690,6 +674,57 @@ void GetStatsOnSignalingThread(
   }
 }
 
+// A stats collector callback.
+// It is invoked on the WebRTC signaling thread and will post a task to invoke
+// |callback| on the thread given in the |main_thread| argument.
+// The argument to the callback will be a |blink::WebRTCStatsReport|.
+class GetRTCStatsCallback : public webrtc::RTCStatsCollectorCallback {
+ public:
+  static rtc::scoped_refptr<GetRTCStatsCallback> Create(
+      const scoped_refptr<base::SingleThreadTaskRunner>& main_thread,
+      std::unique_ptr<blink::WebRTCStatsReportCallback> callback) {
+    return rtc::scoped_refptr<GetRTCStatsCallback>(
+        new rtc::RefCountedObject<GetRTCStatsCallback>(
+            main_thread, callback.release()));
+  }
+
+  void OnStatsDelivered(
+      const rtc::scoped_refptr<const webrtc::RTCStatsReport>& report) override {
+    main_thread_->PostTask(FROM_HERE,
+        base::Bind(&GetRTCStatsCallback::OnStatsDeliveredOnMainThread,
+            this, report));
+  }
+
+  void OnStatsDeliveredOnMainThread(
+      const rtc::scoped_refptr<const webrtc::RTCStatsReport>& report) {
+    DCHECK(main_thread_->BelongsToCurrentThread());
+    DCHECK(report);
+    callback_->OnStatsDelivered(std::unique_ptr<blink::WebRTCStatsReport>(
+        new RTCStatsReport(make_scoped_refptr(report.get()))));
+  }
+
+ protected:
+  GetRTCStatsCallback(
+      const scoped_refptr<base::SingleThreadTaskRunner>& main_thread,
+      blink::WebRTCStatsReportCallback* callback)
+      : main_thread_(main_thread),
+        callback_(callback) {
+  }
+
+  const scoped_refptr<base::SingleThreadTaskRunner> main_thread_;
+  std::unique_ptr<blink::WebRTCStatsReportCallback> callback_;
+};
+
+void GetRTCStatsOnSignalingThread(
+    const scoped_refptr<base::SingleThreadTaskRunner>& main_thread,
+    scoped_refptr<webrtc::PeerConnectionInterface> native_peer_connection,
+    std::unique_ptr<blink::WebRTCStatsReportCallback> callback) {
+  TRACE_EVENT0("webrtc", "GetRTCStatsOnSignalingThread");
+
+  native_peer_connection->GetStats(
+      GetRTCStatsCallback::Create(main_thread, std::move(callback)));
+}
+
 class PeerConnectionUMAObserver : public webrtc::UMAObserver {
  public:
   PeerConnectionUMAObserver() {}
@@ -708,6 +743,10 @@ class PeerConnectionUMAObserver : public webrtc::UMAObserver {
         break;
       case webrtc::kEnumCounterIceCandidatePairTypeTcp:
         UMA_HISTOGRAM_ENUMERATION("WebRTC.PeerConnection.CandidatePairType_TCP",
+                                  counter, counter_max);
+        break;
+      case webrtc::kEnumCounterDtlsHandshakeError:
+        UMA_HISTOGRAM_ENUMERATION("WebRTC.PeerConnection.DtlsHandshakeError",
                                   counter, counter_max);
         break;
       default:
@@ -860,7 +899,7 @@ blink::WebRTCStatsResponse LocalRTCStatsResponse::webKitStatsResponse() const {
   return impl_;
 }
 
-void LocalRTCStatsResponse::addStats(const blink::WebRTCStats& stats) {
+void LocalRTCStatsResponse::addStats(const blink::WebRTCLegacyStats& stats) {
   impl_.addStats(stats);
 }
 
@@ -1516,7 +1555,10 @@ void RTCPeerConnectionHandler::getStats(
            track_id, track_type);
 }
 
-// TODO(tommi): It's weird to have three {g|G}etStats methods.  Clean this up.
+// TODO(tommi,hbos): It's weird to have three {g|G}etStats methods for the
+// legacy stats collector API and even more for the new stats API. Clean it up.
+// TODO(hbos): Rename old |getStats| and related functions to "getLegacyStats",
+// rename new |getStats|'s helper functions from "GetRTCStats*" to "GetStats*".
 void RTCPeerConnectionHandler::GetStats(
     webrtc::StatsObserver* observer,
     webrtc::PeerConnectionInterface::StatsOutputLevel level,
@@ -1526,6 +1568,15 @@ void RTCPeerConnectionHandler::GetStats(
   signaling_thread()->PostTask(FROM_HERE,
       base::Bind(&GetStatsOnSignalingThread, native_peer_connection_, level,
                  make_scoped_refptr(observer), track_id, track_type));
+}
+
+void RTCPeerConnectionHandler::getStats(
+    std::unique_ptr<blink::WebRTCStatsReportCallback> callback) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  signaling_thread()->PostTask(FROM_HERE,
+      base::Bind(&GetRTCStatsOnSignalingThread,
+          base::ThreadTaskRunnerHandle::Get(), native_peer_connection_,
+          base::Passed(&callback)));
 }
 
 void RTCPeerConnectionHandler::CloseClientPeerConnection() {

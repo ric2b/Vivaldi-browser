@@ -17,6 +17,9 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_samples.h"
+#include "base/metrics/statistics_recorder.h"
 #include "base/synchronization/condition_variable.h"
 #include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
@@ -40,11 +43,16 @@ namespace base {
 namespace internal {
 namespace {
 
-const size_t kNumWorkersInWorkerPool = 4;
-const size_t kNumThreadsPostingTasks = 4;
-const size_t kNumTasksPostedPerThread = 150;
+constexpr size_t kNumWorkersInWorkerPool = 4;
+constexpr size_t kNumThreadsPostingTasks = 4;
+constexpr size_t kNumTasksPostedPerThread = 150;
+// This can't be lower because Windows' WaitableEvent wakes up too early when a
+// small timeout is used. This results in many spurious wake ups before a worker
+// is allowed to detach.
 constexpr TimeDelta kReclaimTimeForDetachTests =
-    TimeDelta::FromMilliseconds(10);
+    TimeDelta::FromMilliseconds(500);
+constexpr TimeDelta kExtraTimeToWaitForDetach =
+    TimeDelta::FromSeconds(1);
 
 using IORestriction = SchedulerWorkerPoolParams::IORestriction;
 
@@ -69,7 +77,7 @@ class TaskSchedulerWorkerPoolImplTest
   TaskSchedulerWorkerPoolImplTest() = default;
 
   void SetUp() override {
-    InitializeWorkerPool(TimeDelta::Max());
+    InitializeWorkerPool(TimeDelta::Max(), kNumWorkersInWorkerPool);
   }
 
   void TearDown() override {
@@ -77,12 +85,11 @@ class TaskSchedulerWorkerPoolImplTest
     worker_pool_->JoinForTesting();
   }
 
-  void InitializeWorkerPool(const TimeDelta& suggested_reclaim_time) {
+  void InitializeWorkerPool(const TimeDelta& suggested_reclaim_time,
+                            size_t num_workers) {
     worker_pool_ = SchedulerWorkerPoolImpl::Create(
-        SchedulerWorkerPoolParams("TestWorkerPoolWithFileIO",
-                                  ThreadPriority::NORMAL,
-                                  IORestriction::ALLOWED,
-                                  kNumWorkersInWorkerPool,
+        SchedulerWorkerPoolParams("TestWorkerPool", ThreadPriority::NORMAL,
+                                  IORestriction::ALLOWED, num_workers,
                                   suggested_reclaim_time),
         Bind(&TaskSchedulerWorkerPoolImplTest::ReEnqueueSequenceCallback,
              Unretained(this)),
@@ -171,9 +178,9 @@ TEST_P(TaskSchedulerWorkerPoolImplTest, PostTasks) {
   // Create threads to post tasks.
   std::vector<std::unique_ptr<ThreadPostingTasks>> threads_posting_tasks;
   for (size_t i = 0; i < kNumThreadsPostingTasks; ++i) {
-    threads_posting_tasks.push_back(WrapUnique(new ThreadPostingTasks(
+    threads_posting_tasks.push_back(MakeUnique<ThreadPostingTasks>(
         worker_pool_.get(), GetParam(), WaitBeforePostTask::NO_WAIT,
-        PostNestedTask::NO)));
+        PostNestedTask::NO));
     threads_posting_tasks.back()->Start();
   }
 
@@ -194,9 +201,9 @@ TEST_P(TaskSchedulerWorkerPoolImplTest, PostTasksWaitAllWorkersIdle) {
   // posting a new task.
   std::vector<std::unique_ptr<ThreadPostingTasks>> threads_posting_tasks;
   for (size_t i = 0; i < kNumThreadsPostingTasks; ++i) {
-    threads_posting_tasks.push_back(WrapUnique(new ThreadPostingTasks(
+    threads_posting_tasks.push_back(MakeUnique<ThreadPostingTasks>(
         worker_pool_.get(), GetParam(),
-        WaitBeforePostTask::WAIT_FOR_ALL_WORKERS_IDLE, PostNestedTask::NO)));
+        WaitBeforePostTask::WAIT_FOR_ALL_WORKERS_IDLE, PostNestedTask::NO));
     threads_posting_tasks.back()->Start();
   }
 
@@ -216,9 +223,9 @@ TEST_P(TaskSchedulerWorkerPoolImplTest, NestedPostTasks) {
   // another task when it runs.
   std::vector<std::unique_ptr<ThreadPostingTasks>> threads_posting_tasks;
   for (size_t i = 0; i < kNumThreadsPostingTasks; ++i) {
-    threads_posting_tasks.push_back(WrapUnique(new ThreadPostingTasks(
+    threads_posting_tasks.push_back(MakeUnique<ThreadPostingTasks>(
         worker_pool_.get(), GetParam(), WaitBeforePostTask::NO_WAIT,
-        PostNestedTask::YES)));
+        PostNestedTask::YES));
     threads_posting_tasks.back()->Start();
   }
 
@@ -241,9 +248,9 @@ TEST_P(TaskSchedulerWorkerPoolImplTest, PostTasksWithOneAvailableWorker) {
                       WaitableEvent::InitialState::NOT_SIGNALED);
   std::vector<std::unique_ptr<test::TestTaskFactory>> blocked_task_factories;
   for (size_t i = 0; i < (kNumWorkersInWorkerPool - 1); ++i) {
-    blocked_task_factories.push_back(WrapUnique(new test::TestTaskFactory(
+    blocked_task_factories.push_back(MakeUnique<test::TestTaskFactory>(
         worker_pool_->CreateTaskRunnerWithTraits(TaskTraits(), GetParam()),
-        GetParam())));
+        GetParam()));
     EXPECT_TRUE(blocked_task_factories.back()->PostTask(
         PostNestedTask::NO, Bind(&WaitableEvent::Wait, Unretained(&event))));
     blocked_task_factories.back()->WaitForAllTasksToRun();
@@ -275,9 +282,9 @@ TEST_P(TaskSchedulerWorkerPoolImplTest, Saturate) {
                       WaitableEvent::InitialState::NOT_SIGNALED);
   std::vector<std::unique_ptr<test::TestTaskFactory>> factories;
   for (size_t i = 0; i < kNumWorkersInWorkerPool; ++i) {
-    factories.push_back(WrapUnique(new test::TestTaskFactory(
+    factories.push_back(MakeUnique<test::TestTaskFactory>(
         worker_pool_->CreateTaskRunnerWithTraits(TaskTraits(), GetParam()),
-        GetParam())));
+        GetParam()));
     EXPECT_TRUE(factories.back()->PostTask(
         PostNestedTask::NO, Bind(&WaitableEvent::Wait, Unretained(&event))));
     factories.back()->WaitForAllTasksToRun();
@@ -324,6 +331,31 @@ TEST_P(TaskSchedulerWorkerPoolImplTest, PostDelayedTask) {
   delayed_task_manager_.PostReadyTasks();
 
   // The task should run.
+  task_ran.Wait();
+}
+
+// Verify that the RunsTasksOnCurrentThread() method of a SEQUENCED TaskRunner
+// returns false when called from a task that isn't part of the sequence.
+TEST_P(TaskSchedulerWorkerPoolImplTest, SequencedRunsTasksOnCurrentThread) {
+  scoped_refptr<TaskRunner> task_runner(
+      worker_pool_->CreateTaskRunnerWithTraits(TaskTraits(), GetParam()));
+  scoped_refptr<TaskRunner> sequenced_task_runner(
+      worker_pool_->CreateTaskRunnerWithTraits(TaskTraits(),
+                                               ExecutionMode::SEQUENCED));
+
+  WaitableEvent task_ran(WaitableEvent::ResetPolicy::MANUAL,
+                         WaitableEvent::InitialState::NOT_SIGNALED);
+  task_runner->PostTask(
+      FROM_HERE,
+      Bind(
+          [](scoped_refptr<TaskRunner> sequenced_task_runner,
+             WaitableEvent* task_ran) {
+            EXPECT_FALSE(sequenced_task_runner->RunsTasksOnCurrentThread());
+            // Tests that use TestTaskFactory already verify that
+            // RunsTasksOnCurrentThread() returns true when appropriate.
+            task_ran->Signal();
+          },
+          sequenced_task_runner, Unretained(&task_ran)));
   task_ran.Wait();
 }
 
@@ -412,7 +444,7 @@ class TaskSchedulerWorkerPoolSingleThreadedTest
 
  protected:
   void SetUp() override {
-    InitializeWorkerPool(kReclaimTimeForDetachTests);
+    InitializeWorkerPool(kReclaimTimeForDetachTests, kNumWorkersInWorkerPool);
   }
 
   TaskSchedulerWorkerPoolSingleThreadedTest() = default;
@@ -444,8 +476,7 @@ TEST_F(TaskSchedulerWorkerPoolSingleThreadedTest, SingleThreadTask) {
   worker_pool_->WaitForAllWorkersIdleForTesting();
 
   // Give the worker pool a chance to reclaim its threads.
-  PlatformThread::Sleep(
-      kReclaimTimeForDetachTests + TimeDelta::FromMilliseconds(200));
+  PlatformThread::Sleep(kReclaimTimeForDetachTests + kExtraTimeToWaitForDetach);
 
   worker_pool_->DisallowWorkerDetachmentForTesting();
 
@@ -484,7 +515,7 @@ class TaskSchedulerWorkerPoolCheckTlsReuse
               WaitableEvent::InitialState::NOT_SIGNALED) {}
 
   void SetUp() override {
-    InitializeWorkerPool(kReclaimTimeForDetachTests);
+    InitializeWorkerPool(kReclaimTimeForDetachTests, kNumWorkersInWorkerPool);
   }
 
   subtle::Atomic32 zero_tls_values_ = 0;
@@ -523,8 +554,7 @@ TEST_F(TaskSchedulerWorkerPoolCheckTlsReuse, CheckDetachedThreads) {
   waiter_.Reset();
 
   // Give the worker pool a chance to detach its threads.
-  PlatformThread::Sleep(
-      kReclaimTimeForDetachTests + TimeDelta::FromMilliseconds(200));
+  PlatformThread::Sleep(kReclaimTimeForDetachTests + kExtraTimeToWaitForDetach);
 
   worker_pool_->DisallowWorkerDetachmentForTesting();
 
@@ -551,6 +581,146 @@ TEST_F(TaskSchedulerWorkerPoolCheckTlsReuse, CheckDetachedThreads) {
 
   // Release tasks waiting on |waiter_|.
   waiter_.Signal();
+}
+
+namespace {
+
+class TaskSchedulerWorkerPoolHistogramTest
+    : public TaskSchedulerWorkerPoolImplTest {
+ public:
+  TaskSchedulerWorkerPoolHistogramTest() = default;
+
+ protected:
+  void SetUp() override {}
+
+  void TearDown() override { worker_pool_->JoinForTesting(); }
+
+ private:
+  std::unique_ptr<StatisticsRecorder> statistics_recorder_ =
+      StatisticsRecorder::CreateTemporaryForTesting();
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(TaskSchedulerWorkerPoolHistogramTest);
+};
+
+}  // namespace
+
+TEST_F(TaskSchedulerWorkerPoolHistogramTest, NumTasksBetweenWaits) {
+  WaitableEvent event(WaitableEvent::ResetPolicy::MANUAL,
+                      WaitableEvent::InitialState::NOT_SIGNALED);
+  InitializeWorkerPool(TimeDelta::Max(), kNumWorkersInWorkerPool);
+  auto task_runner = worker_pool_->CreateTaskRunnerWithTraits(
+      TaskTraits(), ExecutionMode::SEQUENCED);
+
+  // Post a task.
+  task_runner->PostTask(FROM_HERE,
+                        Bind(&WaitableEvent::Wait, Unretained(&event)));
+
+  // Post 2 more tasks while the first task hasn't completed its execution. It
+  // is guaranteed that these tasks will run immediately after the first task,
+  // without allowing the worker to sleep.
+  task_runner->PostTask(FROM_HERE, Bind(&DoNothing));
+  task_runner->PostTask(FROM_HERE, Bind(&DoNothing));
+
+  // Allow tasks to run and wait until the SchedulerWorker is idle.
+  event.Signal();
+  worker_pool_->WaitForAllWorkersIdleForTesting();
+
+  // Wake up the SchedulerWorker that just became idle by posting a task and
+  // wait until it becomes idle again. The SchedulerWorker should record the
+  // TaskScheduler.NumTasksBetweenWaits.* histogram on wake up.
+  task_runner->PostTask(FROM_HERE, Bind(&DoNothing));
+  worker_pool_->WaitForAllWorkersIdleForTesting();
+
+  // Verify that counts were recorded to the histogram as expected.
+  EXPECT_EQ(0, worker_pool_->num_tasks_between_waits_histogram_for_testing()
+                   ->SnapshotSamples()
+                   ->GetCount(0));
+  EXPECT_EQ(1, worker_pool_->num_tasks_between_waits_histogram_for_testing()
+                   ->SnapshotSamples()
+                   ->GetCount(3));
+  EXPECT_EQ(0, worker_pool_->num_tasks_between_waits_histogram_for_testing()
+                   ->SnapshotSamples()
+                   ->GetCount(10));
+}
+
+namespace {
+
+void SignalAndWaitEvent(WaitableEvent* signal_event,
+                        WaitableEvent* wait_event) {
+  signal_event->Signal();
+  wait_event->Wait();
+}
+
+}  // namespace
+
+TEST_F(TaskSchedulerWorkerPoolHistogramTest, NumTasksBetweenWaitsWithDetach) {
+  WaitableEvent tasks_can_exit_event(WaitableEvent::ResetPolicy::MANUAL,
+                                     WaitableEvent::InitialState::NOT_SIGNALED);
+  InitializeWorkerPool(kReclaimTimeForDetachTests, kNumWorkersInWorkerPool);
+  auto task_runner = worker_pool_->CreateTaskRunnerWithTraits(
+      TaskTraits(), ExecutionMode::PARALLEL);
+
+  // Post tasks to saturate the pool.
+  std::vector<std::unique_ptr<WaitableEvent>> task_started_events;
+  for (size_t i = 0; i < kNumWorkersInWorkerPool; ++i) {
+    task_started_events.push_back(
+        MakeUnique<WaitableEvent>(WaitableEvent::ResetPolicy::MANUAL,
+                                  WaitableEvent::InitialState::NOT_SIGNALED));
+    task_runner->PostTask(
+        FROM_HERE,
+        Bind(&SignalAndWaitEvent, Unretained(task_started_events.back().get()),
+             Unretained(&tasks_can_exit_event)));
+  }
+  for (const auto& task_started_event : task_started_events)
+    task_started_event->Wait();
+
+  // Allow tasks to complete their execution and wait to allow workers to
+  // detach.
+  tasks_can_exit_event.Signal();
+  worker_pool_->WaitForAllWorkersIdleForTesting();
+  PlatformThread::Sleep(kReclaimTimeForDetachTests + kExtraTimeToWaitForDetach);
+
+  // Wake up SchedulerWorkers by posting tasks. They should record the
+  // TaskScheduler.NumTasksBetweenWaits.* histogram on wake up.
+  tasks_can_exit_event.Reset();
+  task_started_events.clear();
+  for (size_t i = 0; i < kNumWorkersInWorkerPool; ++i) {
+    task_started_events.push_back(
+        MakeUnique<WaitableEvent>(WaitableEvent::ResetPolicy::MANUAL,
+                                  WaitableEvent::InitialState::NOT_SIGNALED));
+    task_runner->PostTask(
+        FROM_HERE,
+        Bind(&SignalAndWaitEvent, Unretained(task_started_events.back().get()),
+             Unretained(&tasks_can_exit_event)));
+  }
+  for (const auto& task_started_event : task_started_events)
+    task_started_event->Wait();
+
+  // Verify that counts were recorded to the histogram as expected.
+  // - The "0" bucket has a count of at least 1 because the SchedulerWorker on
+  //   top of the idle stack isn't allowed to detach when its sleep timeout
+  //   expires. Instead, it waits on its WaitableEvent again without running a
+  //   task. The count may be higher than 1 because of spurious wake ups before
+  //   the sleep timeout expires.
+  EXPECT_GE(worker_pool_->num_tasks_between_waits_histogram_for_testing()
+                ->SnapshotSamples()
+                ->GetCount(0),
+            1);
+  // - The "1" bucket has a count of |kNumWorkersInWorkerPool| because each
+  //   SchedulerWorker ran a task before waiting on its WaitableEvent at the
+  //   beginning of the test.
+  EXPECT_EQ(static_cast<int>(kNumWorkersInWorkerPool),
+            worker_pool_->num_tasks_between_waits_histogram_for_testing()
+                ->SnapshotSamples()
+                ->GetCount(1));
+  EXPECT_EQ(0, worker_pool_->num_tasks_between_waits_histogram_for_testing()
+                   ->SnapshotSamples()
+                   ->GetCount(10));
+
+  tasks_can_exit_event.Signal();
+  worker_pool_->WaitForAllWorkersIdleForTesting();
+  worker_pool_->DisallowWorkerDetachmentForTesting();
 }
 
 }  // namespace internal

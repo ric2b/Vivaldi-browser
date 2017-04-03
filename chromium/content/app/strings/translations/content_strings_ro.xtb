@@ -1,12 +1,12 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ro">
-<translation id="1014825444426747588">necompletat</translation>
 <translation id="1018939186200882850">element de meniu</translation>
 <translation id="1020833440720551630">dezactivați sunetul înregistrării audio</translation>
 <translation id="10623998915015855">buton de comutare</translation>
 <translation id="1088086359088493902">Secunde</translation>
 <translation id="1171774979989969504">Introdu o adresă de e-mail.</translation>
+<translation id="1178581264944972037">Întrerupe</translation>
 <translation id="1188858454923323853">complementar</translation>
 <translation id="1206619573307042055">text derulant</translation>
 <translation id="1206693055195146388">glisor</translation>
@@ -25,6 +25,7 @@
 <translation id="1822429046913737220">AM/PM</translation>
 <translation id="1832974991323546415">redă pe dispozitiv la distanță</translation>
 <translation id="1842960171412779397">selectează</translation>
+<translation id="1854180393107901205">Nu mai trimite</translation>
 <translation id="1880518467580572141">schemă</translation>
 <translation id="1921819250265091946">zz</translation>
 <translation id="1930711995431081526">stare</translation>
@@ -39,6 +40,7 @@
 <translation id="2507943997699731163">Completează acest câmp.</translation>
 <translation id="2508569020611168319">listă de file</translation>
 <translation id="2548326553472216322">Nicio căutare recentă</translation>
+<translation id="2561842179657104141">afișează mai multe comenzi media</translation>
 <translation id="2572483411312390101">redați</translation>
 <translation id="2613802280814924224">Introduceți o valoare validă. Cea mai apropiată valoare validă este <ph name="VALID_VALUE" />.</translation>
 <translation id="2653659639078652383">Trimite</translation>
@@ -71,6 +73,7 @@
 <translation id="3808586225841795776">termen</translation>
 <translation id="3822383571486410024">Mărește acest text la cel puțin <ph name="MIN_CHARACTERS" /> (de) caractere (în prezent folosești <ph name="CURRENT_LENGTH" /> (de) caractere).</translation>
 <translation id="383465348367842624">Valoarea urmată de semnul „<ph name="ATSIGN" />” nu trebuie să conțină simbolul „<ph name="INVALIDCHARACTER" />”.</translation>
+<translation id="3846214748874656680">Ieși din ecranul complet</translation>
 <translation id="3924558731517983934">aplicație</translation>
 <translation id="3960700977367013758">bară de derulare</translation>
 <translation id="4103419683916926126">Milisecunde</translation>
@@ -91,6 +94,7 @@
 <translation id="479989351350248267">căutați</translation>
 <translation id="4812940957355064477">Introduceți un număr.</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> selectate</translation>
+<translation id="4992066212339426712">Activează sunetul</translation>
 <translation id="49969490063480558">Introduceți o valoare după semnul „<ph name="ATSIGN" />”. Adresa „<ph name="INVALIDADDRESS" />” nu este completă.</translation>
 <translation id="5034860022980953847">indicator de progres</translation>
 <translation id="5048533449481078685">marcator de listă</translation>
@@ -105,13 +109,17 @@
 <translation id="5468998798572797635">ieșiți din ecranul complet</translation>
 <translation id="5476505524087279545">debifează</translation>
 <translation id="5516424706154626233">selector dată</translation>
+<translation id="5537725057119320332">Proiectează</translation>
 <translation id="5546461542133609677">activați sunetul</translation>
 <translation id="561939826962581046">oră</translation>
 <translation id="5641012560118721995">întrerupeți redarea</translation>
 <translation id="5643186887447432888">buton</translation>
+<translation id="5677946354068040947">mai multe opțiuni</translation>
+<translation id="57838592816432529">Dezactivează sunetul</translation>
 <translation id="583281660410589416">Necunoscut</translation>
 <translation id="5843503607508392247">Altele...</translation>
 <translation id="5860033963881614850">Dezactivat</translation>
+<translation id="588258955323874662">Ecran complet</translation>
 <translation id="5939518447894949180">Resetează</translation>
 <translation id="5944544982112848342">2048 (nivel ridicat)</translation>
 <translation id="5966707198760109579">Săptămână</translation>
@@ -134,12 +142,14 @@
 <translation id="6692633176391053278">control numeric cu incrementare/decrementare</translation>
 <translation id="6739588121953935928">riglă</translation>
 <translation id="6755330956360078551">balon explicativ</translation>
+<translation id="6790428901817661496">Redă</translation>
 <translation id="6820355525329141109">Nu s-a putut încărca pluginul.</translation>
 <translation id="6843725295806269523">dezactivați sunetul</translation>
 <translation id="6845533974506654842">apasă</translation>
 <translation id="6853785296079745596">ascundeți subtitrările</translation>
 <translation id="6885760532393684712">director</translation>
 <translation id="6934078000481955284">blockquote</translation>
+<translation id="6941933287844615239">descarcă conținut media</translation>
 <translation id="7057186640035488495">durată film</translation>
 <translation id="709897737746224366">Respectă formatul solicitat.</translation>
 <translation id="7223624360433298498">timp scurs</translation>
@@ -148,6 +158,7 @@
 <translation id="7364796246159120393">Alege fișierul</translation>
 <translation id="739024184232394898">Altele...</translation>
 <translation id="7491962110804786152">filă</translation>
+<translation id="7514365320538308">Descarcă</translation>
 <translation id="7673697353781729403">Ore</translation>
 <translation id="7720026100085573005">timp rămas</translation>
 <translation id="7740016676195725605">nu mai afișați subtitrările</translation>
@@ -164,6 +175,7 @@
 <translation id="819205353528511139">redați filmul în modul ecran complet</translation>
 <translation id="8199524924445686405">aaaa</translation>
 <translation id="8244226242650769279">hartă imagine</translation>
+<translation id="8284326494547611709">Subtitrări</translation>
 <translation id="835897206747267392">Valoare nevalidă.</translation>
 <translation id="838869780401515933">bifează</translation>
 <translation id="8433900881053900389">bară de instrumente</translation>

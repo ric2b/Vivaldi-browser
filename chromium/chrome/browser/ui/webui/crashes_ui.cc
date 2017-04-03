@@ -19,19 +19,19 @@
 #include "chrome/browser/metrics/metrics_reporting_state.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/browser_resources.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/crash/core/browser/crashes_ui_util.h"
+#include "components/grit/components_resources.h"
+#include "components/grit/components_scaled_resources.h"
+#include "components/strings/grit/components_chromium_strings.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/browser/web_ui_message_handler.h"
-#include "grit/browser_resources.h"
-#include "grit/components_chromium_strings.h"
-#include "grit/components_resources.h"
-#include "grit/components_scaled_resources.h"
-#include "grit/components_strings.h"
 #include "ui/base/resource/resource_bundle.h"
 
 #if defined(OS_CHROMEOS)
@@ -93,10 +93,8 @@ class CrashesDOMHandler : public WebUIMessageHandler,
   // Sends the recent crashes list JS.
   void UpdateUI();
 
-#if defined(OS_WIN) || defined(OS_MACOSX)
   // Asynchronously requests a user triggered upload. Called from JS.
   void HandleRequestSingleCrashUpload(const base::ListValue* args);
-#endif
 
   scoped_refptr<CrashUploadList> upload_list_;
   bool list_available_;
@@ -128,12 +126,10 @@ void CrashesDOMHandler::RegisterMessages() {
                  base::Unretained(this)));
 #endif
 
-#if defined(OS_WIN) || defined(OS_MACOSX)
   web_ui()->RegisterMessageCallback(
       crash::kCrashesUIRequestSingleCrashUpload,
       base::Bind(&CrashesDOMHandler::HandleRequestSingleCrashUpload,
                  base::Unretained(this)));
-#endif
 }
 
 void CrashesDOMHandler::HandleRequestCrashes(const base::ListValue* args) {
@@ -176,9 +172,9 @@ void CrashesDOMHandler::UpdateUI() {
   bool upload_list = crash_reporting_enabled;
   bool support_manual_uploads = false;
 
-#if defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_ANDROID)
   // Maunal uploads currently are supported only for Crashpad-using platforms
-  // and only if crash uploads are not disabled by policy.
+  // and Android, and only if crash uploads are not disabled by policy.
   support_manual_uploads =
       crash_reporting_enabled || !IsMetricsReportingPolicyManaged();
 
@@ -209,7 +205,6 @@ void CrashesDOMHandler::UpdateUI() {
                                          args);
 }
 
-#if defined(OS_WIN) || defined(OS_MACOSX)
 void CrashesDOMHandler::HandleRequestSingleCrashUpload(
     const base::ListValue* args) {
   DCHECK(args);
@@ -225,7 +220,6 @@ void CrashesDOMHandler::HandleRequestSingleCrashUpload(
   }
   upload_list_->RequestSingleCrashUploadAsync(local_id);
 }
-#endif
 
 }  // namespace
 

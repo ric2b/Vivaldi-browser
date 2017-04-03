@@ -30,6 +30,7 @@ import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.ui.VSyncMonitor;
+import org.chromium.ui.display.DisplayAndroid;
 import org.chromium.ui.widget.Toast;
 
 import java.lang.ref.WeakReference;
@@ -71,6 +72,7 @@ public class WindowAndroid {
     // Native pointer to the c++ WindowAndroid object.
     private long mNativeWindowAndroid = 0;
     private final VSyncMonitor mVSyncMonitor;
+    private final DisplayAndroid mDisplayAndroid;
 
     // A string used as a key to store intent errors in a bundle
     static final String WINDOW_CALLBACK_ERRORS = "window_callback_errors";
@@ -175,11 +177,17 @@ public class WindowAndroid {
         mVSyncMonitor = new VSyncMonitor(context, mVSyncListener);
         mAccessibilityManager = (AccessibilityManager) mApplicationContext.getSystemService(
                 Context.ACCESSIBILITY_SERVICE);
+        mDisplayAndroid = DisplayAndroid.get(context);
     }
 
     @CalledByNative
     private static WindowAndroid createForTesting(Context context) {
         return new WindowAndroid(context);
+    }
+
+    @CalledByNative
+    private void clearNativePointer() {
+        mNativeWindowAndroid = 0;
     }
 
     /**
@@ -387,6 +395,13 @@ public class WindowAndroid {
     }
 
     /**
+     * @return DisplayAndroid instance belong to this window.
+     */
+    public DisplayAndroid getDisplay() {
+        return mDisplayAndroid;
+    }
+
+    /**
      * @return A reference to owning Activity.  The returned WeakReference will never be null, but
      *         the contained Activity can be null (either if it has been garbage collected or if
      *         this is in the context of a WebView that was not created using an Activity).
@@ -502,8 +517,8 @@ public class WindowAndroid {
      */
     public void destroy() {
         if (mNativeWindowAndroid != 0) {
+            // Native code clears |mNativeWindowAndroid|.
             nativeDestroy(mNativeWindowAndroid);
-            mNativeWindowAndroid = 0;
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {

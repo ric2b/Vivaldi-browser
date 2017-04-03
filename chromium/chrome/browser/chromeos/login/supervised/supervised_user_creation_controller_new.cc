@@ -26,7 +26,7 @@
 #include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/login/auth/key.h"
 #include "chromeos/login/auth/user_context.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
@@ -307,13 +307,13 @@ void SupervisedUserCreationControllerNew::OnAddKeySuccess() {
 
   VLOG(1) << " Phase 3 : Create/update user on chrome.com/manage";
 
-  ProfileSyncService* sync_service =
+  browser_sync::ProfileSyncService* sync_service =
       ProfileSyncServiceFactory::GetInstance()->GetForProfile(
           creation_context_->manager_profile);
-  ProfileSyncService::SyncStatusSummary status =
+  browser_sync::ProfileSyncService::SyncStatusSummary status =
       sync_service->QuerySyncStatusSummary();
 
-  if (status == ProfileSyncService::DATATYPES_NOT_INITIALIZED)
+  if (status == browser_sync::ProfileSyncService::DATATYPES_NOT_INITIALIZED)
     consumer_->OnLongCreationWarning();
 
   creation_context_->registration_utility =

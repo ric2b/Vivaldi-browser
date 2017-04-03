@@ -21,24 +21,20 @@
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
  * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
- 
+
 #include "platform/geometry/FloatSize.h"
 
 namespace blink {
 
 #ifndef NSGEOMETRY_TYPES_SAME_AS_CGGEOMETRY_TYPES
 
-FloatSize::FloatSize(const NSSize& s) : m_width(s.width), m_height(s.height)
-{
-}
+FloatSize::FloatSize(const NSSize& s) : m_width(s.width), m_height(s.height) {}
 
-FloatSize::operator NSSize() const
-{
-    return NSMakeSize(m_width, m_height);
+FloatSize::operator NSSize() const {
+  return NSMakeSize(m_width, m_height);
 }
 
 #endif
-
 }

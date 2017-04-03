@@ -26,7 +26,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/devtools/devtools_target_impl.h"
+#include "chrome/browser/devtools/chrome_devtools_manager_delegate.h"
 #include "chrome/browser/devtools/global_confirm_info_bar.h"
 #include "chrome/browser/extensions/api/debugger/debugger_api_constants.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -673,33 +673,36 @@ const char kTargetTitleField[] = "title";
 const char kTargetAttachedField[] = "attached";
 const char kTargetUrlField[] = "url";
 const char kTargetFaviconUrlField[] = "faviconUrl";
-const char kTargetTypePage[] = "page";
-const char kTargetTypeBackgroundPage[] = "background_page";
-const char kTargetTypeWorker[] = "worker";
-const char kTargetTypeOther[] = "other";
 const char kTargetTabIdField[] = "tabId";
 const char kTargetExtensionIdField[] = "extensionId";
+const char kTargetTypeWorker[] = "worker";
 
-base::Value* SerializeTarget(const DevToolsTargetImpl& target) {
-  base::DictionaryValue* dictionary = new base::DictionaryValue();
+std::unique_ptr<base::DictionaryValue> SerializeTarget(
+    scoped_refptr<DevToolsAgentHost> host) {
+  std::unique_ptr<base::DictionaryValue> dictionary(
+      new base::DictionaryValue());
+  dictionary->SetString(kTargetIdField, host->GetId());
+  dictionary->SetString(kTargetTitleField, host->GetTitle());
+  dictionary->SetBoolean(kTargetAttachedField, host->IsAttached());
+  dictionary->SetString(kTargetUrlField, host->GetURL().spec());
 
-  dictionary->SetString(kTargetIdField, target.GetId());
-  dictionary->SetString(kTargetTitleField, target.GetTitle());
-  dictionary->SetBoolean(kTargetAttachedField, target.IsAttached());
-  dictionary->SetString(kTargetUrlField, target.GetURL().spec());
-
-  std::string type = target.GetType();
-  if (type == kTargetTypePage) {
-    dictionary->SetInteger(kTargetTabIdField, target.GetTabId());
-  } else if (type == kTargetTypeBackgroundPage) {
-    dictionary->SetString(kTargetExtensionIdField, target.GetExtensionId());
-  } else if (type != kTargetTypeWorker) {
-    // DevToolsTargetImpl may support more types than the debugger API.
-    type = kTargetTypeOther;
+  std::string type = host->GetType();
+  if (type == DevToolsAgentHost::kTypePage) {
+    int tab_id =
+        extensions::ExtensionTabUtil::GetTabId(host->GetWebContents());
+    dictionary->SetInteger(kTargetTabIdField, tab_id);
+  } else if (type == ChromeDevToolsManagerDelegate::kTypeBackgroundPage) {
+    dictionary->SetString(kTargetExtensionIdField, host->GetURL().host());
   }
+
+  if (type == DevToolsAgentHost::kTypeServiceWorker ||
+      type == DevToolsAgentHost::kTypeSharedWorker) {
+    type = kTargetTypeWorker;
+  }
+
   dictionary->SetString(kTargetTypeField, type);
 
-  GURL favicon_url = target.GetFaviconURL();
+  GURL favicon_url = host->GetFaviconURL();
   if (favicon_url.is_valid())
     dictionary->SetString(kTargetFaviconUrlField, favicon_url.spec());
 
@@ -715,7 +718,7 @@ DebuggerGetTargetsFunction::~DebuggerGetTargetsFunction() {
 }
 
 bool DebuggerGetTargetsFunction::RunAsync() {
-  std::vector<DevToolsTargetImpl*> list = DevToolsTargetImpl::EnumerateAll();
+  content::DevToolsAgentHost::List list = DevToolsAgentHost::GetOrCreateAll();
   content::BrowserThread::PostTask(
       content::BrowserThread::UI,
       FROM_HERE,
@@ -724,11 +727,10 @@ bool DebuggerGetTargetsFunction::RunAsync() {
 }
 
 void DebuggerGetTargetsFunction::SendTargetList(
-    const std::vector<DevToolsTargetImpl*>& target_list) {
+    const content::DevToolsAgentHost::List& target_list) {
   std::unique_ptr<base::ListValue> result(new base::ListValue());
   for (size_t i = 0; i < target_list.size(); ++i)
-    result->Append(SerializeTarget(*target_list[i]));
-  base::STLDeleteContainerPointers(target_list.begin(), target_list.end());
+    result->Append(SerializeTarget(target_list[i]));
   SetResult(std::move(result));
   SendResponse(true);
 }

@@ -138,6 +138,7 @@ CrSettingsAboutPageTest.prototype = {
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    'test_util.js',
     'test_browser_proxy.js',
     'test_lifetime_browser_proxy.js',
     'about_page_tests.js',
@@ -157,6 +158,95 @@ TEST_F('CrSettingsAboutPageTest', 'AboutPage_OfficialBuild', function() {
 GEN('#endif');
 
 GEN('#if defined(OS_CHROMEOS)');
+
+/**
+ * Test fixture for
+ * chrome/browser/resources/settings/people_page/password_prompt_dialog.html.
+ * This is ChromeOS only.
+ * @constructor
+ * @extends {CrSettingsBrowserTest}
+*/
+function CrSettingsPeoplePageQuickUnlockAuthenticateTest() {}
+
+CrSettingsPeoplePageQuickUnlockAuthenticateTest.prototype = {
+  __proto__: CrSettingsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload: 'chrome://md-settings/people_page/password_prompt_dialog.html',
+
+  /** @override */
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    '../fake_chrome_event.js',
+    'fake_quick_unlock_private.js',
+    'quick_unlock_authenticate_browsertest_chromeos.js'
+  ]),
+};
+
+TEST_F('CrSettingsPeoplePageQuickUnlockAuthenticateTest', 'Test', function() {
+  settings_people_page_quick_unlock.registerAuthenticateTests();
+  mocha.run();
+});
+
+/**
+ * Test fixture for
+ * chrome/browser/resources/settings/people_page/lock_screen.html
+ * This is ChromeOS only.
+ * @constructor
+ * @extends {CrSettingsBrowserTest}
+*/
+function CrSettingsPeoplePageLockScreenTest() {}
+
+CrSettingsPeoplePageLockScreenTest.prototype = {
+  __proto__: CrSettingsBrowserTest.prototype,
+
+  /** @override */
+  //browsePreload: 'chrome://md-settings/settings_main/settings_main.html',
+  browsePreload: 'chrome://md-settings/people_page/lock_screen.html',
+
+  /** @override */
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    '../fake_chrome_event.js',
+    'fake_quick_unlock_private.js',
+    'fake_settings_private.js',
+    'quick_unlock_authenticate_browsertest_chromeos.js'
+  ]),
+};
+
+TEST_F('CrSettingsPeoplePageLockScreenTest', 'Test', function() {
+  settings_people_page_quick_unlock.registerLockScreenTests();
+  mocha.run();
+});
+
+/**
+ * Test fixture for
+ * chrome/browser/resources/settings/people_page/setup_pin_dialog.html.
+ *
+ * This is ChromeOS only.
+ * @constructor
+ * @extends {CrSettingsBrowserTest}
+*/
+function CrSettingsPeoplePageSetupPinDialogTest() {}
+
+CrSettingsPeoplePageSetupPinDialogTest.prototype = {
+  __proto__: CrSettingsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload: 'chrome://md-settings/people_page/setup_pin_dialog.html',
+
+  /** @override */
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    '../fake_chrome_event.js',
+    'fake_quick_unlock_private.js',
+    'fake_settings_private.js',
+    'quick_unlock_authenticate_browsertest_chromeos.js'
+  ]),
+};
+
+TEST_F('CrSettingsPeoplePageSetupPinDialogTest', 'Test', function() {
+  settings_people_page_quick_unlock.registerSetupPinDialogTests();
+  mocha.run();
+});
+
 /**
  * Test fixture for
  * chrome/browser/resources/settings/people_page/change_picture.html.
@@ -340,6 +430,34 @@ TEST_F('CrSettingsAppearancePageTest', 'AppearancePage', function() {
   mocha.run();
 });
 
+GEN('#if !defined(OS_CHROMEOS)');
+/**
+ * Test fixture for chrome/browser/resources/settings/default_browser_page/.
+ * @constructor
+ * @extends {CrSettingsBrowserTest}
+*/
+function CrSettingsDefaultBrowserTest() {}
+
+CrSettingsDefaultBrowserTest.prototype = {
+  __proto__: CrSettingsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload:
+      'chrome://md-settings/default_browser_page/default_browser_page.html',
+
+  /** @override */
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    'test_browser_proxy.js',
+    'default_browser_browsertest.js',
+  ]),
+};
+
+TEST_F('CrSettingsDefaultBrowserTest', 'DefaultBrowserPage', function() {
+  settings_default_browser.registerTests();
+  mocha.run();
+});
+GEN('#endif');
+
 /**
  * Test fixture for chrome/browser/resources/settings/search_page/.
  * @constructor
@@ -410,6 +528,7 @@ CrSettingsCertificateManagerTest.prototype = {
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    'test_util.js',
     'test_browser_proxy.js',
     'certificate_manager_page_test.js',
   ]),
@@ -437,7 +556,9 @@ CrSettingsPrivacyPageTest.prototype = {
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     ROOT_PATH + 'ui/webui/resources/js/promise_resolver.js',
+    'test_util.js',
     'test_browser_proxy.js',
+    'test_privacy_page_browser_proxy.js',
     'privacy_page_test.js',
   ]),
 };
@@ -468,6 +589,7 @@ CrSettingsSiteSettingsTest.prototype = {
     'site_settings_category_tests.js',
     'test_browser_proxy.js',
     'test_site_settings_prefs_browser_proxy.js',
+    'zoom_levels_tests.js',
   ]),
 };
 
@@ -476,6 +598,7 @@ TEST_F('CrSettingsSiteSettingsTest', 'SiteSettings', function() {
   site_details_permission.registerTests();
   site_list.registerTests();
   site_settings_category.registerTests();
+  zoom_levels.registerTests();
 
   mocha.run();
 });
@@ -734,6 +857,13 @@ TEST_F('CrSettingsRouteDynamicParametersTest', 'MAYBE_All', function() {
   mocha.run();
 });
 
+// Times out on Windows Tests (dbg). See https://crbug.com/651296.
+GEN('#if defined(OS_WIN)');
+GEN('#define MAYBE_MainPage_All DISABLED_All');
+GEN('#else');
+GEN('#define MAYBE_MainPage_All All');
+GEN('#endif');
+
 /**
  * Test fixture for chrome/browser/resources/settings/settings_main/.
  * @constructor
@@ -753,7 +883,7 @@ CrSettingsMainPageTest.prototype = {
   ]),
 };
 
-TEST_F('CrSettingsMainPageTest', 'All', function() {
+TEST_F('CrSettingsMainPageTest', 'MAYBE_MainPage_All', function() {
   settings_main_page.registerTests();
   mocha.run();
 });
@@ -812,6 +942,7 @@ CrSettingsMetricsReportingTest.prototype = {
 
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     'test_browser_proxy.js',
+    'test_privacy_page_browser_proxy.js',
     'metrics_reporting_tests.js',
   ]),
 };

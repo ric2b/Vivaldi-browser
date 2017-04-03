@@ -5,12 +5,14 @@
 #include "chrome/browser/engagement/site_engagement_score.h"
 
 #include <cmath>
+#include <utility>
 
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/engagement/site_engagement_metrics.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/variations/variations_associated_data.h"
@@ -33,22 +35,21 @@ bool DoublesConsideredDifferent(double value1, double value2, double delta) {
   return abs_difference > delta;
 }
 
-std::unique_ptr<base::DictionaryValue> GetScoreDictForOrigin(
-    HostContentSettingsMap* settings,
+std::unique_ptr<base::DictionaryValue> GetScoreDictForSettings(
+    const HostContentSettingsMap* settings,
     const GURL& origin_url) {
   if (!settings)
-    return std::unique_ptr<base::DictionaryValue>();
+    return base::MakeUnique<base::DictionaryValue>();
 
-  std::unique_ptr<base::Value> value = settings->GetWebsiteSetting(
-      origin_url, origin_url, CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT,
-      std::string(), NULL);
-  if (!value.get())
-    return base::WrapUnique(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> value =
+      base::DictionaryValue::From(settings->GetWebsiteSetting(
+          origin_url, origin_url, CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT,
+          std::string(), NULL));
 
-  if (!value->IsType(base::Value::TYPE_DICTIONARY))
-    return base::WrapUnique(new base::DictionaryValue());
+  if (value.get())
+    return value;
 
-  return base::WrapUnique(static_cast<base::DictionaryValue*>(value.release()));
+  return base::MakeUnique<base::DictionaryValue>();
 }
 
 }  // namespace
@@ -70,23 +71,23 @@ SiteEngagementScore::ParamValues& SiteEngagementScore::GetParamValues() {
 // static
 SiteEngagementScore::ParamValues SiteEngagementScore::BuildParamValues() {
   SiteEngagementScore::ParamValues param_values;
-  param_values[MAX_POINTS_PER_DAY] = {"max_points_per_day", 5};
-  param_values[DECAY_PERIOD_IN_HOURS] = {"decay_period_in_hours", 7 * 24};
-  param_values[DECAY_POINTS] = {"decay_points", 5};
-  param_values[DECAY_PROPORTION] = {"decay_proportion", 1};
-  param_values[SCORE_CLEANUP_THRESHOLD] = {"score_cleanup_threshold", 0};
-  param_values[NAVIGATION_POINTS] = {"navigation_points", 0.5};
-  param_values[USER_INPUT_POINTS] = {"user_input_points", 0.2};
-  param_values[VISIBLE_MEDIA_POINTS] = {"visible_media_playing_points", 0.02};
+  param_values[MAX_POINTS_PER_DAY] = {"max_points_per_day", 15};
+  param_values[DECAY_PERIOD_IN_HOURS] = {"decay_period_in_hours", 2};
+  param_values[DECAY_POINTS] = {"decay_points", 0};
+  param_values[DECAY_PROPORTION] = {"decay_proportion", 0.984};
+  param_values[SCORE_CLEANUP_THRESHOLD] = {"score_cleanup_threshold", 0.5};
+  param_values[NAVIGATION_POINTS] = {"navigation_points", 1.5};
+  param_values[USER_INPUT_POINTS] = {"user_input_points", 0.6};
+  param_values[VISIBLE_MEDIA_POINTS] = {"visible_media_playing_points", 0.06};
   param_values[HIDDEN_MEDIA_POINTS] = {"hidden_media_playing_points", 0.01};
   param_values[WEB_APP_INSTALLED_POINTS] = {"web_app_installed_points", 5};
-  param_values[FIRST_DAILY_ENGAGEMENT] = {"first_daily_engagement_points", 0.5};
-  param_values[BOOTSTRAP_POINTS] = {"bootstrap_points", 8};
-  param_values[MEDIUM_ENGAGEMENT_BOUNDARY] = {"medium_engagement_boundary", 5};
+  param_values[FIRST_DAILY_ENGAGEMENT] = {"first_daily_engagement_points", 1.5};
+  param_values[BOOTSTRAP_POINTS] = {"bootstrap_points", 24};
+  param_values[MEDIUM_ENGAGEMENT_BOUNDARY] = {"medium_engagement_boundary", 15};
   param_values[HIGH_ENGAGEMENT_BOUNDARY] = {"high_engagement_boundary", 50};
-  param_values[MAX_DECAYS_PER_SCORE] = {"max_decays_per_score", 1};
+  param_values[MAX_DECAYS_PER_SCORE] = {"max_decays_per_score", 4};
   param_values[LAST_ENGAGEMENT_GRACE_PERIOD_IN_HOURS] = {
-      "last_engagement_grace_period_in_hours", 72};
+      "last_engagement_grace_period_in_hours", 1};
   return param_values;
 }
 
@@ -177,12 +178,15 @@ void SiteEngagementScore::UpdateFromVariations(const char* param_name) {
     SiteEngagementScore::GetParamValues()[i].second = param_vals[i];
 }
 
-SiteEngagementScore::SiteEngagementScore(base::Clock* clock,
-                                         const GURL& origin,
-                                         HostContentSettingsMap* settings_map)
-    : SiteEngagementScore(clock, GetScoreDictForOrigin(settings_map, origin)) {
-  origin_ = origin;
-  settings_map_ = settings_map;
+SiteEngagementScore::SiteEngagementScore(
+    base::Clock* clock,
+    const GURL& origin,
+    HostContentSettingsMap* settings)
+    : SiteEngagementScore(
+          clock,
+          origin,
+          GetScoreDictForSettings(settings, origin)) {
+  settings_map_ = settings;
 }
 
 SiteEngagementScore::SiteEngagementScore(SiteEngagementScore&& other) = default;
@@ -234,6 +238,7 @@ double SiteEngagementScore::GetScore() const {
 }
 
 void SiteEngagementScore::Commit() {
+  DCHECK(settings_map_);
   if (!UpdateScoreDict(score_dict_.get()))
     return;
 
@@ -298,13 +303,15 @@ bool SiteEngagementScore::UpdateScoreDict(base::DictionaryValue* score_dict) {
 
 SiteEngagementScore::SiteEngagementScore(
     base::Clock* clock,
+    const GURL& origin,
     std::unique_ptr<base::DictionaryValue> score_dict)
     : clock_(clock),
       raw_score_(0),
       points_added_today_(0),
       last_engagement_time_(),
       last_shortcut_launch_time_(),
-      score_dict_(score_dict.release()) {
+      score_dict_(score_dict.release()),
+      origin_(origin) {
   if (!score_dict_)
     return;
 

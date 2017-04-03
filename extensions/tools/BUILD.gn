@@ -3,4 +3,8 @@ source_set("tools") {
     "../tools/vivaldi_tools.cpp",
     "../tools/vivaldi_tools.h",
   ]
+  deps = [
+    "//components/google/core/browser:browser",
+    "//net:net"
+  ]
 }

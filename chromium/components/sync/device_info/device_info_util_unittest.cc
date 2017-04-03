@@ -4,8 +4,6 @@
 
 #include "components/sync/device_info/device_info_util.h"
 
-#include <string>
-
 #include "components/sync/protocol/sync.pb.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -13,7 +11,7 @@ using base::Time;
 using base::TimeDelta;
 using sync_pb::DeviceInfoSpecifics;
 
-namespace sync_driver {
+namespace syncer {
 
 namespace {
 
@@ -110,4 +108,4 @@ TEST_F(DeviceInfoUtilTest, TagRoundTrip) {
                 DeviceInfoUtil::SpecificsToTag(specifics)));
 }
 
-}  // namespace sync_driver
+}  // namespace syncer

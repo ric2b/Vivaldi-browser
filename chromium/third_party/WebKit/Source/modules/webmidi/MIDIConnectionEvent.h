@@ -39,42 +39,36 @@ namespace blink {
 class MIDIConnectionEventInit;
 
 class MIDIConnectionEvent final : public Event {
-    DEFINE_WRAPPERTYPEINFO();
-public:
-    static MIDIConnectionEvent* create()
-    {
-        return new MIDIConnectionEvent();
-    }
+  DEFINE_WRAPPERTYPEINFO();
 
-    static MIDIConnectionEvent* create(MIDIPort* port)
-    {
-        return new MIDIConnectionEvent(port);
-    }
+ public:
+  static MIDIConnectionEvent* create(MIDIPort* port) {
+    return new MIDIConnectionEvent(port);
+  }
 
-    static MIDIConnectionEvent* create(const AtomicString& type, const MIDIConnectionEventInit& initializer)
-    {
-        return new MIDIConnectionEvent(type, initializer);
-    }
+  static MIDIConnectionEvent* create(
+      const AtomicString& type,
+      const MIDIConnectionEventInit& initializer) {
+    return new MIDIConnectionEvent(type, initializer);
+  }
 
-    MIDIPort* port() { return m_port; }
+  MIDIPort* port() { return m_port; }
 
-    const AtomicString& interfaceName() const override { return EventNames::MIDIConnectionEvent; }
+  const AtomicString& interfaceName() const override {
+    return EventNames::MIDIConnectionEvent;
+  }
 
-    DECLARE_VIRTUAL_TRACE();
+  DECLARE_VIRTUAL_TRACE();
 
-private:
-    MIDIConnectionEvent()
-        : Event(EventTypeNames::statechange, false, false) { }
+ private:
+  MIDIConnectionEvent(MIDIPort* port)
+      : Event(EventTypeNames::statechange, false, false), m_port(port) {}
 
-    MIDIConnectionEvent(MIDIPort* port)
-        : Event(EventTypeNames::statechange, false, false)
-        , m_port(port) { }
+  MIDIConnectionEvent(const AtomicString&, const MIDIConnectionEventInit&);
 
-    MIDIConnectionEvent(const AtomicString&, const MIDIConnectionEventInit&);
-
-    Member<MIDIPort> m_port;
+  Member<MIDIPort> m_port;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // MIDIConnectionEvent_h
+#endif  // MIDIConnectionEvent_h

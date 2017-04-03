@@ -11,7 +11,7 @@
 #include "base/auto_reset.h"
 #include "base/format_macros.h"
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -83,55 +83,6 @@ const char kFocusToEditTimeHistogram[] = "Omnibox.FocusToEditTime";
 const char kFocusToOpenTimeHistogram[] =
     "Omnibox.FocusToOpenTimeAnyPopupState2";
 
-// Split the percentage match histograms into buckets based on the width of the
-// omnibox.
-const int kPercentageMatchHistogramWidthBuckets[] = { 400, 700, 1200 };
-
-void RecordPercentageMatchHistogram(const base::string16& old_text,
-                                    const base::string16& new_text,
-                                    ui::PageTransition transition,
-                                    int omnibox_width) {
-  size_t avg_length = (old_text.length() + new_text.length()) / 2;
-
-  int percent = 0;
-  if (!old_text.empty() && !new_text.empty()) {
-    size_t shorter_length = std::min(old_text.length(), new_text.length());
-    base::string16::const_iterator end(old_text.begin() + shorter_length);
-    base::string16::const_iterator mismatch(
-        std::mismatch(old_text.begin(), end, new_text.begin()).first);
-    size_t matching_characters = mismatch - old_text.begin();
-    percent = static_cast<float>(matching_characters) / avg_length * 100;
-  }
-
-  // TODO(treib,mpearson): Do we want to keep these histograms? Most of the
-  // previously-logged cases don't exist anymore. crbug.com/627747
-  std::string histogram_name;
-  if (ui::PageTransitionTypeIncludingQualifiersIs(
-          transition, ui::PAGE_TRANSITION_TYPED)) {
-    histogram_name = "InstantExtended.PercentageMatchV2_URLtoURL";
-    UMA_HISTOGRAM_PERCENTAGE(histogram_name, percent);
-  } else {
-    histogram_name = "InstantExtended.PercentageMatchV2_URLtoQuery";
-    UMA_HISTOGRAM_PERCENTAGE(histogram_name, percent);
-  }
-
-  std::string suffix = "large";
-  for (size_t i = 0; i < arraysize(kPercentageMatchHistogramWidthBuckets);
-       ++i) {
-    if (omnibox_width < kPercentageMatchHistogramWidthBuckets[i]) {
-      suffix = base::IntToString(kPercentageMatchHistogramWidthBuckets[i]);
-      break;
-    }
-  }
-
-  // Cannot rely on UMA histograms macro because the name of the histogram is
-  // generated dynamically.
-  base::HistogramBase* counter = base::LinearHistogram::FactoryGet(
-      histogram_name + "_" + suffix, 1, 101, 102,
-      base::Histogram::kUmaTargetedHistogramFlag);
-  counter->Add(percent);
-}
-
 }  // namespace
 
 
@@ -143,7 +94,6 @@ OmniboxEditModel::State::State(bool user_input_in_progress,
                                const base::string16& keyword,
                                bool is_keyword_hint,
                                KeywordModeEntryMethod keyword_mode_entry_method,
-                               bool url_replacement_enabled,
                                OmniboxFocusState focus_state,
                                FocusSource focus_source,
                                const AutocompleteInput& autocomplete_input)
@@ -153,7 +103,6 @@ OmniboxEditModel::State::State(bool user_input_in_progress,
       keyword(keyword),
       is_keyword_hint(is_keyword_hint),
       keyword_mode_entry_method(keyword_mode_entry_method),
-      url_replacement_enabled(url_replacement_enabled),
       focus_state(focus_state),
       focus_source(focus_source),
       autocomplete_input(autocomplete_input) {
@@ -213,20 +162,14 @@ const OmniboxEditModel::State OmniboxEditModel::GetStateForTabSwitch() {
   return State(
       user_input_in_progress_, user_text_, view_->GetGrayTextAutocompletion(),
       keyword_, is_keyword_hint_, keyword_mode_entry_method_,
-      controller_->GetToolbarModel()->url_replacement_enabled(),
       focus_state_, focus_source_, input_);
 }
 
 void OmniboxEditModel::RestoreState(const State* state) {
   // We need to update the permanent text correctly and revert the view
   // regardless of whether there is saved state.
-  bool url_replacement_enabled = !state || state->url_replacement_enabled;
-  controller_->GetToolbarModel()->set_url_replacement_enabled(
-      url_replacement_enabled);
   permanent_text_ = controller_->GetToolbarModel()->GetFormattedURL(nullptr);
-  // Don't muck with the search term replacement state, as we've just set it
-  // correctly.
-  view_->RevertWithoutResettingSearchTermReplacement();
+  view_->RevertAll();
   // Restore the autocomplete controller's input, or clear it if this is a new
   // tab.
   input_ = state ? state->autocomplete_input : AutocompleteInput();
@@ -286,11 +229,8 @@ bool OmniboxEditModel::UpdatePermanentText() {
   base::string16 gray_text = view_->GetGrayTextAutocompletion();
   const bool visibly_changed_permanent_text =
       (permanent_text_ != new_permanent_text) &&
-      (!has_focus() ||
-       (!user_input_in_progress_ && !PopupIsOpen() &&
-        controller_->GetToolbarModel()->url_replacement_enabled())) &&
-      (gray_text.empty() ||
-       new_permanent_text != user_text_ + gray_text);
+      (!has_focus() || (!user_input_in_progress_ && !PopupIsOpen())) &&
+      (gray_text.empty() || new_permanent_text != user_text_ + gray_text);
 
   permanent_text_ = new_permanent_text;
   return visibly_changed_permanent_text;
@@ -536,8 +476,8 @@ void OmniboxEditModel::PasteAndGo(const base::string16& text) {
   AutocompleteMatch match;
   GURL alternate_nav_url;
   ClassifyStringForPasteAndGo(text, &match, &alternate_nav_url);
-  view_->OpenMatch(match, CURRENT_TAB, alternate_nav_url, text,
-                   OmniboxPopupModel::kNoMatch);
+  view_->OpenMatch(match, WindowOpenDisposition::CURRENT_TAB, alternate_nav_url,
+                   text, OmniboxPopupModel::kNoMatch);
 }
 
 bool OmniboxEditModel::IsPasteAndSearch(const base::string16& text) const {
@@ -664,15 +604,14 @@ void OmniboxEditModel::OpenMatch(AutocompleteMatch match,
   base::TimeDelta elapsed_time_since_last_change_to_default_match(
       now - autocomplete_controller()->last_time_default_match_changed());
   DCHECK(match.provider);
-  // These elapsed times don't really make sense for ZeroSuggest matches
-  // (because the user does not modify the omnibox for ZeroSuggest), so for
-  // those we set the elapsed times to something that will be ignored by
+  // These elapsed times don't really make sense for matches that come from
+  // omnibox focus (because the user did not modify the omnibox), so for those
+  // we set the elapsed times to something that will be ignored by
   // metrics_log.cc.  They also don't necessarily make sense if the omnibox
   // dropdown is closed or the user used a paste-and-go action.  (In most
   // cases when this happens, the user never modified the omnibox.)
   const bool popup_open = PopupIsOpen();
-  if ((match.provider->type() == AutocompleteProvider::TYPE_ZERO_SUGGEST) ||
-      !popup_open || !pasted_text.empty()) {
+  if (input_.from_omnibox_focus() || !popup_open || !pasted_text.empty()) {
     const base::TimeDelta default_time_delta =
         base::TimeDelta::FromMilliseconds(-1);
     elapsed_time_since_user_first_modified_omnibox = default_time_delta;
@@ -708,7 +647,8 @@ void OmniboxEditModel::OpenMatch(AutocompleteMatch match,
       << "omnibox text at same time or before the most recent time the "
       << "default match changed.";
 
-  if ((disposition == CURRENT_TAB) && client_->CurrentPageExists()) {
+  if ((disposition == WindowOpenDisposition::CURRENT_TAB) &&
+      client_->CurrentPageExists()) {
     // If we know the destination is being opened in the current tab,
     // we can easily get the tab ID.  (If it's being opened in a new
     // tab, we don't know the tab ID yet.)
@@ -735,7 +675,7 @@ void OmniboxEditModel::OpenMatch(AutocompleteMatch match,
       // Don't increment usage count for extension keywords.
       if (client_->ProcessExtensionKeyword(template_url, match, disposition,
                                            observer.get())) {
-        if (disposition != NEW_BACKGROUND_TAB)
+        if (disposition != WindowOpenDisposition::NEW_BACKGROUND_TAB)
           view_->RevertAll();
         return;
       }
@@ -760,13 +700,10 @@ void OmniboxEditModel::OpenMatch(AutocompleteMatch match,
   // Get the current text before we call RevertAll() which will clear it.
   base::string16 current_text = view_->GetText();
 
-  if (disposition != NEW_BACKGROUND_TAB) {
+  if (disposition != WindowOpenDisposition::NEW_BACKGROUND_TAB) {
     base::AutoReset<bool> tmp(&in_revert_, true);
     view_->RevertAll();  // Revert the box to its unedited state.
   }
-
-  RecordPercentageMatchHistogram(
-      permanent_text_, current_text, match.transition, view_->GetWidth());
 
   // Track whether the destination URL sends us to a search results page
   // using the default search provider.

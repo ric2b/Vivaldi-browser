@@ -14,6 +14,7 @@
 #include "services/ui/ws/display.h"
 #include "services/ui/ws/display_binding.h"
 #include "services/ui/ws/display_manager.h"
+#include "services/ui/ws/gpu_service_proxy.h"
 #include "services/ui/ws/operation.h"
 #include "services/ui/ws/server_window.h"
 #include "services/ui/ws/user_activity_monitor.h"
@@ -37,16 +38,21 @@ struct WindowServer::CurrentMoveLoopState {
   gfx::Rect revert_bounds;
 };
 
-WindowServer::WindowServer(
-    WindowServerDelegate* delegate,
-    const scoped_refptr<ui::SurfacesState>& surfaces_state)
+struct WindowServer::CurrentDragLoopState {
+  uint32_t change_id;
+  ServerWindow* window;
+  WindowTree* initiator;
+};
+
+WindowServer::WindowServer(WindowServerDelegate* delegate)
     : delegate_(delegate),
-      surfaces_state_(surfaces_state),
+      display_compositor_(new DisplayCompositor()),
       next_client_id_(1),
       display_manager_(new DisplayManager(this, &user_id_tracker_)),
       current_operation_(nullptr),
       in_destructor_(false),
       next_wm_change_id_(0),
+      gpu_proxy_(new GpuServiceProxy(this)),
       window_manager_window_tree_factory_set_(this, &user_id_tracker_) {
   user_id_tracker_.AddObserver(this);
   OnUserIdAdded(user_id_tracker_.active_id());
@@ -54,6 +60,9 @@ WindowServer::WindowServer(
 
 WindowServer::~WindowServer() {
   in_destructor_ = true;
+
+  for (auto& pair : tree_map_)
+    pair.second->PrepareForWindowServerShutdown();
 
   // Destroys the window trees results in querying for the display. Tear down
   // the displays first so that the trees are notified of the display going
@@ -99,8 +108,8 @@ WindowTree* WindowServer::EmbedAtWindow(
           WindowServerDelegate::BindingType::EMBED, this, tree,
           &window_tree_request, &client);
   if (!binding) {
-    binding.reset(new ws::DefaultWindowTreeBinding(
-        tree, this, std::move(window_tree_request), std::move(client)));
+    binding = base::MakeUnique<ws::DefaultWindowTreeBinding>(
+        tree, this, std::move(window_tree_request), std::move(client));
   }
 
   AddTree(std::move(tree_ptr), std::move(binding), std::move(window_tree_ptr));
@@ -128,9 +137,9 @@ WindowTree* WindowServer::CreateTreeForWindowManager(
           WindowServerDelegate::BindingType::WINDOW_MANAGER, this,
           window_tree.get(), &window_tree_request, &window_tree_client);
   if (!window_tree_binding) {
-    window_tree_binding.reset(new DefaultWindowTreeBinding(
+    window_tree_binding = base::MakeUnique<DefaultWindowTreeBinding>(
         window_tree.get(), this, std::move(window_tree_request),
-        std::move(window_tree_client)));
+        std::move(window_tree_client));
   }
   WindowTree* window_tree_ptr = window_tree.get();
   AddTree(std::move(window_tree), std::move(window_tree_binding), nullptr);
@@ -150,20 +159,6 @@ void WindowServer::DestroyTree(WindowTree* tree) {
   // Notify remaining connections so that they can cleanup.
   for (auto& pair : tree_map_)
     pair.second->OnWindowDestroyingTreeImpl(tree);
-
-  // Notify the hosts, taking care to only notify each host once.
-  std::set<Display*> displays_notified;
-  for (auto* root : tree->roots()) {
-    // WindowTree holds its roots as a const, which is right as WindowTree
-    // doesn't need to modify the window. OTOH we do. We could look up the
-    // window using the id to get non-const version, but instead we cast.
-    Display* display =
-        display_manager_->GetDisplayContaining(const_cast<ServerWindow*>(root));
-    if (display && displays_notified.count(display) == 0) {
-      display->OnWillDestroyTree(tree);
-      displays_notified.insert(display);
-    }
-  }
 
   window_manager_window_tree_factory_set_.DeleteFactoryAssociatedWithTree(tree);
 
@@ -199,6 +194,16 @@ ServerWindow* WindowServer::GetWindow(const WindowId& id) {
       ServerWindow* window = display->GetRootWithId(id);
       if (window)
         return window;
+    }
+    // WindowManagerDisplayRoots are destroyed by the client and not held by
+    // the Display.
+    for (auto& pair : tree_map_) {
+      if (pair.second->window_manager_state()) {
+        ServerWindow* window =
+            pair.second->window_manager_state()->GetOrphanedRootWithId(id);
+        if (window)
+          return window;
+      }
     }
   }
   WindowTree* tree = GetTreeWithId(id.client_id);
@@ -240,12 +245,6 @@ void WindowServer::OnFirstWindowManagerWindowTreeFactoryReady() {
   // created yet. Treat this as a signal to create a Display.
   // TODO(sky): we need a better way to determine this, most likely a switch.
   delegate_->CreateDefaultDisplays();
-}
-
-ui::clipboard::ClipboardImpl* WindowServer::GetClipboardForUser(
-    const UserId& user_id) {
-  DCHECK_GT(clipboard_map_.count(user_id), 0u);
-  return clipboard_map_[user_id].get();
 }
 
 UserActivityMonitor* WindowServer::GetUserActivityMonitorForUser(
@@ -416,13 +415,13 @@ void WindowServer::ProcessWindowReorder(const ServerWindow* window,
   }
 }
 
-void WindowServer::ProcessWindowDeleted(const ServerWindow* window) {
+void WindowServer::ProcessWindowDeleted(ServerWindow* window) {
   for (auto& pair : tree_map_)
     pair.second->ProcessWindowDeleted(window, IsOperationSource(pair.first));
 }
 
-void WindowServer::ProcessWillChangeWindowPredefinedCursor(ServerWindow* window,
-                                                           int32_t cursor_id) {
+void WindowServer::ProcessWillChangeWindowPredefinedCursor(
+    ServerWindow* window, mojom::Cursor cursor_id) {
   for (auto& pair : tree_map_) {
     pair.second->ProcessCursorChanged(window, cursor_id,
                                       IsOperationSource(pair.first));
@@ -484,6 +483,69 @@ gfx::Rect WindowServer::GetCurrentMoveLoopRevertBounds() {
   return gfx::Rect();
 }
 
+void WindowServer::StartDragLoop(uint32_t change_id,
+                                 ServerWindow* window,
+                                 WindowTree* initiator) {
+  current_drag_loop_.reset(
+      new CurrentDragLoopState{change_id, window, initiator});
+}
+
+void WindowServer::EndDragLoop() {
+  current_drag_loop_.reset();
+}
+
+uint32_t WindowServer::GetCurrentDragLoopChangeId() {
+  if (current_drag_loop_)
+    return current_drag_loop_->change_id;
+  return 0u;
+}
+
+ServerWindow* WindowServer::GetCurrentDragLoopWindow() {
+  if (current_drag_loop_)
+    return current_drag_loop_->window;
+  return nullptr;
+}
+
+WindowTree* WindowServer::GetCurrentDragLoopInitiator() {
+  if (current_drag_loop_)
+    return current_drag_loop_->initiator;
+  return nullptr;
+}
+
+void WindowServer::OnDisplayReady(Display* display, bool is_first) {
+  if (gpu_channel_)
+    display->platform_display()->OnGpuChannelEstablished(gpu_channel_);
+  if (is_first)
+    delegate_->OnFirstDisplayReady();
+}
+
+void WindowServer::OnNoMoreDisplays() {
+  delegate_->OnNoMoreDisplays();
+}
+
+WindowManagerState* WindowServer::GetWindowManagerStateForUser(
+    const UserId& user_id) {
+  return window_manager_window_tree_factory_set_.GetWindowManagerStateForUser(
+      user_id);
+}
+
+ui::DisplayCompositor* WindowServer::GetDisplayCompositor() {
+  return display_compositor_.get();
+}
+
+bool WindowServer::GetFrameDecorationsForUser(
+    const UserId& user_id,
+    mojom::FrameDecorationValuesPtr* values) {
+  WindowManagerState* window_manager_state =
+      window_manager_window_tree_factory_set_.GetWindowManagerStateForUser(
+          user_id);
+  if (!window_manager_state)
+    return false;
+  if (values && window_manager_state->got_frame_decoration_values())
+    *values = window_manager_state->frame_decoration_values().Clone();
+  return window_manager_state->got_frame_decoration_values();
+}
+
 bool WindowServer::GetAndClearInFlightWindowManagerChange(
     uint32_t window_manager_change_id,
     InFlightWindowManagerChange* change) {
@@ -518,7 +580,7 @@ void WindowServer::UpdateNativeCursorFromMouseLocation(ServerWindow* window) {
     EventDispatcher* event_dispatcher =
         display_root->window_manager_state()->event_dispatcher();
     event_dispatcher->UpdateCursorProviderByLastKnownLocation();
-    int32_t cursor_id = 0;
+    mojom::Cursor cursor_id = mojom::Cursor::CURSOR_NULL;
     if (event_dispatcher->GetCurrentMouseCursor(&cursor_id))
       display_root->display()->UpdateNativeCursor(cursor_id);
   }
@@ -536,7 +598,7 @@ void WindowServer::UpdateNativeCursorIfOver(ServerWindow* window) {
     return;
 
   event_dispatcher->UpdateNonClientAreaForCurrentWindow();
-  int32_t cursor_id = 0;
+  mojom::Cursor cursor_id = mojom::Cursor::CURSOR_NULL;
   if (event_dispatcher->GetCurrentMouseCursor(&cursor_id))
     display_root->display()->UpdateNativeCursor(cursor_id);
 }
@@ -544,10 +606,6 @@ void WindowServer::UpdateNativeCursorIfOver(ServerWindow* window) {
 bool WindowServer::IsUserInHighContrastMode(const UserId& user) const {
   const auto iter = high_contrast_mode_.find(user);
   return (iter == high_contrast_mode_.end()) ? false : iter->second;
-}
-
-ui::SurfacesState* WindowServer::GetSurfacesState() {
-  return surfaces_state_.get();
 }
 
 void WindowServer::OnScheduleWindowPaint(ServerWindow* window) {
@@ -686,7 +744,7 @@ void WindowServer::OnWindowVisibilityChanged(ServerWindow* window) {
 }
 
 void WindowServer::OnWindowPredefinedCursorChanged(ServerWindow* window,
-                                                   int32_t cursor_id) {
+                                                   mojom::Cursor cursor_id) {
   if (in_destructor_)
     return;
 
@@ -696,7 +754,7 @@ void WindowServer::OnWindowPredefinedCursorChanged(ServerWindow* window,
 }
 
 void WindowServer::OnWindowNonClientCursorChanged(ServerWindow* window,
-                                                  int32_t cursor_id) {
+                                                  mojom::Cursor cursor_id) {
   if (in_destructor_)
     return;
 
@@ -739,31 +797,12 @@ void WindowServer::OnTransientWindowRemoved(ServerWindow* window,
   }
 }
 
-void WindowServer::OnFirstDisplayReady() {
-  delegate_->OnFirstDisplayReady();
-}
-
-void WindowServer::OnNoMoreDisplays() {
-  delegate_->OnNoMoreDisplays();
-}
-
-bool WindowServer::GetFrameDecorationsForUser(
-    const UserId& user_id,
-    mojom::FrameDecorationValuesPtr* values) {
-  WindowManagerState* window_manager_state =
-      window_manager_window_tree_factory_set_.GetWindowManagerStateForUser(
-          user_id);
-  if (!window_manager_state)
-    return false;
-  if (values && window_manager_state->got_frame_decoration_values())
-    *values = window_manager_state->frame_decoration_values().Clone();
-  return window_manager_state->got_frame_decoration_values();
-}
-
-WindowManagerState* WindowServer::GetWindowManagerStateForUser(
-    const UserId& user_id) {
-  return window_manager_window_tree_factory_set_.GetWindowManagerStateForUser(
-      user_id);
+void WindowServer::OnGpuChannelEstablished(
+    scoped_refptr<gpu::GpuChannelHost> gpu_channel) {
+  gpu_channel_ = std::move(gpu_channel);
+  const std::set<Display*>& displays = display_manager()->displays();
+  for (auto* display : displays)
+    display->platform_display()->OnGpuChannelEstablished(gpu_channel_);
 }
 
 void WindowServer::OnActiveUserIdChanged(const UserId& previously_active_id,
@@ -779,12 +818,10 @@ void WindowServer::OnActiveUserIdChanged(const UserId& previously_active_id,
 
 void WindowServer::OnUserIdAdded(const UserId& id) {
   activity_monitor_map_[id] = base::MakeUnique<UserActivityMonitor>(nullptr);
-  clipboard_map_[id] = base::MakeUnique<clipboard::ClipboardImpl>();
 }
 
 void WindowServer::OnUserIdRemoved(const UserId& id) {
   activity_monitor_map_.erase(id);
-  clipboard_map_.erase(id);
 }
 
 }  // namespace ws

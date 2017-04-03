@@ -22,7 +22,8 @@ class MediaSessionDelegateDefault : public MediaSessionDelegate {
   ~MediaSessionDelegateDefault() override;
 
   // MediaSessionDelegate implementation.
-  bool RequestAudioFocus(MediaSession::Type type) override;
+  bool RequestAudioFocus(
+      AudioFocusManager::AudioFocusType audio_focus_type) override;
   void AbandonAudioFocus() override;
 
  private:
@@ -39,16 +40,15 @@ MediaSessionDelegateDefault::MediaSessionDelegateDefault(
 
 MediaSessionDelegateDefault::~MediaSessionDelegateDefault() = default;
 
-bool MediaSessionDelegateDefault::RequestAudioFocus(MediaSession::Type type) {
+bool MediaSessionDelegateDefault::RequestAudioFocus(
+    AudioFocusManager::AudioFocusType audio_focus_type) {
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kEnableDefaultMediaSession)) {
     return true;
   }
 
-  AudioFocusManager::GetInstance()->RequestAudioFocus(
-      media_session_, type == MediaSession::Type::Content
-                          ? AudioFocusType::Gain
-                          : AudioFocusType::GainTransientMayDuck);
+  AudioFocusManager::GetInstance()->RequestAudioFocus(media_session_,
+                                                      audio_focus_type);
   return true;
 }
 

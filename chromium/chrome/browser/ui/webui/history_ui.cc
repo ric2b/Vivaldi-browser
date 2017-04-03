@@ -19,18 +19,19 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/browsing_data_ui/history_notice_utils.h"
+#include "chrome/grit/theme_resources.h"
+#include "components/browsing_data/core/history_notice_utils.h"
+#include "components/browsing_data/core/pref_names.h"
+#include "components/grit/components_scaled_resources.h"
 #include "components/prefs/pref_service.h"
 #include "components/search/search.h"
 #include "components/signin/core/browser/signin_manager.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
-#include "grit/browser_resources.h"
-#include "grit/components_scaled_resources.h"
-#include "grit/components_strings.h"
-#include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 
@@ -166,6 +167,7 @@ content::WebUIDataSource* CreateHistoryUIHTMLSource(Profile* profile) {
   source->AddResourcePath(kOtherDevicesJsFile, IDR_OTHER_DEVICES_JS);
   source->SetDefaultResource(IDR_HISTORY_HTML);
   source->DisableDenyXFrameOptions();
+  source->DisableI18nAndUseGzipForAllPaths();
 
   return source;
 }
@@ -180,7 +182,8 @@ HistoryUI::HistoryUI(content::WebUI* web_ui) : WebUIController(web_ui) {
 #if !defined(OS_ANDROID)
   if (search::IsInstantExtendedAPIEnabled()) {
     web_ui->AddMessageHandler(new browser_sync::ForeignSessionHandler());
-    web_ui->AddMessageHandler(new HistoryLoginHandler());
+    web_ui->AddMessageHandler(new HistoryLoginHandler(
+        base::Bind(&HistoryUI::CreateDataSource, base::Unretained(this))));
   }
 #endif
 
@@ -193,14 +196,13 @@ HistoryUI::HistoryUI(content::WebUI* web_ui) : WebUIController(web_ui) {
   GURL url = web_ui->GetWebContents()->GetVisibleURL();
   if (url.has_query() && url.query() == "reset_ofbh") {
     Profile::FromWebUI(web_ui)->GetPrefs()->SetInteger(
-        prefs::kClearBrowsingDataHistoryNoticeShownTimes, 0);
-    browsing_data_ui::testing::
+        browsing_data::prefs::kClearBrowsingDataHistoryNoticeShownTimes, 0);
+    browsing_data::testing::
         g_override_other_forms_of_browsing_history_query = true;
   }
 
   // Set up the chrome://history-frame/ source.
-  Profile* profile = Profile::FromWebUI(web_ui);
-  content::WebUIDataSource::Add(profile, CreateHistoryUIHTMLSource(profile));
+  CreateDataSource();
 }
 
 HistoryUI::~HistoryUI() {}
@@ -210,4 +212,12 @@ base::RefCountedMemory* HistoryUI::GetFaviconResourceBytes(
       ui::ScaleFactor scale_factor) {
   return ResourceBundle::GetSharedInstance().
       LoadDataResourceBytesForScale(IDR_HISTORY_FAVICON, scale_factor);
+}
+
+// TODO(lshang): Change to not re-create data source every time after we use
+// unique_ptr instead of raw pointers for data source.
+void HistoryUI::CreateDataSource() {
+  Profile* profile = Profile::FromWebUI(web_ui());
+  content::WebUIDataSource* data_source = CreateHistoryUIHTMLSource(profile);
+  content::WebUIDataSource::Add(profile, data_source);
 }

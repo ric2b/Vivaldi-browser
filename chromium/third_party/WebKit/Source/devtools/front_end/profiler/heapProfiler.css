@@ -29,14 +29,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-.heap-snapshot-sidebar-tree-item .icon {
-    content: url(Images/profileIcon.png);
-}
-
-.heap-snapshot-sidebar-tree-item.small .icon {
-    content: url(Images/profileSmallIcon.png);
-}
-
 .heap-snapshot-view {
     overflow: hidden;
 }
@@ -104,10 +96,6 @@
 
 .heap-snapshot-view .heap-snapshot-view-resizer * {
     pointer-events: none;
-}
-
-.heap-snapshot-view .heap-object-details-header {
-    background-color: #eee;
 }
 
 .heap-snapshot-view tr:not(.selected) td.object-column span.highlight {

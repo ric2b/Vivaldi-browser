@@ -59,21 +59,18 @@ uint32_t ComputeOffset(const void* start, const void* position) {
 class ProgramManagerTestBase : public GpuServiceTest {
  protected:
   virtual void SetupProgramManager() {
-    manager_.reset(new ProgramManager(nullptr, kMaxVaryingVectors,
-                                      kMaxDrawBuffers,
-                                      kMaxDualSourceDrawBuffers,
-                                      kMaxVertexAttribs,
-                                      gpu_preferences_,
-                                      feature_info_.get()));
+    manager_.reset(new ProgramManager(
+        nullptr, kMaxVaryingVectors, kMaxDrawBuffers, kMaxDualSourceDrawBuffers,
+        kMaxVertexAttribs, gpu_preferences_, feature_info_.get(), nullptr));
   }
   void SetUpBase(const char* gl_version,
                  const char* gl_extensions,
                  FeatureInfo* feature_info = nullptr) {
     GpuServiceTest::SetUpWithGLVersion(gl_version, gl_extensions);
-    TestHelper::SetupFeatureInfoInitExpectationsWithGLVersion(
-        gl_.get(), gl_extensions, "", gl_version);
     if (!feature_info)
       feature_info = new FeatureInfo();
+    TestHelper::SetupFeatureInfoInitExpectationsWithGLVersion(
+        gl_.get(), gl_extensions, "", gl_version, feature_info->context_type());
     feature_info->InitializeForTesting();
     feature_info_ = feature_info;
     SetupProgramManager();
@@ -131,7 +128,7 @@ TEST_F(ProgramManagerTest, Destroy) {
 }
 
 TEST_F(ProgramManagerTest, DeleteBug) {
-  ShaderManager shader_manager;
+  ShaderManager shader_manager(nullptr);
   const GLuint kClient1Id = 1;
   const GLuint kClient2Id = 2;
   const GLuint kService1Id = 11;
@@ -237,6 +234,8 @@ class ProgramManagerWithShaderTest : public ProgramManagerTestBase {
 
   static const size_t kNumAttribs;
   static const size_t kNumUniforms;
+
+  ProgramManagerWithShaderTest() : shader_manager_(nullptr) {}
 
  protected:
   typedef TestHelper::AttribInfo AttribInfo;
@@ -2064,19 +2063,17 @@ class ProgramManagerWithCacheTest : public ProgramManagerTestBase {
 
   ProgramManagerWithCacheTest()
       : cache_(new MockProgramCache()),
-        vertex_shader_(NULL),
-        fragment_shader_(NULL),
-        program_(NULL) {
-  }
+        vertex_shader_(nullptr),
+        fragment_shader_(nullptr),
+        program_(nullptr),
+        shader_manager_(nullptr) {}
 
  protected:
   void SetupProgramManager() override {
-    manager_.reset(new ProgramManager(cache_.get(), kMaxVaryingVectors,
-                                      kMaxDrawBuffers,
-                                      kMaxDualSourceDrawBuffers,
-                                      kMaxVertexAttribs,
-                                      gpu_preferences_,
-                                      feature_info_.get()));
+    manager_.reset(
+        new ProgramManager(cache_.get(), kMaxVaryingVectors, kMaxDrawBuffers,
+                           kMaxDualSourceDrawBuffers, kMaxVertexAttribs,
+                           gpu_preferences_, feature_info_.get(), nullptr));
   }
 
   void SetUp() override {

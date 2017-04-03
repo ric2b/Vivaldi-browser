@@ -5,8 +5,7 @@
 
 <dom-module id="settings-cups-printers">
   <template>
-    <style include="settings-shared"></style>
-    <style>
+    <style include="settings-shared">
       a[is='action-link'] {
         display: inline-block;
         text-decoration: none;
@@ -16,9 +15,34 @@
         color: blue;
         text-decoration: underline;
       }
-    </style>
 
-    <!-- TODO(xdai): Implement the search field as seen in the mock. -->
+      #message {
+        display: flex;
+        justify-content: center;
+        position: absolute;
+        top: 85%;
+        width: 100%;
+      }
+
+      .center {
+        background-color: black;
+        color: white;
+        font: 13px;
+        padding-bottom: 15px;
+        padding-top: 15px;
+        text-align: center;
+        width: 350px;
+      }
+
+      #addPrinterErrorMessage {
+        display: flex;
+        justify-content: space-around;
+      }
+
+      #addPrinterErrorMessage a[is='action-link'] {
+        text-transform: uppercase;
+      }
+    </style>
 
     <div class="settings-box first">
       <a is="action-link" on-tap="onAddPrinterTap_" actionable>
@@ -32,6 +56,18 @@
     <settings-cups-printers-list printers="{{printers}}"
         search-term="[[searchTerm]]">
     </settings-cups-printers-list>
+
+    <div id="message">
+      <div class="center" id="addPrinterDoneMessage" hidden>
+        $i18n{printerAddedSuccessfulMessage}
+      </div>
+      <div class="center" id="addPrinterErrorMessage" hidden>
+        <span>$i18n{printerAddedFailedMessage}</span>
+        <a is="action-link" on-tap="onAddPrinterTap_" actionable>
+          $i18n{printerAddedTryAgainMessage}
+        </a>
+      </div>
+    </div>
   </template>
   <script src="cups_printers.js"></script>
 </dom-module>

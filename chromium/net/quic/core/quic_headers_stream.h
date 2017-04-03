@@ -62,8 +62,7 @@ class NET_EXPORT_PRIVATE QuicHeadersStream : public ReliableQuicStream {
   // Return the size, in bytes, of the resulting PUSH_PROMISE frame.
   virtual size_t WritePushPromise(QuicStreamId original_stream_id,
                                   QuicStreamId promised_stream_id,
-                                  SpdyHeaderBlock headers,
-                                  QuicAckListenerInterface* ack_listener);
+                                  SpdyHeaderBlock headers);
 
   // For forcing HOL blocking.  This encapsulates data from other
   // streams into HTTP/2 data frames on the headers stream.
@@ -91,6 +90,10 @@ class NET_EXPORT_PRIVATE QuicHeadersStream : public ReliableQuicStream {
   // Sets the maximum size of the header compression table spdy_framer_ is
   // willing to use to decode header blocks.
   void UpdateHeaderEncoderTableSize(uint32_t value);
+
+  // Called when SETTINGS_ENABLE_PUSH is received, only supported on
+  // server side.
+  void UpdateEnableServerPush(bool value);
 
   // Sets how much encoded data the hpack decoder of spdy_framer_ is willing to
   // buffer.
@@ -163,9 +166,6 @@ class NET_EXPORT_PRIVATE QuicHeadersStream : public ReliableQuicStream {
 
   SpdyFramer spdy_framer_;
   std::unique_ptr<SpdyFramerVisitor> spdy_framer_visitor_;
-
-  // Either empty, or contains the complete list of headers.
-  QuicHeaderList header_list_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicHeadersStream);
 };

@@ -486,8 +486,9 @@ void ExtensionHost::AddNewContents(WebContents* source,
                                    const gfx::Rect& initial_rect,
                                    bool user_gesture,
                                    bool* was_blocked) {
-  if (vivaldi::IsVivaldiRunning() && disposition == NEW_POPUP) {
-    disposition = NEW_FOREGROUND_TAB;
+  if (vivaldi::IsVivaldiRunning() &&
+      disposition == WindowOpenDisposition::NEW_POPUP) {
+    disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   }
   // First, if the creating extension view was associated with a tab contents,
   // use that tab content's delegate. We must be careful here that the
@@ -497,7 +498,7 @@ void ExtensionHost::AddNewContents(WebContents* source,
   // vice versa.
   // Note that we don't do this for popup windows, because we need to associate
   // those with their extension_app_id.
-  if (disposition != NEW_POPUP) {
+  if (disposition != WindowOpenDisposition::NEW_POPUP) {
     WebContents* associated_contents = GetAssociatedWebContents();
     if (associated_contents &&
         associated_contents->GetBrowserContext() ==

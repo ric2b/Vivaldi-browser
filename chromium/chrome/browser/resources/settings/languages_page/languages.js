@@ -234,6 +234,8 @@ Polymer({
         /** @type {!Array<string>} */(translateBlockedPref.value));
 
     for (var i = 0; i < this.languages.enabled.length; i++) {
+      if (this.languages.enabled[i].language.code == navigator.language)
+        continue;
       var translateCode = this.convertLanguageCodeForTranslate(
           this.languages.enabled[i].language.code);
       this.set(
@@ -341,6 +343,7 @@ Polymer({
       // language that is blocked.
       var translateCode = this.convertLanguageCodeForTranslate(code);
       languageState.translateEnabled = !!language.supportsTranslate &&
+          code != navigator.language &&
           !translateBlockedSet.has(translateCode) &&
           translateCode != translateTarget;
       enabledLanguageStates.push(languageState);
@@ -569,6 +572,25 @@ Polymer({
 
     languageCodes[originalIndex] = languageCodes[newIndex];
     languageCodes[newIndex] = languageCode;
+    this.setPrefValue(preferredLanguagesPrefName, languageCodes.join(','));
+  },
+
+  /**
+   * Moves the language directly to the front of the list of enabled languages.
+   * @param {string} languageCode
+   */
+  moveLanguageToFront: function(languageCode) {
+    if (!CrSettingsPrefs.isInitialized)
+      return;
+
+    var languageCodes =
+        this.getPref(preferredLanguagesPrefName).value.split(',');
+    var originalIndex = languageCodes.indexOf(languageCode);
+    assert(originalIndex != -1);
+
+    languageCodes.splice(originalIndex, 1);
+    languageCodes.unshift(languageCode);
+
     this.setPrefValue(preferredLanguagesPrefName, languageCodes.join(','));
   },
 

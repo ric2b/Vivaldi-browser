@@ -12,9 +12,12 @@
 #include "base/files/file.h"
 #include "base/guid.h"
 #include "base/macros.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/scoped_observer.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/time/time.h"
+#include "base/trace_event/trace_event.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
@@ -41,6 +44,7 @@ class MHTMLGenerationManager::Job : public RenderProcessHostObserver {
 
   int id() const { return job_id_; }
   void set_browser_file(base::File file) { browser_file_ = std::move(file); }
+  base::TimeTicks creation_time() const { return creation_time_; }
 
   const GenerateMHTMLCallback& callback() const { return callback_; }
 
@@ -81,6 +85,8 @@ class MHTMLGenerationManager::Job : public RenderProcessHostObserver {
 
   void MarkAsFinished();
 
+  void ReportRendererMainThreadTime(base::TimeDelta renderer_main_thread_time);
+
  private:
   static int64_t CloseFileOnFileThread(base::File file);
   void AddFrame(RenderFrameHost* render_frame_host);
@@ -93,7 +99,14 @@ class MHTMLGenerationManager::Job : public RenderProcessHostObserver {
 
   // Id used to map renderer responses to jobs.
   // See also MHTMLGenerationManager::id_to_job_ map.
-  int job_id_;
+  const int job_id_;
+
+  // Time tracking for performance metrics reporting.
+  const base::TimeTicks creation_time_;
+  base::TimeTicks wait_on_renderer_start_time_;
+  base::TimeDelta all_renderers_wait_time_;
+  base::TimeDelta all_renderers_main_thread_time_;
+  base::TimeDelta longest_renderer_main_thread_time_;
 
   // User-configurable parameters. Includes the file location, binary encoding
   // choices, and whether to skip storing resources marked
@@ -142,6 +155,7 @@ MHTMLGenerationManager::Job::Job(int job_id,
                                  const MHTMLGenerationParams& params,
                                  const GenerateMHTMLCallback& callback)
     : job_id_(job_id),
+      creation_time_(base::TimeTicks::Now()),
       params_(params),
       frame_tree_node_id_of_busy_frame_(FrameTreeNode::kFrameTreeNodeInvalidId),
       mhtml_boundary_marker_(net::GenerateMimeMultipartBoundary()),
@@ -223,6 +237,11 @@ bool MHTMLGenerationManager::Job::SendToNextRenderFrame() {
             frame_tree_node_id_of_busy_frame_);
   frame_tree_node_id_of_busy_frame_ = frame_tree_node_id;
   rfh->Send(new FrameMsg_SerializeAsMHTML(rfh->GetRoutingID(), ipc_params));
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN1("page-serialization", "WaitingOnRenderer",
+                                    this, "frame tree node id",
+                                    frame_tree_node_id);
+  DCHECK(wait_on_renderer_start_time_.is_null());
+  wait_on_renderer_start_time_ = base::TimeTicks::Now();
   return true;
 }
 
@@ -236,11 +255,52 @@ void MHTMLGenerationManager::Job::RenderProcessExited(
 
 void MHTMLGenerationManager::Job::MarkAsFinished() {
   DCHECK(!is_finished_);
+  if (is_finished_)
+    return;
+
   is_finished_ = true;
+  TRACE_EVENT_NESTABLE_ASYNC_INSTANT0("page-serialization", "JobFinished",
+                                      this);
+
+  // End of job timing reports.
+  if (!wait_on_renderer_start_time_.is_null()) {
+    base::TimeDelta renderer_wait_time =
+        base::TimeTicks::Now() - wait_on_renderer_start_time_;
+    UMA_HISTOGRAM_TIMES(
+        "PageSerialization.MhtmlGeneration.BrowserWaitForRendererTime."
+        "SingleFrame",
+        renderer_wait_time);
+    all_renderers_wait_time_ += renderer_wait_time;
+  }
+  if (!all_renderers_wait_time_.is_zero()) {
+    UMA_HISTOGRAM_TIMES(
+        "PageSerialization.MhtmlGeneration.BrowserWaitForRendererTime."
+        "FrameTree",
+        all_renderers_wait_time_);
+  }
+  if (!all_renderers_main_thread_time_.is_zero()) {
+    UMA_HISTOGRAM_TIMES(
+        "PageSerialization.MhtmlGeneration.RendererMainThreadTime.FrameTree",
+        all_renderers_main_thread_time_);
+  }
+  if (!longest_renderer_main_thread_time_.is_zero()) {
+    UMA_HISTOGRAM_TIMES(
+        "PageSerialization.MhtmlGeneration.RendererMainThreadTime.SlowestFrame",
+        longest_renderer_main_thread_time_);
+  }
 
   // Stopping RenderProcessExited notifications is needed to avoid calling
   // JobFinished twice.  See also https://crbug.com/612098.
   observed_renderer_process_host_.RemoveAll();
+}
+
+void MHTMLGenerationManager::Job::ReportRendererMainThreadTime(
+    base::TimeDelta renderer_main_thread_time) {
+  DCHECK(renderer_main_thread_time > base::TimeDelta());
+  if (renderer_main_thread_time > base::TimeDelta())
+    all_renderers_main_thread_time_ += renderer_main_thread_time;
+  if (renderer_main_thread_time > longest_renderer_main_thread_time_)
+    longest_renderer_main_thread_time_ = renderer_main_thread_time;
 }
 
 void MHTMLGenerationManager::Job::AddFrame(RenderFrameHost* render_frame_host) {
@@ -291,6 +351,16 @@ bool MHTMLGenerationManager::Job::IsMessageFromFrameExpected(
 
 bool MHTMLGenerationManager::Job::OnSerializeAsMHTMLResponse(
     const std::set<std::string>& digests_of_uris_of_serialized_resources) {
+  DCHECK(!wait_on_renderer_start_time_.is_null());
+  base::TimeDelta renderer_wait_time =
+      base::TimeTicks::Now() - wait_on_renderer_start_time_;
+  UMA_HISTOGRAM_TIMES(
+      "PageSerialization.MhtmlGeneration.BrowserWaitForRendererTime."
+      "SingleFrame",
+      renderer_wait_time);
+  all_renderers_wait_time_ += renderer_wait_time;
+  wait_on_renderer_start_time_ = base::TimeTicks();
+
   // Renderer should be deduping resources with the same uris.
   DCHECK_EQ(0u, base::STLSetIntersection<std::set<std::string>>(
                     digests_of_already_serialized_uris_,
@@ -329,21 +399,26 @@ void MHTMLGenerationManager::SaveMHTML(WebContents* web_contents,
                                        const GenerateMHTMLCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  int job_id = NewJob(web_contents, params, callback);
+  Job* job = NewJob(web_contents, params, callback);
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN2(
+      "page-serialization", "SavingMhtmlJob", job, "url",
+      web_contents->GetLastCommittedURL().possibly_invalid_spec().c_str(),
+      "file", params.file_path.value().c_str());
 
   BrowserThread::PostTaskAndReplyWithResult(
       BrowserThread::FILE, FROM_HERE,
       base::Bind(&MHTMLGenerationManager::CreateFile, params.file_path),
       base::Bind(&MHTMLGenerationManager::OnFileAvailable,
                  base::Unretained(this),  // Safe b/c |this| is a singleton.
-                 job_id));
+                 job->id()));
 }
 
 void MHTMLGenerationManager::OnSerializeAsMHTMLResponse(
     RenderFrameHostImpl* sender,
     int job_id,
     bool mhtml_generation_in_renderer_succeeded,
-    const std::set<std::string>& digests_of_uris_of_serialized_resources) {
+    const std::set<std::string>& digests_of_uris_of_serialized_resources,
+    base::TimeDelta renderer_main_thread_time) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   Job* job = FindJob(job_id);
@@ -353,6 +428,10 @@ void MHTMLGenerationManager::OnSerializeAsMHTMLResponse(
                        bad_message::DWNLD_INVALID_SERIALIZE_AS_MHTML_RESPONSE);
     return;
   }
+
+  TRACE_EVENT_NESTABLE_ASYNC_END0("page-serialization", "WaitingOnRenderer",
+                                  job);
+  job->ReportRendererMainThreadTime(renderer_main_thread_time);
 
   if (!mhtml_generation_in_renderer_succeeded) {
     JobFinished(job, JobStatus::FAILURE);
@@ -426,19 +505,26 @@ void MHTMLGenerationManager::OnFileClosed(int job_id,
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   Job* job = FindJob(job_id);
+  TRACE_EVENT_NESTABLE_ASYNC_END2(
+      "page-serialization", "SavingMhtmlJob", job, "job result",
+      job_status == JobStatus::SUCCESS ? "success" : "failure", "file size",
+      file_size);
+  UMA_HISTOGRAM_TIMES("PageSerialization.MhtmlGeneration.FullPageSavingTime",
+                      base::TimeTicks::Now() - job->creation_time());
   job->callback().Run(job_status == JobStatus::SUCCESS ? file_size : -1);
   id_to_job_.erase(job_id);
   delete job;
 }
 
-int MHTMLGenerationManager::NewJob(WebContents* web_contents,
-                                   const MHTMLGenerationParams& params,
-                                   const GenerateMHTMLCallback& callback) {
+MHTMLGenerationManager::Job* MHTMLGenerationManager::NewJob(
+    WebContents* web_contents,
+    const MHTMLGenerationParams& params,
+    const GenerateMHTMLCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  int job_id = next_job_id_++;
-  id_to_job_[job_id] = new Job(job_id, web_contents, params, callback);
-  return job_id;
+  Job* job = new Job(++next_job_id_, web_contents, params, callback);
+  id_to_job_[job->id()] = job;
+  return job;
 }
 
 MHTMLGenerationManager::Job* MHTMLGenerationManager::FindJob(int job_id) {

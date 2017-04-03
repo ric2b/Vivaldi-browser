@@ -8,17 +8,19 @@ import android.os.ConditionVariable;
 import android.test.suitebuilder.annotation.LargeTest;
 import android.test.suitebuilder.annotation.SmallTest;
 
+import org.json.JSONObject;
+
 import org.chromium.base.Log;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.test.util.Feature;
 import org.chromium.net.CronetTestBase.OnlyRunNativeCronet;
-import org.json.JSONObject;
+import org.chromium.net.MetricsTestUtil.TestRequestFinishedListener;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.util.HashMap;
+import java.util.Date;
 import java.util.concurrent.Executors;
 
 /**
@@ -47,8 +49,6 @@ public class QuicTest extends CronetTestBase {
                                         .put("host_whitelist", "test.example.com")
                                         .put("max_server_configs_stored_in_properties", 2)
                                         .put("delay_tcp_race", true)
-                                        .put("max_number_of_lossy_connections", 10)
-                                        .put("packet_loss_threshold", 0.5)
                                         .put("idle_connection_timeout_seconds", 300)
                                         .put("close_sessions_on_ip_change", false)
                                         .put("migrate_sessions_on_network_change", false)
@@ -68,34 +68,6 @@ public class QuicTest extends CronetTestBase {
     protected void tearDown() throws Exception {
         QuicTestServer.shutdownQuicTestServer();
         super.tearDown();
-    }
-
-    @SmallTest
-    @Feature({"Cronet"})
-    @SuppressWarnings("deprecation")
-    @OnlyRunNativeCronet
-    public void testQuicLoadUrl_LegacyAPI() throws Exception {
-        String[] commandLineArgs = {
-                CronetTestFramework.LIBRARY_INIT_KEY, CronetTestFramework.LibraryInitType.LEGACY};
-        mTestFramework = new CronetTestFramework(null, commandLineArgs, getContext(), mBuilder);
-        String quicURL = QuicTestServer.getServerURL() + "/simple.txt";
-
-        HashMap<String, String> headers = new HashMap<String, String>();
-        TestHttpUrlRequestListener listener = new TestHttpUrlRequestListener();
-
-        // Although the native stack races QUIC and SPDY for the first request,
-        // since there is no http server running on the corresponding TCP port,
-        // QUIC will always succeed with a 200 (see
-        // net::HttpStreamFactoryImpl::Request::OnStreamFailed).
-        HttpUrlRequest request = mTestFramework.mRequestFactory.createRequest(
-                quicURL, HttpUrlRequest.REQUEST_PRIORITY_MEDIUM, headers, listener);
-        request.start();
-        listener.blockForComplete();
-        assertEquals(200, listener.mHttpStatusCode);
-        assertEquals(
-                "This is a simple text file served by QUIC.\n",
-                listener.mResponseAsString);
-        assertEquals("quic/1+spdy/3", listener.mNegotiatedProtocol);
     }
 
     @LargeTest
@@ -229,7 +201,64 @@ public class QuicTest extends CronetTestBase {
         // Verify that effective connection type callback is received and
         // effective connection type is correctly set.
         assertTrue(mTestFramework.mCronetEngine.getEffectiveConnectionType()
-                != EffectiveConnectionType.EFFECTIVE_CONNECTION_TYPE_UNKNOWN);
+                != EffectiveConnectionType.TYPE_UNKNOWN);
+
+        mTestFramework.mCronetEngine.shutdown();
+    }
+
+    @SmallTest
+    @OnlyRunNativeCronet
+    @Feature({"Cronet"})
+    public void testMetricsWithQuic() throws Exception {
+        mTestFramework = startCronetTestFrameworkWithUrlAndCronetEngineBuilder(null, mBuilder);
+        TestRequestFinishedListener requestFinishedListener = new TestRequestFinishedListener();
+        mTestFramework.mCronetEngine.addRequestFinishedListener(requestFinishedListener);
+
+        String quicURL = QuicTestServer.getServerURL() + "/simple.txt";
+        TestUrlRequestCallback callback = new TestUrlRequestCallback();
+
+        UrlRequest.Builder requestBuilder = new UrlRequest.Builder(
+                quicURL, callback, callback.getExecutor(), mTestFramework.mCronetEngine);
+        Date startTime = new Date();
+        requestBuilder.build().start();
+        callback.blockForDone();
+        requestFinishedListener.blockUntilDone();
+        Date endTime = new Date();
+
+        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
+        assertEquals("quic/1+spdy/3", callback.mResponseInfo.getNegotiatedProtocol());
+
+        RequestFinishedInfo requestInfo = requestFinishedListener.getRequestInfo();
+        assertNotNull(requestInfo);
+        RequestFinishedInfo.Metrics metrics = requestInfo.getMetrics();
+        assertNotNull(metrics);
+
+        MetricsTestUtil.checkTimingMetrics(metrics, startTime, endTime);
+        MetricsTestUtil.checkHasConnectTiming(metrics, startTime, endTime, true);
+        assertTrue(metrics.getSentBytesCount() > 0);
+
+        // Second request should use the same connection and not have ConnectTiming numbers
+        callback = new TestUrlRequestCallback();
+        requestFinishedListener.reset();
+        requestBuilder = new UrlRequest.Builder(
+                quicURL, callback, callback.getExecutor(), mTestFramework.mCronetEngine);
+        startTime = new Date();
+        requestBuilder.build().start();
+        callback.blockForDone();
+        requestFinishedListener.blockUntilDone();
+        endTime = new Date();
+
+        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
+        assertEquals("quic/1+spdy/3", callback.mResponseInfo.getNegotiatedProtocol());
+
+        requestInfo = requestFinishedListener.getRequestInfo();
+        assertNotNull(requestInfo);
+        metrics = requestInfo.getMetrics();
+        assertNotNull(metrics);
+
+        MetricsTestUtil.checkTimingMetrics(metrics, startTime, endTime);
+        MetricsTestUtil.checkNoConnectTiming(metrics);
+        assertTrue(metrics.getSentBytesCount() > 0);
 
         mTestFramework.mCronetEngine.shutdown();
     }

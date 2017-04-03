@@ -47,7 +47,6 @@
 <translation id="2268813581635650749">అందరినీ సైన్ అవుట్ చేయి</translation>
 <translation id="2297568595583585744">స్థితి ట్రే</translation>
 <translation id="2303600792989757991">విండో స్థూలదృష్టిని టోగుల్ చేయి</translation>
-<translation id="2372145515558759244">అనువర్తనాలను సమకాలీకరిస్తోంది...</translation>
 <translation id="2391579633712104609">180°</translation>
 <translation id="2429753432712299108">బ్లూటూత్ పరికరం "<ph name="DEVICE_NAME" />" జత కావడానికి అనుమతి కోరుతోంది. ఆమోదించడానికి ముందు, దయచేసి ఆ పరికరంలో ఈ పాస్‌కీ చూపబడుతోందని నిర్ధారించుకోండి: <ph name="PASSKEY" /></translation>
 <translation id="2475982808118771221">ఒక లోపం సంభవించింది</translation>
@@ -61,7 +60,6 @@
 <translation id="2727977024730340865">తక్కువ-పవర్ గల ఛార్జర్‌కు ప్లగిన్ చేయబడింది. బ్యాటరీ ఛార్జింగ్ విశ్వసనీయంగా ఉండకపోవచ్చు.</translation>
 <translation id="2761704814324807722">స్థితి ట్రే, సమయం <ph name="TIME" />, <ph name="BATTERY" /></translation>
 <translation id="2792498699870441125">Alt+Search</translation>
-<translation id="2805756323405976993">యాప్స్</translation>
 <translation id="2819276065543622893">మీరు ఇప్పుడు సైన్ అవుట్ చేయబడతారు.</translation>
 <translation id="2825619548187458965">అర</translation>
 <translation id="2844169650293029770">USB-C పరికరం (ఎడమవైపు ముందు పోర్ట్)</translation>
@@ -97,7 +95,6 @@
 <translation id="3621712662352432595">ఆడియో సెట్టింగ్‌‍లు</translation>
 <translation id="3625258641415618104">స్క్రీన్‌షాట్‌లు నిలిపివేయబడ్డాయి</translation>
 <translation id="3626281679859535460">ప్రకాశం</translation>
-<translation id="3678715477168044796"><ph name="DISPLAY_NAME" />: <ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079"><ph name="DISPLAY_NAME" /> రిజల్యూషన్ <ph name="RESOLUTION" />కి మార్చబడింది</translation>
 <translation id="370649949373421643">Wi-fiని ప్రారంభించు</translation>
 <translation id="3709443003275901162">9+</translation>
@@ -111,6 +108,8 @@
 <translation id="3866182280516392520">IPv6 చిరునామా</translation>
 <translation id="3891340733213178823">సైన్ అవుట్ చేయడానికి Ctrl+Shift+Qని రెండుసార్లు నొక్కండి.</translation>
 <translation id="3892641579809465218">అంతర్గత ప్రదర్శన</translation>
+<translation id="3893630138897523026">ChromeVox (చదవబడే అభిప్రాయం)</translation>
+<translation id="3899995891769452915">వాయిస్ ఇన్‌పుట్</translation>
 <translation id="3963445509666917109">స్పీకర్ (అంతర్గతం)</translation>
 <translation id="3967919079500697218">మీ నిర్వాహకులు స్క్రీన్‌షాట్‌లను తీయగల సామర్థ్యాన్ని నిలిపివేసారు.</translation>
 <translation id="397105322502079400">గణిస్తోంది...</translation>
@@ -134,10 +133,8 @@
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl+Shift+Space</translation>
 <translation id="5045002648206642691">Google డిస్క్ సెట్టింగ్‌లు...</translation>
-<translation id="511445211639755999"><ph name="RESOLUTION" />, <ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">Cast పరికరాలు అందుబాటులో ఉన్నాయి</translation>
 <translation id="5170568018924773124">ఫోల్డర్‌లో చూపించు</translation>
-<translation id="5191140942132549112">ప్రశ్నలను చూపు</translation>
 <translation id="5222676887888702881">సైన్ ఔట్</translation>
 <translation id="5238774010593222950">మరొక ఖాతాకు సైన్ ఇన్ చేయడం సాధ్యపడదు.</translation>
 <translation id="532063867737390965">ఈ నెట్‌వర్క్ సెట్టింగ్‌ను నిర్వాహకుడు నిలిపివేసారు.</translation>
@@ -185,6 +182,7 @@
 <translation id="6459472438155181876"><ph name="DISPLAY_NAME" />కు స్క్రీన్‌ను విస్తరిస్తోంది</translation>
 <translation id="6490471652906364588">USB-C పరికరం (కుడి పోర్ట్)</translation>
 <translation id="6501401484702599040"><ph name="RECEIVER_NAME" />కి స్క్రీన్‌ను ప్రసారం చేస్తున్నాము</translation>
+<translation id="6521655319214113338">చేతివ్రాత ఇన్‌పుట్</translation>
 <translation id="6537270692134705506">స్క్రీన్‌ని సంగ్రహించు</translation>
 <translation id="6550675742724504774">ఎంపికలు</translation>
 <translation id="6585808820553845416">సెషన్ <ph name="SESSION_TIME_REMAINING" />లో ముగుస్తుంది.</translation>
@@ -194,7 +192,6 @@
 <translation id="6713285437468012787">బ్లూటూత్ పరికరం "<ph name="DEVICE_NAME" />" జత చేయబడింది మరియు ఇప్పుడు అందరు వినియోగదారులకు అందుబాటులో ఉంది. మీరు సెట్టింగ్‌లను ఉపయోగించి ఈ జతను తీసివేయవచ్చు.</translation>
 <translation id="6785414152754474415">బ్యాటరీ <ph name="PERCENTAGE" />% నిండింది మరియు ఛార్జ్ అవుతోంది.</translation>
 <translation id="683971173229319003">Search+L</translation>
-<translation id="68610848741840742">ChromeVox (చదవబడే అభిప్రాయం)</translation>
 <translation id="6911468394164995108">మరొక దానిలో చేరండి...</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6979158407327259162">Google డిస్క్</translation>
@@ -217,8 +214,10 @@
 <translation id="743058460480092004">కెమెరా మరియు మైక్రోఫోన్ ఉపయోగంలో ఉన్నాయి.</translation>
 <translation id="7510334386202674593">Ctrl+Shift+L</translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" /> <ph name="SPECIFIED_RESOLUTION" />కి మద్దతివ్వదు. రిజల్యూషన్ <ph name="FALLBACK_RESOLUTION" />కి మార్చబడింది</translation>
+<translation id="7562368315689366235">ఎమోజీ ఫలకం</translation>
 <translation id="7573962313813535744">డాక్ చేయబడిన మోడ్</translation>
 <translation id="7580671184200851182">అన్ని స్పీకర్‌ల్లో ఒకే ఆడియోను ప్లే చేయి (మోనో ఆడియో)</translation>
+<translation id="7581273696622423628">సర్వేలో పాల్గొనండి</translation>
 <translation id="7593891976182323525">Search లేదా Shift</translation>
 <translation id="7649070708921625228">సహాయం</translation>
 <translation id="7692480393933218409">కనెక్ట్ చేసిన USB-C పరికరాలను ఛార్జ్ చేస్తోంది</translation>

@@ -26,6 +26,7 @@
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_util.h"
 #include "components/data_reduction_proxy/proto/client_config.pb.h"
+#include "components/data_use_measurement/core/data_use_user_data.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/load_flags.h"
 #include "net/base/load_timing_info.h"
@@ -34,6 +35,7 @@
 #include "net/http/http_request_headers.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
+#include "net/log/net_log_source_type.h"
 #include "net/proxy/proxy_server.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request_status.h"
@@ -68,13 +70,13 @@ const uint32_t kMaxBackgroundFetchIntervalSeconds = 6 * 60 * 60;  // 6 hours.
 // This is the default backoff policy used to communicate with the Data
 // Reduction Proxy configuration service.
 const net::BackoffEntry::Policy kDefaultBackoffPolicy = {
-    0,               // num_errors_to_ignore
-    1 * 1000,        // initial_delay_ms
-    4,               // multiply_factor
-    0.10,            // jitter_factor,
-    30 * 60 * 1000,  // maximum_backoff_ms
-    -1,              // entry_lifetime_ms
-    true,            // always_use_initial_delay
+    0,                // num_errors_to_ignore
+    30 * 1000,        // initial_delay_ms
+    4,                // multiply_factor
+    0.25,             // jitter_factor,
+    128 * 60 * 1000,  // maximum_backoff_ms
+    -1,               // entry_lifetime_ms
+    true,             // always_use_initial_delay
 };
 
 // Extracts the list of Data Reduction Proxy servers to use for HTTP requests.
@@ -112,7 +114,7 @@ void RecordAuthExpiredSessionKey(bool matches) {
                                         : AUTH_EXPIRED_SESSION_KEY_MISMATCH;
 
   UMA_HISTOGRAM_ENUMERATION(
-      "DataReductionProxy.ClientConfig.AuthExpiredSessionKey", state,
+      "DataReductionProxy.ConfigService.AuthExpiredSessionKey", state,
       AUTH_EXPIRED_SESSION_KEY_BOUNDARY);
 }
 
@@ -217,14 +219,15 @@ void DataReductionProxyConfigServiceClient::RetrieveConfig() {
   if (!enabled_)
     return;
 
-  bound_net_log_ = net::BoundNetLog::Make(
-      net_log_, net::NetLog::SOURCE_DATA_REDUCTION_PROXY);
+  net_log_with_source_ = net::NetLogWithSource::Make(
+      net_log_, net::NetLogSourceType::DATA_REDUCTION_PROXY);
   // Strip off query string parameters
   GURL::Replacements replacements;
   replacements.ClearQuery();
   GURL base_config_service_url =
       config_service_url_.ReplaceComponents(replacements);
-  event_creator_->BeginConfigRequest(bound_net_log_, base_config_service_url);
+  event_creator_->BeginConfigRequest(net_log_with_source_,
+                                     base_config_service_url);
   config_fetch_start_time_ = base::TimeTicks::Now();
 
   RetrieveRemoteConfig();
@@ -247,7 +250,7 @@ void DataReductionProxyConfigServiceClient::ApplySerializedConfig(
 bool DataReductionProxyConfigServiceClient::ShouldRetryDueToAuthFailure(
     const net::HttpRequestHeaders& request_headers,
     const net::HttpResponseHeaders* response_headers,
-    const net::HostPortPair& proxy_server,
+    const net::ProxyServer& proxy_server,
     const net::LoadTimingInfo& load_timing_info) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(response_headers);
@@ -391,13 +394,16 @@ DataReductionProxyConfigServiceClient::GetURLFetcherForConfig(
   DCHECK(thread_checker_.CalledOnValidThread());
   std::unique_ptr<net::URLFetcher> fetcher(net::URLFetcher::Create(
       secure_proxy_check_url, net::URLFetcher::POST, this));
+  data_use_measurement::DataUseUserData::AttachToFetcher(
+      fetcher.get(),
+      data_use_measurement::DataUseUserData::DATA_REDUCTION_PROXY);
   fetcher->SetLoadFlags(net::LOAD_BYPASS_PROXY);
   fetcher->SetUploadData("application/x-protobuf", request_body);
   DCHECK(url_request_context_getter_);
   fetcher->SetRequestContext(url_request_context_getter_);
-  // Configure max retries to be at most kMaxRetries times for 5xx errors.
+  // |fetcher| should not retry on 5xx errors since the server may already be
+  // overloaded. Spurious 5xx errors are still retried on exponential backoff.
   static const int kMaxRetries = 5;
-  fetcher->SetMaxRetriesOn5xx(kMaxRetries);
   fetcher->SetAutomaticallyRetryOnNetworkChanges(kMaxRetries);
   return fetcher;
 }
@@ -451,7 +457,7 @@ void DataReductionProxyConfigServiceClient::HandleResponse(
       succeeded, refresh_duration, GetBackoffEntry()->GetTimeUntilRelease());
 
   SetConfigRefreshTimer(next_config_refresh_time);
-  event_creator_->EndConfigRequest(bound_net_log_, status.error(),
+  event_creator_->EndConfigRequest(net_log_with_source_, status.error(),
                                    response_code,
                                    GetBackoffEntry()->failure_count(), proxies,
                                    refresh_duration, next_config_refresh_time);

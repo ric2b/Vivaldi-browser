@@ -5,6 +5,8 @@
 #ifndef NET_SSL_SSL_INFO_H_
 #define NET_SSL_SSL_INFO_H_
 
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/memory/ref_counted.h"
@@ -80,11 +82,9 @@ class NET_EXPORT SSLInfo {
   // -1 means the security strength is unknown.
   int security_bits;
 
-  // Security information of the SSL connection handshake.
-  // The meaning depends on the cipher used, see BoringSSL's |SSL_SESSION|'s
-  // key_exchange_info for more information.
-  // A zero indicates that the value is unknown.
-  int key_exchange_info;
+  // The ID of the (EC)DH group used by the key exchange or zero if unknown
+  // (older cache entries may not store the value) or not applicable.
+  uint16_t key_exchange_group;
 
   // Information about the SSL connection itself. See
   // ssl_connection_status_flags.h for values. The protocol version,

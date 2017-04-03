@@ -5,19 +5,22 @@
 #ifndef DEVICE_VR_ANDROID_GVR_DEVICE_PROVIDER_H
 #define DEVICE_VR_ANDROID_GVR_DEVICE_PROVIDER_H
 
-#include <jni.h>
-
 #include <memory>
 
-#include "base/android/jni_android.h"
 #include "base/macros.h"
-#include "device/vr/android/gvr/gvr_api_manager.h"
+#include "base/single_thread_task_runner.h"
+#include "device/vr/vr_client_dispatcher.h"
 #include "device/vr/vr_device.h"
 #include "device/vr/vr_device_provider.h"
+#include "device/vr/vr_export.h"
 
 namespace device {
 
-class GvrDeviceProvider : public VRDeviceProvider, public GvrApiManagerClient {
+class GvrDelegate;
+class GvrDevice;
+class GvrNonPresentingDelegate;
+
+class DEVICE_VR_EXPORT GvrDeviceProvider : public VRDeviceProvider {
  public:
   GvrDeviceProvider();
   ~GvrDeviceProvider() override;
@@ -25,13 +28,24 @@ class GvrDeviceProvider : public VRDeviceProvider, public GvrApiManagerClient {
   void GetDevices(std::vector<VRDevice*>* devices) override;
   void Initialize() override;
 
-  // GvrApiManagerClient
-  void OnGvrApiInitialized(gvr::GvrApi* gvr_api) override;
-  void OnGvrApiShutdown() override;
+  // Called from GvrDevice
+  bool RequestPresent();
+  void ExitPresent();
+
+  // Called from GvrDelegate
+  void OnGvrDelegateReady(GvrDelegate* delegate);
+  void OnGvrDelegateRemoved();
+
+  void SetClient(VRClientDispatcher* client) override;
 
  private:
-  std::unique_ptr<VRDevice> vr_device_;
-  base::android::ScopedJavaGlobalRef<jobject> j_device_;
+  void GvrDelegateReady(GvrDelegate* delegate);
+  void GvrDelegateRemoved();
+
+  std::unique_ptr<VRClientDispatcher> client_;
+  std::unique_ptr<GvrDevice> vr_device_;
+
+  scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(GvrDeviceProvider);
 };

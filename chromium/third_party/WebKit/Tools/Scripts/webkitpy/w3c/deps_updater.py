@@ -14,6 +14,7 @@ import json
 
 from webkitpy.common.net.git_cl import GitCL
 from webkitpy.common.webkit_finder import WebKitFinder
+from webkitpy.layout_tests.models.test_expectations import TestExpectations
 
 # Import destination directories (under LayoutTests/imported/).
 WPT_DEST_NAME = 'wpt'
@@ -43,17 +44,17 @@ class DepsUpdater(object):
         if not self.checkout_is_okay(options.allow_local_commits):
             return 1
 
-        self.git_cl = GitCL(self.executive, auth_refresh_token_json=options.auth_refresh_token_json)
+        self.git_cl = GitCL(self.host, auth_refresh_token_json=options.auth_refresh_token_json)
 
         self.print_('## Noting the current Chromium commit.')
         _, show_ref_output = self.run(['git', 'show-ref', 'HEAD'])
         chromium_commitish = show_ref_output.split()[0]
 
         if options.target == 'wpt':
-            import_commitish = self.update(WPT_DEST_NAME, WPT_REPO_URL, options.keep_w3c_repos_around)
-            self._copy_resources_to_wpt()
+            import_commitish = self.update(WPT_DEST_NAME, WPT_REPO_URL, options.keep_w3c_repos_around, options.revision)
+            self._copy_resources()
         elif options.target == 'css':
-            import_commitish = self.update(CSS_DEST_NAME, CSS_REPO_URL, options.keep_w3c_repos_around)
+            import_commitish = self.update(CSS_DEST_NAME, CSS_REPO_URL, options.keep_w3c_repos_around, options.revision)
         else:
             raise AssertionError("Unsupported target %s" % options.target)
 
@@ -73,6 +74,8 @@ class DepsUpdater(object):
                             help='allow script to run even if we have local commits')
         parser.add_argument('--keep-w3c-repos-around', action='store_true',
                             help='leave the w3c repos around that were imported previously.')
+        parser.add_argument('-r', dest='revision', action='store',
+                            help='Target revision.')
         parser.add_argument('target', choices=['css', 'wpt'],
                             help='Target repository.  "css" for csswg-test, "wpt" for web-platform-tests.')
         parser.add_argument('--auto-update', action='store_true',
@@ -102,29 +105,50 @@ class DepsUpdater(object):
 
         return True
 
-    def _copy_resources_to_wpt(self):
-        """Copies some files over to a newly-updated wpt directory.
+    def _copy_resources(self):
+        """Copies resources from LayoutTests/resources to wpt and vice versa.
 
-        There are some resources in our repository that we use instead of the
-        upstream versions.
+        There are resources from our repository that we use instead of the
+        upstream versions. Conversely, there are also some resources that
+        are copied in the other direction.
+
+        Specifically:
+          - testharnessreport.js contains code needed to integrate our testing
+            with testharness.js; we also want our code to be used for tests
+            in wpt.
+          - TODO(qyearsley, jsbell): Document why other other files are copied,
+            or stop copying them if it's unnecessary.
+
+        If this method is changed, the lists of files expected to be identical
+        in LayoutTests/PRESUBMIT.py should also be changed.
         """
-        resources_to_copy = [
+        resources_to_copy_to_wpt = [
             ('testharnessreport.js', 'resources'),
             ('WebIDLParser.js', 'resources'),
             ('vendor-prefix.js', 'common'),
         ]
-        for filename, wpt_subdir in resources_to_copy:
+        resources_to_copy_from_wpt = [
+            ('idlharness.js', 'resources'),
+            ('testharness.js', 'resources'),
+        ]
+        for filename, wpt_subdir in resources_to_copy_to_wpt:
             source = self.path_from_webkit_base('LayoutTests', 'resources', filename)
             destination = self.path_from_webkit_base('LayoutTests', 'imported', WPT_DEST_NAME, wpt_subdir, filename)
             self.copyfile(source, destination)
             self.run(['git', 'add', destination])
+        for filename, wpt_subdir in resources_to_copy_from_wpt:
+            source = self.path_from_webkit_base('LayoutTests', 'imported', WPT_DEST_NAME, wpt_subdir, filename)
+            destination = self.path_from_webkit_base('LayoutTests', 'resources', filename)
+            self.copyfile(source, destination)
+            self.run(['git', 'add', destination])
 
-    def update(self, dest_dir_name, url, keep_w3c_repos_around):
+    def update(self, dest_dir_name, url, keep_w3c_repos_around, revision):
         """Updates an imported repository.
 
         Args:
             dest_dir_name: The destination directory name.
             url: URL of the git repository.
+            revision: Commit hash or None.
 
         Returns:
             A string for the commit description "<destination>@<commitish>".
@@ -133,6 +157,9 @@ class DepsUpdater(object):
         self.print_('## Cloning %s into %s.' % (url, temp_repo_path))
         self.run(['git', 'clone', url, temp_repo_path])
 
+        if revision is not None:
+            self.print_('## Checking out %s' % revision)
+            self.run(['git', 'checkout', revision], cwd=temp_repo_path)
         self.run(['git', 'submodule', 'update', '--init', '--recursive'], cwd=temp_repo_path)
 
         self.print_('## Noting the revision we are importing.')
@@ -167,6 +194,9 @@ class DepsUpdater(object):
         if not keep_w3c_repos_around:
             self.print_('## Deleting temp repo directory %s.' % temp_repo_path)
             self.rmtree(temp_repo_path)
+
+        self.print_('## Updating TestExpectations for any removed or renamed tests.')
+        self.update_test_expectations(self._list_deleted_tests(), self._list_renamed_tests())
 
         return '%s@%s' % (dest_dir_name, master_commitish)
 
@@ -206,7 +236,8 @@ class DepsUpdater(object):
             return False
         return True
 
-    def is_baseline(self, fs, dirname, basename):  # Callback for FileSystem.files_under; not all arguments used - pylint: disable=unused-argument
+    # Callback for FileSystem.files_under; not all arguments used - pylint: disable=unused-argument
+    def is_baseline(self, fs, dirname, basename):
         return basename.endswith('-expected.txt')
 
     def is_not_baseline(self, fs, dirname, basename):
@@ -271,25 +302,46 @@ class DepsUpdater(object):
         Returns:
             True if successfully committed, False otherwise.
         """
-        self.print_('## Uploading change list.')
-        cc_list = self.get_directory_owners_to_cc()
-        self.git_cl.run([
-            'upload', '-f', '--rietveld',
-            '-m', 'W3C auto test import CL.\n\nTBR=qyearsley@chromium.org',
-        ] + ['--cc=' + email for email in cc_list])
+        self._upload_cl()
+        self.print_('## ' + self.git_cl.run(['issue']).strip())
 
+        # First try: if there are failures, update expectations.
         self.print_('## Triggering try jobs.')
         for try_bot in self.host.builders.all_try_builder_names():
             self.git_cl.run(['try', '-b', try_bot])
-        if self.git_cl.has_failing_try_results():
-            self.write_test_expectations()
+        try_results = self.git_cl.wait_for_try_jobs()
+        if not try_results:
+            self.print_('## Timed out waiting for try results.')
+            return
+        if try_results and self.git_cl.has_failing_try_results(try_results):
+            self.fetch_new_expectations_and_baselines()
 
-        self.run(['set-commit', '--rietveld'])
-        if self.git_cl.has_failing_try_results():
-            self.print_('## CL has failing results when trying to land; aborting.')
+        # Second try: if there are failures, then abort.
+        self.git_cl.run(['set-commit', '--rietveld'])
+        try_results = self.git_cl.wait_for_try_jobs()
+        if not try_results:
+            self.print_('Timed out waiting for try results.')
             self.git_cl.run(['set-close'])
             return False
+        if self.git_cl.has_failing_try_results(try_results):
+            self.print_('CQ failed; aborting.')
+            self.git_cl.run(['set-close'])
+            return False
+        self.print_('## Update completed.')
         return True
+
+    def _upload_cl(self):
+        self.print_('## Uploading change list.')
+        cc_list = self.get_directory_owners_to_cc()
+        last_commit_message = self.check_run(['git', 'log', '-1', '--format=%B'])
+        commit_message = last_commit_message + 'TBR=qyearsley@chromium.org'
+        self.git_cl.run([
+            'upload',
+            '-f',
+            '--rietveld',
+            '-m',
+            commit_message,
+        ] + ['--cc=' + email for email in cc_list])
 
     def get_directory_owners_to_cc(self):
         """Returns a list of email addresses to CC for the current import."""
@@ -298,7 +350,7 @@ class DepsUpdater(object):
             'Tools', 'Scripts', 'webkitpy', 'w3c', 'directory_owners.json')
         with open(directory_owners_file_path) as data_file:
             directory_to_owner = self.parse_directory_owners(json.load(data_file))
-        out = self.check_run(['git', 'diff', 'master', '--name-only'])
+        out = self.check_run(['git', 'diff', 'origin/master', '--name-only'])
         changed_files = out.splitlines()
         return self.generate_email_list(changed_files, directory_to_owner)
 
@@ -319,8 +371,7 @@ class DepsUpdater(object):
             directory_to_owner: A dict mapping layout test directories to emails.
 
         Returns:
-            A list of the email addresses to be notified for the current
-            import.
+            A list of the email addresses to be notified for the current import.
         """
         email_addresses = set()
         for file_path in changed_files:
@@ -332,10 +383,60 @@ class DepsUpdater(object):
                 email_addresses.add(directory_to_owner[test_dir])
         return sorted(email_addresses)
 
-    def write_test_expectations(self):
+    def fetch_new_expectations_and_baselines(self):
+        """Adds new expectations and downloads baselines based on try job results, then commits and uploads the change."""
         self.print_('## Adding test expectations lines to LayoutTests/TestExpectations.')
         script_path = self.path_from_webkit_base('Tools', 'Scripts', 'update-w3c-test-expectations')
-        self.run([self.host.executable, script_path])
-        message = '\'Modifies TestExpectations and/or downloads new baselines for tests\''
+        self.run([self.host.executable, script_path, '--verbose'])
+        message = 'Modify TestExpectations or download new baselines for tests.'
         self.check_run(['git', 'commit', '-a', '-m', message])
-        self.git_cl(['upload', '-m', message, '--rietveld'])
+        self.git_cl.run(['upload', '-m', message, '--rietveld'])
+
+    def update_test_expectations(self, deleted_tests, renamed_tests):
+        """Updates the TestExpectations file entries for tests that have been deleted or renamed."""
+        port = self.host.port_factory.get()
+        test_expectations = TestExpectations(port, include_overrides=False)
+        # Tests for which files don't exist aren't stored in TestExpectationsModel,
+        # so methods like TestExpectations.remove_expectation_line don't work; instead
+        # we can run through the TestExpectationLine objects that were parsed.
+        # FIXME: This won't work for removed or renamed directories with test expectations
+        # that are directories rather than individual tests.
+        new_lines = []
+        changed_lines = []
+        for expectation_line in test_expectations.expectations():
+            if expectation_line.name in deleted_tests:
+                continue
+            if expectation_line.name in renamed_tests:
+                expectation_line.name = renamed_tests[expectation_line.name]
+                # Upon parsing the file, a "path does not exist" warning is expected
+                # to be there for tests that have been renamed, and if there are warnings,
+                # then the original string is used. If the warnings are reset, then the
+                # expectation line is re-serialized when output.
+                expectation_line.warnings = []
+                changed_lines.append(expectation_line)
+            new_lines.append(expectation_line)
+        self.host.filesystem.write_text_file(
+            port.path_to_generic_test_expectations_file(),
+            TestExpectations.list_to_string(new_lines, reconstitute_only_these=changed_lines))
+
+    def _list_deleted_tests(self):
+        """Returns a list of layout tests that have been deleted."""
+        out = self.check_run(['git', 'diff', 'origin/master', '--diff-filter=D', '--name-only'])
+        deleted_tests = []
+        for line in out.splitlines():
+            test = self.finder.layout_test_name(line)
+            if test:
+                deleted_tests.append(test)
+        return deleted_tests
+
+    def _list_renamed_tests(self):
+        """Returns a dict mapping source to dest name for layout tests that have been renamed."""
+        out = self.check_run(['git', 'diff', 'origin/master', '--diff-filter=R', '--name-status'])
+        renamed_tests = {}
+        for line in out.splitlines():
+            _, source_path, dest_path = line.split()
+            source_test = self.finder.layout_test_name(source_path)
+            dest_test = self.finder.layout_test_name(dest_path)
+            if source_test and dest_test:
+                renamed_tests[source_test] = dest_test
+        return renamed_tests

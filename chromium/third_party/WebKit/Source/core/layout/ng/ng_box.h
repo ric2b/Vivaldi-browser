@@ -5,7 +5,6 @@
 #ifndef NGBox_h
 #define NGBox_h
 
-#include "core/layout/LayoutBox.h"
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
 
@@ -13,38 +12,66 @@ namespace blink {
 
 class ComputedStyle;
 class LayoutBox;
-class NGBoxIterator;
+class LayoutObject;
+class NGBlockLayoutAlgorithm;
 class NGConstraintSpace;
 class NGFragment;
+class NGPhysicalFragment;
 
 // Represents a node to be laid out.
-class CORE_EXPORT NGBox final {
+class CORE_EXPORT NGBox final : public GarbageCollectedFinalized<NGBox> {
  public:
-  explicit NGBox(LayoutObject* layoutObject)
-      : m_layoutBox(toLayoutBox(layoutObject)) {}
+  explicit NGBox(LayoutObject*);
 
-  NGBox() : m_layoutBox(nullptr) {}
+  // TODO(layout-ng): make it private and declare a friend class to use in tests
+  explicit NGBox(ComputedStyle*);
 
-  // Returns an iterator that will iterate over this box's children, if any.
-  NGBoxIterator childIterator();
-  operator bool() const { return m_layoutBox; }
+  // Returns true when done; when this function returns false, it has to be
+  // called again. The out parameter will only be set when this function
+  // returns true. The same constraint space has to be passed each time.
+  // TODO(layout-ng): Should we have a StartLayout function to avoid passing
+  // the same space for each Layout iteration?
+  bool Layout(const NGConstraintSpace*, NGFragment**);
+  const ComputedStyle* Style() const;
 
-  NGFragment* layout(const NGConstraintSpace&);
-  const ComputedStyle* style() const;
+  NGBox* NextSibling();
 
-  NGBox nextSibling() const;
+  NGBox* FirstChild();
 
-  NGBox firstChild() const;
+  void SetNextSibling(NGBox*);
+  void SetFirstChild(NGBox*);
 
+  DEFINE_INLINE_VIRTUAL_TRACE() {
+    visitor->trace(algorithm_);
+    visitor->trace(fragment_);
+    visitor->trace(next_sibling_);
+    visitor->trace(first_child_);
+  }
+
+ private:
   // This is necessary for interop between old and new trees -- after our parent
   // positions us, it calls this function so we can store the position on the
   // underlying LayoutBox.
-  void positionUpdated(const NGFragment&);
+  void PositionUpdated();
 
- private:
-  bool canUseNewLayout();
+  bool CanUseNewLayout();
 
-  LayoutBox* m_layoutBox;
+  // After we run the layout algorithm, this function copies back the geometry
+  // data to the layout box.
+  void CopyFragmentDataToLayoutBox(const NGConstraintSpace&);
+
+  // Runs layout on layout_box_ and creates a fragment for the resulting
+  // geometry.
+  NGPhysicalFragment* RunOldLayout(const NGConstraintSpace&);
+
+  // We can either wrap a layout_box_ or a style_/next_sibling_/first_child_
+  // combination.
+  LayoutBox* layout_box_;
+  RefPtr<ComputedStyle> style_;
+  Member<NGBox> next_sibling_;
+  Member<NGBox> first_child_;
+  Member<NGBlockLayoutAlgorithm> algorithm_;
+  Member<NGPhysicalFragment> fragment_;
 };
 
 }  // namespace blink

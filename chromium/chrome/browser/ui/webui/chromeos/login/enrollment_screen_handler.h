@@ -46,6 +46,8 @@ class EnrollmentScreenHandler
   void ShowSigninScreen() override;
   void ShowAttributePromptScreen(const std::string& asset_id,
                                  const std::string& location) override;
+  void ShowAttestationBasedEnrollmentSuccessScreen(
+      const std::string& enterprise_domain) override;
   void ShowEnrollmentSpinnerScreen() override;
   void ShowAuthError(const GoogleServiceAuthError& error) override;
   void ShowEnrollmentStatus(policy::EnrollmentStatus status) override;
@@ -83,6 +85,10 @@ class EnrollmentScreenHandler
 
   // Display the given i18n resource as error message.
   void ShowError(int message_id, bool retry);
+
+  // Display the given i18n resource as an error message, with the $1
+  // substitution parameter replaced with the device's product name.
+  void ShowErrorForDevice(int message_id, bool retry);
 
   // Display the given string as error message.
   void ShowErrorMessage(const std::string& message, bool retry);

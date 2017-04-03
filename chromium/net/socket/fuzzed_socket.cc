@@ -12,6 +12,7 @@
 #include "base/test/fuzzed_data_provider.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/base/io_buffer.h"
+#include "net/log/net_log_source_type.h"
 
 namespace net {
 
@@ -35,7 +36,7 @@ const Error kReadWriteErrors[] = {ERR_CONNECTION_CLOSED, ERR_FAILED,
 FuzzedSocket::FuzzedSocket(base::FuzzedDataProvider* data_provider,
                            net::NetLog* net_log)
     : data_provider_(data_provider),
-      bound_net_log_(BoundNetLog::Make(net_log, NetLog::SOURCE_SOCKET)),
+      net_log_(NetLogWithSource::Make(net_log, NetLogSourceType::SOCKET)),
       remote_address_(IPEndPoint(IPAddress::IPv4Localhost(), 80)),
       weak_factory_(this) {}
 
@@ -206,8 +207,8 @@ int FuzzedSocket::GetLocalAddress(IPEndPoint* address) const {
   return OK;
 }
 
-const BoundNetLog& FuzzedSocket::NetLog() const {
-  return bound_net_log_;
+const NetLogWithSource& FuzzedSocket::NetLog() const {
+  return net_log_;
 }
 
 void FuzzedSocket::SetSubresourceSpeculation() {}

@@ -26,9 +26,9 @@
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_popup_contents_view.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
+#include "components/grit/components_scaled_resources.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
-#include "grit/components_scaled_resources.h"
-#include "grit/theme_resources.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -202,7 +202,7 @@ OmniboxResultView::OmniboxResultView(OmniboxPopupContentsView* model,
       animation_(new gfx::SlideAnimation(this)) {
   CHECK_GE(model_index, 0);
   if (default_icon_size_ == 0)
-    default_icon_size_ = location_bar_view_->GetLocationIconWidth();
+    default_icon_size_ = LocationBarView::kIconWidth;
   keyword_icon_->set_owned_by_client();
   keyword_icon_->EnableCanvasFlippingForRTLUI(true);
   keyword_icon_->SetImage(GetKeywordIcon());
@@ -335,7 +335,7 @@ void OmniboxResultView::PaintMatch(const AutocompleteMatch& match,
   if (!separator_rendertext_) {
     const base::string16& separator =
         l10n_util::GetStringUTF16(IDS_AUTOCOMPLETE_MATCH_DESCRIPTION_SEPARATOR);
-    separator_rendertext_.reset(CreateRenderText(separator).release());
+    separator_rendertext_ = CreateRenderText(separator);
     separator_rendertext_->SetColor(GetColor(GetState(), DIMMED_TEXT));
     separator_width_ = separator_rendertext_->GetContentWidth();
   }

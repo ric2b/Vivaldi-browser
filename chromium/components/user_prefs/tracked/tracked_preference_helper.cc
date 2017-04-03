@@ -6,6 +6,7 @@
 
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "components/user_prefs/tracked/tracked_preference_histogram_names.h"
 
 TrackedPreferenceHelper::TrackedPreferenceHelper(
@@ -37,6 +38,10 @@ TrackedPreferenceHelper::ResetAction TrackedPreferenceHelper::GetAction(
     case PrefHashStoreTransaction::SECURE_LEGACY:
       // Accept secure legacy device ID based hashes.
       return DONT_RESET;
+    case PrefHashStoreTransaction::UNSUPPORTED:
+      NOTREACHED()
+          << "GetAction should not be called with an UNSUPPORTED value state";
+      return DONT_RESET;
     case PrefHashStoreTransaction::UNTRUSTED_UNKNOWN_VALUE:  // Falls through.
     case PrefHashStoreTransaction::CHANGED:
       return enforce_ ? DO_RESET : WANTED_RESET;
@@ -51,46 +56,53 @@ bool TrackedPreferenceHelper::IsPersonal() const {
 }
 
 void TrackedPreferenceHelper::ReportValidationResult(
-    PrefHashStoreTransaction::ValueState value_state) const {
+    PrefHashStoreTransaction::ValueState value_state,
+    base::StringPiece validation_type_suffix) const {
+  const char* histogram_name = nullptr;
   switch (value_state) {
     case PrefHashStoreTransaction::UNCHANGED:
-      UMA_HISTOGRAM_ENUMERATION(
-          user_prefs::tracked::kTrackedPrefHistogramUnchanged, reporting_id_,
-          reporting_ids_count_);
-      return;
+      histogram_name = user_prefs::tracked::kTrackedPrefHistogramUnchanged;
+      break;
     case PrefHashStoreTransaction::CLEARED:
-      UMA_HISTOGRAM_ENUMERATION(
-          user_prefs::tracked::kTrackedPrefHistogramCleared, reporting_id_,
-          reporting_ids_count_);
-      return;
+      histogram_name = user_prefs::tracked::kTrackedPrefHistogramCleared;
+      break;
     case PrefHashStoreTransaction::SECURE_LEGACY:
-      UMA_HISTOGRAM_ENUMERATION(
-          user_prefs::tracked::kTrackedPrefHistogramMigratedLegacyDeviceId,
-          reporting_id_, reporting_ids_count_);
-      return;
+      histogram_name =
+          user_prefs::tracked::kTrackedPrefHistogramMigratedLegacyDeviceId;
+      break;
     case PrefHashStoreTransaction::CHANGED:
-      UMA_HISTOGRAM_ENUMERATION(
-          user_prefs::tracked::kTrackedPrefHistogramChanged, reporting_id_,
-          reporting_ids_count_);
-      return;
+      histogram_name = user_prefs::tracked::kTrackedPrefHistogramChanged;
+      break;
     case PrefHashStoreTransaction::UNTRUSTED_UNKNOWN_VALUE:
-      UMA_HISTOGRAM_ENUMERATION(
-          user_prefs::tracked::kTrackedPrefHistogramInitialized, reporting_id_,
-          reporting_ids_count_);
-      return;
+      histogram_name = user_prefs::tracked::kTrackedPrefHistogramInitialized;
+      break;
     case PrefHashStoreTransaction::TRUSTED_UNKNOWN_VALUE:
-      UMA_HISTOGRAM_ENUMERATION(
-          user_prefs::tracked::kTrackedPrefHistogramTrustedInitialized,
-          reporting_id_, reporting_ids_count_);
-      return;
+      histogram_name =
+          user_prefs::tracked::kTrackedPrefHistogramTrustedInitialized;
+      break;
     case PrefHashStoreTransaction::TRUSTED_NULL_VALUE:
-      UMA_HISTOGRAM_ENUMERATION(
-          user_prefs::tracked::kTrackedPrefHistogramNullInitialized,
-          reporting_id_, reporting_ids_count_);
+      histogram_name =
+          user_prefs::tracked::kTrackedPrefHistogramNullInitialized;
+      break;
+    case PrefHashStoreTransaction::UNSUPPORTED:
+      NOTREACHED() << "ReportValidationResult should not be called with an "
+                      "UNSUPPORTED value state";
       return;
   }
-  NOTREACHED() << "Unexpected PrefHashStoreTransaction::ValueState: "
-               << value_state;
+  DCHECK(histogram_name);
+
+  std::string full_histogram_name(histogram_name);
+  if (!validation_type_suffix.empty()) {
+    full_histogram_name.push_back('.');
+    validation_type_suffix.AppendToString(&full_histogram_name);
+  }
+
+  // Using FactoryGet to allow dynamic histogram names. This is equivalent to
+  // UMA_HISTOGRAM_ENUMERATION(name, reporting_id_, reporting_ids_count_);
+  base::HistogramBase* histogram = base::LinearHistogram::FactoryGet(
+      full_histogram_name, 1, reporting_ids_count_, reporting_ids_count_ + 1,
+      base::HistogramBase::kUmaTargetedHistogramFlag);
+  histogram->Add(reporting_id_);
 }
 
 void TrackedPreferenceHelper::ReportAction(ResetAction reset_action) const {

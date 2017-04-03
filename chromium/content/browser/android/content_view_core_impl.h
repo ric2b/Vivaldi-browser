@@ -12,6 +12,7 @@
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_weak_ref.h"
+#include "base/android/scoped_java_ref.h"
 #include "base/compiler_specific.h"
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
@@ -51,17 +52,17 @@ class ContentViewCoreImpl : public ContentViewCore,
   static ContentViewCoreImpl* FromWebContents(WebContents* web_contents);
   ContentViewCoreImpl(
       JNIEnv* env,
-      jobject obj,
+      const base::android::JavaRef<jobject>& obj,
       WebContents* web_contents,
       const base::android::JavaRef<jobject>& view_android_delegate,
       ui::WindowAndroid* window_android,
-      jobject java_bridge_retained_object_set);
+      const base::android::JavaRef<jobject>& java_bridge_retained_object_set);
 
   // ContentViewCore implementation.
   base::android::ScopedJavaLocalRef<jobject> GetJavaObject() override;
   WebContents* GetWebContents() const override;
   ui::WindowAndroid* GetWindowAndroid() const override;
-  bool ShowPastePopup(int x, int y) override;
+  void ShowPastePopup(int x, int y) override;
   void PauseOrResumeGeolocation(bool should_pause) override;
 
   void AddObserver(ContentViewCoreImplObserver* observer);
@@ -199,12 +200,6 @@ class ContentViewCoreImpl : public ContentViewCore,
                jfloat x,
                jfloat y,
                jfloat delta);
-  void SelectBetweenCoordinates(JNIEnv* env,
-                                const base::android::JavaParamRef<jobject>& obj,
-                                jfloat x1,
-                                jfloat y1,
-                                jfloat x2,
-                                jfloat y2);
   void DismissTextHandles(JNIEnv* env,
                           const base::android::JavaParamRef<jobject>& obj);
   void SetTextHandlesTemporarilyHidden(
@@ -361,9 +356,6 @@ class ContentViewCoreImpl : public ContentViewCore,
   // Creates a java-side touch event, used for injecting motion events for
   // testing/benchmarking purposes.
   base::android::ScopedJavaLocalRef<jobject> CreateMotionEventSynthesizer();
-
-  // Returns True if the given media should be blocked to load.
-  bool ShouldBlockMediaRequest(const GURL& url);
 
   void DidStopFlinging();
 

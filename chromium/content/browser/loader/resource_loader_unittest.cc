@@ -22,8 +22,6 @@
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/loader/redirect_to_file_resource_handler.h"
 #include "content/browser/loader/resource_loader_delegate.h"
-#include "content/common/ssl_status_serialization.h"
-#include "content/public/browser/cert_store.h"
 #include "content/public/browser/client_certificate_delegate.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/common/content_paths.h"
@@ -388,7 +386,6 @@ class ResourceHandlerStub : public ResourceHandler {
   }
 
   void OnResponseCompleted(const net::URLRequestStatus& status,
-                           const std::string& security_info,
                            bool* defer) override {
     EXPECT_FALSE(received_response_completed_);
     if (status.is_success() && expect_reads_)
@@ -497,7 +494,7 @@ class NonChunkedUploadDataStream : public net::UploadDataStream {
   }
 
  private:
-  int InitInternal(const net::BoundNetLog& net_log) override {
+  int InitInternal(const net::NetLogWithSource& net_log) override {
     SetSize(size_);
     stream_.Init(base::Bind(&NonChunkedUploadDataStream::OnInitCompleted,
                             base::Unretained(this)),
@@ -613,7 +610,7 @@ class ResourceLoaderTest : public testing::Test,
     loader_.reset(new ResourceLoader(
         std::move(request),
         WrapResourceHandler(std::move(resource_handler), raw_ptr_to_request_),
-        CertStore::GetInstance(), this));
+        this));
   }
 
   void SetUp() override {
@@ -1109,84 +1106,6 @@ TEST_F(ResourceLoaderRedirectToFileTest, DownstreamDeferStart) {
   std::string contents;
   ASSERT_TRUE(base::ReadFileToString(temp_path(), &contents));
   EXPECT_EQ(test_data(), contents);
-}
-
-// Test that an HTTPS resource has the expected security info attached
-// to it.
-TEST_F(HTTPSSecurityInfoResourceLoaderTest, SecurityInfoOnHTTPSResource) {
-  // Start the request and wait for it to finish.
-  std::unique_ptr<net::URLRequest> request(
-      resource_context_.GetRequestContext()->CreateRequest(
-          test_https_url(), net::DEFAULT_PRIORITY, nullptr /* delegate */));
-  SetUpResourceLoader(std::move(request), RESOURCE_TYPE_MAIN_FRAME, true);
-
-  // Send the request and wait until it completes.
-  loader_->StartRequest();
-  raw_ptr_resource_handler_->WaitForResponseComplete();
-  ASSERT_EQ(net::URLRequestStatus::SUCCESS,
-            raw_ptr_to_request_->status().status());
-
-  ResourceResponse* response = raw_ptr_resource_handler_->response();
-  ASSERT_TRUE(response);
-
-  // Deserialize the security info from the response and check that it
-  // is as expected.
-  SSLStatus deserialized;
-  ASSERT_TRUE(
-      DeserializeSecurityInfo(response->head.security_info, &deserialized));
-
-  // Expect a BROKEN security style because the cert status has errors.
-  EXPECT_EQ(content::SECURITY_STYLE_AUTHENTICATION_BROKEN,
-            deserialized.security_style);
-  scoped_refptr<net::X509Certificate> cert;
-  ASSERT_TRUE(
-      CertStore::GetInstance()->RetrieveCert(deserialized.cert_id, &cert));
-  EXPECT_TRUE(cert->Equals(GetTestCert().get()));
-
-  EXPECT_EQ(kTestCertError, deserialized.cert_status);
-  EXPECT_EQ(kTestConnectionStatus, deserialized.connection_status);
-  EXPECT_EQ(kTestSecurityBits, deserialized.security_bits);
-}
-
-// Test that an HTTPS redirect response has the expected security info
-// attached to it.
-TEST_F(HTTPSSecurityInfoResourceLoaderTest,
-       SecurityInfoOnHTTPSRedirectResource) {
-  // Start the request and wait for it to finish.
-  std::unique_ptr<net::URLRequest> request(
-      resource_context_.GetRequestContext()->CreateRequest(
-          test_https_redirect_url(), net::DEFAULT_PRIORITY,
-          nullptr /* delegate */));
-  SetUpResourceLoader(std::move(request), RESOURCE_TYPE_MAIN_FRAME, true);
-
-  // Send the request and wait until it completes.
-  loader_->StartRequest();
-  raw_ptr_resource_handler_->WaitForResponseComplete();
-  ASSERT_EQ(net::URLRequestStatus::SUCCESS,
-            raw_ptr_to_request_->status().status());
-  ASSERT_TRUE(raw_ptr_resource_handler_->received_request_redirected());
-
-  ResourceResponse* redirect_response =
-      raw_ptr_resource_handler_->redirect_response();
-  ASSERT_TRUE(redirect_response);
-
-  // Deserialize the security info from the redirect response and check
-  // that it is as expected.
-  SSLStatus deserialized;
-  ASSERT_TRUE(DeserializeSecurityInfo(redirect_response->head.security_info,
-                                      &deserialized));
-
-  // Expect a BROKEN security style because the cert status has errors.
-  EXPECT_EQ(content::SECURITY_STYLE_AUTHENTICATION_BROKEN,
-            deserialized.security_style);
-  scoped_refptr<net::X509Certificate> cert;
-  ASSERT_TRUE(
-      CertStore::GetInstance()->RetrieveCert(deserialized.cert_id, &cert));
-  EXPECT_TRUE(cert->Equals(GetTestCert().get()));
-
-  EXPECT_EQ(kTestCertError, deserialized.cert_status);
-  EXPECT_EQ(kTestConnectionStatus, deserialized.connection_status);
-  EXPECT_EQ(kTestSecurityBits, deserialized.security_bits);
 }
 
 class EffectiveConnectionTypeResourceLoaderTest : public ResourceLoaderTest {

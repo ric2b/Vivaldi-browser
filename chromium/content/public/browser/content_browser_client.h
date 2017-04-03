@@ -21,8 +21,8 @@
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/media_stream_request.h"
-#include "content/public/common/mojo_application_info.h"
 #include "content/public/common/resource_type.h"
+#include "content/public/common/service_info.h"
 #include "content/public/common/socket_permission_request.h"
 #include "content/public/common/window_container_type.h"
 #include "media/audio/audio_manager.h"
@@ -115,6 +115,7 @@ class GpuProcessHost;
 class LocationProvider;
 class MediaObserver;
 class NavigationHandle;
+class NavigationUIData;
 class PlatformNotificationService;
 class PresentationServiceDelegate;
 class QuotaPermissionContext;
@@ -648,12 +649,12 @@ class CONTENT_EXPORT ContentBrowserClient {
       BrowserContext* browser_context,
       const GURL& url);
 
-  // Generate a Shell user-id for the supplied browser context. Defaults to
+  // Generate a Service user-id for the supplied browser context. Defaults to
   // returning a random GUID.
-  virtual std::string GetShellUserIdForBrowserContext(
+  virtual std::string GetServiceUserIdForBrowserContext(
       BrowserContext* browser_context);
 
-  // Allows to register browser Mojo interfaces exposed through the
+  // Allows to register browser interfaces exposed through the
   // RenderProcessHost. Note that interface factory callbacks added to
   // |registry| will by default be run immediately on the IO thread, unless a
   // task runner is provided.
@@ -681,41 +682,35 @@ class CONTENT_EXPORT ContentBrowserClient {
       shell::InterfaceRegistry* registry,
       GpuProcessHost* render_process_host) {}
 
-  using StaticMojoApplicationMap = std::map<std::string, MojoApplicationInfo>;
+  using StaticServiceMap = std::map<std::string, ServiceInfo>;
 
-  // Registers Mojo applications to be loaded in the browser process by the
-  // browser's global Mojo shell.
-  virtual void RegisterInProcessMojoApplications(
-      StaticMojoApplicationMap* apps) {}
+  // Registers services to be loaded in the browser process by the Service
+  // Manager.
+  virtual void RegisterInProcessServices(StaticServiceMap* services) {}
 
-  using OutOfProcessMojoApplicationMap = std::map<std::string, base::string16>;
+  using OutOfProcessServiceMap = std::map<std::string, base::string16>;
 
-  // Registers Mojo applications to be loaded out of the browser process, in a
-  // sandboxed utility process. The value of each map entry should be the
-  // process name to use for the application's host process when launched.
-  virtual void RegisterOutOfProcessMojoApplications(
-      OutOfProcessMojoApplicationMap* apps) {}
+  // Registers services to be loaded out of the browser process, in a sandboxed
+  // utility process. The value of each map entry should be the process name to
+  // use for the service's host process when launched.
+  virtual void RegisterOutOfProcessServices(OutOfProcessServiceMap* services) {}
 
-  // Registers Mojo applications to be loaded out of the browser process (in
-  // a utility process) without the sandbox.
+  // Registers services to be loaded out of the browser process (in a utility
+  // process) without the sandbox.
   //
-  // WARNING: This path is NOT recommended! If a Mojo application needs a
-  // service that is only available out of the sandbox, it could ask the browser
-  // process to provide it (e.g. through OverrideFrameMojoShellServices()). Only
-  // use this method when that approach does not work.
-  virtual void RegisterUnsandboxedOutOfProcessMojoApplications(
-      OutOfProcessMojoApplicationMap* apps) {}
+  // WARNING: This path is NOT recommended! If a service needs another service
+  // that is only available out of the sandbox, it could ask the browser
+  // process to provide it. Only use this method when that approach does not
+  // work.
+  virtual void RegisterUnsandboxedOutOfProcessServices(
+      OutOfProcessServiceMap* services) {}
 
-  // A map of Mojo application names to corresponding manifest contents.
-  using MojoApplicationManifestMap = std::map<std::string, std::string>;
-
-  // Registers manifest contents for Mojo applications.
-  // See "services/shell/manifest.json" for an example Mojo app manifest.
-  //
-  // TODO(rockot): http://crbug.com/610426. Add more documentations about
-  //  Mojo app manifest.
-  virtual void RegisterMojoApplicationManifests(
-      MojoApplicationManifestMap* manifests) {}
+  // Allow the embedder to provide a dictionary loaded from a JSON file
+  // resembling a service manifest whose capabilities section will be merged
+  // with content's own for |name|. Additional entries will be appended to their
+  // respective sections.
+  virtual std::unique_ptr<base::Value> GetServiceManifestOverlay(
+      const std::string& name);
 
   // Allows to override the visibility state of a RenderFrameHost.
   // |visibility_state| should not be null. It will only be set if needed.
@@ -744,6 +739,12 @@ class CONTENT_EXPORT ContentBrowserClient {
   // guaranteed that the throttles will be executed in the order they were
   // provided.
   virtual ScopedVector<NavigationThrottle> CreateThrottlesForNavigation(
+      NavigationHandle* navigation_handle);
+
+  // PlzNavigate
+  // Called at the start of the navigation to get opaque data the embedder
+  // wants to see passed to the corresponding URLRequest on the IO thread.
+  virtual std::unique_ptr<NavigationUIData> GetNavigationUIData(
       NavigationHandle* navigation_handle);
 
   // Allows the embedder to provide its own AudioManager implementation.
@@ -789,13 +790,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   // a process hosting a plugin with the specified |mime_type|.
   virtual bool IsWin32kLockdownEnabledForMimeType(
       const std::string& mime_type) const;
-#endif
-
-#if defined(VIDEO_HOLE)
-  // Allows an embedder to provide its own ExternalVideoSurfaceContainer
-  // implementation.  Return nullptr to disable external surface video.
-  virtual ExternalVideoSurfaceContainer*
-  OverrideCreateExternalVideoSurfaceContainer(WebContents* web_contents);
 #endif
 };
 

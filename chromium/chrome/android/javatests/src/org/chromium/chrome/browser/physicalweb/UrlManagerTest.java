@@ -11,6 +11,7 @@ import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.test.util.FlakyTest;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.test.util.browser.notifications.MockNotificationManagerProxy;
 import org.chromium.chrome.test.util.browser.notifications.MockNotificationManagerProxy.NotificationEntry;
 import org.chromium.content.browser.test.util.Criteria;
@@ -18,7 +19,9 @@ import org.chromium.content.browser.test.util.CriteriaHelper;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Tests for {@link UrlManager}.
@@ -91,6 +94,7 @@ public class UrlManagerTest extends InstrumentationTestCase {
     }
 
     @SmallTest
+    @RetryOnFailure
     public void testAddUrlAfterClearAllUrlsWorks() {
         addPwsResult1();
         addPwsResult2();
@@ -110,6 +114,7 @@ public class UrlManagerTest extends InstrumentationTestCase {
     }
 
     @SmallTest
+    @RetryOnFailure
     public void testClearNearbyUrlsWorks() {
         addPwsResult1();
         addPwsResult2();
@@ -161,6 +166,7 @@ public class UrlManagerTest extends InstrumentationTestCase {
     }
 
     @SmallTest
+    @RetryOnFailure
     public void testAddUrlNoResolutionDoesNothing() throws Exception {
         addEmptyPwsResult();
         addUrlInfo1();
@@ -202,6 +208,7 @@ public class UrlManagerTest extends InstrumentationTestCase {
     }
 
     @SmallTest
+    @RetryOnFailure
     public void testAddTwoUrlsMakesOneNotification() throws Exception {
         addPwsResult1();
         addPwsResult2();
@@ -218,6 +225,7 @@ public class UrlManagerTest extends InstrumentationTestCase {
     }
 
     @SmallTest
+    @RetryOnFailure
     public void testAddUrlGarbageCollectsForSize() throws Exception {
         // Add and remove 101 URLs, making sure one is clearly slightly older than the others.
         addEmptyPwsResult();
@@ -255,6 +263,7 @@ public class UrlManagerTest extends InstrumentationTestCase {
     }
 
     @SmallTest
+    @RetryOnFailure
     public void testAddUrlTwiceWorks() throws Exception {
         // Add and remove an old URL twice and add new URL twice before removing.
         // This should cover several issues involved with updating the cache queue.
@@ -301,6 +310,7 @@ public class UrlManagerTest extends InstrumentationTestCase {
     }
 
     @SmallTest
+    @RetryOnFailure
     public void testAddUrlInCacheWithNoOthersMakesNotification() throws Exception {
         addPwsResult1();
         addPwsResult1();
@@ -374,6 +384,7 @@ public class UrlManagerTest extends InstrumentationTestCase {
     }
 
     @SmallTest
+    @RetryOnFailure
     public void testGetUrlSorts() throws Exception {
         addEmptyPwsResult();
         addEmptyPwsResult();
@@ -398,6 +409,7 @@ public class UrlManagerTest extends InstrumentationTestCase {
     }
 
     @SmallTest
+    @RetryOnFailure
     public void testSerializationWorksWithoutGarbageCollection() throws Exception {
         addPwsResult1();
         addPwsResult2();
@@ -411,9 +423,12 @@ public class UrlManagerTest extends InstrumentationTestCase {
         UrlManager urlManager = new UrlManager(context);
         List<UrlInfo> urlInfos = urlManager.getUrls();
         assertEquals(2, urlInfos.size());
+        Set<String> resolvedUrls = urlManager.getResolvedUrls();
+        assertEquals(2, resolvedUrls.size());
     }
 
     @SmallTest
+    @RetryOnFailure
     public void testSerializationWorksWithGarbageCollection() throws Exception {
         addPwsResult1();
         addPwsResult2();
@@ -426,25 +441,49 @@ public class UrlManagerTest extends InstrumentationTestCase {
         UrlManager urlManager = new UrlManager(context);
         List<UrlInfo> urlInfos = urlManager.getUrls();
         assertEquals(0, urlInfos.size());
+        Set<String> resolvedUrls = urlManager.getResolvedUrls();
+        assertEquals(0, resolvedUrls.size());
     }
 
     @SmallTest
     public void testUpgradeFromNone() throws Exception {
+        Set<String> oldResolvedUrls = new HashSet<String>();
+        oldResolvedUrls.add("old");
         Context context = getInstrumentation().getTargetContext().getApplicationContext();
         mSharedPreferences.edit()
                 .remove(UrlManager.getVersionKey())
+                .putStringSet("physicalweb_resolved_urls", oldResolvedUrls)
                 .apply();
         new UrlManager(context);
 
-        // Make sure the new prefs are populated.
+        // Make sure the new prefs are populated and old prefs are gone.
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                return mSharedPreferences.contains(UrlManager.getVersionKey());
+                return mSharedPreferences.contains(UrlManager.getVersionKey())
+                        && !mSharedPreferences.contains("physicalweb_resolved_urls");
             }
         }, 5000, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
 
         assertEquals(UrlManager.getVersion(),
                 mSharedPreferences.getInt(UrlManager.getVersionKey(), 0));
+    }
+
+    @SmallTest
+    public void testGetPwCollection() {
+        assertEquals(0, mUrlManager.getPwCollection().urlInfos.length);
+        assertEquals(0, mUrlManager.getPwCollection().pwsResults.length);
+        addPwsResult1();
+        long curTime = System.currentTimeMillis();
+        mUrlManager.addUrl(new UrlInfo(URL1, 99.5, curTime + 42));
+        getInstrumentation().waitForIdleSync();
+        assertEquals(1, mUrlManager.getPwCollection().urlInfos.length);
+        assertEquals(1, mUrlManager.getPwCollection().pwsResults.length);
+
+        addPwsResult2();
+        mUrlManager.addUrl(new UrlInfo(URL2, 99.5, curTime + 42));
+        getInstrumentation().waitForIdleSync();
+        assertEquals(2, mUrlManager.getPwCollection().urlInfos.length);
+        assertEquals(2, mUrlManager.getPwCollection().pwsResults.length);
     }
 }

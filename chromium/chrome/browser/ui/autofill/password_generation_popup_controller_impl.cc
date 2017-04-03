@@ -26,7 +26,7 @@
 #include "components/autofill/content/common/autofill_messages.h"
 #include "components/autofill/core/browser/password_generator.h"
 #include "components/autofill/core/browser/suggestion.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "content/public/browser/native_web_keyboard_event.h"
@@ -100,7 +100,7 @@ PasswordGenerationPopupControllerImpl::PasswordGenerationPopupControllerImpl(
 
   int link_id = IDS_MANAGE_PASSWORDS_LINK;
   int help_text_id = IDS_PASSWORD_GENERATION_PROMPT;
-  const ProfileSyncService* sync_service =
+  const browser_sync::ProfileSyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(
           Profile::FromBrowserContext(web_contents->GetBrowserContext()));
   if (password_bubble_experiment::IsSmartLockBrandingEnabled(sync_service)) {

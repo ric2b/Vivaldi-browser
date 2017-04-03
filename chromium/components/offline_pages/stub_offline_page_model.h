@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "components/keyed_service/core/keyed_service.h"
 #include "components/offline_pages/offline_page_model.h"
 
 namespace offline_pages {
@@ -16,7 +17,7 @@ namespace offline_pages {
 // Stub implementation of OfflinePageModel interface for testing. Besides using
 // as a stub for tests, it may also be subclassed to mock specific methods
 // needed for a set of tests.
-class StubOfflinePageModel : public OfflinePageModel {
+class StubOfflinePageModel : public OfflinePageModel, public KeyedService {
  public:
   StubOfflinePageModel();
   ~StubOfflinePageModel() override;
@@ -29,14 +30,11 @@ class StubOfflinePageModel : public OfflinePageModel {
                 std::unique_ptr<OfflinePageArchiver> archiver,
                 const SavePageCallback& callback) override;
   void MarkPageAccessed(int64_t offline_id) override;
-  void ClearAll(const base::Closure& callback) override;
   void DeletePagesByOfflineId(const std::vector<int64_t>& offline_ids,
                               const DeletePageCallback& callback) override;
   void DeleteCachedPagesByURLPredicate(
       const UrlPredicate& predicate,
       const DeletePageCallback& callback) override;
-  void HasPages(const std::string& name_space,
-                const HasPagesCallback& callback) override;
   void CheckPagesExistOffline(
       const std::set<GURL>& urls,
       const CheckPagesExistOfflineCallback& callback) override;
@@ -53,17 +51,11 @@ class StubOfflinePageModel : public OfflinePageModel {
       const SingleOfflinePageItemCallback& callback) override;
   const OfflinePageItem* MaybeGetPageByOfflineId(
       int64_t offline_id) const override;
-  void GetPageByOfflineURL(
-      const GURL& offline_url,
-      const SingleOfflinePageItemCallback& callback) override;
-  const OfflinePageItem* MaybeGetPageByOfflineURL(
-      const GURL& offline_url) const override;
   void GetPagesByOnlineURL(
       const GURL& online_url,
       const MultipleOfflinePageItemCallback& callback) override;
   const OfflinePageItem* MaybeGetBestPageForOnlineURL(
       const GURL& online_url) const override;
-  void CheckMetadataConsistency() override;
   void ExpirePages(const std::vector<int64_t>& offline_ids,
                    const base::Time& expiration_time,
                    const base::Callback<void(bool)>& callback) override;

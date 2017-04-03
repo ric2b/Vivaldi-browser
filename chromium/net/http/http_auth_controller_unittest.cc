@@ -13,7 +13,7 @@
 #include "net/http/http_request_info.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 #include "net/ssl/ssl_info.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -50,7 +50,7 @@ void RunSingleRoundAuthTest(HandlerRunMode run_mode,
                             int handler_rv,
                             int expected_controller_rv,
                             SchemeState scheme_state) {
-  BoundNetLog dummy_log;
+  NetLogWithSource dummy_log;
   HttpAuthCache dummy_auth_cache;
 
   HttpRequestInfo request;
@@ -171,7 +171,7 @@ TEST(HttpAuthControllerTest, NoExplicitCredentialsAllowed) {
     HttpAuth::Scheme expected_scheme_;
   };
 
-  BoundNetLog dummy_log;
+  NetLogWithSource dummy_log;
   HttpAuthCache dummy_auth_cache;
   HttpRequestInfo request;
   request.method = "GET";

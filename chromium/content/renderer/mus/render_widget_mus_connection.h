@@ -7,7 +7,7 @@
 
 #include "base/macros.h"
 #include "base/threading/thread_checker.h"
-#include "cc/output/output_surface.h"
+#include "cc/output/compositor_frame_sink.h"
 #include "content/common/content_export.h"
 #include "content/renderer/input/render_widget_input_handler_delegate.h"
 #include "content/renderer/mus/compositor_mus_connection.h"
@@ -29,7 +29,7 @@ class CONTENT_EXPORT RenderWidgetMusConnection
   void Bind(mojo::InterfaceRequest<ui::mojom::WindowTreeClient> request);
 
   // Create a cc output surface.
-  std::unique_ptr<cc::OutputSurface> CreateOutputSurface(
+  std::unique_ptr<cc::CompositorFrameSink> CreateCompositorFrameSink(
       scoped_refptr<gpu::GpuChannelHost> gpu_channel_host);
 
   static RenderWidgetMusConnection* Get(int routing_id);
@@ -64,7 +64,7 @@ class CONTENT_EXPORT RenderWidgetMusConnection
 
   void OnConnectionLost();
   void OnWindowInputEvent(
-      std::unique_ptr<blink::WebInputEvent> input_event,
+      ui::ScopedWebInputEvent input_event,
       const base::Callback<void(ui::mojom::EventResult)>& ack);
 
   const int routing_id_;

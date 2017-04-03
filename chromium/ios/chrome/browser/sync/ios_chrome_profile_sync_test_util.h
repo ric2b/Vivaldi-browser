@@ -7,13 +7,13 @@
 
 #include <memory>
 
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 
 namespace ios {
 class ChromeBrowserState;
 }
 
-namespace sync_driver {
+namespace syncer {
 class SyncClient;
 }
 
@@ -23,8 +23,9 @@ class BrowserState;
 
 // Helper method for constructing ProfileSyncService mocks. If |sync_client|
 // is null, a fresh one is created.
-ProfileSyncService::InitParams CreateProfileSyncServiceParamsForTest(
-    std::unique_ptr<sync_driver::SyncClient> sync_client,
+browser_sync::ProfileSyncService::InitParams
+CreateProfileSyncServiceParamsForTest(
+    std::unique_ptr<syncer::SyncClient> sync_client,
     ios::ChromeBrowserState* browser_state);
 
 // Helper routine to be used in conjunction with

@@ -57,6 +57,18 @@
   DISABLE(RenderWidgetUnittest, TouchDuringOrOutsideFlingUmaMetrics)
   DISABLE(HttpStreamFactoryImplJobControllerTest, DelayedTCP)
   DISABLE(DevToolsSanityTest, TestNetworkPushTime)
+  DISABLE(BidirectionalStreamTest, LoadTimingTwoRequests)
+  DISABLE(BidirectionalStreamTest, SimplePostRequest)
+  DISABLE_MULTI(CacheStorageCacheTestP, DeleteWithIgnoreSearchFalse)
+  DISABLE_MULTI(CacheStorageCacheTestP, TwoKeysThenOne)
+  DISABLE_MULTI(CacheStorageCacheTestP, DeleteWithIgnoreSearchTrue)
+  DISABLE_MULTI(CacheStorageCacheTestP, KeysWithIgnoreSearchTrue)
+  DISABLE_MULTI(CacheStorageCacheTestP, TwoKeys)
+  DISABLE_MULTI(CacheStorageCacheTestP, MatchAll_TwoResponsesThenOne)
+  DISABLE(InputEventFilterTest, NonBlockingWheel)
+  DISABLE(InputEventFilterTest, Basic)
+  DISABLE(RenderViewImplTest, RendererNavigationStartTransmittedToBrowser)
+  DISABLE(SRTFetcherTest, ReporterLogging_EnabledNoRecentLogging)
 
   // Fails on tester, works on dev PC; assume it is the timing issue
   DISABLE(NotificationPermissionContextTest, TestDenyInIncognitoAfterDelay)

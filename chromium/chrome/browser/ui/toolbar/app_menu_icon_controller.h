@@ -6,23 +6,36 @@
 #define CHROME_BROWSER_UI_TOOLBAR_APP_MENU_ICON_CONTROLLER_H_
 
 #include "base/macros.h"
-#include "chrome/browser/ui/toolbar/app_menu_icon_painter.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_service.h"
 
+#if defined(OS_WIN)
+#include "chrome/browser/win/enumerate_modules_model.h"
+#endif
+
 class Profile;
 
 // AppMenuIconController encapsulates the logic for badging the app menu icon
 // as a result of various events - such as available updates, errors, etc.
-class AppMenuIconController : public content::NotificationObserver {
+class AppMenuIconController :
+#if defined(OS_WIN)
+    public EnumerateModulesModel::Observer,
+#endif
+    public content::NotificationObserver {
  public:
   enum class IconType {
     NONE,
     UPGRADE_NOTIFICATION,
     GLOBAL_ERROR,
     INCOMPATIBILITY_WARNING,
+  };
+  enum class Severity {
+    NONE,
+    LOW,
+    MEDIUM,
+    HIGH,
   };
 
   // Delegate interface for receiving icon update notifications.
@@ -32,7 +45,7 @@ class AppMenuIconController : public content::NotificationObserver {
     // well as specifying whether it should |animate|. The |type| parameter
     // specifies the type of change (i.e. the source of the notification).
     virtual void UpdateSeverity(IconType type,
-                                AppMenuIconPainter::Severity severity,
+                                Severity severity,
                                 bool animate) = 0;
 
    protected:
@@ -55,6 +68,12 @@ class AppMenuIconController : public content::NotificationObserver {
   void Observe(int type,
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override;
+
+#if defined(OS_WIN)
+  // EnumerateModulesModel:
+  void OnScanCompleted() override;
+  void OnConflictsAcknowledged() override;
+#endif
 
   Profile* profile_;
   Delegate* delegate_;

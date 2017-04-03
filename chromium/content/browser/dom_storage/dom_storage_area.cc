@@ -12,7 +12,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/process/process_info.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -195,7 +195,8 @@ bool DOMStorageArea::SetItem(const base::string16& key,
   if (success && backing_ &&
       (old_value->is_null() || old_value->string() != value)) {
     CommitBatch* commit_batch = CreateCommitBatchIfNeeded();
-    commit_batch->changed_values[key] = base::NullableString16(value, false);
+    // Values are populated later to avoid holding duplicate memory.
+    commit_batch->changed_values[key] = base::NullableString16();
   }
   return success;
 }
@@ -325,8 +326,15 @@ void DOMStorageArea::PurgeMemory() {
 }
 
 void DOMStorageArea::Shutdown() {
-  DCHECK(!is_shutdown_);
+  if (is_shutdown_)
+    return;
   is_shutdown_ = true;
+
+  if (commit_batch_) {
+    DCHECK(backing_);
+    PopulateCommitBatchValues();
+  }
+
   map_ = NULL;
   if (!backing_)
     return;
@@ -339,7 +347,7 @@ void DOMStorageArea::Shutdown() {
 }
 
 void DOMStorageArea::OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd) {
-  DCHECK(task_runner_->IsRunningOnPrimarySequence());
+  task_runner_->AssertIsRunningOnPrimarySequence();
   if (!is_initial_import_done_)
     return;
 
@@ -427,6 +435,12 @@ DOMStorageArea::CommitBatch* DOMStorageArea::CreateCommitBatchIfNeeded() {
   return commit_batch_.get();
 }
 
+void DOMStorageArea::PopulateCommitBatchValues() {
+  task_runner_->AssertIsRunningOnPrimarySequence();
+  for (auto& key_value : commit_batch_->changed_values)
+    key_value.second = map_->GetItem(key_value.first);
+}
+
 void DOMStorageArea::StartCommitTimer() {
   if (is_shutdown_ || !commit_batch_)
     return;
@@ -473,12 +487,13 @@ void DOMStorageArea::PostCommitTask() {
 
   DCHECK(backing_.get());
 
+  PopulateCommitBatchValues();
   commit_rate_limiter_.add_samples(1);
   data_rate_limiter_.add_samples(commit_batch_->GetDataSize());
 
   // This method executes on the primary sequence, we schedule
   // a task for immediate execution on the commit sequence.
-  DCHECK(task_runner_->IsRunningOnPrimarySequence());
+  task_runner_->AssertIsRunningOnPrimarySequence();
   bool success = task_runner_->PostShutdownBlockingTask(
       FROM_HERE,
       DOMStorageTaskRunner::COMMIT_SEQUENCE,
@@ -490,7 +505,7 @@ void DOMStorageArea::PostCommitTask() {
 
 void DOMStorageArea::CommitChanges(const CommitBatch* commit_batch) {
   // This method executes on the commit sequence.
-  DCHECK(task_runner_->IsRunningOnCommitSequence());
+  task_runner_->AssertIsRunningOnCommitSequence();
   backing_->CommitChanges(commit_batch->clear_all_first,
                           commit_batch->changed_values);
   // TODO(michaeln): what if CommitChanges returns false (e.g., we're trying to
@@ -502,7 +517,7 @@ void DOMStorageArea::CommitChanges(const CommitBatch* commit_batch) {
 
 void DOMStorageArea::OnCommitComplete() {
   // We're back on the primary sequence in this method.
-  DCHECK(task_runner_->IsRunningOnPrimarySequence());
+  task_runner_->AssertIsRunningOnPrimarySequence();
   --commit_batches_in_flight_;
   if (is_shutdown_)
     return;
@@ -516,7 +531,7 @@ void DOMStorageArea::OnCommitComplete() {
 
 void DOMStorageArea::ShutdownInCommitSequence() {
   // This method executes on the commit sequence.
-  DCHECK(task_runner_->IsRunningOnCommitSequence());
+  task_runner_->AssertIsRunningOnCommitSequence();
   DCHECK(backing_.get());
   if (commit_batch_) {
     // Commit any changes that accrued prior to the timer firing.

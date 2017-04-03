@@ -4,7 +4,6 @@
 
 import("//mojo/public/tools/bindings/mojom.gni")
 
-# GYP version: components/contextual_search.gypi:contextual_search_mojo_bindings
 mojom("mojo_bindings") {
   sources = [
     "common/contextual_search_js_api_service.mojom",
@@ -14,11 +13,14 @@ mojom("mojo_bindings") {
   use_new_wrapper_types = false
 }
 
-# GYP version: components/contextual_search.gypi:contextual_search_browser
 static_library("browser") {
   sources = [
     "browser/contextual_search_js_api_service_impl.cc",
     "browser/contextual_search_js_api_service_impl.h",
+    "browser/ctr_aggregator.cc",
+    "browser/ctr_aggregator.h",
+    "browser/weekly_activity_storage.cc",
+    "browser/weekly_activity_storage.h",
   ]
   deps = [
     ":mojo_bindings",
@@ -26,7 +28,19 @@ static_library("browser") {
   ]
 }
 
-# GYP version: components/contextual_search.gypi:contextual_search_renderer
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "browser/ctr_aggregator_unittest.cc",
+  ]
+
+  deps = [
+    ":browser",
+    "//base",
+    "//testing/gtest",
+  ]
+}
+
 static_library("renderer") {
   sources = [
     "renderer/contextual_search_wrapper.cc",

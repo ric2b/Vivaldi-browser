@@ -25,9 +25,9 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/feedback/tracing_manager.h"
 #include "components/signin/core/browser/signin_manager.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/user_metrics.h"
 #include "extensions/browser/event_router.h"
-#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "url/url_util.h"
@@ -122,14 +122,19 @@ void FeedbackPrivateAPI::RequestFeedbackForFlow(
   if (browser_context_ && EventRouter::Get(browser_context_)) {
     FeedbackInfo info;
     info.description = description_template;
-    info.category_tag = base::WrapUnique(new std::string(category_tag));
-    info.page_url = base::WrapUnique(new std::string(page_url.spec()));
+    info.category_tag = base::MakeUnique<std::string>(category_tag);
+    info.page_url = base::MakeUnique<std::string>(page_url.spec());
     info.system_information.reset(new SystemInformationList);
     // The manager is only available if tracing is enabled.
     if (TracingManager* manager = TracingManager::Get()) {
       info.trace_id.reset(new int(manager->RequestTrace()));
     }
     info.flow = flow;
+#if defined(OS_MACOSX)
+    info.use_system_window_frame = true;
+#else
+    info.use_system_window_frame = false;
+#endif
 
     std::unique_ptr<base::ListValue> args =
         feedback_private::OnFeedbackRequested::Create(info);
@@ -148,12 +153,13 @@ void FeedbackPrivateAPI::RequestFeedbackForFlow(
 // static
 base::Closure* FeedbackPrivateGetStringsFunction::test_callback_ = NULL;
 
-bool FeedbackPrivateGetStringsFunction::RunSync() {
+ExtensionFunction::ResponseAction FeedbackPrivateGetStringsFunction::Run() {
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
 
 #define SET_STRING(id, idr) \
   dict->SetString(id, l10n_util::GetStringUTF16(idr))
   SET_STRING("page-title", IDS_FEEDBACK_REPORT_PAGE_TITLE);
+  SET_STRING("additionalInfo", IDS_FEEDBACK_ADDITIONAL_INFO_LABEL);
   SET_STRING("page-url", IDS_FEEDBACK_REPORT_URL_LABEL);
   SET_STRING("screenshot", IDS_FEEDBACK_SCREENSHOT_LABEL);
   SET_STRING("user-email", IDS_FEEDBACK_USER_EMAIL_LABEL);
@@ -198,21 +204,19 @@ bool FeedbackPrivateGetStringsFunction::RunSync() {
   const std::string& app_locale = g_browser_process->GetApplicationLocale();
   webui::SetLoadTimeDataDefaults(app_locale, dict.get());
 
-  SetResult(std::move(dict));
 
   if (test_callback_ && !test_callback_->is_null())
     test_callback_->Run();
 
-  return true;
+  return RespondNow(OneArgument(std::move(dict)));
 }
 
-bool FeedbackPrivateGetUserEmailFunction::RunSync() {
-  SigninManagerBase* signin_manager =
-      SigninManagerFactory::GetForProfile(GetProfile());
-  SetResult(base::MakeUnique<base::StringValue>(
+ExtensionFunction::ResponseAction FeedbackPrivateGetUserEmailFunction::Run() {
+  SigninManagerBase* signin_manager = SigninManagerFactory::GetForProfile(
+      Profile::FromBrowserContext(browser_context()));
+  return RespondNow(OneArgument(base::MakeUnique<base::StringValue>(
       signin_manager ? signin_manager->GetAuthenticatedAccountInfo().email
-                     : std::string()));
-  return true;
+                     : std::string())));
 }
 
 bool FeedbackPrivateGetSystemInformationFunction::RunAsync() {

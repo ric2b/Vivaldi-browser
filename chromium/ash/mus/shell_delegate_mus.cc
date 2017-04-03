@@ -10,18 +10,24 @@
 #include "ash/common/media_delegate.h"
 #include "ash/common/palette_delegate.h"
 #include "ash/common/session/session_state_delegate.h"
-#include "ash/common/shelf/shelf_delegate.h"
-#include "ash/common/system/tray/default_system_tray_delegate.h"
-#include "ash/common/wallpaper/wallpaper_delegate.h"
+#include "ash/common/wm_shell.h"
 #include "ash/mus/accessibility_delegate_mus.h"
 #include "ash/mus/context_menu_mus.h"
 #include "ash/mus/new_window_delegate_mus.h"
+#include "ash/mus/shelf_delegate_mus.h"
+#include "ash/mus/wallpaper_delegate_mus.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "components/user_manager/user_info_impl.h"
 #include "ui/app_list/presenter/app_list_presenter.h"
 #include "ui/gfx/image/image.h"
+
+#if defined(OS_CHROMEOS)
+#include "ash/mus/system_tray_delegate_mus.h"
+#else
+#include "ash/common/system/tray/default_system_tray_delegate.h"
+#endif
 
 namespace ash {
 namespace {
@@ -100,42 +106,18 @@ class MediaDelegateStub : public MediaDelegate {
   DISALLOW_COPY_AND_ASSIGN(MediaDelegateStub);
 };
 
-class ShelfDelegateStub : public ShelfDelegate {
- public:
-  ShelfDelegateStub() {}
-  ~ShelfDelegateStub() override {}
-
-  // ShelfDelegate overrides:
-  void OnShelfCreated(WmShelf* shelf) override {}
-  void OnShelfDestroyed(WmShelf* shelf) override {}
-  void OnShelfAlignmentChanged(WmShelf* shelf) override {}
-  void OnShelfAutoHideBehaviorChanged(WmShelf* shelf) override {}
-  void OnShelfAutoHideStateChanged(WmShelf* shelf) override {}
-  void OnShelfVisibilityStateChanged(WmShelf* shelf) override {}
-  ShelfID GetShelfIDForAppID(const std::string& app_id) override { return 0; }
-  bool HasShelfIDToAppIDMapping(ShelfID id) const override { return false; }
-  const std::string& GetAppIDForShelfID(ShelfID id) override {
-    return base::EmptyString();
-  }
-  void PinAppWithID(const std::string& app_id) override {}
-  bool IsAppPinned(const std::string& app_id) override { return false; }
-  void UnpinAppWithID(const std::string& app_id) override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ShelfDelegateStub);
-};
-
 }  // namespace
 
-ShellDelegateMus::ShellDelegateMus(
-    std::unique_ptr<app_list::AppListPresenter> app_list_presenter,
-    shell::Connector* connector)
-    : app_list_presenter_(std::move(app_list_presenter)),
-      connector_(connector) {
+ShellDelegateMus::ShellDelegateMus(shell::Connector* connector)
+    : connector_(connector), app_list_presenter_(connector) {
   // |connector_| may be null in tests.
 }
 
 ShellDelegateMus::~ShellDelegateMus() {}
+
+::shell::Connector* ShellDelegateMus::GetShellConnector() const {
+  return connector_;
+}
 
 bool ShellDelegateMus::IsFirstRunAfterBoot() const {
   NOTIMPLEMENTED();
@@ -189,25 +171,29 @@ void ShellDelegateMus::OpenUrlFromArc(const GURL& url) {
 }
 
 app_list::AppListPresenter* ShellDelegateMus::GetAppListPresenter() {
-  return app_list_presenter_.get();
+  return &app_list_presenter_;
 }
 
 ShelfDelegate* ShellDelegateMus::CreateShelfDelegate(ShelfModel* model) {
-  // TODO(mash): Implement a real shelf delegate; maybe port ShelfDelegateMus?
-  return new ShelfDelegateStub;
+  return new ShelfDelegateMus(WmShell::Get()->shelf_model());
 }
 
 SystemTrayDelegate* ShellDelegateMus::CreateSystemTrayDelegate() {
-  NOTIMPLEMENTED() << " Using the default SystemTrayDelegate implementation";
-  return new DefaultSystemTrayDelegate;
+#if defined(OS_CHROMEOS)
+  return new SystemTrayDelegateMus();
+#else
+  // Windows and Linux do not support the services required for most system tray
+  // items. Use the same stub delegate as ash_shell_with_content.
+  return new DefaultSystemTrayDelegate();
+#endif
 }
 
 std::unique_ptr<WallpaperDelegate> ShellDelegateMus::CreateWallpaperDelegate() {
-  NOTIMPLEMENTED();
-  return nullptr;
+  return base::MakeUnique<WallpaperDelegateMus>(connector_);
 }
 
 SessionStateDelegate* ShellDelegateMus::CreateSessionStateDelegate() {
+  // TODO: http://crbug.com/647416.
   NOTIMPLEMENTED() << " Using a stub SessionStateDeleagte implementation";
   return new SessionStateDelegateStub;
 }
@@ -221,11 +207,13 @@ NewWindowDelegate* ShellDelegateMus::CreateNewWindowDelegate() {
 }
 
 MediaDelegate* ShellDelegateMus::CreateMediaDelegate() {
+  // TODO: http://crbug.com/647409.
   NOTIMPLEMENTED() << " Using a stub MediaDelegate implementation";
   return new MediaDelegateStub;
 }
 
 std::unique_ptr<PaletteDelegate> ShellDelegateMus::CreatePaletteDelegate() {
+  // TODO: http://crbug.com/647417.
   NOTIMPLEMENTED();
   return nullptr;
 }
@@ -236,6 +224,7 @@ ui::MenuModel* ShellDelegateMus::CreateContextMenu(WmShelf* wm_shelf,
 }
 
 GPUSupport* ShellDelegateMus::CreateGPUSupport() {
+  // TODO: http://crbug.com/647421.
   NOTIMPLEMENTED() << " Using a stub GPUSupport implementation";
   return new GPUSupportStub();
 }

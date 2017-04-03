@@ -23,6 +23,7 @@
 #include "content/renderer/media/webmediaplayer_ms_compositor.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_thread_impl.h"
+#include "media/base/media_content_type.h"
 #include "media/base/media_log.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_rotation.h"
@@ -185,7 +186,7 @@ void WebMediaPlayerMS::play() {
     // here, but that is treated as an unknown duration and assumed to be
     // interactive. See http://crbug.com/595297 for more details.
     delegate_->DidPlay(delegate_id_, hasVideo(), hasAudio(), false,
-                       base::TimeDelta::FromSeconds(1));
+                       media::MediaContentType::Uncontrollable);
   }
 
   paused_ = false;
@@ -334,8 +335,7 @@ bool WebMediaPlayerMS::didLoadingProgress() {
 
 void WebMediaPlayerMS::paint(blink::WebCanvas* canvas,
                              const blink::WebRect& rect,
-                             unsigned char alpha,
-                             SkXfermode::Mode mode) {
+                             SkPaint& paint) {
   DVLOG(3) << __func__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
@@ -353,7 +353,7 @@ void WebMediaPlayerMS::paint(blink::WebCanvas* canvas,
     DCHECK(context_3d.gl);
   }
   const gfx::RectF dest_rect(rect.x, rect.y, rect.width, rect.height);
-  video_renderer_.Paint(frame, canvas, dest_rect, alpha, mode,
+  video_renderer_.Paint(frame, canvas, dest_rect, paint,
                         video_rotation_, context_3d);
 }
 
@@ -422,10 +422,10 @@ void WebMediaPlayerMS::OnShown() {
 #endif  // defined(OS_ANDROID)
 }
 
-void WebMediaPlayerMS::OnSuspendRequested(bool must_suspend) {
+bool WebMediaPlayerMS::OnSuspendRequested(bool must_suspend) {
 #if defined(OS_ANDROID)
   if (!must_suspend)
-    return;
+    return false;
 
   if (!paused_) {
     pause();
@@ -437,6 +437,7 @@ void WebMediaPlayerMS::OnSuspendRequested(bool must_suspend) {
 
   render_frame_suspended_ = true;
 #endif
+  return true;
 }
 
 void WebMediaPlayerMS::OnPlay() {

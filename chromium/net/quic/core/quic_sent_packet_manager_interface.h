@@ -6,6 +6,7 @@
 #define NET_QUIC_QUIC_SENT_PACKET_MANAGER_INTERFACE_H_
 
 #include "base/macros.h"
+#include "net/base/net_export.h"
 #include "net/quic/core/quic_protocol.h"
 #include "net/quic/core/quic_sustained_bandwidth_recorder.h"
 
@@ -164,8 +165,6 @@ class NET_EXPORT_PRIVATE QuicSentPacketManagerInterface {
   // this migration is path level. Need to rename this as OnPeerMigration.
   virtual void OnConnectionMigration(QuicPathId path_id,
                                      PeerAddressChangeType type) = 0;
-
-  virtual bool IsHandshakeConfirmed() const = 0;
 
   virtual void SetDebugDelegate(DebugDelegate* debug_delegate) = 0;
 

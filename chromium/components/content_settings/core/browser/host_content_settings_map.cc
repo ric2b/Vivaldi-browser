@@ -11,7 +11,7 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -234,12 +234,14 @@ ContentSetting HostContentSettingsMap::GetDefaultContentSettingFromProvider(
   std::unique_ptr<content_settings::RuleIterator> rule_iterator(
       provider->GetRuleIterator(content_type, std::string(), false));
 
-  ContentSettingsPattern wildcard = ContentSettingsPattern::Wildcard();
-  while (rule_iterator->HasNext()) {
-    content_settings::Rule rule = rule_iterator->Next();
-    if (rule.primary_pattern == wildcard &&
-        rule.secondary_pattern == wildcard) {
-      return content_settings::ValueToContentSetting(rule.value.get());
+  if (rule_iterator) {
+    ContentSettingsPattern wildcard = ContentSettingsPattern::Wildcard();
+    while (rule_iterator->HasNext()) {
+      content_settings::Rule rule = rule_iterator->Next();
+      if (rule.primary_pattern == wildcard &&
+          rule.secondary_pattern == wildcard) {
+        return content_settings::ValueToContentSetting(rule.value.get());
+      }
     }
   }
   return CONTENT_SETTING_DEFAULT;
@@ -745,6 +747,28 @@ void HostContentSettingsMap::ClearSettingsForOneType(
   FlushLossyWebsiteSettings();
 }
 
+void HostContentSettingsMap::ClearSettingsForOneTypeWithPredicate(
+    ContentSettingsType content_type,
+    const base::Callback<bool(const ContentSettingsPattern& primary_pattern,
+                              const ContentSettingsPattern& secondary_pattern)>&
+        pattern_predicate) {
+  if (pattern_predicate.is_null()) {
+    ClearSettingsForOneType(content_type);
+    return;
+  }
+
+  ContentSettingsForOneType settings;
+  GetSettingsForOneType(content_type, std::string(), &settings);
+  for (const ContentSettingPatternSource& setting : settings) {
+    if (pattern_predicate.Run(setting.primary_pattern,
+                              setting.secondary_pattern)) {
+      SetWebsiteSettingCustomScope(setting.primary_pattern,
+                                   setting.secondary_pattern, content_type,
+                                   std::string(), nullptr);
+    }
+  }
+}
+
 // TODO(raymes): Remove this function. Consider making it a property of
 // ContentSettingsInfo or removing it altogether (it's unclear whether we should
 // be restricting allowed default values at this layer).
@@ -812,6 +836,9 @@ void HostContentSettingsMap::AddSettingsForOneType(
     bool incognito) const {
   std::unique_ptr<content_settings::RuleIterator> rule_iterator(
       provider->GetRuleIterator(content_type, resource_identifier, incognito));
+  if (!rule_iterator)
+    return;
+
   while (rule_iterator->HasNext()) {
     const content_settings::Rule& rule = rule_iterator->Next();
     ContentSetting setting_value = CONTENT_SETTING_DEFAULT;
@@ -976,15 +1003,17 @@ HostContentSettingsMap::GetContentSettingValueAndPatterns(
     const GURL& secondary_url,
     ContentSettingsPattern* primary_pattern,
     ContentSettingsPattern* secondary_pattern) {
-  while (rule_iterator->HasNext()) {
-    const content_settings::Rule& rule = rule_iterator->Next();
-    if (rule.primary_pattern.Matches(primary_url) &&
-        rule.secondary_pattern.Matches(secondary_url)) {
-      if (primary_pattern)
-        *primary_pattern = rule.primary_pattern;
-      if (secondary_pattern)
-        *secondary_pattern = rule.secondary_pattern;
-      return base::WrapUnique(rule.value.get()->DeepCopy());
+  if (rule_iterator) {
+    while (rule_iterator->HasNext()) {
+      const content_settings::Rule& rule = rule_iterator->Next();
+      if (rule.primary_pattern.Matches(primary_url) &&
+          rule.secondary_pattern.Matches(secondary_url)) {
+        if (primary_pattern)
+          *primary_pattern = rule.primary_pattern;
+        if (secondary_pattern)
+          *secondary_pattern = rule.secondary_pattern;
+        return base::WrapUnique(rule.value.get()->DeepCopy());
+      }
     }
   }
   return std::unique_ptr<base::Value>();

@@ -7,6 +7,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -36,6 +37,8 @@
 #include "chrome/browser/permissions/permission_decision_auto_blocker.h"
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
+#include "chrome/browser/previews/previews_service.h"
+#include "chrome/browser/previews/previews_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
@@ -63,6 +66,7 @@
 #include "components/power/origin_power_map.h"
 #include "components/power/origin_power_map_factory.h"
 #include "components/prefs/pref_service.h"
+#include "components/previews/core/previews_ui_service.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/web_cache/browser/web_cache_manager.h"
@@ -75,6 +79,8 @@
 #include "content/public/browser/user_metrics.h"
 #include "net/base/net_errors.h"
 #include "net/cookies/cookie_store.h"
+#include "net/http/http_network_session.h"
+#include "net/http/http_transaction_factory.h"
 #include "net/http/transport_security_state.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/channel_id_store.h"
@@ -116,8 +122,8 @@
 #endif
 
 #if defined(ENABLE_WEBRTC)
-#include "chrome/browser/media/webrtc_log_list.h"
-#include "chrome/browser/media/webrtc_log_util.h"
+#include "chrome/browser/media/webrtc/webrtc_log_list.h"
+#include "chrome/browser/media/webrtc/webrtc_log_util.h"
 #endif
 
 using base::UserMetricsAction;
@@ -170,10 +176,26 @@ bool ForwardPrimaryPatternCallback(
   return predicate.Run(primary_pattern);
 }
 
-void ClearHostnameResolutionCacheOnIOThread(IOThread* io_thread) {
+void ClearHostnameResolutionCacheOnIOThread(
+    IOThread* io_thread,
+    base::Callback<bool(const std::string&)> host_filter) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  io_thread->ClearHostCache();
+  io_thread->ClearHostCache(host_filter);
+}
+
+void ClearHttpAuthCacheOnIOThread(
+    scoped_refptr<net::URLRequestContextGetter> context_getter,
+    base::Time delete_begin) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  net::HttpNetworkSession* http_session = context_getter->GetURLRequestContext()
+                                              ->http_transaction_factory()
+                                              ->GetSession();
+  DCHECK(http_session);
+  http_session->http_auth_cache()->ClearEntriesAddedWithin(base::Time::Now() -
+                                                           delete_begin);
+  http_session->CloseAllConnections();
 }
 
 void ClearNetworkPredictorOnIOThread(chrome_browser_net::Predictor* predictor) {
@@ -389,8 +411,8 @@ void BrowsingDataRemover::RemoveInternal(
   // Remove() and RemoveAndReply() pass a null pointer to indicate no filter.
   // No filter is equivalent to one that |IsEmptyBlacklist()|.
   if (!filter_builder) {
-    filter_builder = base::WrapUnique(new RegistrableDomainFilterBuilder(
-        RegistrableDomainFilterBuilder::BLACKLIST));
+    filter_builder = base::MakeUnique<RegistrableDomainFilterBuilder>(
+        RegistrableDomainFilterBuilder::BLACKLIST);
     DCHECK(filter_builder->IsEmptyBlacklist());
   }
 
@@ -501,28 +523,33 @@ void BrowsingDataRemover::RemoveImpl(
           base::Bind(&BrowsingDataRemover::OnHistoryDeletionDone,
                      weak_ptr_factory_.GetWeakPtr()),
           &history_task_tracker_);
-
-#if defined(ENABLE_EXTENSIONS)
-      // The extension activity contains details of which websites extensions
-      // were active on. It therefore indirectly stores details of websites a
-      // user has visited so best clean from here as well.
-      extensions::ActivityLog::GetInstance(profile_)->RemoveURLs(
-          std::set<GURL>());
-#endif
     }
 
     ntp_snippets::ContentSuggestionsService* content_suggestions_service =
-        ContentSuggestionsServiceFactory::GetForProfile(profile_);
+        ContentSuggestionsServiceFactory::GetForProfileIfExists(profile_);
     if (content_suggestions_service) {
       content_suggestions_service->ClearHistory(delete_begin_, delete_end_,
                                                 filter);
     }
 
 #if defined(ENABLE_EXTENSIONS)
+    // The extension activity log contains details of which websites extensions
+    // were active on. It therefore indirectly stores details of websites a
+    // user has visited so best clean from here as well.
+    // TODO(msramek): Support all backends with filter (crbug.com/589586).
+    extensions::ActivityLog::GetInstance(profile_)->RemoveURLs(
+        std::set<GURL>());
+
     // Clear launch times as they are a form of history.
-    extensions::ExtensionPrefs* extension_prefs =
-        extensions::ExtensionPrefs::Get(profile_);
-    extension_prefs->ClearLastLaunchTimes();
+    // BrowsingDataFilterBuilder currently doesn't support extension origins.
+    // Therefore, clearing history for a small set of origins (WHITELIST) should
+    // never delete any extension launch times, while clearing for almost all
+    // origins (BLACKLIST) should always delete all of extension launch times.
+    if (filter_builder.mode() == BrowsingDataFilterBuilder::BLACKLIST) {
+      extensions::ExtensionPrefs* extension_prefs =
+          extensions::ExtensionPrefs::Get(profile_);
+      extension_prefs->ClearLastLaunchTimes();
+    }
 #endif
 
     // The power consumption history by origin contains details of websites
@@ -533,15 +560,18 @@ void BrowsingDataRemover::RemoveImpl(
       origin_power_map->ClearOriginMap(nullable_filter);
 
     // Need to clear the host cache and accumulated speculative data, as it also
-    // reveals some history: we have no mechanism to track when these items were
-    // created, so we'll clear them all. Better safe than sorry.
+    // reveals some history. We have no mechanism to track when these items were
+    // created, so we'll not honor the time range.
+    // TODO(msramek): We can use the plugin filter here because plugins, same
+    // as the hostname resolution cache, key their entries by hostname. Rename
+    // BuildPluginFilter() to something more general to reflect this use.
     if (g_browser_process->io_thread()) {
-      // TODO(dmurph): Support all backends with filter (crbug.com/113621).
       waiting_for_clear_hostname_resolution_cache_ = true;
       BrowserThread::PostTaskAndReply(
           BrowserThread::IO, FROM_HERE,
           base::Bind(&ClearHostnameResolutionCacheOnIOThread,
-                     g_browser_process->io_thread()),
+                     g_browser_process->io_thread(),
+                     filter_builder.BuildPluginFilter()),
           base::Bind(&BrowsingDataRemover::OnClearedHostnameResolutionCache,
                      weak_ptr_factory_.GetWeakPtr()));
     }
@@ -562,15 +592,16 @@ void BrowsingDataRemover::RemoveImpl(
         TemplateURLServiceFactory::GetForProfile(profile_);
 
     if (keywords_model && !keywords_model->loaded()) {
+      // TODO(msramek): Store filters from the currently executed task on the
+      // object to avoid having to copy them to callback methods.
       template_url_sub_ = keywords_model->RegisterOnLoadedCallback(
           base::Bind(&BrowsingDataRemover::OnKeywordsLoaded,
-                     weak_ptr_factory_.GetWeakPtr()));
+                     weak_ptr_factory_.GetWeakPtr(), filter));
       keywords_model->Load();
       waiting_for_clear_keyword_data_ = true;
     } else if (keywords_model) {
-      // TODO(dmurph): Support all backends with filter (crbug.com/113621).
-      keywords_model->RemoveAutoGeneratedForOriginBetween(GURL(), delete_begin_,
-                                                          delete_end_);
+      keywords_model->RemoveAutoGeneratedForUrlsBetween(filter, delete_begin_,
+                                                        delete_end_);
     }
 
     // The PrerenderManager keeps history of prerendered pages, so clear that.
@@ -578,7 +609,7 @@ void BrowsingDataRemover::RemoveImpl(
     // considered to have a small amount of historical information, so delete
     // it, too.
     prerender::PrerenderManager* prerender_manager =
-        prerender::PrerenderManagerFactory::GetForProfile(profile_);
+        prerender::PrerenderManagerFactory::GetForBrowserContext(profile_);
     if (prerender_manager) {
       // TODO(dmurph): Support all backends with filter (crbug.com/113621).
       prerender_manager->ClearData(
@@ -645,8 +676,15 @@ void BrowsingDataRemover::RemoveImpl(
 
     // The SSL Host State that tracks SSL interstitial "proceed" decisions may
     // include origins that the user has visited, so it must be cleared.
-    if (profile_->GetSSLHostStateDelegate())
-      profile_->GetSSLHostStateDelegate()->Clear();
+    // TODO(msramek): We can reuse the plugin filter here, since both plugins
+    // and SSL host state are scoped to hosts and represent them as std::string.
+    // Rename the method to indicate its more general usage.
+    if (profile_->GetSSLHostStateDelegate()) {
+      profile_->GetSSLHostStateDelegate()->Clear(
+          filter_builder.IsEmptyBlacklist()
+              ? base::Callback<bool(const std::string&)>()
+              : filter_builder.BuildPluginFilter());
+    }
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
     precache::PrecacheManager* precache_manager =
@@ -667,9 +705,10 @@ void BrowsingDataRemover::RemoveImpl(
     // registered webapps. The webapp_registry makes a JNI call into a Java-side
     // AsyncTask, so don't wait for the reply.
     waiting_for_clear_webapp_history_ = true;
-    webapp_registry_->ClearWebappHistory(
+    webapp_registry_->ClearWebappHistoryForUrls(
+        filter,
         base::Bind(&BrowsingDataRemover::OnClearedWebappHistory,
-          weak_ptr_factory_.GetWeakPtr()));
+                   weak_ptr_factory_.GetWeakPtr()));
 #endif
 
     data_reduction_proxy::DataReductionProxySettings*
@@ -685,6 +724,14 @@ void BrowsingDataRemover::RemoveImpl(
         data_reduction_proxy_service->compression_stats()
             ->DeleteBrowsingHistory(delete_begin_, delete_end_);
       }
+    }
+
+    // |previews_service| is null if |profile_| is off the record.
+    PreviewsService* previews_service =
+        PreviewsServiceFactory::GetForProfile(profile_);
+    if (previews_service && previews_service->previews_ui_service()) {
+      previews_service->previews_ui_service()->ClearBlackList(delete_begin_,
+                                                              delete_end_);
     }
   }
 
@@ -768,6 +815,13 @@ void BrowsingDataRemover::RemoveImpl(
                               weak_ptr_factory_.GetWeakPtr())));
   }
 
+  if (remove_mask & REMOVE_DURABLE_PERMISSION) {
+    HostContentSettingsMapFactory::GetForProfile(profile_)
+        ->ClearSettingsForOneTypeWithPredicate(
+            CONTENT_SETTINGS_TYPE_DURABLE_STORAGE,
+            base::Bind(&ForwardPrimaryPatternCallback, same_pattern_filter));
+  }
+
   if (remove_mask & REMOVE_LOCAL_STORAGE) {
     storage_partition_remove_mask |=
         content::StoragePartition::REMOVE_DATA_MASK_LOCAL_STORAGE;
@@ -828,17 +882,17 @@ void BrowsingDataRemover::RemoveImpl(
 #endif
 
   if (remove_mask & REMOVE_SITE_USAGE_DATA) {
-    ClearSettingsForOneTypeWithPredicate(
-        HostContentSettingsMapFactory::GetForProfile(profile_),
-        CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT,
-        base::Bind(&ForwardPrimaryPatternCallback, same_pattern_filter));
+    HostContentSettingsMapFactory::GetForProfile(profile_)
+        ->ClearSettingsForOneTypeWithPredicate(
+            CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT,
+            base::Bind(&ForwardPrimaryPatternCallback, same_pattern_filter));
   }
 
   if (remove_mask & REMOVE_SITE_USAGE_DATA || remove_mask & REMOVE_HISTORY) {
-    ClearSettingsForOneTypeWithPredicate(
-        HostContentSettingsMapFactory::GetForProfile(profile_),
-        CONTENT_SETTINGS_TYPE_APP_BANNER,
-        base::Bind(&ForwardPrimaryPatternCallback, same_pattern_filter));
+    HostContentSettingsMapFactory::GetForProfile(profile_)
+        ->ClearSettingsForOneTypeWithPredicate(
+            CONTENT_SETTINGS_TYPE_APP_BANNER,
+            base::Bind(&ForwardPrimaryPatternCallback, same_pattern_filter));
 
     PermissionDecisionAutoBlocker::RemoveCountsByUrl(profile_, filter);
   }
@@ -882,8 +936,8 @@ void BrowsingDataRemover::RemoveImpl(
 
     if (password_store) {
       waiting_for_clear_passwords_stats_ = true;
-      password_store->RemoveStatisticsCreatedBetween(
-          delete_begin_, delete_end_,
+      password_store->RemoveStatisticsByOriginAndTime(
+          nullable_filter, delete_begin_, delete_end_,
           base::Bind(&BrowsingDataRemover::OnClearedPasswordsStats,
                      weak_ptr_factory_.GetWeakPtr()));
     }
@@ -961,7 +1015,7 @@ void BrowsingDataRemover::RemoveImpl(
     // The PrerenderManager may have a page actively being prerendered, which
     // is essentially a preemptively cached page.
     prerender::PrerenderManager* prerender_manager =
-        prerender::PrerenderManagerFactory::GetForProfile(profile_);
+        prerender::PrerenderManagerFactory::GetForBrowserContext(profile_);
     if (prerender_manager) {
       prerender_manager->ClearData(
           prerender::PrerenderManager::CLEAR_PRERENDER_CONTENTS);
@@ -981,9 +1035,21 @@ void BrowsingDataRemover::RemoveImpl(
                    weak_ptr_factory_.GetWeakPtr()));
 
     ntp_snippets::ContentSuggestionsService* content_suggestions_service =
-        ContentSuggestionsServiceFactory::GetForProfile(profile_);
+        ContentSuggestionsServiceFactory::GetForProfileIfExists(profile_);
     if (content_suggestions_service)
       content_suggestions_service->ClearAllCachedSuggestions();
+  }
+
+  if (remove_mask & REMOVE_COOKIES || remove_mask & REMOVE_PASSWORDS) {
+    scoped_refptr<net::URLRequestContextGetter> request_context =
+        profile_->GetRequestContext();
+    waiting_for_clear_http_auth_cache_ = true;
+    BrowserThread::PostTaskAndReply(
+        BrowserThread::IO, FROM_HERE,
+        base::Bind(&ClearHttpAuthCacheOnIOThread, std::move(request_context),
+                   delete_begin_),
+        base::Bind(&BrowsingDataRemover::OnClearedHttpAuthCache,
+                   weak_ptr_factory_.GetWeakPtr()));
   }
 
   // Content Decryption Modules used by Encrypted Media store licenses in a
@@ -1106,7 +1172,7 @@ void BrowsingDataRemover::RemoveImpl(
 
   // For now we're considering offline pages as cache, so if we're removing
   // cache we should remove offline pages as well.
-  if ((remove_mask & REMOVE_CACHE) && offline_pages::IsOfflinePagesEnabled()) {
+  if ((remove_mask & REMOVE_CACHE)) {
     waiting_for_clear_offline_page_data_ = true;
     offline_pages::OfflinePageModelFactory::GetForBrowserContext(profile_)
         ->DeleteCachedPagesByURLPredicate(
@@ -1150,7 +1216,7 @@ void BrowsingDataRemover::OverrideStoragePartitionForTesting(
 #if BUILDFLAG(ANDROID_JAVA_UI)
 void BrowsingDataRemover::OverrideWebappRegistryForTesting(
     std::unique_ptr<WebappRegistry> webapp_registry) {
-  webapp_registry_.reset(webapp_registry.release());
+  webapp_registry_ = std::move(webapp_registry);
 }
 #endif
 
@@ -1191,24 +1257,6 @@ BrowsingDataRemover::RemovalTask::RemovalTask(
 
 BrowsingDataRemover::RemovalTask::~RemovalTask() {}
 
-void BrowsingDataRemover::ClearSettingsForOneTypeWithPredicate(
-    HostContentSettingsMap* content_settings_map,
-    ContentSettingsType content_type,
-    const base::Callback<bool(const ContentSettingsPattern& primary_pattern,
-                              const ContentSettingsPattern& secondary_pattern)>&
-        predicate) {
-  ContentSettingsForOneType settings;
-  content_settings_map->GetSettingsForOneType(content_type, std::string(),
-                                              &settings);
-  for (const ContentSettingPatternSource& setting : settings) {
-    if (predicate.Run(setting.primary_pattern, setting.secondary_pattern)) {
-      content_settings_map->SetWebsiteSettingCustomScope(
-          setting.primary_pattern, setting.secondary_pattern, content_type,
-          std::string(), nullptr);
-    }
-  }
-}
-
 bool BrowsingDataRemover::AllDone() {
   return !waiting_for_synchronous_clear_operations_ &&
          !waiting_for_clear_autofill_origin_urls_ &&
@@ -1218,6 +1266,7 @@ bool BrowsingDataRemover::AllDone() {
          !waiting_for_clear_domain_reliability_monitor_ &&
          !waiting_for_clear_form_ && !waiting_for_clear_history_ &&
          !waiting_for_clear_hostname_resolution_cache_ &&
+         !waiting_for_clear_http_auth_cache_ &&
          !waiting_for_clear_keyword_data_ && !waiting_for_clear_nacl_cache_ &&
          !waiting_for_clear_network_predictor_ &&
          !waiting_for_clear_networking_history_ &&
@@ -1238,12 +1287,14 @@ bool BrowsingDataRemover::AllDone() {
          !waiting_for_clear_auto_sign_in_;
 }
 
-void BrowsingDataRemover::OnKeywordsLoaded() {
+void BrowsingDataRemover::OnKeywordsLoaded(
+    base::Callback<bool(const GURL&)> url_filter) {
   // Deletes the entries from the model, and if we're not waiting on anything
   // else notifies observers and deletes this BrowsingDataRemover.
   TemplateURLService* model =
       TemplateURLServiceFactory::GetForProfile(profile_);
-  model->RemoveAutoGeneratedBetween(delete_begin_, delete_end_);
+  model->RemoveAutoGeneratedForUrlsBetween(url_filter, delete_begin_,
+                                           delete_end_);
   waiting_for_clear_keyword_data_ = false;
   template_url_sub_.reset();
   NotifyIfDone();
@@ -1313,6 +1364,12 @@ void BrowsingDataRemover::OnHistoryDeletionDone() {
 void BrowsingDataRemover::OnClearedHostnameResolutionCache() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   waiting_for_clear_hostname_resolution_cache_ = false;
+  NotifyIfDone();
+}
+
+void BrowsingDataRemover::OnClearedHttpAuthCache() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  waiting_for_clear_http_auth_cache_ = false;
   NotifyIfDone();
 }
 

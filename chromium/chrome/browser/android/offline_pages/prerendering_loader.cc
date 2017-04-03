@@ -17,6 +17,33 @@
 
 namespace offline_pages {
 
+
+// Classifies the appropriate RequestStatus for for the given prerender
+// FinalStatus.
+Offliner::RequestStatus ClassifyFinalStatus(
+    prerender::FinalStatus final_status) {
+  switch (final_status) {
+
+    // Identify aborted/canceled operations
+
+    case prerender::FINAL_STATUS_CANCELLED:
+    // TODO(dougarnett): Reconsider if/when get better granularity (642768)
+    case prerender::FINAL_STATUS_UNSUPPORTED_SCHEME:
+      return Offliner::PRERENDERING_CANCELED;
+
+    // Identify non-retryable failues.
+
+    case prerender::FINAL_STATUS_SAFE_BROWSING:
+    case prerender::FINAL_STATUS_CREATING_AUDIO_STREAM:
+    case prerender::FINAL_STATUS_JAVASCRIPT_ALERT:
+      return Offliner::RequestStatus::PRERENDERING_FAILED_NO_RETRY;
+
+    // Otherwise, assume retryable failure.
+    default:
+      return Offliner::RequestStatus::PRERENDERING_FAILED;
+  }
+}
+
 PrerenderingLoader::PrerenderingLoader(content::BrowserContext* browser_context)
     : state_(State::IDLE),
       snapshot_controller_(nullptr),
@@ -42,11 +69,12 @@ bool PrerenderingLoader::LoadPage(const GURL& url,
   // Create a WebContents instance to define and hold a SessionStorageNamespace
   // for this load request.
   DCHECK(!session_contents_.get());
-  session_contents_.reset(content::WebContents::Create(
-      content::WebContents::CreateParams(browser_context_)));
+  std::unique_ptr<content::WebContents> new_web_contents(
+      content::WebContents::Create(
+          content::WebContents::CreateParams(browser_context_)));
   content::SessionStorageNamespace* sessionStorageNamespace =
-      session_contents_->GetController().GetDefaultSessionStorageNamespace();
-  gfx::Size renderWindowSize = session_contents_->GetContainerBounds().size();
+      new_web_contents->GetController().GetDefaultSessionStorageNamespace();
+  gfx::Size renderWindowSize = new_web_contents->GetContainerBounds().size();
   bool accepted = adapter_->StartPrerender(
       browser_context_, url, sessionStorageNamespace, renderWindowSize);
   if (!accepted)
@@ -56,7 +84,8 @@ bool PrerenderingLoader::LoadPage(const GURL& url,
   snapshot_controller_.reset(
       new SnapshotController(base::ThreadTaskRunnerHandle::Get(), this));
   callback_ = callback;
-  state_ = State::PENDING;
+  session_contents_.swap(new_web_contents);
+  state_ = State::LOADING;
   return true;
 }
 
@@ -84,12 +113,6 @@ void PrerenderingLoader::SetAdapterForTesting(
     std::unique_ptr<PrerenderAdapter> prerender_adapter) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   adapter_ = std::move(prerender_adapter);
-}
-
-void PrerenderingLoader::OnPrerenderStart() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  DCHECK(state_ == State::PENDING);
-  state_ = State::LOADING;
 }
 
 void PrerenderingLoader::OnPrerenderStopLoading() {
@@ -149,7 +172,7 @@ void PrerenderingLoader::HandleLoadEvent() {
 }
 
 void PrerenderingLoader::HandleLoadingStopped() {
-  // Loading has stopped so unless the Loader has already transistioned to the
+  // Loading has stopped so unless the Loader has already transitioned to the
   // idle state, clean up the previous request state, transition to the idle
   // state, and post callback.
   // Note: it is possible to receive some asynchronous stopped indication after
@@ -159,32 +182,36 @@ void PrerenderingLoader::HandleLoadingStopped() {
   if (IsIdle())
     return;
 
-  // Request status depends on whether we are still loading (failed) or
-  // did load and then loading was stopped (cancel - from prerender stack).
-  Offliner::RequestStatus request_status =
-      IsLoaded() ? Offliner::RequestStatus::PRERENDERING_CANCELED
-                 : Offliner::RequestStatus::PRERENDERING_FAILED;
+  Offliner::RequestStatus request_status;
 
   if (adapter_->IsActive()) {
-    prerender::FinalStatus final_status = adapter_->GetFinalStatus();
-    DVLOG(1) << "Load failed: " << final_status;
-
-    // Loss of network connection can show up as unsupported scheme per
-    // a redirect to a special data URL is used to navigate to error page.
-    // We want to be able to retry these request so for now treat any
-    // unsupported scheme error as a cancel.
-    // TODO(dougarnett): Use new FinalStatus code if/when supported (642768).
-    // TODO(dougarnett): Create whitelist of final status codes that should
-    // not be considered failures (and define new RequestStatus code for them).
-    if (adapter_->GetFinalStatus() ==
-        prerender::FinalStatus::FINAL_STATUS_UNSUPPORTED_SCHEME) {
+    if (IsLoaded()) {
+      // If page already loaded, then prerender is telling us that it is
+      // canceling (and we should stop using the loaded WebContents).
       request_status = Offliner::RequestStatus::PRERENDERING_CANCELED;
-      UMA_HISTOGRAM_ENUMERATION(
-          "OfflinePages.Background.UnsupportedScheme.ConnectionType",
-          net::NetworkChangeNotifier::GetConnectionType(),
-          net::NetworkChangeNotifier::ConnectionType::CONNECTION_LAST + 1);
+    } else {
+      // Otherwise, get the available FinalStatus to classify the outcome.
+      prerender::FinalStatus final_status = adapter_->GetFinalStatus();
+      DVLOG(1) << "Load failed: " << final_status;
+      request_status = ClassifyFinalStatus(final_status);
+
+      // Loss of network connection can show up as unsupported scheme per
+      // a redirect to a special data URL is used to navigate to error page.
+      // Capture the current connectivity here in case we can leverage that
+      // to differentiate how to treat it.
+      if (final_status == prerender::FINAL_STATUS_UNSUPPORTED_SCHEME) {
+        UMA_HISTOGRAM_ENUMERATION(
+            "OfflinePages.Background.UnsupportedScheme.ConnectionType",
+            net::NetworkChangeNotifier::GetConnectionType(),
+            net::NetworkChangeNotifier::ConnectionType::CONNECTION_LAST + 1);
+      }
     }
+
+    // Now clean up the active prerendering operation detail.
     adapter_->DestroyActive();
+  } else {
+    // No access to FinalStatus so classify as retryable failure.
+    request_status = Offliner::RequestStatus::PRERENDERING_FAILED;
   }
 
   snapshot_controller_.reset(nullptr);

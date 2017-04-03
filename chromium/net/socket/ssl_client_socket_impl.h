@@ -24,6 +24,7 @@
 #include "net/cert/cert_verifier.h"
 #include "net/cert/cert_verify_result.h"
 #include "net/cert/ct_verify_result.h"
+#include "net/log/net_log_with_source.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/ssl/channel_id_service.h"
@@ -37,6 +38,10 @@ class FilePath;
 class SequencedTaskRunner;
 }
 
+namespace crypto {
+class OpenSSLErrStackTracer;
+}
+
 namespace net {
 
 class CertVerifier;
@@ -44,7 +49,9 @@ class CTVerifier;
 class SSLCertRequestInfo;
 class SSLInfo;
 
-using SignedEkmMap = base::MRUCache<std::string, std::vector<uint8_t>>;
+using TokenBindingSignatureMap =
+    base::MRUCache<std::pair<TokenBindingType, std::string>,
+                   std::vector<uint8_t>>;
 
 class SSLClientSocketImpl : public SSLClientSocket {
  public:
@@ -74,8 +81,9 @@ class SSLClientSocketImpl : public SSLClientSocket {
   // SSLClientSocket implementation.
   void GetSSLCertRequestInfo(SSLCertRequestInfo* cert_request_info) override;
   ChannelIDService* GetChannelIDService() const override;
-  Error GetSignedEKMForTokenBinding(crypto::ECPrivateKey* key,
-                                    std::vector<uint8_t>* out) override;
+  Error GetTokenBindingSignature(crypto::ECPrivateKey* key,
+                                 TokenBindingType tb_type,
+                                 std::vector<uint8_t>* out) override;
   crypto::ECPrivateKey* GetChannelIDKey() const override;
 
   // SSLSocket implementation.
@@ -92,7 +100,7 @@ class SSLClientSocketImpl : public SSLClientSocket {
   bool IsConnectedAndIdle() const override;
   int GetPeerAddress(IPEndPoint* address) const override;
   int GetLocalAddress(IPEndPoint* address) const override;
-  const BoundNetLog& NetLog() const override;
+  const NetLogWithSource& NetLog() const override;
   void SetSubresourceSpeculation() override;
   void SetOmniboxSpeculation() override;
   bool WasEverUsed() const override;
@@ -166,12 +174,6 @@ class SSLClientSocketImpl : public SSLClientSocket {
   // certificates don't change during renegotiation.
   int CertVerifyCallback(X509_STORE_CTX* store_ctx);
 
-  // Callback from the SSL layer to check which NPN protocol we are supporting
-  int SelectNextProtoCallback(unsigned char** out,
-                              unsigned char* outlen,
-                              const unsigned char* in,
-                              unsigned int inlen);
-
   // Called during an operation on |transport_bio_|'s peer. Checks saved
   // transport error state and, if appropriate, returns an error through
   // OpenSSL's error system.
@@ -240,9 +242,9 @@ class SSLClientSocketImpl : public SSLClientSocket {
 
   void LogConnectEndEvent(int rv);
 
-  // Record which TLS extension was used to negotiate protocol and protocol
-  // chosen in a UMA histogram.
-  void RecordNegotiationExtension() const;
+  // Record whether ALPN was used, and if so, the negotiated protocol,
+  // in a UMA histogram.
+  void RecordNegotiatedProtocol() const;
 
   // Records histograms for channel id support during full handshakes - resumed
   // handshakes are ignored.
@@ -250,6 +252,12 @@ class SSLClientSocketImpl : public SSLClientSocket {
 
   // Returns whether TLS channel ID is enabled.
   bool IsChannelIDEnabled() const;
+
+  // Returns the net error corresponding to the most recent OpenSSL
+  // error. ssl_error is the output of SSL_get_error.
+  int MapLastOpenSSLError(int ssl_error,
+                          const crypto::OpenSSLErrStackTracer& tracer,
+                          OpenSSLErrorInfo* info);
 
   bool transport_send_busy_;
   bool transport_recv_busy_;
@@ -325,7 +333,7 @@ class SSLClientSocketImpl : public SSLClientSocket {
   ChannelIDService* channel_id_service_;
   bool tb_was_negotiated_;
   TokenBindingParam tb_negotiated_param_;
-  SignedEkmMap tb_signed_ekm_map_;
+  TokenBindingSignatureMap tb_signature_map_;
 
   // OpenSSL stuff
   SSL* ssl_;
@@ -353,10 +361,7 @@ class SSLClientSocketImpl : public SSLClientSocket {
   // True if the socket has been disconnected.
   bool disconnected_;
 
-  NextProtoStatus npn_status_;
   NextProto negotiated_protocol_;
-  // Protocol negotiation extension used.
-  SSLNegotiationExtension negotiation_extension_;
   // Written by the |channel_id_service_|.
   std::unique_ptr<crypto::ECPrivateKey> channel_id_key_;
   // True if a channel ID was sent.
@@ -366,6 +371,8 @@ class SSLClientSocketImpl : public SSLClientSocket {
   ScopedSSL_SESSION pending_session_;
   // True if the initial handshake's certificate has been verified.
   bool certificate_verified_;
+  // Set to true if a CertificateRequest was received.
+  bool certificate_requested_;
   // The request handle for |channel_id_service_|.
   ChannelIDService::Request channel_id_request_;
 
@@ -384,7 +391,7 @@ class SSLClientSocketImpl : public SSLClientSocket {
   // True if PKP is bypassed due to a local trust anchor.
   bool pkp_bypassed_;
 
-  BoundNetLog net_log_;
+  NetLogWithSource net_log_;
   base::WeakPtrFactory<SSLClientSocketImpl> weak_factory_;
 };
 

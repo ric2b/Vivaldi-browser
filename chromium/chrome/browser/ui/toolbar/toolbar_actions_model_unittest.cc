@@ -1121,11 +1121,11 @@ TEST_F(ToolbarActionsModelUnitTest, ActionsToolbarIncognitoEnableExtension) {
     // The extension id will be calculated from the file path; we need this to
     // wait for the extension to load.
     base::FilePath path_for_id =
-        base::MakeAbsoluteFilePath(dirs[i]->unpacked_path());
+        base::MakeAbsoluteFilePath(dirs[i]->UnpackedPath());
     std::string id = crx_file::id_util::GenerateIdForPath(path_for_id);
     extensions::TestExtensionRegistryObserver observer(registry(), id);
-    extensions::UnpackedInstaller::Create(service())
-        ->Load(dirs[i]->unpacked_path());
+    extensions::UnpackedInstaller::Create(service())->Load(
+        dirs[i]->UnpackedPath());
     observer.WaitForExtensionLoaded();
     extensions[i] = registry()->enabled_extensions().GetByID(id);
     ASSERT_TRUE(extensions[i]);
@@ -1312,36 +1312,6 @@ TEST_F(ToolbarActionsModelUnitTest, ToolbarModelPrefChange) {
             observer()->inserted_count() - observer()->removed_count());
 }
 
-TEST_F(ToolbarActionsModelUnitTest, ComponentExtensionsAddedToEnd) {
-  Init();
-
-  ASSERT_TRUE(AddBrowserActionExtensions());
-
-  EXPECT_EQ(browser_action_a()->id(), GetActionIdAtIndex(0));
-  EXPECT_EQ(browser_action_b()->id(), GetActionIdAtIndex(1));
-  EXPECT_EQ(browser_action_c()->id(), GetActionIdAtIndex(2));
-
-  const char kName[] = "component";
-  extensions::DictionaryBuilder manifest;
-  manifest.Set("name", kName)
-      .Set("description", "An extension")
-      .Set("manifest_version", 2)
-      .Set("version", "1.0.0")
-      .Set("browser_action", extensions::DictionaryBuilder().Build());
-  scoped_refptr<const extensions::Extension> component_extension =
-      extensions::ExtensionBuilder()
-          .SetManifest(manifest.Build())
-          .SetID(crx_file::id_util::GenerateId(kName))
-          .SetLocation(extensions::Manifest::COMPONENT)
-          .Build();
-  service()->AddExtension(component_extension.get());
-
-  EXPECT_EQ(component_extension.get()->id(), GetActionIdAtIndex(0));
-  EXPECT_EQ(browser_action_a()->id(), GetActionIdAtIndex(1));
-  EXPECT_EQ(browser_action_b()->id(), GetActionIdAtIndex(2));
-  EXPECT_EQ(browser_action_c()->id(), GetActionIdAtIndex(3));
-}
-
 // Test various different reorderings, removals, and reinsertions of the
 // toolbar with component actions.
 TEST_F(ToolbarActionsModelUnitTest,
@@ -1486,6 +1456,18 @@ TEST_F(ToolbarActionsModelUnitTest,
   EXPECT_EQ(1u, toolbar_model()->visible_icon_count());
   EXPECT_EQ(browser_action_a()->id(), GetActionIdAtIndex(0u));
   EXPECT_EQ(browser_action_c()->id(), GetActionIdAtIndex(1u));
+}
+
+TEST_F(ToolbarActionsModelUnitTest, AddComponentActionBeforeInitialization) {
+  InitializeEmptyExtensionService();
+  ToolbarActionsModel* toolbar_model = extensions::extension_action_test_util::
+      CreateToolbarModelForProfileWithoutWaitingForReady(profile());
+  ASSERT_FALSE(toolbar_model->actions_initialized());
+
+  // AddComponentAction() should be a no-op if actions_initialized() is false.
+  toolbar_model->AddComponentAction(component_action_id());
+  EXPECT_EQ(0u, toolbar_model->toolbar_items().size());
+  EXPECT_FALSE(toolbar_model->HasComponentAction(component_action_id()));
 }
 
 TEST_F(ToolbarActionsModelUnitTest,

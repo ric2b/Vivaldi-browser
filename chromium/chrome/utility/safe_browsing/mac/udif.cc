@@ -190,7 +190,14 @@ class UDIFBlock {
  public:
   UDIFBlock() : block_() {}
 
-  bool ParseBlockData(const UDIFBlockData* block_data, uint16_t sector_size) {
+  bool ParseBlockData(const UDIFBlockData* block_data,
+                      size_t block_data_size,
+                      uint16_t sector_size) {
+    if (block_data_size < sizeof(block_)) {
+      DLOG(ERROR) << "UDIF block data is smaller than expected";
+      return false;
+    }
+
     block_ = *block_data;
     ConvertBigEndian(&block_);
 
@@ -199,6 +206,19 @@ class UDIFBlock {
                       sector_size;
     if (!block_size.IsValid()) {
       DLOG(ERROR) << "UDIF block size overflows";
+      return false;
+    }
+
+    // Make sure the block data contains the reported number of chunks.
+    auto block_and_chunks_size =
+        (base::CheckedNumeric<size_t>(sizeof(UDIFBlockChunk)) *
+         block_.chunk_count) +
+        sizeof(block_);
+    if (!block_and_chunks_size.IsValid() ||
+        block_data_size < block_and_chunks_size.ValueOrDie()) {
+      DLOG(ERROR) << "UDIF block does not contain reported number of chunks, "
+                  << block_and_chunks_size.ValueOrDie() << " bytes expected, "
+                  << "got " << block_data_size;
       return false;
     }
 
@@ -382,8 +402,8 @@ size_t UDIFParser::GetPartitionSize(size_t part_number) {
 std::unique_ptr<ReadStream> UDIFParser::GetPartitionReadStream(
     size_t part_number) {
   DCHECK_LT(part_number, blocks_.size());
-  return base::WrapUnique(
-      new UDIFPartitionReadStream(stream_, block_size_, blocks_[part_number]));
+  return base::MakeUnique<UDIFPartitionReadStream>(stream_, block_size_,
+                                                   blocks_[part_number]);
 }
 
 bool UDIFParser::ParseBlkx() {
@@ -486,6 +506,7 @@ bool UDIFParser::ParseBlkx() {
     std::unique_ptr<UDIFBlock> block(new UDIFBlock());
     if (!block->ParseBlockData(
             reinterpret_cast<const UDIFBlockData*>(CFDataGetBytePtr(data)),
+            base::checked_cast<size_t>(CFDataGetLength(data)),
             block_size_)) {
       DLOG(ERROR) << "Failed to parse UDIF block data";
       return false;

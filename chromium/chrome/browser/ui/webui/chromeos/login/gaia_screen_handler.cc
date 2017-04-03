@@ -6,9 +6,10 @@
 
 #include "ash/common/system/chromeos/devicetype_utils.h"
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/guid.h"
 #include "base/logging.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -26,7 +27,7 @@
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/io_thread.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
-#include "chrome/browser/ui/webui/signin/get_auth_frame.h"
+#include "chrome/browser/ui/webui/signin/signin_utils.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
@@ -37,6 +38,7 @@
 #include "chromeos/system/version_loader.h"
 #include "components/login/localized_values_builder.h"
 #include "components/prefs/pref_service.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/version_info/version_info.h"
@@ -44,9 +46,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/gaia_urls.h"
-#include "grit/components_strings.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
-#include "ui/base/l10n/l10n_util.h"
 
 using content::BrowserThread;
 namespace em = enterprise_management;
@@ -163,7 +163,7 @@ void ClearDnsCache(IOThread* io_thread) {
   if (browser_shutdown::IsTryingToQuit())
     return;
 
-  io_thread->ClearHostCache();
+  io_thread->ClearHostCache(base::Callback<bool(const std::string&)>());
 }
 
 void PushFrontIMIfNotExists(const std::string& input_method,

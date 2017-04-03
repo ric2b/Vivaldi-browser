@@ -69,9 +69,9 @@ _VERSION_SPECIFIC_FILTER = {}
 _VERSION_SPECIFIC_FILTER['HEAD'] = [
     # https://code.google.com/p/chromedriver/issues/detail?id=992
     'ChromeDownloadDirTest.testDownloadDirectoryOverridesExistingPreferences',
-    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1431
-    'ChromeDriverTest.testAutoReporting',
-    'ChromeDriverTest.testConsoleLogSources',
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1503
+    'ChromeDriverTest.testShadowDomHover',
+    'ChromeDriverTest.testMouseMoveTo',
 ]
 
 _OS_SPECIFIC_FILTER = {}
@@ -149,9 +149,6 @@ _ANDROID_NEGATIVE_FILTER['chrome_beta'] = (
 _ANDROID_NEGATIVE_FILTER['chromium'] = (
     _ANDROID_NEGATIVE_FILTER['chrome'] + [
         'ChromeDriverTest.testSwitchToWindow',
-        # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1431
-        'ChromeDriverTest.testAutoReporting',
-        'ChromeDriverTest.testConsoleLogSources',
     ]
 )
 _ANDROID_NEGATIVE_FILTER['chromedriver_webview_shell'] = (
@@ -179,6 +176,7 @@ _ANDROID_NEGATIVE_FILTER['chromedriver_webview_shell'] = (
         'ChromeDriverTest.testGetWindowHandles',
         'ChromeDriverTest.testSwitchToWindow',
         'ChromeDriverTest.testShouldHandleNewWindowLoadingProperly',
+        'ChromeDriverTest.testGetLogOnClosedWindow',
         # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1295
         # TODO(gmanikpure): re-enable this test when we stop supporting
         # WebView on KitKat.
@@ -584,6 +582,19 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
     value = self._driver.ExecuteScript('return arguments[0].value;', text)
     self.assertEquals('0123456789+-*/ Hi, there!', value)
 
+  def testSendingTabKeyMovesToNextInputElement(self):
+    self._driver.Load(self.GetHttpUrlForFile('/chromedriver/two_inputs.html'))
+    first = self._driver.FindElement('id', 'first')
+    second = self._driver.FindElement('id', 'second')
+    first.Click()
+    self._driver.SendKeys('snoopy')
+    self._driver.SendKeys(u'\uE004')
+    self._driver.SendKeys('prickly pete')
+    self.assertEquals('snoopy', self._driver.ExecuteScript(
+        'return arguments[0].value;', first))
+    self.assertEquals('prickly pete', self._driver.ExecuteScript(
+        'return arguments[0].value;', second))
+
   def testGetElementAttribute(self):
     self._driver.Load(self.GetHttpUrlForFile(
         '/chromedriver/attribute_colon_test.html'))
@@ -844,6 +855,23 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
     self.WaitForCondition(lambda: len(GetPendingLogs(self._driver)) > 0 , 11)
     self.assertEqual('console-api', new_logs[0][0]['source'])
     self.assertTrue('RepeatedError' in new_logs[0][0]['message'])
+
+  def testGetLogOnClosedWindow(self):
+    self._driver.Load(self.GetHttpUrlForFile('/chromedriver/page_test.html'))
+    self._driver.FindElement('id', 'link').Click()
+    self._driver.CloseWindow()
+    try:
+      self._driver.GetLog('browser')
+    except chromedriver.ChromeDriverException as e:
+      self.fail('exception while calling GetLog on a closed tab: ' + e.message)
+
+  def testGetLogOnWindowWithAlert(self):
+    self._driver.Load(self.GetHttpUrlForFile('/chromedriver/empty.html'))
+    self._driver.ExecuteScript('alert("alert!");')
+    try:
+      self._driver.GetLog('browser')
+    except Exception as e:
+      self.fail(e.message)
 
   def testAutoReporting(self):
     self.assertFalse(self._driver.IsAutoReporting())

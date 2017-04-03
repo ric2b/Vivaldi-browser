@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <string>
 
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
@@ -192,7 +193,9 @@ class ContextualSearchDelegate
                                         std::string* prevent_preload,
                                         int* mention_start,
                                         int* mention_end,
-                                        std::string* context_language);
+                                        std::string* context_language,
+                                        std::string* thumbnail_url,
+                                        std::string* caption);
 
   // Extracts the start and end location from a mentions list, and sets the
   // integers referenced by |startResult| and |endResult|.

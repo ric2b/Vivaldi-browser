@@ -6,6 +6,7 @@
 #define COMPONENTS_NTP_SNIPPETS_CATEGORY_FACTORY_H_
 
 #include <map>
+#include <string>
 #include <vector>
 
 #include "base/macros.h"

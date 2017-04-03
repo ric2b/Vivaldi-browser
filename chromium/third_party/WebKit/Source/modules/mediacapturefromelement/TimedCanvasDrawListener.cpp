@@ -4,37 +4,40 @@
 
 #include "modules/mediacapturefromelement/TimedCanvasDrawListener.h"
 
+#include "third_party/skia/include/core/SkImage.h"
 #include <memory>
 
 namespace blink {
 
-TimedCanvasDrawListener::TimedCanvasDrawListener(std::unique_ptr<WebCanvasCaptureHandler> handler, double frameRate)
-    : CanvasDrawListener(std::move(handler))
-    , m_frameInterval(1 / frameRate)
-    , m_requestFrameTimer(this, &TimedCanvasDrawListener::requestFrameTimerFired)
-{
-}
+TimedCanvasDrawListener::TimedCanvasDrawListener(
+    std::unique_ptr<WebCanvasCaptureHandler> handler,
+    double frameRate)
+    : CanvasDrawListener(std::move(handler)),
+      m_frameInterval(1 / frameRate),
+      m_requestFrameTimer(this,
+                          &TimedCanvasDrawListener::requestFrameTimerFired) {}
 
 TimedCanvasDrawListener::~TimedCanvasDrawListener() {}
 
 // static
-TimedCanvasDrawListener* TimedCanvasDrawListener::create(std::unique_ptr<WebCanvasCaptureHandler> handler, double frameRate)
-{
-    TimedCanvasDrawListener* listener = new TimedCanvasDrawListener(std::move(handler), frameRate);
-    listener->m_requestFrameTimer.startRepeating(listener->m_frameInterval, BLINK_FROM_HERE);
-    return listener;
+TimedCanvasDrawListener* TimedCanvasDrawListener::create(
+    std::unique_ptr<WebCanvasCaptureHandler> handler,
+    double frameRate) {
+  TimedCanvasDrawListener* listener =
+      new TimedCanvasDrawListener(std::move(handler), frameRate);
+  listener->m_requestFrameTimer.startRepeating(listener->m_frameInterval,
+                                               BLINK_FROM_HERE);
+  return listener;
 }
 
-void TimedCanvasDrawListener::sendNewFrame(const WTF::PassRefPtr<SkImage>& image)
-{
-    m_frameCaptureRequested = false;
-    CanvasDrawListener::sendNewFrame(image);
+void TimedCanvasDrawListener::sendNewFrame(sk_sp<SkImage> image) {
+  m_frameCaptureRequested = false;
+  CanvasDrawListener::sendNewFrame(std::move(image));
 }
 
-void TimedCanvasDrawListener::requestFrameTimerFired(TimerBase*)
-{
-    // TODO(emircan): Measure the jitter and log, see crbug.com/589974.
-    m_frameCaptureRequested = true;
+void TimedCanvasDrawListener::requestFrameTimerFired(TimerBase*) {
+  // TODO(emircan): Measure the jitter and log, see crbug.com/589974.
+  m_frameCaptureRequested = true;
 }
 
-} // namespace blink
+}  // namespace blink

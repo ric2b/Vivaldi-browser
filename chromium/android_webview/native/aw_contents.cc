@@ -60,7 +60,6 @@
 #include "content/public/browser/android/content_view_core.h"
 #include "content/public/browser/android/synchronous_compositor.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/cert_store.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/favicon_status.h"
 #include "content/public/browser/message_port_provider.h"
@@ -68,10 +67,10 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/ssl_status.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/mhtml_generation_params.h"
 #include "content/public/common/renderer_preferences.h"
-#include "content/public/common/ssl_status.h"
 #include "jni/AwContents_jni.h"
 #include "net/base/auth.h"
 #include "net/cert/x509_certificate.h"
@@ -273,7 +272,7 @@ void AwContents::InitAutofillIfNecessary(bool enabled) {
       AutofillManager::DISABLE_AUTOFILL_DOWNLOAD_MANAGER);
 }
 
-void AwContents::SetAwAutofillClient(jobject client) {
+void AwContents::SetAwAutofillClient(const JavaRef<jobject>& client) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
@@ -399,8 +398,7 @@ void GenerateMHTMLCallback(ScopedJavaGlobalRef<jobject>* callback,
   JNIEnv* env = AttachCurrentThread();
   // Android files are UTF8, so the path conversion below is safe.
   Java_AwContents_generateMHTMLCallback(
-      env, ConvertUTF8ToJavaString(env, path.AsUTF8Unsafe()), size,
-      callback->obj());
+      env, ConvertUTF8ToJavaString(env, path.AsUTF8Unsafe()), size, *callback);
 }
 }  // namespace
 
@@ -770,18 +768,13 @@ base::android::ScopedJavaLocalRef<jbyteArray> AwContents::GetCertificate(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   content::NavigationEntry* entry =
       web_contents_->GetController().GetLastCommittedEntry();
-  if (!entry)
-    return ScopedJavaLocalRef<jbyteArray>();
-  // Get the certificate
-  int cert_id = entry->GetSSL().cert_id;
-  scoped_refptr<net::X509Certificate> cert;
-  bool ok = content::CertStore::GetInstance()->RetrieveCert(cert_id, &cert);
-  if (!ok)
+  if (!entry || !entry->GetSSL().certificate)
     return ScopedJavaLocalRef<jbyteArray>();
 
   // Convert the certificate and return it
   std::string der_string;
-  net::X509Certificate::GetDEREncoded(cert->os_cert_handle(), &der_string);
+  net::X509Certificate::GetDEREncoded(
+      entry->GetSSL().certificate->os_cert_handle(), &der_string);
   return base::android::ToJavaByteArray(
       env, reinterpret_cast<const uint8_t*>(der_string.data()),
       der_string.length());
@@ -1060,6 +1053,15 @@ void AwContents::DidOverscroll(const gfx::Vector2d& overscroll_delta,
                                 overscroll_velocity.y());
 }
 
+ui::TouchHandleDrawable* AwContents::CreateDrawable() {
+  JNIEnv* env = AttachCurrentThread();
+  const ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
+  if (obj.is_null())
+    return nullptr;
+  return reinterpret_cast<ui::TouchHandleDrawable*>(
+      Java_AwContents_onCreateTouchHandle(env, obj));
+}
+
 void AwContents::SetDipScale(JNIEnv* env,
                              const JavaParamRef<jobject>& obj,
                              jfloat dip_scale) {
@@ -1138,8 +1140,7 @@ void InvokeVisualStateCallback(const JavaObjectWeakGlobalRef& java_ref,
   ScopedJavaLocalRef<jobject> obj = java_ref.get(env);
   if (obj.is_null())
      return;
-  Java_AwContents_invokeVisualStateCallback(env, obj, callback->obj(),
-                                            request_id);
+  Java_AwContents_invokeVisualStateCallback(env, obj, *callback, request_id);
 }
 }  // namespace
 

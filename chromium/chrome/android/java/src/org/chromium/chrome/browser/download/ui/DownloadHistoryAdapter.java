@@ -5,16 +5,11 @@
 package org.chromium.chrome.browser.download.ui;
 
 import android.content.ComponentName;
-import android.content.Context;
-import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.RecyclerView.ViewHolder;
 import android.text.TextUtils;
-import android.text.format.Formatter;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ImageView;
-import android.widget.TextView;
 
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
@@ -29,7 +24,7 @@ import org.chromium.chrome.browser.offlinepages.downloads.OfflinePageDownloadBri
 import org.chromium.chrome.browser.offlinepages.downloads.OfflinePageDownloadItem;
 import org.chromium.chrome.browser.widget.DateDividedAdapter;
 import org.chromium.chrome.browser.widget.selection.SelectionDelegate;
-import org.chromium.components.url_formatter.UrlFormatter;
+import org.chromium.content_public.browser.DownloadState;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -39,27 +34,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /** Bridges the user's download history and the UI used to display it. */
 public class DownloadHistoryAdapter extends DateDividedAdapter implements DownloadUiObserver {
-
-    /** Holds onto a View that displays information about a downloaded file. */
-    public static class ItemViewHolder extends RecyclerView.ViewHolder {
-        public DownloadItemView mItemView;
-        public ImageView mIconView;
-        public TextView mFilenameView;
-        public TextView mHostnameView;
-        public TextView mFilesizeView;
-
-        public ItemViewHolder(View itemView) {
-            super(itemView);
-
-            assert itemView instanceof DownloadItemView;
-            mItemView = (DownloadItemView) itemView;
-
-            mIconView = (ImageView) itemView.findViewById(R.id.icon_view);
-            mFilenameView = (TextView) itemView.findViewById(R.id.filename_view);
-            mHostnameView = (TextView) itemView.findViewById(R.id.hostname_view);
-            mFilesizeView = (TextView) itemView.findViewById(R.id.filesize_view);
-        }
-    }
 
     /** See {@link #findItemIndex}. */
     private static final int INVALID_INDEX = -1;
@@ -85,6 +59,9 @@ public class DownloadHistoryAdapter extends DateDividedAdapter implements Downlo
     private final List<DownloadItemWrapper> mDownloadOffTheRecordItems = new ArrayList<>();
     private final List<OfflinePageItemWrapper> mOfflinePageItems = new ArrayList<>();
     private final List<DownloadHistoryItemWrapper> mFilteredItems = new ArrayList<>();
+    private final FilePathsToDownloadItemsMap mFilePathsToItemsMap =
+            new FilePathsToDownloadItemsMap();
+
     private final ComponentName mParentComponent;
     private final boolean mShowOffTheRecord;
     private final LoadingStateDelegate mLoadingDelegate;
@@ -93,11 +70,17 @@ public class DownloadHistoryAdapter extends DateDividedAdapter implements Downlo
     private OfflinePageDownloadBridge.Observer mOfflinePageObserver;
     private int mFilter = DownloadFilter.FILTER_ALL;
 
+    private boolean mAllDownloadItemsRetrieved;
+    private boolean mAllOffTheRecordDownloadItemsRetrieved;
+    private boolean mAllOfflinePagesRetrieved;
+
     DownloadHistoryAdapter(boolean showOffTheRecord, ComponentName parentComponent) {
         mShowOffTheRecord = showOffTheRecord;
         mParentComponent = parentComponent;
-        setHasStableIds(true);
         mLoadingDelegate = new LoadingStateDelegate(mShowOffTheRecord);
+
+        // Using stable IDs allows the RecyclerView to animate changes.
+        setHasStableIds(true);
     }
 
     public void initialize(BackendProvider provider) {
@@ -117,6 +100,16 @@ public class DownloadHistoryAdapter extends DateDividedAdapter implements Downlo
     /** Called when the user's download history has been gathered. */
     public void onAllDownloadsRetrieved(List<DownloadItem> result, boolean isOffTheRecord) {
         if (isOffTheRecord && !mShowOffTheRecord) return;
+
+        if ((!isOffTheRecord && mAllDownloadItemsRetrieved)
+                || (isOffTheRecord && mAllOffTheRecordDownloadItemsRetrieved)) {
+            return;
+        }
+        if (!isOffTheRecord) {
+            mAllDownloadItemsRetrieved = true;
+        } else {
+            mAllOffTheRecordDownloadItemsRetrieved = true;
+        }
 
         mLoadingDelegate.updateLoadingState(
                 isOffTheRecord ? LoadingStateDelegate.OFF_THE_RECORD_HISTORY_LOADED
@@ -138,39 +131,51 @@ public class DownloadHistoryAdapter extends DateDividedAdapter implements Downlo
             } else {
                 list.add(wrapper);
                 mItemCounts[wrapper.getFilterType()]++;
+                mFilePathsToItemsMap.addItem(wrapper);
             }
         }
 
-        if (!isOffTheRecord) recordDownloadCountHistograms(mItemCounts, result.size());
+        if (!isOffTheRecord) recordDownloadCountHistograms(mItemCounts);
 
-        if (mLoadingDelegate.isLoaded()) filter(mLoadingDelegate.getPendingFilter());
+        onItemsRetrieved();
     }
 
     /** Called when the user's offline page history has been gathered. */
     private void onAllOfflinePagesRetrieved(List<OfflinePageDownloadItem> result) {
+        if (mAllOfflinePagesRetrieved) return;
+        mAllOfflinePagesRetrieved = true;
+
         mLoadingDelegate.updateLoadingState(LoadingStateDelegate.OFFLINE_PAGE_LOADED);
         mOfflinePageItems.clear();
         for (OfflinePageDownloadItem item : result) {
-            mOfflinePageItems.add(createOfflinePageItemWrapper(item));
+            OfflinePageItemWrapper wrapper = createOfflinePageItemWrapper(item);
+            mOfflinePageItems.add(wrapper);
+            mFilePathsToItemsMap.addItem(wrapper);
         }
-
-        if (mLoadingDelegate.isLoaded()) filter(mLoadingDelegate.getPendingFilter());
 
         RecordHistogram.recordCountHistogram("Android.DownloadManager.InitialCount.OfflinePage",
                 result.size());
+
+        onItemsRetrieved();
+    }
+
+    /**
+     * Should be called when download items or offline pages have been retrieved.
+     */
+    private void onItemsRetrieved() {
+        if (mLoadingDelegate.isLoaded()) {
+            recordTotalDownloadCountHistogram();
+            filter(mLoadingDelegate.getPendingFilter());
+        }
     }
 
     /** Returns the total size of all non-deleted downloaded items. */
     public long getTotalDownloadSize() {
         long totalSize = 0;
         for (DownloadHistoryItemWrapper wrapper : mDownloadItems) {
-            assert wrapper instanceof DownloadItemWrapper;
-            DownloadItemWrapper downloadWrapper = (DownloadItemWrapper) wrapper;
             totalSize += wrapper.getFileSize();
         }
         for (DownloadHistoryItemWrapper wrapper : mDownloadOffTheRecordItems) {
-            assert wrapper instanceof DownloadItemWrapper;
-            DownloadItemWrapper downloadWrapper = (DownloadItemWrapper) wrapper;
             totalSize += wrapper.getFileSize();
         }
         for (DownloadHistoryItemWrapper wrapper : mOfflinePageItems) {
@@ -189,52 +194,25 @@ public class DownloadHistoryAdapter extends DateDividedAdapter implements Downlo
         View v = LayoutInflater.from(parent.getContext()).inflate(
                 R.layout.download_item_view, parent, false);
         ((DownloadItemView) v).setSelectionDelegate(getSelectionDelegate());
-        return new ItemViewHolder(v);
+        return new DownloadHistoryItemViewHolder(v);
     }
 
     @Override
     public void bindViewHolderForTimedItem(ViewHolder current, TimedItem timedItem) {
         final DownloadHistoryItemWrapper item = (DownloadHistoryItemWrapper) timedItem;
 
-        ItemViewHolder holder = (ItemViewHolder) current;
-        Context context = holder.mFilesizeView.getContext();
-        holder.mFilenameView.setText(item.getDisplayFileName());
-        holder.mHostnameView.setText(
-                UrlFormatter.formatUrlForSecurityDisplay(item.getUrl(), false));
-        holder.mFilesizeView.setText(
-                Formatter.formatFileSize(context, item.getFileSize()));
-        holder.mItemView.initialize(item);
-
-        // Pick what icon to display for the item.
-        int fileType = item.getFilterType();
-        int iconResource = R.drawable.ic_drive_file_white_24dp;
-        switch (fileType) {
-            case DownloadFilter.FILTER_PAGE:
-                iconResource = R.drawable.ic_drive_site_white_24dp;
-                break;
-            case DownloadFilter.FILTER_VIDEO:
-                iconResource = R.drawable.ic_play_arrow_white_24dp;
-                break;
-            case DownloadFilter.FILTER_AUDIO:
-                iconResource = R.drawable.ic_music_note_white_24dp;
-                break;
-            case DownloadFilter.FILTER_IMAGE:
-                iconResource = R.drawable.ic_image_white_24dp;
-                break;
-            case DownloadFilter.FILTER_DOCUMENT:
-                iconResource = R.drawable.ic_drive_text_white_24dp;
-                break;
-            default:
-        }
-
-        holder.mIconView.setImageResource(iconResource);
+        DownloadHistoryItemViewHolder holder = (DownloadHistoryItemViewHolder) current;
+        holder.displayItem(mBackendProvider, item);
     }
 
     /**
      * Updates the list when new information about a download comes in.
      */
-    public void onDownloadItemUpdated(DownloadItem item, boolean isOffTheRecord) {
+    public void onDownloadItemUpdated(DownloadItem item, boolean isOffTheRecord, int state) {
         if (isOffTheRecord && !mShowOffTheRecord) return;
+
+        // The adapter currently only cares about completion events.
+        if (state != DownloadState.COMPLETE) return;
 
         List<DownloadItemWrapper> list = getDownloadItemList(isOffTheRecord);
         int index = findItemIndex(list, item.getId());
@@ -253,9 +231,17 @@ public class DownloadHistoryAdapter extends DateDividedAdapter implements Downlo
         if (index == INVALID_INDEX) {
             // Add a new entry.
             list.add(wrapper);
+            mFilePathsToItemsMap.addItem(wrapper);
         } else {
+            DownloadItemWrapper previousWrapper = list.get(index);
+            // If the previous item was selected, the updated item should be selected as well.
+            if (getSelectionDelegate().isItemSelected(previousWrapper)) {
+                getSelectionDelegate().toggleSelectionForItem(previousWrapper);
+                getSelectionDelegate().toggleSelectionForItem(wrapper);
+            }
             // Update the old one.
             list.set(index, wrapper);
+            mFilePathsToItemsMap.replaceItem(wrapper);
         }
 
         filter(mFilter);
@@ -268,7 +254,9 @@ public class DownloadHistoryAdapter extends DateDividedAdapter implements Downlo
      */
     public void onDownloadItemRemoved(String guid, boolean isOffTheRecord) {
         if (isOffTheRecord && !mShowOffTheRecord) return;
-        if (removeItemFromList(getDownloadItemList(isOffTheRecord), guid)) filter(mFilter);
+        if (removeItemFromList(getDownloadItemList(isOffTheRecord), guid)) {
+            filter(mFilter);
+        }
     }
 
     @Override
@@ -293,6 +281,47 @@ public class DownloadHistoryAdapter extends DateDividedAdapter implements Downlo
             sExternallyDeletedItems.clear();
             sExternallyDeletedOffTheRecordItems.clear();
         }
+    }
+
+    /**
+     * @param items The items to remove from this adapter. This should be used to remove items
+     *              from the adapter during deletions.
+     */
+    void removeItemsFromAdapter(List<DownloadHistoryItemWrapper> items) {
+        for (DownloadHistoryItemWrapper item : items) {
+            if (item instanceof DownloadItemWrapper) {
+                getDownloadItemList(item.isOffTheRecord()).remove(item);
+            } else {
+                mOfflinePageItems.remove(item);
+            }
+            mFilePathsToItemsMap.removeItem(item);
+        }
+        filter(mFilter);
+    }
+
+    /**
+     * @param items The items to add to this adapter. This should be used to add items back to the
+     *              adapter when undoing deletions.
+     */
+    void addItemsToAdapter(List<DownloadHistoryItemWrapper> items) {
+        for (DownloadHistoryItemWrapper item : items) {
+            if (item instanceof DownloadItemWrapper) {
+                getDownloadItemList(item.isOffTheRecord()).add((DownloadItemWrapper) item);
+            } else {
+                mOfflinePageItems.add((OfflinePageItemWrapper) item);
+            }
+            mFilePathsToItemsMap.addItem(item);
+        }
+        filter(mFilter);
+    }
+
+    /**
+     * Gets all DownloadHistoryItemWrappers that point to the same path in the user's storage.
+     * @param filePath The file path used to retrieve items.
+     * @return DownloadHistoryItemWrappers associated with filePath.
+     */
+    List<DownloadHistoryItemWrapper> getItemsForFilePath(String filePath) {
+        return mFilePathsToItemsMap.getItemsForFilePath(filePath);
     }
 
     private DownloadDelegate getDownloadDelegate() {
@@ -341,7 +370,9 @@ public class DownloadHistoryAdapter extends DateDividedAdapter implements Downlo
 
             @Override
             public void onItemAdded(OfflinePageDownloadItem item) {
-                mOfflinePageItems.add(createOfflinePageItemWrapper(item));
+                OfflinePageItemWrapper wrapper = createOfflinePageItemWrapper(item);
+                mOfflinePageItems.add(wrapper);
+                mFilePathsToItemsMap.addItem(wrapper);
                 updateFilter();
             }
 
@@ -354,7 +385,9 @@ public class DownloadHistoryAdapter extends DateDividedAdapter implements Downlo
             public void onItemUpdated(OfflinePageDownloadItem item) {
                 int index = findItemIndex(mOfflinePageItems, item.getGuid());
                 if (index != INVALID_INDEX) {
-                    mOfflinePageItems.set(index, createOfflinePageItemWrapper(item));
+                    OfflinePageItemWrapper wrapper = createOfflinePageItemWrapper(item);
+                    mOfflinePageItems.set(index, wrapper);
+                    mFilePathsToItemsMap.replaceItem(wrapper);
                     updateFilter();
                 }
             }
@@ -397,6 +430,8 @@ public class DownloadHistoryAdapter extends DateDividedAdapter implements Downlo
         int index = findItemIndex(list, guid);
         if (index != INVALID_INDEX) {
             T wrapper = list.remove(index);
+            mFilePathsToItemsMap.removeItem(wrapper);
+
             if (getSelectionDelegate().isItemSelected(wrapper)) {
                 getSelectionDelegate().toggleSelectionForItem(wrapper);
             }
@@ -407,14 +442,14 @@ public class DownloadHistoryAdapter extends DateDividedAdapter implements Downlo
 
     private DownloadItemWrapper createDownloadItemWrapper(
             DownloadItem item, boolean isOffTheRecord) {
-        return new DownloadItemWrapper(item, isOffTheRecord, mBackendProvider);
+        return new DownloadItemWrapper(item, isOffTheRecord, mBackendProvider, mParentComponent);
     }
 
     private OfflinePageItemWrapper createOfflinePageItemWrapper(OfflinePageDownloadItem item) {
         return new OfflinePageItemWrapper(item, mBackendProvider, mParentComponent);
     }
 
-    private void recordDownloadCountHistograms(int[] itemCounts, int totalCount) {
+    private void recordDownloadCountHistograms(int[] itemCounts) {
         RecordHistogram.recordCountHistogram("Android.DownloadManager.InitialCount.Audio",
                 itemCounts[DownloadFilter.FILTER_AUDIO]);
         RecordHistogram.recordCountHistogram("Android.DownloadManager.InitialCount.Document",
@@ -425,19 +460,26 @@ public class DownloadHistoryAdapter extends DateDividedAdapter implements Downlo
                 itemCounts[DownloadFilter.FILTER_OTHER]);
         RecordHistogram.recordCountHistogram("Android.DownloadManager.InitialCount.Video",
                 itemCounts[DownloadFilter.FILTER_VIDEO]);
+    }
+
+    private void recordTotalDownloadCountHistogram() {
+        // The total count intentionally leaves out incognito downloads. This should be revisited
+        // if/when incognito downloads are persistently available in downloads home.
         RecordHistogram.recordCountHistogram("Android.DownloadManager.InitialCount.Total",
-                totalCount);
+                mDownloadItems.size() + mOfflinePageItems.size());
     }
 
     private void removeExternallyDeletedItem(DownloadItemWrapper wrapper, boolean isOffTheRecord) {
         getExternallyDeletedItemsMap(isOffTheRecord).put(wrapper.getId(), true);
         wrapper.remove();
+        mFilePathsToItemsMap.removeItem(wrapper);
         RecordUserAction.record("Android.DownloadManager.Item.ExternallyDeleted");
     }
 
     private Map<String, Boolean> getExternallyDeletedItemsMap(boolean isOffTheRecord) {
         return isOffTheRecord ? sExternallyDeletedOffTheRecordItems : sExternallyDeletedItems;
     }
+
     /**
      * Determines when the data from all of the backends has been loaded.
      * <p>

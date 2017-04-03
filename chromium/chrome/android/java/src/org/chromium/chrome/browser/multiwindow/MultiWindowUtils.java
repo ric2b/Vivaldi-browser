@@ -237,6 +237,14 @@ public class MultiWindowUtils implements ActivityStateListener {
     }
 
     /**
+     * Should be called when multi-instance mode is started. This method is responsible for
+     * notifying classes that are multi-instance aware.
+     */
+    public static void onMultiInstanceModeStarted() {
+        ChromeTabbedActivity.onMultiInstanceModeStarted();
+    }
+
+    /**
      * @param className The class name of the Activity to look for in Android recents
      * @param context The current Context, used to retrieve the ActivityManager system service.
      * @return True if the Activity still has a task in Android recents, regardless of whether
@@ -255,7 +263,11 @@ public class MultiWindowUtils implements ActivityStateListener {
         return false;
     }
 
-    private boolean isActivityVisible(Activity activity) {
+    /**
+     * @param activity The Activity whose visibility to test.
+     * @return True iff the given Activity is currently visible.
+     */
+    public static boolean isActivityVisible(Activity activity) {
         if (activity == null) return false;
         int activityState = ApplicationStatus.getStateForActivity(activity);
         // In Android N multi-window mode, only one activity is resumed at a time. The other

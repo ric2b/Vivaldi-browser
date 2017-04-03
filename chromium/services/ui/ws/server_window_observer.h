@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "services/ui/public/interfaces/cursor.mojom.h"
 #include "services/ui/public/interfaces/mus_constants.mojom.h"
 
 namespace gfx {
@@ -66,9 +67,9 @@ class ServerWindowObserver {
                                       float new_opacity) {}
 
   virtual void OnWindowPredefinedCursorChanged(ServerWindow* window,
-                                               int32_t cursor_id) {}
+                                               mojom::Cursor cursor_id) {}
   virtual void OnWindowNonClientCursorChanged(ServerWindow* window,
-                                              int32_t cursor_id) {}
+                                              mojom::Cursor cursor_id) {}
 
   virtual void OnWindowTextInputStateChanged(ServerWindow* window,
                                              const ui::TextInputState& state) {}
@@ -77,6 +78,9 @@ class ServerWindowObserver {
       ServerWindow* window,
       const std::string& name,
       const std::vector<uint8_t>* new_data) {}
+
+  // Called when the window is no longer an embed root.
+  virtual void OnWindowEmbeddedAppDisconnected(ServerWindow* window) {}
 
   // Called when a transient child is added to |window|.
   virtual void OnTransientWindowAdded(ServerWindow* window,

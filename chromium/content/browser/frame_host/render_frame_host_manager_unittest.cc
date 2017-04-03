@@ -44,10 +44,10 @@
 #include "content/public/common/javascript_message_type.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/url_utils.h"
+#include "content/public/test/browser_side_navigation_test_utils.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_notification_tracker.h"
 #include "content/public/test/test_utils.h"
-#include "content/test/browser_side_navigation_test_utils.h"
 #include "content/test/test_content_browser_client.h"
 #include "content/test/test_content_client.h"
 #include "content/test/test_render_frame_host.h"
@@ -434,7 +434,7 @@ class RenderFrameHostManagerTest : public RenderViewHostImplTestHarness {
                                                      ->navigator()
                                                      ->GetController());
       FrameMsg_Navigate_Type::Value navigate_type =
-          entry.restore_type() == NavigationEntryImpl::RESTORE_NONE
+          entry.restore_type() == RestoreType::NONE
               ? FrameMsg_Navigate_Type::NORMAL
               : FrameMsg_Navigate_Type::RESTORE;
       std::unique_ptr<NavigationRequest> navigation_request =
@@ -2536,8 +2536,7 @@ TEST_F(RenderFrameHostManagerTest, RestoreNavigationToWebUI) {
           browser_context());
   new_entry->SetPageID(0);
   entries.push_back(std::move(new_entry));
-  controller.Restore(
-      0, NavigationController::RESTORE_LAST_SESSION_EXITED_CLEANLY, &entries);
+  controller.Restore(0, RestoreType::LAST_SESSION_EXITED_CLEANLY, &entries);
   ASSERT_EQ(0u, entries.size());
   ASSERT_EQ(1, controller.GetEntryCount());
 
@@ -2551,8 +2550,7 @@ TEST_F(RenderFrameHostManagerTest, RestoreNavigationToWebUI) {
                             Referrer(), base::string16() /* title */,
                             ui::PAGE_TRANSITION_RELOAD,
                             false /* is_renderer_init */);
-  entry.set_restore_type(
-      NavigationEntryImpl::RESTORE_LAST_SESSION_EXITED_CLEANLY);
+  entry.set_restore_type(RestoreType::LAST_SESSION_EXITED_CLEANLY);
   NavigateToEntry(manager, entry);
 
   // As the initial renderer was not live, the new RenderFrameHost should be

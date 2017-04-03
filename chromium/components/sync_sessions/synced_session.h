@@ -6,6 +6,7 @@
 #define COMPONENTS_SYNC_SESSIONS_SYNCED_SESSION_H_
 
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 
@@ -19,15 +20,12 @@ namespace sessions {
 struct SessionWindow;
 }
 
-namespace sync_driver {
+namespace sync_sessions {
 
 // Defines a synced session for use by session sync. A synced session is a
 // list of windows along with a unique session identifer (tag) and meta-data
 // about the device being synced.
 struct SyncedSession {
-  typedef std::map<SessionID::id_type, sessions::SessionWindow*>
-      SyncedWindowMap;
-
   // The type of device.
   // Please keep in sync with ForeignSessionHelper.java
   enum DeviceType {
@@ -56,9 +54,9 @@ struct SyncedSession {
   // and all children tab mtimes.
   base::Time modified_time;
 
-  // Map of windows that make up this session. Windowws are owned by the session
-  // itself and free'd on destruction.
-  SyncedWindowMap windows;
+  // Map of windows that make up this session.
+  std::map<SessionID::id_type, std::unique_ptr<sessions::SessionWindow>>
+      windows;
 
   // A tab node id is part of the identifier for the sync tab objects. Tab node
   // ids are not used for interacting with the model/browser tabs. However, when
@@ -103,6 +101,6 @@ struct SyncedSession {
   DISALLOW_COPY_AND_ASSIGN(SyncedSession);
 };
 
-}  // namespace sync_driver
+}  // namespace sync_sessions
 
 #endif  // COMPONENTS_SYNC_SESSIONS_SYNCED_SESSION_H_

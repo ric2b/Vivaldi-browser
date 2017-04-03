@@ -7,7 +7,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <memory>
+#include <string>
+#include <vector>
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
@@ -18,7 +19,6 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
@@ -26,19 +26,17 @@
 #include "chrome/browser/sync/sync_ui_util.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_manager.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/sync/core/network_resources.h"
 #include "components/sync/core/read_transaction.h"
 #include "components/sync/driver/about_sync_util.h"
 #include "components/sync/driver/pref_names.h"
-#include "components/sync/driver/sync_prefs.h"
 #include "content/public/browser/browser_thread.h"
 #include "google/cacheinvalidation/types.pb.h"
 #include "google_apis/gaia/gaia_constants.h"
-#include "google_apis/gaia/google_service_auth_error.h"
-#include "grit/components_strings.h"
 #include "jni/ProfileSyncService_jni.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -48,6 +46,7 @@ using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
+using browser_sync::ProfileSyncService;
 using content::BrowserThread;
 
 namespace {
@@ -83,22 +82,22 @@ ScopedJavaLocalRef<jintArray> ModelTypeSetToJavaIntArray(
 }  // namespace
 
 ProfileSyncServiceAndroid::ProfileSyncServiceAndroid(JNIEnv* env, jobject obj)
-    : profile_(NULL),
-      sync_service_(NULL),
+    : profile_(nullptr),
+      sync_service_(nullptr),
       weak_java_profile_sync_service_(env, obj) {
-  if (g_browser_process == NULL ||
-      g_browser_process->profile_manager() == NULL) {
+  if (g_browser_process == nullptr ||
+      g_browser_process->profile_manager() == nullptr) {
     NOTREACHED() << "Browser process or profile manager not initialized";
     return;
   }
 
   profile_ = ProfileManager::GetActiveUserProfile();
-  if (profile_ == NULL) {
+  if (profile_ == nullptr) {
     NOTREACHED() << "Sync Init: Profile not found.";
     return;
   }
 
-  sync_prefs_.reset(new sync_driver::SyncPrefs(profile_->GetPrefs()));
+  sync_prefs_.reset(new syncer::SyncPrefs(profile_->GetPrefs()));
 
   sync_service_ =
       ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile_);
@@ -290,7 +289,7 @@ jint ProfileSyncServiceAndroid::GetPassphraseType(
     JNIEnv* env,
     const JavaParamRef<jobject>&) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return sync_service_->GetPassphraseType();
+  return static_cast<unsigned>(sync_service_->GetPassphraseType());
 }
 
 void ProfileSyncServiceAndroid::SetEncryptionPassphrase(
@@ -469,7 +468,7 @@ ScopedJavaLocalRef<jstring> ProfileSyncServiceAndroid::GetAboutInfoForTest(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   std::unique_ptr<base::DictionaryValue> about_info =
-      sync_driver::sync_ui_util::ConstructAboutInformation(
+      syncer::sync_ui_util::ConstructAboutInformation(
           sync_service_, sync_service_->signin(), chrome::GetChannel());
   std::string about_info_json;
   base::JSONWriter::Write(*about_info, &about_info_json);
@@ -484,7 +483,7 @@ jlong ProfileSyncServiceAndroid::GetLastSyncedTimeForTest(
   // conversion, since SyncPrefs::GetLastSyncedTime() converts the stored value
   // to to base::Time.
   return static_cast<jlong>(
-      profile_->GetPrefs()->GetInt64(sync_driver::prefs::kSyncLastSyncedTime));
+      profile_->GetPrefs()->GetInt64(syncer::prefs::kSyncLastSyncedTime));
 }
 
 void ProfileSyncServiceAndroid::OverrideNetworkResourcesForTest(

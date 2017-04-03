@@ -1,18 +1,12 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# TODO(rockot) bug 505926: Don't include chrome files from here.
-# See chrome_browser_tests_extensions_sources below
-import("//chrome/chrome_tests.gni")
-import("//extensions/extensions.gni")
 import("//testing/test.gni")
 import("//tools/grit/grit_rule.gni")
 import("//tools/grit/repack.gni")
 
 assert(enable_extensions)
 
-# GYP version: extensions/extensions_resources.gyp:extensions_resources
 group("extensions_resources") {
   public_deps = [
     ":extensions_browser_resources",
@@ -21,8 +15,6 @@ group("extensions_resources") {
   ]
 }
 
-# GYP version: extensions/extensions_resources.gyp:extensions_resources
-#              (extensions_resources action)
 grit("extensions_resources_grd") {
   source = "extensions_resources.grd"
   outputs = [
@@ -31,8 +23,6 @@ grit("extensions_resources_grd") {
   ]
 }
 
-# GYP version: extensions/extensions_resources.gyp:extensions_resources
-#              (extensions_browser_resources action)
 grit("extensions_browser_resources") {
   source = "browser/resources/extensions_browser_resources.grd"
   outputs = [
@@ -48,8 +38,6 @@ grit("extensions_browser_resources") {
   ]
 }
 
-# GYP version: extensions/extensions_resources.gyp:extensions_resources
-#              (extensions_renderer_resources action)
 grit("extensions_renderer_resources") {
   source = "renderer/resources/extensions_renderer_resources.grd"
   outputs = [
@@ -66,14 +54,68 @@ grit("extensions_renderer_resources") {
     "//device/serial:serial_mojo__generator",
     "//extensions/common:mojo__generator",
     "//extensions/common/api:mojom__generator",
+    "//mojo/common:common_custom_types__generator",
   ]
 }
 
 static_library("test_support") {
   testonly = true
-  sources = rebase_path(extensions_gypi_values.extensions_test_support_sources,
-                        ".",
-                        "//extensions")
+  sources = [
+    "browser/api/cast_channel/cast_test_util.cc",
+    "browser/api/cast_channel/cast_test_util.h",
+    "browser/api/dns/mock_host_resolver_creator.cc",
+    "browser/api/dns/mock_host_resolver_creator.h",
+    "browser/api/storage/settings_test_util.cc",
+    "browser/api/storage/settings_test_util.h",
+    "browser/api_test_utils.cc",
+    "browser/api_test_utils.h",
+    "browser/api_unittest.cc",
+    "browser/api_unittest.h",
+    "browser/app_window/test_app_window_contents.cc",
+    "browser/app_window/test_app_window_contents.h",
+    "browser/extension_error_test_util.cc",
+    "browser/extension_error_test_util.h",
+    "browser/extensions_test.cc",
+    "browser/extensions_test.h",
+    "browser/guest_view/mime_handler_view/test_mime_handler_view_guest.cc",
+    "browser/guest_view/mime_handler_view/test_mime_handler_view_guest.h",
+    "browser/mock_extension_system.cc",
+    "browser/mock_extension_system.h",
+    "browser/scoped_ignore_content_verifier_for_test.cc",
+    "browser/scoped_ignore_content_verifier_for_test.h",
+    "browser/test_extension_registry_observer.cc",
+    "browser/test_extension_registry_observer.h",
+    "browser/test_extensions_browser_client.cc",
+    "browser/test_extensions_browser_client.h",
+    "browser/test_image_loader.cc",
+    "browser/test_image_loader.h",
+    "browser/test_management_policy.cc",
+    "browser/test_management_policy.h",
+    "browser/test_runtime_api_delegate.cc",
+    "browser/test_runtime_api_delegate.h",
+    "common/extension_builder.cc",
+    "common/extension_builder.h",
+    "common/manifest_test.cc",
+    "common/manifest_test.h",
+    "common/permissions/permission_message_test_util.cc",
+    "common/permissions/permission_message_test_util.h",
+    "common/test_util.cc",
+    "common/test_util.h",
+    "renderer/test_extensions_renderer_client.cc",
+    "renderer/test_extensions_renderer_client.h",
+    "test/background_page_watcher.cc",
+    "test/background_page_watcher.h",
+    "test/extension_test_message_listener.cc",
+    "test/extension_test_message_listener.h",
+    "test/result_catcher.cc",
+    "test/result_catcher.h",
+    "test/test_content_utility_client.cc",
+    "test/test_content_utility_client.h",
+    "test/test_extensions_client.cc",
+    "test/test_extensions_client.h",
+    "test/test_permission_message_provider.cc",
+    "test/test_permission_message_provider.h",
+  ]
 
   # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
@@ -104,7 +146,6 @@ static_library("test_support") {
   ]
 }
 
-# GYP version: //extensions/extensions.gyp:extensions_shell_and_test_pak
 repack("shell_and_test_pak") {
   sources = [
     "$root_gen_dir/blink/devtools_resources.pak",
@@ -141,18 +182,9 @@ repack("shell_and_test_pak") {
 }
 
 test("extensions_unittests") {
-  sources =
-      rebase_path(extensions_tests_gypi_values.extensions_unittests_sources,
-                  ".",
-                  "//extensions")
-
-  sources += [
-    # TODO(rockot): DisplayInfoProvider::Create() is only implemented in Chrome
-    # and app_shell. This is wrong.
-    "shell/browser/shell_display_info_provider.cc",
+  sources = [
+    "test/extensions_unittests_main.cc",
   ]
-
-  configs += [ "//build/config:precompiled_headers" ]
 
   data = [
     "test/data/",
@@ -166,57 +198,28 @@ test("extensions_unittests") {
     ":extensions_resources",
     ":shell_and_test_pak",
     ":test_support",
-    "//base",
     "//base/test:test_support",
-    "//components/keyed_service/content",
-    "//components/pref_registry:test_support",
-    "//components/prefs:test_support",
-    "//components/user_prefs",
+    "//content/public/common",
     "//content/test:test_support",
-    "//device/bluetooth:mocks",
-    "//device/core",
-    "//device/hid",
-    "//device/serial",
-    "//device/serial:test_support",
+    "//extensions/browser:unit_tests",
     "//extensions/common",
-    "//extensions/common/api/cast_channel:cast_channel_proto",
-    "//extensions/renderer",
-    "//extensions/strings",
-    "//extensions/utility",
-    "//mojo/edk/js",
+    "//extensions/common:unit_tests",
+    "//extensions/renderer:unit_tests",
+    "//extensions/shell:unit_tests",
+    "//extensions/utility:unit_tests",
     "//mojo/edk/system",
-    "//mojo/public/cpp/bindings",
-    "//services/shell/public/interfaces",
-    "//testing/gmock",
-    "//testing/gtest",
-    "//third_party/leveldatabase",
+    "//mojo/edk/test:test_support",
+    "//ui/gl:test_support",
   ]
 
   data_deps = [
     "//third_party/mesa:osmesa",
   ]
-
-  if (is_chromeos) {
-    sources += [
-      "browser/api/webcam_private/visca_webcam_unittest.cc",
-
-      # TODO(rockot): There are two implementations of VpnServiceFactory, a
-      # stub in app_shell and a real one in Chrome. This is wrong.
-      "shell/browser/api/vpn_provider/vpn_service_factory.cc",
-    ]
-
-    deps += [ "//chromeos:test_support" ]
-  }
 }
 
 test("extensions_browsertests") {
-  sources =
-      rebase_path(extensions_tests_gypi_values.extensions_browsertests_sources,
-                  ".",
-                  "//extensions")
-
   data = [
-    "test/data/",
+    "//extensions/test/data/",
     "//net/tools/testserver/",
     "//third_party/pyftpdlib/",
     "//third_party/pywebsocket/",
@@ -224,36 +227,14 @@ test("extensions_browsertests") {
     "$root_out_dir/extensions_shell_and_test.pak",
   ]
 
-  defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
-
   deps = [
-    ":test_support",
-    "shell:app_shell_lib",
-
-    # TODO(yoz): find the right deps
-    "//base",
-    "//base/test:test_support",
-    "//components/prefs:test_support",
-    "//components/storage_monitor:test_support",
-    "//content/test:test_support",
-    "//device/bluetooth:mocks",
-    "//device/core:mocks",
-    "//device/hid:mocks",
-    "//device/usb:test_support",
-    "//mojo/edk/js",
-    "//mojo/public/cpp/bindings",
-    "//net:test_support",
-    "//testing/gmock",
-    "//testing/gtest",
+    "//extensions/browser:browser_tests",
+    "//extensions/shell:browser_tests",
   ]
 
   data_deps = [
     "//third_party/mesa:osmesa",
   ]
-
-  if (is_mac) {
-    deps += [ "shell:app_shell" ]  # Needed for App Shell.app's Helper.
-  }
 }
 
 # TODO(rockot) bug 505926: These should be moved to extensions_browsertests but have
@@ -263,10 +244,20 @@ test("extensions_browsertests") {
 # //chrome/test:browser_tests.
 source_set("chrome_extensions_browsertests") {
   testonly = true
-  sources = rebase_path(
-          chrome_tests_gypi_values.chrome_browser_tests_extensions_sources,
-          ".",
-          "//chrome")
+  sources = [
+    "browser/api/app_window/app_window_apitest.cc",
+    "browser/api/bluetooth/bluetooth_apitest.cc",
+    "browser/api/bluetooth/bluetooth_private_apitest.cc",
+    "browser/api/cast_channel/cast_channel_apitest.cc",
+    "browser/api/runtime/runtime_apitest.cc",
+    "browser/api/serial/serial_apitest.cc",
+    "browser/api/usb/usb_manual_apitest.cc",
+    "browser/app_window/app_window_browsertest.cc",
+    "browser/guest_view/extension_options/extension_options_apitest.cc",
+    "browser/guest_view/mime_handler_view/mime_handler_view_browsertest.cc",
+    "renderer/console_apitest.cc",
+    "renderer/script_context_browsertest.cc",
+  ]
 
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
 
@@ -332,10 +323,9 @@ source_set("chrome_extensions_browsertests") {
 # chrome_extensions_browsertests.
 source_set("chrome_extensions_interactive_uitests") {
   testonly = true
-  sources = rebase_path(
-          chrome_tests_gypi_values.chrome_interactive_ui_test_extensions_sources,
-          ".",
-          "//chrome")
+  sources = [
+    "browser/app_window/app_window_interactive_uitest.cc",
+  ]
 
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
 

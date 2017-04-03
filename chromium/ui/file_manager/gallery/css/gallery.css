@@ -76,13 +76,8 @@ html[dir='rtl'] .bubble .close-x {
   opacity: 0.7;
 }
 
-paper-ripple,
-paper-button::shadow paper-ripple {
+paper-ripple {
   color: black;
-}
-
-files-toggle-ripple::shadow .ripple.activated {
-  opacity: 0.4;
 }
 
 .gallery,
@@ -556,8 +551,7 @@ html[dir='rtl'] .gallery .toolbar .bubble {
   -webkit-margin-start: 16px;
 }
 
-.edit-mode-toolbar .overwrite-original[disabled]::shadow #checkbox,
-.edit-mode-toolbar .overwrite-original[disabled]::shadow #checkboxLabel {
+.edit-mode-toolbar .overwrite-original[disabled] {
   opacity: 0.2;
 }
 
@@ -752,6 +746,12 @@ button[disabled] {
       url(../images/200/crop.png) 2x);
 }
 
+.edit-main button.resize .icon {
+  background-image:  -webkit-image-set(
+      url(../images/100/resize.png) 1x,
+      url(../images/200/resize.png) 2x);
+}
+
 .edit-main button.exposure .icon {
   background-image: -webkit-image-set(
       url(../images/100/brightness.png) 1x,
@@ -794,6 +794,10 @@ button[disabled] {
   width: 100%;
 }
 
+.gallery[editor-mode="resize"] .edit-modal {
+  height: 56px;
+}
+
 .edit-modal-wrapper[hidden] {
   display: none;
 }
@@ -817,24 +821,29 @@ button[disabled] {
 
 .edit-modal-wrapper .container {
   justify-content: center;
+  left: 0;
+  position: absolute;
+  top: 0;
 }
 
 .edit-modal-wrapper .action-buttons {
   justify-content: flex-end;
-  left: 0;
-  position: absolute;
-  top: 0;
 }
 
 .edit-modal button.edit-toolbar {
   background: transparent;
   border: 0 none;
   border-image: none;
+  border-radius: 2px;
   box-sizing: border-box;
   color: white;
   min-width: 0;
   padding: 0;
   position: relative;
+}
+
+.edit-modal button.edit-toolbar:focus {
+  background-color: rgba(255, 255, 255, 0.12);
 }
 
 .edit-modal button.edit-toolbar .icon {
@@ -913,10 +922,6 @@ button[disabled] {
 
 paper-slider {
   width: 172px;
-}
-
-paper-slider::shadow paper-progress::shadow #progressContainer {
-  background-color: rgba(255, 255, 255, 0.2);
 }
 
 .edit-modal .range.brightness > .icon {
@@ -1012,6 +1017,44 @@ paper-slider::shadow paper-progress::shadow #progressContainer {
 
 .gallery .crop-frame .corner.bottom {
   bottom: -6px;
+}
+
+/* Input UI */
+.edit-modal .input {
+  align-items: flex-end;
+  display: flex;
+  width: 90px;
+}
+
+.edit-modal .input > .unit_label {
+  color: rgba(255, 255, 255, 0.54);
+  margin-bottom: 10px;
+}
+
+.edit-modal .lockicon {
+  background-repeat: no-repeat;
+  background-size: contain;
+  height: 16px;
+  margin: 16px;
+  margin-top: auto;
+  width: 16px;
+}
+
+.edit-modal .lockicon:focus {
+  outline: none;
+}
+
+.edit-modal .lockicon[locked] {
+  background-image: -webkit-image-set(
+      url(../images/100/ratio_locked.png) 1x,
+      url(../images/200/ratio_locked.png) 2x);
+}
+
+.edit-modal .lockicon:not([locked]) {
+  opacity: 0.54;
+  background-image: -webkit-image-set(
+      url(../images/100/ratio_unlocked.png) 1x,
+      url(../images/200/ratio_unlocked.png) 2x);
 }
 
 /* Prompt/notification panel */

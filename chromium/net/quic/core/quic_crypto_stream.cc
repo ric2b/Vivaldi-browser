@@ -69,15 +69,19 @@ void QuicCryptoStream::OnDataAvailable() {
       return;
     }
     sequencer()->MarkConsumed(iov.iov_len);
+    if (handshake_confirmed_ && crypto_framer_.InputBytesRemaining() == 0) {
+      // If the handshake is complete and the current message has been fully
+      // processed then no more handshake messages are likely to arrive soon
+      // so release the memory in the stream sequencer.
+      sequencer()->ReleaseBufferIfEmpty();
+    }
   }
 }
 
 void QuicCryptoStream::SendHandshakeMessage(
     const CryptoHandshakeMessage& message) {
   DVLOG(1) << ENDPOINT << "Sending " << message.DebugString();
-  if (FLAGS_quic_neuter_unencrypted_when_sending) {
-    session()->connection()->NeuterUnencryptedPackets();
-  }
+  session()->connection()->NeuterUnencryptedPackets();
   session()->OnCryptoHandshakeMessageSent(message);
   const QuicData& data = message.GetSerialized();
   WriteOrBufferData(StringPiece(data.data(), data.length()), false, nullptr);

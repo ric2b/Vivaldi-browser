@@ -15,9 +15,12 @@ import android.graphics.Color;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
+import android.support.annotation.Nullable;
 import android.support.v4.graphics.drawable.RoundedBitmapDrawable;
 import android.support.v4.graphics.drawable.RoundedBitmapDrawableFactory;
+import android.support.v7.widget.DefaultItemAnimator;
 import android.support.v7.widget.RecyclerView;
+import android.support.v7.widget.RecyclerView.ViewHolder;
 import android.support.v7.widget.helper.ItemTouchHelper;
 import android.text.Editable;
 import android.text.TextUtils;
@@ -34,6 +37,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
@@ -46,13 +50,14 @@ import org.chromium.chrome.browser.ntp.LogoBridge.Logo;
 import org.chromium.chrome.browser.ntp.LogoBridge.LogoObserver;
 import org.chromium.chrome.browser.ntp.MostVisitedItem.MostVisitedItemManager;
 import org.chromium.chrome.browser.ntp.NewTabPage.OnSearchBoxScrollListener;
+import org.chromium.chrome.browser.ntp.cards.CardsVariationParameters;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageAdapter;
-import org.chromium.chrome.browser.ntp.cards.NewTabPageItem;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageRecyclerView;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
-import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsConfig;
+import org.chromium.chrome.browser.ntp.snippets.SuggestionsSource;
 import org.chromium.chrome.browser.profiles.MostVisitedSites.MostVisitedURLsObserver;
+import org.chromium.chrome.browser.signin.SigninManager.SignInStateObserver;
 import org.chromium.chrome.browser.util.MathUtils;
 import org.chromium.chrome.browser.util.ViewUtils;
 import org.chromium.chrome.browser.widget.RoundedIconGenerator;
@@ -88,7 +93,7 @@ public class NewTabPageView extends FrameLayout
 
     private NewTabPageLayout mNewTabPageLayout;
     private LogoView mSearchProviderLogoView;
-    private View mSearchBoxView;
+    private ViewGroup mSearchBoxView;
     private ImageView mVoiceSearchButton;
     private MostVisitedLayout mMostVisitedLayout;
     private View mMostVisitedPlaceholder;
@@ -282,6 +287,25 @@ public class NewTabPageView extends FrameLayout
          * Handles clicks on the "learn more" link in the footer.
          */
         void onLearnMoreClicked();
+
+        /**
+         * Returns the SuggestionsSource or null if it doesn't exist. The SuggestionsSource is
+         * invalidated (has destroy() called) when the NewTabPage is destroyed so use this method
+         * instead of keeping your own reference.
+         */
+        @Nullable SuggestionsSource getSuggestionsSource();
+
+        /**
+         * Registers a {@link SignInStateObserver}, will handle the de-registration when the New Tab
+         * Page goes away.
+         */
+        void registerSignInStateObserver(SignInStateObserver signInStateObserver);
+
+        /**
+         * @return whether the {@link NewTabPage} associated with this manager is the current page
+         * displayed to the user.
+         */
+        boolean isCurrentPage();
     }
 
     /**
@@ -298,15 +322,15 @@ public class NewTabPageView extends FrameLayout
      * @param manager NewTabPageManager used to perform various actions when the user interacts
      *                with the page.
      * @param searchProviderHasLogo Whether the search provider has a logo.
-     * @param snippetsBridge The optional bridge, that can be used to interact with the snippets.
+     * @param scrollPosition The adapter scroll position to initialize to.
      */
-    public void initialize(NewTabPageManager manager, boolean searchProviderHasLogo,
-            SnippetsBridge snippetsBridge) {
+    public void initialize(
+            NewTabPageManager manager, boolean searchProviderHasLogo, int scrollPosition) {
         mManager = manager;
         mUiConfig = new UiConfig(this);
         ViewStub stub = (ViewStub) findViewById(R.id.new_tab_page_layout_stub);
 
-        mUseCardsUi = snippetsBridge != null;
+        mUseCardsUi = manager.getSuggestionsSource() != null;
         if (mUseCardsUi) {
             stub.setLayoutResource(R.layout.new_tab_page_recycler_view);
             mRecyclerView = (NewTabPageRecyclerView) stub.inflate();
@@ -322,11 +346,22 @@ public class NewTabPageView extends FrameLayout
             // made for the ScrollView UI.
             ViewGroup.LayoutParams params = mNewTabPageLayout.getLayoutParams();
             params.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+
+            mRecyclerView.setItemAnimator(new DefaultItemAnimator() {
+                @Override
+                public void onAnimationFinished(ViewHolder viewHolder) {
+                    super.onAnimationFinished(viewHolder);
+                    // When removing sections, because the animations are all translations, the
+                    // scroll events don't fire and we can get in the situation where the toolbar
+                    // buttons disappear.
+                    updateSearchBoxOnScroll();
+                }
+            });
         } else {
             stub.setLayoutResource(R.layout.new_tab_page_scroll_view);
             mScrollView = (NewTabPageScrollView) stub.inflate();
             mScrollView.setBackgroundColor(
-                    NtpColorUtils.getBackgroundColorResource(getResources(), false));
+                    NtpStyleUtils.getBackgroundColorResource(getResources(), false));
             mScrollView.enableBottomShadow(SHADOW_COLOR);
             mNewTabPageLayout = (NewTabPageLayout) findViewById(R.id.ntp_content);
         }
@@ -338,12 +373,12 @@ public class NewTabPageView extends FrameLayout
 
         mSearchProviderLogoView =
                 (LogoView) mNewTabPageLayout.findViewById(R.id.search_provider_logo);
-        mSearchBoxView = mNewTabPageLayout.findViewById(R.id.search_box);
+        mSearchBoxView = (ViewGroup) mNewTabPageLayout.findViewById(R.id.search_box);
         mNoSearchLogoSpacer = mNewTabPageLayout.findViewById(R.id.no_search_logo_spacer);
 
         initializeSearchBoxTextView();
         initializeVoiceSearchButton();
-        initializeToolbar();
+        initializeBottomToolbar();
 
         mNewTabPageLayout.addOnLayoutChangeListener(this);
         setSearchProviderHasLogo(searchProviderHasLogo);
@@ -354,9 +389,15 @@ public class NewTabPageView extends FrameLayout
 
         // Set up snippets
         if (mUseCardsUi) {
-            mNewTabPageAdapter =
-                    new NewTabPageAdapter(mManager, mNewTabPageLayout, snippetsBridge, mUiConfig);
+            mNewTabPageAdapter = NewTabPageAdapter.create(mManager, mNewTabPageLayout, mUiConfig);
             mRecyclerView.setAdapter(mNewTabPageAdapter);
+            mRecyclerView.scrollToPosition(scrollPosition);
+
+            if (CardsVariationParameters.isScrollBelowTheFoldEnabled()) {
+                int searchBoxHeight = NtpStyleUtils.getSearchBoxHeight(getResources());
+                mRecyclerView.getLinearLayoutManager().scrollToPositionWithOffset(
+                        mNewTabPageAdapter.getFirstHeaderPosition(), searchBoxHeight);
+            }
 
             // Set up swipe-to-dismiss
             ItemTouchHelper helper =
@@ -431,7 +472,7 @@ public class NewTabPageView extends FrameLayout
      * Sets up event listeners for the bottom toolbar if it is enabled. Removes the bottom toolbar
      * if it is disabled.
      */
-    private void initializeToolbar() {
+    private void initializeBottomToolbar() {
         NewTabPageToolbar toolbar = (NewTabPageToolbar) findViewById(R.id.ntp_toolbar);
         if (SnippetsConfig.isEnabled()) {
             ((ViewGroup) toolbar.getParent()).removeView(toolbar);
@@ -456,6 +497,12 @@ public class NewTabPageView extends FrameLayout
     private void updateSearchBoxOnScroll() {
         if (mDisableUrlFocusChangeAnimations) return;
 
+        // When the page changes (tab switching or new page loading), it is possible that events
+        // (e.g. delayed RecyclerView change notifications) trigger calls to these methods after
+        // the current page changes. We check it again to make sure we don't attempt to update the
+        // wrong page.
+        if (!mManager.isCurrentPage()) return;
+
         if (mSearchBoxScrollListener != null) {
             mSearchBoxScrollListener.onNtpScrollChanged(getToolbarTransitionPercentage());
         }
@@ -474,6 +521,14 @@ public class NewTabPageView extends FrameLayout
         // search box) are sane.
         if (getWrapperView().getHeight() == 0) return 0f;
 
+        if (mUseCardsUi && !mRecyclerView.isFirstItemVisible()) {
+            // getVerticalScroll is valid only for the RecyclerView if the first item is visible.
+            // If the first item is not visible, we must have scrolled quite far and we know the
+            // toolbar transition should be 100%. This might be the initial scroll position due to
+            // the scroll restore feature, so the search box will not have been laid out yet.
+            return 1f;
+        }
+
         int searchBoxTop = mSearchBoxView.getTop();
         if (searchBoxTop == 0) return 0f;
 
@@ -485,39 +540,20 @@ public class NewTabPageView extends FrameLayout
             return MathUtils.clamp(getVerticalScroll() / (float) searchBoxTop, 0f, 1f);
         }
 
-        if (!mRecyclerView.isFirstItemVisible()) {
-            // getVerticalScroll is valid only for the RecyclerView if the first item is
-            // visible. If the first item is not visible, we know the toolbar transition
-            // should be 100%.
-            return 1f;
-        }
-
         final int scrollY = getVerticalScroll();
         final float transitionLength =
                 getResources().getDimension(R.dimen.ntp_search_box_transition_length);
+        // Tab strip height is zero on phones, nonzero on tablets.
+        int tabStripHeight = getResources().getDimensionPixelSize(R.dimen.tab_strip_height);
 
-        // |scrollY - searchBoxTop| gives the distance the search bar is from the top of the screen.
-        return MathUtils.clamp(
-                (scrollY - searchBoxTop + transitionLength) / transitionLength, 0f, 1f);
+        // |scrollY - searchBoxTop + tabStripHeight| gives the distance the search bar is from the
+        // top of the tab.
+        return MathUtils.clamp((scrollY - searchBoxTop + transitionLength + tabStripHeight)
+                / transitionLength, 0f, 1f);
     }
 
     private ViewGroup getWrapperView() {
         return mUseCardsUi ? mRecyclerView : mScrollView;
-    }
-
-    /**
-     * Get the number of listed items (visible or not) for the given type.
-     * @param newTabPageItemViewType the item type to count.
-     */
-    public int getViewCountMatchingViewType(@NewTabPageItem.ViewType int newTabPageItemViewType) {
-        int viewCount = 0;
-        int adapterSize = mNewTabPageAdapter.getItemCount();
-        for (int i = 0; i < adapterSize; i++) {
-            if (mNewTabPageAdapter.getItemViewType(i) == newTabPageItemViewType) {
-                viewCount++;
-            }
-        }
-        return viewCount;
     }
 
     /**
@@ -749,6 +785,12 @@ public class NewTabPageView extends FrameLayout
      */
     public void setSearchBoxAlpha(float alpha) {
         mSearchBoxView.setAlpha(alpha);
+
+        // Disable the search box contents if it is the process of being animated away.
+        for (int i = 0; i < mSearchBoxView.getChildCount(); i++) {
+            mSearchBoxView.getChildAt(i).setEnabled(mSearchBoxView.getAlpha() == 1.0f);
+        }
+
     }
 
     /**
@@ -897,19 +939,28 @@ public class NewTabPageView extends FrameLayout
             final String[] whitelistIconPaths, final int[] sources) {
         Set<String> urlSet = new HashSet<>(Arrays.asList(urls));
 
+        // If no Most Visited items have been built yet, this is the initial load. Build the Most
+        // Visited items immediately so the layout is stable during initial rendering. They can be
+        // replaced later if there are offline urls, but that will not affect the layout widths and
+        // heights. A stable layout enables reliable scroll position initialization.
+        if (!mHasReceivedMostVisitedSites) {
+            buildMostVisitedItems(titles, urls, whitelistIconPaths, null, sources);
+        }
+
         // TODO(https://crbug.com/607573): We should show offline-available content in a nonblocking
         // way so that responsiveness of the NTP does not depend on ready availability of offline
         // pages.
         mManager.getUrlsAvailableOffline(urlSet, new Callback<Set<String>>() {
             @Override
             public void onResult(Set<String> offlineUrls) {
-                onOfflineUrlsAvailable(titles, urls, whitelistIconPaths, offlineUrls, sources);
+                buildMostVisitedItems(titles, urls, whitelistIconPaths, offlineUrls, sources);
             }
         });
     }
 
-    private void onOfflineUrlsAvailable(final String[] titles, final String[] urls,
-            final String[] whitelistIconPaths, final Set<String> offlineUrls, final int[] sources) {
+    private void buildMostVisitedItems(final String[] titles, final String[] urls,
+            final String[] whitelistIconPaths, @Nullable final Set<String> offlineUrls,
+            final int[] sources) {
         mMostVisitedLayout.removeAllViews();
 
         MostVisitedItem[] oldItems = mMostVisitedItems;
@@ -926,7 +977,7 @@ public class NewTabPageView extends FrameLayout
             final String whitelistIconPath = whitelistIconPaths[i];
             final int source = sources[i];
 
-            boolean offlineAvailable = offlineUrls.contains(url);
+            boolean offlineAvailable = offlineUrls != null && offlineUrls.contains(url);
 
             // Look for an existing item to reuse.
             MostVisitedItem item = null;
@@ -1038,7 +1089,6 @@ public class NewTabPageView extends FrameLayout
 
         private static final int ICON_CORNER_RADIUS_DP = 4;
         private static final int ICON_TEXT_SIZE_DP = 20;
-        private static final int ICON_BACKGROUND_COLOR = 0xff787878;
         private static final int ICON_MIN_SIZE_PX = 48;
 
         private int mMinIconSize;
@@ -1052,9 +1102,10 @@ public class NewTabPageView extends FrameLayout
             mMinIconSize = Math.min(mDesiredIconSize, ICON_MIN_SIZE_PX);
             int desiredIconSizeDp = Math.round(
                     mDesiredIconSize / res.getDisplayMetrics().density);
-            mIconGenerator = new RoundedIconGenerator(
-                    context, desiredIconSizeDp, desiredIconSizeDp, ICON_CORNER_RADIUS_DP,
-                    ICON_BACKGROUND_COLOR, ICON_TEXT_SIZE_DP);
+            int iconColor = ApiCompatibilityUtils.getColor(
+                    getResources(), R.color.default_favicon_background_color);
+            mIconGenerator = new RoundedIconGenerator(context, desiredIconSizeDp, desiredIconSizeDp,
+                    ICON_CORNER_RADIUS_DP, iconColor, ICON_TEXT_SIZE_DP);
         }
 
         public int getNumberOfTiles(boolean searchProviderHasLogo) {
@@ -1085,13 +1136,14 @@ public class NewTabPageView extends FrameLayout
             }
 
             @Override
-            public void onLargeIconAvailable(Bitmap icon, int fallbackColor) {
+            public void onLargeIconAvailable(
+                    Bitmap icon, int fallbackColor, boolean isFallbackColorDefault) {
                 if (icon == null) {
                     mIconGenerator.setBackgroundColor(fallbackColor);
                     icon = mIconGenerator.generateIconForUrl(mItem.getUrl());
                     mItemView.setIcon(new BitmapDrawable(getResources(), icon));
-                    mItem.setTileType(fallbackColor == ICON_BACKGROUND_COLOR
-                            ? MostVisitedTileType.ICON_DEFAULT : MostVisitedTileType.ICON_COLOR);
+                    mItem.setTileType(isFallbackColorDefault ? MostVisitedTileType.ICON_DEFAULT
+                                                             : MostVisitedTileType.ICON_COLOR);
                 } else {
                     RoundedBitmapDrawable roundedIcon = RoundedBitmapDrawableFactory.create(
                             getResources(), icon);
@@ -1133,7 +1185,7 @@ public class NewTabPageView extends FrameLayout
                 Log.d(TAG, "Image decoding failed: %s", item.getWhitelistIconPath());
                 return false;
             }
-            iconCallback.onLargeIconAvailable(bitmap, Color.BLACK);
+            iconCallback.onLargeIconAvailable(bitmap, Color.BLACK, false);
             return true;
         }
 
@@ -1182,5 +1234,13 @@ public class NewTabPageView extends FrameLayout
         } else {
             return mScrollView.getScrollY();
         }
+    }
+
+    /**
+     * @return The adapter position the user has scrolled to.
+     */
+    public int getScrollPosition() {
+        if (mUseCardsUi) return mRecyclerView.getScrollPosition();
+        return RecyclerView.NO_POSITION;
     }
 }

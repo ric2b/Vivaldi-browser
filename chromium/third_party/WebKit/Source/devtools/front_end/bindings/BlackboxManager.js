@@ -5,13 +5,11 @@
 /**
  * @constructor
  * @param {!WebInspector.DebuggerWorkspaceBinding} debuggerWorkspaceBinding
- * @param {!WebInspector.NetworkMapping} networkMapping
  * @implements {WebInspector.TargetManager.Observer}
  */
-WebInspector.BlackboxManager = function(debuggerWorkspaceBinding, networkMapping)
+WebInspector.BlackboxManager = function(debuggerWorkspaceBinding)
 {
     this._debuggerWorkspaceBinding = debuggerWorkspaceBinding;
-    this._networkMapping = networkMapping;
 
     WebInspector.targetManager.addModelListener(WebInspector.DebuggerModel, WebInspector.DebuggerModel.Events.ParsedScriptSource, this._parsedScriptSource, this);
     WebInspector.targetManager.addModelListener(WebInspector.DebuggerModel, WebInspector.DebuggerModel.Events.GlobalObjectCleared, this._globalObjectCleared, this);
@@ -151,14 +149,14 @@ WebInspector.BlackboxManager.prototype = {
         if (!previousScriptState)
             return Promise.resolve();
 
-        var mappings = sourceMap.mappings().slice();
-        mappings.sort(mappingComparator);
-
+        var hasBlackboxedMappings = sourceMap.sourceURLs().some((url) => this.isBlackboxedURL(url));
+        var mappings = hasBlackboxedMappings ? sourceMap.mappings().slice() : [];
         if (!mappings.length) {
             if (previousScriptState.length > 0)
                 return this._setScriptState(script, []);
             return Promise.resolve();
         }
+        mappings.sort(mappingComparator);
 
         var currentBlackboxed = false;
         var isBlackboxed = false;
@@ -195,12 +193,7 @@ WebInspector.BlackboxManager.prototype = {
      */
     _uiSourceCodeURL: function(uiSourceCode)
     {
-        var networkURL = this._networkMapping.networkURL(uiSourceCode);
-        var projectType = uiSourceCode.project().type();
-        if (projectType === WebInspector.projectTypes.Debugger)
-            return null;
-        var url = projectType === WebInspector.projectTypes.Formatter ? uiSourceCode.url() : networkURL;
-        return url ? url : null;
+        return uiSourceCode.project().type() === WebInspector.projectTypes.Debugger ? null : uiSourceCode.url();
     },
 
     /**

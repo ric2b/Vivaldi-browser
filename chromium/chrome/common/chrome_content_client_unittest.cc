@@ -26,27 +26,37 @@ void CheckUserAgentStringOrdering(bool mobile_device) {
   ChromeContentClient content_client;
   std::string buffer = content_client.GetUserAgent();
 
-  base::SplitStringUsingSubstr(buffer, "Mozilla/5.0 (", &pieces);
+  pieces = base::SplitStringUsingSubstr(buffer, "Mozilla/5.0 (",
+                                        base::TRIM_WHITESPACE,
+                                        base::SPLIT_WANT_ALL);
   ASSERT_EQ(2u, pieces.size());
   buffer = pieces[1];
   EXPECT_EQ("", pieces[0]);
 
-  base::SplitStringUsingSubstr(buffer, ") AppleWebKit/", &pieces);
+  pieces = base::SplitStringUsingSubstr(buffer, ") AppleWebKit/",
+                                        base::TRIM_WHITESPACE,
+                                        base::SPLIT_WANT_ALL);
   ASSERT_EQ(2u, pieces.size());
   buffer = pieces[1];
   std::string os_str = pieces[0];
 
-  base::SplitStringUsingSubstr(buffer, " (KHTML, like Gecko) ", &pieces);
+  pieces = base::SplitStringUsingSubstr(buffer, " (KHTML, like Gecko) ",
+                                        base::TRIM_WHITESPACE,
+                                        base::SPLIT_WANT_ALL);
   ASSERT_EQ(2u, pieces.size());
   buffer = pieces[1];
   std::string webkit_version_str = pieces[0];
 
-  base::SplitStringUsingSubstr(buffer, " Safari/", &pieces);
+  pieces = base::SplitStringUsingSubstr(buffer, " Safari/",
+                                        base::TRIM_WHITESPACE,
+                                        base::SPLIT_WANT_ALL);
   ASSERT_EQ(2u, pieces.size());
   std::string product_str = pieces[0];
 
   buffer = pieces[1];
-  base::SplitStringUsingSubstr(buffer, " Vivaldi/", &pieces);
+  pieces = base::SplitStringUsingSubstr(buffer, " Vivaldi/",
+                                       base::TRIM_WHITESPACE,
+                                       base::SPLIT_WANT_ALL);
   ASSERT_EQ(2u, pieces.size());
 
   std::string safari_version_str = pieces[0];
@@ -136,90 +146,22 @@ TEST(ChromeContentClientTest, FindMostRecent) {
   EXPECT_EQ("6.0.0.13", most_recent->version);
 
   // Test real scenarios.
-  content::PepperPluginInfo bundled_flash;
-  bundled_flash.version = "4.3.2.1";
-  bundled_flash.is_external = false;
-  bundled_flash.is_debug = false;
-  bundled_flash.is_on_local_drive = true;
-  bundled_flash.is_bundled = true;
-  bundled_flash.name = "bundled_flash";
-
-  content::PepperPluginInfo local_component_flash;
-  local_component_flash.version = "4.3.2.1";
-  local_component_flash.is_external = false;
-  local_component_flash.is_debug = false;
-  local_component_flash.is_on_local_drive = true;
-  local_component_flash.is_bundled = false;
-  local_component_flash.name = "local_component_flash";
-
-  content::PepperPluginInfo network_component_flash;
-  network_component_flash.version = "4.3.2.1";
-  network_component_flash.is_external = false;
-  network_component_flash.is_debug = false;
-  network_component_flash.is_on_local_drive = false;
-  network_component_flash.is_bundled = false;
-  network_component_flash.name = "network_component_flash";
+  content::PepperPluginInfo component_flash;
+  component_flash.version = "4.3.2.1";
+  component_flash.is_external = false;
+  component_flash.name = "component_flash";
 
   content::PepperPluginInfo system_flash;
   system_flash.version = "4.3.2.1";
   system_flash.is_external = true;
-  system_flash.is_debug = false;
-  system_flash.is_on_local_drive = true;
-  system_flash.is_bundled = false;
   system_flash.name = "system_flash";
 
-  content::PepperPluginInfo system_debug_flash;
-  system_debug_flash.version = "4.3.2.1";
-  system_debug_flash.is_external = true;
-  system_debug_flash.is_debug = true;
-  system_debug_flash.is_on_local_drive = false;
-  system_debug_flash.is_bundled = false;
-  system_debug_flash.name = "system_debug_flash";
-
   // The order here should be:
-  // 1. Debug System Flash.
-  // 2. Bundled.
-  // 3. Component update on a local drive.
-  // 4. System Flash.
-  // 5. Component update on a network drive.
-
-  // Debug beats bundled.
-  version_vector.clear();
-  version_vector.push_back(&system_debug_flash);
-  version_vector.push_back(&bundled_flash);
-
-  most_recent = ChromeContentClient::FindMostRecentPlugin(version_vector);
-  EXPECT_STREQ("system_debug_flash", most_recent->name.c_str());
-
-  // Bundled beats component updated.
-  version_vector.clear();
-  version_vector.push_back(&bundled_flash);
-  version_vector.push_back(&local_component_flash);
-
-  most_recent = ChromeContentClient::FindMostRecentPlugin(version_vector);
-  EXPECT_STREQ("bundled_flash", most_recent->name.c_str());
-
-  // Bundled beats System flash
-  version_vector.clear();
-  version_vector.push_back(&bundled_flash);
-  version_vector.push_back(&system_flash);
-
-  most_recent = ChromeContentClient::FindMostRecentPlugin(version_vector);
-  EXPECT_STREQ("bundled_flash", most_recent->name.c_str());
-
-  // Local component updated beats System Flash.
+  // 1. System Flash.
+  // 2. Component update.
   version_vector.clear();
   version_vector.push_back(&system_flash);
-  version_vector.push_back(&local_component_flash);
-
-  most_recent = ChromeContentClient::FindMostRecentPlugin(version_vector);
-  EXPECT_STREQ("local_component_flash", most_recent->name.c_str());
-
-  // System Flash beats component update on network drive.
-  version_vector.clear();
-  version_vector.push_back(&network_component_flash);
-  version_vector.push_back(&system_flash);
-
+  version_vector.push_back(&component_flash);
   most_recent = ChromeContentClient::FindMostRecentPlugin(version_vector);
   EXPECT_STREQ("system_flash", most_recent->name.c_str());
 }

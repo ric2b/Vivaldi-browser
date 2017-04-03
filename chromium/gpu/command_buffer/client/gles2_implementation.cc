@@ -19,6 +19,7 @@
 #include <string>
 #include "base/atomic_sequence_num.h"
 #include "base/compiler_specific.h"
+#include "base/numerics/safe_math.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
@@ -1443,6 +1444,27 @@ void GLES2Implementation::SwapBuffers() {
   helper_->CommandBufferHelper::Flush();
   // Wait if we added too many swap buffers. Add 1 to kMaxSwapBuffers to
   // compensate for TODO above.
+  if (swap_buffers_tokens_.size() > kMaxSwapBuffers + 1) {
+    helper_->WaitForToken(swap_buffers_tokens_.front());
+    swap_buffers_tokens_.pop();
+  }
+}
+
+void GLES2Implementation::SwapBuffersWithDamageCHROMIUM(GLint x,
+                                                        GLint y,
+                                                        GLint width,
+                                                        GLint height) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glSwapBuffersWithDamageCHROMIUM("
+                     << x << ", " << y << ", " << width << ", " << height
+                     << ")");
+  TRACE_EVENT2("gpu", "GLES2::SwapBuffersWithDamageCHROMIUM", "width", width,
+               "height", height);
+
+  // Same flow control as GLES2Implementation::SwapBuffers (see comments there).
+  swap_buffers_tokens_.push(helper_->InsertToken());
+  helper_->SwapBuffersWithDamageCHROMIUM(x, y, width, height);
+  helper_->CommandBufferHelper::Flush();
   if (swap_buffers_tokens_.size() > kMaxSwapBuffers + 1) {
     helper_->WaitForToken(swap_buffers_tokens_.front());
     swap_buffers_tokens_.pop();
@@ -2875,6 +2897,18 @@ void GLES2Implementation::TexSubImage2D(
   pixels = reinterpret_cast<const int8_t*>(pixels) + skip_size;
 
   ScopedTransferBufferPtr buffer(size, helper_, transfer_buffer_);
+  base::CheckedNumeric<GLint> checked_xoffset = xoffset;
+  checked_xoffset += width;
+  if (!checked_xoffset.IsValid()) {
+    SetGLError(GL_INVALID_VALUE, "TexSubImage2D", "xoffset + width overflows");
+    return;
+  }
+  base::CheckedNumeric<GLint> checked_yoffset = yoffset;
+  checked_yoffset += height;
+  if (!checked_yoffset.IsValid()) {
+    SetGLError(GL_INVALID_VALUE, "TexSubImage2D", "yoffset + height overflows");
+    return;
+  }
   TexSubImage2DImpl(
       target, level, xoffset, yoffset, width, height, format, type,
       unpadded_row_size, pixels, padded_row_size, GL_FALSE, &buffer,
@@ -3000,6 +3034,24 @@ void GLES2Implementation::TexSubImage3D(
   pixels = reinterpret_cast<const int8_t*>(pixels) + skip_size;
 
   ScopedTransferBufferPtr buffer(size, helper_, transfer_buffer_);
+  base::CheckedNumeric<GLint> checked_xoffset = xoffset;
+  checked_xoffset += width;
+  if (!checked_xoffset.IsValid()) {
+    SetGLError(GL_INVALID_VALUE, "TexSubImage3D", "xoffset + width overflows");
+    return;
+  }
+  base::CheckedNumeric<GLint> checked_yoffset = yoffset;
+  checked_yoffset += height;
+  if (!checked_yoffset.IsValid()) {
+    SetGLError(GL_INVALID_VALUE, "TexSubImage3D", "yoffset + height overflows");
+    return;
+  }
+  base::CheckedNumeric<GLint> checked_zoffset = zoffset;
+  checked_zoffset += depth;
+  if (!checked_zoffset.IsValid()) {
+    SetGLError(GL_INVALID_VALUE, "TexSubImage3D", "zoffset + depth overflows");
+    return;
+  }
   TexSubImage3DImpl(
       target, level, xoffset, yoffset, zoffset, width, height, depth,
       format, type, unpadded_row_size, pixels, padded_row_size, GL_FALSE,
@@ -3597,9 +3649,9 @@ const GLubyte* GLES2Implementation::GetStringHelper(GLenum name) {
     if (name == GL_EXTENSIONS) {
       str += std::string(str.empty() ? "" : " ") +
              "GL_EXT_unpack_subimage "
-             "GL_CHROMIUM_map_sub";
-      if (capabilities_.image)
-        str += " GL_CHROMIUM_image GL_CHROMIUM_gpu_memory_buffer_image";
+             "GL_CHROMIUM_map_sub "
+             "GL_CHROMIUM_image "
+             "GL_CHROMIUM_gpu_memory_buffer_image";
       if (capabilities_.future_sync_points)
         str += " GL_CHROMIUM_future_sync_point";
     }
@@ -4712,6 +4764,11 @@ GLenum GLES2Implementation::GetGraphicsResetStatusKHR() {
 
 void GLES2Implementation::Swap() {
   SwapBuffers();
+}
+
+void GLES2Implementation::SwapWithDamage(const gfx::Rect& damage) {
+  SwapBuffersWithDamageCHROMIUM(damage.x(), damage.y(), damage.width(),
+                                damage.height());
 }
 
 void GLES2Implementation::PartialSwapBuffers(const gfx::Rect& sub_buffer) {
@@ -5997,6 +6054,7 @@ bool CreateImageValidInternalFormat(GLenum internalformat,
     case GL_ETC1_RGB8_OES:
       return capabilities.texture_format_etc1;
     case GL_RED:
+    case GL_RG_EXT:
     case GL_RGB:
     case GL_RGBA:
     case GL_RGB_YCBCR_422_CHROMIUM:

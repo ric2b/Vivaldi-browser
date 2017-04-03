@@ -39,14 +39,12 @@ const size_t kMaxAppsPerSite = 3;
 // Oldest could show banner event we care about, in days.
 const unsigned int kOldestCouldShowBannerEventInDays = 14;
 
-// Number of days that showing the banner will prevent it being seen again for.
-const unsigned int kMinimumDaysBetweenBannerShows = 60;
+// Default number of days that dismissing or ignoring the banner will prevent it
+// being seen again for.
+const unsigned int kMinimumBannerBlockedToBannerShown = 90;
+const unsigned int kMinimumDaysBetweenBannerShows = 14;
 
 const unsigned int kNumberOfMinutesInADay = 1440;
-
-// Number of days that the banner being blocked will prevent it being seen again
-// for.
-const unsigned int kMinimumBannerBlockedToBannerShown = 90;
 
 // Default scores assigned to direct and indirect navigations respectively.
 const unsigned int kDefaultDirectNavigationEngagement = 1;
@@ -80,6 +78,8 @@ const char kBannerParamsIndirectKey[] = "indirect";
 const char kBannerParamsTotalKey[] = "total";
 const char kBannerParamsMinutesKey[] = "minutes";
 const char kBannerParamsEngagementTotalKey[] = "site_engagement_total";
+const char kBannerParamsDaysAfterBannerDismissedKey[] = "days_after_dismiss";
+const char kBannerParamsDaysAfterBannerIgnoredKey[] = "days_after_ignore";
 const char kBannerSiteEngagementParamsKey[] = "use_site_engagement";
 
 // Engagement weight assigned to direct and indirect navigations.
@@ -95,18 +95,21 @@ unsigned int gMinimumMinutesBetweenVisits = kNumberOfMinutesInADay;
 // Total engagement score required before a banner will actually be triggered.
 double gTotalEngagementToTrigger = kDefaultTotalEngagementToTrigger;
 
+unsigned int gDaysAfterDismissedToShow = kMinimumBannerBlockedToBannerShown;
+unsigned int gDaysAfterIgnoredToShow = kMinimumDaysBetweenBannerShows;
+
 std::unique_ptr<base::DictionaryValue> GetOriginDict(
     HostContentSettingsMap* settings,
     const GURL& origin_url) {
   if (!settings)
-    return base::WrapUnique(new base::DictionaryValue());
+    return base::MakeUnique<base::DictionaryValue>();
 
   std::unique_ptr<base::DictionaryValue> dict =
       base::DictionaryValue::From(settings->GetWebsiteSetting(
           origin_url, origin_url, CONTENT_SETTINGS_TYPE_APP_BANNER,
           std::string(), NULL));
   if (!dict)
-    return base::WrapUnique(new base::DictionaryValue());
+    return base::MakeUnique<base::DictionaryValue>();
 
   return dict;
 }
@@ -137,6 +140,26 @@ double GetEventEngagement(ui::PageTransition transition_type) {
   }
 }
 
+// Queries variations for the number of days which dismissing and ignoring the
+// banner should prevent a banner from showing.
+void UpdateDaysBetweenShowing() {
+  std::string dismiss_param = variations::GetVariationParamValue(
+      kBannerParamsKey, kBannerParamsDaysAfterBannerDismissedKey);
+  std::string ignore_param = variations::GetVariationParamValue(
+      kBannerParamsKey, kBannerParamsDaysAfterBannerIgnoredKey);
+
+  if (!dismiss_param.empty() && !ignore_param.empty()) {
+    unsigned int dismiss_days = 0;
+    unsigned int ignore_days = 0;
+
+    if (base::StringToUint(dismiss_param, &dismiss_days) &&
+        base::StringToUint(ignore_param, &ignore_days)) {
+      AppBannerSettingsHelper::SetDaysAfterDismissAndIgnoreToTrigger(
+          dismiss_days, ignore_days);
+    }
+  }
+}
+
 // Queries variations for the maximum site engagement score required to trigger
 // the banner showing.
 void UpdateSiteEngagementToTrigger() {
@@ -147,7 +170,7 @@ void UpdateSiteEngagementToTrigger() {
     double total_engagement = -1;
 
     if (base::StringToDouble(total_param, &total_engagement) &&
-        total_engagement > 0) {
+        total_engagement >= 0) {
       AppBannerSettingsHelper::SetTotalEngagementToTrigger(total_engagement);
     }
   }
@@ -198,6 +221,9 @@ void UpdateMinutesBetweenVisits() {
 }
 
 }  // namespace
+
+// Key to store instant apps events.
+const char AppBannerSettingsHelper::kInstantAppsKey[] = "instantapps";
 
 void AppBannerSettingsHelper::ClearHistoryForURLs(
     Profile* profile,
@@ -394,10 +420,8 @@ InstallableStatusCode AppBannerSettingsHelper::ShouldShowBanner(
   base::Time added_time =
       GetSingleBannerEvent(web_contents, origin_url, package_name_or_start_url,
                            APP_BANNER_EVENT_DID_ADD_TO_HOMESCREEN);
-  if (!added_time.is_null()) {
-    banners::TrackDisplayEvent(banners::DISPLAY_EVENT_INSTALLED_PREVIOUSLY);
+  if (!added_time.is_null())
     return ALREADY_INSTALLED;
-  }
 
   base::Time blocked_time =
       GetSingleBannerEvent(web_contents, origin_url, package_name_or_start_url,
@@ -406,17 +430,14 @@ InstallableStatusCode AppBannerSettingsHelper::ShouldShowBanner(
   // Null times are in the distant past, so the delta between real times and
   // null events will always be greater than the limits.
   if (time - blocked_time <
-      base::TimeDelta::FromDays(kMinimumBannerBlockedToBannerShown)) {
-    banners::TrackDisplayEvent(banners::DISPLAY_EVENT_BLOCKED_PREVIOUSLY);
+      base::TimeDelta::FromDays(gDaysAfterDismissedToShow)) {
     return PREVIOUSLY_BLOCKED;
   }
 
   base::Time shown_time =
       GetSingleBannerEvent(web_contents, origin_url, package_name_or_start_url,
                            APP_BANNER_EVENT_DID_SHOW);
-  if (time - shown_time <
-      base::TimeDelta::FromDays(kMinimumDaysBetweenBannerShows)) {
-    banners::TrackDisplayEvent(banners::DISPLAY_EVENT_IGNORED_PREVIOUSLY);
+  if (time - shown_time < base::TimeDelta::FromDays(gDaysAfterIgnoredToShow)) {
     return PREVIOUSLY_IGNORED;
   }
 
@@ -427,8 +448,11 @@ InstallableStatusCode AppBannerSettingsHelper::ShouldShowBanner(
   // TODO(dominickn): just return true here and remove all of the following code
   // in this method when app banners have fully migrated to using site
   // engagement as a trigger condition. See crbug.com/616322.
-  if (ShouldUseSiteEngagementScore())
+  // Do not do engagement checks for instant app banners.
+  if (ShouldUseSiteEngagementScore() ||
+      package_name_or_start_url == kInstantAppsKey) {
     return NO_ERROR_DETECTED;
+  }
 
   double total_engagement = 0;
   std::vector<BannerEvent> could_show_events = GetCouldShowBannerEvents(
@@ -437,10 +461,8 @@ InstallableStatusCode AppBannerSettingsHelper::ShouldShowBanner(
   for (const auto& event : could_show_events)
     total_engagement += event.engagement;
 
-  if (!HasSufficientEngagement(total_engagement)) {
-    banners::TrackDisplayEvent(banners::DISPLAY_EVENT_NOT_VISITED_ENOUGH);
+  if (!HasSufficientEngagement(total_engagement))
     return INSUFFICIENT_ENGAGEMENT;
-  }
 
   return NO_ERROR_DETECTED;
 }
@@ -542,12 +564,9 @@ void AppBannerSettingsHelper::RecordMinutesFromFirstVisitToShow(
   banners::TrackMinutesFromFirstVisitToBannerShown(minutes);
 }
 
-bool AppBannerSettingsHelper::WasLaunchedRecently(
-    content::WebContents* web_contents,
-    const GURL& origin_url,
-    base::Time now) {
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+bool AppBannerSettingsHelper::WasLaunchedRecently(Profile* profile,
+                                                  const GURL& origin_url,
+                                                  base::Time now) {
   HostContentSettingsMap* settings =
       HostContentSettingsMapFactory::GetForProfile(profile);
   std::unique_ptr<base::DictionaryValue> origin_dict =
@@ -568,8 +587,10 @@ bool AppBannerSettingsHelper::WasLaunchedRecently(
       std::string event_key(
           kBannerEventKeys[APP_BANNER_EVENT_DID_ADD_TO_HOMESCREEN]);
       double internal_time;
-      if (!value->GetDouble(event_key, &internal_time))
+      if (it.key() == kInstantAppsKey ||
+          !value->GetDouble(event_key, &internal_time)) {
         continue;
+      }
 
       base::Time added_time = base::Time::FromInternalValue(internal_time);
 
@@ -581,6 +602,13 @@ bool AppBannerSettingsHelper::WasLaunchedRecently(
   }
 
   return false;
+}
+
+void AppBannerSettingsHelper::SetDaysAfterDismissAndIgnoreToTrigger(
+    unsigned int dismiss_days,
+    unsigned int ignore_days) {
+  gDaysAfterDismissedToShow = dismiss_days;
+  gDaysAfterIgnoredToShow = ignore_days;
 }
 
 void AppBannerSettingsHelper::SetEngagementWeights(double direct_engagement,
@@ -600,6 +628,8 @@ void AppBannerSettingsHelper::SetTotalEngagementToTrigger(
 }
 
 void AppBannerSettingsHelper::SetDefaultParameters() {
+  SetDaysAfterDismissAndIgnoreToTrigger(kMinimumBannerBlockedToBannerShown,
+                                        kMinimumDaysBetweenBannerShows);
   SetEngagementWeights(kDefaultDirectNavigationEngagement,
                        kDefaultIndirectNavigationEngagement);
   SetMinimumMinutesBetweenVisits(kNumberOfMinutesInADay);
@@ -635,6 +665,7 @@ base::Time AppBannerSettingsHelper::BucketTimeToResolution(
 void AppBannerSettingsHelper::UpdateFromFieldTrial() {
   // If we are using the site engagement score, only extract the total
   // engagement to trigger from the params variations.
+  UpdateDaysBetweenShowing();
   if (ShouldUseSiteEngagementScore()) {
     UpdateSiteEngagementToTrigger();
   } else {

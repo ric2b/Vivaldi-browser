@@ -11,7 +11,9 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/platform_thread.h"
+#include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/catalog/public/cpp/resource_loader.h"
 #include "services/shell/public/c/main.h"
 #include "services/shell/public/cpp/connection.h"
@@ -74,6 +76,7 @@ struct Service::PendingRequest {
 };
 
 struct Service::UserState {
+  std::unique_ptr<clipboard::ClipboardImpl> clipboard;
   std::unique_ptr<ws::AccessibilityManager> accessibility;
   std::unique_ptr<ws::WindowTreeHostFactory> window_tree_host_factory;
 };
@@ -81,8 +84,7 @@ struct Service::UserState {
 Service::Service()
     : test_config_(false),
       platform_screen_(display::PlatformScreen::Create()),
-      ime_registrar_(&ime_server_),
-      weak_ptr_factory_(this) {}
+      ime_registrar_(&ime_server_) {}
 
 Service::~Service() {
   // Destroy |window_server_| first, since it depends on |event_source_|.
@@ -102,7 +104,7 @@ void Service::InitializeResources(shell::Connector* connector) {
 
   catalog::ResourceLoader loader;
   filesystem::mojom::DirectoryPtr directory;
-  connector->ConnectToInterface("mojo:catalog", &directory);
+  connector->ConnectToInterface("service:catalog", &directory);
   CHECK(loader.OpenFiles(std::move(directory), resource_paths));
 
   ui::RegisterPathProvider();
@@ -133,8 +135,6 @@ void Service::AddUserIfNecessary(const shell::Identity& remote_identity) {
 }
 
 void Service::OnStart(const shell::Identity& identity) {
-  platform_display_init_params_.surfaces_state = new SurfacesState;
-
   base::PlatformThread::SetName("mus");
   tracing_.Initialize(connector(), identity.name());
   TRACE_EVENT0("mus", "Service::Initialize started");
@@ -181,18 +181,16 @@ void Service::OnStart(const shell::Identity& identity) {
   // so keep this line below both of those.
   input_device_server_.RegisterAsObserver();
 
-  gpu_proxy_.reset(new GpuServiceProxy());
-
   // Gpu must be running before the PlatformScreen can be initialized.
-  platform_screen_->Init();
-  window_server_.reset(
-      new ws::WindowServer(this, platform_display_init_params_.surfaces_state));
+  window_server_.reset(new ws::WindowServer(this));
 
   // DeviceDataManager must be initialized before TouchController. On non-Linux
   // platforms there is no DeviceDataManager so don't create touch controller.
   if (ui::DeviceDataManager::HasInstance())
     touch_controller_.reset(
         new ws::TouchController(window_server_->display_manager()));
+
+  ime_server_.Init(connector());
 }
 
 bool Service::OnConnect(const shell::Identity& remote_identity,
@@ -216,6 +214,8 @@ bool Service::OnConnect(const shell::Identity& remote_identity,
   if (input_device_server_.IsRegisteredAsObserver())
     input_device_server_.AddInterface(registry);
 
+  platform_screen_->AddInterfaces(registry);
+
 #if defined(USE_OZONE)
   ui::OzonePlatform::GetInstance()->AddInterfaces(registry);
 #endif
@@ -236,19 +236,25 @@ void Service::OnFirstDisplayReady() {
 
 void Service::OnNoMoreDisplays() {
   // We may get here from the destructor, in which case there is no messageloop.
-  if (base::MessageLoop::current())
+  if (base::MessageLoop::current() &&
+      base::MessageLoop::current()->is_running()) {
     base::MessageLoop::current()->QuitWhenIdle();
+  }
 }
 
 bool Service::IsTestConfig() const {
   return test_config_;
 }
 
+void Service::UpdateTouchTransforms() {
+  if (touch_controller_)
+    touch_controller_->UpdateTouchTransforms();
+}
+
 void Service::CreateDefaultDisplays() {
-  // An asynchronous callback will create the Displays once the physical
-  // displays are ready.
-  platform_screen_->ConfigurePhysicalDisplay(base::Bind(
-      &Service::OnCreatedPhysicalDisplay, weak_ptr_factory_.GetWeakPtr()));
+  // The display manager will create Displays once hardware or virtual displays
+  // are ready.
+  platform_screen_->Init(window_server_->display_manager());
 }
 
 void Service::Create(const shell::Identity& remote_identity,
@@ -264,8 +270,10 @@ void Service::Create(const shell::Identity& remote_identity,
 
 void Service::Create(const shell::Identity& remote_identity,
                      mojom::ClipboardRequest request) {
-  const ws::UserId& user_id = remote_identity.user_id();
-  window_server_->GetClipboardForUser(user_id)->AddBinding(std::move(request));
+  UserState* user_state = GetUserState(remote_identity);
+  if (!user_state->clipboard)
+    user_state->clipboard.reset(new clipboard::ClipboardImpl);
+  user_state->clipboard->AddBinding(std::move(request));
 }
 
 void Service::Create(const shell::Identity& remote_identity,
@@ -286,7 +294,7 @@ void Service::Create(const shell::Identity& remote_identity,
 
 void Service::Create(const shell::Identity& remote_identity,
                      mojom::GpuServiceRequest request) {
-  gpu_proxy_->Add(std::move(request));
+  window_server_->gpu_proxy()->Add(std::move(request));
 }
 
 void Service::Create(const shell::Identity& remote_identity,
@@ -331,8 +339,10 @@ void Service::Create(const shell::Identity& remote_identity,
     return;
   }
   AddUserIfNecessary(remote_identity);
-  new ws::WindowTreeFactory(window_server_.get(), remote_identity.user_id(),
-                            remote_identity.name(), std::move(request));
+  mojo::MakeStrongBinding(base::MakeUnique<ws::WindowTreeFactory>(
+                              window_server_.get(), remote_identity.user_id(),
+                              remote_identity.name()),
+                          std::move(request));
 }
 
 void Service::Create(const shell::Identity& remote_identity,
@@ -340,8 +350,7 @@ void Service::Create(const shell::Identity& remote_identity,
   UserState* user_state = GetUserState(remote_identity);
   if (!user_state->window_tree_host_factory) {
     user_state->window_tree_host_factory.reset(new ws::WindowTreeHostFactory(
-        window_server_.get(), remote_identity.user_id(),
-        platform_display_init_params_));
+        window_server_.get(), remote_identity.user_id()));
   }
   user_state->window_tree_host_factory->AddBinding(std::move(request));
 }
@@ -350,21 +359,10 @@ void Service::Create(const shell::Identity& remote_identity,
                      mojom::WindowServerTestRequest request) {
   if (!test_config_)
     return;
-  new ws::WindowServerTestImpl(window_server_.get(), std::move(request));
+  mojo::MakeStrongBinding(
+      base::MakeUnique<ws::WindowServerTestImpl>(window_server_.get()),
+      std::move(request));
 }
 
-void Service::OnCreatedPhysicalDisplay(int64_t id, const gfx::Rect& bounds) {
-  platform_display_init_params_.display_bounds = bounds;
-  platform_display_init_params_.display_id = id;
-  platform_display_init_params_.platform_screen = platform_screen_.get();
-
-  // Display manages its own lifetime.
-  ws::Display* host_impl =
-      new ws::Display(window_server_.get(), platform_display_init_params_);
-  host_impl->Init(nullptr);
-
-  if (touch_controller_)
-    touch_controller_->UpdateTouchTransforms();
-}
 
 }  // namespace ui

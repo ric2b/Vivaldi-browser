@@ -9,6 +9,13 @@
 // with the checks done in IN_PROC_BROWSER_TEST_F(ExtensionApiTest, Metrics).
 // See metrics_apitest.cc.
 chrome.test.runTests([
+  function getIsCrashReportingEnabled() {
+    chrome.metricsPrivate.getIsCrashReportingEnabled(function(enabled) {
+      chrome.test.assertEq('boolean', typeof enabled);
+      chrome.test.succeed();
+    });
+  },
+
   function recordUserAction() {
     // Log a metric once.
     chrome.metricsPrivate.recordUserAction('test.ua.1');
@@ -23,7 +30,7 @@ chrome.test.runTests([
   function recordValue() {
     chrome.metricsPrivate.recordValue({
       'metricName': 'test.h.1',
-      'type': 'histogram-log',
+      'type': chrome.metricsPrivate.MetricTypeType.HISTOGRAM_LOG,
       'min': 1,
       'max': 100,
       'buckets': 50
@@ -31,7 +38,7 @@ chrome.test.runTests([
 
     chrome.metricsPrivate.recordValue({
       'metricName': 'test.h.2',
-      'type': 'histogram-linear',
+      'type': chrome.metricsPrivate.MetricTypeType.HISTOGRAM_LINEAR,
       'min': 1,
       'max': 200,
       'buckets': 50
@@ -108,28 +115,28 @@ chrome.test.runTests([
   function testBucketSizeChanges() {
     var linear1 = {
       'metricName': 'test.bucketchange.linear',
-      'type': 'histogram-linear',
+      'type': chrome.metricsPrivate.MetricTypeType.HISTOGRAM_LINEAR,
       'min': 0,
       'max': 100,
       'buckets': 10
     };
     var linear2 = {
       'metricName': 'test.bucketchange.linear',
-      'type': 'histogram-linear',
+      'type': chrome.metricsPrivate.MetricTypeType.HISTOGRAM_LINEAR,
       'min': 0,
       'max': 100,
       'buckets': 20
     };
     var log1 = {
       'metricName': 'test.bucketchange.log',
-      'type': 'histogram-log',
+      'type': chrome.metricsPrivate.MetricTypeType.HISTOGRAM_LOG,
       'min': 0,
       'max': 100,
       'buckets': 10
     };
     var log2 = {
       'metricName': 'test.bucketchange.log',
-      'type': 'histogram-log',
+      'type': chrome.metricsPrivate.MetricTypeType.HISTOGRAM_LOG,
       'min': 0,
       'max': 100,
       'buckets': 20

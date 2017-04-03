@@ -212,7 +212,9 @@ WebInspector.CSSModel.prototype = {
      */
     _factoryForSourceMap: function(sourceMap)
     {
-        var sourceExtensions = new Set(sourceMap.sourceURLs().map(url => WebInspector.ParsedURL.extractExtension(url)));
+        var sourceExtensions = new Set();
+        for (var url of sourceMap.sourceURLs())
+            sourceExtensions.add(WebInspector.ParsedURL.extractExtension(url));
         for (var runtimeExtension of self.runtime.extensions(WebInspector.SourceMapFactory)) {
             var supportedExtensions = new Set(runtimeExtension.descriptor()["extensions"]);
             if (supportedExtensions.containsAll(sourceExtensions))
@@ -531,6 +533,24 @@ WebInspector.CSSModel.prototype = {
         }
 
         return this._agent.getMatchedStylesForNode(nodeId, callback.bind(this));
+    },
+
+    /**
+     * @param {!CSSAgent.StyleSheetId} styleSheetId
+     * @return {!Promise<!Array<string>>}
+     */
+    classNamesPromise: function(styleSheetId)
+    {
+        /**
+         * @param {?string} error
+         * @param {?Array<string>} classNames
+         * @return {!Array<string>}
+         */
+        function classNamesCallback(error, classNames)
+        {
+            return !error && classNames ? classNames : [];
+        }
+        return this._agent.collectClassNames(styleSheetId, classNamesCallback);
     },
 
     /**

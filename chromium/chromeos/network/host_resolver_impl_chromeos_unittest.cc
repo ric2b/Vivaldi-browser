@@ -22,6 +22,7 @@
 #include "dbus/object_path.h"
 #include "net/base/net_errors.h"
 #include "net/base/network_interfaces.h"
+#include "net/log/net_log_with_source.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
@@ -61,14 +62,10 @@ class HostResolverImplChromeOSTest : public testing::Test {
     SetDefaultIPConfigs(default_device->path());
 
     // Create the host resolver from the IO message loop.
-    io_message_loop_.PostTask(
+    io_message_loop_.task_runner()->PostTask(
         FROM_HERE,
         base::Bind(&HostResolverImplChromeOSTest::InitializeHostResolver,
                    base::Unretained(this)));
-    io_message_loop_.RunUntilIdle();
-
-    // Run the main message loop to create the network observer and initialize
-    // the ip address values.
     base::RunLoop().RunUntilIdle();
   }
 
@@ -83,7 +80,7 @@ class HostResolverImplChromeOSTest : public testing::Test {
     io_message_loop_.task_runner()->PostTask(
         FROM_HERE, base::Bind(&HostResolverImplChromeOSTest::Resolve,
                               base::Unretained(this), info));
-    io_message_loop_.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
     return result_;
   }
 
@@ -145,7 +142,7 @@ class HostResolverImplChromeOSTest : public testing::Test {
   std::unique_ptr<chromeos::NetworkStateHandler> network_state_handler_;
   std::unique_ptr<net::HostResolver> host_resolver_;
   base::MessageLoop io_message_loop_;
-  net::BoundNetLog net_log_;
+  net::NetLogWithSource net_log_;
   std::unique_ptr<net::HostResolver::Request> request_;
 
   DISALLOW_COPY_AND_ASSIGN(HostResolverImplChromeOSTest);

@@ -29,27 +29,33 @@
 namespace blink {
 
 class LayoutFieldset final : public LayoutBlockFlow {
-public:
-    explicit LayoutFieldset(Element*);
+ public:
+  explicit LayoutFieldset(Element*);
 
-    LayoutBox* findInFlowLegend() const;
+  LayoutBox* findInFlowLegend() const;
 
-    const char* name() const override { return "LayoutFieldset"; }
+  const char* name() const override { return "LayoutFieldset"; }
 
-private:
-    bool isOfType(LayoutObjectType type) const override { return type == LayoutObjectFieldset || LayoutBlockFlow::isOfType(type); }
+ private:
+  // We override the two baseline functions because we want our baseline to be
+  // the bottom of our margin box.
+  bool isOfType(LayoutObjectType type) const override {
+    return type == LayoutObjectFieldset || LayoutBlockFlow::isOfType(type);
+  }
 
-    LayoutObject* layoutSpecialExcludedChild(bool relayoutChildren, SubtreeLayoutScope&) override;
+  LayoutObject* layoutSpecialExcludedChild(bool relayoutChildren,
+                                           SubtreeLayoutScope&) override;
 
-    void computePreferredLogicalWidths() override;
-    bool avoidsFloats() const override { return true; }
+  void computePreferredLogicalWidths() override;
+  bool avoidsFloats() const override { return true; }
 
-    void paintBoxDecorationBackground(const PaintInfo&, const LayoutPoint&) const override;
-    void paintMask(const PaintInfo&, const LayoutPoint&) const override;
+  void paintBoxDecorationBackground(const PaintInfo&,
+                                    const LayoutPoint&) const override;
+  void paintMask(const PaintInfo&, const LayoutPoint&) const override;
 };
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutFieldset, isFieldset());
 
-} // namespace blink
+}  // namespace blink
 
-#endif // LayoutFieldset_h
+#endif  // LayoutFieldset_h

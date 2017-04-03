@@ -6,8 +6,12 @@
 
 #include <stddef.h>
 
+#include <memory>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -24,6 +28,7 @@
 #include "chrome/browser/ui/webui/chromeos/login/l10n_util.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_type.h"
 #include "content/public/browser/navigation_controller.h"
@@ -32,7 +37,6 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest_url_handlers.h"
-#include "grit/components_strings.h"
 #include "ui/base/ime/chromeos/component_extension_ime_manager.h"
 #include "ui/base/ime/chromeos/extension_ime_util.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
@@ -145,7 +149,7 @@ base::ListValue* CrosLanguageOptionsHandler::GetInputMethodList() {
     const std::string display_name =
         manager->GetInputMethodUtil()->GetInputMethodDisplayNameFromId(
             descriptor.id());
-    base::DictionaryValue* dictionary = new base::DictionaryValue();
+    auto dictionary = base::MakeUnique<base::DictionaryValue>();
     dictionary->SetString("id", descriptor.id());
     dictionary->SetString("displayName", display_name);
 
@@ -157,7 +161,7 @@ base::ListValue* CrosLanguageOptionsHandler::GetInputMethodList() {
     }
     dictionary->Set("languageCodeSet", languages);
 
-    input_method_list->Append(dictionary);
+    input_method_list->Append(std::move(dictionary));
   }
 
   return input_method_list;
@@ -182,7 +186,7 @@ base::ListValue*
     for (size_t i = 0; i < descriptor.language_codes().size(); ++i)
       language_codes->SetBoolean(descriptor.language_codes().at(i), true);
     dictionary->Set("languageCodeSet", language_codes.release());
-    ime_ids_list->Append(dictionary.release());
+    ime_ids_list->Append(std::move(dictionary));
   }
   return ime_ids_list.release();
 }
@@ -244,11 +248,9 @@ void CrosLanguageOptionsHandler::InputMethodOptionsOpenCallback(
 
   Browser* browser = chrome::FindBrowserWithWebContents(
       web_ui()->GetWebContents());
-  content::OpenURLParams params(ime->options_page_url(),
-      content::Referrer(),
-      SINGLETON_TAB,
-      ui::PAGE_TRANSITION_LINK,
-      false);
+  content::OpenURLParams params(ime->options_page_url(), content::Referrer(),
+                                WindowOpenDisposition::SINGLETON_TAB,
+                                ui::PAGE_TRANSITION_LINK, false);
   browser->OpenURL(params);
 }
 

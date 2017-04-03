@@ -9,11 +9,11 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/stl_util.h"
 #include "cc/base/cc_export.h"
 
 namespace cc {
@@ -130,6 +130,7 @@ class ContiguousContainer : public ContiguousContainerBase {
   ContiguousContainer(size_t max_object_size, size_t initial_size_bytes)
       : ContiguousContainerBase(Align(max_object_size), initial_size_bytes) {}
 
+  DISABLE_CFI_PERF
   ~ContiguousContainer() {
     for (auto& element : *this) {
       // MSVC incorrectly reports this variable as unused.

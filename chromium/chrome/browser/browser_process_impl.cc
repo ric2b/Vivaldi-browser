@@ -51,6 +51,7 @@
 #include "chrome/browser/intranet_redirect_detector.h"
 #include "chrome/browser/io_thread.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/loader/chrome_resource_dispatcher_host_delegate.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/metrics/chrome_metrics_services_manager_client.h"
 #include "chrome/browser/metrics/thread_watcher.h"
@@ -66,7 +67,6 @@
 #include "chrome/browser/printing/print_job_manager.h"
 #include "chrome/browser/printing/print_preview_dialog_controller.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/renderer_host/chrome_resource_dispatcher_host_delegate.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/status_icons/status_tray.h"
@@ -92,6 +92,7 @@
 #include "components/metrics_services_manager/metrics_services_manager.h"
 #include "components/net_log/chrome_net_log.h"
 #include "components/network_time/network_time_tracker.h"
+#include "components/physical_web/data_source/physical_web_data_source.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/policy_service.h"
 #include "components/prefs/json_pref_store.h"
@@ -159,7 +160,7 @@
 #endif
 
 #if defined(ENABLE_WEBRTC)
-#include "chrome/browser/media/webrtc_log_uploader.h"
+#include "chrome/browser/media/webrtc/webrtc_log_uploader.h"
 #endif
 
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
@@ -168,6 +169,10 @@
 
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
 #include "chrome/browser/first_run/upgrade_util.h"
+#endif
+
+#if defined(OS_ANDROID)
+#include "chrome/browser/android/physical_web/physical_web_data_source_android.h"
 #endif
 
 #if (defined(OS_WIN) || defined(OS_LINUX)) && !defined(OS_CHROMEOS)
@@ -221,22 +226,6 @@ BrowserProcessImpl::BrowserProcessImpl(
       net_log_path, GetNetCaptureModeFromCommandLine(command_line),
       command_line.GetCommandLineString(), chrome::GetChannelString()));
 
-#if defined(ENABLE_EXTENSIONS)
-  if (extensions::IsIsolateExtensionsEnabled()) {
-    // chrome-extension:// URLs are safe to request anywhere, but may only
-    // commit (including in iframes) in extension processes.
-    ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeIsolatedScheme(
-        extensions::kExtensionScheme, true);
-    // TODO(nick): Kill off kExtensionResourceScheme.
-    ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeIsolatedScheme(
-        extensions::kExtensionResourceScheme, false);
-  } else {
-    ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(
-        extensions::kExtensionScheme);
-    ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(
-        extensions::kExtensionResourceScheme);
-  }
-#endif
   ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(
       chrome::kChromeSearchScheme);
 
@@ -520,8 +509,9 @@ BrowserProcessImpl::GetMetricsServicesManager() {
   DCHECK(CalledOnValidThread());
   if (!metrics_services_manager_) {
     metrics_services_manager_.reset(
-        new metrics_services_manager::MetricsServicesManager(base::WrapUnique(
-            new ChromeMetricsServicesManagerClient(local_state()))));
+        new metrics_services_manager::MetricsServicesManager(
+            base::MakeUnique<ChromeMetricsServicesManagerClient>(
+                local_state())));
   }
   return metrics_services_manager_.get();
 }
@@ -792,6 +782,19 @@ BrowserProcessImpl::CachedDefaultWebClientState() {
   return cached_default_web_client_state_;
 }
 
+PhysicalWebDataSource* BrowserProcessImpl::GetPhysicalWebDataSource() {
+  DCHECK(CalledOnValidThread());
+#if defined(OS_ANDROID)
+  if (!physical_web_data_source_) {
+    CreatePhysicalWebDataSource();
+    DCHECK(physical_web_data_source_);
+  }
+  return physical_web_data_source_.get();
+#else
+  return nullptr;
+#endif
+}
+
 // static
 void BrowserProcessImpl::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kDefaultBrowserSettingEnabled,
@@ -901,19 +904,18 @@ net_log::ChromeNetLog* BrowserProcessImpl::net_log() {
 
 component_updater::ComponentUpdateService*
 BrowserProcessImpl::component_updater() {
-  if (!component_updater_.get()) {
-    if (!BrowserThread::CurrentlyOn(BrowserThread::UI))
-      return NULL;
-    scoped_refptr<update_client::Configurator> configurator =
-        component_updater::MakeChromeComponentUpdaterConfigurator(
-            base::CommandLine::ForCurrentProcess(),
-            io_thread()->system_url_request_context_getter(),
-            g_browser_process->local_state());
-    // Creating the component updater does not do anything, components
-    // need to be registered and Start() needs to be called.
-    component_updater_.reset(component_updater::ComponentUpdateServiceFactory(
-                                 configurator).release());
-  }
+  if (component_updater_)
+    return component_updater_.get();
+
+  if (!BrowserThread::CurrentlyOn(BrowserThread::UI))
+    return nullptr;
+
+  component_updater_ = component_updater::ComponentUpdateServiceFactory(
+      component_updater::MakeChromeComponentUpdaterConfigurator(
+          base::CommandLine::ForCurrentProcess(),
+          io_thread()->system_url_request_context_getter(),
+          g_browser_process->local_state()));
+
   return component_updater_.get();
 }
 
@@ -1032,6 +1034,26 @@ void BrowserProcessImpl::CreateLocalState() {
 }
 
 void BrowserProcessImpl::PreCreateThreads() {
+#if defined(ENABLE_EXTENSIONS)
+  // Register the chrome-extension scheme to reflect the extension process
+  // model. Controlled by a field trial, so we can't do this earlier.
+  base::FieldTrialList::FindFullName("SiteIsolationExtensions");
+  if (extensions::IsIsolateExtensionsEnabled()) {
+    // chrome-extension:// URLs are safe to request anywhere, but may only
+    // commit (including in iframes) in extension processes.
+    ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeIsolatedScheme(
+        extensions::kExtensionScheme, true);
+    // TODO(nick): Kill off kExtensionResourceScheme.
+    ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeIsolatedScheme(
+        extensions::kExtensionResourceScheme, false);
+  } else {
+    ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(
+        extensions::kExtensionScheme);
+    ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(
+        extensions::kExtensionResourceScheme);
+  }
+#endif
+
   io_thread_.reset(
       new IOThread(local_state(), policy_service(), net_log_.get(),
                    extension_event_router_forwarder()));
@@ -1080,6 +1102,13 @@ void BrowserProcessImpl::PreMainMessageLoopRun() {
   CacheDefaultWebClientState();
 
   platform_part_->PreMainMessageLoopRun();
+
+  if (base::FeatureList::IsEnabled(network_time::kNetworkTimeServiceQuerying)) {
+    network_time_tracker_.reset(new network_time::NetworkTimeTracker(
+        base::WrapUnique(new base::DefaultClock()),
+        base::WrapUnique(new base::DefaultTickClock()), local_state(),
+        system_request_context()));
+  }
 }
 
 void BrowserProcessImpl::CreateIconManager() {
@@ -1214,6 +1243,16 @@ void BrowserProcessImpl::CreateGCMDriver() {
           content::BrowserThread::IO),
       blocking_task_runner);
 #endif  // defined(OS_ANDROID)
+}
+
+void BrowserProcessImpl::CreatePhysicalWebDataSource() {
+  DCHECK(!physical_web_data_source_);
+
+#if defined(OS_ANDROID)
+  physical_web_data_source_ = base::MakeUnique<PhysicalWebDataSourceAndroid>();
+#else
+  NOTIMPLEMENTED();
+#endif
 }
 
 void BrowserProcessImpl::ApplyDefaultBrowserPolicy() {

@@ -33,31 +33,35 @@
 
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/dom/DOMTimeStamp.h"
+#include "modules/ModulesExport.h"
 #include "platform/heap/GarbageCollected.h"
 #include "public/platform/WebRTCCertificate.h"
 #include <memory>
 
 namespace blink {
 
-class RTCCertificate final : public GarbageCollectedFinalized<RTCCertificate>, public ScriptWrappable {
-    DEFINE_WRAPPERTYPEINFO();
-public:
-    // Takes ownership of the certificate.
-    RTCCertificate(std::unique_ptr<WebRTCCertificate>);
+class MODULES_EXPORT RTCCertificate final
+    : public GarbageCollectedFinalized<RTCCertificate>,
+      public ScriptWrappable {
+  DEFINE_WRAPPERTYPEINFO();
 
-    // Returns a new WebRTCCertificate shallow copy.
-    std::unique_ptr<WebRTCCertificate> certificateShallowCopy() const;
-    const WebRTCCertificate& certificate() const { return *m_certificate; }
+ public:
+  // Takes ownership of the certificate.
+  RTCCertificate(std::unique_ptr<WebRTCCertificate>);
 
-    DEFINE_INLINE_TRACE() {}
+  // Returns a new WebRTCCertificate shallow copy.
+  std::unique_ptr<WebRTCCertificate> certificateShallowCopy() const;
+  const WebRTCCertificate& certificate() const { return *m_certificate; }
 
-    // Returns the expiration time in ms relative to epoch, 1970-01-01T00:00:00Z.
-    DOMTimeStamp expires() const;
+  DEFINE_INLINE_TRACE() {}
 
-private:
-    std::unique_ptr<WebRTCCertificate> m_certificate;
+  // Returns the expiration time in ms relative to epoch, 1970-01-01T00:00:00Z.
+  DOMTimeStamp expires() const;
+
+ private:
+  std::unique_ptr<WebRTCCertificate> m_certificate;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // RTCCertificate_h
+#endif  // RTCCertificate_h

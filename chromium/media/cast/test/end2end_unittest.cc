@@ -22,6 +22,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/sys_byteorder.h"
 #include "base/test/simple_test_tick_clock.h"
@@ -256,7 +257,7 @@ class TestReceiverAudioCallback
         AudioBus::Create(audio_bus.channels(), audio_bus.frames());
     audio_bus.CopyTo(expected_audio_frame->audio_bus.get());
     expected_audio_frame->playout_time = playout_time;
-    expected_frames_.push_back(expected_audio_frame.release());
+    expected_frames_.push_back(std::move(expected_audio_frame));
   }
 
   void IgnoreAudioFrame(std::unique_ptr<AudioBus> audio_bus,
@@ -272,8 +273,8 @@ class TestReceiverAudioCallback
 
     ASSERT_TRUE(audio_bus);
     ASSERT_FALSE(expected_frames_.empty());
-    const std::unique_ptr<ExpectedAudioFrame> expected_audio_frame(
-        expected_frames_.front());
+    const std::unique_ptr<ExpectedAudioFrame> expected_audio_frame =
+        std::move(expected_frames_.front());
     expected_frames_.pop_front();
 
     EXPECT_EQ(audio_bus->channels(), kAudioChannels);
@@ -303,7 +304,6 @@ class TestReceiverAudioCallback
 
  protected:
   virtual ~TestReceiverAudioCallback() {
-    base::STLDeleteElements(&expected_frames_);
   }
 
  private:
@@ -311,7 +311,7 @@ class TestReceiverAudioCallback
 
   int num_called_;
   int expected_sampling_frequency_;
-  std::list<ExpectedAudioFrame*> expected_frames_;
+  std::list<std::unique_ptr<ExpectedAudioFrame>> expected_frames_;
   base::TimeTicks last_playout_time_;
 };
 

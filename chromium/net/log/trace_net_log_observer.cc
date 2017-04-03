@@ -14,7 +14,8 @@
 #include "base/logging.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_entry.h"
+#include "net/log/net_log_event_type.h"
 
 namespace net {
 
@@ -55,10 +56,10 @@ TraceNetLogObserver::~TraceNetLogObserver() {
   DCHECK(!net_log());
 }
 
-void TraceNetLogObserver::OnAddEntry(const NetLog::Entry& entry) {
+void TraceNetLogObserver::OnAddEntry(const NetLogEntry& entry) {
   std::unique_ptr<base::Value> params(entry.ParametersToValue());
   switch (entry.phase()) {
-    case NetLog::PHASE_BEGIN:
+    case NetLogEventPhase::BEGIN:
       TRACE_EVENT_NESTABLE_ASYNC_BEGIN2(
           kNetLogTracingCategory, NetLog::EventTypeToString(entry.type()),
           entry.source().id, "source_type",
@@ -66,7 +67,7 @@ void TraceNetLogObserver::OnAddEntry(const NetLog::Entry& entry) {
           std::unique_ptr<base::trace_event::ConvertableToTraceFormat>(
               new TracedValue(std::move(params))));
       break;
-    case NetLog::PHASE_END:
+    case NetLogEventPhase::END:
       TRACE_EVENT_NESTABLE_ASYNC_END2(
           kNetLogTracingCategory, NetLog::EventTypeToString(entry.type()),
           entry.source().id, "source_type",
@@ -74,7 +75,7 @@ void TraceNetLogObserver::OnAddEntry(const NetLog::Entry& entry) {
           std::unique_ptr<base::trace_event::ConvertableToTraceFormat>(
               new TracedValue(std::move(params))));
       break;
-    case NetLog::PHASE_NONE:
+    case NetLogEventPhase::NONE:
       TRACE_EVENT_NESTABLE_ASYNC_INSTANT2(
           kNetLogTracingCategory, NetLog::EventTypeToString(entry.type()),
           entry.source().id, "source_type",

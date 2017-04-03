@@ -9,7 +9,7 @@
 
 #include "components/sync/core/model_type_processor.h"
 
-namespace syncer_v2 {
+namespace syncer {
 
 class FakeModelTypeProcessor : public ModelTypeProcessor {
  public:
@@ -19,12 +19,12 @@ class FakeModelTypeProcessor : public ModelTypeProcessor {
   // ModelTypeProcessor implementation.
   void ConnectSync(std::unique_ptr<CommitQueue> worker) override;
   void DisconnectSync() override;
-  void OnCommitCompleted(const sync_pb::DataTypeState& type_state,
+  void OnCommitCompleted(const sync_pb::ModelTypeState& type_state,
                          const CommitResponseDataList& response_list) override;
-  void OnUpdateReceived(const sync_pb::DataTypeState& type_state,
+  void OnUpdateReceived(const sync_pb::ModelTypeState& type_state,
                         const UpdateResponseDataList& updates) override;
 };
 
-}  // namespace syncer_v2
+}  // namespace syncer
 
 #endif  // COMPONENTS_SYNC_CORE_TEST_FAKE_MODEL_TYPE_PROCESSOR_H_

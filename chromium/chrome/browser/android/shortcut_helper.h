@@ -10,6 +10,7 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "chrome/browser/android/shortcut_info.h"
+#include "chrome/browser/android/webapk/webapk_installer.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
 namespace content {
@@ -39,7 +40,8 @@ class ShortcutHelper {
   static void InstallWebApkWithSkBitmap(
       content::BrowserContext* browser_context,
       const ShortcutInfo& info,
-      const SkBitmap& icon_bitmap);
+      const SkBitmap& icon_bitmap,
+      const WebApkInstaller::FinishCallback& callback);
 
   // Adds a shortcut which opens in a fullscreen window to the launcher.
   // |splash_image_callback| will be invoked once the Java-side operation has
@@ -56,15 +58,6 @@ class ShortcutHelper {
   static void AddShortcutWithSkBitmap(
       const ShortcutInfo& info,
       const SkBitmap& icon_bitmap);
-
-  // Called after either:
-  // - A request to install the WebAPK has been sent.
-  // OR
-  // - WebAPK creation process fails.
-  // |success| indicates whether an installation request was sent. A "true"
-  // value of |success| does not guarantee that the WebAPK will be successfully
-  // installed.
-  static void OnBuiltWebApk(bool success);
 
   // Returns the ideal size for an icon representing a web app.
   static int GetIdealHomescreenIconSizeInDp();
@@ -103,7 +96,11 @@ class ShortcutHelper {
                                                    const GURL& url,
                                                    bool* is_generated);
 
-  // Returns true if WebAPKs are enabled and there is a WebAPK installed which
+  // Returns the package name of the WebAPK if WebAPKs are enabled and there is
+  // an installed WebAPK which can handle |url|. Returns empty string otherwise.
+  static std::string QueryWebApkPackage(const GURL& url);
+
+  // Returns true if WebAPKs are enabled and there is an installed WebAPK which
   // can handle |url|.
   static bool IsWebApkInstalled(const GURL& url);
 

@@ -5,6 +5,7 @@
   <link rel="stylesheet" href="chrome://resources/css/bubble.css">
   <link rel="stylesheet" href="chrome://resources/css/bubble_button.css">
   <link rel="stylesheet" href="chrome://resources/css/controlled_indicator.css">
+  <link rel="stylesheet" href="chrome://resources/css/overlay.css">
   <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
   <link rel="import" href="chrome://resources/polymer/v1_0/paper-progress/paper-progress.html">
   <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/classes/iron-flex-layout.html">
@@ -49,6 +50,7 @@
   <script src="chrome://resources/js/cr/ui/bubble.js"></script>
   <script src="chrome://resources/js/cr/ui/bubble_button.js"></script>
   <script src="chrome://resources/js/cr/ui/controlled_indicator.js"></script>
+  <script src="chrome://resources/js/cr/ui/overlay.js"></script>
 </head>
 <body>
   <div id="terms-loading" class="section">
@@ -86,7 +88,10 @@
               id="enable-location-service">
           <p class="checkbox-text" id="text-location-service"></p>
         </label>
-        <div class="layout horizontal end-justified section-buttons">
+        <div class="layout horizontal center end-justified section-buttons">
+          <a class="checkbox-text" id="privacy-policy-link"
+              href="#" i18n-content="privacyPolicyLink"></a>
+          <div class="flex"></div>
           <paper-button class="white" id="button-cancel"
               i18n-content="buttonCancel">
           </paper-button>
@@ -133,6 +138,23 @@
         </paper-button>
         <paper-button class="blue" id="button-retry" i18n-content="buttonRetry">
         </paper-button>
+      </div>
+    </div>
+  </div>
+  <div id="overlay-container" class="overlay" hidden>
+    <div class="page">
+      <div class="close-button"></div>
+      <div class="content-area">
+        <span id="overlay-text-content"></span>
+        <webview id="overlay-url"></webview>
+      </div>
+      <div class="action-area">
+        <div class="action-area-right">
+          <div class="button-strip">
+            <button id="overlay-close" i18n-content="overlayClose">
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>

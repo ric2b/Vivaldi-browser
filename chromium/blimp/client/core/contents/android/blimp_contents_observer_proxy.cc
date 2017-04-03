@@ -17,7 +17,7 @@ jlong Init(JNIEnv* env,
            const base::android::JavaParamRef<jobject>& jobj,
            const base::android::JavaParamRef<jobject>& jblimp_contents_impl) {
   BlimpContentsImplAndroid* blimp_contents_impl_android =
-      BlimpContentsImplAndroid::FromJavaObject(env, jblimp_contents_impl.obj());
+      BlimpContentsImplAndroid::FromJavaObject(env, jblimp_contents_impl);
   CHECK(blimp_contents_impl_android);
 
   return reinterpret_cast<intptr_t>(
@@ -50,6 +50,18 @@ void BlimpContentsObserverProxy::Destroy(
 void BlimpContentsObserverProxy::OnNavigationStateChanged() {
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_BlimpContentsObserverProxy_onNavigationStateChanged(env, java_obj_);
+}
+
+void BlimpContentsObserverProxy::OnLoadingStateChanged(bool loading) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_BlimpContentsObserverProxy_onLoadingStateChanged(env, java_obj_,
+                                                        loading);
+}
+
+void BlimpContentsObserverProxy::OnPageLoadingStateChanged(bool loading) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_BlimpContentsObserverProxy_onPageLoadingStateChanged(env, java_obj_,
+                                                            loading);
 }
 
 }  // namespace client

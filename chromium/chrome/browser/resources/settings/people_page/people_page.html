@@ -6,6 +6,7 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-checkbox/paper-checkbox.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_dialog/cr_dialog.html">
 <link rel="import" href="/controls/settings_checkbox.html">
 <link rel="import" href="/people_page/sync_page.html">
@@ -50,6 +51,10 @@
         font-weight: bold;
       }
 
+      iron-icon[icon='settings:sync'] {
+       --iron-icon-fill-color: var(--google-green-700);
+      }
+
       iron-icon[icon='settings:sync-problem'] {
        --iron-icon-fill-color: var(--settings-error-color);
       }
@@ -60,6 +65,7 @@
 
       .icon-container {
         display: flex;
+        flex-shrink: 0;
         justify-content: center;
         width: 40px;
       }
@@ -81,20 +87,20 @@
           <div id="profile-icon" on-tap="onPictureTap_" actionable
               style="background-image: [[getIconImageset_(profileIconUrl_)]]">
           </div>
-          <div class="middle">
 <if expr="not chromeos">
-            <span id="profile-name" on-tap="onProfileNameTap_" actionable>
-              [[profileName_]]
-            </span>
+          <div class="middle two-line" on-tap="onProfileNameTap_" actionable>
 </if>
 <if expr="chromeos">
-            <span id="profile-name">
+          <div class="middle two-line" on-tap="onPictureTap_" actionable>
+</if>
+            <span class="flex" id="profile-name">
               [[profileName_]]
             </span>
-</if>
+            <button class="icon-arrow-right" is="paper-icon-button-light">
+            </button>
           </div>
 <if expr="not chromeos">
-          <template is="dom-if" if="[[!syncStatus.signedIn]]">
+          <template is="dom-if" if="[[showSignin_(syncStatus)]]">
             <span class="secondary-action">
               <paper-button class="primary-button" on-tap="onSigninTap_"
                   disabled="[[syncStatus.setupInProgress]]">
@@ -113,8 +119,14 @@
           </template>
 </if>
         </div>
-        <div class="settings-box two-line" hidden="[[syncStatus.signedIn]]">
-          $i18n{syncOverview}
+        <div class="settings-box two-line"
+            hidden="[[!showSignin_(syncStatus)]]">
+          <div>
+            $i18n{syncOverview}
+            <a target="_blank" href="$i18n{syncLearnMoreUrl}">
+              $i18n{learnMore}
+            </a>
+          </div>
         </div>
 
 <if expr="not chromeos">
@@ -148,6 +160,8 @@
                 [[syncStatus.statusText]]
               </div>
             </div>
+            <button class="icon-arrow-right" is="paper-icon-button-light">
+            </button>
           </div>
         </template>
 
@@ -161,6 +175,7 @@
             <div>$i18n{personalizeGoogleServicesTitle}</div>
             <div class="secondary">$i18n{personalizeGoogleServicesText}</div>
           </div>
+          <button class="icon-external" is="paper-icon-button-light"></button>
         </div>
 
 <if expr="chromeos">
@@ -228,18 +243,26 @@
         </template>
 </if>
 
-        <div id="manage-other-people-subpage-trigger" class="settings-box">
-          <paper-button class="primary-button" on-tap="onManageOtherPeople_">
+        <div id="manage-other-people-subpage-trigger"
+            class="settings-box two-line" on-tap="onManageOtherPeople_"
+            actionable>
+          <div class="start">
             $i18n{manageOtherPeople}
-          </paper-button>
+            <div class="secondary">$i18n{manageOtherPeopleDescription}</div>
+          </div>
+          <button class="icon-arrow-right" is="paper-icon-button-light"></button>
         </div>
 
         <template is="dom-if" if=[[profileManagesSupervisedUsers_]]>
-          <div id="manageSupervisedUsersContainer" class="settings-box">
-            <paper-button class="primary-button"
-                on-tap="onManageSupervisedUsers_">
+          <div id="manageSupervisedUsersContainer" class="settings-box two-line"
+              on-tap="onManageSupervisedUsers_" actionable>
+            <div class="start">
               $i18n{manageSupervisedUsers}
-            </paper-button>
+              <div class="secondary">
+                $i18n{manageSupervisedUsersDescription}
+              </div>
+            </div>
+            <button class="icon-external" is="paper-icon-button-light"></button>
           </div>
         </template>
       </neon-animatable>
@@ -283,14 +306,14 @@
             associated-control="[[$$('#picture-subpage-trigger')]]"
             page-title="$i18n{editPerson}">
           <settings-manage-profile profile-icon-url="[[profileIconUrl_]]"
-              profile-name="[[profileName_]]">
+              profile-name="[[profileName_]]" sync-status="[[syncStatus]]">
           </settings-manage-profile>
         </settings-subpage>
       </template>
 </if>
     </settings-animated-pages>
 
-    <dialog is="cr-dialog" id="disconnectDialog">
+    <dialog is="cr-dialog" id="disconnectDialog" on-close="onDisconnectClosed_">
       <div class="title">$i18n{syncDisconnectTitle}</div>
       <div class="body">
         <div inner-h-t-m-l="[[getDisconnectExplanationHtml_(syncStatus.domain)]]">

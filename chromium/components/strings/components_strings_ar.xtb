@@ -15,6 +15,7 @@
 <translation id="1107591249535594099">‏إذا تم وضع علامة على هذا الخيار، سيخزّن Chrome نسخة من هذه البطاقة على هذا الجهاز لتعبئة النماذج بشكل أسرع.</translation>
 <translation id="1111153019813902504">الإشارات الجديدة</translation>
 <translation id="1113869188872983271">تراجع عن إعادة الت&amp;رتيب</translation>
+<translation id="1126551341858583091">يمثل الحجم على سعة التخزين المحلية <ph name="CRASH_SIZE" />.</translation>
 <translation id="112840717907525620">ذاكرة التخزين المؤقت للسياسة بحالة جيدة</translation>
 <translation id="113188000913989374"><ph name="SITE" /> يعرض:</translation>
 <translation id="1132774398110320017">‏إعدادات الملء التلقائي في Chrome...</translation>
@@ -79,7 +80,6 @@
 <translation id="1871208020102129563">‏تم تعيين الخادم الوكيل لاستخدام الخوادم الوكيلة الثابتة وليس عنوان URL لنص برمجي pac.</translation>
 <translation id="1883255238294161206">تصغير القائمة</translation>
 <translation id="1898423065542865115">التصفية</translation>
-<translation id="1911837502049945214">لم يقبل <ph name="HOST_NAME" /> شهادة تسجيل الدخول أو ربما انتهت صلاحية شهادة تسجيل الدخول.</translation>
 <translation id="194030505837763158">الانتقال إلى <ph name="LINK" /></translation>
 <translation id="1962204205936693436">إشارات <ph name="DOMAIN" /></translation>
 <translation id="1973335181906896915">خطأ أثناء التسلسل</translation>
@@ -172,10 +172,8 @@
 <translation id="2824775600643448204">شريط العناوين والبحث</translation>
 <translation id="2826760142808435982">تم تشفير الاتصال ومصادقته باستخدام <ph name="CIPHER" />، ويستخدم <ph name="KX" /> كآلية التبادل الرئيسية.</translation>
 <translation id="2835170189407361413">محو النموذج</translation>
-<translation id="2837049386027881519">‏يجب إعادة محاولة إجراء الاتصال باستخدام إصدار أقدم من بروتوكول TLS أو طبقة المقابس الآمنة. يعني هذا عادة أن الخادم يستخدم برنامجًا قديمًا جدًا وقد تكون به مشكلات أمان أخرى.</translation>
 <translation id="284702764277384724">يبدو أن شهادة الخادم على <ph name="HOST_NAME" /> مزيفة.</translation>
 <translation id="2889159643044928134">إلغاء إعادة التحميل</translation>
-<translation id="2896499918916051536">هذا المكون الإضافي غير معتمد.</translation>
 <translation id="2900469785430194048">‏نفدت ذاكرة Google Chrome أثناء محاولة عرض صفحة الويب هذه.</translation>
 <translation id="2909946352844186028">تم اكتشاف حدوث تغيير في الشبكة.</translation>
 <translation id="2922350208395188000">لا يمكن التحقق من شهادة الخادم.</translation>
@@ -217,8 +215,10 @@
 <translation id="3254409185687681395">وضع إشارة على هذه الصفحة</translation>
 <translation id="3270847123878663523">تراجع عن إعادة الت&amp;رتيب</translation>
 <translation id="3286538390144397061">إعادة التشغيل الآن</translation>
+<translation id="3303855915957856445">لم يتم العثور على أي نتائج بحث</translation>
 <translation id="3305707030755673451">تم تشفير بياناتك باستخدام عبارة مرور المزامنة في <ph name="TIME" />. أدخلها لبدء المزامنة.</translation>
 <translation id="333371639341676808">منع هذه الصفحة من إنشاء مربّعات حوار إضافية.</translation>
+<translation id="3338095232262050444">آمن</translation>
 <translation id="3340978935015468852">الإعدادات</translation>
 <translation id="3345135638360864351">تعذر إرسال طلبك للوصول إلى هذا الموقع إلى <ph name="NAME" />. يُرجى إعادة المحاولة مرة أخرى.</translation>
 <translation id="3355823806454867987">تغيير إعدادات الخادم الوكيل...</translation>
@@ -290,6 +290,7 @@
 <translation id="3963721102035795474">وضع القارئ</translation>
 <translation id="397105322502079400">جارٍ الحساب...</translation>
 <translation id="3973234410852337861">تم حظر <ph name="HOST_NAME" /></translation>
+<translation id="40103911065039147">{URL_count,plural, =1{صفحة ويب واحدة مجاورة}zero{# صفحات ويب مجاورة}two{صفحتا ويب (#) مجاورتان}few{# صفحات ويب مجاورة}many{# صفحة ويب مجاورة}other{# صفحة ويب مجاورة}}</translation>
 <translation id="4021036232240155012">‏يُعد نظام أسماء النطاقات (DNS) هو خدمة الشبكة التي تترجم اسم موقع ويب إلى عنوانه على شبكة الإنترنت.</translation>
 <translation id="4030383055268325496">تراجع عن الإ&amp;ضافة</translation>
 <translation id="404928562651467259">تحذير</translation>
@@ -320,11 +321,13 @@
 <translation id="4304224509867189079">تسجيل الدخول</translation>
 <translation id="432290197980158659">قدم الخادم شهادة لا تتطابق مع التوقعات المضمّنة. تم تضمين هذه التوقعات للحصول على مواقع ويب موثوقة وآمنة جدًا لتوفير الحماية لك. <ph name="BEGIN_LEARN_MORE_LINK" />مزيد من المعلومات<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="4325863107915753736">أخفق العثور على المقالة</translation>
+<translation id="4331708818696583467">غير آمن</translation>
 <translation id="4372948949327679948">القيمة <ph name="VALUE_TYPE" /> المتوقعة.</translation>
 <translation id="4381091992796011497">اسم المستخدم:</translation>
 <translation id="4394049700291259645">تعطيل</translation>
 <translation id="4395129973926795186"><ph name="START_DATE" /> إلى <ph name="END_DATE" /></translation>
 <translation id="4406896451731180161">نتائج البحث</translation>
+<translation id="4432688616882109544">لم يقبل <ph name="HOST_NAME" /> شهادة تسجيل الدخول أو من المحتمل ألا يكون قد تم تقديم واحدة.</translation>
 <translation id="443673843213245140">تم تعطيل استخدام الخادم الوكيل ولكن تم تحديد تهيئة صريحة للخادم الوكيل.</translation>
 <translation id="4458874409874303848">SafeSites</translation>
 <translation id="4461847750548395463">‏ظهرت هذه الرسالة لأنه تم تمكين Google SafeSites.</translation>
@@ -339,6 +342,7 @@
 <translation id="4589078953350245614">لقد حاولت الوصول إلى <ph name="DOMAIN" />، ولكن الخادم قدم شهادة غير صالحة. <ph name="BEGIN_LEARN_MORE_LINK" />مزيد من المعلومات<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="4592951414987517459">يتم ترميز اتصالك بالنطاق <ph name="DOMAIN" /> باستخدام مجموعة تشفير حديثة.</translation>
 <translation id="4594403342090139922">تراجع عن الحذ&amp;ف</translation>
+<translation id="4627442949885028695">متابعة من جهاز آخر</translation>
 <translation id="4668929960204016307">،</translation>
 <translation id="4670097147947922288">أنت تعرض حاليًا صفحة إضافة.</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" />‏ <ph name="SENTENCE2" /></translation>
@@ -359,14 +363,15 @@
 <translation id="4880827082731008257">سجلّ البحث</translation>
 <translation id="4884656795097055129">ستظهر المزيد من المقالات في الوقت المناسب.</translation>
 <translation id="4895877746940133817"><ph name="TYPE_1" />، <ph name="TYPE_2" />، <ph name="TYPE_3" /></translation>
+<translation id="4914479371620770914">{URL_count,plural, =1{وصفحة ويب واحدة إضافية}zero{و# صفحة ويب إضافية}two{وصفحتا ويب (#) إضافيتان}few{و# صفحات ويب إضافية}many{و# صفحة ويب إضافية}other{و# صفحة ويب إضافية}}</translation>
 <translation id="4923417429809017348">تمت ترجمة هذه الصفحة من لغة غير معروفة إلى اللغة <ph name="LANGUAGE_LANGUAGE" /></translation>
 <translation id="4926049483395192435">يجب تحديدها.</translation>
 <translation id="4930497775425430760">ظهرت لك هذه الرسالة نظرًا لحاجة والديك للموافقة على المواقع الجديدة عند زيارتك الأولى.</translation>
 <translation id="495170559598752135">إجراءات</translation>
 <translation id="4958444002117714549">توسيع القائمة</translation>
 <translation id="4962322354953122629">‏هذا الخادم لم يتمكن من إثبات أن ذلك <ph name="DOMAIN" />؛ بل إن شهادة أمانه غير موثوقة من قِبل Chrome. وربما يكون السبب في ذلك خطأً في التهيئة أو مهاجمًا يعترض اتصالك. <ph name="BEGIN_LEARN_MORE_LINK" />مزيد من المعلومات<ph name="END_LEARN_MORE_LINK" />.</translation>
-<translation id="4986920000862467124">جميع الأقسام مقروءة</translation>
 <translation id="498957508165411911">هل تريد الترجمة من <ph name="ORIGINAL_LANGUAGE" /> إلى <ph name="TARGET_LANGUAGE" />؟</translation>
+<translation id="4989809363548539747">هذا المكوِّن الإضافي غير مدعوم</translation>
 <translation id="5002932099480077015">‏إذا تم التمكين، سيخزن Chrome نسخة من بطاقتك على هذا الجهاز لملء النموذج بشكل أسرع.</translation>
 <translation id="5019198164206649151">التخزين المساعد في حالة سيئة</translation>
 <translation id="5023310440958281426">التحقق من سياسات المشرف</translation>
@@ -380,7 +385,6 @@
 <translation id="5089810972385038852">بلد/دولة</translation>
 <translation id="5095208057601539847">الإقليم</translation>
 <translation id="5115563688576182185">(64 بت)</translation>
-<translation id="5122371513570456792">تم العثور على <ph name="NUMBER_OF_RESULTS" /> <ph name="SEARCH_RESULTS" /> لـ "<ph name="SEARCH_STRING" />".</translation>
 <translation id="5141240743006678641">‏تشفير كلمات المرور المتزامنة باستخدام بيانات اعتماد Google</translation>
 <translation id="5145883236150621069">يوجد رمز خطأ في استجابة السياسة</translation>
 <translation id="5171045022955879922">‏البحث أو إدخال عنوان URL</translation>
@@ -388,8 +392,8 @@
 <translation id="5179510805599951267">هل الصفحة ليست باللغة <ph name="ORIGINAL_LANGUAGE" />؟ الإبلاغ عن هذا الخطأ</translation>
 <translation id="5190835502935405962">شريط الإشارات</translation>
 <translation id="5199729219167945352">التجارب</translation>
-<translation id="52060377617855516">{URL_count,plural, =1{تم العثور على صفحة ويب واحدة}zero{تم العثور على # صفحة ويب}two{تم العثور على صفحتي ويب (#)}few{تم العثور على # صفحات ويب}many{تم العثور على # صفحة ويب}other{تم العثور على # صفحة ويب}}</translation>
 <translation id="5251803541071282808">السحاب</translation>
+<translation id="5277279256032773186">‏هل تستخدم Chrome في العمل؟ يمكن للأنشطة التجارية إدارة إعدادات Chrome لموظفيها. تعرَّف على المزيد</translation>
 <translation id="5299298092464848405">خطأ في تحليل السياسة</translation>
 <translation id="5300589172476337783">عرض</translation>
 <translation id="5308689395849655368">ميزة الإبلاغ عن الأعطال معطلة.</translation>
@@ -423,7 +427,6 @@
 <translation id="5622887735448669177">هل تريد الخروج من هذا الموقع؟</translation>
 <translation id="5629630648637658800">أخفق تحميل إعدادات السياسة</translation>
 <translation id="5631439013527180824">الرمز المميز لإدارة الجهاز غير صالح</translation>
-<translation id="5650551054760837876">لم يتمّ العثور على أي نتائج بحث.</translation>
 <translation id="5677928146339483299">تم المنع</translation>
 <translation id="5710435578057952990">لم  يتمّ التحقق من هوية هذا الموقع.</translation>
 <translation id="5720705177508910913">المستخدم الحالي</translation>
@@ -462,7 +465,6 @@
 <translation id="6150607114729249911">عفوًا! عليك أن تسأل والديك ما إذا كان مناسبًا لك زيارة هذه الصفحة.</translation>
 <translation id="6151417162996330722">فترة صلاحية شهادة الخادم طويلة جدًا.</translation>
 <translation id="6165508094623778733">مزيد من المعلومات</translation>
-<translation id="6180780615171238625">لا يمكنك زيارة <ph name="SITE" /> الآن نظرًا لأنه تم إبطال هذه الشهادة. أخطاء الشبكة والهجمات عليها عادةً ما تكون مؤقتة، لذا ستعمل هذه الصفحة لاحقًا على الأرجح. <ph name="BEGIN_LEARN_MORE_LINK" />مزيد من المعلومات<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="6203231073485539293">التحقق من اتصالك بالإنترنت</translation>
 <translation id="6218753634732582820">‏هل تريد إزالة العنوان من Chromium؟</translation>
 <translation id="6259156558325130047">إعادة إ&amp;جراء الترتيب</translation>
@@ -490,6 +492,7 @@
 <translation id="647261751007945333">سياسات الأجهزة</translation>
 <translation id="6489534406876378309">بدء تحميل الأعطال</translation>
 <translation id="6529602333819889595">إعادة الح&amp;ذف</translation>
+<translation id="6534179046333460208">اقتراحات الشبكة المادية</translation>
 <translation id="6550675742724504774">خيارات</translation>
 <translation id="6593753688552673085">أقل من <ph name="UPPER_ESTIMATE" /></translation>
 <translation id="6596325263575161958">خيارات التشفير</translation>
@@ -523,8 +526,10 @@
 <translation id="6970216967273061347">المنطقة</translation>
 <translation id="6973656660372572881">‏تم تحديد كل من الخوادم الوكيلة الثابتة وعنوان URL للنص البرمجي pac.</translation>
 <translation id="6989763994942163495">عرض الإعدادات المتقدمة...</translation>
+<translation id="7000990526846637657">لم يتم العثور على أي إدخالات في السجلّ</translation>
 <translation id="7009986207543992532">لقد حاولت الوصول إلى <ph name="DOMAIN" />، ولكن الخادم قدّم شهادة مدة صلاحيتها طويلة جدًا مما يجعلها غير جديرة بالثقة. <ph name="BEGIN_LEARN_MORE_LINK" />مزيد من المعلومات<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="7012363358306927923">China UnionPay</translation>
+<translation id="7012372675181957985">‏قد يتضمن حسابك في Google نماذج أخرى من سجلّ التصفح في <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" /></translation>
 <translation id="7029809446516969842">كلمات المرور</translation>
 <translation id="7087282848513945231">المقاطعة/الإقليم/المنطقة</translation>
 <translation id="7088615885725309056">أقدم</translation>
@@ -550,6 +555,7 @@
 <translation id="7309308571273880165">تقرير الأعطال الذي تم الحصول عليه في <ph name="CRASH_TIME" /> (التحميل مطلوب بواسطة المستخدم، لم يتم التحميل بعد)</translation>
 <translation id="7334320624316649418">إعادة إ&amp;جراء الترتيب</translation>
 <translation id="733923710415886693">لم يتم الكشف عن شهادة الخادم عن طريق شهادة الشفافية.</translation>
+<translation id="7351800657706554155">لا يمكنك زيارة <ph name="SITE" /> الآن نظرًا لأنه تم إبطال شهادته. وعادةً ما تكون أخطاء الشبكة والهجمات عليها مؤقتة، لذا ستعمل هذه الصفحة لاحقًا على الأرجح. <ph name="BEGIN_LEARN_MORE_LINK" />مزيد من المعلومات<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="7353601530677266744">سطر الأوامر</translation>
 <translation id="7372973238305370288">نتيجة البحث</translation>
 <translation id="7377249249140280793"><ph name="RELATIVE_DATE" />‏ - <ph name="FULL_DATE" /></translation>
@@ -568,6 +574,7 @@
 <translation id="7469372306589899959">جارٍ التاكد من البطاقة</translation>
 <translation id="7481312909269577407">إلى الأمام</translation>
 <translation id="7485870689360869515">لم يتم العثور على بيانات.</translation>
+<translation id="7508255263130623398">رقم تعريف الجهاز المعروض للسياسة فارغ أو لا يتطابق مع رقم تعريف الجهاز الحالي</translation>
 <translation id="7514365320538308">تنزيل</translation>
 <translation id="7518003948725431193">لم يتم العثور على أي صفحة ويب لعنوان الويب:<ph name="URL" /></translation>
 <translation id="7537536606612762813">إلزامية</translation>
@@ -577,6 +584,7 @@
 <translation id="7568593326407688803">تتوفر هذه الصفحة باللغة<ph name="ORIGINAL_LANGUAGE" />فهل تريد ترجمتها؟</translation>
 <translation id="7569952961197462199">‏هل تريد إزالة بطاقة الائتمان من Chrome؟</translation>
 <translation id="7578104083680115302">‏الدفع سريعًا على المواقع والتطبيقات عبر الأجهزة باستخدام البطاقات التي حفظتها في Google.</translation>
+<translation id="7588950540487816470">الشبكة المادية</translation>
 <translation id="7592362899630581445">تنتهك شهادة الخادم القيود المفروضة على الاسم.</translation>
 <translation id="759889825892636187">يتعذر على <ph name="HOST_NAME" /> معالجة هذا الطلب حاليًا.</translation>
 <translation id="7600965453749440009">عدم الترجمة مطلقًا من اللغة <ph name="LANGUAGE" /></translation>
@@ -604,6 +612,7 @@
 <translation id="780301667611848630">لا، شكرًا</translation>
 <translation id="7805768142964895445">الحالة</translation>
 <translation id="7813600968533626083">‏هل تريد إزالة اقتراح النموذج من Chrome؟</translation>
+<translation id="7815407501681723534">تم العثور على <ph name="NUMBER_OF_RESULTS" /> <ph name="SEARCH_RESULTS" /> لـ "<ph name="SEARCH_STRING" />"</translation>
 <translation id="785549533363645510">ومع ذلك، أنت غير مرئي. لا يخفي الانتقال إلى وضع التخفي التصفح من صاحب العمل أو مزود خدمة الإنترنت أو المواقع التي تزورها.</translation>
 <translation id="7887683347370398519">‏تحقق من رمز التحقق من البطاقة (CVC) ثم أعد المحاولة.</translation>
 <translation id="7894616681410591072">عفوًا، أنت بحاجة إلى الحصول على إذن من <ph name="NAME" /> للدخول إلى هذه الصفحة.</translation>
@@ -619,7 +628,6 @@
 <translation id="7995512525968007366">غير محدد</translation>
 <translation id="8012647001091218357">لم نتمكن من الوصول إلى والديك في الوقت الحالي. يُرجى إعادة المحاولة مرة أخرى.</translation>
 <translation id="8034522405403831421">هذه الصفحة باللغة <ph name="SOURCE_LANGUAGE" />. هل تريد ترجمتها إلى اللغة <ph name="TARGET_LANGUAGE" />؟</translation>
-<translation id="8034955203865359138">لم يتم العثور على أي إدخالات في السجل.</translation>
 <translation id="8088680233425245692">أخفق عرض المقالة.</translation>
 <translation id="8089520772729574115">أقل من ميغابايت واحدة</translation>
 <translation id="8091372947890762290">التنشيط قيد الانتظار في الخادم</translation>
@@ -645,6 +653,7 @@
 <translation id="8349305172487531364">شريط الإشارات</translation>
 <translation id="8363502534493474904">إيقاف تشغيل وضع الطائرة</translation>
 <translation id="8364627913115013041">لم يتم تعيينها.</translation>
+<translation id="8380941800586852976">ضارة</translation>
 <translation id="8412145213513410671">الأعطال (<ph name="CRASH_COUNT" />)</translation>
 <translation id="8412392972487953978">يجب إدخال عبارة المرور نفسها مرتين.</translation>
 <translation id="8428213095426709021">إعدادات</translation>
@@ -671,7 +680,6 @@
 <translation id="8730621377337864115">تم</translation>
 <translation id="8738058698779197622">‏لإنشاء اتصال آمن، فإنك بحاجة إلى ضبط ساعتك بشكل صحيح. وذلك لأن الشهادات التي تستخدمها مواقع الويب لتعريف نفسها تكون صالحة فقط لفترات محددة من الوقت. فإذا كانت ساعة جهازك غير صحيحة، فلن يتمكن Chromium من التحقق من هذه الشهادات.</translation>
 <translation id="8740359287975076522">‏تعذر العثور على &lt;/abbr&gt;عنوان نظام أسماء النطاقات (DNS)‏&lt;abbr id="dnsDefinition"&gt; لـ <ph name="HOST_NAME" />. جارٍ تشخيص المشكلة.</translation>
-<translation id="8741995161408053644">‏قد يتضمن حسابك في Google على نماذج أخرى من سجل التصفح في <ph name="BEGIN_LINK" /> history.google.com <ph name="END_LINK" />.</translation>
 <translation id="8790007591277257123">إعادة الح&amp;ذف</translation>
 <translation id="8798099450830957504">الافتراضي</translation>
 <translation id="8804164990146287819">سياسة الخصوصية</translation>

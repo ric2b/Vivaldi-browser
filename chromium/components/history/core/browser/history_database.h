@@ -20,6 +20,8 @@
 #include "sql/init_status.h"
 #include "sql/meta_table.h"
 
+#include "db/vivaldi_history_database.h"
+
 #if defined(OS_ANDROID)
 #include "components/history/core/browser/android/android_cache_database.h"
 #include "components/history/core/browser/android/android_urls_database.h"
@@ -48,7 +50,8 @@ class HistoryDatabase : public DownloadDatabase,
 #endif
                         public URLDatabase,
                         public VisitDatabase,
-                        public VisitSegmentDatabase {
+                        public VisitSegmentDatabase,
+                        public VivaldiHistoryDatabase {
  public:
   // A simple class for scoping a history database transaction. This does not
   // support rollback since the history database doesn't, either.
@@ -90,8 +93,6 @@ class HistoryDatabase : public DownloadDatabase,
   // Computes the |num_hosts| most-visited hostnames in the past 30 days. See
   // history_service.h for details.
   TopHostsList TopHosts(size_t num_hosts);
-
-  TopUrlsPerDayList TopUrlsPerDay(size_t num_hosts);
 
   // Call to set the mode on the database to exclusive. The default locking mode
   // is "normal" but we want to run in exclusive mode for slightly better

@@ -1,6 +1,5 @@
 import("//vivaldi/gn/config/features.gni")
 import("//tools/grit/grit_rule.gni")
-import("//vivaldi/gn/deepcopy.gni")
 import("//build/config/locales.gni")
 import("//vivaldi/app/resources/untranslated.gni")
 

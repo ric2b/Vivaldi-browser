@@ -8,10 +8,6 @@
 
 PermissionRequest::PermissionRequest() : persist_(true) {}
 
-gfx::VectorIconId PermissionRequest::GetVectorIconId() const {
-  return gfx::VectorIconId::VECTOR_ICON_NONE;
-}
-
 bool PermissionRequest::ShouldShowPersistenceToggle() const {
   return false;
 }

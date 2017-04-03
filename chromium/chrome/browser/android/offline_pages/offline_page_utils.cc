@@ -13,7 +13,10 @@
 #include "chrome/browser/android/offline_pages/offline_page_mhtml_archiver.h"
 #include "chrome/browser/android/offline_pages/offline_page_model_factory.h"
 #include "chrome/browser/android/offline_pages/offline_page_tab_helper.h"
+#include "chrome/browser/android/offline_pages/request_coordinator_factory.h"
 #include "chrome/browser/android/tab_android.h"
+#include "components/offline_pages/background/request_coordinator.h"
+#include "components/offline_pages/background/save_page_request.h"
 #include "components/offline_pages/client_namespace_constants.h"
 #include "components/offline_pages/offline_page_feature.h"
 #include "components/offline_pages/offline_page_item.h"
@@ -25,35 +28,6 @@
 
 namespace offline_pages {
 namespace {
-
-// Returns an offline page that is stored as the |offline_url|.
-const OfflinePageItem* GetOfflinePageForOfflineURL(
-    content::BrowserContext* browser_context,
-    const GURL& offline_url) {
-  DCHECK(browser_context);
-
-  // Note that we first check if the url likely points to an offline page
-  // before calling GetPageByOfflineURL in order to avoid unnecessary lookup
-  // cost.
-  if (!OfflinePageUtils::MightBeOfflineURL(offline_url))
-    return nullptr;
-
-  OfflinePageModel* offline_page_model =
-      OfflinePageModelFactory::GetForBrowserContext(browser_context);
-  if (!offline_page_model)
-    return nullptr;
-
-  return offline_page_model->MaybeGetPageByOfflineURL(offline_url);
-}
-
-void OnGetPageByOfflineURLDone(
-    const base::Callback<void(const GURL&)>& callback,
-    const OfflinePageItem* item) {
-  GURL result_url;
-  if (item)
-    result_url = item->url;
-  callback.Run(result_url);
-}
 
 void OnGetPagesByOnlineURLDone(
     int tab_id,
@@ -76,27 +50,6 @@ void OnGetPagesByOnlineURLDone(
 }  // namespace
 
 // static
-bool OfflinePageUtils::MightBeOfflineURL(const GURL& url) {
-  // It has to be a file URL ending with .mhtml extension.
-  return url.is_valid() && url.SchemeIsFile() &&
-         base::EndsWith(url.spec(),
-                        OfflinePageMHTMLArchiver::GetFileNameExtension(),
-                        base::CompareCase::INSENSITIVE_ASCII);
-}
-
-// static
-GURL OfflinePageUtils::MaybeGetOnlineURLForOfflineURL(
-    content::BrowserContext* browser_context,
-    const GURL& offline_url) {
-  const OfflinePageItem* offline_page =
-      GetOfflinePageForOfflineURL(browser_context, offline_url);
-  if (!offline_page)
-    return GURL();
-
-  return offline_page->url;
-}
-
-// static
 void OfflinePageUtils::SelectPageForOnlineURL(
     content::BrowserContext* browser_context,
     const GURL& online_url,
@@ -114,46 +67,6 @@ void OfflinePageUtils::SelectPageForOnlineURL(
       online_url, base::Bind(&OnGetPagesByOnlineURLDone, tab_id, callback));
 }
 
-// static
-void OfflinePageUtils::GetOnlineURLForOfflineURL(
-    content::BrowserContext* browser_context,
-    const GURL& offline_url,
-    const base::Callback<void(const GURL&)>& callback) {
-  OfflinePageModel* offline_page_model =
-      OfflinePageModelFactory::GetForBrowserContext(browser_context);
-  if (!offline_page_model) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&OnGetPageByOfflineURLDone, callback, nullptr));
-    return;
-  }
-
-  offline_page_model->GetPageByOfflineURL(
-      offline_url, base::Bind(&OnGetPageByOfflineURLDone, callback));
-}
-
-// static
-bool OfflinePageUtils::IsOfflinePage(content::BrowserContext* browser_context,
-                                     const GURL& offline_url) {
-  return GetOfflinePageForOfflineURL(browser_context, offline_url) != nullptr;
-}
-
-// static
-void OfflinePageUtils::MarkPageAccessed(
-    content::BrowserContext* browser_context, const GURL& offline_url) {
-  DCHECK(browser_context);
-
-  const OfflinePageItem* offline_page =
-      GetOfflinePageForOfflineURL(browser_context, offline_url);
-  if (!offline_page)
-    return;
-
-  OfflinePageModel* offline_page_model =
-      OfflinePageModelFactory::GetForBrowserContext(browser_context);
-  DCHECK(offline_page_model);
-  offline_page_model->MarkPageAccessed(offline_page->offline_id);
-}
-
-// static
 const OfflinePageItem* OfflinePageUtils::GetOfflinePageFromWebContents(
     content::WebContents* web_contents) {
   OfflinePageTabHelper* tab_helper =
@@ -192,6 +105,71 @@ bool OfflinePageUtils::GetTabId(content::WebContents* web_contents,
     return false;
   *tab_id = tab_android->GetAndroidId();
   return true;
+}
+
+// static
+void OfflinePageUtils::CheckExistenceOfPagesWithURL(
+    content::BrowserContext* browser_context,
+    const std::string name_space,
+    const GURL& offline_page_url,
+    const base::Callback<void(bool)>& callback) {
+  OfflinePageModel* offline_page_model =
+      OfflinePageModelFactory::GetForBrowserContext(browser_context);
+  DCHECK(offline_page_model);
+  auto continuation = [](const std::string& name_space,
+                         const base::Callback<void(bool)>& callback,
+                         const std::vector<OfflinePageItem>& pages) {
+    for (auto& page : pages) {
+      if (page.client_id.name_space == name_space) {
+        callback.Run(true);
+        return;
+      }
+    }
+    callback.Run(false);
+  };
+
+  offline_page_model->GetPagesByOnlineURL(
+      offline_page_url, base::Bind(continuation, name_space, callback));
+}
+
+// static
+void OfflinePageUtils::CheckExistenceOfRequestsWithURL(
+    content::BrowserContext* browser_context,
+    const std::string name_space,
+    const GURL& offline_page_url,
+    const base::Callback<void(bool)>& callback) {
+  RequestCoordinator* request_coordinator =
+      RequestCoordinatorFactory::GetForBrowserContext(browser_context);
+
+  auto request_coordinator_continuation = [](
+      const std::string& name_space, const GURL& offline_page_url,
+      const base::Callback<void(bool)>& callback,
+      std::vector<std::unique_ptr<SavePageRequest>> requests) {
+    for (auto& request : requests) {
+      if (request->url() == offline_page_url &&
+          request->client_id().name_space == name_space) {
+        callback.Run(true);
+        return;
+      }
+    }
+    callback.Run(false);
+  };
+
+  request_coordinator->GetAllRequests(
+      base::Bind(request_coordinator_continuation, name_space, offline_page_url,
+                 callback));
+}
+
+// static
+bool OfflinePageUtils::EqualsIgnoringFragment(const GURL& lhs,
+                                              const GURL& rhs) {
+  GURL::Replacements remove_params;
+  remove_params.ClearRef();
+
+  GURL lhs_stripped = lhs.ReplaceComponents(remove_params);
+  GURL rhs_stripped = rhs.ReplaceComponents(remove_params);
+
+  return lhs_stripped == rhs_stripped;
 }
 
 }  // namespace offline_pages

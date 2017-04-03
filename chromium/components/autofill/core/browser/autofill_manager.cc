@@ -220,6 +220,11 @@ AutofillManager::AutofillManager(
   CountryNames::SetLocaleString(app_locale_);
   if (personal_data_ && client_)
     personal_data_->OnSyncServiceInitialized(client_->GetSyncService());
+
+#if defined(OS_ANDROID)
+  if (personal_data_ && driver_)
+    personal_data_->SetURLRequestContextGetter(driver_->GetURLRequestContext());
+#endif
 }
 
 AutofillManager::~AutofillManager() {}
@@ -596,9 +601,11 @@ void AutofillManager::OnQueryFormFieldAutofill(int query_id,
 
   // If there are no Autofill suggestions, consider showing Autocomplete
   // suggestions. We will not show Autocomplete suggestions for a field that
-  // specifies autocomplete=off (or an unrecognized type) or a field that we
-  // think is a credit card expiration, cvc or number.
-  if (suggestions.empty() && field.should_autocomplete &&
+  // specifies autocomplete=off (or an unrecognized type), a field for which we
+  // will show the credit card signin promo, or a field that we think is a
+  // credit card expiration, cvc or number.
+  if (suggestions.empty() && !ShouldShowCreditCardSigninPromo(form, field) &&
+      field.should_autocomplete &&
       !(autofill_field &&
         (IsCreditCardExpirationType(autofill_field->Type().GetStorableType()) ||
          autofill_field->Type().html_type() == HTML_TYPE_UNRECOGNIZED ||
@@ -907,7 +914,7 @@ void AutofillManager::OnLoadedServerPredictions(
   std::vector<FormStructure*> queried_forms;
   for (const std::string& signature : base::Reversed(form_signatures)) {
     for (FormStructure* cur_form : base::Reversed(form_structures_)) {
-      if (cur_form->FormSignature() == signature) {
+      if (cur_form->FormSignatureAsStr() == signature) {
         queried_forms.push_back(cur_form);
         break;
       }
@@ -993,15 +1000,15 @@ void AutofillManager::OnDidUploadCard(
   // TODO(jdonnelly): Log duration.
 }
 
-void AutofillManager::OnFullCardDetails(const CreditCard& card,
-                                        const base::string16& cvc) {
+void AutofillManager::OnFullCardRequestSucceeded(const CreditCard& card,
+                                                 const base::string16& cvc) {
   credit_card_form_event_logger_->OnDidFillSuggestion(masked_card_);
   FillCreditCardForm(unmasking_query_id_, unmasking_form_, unmasking_field_,
                      card, cvc);
   masked_card_ = CreditCard();
 }
 
-void AutofillManager::OnFullCardError() {
+void AutofillManager::OnFullCardRequestFailed() {
   driver_->RendererShouldClearPreviewedForm();
 }
 
@@ -1273,7 +1280,7 @@ void AutofillManager::UploadFormData(const FormStructure& submitted_form,
 
   // Check if the form is among the forms that were recently auto-filled.
   bool was_autofilled = false;
-  std::string form_signature = submitted_form.FormSignature();
+  std::string form_signature = submitted_form.FormSignatureAsStr();
   for (const std::string& cur_sig : autofilled_form_signatures_) {
     if (cur_sig == form_signature) {
       was_autofilled = true;
@@ -1540,7 +1547,7 @@ void AutofillManager::FillOrPreviewDataModelForm(
     }
   }
 
-  autofilled_form_signatures_.push_front(form_structure->FormSignature());
+  autofilled_form_signatures_.push_front(form_structure->FormSignatureAsStr());
   // Only remember the last few forms that we've seen, both to avoid false
   // positives and to avoid wasting memory.
   if (autofilled_form_signatures_.size() > kMaxRecentFormSignaturesToRemember)

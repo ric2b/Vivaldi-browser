@@ -15,6 +15,7 @@
 <translation id="1107591249535594099">Hvis det er merket av for dette alternativet, lagrer Chrome en kopi av kortet ditt på denne enheten, slik at det går raskere å fylle ut skjemaer.</translation>
 <translation id="1111153019813902504">Nylige bokmerker</translation>
 <translation id="1113869188872983271">&amp;Angre omorganiseringen</translation>
+<translation id="1126551341858583091">Størrelsen på den lokale lagringsplassen er <ph name="CRASH_SIZE" />.</translation>
 <translation id="112840717907525620">Bufferen for enhetsinnstillinger er OK</translation>
 <translation id="113188000913989374"><ph name="SITE" /> sier:</translation>
 <translation id="1132774398110320017">Innstillinger for autofyll i Chrome</translation>
@@ -79,7 +80,6 @@
 <translation id="1871208020102129563">Mellomtjeneren er angitt til å bruke statiske proxytjenere, ikke en nettadresse med .pac-skript.</translation>
 <translation id="1883255238294161206">Skjul liste</translation>
 <translation id="1898423065542865115">Filtrering</translation>
-<translation id="1911837502049945214"><ph name="HOST_NAME" /> godtok ikke påloggingssertifikatet ditt, eller påloggingssertifikatet kan ha utløpt.</translation>
 <translation id="194030505837763158">Gå til <ph name="LINK" /></translation>
 <translation id="1962204205936693436"><ph name="DOMAIN" />-bokmerker</translation>
 <translation id="1973335181906896915">Serialiseringsfeil</translation>
@@ -172,10 +172,8 @@
 <translation id="2824775600643448204">Adresse- og søkefelt</translation>
 <translation id="2826760142808435982">Tilkoblingen er kryptert ved hjelp av <ph name="CIPHER" />, og bruker <ph name="KX" /> som mekanisme for nøkkelutveksling.</translation>
 <translation id="2835170189407361413">Slett skjemaet</translation>
-<translation id="2837049386027881519">Tilkoblingen måtte måtte prøves på nytt ved hjelp av en eldre versjon av TLS- eller SSL-protokollen. Dette betyr vanligvis at tjeneren bruker veldig gammel programvare og kan ha andre sikkerhetsproblemer.</translation>
 <translation id="284702764277384724">Tjenersertifikatet på <ph name="HOST_NAME" /> ser ut til å være forfalsket.</translation>
 <translation id="2889159643044928134">Ikke last inn på nytt</translation>
-<translation id="2896499918916051536">Dette programtillegget støttes ikke.</translation>
 <translation id="2900469785430194048">Google Chrome gikk tom for minne under forsøket på å vise denne nettsiden.</translation>
 <translation id="2909946352844186028">En nettverksendring ble oppdaget.</translation>
 <translation id="2922350208395188000">Tjenerens sertifikat kan ikke kontrolleres.</translation>
@@ -217,8 +215,10 @@
 <translation id="3254409185687681395">Legg til bokmerke for denne siden</translation>
 <translation id="3270847123878663523">&amp;Angre omorganiseringen</translation>
 <translation id="3286538390144397061">Start på nytt nå</translation>
+<translation id="3303855915957856445">Søket ga ingen treff</translation>
 <translation id="3305707030755673451">Dataene dine er kryptert med passordfrasen din for synkronisering <ph name="TIME" />. Skriv den inn for å starte synkroniseringen.</translation>
 <translation id="333371639341676808">Hindre denne siden i å opprette flere dialogbokser.</translation>
+<translation id="3338095232262050444">Sikker</translation>
 <translation id="3340978935015468852">innstillinger</translation>
 <translation id="3345135638360864351">Forespørselen om tilgang til dette nettstedet kunne ikke sendes til <ph name="NAME" />. Prøv igjen.</translation>
 <translation id="3355823806454867987">Endre innstillinger for mellomtjener</translation>
@@ -290,6 +290,7 @@
 <translation id="3963721102035795474">Lesermodus</translation>
 <translation id="397105322502079400">Beregner …</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> er blokkert</translation>
+<translation id="40103911065039147">{URL_count,plural, =1{1 Like ved-nettside}other{# Like ved-nettsider}}</translation>
 <translation id="4021036232240155012">DNS er nettverkstjenesten som oversetter navnene på nettsteder til Internett-adressene deres.</translation>
 <translation id="4030383055268325496">&amp;Angre tilleggingen</translation>
 <translation id="404928562651467259">ADVARSEL</translation>
@@ -320,11 +321,13 @@
 <translation id="4304224509867189079">Logg på</translation>
 <translation id="432290197980158659">Tjeneren presenterte et sertifikat som ikke samsvarer med innebygde forventninger. Disse forventningene benyttes for visse nettsteder med høy sikkerhet og brukes for å beskytte deg. <ph name="BEGIN_LEARN_MORE_LINK" />Finn ut mer<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="4325863107915753736">Artikkelen ble ikke funnet</translation>
+<translation id="4331708818696583467">Ikke sikker</translation>
 <translation id="4372948949327679948">Forventet <ph name="VALUE_TYPE" />-verdi.</translation>
 <translation id="4381091992796011497">Brukernavn:</translation>
 <translation id="4394049700291259645">Slå av</translation>
 <translation id="4395129973926795186"><ph name="START_DATE" /> til <ph name="END_DATE" /></translation>
 <translation id="4406896451731180161">søkeresultater</translation>
+<translation id="4432688616882109544">Enten godtok ikke <ph name="HOST_NAME" /> påloggingssertifikatet ditt, eller så ble det ikke oppgitt.</translation>
 <translation id="443673843213245140">Bruk av mellomtjener er deaktivert, men det er angitt en uttrykkelig mellomtjenerkonfigurasjon.</translation>
 <translation id="4458874409874303848">SafeSites</translation>
 <translation id="4461847750548395463">Du ser denne meldingen fordi Google SafeSites er slått på.</translation>
@@ -339,6 +342,7 @@
 <translation id="4589078953350245614">Du prøvde å gå til <ph name="DOMAIN" />, men tjeneren presenterte et ugyldig sertifikat. <ph name="BEGIN_LEARN_MORE_LINK" />Finn ut mer<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="4592951414987517459">Tilkoblingen til <ph name="DOMAIN" /> er kryptert med en moderne chifferserie.</translation>
 <translation id="4594403342090139922">&amp;Angre slettingen</translation>
+<translation id="4627442949885028695">Fortsett på en annen enhet</translation>
 <translation id="4668929960204016307">,</translation>
 <translation id="4670097147947922288">Dette er en utvidelsesside.</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
@@ -359,14 +363,15 @@
 <translation id="4880827082731008257">Søk i loggen</translation>
 <translation id="4884656795097055129">Flere artikler vises når tiden er inne.</translation>
 <translation id="4895877746940133817"><ph name="TYPE_1" />, <ph name="TYPE_2" />, <ph name="TYPE_3" /></translation>
+<translation id="4914479371620770914">{URL_count,plural, =1{og 1 nettside til}other{og # nettsider til}}</translation>
 <translation id="4923417429809017348">Denne siden er oversatt til <ph name="LANGUAGE_LANGUAGE" /> fra et ukjent språk</translation>
 <translation id="4926049483395192435">Må angis.</translation>
 <translation id="4930497775425430760">Du ser denne meldingen fordi en av foreldrene dine må godkjenne nye nettsteder den første gangen du åpner dem.</translation>
 <translation id="495170559598752135">Handlinger</translation>
 <translation id="4958444002117714549">Utvid liste</translation>
 <translation id="4962322354953122629">Denne tjeneren kunne ikke bevise at den er <ph name="DOMAIN" />, ettersom skkerhetssertifikatet ikke er regnet som pålitelig av Chrome. Dette kan skyldes en feilkonfigurasjon eller at en angriper avskjærer tilkoblingen din. <ph name="BEGIN_LEARN_MORE_LINK" />Finn ut mer<ph name="END_LEARN_MORE_LINK" />.</translation>
-<translation id="4986920000862467124">Alt er lest</translation>
 <translation id="498957508165411911">Vil du oversette fra <ph name="ORIGINAL_LANGUAGE" /> til <ph name="TARGET_LANGUAGE" />?</translation>
+<translation id="4989809363548539747">Dette programtillegget støttes ikke</translation>
 <translation id="5002932099480077015">Hvis du slår på dette alternativet, lagrer Chrome en kopi av kortet ditt på denne enheten, slik at det blir raskere å fylle ut skjemaer i fremtiden.</translation>
 <translation id="5019198164206649151">Ugyldig funksjonalitet for sikkerhetskopiering</translation>
 <translation id="5023310440958281426">Kontrollér retningslinjene til administratoren din</translation>
@@ -380,7 +385,6 @@
 <translation id="5089810972385038852">Fylke / delstat</translation>
 <translation id="5095208057601539847">Provins</translation>
 <translation id="5115563688576182185">(64-bit)</translation>
-<translation id="5122371513570456792">Funnet <ph name="NUMBER_OF_RESULTS" /><ph name="SEARCH_RESULTS" /> for «<ph name="SEARCH_STRING" />».</translation>
 <translation id="5141240743006678641">Kryptér synkroniserte passord med Google-legitimasjonen din</translation>
 <translation id="5145883236150621069">Feilkode i responsen for enhetsinnstillinger</translation>
 <translation id="5171045022955879922">Søk, eller skriv inn en nettadresse</translation>
@@ -388,8 +392,8 @@
 <translation id="5179510805599951267">Er ikke dette <ph name="ORIGINAL_LANGUAGE" />? Rapportér denne feilen</translation>
 <translation id="5190835502935405962">Bokmerkerad</translation>
 <translation id="5199729219167945352">Eksperimenter</translation>
-<translation id="52060377617855516">{URL_count,plural, =1{1 nettside ble funnet}other{# nettsider ble funnet}}</translation>
 <translation id="5251803541071282808">Nettsky</translation>
+<translation id="5277279256032773186">Bruker du Chrome på jobben? Bedrifter kan administrere Chrome-innstillingene for de ansatte. Finn ut mer</translation>
 <translation id="5299298092464848405">Feil under analysen av enhetsinnstillingene</translation>
 <translation id="5300589172476337783">Vis</translation>
 <translation id="5308689395849655368">Rapportering av programstopp er deaktivert.</translation>
@@ -423,7 +427,6 @@
 <translation id="5622887735448669177">Vil du forlate dette nettstedet?</translation>
 <translation id="5629630648637658800">Kunne ikke laste in angivelsen for enhetsinnstillinger</translation>
 <translation id="5631439013527180824">Ugyldig token for enhetsadministrering</translation>
-<translation id="5650551054760837876">Ingen søkeresultater funnet.</translation>
 <translation id="5677928146339483299">Blokkert</translation>
 <translation id="5710435578057952990">Identiteten til dette nettstedet er ikke verifisert.</translation>
 <translation id="5720705177508910913">Gjeldende bruker</translation>
@@ -462,7 +465,6 @@
 <translation id="6150607114729249911">Beklager, du må spørre foreldrene dine om det er greit at du besøker denne siden.</translation>
 <translation id="6151417162996330722">Tjenersertifikatet har en gyldighetsperiode som er for lang.</translation>
 <translation id="6165508094623778733">Les mer</translation>
-<translation id="6180780615171238625">Du kan ikke gå til <ph name="SITE" /> akkurat nå fordi dette sertifikatet er trukket tilbake. Nettverksfeil og -angrep er som regel kortvarige, så denne siden fungerer nok igjen senere. <ph name="BEGIN_LEARN_MORE_LINK" />Finn ut mer<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="6203231073485539293">Kontrollér Internett-tilkoblingen</translation>
 <translation id="6218753634732582820">Vil du fjerne adressen fra Chromium?</translation>
 <translation id="6259156558325130047">&amp;Omorganiser likevel</translation>
@@ -490,6 +492,7 @@
 <translation id="647261751007945333">Enhetsinnstillinger</translation>
 <translation id="6489534406876378309">Start opplastingen av krasj</translation>
 <translation id="6529602333819889595">&amp;Slett likevel</translation>
+<translation id="6534179046333460208">Fysisk nett-forslag</translation>
 <translation id="6550675742724504774">Alternativer</translation>
 <translation id="6593753688552673085">mindre enn <ph name="UPPER_ESTIMATE" /></translation>
 <translation id="6596325263575161958">Krypteringsalternativer</translation>
@@ -523,8 +526,10 @@
 <translation id="6970216967273061347">Område</translation>
 <translation id="6973656660372572881">Både statiske proxytjenere og en .pac-skriptnettadresse er angitt.</translation>
 <translation id="6989763994942163495">Vis avanserte innstillinger</translation>
+<translation id="7000990526846637657">Fant ingen loggoppføringer</translation>
 <translation id="7009986207543992532">Du prøvde å gå til <ph name="DOMAIN" />, men tjeneren presenterte et sertifikat hvor gyldighetsperioden er oppgitt som for lang til å være pålitelig. <ph name="BEGIN_LEARN_MORE_LINK" />Finn ut mer<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="7012363358306927923">China UnionPay</translation>
+<translation id="7012372675181957985">Google-kontoen din kan ha andre typer nettlesingslogger på <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" /></translation>
 <translation id="7029809446516969842">Passord</translation>
 <translation id="7087282848513945231">Fylke</translation>
 <translation id="7088615885725309056">Eldre</translation>
@@ -550,6 +555,7 @@
 <translation id="7309308571273880165">Programstopprapport opprettet <ph name="CRASH_TIME" /> (opplasting er forespurt av brukeren, men den har ikke blitt utført ennå)</translation>
 <translation id="7334320624316649418">&amp;Omorganiser likevel</translation>
 <translation id="733923710415886693">Tjenerens sertifikat er ikke vist i henhold til regelen for sertifikatåpenhet.</translation>
+<translation id="7351800657706554155">Du kan ikke gå til <ph name="SITE" /> akkurat nå fordi dette sertifikatet er trukket tilbake. Nettverksfeil og nettangrep er som regel kortvarige, så denne siden fungerer nok igjen senere. <ph name="BEGIN_LEARN_MORE_LINK" />Finn ut mer<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="7353601530677266744">Kommandolinje </translation>
 <translation id="7372973238305370288">søkeresultat</translation>
 <translation id="7377249249140280793"><ph name="RELATIVE_DATE" /> – <ph name="FULL_DATE" /></translation>
@@ -568,6 +574,7 @@ Forresten: Inkognitomodus (<ph name="SHORTCUT_KEY" />) kan være kjekt neste gan
 <translation id="7469372306589899959">Bekrefter kortet</translation>
 <translation id="7481312909269577407">Frem</translation>
 <translation id="7485870689360869515">Ingen data ble funnet.</translation>
+<translation id="7508255263130623398">Den returnerte enhets-ID-en for regelen er tom eller samsvarer ikke med den faktiske enhets-ID-en</translation>
 <translation id="7514365320538308">Last ned</translation>
 <translation id="7518003948725431193">Finner ingen nettside for denne nettadressen: <ph name="URL" /></translation>
 <translation id="7537536606612762813">Obligatorisk</translation>
@@ -577,6 +584,7 @@ Forresten: Inkognitomodus (<ph name="SHORTCUT_KEY" />) kan være kjekt neste gan
 <translation id="7568593326407688803">Denne siden er på<ph name="ORIGINAL_LANGUAGE" />Vil du ha den oversatt?</translation>
 <translation id="7569952961197462199">Vil du fjerne kredittkortet fra Chrome?</translation>
 <translation id="7578104083680115302">Når du lagrer kort med Google, kan du bruke dem til å betale raskt på nettsteder og i apper – uansett hvilken enhet du bruker.</translation>
+<translation id="7588950540487816470">Fysisk nett</translation>
 <translation id="7592362899630581445">Tjenerens sertifikat bryter navnereglene.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> kan for øyeblikket ikke behandle denne forespørselen.</translation>
 <translation id="7600965453749440009">Oversett aldri <ph name="LANGUAGE" /></translation>
@@ -604,6 +612,7 @@ Forresten: Inkognitomodus (<ph name="SHORTCUT_KEY" />) kan være kjekt neste gan
 <translation id="780301667611848630">Nei takk</translation>
 <translation id="7805768142964895445">Status</translation>
 <translation id="7813600968533626083">Vil du fjerne skjemaforslaget fra Chrome?</translation>
+<translation id="7815407501681723534">Fant <ph name="NUMBER_OF_RESULTS" /> <ph name="SEARCH_RESULTS" /> for «<ph name="SEARCH_STRING" />»</translation>
 <translation id="785549533363645510">Du er imidlertid ikke usynlig. Inkognitomodus skjuler ikke surfingen din for arbeidsgiveren din, Internett-leverandøren eller nettstedene du besøker.</translation>
 <translation id="7887683347370398519">Kontrollér CVC-koden din, og prøv igjen.</translation>
 <translation id="7894616681410591072">Beklager, du må ha tillatelse fra <ph name="NAME" /> for å få tilgang til denne siden.</translation>
@@ -619,7 +628,6 @@ Forresten: Inkognitomodus (<ph name="SHORTCUT_KEY" />) kan være kjekt neste gan
 <translation id="7995512525968007366">Ikke spesifisert</translation>
 <translation id="8012647001091218357">Vi kunne ikke nå foreldrene dine akkurat nå. Prøv igjen.</translation>
 <translation id="8034522405403831421">Denne siden er på <ph name="SOURCE_LANGUAGE" />. Vil du oversette den til <ph name="TARGET_LANGUAGE" />?</translation>
-<translation id="8034955203865359138">Fant ingen loggoppføringer.</translation>
 <translation id="8088680233425245692">Kunne ikke åpne artikkelen.</translation>
 <translation id="8089520772729574115">under 1 MB</translation>
 <translation id="8091372947890762290">Aktivering venter på tjeneren</translation>
@@ -645,6 +653,7 @@ Forresten: Inkognitomodus (<ph name="SHORTCUT_KEY" />) kan være kjekt neste gan
 <translation id="8349305172487531364">Bokmerkerad</translation>
 <translation id="8363502534493474904">Slå av flymodus</translation>
 <translation id="8364627913115013041">Ikke angitt.</translation>
+<translation id="8380941800586852976">Farlig</translation>
 <translation id="8412145213513410671">Kræsj (<ph name="CRASH_COUNT" />)</translation>
 <translation id="8412392972487953978">Du må angi den samme passordfrasen to ganger.</translation>
 <translation id="8428213095426709021">Innstillinger</translation>
@@ -671,7 +680,6 @@ Forresten: Inkognitomodus (<ph name="SHORTCUT_KEY" />) kan være kjekt neste gan
 <translation id="8730621377337864115">Ferdig</translation>
 <translation id="8738058698779197622">Klokken din må være riktig stilt for at du skal kunne opprette en sikker forbindelse. Sertifikatene som nettsteder bruker til å identifisere seg med, er nemlig bare gyldige i en viss tid. Siden enhetens klokke er feil, kan ikke Chromium kontrollere disse sertifikatene.</translation>
 <translation id="8740359287975076522">&lt;abbr id="dnsDefinition"&gt;DNS-adressen&lt;/abbr&gt; til <ph name="HOST_NAME" /> ble ikke funnet. Problemet diagnostiseres.</translation>
-<translation id="8741995161408053644">Google-kontoen din kan ha andre typer nettlesingslogger på <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" />.</translation>
 <translation id="8790007591277257123">&amp;Slett likevel</translation>
 <translation id="8798099450830957504">Standard</translation>
 <translation id="8804164990146287819">Personvernregler</translation>

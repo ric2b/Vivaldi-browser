@@ -6,6 +6,7 @@
 #define MOJO_PUBLIC_CPP_BINDINGS_ASSOCIATED_BINDING_H_
 
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "base/bind.h"
@@ -18,7 +19,9 @@
 #include "mojo/public/cpp/bindings/associated_group.h"
 #include "mojo/public/cpp/bindings/associated_group_controller.h"
 #include "mojo/public/cpp/bindings/associated_interface_request.h"
+#include "mojo/public/cpp/bindings/connection_error_callback.h"
 #include "mojo/public/cpp/bindings/interface_endpoint_client.h"
+#include "mojo/public/cpp/bindings/lib/control_message_proxy.h"
 #include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 
 namespace mojo {
@@ -103,10 +106,7 @@ class AssociatedBinding {
     endpoint_client_.reset(new InterfaceEndpointClient(
         std::move(handle), &stub_,
         base::WrapUnique(new typename Interface::RequestValidator_()),
-        Interface::HasSyncMethods_, std::move(runner)));
-    endpoint_client_->set_connection_error_handler(
-        base::Bind(&AssociatedBinding::RunConnectionErrorHandler,
-                   base::Unretained(this)));
+        Interface::HasSyncMethods_, std::move(runner), Interface::Version_));
 
     stub_.serialization_context()->group_controller =
         endpoint_client_->group_controller();
@@ -125,7 +125,14 @@ class AssociatedBinding {
   void Close() {
     DCHECK(endpoint_client_);
     endpoint_client_.reset();
-    connection_error_handler_.Reset();
+  }
+
+  // Similar to the method above, but also specifies a disconnect reason.
+  void CloseWithReason(uint32_t custom_reason, const std::string& description) {
+    DCHECK(endpoint_client_);
+    endpoint_client_->control_message_proxy()->SendDisconnectReason(
+        custom_reason, description);
+    Close();
   }
 
   // Unbinds and returns the associated interface request so it can be
@@ -138,7 +145,6 @@ class AssociatedBinding {
     request.Bind(endpoint_client_->PassHandle());
 
     endpoint_client_.reset();
-    connection_error_handler_.Reset();
 
     return request;
   }
@@ -150,7 +156,13 @@ class AssociatedBinding {
   // AssociatedBinding is unbound or closed.
   void set_connection_error_handler(const base::Closure& error_handler) {
     DCHECK(is_bound());
-    connection_error_handler_ = error_handler;
+    endpoint_client_->set_connection_error_handler(error_handler);
+  }
+
+  void set_connection_error_with_reason_handler(
+      const ConnectionErrorWithReasonCallback& error_handler) {
+    DCHECK(is_bound());
+    endpoint_client_->set_connection_error_with_reason_handler(error_handler);
   }
 
   // Returns the interface implementation that was previously specified.
@@ -165,17 +177,19 @@ class AssociatedBinding {
     return endpoint_client_ ? endpoint_client_->associated_group() : nullptr;
   }
 
- private:
-  void RunConnectionErrorHandler() {
-    if (!connection_error_handler_.is_null())
-      connection_error_handler_.Run();
+  // Sends a message on the underlying message pipe and runs the current
+  // message loop until its response is received. This can be used in tests to
+  // verify that no message was sent on a message pipe in response to some
+  // stimulus.
+  void FlushForTesting() {
+    endpoint_client_->control_message_proxy()->FlushForTesting();
   }
 
+ private:
   std::unique_ptr<InterfaceEndpointClient> endpoint_client_;
 
   typename Interface::Stub_ stub_;
   Interface* impl_;
-  base::Closure connection_error_handler_;
 
   DISALLOW_COPY_AND_ASSIGN(AssociatedBinding);
 };

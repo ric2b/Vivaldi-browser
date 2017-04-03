@@ -9,10 +9,11 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
 #include "blimp/client/public/blimp_client_context.h"
 #include "blimp/client/public/contents/blimp_contents.h"
+#include "blimp/client/public/contents/blimp_contents_view.h"
 #include "blimp/client/public/contents/blimp_navigation_controller.h"
 #include "cc/layers/layer.h"
 #include "chrome/browser/android/blimp/blimp_client_context_factory.h"
@@ -87,6 +88,7 @@
 #include "skia/ext/image_operations.h"
 #include "third_party/WebKit/public/platform/WebReferrerPolicy.h"
 #include "ui/android/view_android.h"
+#include "ui/android/window_android.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/display/display.h"
@@ -98,6 +100,7 @@
 using base::android::AttachCurrentThread;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaParamRef;
+using base::android::JavaRef;
 using content::BrowserThread;
 using content::GlobalRequestID;
 using content::NavigationController;
@@ -119,7 +122,7 @@ TabAndroid* TabAndroid::FromWebContents(
   return static_cast<TabAndroid*>(core_delegate);
 }
 
-TabAndroid* TabAndroid::GetNativeTab(JNIEnv* env, jobject obj) {
+TabAndroid* TabAndroid::GetNativeTab(JNIEnv* env, const JavaRef<jobject>& obj) {
   return reinterpret_cast<TabAndroid*>(Java_Tab_getNativePtr(env, obj));
 }
 
@@ -129,7 +132,7 @@ void TabAndroid::AttachTabHelpers(content::WebContents* web_contents) {
   TabHelpers::AttachTabHelpers(web_contents);
 }
 
-TabAndroid::TabAndroid(JNIEnv* env, jobject obj)
+TabAndroid::TabAndroid(JNIEnv* env, const JavaRef<jobject>& obj)
     : weak_java_tab_(env, obj),
       content_layer_(cc::Layer::Create()),
       tab_content_manager_(NULL),
@@ -186,7 +189,7 @@ Profile* TabAndroid::GetProfile() const {
   return Profile::FromBrowserContext(web_contents()->GetBrowserContext());
 }
 
-browser_sync::SyncedTabDelegate* TabAndroid::GetSyncedTabDelegate() const {
+sync_sessions::SyncedTabDelegate* TabAndroid::GetSyncedTabDelegate() const {
   return synced_tab_delegate_.get();
 }
 
@@ -214,11 +217,11 @@ void TabAndroid::HandlePopupNavigation(chrome::NavigateParams* params) {
   WindowOpenDisposition disposition = params->disposition;
   const GURL& url = params->url;
 
-  if (disposition == NEW_POPUP ||
-      disposition == NEW_FOREGROUND_TAB ||
-      disposition == NEW_BACKGROUND_TAB ||
-      disposition == NEW_WINDOW ||
-      disposition == OFF_THE_RECORD) {
+  if (disposition == WindowOpenDisposition::NEW_POPUP ||
+      disposition == WindowOpenDisposition::NEW_FOREGROUND_TAB ||
+      disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB ||
+      disposition == WindowOpenDisposition::NEW_WINDOW ||
+      disposition == WindowOpenDisposition::OFF_THE_RECORD) {
     JNIEnv* env = AttachCurrentThread();
     ScopedJavaLocalRef<jobject> jobj = weak_java_tab_.get(env);
     ScopedJavaLocalRef<jstring> jurl(ConvertUTF8ToJavaString(env, url.spec()));
@@ -227,9 +230,9 @@ void TabAndroid::HandlePopupNavigation(chrome::NavigateParams* params) {
     ScopedJavaLocalRef<jobject> jpost_data;
     if (params->uses_post && params->post_data)
       jpost_data = params->post_data->ToJavaObject(env);
-    Java_Tab_openNewTab(env, jobj, jurl, jheaders, jpost_data, disposition,
-                        params->created_with_opener,
-                        params->is_renderer_initiated);
+    Java_Tab_openNewTab(
+        env, jobj, jurl, jheaders, jpost_data, static_cast<int>(disposition),
+        params->created_with_opener, params->is_renderer_initiated);
   } else {
     NOTIMPLEMENTED();
   }
@@ -367,8 +370,7 @@ void TabAndroid::InitWebContents(
     const JavaParamRef<jobject>& jweb_contents,
     const JavaParamRef<jobject>& jweb_contents_delegate,
     const JavaParamRef<jobject>& jcontext_menu_populator) {
-  web_contents_.reset(
-      content::WebContents::FromJavaWebContents(jweb_contents.obj()));
+  web_contents_.reset(content::WebContents::FromJavaWebContents(jweb_contents));
   DCHECK(web_contents_.get());
 
   AttachTabHelpers(web_contents_.get());
@@ -383,9 +385,9 @@ void TabAndroid::InitWebContents(
       SetViewAndroid(web_contents()->GetNativeView());
   CoreTabHelper::FromWebContents(web_contents())->set_delegate(this);
   SearchTabHelper::FromWebContents(web_contents())->set_delegate(this);
-  web_contents_delegate_.reset(
-      new chrome::android::TabWebContentsDelegateAndroid(
-          env, jweb_contents_delegate));
+  web_contents_delegate_ =
+      base::MakeUnique<android::TabWebContentsDelegateAndroid>(
+          env, jweb_contents_delegate);
   web_contents_delegate_->LoadProgressChanged(web_contents(), 0);
   web_contents()->SetDelegate(web_contents_delegate_.get());
 
@@ -416,20 +418,40 @@ void TabAndroid::InitWebContents(
   if (instant_service)
     instant_service->AddObserver(this);
 
-  content_layer_->InsertChild(web_contents_->GetNativeView()->GetLayer(), 0);
+  if (!blimp_contents_)
+    content_layer_->InsertChild(web_contents_->GetNativeView()->GetLayer(), 0);
 }
 
 base::android::ScopedJavaLocalRef<jobject> TabAndroid::InitBlimpContents(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jobject>& j_profile) {
+    const JavaParamRef<jobject>& j_profile,
+    jlong window_android_ptr) {
   Profile* profile = ProfileAndroid::FromProfileAndroid(j_profile.obj());
   DCHECK(!profile->IsOffTheRecord());
   blimp::client::BlimpClientContext* context =
       BlimpClientContextFactory::GetForBrowserContext(profile);
   DCHECK(context);
-  blimp_contents_ = context->CreateBlimpContents();
-  DCHECK(blimp_contents_);
+  ui::WindowAndroid* window =
+      reinterpret_cast<ui::WindowAndroid*>(window_android_ptr);
+  blimp_contents_ = context->CreateBlimpContents(window);
+  // If creating a BlimpContents failed, fall back to WebContents-based by
+  // doing an early out here.
+  if (!blimp_contents_)
+    return nullptr;
+
+  // Let's detach the layer from WebContents first, just to be sure.
+  if (web_contents_ && web_contents_->GetNativeView() &&
+      web_contents_->GetNativeView()->GetLayer()) {
+    cc::Layer* web_contents_layer = web_contents_->GetNativeView()->GetLayer();
+    if (web_contents_layer->parent() == content_layer_.get())
+      web_contents_layer->RemoveFromParent();
+  }
+
+  // Attach the layer holding the tab contents to the |content_layer_|.
+  content_layer_->InsertChild(
+      blimp_contents_->GetView()->GetNativeView()->GetLayer(), 0);
+
   return blimp_contents_->GetJavaObject();
 }
 
@@ -440,9 +462,9 @@ void TabAndroid::UpdateDelegates(
     const JavaParamRef<jobject>& jcontext_menu_populator) {
   ContextMenuHelper::FromWebContents(web_contents())->SetPopulator(
       jcontext_menu_populator);
-  web_contents_delegate_.reset(
-      new chrome::android::TabWebContentsDelegateAndroid(
-          env, jweb_contents_delegate));
+  web_contents_delegate_ =
+      base::MakeUnique<android::TabWebContentsDelegateAndroid>(
+          env, jweb_contents_delegate);
   web_contents()->SetDelegate(web_contents_delegate_.get());
 }
 
@@ -538,7 +560,7 @@ TabAndroid::TabLoadStatus TabAndroid::LoadUrl(
   // Note in incognito mode, we don't have a PrerenderManager.
 
   prerender::PrerenderManager* prerender_manager =
-      prerender::PrerenderManagerFactory::GetForProfile(GetProfile());
+      prerender::PrerenderManagerFactory::GetForBrowserContext(GetProfile());
   if (prerender_manager) {
     bool prefetched_page_loaded = HasPrerenderedUrl(gurl);
     // Getting the load status before MaybeUsePrerenderedPage() b/c it resets.
@@ -693,7 +715,7 @@ prerender::PrerenderManager* TabAndroid::GetPrerenderManager() const {
   Profile* profile = GetProfile();
   if (!profile)
     return NULL;
-  return prerender::PrerenderManagerFactory::GetForProfile(profile);
+  return prerender::PrerenderManagerFactory::GetForBrowserContext(profile);
 }
 
 // static
@@ -761,12 +783,6 @@ jlong TabAndroid::GetBookmarkId(JNIEnv* env,
       web_contents()->GetURL());
   Profile* profile = GetProfile();
 
-  // If the url points to an offline page, then we need to get its original URL.
-  if (offline_pages::OfflinePageUtils::IsOfflinePage(profile, url)) {
-    url = offline_pages::OfflinePageUtils::MaybeGetOnlineURLForOfflineURL(
-        profile, url);
-  }
-
   // Get all the nodes for |url| and sort them by date added.
   std::vector<const bookmarks::BookmarkNode*> nodes;
   bookmarks::ManagedBookmarkService* managed =
@@ -790,11 +806,6 @@ jlong TabAndroid::GetBookmarkId(JNIEnv* env,
 void TabAndroid::ShowOfflinePages() {
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_Tab_showOfflinePages(env, weak_java_tab_.get(env));
-}
-
-void TabAndroid::OnLoFiResponseReceived(bool is_preview) {
-  JNIEnv* env = base::android::AttachCurrentThread();
-  Java_Tab_onLoFiResponseReceived(env, weak_java_tab_.get(env), is_preview);
 }
 
 jboolean TabAndroid::IsOfflinePage(JNIEnv* env,
@@ -849,15 +860,15 @@ void TabAndroid::SetInterceptNavigationDelegate(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   InterceptNavigationDelegate::Associate(
       web_contents(),
-      base::WrapUnique(new ChromeInterceptNavigationDelegate(env, delegate)));
+      base::MakeUnique<ChromeInterceptNavigationDelegate>(env, delegate));
 }
 
 void TabAndroid::AttachToTabContentManager(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jobject>& jtab_content_manager) {
-  chrome::android::TabContentManager* tab_content_manager =
-      chrome::android::TabContentManager::FromJavaObject(jtab_content_manager);
+  android::TabContentManager* tab_content_manager =
+      android::TabContentManager::FromJavaObject(jtab_content_manager);
   if (tab_content_manager == tab_content_manager_)
     return;
 
@@ -866,33 +877,6 @@ void TabAndroid::AttachToTabContentManager(
   tab_content_manager_ = tab_content_manager;
   if (tab_content_manager_)
     tab_content_manager_->AttachLiveLayer(GetAndroidId(), GetContentLayer());
-}
-
-void TabAndroid::AttachOverlayWebContents(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jobject>& jweb_contents,
-    jboolean visible) {
-  WebContents* web_contents =
-      content::WebContents::FromJavaWebContents(jweb_contents.obj());
-  DCHECK(web_contents);
-  DCHECK(web_contents->GetNativeView());
-
-  web_contents->GetNativeView()->GetLayer()->SetHideLayerAndSubtree(!visible);
-  content_layer_->AddChild(web_contents->GetNativeView()->GetLayer());
-}
-
-void TabAndroid::DetachOverlayWebContents(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jobject>& jweb_contents) {
-  WebContents* web_contents =
-      content::WebContents::FromJavaWebContents(jweb_contents.obj());
-  DCHECK(web_contents);
-  DCHECK(web_contents->GetNativeView());
-
-  if (web_contents->GetNativeView()->GetLayer()->parent() == content_layer_)
-    web_contents->GetNativeView()->GetLayer()->RemoveFromParent();
 }
 
 static void Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {

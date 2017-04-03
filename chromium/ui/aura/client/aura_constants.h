@@ -5,6 +5,7 @@
 #ifndef UI_AURA_CLIENT_AURA_CONSTANTS_H_
 #define UI_AURA_CLIENT_AURA_CONSTANTS_H_
 
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/aura/aura_export.h"
 #include "ui/aura/window.h"
 #include "ui/base/ui_base_types.h"
@@ -24,6 +25,10 @@ AURA_EXPORT extern const WindowProperty<bool>* const kAlwaysOnTopKey;
 // A property key to store whether animations are disabled for the window. Type
 // of value is an int.
 AURA_EXPORT extern const WindowProperty<bool>* const kAnimationsDisabledKey;
+
+// A property key to store the type of window that will be used to record
+// pointer metrics. See AppType in ash/shared/app_types.h for more details.
+AURA_EXPORT extern const WindowProperty<int>* const kAppType;
 
 // A property key to store the can-maximize flag.
 AURA_EXPORT extern const WindowProperty<bool>* const kCanMaximizeKey;
@@ -74,6 +79,9 @@ AURA_EXPORT extern const WindowProperty<ui::WindowShowState>* const
 // view is the tab strip for tabbed browser windows, the toolbar for popups,
 // the web contents for app windows and varies for fullscreen windows.
 AURA_EXPORT extern const aura::WindowProperty<int>* const kTopViewInset;
+
+// The color of the window header.
+AURA_EXPORT extern const aura::WindowProperty<SkColor>* const kTopViewColor;
 
 // A property key to store window icon.
 AURA_EXPORT extern const WindowProperty<gfx::ImageSkia*>* const kWindowIconKey;

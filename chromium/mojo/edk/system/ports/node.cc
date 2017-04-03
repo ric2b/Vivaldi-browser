@@ -8,6 +8,7 @@
 
 #include <utility>
 
+#include "base/atomicops.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
@@ -272,7 +273,7 @@ int Node::GetMessageIf(const PortRef& port_ref,
                        ScopedMessage* message) {
   *message = nullptr;
 
-  DVLOG(2) << "GetMessageIf for " << port_ref.name() << "@" << name_;
+  DVLOG(4) << "GetMessageIf for " << port_ref.name() << "@" << name_;
 
   Port* port = port_ref.port();
   {
@@ -428,7 +429,7 @@ int Node::OnUserMessage(ScopedMessage message) {
     ports_buf << message->ports()[i];
   }
 
-  DVLOG(2) << "AcceptMessage " << event->sequence_num
+  DVLOG(4) << "AcceptMessage " << event->sequence_num
              << " [ports=" << ports_buf.str() << "] at "
              << port_name << "@" << name_;
 #endif
@@ -808,6 +809,11 @@ scoped_refptr<Port> Node::GetPort_Locked(const PortName& port_name) {
   if (iter == ports_.end())
     return nullptr;
 
+#if defined(OS_ANDROID) && defined(ARCH_CPU_ARM64)
+  // Workaround for https://crbug.com/665869.
+  base::subtle::MemoryBarrier();
+#endif
+
   return iter->second;
 }
 
@@ -1078,7 +1084,7 @@ int Node::WillSendMessage_Locked(const LockedPort& port,
   }
 
 #if DCHECK_IS_ON()
-  DVLOG(2) << "Sending message "
+  DVLOG(4) << "Sending message "
            << GetEventData<UserEventData>(*message)->sequence_num
            << " [ports=" << ports_buf.str() << "]"
            << " from " << port_name << "@" << name_

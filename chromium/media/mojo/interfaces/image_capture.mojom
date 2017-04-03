@@ -6,25 +6,38 @@ module media.mojom;
 
 // Equivalent to idl MediaSettingsRange, arbitrary range representing the
 // allowed variations of a Capability or an Option.
-// https://w3c.github.io/mediacapture-image/#mediasettingsrange
+// https://www.w3.org/TR/image-capture/#MediaSettingsRange
 struct Range {
-  uint32 max;
-  uint32 min;
-  uint32 current;
+  int32 max;
+  int32 min;
+  int32 current;
 };
 
-// https://w3c.github.io/mediacapture-image/#idl-def-MeteringMode
-enum MeteringMode { UNAVAILABLE, MANUAL, SINGLE_SHOT, CONTINUOUS };
+// https://www.w3.org/TR/image-capture/#MeteringMode
+enum MeteringMode { NONE, MANUAL, SINGLE_SHOT, CONTINUOUS };
+
+// https://www.w3.org/TR/image-capture/#FillLightMode
+enum FillLightMode { NONE, OFF, AUTO, FLASH, TORCH };
 
 // Equivalent to idl PhotoCapabilities,
-// https://w3c.github.io/mediacapture-image/#photocapabilities
+// https://www.w3.org/TR/image-capture/#PhotoCapabilities
 struct PhotoCapabilities {
+  MeteringMode white_balance_mode;
+  Range color_temperature;
+  MeteringMode exposure_mode;
+  Range exposure_compensation;
   Range iso;
+  bool red_eye_reduction;
+  MeteringMode focus_mode;
+
+  Range brightness;
+  Range contrast;
+  Range saturation;
+  Range sharpness;
   Range height;
   Range width;
   Range zoom;
-  MeteringMode focus_mode;
-  MeteringMode exposure_mode;
+  FillLightMode fill_light_mode;
 };
 
 // Equivalent to idl Point2D.
@@ -35,20 +48,41 @@ struct Point2D {
 };
 
 // Equivalent to idl PhotoSettings,
-// https://w3c.github.io/mediacapture-image/index.html#photosettings
+// https://www.w3.org/TR/image-capture/#PhotoSettings
 struct PhotoSettings {
   // uint32 cannot be nullable, i.e. uint32? does not work, use instead a flag.
+  bool has_white_balance_mode;
+  MeteringMode white_balance_mode;
+  bool has_color_temperature;
+  uint32 color_temperature;
+  bool has_exposure_mode;
+  MeteringMode exposure_mode;
+  bool has_exposure_compensation;
+  uint32 exposure_compensation;
+  bool has_iso;
+  uint32 iso;
+  bool has_red_eye_reduction;
+  bool red_eye_reduction;
+  bool has_focus_mode;
+  MeteringMode focus_mode;
+  array<Point2D> points_of_interest;
+
+  bool has_brightness;
+  uint32 brightness;
+  bool has_contrast;
+  uint32 contrast;
+  bool has_saturation;
+  uint32 saturation;
+  bool has_sharpness;
+  uint32 sharpness;
   bool has_zoom;
   uint32 zoom;
   bool has_width;
   uint32 width;
   bool has_height;
   uint32 height;
-  bool has_focus_mode;
-  MeteringMode focus_mode;
-  bool has_exposure_mode;
-  MeteringMode exposure_mode;
-  array<Point2D> points_of_interest;
+  bool has_fill_light_mode;
+  FillLightMode fill_light_mode;
 };
 
 // This is a mojo move-only equivalent of a Blob, i.e. MIME type and Data.
@@ -61,18 +95,18 @@ struct Blob {
 interface ImageCapture
 {
     // Retrieves the image capture device capabilities and current settings.
-    // https://w3c.github.io/mediacapture-image/index.html#widl-ImageCapture-getPhotoCapabilities-Promise-PhotoCapabilities
+    // https://www.w3.org/TR/image-capture/#dom-imagecapture-getphotocapabilities
     GetCapabilities(string source_id)
         => (PhotoCapabilities capabilities);
 
     // Sets the |settings| on the associated video capture device.
-    // https://w3c.github.io/mediacapture-image/index.html#widl-ImageCapture-setOptions-Promise-void--PhotoSettings-photoSettings
+    // https://www.w3.org/TR/image-capture/#dom-imagecapture-setoptions
     SetOptions(string source_id, PhotoSettings settings)
         => (bool success);
 
     // Takes a Photo from the given |source_id|, returning it encoded in |blob|
     // with the format specified in its |mime_type|.
-    // https://w3c.github.io/mediacapture-image/index.html#widl-ImageCapture-takePhoto-Promise-Blob
+    // https://www.w3.org/TR/image-capture/#dom-imagecapture-takephoto
     TakePhoto(string source_id)
         => (Blob blob);
 };

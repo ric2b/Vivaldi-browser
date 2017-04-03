@@ -128,8 +128,6 @@ static_library("content_shell_lib") {
     "browser/shell_login_dialog.h",
     "browser/shell_login_dialog_mac.mm",
     "browser/shell_mac.mm",
-    "browser/shell_mojo_test_utils_android.cc",
-    "browser/shell_mojo_test_utils_android.h",
     "browser/shell_net_log.cc",
     "browser/shell_net_log.h",
     "browser/shell_network_delegate.cc",
@@ -220,9 +218,8 @@ static_library("content_shell_lib") {
     "//base:base_static",
     "//base/third_party/dynamic_annotations",
     "//cc",
+    "//components/cdm/renderer",
     "//components/crash/content/app:app_breakpad_mac_win_to_be_deleted",
-    "//components/devtools_discovery",
-    "//components/devtools_http_handler",
     "//components/plugins/renderer",
     "//components/test_runner:test_runner",
     "//components/url_formatter",
@@ -236,7 +233,7 @@ static_library("content_shell_lib") {
     "//content/test:test_support",
     "//device/bluetooth",
     "//device/bluetooth:mocks",
-    "//device/geolocation:device_geolocation",
+    "//device/geolocation",
     "//gin",
     "//gpu",
     "//ipc",
@@ -486,8 +483,6 @@ if (is_android) {
     info_plist_target = ":content_shell_plist"
   }
 } else {
-  # TODO(brettw) when GYP is no longer necessary, delete
-  # content/shell/app/shell.exe.manifest. This file is not used in GN.
   executable("content_shell") {
     testonly = true
 
@@ -533,7 +528,6 @@ if (is_android) {
 }
 
 if (is_win) {
-  # GYP version: content/content_shell_and_tests.gyp:content_shell_crash_service
   executable("content_shell_crash_service") {
     sources = [
       "tools/content_shell_crash_service.cc",

@@ -22,23 +22,22 @@
 #include "base/synchronization/waitable_event.h"
 #include "build/build_config.h"
 #include "content/browser/browser_child_process_host_impl.h"
-#include "content/browser/mojo/mojo_shell_context.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
+#include "content/browser/service_manager/service_manager_context.h"
 #include "content/common/child_process_host_impl.h"
 #include "content/common/in_process_child_thread_params.h"
-#include "content/common/mojo/constants.h"
-#include "content/common/mojo/mojo_child_connection.h"
+#include "content/common/service_manager/child_connection.h"
 #include "content/common/utility_messages.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/utility_process_host_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/mojo_channel_switches.h"
-#include "content/public/common/mojo_shell_connection.h"
 #include "content/public/common/process_type.h"
 #include "content/public/common/sandbox_type.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
-#include "ipc/ipc_switches.h"
+#include "content/public/common/service_manager_connection.h"
+#include "content/public/common/service_names.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "services/shell/public/cpp/connection.h"
 #include "services/shell/public/cpp/interface_provider.h"
@@ -169,7 +168,7 @@ UtilityProcessHostImpl::UtilityProcessHostImpl(
       name_(base::ASCIIToUTF16("utility process")),
       weak_ptr_factory_(this) {
   process_.reset(new BrowserChildProcessHostImpl(
-      PROCESS_TYPE_UTILITY, this, kUtilityMojoApplicationName));
+      PROCESS_TYPE_UTILITY, this, kUtilityServiceName));
 }
 
 UtilityProcessHostImpl::~UtilityProcessHostImpl() {
@@ -266,8 +265,8 @@ bool UtilityProcessHostImpl::StartProcess() {
     // support single process mode this way.
     in_process_thread_.reset(
         g_utility_main_thread_factory(InProcessChildThreadParams(
-            std::string(), BrowserThread::UnsafeGetMessageLoopForThread(
-                            BrowserThread::IO)->task_runner(),
+            BrowserThread::UnsafeGetMessageLoopForThread(BrowserThread::IO)
+                ->task_runner(),
             process_->child_connection()->service_token())));
     in_process_thread_->Start();
   } else {
@@ -384,7 +383,7 @@ void UtilityProcessHostImpl::OnProcessLaunchFailed(int error_code) {
   client_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&UtilityProcessHostClient::OnProcessLaunchFailed,
-                 client_.get(),
+                 client_,
                  error_code));
 }
 
@@ -394,7 +393,7 @@ void UtilityProcessHostImpl::OnProcessCrashed(int exit_code) {
 
   client_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&UtilityProcessHostClient::OnProcessCrashed, client_.get(),
+      base::Bind(&UtilityProcessHostClient::OnProcessCrashed, client_,
             exit_code));
 }
 

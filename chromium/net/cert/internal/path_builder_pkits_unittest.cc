@@ -58,9 +58,10 @@ class PathBuilderPkitsTestDelegate {
     }
     ParsedCertificateList certs;
     for (const std::string& der : cert_ders) {
-      certs.push_back(ParsedCertificate::CreateFromCertificateCopy(der, {}));
-      if (!certs.back()) {
-        ADD_FAILURE() << "ParsedCertificate::CreateFromCertificateCopy failed";
+      CertErrors errors;
+      if (!ParsedCertificate::CreateAndAddToVector(der, {}, &certs, &errors)) {
+        ADD_FAILURE() << "ParseCertificate::CreateAndAddToVector() failed:\n"
+                      << errors.ToDebugString();
         return false;
       }
     }
@@ -92,7 +93,7 @@ class PathBuilderPkitsTestDelegate {
     CompletionStatus rv = path_builder.Run(base::Closure());
     EXPECT_EQ(CompletionStatus::SYNC, rv);
 
-    return result.is_success();
+    return result.HasValidPath();
   }
 };
 

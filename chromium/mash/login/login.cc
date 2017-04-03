@@ -21,7 +21,7 @@
 #include "services/ui/public/cpp/property_type_converters.h"
 #include "services/ui/public/interfaces/user_access_manager.mojom.h"
 #include "ui/views/background.h"
-#include "ui/views/controls/button/label_button.h"
+#include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/mus/aura_init.h"
 #include "ui/views/mus/native_widget_mus.h"
 #include "ui/views/mus/window_manager_connection.h"
@@ -66,12 +66,10 @@ class UI : public views::WidgetDelegateView,
         user_id_1_("00000000-0000-4000-8000-000000000000"),
         user_id_2_("00000000-0000-4000-8000-000000000001"),
         login_button_1_(
-            new views::LabelButton(this, base::ASCIIToUTF16("Timothy"))),
+            views::MdTextButton::Create(this, base::ASCIIToUTF16("Timothy"))),
         login_button_2_(
-            new views::LabelButton(this, base::ASCIIToUTF16("Jimothy"))) {
+            views::MdTextButton::Create(this, base::ASCIIToUTF16("Jimothy"))) {
     set_background(views::Background::CreateSolidBackground(SK_ColorRED));
-    login_button_1_->SetStyle(views::Button::STYLE_BUTTON);
-    login_button_2_->SetStyle(views::Button::STYLE_BUTTON);
     AddChildView(login_button_1_);
     AddChildView(login_button_2_);
   }
@@ -82,7 +80,6 @@ class UI : public views::WidgetDelegateView,
   }
 
   // Overridden from views::WidgetDelegate:
-  views::View* GetContentsView() override { return this; }
   base::string16 GetWindowTitle() const override {
     // TODO(beng): use resources.
     return base::ASCIIToUTF16("Login");
@@ -104,16 +101,16 @@ class UI : public views::WidgetDelegateView,
     button_box.set_y((button_box.height() - ps1.height()) / 2);
 
     login_button_1_->SetBounds(button_box.x(), button_box.y(), ps1.width(),
-                                ps1.height());
+                               ps1.height());
     login_button_2_->SetBounds(login_button_1_->bounds().right() + 10,
-                                button_box.y(), ps2.width(), ps2.height());
+                               button_box.y(), ps2.width(), ps2.height());
   }
 
   // Overridden from views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
   void StartWindowManager(const shell::Identity& identity) {
-    mash_wm_connection_ = connector_->Connect("mojo:ash");
+    mash_wm_connection_ = connector_->Connect("service:ash");
     mash_wm_connection_->SetConnectionLostClosure(
         base::Bind(&UI::StartWindowManager, base::Unretained(this), identity));
     window_manager_connection_ =
@@ -124,8 +121,8 @@ class UI : public views::WidgetDelegateView,
   shell::Connector* connector_;
   const std::string user_id_1_;
   const std::string user_id_2_;
-  views::LabelButton* login_button_1_;
-  views::LabelButton* login_button_2_;
+  views::MdTextButton* login_button_1_;
+  views::MdTextButton* login_button_2_;
   std::unique_ptr<shell::Connection> mash_wm_connection_;
   std::unique_ptr<views::WindowManagerConnection> window_manager_connection_;
 
@@ -142,8 +139,8 @@ class Login : public shell::Service,
   void LoginAs(const std::string& user_id) {
     user_access_manager_->SetActiveUser(user_id);
     mash::init::mojom::InitPtr init;
-    connector()->ConnectToInterface("mojo:mash_init", &init);
-    init->StartService("mojo:mash_session", user_id);
+    connector()->ConnectToInterface("service:mash_init", &init);
+    init->StartService("service:mash_session", user_id);
   }
 
  private:
@@ -155,7 +152,7 @@ class Login : public shell::Service,
     aura_init_.reset(
         new views::AuraInit(connector(), "views_mus_resources.pak"));
 
-    connector()->ConnectToInterface("mojo:ui", &user_access_manager_);
+    connector()->ConnectToInterface("service:ui", &user_access_manager_);
     user_access_manager_->SetActiveUser(identity.user_id());
   }
   bool OnConnect(const shell::Identity& remote_identity,

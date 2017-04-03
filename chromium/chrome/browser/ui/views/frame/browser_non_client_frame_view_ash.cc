@@ -11,7 +11,6 @@
 #include "ash/common/frame/default_header_painter.h"
 #include "ash/common/frame/frame_border_hit_test.h"
 #include "ash/common/frame/header_painter_util.h"
-#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/wm_lookup.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
@@ -34,10 +33,10 @@
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/browser/web_applications/web_app.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_registry.h"
-#include "grit/theme_resources.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
@@ -55,6 +54,10 @@
 #include "ui/views/layout/layout_constants.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
+
+#if defined(OS_CHROMEOS)
+#include "ash/shared/app_types.h"
+#endif
 
 namespace {
 
@@ -137,6 +140,16 @@ void BrowserNonClientFrameViewAsh::Init() {
     header_painter->Init(frame(), browser_view(), this, window_icon_,
                          caption_button_container_);
   }
+
+#if defined(OS_CHROMEOS)
+  if (browser_view()->browser()->is_app()) {
+    frame()->GetNativeWindow()->SetProperty(
+        aura::client::kAppType, static_cast<int>(ash::AppType::CHROME_APP));
+  } else {
+    frame()->GetNativeWindow()->SetProperty(
+        aura::client::kAppType, static_cast<int>(ash::AppType::BROWSER));
+  }
+#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -360,13 +373,13 @@ void BrowserNonClientFrameViewAsh::ChildPreferredSizeChanged(
 // ash::ShellObserver:
 
 void BrowserNonClientFrameViewAsh::OnOverviewModeStarting() {
-  if (ash::MaterialDesignController::IsOverviewMaterial())
-    caption_button_container_->SetVisible(false);
+  frame()->GetNativeWindow()->SetProperty(aura::client::kTopViewColor,
+                                          GetFrameColor());
+  caption_button_container_->SetVisible(false);
 }
 
 void BrowserNonClientFrameViewAsh::OnOverviewModeEnded() {
-  if (ash::MaterialDesignController::IsOverviewMaterial())
-    caption_button_container_->SetVisible(true);
+  caption_button_container_->SetVisible(true);
 }
 
 void BrowserNonClientFrameViewAsh::OnMaximizeModeStarted() {
@@ -413,34 +426,6 @@ void BrowserNonClientFrameViewAsh::UpdateProfileIcons() {
 
 ///////////////////////////////////////////////////////////////////////////////
 // BrowserNonClientFrameViewAsh, private:
-
-// views::NonClientFrameView:
-bool BrowserNonClientFrameViewAsh::DoesIntersectRect(
-    const views::View* target,
-    const gfx::Rect& rect) const {
-  CHECK_EQ(this, target);
-  if (!views::ViewTargeterDelegate::DoesIntersectRect(this, rect)) {
-    // |rect| is outside BrowserNonClientFrameViewAsh's bounds.
-    return false;
-  }
-
-  if (!browser_view()->IsTabStripVisible()) {
-    // Claim |rect| if it is above the top of the topmost client area view.
-    return rect.y() < GetTopInset(false);
-  }
-
-  // Claim |rect| only if it is above the bottom of the tabstrip in a non-tab
-  // portion. In particular, the avatar label/button is left of the tabstrip and
-  // the window controls are right of the tabstrip.
-  TabStrip* tabstrip = browser_view()->tabstrip();
-  gfx::RectF rect_in_tabstrip_coords_f(rect);
-  View::ConvertRectToTarget(this, tabstrip, &rect_in_tabstrip_coords_f);
-  const gfx::Rect rect_in_tabstrip_coords(
-      gfx::ToEnclosingRect(rect_in_tabstrip_coords_f));
-  return (rect_in_tabstrip_coords.y() <= tabstrip->height()) &&
-          (!tabstrip->HitTestRect(rect_in_tabstrip_coords) ||
-          tabstrip->IsRectInWindowCaption(rect_in_tabstrip_coords));
-}
 
 int BrowserNonClientFrameViewAsh::GetTabStripLeftInset() const {
   const gfx::Insets insets(GetLayoutInsets(AVATAR_ICON));
@@ -530,7 +515,7 @@ void BrowserNonClientFrameViewAsh::PaintToolbarBackground(gfx::Canvas* canvas) {
   const gfx::ImageSkia* const bg = tp->GetImageSkiaNamed(IDR_THEME_TOOLBAR);
   const int x = toolbar_bounds.x();
   const int y = toolbar_bounds.y();
-  const int bg_y = GetTopInset(false) + Tab::GetYInsetForActiveTabBackground();
+  const int bg_y = GetTopInset(false) + GetLayoutInsets(TAB).top();
   const int w = toolbar_bounds.width();
   const int h = toolbar_bounds.height();
   const SkColor separator_color =

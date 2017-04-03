@@ -42,6 +42,9 @@ class ASH_EXPORT PaletteToolManager : public PaletteTool::Delegate {
     // Hide the palette (if shown).
     virtual void HidePalette() = 0;
 
+    // Hide the palette immediately, ie, do not display a hide animation.
+    virtual void HidePaletteImmediately() = 0;
+
     // Called when the active tool has changed.
     virtual void OnActiveToolChanged() = 0;
 
@@ -81,7 +84,7 @@ class ASH_EXPORT PaletteToolManager : public PaletteTool::Delegate {
 
   // Fetch the active tray icon for the given tool. Returns
   // gfx::VectorIconId::VECTOR_ICON_NONE if not available.
-  gfx::VectorIconId GetActiveTrayIcon(PaletteToolId tool_id);
+  const gfx::VectorIcon& GetActiveTrayIcon(PaletteToolId tool_id) const;
 
   // Create views for all of the registered tools.
   std::vector<PaletteToolView> CreateViews();
@@ -98,11 +101,12 @@ class ASH_EXPORT PaletteToolManager : public PaletteTool::Delegate {
   void EnableTool(PaletteToolId tool_id) override;
   void DisableTool(PaletteToolId tool_id) override;
   void HidePalette() override;
+  void HidePaletteImmediately() override;
   WmWindow* GetWindow() override;
   void RecordPaletteOptionsUsage(ash::PaletteTrayOptions option) override;
   void RecordPaletteModeCancellation(PaletteModeCancelType type) override;
 
-  PaletteTool* FindToolById(PaletteToolId tool_id);
+  PaletteTool* FindToolById(PaletteToolId tool_id) const;
 
   // Unowned pointer to the delegate to provide external functionality.
   Delegate* delegate_;

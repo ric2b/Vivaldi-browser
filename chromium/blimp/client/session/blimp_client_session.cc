@@ -13,30 +13,44 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/sequenced_task_runner.h"
+#include "base/task_runner_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "blimp/client/core/blimp_client_switches.h"
 #include "blimp/client/core/contents/ime_feature.h"
 #include "blimp/client/core/contents/navigation_feature.h"
 #include "blimp/client/core/contents/tab_control_feature.h"
+#include "blimp/client/core/geolocation/geolocation_feature.h"
+#include "blimp/client/core/render_widget/render_widget_feature.h"
 #include "blimp/client/core/session/client_network_components.h"
 #include "blimp/client/core/session/cross_thread_network_event_observer.h"
-#include "blimp/client/feature/render_widget_feature.h"
-#include "blimp/client/feature/settings_feature.h"
+#include "blimp/client/core/settings/settings_feature.h"
+#include "blimp/client/core/switches/blimp_client_switches.h"
 #include "blimp/common/blob_cache/in_memory_blob_cache.h"
 #include "blimp/net/blimp_message_thread_pipe.h"
 #include "blimp/net/blimp_stats.h"
 #include "blimp/net/blob_channel/blob_channel_receiver.h"
 #include "blimp/net/blob_channel/helium_blob_receiver_delegate.h"
 #include "blimp/net/thread_pipe_manager.h"
+#include "device/geolocation/geolocation_delegate.h"
+#include "device/geolocation/location_arbitrator.h"
 #include "url/gurl.h"
 
 namespace blimp {
 namespace client {
+namespace {
+
+void DropConnectionOnIOThread(ClientNetworkComponents* net_components) {
+  net_components->GetBrowserConnectionHandler()->DropCurrentConnection();
+}
+
+}  // namespace
 
 BlimpClientSession::BlimpClientSession(const GURL& assigner_endpoint)
     : io_thread_("BlimpIOThread"),
+      geolocation_feature_(base::MakeUnique<GeolocationFeature>(
+          base::MakeUnique<device::LocationArbitrator>(
+              base::MakeUnique<device::GeolocationDelegate>()))),
       tab_control_feature_(new TabControlFeature),
       navigation_feature_(new NavigationFeature),
       ime_feature_(new ImeFeature),
@@ -108,6 +122,9 @@ void BlimpClientSession::RegisterFeatures() {
       io_thread_.task_runner(), net_components_->GetBrowserConnectionHandler());
 
   // Register features' message senders and receivers.
+  geolocation_feature_->set_outgoing_message_processor(
+      thread_pipe_manager_->RegisterFeature(BlimpMessage::kGeolocation,
+                                            geolocation_feature_.get()));
   tab_control_feature_->set_outgoing_message_processor(
       thread_pipe_manager_->RegisterFeature(BlimpMessage::kTabControl,
                                             tab_control_feature_.get()));
@@ -140,16 +157,17 @@ void BlimpClientSession::RegisterFeatures() {
     settings_feature_->SetRecordWholeDocument(true);
 }
 
+void BlimpClientSession::DropConnection() {
+  io_thread_.task_runner()->PostTask(
+      FROM_HERE, base::Bind(&DropConnectionOnIOThread, net_components_.get()));
+}
+
 void BlimpClientSession::OnConnected() {}
 
 void BlimpClientSession::OnDisconnected(int result) {}
 
 void BlimpClientSession::OnImageDecodeError() {
-  io_thread_.task_runner()->PostTask(
-      FROM_HERE,
-      base::Bind(
-          &BrowserConnectionHandler::DropCurrentConnection,
-          base::Unretained(net_components_->GetBrowserConnectionHandler())));
+  DropConnection();
 }
 
 TabControlFeature* BlimpClientSession::GetTabControlFeature() const {

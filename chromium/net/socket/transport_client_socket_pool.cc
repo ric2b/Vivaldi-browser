@@ -21,6 +21,9 @@
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
 #include "net/log/net_log.h"
+#include "net/log/net_log_event_type.h"
+#include "net/log/net_log_source_type.h"
+#include "net/log/net_log_with_source.h"
 #include "net/socket/client_socket_factory.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/client_socket_pool_base.h"
@@ -101,12 +104,13 @@ TransportConnectJob::TransportConnectJob(
     HostResolver* host_resolver,
     Delegate* delegate,
     NetLog* net_log)
-    : ConnectJob(group_name,
-                 timeout_duration,
-                 priority,
-                 respect_limits,
-                 delegate,
-                 BoundNetLog::Make(net_log, NetLog::SOURCE_CONNECT_JOB)),
+    : ConnectJob(
+          group_name,
+          timeout_duration,
+          priority,
+          respect_limits,
+          delegate,
+          NetLogWithSource::Make(net_log, NetLogSourceType::CONNECT_JOB)),
       params_(params),
       resolver_(host_resolver),
       client_socket_factory_(client_socket_factory),
@@ -556,7 +560,7 @@ int TransportClientSocketPool::RequestSocket(const std::string& group_name,
                                              RespectLimits respect_limits,
                                              ClientSocketHandle* handle,
                                              const CompletionCallback& callback,
-                                             const BoundNetLog& net_log) {
+                                             const NetLogWithSource& net_log) {
   const scoped_refptr<TransportSocketParams>* casted_params =
       static_cast<const scoped_refptr<TransportSocketParams>*>(params);
 
@@ -567,12 +571,12 @@ int TransportClientSocketPool::RequestSocket(const std::string& group_name,
 }
 
 void TransportClientSocketPool::NetLogTcpClientSocketPoolRequestedSocket(
-    const BoundNetLog& net_log,
+    const NetLogWithSource& net_log,
     const scoped_refptr<TransportSocketParams>* casted_params) {
   if (net_log.IsCapturing()) {
     // TODO(eroman): Split out the host and port parameters.
     net_log.AddEvent(
-        NetLog::TYPE_TCP_CLIENT_SOCKET_POOL_REQUESTED_SOCKET,
+        NetLogEventType::TCP_CLIENT_SOCKET_POOL_REQUESTED_SOCKET,
         CreateNetLogHostPortPairCallback(
             &casted_params->get()->destination().host_port_pair()));
   }
@@ -582,14 +586,14 @@ void TransportClientSocketPool::RequestSockets(
     const std::string& group_name,
     const void* params,
     int num_sockets,
-    const BoundNetLog& net_log) {
+    const NetLogWithSource& net_log) {
   const scoped_refptr<TransportSocketParams>* casted_params =
       static_cast<const scoped_refptr<TransportSocketParams>*>(params);
 
   if (net_log.IsCapturing()) {
     // TODO(eroman): Split out the host and port parameters.
     net_log.AddEvent(
-        NetLog::TYPE_TCP_CLIENT_SOCKET_POOL_REQUESTED_SOCKETS,
+        NetLogEventType::TCP_CLIENT_SOCKET_POOL_REQUESTED_SOCKETS,
         CreateNetLogHostPortPairCallback(
             &casted_params->get()->destination().host_port_pair()));
   }

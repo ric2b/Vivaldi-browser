@@ -10,16 +10,17 @@
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
- * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+ * DAMAGE.
  */
 
 #ifndef AudioResampler_h
@@ -40,33 +41,37 @@ namespace blink {
 // The default constructor defaults to single-channel (mono).
 
 class PLATFORM_EXPORT AudioResampler {
-    DISALLOW_NEW();
-    WTF_MAKE_NONCOPYABLE(AudioResampler);
-public:
-    AudioResampler();
-    AudioResampler(unsigned numberOfChannels);
-    ~AudioResampler() { }
+  DISALLOW_NEW();
+  WTF_MAKE_NONCOPYABLE(AudioResampler);
 
-    // Given an AudioSourceProvider, process() resamples the source stream into destinationBus.
-    void process(AudioSourceProvider*, AudioBus* destinationBus, size_t framesToProcess);
+ public:
+  AudioResampler();
+  AudioResampler(unsigned numberOfChannels);
+  ~AudioResampler() {}
 
-    // Resets the processing state.
-    void reset();
+  // Given an AudioSourceProvider, process() resamples the source stream into
+  // destinationBus.
+  void process(AudioSourceProvider*,
+               AudioBus* destinationBus,
+               size_t framesToProcess);
 
-    void configureChannels(unsigned numberOfChannels);
+  // Resets the processing state.
+  void reset();
 
-    // 0 < rate <= MaxRate
-    void setRate(double rate);
-    double rate() const { return m_rate; }
+  void configureChannels(unsigned numberOfChannels);
 
-    static const double MaxRate;
+  // 0 < rate <= MaxRate
+  void setRate(double rate);
+  double rate() const { return m_rate; }
 
-private:
-    double m_rate;
-    Vector<std::unique_ptr<AudioResamplerKernel>> m_kernels;
-    RefPtr<AudioBus> m_sourceBus;
+  static const double MaxRate;
+
+ private:
+  double m_rate;
+  Vector<std::unique_ptr<AudioResamplerKernel>> m_kernels;
+  RefPtr<AudioBus> m_sourceBus;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // AudioResampler_h
+#endif  // AudioResampler_h

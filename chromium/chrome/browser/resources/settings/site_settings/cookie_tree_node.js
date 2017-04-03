@@ -47,7 +47,7 @@ var categoryLabels = {
   'database': loadTimeData.getString('cookieDatabaseStorage'),
   'file_system': loadTimeData.getString('cookieFileSystem'),
   'flash_lso': loadTimeData.getString('cookieFlashLso'),
-  'indexed_db': loadTimeData.getString('cookieLocalStorage'),
+  'indexed_db': loadTimeData.getString('cookieDatabaseStorage'),
   'local_storage': loadTimeData.getString('cookieLocalStorage'),
   'service_worker': loadTimeData.getString('cookieServiceWorker'),
 };
@@ -173,10 +173,13 @@ cr.define('settings', function() {
 
           // Some types, like quota, have no description nodes.
           var dataType = '';
-          if (descriptionNode.data_.type != undefined)
+          if (descriptionNode.data_.type != undefined) {
             dataType = descriptionNode.data_.type;
-          else
-            dataType = descriptionNode.children_[0].data_.type;
+          } else {
+            // A description node might not have children when it's deleted.
+            if (descriptionNode.children_.length > 0)
+              dataType = descriptionNode.children_[0].data_.type;
+          }
 
           var count =
               (dataType == 'cookie') ? descriptionNode.children_.length : 0;

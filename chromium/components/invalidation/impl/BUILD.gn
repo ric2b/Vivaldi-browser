@@ -207,6 +207,7 @@ if (is_android) {
     deps = [
       ":proto_java",
       "//base:base_java",
+      "//components/signin/core/browser/android:java",
       "//components/sync/android:sync_java",
       "//third_party/android_protobuf:protobuf_nano_javalib",
       "//third_party/cacheinvalidation:cacheinvalidation_javalib",
@@ -226,10 +227,12 @@ if (is_android) {
     ]
   }
   android_library("javatests") {
+    testonly = true
     deps = [
       ":java",
       "//base:base_java",
       "//base:base_java_test_support",
+      "//components/signin/core/browser/android:java",
       "//components/sync/android:sync_java",
       "//third_party/cacheinvalidation:cacheinvalidation_javalib",
       "//third_party/cacheinvalidation:cacheinvalidation_proto_java",

@@ -6,10 +6,10 @@ package org.chromium.android_webview.permission;
 
 import android.net.Uri;
 
+import org.chromium.android_webview.CleanupReference;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
-import org.chromium.content.common.CleanupReference;
 
 /**
  * This class wraps permission request in Chromium side, and can only be created
@@ -30,7 +30,7 @@ public class AwPermissionRequest {
     // This should be same as corresponding definition in PermissionRequest.
     // We duplicate definition because it is used in Android L and afterwards, but is only
     // defined in M.
-    // TODO(michaelbai) : Replace "android.webkit.resoruce.MIDI_SYSEX" with
+    // TODO(michaelbai) : Replace "android.webkit.resource.MIDI_SYSEX" with
     // PermissionRequest.RESOURCE_MIDI_SYSEX once Android M SDK is used.
     public static final String RESOURCE_MIDI_SYSEX = "android.webkit.resource.MIDI_SYSEX";
 

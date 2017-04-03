@@ -4,7 +4,7 @@
 
 #include "chrome/browser/ui/views/download/download_feedback_dialog_view.h"
 
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/supports_user_data.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -13,8 +13,8 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/prefs/pref_service.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/page_navigator.h"
-#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/controls/link.h"
 #include "ui/views/controls/message_box_view.h"
@@ -156,8 +156,9 @@ void DownloadFeedbackDialogView::LinkClicked(
       ui::DispositionFromEventFlags(event_flags);
   content::OpenURLParams params(
       GURL(l10n_util::GetStringUTF8(IDS_SAFE_BROWSING_PRIVACY_POLICY_URL)),
-      content::Referrer(),
-      disposition == CURRENT_TAB ? NEW_FOREGROUND_TAB : disposition,
+      content::Referrer(), disposition == WindowOpenDisposition::CURRENT_TAB
+                               ? WindowOpenDisposition::NEW_FOREGROUND_TAB
+                               : disposition,
       ui::PAGE_TRANSITION_LINK, false);
   navigator_->OpenURL(params);
 }

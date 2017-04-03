@@ -5,8 +5,8 @@
 #include "bindings/modules/v8/ModuleBindingsInitializer.h"
 
 #include "bindings/core/v8/V8PerIsolateData.h"
+#include "bindings/modules/v8/ConditionalFeaturesForModules.h"
 #include "bindings/modules/v8/SerializedScriptValueForModulesFactory.h"
-#include "bindings/modules/v8/V8BindingForModules.h"
 
 namespace blink {
 
@@ -14,11 +14,11 @@ namespace blink {
 // generate_init_partial_interfaces.py.
 void initPartialInterfacesInModules();
 
-void ModuleBindingsInitializer::init()
-{
-    registerInstallOriginTrialsForModules();
-    initPartialInterfacesInModules();
-    SerializedScriptValueFactory::initialize(new SerializedScriptValueForModulesFactory);
+void ModuleBindingsInitializer::init() {
+  registerInstallConditionalFeaturesForModules();
+  initPartialInterfacesInModules();
+  SerializedScriptValueFactory::initialize(
+      new SerializedScriptValueForModulesFactory);
 }
 
-} // namespace blink
+}  // namespace blink

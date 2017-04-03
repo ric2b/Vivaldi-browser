@@ -13,10 +13,12 @@
 #include "base/command_line.h"
 #include "gpu/command_buffer/service/buffer_manager.h"
 #include "gpu/command_buffer/service/framebuffer_manager.h"
+#include "gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/command_buffer/service/mailbox_manager_impl.h"
 #include "gpu/command_buffer/service/path_manager.h"
 #include "gpu/command_buffer/service/program_manager.h"
+#include "gpu/command_buffer/service/progress_reporter.h"
 #include "gpu/command_buffer/service/renderbuffer_manager.h"
 #include "gpu/command_buffer/service/sampler_manager.h"
 #include "gpu/command_buffer/service/shader_manager.h"
@@ -64,7 +66,8 @@ ContextGroup::ContextGroup(
         framebuffer_completeness_cache,
     const scoped_refptr<FeatureInfo>& feature_info,
     bool bind_generates_resource,
-    gpu::ImageFactory* image_factory)
+    gpu::ImageFactory* image_factory,
+    ProgressReporter* progress_reporter)
     : gpu_preferences_(gpu_preferences),
       mailbox_manager_(mailbox_manager),
       memory_tracker_(memory_tracker),
@@ -101,7 +104,9 @@ ContextGroup::ContextGroup(
       uniform_buffer_offset_alignment_(1u),
       program_cache_(NULL),
       feature_info_(feature_info),
-      image_factory_(image_factory) {
+      image_factory_(image_factory),
+      passthrough_resources_(new PassthroughResources),
+      progress_reporter_(progress_reporter) {
   {
     DCHECK(feature_info_);
     if (!mailbox_manager_.get())
@@ -204,13 +209,13 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
 
   buffer_manager_.reset(
       new BufferManager(memory_tracker_.get(), feature_info_.get()));
-  framebuffer_manager_.reset(new FramebufferManager(
-      max_draw_buffers_, max_color_attachments_, feature_info_->context_type(),
-      framebuffer_completeness_cache_));
+  framebuffer_manager_.reset(
+      new FramebufferManager(max_draw_buffers_, max_color_attachments_,
+                             framebuffer_completeness_cache_));
   renderbuffer_manager_.reset(new RenderbufferManager(
       memory_tracker_.get(), max_renderbuffer_size, max_samples,
       feature_info_.get()));
-  shader_manager_.reset(new ShaderManager());
+  shader_manager_.reset(new ShaderManager(progress_reporter_));
   sampler_manager_.reset(new SamplerManager(feature_info_.get()));
 
   // Lookup GL things we need to know.
@@ -297,14 +302,11 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
         feature_info_->workarounds().max_texture_size);
   }
 
-  texture_manager_.reset(new TextureManager(memory_tracker_.get(),
-                                            feature_info_.get(),
-                                            max_texture_size,
-                                            max_cube_map_texture_size,
-                                            max_rectangle_texture_size,
-                                            max_3d_texture_size,
-                                            max_array_texture_layers,
-                                            bind_generates_resource_));
+  texture_manager_.reset(new TextureManager(
+      memory_tracker_.get(), feature_info_.get(), max_texture_size,
+      max_cube_map_texture_size, max_rectangle_texture_size,
+      max_3d_texture_size, max_array_texture_layers, bind_generates_resource_,
+      progress_reporter_));
   texture_manager_->set_framebuffer_manager(framebuffer_manager_.get());
 
   const GLint kMinTextureImageUnits = 8;
@@ -433,14 +435,10 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
 
   path_manager_.reset(new PathManager());
 
-  program_manager_.reset(
-      new ProgramManager(program_cache_,
-                         max_varying_vectors_,
-                         max_draw_buffers_,
-                         max_dual_source_draw_buffers_,
-                         max_vertex_attribs_,
-                         gpu_preferences_,
-                         feature_info_.get()));
+  program_manager_.reset(new ProgramManager(
+      program_cache_, max_varying_vectors_, max_draw_buffers_,
+      max_dual_source_draw_buffers_, max_vertex_attribs_, gpu_preferences_,
+      feature_info_.get(), progress_reporter_));
 
   if (!texture_manager_->Initialize()) {
     DLOG(ERROR) << "Context::Group::Initialize failed because texture manager "
@@ -479,6 +477,11 @@ bool ContextGroup::HaveContexts() {
   return !decoders_.empty();
 }
 
+void ContextGroup::ReportProgress() {
+  if (progress_reporter_)
+    progress_reporter_->ReportProgress();
+}
+
 void ContextGroup::Destroy(GLES2Decoder* decoder, bool have_context) {
   decoders_.erase(std::remove_if(decoders_.begin(), decoders_.end(),
                                  WeakPtrEquals<gles2::GLES2Decoder>(decoder)),
@@ -494,6 +497,7 @@ void ContextGroup::Destroy(GLES2Decoder* decoder, bool have_context) {
     }
     buffer_manager_->Destroy();
     buffer_manager_.reset();
+    ReportProgress();
   }
 
   if (framebuffer_manager_ != NULL) {
@@ -501,39 +505,50 @@ void ContextGroup::Destroy(GLES2Decoder* decoder, bool have_context) {
     if (texture_manager_)
       texture_manager_->set_framebuffer_manager(NULL);
     framebuffer_manager_.reset();
+    ReportProgress();
   }
 
   if (renderbuffer_manager_ != NULL) {
     renderbuffer_manager_->Destroy(have_context);
     renderbuffer_manager_.reset();
+    ReportProgress();
   }
 
   if (texture_manager_ != NULL) {
     texture_manager_->Destroy(have_context);
     texture_manager_.reset();
+    ReportProgress();
   }
 
   if (path_manager_ != NULL) {
     path_manager_->Destroy(have_context);
     path_manager_.reset();
+    ReportProgress();
   }
 
   if (program_manager_ != NULL) {
     program_manager_->Destroy(have_context);
     program_manager_.reset();
+    ReportProgress();
   }
 
   if (shader_manager_ != NULL) {
     shader_manager_->Destroy(have_context);
     shader_manager_.reset();
+    ReportProgress();
   }
 
   if (sampler_manager_ != NULL) {
     sampler_manager_->Destroy(have_context);
     sampler_manager_.reset();
+    ReportProgress();
   }
 
   memory_tracker_ = NULL;
+
+  passthrough_resources_->Destroy(have_context);
+  passthrough_resources_.reset();
+  ReportProgress();
 }
 
 uint32_t ContextGroup::GetMemRepresented() const {

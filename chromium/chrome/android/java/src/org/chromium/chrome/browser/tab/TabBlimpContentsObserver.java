@@ -5,12 +5,13 @@
 package org.chromium.chrome.browser.tab;
 
 import org.chromium.base.ObserverList.RewindableIterator;
-import org.chromium.blimp_public.contents.BlimpContentsObserver;
+import org.chromium.blimp_public.contents.EmptyBlimpContentsObserver;
+import org.chromium.ui.base.PageTransition;
 
 /**
  * BlimpContentsObserver used by Tab.
  */
-public class TabBlimpContentsObserver implements BlimpContentsObserver {
+public class TabBlimpContentsObserver extends EmptyBlimpContentsObserver {
     private Tab mTab;
 
     public TabBlimpContentsObserver(Tab tab) {
@@ -27,5 +28,15 @@ public class TabBlimpContentsObserver implements BlimpContentsObserver {
         while (observers.hasNext()) {
             observers.next().onUrlUpdated(mTab);
         }
+    }
+
+    /**
+     * Tab can use this to drive what kind of content to show based on the URL.
+     */
+    @Override
+    public void onLoadingStateChanged(boolean loading) {
+        // TODO(dtrainor): Investigate if we need to pipe through a more accurate PageTransition
+        // here.
+        mTab.handleDidCommitProvisonalLoadForFrame(mTab.getUrl(), PageTransition.TYPED);
     }
 }

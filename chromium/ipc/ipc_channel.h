@@ -222,6 +222,28 @@ class IPC_EXPORT Channel : public Endpoint {
   // implementation.
   virtual bool Connect() WARN_UNUSED_RESULT = 0;
 
+  // Pause the channel. Subsequent sends will be queued internally until
+  // Unpause() is called and the channel is flushed either by Unpause() or a
+  // subsequent call to Flush().
+  virtual void Pause();
+
+  // Unpause the channel. This allows subsequent Send() calls to transmit
+  // messages immediately, without queueing. If |flush| is true, any messages
+  // queued while paused will be flushed immediately upon unpausing. Otherwise
+  // you must call Flush() explicitly.
+  //
+  // Not all implementations support Unpause(). See ConnectPaused() above for
+  // details.
+  virtual void Unpause(bool flush);
+
+  // Manually flush the pipe. This is only useful exactly once, and only after
+  // a call to Unpause(false), in order to explicitly flush out any
+  // messages which were queued prior to unpausing.
+  //
+  // Not all implementations support Flush(). See ConnectPaused() above for
+  // details.
+  virtual void Flush();
+
   // Close this Channel explicitly.  May be called multiple times.
   // On POSIX calling close on an IPC channel that listens for connections will
   // cause it to close any accepted connections, and it will stop listening for
@@ -243,10 +265,6 @@ class IPC_EXPORT Channel : public Endpoint {
   // |message| must be allocated using operator new.  This object will be
   // deleted once the contents of the Message have been sent.
   bool Send(Message* message) override = 0;
-
-  // IsSendThreadSafe returns true iff it's safe to call |Send| from non-IO
-  // threads. This is constant for the lifetime of the |Channel|.
-  virtual bool IsSendThreadSafe() const;
 
   // NaCl in Non-SFI mode runs on Linux directly, and the following functions
   // compiled on Linux are also needed. Please see also comments in

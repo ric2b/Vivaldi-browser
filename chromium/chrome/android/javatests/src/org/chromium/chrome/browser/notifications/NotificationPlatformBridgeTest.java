@@ -4,39 +4,176 @@
 
 package org.chromium.chrome.browser.notifications;
 
-import android.annotation.SuppressLint;
+import static org.chromium.base.test.util.ScalableTimeout.scaleTimeout;
+
+import android.annotation.TargetApi;
 import android.app.Notification;
 import android.content.Context;
-import android.content.res.Resources;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Color;
+import android.os.Build;
 import android.test.suitebuilder.annotation.LargeTest;
 import android.test.suitebuilder.annotation.MediumTest;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.SuppressFBWarnings;
+import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.MinAndroidSdkLevel;
+import org.chromium.base.test.util.RetryOnFailure;
+import org.chromium.chrome.R;
+import org.chromium.chrome.browser.infobar.InfoBar;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.website.ContentSetting;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.widget.RoundedIconGenerator;
+import org.chromium.chrome.test.util.InfoBarUtil;
+import org.chromium.chrome.test.util.browser.TabTitleObserver;
 import org.chromium.chrome.test.util.browser.notifications.MockNotificationManagerProxy.NotificationEntry;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 
+import java.net.URL;
 import java.util.List;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Instrumentation tests for the Notification Bridge.
  *
  * Web Notifications are only supported on Android JellyBean and beyond.
  */
-// TODO(peter): remove @SuppressLint once crbug.com/501900 is fixed.
-@SuppressLint("NewApi")
-// TODO(peter): fix deprecation warnings crbug.com/528076
-@SuppressWarnings("deprecation")
 public class NotificationPlatformBridgeTest extends NotificationTestBase {
     private static final String NOTIFICATION_TEST_PAGE =
             "/chrome/test/data/notifications/android_test.html";
+    private static final int TITLE_UPDATE_TIMEOUT_SECONDS = (int) scaleTimeout(5);
+
+    @Override
+    protected void setUp() throws Exception {
+        super.setUp();
+        loadUrl(getTestServer().getURL(NOTIFICATION_TEST_PAGE));
+    }
+
+    private void waitForTitle(String expectedTitle) throws InterruptedException {
+        Tab tab = getActivity().getActivityTab();
+        TabTitleObserver titleObserver = new TabTitleObserver(tab, expectedTitle);
+        try {
+            titleObserver.waitForTitleUpdate(TITLE_UPDATE_TIMEOUT_SECONDS);
+        } catch (TimeoutException e) {
+            // The title is not as expected, this assertion neatly logs what the difference is.
+            assertEquals(expectedTitle, tab.getTitle());
+        }
+    }
+
+    private InfoBar getInfobarBlocking() throws InterruptedException {
+        CriteriaHelper.pollUiThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                return !getInfoBars().isEmpty();
+            }
+        });
+        List<InfoBar> infoBars = getInfoBars();
+        assertEquals(1, infoBars.size());
+        return infoBars.get(0);
+    }
+
+    private void waitForInfobarToClose() throws InterruptedException {
+        CriteriaHelper.pollUiThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                return getInfoBars().isEmpty();
+            }
+        });
+        assertEquals(0, getInfoBars().size());
+    }
+
+    private void checkThatShowNotificationIsDenied() throws Exception {
+        runJavaScriptCodeInCurrentTab("showNotification('MyNotification', {})");
+        waitForTitle("TypeError: No notification permission has been granted for this origin.");
+        // Ideally we'd wait a little here, but it's hard to wait for things that shouldn't happen.
+        assertTrue(getNotificationEntries().isEmpty());
+    }
+
+    /**
+     * Verifies that notifcations cannot be shown without permission, and that dismissing or denying
+     * the infobar works correctly.
+     */
+    @LargeTest
+    @Feature({"Browser", "Notifications"})
+    public void testPermissionDenied() throws Exception {
+        // Notifications permission should initially be prompt, and showing should fail.
+        assertEquals("\"default\"", runJavaScriptCodeInCurrentTab("Notification.permission"));
+        checkThatShowNotificationIsDenied();
+
+        // Notification.requestPermission() should show the notifications infobar.
+        assertEquals(0, getInfoBars().size());
+        runJavaScriptCodeInCurrentTab("Notification.requestPermission(sendToTest)");
+        InfoBar infoBar = getInfobarBlocking();
+
+        // Dismissing the infobar should pass prompt to the requestPermission callback.
+        assertTrue(InfoBarUtil.clickCloseButton(infoBar));
+        waitForInfobarToClose();
+        waitForTitle("default"); // See https://crbug.com/434547.
+
+        // Notifications permission should still be prompt.
+        assertEquals("\"default\"", runJavaScriptCodeInCurrentTab("Notification.permission"));
+        checkThatShowNotificationIsDenied();
+
+        // Notification.requestPermission() should show the notifications infobar again.
+        runJavaScriptCodeInCurrentTab("Notification.requestPermission(sendToTest)");
+        infoBar = getInfobarBlocking();
+
+        // Denying the infobar should pass denied to the requestPermission callback.
+        assertTrue(InfoBarUtil.clickSecondaryButton(infoBar));
+        waitForInfobarToClose();
+        waitForTitle("denied");
+
+        // This should have caused notifications permission to become denied.
+        assertEquals("\"denied\"", runJavaScriptCodeInCurrentTab("Notification.permission"));
+        checkThatShowNotificationIsDenied();
+
+        // Reload page to ensure the block is persisted.
+        loadUrl(getTestServer().getURL(NOTIFICATION_TEST_PAGE));
+
+        // Notification.requestPermission() should immediately pass denied to the callback without
+        // showing an infobar.
+        runJavaScriptCodeInCurrentTab("Notification.requestPermission(sendToTest)");
+        waitForTitle("denied");
+        assertEquals(0, getInfoBars().size());
+
+        // Notifications permission should still be denied.
+        assertEquals("\"denied\"", runJavaScriptCodeInCurrentTab("Notification.permission"));
+        checkThatShowNotificationIsDenied();
+    }
+
+    /**
+     * Verifies granting permission via the infobar.
+     */
+    @MediumTest
+    @Feature({"Browser", "Notifications"})
+    public void testPermissionGranted() throws Exception {
+        // Notifications permission should initially be prompt, and showing should fail.
+        assertEquals("\"default\"", runJavaScriptCodeInCurrentTab("Notification.permission"));
+        checkThatShowNotificationIsDenied();
+
+        // Notification.requestPermission() should show the notifications infobar.
+        assertEquals(0, getInfoBars().size());
+        runJavaScriptCodeInCurrentTab("Notification.requestPermission(sendToTest)");
+        InfoBar infoBar = getInfobarBlocking();
+
+        // Accepting the infobar should pass granted to the requestPermission callback.
+        assertTrue(InfoBarUtil.clickPrimaryButton(infoBar));
+        waitForInfobarToClose();
+        waitForTitle("granted");
+
+        // Reload page to ensure the grant is persisted.
+        loadUrl(getTestServer().getURL(NOTIFICATION_TEST_PAGE));
+
+        // Notifications permission should now be granted, and showing should succeed.
+        assertEquals("\"granted\"", runJavaScriptCodeInCurrentTab("Notification.permission"));
+        showAndGetNotification("MyNotification", "{}");
+    }
 
     /**
      * Verifies that the intended default properties of a notification will indeed be set on the
@@ -44,17 +181,19 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
      */
     @MediumTest
     @Feature({"Browser", "Notifications"})
+    @RetryOnFailure
     public void testDefaultNotificationProperties() throws Exception {
-        loadUrl(getTestServer().getURL(NOTIFICATION_TEST_PAGE));
         setNotificationContentSettingForCurrentOrigin(ContentSetting.ALLOW);
+        Context context = getInstrumentation().getTargetContext();
 
         Notification notification = showAndGetNotification("MyNotification", "{ body: 'Hello' }");
+        String expectedOrigin =
+                UrlFormatter.formatUrlForSecurityDisplay(getOrigin(), false /* showScheme */);
 
         // Validate the contents of the notification.
-        assertEquals("MyNotification", notification.extras.getString(Notification.EXTRA_TITLE));
-        assertEquals("Hello", notification.extras.getString(Notification.EXTRA_TEXT));
-        assertEquals(UrlFormatter.formatUrlForSecurityDisplay(getOrigin(), false /* showScheme */),
-                notification.extras.getString(Notification.EXTRA_SUB_TEXT));
+        assertEquals("MyNotification", NotificationTestUtil.getExtraTitle(notification));
+        assertEquals("Hello", NotificationTestUtil.getExtraText(notification));
+        assertEquals(expectedOrigin, NotificationTestUtil.getExtraSubText(notification));
 
         // Verify that the ticker text contains the notification's title and body.
         String tickerText = notification.tickerText.toString();
@@ -62,16 +201,59 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
         assertTrue(tickerText.contains("MyNotification"));
         assertTrue(tickerText.contains("Hello"));
 
+        // On L+, verify the public version of the notification contains the notification's origin,
+        // and that the body text has been replaced.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            assertNotNull(notification.publicVersion);
+            assertEquals(context.getString(R.string.notification_hidden_text),
+                    NotificationTestUtil.getExtraText(notification.publicVersion));
+        }
+        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.M) {
+            // On N+, origin should be set as the subtext of the public notification.
+            assertEquals(expectedOrigin,
+                    NotificationTestUtil.getExtraSubText(notification.publicVersion));
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            // On L/M, origin should be the title of the public notification.
+            assertEquals(
+                    expectedOrigin, NotificationTestUtil.getExtraTitle(notification.publicVersion));
+        }
+
         // Verify that the notification's timestamp is set in the past 60 seconds. This number has
         // no significance, but needs to be high enough to not cause flakiness as it's set by the
         // renderer process on notification creation.
         assertTrue(Math.abs(System.currentTimeMillis() - notification.when) < 60 * 1000);
 
-        assertNotNull(notification.largeIcon);
+        assertNotNull(NotificationTestUtil.getLargeIconFromNotification(context, notification));
 
         // Validate the notification's behavior.
         assertEquals(Notification.DEFAULT_ALL, notification.defaults);
         assertEquals(Notification.PRIORITY_DEFAULT, notification.priority);
+    }
+
+    /**
+     * Verifies that specifying a notification action with type: 'text' results in a notification
+     * with a remote input on the action.
+     */
+    @CommandLineFlags.Add("enable-experimental-web-platform-features")
+    @MinAndroidSdkLevel(Build.VERSION_CODES.KITKAT_WATCH)
+    @TargetApi(Build.VERSION_CODES.KITKAT_WATCH) // RemoteInputs were only added in KITKAT_WATCH.
+    @MediumTest
+    @Feature({"Browser", "Notifications"})
+    public void testNotificationWithTextAction() throws Exception {
+        setNotificationContentSettingForCurrentOrigin(ContentSetting.ALLOW);
+
+        Notification notification = showAndGetNotification("MyNotification", "{ "
+                        + " actions: [{action: 'myAction', title: 'reply', type: 'text',"
+                        + " placeholder: 'hi' }]}");
+
+        // The specified action should be present, as well as a default settings action.
+        assertEquals(2, notification.actions.length);
+
+        Notification.Action action = notification.actions[0];
+        assertEquals("reply", action.title);
+        assertNotNull(notification.actions[0].getRemoteInputs());
+        assertEquals(1, action.getRemoteInputs().length);
+        assertEquals("hi", action.getRemoteInputs()[0].getLabel());
     }
 
     /**
@@ -80,7 +262,6 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
     @MediumTest
     @Feature({"Browser", "Notifications"})
     public void testNotificationRenotifyProperty() throws Exception {
-        loadUrl(getTestServer().getURL(NOTIFICATION_TEST_PAGE));
         setNotificationContentSettingForCurrentOrigin(ContentSetting.ALLOW);
 
         Notification notification =
@@ -96,7 +277,6 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
     @MediumTest
     @Feature({"Browser", "Notifications"})
     public void testNotificationSilentProperty() throws Exception {
-        loadUrl(getTestServer().getURL(NOTIFICATION_TEST_PAGE));
         setNotificationContentSettingForCurrentOrigin(ContentSetting.ALLOW);
 
         Notification notification = showAndGetNotification("MyNotification", "{ silent: true }");
@@ -107,7 +287,6 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
 
     private void verifyVibrationNotRequestedWhenDisabledInPrefs(String notificationOptions)
             throws Exception {
-        loadUrl(getTestServer().getURL(NOTIFICATION_TEST_PAGE));
         setNotificationContentSettingForCurrentOrigin(ContentSetting.ALLOW);
 
         // Disable notification vibration in preferences.
@@ -135,6 +314,7 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
      */
     @MediumTest
     @Feature({"Browser", "Notifications"})
+    @RetryOnFailure
     public void testNotificationVibratePreferenceDisabledDefault() throws Exception {
         verifyVibrationNotRequestedWhenDisabledInPrefs("{}");
     }
@@ -145,6 +325,7 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
      */
     @MediumTest
     @Feature({"Browser", "Notifications"})
+    @RetryOnFailure
     public void testNotificationVibratePreferenceDisabledCustomPattern() throws Exception {
         verifyVibrationNotRequestedWhenDisabledInPrefs("{ vibrate: 42 }");
     }
@@ -156,7 +337,6 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
     @MediumTest
     @Feature({"Browser", "Notifications"})
     public void testNotificationVibrateCustomPattern() throws Exception {
-        loadUrl(getTestServer().getURL(NOTIFICATION_TEST_PAGE));
         setNotificationContentSettingForCurrentOrigin(ContentSetting.ALLOW);
 
         // By default, vibration is enabled in notifications.
@@ -180,23 +360,76 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
     }
 
     /**
+     * Verifies that on Android M+, notifications which specify a badge will have that icon
+     * fetched and included as the small icon in the notification and public version.
+     * If the test target is L or below, verifies the small icon (and public small icon on L) is
+     * the expected chrome logo.
+     */
+    @MediumTest
+    @Feature({"Browser", "Notifications"})
+    public void testShowNotificationWithBadge() throws Exception {
+        setNotificationContentSettingForCurrentOrigin(ContentSetting.ALLOW);
+
+        Notification notification =
+                showAndGetNotification("MyNotification", "{badge: 'badge.png'}");
+
+        assertEquals("MyNotification", NotificationTestUtil.getExtraTitle(notification));
+
+        Context context = getInstrumentation().getTargetContext();
+        Bitmap smallIcon = NotificationTestUtil.getSmallIconFromNotification(context, notification);
+        assertNotNull(smallIcon);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            // Custom badges are only supported on M+.
+            // 1. Check the notification badge.
+            URL badgeUrl =
+                    new URL(getTestServer().getURL("/chrome/test/data/notifications/badge.png"));
+            Bitmap bitmap = BitmapFactory.decodeStream(badgeUrl.openStream());
+            Bitmap expected = bitmap.copy(bitmap.getConfig(), true);
+            NotificationBuilderBase.applyWhiteOverlayToBitmap(expected);
+            assertTrue(expected.sameAs(smallIcon));
+
+            // 2. Check the public notification badge.
+            assertNotNull(notification.publicVersion);
+            Bitmap publicSmallIcon = NotificationTestUtil.getSmallIconFromNotification(
+                    context, notification.publicVersion);
+            assertNotNull(publicSmallIcon);
+            assertEquals(expected.getWidth(), publicSmallIcon.getWidth());
+            assertEquals(expected.getHeight(), publicSmallIcon.getHeight());
+            assertTrue(expected.sameAs(publicSmallIcon));
+        } else {
+            Bitmap expected =
+                    BitmapFactory.decodeResource(context.getResources(), R.drawable.ic_chrome);
+            assertTrue(expected.sameAs(smallIcon));
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                // Public versions of notifications are only supported on L+.
+                assertNotNull(notification.publicVersion);
+                Bitmap publicSmallIcon = NotificationTestUtil.getSmallIconFromNotification(
+                        context, notification.publicVersion);
+                assertTrue(expected.sameAs(publicSmallIcon));
+            }
+        }
+    }
+
+    /**
      * Verifies that notifications which specify an icon will have that icon fetched, converted into
      * a Bitmap and included as the large icon in the notification.
      */
     @MediumTest
     @Feature({"Browser", "Notifications"})
+    @RetryOnFailure
     public void testShowNotificationWithIcon() throws Exception {
-        loadUrl(getTestServer().getURL(NOTIFICATION_TEST_PAGE));
         setNotificationContentSettingForCurrentOrigin(ContentSetting.ALLOW);
 
-        Notification notification = showAndGetNotification("MyNotification", "{icon: 'icon.png'}");
+        Notification notification = showAndGetNotification("MyNotification", "{icon: 'red.png'}");
 
-        assertEquals("MyNotification", notification.extras.getString(Notification.EXTRA_TITLE));
-        assertNotNull(notification.largeIcon);
+        assertEquals("MyNotification", NotificationTestUtil.getExtraTitle(notification));
 
-        // TODO(peter): Do some more sensible checking that |icon.png| could actually be loaded.
-        // One option might be to give that icon a solid color and check for it in the Bitmap, but
-        // I'm not certain how reliable that would be.
+        Context context = getInstrumentation().getTargetContext();
+        Bitmap largeIcon = NotificationTestUtil.getLargeIconFromNotification(context, notification);
+        assertNotNull(largeIcon);
+        assertEquals(Color.RED, largeIcon.getPixel(0, 0));
     }
 
     /**
@@ -206,14 +439,16 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
      */
     @MediumTest
     @Feature({"Browser", "Notifications"})
+    @RetryOnFailure
     public void testShowNotificationWithoutIcon() throws Exception {
-        loadUrl(getTestServer().getURL(NOTIFICATION_TEST_PAGE));
         setNotificationContentSettingForCurrentOrigin(ContentSetting.ALLOW);
 
         Notification notification = showAndGetNotification("NoIconNotification", "{}");
 
-        assertEquals("NoIconNotification", notification.extras.getString(Notification.EXTRA_TITLE));
-        assertNotNull(notification.largeIcon);
+        assertEquals("NoIconNotification", NotificationTestUtil.getExtraTitle(notification));
+
+        Context context = getInstrumentation().getTargetContext();
+        assertNotNull(NotificationTestUtil.getLargeIconFromNotification(context, notification));
 
         NotificationPlatformBridge notificationBridge =
                 NotificationPlatformBridge.getInstanceForTests();
@@ -221,65 +456,13 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
 
         // Create a second rounded icon for the test's origin, and compare its dimensions against
         // those of the icon associated to the notification itself.
-        RoundedIconGenerator generator = notificationBridge.mIconGenerator;
-        assertNotNull(generator);
+        RoundedIconGenerator generator =
+                NotificationBuilderBase.createIconGenerator(context.getResources());
 
         Bitmap generatedIcon = generator.generateIconForUrl(getOrigin());
         assertNotNull(generatedIcon);
-
-        assertEquals(generatedIcon.getWidth(), notification.largeIcon.getWidth());
-        assertEquals(generatedIcon.getHeight(), notification.largeIcon.getHeight());
-    }
-
-    /**
-     * Tests the three paths for ensuring that a notification will be shown with a normalized icon:
-     *     (1) NULL bitmaps should have an auto-generated image.
-     *     (2) Large bitmaps should be resized to the device's intended size.
-     *     (3) Smaller bitmaps should be left alone.
-     */
-    @MediumTest
-    @Feature({"Browser", "Notifications"})
-    public void testEnsureNormalizedIconBehavior() throws Exception {
-        loadUrl(getTestServer().getURL(NOTIFICATION_TEST_PAGE));
-        setNotificationContentSettingForCurrentOrigin(ContentSetting.ALLOW);
-
-        // Create a notification to ensure that the NotificationPlatformBridge is initialized.
-        showAndGetNotification("MyNotification", "{}");
-
-        // Get the dimensions of the notification icon that will be presented to the user.
-        Context appContext = getInstrumentation().getTargetContext().getApplicationContext();
-        Resources resources = appContext.getResources();
-
-        int largeIconWidthPx =
-                resources.getDimensionPixelSize(android.R.dimen.notification_large_icon_width);
-        int largeIconHeightPx =
-                resources.getDimensionPixelSize(android.R.dimen.notification_large_icon_height);
-
-        String origin = "https://example.com";
-
-        NotificationPlatformBridge notificationBridge =
-                NotificationPlatformBridge.getInstanceForTests();
-        assertNotNull(notificationBridge);
-
-        Bitmap fromNullIcon = notificationBridge.ensureNormalizedIcon(null, origin);
-        assertNotNull(fromNullIcon);
-        assertEquals(largeIconWidthPx, fromNullIcon.getWidth());
-        assertEquals(largeIconHeightPx, fromNullIcon.getHeight());
-
-        Bitmap largeIcon = Bitmap.createBitmap(largeIconWidthPx * 2, largeIconHeightPx * 2,
-                                               Bitmap.Config.ALPHA_8);
-
-        Bitmap fromLargeIcon = notificationBridge.ensureNormalizedIcon(largeIcon, origin);
-        assertNotNull(fromLargeIcon);
-        assertEquals(largeIconWidthPx, fromLargeIcon.getWidth());
-        assertEquals(largeIconHeightPx, fromLargeIcon.getHeight());
-
-        Bitmap smallIcon = Bitmap.createBitmap(largeIconWidthPx / 2, largeIconHeightPx / 2,
-                                               Bitmap.Config.ALPHA_8);
-
-        Bitmap fromSmallIcon = notificationBridge.ensureNormalizedIcon(smallIcon, origin);
-        assertNotNull(fromSmallIcon);
-        assertEquals(smallIcon, fromSmallIcon);
+        assertTrue(generatedIcon.sameAs(
+                NotificationTestUtil.getLargeIconFromNotification(context, notification)));
     }
 
     /*
@@ -289,8 +472,8 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
      */
     @LargeTest
     @Feature({"Browser", "Notifications"})
+    @RetryOnFailure
     public void testNotificationContentIntentClosesNotification() throws Exception {
-        loadUrl(getTestServer().getURL(NOTIFICATION_TEST_PAGE));
         setNotificationContentSettingForCurrentOrigin(ContentSetting.ALLOW);
 
         Notification notification = showAndGetNotification("MyNotification", "{}");
@@ -312,8 +495,8 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
      */
     @LargeTest
     @Feature({"Browser", "Notifications"})
+    @RetryOnFailure
     public void testNotificationContentIntentCreatesTab() throws Exception {
-        loadUrl(getTestServer().getURL(NOTIFICATION_TEST_PAGE));
         setNotificationContentSettingForCurrentOrigin(ContentSetting.ALLOW);
 
         assertEquals("Expected the notification test page to be the sole tab in the current model",
@@ -347,7 +530,6 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
     @MediumTest
     @Feature({"Browser", "Notifications"})
     public void testNotificationTagReplacement() throws Exception {
-        loadUrl(getTestServer().getURL(NOTIFICATION_TEST_PAGE));
         setNotificationContentSettingForCurrentOrigin(ContentSetting.ALLOW);
 
         runJavaScriptCodeInCurrentTab("showNotification('MyNotification', {tag: 'myTag'});");
@@ -363,7 +545,7 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
         notifications = getNotificationEntries();
         assertEquals(1, notifications.size());
         assertEquals("SecondNotification",
-                notifications.get(0).notification.extras.getString(Notification.EXTRA_TITLE));
+                NotificationTestUtil.getExtraTitle(notifications.get(0).notification));
 
         // Verify that for replaced notifications their tag was the same.
         assertEquals(tag, notifications.get(0).tag);
@@ -380,7 +562,6 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
     @LargeTest
     @Feature({"Browser", "Notifications"})
     public void testShowAndCloseMultipleNotifications() throws Exception {
-        loadUrl(getTestServer().getURL(NOTIFICATION_TEST_PAGE));
         setNotificationContentSettingForCurrentOrigin(ContentSetting.ALLOW);
 
         // Open the first notification and verify it is displayed.
@@ -389,7 +570,7 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
         List<NotificationEntry> notifications = getNotificationEntries();
         assertEquals(1, notifications.size());
         Notification notificationOne = notifications.get(0).notification;
-        assertEquals("One", notificationOne.extras.getString(Notification.EXTRA_TITLE));
+        assertEquals("One", NotificationTestUtil.getExtraTitle(notificationOne));
 
         // Open the second notification and verify it is displayed.
         runJavaScriptCodeInCurrentTab("showNotification('Two');");
@@ -397,7 +578,7 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
         notifications = getNotificationEntries();
         assertEquals(2, notifications.size());
         Notification notificationTwo = notifications.get(1).notification;
-        assertEquals("Two", notificationTwo.extras.getString(Notification.EXTRA_TITLE));
+        assertEquals("Two", NotificationTestUtil.getExtraTitle(notificationTwo));
 
         // The same integer id is always used as it is not needed for uniqueness, we rely on the tag
         // for uniqueness when the replacement behavior is not needed.
@@ -420,8 +601,7 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
         waitForNotificationManagerMutation();
         notifications = getNotificationEntries();
         assertEquals(1, notifications.size());
-        assertEquals("Two",
-                notifications.get(0).notification.extras.getString(Notification.EXTRA_TITLE));
+        assertEquals("Two", NotificationTestUtil.getExtraTitle(notifications.get(0).notification));
 
         // Close the last notification and verify that none remain.
         notifications.get(0).notification.contentIntent.send();

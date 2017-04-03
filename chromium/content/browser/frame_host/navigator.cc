@@ -18,16 +18,15 @@ NavigationController* Navigator::GetController() {
   return NULL;
 }
 
-bool Navigator::NavigateToPendingEntry(
-    FrameTreeNode* frame_tree_node,
-    const FrameNavigationEntry& frame_entry,
-    NavigationController::ReloadType reload_type,
-    bool is_same_document_history_load) {
+bool Navigator::NavigateToPendingEntry(FrameTreeNode* frame_tree_node,
+                                       const FrameNavigationEntry& frame_entry,
+                                       ReloadType reload_type,
+                                       bool is_same_document_history_load) {
   return false;
 }
 
 bool Navigator::NavigateNewChildFrame(RenderFrameHostImpl* render_frame_host,
-                                      const std::string& unique_name) {
+                                      const GURL& default_url) {
   return false;
 }
 
@@ -38,5 +37,10 @@ base::TimeTicks Navigator::GetCurrentLoadStart() {
 void Navigator::OnBeginNavigation(FrameTreeNode* frame_tree_node,
                                   const CommonNavigationParams& common_params,
                                   const BeginNavigationParams& begin_params) {}
+
+NavigationHandleImpl* Navigator::GetNavigationHandleForFrameHost(
+    RenderFrameHostImpl* render_frame_host) {
+  return nullptr;
+}
 
 }  // namespace content

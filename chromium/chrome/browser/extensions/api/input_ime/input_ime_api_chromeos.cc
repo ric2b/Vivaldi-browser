@@ -5,6 +5,8 @@
 #include "chrome/browser/extensions/api/input_ime/input_ime_api.h"
 
 #include <stddef.h>
+
+#include <memory>
 #include <utility>
 
 #include "base/macros.h"
@@ -160,14 +162,14 @@ class ImeObserverChromeOS : public ui::ImeObserver {
       return;
 
     // Note: this is a private API event.
-    base::ListValue* bounds_list = new base::ListValue();
+    auto bounds_list = base::MakeUnique<base::ListValue>();
     for (size_t i = 0; i < bounds.size(); ++i) {
-      base::DictionaryValue* bounds_value = new base::DictionaryValue();
+      auto bounds_value = base::MakeUnique<base::DictionaryValue>();
       bounds_value->SetInteger("x", bounds[i].x());
       bounds_value->SetInteger("y", bounds[i].y());
       bounds_value->SetInteger("w", bounds[i].width());
       bounds_value->SetInteger("h", bounds[i].height());
-      bounds_list->Append(bounds_value);
+      bounds_list->Append(std::move(bounds_value));
     }
 
     if (bounds_list->GetSize() <= 0)
@@ -179,7 +181,7 @@ class ImeObserverChromeOS : public ui::ImeObserver {
     base::Value* first_value = NULL;
     if (bounds_list->Get(0, &first_value))
       args->Append(first_value->DeepCopy());
-    args->Append(bounds_list);
+    args->Append(std::move(bounds_list));
 
     DispatchEventToExtension(
         extensions::events::INPUT_METHOD_PRIVATE_ON_COMPOSITION_BOUNDS_CHANGED,
@@ -357,12 +359,12 @@ InputMethodEngineBase* InputImeEventRouter::GetActiveEngine(
                                                              : nullptr;
 }
 
-bool InputImeClearCompositionFunction::RunSync() {
+ExtensionFunction::ResponseAction InputImeClearCompositionFunction::Run() {
   InputMethodEngine* engine = GetActiveEngine(
       Profile::FromBrowserContext(browser_context()), extension_id());
   if (!engine) {
-    SetResult(base::MakeUnique<base::FundamentalValue>(false));
-    return true;
+    return RespondNow(
+        OneArgument(base::MakeUnique<base::FundamentalValue>(false)));
   }
 
   std::unique_ptr<ClearComposition::Params> parent_params(
@@ -370,9 +372,13 @@ bool InputImeClearCompositionFunction::RunSync() {
   const ClearComposition::Params::Parameters& params =
       parent_params->parameters;
 
-  SetResult(base::MakeUnique<base::FundamentalValue>(
-      engine->ClearComposition(params.context_id, &error_)));
-  return true;
+  std::string error;
+  bool success = engine->ClearComposition(params.context_id, &error);
+  std::unique_ptr<base::ListValue> results =
+      base::MakeUnique<base::ListValue>();
+  results->Append(base::MakeUnique<base::FundamentalValue>(success));
+  return RespondNow(success ? ArgumentList(std::move(results))
+                            : ErrorWithArguments(std::move(results), error));
 }
 
 bool InputImeHideInputViewFunction::RunAsync() {
@@ -385,7 +391,8 @@ bool InputImeHideInputViewFunction::RunAsync() {
   return true;
 }
 
-bool InputImeSetCandidateWindowPropertiesFunction::RunSync() {
+ExtensionFunction::ResponseAction
+InputImeSetCandidateWindowPropertiesFunction::Run() {
   std::unique_ptr<SetCandidateWindowProperties::Params> parent_params(
       SetCandidateWindowProperties::Params::Create(*args_));
   const SetCandidateWindowProperties::Params::Parameters&
@@ -397,17 +404,20 @@ bool InputImeSetCandidateWindowPropertiesFunction::RunSync() {
       event_router ? event_router->GetEngine(extension_id(), params.engine_id)
                    : nullptr;
   if (!engine) {
-    SetResult(base::MakeUnique<base::FundamentalValue>(false));
-    return true;
+    return RespondNow(
+        OneArgument(base::MakeUnique<base::FundamentalValue>(false)));
   }
 
   const SetCandidateWindowProperties::Params::Parameters::Properties&
       properties = params.properties;
 
+  std::string error;
   if (properties.visible &&
-      !engine->SetCandidateWindowVisible(*properties.visible, &error_)) {
-    SetResult(base::MakeUnique<base::FundamentalValue>(false));
-    return true;
+      !engine->SetCandidateWindowVisible(*properties.visible, &error)) {
+    std::unique_ptr<base::ListValue> results =
+        base::MakeUnique<base::ListValue>();
+    results->Append(base::MakeUnique<base::FundamentalValue>(false));
+    return RespondNow(ErrorWithArguments(std::move(results), error));
   }
 
   InputMethodEngine::CandidateWindowProperty properties_out =
@@ -452,17 +462,16 @@ bool InputImeSetCandidateWindowPropertiesFunction::RunSync() {
     engine->SetCandidateWindowProperty(properties_out);
   }
 
-  SetResult(base::MakeUnique<base::FundamentalValue>(true));
-
-  return true;
+  return RespondNow(
+      OneArgument(base::MakeUnique<base::FundamentalValue>(true)));
 }
 
-bool InputImeSetCandidatesFunction::RunSync() {
+ExtensionFunction::ResponseAction InputImeSetCandidatesFunction::Run() {
   InputMethodEngine* engine = GetActiveEngine(
       Profile::FromBrowserContext(browser_context()), extension_id());
   if (!engine) {
-    SetResult(base::MakeUnique<base::FundamentalValue>(true));
-    return true;
+    return RespondNow(
+        OneArgument(base::MakeUnique<base::FundamentalValue>(true)));
   }
 
   std::unique_ptr<SetCandidates::Params> parent_params(
@@ -485,17 +494,22 @@ bool InputImeSetCandidatesFunction::RunSync() {
     }
   }
 
-  SetResult(base::MakeUnique<base::FundamentalValue>(
-      engine->SetCandidates(params.context_id, candidates_out, &error_)));
-  return true;
+  std::string error;
+  bool success =
+      engine->SetCandidates(params.context_id, candidates_out, &error);
+  std::unique_ptr<base::ListValue> results =
+      base::MakeUnique<base::ListValue>();
+  results->Append(base::MakeUnique<base::FundamentalValue>(success));
+  return RespondNow(success ? ArgumentList(std::move(results))
+                            : ErrorWithArguments(std::move(results), error));
 }
 
-bool InputImeSetCursorPositionFunction::RunSync() {
+ExtensionFunction::ResponseAction InputImeSetCursorPositionFunction::Run() {
   InputMethodEngine* engine = GetActiveEngine(
       Profile::FromBrowserContext(browser_context()), extension_id());
   if (!engine) {
-    SetResult(base::MakeUnique<base::FundamentalValue>(false));
-    return true;
+    return RespondNow(
+        OneArgument(base::MakeUnique<base::FundamentalValue>(false)));
   }
 
   std::unique_ptr<SetCursorPosition::Params> parent_params(
@@ -503,12 +517,17 @@ bool InputImeSetCursorPositionFunction::RunSync() {
   const SetCursorPosition::Params::Parameters& params =
       parent_params->parameters;
 
-  SetResult(base::MakeUnique<base::FundamentalValue>(engine->SetCursorPosition(
-      params.context_id, params.candidate_id, &error_)));
-  return true;
+  std::string error;
+  bool success =
+      engine->SetCursorPosition(params.context_id, params.candidate_id, &error);
+  std::unique_ptr<base::ListValue> results =
+      base::MakeUnique<base::ListValue>();
+  results->Append(base::MakeUnique<base::FundamentalValue>(success));
+  return RespondNow(success ? ArgumentList(std::move(results))
+                            : ErrorWithArguments(std::move(results), error));
 }
 
-bool InputImeSetMenuItemsFunction::RunSync() {
+ExtensionFunction::ResponseAction InputImeSetMenuItemsFunction::Run() {
   std::unique_ptr<SetMenuItems::Params> parent_params(
       SetMenuItems::Params::Create(*args_));
   const SetMenuItems::Params::Parameters& params =
@@ -519,10 +538,8 @@ bool InputImeSetMenuItemsFunction::RunSync() {
   InputMethodEngine* engine =
       event_router ? event_router->GetEngine(extension_id(), params.engine_id)
                    : nullptr;
-  if (!engine) {
-    error_ = kErrorEngineNotAvailable;
-    return false;
-  }
+  if (!engine)
+    return RespondNow(Error(kErrorEngineNotAvailable));
 
   std::vector<chromeos::input_method::InputMethodManager::MenuItem> items_out;
   for (const input_ime::MenuItem& item_in : params.items) {
@@ -531,11 +548,11 @@ bool InputImeSetMenuItemsFunction::RunSync() {
   }
 
   if (!engine->SetMenuItems(items_out))
-    error_ = kErrorSetMenuItemsFail;
-  return true;
+    return RespondNow(Error(kErrorSetMenuItemsFail));
+  return RespondNow(NoArguments());
 }
 
-bool InputImeUpdateMenuItemsFunction::RunSync() {
+ExtensionFunction::ResponseAction InputImeUpdateMenuItemsFunction::Run() {
   std::unique_ptr<UpdateMenuItems::Params> parent_params(
       UpdateMenuItems::Params::Create(*args_));
   const UpdateMenuItems::Params::Parameters& params =
@@ -546,10 +563,8 @@ bool InputImeUpdateMenuItemsFunction::RunSync() {
   InputMethodEngine* engine =
       event_router ? event_router->GetEngine(extension_id(), params.engine_id)
                    : nullptr;
-  if (!engine) {
-    error_ = kErrorEngineNotAvailable;
-    return false;
-  }
+  if (!engine)
+    return RespondNow(Error(kErrorEngineNotAvailable));
 
   std::vector<chromeos::input_method::InputMethodManager::MenuItem> items_out;
   for (const input_ime::MenuItem& item_in : params.items) {
@@ -558,11 +573,11 @@ bool InputImeUpdateMenuItemsFunction::RunSync() {
   }
 
   if (!engine->UpdateMenuItems(items_out))
-    error_ = kErrorUpdateMenuItemsFail;
-  return true;
+    return RespondNow(Error(kErrorUpdateMenuItemsFail));
+  return RespondNow(NoArguments());
 }
 
-bool InputImeDeleteSurroundingTextFunction::RunSync() {
+ExtensionFunction::ResponseAction InputImeDeleteSurroundingTextFunction::Run() {
   std::unique_ptr<DeleteSurroundingText::Params> parent_params(
       DeleteSurroundingText::Params::Create(*args_));
   const DeleteSurroundingText::Params::Parameters& params =
@@ -573,14 +588,13 @@ bool InputImeDeleteSurroundingTextFunction::RunSync() {
   InputMethodEngine* engine =
       event_router ? event_router->GetEngine(extension_id(), params.engine_id)
                    : nullptr;
-  if (!engine) {
-    error_ = kErrorEngineNotAvailable;
-    return false;
-  }
+  if (!engine)
+    return RespondNow(Error(kErrorEngineNotAvailable));
 
+  std::string error;
   engine->DeleteSurroundingText(params.context_id, params.offset, params.length,
-                                &error_);
-  return true;
+                                &error);
+  return RespondNow(error.empty() ? NoArguments() : Error(error));
 }
 
 ExtensionFunction::ResponseAction

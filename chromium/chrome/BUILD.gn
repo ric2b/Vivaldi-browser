@@ -11,10 +11,12 @@ import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
 import("//build/config/win/console_app.gni")
 import("//build/config/win/manifest.gni")
-import("//chrome/chrome_repack_locales.gni")
+import("//build/toolchain/toolchain.gni")
+import("//chrome/chrome_paks.gni")
 import("//chrome/common/features.gni")
-import("//chrome/version.gni")
-import("//ui/base/ui_features.gni")
+import("//chrome/process_version_rc_template.gni")
+import("//third_party/widevine/cdm/widevine.gni")
+import("//tools/resources/generate_resource_whitelist.gni")
 import("//v8/gni/v8.gni")
 
 if (is_android) {
@@ -34,6 +36,10 @@ if (is_android) {
 if (is_vivaldi) {
   import("//vivaldi/gn/config/product.gni")
   import("//vivaldi/gn/config/version.gni")
+}
+
+if (enable_resource_whitelist_generation) {
+  chrome_resource_whitelist = "$target_gen_dir/chrome_resource_whitelist.txt"
 }
 
 if (is_win) {
@@ -173,7 +179,6 @@ if (!is_android && !is_mac) {
         "//components/browser_watcher:browser_watcher_client",
         "//components/crash/content/app:run_as_crashpad_handler",
         "//components/flags_ui:switches",
-        "//components/startup_metric_utils/common",
         "//content:sandbox_helper_win",
         "//content/public/common:static_switches",
         "//crypto",
@@ -232,8 +237,6 @@ if (!is_android && !is_mac) {
         "//chrome/common:features",
       ]
 
-      # GYP has this in a 'profiling==0 and linux_disable_pie==0' condition.
-      # but GN doesn't have either of these flags.
       ldflags = [ "-pie" ]
 
       # Find lib/libffmpeg.so without the executable wrapper script. Note that
@@ -264,11 +267,7 @@ if (!is_android && !is_mac) {
     }
 
     # These files are used by the installer so we need a public dep.
-    public_deps += [
-      ":packed_extra_resources",
-      ":packed_resources",
-    ]
-    deps += [ "//components/startup_metric_utils/browser:lib" ]
+    public_deps += [ ":packed_resources" ]
 
     # Only ChromeOS has precompiled Flash that needs to get copied to the output
     # directory. On other platforms, Flash is either component-updated only or
@@ -305,8 +304,6 @@ if (is_win) {
 
     sources = [
       "//base/win/dllmain.cc",
-      "app/chrome_dll.rc",
-      "app/chrome_dll_resource.h",
       "app/chrome_main.cc",
       "app/chrome_main_delegate.cc",
       "app/chrome_main_delegate.h",
@@ -317,6 +314,7 @@ if (is_win) {
     deps = [
       ":browser_dependencies",
       "//build/config/sanitizers:deps",
+      "//chrome/app:chrome_dll_resources",
       "//chrome/app:command_ids",
       "//chrome/common:features",
       "//third_party/cld",
@@ -391,7 +389,7 @@ if (is_win) {
   }
 
   if (is_multi_dll_chrome) {
-    # This manifest matches what GYP produces. It may not even be necessary.
+    # This manifest matches what GYP produced. It may not even be necessary.
     windows_manifest("chrome_child_manifest") {
       sources = [
         as_invoker_manifest,
@@ -441,11 +439,25 @@ if (is_win) {
         }
         if (chrome_pgo_phase == 1) {
           ldflags += [
-            "/LTCG:PGINSTRUMENT",
+            "/LTCG",
+
+            # Make sure that enough memory gets allocated for the PGO profiling
+            # buffers and also cap this memory. Usually a PGI instrumented build
+            # of chrome_child.dll requires ~55MB of memory for storing its counter
+            # etc, normally the linker should automatically choose an appropriate
+            # amount of memory but it doesn't always do a good estimate and
+            # sometime allocates too little or too much (and so the instrumented
+            # image fails to start). Making sure that the buffer has a size in the
+            # [128 MB, 512 MB] range should prevent this from happening.
+            "/GENPROFILE:MEMMIN=134217728",
+            "/GENPROFILE:MEMMAX=536870912",
             "/PogoSafeMode",
           ]
         } else if (chrome_pgo_phase == 2) {
-          ldflags += [ "/LTCG:PGOPTIMIZE" ]
+          ldflags += [
+            "/LTCG",
+            "/USEPROFILE",
+          ]
         }
       }
 
@@ -485,6 +497,22 @@ if (is_win) {
       deps += [
         ":chrome_dsym_archive",
         ":chrome_dump_syms",
+      ]
+    }
+  }
+
+  if (enable_xpc_notifications) {
+    bundle_data("chrome_framework_services") {
+      sources = [
+        "$root_out_dir/AlertNotificationService.xpc",
+      ]
+
+      outputs = [
+        "{{bundle_root_dir}}/XPCServices/{{source_file_part}}",
+      ]
+
+      public_deps = [
+        "//chrome/browser/ui/cocoa/notifications:alert_notification_xpc_service",
       ]
     }
   }
@@ -724,21 +752,6 @@ if (is_win) {
     }
   }
 
-  bundle_data("chrome_framework_locales") {
-    sources = []
-    public_deps = [
-      ":repack_locales_pack",
-    ]
-
-    foreach(locale, locales_as_mac_outputs) {
-      sources += [ "$root_gen_dir/repack/locales/$locale.pak" ]
-    }
-
-    outputs = [
-      "{{bundle_resources_dir}}/{{source_name_part}}.lproj/locale.pak",
-    ]
-  }
-
   bundle_data("chrome_framework_helpers") {
     sources = [
       "$root_out_dir/crashpad_handler",
@@ -761,6 +774,8 @@ if (is_win) {
 
   bundle_data("chrome_framework_resources") {
     sources = [
+      "$root_out_dir/app_mode_loader.app",
+
       # This image is used to badge the lock icon in the
       # authentication dialogs, such as those used for installation
       # from disk image and Keystone promotion (if so enabled).  It
@@ -768,9 +783,6 @@ if (is_win) {
       # resource bundle because that's the interface that
       # Authorization Services uses.  Also, Authorization Services
       # can't deal with .icns files.
-      "$root_gen_dir/repack/resources.pak",
-      "$root_out_dir/app_mode_loader.app",
-      "$root_out_dir/chrome_100_percent.pak",
       "app/theme/default_100_percent/$branding_path_component/product_logo_32.png",
       "browser/mac/install.sh",
     ]
@@ -780,14 +792,9 @@ if (is_win) {
     ]
 
     public_deps = [
-      ":packed_extra_resources",
       ":packed_resources",
       "//chrome/app_shim:app_mode_loader",
     ]
-
-    if (enable_hidpi) {
-      sources += [ "$root_out_dir/chrome_200_percent.pak" ]
-    }
 
     if (enable_mac_keystone) {
       sources += [
@@ -857,7 +864,11 @@ if (is_win) {
       public_deps = []
 
       if (enable_nacl) {
-        sources += [ "$root_out_dir/nacl_irt_x86_64.nexe" ]
+        if (current_cpu == "x86") {
+          sources += [ "$root_out_dir/nacl_irt_x86_32.nexe" ]
+        } else if (current_cpu == "x64") {
+          sources += [ "$root_out_dir/nacl_irt_x86_64.nexe" ]
+        }
         public_deps += [ "//ppapi/native_client:irt" ]
       }
     }
@@ -866,51 +877,44 @@ if (is_win) {
     }
   }
 
-  if (is_chrome_branded) {
+  _should_bundle_widevine =
+      (is_chrome_branded || enable_widevine) && enable_pepper_cdms
+  if (_should_bundle_widevine) {
+    # The Widevine CDM and manifest are either the actual Widevine CDM and
+    # manifest or stubs used for testing only. The choice is made within the
+    # corresponding Widevine targets based on branding.
     bundle_data("widevine_cdm_library_binaries") {
       sources = [
-        "$root_out_dir/$widevine_cdm_path/libwidevinecdm.dylib",
         "$root_out_dir/$widevine_cdm_path/widevinecdmadapter.plugin",
+        "$root_out_dir/libwidevinecdm.dylib",
       ]
       outputs = [
         "{{bundle_root_dir}}/Libraries/$widevine_cdm_path/{{source_file_part}}",
       ]
       public_deps = [
-        "//third_party/widevine/cdm:widevinecdm",
+        # Need this intermediate dependency because "widevinecdm" is a
+        # shared_library if !is_chrome_branded, and then depending on
+        # "widevinecdm" directly would cause it to be linked into the Chromium
+        # Framework, which we don't want.
+        ":widevine_cdm_library_copy",
         "//third_party/widevine/cdm:widevinecdmadapter",
       ]
     }
-  }
 
-  if (is_vivaldi) {
-    bundle_data("vivaldi_copy_widevine") {
-      sources = [
-        "$root_out_dir/viv_widevine/libwidevinecdm.dylib",
-        "$root_out_dir/viv_widevine/widevinecdmadapter.plugin",
-      ]
-      outputs = [
-        "{{bundle_root_dir}}/Libraries/$widevine_cdm_path/{{source_file_part}}",
-      ]
-      public_deps = [
-        ":vivaldi_copy_widevine_lib"
-      ]
-    }
-    copy("vivaldi_copy_widevine_lib") {
+    copy("widevine_cdm_library_copy") {
       sources = [
         "$root_out_dir/$widevine_cdm_path/libwidevinecdm.dylib",
-        "$root_out_dir/$widevine_cdm_path/widevinecdmadapter.plugin"
       ]
       outputs = [
-        "$root_out_dir/viv_widevine/{{source_file_part}}"
+        "$root_out_dir/{{source_file_part}}",
       ]
-      public_deps = [
+      deps = [
         "//third_party/widevine/cdm:widevinecdm",
-        "//third_party/widevine/cdm:widevinecdmadapter",
       ]
     }
   }
 
-  if (is_chrome_branded) {
+  if (is_chrome_branded || is_vivaldi) {
     bundle_data("widevine_cdm_library_manifest") {
       sources = [
         "$root_out_dir/WidevineCdm/manifest.json",
@@ -925,7 +929,7 @@ if (is_win) {
   }
 
   group("widevine_cdm_library") {
-    if (is_chrome_branded) {
+    if (_should_bundle_widevine) {
       deps = [
         ":widevine_cdm_library_binaries",
         ":widevine_cdm_library_manifest",
@@ -1053,9 +1057,9 @@ if (is_win) {
 
     deps = [
       ":chrome_framework_helpers",
-      ":chrome_framework_locales",
       ":chrome_framework_plugins",
       ":chrome_framework_resources",
+      ":packed_resources",
       ":widevine_cdm_library",
       "//build/config/sanitizers:deps",
       "//chrome/app/nibs:chrome_xibs",
@@ -1063,6 +1067,10 @@ if (is_win) {
 
     if (is_chrome_branded) {
       deps += [ ":default_apps" ]
+    }
+
+    if (enable_xpc_notifications) {
+      deps += [ ":chrome_framework_services" ]
     }
 
     ldflags = [
@@ -1098,6 +1106,14 @@ if (is_win) {
       args = [
         "--stamp",
         rebase_path(stamp_file, root_out_dir),
+      ]
+      if (!use_system_xcode) {
+        args += [
+          "--developer-dir",
+          hermetic_xcode_path,
+        ]
+      }
+      args += [
         "_ChromeMain",
         rebase_path(
             "$root_out_dir/$chrome_framework_name.framework/$chrome_framework_name",
@@ -1198,7 +1214,6 @@ if (is_win) {
   }
 }
 
-# GYP version: chromium_browser_dependencies variable in chrome.gyp
 group("browser_dependencies") {
   public_deps = [
     "//chrome/browser",
@@ -1224,29 +1239,25 @@ group("browser_dependencies") {
       # all blink targets.
       "//third_party/WebKit/public:blink",
       # TODO(brettw) bug 581766: V8 should not be linked into the browser
-      # process, and then we can enable this.
+      # process, and then we can enable this. When testing whether you can
+      # enable this, run with a non-component build.
       #"//v8/*",
     ]
   }
 }
 
-# GYP version: chromium_child_dependencies variable in chrome.gyp
 group("child_dependencies") {
   public_deps = [
+    "//chrome/browser/devtools",
+    "//chrome/child",
     "//chrome/common",
+    "//chrome/gpu",
+    "//chrome/renderer",
+    "//chrome/utility",
     "//components/sync",
+    "//content/public/child",
+    "//third_party/WebKit/public:blink_devtools_frontend_resources",
   ]
-  if (!is_ios) {
-    public_deps += [
-      "//chrome/browser/devtools",
-      "//chrome/child",
-      "//chrome/gpu",
-      "//chrome/renderer",
-      "//chrome/utility",
-      "//content/public/child",
-      "//third_party/WebKit/public:blink_devtools_frontend_resources",
-    ]
-  }
 
   if (enable_nacl) {
     public_deps += [ "//components/nacl/renderer/plugin:nacl_trusted_plugin" ]
@@ -1254,23 +1265,21 @@ group("child_dependencies") {
 }
 
 if (is_win) {
-  process_version("chrome_exe_version") {
-    template_file = chrome_version_rc_template
+  process_version_rc_template("chrome_exe_version") {
     sources = [
       "app/chrome_exe.ver",
     ]
     output = "$target_gen_dir/chrome_exe_version.rc"
   }
 
-  process_version("chrome_dll_version") {
-    template_file = chrome_version_rc_template
+  process_version_rc_template("chrome_dll_version") {
     sources = [
       "app/chrome_dll.ver",
     ]
     output = "$target_gen_dir/chrome_dll_version.rc"
   }
 
-  # This manifest matches what GYP produces. It may not even be necessary.
+  # This manifest matches what GYP produced. It may not even be necessary.
   windows_manifest("chrome_dll_manifest") {
     sources = [
       as_invoker_manifest,
@@ -1279,16 +1288,14 @@ if (is_win) {
     type = "dll"
   }
 
-  process_version("nacl64_exe_version") {
-    template_file = chrome_version_rc_template
+  process_version_rc_template("nacl64_exe_version") {
     sources = [
       "app/nacl64_exe.ver",
     ]
     output = "$target_gen_dir/nacl64_exe_version.rc"
   }
 
-  process_version("other_version") {
-    template_file = chrome_version_rc_template
+  process_version_rc_template("other_version") {
     sources = [
       "app/other.ver",
     ]
@@ -1302,12 +1309,10 @@ if (is_win) {
     ]
     deps = [
       "//base",
-      "//components/startup_metric_utils/common",
     ]
   }
 }
 
-# GYP version: chrome/chrome_exe.gypi:visual_elements_resources
 copy("visual_elements_resources") {
   if (is_vivaldi) {
     sources = [
@@ -1334,37 +1339,30 @@ copy("visual_elements_resources") {
   ]
 }
 
-# GYP version: chrome/chrome_resources.gyp:chrome_resources
 group("resources") {
   public_deps = [
-    # Note: GYP lists some dependencies in addition to these actions. However,
-    # these are just dependencies for the actions themselves, which our actions
-    # list individually when needed.
     "//chrome/browser:resources",
     "//chrome/common:resources",
     "//chrome/renderer:resources",
   ]
 }
 
-# GYP version: chrome/chrome_resources.gyp:chrome_extra_resources
 group("extra_resources") {
   public_deps = [
+    "//chrome/browser/resources:component_extension_resources",
     "//chrome/browser/resources:invalidations_resources",
     "//chrome/browser/resources:net_internals_resources",
+    "//chrome/browser/resources:options_resources",
     "//chrome/browser/resources:password_manager_internals_resources",
     "//chrome/browser/resources:policy_resources",
+    "//chrome/browser/resources:settings_resources",
+    "//chrome/browser/resources:task_scheduler_internals_resources",
     "//chrome/browser/resources:translate_internals_resources",
   ]
-  if (!is_ios) {
-    public_deps += [
-      "//chrome/browser/resources:component_extension_resources",
-      "//chrome/browser/resources:options_resources",
-      "//chrome/browser/resources:settings_resources",
-    ]
-  }
 
   if (is_chromeos) {
     public_deps += [ "//chrome/browser/resources/chromeos/chromevox" ]
+    public_deps += [ "//chrome/browser/resources/chromeos/select_to_speak" ]
   }
 
   if (enable_extensions) {
@@ -1375,7 +1373,7 @@ group("extra_resources") {
   }
 }
 
-if (is_chrome_branded) {
+if (is_chrome_branded && !is_android) {
   if (!is_mac) {
     _default_apps_target_type = "copy"
   } else {
@@ -1414,109 +1412,28 @@ if (is_chrome_branded) {
   }
 }
 
-group("packed_resources") {
-  public_deps = [
-    ":repack_chrome_100_percent",
-    ":repack_locales_pack",
-    ":repack_pseudo_locales_pack",
-  ]
-
-  if (is_chrome_branded && !is_mac) {
-    public_deps += [ ":default_apps" ]
-  }
-
-  if (enable_hidpi) {
-    public_deps += [ ":repack_chrome_200_percent" ]
-  }
-}
-
-repack("packed_extra_resources") {
-  visibility = [ "./*" ]
-  sources = [
-    "$root_gen_dir/chrome/browser_resources.pak",
-    "$root_gen_dir/chrome/chrome_unscaled_resources.pak",
-    "$root_gen_dir/chrome/common_resources.pak",
-    "$root_gen_dir/chrome/invalidations_resources.pak",
-    "$root_gen_dir/chrome/net_internals_resources.pak",
-    "$root_gen_dir/chrome/password_manager_internals_resources.pak",
-    "$root_gen_dir/chrome/policy_resources.pak",
-    "$root_gen_dir/chrome/translate_internals_resources.pak",
-    "$root_gen_dir/components/components_resources.pak",
-    "$root_gen_dir/net/net_resources.pak",
-    "$root_gen_dir/ui/resources/webui_resources.pak",
-  ]
-  deps = [
-    "//chrome/app/theme:chrome_unscaled_resources",
-    "//chrome/browser:resources",
-    "//chrome/browser/resources:invalidations_resources",
-    "//chrome/browser/resources:net_internals_resources",
-    "//chrome/browser/resources:password_manager_internals_resources",
-    "//chrome/browser/resources:policy_resources",
-    "//chrome/browser/resources:translate_internals_resources",
-    "//chrome/common:resources",
-    "//components/resources",
-    "//net:net_resources",
-    "//ui/resources",
-  ]
-
-  if (is_android) {
-    sources += [ "$root_gen_dir/android_webview/aw_resources.pak" ]
-    deps += [ "//android_webview:generate_aw_resources" ]
-  }
-  if (!is_ios && !is_android) {
-    # New paks should be added here by default.
-    sources += [
-      "$root_gen_dir/blink/devtools_resources.pak",
-      "$root_gen_dir/chrome/component_extension_resources.pak",
-      "$root_gen_dir/chrome/options_resources.pak",
-      "$root_gen_dir/chrome/quota_internals_resources.pak",
-      "$root_gen_dir/chrome/settings_resources.pak",
-      "$root_gen_dir/chrome/sync_file_system_internals_resources.pak",
-    ]
-    deps += [
-      "//chrome/browser/resources:component_extension_resources",
-      "//chrome/browser/resources:options_resources",
-      "//chrome/browser/resources:quota_internals_resources",
-      "//chrome/browser/resources:settings_resources",
-      "//chrome/browser/resources:sync_file_system_internals_resources",
-      "//content/browser/devtools:devtools_resources",
-    ]
-  }
-  if (!is_ios) {
-    sources += [
-      "$root_gen_dir/blink/public/resources/blink_resources.pak",
-      "$root_gen_dir/content/browser/tracing/tracing_resources.pak",
-      "$root_gen_dir/content/content_resources.pak",
-    ]
-    deps += [
-      "//content:resources",
-      "//content/browser/tracing:resources",
-      "//third_party/WebKit/public:resources",
-    ]
-  }
-  if (is_chromeos) {
-    sources += [ "$root_gen_dir/ui/file_manager/file_manager_resources.pak" ]
-    deps += [ "//ui/file_manager:resources" ]
-  }
-  if (enable_extensions) {
-    sources += [
-      "$root_gen_dir/extensions/extensions_renderer_resources.pak",
-      "$root_gen_dir/extensions/extensions_resources.pak",
-    ]
-    deps += [ "//extensions:extensions_resources" ]
-  }
-
-  # GYP outputs the file in the gen/repack directory. On non-Mac/iOS platforms
-  # it them copies it. This skipes the copy step and writes it to the final
-  # location.
-  if (is_mac || is_ios) {
-    output = "$root_gen_dir/repack/resources.pak"
+chrome_paks("packed_resources") {
+  if (is_mac) {
+    output_dir = "$root_gen_dir/repack"
+    copy_data_to_bundle = true
   } else {
-    output = "$root_out_dir/resources.pak"
+    output_dir = root_out_dir
+  }
+
+  if (enable_resource_whitelist_generation) {
+    repack_whitelist = chrome_resource_whitelist
+    deps = [
+      "//chrome:resource_whitelist",
+    ]
+  }
+
+  if (is_chrome_branded && !is_mac && !is_android) {
+    public_deps = [
+      ":default_apps",
+    ]
   }
 }
 
-# GYP version: chrome/chrome_resources.gyp:browser_tests_pak
 repack("browser_tests_pak") {
   sources = [
     "$root_gen_dir/chrome/options_test_resources.pak",
@@ -1529,139 +1446,6 @@ repack("browser_tests_pak") {
   ]
 }
 
-# Collects per-locale grit files from many sources into global per-locale files.
-chrome_repack_locales("repack_locales_pack") {
-  visibility = [ ":*" ]
-
-  input_locales = locales
-
-  if (is_mac) {
-    output_locales = locales_as_mac_outputs
-  } else {
-    output_locales = locales
-  }
-}
-
-chrome_repack_locales("repack_pseudo_locales_pack") {
-  visibility = [ ":*" ]
-
-  input_locales = [ "fake-bidi" ]
-
-  if (is_mac) {
-    output_locales = [ "fake_bidi" ]  # Mac uses underscores.
-  } else {
-    output_locales = [ "fake-bidi" ]
-  }
-}
-
-# Generates a rule to repack a set of resources, substituting a given string
-# in for the percentage (e.g. "100", "200"). It generates the repacked files in
-# the "gen" directory, and then introduces a copy rule to copy it to the root
-# build directory.
-#
-# It's not clear why this two-step dance is necessary as opposed to just
-# generating the file in the destination. However, this is what the GYP build
-# does, and for maintenance purposes, this keeps the same files in the same
-# place between the two builds when possible.
-#
-# Argument:
-#   percent [required]
-#      String to substitute for the percentage.
-template("chrome_repack_percent") {
-  percent = invoker.percent
-
-  if (is_vivaldi) {
-    productname = "vivaldi"
-  } else {
-    productname = "chrome"
-  }
-
-  repack_name = "${target_name}_repack"
-  repack_output_file =
-      "$root_gen_dir/repack/${productname}_${percent}_percent.pak"
-
-  copy_name = target_name
-
-  repack(repack_name) {
-    visibility = [ ":$copy_name" ]
-
-    # All sources should also have deps for completeness.
-    sources = [
-      "$root_gen_dir/chrome/renderer_resources_${percent}_percent.pak",
-      "$root_gen_dir/chrome/theme_resources_${percent}_percent.pak",
-      "$root_gen_dir/components/components_resources_${percent}_percent.pak",
-      "$root_gen_dir/ui/resources/ui_resources_${percent}_percent.pak",
-    ]
-
-    deps = [
-      "//chrome/app/theme:theme_resources",
-      "//chrome/renderer:resources",
-      "//components/resources",
-      "//components/strings",
-      "//net:net_resources",
-      "//ui/resources",
-    ]
-
-    if (!is_ios) {
-      sources += [
-        "$root_gen_dir/blink/public/resources/blink_image_resources_${percent}_percent.pak",
-        "$root_gen_dir/content/app/resources/content_resources_${percent}_percent.pak",
-      ]
-      deps += [
-        "//content/app/resources",
-        "//third_party/WebKit/public:image_resources",
-      ]
-    }
-    if (use_ash) {
-      sources +=
-          [ "$root_gen_dir/ash/resources/ash_resources_${percent}_percent.pak" ]
-      deps += [ "//ash/resources" ]
-    }
-    if (toolkit_views) {
-      sources += [ "$root_gen_dir/ui/views/resources/views_resources_${percent}_percent.pak" ]
-      deps += [ "//ui/views/resources" ]
-    }
-    if (is_chromeos) {
-      sources += [ "$root_gen_dir/ui/chromeos/resources/ui_chromeos_resources_${percent}_percent.pak" ]
-      deps += [ "//ui/chromeos/resources" ]
-    }
-    if (enable_extensions) {
-      sources += [ "$root_gen_dir/extensions/extensions_browser_resources_${percent}_percent.pak" ]
-      deps += [ "//extensions:extensions_browser_resources" ]
-    }
-    if (enable_app_list) {
-      sources += [ "$root_gen_dir/ui/app_list/resources/app_list_resources_${percent}_percent.pak" ]
-      deps += [ "//ui/app_list/resources" ]
-    }
-
-    output = repack_output_file
-  }
-
-  copy(copy_name) {
-    visibility = [ ":*" ]
-    deps = [
-      ":$repack_name",
-    ]
-    sources = [
-      repack_output_file,
-    ]
-    outputs = [
-      "$root_build_dir/${productname}_${percent}_percent.pak",
-    ]
-  }
-}
-
-chrome_repack_percent("repack_chrome_100_percent") {
-  percent = "100"
-}
-
-if (enable_hidpi) {
-  chrome_repack_percent("repack_chrome_200_percent") {
-    percent = "200"
-  }
-}
-
-# GYP version: chrome/chrome_resources.gyp:chrome_strings
 group("strings") {
   public_deps = [
     "//chrome/app:chromium_strings",
@@ -1672,49 +1456,42 @@ group("strings") {
 }
 
 if (is_android) {
-  # GYP: //chrome/chrome.gyp:data_use_ui_message_enum_java
   java_cpp_enum("data_use_ui_message_enum_javagen") {
     sources = [
       "browser/android/data_usage/data_use_tab_ui_manager_android.cc",
     ]
   }
 
-  # GYP: //chrome/chrome.gyp:content_setting_java
   java_cpp_enum("content_setting_javagen") {
     sources = [
       "../components/content_settings/core/common/content_settings.h",
     ]
   }
 
-  # GYP: //chrome/chrome.gyp:content_settings_type_java
   java_cpp_enum("content_settings_type_javagen") {
     sources = [
       "../components/content_settings/core/common/content_settings_types.h",
     ]
   }
 
-  # GYP: //chrome/chrome.gyp:signin_metrics_enum_java
   java_cpp_enum("signin_metrics_enum_javagen") {
     sources = [
       "../components/signin/core/browser/signin_metrics.h",
     ]
   }
 
-  # GYP: //chrome/chrome.gyp:page_info_connection_type_java
   java_cpp_enum("page_info_connection_type_javagen") {
     sources = [
       "browser/ui/android/website_settings_popup_android.h",
     ]
   }
 
-  # GYP: //chrome/chrome.gyp:website_settings_action_java
   java_cpp_enum("website_settings_action_javagen") {
     sources = [
       "browser/ui/website_settings/website_settings.h",
     ]
   }
 
-  # GYP: //chrome/chrome_android.gypi:chrome_android_core
   source_set("chrome_android_core") {
     sources = [
       "app/android/chrome_android_initializer.cc",
@@ -1745,6 +1522,16 @@ if (is_android) {
       "//components/safe_browsing_db:safe_browsing_db_mobile",
       "//content/public/app:both",
     ]
+  }
+}
+
+if (enable_resource_whitelist_generation) {
+  generate_resource_whitelist("resource_whitelist") {
+    deps = [
+      "//chrome/android:chrome",
+    ]
+    input = "$root_out_dir/libchrome$shlib_extension.whitelist"
+    output = chrome_resource_whitelist
   }
 }
 
@@ -1794,7 +1581,7 @@ if (is_linux) {
 
       chrome_binary = "$root_out_dir/vivaldi"
       if (current_cpu == "x86") {
-        # Use "ia32" instead of "x86" for GYP compat.
+        # GYP used "ia32" so keep that naming for back-compat.
         symbol_file = "$root_out_dir/chrome.breakpad.ia32"
       } else {
         symbol_file = "$root_out_dir/chrome.breakpad.$current_cpu"

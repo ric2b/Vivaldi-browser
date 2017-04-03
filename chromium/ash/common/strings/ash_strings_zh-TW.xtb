@@ -47,7 +47,6 @@
 <translation id="2268813581635650749">登出所有使用者</translation>
 <translation id="2297568595583585744">狀態匣</translation>
 <translation id="2303600792989757991">切換視窗總覽</translation>
-<translation id="2372145515558759244">正在同步處理應用程式...</translation>
 <translation id="2391579633712104609">180 度</translation>
 <translation id="2429753432712299108">藍牙裝置「<ph name="DEVICE_NAME" />」要求配對權限。接受要求前，請確認裝置顯示以下密碼金鑰：<ph name="PASSKEY" /></translation>
 <translation id="2475982808118771221">發生錯誤</translation>
@@ -61,7 +60,6 @@
 <translation id="2727977024730340865">使用低功率充電器，可能導致充電狀態不穩定。</translation>
 <translation id="2761704814324807722">狀態匣：時間 <ph name="TIME" />，<ph name="BATTERY" /></translation>
 <translation id="2792498699870441125">Alt + 搜尋鍵</translation>
-<translation id="2805756323405976993">應用程式</translation>
 <translation id="2819276065543622893">現在即將登出。</translation>
 <translation id="2825619548187458965">檔案櫃</translation>
 <translation id="2844169650293029770">USB-C 裝置 (左前方連接埠)</translation>
@@ -97,7 +95,6 @@
 <translation id="3621712662352432595">音訊設定</translation>
 <translation id="3625258641415618104">已停用螢幕擷取畫面</translation>
 <translation id="3626281679859535460">亮度</translation>
-<translation id="3678715477168044796"><ph name="DISPLAY_NAME" />：<ph name="ANNOTATION" /></translation>
 <translation id="3683428399328702079"><ph name="DISPLAY_NAME" /> 的解析度已變更為 <ph name="RESOLUTION" /></translation>
 <translation id="370649949373421643">啟用 Wi-Fi</translation>
 <translation id="3709443003275901162">9+</translation>
@@ -111,6 +108,8 @@
 <translation id="3866182280516392520">IPv6 位址</translation>
 <translation id="3891340733213178823">按兩下 Ctrl+Shift+Q 鍵即可登出。</translation>
 <translation id="3892641579809465218">内建顯示器</translation>
+<translation id="3893630138897523026">ChromeVox (互動朗讀)</translation>
+<translation id="3899995891769452915">語音輸入</translation>
 <translation id="3963445509666917109">喇叭 (內部)</translation>
 <translation id="3967919079500697218">您的管理員已停用拍攝螢幕擷取畫面功能。</translation>
 <translation id="397105322502079400">計算中…</translation>
@@ -134,10 +133,8 @@
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5012744545445585468">Ctrl + Shift + 空格鍵</translation>
 <translation id="5045002648206642691">Google 雲端硬碟設定...</translation>
-<translation id="511445211639755999"><ph name="RESOLUTION" />，<ph name="OVERSCAN" /></translation>
 <translation id="5168181903108465623">可用的投放裝置</translation>
 <translation id="5170568018924773124">在資料夾中顯示</translation>
-<translation id="5191140942132549112">顯示問題</translation>
 <translation id="5222676887888702881">登出</translation>
 <translation id="5238774010593222950">無法登入其他帳戶。</translation>
 <translation id="532063867737390965">管理員停用了這項網路設定。</translation>
@@ -185,6 +182,7 @@
 <translation id="6459472438155181876">正在擴充 <ph name="DISPLAY_NAME" /> 畫面</translation>
 <translation id="6490471652906364588">USB-C 裝置 (右側連接埠)</translation>
 <translation id="6501401484702599040">正在將畫面投放到「<ph name="RECEIVER_NAME" />」</translation>
+<translation id="6521655319214113338">手寫輸入</translation>
 <translation id="6537270692134705506">擷取整個畫面</translation>
 <translation id="6550675742724504774">選項</translation>
 <translation id="6585808820553845416">這個工作階段將在 <ph name="SESSION_TIME_REMAINING" />後結束。</translation>
@@ -194,7 +192,6 @@
 <translation id="6713285437468012787">藍牙裝置「<ph name="DEVICE_NAME" />」已配對成功，可供所有使用者使用。如要移除配對，請使用「設定」。</translation>
 <translation id="6785414152754474415">電池電量為 <ph name="PERCENTAGE" />% (充電中)。</translation>
 <translation id="683971173229319003">搜尋鍵 + L 鍵</translation>
-<translation id="68610848741840742">ChromeVox (互動朗讀)</translation>
 <translation id="6911468394164995108">加入其他網路...</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6979158407327259162">Google 雲端硬碟</translation>
@@ -217,8 +214,10 @@
 <translation id="743058460480092004">攝影機和麥克風正在使用中。</translation>
 <translation id="7510334386202674593">Ctrl + Shift + L 鍵</translation>
 <translation id="7561014039265304140"><ph name="DISPLAY_NAME" /> 不支援 <ph name="SPECIFIED_RESOLUTION" />，解析度已變更為 <ph name="FALLBACK_RESOLUTION" /></translation>
+<translation id="7562368315689366235">表情符號面板</translation>
 <translation id="7573962313813535744">停駐模式</translation>
 <translation id="7580671184200851182">透過所有喇叭播放相同的音效 (單聲道音訊)</translation>
+<translation id="7581273696622423628">填寫問卷</translation>
 <translation id="7593891976182323525">搜尋鍵或 Shift 鍵</translation>
 <translation id="7649070708921625228">說明</translation>
 <translation id="7692480393933218409">正在為連接的 USB-C 裝置充電</translation>

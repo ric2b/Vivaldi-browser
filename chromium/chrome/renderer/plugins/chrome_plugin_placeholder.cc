@@ -22,7 +22,6 @@
 #include "chrome/renderer/custom_menu_commands.h"
 #include "chrome/renderer/plugins/plugin_preroller.h"
 #include "chrome/renderer/plugins/plugin_uma.h"
-#include "components/content_settings/content/common/content_settings_messages.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/context_menu_params.h"
@@ -224,6 +223,11 @@ void ChromePluginPlaceholder::OpenAboutPluginsCallback() {
       new ChromeViewHostMsg_OpenAboutPlugins(routing_id()));
 }
 
+void ChromePluginPlaceholder::ShowPermissionBubbleCallback() {
+  RenderThread::Get()->Send(
+      new ChromeViewHostMsg_ShowFlashPermissionBubble(routing_id()));
+}
+
 #if defined(ENABLE_PLUGIN_INSTALLATION)
 void ChromePluginPlaceholder::OnDidNotFindMissingPlugin() {
   SetMessage(l10n_util::GetStringUTF16(IDS_PLUGIN_NOT_FOUND));
@@ -285,14 +289,9 @@ void ChromePluginPlaceholder::PluginListChanged() {
 
   ChromeViewHostMsg_GetPluginInfo_Output output;
   std::string mime_type(GetPluginParams().mimeType.utf8());
-  blink::WebString top_origin =
-      GetFrame()->top()->getSecurityOrigin().toString();
-  render_frame()->Send(
-      new ChromeViewHostMsg_GetPluginInfo(routing_id(),
-                                          GURL(GetPluginParams().url),
-                                          blink::WebStringToGURL(top_origin),
-                                          mime_type,
-                                          &output));
+  render_frame()->Send(new ChromeViewHostMsg_GetPluginInfo(
+      routing_id(), GURL(GetPluginParams().url),
+      GetFrame()->top()->getSecurityOrigin(), mime_type, &output));
   if (output.status == status_)
     return;
   blink::WebPlugin* new_plugin = ChromeContentRendererClient::CreatePlugin(
@@ -417,7 +416,9 @@ gin::ObjectTemplateBuilder ChromePluginPlaceholder::GetObjectTemplateBuilder(
               "didFinishLoading",
               &ChromePluginPlaceholder::DidFinishLoadingCallback)
           .SetMethod("openAboutPlugins",
-                     &ChromePluginPlaceholder::OpenAboutPluginsCallback);
+                     &ChromePluginPlaceholder::OpenAboutPluginsCallback)
+          .SetMethod("showPermissionBubble",
+                     &ChromePluginPlaceholder::ShowPermissionBubbleCallback);
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnablePluginPlaceholderTesting)) {

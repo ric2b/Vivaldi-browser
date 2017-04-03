@@ -47,16 +47,15 @@ gfx::NativeWindow WebContentsViewChildFrame::GetTopLevelNativeWindow() const {
   return GetOuterView()->GetTopLevelNativeWindow();
 }
 
-void WebContentsViewChildFrame::GetScreenInfo(
-    blink::WebScreenInfo* web_screen_info) const {
+void WebContentsViewChildFrame::GetScreenInfo(ScreenInfo* screen_info) const {
   // TODO(wjmaclean): falling back to the default screen info is not what used
   // to happen in RenderWidgetHostViewChildFrame, but it seems like the right
   // thing to do. We should keep an eye on this in case the else-clause below
   // causes problems.
   if (web_contents_->GetOuterWebContents())
-    GetOuterView()->GetScreenInfo(web_screen_info);
+    GetOuterView()->GetScreenInfo(screen_info);
   else
-    WebContentsView::GetDefaultScreenInfo(web_screen_info);
+    WebContentsView::GetDefaultScreenInfo(screen_info);
 }
 
 void WebContentsViewChildFrame::GetContainerBounds(gfx::Rect* out) const {
@@ -88,7 +87,7 @@ void WebContentsViewChildFrame::CreateView(const gfx::Size& initial_size,
 RenderWidgetHostViewBase* WebContentsViewChildFrame::CreateViewForWidget(
     RenderWidgetHost* render_widget_host,
     bool is_guest_view_hack) {
-  return new RenderWidgetHostViewChildFrame(render_widget_host);
+  return RenderWidgetHostViewChildFrame::Create(render_widget_host);
 }
 
 RenderWidgetHostViewBase* WebContentsViewChildFrame::CreateViewForPopupWidget(

@@ -99,10 +99,7 @@ bool SyncMessageFilter::Send(Message* message) {
   if (!message->is_sync()) {
     {
       base::AutoLock auto_lock(lock_);
-      if (sender_ && is_channel_send_thread_safe_) {
-        sender_->Send(message);
-        return true;
-      } else if (!io_task_runner_.get()) {
+      if (!io_task_runner_.get()) {
         pending_messages_.emplace_back(base::WrapUnique(message));
         return true;
       }
@@ -170,11 +167,16 @@ bool SyncMessageFilter::Send(Message* message) {
   return pending_message.send_result;
 }
 
-void SyncMessageFilter::OnFilterAdded(Sender* sender) {
+void SyncMessageFilter::OnFilterAdded(Channel* channel) {
   std::vector<std::unique_ptr<Message>> pending_messages;
   {
     base::AutoLock auto_lock(lock_);
-    sender_ = sender;
+    channel_ = channel;
+    Channel::AssociatedInterfaceSupport* support =
+        channel_->GetAssociatedInterfaceSupport();
+    if (support)
+      channel_associated_group_ = *support->GetAssociatedGroup();
+
     io_task_runner_ = base::ThreadTaskRunnerHandle::Get();
     shutdown_watcher_.StartWatching(
         shutdown_event_,
@@ -188,14 +190,14 @@ void SyncMessageFilter::OnFilterAdded(Sender* sender) {
 
 void SyncMessageFilter::OnChannelError() {
   base::AutoLock auto_lock(lock_);
-  sender_ = NULL;
+  channel_ = nullptr;
   shutdown_watcher_.StopWatching();
   SignalAllEvents();
 }
 
 void SyncMessageFilter::OnChannelClosing() {
   base::AutoLock auto_lock(lock_);
-  sender_ = NULL;
+  channel_ = nullptr;
   shutdown_watcher_.StopWatching();
   SignalAllEvents();
 }
@@ -220,10 +222,8 @@ bool SyncMessageFilter::OnMessageReceived(const Message& message) {
   return false;
 }
 
-SyncMessageFilter::SyncMessageFilter(base::WaitableEvent* shutdown_event,
-                                     bool is_channel_send_thread_safe)
-    : sender_(NULL),
-      is_channel_send_thread_safe_(is_channel_send_thread_safe),
+SyncMessageFilter::SyncMessageFilter(base::WaitableEvent* shutdown_event)
+    : channel_(nullptr),
       listener_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       shutdown_event_(shutdown_event),
       weak_factory_(this) {
@@ -236,8 +236,8 @@ SyncMessageFilter::~SyncMessageFilter() {
 }
 
 void SyncMessageFilter::SendOnIOThread(Message* message) {
-  if (sender_) {
-    sender_->Send(message);
+  if (channel_) {
+    channel_->Send(message);
     return;
   }
 
@@ -273,6 +273,20 @@ void SyncMessageFilter::OnIOMessageLoopDestroyed() {
   // message loop is destroyed. Since that destruction indicates shutdown
   // anyway, we manually signal the shutdown event in this case.
   shutdown_mojo_event_.Signal();
+}
+
+void SyncMessageFilter::GetGenericRemoteAssociatedInterface(
+    const std::string& interface_name,
+    mojo::ScopedInterfaceEndpointHandle handle) {
+  base::AutoLock auto_lock(lock_);
+  DCHECK(io_task_runner_ && io_task_runner_->BelongsToCurrentThread());
+  if (!channel_)
+    return;
+
+  Channel::AssociatedInterfaceSupport* support =
+      channel_->GetAssociatedInterfaceSupport();
+  support->GetGenericRemoteAssociatedInterface(
+      interface_name, std::move(handle));
 }
 
 }  // namespace IPC

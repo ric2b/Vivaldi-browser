@@ -13,7 +13,7 @@
 #include "base/guid.h"
 #include "base/i18n/case_conversion.h"
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -156,7 +156,7 @@ void AutocompleteActionPredictor::StartPrerendering(
   std::unique_ptr<prerender::PrerenderHandle> old_prerender_handle =
       std::move(prerender_handle_);
   prerender::PrerenderManager* prerender_manager =
-      prerender::PrerenderManagerFactory::GetForProfile(profile_);
+      prerender::PrerenderManagerFactory::GetForBrowserContext(profile_);
   if (prerender_manager) {
     prerender_handle_ = prerender_manager->AddPrerenderFromOmnibox(
         url, session_storage_namespace, size);
@@ -246,8 +246,7 @@ void AutocompleteActionPredictor::OnOmniboxOpenedUrl(const OmniboxLog& log) {
   }
 
   UMA_HISTOGRAM_BOOLEAN(
-      base::StringPrintf("Prerender.OmniboxNavigationsCouldPrerender%s",
-                         prerender::PrerenderManager::GetModeString()).c_str(),
+      "Prerender.OmniboxNavigationsCouldPrerender",
       prerender::IsOmniboxEnabled(profile_));
 
   const AutocompleteMatch& match = log.result.match_at(log.selected_index);

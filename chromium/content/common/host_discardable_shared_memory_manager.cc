@@ -14,6 +14,7 @@
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/memory/discardable_memory.h"
+#include "base/memory/memory_coordinator_client_registry.h"
 #include "base/memory/ptr_util.h"
 #include "base/numerics/safe_math.h"
 #include "base/process/memory.h"
@@ -33,7 +34,7 @@
 #if defined(OS_LINUX)
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #endif
 
 namespace content {
@@ -163,7 +164,8 @@ HostDiscardableSharedMemoryManager::MemorySegment::~MemorySegment() {
 }
 
 HostDiscardableSharedMemoryManager::HostDiscardableSharedMemoryManager()
-    : memory_limit_(GetDefaultMemoryLimit()),
+    : default_memory_limit_(GetDefaultMemoryLimit()),
+      memory_limit_(default_memory_limit_),
       bytes_allocated_(0),
       memory_pressure_listener_(new base::MemoryPressureListener(
           base::Bind(&HostDiscardableSharedMemoryManager::OnMemoryPressure,
@@ -179,6 +181,7 @@ HostDiscardableSharedMemoryManager::HostDiscardableSharedMemoryManager()
   base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
       this, "HostDiscardableSharedMemoryManager",
       base::ThreadTaskRunnerHandle::Get());
+  base::MemoryCoordinatorClientRegistry::GetInstance()->Register(this);
 }
 
 HostDiscardableSharedMemoryManager::~HostDiscardableSharedMemoryManager() {
@@ -194,8 +197,7 @@ HostDiscardableSharedMemoryManager::current() {
 std::unique_ptr<base::DiscardableMemory>
 HostDiscardableSharedMemoryManager::AllocateLockedDiscardableMemory(
     size_t size) {
-  // TODO(reveman): Temporary diagnostics for http://crbug.com/577786.
-  CHECK_NE(size, 0u);
+  DCHECK_NE(size, 0u);
 
   DiscardableSharedMemoryId new_id =
       g_next_discardable_shared_memory_id.GetNext();
@@ -213,11 +215,11 @@ HostDiscardableSharedMemoryManager::AllocateLockedDiscardableMemory(
     base::TerminateBecauseOutOfMemory(size);
   // Close file descriptor to avoid running out.
   memory->Close();
-  return base::WrapUnique(new DiscardableMemoryImpl(
+  return base::MakeUnique<DiscardableMemoryImpl>(
       std::move(memory),
       base::Bind(
           &HostDiscardableSharedMemoryManager::DeletedDiscardableSharedMemory,
-          base::Unretained(this), new_id, ChildProcessHost::kInvalidUniqueID)));
+          base::Unretained(this), new_id, ChildProcessHost::kInvalidUniqueID));
 }
 
 bool HostDiscardableSharedMemoryManager::OnMemoryDump(
@@ -345,6 +347,24 @@ size_t HostDiscardableSharedMemoryManager::GetBytesAllocated() {
   base::AutoLock lock(lock_);
 
   return bytes_allocated_;
+}
+
+void HostDiscardableSharedMemoryManager::OnMemoryStateChange(
+    base::MemoryState state) {
+  switch (state) {
+    case base::MemoryState::NORMAL:
+      SetMemoryLimit(default_memory_limit_);
+      break;
+    case base::MemoryState::THROTTLED:
+      SetMemoryLimit(0);
+      break;
+    case base::MemoryState::SUSPENDED:
+      // Note that SUSPENDED never occurs in the main browser process so far.
+      // Fall through.
+    case base::MemoryState::UNKNOWN:
+      NOTREACHED();
+      break;
+  }
 }
 
 void HostDiscardableSharedMemoryManager::AllocateLockedDiscardableSharedMemory(

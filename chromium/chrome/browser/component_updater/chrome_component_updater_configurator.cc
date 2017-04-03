@@ -15,16 +15,18 @@
 #endif
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/component_updater/component_patcher_operation_out_of_process.h"
+#include "chrome/browser/component_updater/component_updater_utils.h"
 #include "chrome/browser/google/google_brand.h"
 #include "chrome/browser/update_client/chrome_update_query_params_delegate.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/pref_names.h"
 #if defined(OS_WIN)
 #include "chrome/installer/util/google_update_settings.h"
-#endif
+#endif  // OS_WIN
 #include "components/component_updater/configurator_impl.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "components/update_client/update_query_params.h"
 #include "content/public/browser/browser_thread.h"
 
 namespace component_updater {
@@ -45,6 +47,7 @@ class ChromeConfigurator : public update_client::Configurator {
   int UpdateDelay() const override;
   std::vector<GURL> UpdateUrl() const override;
   std::vector<GURL> PingUrl() const override;
+  std::string GetProdId() const override;
   base::Version GetBrowserVersion() const override;
   std::string GetChannel() const override;
   std::string GetBrand() const override;
@@ -62,6 +65,7 @@ class ChromeConfigurator : public update_client::Configurator {
   scoped_refptr<base::SequencedTaskRunner> GetSequencedTaskRunner()
       const override;
   PrefService* GetPrefService() const override;
+  bool IsPerUserInstall() const override;
 
  private:
   friend class base::RefCountedThreadSafe<ChromeConfigurator>;
@@ -110,6 +114,11 @@ std::vector<GURL> ChromeConfigurator::UpdateUrl() const {
 
 std::vector<GURL> ChromeConfigurator::PingUrl() const {
   return configurator_impl_.PingUrl();
+}
+
+std::string ChromeConfigurator::GetProdId() const {
+  return update_client::UpdateQueryParams::GetProdIdString(
+      update_client::UpdateQueryParams::ProdId::CHROME);
 }
 
 base::Version ChromeConfigurator::GetBrowserVersion() const {
@@ -191,6 +200,10 @@ ChromeConfigurator::GetSequencedTaskRunner() const {
 PrefService* ChromeConfigurator::GetPrefService() const {
   DCHECK(pref_service_);
   return pref_service_;
+}
+
+bool ChromeConfigurator::IsPerUserInstall() const {
+  return component_updater::IsPerUserInstall();
 }
 
 }  // namespace

@@ -13,7 +13,7 @@
 #include "base/cpu.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/task_runner_util.h"
@@ -801,8 +801,6 @@ void GpuVideoDecoder::NotifyError(media::VideoDecodeAccelerator::Error error) {
   if (!vda_)
     return;
 
-  state_ = kError;
-
   // If we have any bitstream buffers, then notify one that an error has
   // occurred.  This guarantees that somebody finds out about the error.  If
   // we don't do this, and if the max decodes are already in flight, then there
@@ -812,6 +810,11 @@ void GpuVideoDecoder::NotifyError(media::VideoDecodeAccelerator::Error error) {
     it->second.done_cb.Run(DecodeStatus::DECODE_ERROR);
     bitstream_buffers_in_decoder_.erase(it);
   }
+
+  if (state_ == kDrainingDecoder)
+    base::ResetAndReturn(&eos_decode_cb_).Run(DecodeStatus::DECODE_ERROR);
+
+  state_ = kError;
 
   DLOG(ERROR) << "VDA Error: " << error;
   UMA_HISTOGRAM_ENUMERATION("Media.GpuVideoDecoderError", error,

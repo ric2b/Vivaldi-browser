@@ -27,8 +27,8 @@
 #include "components/favicon/core/favicon_service.h"
 #include "components/favicon_base/favicon_usage_data.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/test/test_browser_thread_bundle.h"
-#include "grit/components_strings.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -58,7 +58,7 @@ class BookmarkHTMLWriterTest : public testing::Test {
   void SetUp() override {
     testing::Test::SetUp();
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
-    path_ = temp_dir_.path().AppendASCII("bookmarks.html");
+    path_ = temp_dir_.GetPath().AppendASCII("bookmarks.html");
   }
 
   // Converts an ImportedBookmarkEntry to a string suitable for assertion

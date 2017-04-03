@@ -14,17 +14,19 @@ int signum(T t) {
   return (T(0) < t) - (t < T(0));
 }
 
-#define CALL_MEMBER_FUNCTION(object,ptrToMember)  ((object)->*(ptrToMember))
+#define CALL_MEMBER_FUNCTION(object, ptrToMember) ((object)->*(ptrToMember))
 }  // namespace
 
 namespace offline_pages {
 
 RequestPicker::RequestPicker(RequestQueue* requestQueue,
                              OfflinerPolicy* policy,
-                             RequestNotifier* notifier)
+                             RequestNotifier* notifier,
+                             RequestCoordinatorEventLogger* event_logger)
     : queue_(requestQueue),
       policy_(policy),
       notifier_(notifier),
+      event_logger_(event_logger),
       fewer_retries_better_(false),
       earlier_requests_better_(false),
       weak_ptr_factory_(this) {}
@@ -34,37 +36,40 @@ RequestPicker::~RequestPicker() {}
 // Entry point for the async operation to choose the next request.
 void RequestPicker::ChooseNextRequest(
     RequestCoordinator::RequestPickedCallback picked_callback,
-    RequestCoordinator::RequestQueueEmptyCallback empty_callback,
-    DeviceConditions* device_conditions) {
+    RequestCoordinator::RequestNotPickedCallback not_picked_callback,
+    DeviceConditions* device_conditions,
+    const std::set<int64_t>& disabled_requests) {
   picked_callback_ = picked_callback;
-  empty_callback_ = empty_callback;
+  not_picked_callback_ = not_picked_callback;
   fewer_retries_better_ = policy_->ShouldPreferUntriedRequests();
   earlier_requests_better_ = policy_->ShouldPreferEarlierRequests();
   current_conditions_.reset(new DeviceConditions(*device_conditions));
   // Get all requests from queue (there is no filtering mechanism).
   queue_->GetRequests(base::Bind(&RequestPicker::GetRequestResultCallback,
-                                 weak_ptr_factory_.GetWeakPtr()));
+                                 weak_ptr_factory_.GetWeakPtr(),
+                                 disabled_requests));
 }
 
 // When we get contents from the queue, use them to pick the next
 // request to operate on (if any).
 void RequestPicker::GetRequestResultCallback(
+    const std::set<int64_t>& disabled_requests,
     RequestQueue::GetRequestsResult,
-    const std::vector<SavePageRequest>& requests) {
+    std::vector<std::unique_ptr<SavePageRequest>> requests) {
   // If there is nothing to do, return right away.
   if (requests.size() == 0) {
-    empty_callback_.Run();
+    not_picked_callback_.Run(false);
     return;
   }
 
   // Get the expired requests to be removed from the queue, and the valid ones
   // from which to pick the next request.
-  std::vector<SavePageRequest> valid_requests;
-  std::vector<SavePageRequest> expired_requests;
-  SplitRequests(requests, valid_requests, expired_requests);
+  std::vector<std::unique_ptr<SavePageRequest>> valid_requests;
+  std::vector<std::unique_ptr<SavePageRequest>> expired_requests;
+  SplitRequests(std::move(requests), &valid_requests, &expired_requests);
   std::vector<int64_t> expired_request_ids;
-  for (auto request : expired_requests)
-    expired_request_ids.push_back(request.request_id());
+  for (const auto& request : expired_requests)
+    expired_request_ids.push_back(request->request_id());
 
   queue_->RemoveRequests(expired_request_ids,
                          base::Bind(&RequestPicker::OnRequestExpired,
@@ -82,11 +87,19 @@ void RequestPicker::GetRequestResultCallback(
     comparator = &RequestPicker::RecencyFirstCompareFunction;
 
   // Iterate once through the requests, keeping track of best candidate.
+  bool non_user_requested_tasks_remaining = false;
   for (unsigned i = 0; i < valid_requests.size(); ++i) {
-    if (!RequestConditionsSatisfied(valid_requests[i]))
+    // If the  request is on the disabled list, skip it.
+    auto search = disabled_requests.find(valid_requests[i]->request_id());
+    if (search != disabled_requests.end()) {
       continue;
-    if (IsNewRequestBetter(picked_request, &(valid_requests[i]), comparator))
-      picked_request = &(valid_requests[i]);
+    }
+    if (!valid_requests[i]->user_requested())
+      non_user_requested_tasks_remaining = true;
+    if (!RequestConditionsSatisfied(valid_requests[i].get()))
+      continue;
+    if (IsNewRequestBetter(picked_request, valid_requests[i].get(), comparator))
+      picked_request = valid_requests[i].get();
   }
 
   // If we have a best request to try next, get the request coodinator to
@@ -94,55 +107,50 @@ void RequestPicker::GetRequestResultCallback(
   if (picked_request != nullptr) {
     picked_callback_.Run(*picked_request);
   } else {
-    empty_callback_.Run();
+    not_picked_callback_.Run(non_user_requested_tasks_remaining);
   }
 }
 
 // Filter out requests that don't meet the current conditions.  For instance, if
 // this is a predictive request, and we are not on WiFi, it should be ignored
 // this round.
-bool RequestPicker::RequestConditionsSatisfied(const SavePageRequest& request) {
+bool RequestPicker::RequestConditionsSatisfied(const SavePageRequest* request) {
   // If the user did not request the page directly, make sure we are connected
   // to power and have WiFi and sufficient battery remaining before we take this
   // request.
-  // TODO(petewil): We may later want to configure whether to allow 2G for non
-  // user_requested items, add that to policy.
-  if (!request.user_requested()) {
-    if (!current_conditions_->IsPowerConnected())
-      return false;
 
-    if (current_conditions_->GetNetConnectionType() !=
-        net::NetworkChangeNotifier::ConnectionType::CONNECTION_WIFI) {
-      return false;
-    }
+  if (!current_conditions_->IsPowerConnected() &&
+      policy_->PowerRequired(request->user_requested())) {
+    return false;
+  }
 
-    if (current_conditions_->GetBatteryPercentage() <
-        policy_->GetMinimumBatteryPercentageForNonUserRequestOfflining()) {
-      return false;
-    }
+  if (current_conditions_->GetNetConnectionType() !=
+          net::NetworkChangeNotifier::ConnectionType::CONNECTION_WIFI &&
+      policy_->UnmeteredNetworkRequired(request->user_requested())) {
+    return false;
+  }
+
+  if (current_conditions_->GetBatteryPercentage() <
+      policy_->BatteryPercentageRequired(request->user_requested())) {
+    return false;
   }
 
   // If we have already started this page the max number of times, it is not
   // eligible to try again.
-  // TODO(petewil): We should have code to remove the page from the
-  // queue after the last retry.
-  if (request.started_attempt_count() >= policy_->GetMaxStartedTries())
+  if (request->started_attempt_count() >= policy_->GetMaxStartedTries())
     return false;
 
   // If we have already completed trying this page the max number of times, it
   // is not eligible to try again.
-  // TODO(petewil): We should have code to remove the page from the
-  // queue after the last retry.
-  if (request.completed_attempt_count() >= policy_->GetMaxCompletedTries())
+  if (request->completed_attempt_count() >= policy_->GetMaxCompletedTries())
     return false;
 
   // If the request is paused, do not consider it.
-  if (request.request_state() == SavePageRequest::RequestState::PAUSED)
+  if (request->request_state() == SavePageRequest::RequestState::PAUSED)
     return false;
 
   // If the request is expired, do not consider it.
-  // TODO(petewil): We need to remove this from the queue.
-  base::TimeDelta requestAge = base::Time::Now() - request.creation_time();
+  base::TimeDelta requestAge = base::Time::Now() - request->creation_time();
   if (requestAge >
       base::TimeDelta::FromSeconds(
           policy_->GetRequestExpirationTimeInSeconds()))
@@ -152,7 +160,7 @@ bool RequestPicker::RequestConditionsSatisfied(const SavePageRequest& request) {
   // TODO(petewil): If the only reason we return nothing to do is that we have
   // inactive requests, we still want to try again later after their activation
   // time elapses, we shouldn't take ourselves completely off the scheduler.
-  if (request.activation_time() > base::Time::Now())
+  if (request->activation_time() > base::Time::Now())
     return false;
 
   return true;
@@ -238,17 +246,16 @@ int RequestPicker::CompareCreationTime(
   return result;
 }
 
-// Split all requests into expired ones and still valid ones.
 void RequestPicker::SplitRequests(
-    const std::vector<SavePageRequest>& requests,
-    std::vector<SavePageRequest>& valid_requests,
-    std::vector<SavePageRequest>& expired_requests) {
-  for (SavePageRequest request : requests) {
-    if (base::Time::Now() - request.creation_time() >=
+    std::vector<std::unique_ptr<SavePageRequest>> requests,
+    std::vector<std::unique_ptr<SavePageRequest>>* valid_requests,
+    std::vector<std::unique_ptr<SavePageRequest>>* expired_requests) {
+  for (auto& request : requests) {
+    if (base::Time::Now() - request->creation_time() >=
         base::TimeDelta::FromSeconds(kRequestExpirationTimeInSeconds)) {
-      expired_requests.push_back(request);
+      expired_requests->push_back(std::move(request));
     } else {
-      valid_requests.push_back(request);
+      valid_requests->push_back(std::move(request));
     }
   }
 }
@@ -256,11 +263,14 @@ void RequestPicker::SplitRequests(
 // Callback used after expired requests are deleted from the queue and notifies
 // the coordinator.
 void RequestPicker::OnRequestExpired(
-    const RequestQueue::UpdateMultipleRequestResults& results,
-    const std::vector<SavePageRequest>& requests) {
-  for (auto request : requests)
-    notifier_->NotifyCompleted(request,
-                               RequestCoordinator::SavePageStatus::EXPIRED);
+    std::unique_ptr<UpdateRequestsResult> result) {
+  const RequestCoordinator::BackgroundSavePageResult save_page_result(
+      RequestCoordinator::BackgroundSavePageResult::EXPIRED);
+  for (const auto& request : result->updated_items) {
+    event_logger_->RecordDroppedSavePageRequest(
+        request.client_id().name_space, save_page_result, request.request_id());
+    notifier_->NotifyCompleted(request, save_page_result);
+  }
 }
 
 }  // namespace offline_pages

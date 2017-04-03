@@ -58,6 +58,16 @@ namespace prerender {
 
 namespace {
 
+// Valid HTTP methods for both prefetch and prerendering.
+const char* const kValidHttpMethods[] = {
+    "GET", "HEAD",
+};
+
+// Additional valid HTTP methods for prerendering.
+const char* const kValidHttpMethodsForPrerendering[] = {
+    "OPTIONS", "POST", "TRACE",
+};
+
 void ResumeThrottles(
     std::vector<base::WeakPtr<PrerenderResourceThrottle> > throttles) {
   for (size_t i = 0; i < throttles.size(); i++) {
@@ -223,6 +233,27 @@ void PrerenderContents::SetPrerenderMode(PrerenderMode mode) {
   prerender_mode_ = mode;
 }
 
+bool PrerenderContents::IsValidHttpMethod(const std::string& method) {
+  DCHECK_NE(prerender_mode(), NO_PRERENDER);
+  // |method| has been canonicalized to upper case at this point so we can just
+  // compare them.
+  DCHECK_EQ(method, base::ToUpperASCII(method));
+  for (const auto& valid_method : kValidHttpMethods) {
+    if (method == valid_method)
+      return true;
+  }
+
+  if (prerender_mode() == PREFETCH_ONLY)
+    return false;
+
+  for (const auto& valid_method : kValidHttpMethodsForPrerendering) {
+    if (method == valid_method)
+      return true;
+  }
+
+  return false;
+}
+
 // static
 PrerenderContents::Factory* PrerenderContents::CreateFactory() {
   return new PrerenderContentsFactoryImpl();
@@ -233,8 +264,9 @@ PrerenderContents* PrerenderContents::FromWebContents(
     content::WebContents* web_contents) {
   if (!web_contents)
     return NULL;
-  PrerenderManager* prerender_manager = PrerenderManagerFactory::GetForProfile(
-      Profile::FromBrowserContext(web_contents->GetBrowserContext()));
+  PrerenderManager* prerender_manager =
+      PrerenderManagerFactory::GetForBrowserContext(
+          web_contents->GetBrowserContext());
   if (!prerender_manager)
     return NULL;
   return prerender_manager->GetPrerenderContents(web_contents);
@@ -470,7 +502,8 @@ bool PrerenderContents::CheckURL(const GURL& url) {
     Destroy(FINAL_STATUS_UNSUPPORTED_SCHEME);
     return false;
   }
-  if (prerender_manager_->HasRecentlyBeenNavigatedTo(origin(), url)) {
+  if (origin() != ORIGIN_OFFLINE &&
+      prerender_manager_->HasRecentlyBeenNavigatedTo(origin(), url)) {
     Destroy(FINAL_STATUS_RECENTLY_VISITED);
     return false;
   }
@@ -586,7 +619,6 @@ void PrerenderContents::DidNavigateMainFrame(
 }
 
 void PrerenderContents::DidGetRedirectForResourceRequest(
-    content::RenderFrameHost* render_frame_host,
     const content::ResourceRedirectDetails& details) {
   // DidGetRedirectForResourceRequest can come for any resource on a page.  If
   // it's a redirect on the top-level resource, the name needs to be remembered

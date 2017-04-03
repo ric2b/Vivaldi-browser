@@ -25,19 +25,39 @@ import "ui/gfx/geometry/mojo/geometry.mojom";
 interface WindowManager {
   // Whether the window is always on top. Type: bool.
   const string kAlwaysOnTop_Property = "prop:always_on_top";
+  // Disables the window manager from handling immersive fullscreen for the
+  // window. This is typically done if the client wants to handle immersive
+  // themselves. Type: bool.
+  const string kDisableImmersive_Property = "prop:disable_immersive";
   // Initial bounds to create the window at. If empty the WindowManager decides
   // the initial bounds.
   const string kInitialBounds_Property = "prop:initial_bounds";
+  // The id of the display (display::Display::id()) to create the window on.
+  // Type: int64.
+  const string kInitialDisplayId_Property = "prop:initial_display_id";
   // Internal window name. Useful for debugging. Type: mojom::String
   const string kName_Property = "prop:name";
   // The window's preferred size as defined by its content. Type: gfx::Size.
   const string kPreferredSize_Property = "prop:preferred-size";
+  // If true the window manager renders the title area (including frame
+  // decorations) of the parent window in this window. This is only checked
+  // at the time the window is added to its parent, which must be a top level
+  // window (created by way of WindowTree::NewTopLevelWindow()). Type: bool.
+  const string kRendererParentTitleArea_Property =
+      "render-parent-non-client-area";
   // The window's resize behavior. Type: ResizeBehavior.
   const string kResizeBehavior_Property = "prop:resize-behavior";
   // Bounds the window is restored to. Type: gfx::Rect.
   const string kRestoreBounds_Property = "prop:restore-bounds";
   // Shadow style for the window. Type: mojom::ShadowStyle.
   const string kShadowStyle_Property = "prop:shadow-style";
+  // The image resource ID to be used as the shelf item's icon. Type: int
+  const string kShelfIconResourceId_Property = "prop:shelf-icon-resource-id";
+  // The ID of the shelf item corresponding to this window. Type: int
+  const string kShelfId_Property = "prop:shelf-id";
+  // The type of item to be shown on the shelf for this window. Type: int
+  // A few ash::ShelfItemType values are supported; TYPE_UNKNOWN means no item.
+  const string kShelfItemType_Property = "prop:shelf-item-type";
   // The window's show state. Type: ShowState.
   const string kShowState_Property = "prop:show-state";
   // The window bounds as set by user input. Type: gfx::Rect.
@@ -64,6 +84,11 @@ interface WindowManager {
   WmNewDisplayAdded(display.mojom.Display display,
                     WindowData root,
                     bool parent_drawn);
+
+  // Called when a display is removed. The root of the specified display is
+  // still valid. It is expected the client calls DeleteWindow() shortly after
+  // this with the root.
+  WmDisplayRemoved(int64 display_id);
 
   // When the WindowManager completes a request it must call back to
   // WindowManagerClient::WmResponse().

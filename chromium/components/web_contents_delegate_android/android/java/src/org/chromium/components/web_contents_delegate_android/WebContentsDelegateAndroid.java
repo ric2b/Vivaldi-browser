@@ -8,6 +8,7 @@ import android.view.KeyEvent;
 
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
+import org.chromium.content.browser.ContentVideoViewEmbedder;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.common.ResourceRequestBody;
 
@@ -35,9 +36,8 @@ public class WebContentsDelegateAndroid {
     }
 
     /**
-     * @param disposition         The new tab disposition as per the constants in
-     *                            org.chromium.ui.WindowOpenDisposition (See
-     *                            window_open_disposition_list.h for the enumeration definitions).
+     * @param disposition         The new tab disposition, defined in
+     *                            //ui/base/mojo/window_open_disposition.mojom.
      * @param isRendererInitiated Whether or not the renderer initiated this action.
      */
     @CalledByNative
@@ -152,6 +152,21 @@ public class WebContentsDelegateAndroid {
 
     @CalledByNative
     public boolean isFullscreenForTabOrPending() {
+        return false;
+    }
+
+    @CalledByNative
+    public ContentVideoViewEmbedder getContentVideoViewEmbedder() {
+        return null;
+    }
+
+    /**
+     * Called when BrowserMediaPlayerManager wants to load a media resource.
+     * @param url the URL of media resource to load.
+     * @return true to prevent the resource from being loaded.
+     */
+    @CalledByNative
+    public boolean shouldBlockMediaRequest(String url) {
         return false;
     }
 }

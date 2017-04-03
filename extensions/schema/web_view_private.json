@@ -224,9 +224,20 @@
         ]
       },
       {
-        "name": "isFocusedElementEditable",
+        "name": "allowBlockedInsecureContent",
         "type": "function",
-        "description": "Checks whether current DOM element is text-editable.",
+        "description": "Will load all blocked content in a page.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "instanceId"
+          }
+        ]
+      },
+      {
+        "name": "getFocusedElementInfo",
+        "type": "function",
+        "description": "Gets the tagname and type of currently focused element and whether it's editable.",
         "parameters": [
           {
             "type": "integer",
@@ -237,22 +248,21 @@
             "name": "callback",
             "parameters": [
               {
-                "name": "editable",
+                "type": "string",
+                "name": "element",
+                "description": "Element name"
+              },
+              {
+                "type": "string",
+                "name": "type",
+                "description": "Element type"
+              },
+              {
                 "type": "boolean",
-                "description": "true if focused element is editable"
+                "name": "editable",
+                "description": "True is element is editable."
               }
             ]
-          }
-        ]
-      },
-      {
-        "name": "allowBlockedInsecureContent",
-        "type": "function",
-        "description": "Will load all blocked content in a page.",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "instanceId"
           }
         ]
       }

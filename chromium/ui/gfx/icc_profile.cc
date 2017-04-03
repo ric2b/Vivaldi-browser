@@ -76,7 +76,7 @@ ICCProfile ICCProfile::FromData(const char* data, size_t size) {
   return icc_profile;
 }
 
-#if !defined(OS_WIN) && !defined(OS_MACOSX)
+#if !defined(OS_WIN) && !defined(OS_MACOSX) && !defined(USE_X11)
 // static
 ICCProfile ICCProfile::FromBestMonitor() {
   return ICCProfile();
@@ -105,6 +105,9 @@ const std::vector<char>& ICCProfile::GetData() const {
 }
 
 ColorSpace ICCProfile::GetColorSpace() const {
+  if (!valid_)
+    return gfx::ColorSpace();
+
   ColorSpace color_space(ColorSpace::PrimaryID::CUSTOM,
                          ColorSpace::TransferID::CUSTOM,
                          ColorSpace::MatrixID::RGB, ColorSpace::RangeID::FULL);

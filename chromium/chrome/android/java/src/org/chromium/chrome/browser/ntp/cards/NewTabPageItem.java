@@ -18,7 +18,7 @@ public interface NewTabPageItem {
      * @see NewTabPageItem#getType()
      */
     @IntDef({VIEW_TYPE_ABOVE_THE_FOLD, VIEW_TYPE_HEADER, VIEW_TYPE_SNIPPET, VIEW_TYPE_SPACING,
-            VIEW_TYPE_STATUS, VIEW_TYPE_PROGRESS, VIEW_TYPE_ACTION})
+            VIEW_TYPE_STATUS, VIEW_TYPE_PROGRESS, VIEW_TYPE_ACTION, VIEW_TYPE_PROMO})
     @Retention(RetentionPolicy.SOURCE)
     public @interface ViewType {}
 
@@ -71,6 +71,12 @@ public interface NewTabPageItem {
     public static final int VIEW_TYPE_FOOTER = 8;
 
     /**
+     * View type for a {@link SigninPromoItem}.
+     * @see Adapter#getItemViewType(int)
+     */
+    public static final int VIEW_TYPE_PROMO = 9;
+
+    /**
       * Returns the type ({@link ViewType}) of this list item. This is so we can
       * distinguish between different elements that are held in a single RecyclerView holder.
       *
@@ -78,4 +84,10 @@ public interface NewTabPageItem {
       */
     @ViewType
     public int getType();
+
+    /**
+     * Update the given {@link NewTabPageViewHolder} with data from this item.
+     * @param holder The {@link NewTabPageViewHolder} to update.
+     */
+    void onBindViewHolder(NewTabPageViewHolder holder);
 }

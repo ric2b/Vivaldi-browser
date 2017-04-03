@@ -41,19 +41,6 @@ var termsView = null;
 var port = null;
 
 /**
- * Indicates that window was closed internally and it is not required to send
- * closure notification.
- * @type {boolean}
- */
-var windowClosedInternally = false;
-
-/**
- * Timer for terms reload.
- * @type {Object}
- */
-var termsReloadTimeout = null;
-
-/**
  * Stores current device id.
  * @type {string}
  */
@@ -91,22 +78,12 @@ var INNER_HEIGHT = 688;
 
 
 /**
- * Closes current window in response to request from native code. This does not
- * issue 'cancelAuthCode' message to native code.
- */
-function closeWindowInternally() {
-  windowClosedInternally = true;
-  appWindow.close();
-  appWindow = null;
-}
-
-/**
  * Sends a native message to ArcSupportHost.
- * @param {string} code The action code in message.
- * @param {Object=} opt_Props Extra properties for the message.
+ * @param {string} event The event type in message.
+ * @param {Object=} opt_props Extra properties for the message.
  */
-function sendNativeMessage(code, opt_Props) {
-  var message = Object.assign({'action': code}, opt_Props);
+function sendNativeMessage(event, opt_props) {
+  var message = Object.assign({'event': event}, opt_props);
   port.postMessage(message);
 }
 
@@ -118,13 +95,15 @@ function sendNativeMessage(code, opt_Props) {
  * @param {string} learnMoreLinkId Id inner link to 'learn more' element.
  * @param {string} indicatorId Id of indicator to create.
  * @param {string} text Inner text to set. Includes link declaration.
+ * @param {function} callback Callback to call on user action.
  */
-function createConsentOption(textId, learnMoreLinkId, indicatorId, text) {
+function createConsentOption(
+    textId, learnMoreLinkId, indicatorId, text, callback) {
   var doc = appWindow.contentWindow.document;
   var textElement = doc.getElementById(textId);
   textElement.innerHTML = text;
   var linkLearnMoreElement = doc.getElementById(learnMoreLinkId);
-  linkLearnMoreElement.addEventListener('click', onLearnMore);
+  linkLearnMoreElement.addEventListener('click', callback);
 
   // Create controlled by policy indicator.
   var policyIndicator = new appWindow.contentWindow.cr.ui.ControlledIndicator();
@@ -154,11 +133,13 @@ function initialize(data, deviceId) {
   createConsentOption('text-backup-restore',
                       'learn-more-link-backup-restore',
                       'policy-indicator-backup-restore',
-                      data.textBackupRestore);
+                      data.textBackupRestore,
+                      onLearnMoreBackupAndRestore);
   createConsentOption('text-location-service',
                       'learn-more-link-location-service',
                       'policy-indicator-location-service',
-                      data.textLocationService);
+                      data.textLocationService,
+                      onLearnMoreLocationServices);
 
   var scriptSetCountryCode = 'document.countryCode = \'' + countryCode + '\';';
   termsView.addContentScripts([
@@ -176,14 +157,30 @@ function initialize(data, deviceId) {
 }
 
 /**
- * Handles the event when the user clicks on a learn more link. Opens the
- * support page for the user.
- * @param {Event} event
+ * Handles the event when the user clicks on a learn more metrics link. Opens
+ * the pop up dialog with a help.
  */
-var onLearnMore = function(event) {
-  var url = 'https://support.google.com/chromebook?p=playapps';
-  chrome.browser.openTab({'url': url}, function() {});
-  event.preventDefault();
+var onLearnMoreMetrics = function() {
+  var loadTimeData = appWindow.contentWindow.loadTimeData;
+  showTextOverlay(loadTimeData.getString('learnMoreStatistics'));
+};
+
+/**
+ * Handles the event when the user clicks on a learn more backup and restore
+ * link. Opens the pop up dialog with a help.
+ */
+var onLearnMoreBackupAndRestore = function() {
+  var loadTimeData = appWindow.contentWindow.loadTimeData;
+  showTextOverlay(loadTimeData.getString('learnMoreBackupAndRestore'));
+};
+
+/**
+ * Handles the event when the user clicks on a learn more location services
+ * link. Opens the pop up dialog with a help.
+ */
+var onLearnMoreLocationServices = function() {
+  var loadTimeData = appWindow.contentWindow.loadTimeData;
+  showTextOverlay(loadTimeData.getString('learnMoreLocationServices'));
 };
 
 /**
@@ -207,7 +204,7 @@ function setMetricsMode(text, canEnable, on) {
   doc.getElementById('text-metrics').innerHTML = text;
   doc.getElementById('settings-link').addEventListener('click', onSettings);
   doc.getElementById('learn-more-link-metrics').addEventListener('click',
-      onLearnMore);
+      onLearnMoreMetrics);
 
   // Applying metrics mode changes page layout, update terms height.
   updateTermsHeight();
@@ -301,8 +298,10 @@ function onNativeMessage(message) {
     setBackupRestoreMode(message.enabled, message.managed);
   } else if (message.action == 'setLocationServiceMode') {
     setLocationServiceMode(message.enabled, message.managed);
-  } else if (message.action == 'closeUI') {
-    closeWindowInternally();
+  } else if (message.action == 'closeWindow') {
+    if (appWindow) {
+      appWindow.close();
+    }
   } else if (message.action == 'showPage') {
     showPageWithStatus(message.page, message.status);
   } else if (message.action == 'setWindowBounds') {
@@ -320,8 +319,8 @@ function connectPort() {
 }
 
 /**
- * Shows requested page and hide others. Show appWindow if it was hidden before
- * for non 'none' pages. For 'none' page this closes host window.
+ * Shows requested page and hide others. Show appWindow if it was hidden before.
+ * 'none' hides all views.
  * @param {string} pageDivId id of divider of the page to show.
  */
 function showPage(pageDivId) {
@@ -329,11 +328,7 @@ function showPage(pageDivId) {
     return;
   }
 
-  if (pageDivId == 'none') {
-    closeWindowInternally();
-    return;
-  }
-
+  hideOverlay();
   var doc = appWindow.contentWindow.document;
   var pages = doc.getElementsByClassName('section');
   var sendFeedbackElement = doc.getElementById('button-send-feedback');
@@ -374,6 +369,65 @@ function setErrorMessage(error) {
   var messageElement = doc.getElementById('error-message');
   messageElement.innerText = error;
 }
+
+/**
+ * Shows overlay dialog and required content.
+ * @param {string} overlayClass Defines which content to show, 'overlay-url' for
+ *                              webview based content and 'overlay-text' for
+ *                              simple text view.
+ */
+function showOverlay(overlayClass) {
+  var doc = appWindow.contentWindow.document;
+  var overlayContainer = doc.getElementById('overlay-container');
+  overlayContainer.className = 'overlay ' + overlayClass;
+  overlayContainer.hidden = false;
+}
+
+/**
+ * Opens overlay dialog and shows formatted text content there.
+ * @param {string} content HTML formatted text to show.
+ */
+function showTextOverlay(content) {
+  var doc = appWindow.contentWindow.document;
+  var textContent = doc.getElementById('overlay-text-content');
+  textContent.innerHTML = content;
+  showOverlay('overlay-text');
+}
+
+/**
+ * Opens overlay dialog and shows external URL there.
+ * @param {string} url Target URL to open in overlay dialog.
+ */
+function showURLOverlay(url) {
+  var doc = appWindow.contentWindow.document;
+  var overlayWebview = doc.getElementById('overlay-url');
+  overlayWebview.src = url;
+  showOverlay('overlay-url');
+}
+
+/**
+ * Shows Google Privacy Policy in overlay dialog. Policy link is detected from
+ * the content of terms view.
+ */
+function showPrivacyPolicyOverlay() {
+  termsView.executeScript({code: 'getPrivacyPolicyLink();'}, function(results) {
+    if (results && results.length == 1 && typeof results[0] == 'string') {
+      showURLOverlay(results[0]);
+    } else {
+      showURLOverlay('https://www.google.com/policies/privacy/');
+    }
+  });
+}
+
+/**
+ * Hides overlay dialog.
+ */
+function hideOverlay() {
+  var doc = appWindow.contentWindow.document;
+  var overlayContainer = doc.getElementById('overlay-container');
+  overlayContainer.hidden = true;
+}
+
 
 /**
  * Shows requested page.
@@ -495,7 +549,7 @@ chrome.app.runtime.onLaunched.addListener(function() {
         if (results && results.length == 1 && typeof results[0] == 'string' &&
             results[0].substring(0, authCodePrefix.length) == authCodePrefix) {
           var authCode = results[0].substring(authCodePrefix.length);
-          sendNativeMessage('setAuthCode', {code: authCode});
+          sendNativeMessage('onAuthSucceeded', {code: authCode});
         } else {
           setErrorMessage(appWindow.contentWindow.loadTimeData.getString(
               'authorizationFailed'));
@@ -546,53 +600,43 @@ chrome.app.runtime.onLaunched.addListener(function() {
 
 
     // webview is not allowed to open links in the new window. Hook these events
-    // and open links in context of main page.
+    // and open links in overlay dialog.
     termsView.addEventListener('newwindow', function(event) {
       event.preventDefault();
-      chrome.browser.openTab({'url': event.targetUrl}, function() {});
+      showURLOverlay(event.targetUrl);
     });
 
     var onAgree = function() {
       termsAccepted = true;
 
       var enableMetrics = doc.getElementById('enable-metrics');
-      if (!enableMetrics.hidden) {
-        sendNativeMessage('enableMetrics', {
-          'enabled': enableMetrics.checked
-        });
-      }
-
       var enableBackupRestore = doc.getElementById('enable-backup-restore');
-      sendNativeMessage('setBackupRestore', {
-        'enabled': enableBackupRestore.checked
-      });
-
       var enableLocationService = doc.getElementById('enable-location-service');
-      sendNativeMessage('setLocationService', {
-        'enabled': enableLocationService.checked
+      sendNativeMessage('onAgreed', {
+        isMetricsEnabled: enableMetrics.checked,
+        isBackupRestoreEnabled: enableBackupRestore.checked,
+        isLocationServiceEnabled: enableLocationService.checked
       });
-
-      sendNativeMessage('startLso');
     };
 
     var onCancel = function() {
       if (appWindow) {
-        windowClosedInternally = false;
         appWindow.close();
-        appWindow = null;
       }
     };
 
     var onRetry = function() {
       if (termsAccepted) {
-        sendNativeMessage('startLso');
+        // Reuse the onAgree() in case that the user has already accepted
+        // the ToS.
+        onAgree();
       } else {
         loadInitialTerms();
       }
     };
 
     var onSendFeedback = function() {
-      sendNativeMessage('sendFeedback');
+      sendNativeMessage('onSendFeedbackClicked');
     };
 
     doc.getElementById('button-agree').addEventListener('click', onAgree);
@@ -600,6 +644,14 @@ chrome.app.runtime.onLaunched.addListener(function() {
     doc.getElementById('button-retry').addEventListener('click', onRetry);
     doc.getElementById('button-send-feedback')
         .addEventListener('click', onSendFeedback);
+    doc.getElementById('overlay-close').addEventListener('click', hideOverlay);
+    doc.getElementById('privacy-policy-link').addEventListener(
+        'click', showPrivacyPolicyOverlay);
+
+    var overlay = doc.getElementById('overlay-container');
+    appWindow.contentWindow.cr.ui.overlay.setupOverlay(overlay);
+    appWindow.contentWindow.cr.ui.overlay.globalInitialization();
+    overlay.addEventListener('cancelOverlay', hideOverlay);
 
     connectPort();
   };
@@ -607,24 +659,23 @@ chrome.app.runtime.onLaunched.addListener(function() {
   var onWindowCreated = function(createdWindow) {
     appWindow = createdWindow;
     appWindow.contentWindow.onload = onAppContentLoad;
-    createdWindow.onClosed.addListener(onWindowClosed);
+    appWindow.onClosed.addListener(onWindowClosed);
 
     setWindowBounds();
   };
 
   var onWindowClosed = function() {
-    if (termsReloadTimeout) {
-      clearTimeout(termsReloadTimeout);
-      termsReloadTimeout = null;
-    }
+    appWindow = null;
 
-    if (windowClosedInternally) {
-      return;
-    }
-    sendNativeMessage('cancelAuthCode');
+    // Notify to Chrome.
+    sendNativeMessage('onWindowClosed');
+
+    // On window closed, then dispose the extension. So, close the port
+    // otherwise the background page would be kept alive so that the extension
+    // would not be unloaded.
+    port.disconnect();
+    port = null;
   };
-
-  windowClosedInternally = false;
 
   var options = {
     'id': 'play_store_wnd',

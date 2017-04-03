@@ -55,11 +55,8 @@ bool AccessibilityTreeContainsLoadedDocWithUrl(BrowserAccessibility* node,
   if ((node->GetRole() == ui::AX_ROLE_WEB_AREA ||
        node->GetRole() == ui::AX_ROLE_ROOT_WEB_AREA) &&
       node->GetStringAttribute(ui::AX_ATTR_URL) == url) {
-    // If possible, ensure the doc has finished loading. That's currently
-    // not possible with same-process iframes until https://crbug.com/532249
-    // is fixed.
-    return (node->manager()->GetTreeData().url != url ||
-            node->manager()->GetTreeData().loaded);
+    // Ensure the doc has finished loading.
+    return node->manager()->GetTreeData().loaded;
   }
 
   for (unsigned i = 0; i < node->PlatformChildCount(); i++) {
@@ -75,7 +72,9 @@ bool AccessibilityTreeContainsLoadedDocWithUrl(BrowserAccessibility* node,
 
 typedef AccessibilityTreeFormatter::Filter Filter;
 
-DumpAccessibilityTestBase::DumpAccessibilityTestBase() {
+DumpAccessibilityTestBase::DumpAccessibilityTestBase()
+    : is_blink_pass_(false),
+      enable_accessibility_after_navigating_(false) {
 }
 
 DumpAccessibilityTestBase::~DumpAccessibilityTestBase() {
@@ -245,19 +244,33 @@ void DumpAccessibilityTestBase::RunTestForPlatform(
   AddDefaultFilters(&filters_);
   ParseHtmlForExtraDirectives(html_contents, &filters_, &wait_for);
 
-  // Load the test html and wait for the "load complete" AX event.
+  // Get the test URL.
   GURL url(embedded_test_server()->GetURL(
       "/" + std::string(file_dir) + "/" + file_path.BaseName().MaybeAsASCII()));
-  AccessibilityNotificationWaiter accessibility_waiter(
-      shell()->web_contents(),
-      AccessibilityModeComplete,
-      ui::AX_EVENT_LOAD_COMPLETE);
-  NavigateToURL(shell(), url);
-  accessibility_waiter.WaitForNotification();
-
-  // Get the url of every frame in the frame tree.
   WebContentsImpl* web_contents = static_cast<WebContentsImpl*>(
       shell()->web_contents());
+
+  if (enable_accessibility_after_navigating_ &&
+      web_contents->GetAccessibilityMode() == AccessibilityModeOff) {
+    // Load the url, then enable accessibility.
+    NavigateToURL(shell(), url);
+    AccessibilityNotificationWaiter accessibility_waiter(
+        web_contents,
+        AccessibilityModeComplete,
+        ui::AX_EVENT_NONE);
+    accessibility_waiter.WaitForNotification();
+  } else {
+    // Enable accessibility, then load the test html and wait for the
+    // "load complete" AX event.
+    AccessibilityNotificationWaiter accessibility_waiter(
+        web_contents,
+        AccessibilityModeComplete,
+        ui::AX_EVENT_LOAD_COMPLETE);
+    NavigateToURL(shell(), url);
+    accessibility_waiter.WaitForNotification();
+  }
+
+  // Get the url of every frame in the frame tree.
   FrameTree* frame_tree = web_contents->GetFrameTree();
   std::vector<std::string> all_frame_urls;
   for (FrameTreeNode* node : frame_tree->Nodes()) {
@@ -270,19 +283,6 @@ void DumpAccessibilityTestBase::RunTestForPlatform(
     std::string url = node->current_url().spec();
     if (url != url::kAboutBlankURL)
       all_frame_urls.push_back(url);
-
-    // We won't get the correct coordinate transformations for
-    // out-of-process iframes until each frame's surface is ready.
-    RenderFrameHostImpl* current_frame_host = node->current_frame_host();
-    if (!current_frame_host || !current_frame_host->is_local_root())
-      continue;
-    RenderWidgetHostViewBase* rwhv =
-        static_cast<RenderWidgetHostViewBase*>(current_frame_host->GetView());
-    if (rwhv && rwhv->IsChildFrameForTesting()) {
-      SurfaceHitTestReadyNotifier notifier(
-          static_cast<RenderWidgetHostViewChildFrame*>(rwhv));
-      notifier.WaitForSurfaceReady();
-    }
   }
 
   // Wait for the accessibility tree to fully load for all frames,

@@ -17,6 +17,7 @@
 #include "base/macros.h"
 #include "base/memory/discardable_memory_allocator.h"
 #include "base/memory/discardable_shared_memory.h"
+#include "base/memory/memory_coordinator_client.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/shared_memory.h"
@@ -35,7 +36,8 @@ typedef int32_t DiscardableSharedMemoryId;
 // This class is thread-safe and instances can safely be used on any thread.
 class CONTENT_EXPORT HostDiscardableSharedMemoryManager
     : public base::DiscardableMemoryAllocator,
-      public base::trace_event::MemoryDumpProvider {
+      public base::trace_event::MemoryDumpProvider,
+      public base::MemoryCoordinatorClient {
  public:
   HostDiscardableSharedMemoryManager();
   ~HostDiscardableSharedMemoryManager() override;
@@ -103,6 +105,9 @@ class CONTENT_EXPORT HostDiscardableSharedMemoryManager
     return a->memory()->last_known_usage() > b->memory()->last_known_usage();
   }
 
+  // base::MemoryCoordinatorClient implementation:
+  void OnMemoryStateChange(base::MemoryState state) override;
+
   void AllocateLockedDiscardableSharedMemory(
       base::ProcessHandle process_handle,
       int client_process_id,
@@ -131,6 +136,7 @@ class CONTENT_EXPORT HostDiscardableSharedMemoryManager
   // a heap. The LRU memory segment always first.
   typedef std::vector<scoped_refptr<MemorySegment>> MemorySegmentVector;
   MemorySegmentVector segments_;
+  size_t default_memory_limit_;
   size_t memory_limit_;
   size_t bytes_allocated_;
   std::unique_ptr<base::MemoryPressureListener> memory_pressure_listener_;

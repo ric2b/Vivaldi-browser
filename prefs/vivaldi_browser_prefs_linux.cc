@@ -9,6 +9,10 @@ namespace vivaldi {
 void RegisterPlatformPrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(vivaldiprefs::kSmoothScrollingEnabled, true,
     user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+
+  registry->RegisterBooleanPref(
+      vivaldiprefs::kHideMouseCursorInFullscreen, true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 }
 
 }  // namespace vivaldi

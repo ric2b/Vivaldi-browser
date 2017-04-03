@@ -19,6 +19,7 @@ import org.chromium.base.test.util.AdvancedMockContext;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
@@ -148,6 +149,7 @@ public class InfoBarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
     @Smoke
     @MediumTest
     @Feature({"Browser", "Main"})
+    @RetryOnFailure
     public void testInfoBarForGeolocation() throws InterruptedException {
         LocationSettingsTestUtil.setSystemLocationSettingEnabled(true);
         loadUrl(mTestServer.getURL(GEOLOCATION_PAGE));
@@ -170,6 +172,7 @@ public class InfoBarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
      */
     @MediumTest
     @Feature({"Browser"})
+    @RetryOnFailure
     public void testInfoBarForGeolocationDisappearsOnBack() throws InterruptedException {
         LocationSettingsTestUtil.setSystemLocationSettingEnabled(true);
         loadUrl(HELLO_WORLD_URL);
@@ -204,6 +207,7 @@ public class InfoBarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
     @MediumTest
     @CommandLineFlags.Add("force-fieldtrials=DataCompressionProxyPromoVisibility/Enabled")
     @Feature({"Browser", "Main"})
+    @RetryOnFailure
     public void testDataReductionPromoInfoBar() throws InterruptedException {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
@@ -264,6 +268,7 @@ public class InfoBarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
     @MediumTest
     @CommandLineFlags.Add("force-fieldtrials=DataCompressionProxyPromoVisibility/Enabled")
     @Feature({"Browser", "Main"})
+    @RetryOnFailure
     public void testDataReductionPromoInfoBarDismissed() throws InterruptedException {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
@@ -347,6 +352,7 @@ public class InfoBarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
     @MediumTest
     @CommandLineFlags.Add("force-fieldtrials=DataCompressionProxyPromoVisibility/Enabled")
     @Feature({"Browser", "Main"})
+    @RetryOnFailure
     public void testDataReductionPromoInfoBarFreOptOut() {
         // Try to add an infobar. Infobar should not be added since the first run experience or
         // second run promo hasn't been shown.
@@ -384,6 +390,7 @@ public class InfoBarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
     @Smoke
     @MediumTest
     @Feature({"Browser", "Main"})
+    @RetryOnFailure
     public void testInfoBarForHungRenderer() throws InterruptedException {
         loadUrl(HELLO_WORLD_URL);
 
@@ -426,6 +433,7 @@ public class InfoBarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
     @Smoke
     @MediumTest
     @Feature({"Browser", "Main"})
+    @RetryOnFailure
     public void testInfoBarForHungRendererCanKillRenderer() throws InterruptedException {
         loadUrl(HELLO_WORLD_URL);
 
@@ -472,6 +480,7 @@ public class InfoBarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
      */
     @MediumTest
     @Feature({"Browser", "Main"})
+    @RetryOnFailure
     public void testInfoBarContainerSwapsWebContents() throws InterruptedException {
         // Add an infobar.
         LocationSettingsTestUtil.setSystemLocationSettingEnabled(true);

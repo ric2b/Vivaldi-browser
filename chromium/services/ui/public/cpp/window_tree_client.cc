@@ -16,6 +16,7 @@
 #include "services/ui/common/util.h"
 #include "services/ui/public/cpp/in_flight_change.h"
 #include "services/ui/public/cpp/input_event_handler.h"
+#include "services/ui/public/cpp/window_drop_target.h"
 #include "services/ui/public/cpp/window_manager_delegate.h"
 #include "services/ui/public/cpp/window_observer.h"
 #include "services/ui/public/cpp/window_private.h"
@@ -29,14 +30,8 @@
 
 namespace ui {
 
-void DeleteWindowTreeClient(WindowTreeClient* client) { delete client; }
-
 Id MakeTransportId(ClientSpecificId client_id, ClientSpecificId local_id) {
   return (client_id << 16) | local_id;
-}
-
-Id server_id(Window* window) {
-  return WindowPrivate(window).server_id();
 }
 
 // Helper called to construct a local window object from transport data.
@@ -60,29 +55,16 @@ Window* AddWindowToClient(WindowTreeClient* client,
   return window;
 }
 
-Window* BuildWindowTree(WindowTreeClient* client,
-                        const mojo::Array<mojom::WindowDataPtr>& windows,
-                        Window* initial_parent) {
-  std::vector<Window*> parents;
-  Window* root = NULL;
-  Window* last_window = NULL;
-  if (initial_parent)
-    parents.push_back(initial_parent);
-  for (size_t i = 0; i < windows.size(); ++i) {
-    if (last_window && windows[i]->parent_id == server_id(last_window)) {
-      parents.push_back(last_window);
-    } else if (!parents.empty()) {
-      while (server_id(parents.back()) != windows[i]->parent_id)
-        parents.pop_back();
-    }
-    Window* window = AddWindowToClient(
-        client, !parents.empty() ? parents.back() : NULL, windows[i]);
-    if (!last_window)
-      root = window;
-    last_window = window;
-  }
-  return root;
-}
+struct WindowTreeClient::CurrentDragState {
+  // The current change id of the current drag an drop ipc.
+  uint32_t change_id;
+
+  // The effect to return when we send our finish signal.
+  uint32_t completed_action;
+
+  // Callback executed when a drag initiated by PerformDragDrop() is completed.
+  base::Callback<void(bool, uint32_t)> on_finished;
+};
 
 WindowTreeClient::WindowTreeClient(
     WindowTreeClientDelegate* delegate,
@@ -97,7 +79,6 @@ WindowTreeClient::WindowTreeClient(
       focused_window_(nullptr),
       binding_(this),
       tree_(nullptr),
-      delete_on_no_roots_(!window_manager_delegate),
       in_destructor_(false),
       weak_factory_(this) {
   // Allow for a null request in tests.
@@ -117,7 +98,7 @@ WindowTreeClient::~WindowTreeClient() {
   WindowTracker tracker;
   while (!windows_.empty()) {
     IdToWindowMap::iterator it = windows_.begin();
-    if (OwnsWindow(it->second)) {
+    if (it->second->WasCreatedByThisClient()) {
       it->second->Destroy();
     } else {
       tracker.Add(it->second);
@@ -134,20 +115,15 @@ WindowTreeClient::~WindowTreeClient() {
 
   FOR_EACH_OBSERVER(WindowTreeClientObserver, observers_,
                     OnDidDestroyClient(this));
-
-  delegate_->OnDidDestroyClient(this);
 }
 
 void WindowTreeClient::ConnectViaWindowTreeFactory(
     shell::Connector* connector) {
-  // Clients created with no root shouldn't delete automatically.
-  delete_on_no_roots_ = false;
-
   // The client id doesn't really matter, we use 101 purely for debugging.
   client_id_ = 101;
 
   mojom::WindowTreeFactoryPtr factory;
-  connector->ConnectToInterface("mojo:ui", &factory);
+  connector->ConnectToInterface("service:ui", &factory);
   mojom::WindowTreePtr window_tree;
   factory->CreateWindowTree(GetProxy(&window_tree),
                             binding_.CreateInterfacePtrAndBind());
@@ -158,7 +134,7 @@ void WindowTreeClient::ConnectAsWindowManager(shell::Connector* connector) {
   DCHECK(window_manager_delegate_);
 
   mojom::WindowManagerWindowTreeFactoryPtr factory;
-  connector->ConnectToInterface("mojo:ui", &factory);
+  connector->ConnectToInterface("service:ui", &factory);
   mojom::WindowTreePtr window_tree;
   factory->CreateWindowTree(GetProxy(&window_tree),
                             binding_.CreateInterfacePtrAndBind());
@@ -227,11 +203,11 @@ void WindowTreeClient::Reorder(Window* window,
                        direction);
 }
 
-bool WindowTreeClient::OwnsWindow(Window* window) const {
+bool WindowTreeClient::WasCreatedByThisClient(const Window* window) const {
   // Windows created via CreateTopLevelWindow() are not owned by us, but have
-  // our client id.
+  // our client id. const_cast is required by set.
   return HiWord(server_id(window)) == client_id_ &&
-         roots_.count(window) == 0;
+         roots_.count(const_cast<Window*>(window)) == 0;
 }
 
 void WindowTreeClient::SetBounds(Window* window,
@@ -446,10 +422,9 @@ void WindowTreeClient::OnWindowDestroyed(Window* window) {
   for (auto change_id : in_flight_change_ids_to_remove)
     in_flight_map_.erase(change_id);
 
-  if (roots_.erase(window) > 0 && roots_.empty() && delete_on_no_roots_ &&
-      !in_destructor_) {
-    delete this;
-  }
+  const bool was_root = roots_.erase(window) > 0;
+  if (!in_destructor_ && was_root && roots_.empty() && is_from_embed_)
+    delegate_->OnEmbedRootDestroyed(window);
 }
 
 Window* WindowTreeClient::GetWindowByServerId(Id id) {
@@ -486,6 +461,30 @@ bool WindowTreeClient::ApplyServerChangeToExistingInFlightChange(
 
   existing_change->SetRevertValueFrom(change);
   return true;
+}
+
+Window* WindowTreeClient::BuildWindowTree(
+    const mojo::Array<mojom::WindowDataPtr>& windows,
+    Window* initial_parent) {
+  std::vector<Window*> parents;
+  Window* root = nullptr;
+  Window* last_window = nullptr;
+  if (initial_parent)
+    parents.push_back(initial_parent);
+  for (size_t i = 0; i < windows.size(); ++i) {
+    if (last_window && windows[i]->parent_id == server_id(last_window)) {
+      parents.push_back(last_window);
+    } else if (!parents.empty()) {
+      while (server_id(parents.back()) != windows[i]->parent_id)
+        parents.pop_back();
+    }
+    Window* window = AddWindowToClient(
+        this, !parents.empty() ? parents.back() : nullptr, windows[i]);
+    if (!last_window)
+      root = window;
+    last_window = window;
+  }
+  return root;
 }
 
 Window* WindowTreeClient::NewWindowImpl(
@@ -537,7 +536,7 @@ void WindowTreeClient::SetWindowTree(mojom::WindowTreePtr window_tree_ptr) {
 }
 
 void WindowTreeClient::OnConnectionLost() {
-  delete this;
+  delegate_->OnLostConnection(this);
 }
 
 void WindowTreeClient::OnEmbedImpl(mojom::WindowTree* window_tree,
@@ -601,10 +600,6 @@ void WindowTreeClient::OnWmMoveLoopCompleted(uint32_t change_id,
 ////////////////////////////////////////////////////////////////////////////////
 // WindowTreeClient, WindowTreeClient implementation:
 
-void WindowTreeClient::SetDeleteOnNoRoots(bool value) {
-  delete_on_no_roots_ = value;
-}
-
 const std::set<Window*>& WindowTreeClient::GetRoots() {
   return roots_;
 }
@@ -644,6 +639,41 @@ void WindowTreeClient::StopPointerWatcher() {
   has_pointer_watcher_ = false;
 }
 
+void WindowTreeClient::PerformDragDrop(
+    Window* window,
+    const std::map<std::string, std::vector<uint8_t>>& drag_data,
+    int drag_operation,
+    const gfx::Point& cursor_location,
+    const SkBitmap& bitmap,
+    const base::Callback<void(bool, uint32_t)>& callback) {
+  DCHECK(!current_drag_state_);
+
+  // TODO(erg): Pass |cursor_location| and |bitmap| in PerformDragDrop() when
+  // we start showing an image representation of the drag under he cursor.
+
+  if (window->drop_target()) {
+    // To minimize the number of round trips, copy the drag drop data to our
+    // handler here, instead of forcing mus to send this same data back.
+    OnDragDropStart(
+        mojo::Map<mojo::String, mojo::Array<uint8_t>>::From(drag_data));
+  }
+
+  uint32_t current_drag_change = ScheduleInFlightChange(
+      base::MakeUnique<InFlightDragChange>(window, ChangeType::DRAG_LOOP));
+  current_drag_state_.reset(new CurrentDragState{
+      current_drag_change, ui::mojom::kDropEffectNone, callback});
+
+  tree_->PerformDragDrop(
+      current_drag_change, window->server_id(),
+      mojo::Map<mojo::String, mojo::Array<uint8_t>>::From(drag_data),
+      drag_operation);
+}
+
+void WindowTreeClient::CancelDragDrop(Window* window) {
+  // Server will clean up drag and fail the in-flight change.
+  tree_->CancelDragDrop(window->server_id());
+}
+
 void WindowTreeClient::PerformWindowMove(
     Window* window,
     ui::mojom::MoveLoopSource source,
@@ -653,7 +683,7 @@ void WindowTreeClient::PerformWindowMove(
   on_current_move_finished_ = callback;
 
   current_move_loop_change_ = ScheduleInFlightChange(
-      base::MakeUnique<InFlightMoveLoopChange>(window));
+      base::MakeUnique<InFlightDragChange>(window, ChangeType::MOVE_LOOP));
   // Tell the window manager to take over moving us.
   tree_->PerformWindowMove(current_move_loop_change_, window->server_id(),
                            source, cursor_location);
@@ -711,6 +741,11 @@ void WindowTreeClient::RemoveObserver(WindowTreeClientObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
+void WindowTreeClient::SetCanAcceptDrops(Id window_id, bool can_accept_drops) {
+  DCHECK(tree_);
+  tree_->SetCanAcceptDrops(window_id, can_accept_drops);
+}
+
 void WindowTreeClient::SetCanAcceptEvents(Id window_id,
                                           bool can_accept_events) {
   DCHECK(tree_);
@@ -718,15 +753,15 @@ void WindowTreeClient::SetCanAcceptEvents(Id window_id,
 }
 
 void WindowTreeClient::OnEmbed(ClientSpecificId client_id,
-                                   mojom::WindowDataPtr root_data,
-                                   mojom::WindowTreePtr tree,
-                                   int64_t display_id,
-                                   Id focused_window_id,
-                                   bool drawn) {
+                               mojom::WindowDataPtr root_data,
+                               mojom::WindowTreePtr tree,
+                               int64_t display_id,
+                               Id focused_window_id,
+                               bool drawn) {
   DCHECK(!tree_ptr_);
   tree_ptr_ = std::move(tree);
-  tree_ptr_.set_connection_error_handler(
-      base::Bind(&DeleteWindowTreeClient, this));
+
+  is_from_embed_ = true;
 
   if (window_manager_delegate_) {
     tree_ptr_->GetWindowManagerClient(GetProxy(&window_manager_internal_client_,
@@ -894,7 +929,7 @@ void WindowTreeClient::OnWindowHierarchyChanged(
 
   const bool was_window_known = GetWindowByServerId(window_id) != nullptr;
 
-  BuildWindowTree(this, windows, initial_parent);
+  BuildWindowTree(windows, initial_parent);
 
   // If the window was not known, then BuildWindowTree() will have created it
   // and parented the window.
@@ -1003,8 +1038,13 @@ void WindowTreeClient::OnWindowInputEvent(uint32_t event_id,
   // TODO(moshayedi): crbug.com/617222. No need to convert to ui::MouseEvent or
   // ui::TouchEvent once we have proper support for pointer events.
   if (event->IsMousePointerEvent()) {
-    window->input_event_handler_->OnWindowInputEvent(
-        window, ui::MouseEvent(*event->AsPointerEvent()), &ack_callback);
+    if (event->type() == ui::ET_POINTER_WHEEL_CHANGED) {
+      window->input_event_handler_->OnWindowInputEvent(
+          window, ui::MouseWheelEvent(*event->AsPointerEvent()), &ack_callback);
+    } else {
+      window->input_event_handler_->OnWindowInputEvent(
+          window, ui::MouseEvent(*event->AsPointerEvent()), &ack_callback);
+    }
   } else if (event->IsTouchPointerEvent()) {
     window->input_event_handler_->OnWindowInputEvent(
         window, ui::TouchEvent(*event->AsPointerEvent()), &ack_callback);
@@ -1052,6 +1092,92 @@ void WindowTreeClient::OnWindowPredefinedCursorChanged(
   WindowPrivate(window).LocalSetPredefinedCursor(cursor);
 }
 
+void WindowTreeClient::OnDragDropStart(
+    mojo::Map<mojo::String, mojo::Array<uint8_t>> mime_data) {
+  mime_drag_data_ = std::move(mime_data);
+}
+
+void WindowTreeClient::OnDragEnter(Id window_id,
+                                   uint32_t key_state,
+                                   const gfx::Point& position,
+                                   uint32_t effect_bitmask,
+                                   const OnDragEnterCallback& callback) {
+  Window* window = GetWindowByServerId(window_id);
+  if (!window || !window->drop_target()) {
+    callback.Run(mojom::kDropEffectNone);
+    return;
+  }
+
+  if (!base::ContainsKey(drag_entered_windows_, window_id)) {
+    window->drop_target()->OnDragDropStart(
+        mime_drag_data_.To<std::map<std::string, std::vector<uint8_t>>>());
+    drag_entered_windows_.insert(window_id);
+  }
+
+  uint32_t ret =
+      window->drop_target()->OnDragEnter(key_state, position, effect_bitmask);
+  callback.Run(ret);
+}
+
+void WindowTreeClient::OnDragOver(Id window_id,
+                                  uint32_t key_state,
+                                  const gfx::Point& position,
+                                  uint32_t effect_bitmask,
+                                  const OnDragOverCallback& callback) {
+  Window* window = GetWindowByServerId(window_id);
+  if (!window || !window->drop_target()) {
+    callback.Run(mojom::kDropEffectNone);
+    return;
+  }
+
+  uint32_t ret =
+      window->drop_target()->OnDragOver(key_state, position, effect_bitmask);
+  callback.Run(ret);
+}
+
+void WindowTreeClient::OnDragLeave(Id window_id) {
+  Window* window = GetWindowByServerId(window_id);
+  if (!window || !window->drop_target())
+    return;
+
+  window->drop_target()->OnDragLeave();
+}
+
+void WindowTreeClient::OnDragDropDone() {
+  for (Id id : drag_entered_windows_) {
+    Window* window = GetWindowByServerId(id);
+    if (!window || !window->drop_target())
+      continue;
+    window->drop_target()->OnDragDropDone();
+  }
+  drag_entered_windows_.clear();
+}
+
+void WindowTreeClient::OnCompleteDrop(Id window_id,
+                                      uint32_t key_state,
+                                      const gfx::Point& position,
+                                      uint32_t effect_bitmask,
+                                      const OnCompleteDropCallback& callback) {
+  Window* window = GetWindowByServerId(window_id);
+  if (!window || !window->drop_target()) {
+    callback.Run(mojom::kDropEffectNone);
+    return;
+  }
+
+  uint32_t ret = window->drop_target()->OnCompleteDrop(key_state, position,
+                                                       effect_bitmask);
+  callback.Run(ret);
+}
+
+void WindowTreeClient::OnPerformDragDropCompleted(uint32_t change_id,
+                                                  bool success,
+                                                  uint32_t action_taken) {
+  if (current_drag_state_ && change_id == current_drag_state_->change_id) {
+    current_drag_state_->completed_action = action_taken;
+    OnChangeCompleted(change_id, success);
+  }
+}
+
 void WindowTreeClient::OnChangeCompleted(uint32_t change_id, bool success) {
   std::unique_ptr<InFlightChange> change(std::move(in_flight_map_[change_id]));
   in_flight_map_.erase(change_id);
@@ -1073,6 +1199,14 @@ void WindowTreeClient::OnChangeCompleted(uint32_t change_id, bool success) {
     current_move_loop_change_ = 0;
     on_current_move_finished_.Run(success);
     on_current_move_finished_.Reset();
+  }
+
+  if (current_drag_state_ && change_id == current_drag_state_->change_id) {
+    OnDragDropDone();
+
+    current_drag_state_->on_finished.Run(success,
+                                         current_drag_state_->completed_action);
+    current_drag_state_.reset();
   }
 }
 
@@ -1100,6 +1234,17 @@ void WindowTreeClient::WmNewDisplayAdded(const display::Display& display,
                                          mojom::WindowDataPtr root_data,
                                          bool parent_drawn) {
   WmNewDisplayAddedImpl(display, std::move(root_data), parent_drawn);
+}
+
+void WindowTreeClient::WmDisplayRemoved(int64_t display_id) {
+  DCHECK(window_manager_delegate_);
+
+  for (Window* root : roots_) {
+    if (root->display_id() == display_id) {
+      window_manager_delegate_->OnWmDisplayRemoved(root);
+      return;
+    }
+  }
 }
 
 void WindowTreeClient::WmSetBounds(uint32_t change_id,

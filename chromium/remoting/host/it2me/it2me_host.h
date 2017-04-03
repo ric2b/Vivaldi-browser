@@ -6,14 +6,15 @@
 #define REMOTING_HOST_IT2ME_IT2ME_HOST_H_
 
 #include <memory>
+#include <string>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/single_thread_task_runner.h"
 #include "remoting/host/host_status_observer.h"
 #include "remoting/host/it2me/it2me_confirmation_dialog.h"
 #include "remoting/host/it2me/it2me_confirmation_dialog_proxy.h"
+#include "remoting/protocol/validating_authenticator.h"
 #include "remoting/signaling/xmpp_signal_strategy.h"
 
 namespace base {
@@ -64,10 +65,10 @@ class It2MeHost : public base::RefCountedThreadSafe<It2MeHost>,
 
   It2MeHost(std::unique_ptr<ChromotingHostContext> context,
             std::unique_ptr<PolicyWatcher> policy_watcher,
-            std::unique_ptr<It2MeConfirmationDialogFactory>
-                confirmation_dialog_factory,
+            std::unique_ptr<It2MeConfirmationDialog> confirmation_dialog,
             base::WeakPtr<It2MeHost::Observer> observer,
-            const XmppSignalStrategy::XmppServerConfig& xmpp_server_config,
+            std::unique_ptr<SignalStrategy> signal_strategy,
+            const std::string& username,
             const std::string& directory_bot_jid);
 
   // Methods called by the script object, from the plugin thread.
@@ -92,15 +93,22 @@ class It2MeHost : public base::RefCountedThreadSafe<It2MeHost>,
     SetState(state, error_message);
   }
 
+  // Updates the current policies based on |policies|.  Runs |done_callback| on
+  // the calling thread once the policies have been updated.
+  void SetPolicyForTesting(std::unique_ptr<base::DictionaryValue> policies,
+                           const base::Closure& done_callback);
+
+  // Returns the callback used for validating the connection.  Do not run the
+  // returned callback after this object has been destroyed.
+  protocol::ValidatingAuthenticator::ValidationCallback
+  GetValidationCallbackForTesting();
+
  protected:
   friend class base::RefCountedThreadSafe<It2MeHost>;
 
   ~It2MeHost() override;
 
   ChromotingHostContext* host_context() { return host_context_.get(); }
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner() {
-    return task_runner_;
-  }
   base::WeakPtr<It2MeHost::Observer> observer() { return observer_; }
 
  private:
@@ -110,12 +118,10 @@ class It2MeHost : public base::RefCountedThreadSafe<It2MeHost>,
   // Returns true if the host is connected.
   bool IsConnected() const;
 
-  // Presents a confirmation dialog to the user before starting the connection
-  // process.
-  void ShowConfirmationPrompt();
-
   // Processes the result of the confirmation dialog.
-  void OnConfirmationResult(It2MeConfirmationDialog::Result result);
+  void OnConfirmationResult(
+      const protocol::ValidatingAuthenticator::ResultCallback& result_callback,
+      It2MeConfirmationDialog::Result result);
 
   // Called by Connect() to check for policies and start connection process.
   void ReadPolicyAndConnect();
@@ -141,31 +147,36 @@ class It2MeHost : public base::RefCountedThreadSafe<It2MeHost>,
 
   void DisconnectOnNetworkThread();
 
+  // Uses details of the connection and current policies to determine if the
+  // connection should be accepted or rejected.
+  void ValidateConnectionDetails(
+      const std::string& remote_jid,
+      const protocol::ValidatingAuthenticator::ResultCallback& result_callback);
+
   // Caller supplied fields.
   std::unique_ptr<ChromotingHostContext> host_context_;
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   base::WeakPtr<It2MeHost::Observer> observer_;
-  XmppSignalStrategy::XmppServerConfig xmpp_server_config_;
+  std::unique_ptr<SignalStrategy> signal_strategy_;
+  std::string username_;
   std::string directory_bot_jid_;
 
-  It2MeHostState state_;
+  It2MeHostState state_ = kDisconnected;
 
   scoped_refptr<RsaKeyPair> host_key_pair_;
-  std::unique_ptr<SignalStrategy> signal_strategy_;
   std::unique_ptr<RegisterSupportHostRequest> register_request_;
   std::unique_ptr<HostStatusLogger> host_status_logger_;
   std::unique_ptr<DesktopEnvironmentFactory> desktop_environment_factory_;
   std::unique_ptr<HostEventLogger> host_event_logger_;
 
   std::unique_ptr<ChromotingHost> host_;
-  int failed_login_attempts_;
+  int failed_login_attempts_ = 0;
 
   std::unique_ptr<PolicyWatcher> policy_watcher_;
-  std::unique_ptr<It2MeConfirmationDialogFactory> confirmation_dialog_factory_;
+  std::unique_ptr<It2MeConfirmationDialog> confirmation_dialog_;
   std::unique_ptr<It2MeConfirmationDialogProxy> confirmation_dialog_proxy_;
 
   // Host the current nat traversal policy setting.
-  bool nat_traversal_enabled_;
+  bool nat_traversal_enabled_ = false;
 
   // The client and host domain policy setting.
   std::string required_client_domain_;
@@ -174,13 +185,17 @@ class It2MeHost : public base::RefCountedThreadSafe<It2MeHost>,
   // Indicates whether or not a policy has ever been read. This is to ensure
   // that on startup, we do not accidentally start a connection before we have
   // queried our policy restrictions.
-  bool policy_received_;
+  bool policy_received_ = false;
 
   // On startup, it is possible to have Connect() called before the policy read
   // is completed.  Rather than just failing, we thunk the connection call so
   // it can be executed after at least one successful policy read. This
   // variable contains the thunk if it is necessary.
   base::Closure pending_connect_;
+
+  // Called after the client machine initiates the connection process and
+  // determines whether to reject the connection or allow it to continue.
+  protocol::ValidatingAuthenticator::ValidationCallback validation_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(It2MeHost);
 };
@@ -194,19 +209,18 @@ class It2MeHostFactory {
 
   // |policy_service| is used for creating the policy watcher for new
   // instances of It2MeHost on ChromeOS.  The caller must ensure that
-  // |policy_service| is valid throughout the lifetime of the It2MeHostFactory
-  // and each created It2MeHost object.  This is currently possible because
-  // |policy_service| is a global singleton available from the browser process.
-  virtual void set_policy_service(policy::PolicyService* policy_service);
-
+  // |policy_service| is valid throughout the lifetime of each created It2MeHost
+  // object.  This is currently possible because |policy_service| is a global
+  // singleton available from the browser process.
   virtual scoped_refptr<It2MeHost> CreateIt2MeHost(
       std::unique_ptr<ChromotingHostContext> context,
+      policy::PolicyService* policy_service,
       base::WeakPtr<It2MeHost::Observer> observer,
-      const XmppSignalStrategy::XmppServerConfig& xmpp_server_config,
+      std::unique_ptr<SignalStrategy> signal_strategy,
+      const std::string& username,
       const std::string& directory_bot_jid);
 
  private:
-  policy::PolicyService* policy_service_;
   DISALLOW_COPY_AND_ASSIGN(It2MeHostFactory);
 };
 

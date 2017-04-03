@@ -49,26 +49,30 @@ namespace blink {
 // Debug-time checking of this is enforced via v8::MicrotasksScope.
 //
 // Calls of type (1) should generally go through ScriptController, as inspector
-// instrumentation is needed. ScriptController allocates V8RecursionScope for you.
+// instrumentation is needed. ScriptController allocates V8RecursionScope for
+// you.
 //
-// Calls of type (2) should always stack-allocate a v8::MicrotasksScope(kRunMicrtoasks)
-// in the same block as the call into script.
+// Calls of type (2) should always stack-allocate a
+// v8::MicrotasksScope(kRunMicrtoasks) in the same block as the call into
+// script.
 //
-// Calls of type (3) should stack allocate a v8::MicrotasksScope(kDoNotRunMicrotasks) --
-// this skips work that is spec'd to happen at the end of the outer-most
-// script stack frame of calls into page script:
+// Calls of type (3) should stack allocate a
+// v8::MicrotasksScope(kDoNotRunMicrotasks) -- this skips work that is spec'd to
+// happen at the end of the outer-most script stack frame of calls into page
+// script:
 // http://www.whatwg.org/specs/web-apps/current-work/#perform-a-microtask-checkpoint
 class CORE_EXPORT Microtask {
-    STATIC_ONLY(Microtask);
-public:
-    static void performCheckpoint(v8::Isolate*);
+  STATIC_ONLY(Microtask);
 
-    // TODO(jochen): Make all microtasks pass in the ScriptState they want to be
-    // executed in. Until then, all microtasks have to keep track of their
-    // ScriptState themselves.
-    static void enqueueMicrotask(std::unique_ptr<WTF::Closure>);
+ public:
+  static void performCheckpoint(v8::Isolate*);
+
+  // TODO(jochen): Make all microtasks pass in the ScriptState they want to be
+  // executed in. Until then, all microtasks have to keep track of their
+  // ScriptState themselves.
+  static void enqueueMicrotask(std::unique_ptr<WTF::Closure>);
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // Microtask_h
+#endif  // Microtask_h

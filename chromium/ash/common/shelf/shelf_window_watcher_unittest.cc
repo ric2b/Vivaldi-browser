@@ -4,7 +4,6 @@
 
 #include "ash/common/shelf/shelf_window_watcher.h"
 
-#include "ash/common/ash_switches.h"
 #include "ash/common/shelf/shelf_item_types.h"
 #include "ash/common/shelf/shelf_model.h"
 #include "ash/common/shell_window_ids.h"
@@ -13,6 +12,7 @@
 #include "ash/common/wm_lookup.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
+#include "ash/common/wm_window_property.h"
 #include "ash/test/ash_test_base.h"
 #include "ui/base/hit_test.h"
 #include "ui/views/widget/widget.h"
@@ -36,9 +36,7 @@ class ShelfWindowWatcherTest : public test::AshTestBase {
 
   ShelfID CreateShelfItem(WmWindow* window) {
     ShelfID id = model_->next_id();
-    ShelfItemDetails item_details;
-    item_details.type = TYPE_PLATFORM_APP;
-    window->SetShelfItemDetails(item_details);
+    window->SetIntProperty(WmWindowProperty::SHELF_ITEM_TYPE, TYPE_DIALOG);
     return id;
   }
 
@@ -54,7 +52,7 @@ TEST_F(ShelfWindowWatcherTest, OpenAndClose) {
   // ShelfModel only has an APP_LIST item.
   EXPECT_EQ(1, model_->item_count());
 
-  // Adding windows with ShelfItemDetails properties adds shelf items.
+  // Adding windows with valid ShelfItemType properties adds shelf items.
   std::unique_ptr<views::Widget> widget1 =
       CreateTestWidget(nullptr, kShellWindowId_DefaultContainer, gfx::Rect());
   CreateShelfItem(WmLookup::Get()->GetWindowForWidget(widget1.get()));
@@ -71,11 +69,11 @@ TEST_F(ShelfWindowWatcherTest, OpenAndClose) {
   EXPECT_EQ(1, model_->item_count());
 }
 
-TEST_F(ShelfWindowWatcherTest, CreateAndRemoveShelfItemDetails) {
+TEST_F(ShelfWindowWatcherTest, CreateAndRemoveShelfItemProperties) {
   // ShelfModel only has an APP_LIST item.
   EXPECT_EQ(1, model_->item_count());
 
-  // Creating windows without ShelfItemDetails does not add items.
+  // Creating windows without a valid ShelfItemType does not add items.
   std::unique_ptr<views::Widget> widget1 =
       CreateTestWidget(nullptr, kShellWindowId_DefaultContainer, gfx::Rect());
   WmWindow* window1 = WmLookup::Get()->GetWindowForWidget(widget1.get());
@@ -98,13 +96,17 @@ TEST_F(ShelfWindowWatcherTest, CreateAndRemoveShelfItemDetails) {
   int index_w2 = model_->ItemIndexByID(id_w2);
   EXPECT_EQ(STATUS_ACTIVE, model_->items()[index_w2].status);
 
-  // ShelfItem is removed when its window property is cleared.
-  window1->ClearShelfItemDetails();
+  // ShelfItem is removed when the item type window property is cleared.
+  window1->SetIntProperty(WmWindowProperty::SHELF_ITEM_TYPE, TYPE_UNDEFINED);
   EXPECT_EQ(2, model_->item_count());
-  window2->ClearShelfItemDetails();
+  window2->SetIntProperty(WmWindowProperty::SHELF_ITEM_TYPE, TYPE_UNDEFINED);
   EXPECT_EQ(1, model_->item_count());
   // Clearing twice doesn't do anything.
-  window2->ClearShelfItemDetails();
+  window2->SetIntProperty(WmWindowProperty::SHELF_ITEM_TYPE, TYPE_UNDEFINED);
+  EXPECT_EQ(1, model_->item_count());
+
+  // Setting an icon id (without a valid item type) does not add a shelf item.
+  window2->SetIntProperty(WmWindowProperty::SHELF_ICON_RESOURCE_ID, 1234);
   EXPECT_EQ(1, model_->item_count());
 }
 
@@ -157,11 +159,8 @@ TEST_F(ShelfWindowWatcherTest, UpdateWindowProperty) {
   int index = model_->ItemIndexByID(id);
   EXPECT_EQ(STATUS_ACTIVE, model_->items()[index].status);
 
-  // Update ShelfItem for |window|.
-  ShelfItemDetails details;
-  details.type = TYPE_PLATFORM_APP;
-
-  window->SetShelfItemDetails(details);
+  // Update the ShelfItemType for |window|.
+  window->SetIntProperty(WmWindowProperty::SHELF_ITEM_TYPE, TYPE_PLATFORM_APP);
   // No new item is created after updating a launcher item.
   EXPECT_EQ(2, model_->item_count());
   // index and id are not changed after updating a launcher item.

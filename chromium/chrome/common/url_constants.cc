@@ -82,6 +82,7 @@ const char kChromeUIRestartURL[] = "chrome://restart/";
 const char kChromeUISettingsURL[] = "chrome://settings/";
 const char kChromeUIContentSettingsURL[] = "chrome://settings/content";
 const char kChromeUISettingsFrameURL[] = "chrome://settings-frame/";
+const char kChromeUISigninErrorURL[] = "chrome://signin-error/";
 const char kChromeUISuggestionsURL[] = "chrome://suggestions/";
 const char kChromeUISupervisedUserPassphrasePageURL[] =
     "chrome://managed-user-passphrase/";
@@ -93,6 +94,7 @@ const char kChromeUIThumbnailListURL[] = "chrome://thumbnails/";
 const char kChromeUIUberFrameURL[] = "chrome://uber-frame/";
 const char kChromeUIUserActionsURL[] = "chrome://user-actions/";
 const char kChromeUIVersionURL[] = "chrome://version/";
+const char kChromeUIWelcomeURL[] = "chrome://welcome/";
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
 const char kChromeUIContextualSearchPromoURL[] =
@@ -114,7 +116,6 @@ const char kChromeUIDeviceEmulatorURL[] = "chrome://device-emulator/";
 const char kChromeUIFirstRunURL[] = "chrome://first-run/";
 const char kChromeUIKeyboardOverlayURL[] = "chrome://keyboardoverlay/";
 const char kChromeUIMobileSetupURL[] = "chrome://mobilesetup/";
-const char kChromeUINfcDebugURL[] = "chrome://nfc-debug/";
 const char kChromeUIOobeURL[] = "chrome://oobe/";
 const char kChromeUIOSCreditsURL[] = "chrome://os-credits/";
 const char kChromeUIProxySettingsURL[] = "chrome://proxy-settings/";
@@ -125,6 +126,7 @@ const char kChromeUISlowURL[] = "chrome://slow/";
 const char kChromeUISystemInfoURL[] = "chrome://system/";
 const char kChromeUITermsOemURL[] = "chrome://terms/oem";
 const char kChromeUIUserImageURL[] = "chrome://userimage/";
+const char kChromeUIMdCupsSettingsURL[] = "chrome://settings/cupsPrinters";
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_WIN)
@@ -159,6 +161,7 @@ const char kChromeUIAboutHost[] = "about";
 const char kChromeUIBlankHost[] = "blank";
 const char kChromeUIAppLauncherPageHost[] = "apps";
 const char kChromeUIAppListStartPageHost[] = "app-list";
+const char kChromeUIBluetoothInternalsHost[] = "bluetooth-internals";
 const char kChromeUIBookmarksHost[] = "bookmarks";
 const char kChromeUICacheHost[] = "cache";
 const char kChromeUICertificateViewerHost[] = "view-cert";
@@ -229,6 +232,7 @@ const char kChromeUIRestartHost[] = "restart";
 const char kChromeUISettingsHost[] = "settings";
 const char kChromeUISettingsFrameHost[] = "settings-frame";
 const char kChromeUIShorthangHost[] = "shorthang";
+const char kChromeUISigninErrorHost[] = "signin-error";
 const char kChromeUISignInInternalsHost[] = "signin-internals";
 const char kChromeUISiteEngagementHost[] = "site-engagement";
 const char kChromeUISuggestionsHost[] = "suggestions";
@@ -241,6 +245,7 @@ const char kChromeUISyncFileSystemInternalsHost[] = "syncfs-internals";
 const char kChromeUISyncInternalsHost[] = "sync-internals";
 const char kChromeUISyncResourcesHost[] = "syncresources";
 const char kChromeUISystemInfoHost[] = "system";
+const char kChromeUITaskSchedulerInternalsHost[] = "taskscheduler-internals";
 const char kChromeUITermsHost[] = "terms";
 const char kChromeUIThemeHost[] = "theme";
 const char kChromeUIThumbnailHost[] = "thumb";
@@ -253,6 +258,7 @@ const char kChromeUIUberHost[] = "chrome";
 const char kChromeUIUsbInternalsHost[] = "usb-internals";
 const char kChromeUIUserActionsHost[] = "user-actions";
 const char kChromeUIVersionHost[] = "version";
+const char kChromeUIWelcomeHost[] = "welcome";
 const char kChromeUIWorkersHost[] = "workers";
 
 #if defined(ENABLE_PRINT_PREVIEW)
@@ -272,6 +278,10 @@ const char kChromeUIPopularSitesInternalsHost[] = "popular-sites-internals";
 const char kChromeUISnippetsInternalsHost[] = "snippets-internals";
 #endif
 
+#if defined(ENABLE_VR_SHELL)
+const char kChromeUIVrShellUIHost[] = "vr-shell-ui";
+#endif
+
 #if defined(OS_CHROMEOS)
 const char kChromeUIActivationMessageHost[] = "activationmessage";
 const char kChromeUIAppLaunchHost[] = "app-launch";
@@ -285,7 +295,6 @@ const char kChromeUIKeyboardOverlayHost[] = "keyboardoverlay";
 const char kChromeUILoginContainerHost[] = "login-container";
 const char kChromeUILoginHost[] = "login";
 const char kChromeUIMobileSetupHost[] = "mobilesetup";
-const char kChromeUINfcDebugHost[] = "nfc-debug";
 const char kChromeUINetworkHost[] = "network";
 const char kChromeUIOobeHost[] = "oobe";
 const char kChromeUIOSCreditsHost[] = "os-credits";
@@ -356,7 +365,6 @@ const char kTriggeredResetProfileSettingsSubPage[] =
     "triggeredResetProfileSettings";
 #if defined(OS_CHROMEOS)
 const char kInternetOptionsSubPage[] = "internet";
-const char kChangeProfilePictureSubPage[] = "changePicture";
 #endif
 
 // Extension sub pages.
@@ -424,7 +432,7 @@ const char kChromeHelpViaWebUIURL[] =
 
 #if defined(OS_CHROMEOS)
 const char kChromeAccessibilityHelpURL[] =
-    "https://support.google.com/chromebook/?p=accessibility_menu";
+    "https://support.google.com/chromebook/topic/6323347";
 const char kChromeAccessibilitySettingsURL[] =
     "/chromevox/background/options.html";
 const char kChromePaletteHelpURL[] =
@@ -600,13 +608,14 @@ const char kNotificationWelcomeLearnMoreURL[] =
 // Add hosts here to be included in chrome://chrome-urls (about:about).
 // These hosts will also be suggested by BuiltinProvider.
 const char* const kChromeHostURLs[] = {
+  kChromeUIBluetoothInternalsHost,
   kChromeUICacheHost,
   kChromeUIChromeURLsHost,
   kChromeUIComponentsHost,
   kChromeUICrashesHost,
   kChromeUICreditsHost,
-  kChromeUIDeviceLogHost,
   kChromeUIDNSHost,
+  kChromeUIDeviceLogHost,
   kChromeUIFlagsHost,
   kChromeUIGCMInternalsHost,
   kChromeUIHistoryHost,
@@ -623,6 +632,7 @@ const char* const kChromeHostURLs[] = {
   kChromeUISuggestionsHost,
   kChromeUISupervisedUserInternalsHost,
   kChromeUISyncInternalsHost,
+  kChromeUITaskSchedulerInternalsHost,
   kChromeUITermsHost,
   kChromeUIThumbnailListHost,
   kChromeUITranslateInternalsHost,
@@ -772,6 +782,13 @@ const char kWindowsXPVistaDeprecationURL[] =
 
 const char kChooserBluetoothOverviewURL[] =
     "https://support.google.com/chrome?p=bluetooth";
+
+const char kBluetoothAdapterOffHelpURL[] =
+#if defined(OS_CHROMEOS)
+    "chrome://settings/search#Bluetooth";
+#else
+    "https://support.google.com/chrome?p=bluetooth";
+#endif
 
 const char kChooserUsbOverviewURL[] =
     "https://support.google.com/chrome?p=webusb";

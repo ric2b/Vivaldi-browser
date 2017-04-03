@@ -2,10 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "build/build_config.h"
 #include "components/sync/driver/pref_names.h"
 
-namespace sync_driver {
+namespace syncer {
 
 namespace prefs {
 
@@ -48,7 +47,9 @@ const char kSyncFaviconTracking[] = "sync.favicon_tracking";
 const char kSyncHistoryDeleteDirectives[] = "sync.history_delete_directives";
 const char kSyncPasswords[] = "sync.passwords";
 const char kSyncPreferences[] = "sync.preferences";
+const char kSyncPrinters[] = "sync.printers";
 const char kSyncPriorityPreferences[] = "sync.priority_preferences";
+const char kSyncReadingList[] = "sync.reading_list";
 const char kSyncSearchEngines[] = "sync.search_engines";
 const char kSyncSessions[] = "sync.sessions";
 const char kSyncSupervisedUserSettings[] = "sync.managed_user_settings";
@@ -125,4 +126,4 @@ const char kSyncNigoriStateForPassphraseTransition[] =
 
 }  // namespace prefs
 
-}  // namespace sync_driver
+}  // namespace syncer

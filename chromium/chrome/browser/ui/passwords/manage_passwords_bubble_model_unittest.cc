@@ -18,7 +18,7 @@
 #include "chrome/browser/sync/profile_sync_test_util.h"
 #include "chrome/browser/ui/passwords/passwords_model_delegate_mock.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/browser_sync/browser/profile_sync_service_mock.h"
+#include "components/browser_sync/profile_sync_service_mock.h"
 #include "components/password_manager/core/browser/mock_password_store.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
@@ -48,15 +48,20 @@ using ::testing::_;
 namespace {
 
 const char kFakeGroup[] = "FakeGroup";
+const char kSignInPromoCountTilClickMetric[] =
+    "PasswordManager.SignInPromoCountTilClick";
+const char kSignInPromoDismissalCountMetric[] =
+    "PasswordManager.SignInPromoDismissalCount";
 const char kSignInPromoDismissalReasonMetric[] = "PasswordManager.SignInPromo";
 const char kSiteOrigin[] = "http://example.com/login";
 const char kUsername[] = "Admin";
 const char kUIDismissalReasonMetric[] = "PasswordManager.UIDismissalReason";
 
-class TestSyncService : public ProfileSyncServiceMock {
+class TestSyncService : public browser_sync::ProfileSyncServiceMock {
  public:
   explicit TestSyncService(Profile* profile)
-      : ProfileSyncServiceMock(CreateProfileSyncServiceParamsForTest(profile)),
+      : browser_sync::ProfileSyncServiceMock(
+            CreateProfileSyncServiceParamsForTest(profile)),
         smartlock_enabled_(false) {}
   ~TestSyncService() override {}
 
@@ -84,7 +89,7 @@ class TestSyncService : public ProfileSyncServiceMock {
 
 std::unique_ptr<KeyedService> TestingSyncFactoryFunction(
     content::BrowserContext* context) {
-  return base::WrapUnique(new TestSyncService(static_cast<Profile*>(context)));
+  return base::MakeUnique<TestSyncService>(static_cast<Profile*>(context));
 }
 
 }  // namespace
@@ -370,6 +375,8 @@ TEST_F(ManagePasswordsBubbleModelTest, SuppressSignInPromo) {
   EXPECT_FALSE(model()->ReplaceToShowSignInPromoIfNeeded());
   DestroyModel();
   histogram_tester.ExpectTotalCount(kSignInPromoDismissalReasonMetric, 0);
+  histogram_tester.ExpectTotalCount(kSignInPromoCountTilClickMetric, 0);
+  histogram_tester.ExpectTotalCount(kSignInPromoDismissalCountMetric, 0);
 }
 
 TEST_F(ManagePasswordsBubbleModelTest, SignInPromoOK) {
@@ -394,6 +401,8 @@ TEST_F(ManagePasswordsBubbleModelTest, SignInPromoOK) {
   histogram_tester.ExpectUniqueSample(
       kSignInPromoDismissalReasonMetric,
       password_manager::metrics_util::CHROME_SIGNIN_OK, 1);
+  histogram_tester.ExpectUniqueSample(kSignInPromoCountTilClickMetric, 1, 1);
+  histogram_tester.ExpectTotalCount(kSignInPromoDismissalCountMetric, 0);
   EXPECT_TRUE(prefs()->GetBoolean(
       password_manager::prefs::kWasSignInPasswordPromoClicked));
 }
@@ -419,6 +428,8 @@ TEST_F(ManagePasswordsBubbleModelTest, SignInPromoCancel) {
   histogram_tester.ExpectUniqueSample(
       kSignInPromoDismissalReasonMetric,
       password_manager::metrics_util::CHROME_SIGNIN_CANCEL, 1);
+  histogram_tester.ExpectUniqueSample(kSignInPromoCountTilClickMetric, 1, 1);
+  histogram_tester.ExpectTotalCount(kSignInPromoDismissalCountMetric, 0);
   EXPECT_TRUE(prefs()->GetBoolean(
       password_manager::prefs::kWasSignInPasswordPromoClicked));
 }
@@ -443,6 +454,8 @@ TEST_F(ManagePasswordsBubbleModelTest, SignInPromoDismiss) {
   histogram_tester.ExpectUniqueSample(
       kSignInPromoDismissalReasonMetric,
       password_manager::metrics_util::CHROME_SIGNIN_DISMISSED, 1);
+  histogram_tester.ExpectTotalCount(kSignInPromoCountTilClickMetric, 0);
+  histogram_tester.ExpectUniqueSample(kSignInPromoDismissalCountMetric, 1, 1);
   EXPECT_FALSE(prefs()->GetBoolean(
       password_manager::prefs::kWasSignInPasswordPromoClicked));
 }

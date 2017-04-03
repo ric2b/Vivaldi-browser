@@ -14,10 +14,10 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/autofill/core/common/password_form.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/password_manager/core/browser/affiliation_utils.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/elide_url.h"
-#include "grit/components_strings.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/geometry/rect.h"
@@ -116,8 +116,13 @@ void GetSavePasswordDialogTitleTextAndLinkRange(
         l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_SMART_LOCK);
     replacements.insert(replacements.begin(), title_link);
     *title = l10n_util::GetStringFUTF16(title_id, replacements, &offsets);
-    *title_link_range =
-        gfx::Range(offsets[0], offsets[0] + title_link.length());
+    if (!offsets.empty()) {
+      // |offsets| can be empty when the localised string associated with
+      // |title_id| could not be found. While this situation is an error, it
+      // needs to be handled gracefully, see http://crbug.com/658902#c18.
+      *title_link_range =
+          gfx::Range(offsets[0], offsets[0] + title_link.length());
+    }
   } else {
     replacements.insert(
         replacements.begin(),
@@ -183,7 +188,7 @@ base::string16 GetDisplayUsername(const autofill::PasswordForm& form) {
 }
 
 bool IsSyncingAutosignSetting(Profile* profile) {
-  const ProfileSyncService* sync_service =
+  const browser_sync::ProfileSyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile);
   return (sync_service && sync_service->IsFirstSetupComplete() &&
           sync_service->IsSyncActive() &&

@@ -161,9 +161,8 @@ RenderViewContextMenuBase::RenderViewContextMenuBase(
       browser_context_(source_web_contents_->GetBrowserContext()),
       menu_model_(this),
       render_frame_id_(render_frame_host->GetRoutingID()),
-      command_executed_(false),
-      render_process_id_(render_frame_host->GetProcess()->GetID()) {
-}
+      render_process_id_(render_frame_host->GetProcess()->GetID()),
+      command_executed_(false) {}
 
 RenderViewContextMenuBase::~RenderViewContextMenuBase() {
 }
@@ -393,7 +392,8 @@ void RenderViewContextMenuBase::OpenURLWithExtraHeaders(
       content::Referrer(referring_url.GetAsReferrer(),
                         params_.referrer_policy));
 
-  if (params_.link_url == url && disposition != OFF_THE_RECORD)
+  if (params_.link_url == url &&
+      disposition != WindowOpenDisposition::OFF_THE_RECORD)
     params_.custom_context.link_followed = url;
 
   OpenURLParams open_url_params(url, referrer, disposition, transition, false,

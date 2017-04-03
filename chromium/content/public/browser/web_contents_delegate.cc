@@ -15,6 +15,7 @@
 #include "content/public/common/bindings_policy.h"
 #include "content/public/common/security_style.h"
 #include "content/public/common/url_constants.h"
+#include "net/cert/x509_certificate.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace content {
@@ -117,9 +118,10 @@ void WebContentsDelegate::ViewSourceForTab(WebContents* source,
   // It suffers from http://crbug.com/523 and that is why browser overrides
   // it with proper implementation.
   GURL url = GURL(kViewSourceScheme + std::string(":") + page_url.spec());
-  OpenURLFromTab(source, OpenURLParams(url, Referrer(),
-                                       NEW_FOREGROUND_TAB,
-                                       ui::PAGE_TRANSITION_LINK, false));
+  OpenURLFromTab(
+      source,
+      OpenURLParams(url, Referrer(), WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                    ui::PAGE_TRANSITION_LINK, false));
 }
 
 void WebContentsDelegate::ViewSourceForFrame(WebContents* source,
@@ -127,9 +129,10 @@ void WebContentsDelegate::ViewSourceForFrame(WebContents* source,
                                              const PageState& page_state) {
   // Same as ViewSourceForTab, but for given subframe.
   GURL url = GURL(kViewSourceScheme + std::string(":") + frame_url.spec());
-  OpenURLFromTab(source, OpenURLParams(url, Referrer(),
-                                       NEW_FOREGROUND_TAB,
-                                       ui::PAGE_TRANSITION_LINK, false));
+  OpenURLFromTab(
+      source,
+      OpenURLParams(url, Referrer(), WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                    ui::PAGE_TRANSITION_LINK, false));
 }
 
 bool WebContentsDelegate::PreHandleKeyboardEvent(
@@ -226,6 +229,15 @@ void WebContentsDelegate::RequestMediaDecodePermission(
     const base::Callback<void(bool)>& callback) {
   callback.Run(false);
 }
+
+base::android::ScopedJavaLocalRef<jobject>
+WebContentsDelegate::GetContentVideoViewEmbedder() {
+  return base::android::ScopedJavaLocalRef<jobject>();
+}
+
+bool WebContentsDelegate::ShouldBlockMediaRequest(const GURL& url) {
+  return false;
+}
 #endif
 
 bool WebContentsDelegate::RequestPpapiBrokerPermission(
@@ -295,7 +307,7 @@ DownloadItemAction::~DownloadItemAction() {
 
 void WebContentsDelegate::ShowCertificateViewerInDevTools(
     WebContents* web_contents,
-    int cert_id) {
+    scoped_refptr<net::X509Certificate> certificate) {
 }
 
 void WebContentsDelegate::RequestAppBannerFromDevTools(

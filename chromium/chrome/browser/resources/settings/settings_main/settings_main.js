@@ -45,7 +45,8 @@ Polymer({
     },
 
     /**
-     * Controls which main pages are displayed via dom-ifs.
+     * Controls which main pages are displayed via dom-ifs, based on the current
+     * route and the Advanced toggle state.
      * @private {!MainPageVisibility}
      */
     showPages_: {
@@ -56,14 +57,13 @@ Polymer({
     },
 
     /**
-     * The main pages that were displayed before search was initiated. When
-     * |null| it indicates that currently the page is displaying its normal
-     * contents, instead of displaying search results.
-     * @private {?MainPageVisibility}
+     * Whether a search operation is in progress or previous search results are
+     * being displayed.
+     * @private {boolean}
      */
-    previousShowPages_: {
-      type: Object,
-      value: null,
+    inSearchMode_: {
+      type: Boolean,
+      value: false,
     },
 
     /** @private */
@@ -92,7 +92,7 @@ Polymer({
   attached: function() {
     document.addEventListener('toggle-advanced-page', function(e) {
       this.advancedToggleExpanded_ = e.detail;
-      this.currentRouteChanged(settings.getCurrentRoute());
+      this.updatePagesShown_();
     }.bind(this));
 
     var currentRoute = settings.getCurrentRoute();
@@ -103,10 +103,15 @@ Polymer({
   overscrollChanged_: function() {
     if (!this.overscroll_ && this.boundScroll_) {
       this.offsetParent.removeEventListener('scroll', this.boundScroll_);
+      window.removeEventListener('resize', this.boundScroll_);
       this.boundScroll_ = null;
     } else if (this.overscroll_ && !this.boundScroll_) {
-      this.boundScroll_ = this.setOverscroll_.bind(this, 0);
+      this.boundScroll_ = function() {
+        if (!this.ignoreScroll_)
+          this.setOverscroll_(0);
+      }.bind(this);
       this.offsetParent.addEventListener('scroll', this.boundScroll_);
+      window.addEventListener('resize', this.boundScroll_);
     }
   },
 
@@ -114,6 +119,7 @@ Polymer({
    * Sets the overscroll padding. Never forces a scroll, i.e., always leaves
    * any currently visible overflow as-is.
    * @param {number=} opt_minHeight The minimum overscroll height needed.
+   * @private
    */
   setOverscroll_: function(opt_minHeight) {
     var scroller = this.offsetParent;
@@ -126,6 +132,32 @@ Polymer({
     var visibleOverscroll = overscroll.scrollHeight -
                             (overscrollBottom - visibleBottom);
     this.overscroll_ = Math.max(opt_minHeight || 0, visibleOverscroll);
+  },
+
+  /**
+   * Enables or disables user scrolling, via overscroll: hidden. Room for the
+   * hidden scrollbar is added to prevent the page width from changing back and
+   * forth. Also freezes the overscroll height.
+   * @param {!Event} e
+   * @param {boolean} detail True to freeze, false to unfreeze.
+   * @private
+   */
+  onFreezeScroll_: function(e, detail) {
+    if (detail) {
+      // Update the overscroll and ignore scroll events.
+      this.setOverscroll_(this.overscrollHeight_());
+      this.ignoreScroll_ = true;
+
+      // Prevent scrolling the container.
+      var scrollerWidth = this.offsetParent.clientWidth;
+      this.offsetParent.style.overflow = 'hidden';
+      var scrollbarWidth = this.offsetParent.clientWidth - scrollerWidth;
+      this.offsetParent.style.width = 'calc(100% - ' + scrollbarWidth + 'px)';
+    } else {
+      this.ignoreScroll_ = false;
+      this.offsetParent.style.overflow = '';
+      this.offsetParent.style.width = '';
+    }
   },
 
   /**
@@ -142,15 +174,39 @@ Polymer({
    * @private
    */
   showAdvancedToggle_: function() {
-    var inSearchMode = !!this.previousShowPages_;
-    return !inSearchMode && this.showPages_.basic && !this.hasExpandedSection_;
+    return !this.inSearchMode_ && this.showPages_.basic &&
+        !this.hasExpandedSection_;
   },
 
+  /**
+   * @return {boolean} Whether to show the basic page, taking into account both
+   *     routing and search state.
+   * @private
+   */
+  showBasicPage_: function() {
+    return this.showPages_.basic || (
+        this.inSearchMode_ && !this.hasExpandedSection_);
+  },
+
+  /**
+   * @return {boolean} Whether to show the advanced page, taking into account
+   *     both routing and search state.
+   * @private
+   */
+  showAdvancedPage_: function() {
+    return this.showPages_.advanced || (
+        this.inSearchMode_ && !this.hasExpandedSection_);
+  },
+
+  /** @param {!settings.Route} newRoute */
   currentRouteChanged: function(newRoute) {
     // When the route changes from a sub-page to the main page, immediately
     // update hasExpandedSection_ to unhide the other sections.
     if (!newRoute.isSubpage())
       this.hasExpandedSection_ = false;
+
+    if (settings.Route.ADVANCED.contains(newRoute))
+      this.advancedToggleExpanded_ = true;
 
     this.updatePagesShown_();
   },
@@ -177,24 +233,36 @@ Polymer({
         about: false,
         basic: settings.Route.BASIC.contains(currentRoute) ||
             !this.hasExpandedSection_,
-        advanced: settings.Route.ADVANCED.contains(currentRoute) ||
-            (!this.hasExpandedSection_ && this.advancedToggleExpanded_),
+        advanced: this.hasExpandedSection_ ?
+            settings.Route.ADVANCED.contains(currentRoute) :
+            this.advancedToggleExpanded_,
       };
-
-      if (this.showPages_.advanced) {
-        assert(!this.pageVisibility ||
-            this.pageVisibility.advancedSettings !== false);
-        this.advancedToggleExpanded_ = true;
-      }
     }
 
-    // Wait for any other changes prior to calculating the overflow padding.
+    // Calculate and set the overflow padding.
+    this.updateOverscrollForPage_();
+
+    // Wait for any other changes, then calculate the overflow padding again.
     setTimeout(function() {
       // Ensure any dom-if reflects the current properties.
       Polymer.dom.flush();
-
-      this.setOverscroll_(this.overscrollHeight_());
+      this.updateOverscrollForPage_();
     }.bind(this));
+  },
+
+  /**
+   * Calculates the necessary overscroll and sets the overscroll to that value
+   * (at minimum). For the About page, this just zeroes the overscroll.
+   * @private
+   */
+  updateOverscrollForPage_: function() {
+    if (this.showPages_.about) {
+      // Set overscroll directly to remove any existing overscroll that
+      // setOverscroll_ would otherwise preserve.
+      this.overscroll_ = 0;
+      return;
+    }
+    this.setOverscroll_(this.overscrollHeight_());
   },
 
   /**
@@ -263,17 +331,10 @@ Polymer({
    * @return {!Promise} A promise indicating that searching finished.
    */
   searchContents: function(query) {
-    if (!this.previousShowPages_) {
-      // Store which pages are shown before search, so that they can be restored
-      // after the user clears the search results.
-      this.previousShowPages_ = this.showPages_;
-    }
-
+    // Trigger rendering of the basic and advanced pages and search once ready.
+    this.inSearchMode_ = true;
     this.ensureInDefaultSearchPage_();
     this.toolbarSpinnerActive = true;
-
-    // Trigger rendering of the basic and advanced pages and search once ready.
-    this.showPages_ = {about: false, basic: true, advanced: true};
 
     return new Promise(function(resolve, reject) {
       setTimeout(function() {
@@ -294,15 +355,9 @@ Polymer({
           }
 
           this.toolbarSpinnerActive = false;
-          var showingSearchResults = !request.isSame('');
+          this.inSearchMode_ = !request.isSame('');
           this.showNoResultsFound_ =
-              showingSearchResults && !request.didFindMatches();
-
-          if (!showingSearchResults) {
-            // Restore the pages that were shown before search was initiated.
-            this.showPages_ = assert(this.previousShowPages_);
-            this.previousShowPages_ = null;
-          }
+              this.inSearchMode_ && !request.didFindMatches();
         }.bind(this));
       }.bind(this), 0);
     }.bind(this));

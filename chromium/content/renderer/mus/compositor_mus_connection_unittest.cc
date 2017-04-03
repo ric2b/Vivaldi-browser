@@ -79,10 +79,10 @@ class TestInputHandlerManager : public content::InputHandlerManager {
   void SetHandleInputEventResult(content::InputEventAckState result);
 
   // content::InputHandlerManager:
-  content::InputEventAckState HandleInputEvent(
-      int routing_id,
-      const blink::WebInputEvent* input_event,
-      ui::LatencyInfo* latency_info) override;
+  void HandleInputEvent(int routing_id,
+                        ui::ScopedWebInputEvent input_event,
+                        const ui::LatencyInfo& latency_info,
+                        const InputEventAckStateCallback& callback) override;
 
  private:
   // If true content::InputHandlerManager::HandleInputEvent is not called.
@@ -104,14 +104,17 @@ void TestInputHandlerManager::SetHandleInputEventResult(
   result_ = result;
 }
 
-content::InputEventAckState TestInputHandlerManager::HandleInputEvent(
+void TestInputHandlerManager::HandleInputEvent(
     int routing_id,
-    const blink::WebInputEvent* input_event,
-    ui::LatencyInfo* latency_info) {
-  if (override_result_)
-    return result_;
-  return content::InputHandlerManager::HandleInputEvent(routing_id, input_event,
-                                                        latency_info);
+    ui::ScopedWebInputEvent input_event,
+    const ui::LatencyInfo& latency_info,
+    const InputEventAckStateCallback& callback) {
+  if (override_result_) {
+    callback.Run(result_, std::move(input_event), latency_info, nullptr);
+    return;
+  }
+  content::InputHandlerManager::HandleInputEvent(
+      routing_id, std::move(input_event), latency_info, callback);
 }
 
 // Empty implementation of InputHandlerManagerClient.
@@ -122,7 +125,8 @@ class TestInputHandlerManagerClient
   ~TestInputHandlerManagerClient() override{};
 
   // content::InputHandlerManagerClient:
-  void SetBoundHandler(const Handler& handler) override {}
+  void SetInputHandlerManager(
+      content::InputHandlerManager* input_handler_manager) override {}
   void RegisterRoutingID(int routing_id) override {}
   void UnregisterRoutingID(int routing_id) override {}
   void DidOverscroll(int routing_id,
@@ -138,6 +142,7 @@ class TestInputHandlerManagerClient
       int routing_id,
       blink::WebInputEvent::Type type,
       content::InputEventAckState ack_result) override {}
+  void ProcessRafAlignedInput(int routing_id) override {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(TestInputHandlerManagerClient);
@@ -149,7 +154,7 @@ class TestRenderWidget : public content::RenderWidget {
   explicit TestRenderWidget(content::CompositorDependencies* compositor_deps)
       : content::RenderWidget(compositor_deps,
                               blink::WebPopupTypeNone,
-                              blink::WebScreenInfo(),
+                              content::ScreenInfo(),
                               true,
                               false,
                               false) {}
@@ -425,7 +430,7 @@ TEST_F(CompositorMusConnectionTest, LostAck) {
 }
 
 // Tests that when an input handler consumes the event, that
-// CompositorMusConnection does not consume the ack, nor calls it.
+// CompositorMusConnection will consume the ack, but call as UNHANDLED.
 TEST_F(CompositorMusConnectionTest, InputHandlerConsumes) {
   input_handler_manager()->SetHandleInputEventResult(
       InputEventAckState::INPUT_EVENT_ACK_STATE_CONSUMED);
@@ -438,13 +443,14 @@ TEST_F(CompositorMusConnectionTest, InputHandlerConsumes) {
 
   OnWindowInputEvent(&test_window, *event.get(), &ack_callback);
 
-  EXPECT_TRUE(ack_callback.get());
+  EXPECT_FALSE(ack_callback.get());
   VerifyAndRunQueues(false, false);
-  EXPECT_FALSE(test_callback->called());
+  EXPECT_TRUE(test_callback->called());
+  EXPECT_EQ(EventResult::UNHANDLED, test_callback->result());
 }
 
 // Tests that when the renderer will not ack an event, that
-// CompositorMusConnection does not consume the ack, nor calls it.
+// CompositorMusConnection will consume the ack, but call as UNHANDLED.
 TEST_F(CompositorMusConnectionTest, RendererWillNotSendAck) {
   ui::TestWindow test_window;
   ui::PointerEvent event(
@@ -458,10 +464,11 @@ TEST_F(CompositorMusConnectionTest, RendererWillNotSendAck) {
           base::Bind(&::TestCallback::ResultCallback, test_callback)));
 
   OnWindowInputEvent(&test_window, event, &ack_callback);
-  EXPECT_TRUE(ack_callback.get());
+  EXPECT_FALSE(ack_callback.get());
 
   VerifyAndRunQueues(true, false);
-  EXPECT_FALSE(test_callback->called());
+  EXPECT_TRUE(test_callback->called());
+  EXPECT_EQ(EventResult::UNHANDLED, test_callback->result());
 }
 
 // Tests that when a touch event id provided, that CompositorMusConnection

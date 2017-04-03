@@ -87,14 +87,10 @@ public class TabRedirectHandler {
 
         if (checkIsToChrome) mIsInitialIntentHeadingToChrome = isIntentToChrome(mContext, intent);
 
-        // Copies minimum information to retrieve resolvers.
-        mInitialIntent = new Intent(Intent.ACTION_VIEW);
-        mInitialIntent.setData(intent.getData());
-        if (intent.getCategories() != null) {
-            for (String category : intent.getCategories()) {
-                mInitialIntent.addCategory(category);
-            }
-        }
+        // A copy of the intent with component cleared to find resolvers.
+        mInitialIntent = new Intent(intent).setComponent(null);
+        Intent selector = mInitialIntent.getSelector();
+        if (selector != null) selector.setComponent(null);
     }
 
     private static boolean isIntentToChrome(Context context, Intent intent) {
@@ -203,7 +199,15 @@ public class TabRedirectHandler {
      */
     public boolean shouldStayInChrome(boolean hasExternalProtocol) {
         return (mIsInitialIntentHeadingToChrome && !hasExternalProtocol)
-                || mInitialNavigationType == NAVIGATION_TYPE_FROM_LINK_WITHOUT_USER_GESTURE
+                || shouldNavigationTypeStayInChrome();
+
+    }
+
+    /**
+     * @return Whether the current navigation is of the type that should always stay in Chrome.
+     */
+    public boolean shouldNavigationTypeStayInChrome() {
+        return mInitialNavigationType == NAVIGATION_TYPE_FROM_LINK_WITHOUT_USER_GESTURE
                 || mInitialNavigationType == NAVIGATION_TYPE_FROM_RELOAD;
     }
 
@@ -271,5 +275,12 @@ public class TabRedirectHandler {
             }
         }
         return false;
+    }
+
+    /**
+     * @return The initial intent of a redirect chain, if available.
+     */
+    public Intent getInitialIntent() {
+        return mInitialIntent;
     }
 }

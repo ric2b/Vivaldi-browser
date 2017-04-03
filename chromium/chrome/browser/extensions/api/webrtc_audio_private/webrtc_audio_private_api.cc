@@ -73,7 +73,7 @@ const char* WebrtcAudioPrivateEventService::service_name() {
 void WebrtcAudioPrivateEventService::OnDevicesChanged(
     base::SystemMonitor::DeviceType device_type) {
   switch (device_type) {
-    case base::SystemMonitor::DEVTYPE_AUDIO_CAPTURE:
+    case base::SystemMonitor::DEVTYPE_AUDIO:
     case base::SystemMonitor::DEVTYPE_VIDEO_CAPTURE:
       SignalEvent();
       break;
@@ -96,9 +96,9 @@ void WebrtcAudioPrivateEventService::SignalEvent() {
     const std::string& extension_id = extension->id();
     if (router->ExtensionHasEventListener(extension_id, kEventName) &&
         extension->permissions_data()->HasAPIPermission("webrtcAudioPrivate")) {
-      std::unique_ptr<Event> event(
-          new Event(events::WEBRTC_AUDIO_PRIVATE_ON_SINKS_CHANGED, kEventName,
-                    base::WrapUnique(new base::ListValue())));
+      std::unique_ptr<Event> event = base::MakeUnique<Event>(
+          events::WEBRTC_AUDIO_PRIVATE_ON_SINKS_CHANGED, kEventName,
+          base::MakeUnique<base::ListValue>());
       router->DispatchEventToExtension(extension_id, std::move(event));
     }
   }
@@ -244,7 +244,7 @@ void WebrtcAudioPrivateGetSinksFunction::OnOutputDeviceNames(
   // object run strictly in sequence; first RunAsync on the UI thread,
   // then DoQuery on the audio IO thread, then DoneOnUIThread on the
   // UI thread.
-  results_.reset(wap::GetSinks::Results::Create(results).release());
+  results_ = wap::GetSinks::Results::Create(results);
 
   BrowserThread::PostTask(
       BrowserThread::UI,
@@ -300,7 +300,7 @@ void WebrtcAudioPrivateGetActiveSinkFunction::OnHMACCalculated(
     DVLOG(2) << "Received empty ID, replacing with default ID.";
     result = media::AudioDeviceDescription::kDefaultDeviceId;
   }
-  results_.reset(wap::GetActiveSink::Results::Create(result).release());
+  results_ = wap::GetActiveSink::Results::Create(result);
   SendResponse(true);
 }
 
@@ -494,10 +494,9 @@ void WebrtcAudioPrivateGetAssociatedSinkFunction::OnHMACCalculated(
 
   if (associated_sink_id == media::AudioDeviceDescription::kDefaultDeviceId) {
     DVLOG(2) << "Got default ID, replacing with empty ID.";
-    results_.reset(wap::GetAssociatedSink::Results::Create("").release());
+    results_ = wap::GetAssociatedSink::Results::Create("");
   } else {
-    results_.reset(
-        wap::GetAssociatedSink::Results::Create(associated_sink_id).release());
+    results_ = wap::GetAssociatedSink::Results::Create(associated_sink_id);
   }
 
   SendResponse(true);

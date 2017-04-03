@@ -5,6 +5,7 @@
 #include "ui/base/ime/input_method_auralinux.h"
 
 #include "base/auto_reset.h"
+#include "base/bind.h"
 #include "base/environment.h"
 #include "ui/base/ime/ime_bridge.h"
 #include "ui/base/ime/ime_engine_handler_interface.h"
@@ -317,13 +318,6 @@ void InputMethodAuraLinux::ResetContext() {
   result_text_.clear();
   is_sync_mode_ = false;
   composition_changed_ = false;
-}
-
-void InputMethodAuraLinux::OnInputLocaleChanged() {
-}
-
-std::string InputMethodAuraLinux::GetInputLocale() {
-  return "";
 }
 
 bool InputMethodAuraLinux::IsCandidatePopupOpen() const {

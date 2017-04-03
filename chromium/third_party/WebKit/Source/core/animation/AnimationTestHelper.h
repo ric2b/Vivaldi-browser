@@ -5,19 +5,21 @@
 #ifndef AnimationTestHelper_h
 #define AnimationTestHelper_h
 
+#include "wtf/text/StringView.h"
 #include "wtf/text/WTFString.h"
 #include <v8.h>
 
 namespace blink {
 
-v8::Local<v8::Value> stringToV8Value(String);
+void setV8ObjectPropertyAsString(v8::Isolate*,
+                                 v8::Local<v8::Object>,
+                                 const StringView& name,
+                                 const StringView& value);
+void setV8ObjectPropertyAsNumber(v8::Isolate*,
+                                 v8::Local<v8::Object>,
+                                 const StringView& name,
+                                 double value);
 
-v8::Local<v8::Value> doubleToV8Value(double);
+}  // namespace blink
 
-void setV8ObjectPropertyAsString(v8::Isolate*, v8::Local<v8::Object>, String, String);
-
-void setV8ObjectPropertyAsNumber(v8::Isolate*, v8::Local<v8::Object>, String, double);
-
-} // namespace blink
-
-#endif // AnimationTestHelper_h
+#endif  // AnimationTestHelper_h

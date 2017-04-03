@@ -152,12 +152,15 @@ WebInspector.DebuggerWorkspaceBinding.prototype = {
      * @param {!WebInspector.DebuggerModel.Location} location
      * @param {function(!WebInspector.LiveLocation)} updateDelegate
      * @param {!WebInspector.LiveLocationPool} locationPool
-     * @return {!WebInspector.DebuggerWorkspaceBinding.Location}
+     * @return {?WebInspector.DebuggerWorkspaceBinding.Location}
      */
     createCallFrameLiveLocation: function(location, updateDelegate, locationPool)
     {
+        var script = location.script();
+        if (!script)
+            return null;
         var target = location.target();
-        this._ensureInfoForScript(/** @type {!WebInspector.Script} */(location.script()));
+        this._ensureInfoForScript(script);
         var liveLocation = this.createLiveLocation(location, updateDelegate, locationPool);
         this._registerCallFrameLiveLocation(target, liveLocation);
         return liveLocation;
@@ -385,8 +388,10 @@ WebInspector.DebuggerWorkspaceBinding.TargetData = function(debuggerModel, debug
     /** @type {!Map.<!WebInspector.UISourceCode, !WebInspector.DebuggerSourceMapping>} */
     this._uiSourceCodeToSourceMapping = new Map();
 
-    debuggerModel.addEventListener(WebInspector.DebuggerModel.Events.ParsedScriptSource, this._parsedScriptSource, this);
-    debuggerModel.addEventListener(WebInspector.DebuggerModel.Events.FailedToParseScriptSource, this._parsedScriptSource, this);
+    this._eventListeners = [
+        debuggerModel.addEventListener(WebInspector.DebuggerModel.Events.ParsedScriptSource, this._parsedScriptSource, this),
+        debuggerModel.addEventListener(WebInspector.DebuggerModel.Events.FailedToParseScriptSource, this._parsedScriptSource, this)
+    ];
 }
 
 WebInspector.DebuggerWorkspaceBinding.TargetData.prototype = {
@@ -453,6 +458,7 @@ WebInspector.DebuggerWorkspaceBinding.TargetData.prototype = {
 
     _dispose: function()
     {
+        WebInspector.EventTarget.removeEventListeners(this._eventListeners);
         this._compilerMapping.dispose();
         this._resourceMapping.dispose();
         this._defaultMapping.dispose();
@@ -598,7 +604,7 @@ WebInspector.DebuggerWorkspaceBinding.StackTraceTopFrameLocation = function(rawL
     /** @type {!Set<!WebInspector.LiveLocation>} */
     this._locations = new Set();
     for (var location of rawLocations)
-        this._locations.add(binding.createCallFrameLiveLocation(location, this._scheduleUpdate.bind(this), locationPool));
+        this._locations.add(binding.createLiveLocation(location, this._scheduleUpdate.bind(this), locationPool));
     this._updateLocation();
 }
 

@@ -120,6 +120,7 @@ class TestEventDispatcherDelegate : public EventDispatcherDelegate {
     if (delegate_)
       delegate_->ReleaseCapture();
   }
+  void UpdateNativeCursorFromDispatcher() override {}
   void OnCaptureChanged(ServerWindow* new_capture_window,
                         ServerWindow* old_capture_window) override {
     lost_capture_window_ = old_capture_window;
@@ -199,12 +200,8 @@ void RunMouseEventTests(EventDispatcher* dispatcher,
     const MouseEventTest& test = tests[i];
     ASSERT_FALSE(dispatcher_delegate->has_queued_events())
         << " unexpected queued events before running " << i;
-    if (test.input_event.IsMouseWheelEvent())
-      dispatcher->ProcessEvent(test.input_event,
-                               EventDispatcher::AcceleratorMatchPhase::ANY);
-    else
-      dispatcher->ProcessEvent(ui::PointerEvent(test.input_event),
-                               EventDispatcher::AcceleratorMatchPhase::ANY);
+    dispatcher->ProcessEvent(ui::PointerEvent(test.input_event),
+                             EventDispatcher::AcceleratorMatchPhase::ANY);
 
     std::unique_ptr<DispatchedEventDetails> details =
         dispatcher_delegate->GetAndAdvanceDispatchedEventDetails();
@@ -322,14 +319,16 @@ ServerWindow* EventDispatcherTest::GetActiveSystemModalWindow() const {
 void EventDispatcherTest::SetUp() {
   testing::Test::SetUp();
 
-  window_delegate_.reset(new TestServerWindowDelegate());
-  root_window_.reset(new ServerWindow(window_delegate_.get(), WindowId(1, 2)));
+  window_delegate_ = base::MakeUnique<TestServerWindowDelegate>();
+  root_window_ =
+      base::MakeUnique<ServerWindow>(window_delegate_.get(), WindowId(1, 2));
   window_delegate_->set_root_window(root_window_.get());
   root_window_->SetVisible(true);
 
-  test_event_dispatcher_delegate_.reset(new TestEventDispatcherDelegate(this));
-  event_dispatcher_.reset(
-      new EventDispatcher(test_event_dispatcher_delegate_.get()));
+  test_event_dispatcher_delegate_ =
+      base::MakeUnique<TestEventDispatcherDelegate>(this);
+  event_dispatcher_ =
+      base::MakeUnique<EventDispatcher>(test_event_dispatcher_delegate_.get());
   test_event_dispatcher_delegate_->set_root(root_window_.get());
 }
 

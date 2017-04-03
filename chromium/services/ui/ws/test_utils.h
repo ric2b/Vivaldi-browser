@@ -10,10 +10,13 @@
 #include <memory>
 #include <vector>
 
+#include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "services/ui/public/interfaces/display.mojom.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "services/ui/ws/display.h"
 #include "services/ui/ws/display_binding.h"
+#include "services/ui/ws/drag_controller.h"
 #include "services/ui/ws/event_dispatcher.h"
 #include "services/ui/ws/platform_display.h"
 #include "services/ui/ws/platform_display_factory.h"
@@ -216,6 +219,25 @@ class WindowManagerStateTestApi {
 
 // -----------------------------------------------------------------------------
 
+class DragControllerTestApi {
+ public:
+  explicit DragControllerTestApi(DragController* op) : op_(op) {}
+  ~DragControllerTestApi() {}
+
+  size_t GetSizeOfQueueForWindow(ServerWindow* window) {
+    return op_->GetSizeOfQueueForWindow(window);
+  }
+
+  ServerWindow* GetCurrentTarget() { return op_->current_target_window_; }
+
+ private:
+  DragController* op_;
+
+  DISALLOW_COPY_AND_ASSIGN(DragControllerTestApi);
+};
+
+// -----------------------------------------------------------------------------
+
 // Factory that always embeds the new WindowTree as the root user id.
 class TestDisplayBinding : public DisplayBinding {
  public:
@@ -239,14 +261,14 @@ class TestPlatformDisplayFactory : public PlatformDisplayFactory {
  public:
   static const int64_t kFirstDisplayId;
 
-  explicit TestPlatformDisplayFactory(int32_t* cursor_id_storage);
+  explicit TestPlatformDisplayFactory(mojom::Cursor* cursor_storage);
   ~TestPlatformDisplayFactory();
 
   // PlatformDisplayFactory:
   PlatformDisplay* CreatePlatformDisplay() override;
 
  private:
-  int32_t* cursor_id_storage_;
+  mojom::Cursor* cursor_storage_;
   int64_t next_display_id_;
 
   DISALLOW_COPY_AND_ASSIGN(TestPlatformDisplayFactory);
@@ -301,6 +323,8 @@ class TestWindowManager : public mojom::WindowManager {
   bool on_perform_move_loop_called() { return on_perform_move_loop_called_; }
   bool on_accelerator_called() { return on_accelerator_called_; }
   uint32_t on_accelerator_id() { return on_accelerator_id_; }
+  bool got_display_removed() const { return got_display_removed_; }
+  int64_t display_removed_id() const { return display_removed_id_; }
 
  private:
   // WindowManager:
@@ -308,6 +332,7 @@ class TestWindowManager : public mojom::WindowManager {
   void WmNewDisplayAdded(const display::Display& display,
                          ui::mojom::WindowDataPtr root,
                          bool drawn) override {}
+  void WmDisplayRemoved(int64_t display_id) override;
   void WmSetBounds(uint32_t change_id,
                    uint32_t window_id,
                    const gfx::Rect& bounds) override {}
@@ -337,6 +362,9 @@ class TestWindowManager : public mojom::WindowManager {
 
   bool on_accelerator_called_;
   uint32_t on_accelerator_id_;
+
+  bool got_display_removed_ = false;
+  int64_t display_removed_id_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(TestWindowManager);
 };
@@ -410,6 +438,28 @@ class TestWindowTreeClient : public ui::mojom::WindowTreeClient {
   void OnWindowFocused(uint32_t focused_window_id) override;
   void OnWindowPredefinedCursorChanged(uint32_t window_id,
                                        mojom::Cursor cursor_id) override;
+  void OnDragDropStart(
+      mojo::Map<mojo::String, mojo::Array<uint8_t>> mime_data) override;
+  void OnDragEnter(uint32_t window,
+                   uint32_t key_state,
+                   const gfx::Point& position,
+                   uint32_t effect_bitmask,
+                   const OnDragEnterCallback& callback) override;
+  void OnDragOver(uint32_t window,
+                  uint32_t key_state,
+                  const gfx::Point& position,
+                  uint32_t effect_bitmask,
+                  const OnDragOverCallback& callback) override;
+  void OnDragLeave(uint32_t window) override;
+  void OnCompleteDrop(uint32_t window,
+                      uint32_t key_state,
+                      const gfx::Point& position,
+                      uint32_t effect_bitmask,
+                      const OnCompleteDropCallback& callback) override;
+  void OnPerformDragDropCompleted(uint32_t window,
+                                  bool success,
+                                  uint32_t action_taken) override;
+  void OnDragDropDone() override;
   void OnChangeCompleted(uint32_t change_id, bool success) override;
   void RequestClose(uint32_t window_id) override;
   void GetWindowManager(
@@ -427,11 +477,18 @@ class TestWindowTreeClient : public ui::mojom::WindowTreeClient {
 // WindowTreeBinding implementation that vends TestWindowTreeBinding.
 class TestWindowTreeBinding : public WindowTreeBinding {
  public:
-  explicit TestWindowTreeBinding(WindowTree* tree);
+  TestWindowTreeBinding(WindowTree* tree,
+                        std::unique_ptr<TestWindowTreeClient> client =
+                            base::MakeUnique<TestWindowTreeClient>());
   ~TestWindowTreeBinding() override;
 
+  std::unique_ptr<TestWindowTreeClient> ReleaseClient() {
+    return std::move(client_);
+  }
+
   WindowTree* tree() { return tree_; }
-  TestWindowTreeClient* client() { return &client_; }
+  TestWindowTreeClient* client() { return client_.get(); }
+  TestWindowManager* window_manager() { return window_manager_.get(); }
 
   bool is_paused() const { return is_paused_; }
 
@@ -439,9 +496,15 @@ class TestWindowTreeBinding : public WindowTreeBinding {
   mojom::WindowManager* GetWindowManager() override;
   void SetIncomingMethodCallProcessingPaused(bool paused) override;
 
+ protected:
+  // WindowTreeBinding:
+  mojom::WindowTreeClient* CreateClientForShutdown() override;
+
  private:
   WindowTree* tree_;
-  TestWindowTreeClient client_;
+  std::unique_ptr<TestWindowTreeClient> client_;
+  // This is the client created once ResetClientForShutdown() is called.
+  std::unique_ptr<TestWindowTreeClient> client_after_reset_;
   bool is_paused_ = false;
   std::unique_ptr<TestWindowManager> window_manager_;
 
@@ -487,6 +550,7 @@ class TestWindowServerDelegate : public WindowServerDelegate {
       mojom::WindowTreeClientPtr* client) override;
   void CreateDefaultDisplays() override;
   bool IsTestConfig() const override;
+  void UpdateTouchTransforms() override {}
 
  private:
   // If CreateDefaultDisplays() this is the number of Displays that are
@@ -499,6 +563,33 @@ class TestWindowServerDelegate : public WindowServerDelegate {
   std::vector<TestWindowTreeBinding*> bindings_;
 
   DISALLOW_COPY_AND_ASSIGN(TestWindowServerDelegate);
+};
+
+// -----------------------------------------------------------------------------
+
+// Helper class which creates and sets up the necessary objects for tests that
+// use the WindowServer.
+class WindowServerTestHelper {
+ public:
+  WindowServerTestHelper();
+  ~WindowServerTestHelper();
+
+  WindowServer* window_server() { return window_server_.get(); }
+  mojom::Cursor cursor() const { return cursor_id_; }
+
+  TestWindowServerDelegate* window_server_delegate() {
+    return &window_server_delegate_;
+  }
+  base::MessageLoop* message_loop() { return &message_loop_; }
+
+ private:
+  mojom::Cursor cursor_id_;
+  TestPlatformDisplayFactory platform_display_factory_;
+  TestWindowServerDelegate window_server_delegate_;
+  std::unique_ptr<WindowServer> window_server_;
+  base::MessageLoop message_loop_;
+
+  DISALLOW_COPY_AND_ASSIGN(WindowServerTestHelper);
 };
 
 // -----------------------------------------------------------------------------
@@ -526,32 +617,27 @@ class WindowEventTargetingHelper {
   // Sets the task runner for |message_loop_|
   void SetTaskRunner(scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
-  int32_t cursor_id() { return cursor_id_; }
+  mojom::Cursor cursor() const { return ws_test_helper_.cursor(); }
   Display* display() { return display_; }
   TestWindowTreeBinding* last_binding() {
-    return window_server_delegate_.last_binding();
+    return ws_test_helper_.window_server_delegate()->last_binding();
   }
   TestWindowTreeClient* last_window_tree_client() {
-    return window_server_delegate_.last_client();
+    return ws_test_helper_.window_server_delegate()->last_client();
   }
   TestWindowTreeClient* wm_client() { return wm_client_; }
-  WindowServer* window_server() { return window_server_.get(); }
+  WindowServer* window_server() { return ws_test_helper_.window_server(); }
 
  private:
+  WindowServerTestHelper ws_test_helper_;
   // TestWindowTreeClient that is used for the WM client. Owned by
   // |window_server_delegate_|
   TestWindowTreeClient* wm_client_;
-  int32_t cursor_id_;
-  TestPlatformDisplayFactory platform_display_factory_;
-  TestWindowServerDelegate window_server_delegate_;
   // Owned by WindowServer
   TestDisplayBinding* display_binding_;
   // Owned by WindowServer's DisplayManager.
   Display* display_;
-  scoped_refptr<SurfacesState> surfaces_state_;
-  std::unique_ptr<WindowServer> window_server_;
-  // Needed to Bind to |wm_client_|
-  base::MessageLoop message_loop_;
+  scoped_refptr<DisplayCompositor> display_compositor_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowEventTargetingHelper);
 };
@@ -571,7 +657,7 @@ ClientWindowId ClientWindowIdForWindow(WindowTree* tree,
                                        const ServerWindow* window);
 
 // Creates a new visible window as a child of the single root of |tree|.
-// |client_id| set to the ClientWindowId of the new window.
+// |client_id| is set to the ClientWindowId of the new window.
 ServerWindow* NewWindowInTree(WindowTree* tree, ClientWindowId* client_id);
 ServerWindow* NewWindowInTreeWithParent(WindowTree* tree,
                                         ServerWindow* parent,

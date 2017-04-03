@@ -7,14 +7,15 @@
 #include <utility>
 
 #include "build/build_config.h"
-#include "cc/output/compositor_frame.h"
 #include "cc/output/output_surface_client.h"
+#include "cc/output/output_surface_frame.h"
 #include "components/display_compositor/compositor_overlay_candidate_validator.h"
 #include "content/browser/compositor/reflector_impl.h"
 #include "content/browser/compositor/reflector_texture.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "gpu/command_buffer/client/context_support.h"
+#include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/ipc/client/command_buffer_proxy_impl.h"
 
 namespace content {
@@ -49,6 +50,15 @@ GpuBrowserCompositorOutputSurface::GetCommandBufferProxy() {
   return command_buffer_proxy;
 }
 
+void GpuBrowserCompositorOutputSurface::OnReflectorChanged() {
+  if (!reflector_) {
+    reflector_texture_.reset();
+  } else {
+    reflector_texture_.reset(new ReflectorTexture(context_provider()));
+    reflector_->OnSourceTextureMailboxUpdated(reflector_texture_->mailbox());
+  }
+}
+
 bool GpuBrowserCompositorOutputSurface::BindToClient(
     cc::OutputSurfaceClient* client) {
   if (!BrowserCompositorOutputSurface::BindToClient(client))
@@ -65,44 +75,53 @@ bool GpuBrowserCompositorOutputSurface::BindToClient(
   return true;
 }
 
+void GpuBrowserCompositorOutputSurface::EnsureBackbuffer() {}
+
+void GpuBrowserCompositorOutputSurface::DiscardBackbuffer() {
+  context_provider()->ContextGL()->DiscardBackbufferCHROMIUM();
+}
+
+void GpuBrowserCompositorOutputSurface::BindFramebuffer() {
+  context_provider()->ContextGL()->BindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void GpuBrowserCompositorOutputSurface::SwapBuffers(
+    cc::OutputSurfaceFrame frame) {
+  GetCommandBufferProxy()->SetLatencyInfo(frame.latency_info);
+
+  gfx::Rect swap_rect = frame.sub_buffer_rect;
+  gfx::Size surface_size = frame.size;
+  if (reflector_) {
+    if (swap_rect == gfx::Rect(surface_size)) {
+      reflector_texture_->CopyTextureFullImage(surface_size);
+      reflector_->OnSourceSwapBuffers(surface_size);
+    } else {
+      reflector_texture_->CopyTextureSubImage(swap_rect);
+      reflector_->OnSourcePostSubBuffer(swap_rect, surface_size);
+    }
+  }
+
+  if (swap_rect == gfx::Rect(frame.size))
+    context_provider_->ContextSupport()->Swap();
+  else
+    context_provider_->ContextSupport()->PartialSwapBuffers(swap_rect);
+}
+
 uint32_t GpuBrowserCompositorOutputSurface::GetFramebufferCopyTextureFormat() {
   auto* gl = static_cast<ContextProviderCommandBuffer*>(context_provider());
   return gl->GetCopyTextureInternalFormat();
 }
 
-void GpuBrowserCompositorOutputSurface::OnReflectorChanged() {
-  if (!reflector_) {
-    reflector_texture_.reset();
-  } else {
-    reflector_texture_.reset(new ReflectorTexture(context_provider()));
-    reflector_->OnSourceTextureMailboxUpdated(reflector_texture_->mailbox());
-  }
+bool GpuBrowserCompositorOutputSurface::IsDisplayedAsOverlayPlane() const {
+  return false;
 }
 
-void GpuBrowserCompositorOutputSurface::SwapBuffers(cc::CompositorFrame frame) {
-  DCHECK(frame.gl_frame_data);
+unsigned GpuBrowserCompositorOutputSurface::GetOverlayTextureId() const {
+  return 0;
+}
 
-  GetCommandBufferProxy()->SetLatencyInfo(frame.metadata.latency_info);
-
-  if (reflector_) {
-    if (frame.gl_frame_data->sub_buffer_rect ==
-        gfx::Rect(frame.gl_frame_data->size)) {
-      reflector_texture_->CopyTextureFullImage(SurfaceSize());
-      reflector_->OnSourceSwapBuffers();
-    } else {
-      const gfx::Rect& rect = frame.gl_frame_data->sub_buffer_rect;
-      reflector_texture_->CopyTextureSubImage(rect);
-      reflector_->OnSourcePostSubBuffer(rect);
-    }
-  }
-
-  if (frame.gl_frame_data->sub_buffer_rect ==
-      gfx::Rect(frame.gl_frame_data->size)) {
-    context_provider_->ContextSupport()->Swap();
-  } else {
-    context_provider_->ContextSupport()->PartialSwapBuffers(
-        frame.gl_frame_data->sub_buffer_rect);
-  }
+bool GpuBrowserCompositorOutputSurface::SurfaceIsSuspendForRecycle() const {
+  return false;
 }
 
 void GpuBrowserCompositorOutputSurface::OnGpuSwapBuffersCompleted(
@@ -110,7 +129,7 @@ void GpuBrowserCompositorOutputSurface::OnGpuSwapBuffersCompleted(
     gfx::SwapResult result,
     const gpu::GpuProcessHostedCALayerTreeParamsMac* params_mac) {
   RenderWidgetHostImpl::CompositorFrameDrawn(latency_info);
-  OnSwapBuffersComplete();
+  client_->DidSwapBuffersComplete();
 }
 
 #if defined(OS_MACOSX)

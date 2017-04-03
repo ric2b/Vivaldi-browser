@@ -22,8 +22,10 @@
 #include "content/public/browser/favicon_status.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/reload_type.h"
+#include "content/public/browser/restore_type.h"
+#include "content/public/browser/ssl_status.h"
 #include "content/public/common/page_state.h"
-#include "content/public/common/ssl_status.h"
 
 namespace content {
 class ResourceRequestBodyImpl;
@@ -147,6 +149,8 @@ class CONTENT_EXPORT NavigationEntryImpl
   void SetRedirectChain(const std::vector<GURL>& redirects) override;
   const std::vector<GURL>& GetRedirectChain() const override;
   bool IsRestored() const override;
+  std::string GetExtraHeaders() const override;
+  void AddExtraHeaders(const std::string& extra_headers) override;
 
   // Creates a copy of this NavigationEntryImpl that can be modified
   // independently from the original.  Does not copy any value that would be
@@ -222,6 +226,7 @@ class CONTENT_EXPORT NavigationEntryImpl
       scoped_refptr<SiteInstanceImpl> source_site_instance,
       const GURL& url,
       const Referrer& referrer,
+      const std::vector<GURL>& redirect_chain,
       const PageState& page_state,
       const std::string& method,
       int64_t post_id);
@@ -305,7 +310,7 @@ class CONTENT_EXPORT NavigationEntryImpl
     update_virtual_url_with_url_ = update;
   }
 
-  // Extra headers (separated by \n) to send during the request.
+  // Extra headers (separated by \r\n) to send during the request.
   void set_extra_headers(const std::string& extra_headers) {
     extra_headers_ = extra_headers;
   }
@@ -326,28 +331,20 @@ class CONTENT_EXPORT NavigationEntryImpl
     user_typed_url_ = user_typed_url;
   }
 
-  // Enumerations of the possible restore types.
-  enum RestoreType {
-    // Restore from the previous session.
-    RESTORE_LAST_SESSION_EXITED_CLEANLY,
-    RESTORE_LAST_SESSION_CRASHED,
-
-    // The entry has been restored from the current session. This is used when
-    // the user issues 'reopen closed tab'.
-    RESTORE_CURRENT_SESSION,
-
-    // The entry was not restored.
-    RESTORE_NONE
-  };
-
   // The RestoreType for this entry. This is set if the entry was retored. This
-  // is set to RESTORE_NONE once the entry is loaded.
+  // is set to RestoreType::NONE once the entry is loaded.
   void set_restore_type(RestoreType type) {
     restore_type_ = type;
   }
   RestoreType restore_type() const {
     return restore_type_;
   }
+
+  // The ReloadType for this entry.  This is set when a reload is requested.
+  // This is set to ReloadType::NONE if the entry isn't for a reload, or once
+  // the entry is loaded.
+  void set_reload_type(ReloadType type) { reload_type_ = type; }
+  ReloadType reload_type() const { return reload_type_; }
 
   void set_transferred_global_request_id(
       const GlobalRequestID& transferred_global_request_id) {
@@ -511,11 +508,6 @@ class CONTENT_EXPORT NavigationEntryImpl
   // doing the redirect).
   bool should_replace_entry_;
 
-  // This is used when transferring a pending entry from one process to another.
-  // We also send this data through session sync for offline analysis.
-  // It is preserved after commit but should not be persisted.
-  std::vector<GURL> redirect_chain_;
-
   // This is set to true when this entry's navigation should clear the session
   // history both on the renderer and browser side. The browser side history
   // won't be cleared until the renderer has committed this navigation. This
@@ -542,6 +534,10 @@ class CONTENT_EXPORT NavigationEntryImpl
   // Whether the URL load carries a user gesture.
   bool has_user_gesture_;
 #endif
+
+  // Used to store ReloadType for the entry.  This is ReloadType::NONE for
+  // non-reload navigations.  Reset at commit and not persisted.
+  ReloadType reload_type_;
 
   // Determine if the navigation was started within a context menu.
   bool started_from_context_menu_;

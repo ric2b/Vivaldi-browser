@@ -13,9 +13,6 @@ group("mojo") {
   ]
 
   if (!(is_linux && current_cpu == "x86")) {
-    # TODO(GYP): Figure out if this needs to be supported. Right now
-    # it won't work on x86 official builds because it needs stuff in the
-    # sysroot that doesn't exist.
     deps += [ "//mojo/public" ]
   }
 
@@ -31,7 +28,6 @@ group("tests") {
   deps = [
     "//ipc:ipc_tests",
     "//mojo/common:mojo_common_unittests",
-    "//mojo/converters/blink:blink_converters_unittests",
     "//mojo/edk/js/test:js_integration_tests",
     "//mojo/edk/js/test:js_unittests",
     "//mojo/edk/system:mojo_message_pipe_perftests",

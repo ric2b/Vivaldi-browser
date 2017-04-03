@@ -9,6 +9,8 @@
 
 /**
  * @typedef {{embeddingOrigin: string,
+ *            embeddingOriginForDisplay: string,
+ *            incognito: boolean,
  *            origin: string,
  *            originForDisplay: string,
  *            setting: string,
@@ -64,6 +66,14 @@ var UsbDeviceDetails;
  */
 var UsbDeviceEntry;
 
+/**
+ * @typedef {{origin: string,
+ *            setting: string,
+ *            source: string,
+ *            zoom: string}}
+ */
+var ZoomLevelEntry;
+
 cr.define('settings', function() {
   /** @interface */
   function SiteSettingsPrefsBrowserProxy() {}
@@ -79,7 +89,7 @@ cr.define('settings', function() {
     /**
      * Gets the default value for a site settings category.
      * @param {string} contentType The name of the category to query.
-     * @return {Promise<boolean>}
+     * @return {Promise<string>} The string value of the default setting.
      */
     getDefaultValueForContentType: function(contentType) {},
 
@@ -91,15 +101,24 @@ cr.define('settings', function() {
     getExceptionList: function(contentType) {},
 
     /**
+     * Gets the exception details for a particular site.
+     * @param {string} site The name of the site.
+     * @return {Promise<SiteException>}
+     */
+    getSiteDetails: function(site) {},
+
+    /**
      * Resets the category permission for a given origin (expressed as primary
      *    and secondary patterns).
      * @param {string} primaryPattern The origin to change (primary pattern).
      * @param {string} secondaryPattern The embedding origin to change
      *    (secondary pattern).
      * @param {string} contentType The name of the category to reset.
+     * @param {boolean} incognito Whether this applies only to a current
+     *     incognito session exception.
      */
     resetCategoryPermissionForOrigin: function(
-        primaryPattern, secondaryPattern, contentType) {},
+        primaryPattern, secondaryPattern, contentType, incognito) {},
 
     /**
      * Sets the category permission for a given origin (expressed as primary
@@ -109,9 +128,11 @@ cr.define('settings', function() {
      *    (secondary pattern).
      * @param {string} contentType The name of the category to change.
      * @param {string} value The value to change the permission to.
+     * @param {boolean} incognito Whether this rule applies only to the current
+     *     incognito session.
      */
     setCategoryPermissionForOrigin: function(
-        primaryPattern, secondaryPattern, contentType, value) {},
+        primaryPattern, secondaryPattern, contentType, value, incognito) {},
 
     /**
      * Checks whether a pattern is valid.
@@ -204,6 +225,24 @@ cr.define('settings', function() {
      *     for.
      */
     removeUsbDevice: function(origin, embeddingOrigin, usbDevice) {},
+
+    /**
+     * Fetches the incognito status of the current profile (whether an icognito
+     * profile exists). Returns the results via onIncognitoStatusChanged.
+     */
+    updateIncognitoStatus: function() {},
+
+    /**
+     * Fetches the currently defined zoom levels for sites. Returns the results
+     * via onZoomLevelsChanged.
+     */
+    fetchZoomLevels: function() {},
+
+    /**
+     * Removes a zoom levels for a given host.
+     * @param {string} host The host to remove zoom levels for.
+     */
+    removeZoomLevel: function(host) {},
   };
 
   /**
@@ -233,17 +272,22 @@ cr.define('settings', function() {
     },
 
     /** @override */
+    getSiteDetails: function(site) {
+      return cr.sendWithPromise('getSiteDetails', site);
+    },
+
+    /** @override */
     resetCategoryPermissionForOrigin: function(
-        primaryPattern, secondaryPattern, contentType) {
+        primaryPattern, secondaryPattern, contentType, incognito) {
       chrome.send('resetCategoryPermissionForOrigin',
-          [primaryPattern, secondaryPattern, contentType]);
+          [primaryPattern, secondaryPattern, contentType, incognito]);
     },
 
     /** @override */
     setCategoryPermissionForOrigin: function(
-        primaryPattern, secondaryPattern, contentType, value) {
+        primaryPattern, secondaryPattern, contentType, value, incognito) {
       chrome.send('setCategoryPermissionForOrigin',
-          [primaryPattern, secondaryPattern, contentType, value]);
+          [primaryPattern, secondaryPattern, contentType, value, incognito]);
     },
 
     /** @override */
@@ -281,7 +325,6 @@ cr.define('settings', function() {
       return cr.sendWithPromise('removeAllCookies');
     },
 
-
     initializeProtocolHandlerList: function() {
       chrome.send('initializeProtocolHandlerList');
     },
@@ -309,6 +352,21 @@ cr.define('settings', function() {
     /** @override */
     removeUsbDevice: function(origin, embeddingOrigin, usbDevice) {
       chrome.send('removeUsbDevice', [origin, embeddingOrigin, usbDevice]);
+    },
+
+    /** @override */
+    updateIncognitoStatus: function() {
+      chrome.send('updateIncognitoStatus');
+    },
+
+    /** @override */
+    fetchZoomLevels: function() {
+      chrome.send('fetchZoomLevels');
+    },
+
+    /** @override */
+    removeZoomLevel: function(host) {
+      chrome.send('removeZoomLevel', [host]);
     },
   };
 

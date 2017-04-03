@@ -132,6 +132,10 @@ const char kHistogramParseBlockedOnScriptLoadDocumentWrite[] =
 const char kBackgroundHistogramParseBlockedOnScriptLoadDocumentWrite[] =
     "PageLoad.ParseTiming.ParseBlockedOnScriptLoadFromDocumentWrite."
     "Background";
+const char kHistogramParseBlockedOnScriptExecution[] =
+    "PageLoad.ParseTiming.ParseBlockedOnScriptExecution";
+const char kHistogramParseBlockedOnScriptExecutionDocumentWrite[] =
+    "PageLoad.ParseTiming.ParseBlockedOnScriptExecutionFromDocumentWrite";
 
 const char kHistogramFirstContentfulPaintNoStore[] =
     "PageLoad.PaintTiming.NavigationToFirstContentfulPaint.NoStore";
@@ -190,6 +194,9 @@ const char kHistogramTotalRequestsParseStop[] =
 const char kRapporMetricsNameCoarseTiming[] =
     "PageLoad.CoarseTiming.NavigationToFirstContentfulPaint";
 
+const char kRapporMetricsNameFirstMeaningfulPaintNotRecorded[] =
+    "PageLoad.Experimental.PaintTiming.FirstMeaningfulPaintNotRecorded";
+
 const char kHistogramFirstContentfulPaintUserInitiated[] =
     "PageLoad.PaintTiming.NavigationToFirstContentfulPaint.UserInitiated";
 
@@ -197,9 +204,9 @@ const char kHistogramFirstMeaningfulPaintStatus[] =
     "PageLoad.Experimental.PaintTiming.FirstMeaningfulPaintStatus";
 
 const char kHistogramFirstNonScrollInputAfterFirstPaint[] =
-    "PageLoad.Input.TimeToFirstNonScroll.AfterPaint";
+    "PageLoad.InputTiming.NavigationToFirstNonScroll.AfterPaint";
 const char kHistogramFirstScrollInputAfterFirstPaint[] =
-    "PageLoad.Input.TimeToFirstScroll.AfterPaint";
+    "PageLoad.InputTiming.NavigationToFirstScroll.AfterPaint";
 
 }  // namespace internal
 
@@ -210,7 +217,8 @@ CorePageLoadMetricsObserver::CorePageLoadMetricsObserver()
 
 CorePageLoadMetricsObserver::~CorePageLoadMetricsObserver() {}
 
-void CorePageLoadMetricsObserver::OnCommit(
+page_load_metrics::PageLoadMetricsObserver::ObservePolicy
+CorePageLoadMetricsObserver::OnCommit(
     content::NavigationHandle* navigation_handle) {
   transition_ = navigation_handle->GetPageTransition();
   initiated_by_user_gesture_ = navigation_handle->HasUserGesture();
@@ -221,6 +229,7 @@ void CorePageLoadMetricsObserver::OnCommit(
     was_no_store_main_resource_ =
         headers->HasHeaderValue("cache-control", "no-store");
   }
+  return CONTINUE_OBSERVING;
 }
 
 void CorePageLoadMetricsObserver::OnDomContentLoadedEventStart(
@@ -455,6 +464,13 @@ void CorePageLoadMetricsObserver::OnParseStop(
         internal::kHistogramParseBlockedOnScriptLoadDocumentWrite,
         timing.parse_blocked_on_script_load_from_document_write_duration
             .value());
+    PAGE_LOAD_HISTOGRAM(
+        internal::kHistogramParseBlockedOnScriptExecution,
+        timing.parse_blocked_on_script_execution_duration.value());
+    PAGE_LOAD_HISTOGRAM(
+        internal::kHistogramParseBlockedOnScriptExecutionDocumentWrite,
+        timing.parse_blocked_on_script_execution_from_document_write_duration
+            .value());
 
     int total_requests = info.num_cache_requests + info.num_network_requests;
     if (total_requests) {
@@ -477,7 +493,6 @@ void CorePageLoadMetricsObserver::OnParseStop(
             parse_duration);
       }
     }
-
   } else {
     PAGE_LOAD_HISTOGRAM(internal::kBackgroundHistogramParseDuration,
                         parse_duration);
@@ -591,7 +606,9 @@ void CorePageLoadMetricsObserver::RecordTimingHistograms(
 
   if (timing.first_paint && !timing.first_meaningful_paint) {
     RecordFirstMeaningfulPaintStatus(
-        internal::FIRST_MEANINGFUL_PAINT_DID_NOT_REACH_NETWORK_STABLE);
+        timing.first_contentful_paint ?
+        internal::FIRST_MEANINGFUL_PAINT_DID_NOT_REACH_NETWORK_STABLE :
+        internal::FIRST_MEANINGFUL_PAINT_DID_NOT_REACH_FIRST_CONTENTFUL_PAINT);
   }
 }
 
@@ -610,23 +627,32 @@ void CorePageLoadMetricsObserver::RecordRappor(
   if (!info.time_to_commit)
     return;
   DCHECK(!info.committed_url.is_empty());
+
   // Log the eTLD+1 of sites that show poor loading performance.
-  if (!WasStartedInForegroundOptionalEventInForeground(
+  if (WasStartedInForegroundOptionalEventInForeground(
           timing.first_contentful_paint, info)) {
-    return;
+    std::unique_ptr<rappor::Sample> sample =
+        rappor_service->CreateSample(rappor::UMA_RAPPOR_TYPE);
+    sample->SetStringField(
+        "Domain",
+        rappor::GetDomainAndRegistrySampleFromGURL(info.committed_url));
+    uint64_t bucket_index =
+        RapporHistogramBucketIndex(timing.first_contentful_paint.value());
+    sample->SetFlagsField("Bucket", uint64_t(1) << bucket_index,
+                          kNumRapporHistogramBuckets);
+    // The IsSlow flag is just a one bit boolean if the first contentful paint
+    // was > 10s.
+    sample->SetFlagsField(
+        "IsSlow", timing.first_contentful_paint.value().InSecondsF() >= 10, 1);
+    rappor_service->RecordSampleObj(internal::kRapporMetricsNameCoarseTiming,
+                                    std::move(sample));
   }
-  std::unique_ptr<rappor::Sample> sample =
-      rappor_service->CreateSample(rappor::UMA_RAPPOR_TYPE);
-  sample->SetStringField(
-      "Domain", rappor::GetDomainAndRegistrySampleFromGURL(info.committed_url));
-  uint64_t bucket_index =
-      RapporHistogramBucketIndex(timing.first_contentful_paint.value());
-  sample->SetFlagsField("Bucket", uint64_t(1) << bucket_index,
-                        kNumRapporHistogramBuckets);
-  // The IsSlow flag is just a one bit boolean if the first contentful paint
-  // was > 10s.
-  sample->SetFlagsField(
-      "IsSlow", timing.first_contentful_paint.value().InSecondsF() >= 10, 1);
-  rappor_service->RecordSampleObj(internal::kRapporMetricsNameCoarseTiming,
-                                  std::move(sample));
+
+  // Log the eTLD+1 of sites that did not report first meaningful paint.
+  if (timing.first_paint && !timing.first_meaningful_paint) {
+    rappor::SampleDomainAndRegistryFromGURL(
+        rappor_service,
+        internal::kRapporMetricsNameFirstMeaningfulPaintNotRecorded,
+        info.committed_url);
+  }
 }

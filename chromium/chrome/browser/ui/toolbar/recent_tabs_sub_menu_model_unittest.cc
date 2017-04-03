@@ -28,7 +28,7 @@
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/menu_model_test.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/browser_sync/browser/profile_sync_service_mock.h"
+#include "components/browser_sync/profile_sync_service_mock.h"
 #include "components/sessions/core/persistent_tab_restore_service.h"
 #include "components/sessions/core/serialized_navigation_entry_test_helper.h"
 #include "components/sessions/core/session_types.h"
@@ -41,7 +41,6 @@
 #include "components/sync_sessions/synced_session.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_utils.h"
-#include "grit/generated_resources.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -54,7 +53,7 @@ class TestRecentTabsSubMenuModel : public RecentTabsSubMenuModel {
  public:
   TestRecentTabsSubMenuModel(ui::AcceleratorProvider* provider,
                              Browser* browser,
-                             sync_driver::OpenTabsUIDelegate* delegate)
+                             sync_sessions::OpenTabsUIDelegate* delegate)
       : RecentTabsSubMenuModel(provider, browser, delegate),
         execute_count_(0),
         enable_count_(0) {}
@@ -108,11 +107,11 @@ class TestRecentTabsMenuModelDelegate : public ui::MenuModelDelegate {
   DISALLOW_COPY_AND_ASSIGN(TestRecentTabsMenuModelDelegate);
 };
 
-class DummyRouter : public browser_sync::LocalSessionEventRouter {
+class DummyRouter : public sync_sessions::LocalSessionEventRouter {
  public:
   ~DummyRouter() override {}
   void StartRoutingTo(
-      browser_sync::LocalSessionEventHandler* handler) override {}
+      sync_sessions::LocalSessionEventHandler* handler) override {}
   void Stop() override {}
 };
 
@@ -123,18 +122,18 @@ class RecentTabsSubMenuModelTest
  public:
   RecentTabsSubMenuModelTest()
       : sync_service_(CreateProfileSyncServiceParamsForTest(&testing_profile_)),
-        local_device_(new sync_driver::LocalDeviceInfoProviderMock(
+        local_device_(new syncer::LocalDeviceInfoProviderMock(
             "RecentTabsSubMenuModelTest",
             "Test Machine",
             "Chromium 10k",
             "Chrome 10k",
             sync_pb::SyncEnums_DeviceType_TYPE_LINUX,
             "device_id")) {
-    sync_prefs_.reset(new sync_driver::SyncPrefs(testing_profile_.GetPrefs()));
-    manager_.reset(new browser_sync::SessionsSyncManager(
+    sync_prefs_.reset(new syncer::SyncPrefs(testing_profile_.GetPrefs()));
+    manager_.reset(new sync_sessions::SessionsSyncManager(
         sync_service_.GetSyncClient()->GetSyncSessionsClient(),
         sync_prefs_.get(), local_device_.get(),
-        std::unique_ptr<browser_sync::LocalSessionEventRouter>(
+        std::unique_ptr<sync_sessions::LocalSessionEventRouter>(
             new DummyRouter()),
         base::Closure(), base::Closure()));
     manager_->MergeDataAndStartSyncing(
@@ -151,13 +150,13 @@ class RecentTabsSubMenuModelTest
 
   static std::unique_ptr<KeyedService> GetTabRestoreService(
       content::BrowserContext* browser_context) {
-    return base::WrapUnique(new sessions::PersistentTabRestoreService(
+    return base::MakeUnique<sessions::PersistentTabRestoreService>(
         base::WrapUnique(new ChromeTabRestoreServiceClient(
             Profile::FromBrowserContext(browser_context))),
-        nullptr));
+        nullptr);
   }
 
-  sync_driver::OpenTabsUIDelegate* GetOpenTabsDelegate() {
+  sync_sessions::OpenTabsUIDelegate* GetOpenTabsDelegate() {
     return manager_.get();
   }
 
@@ -167,10 +166,10 @@ class RecentTabsSubMenuModelTest
 
  private:
   TestingProfile testing_profile_;
-  ProfileSyncServiceMock sync_service_;
-  std::unique_ptr<sync_driver::SyncPrefs> sync_prefs_;
-  std::unique_ptr<browser_sync::SessionsSyncManager> manager_;
-  std::unique_ptr<sync_driver::LocalDeviceInfoProviderMock> local_device_;
+  browser_sync::ProfileSyncServiceMock sync_service_;
+  std::unique_ptr<syncer::SyncPrefs> sync_prefs_;
+  std::unique_ptr<sync_sessions::SessionsSyncManager> manager_;
+  std::unique_ptr<syncer::LocalDeviceInfoProviderMock> local_device_;
 };
 
 // Test disabled "Recently closed" header with no foreign tabs.

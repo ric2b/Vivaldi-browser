@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_SYNC_TEST_INTEGRATION_UPDATED_PROGRESS_MARKER_CHECKER_H_
 #define CHROME_BROWSER_SYNC_TEST_INTEGRATION_UPDATED_PROGRESS_MARKER_CHECKER_H_
 
+#include <string>
+
 #include "chrome/browser/sync/test/integration/single_client_status_change_checker.h"
 
 // Waits until the latest progress markers are available.
@@ -20,9 +22,10 @@
 // of this checker.  Please do not use it in new tests.
 class UpdatedProgressMarkerChecker : public SingleClientStatusChangeChecker {
  public:
-  explicit UpdatedProgressMarkerChecker(ProfileSyncService* service);
-  ~UpdatedProgressMarkerChecker() override;
+  explicit UpdatedProgressMarkerChecker(
+      browser_sync::ProfileSyncService* service);
 
+  // StatusChangeChecker implementation.
   bool IsExitConditionSatisfied() override;
   std::string GetDebugMessage() const override;
 };

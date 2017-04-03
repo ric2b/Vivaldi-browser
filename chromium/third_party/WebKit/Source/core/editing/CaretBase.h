@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010 Apple Inc. All rights reserved.
+ * Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010 Apple Inc. All rights
+ * reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -42,47 +43,49 @@ class GraphicsContext;
 class LayoutBlock;
 class LayoutViewItem;
 
-enum class CaretVisibility { Visible, Hidden };
+class CORE_EXPORT CaretBase : public GarbageCollectedFinalized<CaretBase>,
+                              public DisplayItemClient {
+  WTF_MAKE_NONCOPYABLE(CaretBase);
 
-class CORE_EXPORT CaretBase : public GarbageCollectedFinalized<CaretBase>, public DisplayItemClient {
-    WTF_MAKE_NONCOPYABLE(CaretBase);
-public:
-    explicit CaretBase(CaretVisibility = CaretVisibility::Hidden);
-    virtual ~CaretBase();
+ public:
+  CaretBase();
+  virtual ~CaretBase();
 
-    void invalidateCaretRect(Node*, bool caretRectChanged = false);
-    void clearCaretRect();
-    // Creating VisiblePosition causes synchronous layout so we should use the
-    // PositionWithAffinity version if possible.
-    // A position in HTMLTextFromControlElement is a typical example.
-    bool updateCaretRect(const PositionWithAffinity& caretPosition);
-    bool updateCaretRect(const VisiblePosition& caretPosition);
-    IntRect absoluteBoundsForLocalRect(Node*, const LayoutRect&) const;
-    bool shouldRepaintCaret(Node&) const;
-    bool shouldRepaintCaret(const LayoutViewItem) const;
-    void paintCaret(Node*, GraphicsContext&, const LayoutPoint&, DisplayItem::Type) const;
+  void invalidateCaretRect(Node*);
+  void clearCaretRect();
+  // Creating VisiblePosition causes synchronous layout so we should use the
+  // PositionWithAffinity version if possible.
+  // A position in HTMLTextFromControlElement is a typical example.
+  void updateCaretRect(const PositionWithAffinity& caretPosition);
+  void updateCaretRect(const VisiblePosition& caretPosition);
+  IntRect absoluteBoundsForLocalRect(Node*, const LayoutRect&) const;
+  bool shouldRepaintCaret(Node&) const;
+  bool shouldRepaintCaret(const LayoutViewItem) const;
+  void paintCaret(Node*,
+                  GraphicsContext&,
+                  const LayoutPoint&,
+                  DisplayItem::Type) const;
 
-    const LayoutRect& localCaretRectWithoutUpdate() const { return m_caretLocalRect; }
+  const LayoutRect& localCaretRectWithoutUpdate() const {
+    return m_caretLocalRect;
+  }
 
-    virtual void setCaretVisibility(CaretVisibility);
-    bool caretIsVisible() const { return m_caretVisibility == CaretVisibility::Visible; }
-    CaretVisibility getCaretVisibility() const { return m_caretVisibility; }
+  static LayoutBlock* caretLayoutObject(Node*);
+  void invalidateLocalCaretRect(Node*, const LayoutRect&);
 
-    static LayoutBlock* caretLayoutObject(Node*);
-    void invalidateLocalCaretRect(Node*, const LayoutRect&);
+  // DisplayItemClient methods.
+  LayoutRect visualRect() const override;
+  String debugName() const final;
 
-    // DisplayItemClient methods.
-    LayoutRect visualRect() const override;
-    String debugName() const final;
+  DECLARE_VIRTUAL_TRACE();
 
-    DECLARE_VIRTUAL_TRACE();
-
-private:
-    LayoutRect m_caretLocalRect; // caret rect in coords local to the layoutObject responsible for painting the caret
-    CaretVisibility m_caretVisibility;
-    LayoutRect m_visualRect;
+ private:
+  // caret rect in coords local to the layoutObject responsible for painting the
+  // caret
+  LayoutRect m_caretLocalRect;
+  LayoutRect m_visualRect;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // CaretBase_h
+#endif  // CaretBase_h

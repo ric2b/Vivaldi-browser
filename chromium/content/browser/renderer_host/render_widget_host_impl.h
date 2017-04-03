@@ -62,7 +62,6 @@ class WebLayer;
 #endif
 class WebMouseEvent;
 struct WebCompositionUnderline;
-struct WebScreenInfo;
 }
 
 namespace cc {
@@ -91,6 +90,7 @@ class TouchEmulator;
 class WebCursor;
 struct EditCommand;
 struct ResizeParams;
+struct ScreenInfo;
 struct TextInputState;
 
 // This implements the RenderWidgetHost interface that is exposed to
@@ -179,7 +179,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
       RenderWidgetHost::InputEventObserver* observer) override;
   void RemoveInputEventObserver(
       RenderWidgetHost::InputEventObserver* observer) override;
-  void GetWebScreenInfo(blink::WebScreenInfo* result) override;
+  void GetScreenInfo(content::ScreenInfo* result) override;
   void HandleCompositorProto(const std::vector<uint8_t>& proto) override;
 
   // Notification that the screen info has changed.
@@ -368,15 +368,24 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
       int selection_start,
       int selection_end);
 
-  // Finishes an ongoing composition with the specified text.
-  // A browser should call this function:
+  // Deletes the ongoing composition if any, inserts the specified text, and
+  // moves the cursor.
+  // A browser should call this function or ImeFinishComposingText:
   // * when it receives a WM_IME_COMPOSITION message with a GCS_RESULTSTR flag
   //   (on Windows);
   // * when it receives a "commit" signal of GtkIMContext (on Linux);
   // * when insertText of NSTextInput is called (on Mac).
-  void ImeConfirmComposition(const base::string16& text,
-                             const gfx::Range& replacement_range,
-                             bool keep_selection);
+  void ImeCommitText(const base::string16& text,
+                     const gfx::Range& replacement_range,
+                     int relative_cursor_pos);
+
+  // Finishes an ongoing composition.
+  // A browser should call this function or ImeCommitText:
+  // * when it receives a WM_IME_COMPOSITION message with a GCS_RESULTSTR flag
+  //   (on Windows);
+  // * when it receives a "commit" signal of GtkIMContext (on Linux);
+  // * when insertText of NSTextInput is called (on Mac).
+  void ImeFinishComposingText(bool keep_selection);
 
   // Cancels an ongoing composition.
   void ImeCancelComposition();
@@ -415,14 +424,10 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   // locked.
   bool GotResponseToLockMouseRequest(bool allowed);
 
-  // Tells the RenderWidget about the latest vsync parameters.
-  void UpdateVSyncParameters(base::TimeTicks timebase,
-                             base::TimeDelta interval);
-
   // Called by the view in response to OnSwapCompositorFrame.
   static void SendReclaimCompositorResources(
       int32_t route_id,
-      uint32_t output_surface_id,
+      uint32_t compositor_frame_sink_id,
       int renderer_host_id,
       bool is_swap_ack,
       const cc::ReturnedResourceArray& resources);

@@ -13,6 +13,7 @@
 #include "base/command_line.h"
 #include "base/files/scoped_file.h"
 #include "base/i18n/rtl.h"
+#include "base/json/json_reader.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
@@ -29,7 +30,8 @@
 #include "chromecast/browser/cast_network_delegate.h"
 #include "chromecast/browser/cast_quota_permission_context.h"
 #include "chromecast/browser/cast_resource_dispatcher_host_delegate.h"
-#include "chromecast/browser/media/cma_message_filter_host.h"
+#include "chromecast/browser/devtools/cast_devtools_delegate.h"
+#include "chromecast/browser/grit/cast_browser_resources.h"
 #include "chromecast/browser/media/media_caps_impl.h"
 #include "chromecast/browser/service/cast_service_simple.h"
 #include "chromecast/browser/url_request_context_factory.h"
@@ -48,11 +50,13 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_descriptors.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/service_names.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/web_preferences.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "services/shell/public/cpp/interface_registry.h"
+#include "ui/base/resource/resource_bundle.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/gl/gl_switches.h"
@@ -64,7 +68,6 @@
 
 #if defined(OS_ANDROID)
 #include "components/crash/content/browser/crash_dump_manager_android.h"
-#include "components/external_video_surface/browser/android/external_video_surface_container_impl.h"
 #else
 #include "chromecast/browser/media/cast_browser_cdm_factory.h"
 #endif  // defined(OS_ANDROID)
@@ -82,7 +85,9 @@ static std::unique_ptr<::shell::Service> CreateMojoMediaApplication(
           base::Bind(&CastContentBrowserClient::CreateMediaPipelineBackend,
                      base::Unretained(browser_client)),
           base::Bind(&CastContentBrowserClient::CreateCdmFactory,
-                     base::Unretained(browser_client))));
+                     base::Unretained(browser_client)),
+          browser_client->GetVideoResolutionPolicy(),
+          browser_client->media_resource_tracker()));
   return std::unique_ptr<::shell::Service>(
       new ::media::MojoMediaApplication(std::move(mojo_media_client),
                                         quit_closure));
@@ -132,6 +137,11 @@ std::unique_ptr<CastService> CastContentBrowserClient::CreateCastService(
 }
 
 #if !defined(OS_ANDROID)
+media::VideoResolutionPolicy*
+CastContentBrowserClient::GetVideoResolutionPolicy() {
+  return nullptr;
+}
+
 scoped_refptr<base::SingleThreadTaskRunner>
 CastContentBrowserClient::GetMediaTaskRunner() {
   DCHECK(cast_browser_main_parts_);
@@ -185,16 +195,6 @@ content::BrowserMainParts* CastContentBrowserClient::CreateBrowserMainParts(
 
 void CastContentBrowserClient::RenderProcessWillLaunch(
     content::RenderProcessHost* host) {
-#if !defined(OS_ANDROID)
-  scoped_refptr<media::CmaMessageFilterHost> cma_message_filter(
-      new media::CmaMessageFilterHost(
-          host->GetID(),
-          base::Bind(&CastContentBrowserClient::CreateMediaPipelineBackend,
-                     base::Unretained(this)),
-          GetMediaTaskRunner(), media_resource_tracker()));
-  host->AddFilter(cma_message_filter.get());
-#endif  // !defined(OS_ANDROID)
-
   // Forcibly trigger I/O-thread URLRequestContext initialization before
   // getting HostResolver.
   content::BrowserThread::PostTaskAndReplyWithResult(
@@ -267,9 +267,6 @@ void CastContentBrowserClient::AppendExtraCommandLineSwitches(
   if (process_type == switches::kRendererProcess) {
     // Any browser command-line switches that should be propagated to
     // the renderer go here.
-
-    if (browser_command_line->HasSwitch(switches::kEnableCmaMediaPipeline))
-      command_line->AppendSwitch(switches::kEnableCmaMediaPipeline);
     if (browser_command_line->HasSwitch(switches::kAllowHiddenMediaPlayback))
       command_line->AppendSwitch(switches::kAllowHiddenMediaPlayback);
   }
@@ -298,6 +295,8 @@ void CastContentBrowserClient::OverrideWebkitPrefs(
 
   // Enable 5% margins for WebVTT cues to keep within title-safe area
   prefs->text_track_margin_percentage = 5;
+
+  prefs->hide_scrollbars = true;
 
 #if defined(OS_ANDROID)
   // Enable the television style for viewport so that all cast apps have a
@@ -425,15 +424,27 @@ void CastContentBrowserClient::ExposeInterfacesToRenderer(
       base::ThreadTaskRunnerHandle::Get());
 }
 
-void CastContentBrowserClient::RegisterInProcessMojoApplications(
-    StaticMojoApplicationMap* apps) {
+void CastContentBrowserClient::RegisterInProcessServices(
+    StaticServiceMap* services) {
 #if defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
-  content::MojoApplicationInfo app_info;
-  app_info.application_factory =
+  content::ServiceInfo info;
+  info.factory =
       base::Bind(&CreateMojoMediaApplication, base::Unretained(this));
-  app_info.application_task_runner = GetMediaTaskRunner();
-  apps->insert(std::make_pair("mojo:media", app_info));
+  info.task_runner = GetMediaTaskRunner();
+  services->insert(std::make_pair("service:media", info));
 #endif
+}
+
+std::unique_ptr<base::Value>
+CastContentBrowserClient::GetServiceManifestOverlay(
+    const std::string& service_name) {
+  ResourceBundle& rb = ResourceBundle::GetSharedInstance();
+  if (service_name != content::kBrowserServiceName)
+    return nullptr;
+  base::StringPiece manifest_contents =
+      rb.GetRawDataResourceForScale(IDR_CAST_CONTENT_BROWSER_MANIFEST_OVERLAY,
+                                    ui::ScaleFactor::SCALE_FACTOR_NONE);
+  return base::JSONReader::Read(manifest_contents);
 }
 
 #if defined(OS_ANDROID)
@@ -474,19 +485,11 @@ void CastContentBrowserClient::GetAdditionalMappedFilesForChildProcess(
 
 std::unique_ptr<::media::CdmFactory>
 CastContentBrowserClient::CreateCdmFactory() {
-// This should return a CdmFactory when either of the following conditions is
-// true:
-//  (1) When we are using the CMA pipeline (by setting the cmdline switch).
-//  (2) When we are using Mojo browser-side CDM (by setting GN args)
-// If neither of these are true, this function should return nullptr.
-#if !defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
-  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableCmaMediaPipeline))
-    return nullptr;
-#endif  // !defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
-
+#if defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
   return base::MakeUnique<media::CastBrowserCdmFactory>(
       GetMediaTaskRunner(), media_resource_tracker());
+#endif  // defined(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+  return nullptr;
 }
 
 void CastContentBrowserClient::GetAdditionalMappedFilesForChildProcess(
@@ -506,14 +509,10 @@ void CastContentBrowserClient::GetAdditionalWebUISchemes(
   additional_schemes->push_back(kChromeResourceScheme);
 }
 
-#if defined(OS_ANDROID) && defined(VIDEO_HOLE)
-content::ExternalVideoSurfaceContainer*
-CastContentBrowserClient::OverrideCreateExternalVideoSurfaceContainer(
-    content::WebContents* web_contents) {
-  return external_video_surface::ExternalVideoSurfaceContainerImpl::Create(
-      web_contents);
+content::DevToolsManagerDelegate*
+CastContentBrowserClient::GetDevToolsManagerDelegate() {
+  return new CastDevToolsDelegate();
 }
-#endif  // defined(OS_ANDROID) && defined(VIDEO_HOLE)
 
 #if !defined(OS_ANDROID)
 int CastContentBrowserClient::GetCrashSignalFD(

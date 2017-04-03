@@ -65,7 +65,6 @@
 <translation id="2359808026110333948">ቀጥል</translation>
 <translation id="2366718077645204424">አስተናጋጁን መድረስ አልተቻለም። ይሄ በሚጠቀሙት አውታረ መረብ ላይ ባለ ውቅር ምክንያት ሳይሆን አይቀርም።</translation>
 <translation id="2370754117186920852"><ph name="OPTIONAL_OFFLINE_REASON" />  ለመጨረሻ ጊዜ መስመር ላይ የታየው በ<ph name="RELATIVE_TIMESTAMP" />።</translation>
-<translation id="2498359688066513246">እገዛ እና ግብረመልስ</translation>
 <translation id="2499160551253595098">የአጠቃቀም ስታትስቲክስ እና የብልሽት ሪፖርቶችን እንድንሰበስብ በመፍቀድ Chrome የርቀት ዴስክቶፕ እንድናሻሽል ያግዙን።</translation>
 <translation id="2512228156274966424">ማሳሰቢያ፦ ሁሉም የቁልፍ ሰሌዳ አቋራጮች የሚገኙ መሆናቸውን ለማረጋገጥ Chrome የርቀት ዴስክቶፕ ወደ «እንደ መስኮት ክፈት» ማዋቀር ይችላሉ።</translation>
 <translation id="2540992418118313681">ሌላ ተጠቃሚ ይህን ኮምፒውተር እንዲመለከት እና እንዲቆጣጠር ማጋራት ይፈልጋሉ?</translation>
@@ -264,6 +263,7 @@
 <translation id="7948001860594368197">የማያ ገጽ አማራጮች</translation>
 <translation id="7970576581263377361">ማረጋገጥ አልተሳካም። እባክዎ እንደገና ወደ Chromium ይግቡ።</translation>
 <translation id="7981525049612125370">የርቀት ክፍለጊዜውን ጊዜው አልፎበታል።</translation>
+<translation id="8041089156583427627">ግብረ መልስ ላክ</translation>
 <translation id="8041721485428375115">የChrome የርቀት ዴስክቶፕ አስተናጋጅ ጫኚውን በማውረድዎ በGoogle <ph name="LINK_BEGIN" />የአገልግሎት ውል<ph name="LINK_END" />ይስማማሉ።</translation>
 <translation id="8073845705237259513">Chrome የርቀት ዴስክቶፕን ለመጠቀም የአንድ የGoogle መለያ በመሣሪያዎ ላይ ማከል አለብዎት።</translation>
 <translation id="80739703311984697">የርቀት አስተናጋጁ ለሶስተኛ ወገን ድር ጣቢያ እንዲያረጋግጡ ይፈልጋል። ለመቀጠል Chromoting ይህን አድራሻ እንዲደርስበት ተጨማሪ ፍቃዶችን መስጠት አለብዎት፦</translation>
@@ -287,6 +287,7 @@
 <translation id="8548209692293300397">ከዚህ ቀደም እንደ <ph name="USER_NAME" /> (<ph name="USER_EMAIL" />) ሆነው ገብተዋል። በዚያ መለያ ውስጥ የእርስዎን ኮምፒውተሮች ለመድረስ በዚያ መለያ <ph name="LINK_BEGIN" />ወደ Google Chrome ይግቡ<ph name="LINK_END" />ና የChrome ርቀት ዴስክቶፕን ዳግም ይጫኑት።</translation>
 <translation id="8642984861538780905">ደህና</translation>
 <translation id="8712909229180978490">የእኔን በGoogle አንጻፊ ላይ የተቀመጡ ፋይሎች ማየት አልችልም።</translation>
+<translation id="8743328882720071828"><ph name="CLIENT_USERNAME" /> የእርስዎን ኮምፒውተር እንዲመለከት እና እንዲቆጣጠር እንዲፈቀድለት ይፈልጋሉr?</translation>
 <translation id="8759753423332885148">ተጨማሪ ለመረዳት።</translation>
 <translation id="8791202241915690908">Chromoting አስተናጋጅ ጫኚውን በማውረድ ላይ</translation>
 <translation id="894763922177556086">ጥሩ</translation>

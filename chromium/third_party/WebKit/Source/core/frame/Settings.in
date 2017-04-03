@@ -71,7 +71,6 @@ textAreasAreResizable initial=false, invalidate=Style
 acceleratedCompositingEnabled initial=true, invalidate=AcceleratedCompositing
 
 offlineWebApplicationCacheEnabled initial=true
-usesEncodingDetector initial=false
 allowScriptsToCloseWindows initial=false
 
 # FIXME: This should really be disabled by default as it makes platforms that
@@ -88,11 +87,10 @@ webGLEnabled initial=false
 
 webGLErrorsToConsoleEnabled initial=true
 antialiased2dCanvasEnabled initial=true
-antialiasedClips2dCanvasEnabled initial=false
+antialiasedClips2dCanvasEnabled initial=true
 accelerated2dCanvasMSAASampleCount type=int, initial=0
 
 hyperlinkAuditingEnabled initial=false
-allowDisplayOfInsecureContent initial=true
 allowRunningOfInsecureContent initial=true
 
 mediaControlsOverlayPlayButtonEnabled initial=false
@@ -106,10 +104,6 @@ scrollAnimatorEnabled initial=true
 # crbug.com/410974 tracks removal once alternative solutions for selective
 # main thread scrolling are supported.
 threadedScrollingEnabled initial=true, invalidate=Style
-
-# Handles frame-level scrolls via the root Layer instead of the FrameView.
-# crbug.com/417782 tracks enabling this by default.
-rootLayerScrolls initial=false
 
 # Used in layout tests for gesture tap highlights. Makes the highlights square
 # (rather than rounded) to make it possible to reftest the results.
@@ -272,7 +266,7 @@ doHtmlPreloadScanning initial=true
 pluginsEnabled initial=false
 
 viewportEnabled initial=false, invalidate=ViewportDescription
-viewportMetaEnabled initial=false
+viewportMetaEnabled initial=false, invalidate=ViewportDescription
 
 dnsPrefetchingEnabled initial=false, invalidate=DNSPrefetching
 
@@ -380,9 +374,16 @@ lowPriorityIframes initial=false
 
 progressBarCompletion type=ProgressBarCompletion, initial=ProgressBarCompletion::LoadEvent
 
+historyEntryRequiresUserGesture initial=false
+
 # Do we want to try to save screen real estate in the media player by hiding
 # the volume slider / mute button?
 preferHiddenVolumeControls initial=false
+
+# Whether to disallow network fetches for parser blocking scripts in the main
+# frame inserted via document.write, for users on 2G or connections that are
+# effectively 2G.
+disallowFetchForDocWrittenScriptsInMainFrameIfEffectively2G initial=false
 
 # Whether to disallow network fetches for parser blocking scripts in the main
 # frame inserted via document.write, for users on slow connections.
@@ -395,9 +396,9 @@ disallowFetchForDocWrittenScriptsInMainFrame initial=false
 # The autoplay gesture override experiment is described in crbug.com/487345 .
 autoplayExperimentMode type=String, initial="off"
 
-# When DevTools is emulating mobile device, frame resize may mean device size has changed,
-# which in turn affects media queries.
-resizeIsDeviceSizeChange initial=false
+# Whether to invalidate device-dependent media queries and restore scroll positions
+# on frame resize assuming device rotation.
+mainFrameResizesAreOrientationChanges initial=false
 
 # If set to a positive value, emit a console warning once for each non-passive
 # event listener that caused an event to be dispatched to main thread and
@@ -417,8 +418,24 @@ useDefaultImageInterpolationQuality initial=false
 # Variant of the ParseHTMLOnMainThread experiment. One experiment immediately
 # tokenizes input bytes. The default is to tokenize with a post task.
 parseHTMLOnMainThreadSyncTokenize initial=false
+
 # Variant of the ParseHTMLOnMainThread experiment. This is designed to coalesce
 # TokenizedChunks when the experiment is running in threaded mode.
 parseHTMLOnMainThreadCoalesceChunks initial=false
 
+# Whether the CSSPreloadScanner is used for externally CSS preloads. NoPreload
+# indicates that the scanner will be used, but no preloads issued.
+cssExternalScannerNoPreload initial=false
+cssExternalScannerPreload initial=false
+
 browserSideNavigationEnabled initial=false
+
+# Some platforms have media subsystems which are too buggy to allow preloading
+# of content by default. See http://crbug.com/612909 for details.
+forcePreloadNoneForMediaElements initial=false
+
+hideScrollbars initial=false
+
+# Spellchecking is enabled by default for elements that do not specify it explicitly
+# using the "spellcheck" attribute.
+spellCheckEnabledByDefault initial=true

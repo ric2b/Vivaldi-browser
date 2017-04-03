@@ -13,7 +13,6 @@
                                   UIViewControllerTransitioningDelegate> {
   base::mac::ObjCPropertyReleaser _propertyReleaser_SelectorCoordinator;
   __unsafe_unretained id<SelectorCoordinatorDelegate> _delegate;
-  __unsafe_unretained NSOrderedSet<NSString*>* _options;
 }
 
 // Redeclaration of infoBarPickerController as readwrite.
@@ -40,9 +39,9 @@
 }
 
 - (void)start {
-  self.selectorPickerViewController =
-      [[SelectorPickerViewController alloc] initWithOptions:self.options
-                                                    default:self.defaultOption];
+  self.selectorPickerViewController = [[[SelectorPickerViewController alloc]
+      initWithOptions:self.options
+              default:self.defaultOption] autorelease];
   self.selectorPickerViewController.delegate = self;
 
   self.selectorPickerViewController.modalTransitionStyle =

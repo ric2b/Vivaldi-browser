@@ -24,7 +24,7 @@
 #include "net/cert/test_root_certs.h"
 #include "net/cert/x509_certificate.h"
 #include "net/dns/host_resolver.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 #include "url/gurl.h"
 
 namespace net {
@@ -354,7 +354,7 @@ bool BaseTestServer::GetAddressList(AddressList* address_list) const {
   TestCompletionCallback callback;
   std::unique_ptr<HostResolver::Request> request;
   int rv = resolver->Resolve(info, DEFAULT_PRIORITY, address_list,
-                             callback.callback(), &request, BoundNetLog());
+                             callback.callback(), &request, NetLogWithSource());
   if (rv == ERR_IO_PENDING)
     rv = callback.WaitForResult();
   if (rv != OK) {

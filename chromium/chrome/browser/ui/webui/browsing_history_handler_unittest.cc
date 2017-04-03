@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/values.h"
 #include "chrome/browser/history/web_history_service_factory.h"
 #include "chrome/browser/signin/fake_profile_oauth2_token_service_builder.h"
 #include "chrome/browser/signin/fake_signin_manager_builder.h"
@@ -19,7 +20,7 @@
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/profile_sync_test_util.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/browser_sync/browser/test_profile_sync_service.h"
+#include "components/browser_sync/test_profile_sync_service.h"
 #include "components/history/core/test/fake_web_history_service.h"
 #include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
 #include "components/signin/core/browser/fake_signin_manager.h"
@@ -31,6 +32,10 @@
 #include "net/http/http_status_code.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
+
+#if !defined(OS_ANDROID)
+#include "chrome/browser/ui/webui/md_history_ui.h"
+#endif
 
 namespace {
 
@@ -72,10 +77,11 @@ bool ResultEquals(
 
 void IgnoreBoolAndDoNothing(bool ignored_argument) {}
 
-class TestSyncService : public TestProfileSyncService {
+class TestSyncService : public browser_sync::TestProfileSyncService {
  public:
   explicit TestSyncService(Profile* profile)
-      : TestProfileSyncService(CreateProfileSyncServiceParamsForTest(profile)),
+      : browser_sync::TestProfileSyncService(
+            CreateProfileSyncServiceParamsForTest(profile)),
         sync_active_(true) {}
 
   bool IsSyncActive() const override { return sync_active_; }
@@ -99,6 +105,7 @@ class BrowsingHistoryHandlerWithWebUIForTesting
   explicit BrowsingHistoryHandlerWithWebUIForTesting(content::WebUI* web_ui) {
     set_web_ui(web_ui);
   }
+  using BrowsingHistoryHandler::QueryComplete;
 };
 
 }  // namespace
@@ -116,6 +123,7 @@ class BrowsingHistoryHandlerTest : public ::testing::Test {
     builder.AddTestingFactory(WebHistoryServiceFactory::GetInstance(),
                               &BuildFakeWebHistoryService);
     profile_ = builder.Build();
+    profile_->CreateBookmarkModel(false);
 
     sync_service_ = static_cast<TestSyncService*>(
         ProfileSyncServiceFactory::GetForProfile(profile_.get()));
@@ -289,6 +297,25 @@ TEST_F(BrowsingHistoryHandlerTest, ObservingWebHistoryDeletions) {
     EXPECT_EQ("historyDeleted", web_ui()->call_data().back()->function_name());
   }
 
+  // BrowsingHistoryHandler does not fire historyDeleted while a web history
+  // delete request is happening.
+  {
+    sync_service()->SetSyncActive(true);
+    BrowsingHistoryHandlerWithWebUIForTesting handler(web_ui());
+    handler.RegisterMessages();
+
+    // Simulate an ongoing delete request.
+    handler.has_pending_delete_request_ = true;
+
+    web_history_service()->ExpireHistoryBetween(
+        std::set<GURL>(), base::Time(), base::Time::Max(),
+        base::Bind(&BrowsingHistoryHandler::RemoveWebHistoryComplete,
+                   handler.weak_factory_.GetWeakPtr()));
+
+    EXPECT_EQ(3U, web_ui()->call_data().size());
+    EXPECT_EQ("deleteComplete", web_ui()->call_data().back()->function_name());
+  }
+
   // When history sync is not active, we don't listen to WebHistoryService
   // deletions. The WebHistoryService object still exists (because it's a
   // BrowserContextKeyedService), but is not visible to BrowsingHistoryHandler.
@@ -301,6 +328,43 @@ TEST_F(BrowsingHistoryHandlerTest, ObservingWebHistoryDeletions) {
                                                 base::Time::Max(), callback);
 
     // No additional WebUI calls were made.
-    EXPECT_EQ(2U, web_ui()->call_data().size());
+    EXPECT_EQ(3U, web_ui()->call_data().size());
   }
 }
+
+#if !defined(OS_ANDROID)
+TEST_F(BrowsingHistoryHandlerTest, MdTruncatesTitles) {
+  MdHistoryUI::SetEnabledForTesting(true);
+
+  history::URLResult long_result(
+      GURL("http://looooooooooooooooooooooooooooooooooooooooooooooooooooooooooo"
+      "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo"
+      "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo"
+      "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo"
+      "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo"
+      "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo"
+      "ngurlislong.com"), base::Time());
+  ASSERT_GT(long_result.url().spec().size(), 300u);
+
+  history::QueryResults results;
+  results.AppendURLBySwapping(&long_result);
+
+  BrowsingHistoryHandlerWithWebUIForTesting handler(web_ui());
+  web_ui()->ClearTrackedCalls();
+
+  handler.QueryComplete(base::string16(), history::QueryOptions(), &results);
+  ASSERT_FALSE(web_ui()->call_data().empty());
+
+  const base::ListValue* arg2;
+  ASSERT_TRUE(web_ui()->call_data().front()->arg2()->GetAsList(&arg2));
+
+  const base::DictionaryValue* first_entry;
+  ASSERT_TRUE(arg2->GetDictionary(0, &first_entry));
+
+  base::string16 title;
+  ASSERT_TRUE(first_entry->GetString("title", &title));
+
+  ASSERT_EQ(0u, title.find(base::ASCIIToUTF16("http://loooo")));
+  EXPECT_EQ(300u, title.size());
+}
+#endif

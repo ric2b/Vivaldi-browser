@@ -11,6 +11,7 @@ import android.test.suitebuilder.annotation.SmallTest;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.AdvancedMockContext;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.RetryOnFailure;
 
 import java.util.UUID;
 
@@ -73,6 +74,7 @@ public class SystemDownloadNotifierTest extends InstrumentationTestCase {
      */
     @SmallTest
     @Feature({"Download"})
+    @RetryOnFailure
     public void testNotificationNotHandledUntilServiceConnection() {
         DownloadInfo info = new DownloadInfo.Builder()
                 .setDownloadGuid(UUID.randomUUID().toString()).build();
@@ -100,7 +102,7 @@ public class SystemDownloadNotifierTest extends InstrumentationTestCase {
 
         mDownloadNotifier.notifyDownloadFailed(info);
         assertTrue(mDownloadNotifier.mStarted);
-        mDownloadNotifier.notifyDownloadSuccessful(info2, 100L, true);
+        mDownloadNotifier.notifyDownloadSuccessful(info2, 100L, true, false);
         assertFalse(mDownloadNotifier.mStarted);
     }
 }

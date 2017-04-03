@@ -29,6 +29,7 @@
 #include "components/ssl_config/ssl_config_switches.h"
 #include "content/public/common/content_switches.h"
 #include "ui/base/ui_base_switches.h"
+#include "ui/display/display_switches.h"
 
 #if defined(OS_CHROMEOS)
 #include "chromeos/chromeos_switches.h"
@@ -55,27 +56,26 @@ const CommandLinePrefStore::PathSwitchToPreferenceMapEntry
 
 const CommandLinePrefStore::BooleanSwitchToPreferenceMapEntry
     CommandLinePrefStore::boolean_switch_map_[] = {
-      { switches::kDisable3DAPIs, prefs::kDisable3DAPIs, true },
-      { switches::kEnableCloudPrintProxy, prefs::kCloudPrintProxyEnabled,
-          true },
-      { switches::kAllowOutdatedPlugins, prefs::kPluginsAllowOutdated, true },
-      { switches::kAlwaysAuthorizePlugins, prefs::kPluginsAlwaysAuthorize,
-          true },
-      { switches::kNoPings, prefs::kEnableHyperlinkAuditing, false },
-      { switches::kNoReferrers, prefs::kEnableReferrers, false },
-      { switches::kAllowRunningInsecureContent,
-        prefs::kWebKitAllowRunningInsecureContent, true },
-      { switches::kAllowCrossOriginAuthPrompt,
-        prefs::kAllowCrossOriginAuthPrompt, true },
-      { switches::kDisablePrintPreview, prefs::kPrintPreviewDisabled, true },
+        {switches::kDisable3DAPIs, prefs::kDisable3DAPIs, true},
+        {switches::kEnableCloudPrintProxy, prefs::kCloudPrintProxyEnabled,
+         true},
+        {switches::kAllowOutdatedPlugins, prefs::kPluginsAllowOutdated, true},
+        {switches::kAlwaysAuthorizePlugins, prefs::kPluginsAlwaysAuthorize,
+         true},
+        {switches::kNoPings, prefs::kEnableHyperlinkAuditing, false},
+        {switches::kNoReferrers, prefs::kEnableReferrers, false},
+        {switches::kAllowRunningInsecureContent,
+         prefs::kWebKitAllowRunningInsecureContent, true},
+        {switches::kAllowCrossOriginAuthPrompt,
+         prefs::kAllowCrossOriginAuthPrompt, true},
+        {switches::kDisablePrintPreview, prefs::kPrintPreviewDisabled, true},
 #if defined(OS_CHROMEOS)
-      { chromeos::switches::kEnableTouchpadThreeFingerClick,
-          prefs::kEnableTouchpadThreeFingerClick, true },
-      { ash::switches::kAshEnableUnifiedDesktop,
-          prefs::kUnifiedDesktopEnabledByDefault, true },
+        {chromeos::switches::kEnableTouchpadThreeFingerClick,
+         prefs::kEnableTouchpadThreeFingerClick, true},
+        {switches::kEnableUnifiedDesktop,
+         prefs::kUnifiedDesktopEnabledByDefault, true},
 #endif
-      { switches::kDisableAsyncDns, prefs::kBuiltInDnsClientEnabled, false },
-      { switches::kUnsafePacUrl, prefs::kPacHttpsUrlStrippingEnabled, false },
+        {switches::kUnsafePacUrl, prefs::kPacHttpsUrlStrippingEnabled, false},
 };
 
 const CommandLinePrefStore::IntegerSwitchToPreferenceMapEntry
@@ -114,9 +114,9 @@ void CommandLinePrefStore::ApplySimpleSwitches() {
   for (size_t i = 0; i < arraysize(string_switch_map_); ++i) {
     if (command_line_->HasSwitch(string_switch_map_[i].switch_name)) {
       SetValue(string_switch_map_[i].preference_path,
-               base::WrapUnique(
-                   new base::StringValue(command_line_->GetSwitchValueASCII(
-                       string_switch_map_[i].switch_name))),
+               base::MakeUnique<base::StringValue>(
+                   command_line_->GetSwitchValueASCII(
+                       string_switch_map_[i].switch_name)),
                WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
     }
   }
@@ -125,9 +125,9 @@ void CommandLinePrefStore::ApplySimpleSwitches() {
     if (command_line_->HasSwitch(path_switch_map_[i].switch_name)) {
       SetValue(
           path_switch_map_[i].preference_path,
-          base::WrapUnique(new base::StringValue(
+          base::MakeUnique<base::StringValue>(
               command_line_->GetSwitchValuePath(path_switch_map_[i].switch_name)
-                  .value())),
+                  .value()),
           WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
     }
   }
@@ -144,7 +144,7 @@ void CommandLinePrefStore::ApplySimpleSwitches() {
         continue;
       }
       SetValue(integer_switch_map_[i].preference_path,
-               base::WrapUnique(new base::FundamentalValue(int_value)),
+               base::MakeUnique<base::FundamentalValue>(int_value),
                WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
     }
   }
@@ -152,8 +152,8 @@ void CommandLinePrefStore::ApplySimpleSwitches() {
   for (size_t i = 0; i < arraysize(boolean_switch_map_); ++i) {
     if (command_line_->HasSwitch(boolean_switch_map_[i].switch_name)) {
       SetValue(boolean_switch_map_[i].preference_path,
-               base::WrapUnique(new base::FundamentalValue(
-                   boolean_switch_map_[i].set_value)),
+               base::MakeUnique<base::FundamentalValue>(
+                   boolean_switch_map_[i].set_value),
                WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
     }
   }
@@ -201,7 +201,7 @@ void CommandLinePrefStore::ApplySSLSwitches() {
 void CommandLinePrefStore::ApplyBackgroundModeSwitches() {
   if (command_line_->HasSwitch(switches::kDisableExtensions)) {
     SetValue(prefs::kBackgroundModeEnabled,
-             base::WrapUnique(new base::FundamentalValue(false)),
+             base::MakeUnique<base::FundamentalValue>(false),
              WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
   }
 }

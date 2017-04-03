@@ -149,6 +149,19 @@ void UpdateVersionInfo(const ServiceWorkerVersionInfo& version,
       info->SetString("status", "REDUNDANT");
       break;
   }
+
+  switch (version.fetch_handler_existence) {
+    case ServiceWorkerVersion::FetchHandlerExistence::UNKNOWN:
+      info->SetString("fetch_handler_existence", "UNKNOWN");
+      break;
+    case ServiceWorkerVersion::FetchHandlerExistence::EXISTS:
+      info->SetString("fetch_handler_existence", "EXISTS");
+      break;
+    case ServiceWorkerVersion::FetchHandlerExistence::DOES_NOT_EXIST:
+      info->SetString("fetch_handler_existence", "DOES_NOT_EXIST");
+      break;
+  }
+
   info->SetString("script_url", version.script_url.spec());
   info->SetString("version_id", base::Int64ToString(version.version_id));
   info->SetInteger("process_id",
@@ -166,8 +179,7 @@ ListValue* GetRegistrationListValue(
        it != registrations.end();
        ++it) {
     const ServiceWorkerRegistrationInfo& registration = *it;
-    std::unique_ptr<class base::DictionaryValue> registration_info(
-        new DictionaryValue());
+    std::unique_ptr<DictionaryValue> registration_info(new DictionaryValue());
     registration_info->SetString("scope", registration.pattern.spec());
     registration_info->SetString(
         "registration_id", base::Int64ToString(registration.registration_id));
@@ -198,9 +210,9 @@ ListValue* GetVersionListValue(
            versions.begin();
        it != versions.end();
        ++it) {
-    DictionaryValue* info = new DictionaryValue();
-    UpdateVersionInfo(*it, info);
-    result->Append(info);
+    std::unique_ptr<DictionaryValue> info(new DictionaryValue());
+    UpdateVersionInfo(*it, info.get());
+    result->Append(std::move(info));
   }
   return result;
 }
@@ -531,7 +543,7 @@ void ServiceWorkerInternalsUI::InspectWorker(const ListValue* args) {
     callback.Run(SERVICE_WORKER_ERROR_NOT_FOUND);
     return;
   }
-  agent_host->Inspect(web_ui()->GetWebContents()->GetBrowserContext());
+  agent_host->Inspect();
   callback.Run(SERVICE_WORKER_OK);
 }
 

@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include "base/memory/weak_ptr.h"
 #include "content/browser/devtools/protocol/devtools_protocol_dispatcher.h"
 #include "content/public/browser/devtools_agent_host.h"
 
@@ -31,8 +32,7 @@ class BrowserHandler : public DevToolsAgentHostClient {
   ~BrowserHandler() override;
 
   void SetClient(std::unique_ptr<Client> client);
-
-  using TargetInfos = std::vector<scoped_refptr<devtools::browser::TargetInfo>>;
+  void Detached();
 
   Response CreateBrowserContext(std::string* out_context_id);
   Response DisposeBrowserContext(const std::string& context_id,
@@ -41,12 +41,16 @@ class BrowserHandler : public DevToolsAgentHostClient {
                         const int* width,
                         const int* height,
                         const std::string* context_id,
-                        std::string* out_targetId);
-  Response CloseTarget(const std::string& targetId, bool* out_success);
-  Response GetTargets(TargetInfos* infos);
-  Response Attach(const std::string& targetId);
-  Response Detach(const std::string& targetId);
-  Response SendMessage(const std::string& targetId, const std::string& message);
+                        std::string* out_target_id);
+  Response CloseTarget(const std::string& target_id, bool* out_success);
+  Response GetTargets(DevToolsCommandId command_id);
+  Response Attach(DevToolsCommandId command_id,
+                  const std::string& target_id);
+  Response Detach(const std::string& target_id, bool* out_success);
+  Response SendMessage(const std::string& target_id,
+                       const std::string& message);
+  Response SetRemoteLocations(
+      const std::vector<std::unique_ptr<base::DictionaryValue>>&);
 
  private:
   void DispatchProtocolMessage(DevToolsAgentHost* agent_host,
@@ -55,7 +59,15 @@ class BrowserHandler : public DevToolsAgentHostClient {
   void AgentHostClosed(DevToolsAgentHost* agent_host,
                        bool replaced_with_another_client) override;
 
+  void RespondToGetTargets(DevToolsCommandId command_id,
+                           DevToolsAgentHost::List list);
+  void RespondToAttach(DevToolsCommandId command_id,
+                       const std::string& target_id,
+                       DevToolsAgentHost::List agents);
+
   std::unique_ptr<Client> client_;
+  DevToolsAgentHost::List attached_hosts_;
+  base::WeakPtrFactory<BrowserHandler> weak_factory_;
   DISALLOW_COPY_AND_ASSIGN(BrowserHandler);
 };
 

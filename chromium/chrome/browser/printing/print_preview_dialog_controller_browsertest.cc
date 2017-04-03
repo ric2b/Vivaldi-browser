@@ -10,6 +10,7 @@
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
@@ -37,6 +38,7 @@
 #include "ipc/ipc_message_macros.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 using content::WebContents;
 using content::WebContentsObserver;
@@ -90,8 +92,8 @@ class PrintPreviewDialogClonedObserver : public WebContentsObserver {
   // content::WebContentsObserver implementation.
   void DidCloneToNewWebContents(WebContents* old_web_contents,
                                 WebContents* new_web_contents) override {
-    request_preview_dialog_observer_.reset(
-        new RequestPrintPreviewObserver(new_web_contents));
+    request_preview_dialog_observer_ =
+        base::MakeUnique<RequestPrintPreviewObserver>(new_web_contents);
   }
 
   std::unique_ptr<RequestPrintPreviewObserver> request_preview_dialog_observer_;
@@ -149,12 +151,8 @@ void CheckPdfPluginForRenderFrame(content::RenderFrameHost* frame) {
 
   ChromePluginServiceFilter* filter = ChromePluginServiceFilter::GetInstance();
   EXPECT_TRUE(filter->IsPluginAvailable(
-      frame->GetProcess()->GetID(),
-      frame->GetRoutingID(),
-      nullptr,
-      GURL(kDummyPrintUrl),
-      GURL(),
-      &pdf_plugin_info));
+      frame->GetProcess()->GetID(), frame->GetRoutingID(), nullptr,
+      GURL(kDummyPrintUrl), url::Origin(), &pdf_plugin_info));
 }
 
 }  // namespace
@@ -192,7 +190,8 @@ class PrintPreviewDialogControllerBrowserTest : public InProcessBrowserTest {
     // PrintPreviewMessageHandler gets created. Thus enabling
     // RequestPrintPreviewObserver to get messages first for the purposes of
     // this test.
-    cloned_tab_observer_.reset(new PrintPreviewDialogClonedObserver(first_tab));
+    cloned_tab_observer_ =
+        base::MakeUnique<PrintPreviewDialogClonedObserver>(first_tab);
     chrome::DuplicateTab(browser());
 
     initiator_ = browser()->tab_strip_model()->GetActiveWebContents();
@@ -263,7 +262,7 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewDialogControllerBrowserTest,
   // Reload the initiator. Make sure reloading destroys the print preview
   // dialog.
   PrintPreviewDialogDestroyedObserver dialog_destroyed_observer(preview_dialog);
-  chrome::Reload(browser(), CURRENT_TAB);
+  chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
   content::WaitForLoadStop(
       browser()->tab_strip_model()->GetActiveWebContents());
   ASSERT_TRUE(dialog_destroyed_observer.dialog_destroyed());
@@ -307,10 +306,8 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewDialogControllerBrowserTest,
   EXPECT_FALSE(filter->IsPluginAvailable(
       initiator()->GetRenderProcessHost()->GetID(),
       initiator()->GetMainFrame()->GetRoutingID(),
-      browser()->profile()->GetResourceContext(),
-      GURL("http://google.com"),
-      GURL(),
-      &dummy_pdf_plugin_info));
+      browser()->profile()->GetResourceContext(), GURL(),
+      url::Origin(GURL("http://google.com")), &dummy_pdf_plugin_info));
 
   PrintPreview();
 

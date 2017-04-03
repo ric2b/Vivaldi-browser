@@ -10,7 +10,6 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
-import android.graphics.Point;
 import android.graphics.Rect;
 import android.net.ConnectivityManager;
 import android.net.Uri;
@@ -106,8 +105,6 @@ public class CustomTabsConnection {
     private final AtomicBoolean mWarmupHasBeenCalled = new AtomicBoolean();
     private final AtomicBoolean mWarmupHasBeenFinished = new AtomicBoolean();
     private ExternalPrerenderHandler mExternalPrerenderHandler;
-    // TODO(lizeb): Remove once crbug.com/630303 is fixed.
-    private boolean mPageLoadMetricsEnabled;
 
     /**
      * <strong>DO NOT CALL</strong>
@@ -481,6 +478,11 @@ public class CustomTabsConnection {
         return mClientManager.shouldPrerenderOnCellularForSession(session);
     }
 
+    /** @see ClientManager#shouldSendNavigationInfoForSession(CustomTabsSessionToken) */
+    public boolean shouldSendNavigationInfoForSession(CustomTabsSessionToken session) {
+        return mClientManager.shouldSendNavigationInfoForSession(session);
+    }
+
     /** See {@link ClientManager#getClientPackageNameForSession(CustomTabsSessionToken)} */
     public String getClientPackageNameForSession(CustomTabsSessionToken session) {
         return mClientManager.getClientPackageNameForSession(session);
@@ -525,6 +527,16 @@ public class CustomTabsConnection {
     public void sendFirstRunCallbackIfNecessary(Intent intent, boolean resultOK) { }
 
     /**
+     * Sends the navigation info that was captured to the client callback.
+     * @param session The session to use for getting client callback.
+     * @param url The current url for the tab.
+     * @param title The current title for the tab.
+     * @param screenshot A screenshot of the tab contents.
+     */
+    public void sendNavigationInfo(
+            CustomTabsSessionToken session, String url, String title, Bitmap screenshot) { }
+
+    /**
      * Notifies the application of a navigation event.
      *
      * Delivers the {@link CustomTabsConnectionCallback#onNavigationEvent}
@@ -548,12 +560,6 @@ public class CustomTabsConnection {
         return true;
     }
 
-    // TODO(lizeb): Remove once crbug.com/630303 is fixed.
-    @VisibleForTesting
-    void enablePageLoadMetricsCallbacks() {
-        mPageLoadMetricsEnabled = true;
-    }
-
     /**
      * Notifies the application of a page load metric.
      *
@@ -566,7 +572,6 @@ public class CustomTabsConnection {
      */
     boolean notifyPageLoadMetric(CustomTabsSessionToken session, String metricName, long offsetMs) {
         CustomTabsCallback callback = mClientManager.getCallbackForSession(session);
-        if (!mPageLoadMetricsEnabled) return false;
         if (callback == null) return false;
         Bundle args = new Bundle();
         args.putLong(metricName, offsetMs);
@@ -657,16 +662,24 @@ public class CustomTabsConnection {
         // processes. We use a workaround in this case.
         boolean useWorkaround = true;
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1) {
-            ActivityManager am =
-                    (ActivityManager) mApplication.getSystemService(Context.ACTIVITY_SERVICE);
-            List<ActivityManager.RunningAppProcessInfo> running = am.getRunningAppProcesses();
-            for (ActivityManager.RunningAppProcessInfo rpi : running) {
-                boolean matchingUid = rpi.uid == uid;
-                boolean isForeground = rpi.importance
-                        == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND;
-                useWorkaround &= !matchingUid;
-                if (matchingUid && isForeground) return true;
-            }
+            do {
+                ActivityManager am =
+                        (ActivityManager) mApplication.getSystemService(Context.ACTIVITY_SERVICE);
+                // Extra paranoia here and below, some L 5.0.x devices seem to throw NPE somewhere
+                // in this code.
+                // See https://crbug.com/654705.
+                if (am == null) break;
+                List<ActivityManager.RunningAppProcessInfo> running = am.getRunningAppProcesses();
+                if (running == null) break;
+                for (ActivityManager.RunningAppProcessInfo rpi : running) {
+                    if (rpi == null) continue;
+                    boolean matchingUid = rpi.uid == uid;
+                    boolean isForeground = rpi.importance
+                            == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND;
+                    useWorkaround &= !matchingUid;
+                    if (matchingUid && isForeground) return true;
+                }
+            } while (false);
         }
         return useWorkaround ? !isBackgroundProcess(Binder.getCallingPid()) : false;
     }
@@ -744,7 +757,7 @@ public class CustomTabsConnection {
         if (mExternalPrerenderHandler == null) {
             mExternalPrerenderHandler = new ExternalPrerenderHandler();
         }
-        Point contentSize = ExternalPrerenderHandler.estimateContentSize(mApplication, true);
+        Rect contentBounds = ExternalPrerenderHandler.estimateContentSize(mApplication, true);
         Context context = mApplication.getApplicationContext();
         String referrer = IntentHandler.getReferrerUrlIncludingExtraHeaders(extrasIntent, context);
         if (referrer == null && getReferrerForSession(session) != null) {
@@ -753,7 +766,7 @@ public class CustomTabsConnection {
         if (referrer == null) referrer = "";
         WebContents webContents = mExternalPrerenderHandler.addPrerender(
                 Profile.getLastUsedProfile(), url, referrer,
-                new Rect(0, 0, contentSize.x, contentSize.y),
+                contentBounds,
                 shouldPrerenderOnCellularForSession(session));
         if (webContents == null) return false;
         if (throttle) mClientManager.registerPrerenderRequest(uid, url);

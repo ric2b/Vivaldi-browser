@@ -11,6 +11,7 @@
 #include "net/http/http_auth_challenge_tokenizer.h"
 #include "net/http/http_auth_handler_digest.h"
 #include "net/http/http_request_info.h"
+#include "net/log/net_log_with_source.h"
 #include "net/ssl/ssl_info.h"
 #include "net/test/gtest_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -60,8 +61,8 @@ bool RespondToChallenge(HttpAuth::Target target,
   SSLInfo null_ssl_info;
   GURL url_origin(target == HttpAuth::AUTH_SERVER ? request_url : proxy_name);
   int rv_create = factory->CreateAuthHandlerFromString(
-      challenge, target, null_ssl_info, url_origin.GetOrigin(), BoundNetLog(),
-      &handler);
+      challenge, target, null_ssl_info, url_origin.GetOrigin(),
+      NetLogWithSource(), &handler);
   if (rv_create != OK || handler.get() == NULL) {
     ADD_FAILURE() << "Unable to create auth handler.";
     return false;
@@ -362,7 +363,7 @@ TEST(HttpAuthHandlerDigestTest, ParseChallenge) {
     std::unique_ptr<HttpAuthHandler> handler;
     int rv = factory->CreateAuthHandlerFromString(
         tests[i].challenge, HttpAuth::AUTH_SERVER, null_ssl_info, origin,
-        BoundNetLog(), &handler);
+        NetLogWithSource(), &handler);
     if (tests[i].parsed_success) {
       EXPECT_THAT(rv, IsOk());
     } else {
@@ -526,7 +527,7 @@ TEST(HttpAuthHandlerDigestTest, AssembleCredentials) {
     std::unique_ptr<HttpAuthHandler> handler;
     int rv = factory->CreateAuthHandlerFromString(
         tests[i].challenge, HttpAuth::AUTH_SERVER, null_ssl_info, origin,
-        BoundNetLog(), &handler);
+        NetLogWithSource(), &handler);
     EXPECT_THAT(rv, IsOk());
     ASSERT_TRUE(handler != NULL);
 
@@ -555,7 +556,7 @@ TEST(HttpAuthHandlerDigest, HandleAnotherChallenge) {
   SSLInfo null_ssl_info;
   int rv = factory->CreateAuthHandlerFromString(
       default_challenge, HttpAuth::AUTH_SERVER, null_ssl_info, origin,
-      BoundNetLog(), &handler);
+      NetLogWithSource(), &handler);
   EXPECT_THAT(rv, IsOk());
   ASSERT_TRUE(handler.get() != NULL);
   HttpAuthChallengeTokenizer tok_default(default_challenge.begin(),

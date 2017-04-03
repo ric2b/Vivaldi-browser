@@ -2,16 +2,14 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//third_party/WebKit/Source/bindings/core/core.gni")
-import("//third_party/WebKit/Source/bindings/core/idl.gni")
 import("//third_party/WebKit/Source/bindings/scripts/scripts.gni")
+import("//third_party/WebKit/Source/core/core_idl_files.gni")
 
 visibility = [ "//third_party/WebKit/*" ]
 
-# GYP version: Source/bindings/core/generated.gyp:interfaces_info_individual_core
 compute_interfaces_info_individual("interfaces_info_individual_core") {
-  sources_static = core_static_idl_files
-  sources_generated = core_generated_idl_files
+  sources = core_static_interface_idl_files + core_static_dependency_idl_files +
+      core_generated_interface_idl_files + core_generated_dependency_idl_files
   interfaces_info_file =
       "$bindings_core_output_dir/InterfacesInfoCoreIndividual.pickle"
   component_info_file = "$bindings_core_output_dir/ComponentInfoCore.pickle"
@@ -22,7 +20,6 @@ compute_interfaces_info_individual("interfaces_info_individual_core") {
   ]
 }
 
-# GYP version: Source/bindings/core/generated.gyp:core_global_objects
 compute_global_objects("core_global_objects") {
   sources = core_idl_files + core_idl_with_modules_dependency_files
   sources_generated = []
@@ -30,7 +27,6 @@ compute_global_objects("core_global_objects") {
   deps = []
 }
 
-# GYP version: Source/bindings/core/generated.gyp:core_global_constructors_idls
 generate_global_constructors("core_global_constructors_idls") {
   sources = core_idl_files + core_idl_with_modules_dependency_files
   global_objects_file = "$bindings_core_output_dir/GlobalObjectsCore.pickle"

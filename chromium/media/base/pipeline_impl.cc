@@ -12,7 +12,7 @@
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/location.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
@@ -311,6 +311,9 @@ void PipelineImpl::RendererWrapper::Seek(base::TimeDelta time) {
   DCHECK(!pending_callbacks_);
   SerialRunner::Queue bound_fns;
 
+  // Abort any reads the renderer may be blocked on.
+  demuxer_->AbortPendingReads();
+
   // Pause.
   if (text_renderer_) {
     bound_fns.Push(base::Bind(&TextRenderer::Pause,
@@ -352,8 +355,7 @@ void PipelineImpl::RendererWrapper::Suspend() {
 
   SetState(kSuspending);
 
-  // Freeze playback and record the media time before flushing. (Flushing clears
-  // the value.)
+  // Freeze playback and record the media time before destroying the renderer.
   shared_state_.renderer->SetPlaybackRate(0.0);
   {
     base::AutoLock auto_lock(shared_state_lock_);
@@ -369,14 +371,7 @@ void PipelineImpl::RendererWrapper::Suspend() {
                         base::Unretained(text_renderer_.get())));
   }
 
-  fns.Push(base::Bind(&Renderer::Flush,
-                      base::Unretained(shared_state_.renderer.get())));
-
-  if (text_renderer_) {
-    fns.Push(base::Bind(&TextRenderer::Flush,
-                        base::Unretained(text_renderer_.get())));
-  }
-
+  // No need to flush the renderer since it's going to be destroyed.
   pending_callbacks_ = SerialRunner::Run(
       fns, base::Bind(&RendererWrapper::CompleteSuspend, weak_this_));
 }
@@ -583,7 +578,7 @@ void PipelineImpl::RendererWrapper::OnEnabledAudioTracksChanged(
   }
 
   DCHECK(demuxer_);
-  DCHECK(shared_state_.renderer);
+  DCHECK(shared_state_.renderer || (state_ != kPlaying));
 
   base::TimeDelta currTime = (state_ == kPlaying)
                                  ? shared_state_.renderer->GetMediaTime()
@@ -602,7 +597,7 @@ void PipelineImpl::RendererWrapper::OnSelectedVideoTrackChanged(
   }
 
   DCHECK(demuxer_);
-  DCHECK(shared_state_.renderer);
+  DCHECK(shared_state_.renderer || (state_ != kPlaying));
 
   base::TimeDelta currTime = (state_ == kPlaying)
                                  ? shared_state_.renderer->GetMediaTime()
@@ -758,6 +753,11 @@ void PipelineImpl::RendererWrapper::CompleteSeek(base::TimeDelta seek_time,
   DCHECK(media_task_runner_->BelongsToCurrentThread());
   DCHECK(state_ == kStarting || state_ == kSeeking || state_ == kResuming);
 
+  if (state_ == kStarting) {
+    UMA_HISTOGRAM_ENUMERATION("Media.PipelineStatus.Start", status,
+                              PIPELINE_STATUS_MAX + 1);
+  }
+
   DCHECK(pending_callbacks_);
   pending_callbacks_.reset();
 
@@ -803,6 +803,9 @@ void PipelineImpl::RendererWrapper::CompleteSuspend(PipelineStatus status) {
     shared_state_.statistics.audio_memory_usage = 0;
     shared_state_.statistics.video_memory_usage = 0;
   }
+
+  // Abort any reads the renderer may have kicked off.
+  demuxer_->AbortPendingReads();
 
   SetState(kSuspended);
   main_task_runner_->PostTask(
@@ -904,6 +907,7 @@ void PipelineImpl::Start(Demuxer* demuxer,
   DCHECK(seek_cb_.is_null());
   client_ = client;
   seek_cb_ = seek_cb;
+  last_media_time_ = base::TimeDelta();
 
   std::unique_ptr<TextRenderer> text_renderer;
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -985,6 +989,7 @@ void PipelineImpl::Seek(base::TimeDelta time, const PipelineStatusCB& seek_cb) {
 
   DCHECK(seek_cb_.is_null());
   seek_cb_ = seek_cb;
+  last_media_time_ = base::TimeDelta();
   media_task_runner_->PostTask(
       FROM_HERE, base::Bind(&RendererWrapper::Seek,
                             base::Unretained(renderer_wrapper_.get()), time));
@@ -1014,6 +1019,7 @@ void PipelineImpl::Resume(std::unique_ptr<Renderer> renderer,
   DCHECK(IsRunning());
   DCHECK(seek_cb_.is_null());
   seek_cb_ = seek_cb;
+  last_media_time_ = base::TimeDelta();
 
   media_task_runner_->PostTask(
       FROM_HERE, base::Bind(&RendererWrapper::Resume,
@@ -1066,7 +1072,24 @@ void PipelineImpl::SetVolume(float volume) {
 
 base::TimeDelta PipelineImpl::GetMediaTime() const {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return renderer_wrapper_->GetMediaTime();
+
+  base::TimeDelta media_time = renderer_wrapper_->GetMediaTime();
+
+  // Clamp current media time to the last reported value, this prevents higher
+  // level clients from seeing time go backwards based on inaccurate or spurious
+  // delay values reported to the AudioClock.
+  //
+  // It is expected that such events are transient and will be recovered as
+  // rendering continues over time.
+  if (media_time < last_media_time_) {
+    DVLOG(2) << __func__ << ": actual=" << media_time
+             << " clamped=" << last_media_time_;
+    return last_media_time_;
+  }
+
+  DVLOG(3) << __FUNCTION__ << ": " << media_time.InMilliseconds() << " ms";
+  last_media_time_ = media_time;
+  return last_media_time_;
 }
 
 Ranges<base::TimeDelta> PipelineImpl::GetBufferedTimeRanges() const {

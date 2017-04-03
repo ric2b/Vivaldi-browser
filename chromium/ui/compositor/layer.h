@@ -76,6 +76,16 @@ class COMPOSITOR_EXPORT Layer
   explicit Layer(LayerType type);
   ~Layer() override;
 
+  // Note that only solid color and surface content is copied.
+  std::unique_ptr<Layer> Clone() const;
+
+  // Returns a new layer that mirrors this layer and is optionally synchronized
+  // with the bounds thereof. Note that children are not mirrored, and that the
+  // content is only mirrored if painted by a delegate or backed by a surface.
+  std::unique_ptr<Layer> Mirror();
+
+  void set_sync_bounds(bool sync_bounds) { sync_bounds_ = sync_bounds; }
+
   // Retrieves the Layer's compositor. The Layer will walk up its parent chain
   // to locate it. Returns NULL if the Layer is not attached to a compositor.
   Compositor* GetCompositor() {
@@ -286,21 +296,6 @@ class COMPOSITOR_EXPORT Layer
   void SetTextureFlipped(bool flipped);
   bool TextureFlipped() const;
 
-  // The alpha value applied to the whole texture. The effective value of each
-  // pixel is computed as:
-  // pixel.a = pixel.a * alpha.
-  // Note: This is different from SetOpacity() as it only applies to the
-  // texture and child layers are unaffected.
-  // TODO(reveman): Remove once components/exo code is using SetShowSurface.
-  // crbug.com/610086
-  void SetTextureAlpha(float alpha);
-
-  // The texture crop rectangle to be used. Empty rectangle means no cropping.
-  void SetTextureCrop(const gfx::RectF& crop);
-
-  // The texture scale to be used. Defaults to no scaling.
-  void SetTextureScale(float x_scale, float y_scale);
-
   // Begins showing content from a surface with a particular id.
   void SetShowSurface(const cc::SurfaceId& surface_id,
                       const cc::SurfaceLayer::SatisfyCallback& satisfy_callback,
@@ -318,7 +313,7 @@ class COMPOSITOR_EXPORT Layer
 
   // Sets the layer's fill color.  May only be called for LAYER_SOLID_COLOR.
   void SetColor(SkColor color);
-  SkColor GetTargetColor();
+  SkColor GetTargetColor() const;
   SkColor background_color() const;
 
   // Updates the nine patch layer's image, aperture and border. May only be
@@ -389,9 +384,6 @@ class COMPOSITOR_EXPORT Layer
       cc::Layer* layer) override;
   void didUpdateMainThreadScrollingReasons() override;
 
-  // Whether this layer has animations waiting to get sent to its cc::Layer.
-  bool HasPendingThreadedAnimationsForTesting() const;
-
   // Triggers a call to SwitchToLayer.
   void SwitchCCLayerForTest();
 
@@ -401,6 +393,7 @@ class COMPOSITOR_EXPORT Layer
 
  private:
   friend class LayerOwner;
+  class LayerMirror;
 
   void CollectAnimators(std::vector<scoped_refptr<LayerAnimator> >* animators);
 
@@ -451,6 +444,8 @@ class COMPOSITOR_EXPORT Layer
   void SetCompositorForAnimatorsInTree(Compositor* compositor);
   void ResetCompositorForAnimatorsInTree(Compositor* compositor);
 
+  void OnMirrorDestroyed(LayerMirror* mirror);
+
   const LayerType type_;
 
   Compositor* compositor_;
@@ -459,6 +454,11 @@ class COMPOSITOR_EXPORT Layer
 
   // This layer's children, in bottom-to-top stacking order.
   std::vector<Layer*> children_;
+
+  std::vector<std::unique_ptr<LayerMirror>> mirrors_;
+
+  // If true, changes to the bounds of this layer are propagated to mirrors.
+  bool sync_bounds_ = false;
 
   gfx::Rect bounds_;
   gfx::Vector2dF subpixel_position_offset_;
@@ -540,13 +540,6 @@ class COMPOSITOR_EXPORT Layer
   // The size of the frame or texture in DIP, set when SetShowDelegatedContent
   // or SetTextureMailbox was called.
   gfx::Size frame_size_in_dip_;
-
-  // The texture crop rectangle.
-  gfx::RectF texture_crop_;
-
-  // The texture scale.
-  float texture_x_scale_;
-  float texture_y_scale_;
 
   DISALLOW_COPY_AND_ASSIGN(Layer);
 };

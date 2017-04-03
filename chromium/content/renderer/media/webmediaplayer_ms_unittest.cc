@@ -56,7 +56,7 @@ class FakeWebMediaPlayerDelegate
                bool has_video,
                bool has_audio,
                bool is_remote,
-               base::TimeDelta duration) override {
+               media::MediaContentType type) override {
     EXPECT_EQ(delegate_id_, delegate_id);
     EXPECT_FALSE(playing_);
     playing_ = true;
@@ -426,6 +426,7 @@ class WebMediaPlayerMSTest
   void connectedToRemoteDevice() override {}
   void disconnectedFromRemoteDevice() override {}
   void cancelledRemotePlaybackRequest() override {}
+  bool isAutoplayingMuted() override { return false; }
   void requestReload(const blink::WebURL& newUrl) override {}
 
   // Implementation of cc::VideoFrameProvider::Client
@@ -917,7 +918,7 @@ TEST_F(WebMediaPlayerMSTest, HiddenPlayerTests) {
   EXPECT_FALSE(player_->paused());
   EXPECT_CALL(*this, DoSetWebLayer(false));
 
-  message_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 }
 #endif
 

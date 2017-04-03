@@ -27,12 +27,10 @@ class HeadlessDevToolsManagerDelegate
   ~HeadlessDevToolsManagerDelegate() override;
 
   // DevToolsManagerDelegate implementation:
-  void Inspect(content::BrowserContext* browser_context,
-               content::DevToolsAgentHost* agent_host) override {}
-  void DevToolsAgentStateChanged(content::DevToolsAgentHost* agent_host,
-                                 bool attached) override{};
   base::DictionaryValue* HandleCommand(content::DevToolsAgentHost* agent_host,
                                        base::DictionaryValue* command) override;
+  std::string GetDiscoveryPageHTML() override;
+  std::string GetFrontendResource(const std::string& path) override;
 
  private:
   std::unique_ptr<base::Value> CreateTarget(

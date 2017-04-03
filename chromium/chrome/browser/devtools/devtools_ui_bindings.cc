@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <utility>
 
 #include "base/base64.h"
@@ -13,7 +14,8 @@
 #include "base/json/json_writer.h"
 #include "base/json/string_escape.h"
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -23,7 +25,6 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/devtools_file_watcher.h"
 #include "chrome/browser/devtools/devtools_protocol.h"
-#include "chrome/browser/devtools/devtools_target_impl.h"
 #include "chrome/browser/devtools/global_confirm_info_bar.h"
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
 #include "chrome/browser/infobars/infobar_service.h"
@@ -48,6 +49,7 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_source.h"
+#include "content/public/browser/reload_type.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -62,6 +64,7 @@
 #include "ipc/ipc_channel.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
+#include "net/cert/x509_certificate.h"
 #include "net/http/http_response_headers.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_fetcher_response_writer.h"
@@ -99,9 +102,9 @@ typedef std::vector<DevToolsUIBindings*> DevToolsUIBindingsList;
 base::LazyInstance<DevToolsUIBindingsList>::Leaky g_instances =
     LAZY_INSTANCE_INITIALIZER;
 
-base::DictionaryValue* CreateFileSystemValue(
+std::unique_ptr<base::DictionaryValue> CreateFileSystemValue(
     DevToolsFileHelper::FileSystem file_system) {
-  base::DictionaryValue* file_system_value = new base::DictionaryValue();
+  auto file_system_value = base::MakeUnique<base::DictionaryValue>();
   file_system_value->SetString("fileSystemName", file_system.file_system_name);
   file_system_value->SetString("rootURL", file_system.root_url);
   file_system_value->SetString("fileSystemPath", file_system.file_system_path);
@@ -194,6 +197,7 @@ class DefaultBindingsDelegate : public DevToolsUIBindings::Delegate {
 
   void ActivateWindow() override;
   void CloseWindow() override {}
+  void Inspect(scoped_refptr<content::DevToolsAgentHost> host) override {}
   void SetInspectedPageBounds(const gfx::Rect& rect) override {}
   void InspectElementCompleted() override {}
   void SetIsDocked(bool is_docked) override {}
@@ -218,9 +222,9 @@ void DefaultBindingsDelegate::ActivateWindow() {
 }
 
 void DefaultBindingsDelegate::OpenInNewTab(const std::string& url) {
-  content::OpenURLParams params(
-      GURL(url), content::Referrer(), NEW_FOREGROUND_TAB,
-      ui::PAGE_TRANSITION_LINK, false);
+  content::OpenURLParams params(GURL(url), content::Referrer(),
+                                WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                                ui::PAGE_TRANSITION_LINK, false);
   Browser* browser = FindBrowser(web_contents_);
   browser->OpenURL(params);
 }
@@ -245,7 +249,7 @@ class ResponseWriter : public net::URLFetcherResponseWriter {
   int Write(net::IOBuffer* buffer,
             int num_bytes,
             const net::CompletionCallback& callback) override;
-  int Finish(const net::CompletionCallback& callback) override;
+  int Finish(int net_error, const net::CompletionCallback& callback) override;
 
  private:
   base::WeakPtr<DevToolsUIBindings> bindings_;
@@ -289,7 +293,8 @@ int ResponseWriter::Write(net::IOBuffer* buffer,
   return num_bytes;
 }
 
-int ResponseWriter::Finish(const net::CompletionCallback& callback) {
+int ResponseWriter::Finish(int net_error,
+                           const net::CompletionCallback& callback) {
   return net::OK;
 }
 
@@ -308,7 +313,7 @@ class DevToolsUIBindings::FrontendWebContentsObserver
   void RenderProcessGone(base::TerminationStatus status) override;
   void DidStartNavigationToPendingEntry(
       const GURL& url,
-      content::NavigationController::ReloadType reload_type) override;
+      content::ReloadType reload_type) override;
   void DocumentAvailableInMainFrame() override;
   void DocumentOnLoadCompletedInMainFrame() override;
   void DidNavigateMainFrame(
@@ -351,9 +356,8 @@ void DevToolsUIBindings::FrontendWebContentsObserver::RenderProcessGone(
 }
 
 void DevToolsUIBindings::FrontendWebContentsObserver::
-    DidStartNavigationToPendingEntry(
-        const GURL& url,
-        content::NavigationController::ReloadType reload_type) {
+    DidStartNavigationToPendingEntry(const GURL& url,
+                                     content::ReloadType reload_type) {
   devtools_bindings_->frontend_host_.reset(
       content::DevToolsFrontendHost::Create(
           web_contents()->GetMainFrame(),
@@ -679,6 +683,52 @@ void DevToolsUIBindings::SetWhitelistedShortcuts(const std::string& message) {
   delegate_->SetWhitelistedShortcuts(message);
 }
 
+void DevToolsUIBindings::ShowCertificateViewer(const std::string& cert_chain) {
+  std::unique_ptr<base::Value> value =
+      base::JSONReader::Read(cert_chain);
+  if (!value || value->GetType() != base::Value::TYPE_LIST) {
+    NOTREACHED();
+    return;
+  }
+
+  std::unique_ptr<base::ListValue> list =
+      base::ListValue::From(std::move(value));
+  std::vector<std::string> decoded;
+  for (size_t i = 0; i < list->GetSize(); ++i) {
+    base::Value* item;
+    if (!list->Get(i, &item) || item->GetType() != base::Value::TYPE_STRING) {
+      NOTREACHED();
+      return;
+    }
+    std::string temp;
+    if (!item->GetAsString(&temp)) {
+      NOTREACHED();
+      return;
+    }
+    if (!base::Base64Decode(temp, &temp)) {
+      NOTREACHED();
+      return;
+    }
+    decoded.push_back(temp);
+  }
+
+  std::vector<base::StringPiece> cert_string_piece;
+  for (const auto& str : decoded)
+    cert_string_piece.push_back(str);
+  scoped_refptr<net::X509Certificate> cert =
+       net::X509Certificate::CreateFromDERCertChain(cert_string_piece);
+  if (!cert) {
+    NOTREACHED();
+    return;
+  }
+
+  if (!agent_host_ || !agent_host_->GetWebContents())
+    return;
+  content::WebContents* inspected_wc = agent_host_->GetWebContents();
+  web_contents_->GetDelegate()->ShowCertificateViewerInDevTools(
+      inspected_wc, cert.get());
+}
+
 void DevToolsUIBindings::ZoomIn() {
   zoom::PageZoom::Zoom(web_contents(), content::PAGE_ZOOM_IN);
 }
@@ -761,17 +811,18 @@ void DevToolsUIBindings::PerformActionOnRemotePage(const std::string& page_id,
                                                    const std::string& action) {
   if (!remote_targets_handler_)
     return;
-  DevToolsTargetImpl* target = remote_targets_handler_->GetTarget(page_id);
-  if (!target)
+  scoped_refptr<content::DevToolsAgentHost> host =
+      remote_targets_handler_->GetTarget(page_id);
+  if (!host)
     return;
   if (action == kRemotePageActionInspect)
-    target->Inspect(profile_);
-  if (action == kRemotePageActionReload)
-    target->Reload();
-  if (action == kRemotePageActionActivate)
-    target->Activate();
-  if (action == kRemotePageActionClose)
-    target->Close();
+    delegate_->Inspect(host);
+  else if (action == kRemotePageActionReload)
+    host->Reload();
+  else if (action == kRemotePageActionActivate)
+    host->Activate();
+  else if (action == kRemotePageActionClose)
+    host->Close();
 }
 
 void DevToolsUIBindings::OpenRemotePage(const std::string& browser_id,
@@ -927,10 +978,17 @@ void DevToolsUIBindings::FileSystemRemoved(
 }
 
 void DevToolsUIBindings::FilePathsChanged(
-    const std::vector<std::string>& file_paths) {
+    const std::vector<std::string>& changed_paths,
+    const std::vector<std::string>& added_paths,
+    const std::vector<std::string>& removed_paths) {
   base::ListValue list;
-  for (auto path : file_paths)
+  for (auto path : changed_paths)
     list.AppendString(path);
+  for (auto path : added_paths)
+    list.AppendString(path);
+  for (auto path : removed_paths)
+    list.AppendString(path);
+
   CallClientFunction("DevToolsAPI.fileSystemFilesChanged",
                      &list, NULL, NULL);
 }

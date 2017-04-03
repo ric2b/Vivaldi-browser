@@ -8,24 +8,22 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "base/single_thread_task_runner.h"
 #include "components/sync/device_info/local_device_info_provider.h"
 #include "components/sync/driver/ui_data_type_controller.h"
 
-namespace sync_driver {
+namespace syncer {
 
 // DataTypeController for DEVICE_INFO model type.
 class DeviceInfoDataTypeController : public UIDataTypeController {
  public:
+  // |dump_stack| is called when an unrecoverable error occurs.
   DeviceInfoDataTypeController(
-      const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
-      const base::Closure& error_callback,
+      const base::Closure& dump_stack,
       SyncClient* sync_client,
       LocalDeviceInfoProvider* local_device_info_provider);
-
- private:
   ~DeviceInfoDataTypeController() override;
 
+ private:
   // UIDataTypeController implementations.
   bool StartModels() override;
   void StopModels() override;
@@ -39,6 +37,6 @@ class DeviceInfoDataTypeController : public UIDataTypeController {
   DISALLOW_COPY_AND_ASSIGN(DeviceInfoDataTypeController);
 };
 
-}  // namespace sync_driver
+}  // namespace syncer
 
 #endif  // COMPONENTS_SYNC_DEVICE_INFO_DEVICE_INFO_DATA_TYPE_CONTROLLER_H_

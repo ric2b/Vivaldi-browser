@@ -40,7 +40,7 @@ using testing::_;
 // TODO(bnc): Merge these correctly.
 bool FLAGS_use_http2_frame_decoder_adapter;
 bool FLAGS_spdy_use_hpack_decoder2;
-bool FLAGS_spdy_framer_use_new_methods3;
+bool FLAGS_spdy_framer_use_new_methods4;
 
 namespace net {
 namespace test {
@@ -195,7 +195,7 @@ struct TestParams {
         FLAGS_use_http2_frame_decoder_adapter = true;
         // Http2FrameDecoderAdapter needs the new header methods, else
         // --use_http2_frame_decoder_adapter=true will be ignored.
-        FLAGS_spdy_framer_use_new_methods3 = true;
+        FLAGS_spdy_framer_use_new_methods4 = true;
         break;
     }
     switch (hpack_decoder) {
@@ -205,7 +205,7 @@ struct TestParams {
       case HPACK_DECODER_NEW:
         FLAGS_spdy_use_hpack_decoder2 = true;
         // Needs new header methods to be used.
-        FLAGS_spdy_framer_use_new_methods3 = true;
+        FLAGS_spdy_framer_use_new_methods4 = true;
         break;
     }
     VLOG(1) << "TestParams: version: " << QuicVersionToString(version)
@@ -381,6 +381,7 @@ class QuicHeadersStreamTest : public ::testing::TestWithParam<TestParamsTuple> {
   static const bool kFrameComplete = true;
   static const bool kHasPriority = true;
 
+  QuicFlagSaver flags_;  // Save/restore all QUIC flag values.
   const TestParams test_params_;
   MockQuicConnectionHelper helper_;
   MockAlarmFactory alarm_factory_;
@@ -444,7 +445,7 @@ TEST_P(QuicHeadersStreamTest, WritePushPromises) {
                                        false, nullptr))
           .WillOnce(WithArgs<2>(Invoke(this, &QuicHeadersStreamTest::SaveIov)));
       headers_stream_->WritePushPromise(stream_id, promised_stream_id,
-                                        headers_.Clone(), nullptr);
+                                        headers_.Clone());
 
       // Parse the outgoing data and check that it matches was was written.
       EXPECT_CALL(visitor_,
@@ -459,10 +460,9 @@ TEST_P(QuicHeadersStreamTest, WritePushPromises) {
       CheckHeaders();
       saved_data_.clear();
     } else {
-      EXPECT_QUIC_BUG(
-          headers_stream_->WritePushPromise(stream_id, promised_stream_id,
-                                            headers_.Clone(), nullptr),
-          "Client shouldn't send PUSH_PROMISE");
+      EXPECT_QUIC_BUG(headers_stream_->WritePushPromise(
+                          stream_id, promised_stream_id, headers_.Clone()),
+                      "Client shouldn't send PUSH_PROMISE");
     }
   }
 }
@@ -528,6 +528,28 @@ TEST_P(QuicHeadersStreamTest, ProcessPushPromise) {
       CheckHeaders();
     }
   }
+}
+
+TEST_P(QuicHeadersStreamTest, ProcessPushPromiseDisabledSetting) {
+  FLAGS_quic_respect_http2_settings_frame = true;
+  FLAGS_quic_enable_server_push_by_default = true;
+  session_.OnConfigNegotiated();
+  SpdySettingsIR data;
+  // Respect supported settings frames SETTINGS_ENABLE_PUSH.
+  data.AddSetting(SETTINGS_ENABLE_PUSH, true, true, 0);
+  SpdySerializedFrame frame(framer_->SerializeFrame(data));
+  stream_frame_.data_buffer = frame.data();
+  stream_frame_.data_length = frame.size();
+  if (perspective() == Perspective::IS_CLIENT) {
+    EXPECT_CALL(
+        *connection_,
+        CloseConnection(QUIC_INVALID_HEADERS_STREAM_DATA,
+                        "Unsupported field of HTTP/2 SETTINGS frame: 9", _));
+  }
+  headers_stream_->OnStreamFrame(stream_frame_);
+  EXPECT_EQ(
+      session_.server_push_enabled(),
+      (perspective() == Perspective::IS_CLIENT && version() > QUIC_VERSION_34));
 }
 
 TEST_P(QuicHeadersStreamTest, EmptyHeaderHOLBlockedTime) {
@@ -764,11 +786,14 @@ TEST_P(QuicHeadersStreamTest, RespectHttp2SettingsFrameUnsupportedFields) {
                       "Unsupported field of HTTP/2 SETTINGS frame: " +
                           base::IntToString(SETTINGS_INITIAL_WINDOW_SIZE),
                       _));
-  EXPECT_CALL(*connection_,
-              CloseConnection(QUIC_INVALID_HEADERS_STREAM_DATA,
-                              "Unsupported field of HTTP/2 SETTINGS frame: " +
-                                  base::IntToString(SETTINGS_ENABLE_PUSH),
-                              _));
+  if (!FLAGS_quic_enable_server_push_by_default ||
+      session_.perspective() == Perspective::IS_CLIENT) {
+    EXPECT_CALL(*connection_,
+                CloseConnection(QUIC_INVALID_HEADERS_STREAM_DATA,
+                                "Unsupported field of HTTP/2 SETTINGS frame: " +
+                                    base::IntToString(SETTINGS_ENABLE_PUSH),
+                                _));
+  }
   EXPECT_CALL(*connection_,
               CloseConnection(QUIC_INVALID_HEADERS_STREAM_DATA,
                               "Unsupported field of HTTP/2 SETTINGS frame: " +

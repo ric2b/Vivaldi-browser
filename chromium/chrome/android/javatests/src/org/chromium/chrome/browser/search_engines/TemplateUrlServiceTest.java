@@ -9,9 +9,12 @@ import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Restriction;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService.LoadListener;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService.TemplateUrl;
 import org.chromium.chrome.test.util.ApplicationData;
+import org.chromium.chrome.test.util.ChromeRestriction;
 import org.chromium.content.browser.test.NativeLibraryTestBase;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
@@ -48,6 +51,7 @@ public class TemplateUrlServiceTest extends NativeLibraryTestBase {
 
     @SmallTest
     @Feature({"ContextualSearch"})
+    @RetryOnFailure
     public void testUrlForContextualSearchQueryValid()
             throws InterruptedException, ExecutionException {
         waitForTemplateUrlServiceToLoad();
@@ -90,6 +94,8 @@ public class TemplateUrlServiceTest extends NativeLibraryTestBase {
 
     @SmallTest
     @Feature({"SearchEngines"})
+    @RetryOnFailure
+    @Restriction(ChromeRestriction.RESTRICTION_TYPE_PHONE) // see crbug.com/581268
     public void testLoadUrlService() throws InterruptedException {
         assertFalse(ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Boolean>() {
             @Override

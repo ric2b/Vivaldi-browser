@@ -548,7 +548,7 @@ bool AutofillProfileComparator::MergeAddresses(const AutofillProfile& p1,
           break;
         case S2_CONTAINS_S1:
           // address2 has more unique tokens than address1.
-          address->SetInfo(kStreetAddress, address1, app_locale_);
+          address->SetInfo(kStreetAddress, address2, app_locale_);
           break;
         case DIFFERENT_TOKENS:
         default:

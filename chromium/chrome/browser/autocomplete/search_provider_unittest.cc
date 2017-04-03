@@ -31,7 +31,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browser_sync/profile_sync_service.h"
 #include "components/google/core/browser/google_switches.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/metrics/proto/omnibox_event.pb.h"
@@ -285,8 +285,7 @@ void SearchProviderTest::SetUp() {
   data.suggestions_url = "http://defaultturl2/{searchTerms}";
   data.instant_url = "http://does/not/exist?strk=1";
   data.search_terms_replacement_key = "strk";
-  default_t_url_ = new TemplateURL(data);
-  turl_model->Add(default_t_url_);
+  default_t_url_ = turl_model->Add(base::MakeUnique<TemplateURL>(data));
   turl_model->SetUserSelectedDefaultSearchProvider(default_t_url_);
   TemplateURLID default_provider_id = default_t_url_->id();
   ASSERT_NE(0, default_provider_id);
@@ -299,8 +298,7 @@ void SearchProviderTest::SetUp() {
   data.SetKeyword(ASCIIToUTF16("k"));
   data.SetURL("http://keyword/{searchTerms}");
   data.suggestions_url = "http://suggest_keyword/{searchTerms}";
-  keyword_t_url_ = new TemplateURL(data);
-  turl_model->Add(keyword_t_url_);
+  keyword_t_url_ = turl_model->Add(base::MakeUnique<TemplateURL>(data));
   ASSERT_NE(0, keyword_t_url_->id());
 
   // Add a page and search term for keyword_t_url_.
@@ -510,7 +508,7 @@ void SearchProviderTest::ResetFieldTrialList() {
   // a DCHECK.
   field_trial_list_.reset();
   field_trial_list_.reset(new base::FieldTrialList(
-      new metrics::SHA1EntropyProvider("foo")));
+      base::MakeUnique<metrics::SHA1EntropyProvider>("foo")));
   variations::testing::ClearAllVariationParams();
 }
 
@@ -1161,8 +1159,7 @@ TEST_F(SearchProviderTest, CommandLineOverrides) {
   data.SetShortName(ASCIIToUTF16("default"));
   data.SetKeyword(data.short_name());
   data.SetURL("{google:baseURL}{searchTerms}");
-  default_t_url_ = new TemplateURL(data);
-  turl_model->Add(default_t_url_);
+  default_t_url_ = turl_model->Add(base::MakeUnique<TemplateURL>(data));
   turl_model->SetUserSelectedDefaultSearchProvider(default_t_url_);
 
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
@@ -3252,17 +3249,17 @@ TEST_F(SearchProviderTest, CanSendURL) {
       &client_incognito));
 
   // Tab sync not enabled.
-  profile_.GetPrefs()->SetBoolean(sync_driver::prefs::kSyncKeepEverythingSynced,
+  profile_.GetPrefs()->SetBoolean(syncer::prefs::kSyncKeepEverythingSynced,
                                   false);
-  profile_.GetPrefs()->SetBoolean(sync_driver::prefs::kSyncTabs, false);
+  profile_.GetPrefs()->SetBoolean(syncer::prefs::kSyncTabs, false);
   EXPECT_FALSE(SearchProvider::CanSendURL(
       GURL("http://www.google.com/search"),
       GURL("https://www.google.com/complete/search"), &google_template_url,
       metrics::OmniboxEventProto::OTHER, SearchTermsData(), &client));
-  profile_.GetPrefs()->SetBoolean(sync_driver::prefs::kSyncTabs, true);
+  profile_.GetPrefs()->SetBoolean(syncer::prefs::kSyncTabs, true);
 
   // Tab sync is encrypted.
-  ProfileSyncService* service =
+  browser_sync::ProfileSyncService* service =
       ProfileSyncServiceFactory::GetInstance()->GetForProfile(&profile_);
   syncer::ModelTypeSet encrypted_types = service->GetEncryptedDataTypes();
   encrypted_types.Put(syncer::SESSIONS);
@@ -3382,8 +3379,7 @@ TEST_F(SearchProviderTest, SuggestQueryUsesToken) {
   data.SetURL("http://example/{searchTerms}{google:sessionToken}");
   data.suggestions_url =
       "http://suggest/?q={searchTerms}&{google:sessionToken}";
-  default_t_url_ = new TemplateURL(data);
-  turl_model->Add(default_t_url_);
+  default_t_url_ = turl_model->Add(base::MakeUnique<TemplateURL>(data));
   turl_model->SetUserSelectedDefaultSearchProvider(default_t_url_);
 
   base::string16 term = term1_.substr(0, term1_.length() - 1);

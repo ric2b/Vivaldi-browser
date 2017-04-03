@@ -32,6 +32,7 @@
 
 namespace gpu {
 class GpuMemoryBufferFactory;
+class GpuWatchdogThread;
 class SyncPointManager;
 }
 
@@ -45,7 +46,6 @@ class TargetServices;
 
 namespace content {
 class GpuServiceFactory;
-class GpuWatchdogThread;
 struct EstablishChannelParams;
 
 // The main thread of the GPU child process. There will only ever be one of
@@ -58,14 +58,14 @@ class GpuChildThread : public ChildThreadImpl,
  public:
   typedef std::queue<IPC::Message*> DeferredMessages;
 
-  GpuChildThread(GpuWatchdogThread* gpu_watchdog_thread,
+  GpuChildThread(std::unique_ptr<gpu::GpuWatchdogThread> gpu_watchdog_thread,
                  bool dead_on_arrival,
                  const gpu::GPUInfo& gpu_info,
                  const DeferredMessages& deferred_messages,
                  gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory);
 
-  GpuChildThread(const gpu::GpuPreferences& gpu_preferences,
-                 const InProcessChildThreadParams& params,
+  GpuChildThread(const InProcessChildThreadParams& params,
+                 const gpu::GPUInfo& gpu_info,
                  gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory);
 
   ~GpuChildThread() override;
@@ -73,9 +73,8 @@ class GpuChildThread : public ChildThreadImpl,
   void Shutdown() override;
 
   void Init(const base::Time& process_start_time);
-  void StopWatchdog();
 
-  gpu::GpuPreferences gpu_preferences() { return gpu_preferences_; }
+  gpu::GpuWatchdogThread* watchdog_thread() { return watchdog_thread_.get(); }
 
  private:
   // ChildThreadImpl:.
@@ -91,7 +90,6 @@ class GpuChildThread : public ChildThreadImpl,
   void DidLoseContext(bool offscreen,
                       gpu::error::ContextLostReason reason,
                       const GURL& active_url) override;
-  void GpuMemoryUmaStats(const gpu::GPUMemoryUmaStats& params) override;
 #if defined(OS_WIN)
   void SendAcceleratedSurfaceCreatedChildWindow(
       gpu::SurfaceHandle parent_window,
@@ -115,7 +113,6 @@ class GpuChildThread : public ChildThreadImpl,
   void OnClean();
   void OnCrash();
   void OnHang();
-  void OnDisableWatchdog();
   void OnGpuSwitched();
 
   void OnEstablishChannel(const EstablishChannelParams& params);
@@ -132,13 +129,11 @@ class GpuChildThread : public ChildThreadImpl,
 
   void BindServiceFactoryRequest(shell::mojom::ServiceFactoryRequest request);
 
-  gpu::GpuPreferences gpu_preferences_;
-
   // Set this flag to true if a fatal error occurred before we receive the
   // OnInitialize message, in which case we just declare ourselves DOA.
-  bool dead_on_arrival_;
+  const bool dead_on_arrival_;
   base::Time process_start_time_;
-  scoped_refptr<GpuWatchdogThread> watchdog_thread_;
+  std::unique_ptr<gpu::GpuWatchdogThread> watchdog_thread_;
 
 #if defined(OS_WIN)
   // Windows specific client sandbox interface.

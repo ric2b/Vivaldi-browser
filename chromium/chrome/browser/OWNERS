@@ -2,6 +2,10 @@
 # usual OWNERS rules.
 per-file about_flags.cc=*
 
+# This is for the common case of adding or renaming files. If you're doing
+# structural changes, use usual OWNERS rules.
+per-file BUILD.gn=*
+
 per-file *_android.*=file://chrome/browser/android/OWNERS
 
 per-file browser_resources.grd=bauerb@chromium.org
@@ -23,6 +27,11 @@ per-file chrome_content_browser_client.cc=*
 per-file chrome_content_browser_client.h=*
 per-file chrome_content_browser_client_browsertest.cc=*
 per-file chrome_content_browser_client_unittest.cc=*
+
+per-file content_browser_manifest_overlay.json=set noparent
+per-file content_browser_manifest_overlay.json=file://ipc/SECURITY_OWNERS
+per-file content_utility_manifest_overlay.json=set noparent
+per-file content_utility_manifest_overlay.json=file://ipc/SECURITY_OWNERS
 
 per-file chrome_browser_field_trials*=file://components/variations/OWNERS
 

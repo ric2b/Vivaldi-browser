@@ -6,10 +6,10 @@
 #define IntersectionObserverController_h
 
 #include "core/dom/ActiveDOMObject.h"
-#include "core/dom/IdleRequestCallback.h"
 #include "core/dom/IntersectionObserver.h"
 #include "platform/heap/Handle.h"
 #include "wtf/HashSet.h"
+#include "wtf/WeakPtr.h"
 
 // Design doc for IntersectionObserver implementation:
 //   https://docs.google.com/a/google.com/document/d/1hLK0eyT5_BzyNS4OkjsnoqqFQDYCbKfyBinj94OnLiQ
@@ -18,36 +18,39 @@ namespace blink {
 
 class Document;
 
-class IntersectionObserverController : public IdleRequestCallback, public ActiveDOMObject {
-    USING_GARBAGE_COLLECTED_MIXIN(IntersectionObserverController);
-public:
-    static IntersectionObserverController* create(Document*);
-    ~IntersectionObserverController();
+class IntersectionObserverController
+    : public GarbageCollectedFinalized<IntersectionObserverController>,
+      public ActiveDOMObject {
+  USING_GARBAGE_COLLECTED_MIXIN(IntersectionObserverController);
 
-    void resume() override;
-    void handleEvent(IdleDeadline*) override;
+ public:
+  static IntersectionObserverController* create(Document*);
+  ~IntersectionObserverController();
 
-    void scheduleIntersectionObserverForDelivery(IntersectionObserver&);
-    void deliverIntersectionObservations();
-    void computeTrackedIntersectionObservations();
-    void addTrackedObserver(IntersectionObserver&);
-    void removeTrackedObserversForRoot(const Node&);
+  void resume() override;
 
-    DECLARE_TRACE();
+  void scheduleIntersectionObserverForDelivery(IntersectionObserver&);
+  void deliverIntersectionObservations();
+  void computeTrackedIntersectionObservations();
+  void addTrackedObserver(IntersectionObserver&);
+  void removeTrackedObserversForRoot(const Node&);
 
-private:
-    explicit IntersectionObserverController(Document*);
+  DECLARE_TRACE();
 
-private:
-    // IntersectionObservers for which this is the tracking document.
-    HeapHashSet<WeakMember<IntersectionObserver>> m_trackedIntersectionObservers;
-    // IntersectionObservers for which this is the execution context of the callback.
-    HeapHashSet<Member<IntersectionObserver>> m_pendingIntersectionObservers;
+ private:
+  explicit IntersectionObserverController(Document*);
 
-    int m_callbackID;
-    bool m_callbackFiredWhileSuspended;
+ private:
+  // IntersectionObservers for which this is the tracking document.
+  HeapHashSet<WeakMember<IntersectionObserver>> m_trackedIntersectionObservers;
+  // IntersectionObservers for which this is the execution context of the
+  // callback.
+  HeapHashSet<Member<IntersectionObserver>> m_pendingIntersectionObservers;
+  WTF::WeakPtrFactory<IntersectionObserverController> m_weakPtrFactory;
+
+  bool m_callbackFiredWhileSuspended;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // IntersectionObserverController_h
+#endif  // IntersectionObserverController_h

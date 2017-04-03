@@ -22,7 +22,6 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/browser_plugin_guest_mode.h"
 #include "content/public/common/page_zoom.h"
 #include "content/public/common/url_constants.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
@@ -283,7 +282,7 @@ void GuestViewBase::DispatchOnResizeEvent(const gfx::Size& old_size,
   args->SetInteger(kNewWidth, new_size.width());
   args->SetInteger(kNewHeight, new_size.height());
   DispatchEventToGuestProxy(
-      base::WrapUnique(new GuestViewEvent(kEventResize, std::move(args))));
+      base::MakeUnique<GuestViewEvent>(kEventResize, std::move(args)));
 }
 
 gfx::Size GuestViewBase::GetDefaultSize() const {
@@ -501,6 +500,8 @@ void GuestViewBase::Destroy() {
   // the statements in this function.
   StopTrackingEmbedderZoomLevel();
   owner_web_contents_ = nullptr;
+
+  element_instance_id_ = kInstanceIDNone;
 
   DCHECK(web_contents());
 

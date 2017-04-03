@@ -75,13 +75,6 @@ class BufferedDataSourceInterface : public DataSource {
   // Returns true if the media resource passed a CORS access control check.
   virtual bool DidPassCORSAccessCheck() const = 0;
 
-  // Cancels initialization, any pending loaders, and any pending read calls
-  // from the demuxer. The caller is expected to release its reference to this
-  // object and never call it again.
-  //
-  // Method called on the render thread.
-  virtual void Abort() = 0;
-
   // Notifies changes in playback state for controlling media buffering
   // behavior.
   virtual void MediaPlaybackRateChanged(double playback_rate) = 0;

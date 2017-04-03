@@ -123,19 +123,17 @@ class MockInputHandler : public cc::InputHandler {
                             cc::InputHandler::ScrollInputType type));
   MOCK_METHOD1(ScrollAnimatedBegin,
                ScrollStatus(const gfx::Point& viewport_point));
-  MOCK_METHOD2(ScrollAnimated,
+  MOCK_METHOD3(ScrollAnimated,
                ScrollStatus(const gfx::Point& viewport_point,
-                            const gfx::Vector2dF& scroll_delta));
+                            const gfx::Vector2dF& scroll_delta,
+                            base::TimeDelta));
   MOCK_METHOD1(ScrollBy, cc::InputHandlerScrollResult(cc::ScrollState*));
-  MOCK_METHOD2(ScrollVerticallyByPage,
-               bool(const gfx::Point& viewport_point,
-                    cc::ScrollDirection direction));
   MOCK_METHOD1(ScrollEnd, void(cc::ScrollState*));
   MOCK_METHOD0(FlingScrollBegin, cc::InputHandler::ScrollStatus());
 
   std::unique_ptr<cc::SwapPromiseMonitor> CreateLatencyInfoSwapPromiseMonitor(
       ui::LatencyInfo* latency) override {
-    return std::unique_ptr<cc::SwapPromiseMonitor>();
+    return nullptr;
   }
 
   cc::ScrollElasticityHelper* CreateScrollElasticityHelper() override {
@@ -150,6 +148,9 @@ class MockInputHandler : public cc::InputHandler {
   }
 
   void BindToClient(cc::InputHandlerClient* client) override {}
+
+  void MouseDown() override {}
+  void MouseUp() override {}
 
   void MouseMoveAt(const gfx::Point& mouse_position) override {}
 
@@ -166,7 +167,7 @@ class MockInputHandler : public cc::InputHandler {
   MOCK_METHOD1(SetSynchronousInputHandlerRootScrollOffset,
                void(const gfx::ScrollOffset& root_offset));
 
-  bool IsCurrentlyScrollingInnerViewport() const override {
+  bool IsCurrentlyScrollingViewport() const override {
     return is_scrolling_root_;
   }
   void set_is_scrolling_root(bool is) { is_scrolling_root_ = is; }
@@ -288,7 +289,7 @@ const cc::InputHandler::ScrollStatus kImplThreadScrollState(
 
 const cc::InputHandler::ScrollStatus kMainThreadScrollState(
     cc::InputHandler::SCROLL_ON_MAIN_THREAD,
-    cc::MainThreadScrollingReason::kEventHandlers);
+    cc::MainThreadScrollingReason::kNotScrollingOnMain);
 
 const cc::InputHandler::ScrollStatus kScrollIgnoredScrollState(
     cc::InputHandler::SCROLL_IGNORED,
@@ -620,7 +621,8 @@ TEST_P(InputHandlerProxyTest, DISABLED_GestureScrollByCoarsePixels) {
   gesture_.type = WebInputEvent::GestureScrollUpdate;
   gesture_.data.scrollUpdate.deltaUnits = WebGestureEvent::ScrollUnits::Pixels;
 
-  EXPECT_CALL(mock_input_handler_, ScrollAnimated(::testing::_, ::testing::_))
+  EXPECT_CALL(mock_input_handler_,
+              ScrollAnimated(::testing::_, ::testing::_, ::testing::_))
       .WillOnce(testing::Return(kImplThreadScrollState));
   EXPECT_EQ(expected_disposition_, input_handler_->HandleInputEvent(gesture_));
 
@@ -2791,7 +2793,21 @@ TEST_P(InputHandlerProxyTest, MainThreadScrollingMouseWheelHistograms) {
       cc::MainThreadScrollingReason::kHasBackgroundAttachmentFixedObjects |
           cc::MainThreadScrollingReason::kThreadedScrollingDisabled |
           cc::MainThreadScrollingReason::kPageOverlay |
-          cc::MainThreadScrollingReason::kAnimatingScrollOnMainThread);
+          cc::MainThreadScrollingReason::kHandlingScrollFromMainThread);
+
+  EXPECT_THAT(
+      histogram_tester().GetAllSamples("Renderer4.MainThreadWheelScrollReason"),
+      testing::ElementsAre(base::Bucket(1, 1), base::Bucket(3, 1),
+                           base::Bucket(5, 1)));
+
+  // We only want to record "Handling scroll from main thread" reason if it's
+  // the only reason. If it's not the only reason, the "real" reason for
+  // scrolling on main is something else, and we only want to pay attention to
+  // that reason. So we should only include this reason in the histogram when
+  // its on its own.
+  input_handler_->RecordMainThreadScrollingReasonsForTest(
+      blink::WebGestureDeviceTouchpad,
+      cc::MainThreadScrollingReason::kHandlingScrollFromMainThread);
 
   EXPECT_THAT(
       histogram_tester().GetAllSamples("Renderer4.MainThreadWheelScrollReason"),

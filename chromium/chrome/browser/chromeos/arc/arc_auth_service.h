@@ -14,6 +14,7 @@
 #include "base/observer_list.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/chromeos/arc/arc_android_management_checker_delegate.h"
+#include "chrome/browser/chromeos/arc/arc_auth_code_fetcher_delegate.h"
 #include "chrome/browser/chromeos/arc/arc_auth_context_delegate.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_service.h"
@@ -38,6 +39,7 @@ class PrefRegistrySyncable;
 namespace arc {
 
 class ArcAndroidManagementChecker;
+class ArcAuthCodeFetcher;
 class ArcAuthContext;
 enum class ProvisioningResult : int;
 
@@ -49,6 +51,7 @@ class ArcAuthService : public ArcService,
                        public InstanceHolder<mojom::AuthInstance>::Observer,
                        public ArcAndroidManagementCheckerDelegate,
                        public ArcAuthContextDelegate,
+                       public ArcAuthCodeFetcherDelegate,
                        public syncable_prefs::PrefServiceSyncableObserver,
                        public syncable_prefs::SyncedPrefObserver {
  public:
@@ -141,6 +144,8 @@ class ArcAuthService : public ArcService,
   void GetAuthCodeDeprecated(
       const GetAuthCodeDeprecatedCallback& callback) override;
   void GetAuthCode(const GetAuthCodeCallback& callback) override;
+  void GetAuthCodeAndAccountType(
+      const GetAuthCodeAndAccountTypeCallback& callback) override;
   void OnSignInComplete() override;
   void OnSignInFailed(arc::mojom::ArcSignInFailureReason reason) override;
   // Callback is called with a bool that indicates the management status of the
@@ -176,6 +181,10 @@ class ArcAuthService : public ArcService,
   void OnContextReady() override;
   void OnPrepareContextFailed() override;
 
+  // ArcAuthCodeFetcherDelegate:
+  void OnAuthCodeSuccess(const std::string& auth_code) override;
+  void OnAuthCodeFailed() override;
+
   // ArcAndroidManagementCheckerDelegate:
   void OnAndroidManagementChecked(
       policy::AndroidManagementClient::Result result) override;
@@ -196,7 +205,7 @@ class ArcAuthService : public ArcService,
   UIPage ui_page() const { return ui_page_; }
 
   // Returns current page status, relevant to the specific page.
-  const base::string16& ui_page_status() { return ui_page_status_; }
+  const base::string16& ui_page_status() const { return ui_page_status_; }
 
  private:
   void StartArc();
@@ -211,9 +220,12 @@ class ArcAuthService : public ArcService,
   void StartUI();
   void StartAndroidManagementClient();
   void CheckAndroidManagement(bool background_mode);
-  void StartArcIfSignedIn();
+  void OnAndroidManagementPassed();
   void OnArcDataRemoved(bool success);
   void OnArcSignInTimeout();
+  bool IsAuthCodeRequest() const;
+  void FetchAuthCode();
+  void PrepareContextForAuthCodeRequest();
 
   // Unowned pointer. Keeps current profile.
   Profile* profile_ = nullptr;
@@ -227,6 +239,7 @@ class ArcAuthService : public ArcService,
   std::unique_ptr<ArcAppLauncher> playstore_launcher_;
   std::string auth_code_;
   GetAuthCodeCallback auth_callback_;
+  GetAuthCodeAndAccountTypeCallback auth_account_callback_;
   bool initial_opt_in_ = false;
   bool disable_arc_from_ui_ = false;
   UIPage ui_page_ = UIPage::NO_PAGE;
@@ -236,6 +249,7 @@ class ArcAuthService : public ArcService,
   base::OneShotTimer arc_sign_in_timer_;
 
   std::unique_ptr<ArcAuthContext> context_;
+  std::unique_ptr<ArcAuthCodeFetcher> auth_code_fetcher_;
   std::unique_ptr<ArcAndroidManagementChecker> android_management_checker_;
 
   base::Time sign_in_time_;

@@ -4,60 +4,33 @@
 
 'use strict';
 
+// The ResultQueue is a mechanism for passing messages back to the test
+// framework.
 var resultQueue = new ResultQueue();
 
-var pushSubscriptionOptions = {
-  userVisibleOnly: true
-};
+// Waits for the given ServiceWorkerRegistration to become ready.
+// Shim for https://github.com/w3c/ServiceWorker/issues/770.
+function swRegistrationReady(reg) {
+  return new Promise((resolve, reject) => {
+    if (reg.active) {
+      resolve();
+      return;
+    }
 
-// Sends data back to the test. This must be in response to an earlier
-// request, but it's ok to respond asynchronously. The request blocks until
-// the response is sent.
-function sendResultToTest(result) {
-  console.log('sendResultToTest: ' + result);
-  if (window.domAutomationController) {
-    domAutomationController.send('' + result);
-  }
+    if (!reg.installing && !reg.waiting) {
+      reject(Error('Install failed'));
+      return;
+    }
+
+    (reg.installing || reg.waiting).addEventListener('statechange', function() {
+      if (this.state == 'redundant') {
+        reject(Error('Install failed'));
+      } else if (this.state == 'activated') {
+        resolve();
+      }
+    });
+  });
 }
-
-function sendErrorToTest(error) {
-  sendResultToTest(error.name + ' - ' + error.message);
-}
-
-// Queue storing asynchronous results received from the Service Worker. Results
-// are sent to the test when requested.
-function ResultQueue() {
-  // Invariant: this.queue.length == 0 || this.pendingGets == 0
-  this.queue = [];
-  this.pendingGets = 0;
-}
-
-// Adds a data item to the queue. Will be sent to the test if there are
-// pendingGets.
-ResultQueue.prototype.push = function(data) {
-  if (this.pendingGets > 0) {
-    this.pendingGets--;
-    sendResultToTest(data);
-  } else {
-    this.queue.unshift(data);
-  }
-};
-
-// Called by native. Sends the next data item to the test if it is available.
-// Otherwise increments pendingGets so it will be delivered when received.
-ResultQueue.prototype.pop = function() {
-  if (this.queue.length) {
-    sendResultToTest(this.queue.pop());
-  } else {
-    this.pendingGets++;
-  }
-};
-
-// Called by native. Immediately sends the next data item to the test if it is
-// available, otherwise sends null.
-ResultQueue.prototype.popImmediately = function() {
-  sendResultToTest(this.queue.length ? this.queue.pop() : null);
-};
 
 // Notification permission has been coalesced with Push permission. After
 // this is granted, Push API subscription can succeed.
@@ -85,6 +58,14 @@ function unregisterServiceWorker() {
   }).catch(sendErrorToTest);
 }
 
+function replaceServiceWorker() {
+  navigator.serviceWorker.register('service_worker_with_skipWaiting_claim.js', {
+    scope: './'
+  }).then(swRegistrationReady).then(() => {
+    sendResultToTest('ok - service worker replaced');
+  }).catch(sendErrorToTest);
+}
+
 function removeManifest() {
   var element = document.querySelector('link[rel="manifest"]');
   if (element) {
@@ -109,8 +90,16 @@ function swapManifestNoSenderId() {
 // from, where the subscription used a sender ID instead of public key.
 function documentSubscribePushWithoutKey() {
   navigator.serviceWorker.ready.then(function(swRegistration) {
-    return swRegistration.pushManager.subscribe(
-        pushSubscriptionOptions)
+    return swRegistration.pushManager.subscribe({userVisibleOnly: true})
+        .then(function(subscription) {
+          sendResultToTest(subscription.endpoint);
+        });
+  }).catch(sendErrorToTest);
+}
+
+function documentSubscribePushWithEmptyOptions() {
+  navigator.serviceWorker.ready.then(function(swRegistration) {
+    return swRegistration.pushManager.subscribe()
         .then(function(subscription) {
           sendResultToTest(subscription.endpoint);
         });
@@ -119,8 +108,10 @@ function documentSubscribePushWithoutKey() {
 
 function documentSubscribePush() {
   navigator.serviceWorker.ready.then(function(swRegistration) {
-    pushSubscriptionOptions.applicationServerKey = kApplicationServerKey.buffer;
-    return swRegistration.pushManager.subscribe(pushSubscriptionOptions)
+    return swRegistration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: kApplicationServerKey.buffer
+        })
         .then(function(subscription) {
           sendResultToTest(subscription.endpoint);
         });
@@ -131,9 +122,10 @@ function documentSubscribePushBadKey() {
   navigator.serviceWorker.ready.then(function(swRegistration) {
     var invalidApplicationServerKey = new Uint8Array(300);
     invalidApplicationServerKey.fill('0x05', 1, 300);
-    pushSubscriptionOptions.applicationServerKey =
-        invalidApplicationServerKey.buffer;
-    return swRegistration.pushManager.subscribe(pushSubscriptionOptions)
+    return swRegistration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: invalidApplicationServerKey.buffer
+        })
         .then(function(subscription) {
           sendResultToTest(subscription.endpoint);
         });
@@ -147,7 +139,8 @@ function workerSubscribePush() {
 
 function workerSubscribePushNoKey() {
   // The worker will try to subscribe without providing a key. This should
-  // succeed if the worker was previously subscribed and fail otherwise.
+  // succeed if the worker was previously subscribed with a numeric key
+  // and fail otherwise.
   navigator.serviceWorker.controller.postMessage(
       {command: 'workerSubscribeNoKey'});
 }
@@ -164,7 +157,7 @@ function GetP256dh() {
 
 function permissionState() {
   navigator.serviceWorker.ready.then(function(swRegistration) {
-    return swRegistration.pushManager.permissionState(pushSubscriptionOptions)
+    return swRegistration.pushManager.permissionState({userVisibleOnly: true})
         .then(function(permission) {
           sendResultToTest('permission status - ' + permission);
         });
@@ -195,8 +188,25 @@ function unsubscribePush() {
         sendResultToTest('unsubscribe result: ' + result);
       }, function(error) {
         sendResultToTest('unsubscribe error: ' + error.message);
-      })
+      });
     })
+  });
+}
+
+function storePushSubscription() {
+  navigator.serviceWorker.ready.then(swRegistration => {
+    swRegistration.pushManager.getSubscription().then(pushSubscription => {
+      window.storedPushSubscription = pushSubscription;
+      sendResultToTest('ok - stored');
+    }, sendErrorToTest);
+  }, sendErrorToTest);
+}
+
+function unsubscribeStoredPushSubscription() {
+  window.storedPushSubscription.unsubscribe().then(function(result) {
+    sendResultToTest('unsubscribe result: ' + result);
+  }, function(error) {
+    sendResultToTest('unsubscribe error: ' + error.message);
   });
 }
 

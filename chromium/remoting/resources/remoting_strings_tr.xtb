@@ -65,7 +65,6 @@ Gizlilikle ilgili daha fazla bilgi edinmek için lütfen Google Gizlilik Politik
 <translation id="2359808026110333948">Devam Et</translation>
 <translation id="2366718077645204424">Ana bilgisayara erişilemiyor. Bu sorun, kullandığınız ağın yapılandırmasından kaynaklanıyor olabilir.</translation>
 <translation id="2370754117186920852"><ph name="OPTIONAL_OFFLINE_REASON" /> Çevrimiçi olarak son görüldüğü zaman: <ph name="RELATIVE_TIMESTAMP" />.</translation>
-<translation id="2498359688066513246">Yardım ve geri bildirim</translation>
 <translation id="2499160551253595098">Kullanım istatistiklerini ve kilitlenme raporlarını toplamamıza izin vererek Chrome Uzaktan Masaüstü'nü daha iyi hale getirmemize yardımcı olun.</translation>
 <translation id="2512228156274966424">NOT: Tüm klavye kısayollarının kullanılabilir olmasını sağlamak için Chrome Uzaktan Masaüstü'nü 'Pencere olarak aç' modunda yapılandırabilirsiniz.</translation>
 <translation id="2540992418118313681">Bu bilgisayarı başka bir kullanıcının görmesi ve kontrol etmesi için paylaşmak istiyor musunuz?</translation>
@@ -264,6 +263,7 @@ Masaüstü Ana Makinesi</translation>
 <translation id="7948001860594368197">Ekran seçenekleri</translation>
 <translation id="7970576581263377361">Kimlik doğrulama başarısız oldu. Lütfen Chromium'da tekrar oturum açın.</translation>
 <translation id="7981525049612125370">Uzak oturumun süresi sona erdi.</translation>
+<translation id="8041089156583427627">Görüş bildirin</translation>
 <translation id="8041721485428375115">Chrome Uzaktan Masaüstü Ana Makine Yükleyicisi'ni indirerek Google <ph name="LINK_BEGIN" />Hizmet Şartları<ph name="LINK_END" />'nı kabul etmiş olursunuz.</translation>
 <translation id="8073845705237259513">Chrome Uzaktan Masaüstü'nü kullanmak için cihazınıza Google Hesabı eklemeniz gerekir.</translation>
 <translation id="80739703311984697">Uzak ana makine üçüncü taraf bir web sitesine kimlik doğrulama işlemi yapmanızı gerektiriyor. Devam etmek üzere şu adrese erişim için Chromoting'e ek izinler vermelisiniz:</translation>
@@ -287,6 +287,7 @@ Masaüstü Ana Makinesi</translation>
 <translation id="8548209692293300397">Daha önce <ph name="USER_NAME" /> (<ph name="USER_EMAIL" />) olarak oturum açmıştınız. Bu hesapla bilgisayarlarınıza erişmek için bu hesabı kullanarak <ph name="LINK_BEGIN" />Google Chrome'da oturum açın<ph name="LINK_END" /> ve Chrome Uzaktan Masaüstü'nü yeniden yükleyin.</translation>
 <translation id="8642984861538780905">Orta</translation>
 <translation id="8712909229180978490">Google Drive'daki kaydedilmiş dosyalarımı çevrimiçi olarak göremiyorum.</translation>
+<translation id="8743328882720071828"><ph name="CLIENT_USERNAME" /> kullanıcısının bilgisayarınızı görmesine ve kontrol etmesine izin vermek istiyor musunuz?</translation>
 <translation id="8759753423332885148">Daha fazla bilgi edinin.</translation>
 <translation id="8791202241915690908">Chromoting Ana Makine Yükleyicisi'ni indirin</translation>
 <translation id="894763922177556086">İyi</translation>

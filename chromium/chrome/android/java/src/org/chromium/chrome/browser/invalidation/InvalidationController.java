@@ -18,10 +18,10 @@ import org.chromium.base.FieldTrialList;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.components.invalidation.InvalidationClientService;
+import org.chromium.components.signin.ChromeSigninController;
 import org.chromium.components.sync.AndroidSyncSettings;
 import org.chromium.components.sync.ModelType;
 import org.chromium.components.sync.notifier.InvalidationIntentProtocol;
-import org.chromium.components.sync.signin.ChromeSigninController;
 
 import java.util.HashSet;
 
@@ -191,7 +191,8 @@ public class InvalidationController implements ApplicationStatus.ApplicationStat
         Intent registerIntent = InvalidationIntentProtocol.createRegisterIntent(
                 ChromeSigninController.get(mContext).getSignedInUser(),
                 typesToRegister);
-        registerIntent.setClass(mContext, InvalidationClientService.class);
+        registerIntent.setClass(
+                mContext, InvalidationClientService.getRegisteredClass());
         mContext.startService(registerIntent);
     }
 
@@ -221,7 +222,8 @@ public class InvalidationController implements ApplicationStatus.ApplicationStat
     private void start() {
         mStarted = true;
         mEnableSessionInvalidationsTimer.resume();
-        Intent intent = new Intent(mContext, InvalidationClientService.class);
+        Intent intent = new Intent(
+                mContext, InvalidationClientService.getRegisteredClass());
         mContext.startService(intent);
     }
 
@@ -231,7 +233,8 @@ public class InvalidationController implements ApplicationStatus.ApplicationStat
     public void stop() {
         mStarted = false;
         mEnableSessionInvalidationsTimer.pause();
-        Intent intent = new Intent(mContext, InvalidationClientService.class);
+        Intent intent = new Intent(
+                mContext, InvalidationClientService.getRegisteredClass());
         intent.putExtra(InvalidationIntentProtocol.EXTRA_STOP, true);
         mContext.startService(intent);
     }

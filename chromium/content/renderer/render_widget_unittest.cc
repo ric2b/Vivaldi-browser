@@ -55,12 +55,12 @@ class InteractiveRenderWidget : public RenderWidget {
   explicit InteractiveRenderWidget(CompositorDependencies* compositor_deps)
       : RenderWidget(compositor_deps,
                      blink::WebPopupTypeNone,
-                     blink::WebScreenInfo(),
+                     ScreenInfo(),
                      false,
                      false,
                      false),
         always_overscroll_(false) {
-    webwidget_ = &mock_webwidget_;
+    webwidget_internal_ = &mock_webwidget_;
     // A RenderWidget is not fully initialized until it has a routing ID.
     SetRoutingID(++next_routing_id_);
   }
@@ -86,7 +86,7 @@ class InteractiveRenderWidget : public RenderWidget {
   MockWebWidget* mock_webwidget() { return &mock_webwidget_; }
 
  protected:
-  ~InteractiveRenderWidget() override { webwidget_ = nullptr; }
+  ~InteractiveRenderWidget() override { webwidget_internal_ = nullptr; }
 
   // Overridden from RenderWidget:
   bool HasTouchEventHandlersAt(const gfx::Point& point) const override {
@@ -277,7 +277,7 @@ TEST_F(RenderWidgetUnittest, FlingOverscroll) {
   EXPECT_EQ(gfx::Vector2dF(10, 5), overscroll.latest_overscroll_delta);
   EXPECT_EQ(gfx::Vector2dF(5, 5), overscroll.accumulated_overscroll);
   EXPECT_EQ(gfx::PointF(1, 1), overscroll.causal_event_viewport_point);
-  EXPECT_EQ(gfx::Vector2dF(-10, -5), overscroll.current_fling_velocity);
+  EXPECT_EQ(gfx::Vector2dF(10, 5), overscroll.current_fling_velocity);
   widget()->sink()->ClearMessages();
 }
 
@@ -374,11 +374,11 @@ class PopupRenderWidget : public RenderWidget {
   explicit PopupRenderWidget(CompositorDependencies* compositor_deps)
       : RenderWidget(compositor_deps,
                      blink::WebPopupTypePage,
-                     blink::WebScreenInfo(),
+                     ScreenInfo(),
                      false,
                      false,
                      false) {
-    webwidget_ = &mock_webwidget_;
+    webwidget_internal_ = &mock_webwidget_;
     // A RenderWidget is not fully initialized until it has a routing ID.
     SetRoutingID(1);
     did_show_ = true;
@@ -393,7 +393,7 @@ class PopupRenderWidget : public RenderWidget {
       const blink::WebDeviceEmulationParams&) override {}
 
  protected:
-  ~PopupRenderWidget() override { webwidget_ = nullptr; }
+  ~PopupRenderWidget() override { webwidget_internal_ = nullptr; }
 
   bool Send(IPC::Message* msg) override {
     sink_.OnMessageReceived(*msg);

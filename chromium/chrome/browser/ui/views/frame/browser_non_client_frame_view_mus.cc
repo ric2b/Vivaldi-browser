@@ -23,10 +23,10 @@
 #include "chrome/browser/ui/views/tab_icon_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/web_applications/web_app.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_registry.h"
-#include "grit/theme_resources.h"
 #include "services/ui/public/cpp/window.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/aura/client/aura_constants.h"
@@ -374,33 +374,6 @@ void BrowserNonClientFrameViewMus::TabStripMaxXChanged(TabStrip* tab_strip) {
 void BrowserNonClientFrameViewMus::TabStripDeleted(TabStrip* tab_strip) {
   tab_strip_->RemoveObserver(this);
   tab_strip_ = nullptr;
-}
-
-bool BrowserNonClientFrameViewMus::DoesIntersectRect(
-    const views::View* target,
-    const gfx::Rect& rect) const {
-  CHECK_EQ(target, this);
-  if (!views::ViewTargeterDelegate::DoesIntersectRect(this, rect)) {
-    // |rect| is outside BrowserNonClientFrameViewMus's bounds.
-    return false;
-  }
-
-  if (!browser_view()->IsTabStripVisible()) {
-    // Claim |rect| if it is above the top of the topmost client area view.
-    return rect.y() < GetTopInset(false);
-  }
-
-  // Claim |rect| only if it is above the bottom of the tabstrip in a non-tab
-  // portion. In particular, the avatar label/button is left of the tabstrip and
-  // the window controls are right of the tabstrip.
-  TabStrip* tabstrip = browser_view()->tabstrip();
-  gfx::RectF rect_in_tabstrip_coords_f(rect);
-  View::ConvertRectToTarget(this, tabstrip, &rect_in_tabstrip_coords_f);
-  const gfx::Rect rect_in_tabstrip_coords =
-      gfx::ToEnclosingRect(rect_in_tabstrip_coords_f);
-  return (rect_in_tabstrip_coords.y() <= tabstrip->height()) &&
-          (!tabstrip->HitTestRect(rect_in_tabstrip_coords) ||
-          tabstrip->IsRectInWindowCaption(rect_in_tabstrip_coords));
 }
 
 int BrowserNonClientFrameViewMus::GetTabStripLeftInset() const {

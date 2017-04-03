@@ -12,13 +12,12 @@
 #include "blimp/client/app/user_agent.h"
 #include "blimp/client/core/contents/tab_control_feature.h"
 #include "blimp/client/core/session/assignment_source.h"
-#include "blimp/client/feature/settings_feature.h"
+#include "blimp/client/core/settings/settings_feature.h"
 #include "blimp/net/blimp_stats.h"
 #include "components/version_info/version_info.h"
 #include "jni/BlimpClientSession_jni.h"
 #include "net/base/net_errors.h"
-
-using base::android::JavaParamRef;
+#include "ui/android/window_android.h"
 
 namespace blimp {
 namespace client {
@@ -34,10 +33,11 @@ GURL CreateAssignerGURL(const std::string& assigner_url) {
 }  // namespace
 
 static jlong Init(JNIEnv* env,
-                  const JavaParamRef<jobject>& jobj,
-                  const base::android::JavaParamRef<jstring>& jassigner_url) {
-  return reinterpret_cast<intptr_t>(
-      new BlimpClientSessionAndroid(env, jobj, jassigner_url));
+                  const base::android::JavaParamRef<jobject>& jobj,
+                  const base::android::JavaParamRef<jstring>& jassigner_url,
+                  jlong window_android_ptr) {
+  return reinterpret_cast<intptr_t>(new BlimpClientSessionAndroid(
+      env, jobj, jassigner_url, window_android_ptr));
 }
 
 // static
@@ -48,7 +48,7 @@ bool BlimpClientSessionAndroid::RegisterJni(JNIEnv* env) {
 // static
 BlimpClientSessionAndroid* BlimpClientSessionAndroid::FromJavaObject(
     JNIEnv* env,
-    jobject jobj) {
+    const base::android::JavaRef<jobject>& jobj) {
   return reinterpret_cast<BlimpClientSessionAndroid*>(
       Java_BlimpClientSession_getNativePtr(env, jobj));
 }
@@ -56,10 +56,16 @@ BlimpClientSessionAndroid* BlimpClientSessionAndroid::FromJavaObject(
 BlimpClientSessionAndroid::BlimpClientSessionAndroid(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& jobj,
-    const base::android::JavaParamRef<jstring>& jassigner_url)
+    const base::android::JavaParamRef<jstring>& jassigner_url,
+    jlong window_android_ptr)
     : BlimpClientSession(CreateAssignerGURL(
           base::android::ConvertJavaStringToUTF8(jassigner_url))) {
   java_obj_.Reset(env, jobj);
+
+  ui::WindowAndroid* window =
+      reinterpret_cast<ui::WindowAndroid*>(window_android_ptr);
+  ime_dialog_.reset(new ImeHelperDialog(window));
+  GetImeFeature()->set_delegate(ime_dialog_.get());
 
   // Send OS info before creating any tab.
   GetSettingsFeature()->SendUserAgentOSVersionInfo(
@@ -83,7 +89,9 @@ void BlimpClientSessionAndroid::Connect(
   BlimpClientSession::Connect(client_auth_token);
 }
 
-BlimpClientSessionAndroid::~BlimpClientSessionAndroid() {}
+BlimpClientSessionAndroid::~BlimpClientSessionAndroid() {
+  GetImeFeature()->set_delegate(nullptr);
+}
 
 void BlimpClientSessionAndroid::OnConnected() {
   JNIEnv* env = base::android::AttachCurrentThread();
@@ -97,8 +105,9 @@ void BlimpClientSessionAndroid::OnDisconnected(int result) {
                           env, net::ErrorToShortString(result)));
 }
 
-void BlimpClientSessionAndroid::Destroy(JNIEnv* env,
-                                        const JavaParamRef<jobject>& jobj) {
+void BlimpClientSessionAndroid::Destroy(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& jobj) {
   delete this;
 }
 

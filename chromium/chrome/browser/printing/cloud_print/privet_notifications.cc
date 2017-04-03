@@ -10,7 +10,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
@@ -32,13 +32,13 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_manager_base.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
-#include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -377,7 +377,7 @@ void PrivetNotificationDelegate::OpenTab(const GURL& url) {
   Profile* profile = Profile::FromBrowserContext(profile_);
   chrome::NavigateParams params(profile, url,
                                 ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
-  params.disposition = NEW_FOREGROUND_TAB;
+  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   chrome::Navigate(&params);
 }
 

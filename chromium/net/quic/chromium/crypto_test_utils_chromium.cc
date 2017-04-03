@@ -25,7 +25,7 @@
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util.h"
 #include "net/http/transport_security_state.h"
-#include "net/log/net_log.h"
+#include "net/log/net_log_with_source.h"
 #include "net/quic/chromium/crypto/proof_source_chromium.h"
 #include "net/quic/chromium/crypto/proof_verifier_chromium.h"
 #include "net/quic/core/crypto/crypto_utils.h"
@@ -107,15 +107,15 @@ std::unique_ptr<ProofVerifier> ProofVerifierForTestingInternal(
   cert_verifier->AddResultForCertAndHost(verify_result.verified_cert.get(),
                                          "test.example.com", verify_result, OK);
   if (use_real_proof_verifier) {
-    return base::WrapUnique(new TestProofVerifierChromium(
+    return base::MakeUnique<TestProofVerifierChromium>(
         std::move(cert_verifier), base::WrapUnique(new TransportSecurityState),
         base::WrapUnique(new MultiLogCTVerifier),
-        base::WrapUnique(new CTPolicyEnforcer), "quic_root.crt"));
+        base::WrapUnique(new CTPolicyEnforcer), "quic_root.crt");
   }
-  return base::WrapUnique(new TestProofVerifierChromium(
+  return base::MakeUnique<TestProofVerifierChromium>(
       std::move(cert_verifier), base::WrapUnique(new TransportSecurityState),
       base::WrapUnique(new MultiLogCTVerifier),
-      base::WrapUnique(new CTPolicyEnforcer), "quic_root.crt"));
+      base::WrapUnique(new CTPolicyEnforcer), "quic_root.crt");
 }
 
 // static
@@ -130,7 +130,8 @@ std::unique_ptr<ProofVerifier> CryptoTestUtils::RealProofVerifierForTesting() {
 
 // static
 ProofVerifyContext* CryptoTestUtils::ProofVerifyContextForTesting() {
-  return new ProofVerifyContextChromium(/*cert_verify_flags=*/0, BoundNetLog());
+  return new ProofVerifyContextChromium(/*cert_verify_flags=*/0,
+                                        NetLogWithSource());
 }
 
 }  // namespace test
