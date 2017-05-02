@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="ja">
+<translation id="1152921474424827756"><ph name="URL" /> の<ph name="BEGIN_LINK" />キャッシュ コピー<ph name="END_LINK" />にアクセスします</translation>
+<translation id="1158211211994409885"><ph name="HOST_NAME" /> により途中で接続が切断されました。</translation>
+<translation id="1375198122581997741">バージョン情報</translation>
+<translation id="139305205187523129"><ph name="HOST_NAME" /> からデータが送信されませんでした。</translation>
+<translation id="1506687042165942984">このページの保存されているコピー（古いバージョン）を表示します。</translation>
+<translation id="1559528461873125649">該当するファイルまたはディレクトリがありません</translation>
+<translation id="1710259589646384581">OS</translation>
+<translation id="1838667051080421715">ウェブページのソースを表示しています。</translation>
+<translation id="194030505837763158"><ph name="LINK" /> に移動します</translation>
+<translation id="2030481566774242610">もしかして: <ph name="LINK" />?</translation>
+<translation id="2089090684895656482">一部表示</translation>
+<translation id="2166378884831602661">このサイトは安全に接続できません</translation>
+<translation id="2292556288342944218">インターネット アクセスがブロックされています</translation>
+<translation id="255002559098805027"><ph name="HOST_NAME" /> から無効な応答が送信されました。</translation>
+<translation id="2609632851001447353">バリエーション</translation>
+<translation id="2650446666397867134">ファイルへのアクセスが拒否されました</translation>
+<translation id="2705137772291741111">このサイトの保存（キャッシュ）されたコピーを読み取れませんでした。</translation>
+<translation id="2784949926578158345">接続がリセットされました。</translation>
+<translation id="284702764277384724"><ph name="HOST_NAME" /> のサーバー証明書は偽造されたもののようです。</translation>
+<translation id="2909946352844186028">ネットワークの変更が検出されました。</translation>
+<translation id="3005723025932146533">保存済みのコピーを表示</translation>
+<translation id="3109728660330352905">このページを表示する権限がありません。</translation>
+<translation id="3176929007561373547">プロキシの設定を確認するか、ネットワーク管理者に問い合わせて、プロキシ サーバーが正常に
+      動作しているかどうかを確認してください。プロキシ サーバーを使用していない場合は
+      次の方法をお試しください。
+      <ph name="PLATFORM_TEXT" /></translation>
+<translation id="3422472998109090673"><ph name="HOST_NAME" /> は現在アクセスできません。</translation>
+<translation id="3447661539832366887">このデバイスの所有者が恐竜ゲームを無効にしています。</translation>
+<translation id="3586931643579894722">詳細を非表示</translation>
+<translation id="3630155396527302611">ネットワークへのアクセスを許可されたプログラムとして既に表示されている場合は、
+      いったんリストから削除し、もう一度追加してみてください。</translation>
+<translation id="3658742229777143148">変更履歴</translation>
+<translation id="382518646247711829">プロキシ サーバーを使用している場合...</translation>
+<translation id="3973234410852337861"><ph name="HOST_NAME" /> はブロックされています</translation>
+<translation id="4021036232240155012">DNS はウェブサイトの名前をインターネット アドレスに変換するネットワーク サービスです。</translation>
+<translation id="4432688616882109544"><ph name="HOST_NAME" /> でログイン証明書が承認されなかったか、ログイン証明書が提示されていない可能性があります。</translation>
+<translation id="4522570452068850558">詳細</translation>
+<translation id="4670097147947922288">拡張機能のページを表示しています。</translation>
+<translation id="4708268264240856090">接続が中断されました</translation>
+<translation id="4744603770635761495">実行ファイルのパス</translation>
+<translation id="4764776831041365478"><ph name="URL" /> のウェブページは一時的に停止しているか、新しいウェブアドレスに移動した可能性があります。</translation>
+<translation id="5023310440958281426">管理者のポリシーを確認してください</translation>
+<translation id="5115563688576182185">(64-bit)</translation>
+<translation id="5431657950005405462">ファイルが見つかりませんでした</translation>
+<translation id="5452270690849572955">この <ph name="HOST_NAME" /> ページが見つかりません</translation>
+<translation id="5492298309214877701">このサイトは企業、団体、または学校のイントラネット上にありますが、外部のウェブサイトと同じ URL が使用されています。
+    <ph name="LINE_BREAK" />
+    システム管理者にお問い合わせください。</translation>
+<translation id="5510766032865166053">移動または削除された可能性があります。</translation>
+<translation id="5556459405103347317">再読み込み</translation>
+<translation id="5617949217645503996"><ph name="HOST_NAME" /> でリダイレクトが繰り返し行われました。</translation>
+<translation id="5675650730144413517">このページは動作していません</translation>
+<translation id="5869405914158311789">このサイトにアクセスできません</translation>
+<translation id="5990559369517809815">サーバーへのリクエストは拡張機能によってブロックされています。</translation>
+<translation id="6042308850641462728">詳細表示</translation>
+<translation id="6146055958333702838">ケーブルを確認し、使用しているネットワーク デバイス（ルーター、モデムなど）を
+    再起動してください。</translation>
+<translation id="6165508094623778733">詳しく見る</translation>
+<translation id="6203231073485539293">インターネット接続を確認してください</translation>
+<translation id="6305205051461490394"><ph name="URL" /> にアクセスできません。</translation>
+<translation id="6321917430147971392">DNS 設定を確認してください</translation>
+<translation id="6328639280570009161">ネットワーク予測を無効にしてみてください</translation>
+<translation id="6433595998831338502"><ph name="HOST_NAME" /> で接続が拒否されました。</translation>
+<translation id="6711464428925977395">プロキシ サーバーに問題がある、またはアドレスが正しくありません。</translation>
+<translation id="6830600606572693159">ウェブページ（<ph name="URL" />）は現在表示できません。アクセスが集中しているか、メンテナンスのために停止している可能性があります。</translation>
+<translation id="6897140037006041989">ユーザー エージェント</translation>
+<translation id="7210863904660874423"><ph name="HOST_NAME" /> ではセキュリティ規格が遵守されていません。</translation>
+<translation id="7269802741830436641">このウェブページにはリダイレクト ループが含まれています</translation>
+<translation id="7353601530677266744">コマンドライン</translation>
+<translation id="7419106976560586862">プロフィール パス</translation>
+<translation id="7518003948725431193">次のウェブページアドレスは見つかりませんでした: <ph name="URL" /></translation>
+<translation id="7549584377607005141">このウェブページを正しく表示するには、先ほど入力したデータが必要です。データは再送信できますが、このページで先ほど行った操作を繰り返すことになります。</translation>
+<translation id="759889825892636187"><ph name="HOST_NAME" /> では現在このリクエストを処理できません。</translation>
+<translation id="7716424297397655342">このサイトをキャッシュから読み込むことができません</translation>
+<translation id="7758069387465995638">ファイアウォールまたはウイルス対策ソフトウェアによって接続がブロックされた可能性があります。</translation>
+<translation id="778579833039460630">データを受信していません</translation>
+<translation id="7951415247503192394">(32-bit)</translation>
+<translation id="8134994873729925007"><ph name="HOST_NAME" /> のサーバーの <ph name="BEGIN_ABBR" />DNS アドレス<ph name="END_ABBR" />が見つかりませんでした。</translation>
+<translation id="8142868475871995937">&lt;strong&gt;vivaldi://policy&lt;/strong&gt; にアクセスして、ブラックリストに登録されている URL とシステム管理者が設定した他のポリシーを確認できます。</translation>
+<translation id="8149426793427495338">パソコンがスリープ状態です。</translation>
+<translation id="8150722005171944719"><ph name="URL" /> のファイルを読むことができません。削除されたか移動された可能性があります。ファイルに対するアクセス権がない場合もあります。</translation>
+<translation id="8225771182978767009">このサイトは、このパソコンを設定したユーザーによってブロックされています。</translation>
+<translation id="8289355894181816810">確認方法がわからない場合は、ネットワーク管理者までお問い合わせください。</translation>
+<translation id="8332188693563227489"><ph name="HOST_NAME" /> へのアクセスが拒否されました</translation>
+<translation id="8498891568109133222"><ph name="HOST_NAME" /> からの応答時間が長すぎます。</translation>
+<translation id="8740359287975076522"><ph name="HOST_NAME" /> の &lt;abbr id="dnsDefinition"&gt;DNS アドレス&lt;/abbr&gt;が見つかりませんでした。問題を診断しています。</translation>
+<translation id="9183425211371246419"><ph name="HOST_NAME" /> ではサポートされていないプロトコルが使用されています。</translation>
+<translation id="933612690413056017">インターネット接続がありません</translation>
+<translation id="969892804517981540">公式ビルド</translation>
+<translation id="988159990683914416">デベロッパービルド</translation>
+</translationbundle>

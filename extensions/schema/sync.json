@@ -1,0 +1,95 @@
+// Copyright (c) 2015-2017 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+[
+  {
+    "namespace": "sync",
+    "description": "Use the <code>chrome.sync</code> for sync messages.",
+    "types": [
+      {
+        "id": "SyncParamItem",
+        "type": "object",
+        "description": "SyncParamItem.",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "The key name."
+          },
+          "value": {
+            "type": "string",
+            "description": "The auth key value."
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "send",
+        "type": "function",
+        "description": "Send sync message.",
+        "parameters": [
+          {
+            "name": "eventName",
+            "type": "string",
+            "description":  "The name of the event."
+          },
+          {
+            "name": "eventArgList",
+            "type": "array",
+            "items": { "$ref": "SyncParamItem" },
+            "description": "List of arguments for the sync event."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string",
+                "description":  "Resulting status of the sync event/command."
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onChanged",
+        "type": "function",
+        "description": "Fired when a sync event happens.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "param1",
+            "description": "Status message from the sync manager."
+          },
+          {
+            "type": "string",
+            "name": "param2",
+            "description": "Detailed status message from the sync manager."
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onChanged",
+        "type": "function",
+        "description": "Fired when a sync event happens.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "param1"
+          },
+          {
+            "type": "string",
+            "name": "param2"
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -1,0 +1,113 @@
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "ios/chrome/browser/ui/webui/chrome_web_ui_ios_controller_factory.h"
+
+#include "base/bind.h"
+#include "base/location.h"
+#include "ios/chrome/browser/chrome_url_constants.h"
+#include "ios/chrome/browser/experimental_flags.h"
+#include "ios/chrome/browser/ui/webui/about_ui.h"
+#include "ios/chrome/browser/ui/webui/crashes_ui.h"
+#include "ios/chrome/browser/ui/webui/flags_ui.h"
+#include "ios/chrome/browser/ui/webui/gcm/gcm_internals_ui.h"
+#include "ios/chrome/browser/ui/webui/net_export/net_export_ui.h"
+#include "ios/chrome/browser/ui/webui/ntp_tiles_internals_ui.h"
+#include "ios/chrome/browser/ui/webui/omaha_ui.h"
+#include "ios/chrome/browser/ui/webui/physical_web_ui.h"
+#include "ios/chrome/browser/ui/webui/popular_sites_internals_ui.h"
+#include "ios/chrome/browser/ui/webui/signin_internals_ui_ios.h"
+#include "ios/chrome/browser/ui/webui/sync_internals/sync_internals_ui.h"
+#include "ios/chrome/browser/ui/webui/version_ui.h"
+#include "url/gurl.h"
+
+using web::WebUIIOS;
+using web::WebUIIOSController;
+
+namespace {
+
+// A function for creating a new WebUIIOS. The caller owns the return value,
+// which may be NULL.
+typedef WebUIIOSController* (*WebUIIOSFactoryFunction)(WebUIIOS* web_ui,
+                                                       const GURL& url);
+
+// Template for defining WebUIIOSFactoryFunction.
+template <class T>
+WebUIIOSController* NewWebUIIOS(WebUIIOS* web_ui, const GURL& url) {
+  return new T(web_ui);
+}
+
+template <class T>
+WebUIIOSController* NewWebUIIOSWithHost(WebUIIOS* web_ui, const GURL& url) {
+  return new T(web_ui, url.host());
+}
+
+// Returns a function that can be used to create the right type of WebUIIOS for
+// a tab, based on its URL. Returns NULL if the URL doesn't have WebUIIOS
+// associated with it.
+WebUIIOSFactoryFunction GetWebUIIOSFactoryFunction(WebUIIOS* web_ui,
+                                                   const GURL& url) {
+  // This will get called a lot to check all URLs, so do a quick check of other
+  // schemes to filter out most URLs.
+  if (!url.SchemeIs(kChromeUIScheme))
+    return nullptr;
+
+  // Please keep this in alphabetical order. If #ifs or special logic is
+  // required, add it below in the appropriate section.
+  const std::string url_host = url.host();
+  if (url_host == kChromeUIChromeURLsHost ||
+      url_host == kChromeUIHistogramHost || url_host == kChromeUICreditsHost)
+    return &NewWebUIIOSWithHost<AboutUI>;
+  if (url_host == kChromeUICrashesHost)
+    return &NewWebUIIOS<CrashesUI>;
+  if (url_host == kChromeUIGCMInternalsHost)
+    return &NewWebUIIOS<GCMInternalsUI>;
+  if (url_host == kChromeUINetExportHost)
+    return &NewWebUIIOS<NetExportUI>;
+  if (url_host == kChromeUINTPTilesInternalsHost)
+    return &NewWebUIIOS<NTPTilesInternalsUI>;
+  if (url_host == kChromeUIOmahaHost)
+    return &NewWebUIIOS<OmahaUI>;
+  if (experimental_flags::IsPhysicalWebEnabled()) {
+    if (url_host == kChromeUIPhysicalWebHost)
+      return &NewWebUIIOS<PhysicalWebUI>;
+  }
+  if (url_host == kChromeUIPopularSitesInternalsHost)
+    return &NewWebUIIOS<PopularSitesInternalsUI>;
+  if (url_host == kChromeUISignInInternalsHost)
+    return &NewWebUIIOS<SignInInternalsUIIOS>;
+  if (url_host == kChromeUISyncInternalsHost)
+    return &NewWebUIIOS<SyncInternalsUI>;
+  if (url_host == kChromeUIVersionHost)
+    return &NewWebUIIOS<VersionUI>;
+  if (url_host == kChromeUIFlagsHost)
+    return &NewWebUIIOS<FlagsUI>;
+  if (url_host == kChromeUIAppleFlagsHost)
+    return &NewWebUIIOS<AppleFlagsUI>;
+
+  return nullptr;
+}
+
+}  // namespace
+
+WebUIIOSController*
+ChromeWebUIIOSControllerFactory::CreateWebUIIOSControllerForURL(
+    WebUIIOS* web_ui,
+    const GURL& url) const {
+  WebUIIOSFactoryFunction function = GetWebUIIOSFactoryFunction(web_ui, url);
+  if (!function)
+    return nullptr;
+
+  return (*function)(web_ui, url);
+}
+
+// static
+ChromeWebUIIOSControllerFactory*
+ChromeWebUIIOSControllerFactory::GetInstance() {
+  return base::Singleton<ChromeWebUIIOSControllerFactory>::get();
+}
+
+ChromeWebUIIOSControllerFactory::ChromeWebUIIOSControllerFactory() {}
+
+ChromeWebUIIOSControllerFactory::~ChromeWebUIIOSControllerFactory() {}

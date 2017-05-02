@@ -1,0 +1,54 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+bundle_data("resources") {
+  sources = [
+    "resources/ptr_close.png",
+    "resources/ptr_close@2x.png",
+    "resources/ptr_close@3x.png",
+    "resources/ptr_close_active.png",
+    "resources/ptr_close_active@2x.png",
+    "resources/ptr_close_active@3x.png",
+    "resources/ptr_new_tab.png",
+    "resources/ptr_new_tab@2x.png",
+    "resources/ptr_new_tab@3x.png",
+    "resources/ptr_new_tab_active.png",
+    "resources/ptr_new_tab_active@2x.png",
+    "resources/ptr_new_tab_active@3x.png",
+    "resources/ptr_reload.png",
+    "resources/ptr_reload@2x.png",
+    "resources/ptr_reload@3x.png",
+    "resources/ptr_reload_active.png",
+    "resources/ptr_reload_active@2x.png",
+    "resources/ptr_reload_active@3x.png",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/{{source_file_part}}",
+  ]
+}
+
+source_set("overscroll_actions") {
+  sources = [
+    "overscroll_actions_controller.h",
+    "overscroll_actions_controller.mm",
+    "overscroll_actions_view.h",
+    "overscroll_actions_view.mm",
+  ]
+  deps = [
+    ":resources",
+    "//base",
+    "//ios/chrome/app/theme",
+    "//ios/chrome/browser/ui",
+    "//ios/chrome/browser/ui/static_content",
+    "//ios/chrome/browser/ui/toolbar",
+    "//ios/chrome/browser/ui/util",
+    "//ios/chrome/browser/ui/voice",
+    "//ios/web",
+  ]
+  allow_circular_includes_from = [ "//ios/chrome/browser/ui/static_content" ]
+  libs = [
+    "QuartzCore.framework",
+    "UIKit.framework",
+  ]
+}

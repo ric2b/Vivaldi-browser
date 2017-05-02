@@ -1,0 +1,87 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+source_set("infobars") {
+  sources = [
+    "infobar_view.h",
+    "infobar_view.mm",
+    "infobar_view_delegate.h",
+  ]
+  deps = [
+    ":resources",
+    "//base",
+    "//base:i18n",
+    "//components/strings",
+    "//ios/chrome/browser/ui",
+    "//ios/chrome/browser/ui/colors",
+    "//ios/chrome/browser/ui/fancy_ui",
+    "//ios/chrome/browser/ui/util",
+    "//ios/public/provider/chrome/browser/ui",
+    "//ios/third_party/material_components_ios",
+    "//ui/base",
+    "//ui/gfx",
+    "//url",
+  ]
+  libs = [
+    "CoreGraphics.framework",
+    "QuartzCore.framework",
+    "UIKit.framework",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "infobar_view_unittest.mm",
+  ]
+  deps = [
+    ":infobars",
+    "//testing/gtest",
+  ]
+}
+
+source_set("eg_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  testonly = true
+  sources = [
+    "infobar_egtest.mm",
+  ]
+  deps = [
+    "//base",
+    "//components/infobars/core",
+    "//ios/chrome/app:app_internal",
+    "//ios/chrome/browser/tabs",
+    "//ios/chrome/test/app:test_support",
+    "//ios/chrome/test/earl_grey:test_support",
+    "//ios/third_party/earl_grey",
+    "//ios/web:test_support",
+    "//url",
+  ]
+  libs = [ "XCTest.framework" ]
+}
+
+bundle_data("resources") {
+  sources = [
+    "resources/infobar_close.png",
+    "resources/infobar_close@2x.png",
+    "resources/infobar_close@3x.png",
+    "resources/infobar_downloading.png",
+    "resources/infobar_downloading@2x.png",
+    "resources/infobar_downloading@3x.png",
+    "resources/infobar_popup_blocker.png",
+    "resources/infobar_popup_blocker@2x.png",
+    "resources/infobar_popup_blocker@3x.png",
+    "resources/infobar_shadow.png",
+    "resources/infobar_shadow@2x.png",
+    "resources/infobar_update.png",
+    "resources/infobar_update@2x.png",
+    "resources/infobar_update@3x.png",
+    "resources/infobar_warning.png",
+    "resources/infobar_warning@2x.png",
+    "resources/infobar_warning@3x.png",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/{{source_file_part}}",
+  ]
+}

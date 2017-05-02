@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="hy">
+<translation id="1152921474424827756">Բացել <ph name="URL" /> էջի <ph name="BEGIN_LINK" />քեշի պատճենը<ph name="END_LINK" /></translation>
+<translation id="1158211211994409885">Միացումն անսպասելիորեն փակվեց <ph name="HOST_NAME" />-ի կողմից։</translation>
+<translation id="1375198122581997741">Տարբերակի մասին</translation>
+<translation id="139305205187523129"><ph name="HOST_NAME" />-ը չի ուղարկել որևէ տվյալ։</translation>
+<translation id="1506687042165942984">Ցույց տալ պահպանված (այսինքն՝ հնացած) օրինակ այս էջից։</translation>
+<translation id="1559528461873125649">Այդպիսի ֆայլ կամ պանակ գոյություն չունի</translation>
+<translation id="1710259589646384581">ՕՀ</translation>
+<translation id="1838667051080421715">Դուք դիտում եք վեբ էջի կոդը։</translation>
+<translation id="194030505837763158">Անցնել <ph name="LINK" /> էջին</translation>
+<translation id="2030481566774242610">Դուք սա՞ նկատի ունեիք՝ <ph name="LINK" />։</translation>
+<translation id="2089090684895656482">Սակավ</translation>
+<translation id="2166378884831602661">Այս կայքը չի կարող ապահովել անվտանգ միացում</translation>
+<translation id="2292556288342944218">Ձեր մուտքն ինտերնետ արգելափակված է</translation>
+<translation id="255002559098805027"><ph name="HOST_NAME" />-ը ուղարկել է անվավեր պատասխան։</translation>
+<translation id="2609632851001447353">Վարիացիաներ</translation>
+<translation id="2650446666397867134">Ֆայլին մոտեցումն արգելված է</translation>
+<translation id="2705137772291741111">Այս կայքի՝ քեշում պահպանված պատճենն անընթեռնելի է։</translation>
+<translation id="2784949926578158345">Միացումը վերադարձել է սկզբնական վիճակին։</translation>
+<translation id="284702764277384724">Սերվերի հավաստագիրը <ph name="HOST_NAME" />-ում ըստ երևույթին կեղծ է։</translation>
+<translation id="2909946352844186028">Հայտնաբերված է ցանցի փոփոխություն։</translation>
+<translation id="3005723025932146533">Ցույց տալ պահպանված օրինակը</translation>
+<translation id="3093245981617870298">Դուք ցանցում չեք։</translation>
+<translation id="3109728660330352905">Դուք չունեք այս էջը դիտելու արտոնություն։</translation>
+<translation id="3176929007561373547">Ստուգեք Ձեր պրոքսիի կարգավորումները կամ կապվեք Ձեր ցանցային
+ադմինիստրատորի հետ՝ համոզվելու համար, որ պրոքսի սերվերն աշխատում է։
+Եթե չեք կարծում, թե պետք է պրոքսի սերվեր օգտագործեք, ապա՝
+<ph name="PLATFORM_TEXT" /></translation>
+<translation id="3422472998109090673"><ph name="HOST_NAME" />-ն այս պահին անհասանելի է։</translation>
+<translation id="3447661539832366887">Այս սարքի տերն անջատել է դինոզավրով խաղը։</translation>
+<translation id="3586931643579894722">Թաքցնել մանրամասները</translation>
+<translation id="3630155396527302611">Եթե ծրագիրն ընդգրկված է այն ծրագրերի ցանկում, որոնց թույլատրված է ցանցից օգտվել,
+փորձեք հեռացնել այն այդ ցանկից և կրկին ավելացնել։</translation>
+<translation id="3658742229777143148">Վերստուգում</translation>
+<translation id="382518646247711829">Եթե Դուք օգտագործում եք պրոքսի սերվեր…</translation>
+<translation id="3973234410852337861"><ph name="HOST_NAME" />-ն արգելափակված է</translation>
+<translation id="4021036232240155012">DNS-ը ցանցային ծառայություն է, որը վեբ կայքի անունը վերածում է նրա IP հասցեին։</translation>
+<translation id="4432688616882109544"><ph name="HOST_NAME" />-ը չի ընդունել Ձեր մուտքի հավաստագիրը կամ այդպիսին չի տրամադրվել։</translation>
+<translation id="4522570452068850558">Մանրամասներ</translation>
+<translation id="4670097147947922288">Դուք դիտում եք ընդլայնման էջ։</translation>
+<translation id="4708268264240856090">Ձեր միացումն ընդհատվեց</translation>
+<translation id="4744603770635761495">Կատարելի ֆայլի ուղի</translation>
+<translation id="4764776831041365478"><ph name="URL" /> հասցեով վեբ էջը, հնարավոր է, որ ժամանակավորապես անհասանելի է կամ մշտապես տեղափոխվել է նոր վեբ հասցե։</translation>
+<translation id="5023310440958281426">Ստուգեք Ձեր ադմինիստրատորի կողմից սահմանված դրույթները</translation>
+<translation id="5115563688576182185">(64 բիթ)</translation>
+<translation id="5431657950005405462">Ձեր ֆայլը չի գտնվել</translation>
+<translation id="5452270690849572955">Այս՝ <ph name="HOST_NAME" /> էջը չի գտնվել</translation>
+<translation id="5492298309214877701">Այս կայքի URL-ը ընկերության, ձեռնարկության կամ դպրոցի ինտրանետում համընկնում է արտաքին վեբ կայքի URL-ի հետ։
+    <ph name="LINE_BREAK" />
+    Դիմեք Ձեր համակարգի ադմինիստրատորին։</translation>
+<translation id="5510766032865166053">Հնարավոր է, որ այն տեղափոխված կամ ջնջված է։</translation>
+<translation id="5556459405103347317">Թարմացնել</translation>
+<translation id="5617949217645503996"><ph name="HOST_NAME" />-ը չափից շատ է վերաուղղորդվել։</translation>
+<translation id="5675650730144413517">Այս էջը չի բացվում</translation>
+<translation id="5869405914158311789">Այս կայքն անհասանելի է</translation>
+<translation id="5990559369517809815">Հարցումները սերվերին արգելափակված են ընդլայնման կողմից։</translation>
+<translation id="6042308850641462728">Ավելին</translation>
+<translation id="6146055958333702838">Ստուգեք մալուխներն ու վերագործարկեք երթուղիչները, մոդեմները
+կամ այլ ցանցային սարքերը։</translation>
+<translation id="6165508094623778733">Իմանալ ավելին</translation>
+<translation id="6203231073485539293">Ստուգեք Ձեր ինտերնետի միացումը</translation>
+<translation id="6305205051461490394"><ph name="URL" />-ն անհասանելի է։</translation>
+<translation id="6321917430147971392">Ստուգեք Ձեր DNS կարգավորումները</translation>
+<translation id="6328639280570009161">Փորձեք անջատել ցանցային կանխատեսումը</translation>
+<translation id="6433595998831338502">Միացումը մերժվեց <ph name="HOST_NAME" />-ի կողմից։</translation>
+<translation id="6711464428925977395">Պրոքսի սերվերի հետ ինչ-որ խնդիր կա կամ հասցեն սխալ է նշված։</translation>
+<translation id="6757797048963528358">Ձեր սարքն անցել է քնի ռեժիմին։</translation>
+<translation id="6830600606572693159"><ph name="URL" /> հասցեի վեբ էջն այս պահին անհասանելի է։ Հնարավոր է, որ այն ծանրաբեռնված է, կամ անջատված է սպասարկման նպատակով։</translation>
+<translation id="6897140037006041989">User Agent</translation>
+<translation id="7210863904660874423"><ph name="HOST_NAME" />-ը չի համապատասխանում անվտանգության ստանդարտներին։</translation>
+<translation id="7269802741830436641">Այս էջում առկա է ցիկլային վերաուղղորդում</translation>
+<translation id="7353601530677266744">Հրամանի տող</translation>
+<translation id="7419106976560586862">Պրոֆիլի ուղի</translation>
+<translation id="7518003948725431193">Որևէ էջ հետևյալ հասցեով չի գտնվել. <ph name="URL" /></translation>
+<translation id="7549584377607005141">Կայքի ճիշտ ցուցադրման համար հարկավոր են ավելի վաղ ներմուծված տվյալներ։ Դուք կարող եք այդ տվյալները կրկին ուղարկել, սակայն այդպիսով կկրկնվեն այն գործողությունները, որոնք այս էջում նախկինում կատարվել են։</translation>
+<translation id="759889825892636187"><ph name="HOST_NAME" />-ն ներկա պահին չի կարող մշակել այս հարցումը։</translation>
+<translation id="7716424297397655342">Այս կայքը չի կարող բեռնվել քեշից</translation>
+<translation id="7758069387465995638">Միացումը հնարավոր է արգելափակված լինի հրապատի կամ հակավիրուսային ծրագրի կողմից։</translation>
+<translation id="778579833039460630">Տվյալներ չեն ստացվել</translation>
+<translation id="7951415247503192394">(32 բիթ)</translation>
+<translation id="8134994873729925007"><ph name="HOST_NAME" />-ի սերվերի <ph name="BEGIN_ABBR" />DNS հասցեն<ph name="END_ABBR" /> չի գտնվել։</translation>
+<translation id="8142868475871995937">Այցելեք &lt;strong&gt;vivaldi://policy&lt;/strong&gt;՝ տեսնելու համար URL-ների սև ցուցակը և այլ դրույթներ՝ պարտադրված Ձեր համակարգի ադմինիստրատորի կողմից։</translation>
+<translation id="8149426793427495338">Ձեր համակարգիչն անցել է քնի ռեժիմին։</translation>
+<translation id="8150722005171944719"><ph name="URL" /> հասցեով ֆայլն ընթեռնելի չէ։ Այն կարող է լինել հեռացված, տեղափոխված, կամ ֆայլի թույլտվությունները կարող են կանխել դրա հասանելիությունը։</translation>
+<translation id="8225771182978767009">Նա, ով կարգավորել է այս համակարգիչը, արգելափակել է այս կայքը։</translation>
+<translation id="8289355894181816810">Լրացուցիչ տեղեկությունների համար կապվեք Ձեր ցանցային ադմինիստրատորի հետ։</translation>
+<translation id="8332188693563227489">Մուտքը <ph name="HOST_NAME" /> արգելված է</translation>
+<translation id="8498891568109133222"><ph name="HOST_NAME" /> կայքի պատասխանը շատ է երկարաձգվում։</translation>
+<translation id="8740359287975076522"><ph name="HOST_NAME" />-ի &lt;abbr id="dnsDefinition"&gt;DNS հասցեն&lt;/abbr&gt; գտնել չհաջողվեց։ Կատարվում է խնդրի ախտորոշում։</translation>
+<translation id="9183425211371246419"><ph name="HOST_NAME" />-ն օգտագործում է չաջակցվող պրոտոկոլ։</translation>
+<translation id="933612690413056017">Ինտերնետին միացում չկա</translation>
+<translation id="969892804517981540">Պաշտոնական նախատարբերակ</translation>
+<translation id="988159990683914416">Մշակողի նախատարբերակ</translation>
+</translationbundle>

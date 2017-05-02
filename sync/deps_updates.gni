@@ -1,0 +1,22 @@
+# Copyright (c) 2015-2017 Vivaldi Technologies AS. All rights reserved
+
+post_process_target("//chrome:browser_dependencies") {
+  public_deps += [ "//vivaldi/sync:browser" ]
+}
+
+post_process_template("//chrome/test:sync_integration_tests") {
+  deps += [ "//vivaldi/sync" ]
+}
+
+post_process_target("//chrome/test:sync_integration_test_support") {
+  public_deps += [
+    "//vivaldi/sync/test:sync_integration_testsupport",
+  ]
+}
+
+post_process_target("//components/sync:test_support_fake_server") {
+  public_deps += [
+    "//vivaldi/sync/test:fake_server",
+    "//vivaldi/sync/test:unit_tests",
+  ]
+}

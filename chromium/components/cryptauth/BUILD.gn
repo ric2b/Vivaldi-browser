@@ -1,0 +1,142 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# CryptAuth is a component which manages data about devices associated with a
+# user's account. This component both sends data about the current device and
+# requets data about associated devices.
+
+static_library("cryptauth") {
+  sources = [
+    "bluetooth_throttler.h",
+    "bluetooth_throttler_impl.cc",
+    "bluetooth_throttler_impl.h",
+    "connection.cc",
+    "connection.h",
+    "cryptauth_access_token_fetcher.h",
+    "cryptauth_access_token_fetcher_impl.cc",
+    "cryptauth_access_token_fetcher_impl.h",
+    "cryptauth_api_call_flow.cc",
+    "cryptauth_api_call_flow.h",
+    "cryptauth_client.h",
+    "cryptauth_client_impl.cc",
+    "cryptauth_client_impl.h",
+    "cryptauth_device_manager.cc",
+    "cryptauth_device_manager.h",
+    "cryptauth_enroller.h",
+    "cryptauth_enroller_impl.cc",
+    "cryptauth_enroller_impl.h",
+    "cryptauth_enrollment_manager.cc",
+    "cryptauth_enrollment_manager.h",
+    "cryptauth_enrollment_utils.cc",
+    "cryptauth_enrollment_utils.h",
+    "cryptauth_gcm_manager.cc",
+    "cryptauth_gcm_manager.h",
+    "cryptauth_gcm_manager_impl.cc",
+    "cryptauth_gcm_manager_impl.h",
+    "eid_generator.cc",
+    "eid_generator.h",
+    "pref_names.cc",
+    "pref_names.h",
+    "remote_beacon_seed_fetcher.cc",
+    "remote_beacon_seed_fetcher.h",
+    "remote_device.cc",
+    "remote_device.h",
+    "secure_message_delegate.cc",
+    "secure_message_delegate.h",
+    "switches.cc",
+    "switches.h",
+    "sync_scheduler.cc",
+    "sync_scheduler.h",
+    "sync_scheduler_impl.cc",
+    "sync_scheduler_impl.h",
+    "wire_message.cc",
+    "wire_message.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/cryptauth/ble",
+    "//components/gcm_driver",
+    "//components/gcm_driver/common",
+    "//components/prefs",
+    "//components/proximity_auth/logging",
+    "//crypto",
+    "//google_apis",
+    "//net",
+  ]
+
+  public_deps = [
+    "//components/cryptauth/proto",
+  ]
+
+  # TODO (hansberry): Resolve this.
+  allow_circular_includes_from = [ "//components/cryptauth/ble" ]
+}
+
+static_library("test_support") {
+  testonly = true
+
+  sources = [
+    "cryptauth_test_util.cc",
+    "cryptauth_test_util.h",
+    "fake_connection.cc",
+    "fake_connection.h",
+    "fake_cryptauth_gcm_manager.cc",
+    "fake_cryptauth_gcm_manager.h",
+    "fake_secure_message_delegate.cc",
+    "fake_secure_message_delegate.h",
+    "mock_cryptauth_client.cc",
+    "mock_cryptauth_client.h",
+    "mock_eid_generator.cc",
+    "mock_eid_generator.h",
+    "mock_remote_beacon_seed_fetcher.cc",
+    "mock_remote_beacon_seed_fetcher.h",
+    "mock_sync_scheduler.cc",
+    "mock_sync_scheduler.h",
+    "remote_device_test_util.cc",
+    "remote_device_test_util.h",
+  ]
+
+  public_deps = [
+    ":cryptauth",
+    "//components/cryptauth/proto",
+  ]
+
+  deps = [
+    "//base",
+    "//testing/gmock",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "bluetooth_throttler_impl_unittest.cc",
+    "connection_unittest.cc",
+    "cryptauth_access_token_fetcher_impl_unittest.cc",
+    "cryptauth_api_call_flow_unittest.cc",
+    "cryptauth_client_impl_unittest.cc",
+    "cryptauth_device_manager_unittest.cc",
+    "cryptauth_enroller_impl_unittest.cc",
+    "cryptauth_enrollment_manager_unittest.cc",
+    "cryptauth_gcm_manager_impl_unittest.cc",
+    "eid_generator_unittest.cc",
+    "fake_secure_message_delegate_unittest.cc",
+    "remote_beacon_seed_fetcher_unittest.cc",
+    "sync_scheduler_impl_unittest.cc",
+    "wire_message_unittest.cc",
+  ]
+
+  deps = [
+    ":cryptauth",
+    ":test_support",
+    "//base/test:test_support",
+    "//components/cryptauth/ble:unit_tests",
+    "//components/gcm_driver:test_support",
+    "//components/prefs:test_support",
+    "//google_apis:test_support",
+    "//net:test_support",
+    "//testing/gtest",
+  ]
+}

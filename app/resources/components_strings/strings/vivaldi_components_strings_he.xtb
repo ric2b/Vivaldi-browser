@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="he">
+<translation id="1152921474424827756">גש אל <ph name="BEGIN_LINK" />עותק בקובץ שמור<ph name="END_LINK" /> של <ph name="URL" /></translation>
+<translation id="1158211211994409885"><ph name="HOST_NAME" /> סגר את החיבור באופן בלתי צפוי.</translation>
+<translation id="1375198122581997741">מידע על הגרסה</translation>
+<translation id="139305205187523129"><ph name="HOST_NAME" /> לא שלח נתונים.</translation>
+<translation id="1506687042165942984">הצג עותק שמור (כלומר, ידוע שהוא עדכני) של הדף הזה.</translation>
+<translation id="1559528461873125649">אין קובץ או ספרייה בשם זה</translation>
+<translation id="1710259589646384581">מערכת הפעלה</translation>
+<translation id="1838667051080421715">אתה מציג את המקור של דף אינטרנט.</translation>
+<translation id="194030505837763158">עבור ל-<ph name="LINK" /></translation>
+<translation id="2030481566774242610">האם התכוונת ל-<ph name="LINK" />?</translation>
+<translation id="2089090684895656482">פחות</translation>
+<translation id="2166378884831602661">אתר זה לא יכול לספק חיבור מאובטח</translation>
+<translation id="2292556288342944218">הגישה לאינטרנט חסומה</translation>
+<translation id="255002559098805027"><ph name="HOST_NAME" /> שלח תגובה לא חוקית.</translation>
+<translation id="2609632851001447353">וריאציות</translation>
+<translation id="2650446666397867134">הגישה לקובץ נדחתה</translation>
+<translation id="2705137772291741111">העותק השמור (בקובץ השמור) של האתר הזה היה בלתי קריא.</translation>
+<translation id="2784949926578158345">החיבור עבר איפוס.</translation>
+<translation id="284702764277384724">אישור השרת ב-<ph name="HOST_NAME" /> נראה מזויף.</translation>
+<translation id="2909946352844186028">אותר שינוי ברשת.</translation>
+<translation id="3005723025932146533">הצג עותק שמור</translation>
+<translation id="3109728660330352905">אין לך הרשאה להציג את הדף הזה.</translation>
+<translation id="3176929007561373547">‏בדוק את הגדרות שרת ה-proxy או פנה למנהל הרשת
+   כדי לוודא ששרת ה-proxy פועל.  אם אינך סבור שעליך
+   להשתמש בשרת proxy:
+   <ph name="PLATFORM_TEXT" /></translation>
+<translation id="3422472998109090673">לא ניתן לגשת כרגע אל <ph name="HOST_NAME" />.</translation>
+<translation id="3447661539832366887">הבעלים של המכשיר הזה כיבה את משחק הדינוזאורים.</translation>
+<translation id="3586931643579894722">הסתר פרטים</translation>
+<translation id="3630155396527302611">אם היא כבר רשומה כתוכנית המורשית לגשת לרשת, נסה
+      להסיר אותה מהרשימה ולהוסיף אותה שוב.</translation>
+<translation id="3658742229777143148">גרסה קודמת</translation>
+<translation id="382518646247711829">‏אם אתה משתמש בשרת Proxy...</translation>
+<translation id="3973234410852337861"><ph name="HOST_NAME" /> חסום</translation>
+<translation id="4021036232240155012">‏DNS הוא שירות הרשת שמתרגם שם של אתר לכתובת האינטרנט שלו.</translation>
+<translation id="4432688616882109544"><ph name="HOST_NAME" /> לא אישר את אישור ההתחברות שלך, או שלא סופק אישור התחברות.</translation>
+<translation id="4522570452068850558">פרטים</translation>
+<translation id="4670097147947922288">אתה צופה בדף של תוסף.</translation>
+<translation id="4708268264240856090">החיבור נקטע</translation>
+<translation id="4744603770635761495">נתיב להפעלה</translation>
+<translation id="4764776831041365478">ייתכן שדף האינטרנט בכתובת <ph name="URL" /> אינו פעיל זמנית, או שהועבר לכתובת אינטרנט חדשה לצמיתות.</translation>
+<translation id="5023310440958281426">בדוק את תקנון מנהל המערכת שלך</translation>
+<translation id="5115563688576182185">(64 סיביות)</translation>
+<translation id="5431657950005405462">הקובץ לא נמצא</translation>
+<translation id="5452270690849572955">לא ניתן למצוא את הדף של <ph name="HOST_NAME" /></translation>
+<translation id="5492298309214877701">כתובת האתר הזה באינטראנט של החברה, הארגון או מוסד הלימודים, זהה לכתובת
+של אתר חיצוני.
+<ph name="LINE_BREAK" />
+ נסה ליצור קשר עם מנהל המערכת.</translation>
+<translation id="5510766032865166053">ייתכן שהוא הועבר או נמחק.</translation>
+<translation id="5556459405103347317">טען שוב</translation>
+<translation id="5617949217645503996"><ph name="HOST_NAME" /> הפנה אותך מחדש פעמים רבות מדי.</translation>
+<translation id="5675650730144413517">הדף הזה לא עובד</translation>
+<translation id="5869405914158311789">לא ניתן לגשת לאתר הזה</translation>
+<translation id="5990559369517809815">בקשות שנשלחו לשרת נחסמו על ידי תוסף.</translation>
+<translation id="6042308850641462728">עוד</translation>
+<translation id="6146055958333702838">בדוק את הכבלים והפעל מחדש את הנתבים, המודמים ושאר התקני הרשת
+  שאתה משתמש בהם.</translation>
+<translation id="6165508094623778733">למידע נוסף</translation>
+<translation id="6203231073485539293">בדוק את חיבור האינטרנט</translation>
+<translation id="6305205051461490394">לא ניתן לגשת אל <ph name="URL" />.</translation>
+<translation id="6321917430147971392">‏בדוק את הגדרות ה-DNS</translation>
+<translation id="6328639280570009161">נסה להשבית את חיזוי הרשת</translation>
+<translation id="6433595998831338502"><ph name="HOST_NAME" /> סירב להתחבר.</translation>
+<translation id="6711464428925977395">‏משהו אינו תקין בשרת ה-proxy, או שהכתובת שגויה.</translation>
+<translation id="6830600606572693159">דף האינטרנט <ph name="URL" /> אינו זמין כעת. ייתכן שהוא בעומס יתר או שהושבת לצורך תחזוקה.</translation>
+<translation id="6897140037006041989">User agent</translation>
+<translation id="7210863904660874423"><ph name="HOST_NAME" /> לא פועל בהתאם לתקני האבטחה.</translation>
+<translation id="7269802741830436641">דף אינטרנט זה מכיל לולאת כתובת אתר להפניה מחדש</translation>
+<translation id="7353601530677266744">שורת פקודה </translation>
+<translation id="7419106976560586862">נתיב פרופיל</translation>
+<translation id="7518003948725431193">לא נמצא דף אינטרנט עבור כתובת האינטרנט: <ph name="URL" /></translation>
+<translation id="7549584377607005141">דף אינטרנט זה זקוק לנתונים שהזנת קודם לכן כדי שהוא יוצג כראוי. אתה יכול לשלוח שוב את הנתונים, אך פעולה זו תגרום לחזרה על כל פעולה שדף זה ביצע בעבר.</translation>
+<translation id="759889825892636187"><ph name="HOST_NAME" /> לא יכול לטפל כרגע בבקשה הזו.</translation>
+<translation id="7716424297397655342">לא ניתן לטעון את האתר הזה מהמטמון</translation>
+<translation id="7758069387465995638">ייתכן שחומת אש או תוכנת אנטי-וירוס חסמו את החיבור.</translation>
+<translation id="778579833039460630">לא התקבלו נתונים</translation>
+<translation id="7951415247503192394">(32 סיביות)</translation>
+<translation id="8134994873729925007">‏לא ניתן היה למצוא את <ph name="BEGIN_ABBR" />כתובת ה-DNS<ph name="END_ABBR" /> של השרת של <ph name="HOST_NAME" />.</translation>
+<translation id="8142868475871995937">‏היכנס לכתובת &lt;strong&gt;vivaldi://policy&lt;/strong&gt; כדי לראות רשימה של כתובות אתרים שנמנעה אליהם הגישה, כמו גם תקנונים אחרים שנאכפו על ידי מנהל המערכת שלך.</translation>
+<translation id="8149426793427495338">המחשב עבר למצב שינה.</translation>
+<translation id="8150722005171944719">הקובץ הנמצא ב-<ph name="URL" /> לא ניתן לקריאה. ייתכן שהקובץ הוסר או הועבר, או שהרשאות הקובץ מונעות גישה אליו.</translation>
+<translation id="8225771182978767009">האדם שהגדיר את המחשב הזה בחר לחסום את האתר הזה.</translation>
+<translation id="8289355894181816810">פנה אל מנהל הרשת אם אינך יודע מה זה אומר.</translation>
+<translation id="8332188693563227489">הגישה ל-<ph name="HOST_NAME" /> נדחתה</translation>
+<translation id="8498891568109133222">ל-<ph name="HOST_NAME" /> נדרש זמן רב מדי להגיב.</translation>
+<translation id="8740359287975076522">‏לא ניתן היה למצוא את &lt;abbr id="dnsDefinition"&gt;כתובת ה-DNS&lt;/abbr&gt; של <ph name="HOST_NAME" />. מאבחן את הבעיה.</translation>
+<translation id="9183425211371246419"><ph name="HOST_NAME" /> משתמש בפרוטוקול שאינו נתמך.</translation>
+<translation id="933612690413056017">אין חיבור לאינטרנט</translation>
+<translation id="969892804517981540">גירסה רשמית</translation>
+<translation id="988159990683914416">גירסת מפתחים</translation>
+</translationbundle>

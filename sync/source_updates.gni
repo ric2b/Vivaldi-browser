@@ -1,0 +1,10 @@
+# Copyright (c) 2015-2017 Vivaldi Technologies AS. All rights reserved
+
+post_process_template("//chrome/test:sync_integration_tests") {
+  sources += [
+    "//vivaldi/sync/test/integration/single_client_notes_sync_test.cpp",
+    "//vivaldi/sync/test/integration/two_client_notes_sync_test.cpp",
+    "//vivaldi/sync/test/vivaldi_single_client_bookmarks_sync_test.cc",
+    "//vivaldi/sync/test/vivaldi_two_client_bookmarks_sync_test.cc",
+  ]
+}

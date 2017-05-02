@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="fa">
+<translation id="1152921474424827756">دسترسی به یک <ph name="BEGIN_LINK" />نسخه ذخیره شده در حافظه پنهان<ph name="END_LINK" /> از <ph name="URL" /></translation>
+<translation id="1158211211994409885"><ph name="HOST_NAME" /> به‌طور غیرمنتظره‌ای اتصال را قطع کرد.</translation>
+<translation id="1375198122581997741">درباره نسخه</translation>
+<translation id="139305205187523129"><ph name="HOST_NAME" /> داده‌ای ارسال نکرد.</translation>
+<translation id="1506687042165942984">یک نسخه ذخیره‌شده (یعنی قدیمی) از این صفحه نشان داده شود.</translation>
+<translation id="1559528461873125649">فاقد چنین فایل یا دایرکتوری است</translation>
+<translation id="1710259589646384581">OS</translation>
+<translation id="1838667051080421715">درحال مشاهده منبع یک صفحه وب هستید.</translation>
+<translation id="194030505837763158">رفتن به <ph name="LINK" /></translation>
+<translation id="2030481566774242610">منظورتان <ph name="LINK" /> بود؟</translation>
+<translation id="2089090684895656482">کمتر</translation>
+<translation id="2166378884831602661">این سایت نمی‌تواند اتصالی ایمن ارائه دهد</translation>
+<translation id="2292556288342944218">دسترسی شما به اینترنت مسدود است</translation>
+<translation id="255002559098805027"><ph name="HOST_NAME" /> پاسخی نامعتبر ارسال کرد.</translation>
+<translation id="2609632851001447353">انواع مختلف</translation>
+<translation id="2650446666397867134">دسترسی به فایل رد شد</translation>
+<translation id="2705137772291741111">کپی ذخیره‌شده (ذخیره موقت‌شده) این سایت قابل خواندن نبود.</translation>
+<translation id="2784949926578158345">اتصال مجدداً برقرار شد.</translation>
+<translation id="284702764277384724">به نظر می‌رسد که گواهی سرور در <ph name="HOST_NAME" /> جعلی باشد.</translation>
+<translation id="2909946352844186028">تغییر شبکه تشخیص داده شد.</translation>
+<translation id="3005723025932146533">نمایش کپی ذخیره شده</translation>
+<translation id="3093245981617870298">شما آفلاین هستید.</translation>
+<translation id="3109728660330352905">شما اجازه مشاهده این صفحه را ندارید.</translation>
+<translation id="3176929007561373547">تنظیمات پروکسی‌ را بررسی کنید یا با سرپرست شبکه‌‌تان تماس بگیرید تا
+      مطمئن شوید سرور پروکسی کار می‌کند. اگر مطمئن نیستید که باید از سرور
+      پروکسی استفاده کنید:
+      <ph name="PLATFORM_TEXT" /></translation>
+<translation id="3422472998109090673">دسترسی به <ph name="HOST_NAME" /> درحال حاضر امکان‌پذیر نیست.</translation>
+<translation id="3447661539832366887">مالک این دستگاه بازی دایناسور را خاموش کرده است</translation>
+<translation id="3586931643579894722">عدم نمایش جزئیات</translation>
+<translation id="3630155396527302611">اگر درحال حاضر به‌عنوان برنامه‌ای برای دسترسی به شبکه در فهرست قرار دارد،
+      سعی کنید آن را از فهرست حذف کرده و دوباره به فهرست اضافه کنید.</translation>
+<translation id="3658742229777143148">ویرایش</translation>
+<translation id="382518646247711829">اگر از سرور پراکسی استفاده می‌کنید...</translation>
+<translation id="3973234410852337861"><ph name="HOST_NAME" /> مسدود است</translation>
+<translation id="4021036232240155012">‏DNS خدماتی از شبکه است که نام وب‌سایت را به آدرس اینترنتی آن ترجمه می‌کند.</translation>
+<translation id="4432688616882109544"><ph name="HOST_NAME" /> گواهی ورود به سیستمتان را نپذیرفت یا ممکن است گواهی‌ای ارائه نشده باشد.</translation>
+<translation id="4522570452068850558">جزئیات</translation>
+<translation id="4670097147947922288">درحال مشاهده یک صفحه افزونه هستید.</translation>
+<translation id="4708268264240856090">اتصال شما قطع شد</translation>
+<translation id="4744603770635761495">مسیر قابل اجرا</translation>
+<translation id="4764776831041365478">ممکن است صفحهٔ وب <ph name="URL" /> موقتاً خراب باشد یا ممکن است برای همیشه به آدرس وب جدید منتقل شده باشد.</translation>
+<translation id="5023310440958281426">خط‌مشی‌های سرپرست سیستمتان را بررسی کنید</translation>
+<translation id="5115563688576182185">(۶۴ بیت)</translation>
+<translation id="5431657950005405462">فایل شما پیدا نشد</translation>
+<translation id="5452270690849572955">صفحه <ph name="HOST_NAME" /> پیدا نمی‌شود</translation>
+<translation id="5492298309214877701">نشانی وب این سایت در اینترانت شرکت، سازمان یا محل تحصیل با نشانی وب یک وب‌سایت خارجی یکسان است.
+    <ph name="LINE_BREAK" />
+    با سرپرست سیستم تماس بگیرید.</translation>
+<translation id="5510766032865166053">ممکن است جابه‌جا یا حذف شده باشد.</translation>
+<translation id="5556459405103347317">تازه‌سازی</translation>
+<translation id="5617949217645503996">تعداد دفعاتی که <ph name="HOST_NAME" /> شما را به نشانی‌های دیگر هدایت کرده بیش از حد است.</translation>
+<translation id="5675650730144413517">این صفحه کار نمی‌کند</translation>
+<translation id="5869405914158311789">دسترسی به این سایت امکان‌پذیر نیست</translation>
+<translation id="5990559369517809815">درخواست‌های ارسالی به سرور توسط یک برنامهٔ افزودنی مسدود شد.</translation>
+<translation id="6042308850641462728">بیشتر</translation>
+<translation id="6146055958333702838">همه کابل‌ها را بررسی کنید و همه ره‌یاب‌ها، مودم‌ها، یا دیگر دستگاه‌های
+   شبکه‌ای را که ممکن است درحال استفاده از آن‌ها باشید مجدداً راه‌اندازی کنید.</translation>
+<translation id="6165508094623778733">بیشتر بدانید</translation>
+<translation id="6203231073485539293">اتصال اینترنتتان را بررسی کنید</translation>
+<translation id="6305205051461490394">دسترسی به <ph name="URL" /> امکان‌پذیر نیست.</translation>
+<translation id="6321917430147971392">‏تنظیمات DNS خودتان را بررسی کنید</translation>
+<translation id="6328639280570009161">غیرفعال کردن پیش‌بینی شبکه را امتحان کنید</translation>
+<translation id="6433595998831338502"><ph name="HOST_NAME" /> از اتصال خودداری کرد.</translation>
+<translation id="6711464428925977395">مشکلی در سرور پروکسی وجود دارد یا این آدرس درست نیست.</translation>
+<translation id="6830600606572693159">صفحهٔ وب موجود در <ph name="URL" /> در حال حاضر موجود نیست. ممکن است بیش از حد مشغول باشد یا برای انجام تعمیرات در دسترس نباشد.</translation>
+<translation id="6897140037006041989">نماینده کاربر</translation>
+<translation id="7210863904660874423"><ph name="HOST_NAME" /> از استانداردهای امنیتی پیروی نمی‌کند.</translation>
+<translation id="7269802741830436641">این صفحهٔ وب دارای یک دور هدایت مجدد است</translation>
+<translation id="7353601530677266744">خط فرمان</translation>
+<translation id="7419106976560586862">مسیر نمایه</translation>
+<translation id="7518003948725431193">صفحه وبی با این آدرس وب یافت نشد: <ph name="URL" /></translation>
+<translation id="7549584377607005141">این صفحه وب برای نمایش صحیح به داده‌هایی نیاز دارد که قبلاً وارد کرده‌اید. می‌توانید این داده‌ها را دوباره ارسال کنید، اما با انجام این کار، هر اقدامی که این صفحه قبلاً انجام داده است تکرار می‌شود.</translation>
+<translation id="759889825892636187"><ph name="HOST_NAME" /> درحال حاضر نمی‌تواند این درخواست را انجام دهد.</translation>
+<translation id="7716424297397655342">این سایت نمی‌تواند از حافظه پنهان بار شود</translation>
+<translation id="7758069387465995638">دیوار آتش یا نرم‌افزار ضدویروس ممکن است مانع اتصال شده باشد.</translation>
+<translation id="778579833039460630">داده‌ای دریافت نشد</translation>
+<translation id="7951415247503192394">(۳۲ بیت)</translation>
+<translation id="8134994873729925007">‏<ph name="BEGIN_ABBR" />نشانی DNS<ph name="END_ABBR" /> سرور <ph name="HOST_NAME" /> پیدا نشد.</translation>
+<translation id="8142868475871995937">‏برای مشاهده فهرست نشانی‌های وب ممنوع و سایر خط‌مشی‌های اجباری براساس تصمیم سرپرست سیستم خود از &lt;strong&gt;vivaldi://policy&lt;/strong&gt; بازدید نمایید.</translation>
+<translation id="8149426793427495338">رایانه‌تان به خواب رفته است.</translation>
+<translation id="8150722005171944719">این فایل در <ph name="URL" /> قابل خواندن نیست. ممکن است حذف شده، جابجا شده باشد و یا مجوزهای فایل از دسترسی جلوگیری می‌کنند.</translation>
+<translation id="8225771182978767009">شخصی که این رایانه را راه‌اندازی کرده این سایت را مسدود کرده است.</translation>
+<translation id="8289355894181816810">اگر این موضوع را متوجه نمی‌شوید، با سرپرست شبکه‌تان تماس بگیرید.</translation>
+<translation id="8332188693563227489">دسترسی به <ph name="HOST_NAME" /> رد شد</translation>
+<translation id="8498891568109133222">پاسخ <ph name="HOST_NAME" /> بیش از حد طول کشیده است.</translation>
+<translation id="8740359287975076522">‏<ph name="HOST_NAME" />’s &lt;abbr id="dnsDefinition"&gt;آدرس DNS&lt;/abbr&gt; پیدا نشد. درحال بررسی برای تشخیص مشکل.</translation>
+<translation id="9183425211371246419"><ph name="HOST_NAME" /> از یک پروتکل پشتیبانی‌نشده استفاده می‌کند.</translation>
+<translation id="933612690413056017">اتصال اینترنت قطع است</translation>
+<translation id="969892804517981540">ساخت رسمی</translation>
+<translation id="988159990683914416">ساخت برنامه‌نویس</translation>
+</translationbundle>

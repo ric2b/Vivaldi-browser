@@ -1,0 +1,84 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+bundle_data("assets") {
+  sources = [
+    "resources/QRScanner.xcassets/Contents.json",
+    "resources/QRScanner.xcassets/qr_scanner_torch_off.imageset/Contents.json",
+    "resources/QRScanner.xcassets/qr_scanner_torch_off.imageset/torch_off.png",
+    "resources/QRScanner.xcassets/qr_scanner_torch_off.imageset/torch_off@2x.png",
+    "resources/QRScanner.xcassets/qr_scanner_torch_off.imageset/torch_off@3x.png",
+    "resources/QRScanner.xcassets/qr_scanner_torch_on.imageset/Contents.json",
+    "resources/QRScanner.xcassets/qr_scanner_torch_on.imageset/torch_on.png",
+    "resources/QRScanner.xcassets/qr_scanner_torch_on.imageset/torch_on@2x.png",
+    "resources/QRScanner.xcassets/qr_scanner_torch_on.imageset/torch_on@3x.png",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/{{source_file_part}}",
+  ]
+}
+
+source_set("qr_scanner") {
+  sources = [
+    "camera_controller.h",
+    "camera_controller.mm",
+    "qr_scanner_alerts.h",
+    "qr_scanner_alerts.mm",
+    "qr_scanner_transitioning_delegate.h",
+    "qr_scanner_transitioning_delegate.mm",
+    "qr_scanner_view.h",
+    "qr_scanner_view.mm",
+    "qr_scanner_view_controller.h",
+    "qr_scanner_view_controller.mm",
+  ]
+  deps = [
+    ":assets",
+    "//base",
+    "//components/version_info",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser",
+    "//ios/chrome/browser/ui",
+    "//ios/chrome/browser/ui/icons",
+    "//ios/chrome/common:ios_app_bundle_id_prefix_header",
+    "//ios/third_party/material_components_ios",
+    "//ui/base",
+  ]
+  libs = [
+    "AVFoundation.framework",
+    "UIKit.framework",
+  ]
+}
+
+source_set("eg_tests") {
+  testonly = true
+  sources = [
+    "qr_scanner_view_controller_egtest.mm",
+  ]
+  deps = [
+    ":qr_scanner",
+    "//base",
+    "//base/test:test_support",
+    "//components/strings",
+    "//components/version_info",
+    "//ios/chrome/app:app_internal",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser",
+    "//ios/chrome/browser/ui:ui_internal",
+    "//ios/chrome/browser/ui/commands",
+    "//ios/chrome/browser/ui/icons",
+    "//ios/chrome/browser/ui/toolbar",
+    "//ios/chrome/test/app:test_support",
+    "//ios/chrome/test/base",
+    "//ios/chrome/test/earl_grey:test_support",
+    "//ios/testing/earl_grey:earl_grey_support",
+    "//ios/third_party/earl_grey",
+    "//ios/web:test_support",
+    "//third_party/ocmock",
+    "//ui/base",
+  ]
+  libs = [
+    "AVFoundation.framework",
+    "UIKit.framework",
+  ]
+}

@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="en-GB">
+<translation id="1152921474424827756">Access a <ph name="BEGIN_LINK" />cached copy<ph name="END_LINK" /> of <ph name="URL" /></translation>
+<translation id="1158211211994409885"><ph name="HOST_NAME" /> unexpectedly closed the connection.</translation>
+<translation id="1375198122581997741">About Version</translation>
+<translation id="139305205187523129"><ph name="HOST_NAME" /> didn’t send any data.</translation>
+<translation id="1506687042165942984">Show a saved (i.e. known to be out of date) copy of this page.</translation>
+<translation id="1559528461873125649">No such file or directory</translation>
+<translation id="1710259589646384581">OS</translation>
+<translation id="1838667051080421715">You are viewing the source of a web page.</translation>
+<translation id="194030505837763158">Go to <ph name="LINK" /></translation>
+<translation id="2030481566774242610">Did you mean <ph name="LINK" />?</translation>
+<translation id="2089090684895656482">Less</translation>
+<translation id="2166378884831602661">This site can’t provide a secure connection</translation>
+<translation id="2292556288342944218">Your Internet access is blocked</translation>
+<translation id="255002559098805027"><ph name="HOST_NAME" /> sent an invalid response.</translation>
+<translation id="2609632851001447353">Variations</translation>
+<translation id="2650446666397867134">Access to the file was denied</translation>
+<translation id="2705137772291741111">The saved (cached) copy of this site was unreadable.</translation>
+<translation id="2784949926578158345">The connection was reset.</translation>
+<translation id="284702764277384724">The server certificate at <ph name="HOST_NAME" /> appears to be a forgery.</translation>
+<translation id="2909946352844186028">A network change was detected.</translation>
+<translation id="3005723025932146533">Show saved copy</translation>
+<translation id="3109728660330352905">You don't have authorisation to view this page.</translation>
+<translation id="3176929007561373547">Check your proxy settings or contact your network administrator to
+      make sure that the proxy server is working. If you don't believe you should
+      be using a proxy server:
+      <ph name="PLATFORM_TEXT" /></translation>
+<translation id="3422472998109090673"><ph name="HOST_NAME" /> is currently unreachable.</translation>
+<translation id="3447661539832366887">The owner of this device turned off the dinosaur game.</translation>
+<translation id="3586931643579894722">Hide details</translation>
+<translation id="3630155396527302611">If it is already listed as a program allowed to access the network, try
+      removing it from the list and adding it again.</translation>
+<translation id="3658742229777143148">Revision</translation>
+<translation id="382518646247711829">If you use a proxy server...</translation>
+<translation id="3973234410852337861"><ph name="HOST_NAME" /> is blocked</translation>
+<translation id="4021036232240155012">DNS is the network service that translates a website’s name to its Internet address.</translation>
+<translation id="4432688616882109544"><ph name="HOST_NAME" /> didn’t accept your login certificate, or one may not have been provided.</translation>
+<translation id="4522570452068850558">Details</translation>
+<translation id="4670097147947922288">You are viewing an extension page.</translation>
+<translation id="4708268264240856090">Your connection was interrupted</translation>
+<translation id="4744603770635761495">Executable Path</translation>
+<translation id="4764776831041365478">The web page at <ph name="URL" /> might be temporarily down or it may have moved permanently to a new web address.</translation>
+<translation id="5023310440958281426">Check your administrator's policies</translation>
+<translation id="5115563688576182185">(64-bit)</translation>
+<translation id="5431657950005405462">Your file was not found</translation>
+<translation id="5452270690849572955">This <ph name="HOST_NAME" /> page can’t be found</translation>
+<translation id="5492298309214877701">This site on the company, organisation or school intranet has the same URL as an external website.
+    <ph name="LINE_BREAK" />
+    Try contacting your system administrator.</translation>
+<translation id="5510766032865166053">It may have been moved or deleted.</translation>
+<translation id="5556459405103347317">Reload</translation>
+<translation id="5617949217645503996"><ph name="HOST_NAME" /> redirected you too many times.</translation>
+<translation id="5675650730144413517">This page isn’t working</translation>
+<translation id="5869405914158311789">This site can’t be reached</translation>
+<translation id="5990559369517809815">Requests to the server have been blocked by an extension.</translation>
+<translation id="6042308850641462728">More</translation>
+<translation id="6146055958333702838">Check any cables and reboot any routers, modems or other network
+    devices you may be using.</translation>
+<translation id="6165508094623778733">Learn more</translation>
+<translation id="6203231073485539293">Check your Internet connection</translation>
+<translation id="6305205051461490394"><ph name="URL" /> is unreachable.</translation>
+<translation id="6321917430147971392">Check your DNS settings</translation>
+<translation id="6328639280570009161">Try disabling network prediction</translation>
+<translation id="6433595998831338502"><ph name="HOST_NAME" /> refused to connect.</translation>
+<translation id="6711464428925977395">There is something wrong with the proxy server or the address is incorrect.</translation>
+<translation id="6830600606572693159">The web page at <ph name="URL" /> is currently unavailable. It may be overloaded or down for maintenance.</translation>
+<translation id="6897140037006041989">User Agent</translation>
+<translation id="7210863904660874423"><ph name="HOST_NAME" /> doesn't adhere to security standards.</translation>
+<translation id="7269802741830436641">This web page has a redirect loop</translation>
+<translation id="7353601530677266744">Command Line</translation>
+<translation id="7419106976560586862">Profile Path</translation>
+<translation id="7518003948725431193">No web page was found for the web address: <ph name="URL" /></translation>
+<translation id="7549584377607005141">This web page requires data that you entered earlier in order to be properly displayed. You can send this data again, but by doing so you will repeat any action this page previously performed.</translation>
+<translation id="759889825892636187"><ph name="HOST_NAME" /> is currently unable to handle this request.</translation>
+<translation id="7716424297397655342">This site can’t be loaded from the cache</translation>
+<translation id="7758069387465995638">Firewall or antivirus software may have blocked the connection.</translation>
+<translation id="778579833039460630">No data received</translation>
+<translation id="7951415247503192394">(32-bit)</translation>
+<translation id="8134994873729925007"><ph name="HOST_NAME" />’s server <ph name="BEGIN_ABBR" />DNS address<ph name="END_ABBR" /> could not be found.</translation>
+<translation id="8142868475871995937">Visit &lt;strong&gt;vivaldi://policy&lt;/strong&gt; to see the list of blacklisted URLs and other policies enforced by your system administrator.</translation>
+<translation id="8149426793427495338">Your computer went to sleep.</translation>
+<translation id="8150722005171944719">The file at <ph name="URL" /> is not readable.  It may have been removed, moved or file permissions may be preventing access.</translation>
+<translation id="8225771182978767009">The person who set up this computer has chosen to block this site.</translation>
+<translation id="8289355894181816810">Contact your network administrator if you're not sure what this means.</translation>
+<translation id="8332188693563227489">Access to <ph name="HOST_NAME" /> was denied</translation>
+<translation id="8498891568109133222"><ph name="HOST_NAME" /> took too long to respond.</translation>
+<translation id="8740359287975076522"><ph name="HOST_NAME" />’s &lt;abbr id="dnsDefinition"&gt;DNS address&lt;/abbr&gt; could not be found. Diagnosing the problem.</translation>
+<translation id="9183425211371246419"><ph name="HOST_NAME" /> uses an unsupported protocol.</translation>
+<translation id="933612690413056017">There is no Internet connection</translation>
+<translation id="969892804517981540">Official Build</translation>
+<translation id="988159990683914416">Developer Build</translation>
+</translationbundle>

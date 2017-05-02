@@ -1,0 +1,270 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="fi">
+<translation id="1018656279737460067">Peruutettu</translation>
+<translation id="1049795001945932310">&amp;Kieliasetukset</translation>
+<translation id="1056898198331236512">Varoitus</translation>
+<translation id="1084824384139382525">Kopioi linkin osoit&amp;e</translation>
+<translation id="114140604515785785">Laajennuksen juurihakemisto:</translation>
+<translation id="1163931534039071049">&amp;Näytä kehyksen lähdekoodi</translation>
+<translation id="1165039591588034296">Virhe</translation>
+<translation id="1175364870820465910">Tulo&amp;sta...</translation>
+<translation id="1181037720776840403">Poista</translation>
+<translation id="1187722533808055681">Käyttämätön-tilasta palautumiset</translation>
+<translation id="119944043368869598">Tyhjennä kaikki</translation>
+<translation id="1244303850296295656">Laajennusvirhe</translation>
+<translation id="1368832886055348810">Vasemmalta oikealle</translation>
+<translation id="1546280085599573572">Tämä laajennus on vaihtanut Etusivu-painikkeella avattavan sivun.</translation>
+<translation id="1588438908519853928">Normaali</translation>
+<translation id="1616206807336925449">Tämä laajennus ei vaadi erityisiä käyttöoikeuksia.</translation>
+<translation id="1620510694547887537">kameraasi</translation>
+<translation id="1635033183663317347">Valvojasi asentama</translation>
+<translation id="1652965563555864525">&amp;Äänetön</translation>
+<translation id="1723824996674794290">Uusi ikku&amp;na</translation>
+<translation id="1729533290416704613">Määrittää myös omnibox-hakujen aloitussivun.</translation>
+<translation id="1789575671122666129">Ponnahdusikkunat</translation>
+<translation id="1850508293116537636">Käännä &amp;myötäpäivään</translation>
+<translation id="1859234291848436338">Kirjoitussuunta</translation>
+<translation id="1901303067676059328">Valitse &amp;kaikki</translation>
+<translation id="1965328510789761112">Yksityinen muisti</translation>
+<translation id="1992397118740194946">Ei asetettu</translation>
+<translation id="2011110593081822050">Verkkotyökalu: <ph name="WORKER_NAME" /></translation>
+<translation id="2076269580855484719">Piilota tämä laajennus</translation>
+<translation id="2087822576218954668">Tulosta: <ph name="PRINT_NAME" /></translation>
+<translation id="2129825002735785149">Päivitä laajennus</translation>
+<translation id="2147827593068025794">Taustasynkronointi</translation>
+<translation id="215753907730220065">Poistu koko näytön tilasta</translation>
+<translation id="2177950615300672361">Incognito-välilehti: <ph name="TAB_NAME" /></translation>
+<translation id="2187317261103489799">Tunnista (oletus)</translation>
+<translation id="219008588003277019">Asiakasmoduuli: <ph name="NEXE_NAME" /></translation>
+<translation id="2218515861914035131">Liitä pelkkänä tekstinä</translation>
+<translation id="2282146716419988068">GPU-prosessi</translation>
+<translation id="2301382460326681002">Laajennuksen juurihakemisto on virheellinen.</translation>
+<translation id="2326931316514688470">&amp;Lataa sovellus uudelleen</translation>
+<translation id="2327492829706409234">Ota sovellus käyttöön</translation>
+<translation id="2344028582131185878">Automaattiset lataukset</translation>
+<translation id="2348176352564285430">Sovellus: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="2378982052244864789">Valitse laajennuksen hakemisto.</translation>
+<translation id="241082044617551207">Tuntematon laajennus</translation>
+<translation id="2423578206845792524">T&amp;allenna kuva nimellä...</translation>
+<translation id="2439110203301358333">Toinen tietokoneellasi oleva ohjelma lisäsi laajennuksen, joka voi muuttaa Chromen toimintaa.</translation>
+<translation id="2445081178310039857">Laajennuksen juurihakemisto tarvitaan.</translation>
+<translation id="2470702053775288986">Ei-tuetut laajennukset poistettu käytöstä</translation>
+<translation id="2482878487686419369">Ilmoitukset</translation>
+<translation id="2501797496290880632">Syötä pikanäppäin</translation>
+<translation id="2509857212037838238">Asenna <ph name="PLUGIN_NAME" /></translation>
+<translation id="253434972992662860">&amp;Tauko</translation>
+<translation id="2550212893339833758">Vaihdettu muisti</translation>
+<translation id="2662876636500006917">Chrome Web Store</translation>
+<translation id="2678063897982469759">Ota uudelleen käyttöön</translation>
+<translation id="2785873697295365461">Tiedostokuvaajat</translation>
+<translation id="2809586584051668049">ja <ph name="NUMBER_ADDITIONAL_DISABLED" /> muuta</translation>
+<translation id="2850541429955027218">Lisää teema</translation>
+<translation id="2861941300086904918">Asiakkaan tietosuojahallinnoija</translation>
+<translation id="2868746137289129307">Tämä laajennus on vanhentunut ja poistettu käytöstä yrityksen käytännön mukaisesti. Se voidaan ottaa käyttöön uudelleen automaattisesti, kun uusi versio on saatavilla.</translation>
+<translation id="2932883381142163287">Ilmoita väärinkäytöstä</translation>
+<translation id="2941112035454246133">Matala</translation>
+<translation id="2972581237482394796">&amp;Tee uudelleen</translation>
+<translation id="299483336428448530">Vanhempasi asentama</translation>
+<translation id="3080207940057008665">Toinen tietokoneellasi oleva ohjelma lisäsi teeman, joka voi muuttaa Chromen toimintaa.</translation>
+<translation id="3122464029669770682">Keskusyksikkö</translation>
+<translation id="3124111068741548686">KÄYTTÄJÄ-kahvat</translation>
+<translation id="3222066309010235055">Esihahmonna: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
+<translation id="3227137524299004712">mikrofoniasi</translation>
+<translation id="3241680850019875542">Voit pakata laajennuksen valitsemalla sen juurihakemiston. Jos haluat päivittää laajennuksen, valitse myös yksityinen avaintiedosto, jotta laajennusta voidaan käyttää uudelleen.</translation>
+<translation id="3280237271814976245">Tallenna &amp;nimellä...</translation>
+<translation id="3288047731229977326">Kehittäjätilassa olevat laajennukset voivat vahingoittaa tietokonettasi. Jos et ole kehittäjä, poista kehittäjätilassa olevat laajennukset käytöstä varmuuden vuoksi.</translation>
+<translation id="3319048459796106952">Uusi &amp;incognito-ikkuna</translation>
+<translation id="3347086966102161372">K&amp;opioi kuvan osoite</translation>
+<translation id="335985608243443814">Selaa...</translation>
+<translation id="3378572629723696641">Tämä laajennus on ehkä vioittunut.</translation>
+<translation id="3427092606871434483">Salli (oletus)</translation>
+<translation id="3435896845095436175">Ota käyttöön</translation>
+<translation id="345693547134384690">Avaa &amp;kuva uudessa välilehdessä</translation>
+<translation id="3467267818798281173">Kysy Googlelta ehdotuksia</translation>
+<translation id="3505030558724226696">Peruuta laitteen käyttöoikeus</translation>
+<translation id="3627588569887975815">Avaa linkki inco&amp;gnito-ikkunassa</translation>
+<translation id="3678156199662914018">Laajennus: <ph name="EXTENSION_NAME" /></translation>
+<translation id="370665806235115550">Ladataan...</translation>
+<translation id="3789841737615482174">Asenna</translation>
+<translation id="3798449238516105146">Versio</translation>
+<translation id="3866249974567520381">Kuvaus</translation>
+<translation id="3905761538810670789">Korjaa sovellus</translation>
+<translation id="3908393983276948098"><ph name="PLUGIN_NAME" /> on vanhentunut.</translation>
+<translation id="3908501907586732282">Ota laajennus käyttöön</translation>
+<translation id="3909791450649380159">L&amp;eikkaa</translation>
+<translation id="3927932062596804919">Estä</translation>
+<translation id="3936390757709632190">Avaa äänitied&amp;osto uudessa välilehdessä</translation>
+<translation id="3943582379552582368">&amp;Edellinen</translation>
+<translation id="3954582159466790312">Palauta &amp;äänet</translation>
+<translation id="3979395879372752341">Uusi laajennus lisätty (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="4021279097213088397">–</translation>
+<translation id="4087089424473531098">Loi laajennuksen:
+
+<ph name="EXTENSION_FILE" /></translation>
+<translation id="4089192115462111328">Chromessa</translation>
+<translation id="4090535558450035482">(Tämä laajennus on hallinnoitu eikä sitä voi poistaa.)</translation>
+<translation id="4096508467498758490">Poista kehittäjätilassa olevat laajennukset käytöstä</translation>
+<translation id="4100839878934973028">Toinen tietokoneellasi oleva ohjelma lisäsi sovelluksen, joka voi muuttaa Chromen toimintaa.</translation>
+<translation id="4130207949184424187">Tämä laajennus on vaihtanut omnibox-hakujen aloitussivun.</translation>
+<translation id="4165986682804962316">Sivustoasetukset</translation>
+<translation id="4176463684765177261">Pois käytöstä</translation>
+<translation id="4200983522494130825">Uusi &amp;välilehti</translation>
+<translation id="420665587194630159">(Käytäntö hallinnoi tätä laajennusta, joten sitä ei voi poistaa tai poistaa käytöstä.)</translation>
+<translation id="4240511609794012987">Jaettu muisti</translation>
+<translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> kt (<ph name="NUM_KILOBYTES_LIVE" /> kt live)</translation>
+<translation id="4312866146174492540">Estä (oletus)</translation>
+<translation id="4384652540891215547">Aktivoi laajennus</translation>
+<translation id="4394049700291259645">Poista käytöstä</translation>
+<translation id="4423482519432579560">&amp;Oikoluku</translation>
+<translation id="4522570452068850558">Tiedot</translation>
+<translation id="4552089082226364758">Salama</translation>
+<translation id="4557136421275541763">Varoitus:</translation>
+<translation id="4593021220803146968">&amp;Siirry osoitteeseen <ph name="URL" /></translation>
+<translation id="4595560905247879544">Vain ylläpitäjä (<ph name="CUSTODIAN_NAME" />) voi muokata sovelluksia ja laajennuksia.</translation>
+<translation id="4613271546271159013">Laajennus vaihtoi sivua, joka näytetään avatessasi uuden välilehden.</translation>
+<translation id="4623537843784569564">Tämä laajennus on ehkä päivitetty väärin. Yritä asentaa se uudelleen.</translation>
+<translation id="4677772697204437347">GPU-muisti</translation>
+<translation id="4711638718396952945">Palauta asetukset</translation>
+<translation id="4839303808932127586">Tallenna &amp;video nimellä...</translation>
+<translation id="4851858059374029925">Asennetaanko <ph name="PLUGIN_NAME" />? Asenna vain luotettuja laajennuksia.</translation>
+<translation id="4861833787540810454">&amp;Toista</translation>
+<translation id="4883993111890464517">Tämä laajennus on ehkä vioittunut. Yritä asentaa se uudelleen.</translation>
+<translation id="488785315393301722">Näytä tiedot</translation>
+<translation id="4911714727432509308">Laajennuksille ei ole määritetty pikanäppäimiä.</translation>
+<translation id="4919987486109157213">Laajennus on vioittunut. Yritä asentaa se uudelleen.</translation>
+<translation id="4927301649992043040">Pakkaa laajennus</translation>
+<translation id="49896407730300355">Käännä &amp;vastapäivään</translation>
+<translation id="4989966318180235467">Tarkista &amp;taustasivu</translation>
+<translation id="5027562294707732951">Lisää laajennus</translation>
+<translation id="5039804452771397117">Salli</translation>
+<translation id="5143374789336132547">Laajennus <ph name="EXTENSION_NAME" /> on vaihtanut Etusivu-painikkeella avattavan sivun.</translation>
+<translation id="5154917547274118687">Muisti</translation>
+<translation id="5233019165164992427">NaCl-vianetsintäportti</translation>
+<translation id="5233231016133573565">Prosessin tunnus</translation>
+<translation id="5233638681132016545">Uusi välilehti</translation>
+<translation id="52912272896845572">Yksityinen avaintiedosto on virheellinen.</translation>
+<translation id="5301954838959518834">Selvä</translation>
+<translation id="5311260548612583999">Yksityinen avaintiedosto (valinnainen):</translation>
+<translation id="5329858601952122676">&amp;Poista</translation>
+<translation id="5355926466126177564">Laajennus <ph name="EXTENSION_NAME" /> on vaihtanut omnibox-hakujen aloitussivun.</translation>
+<translation id="5362741141255528695">Valitse yksityinen avaintiedosto.</translation>
+<translation id="5370819323174483825">&amp;Lataa uudelleen</translation>
+<translation id="5483785310822538350">Peruuta tiedoston ja laitteen käyttöoikeudet</translation>
+<translation id="5485102783864353244">Lisää sovellus</translation>
+<translation id="5521078259930077036">Onko tämä haluamasi etusivu?</translation>
+<translation id="5532223876348815659">Maailmanlaajuinen</translation>
+<translation id="5542132724887566711">Profiili</translation>
+<translation id="5556459405103347317">Lataa uudelleen</translation>
+<translation id="5575473780076478375">Incognito-laajennus: <ph name="EXTENSION_NAME" /></translation>
+<translation id="5627086634964711283">Määrittää myös Etusivu-painikkeella avattavan sivun.</translation>
+<translation id="5646376287012673985">Sijainti</translation>
+<translation id="5715711091495208045">Laajennuksen välittäjä: <ph name="PLUGIN_NAME" /></translation>
+<translation id="5764483294734785780">T&amp;allenna audiotiedosto nimellä...</translation>
+<translation id="5778550464785688721">MIDI-laitteiden täysi käyttöoikeus</translation>
+<translation id="5780973441651030252">Prosessien tärkeysjärjestys</translation>
+<translation id="5804241973901381774">Käyttöluvat</translation>
+<translation id="583281660410589416">Tuntematon</translation>
+<translation id="59174027418879706">Käytössä</translation>
+<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 käytössä}other{# käytössä}}</translation>
+<translation id="5956585768868398362">Onko tämä haluamasi hakusivu?</translation>
+<translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (huippu: <ph name="NUM_KILOBYTES_LIVE" />)</translation>
+<translation id="5965661248935608907">Määrittää myös Etusivu-painikkeella avattavan sivun ja omnibox-hakujen aloitussivun.</translation>
+<translation id="6101226222197207147">Uusi sovellus lisätty (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="6122081475643980456">Internetyhteyttäsi hallinnoidaan</translation>
+<translation id="6124650939968185064">Seuraavat laajennukset ovat riippuvaisia tästä laajennuksesta:</translation>
+<translation id="6156863943908443225">Ohjelmavälimuisti</translation>
+<translation id="6196854373336333322">Välityspalvelimesi asetuksia hallinnoi tällä hetkellä tämä laajennus <ph name="EXTENSION_NAME" />, joka voi muokata, haitata tai salakuunnella kaikkia verkkotoimiasi. Jos et tiedä, miksi tämä muutos tehtiin, et luultavasti halua käyttää sitä.</translation>
+<translation id="6239558157302047471">Lataa kehys uudelleen</translation>
+<translation id="6247802389331535091">Järjestelmä: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="6251870443722440887">GDI-kahvat</translation>
+<translation id="6272643420381259437">Virhe (<ph name="ERROR" />) ladattaessa laajennusta</translation>
+<translation id="6308937455967653460">Tallenna lin&amp;kki nimellä...</translation>
+<translation id="6398765197997659313">Poistu koko näytön tilasta</translation>
+<translation id="6406303162637086258">Simuloi selaimen uudelleenkäynnistys</translation>
+<translation id="6445450263907939268">Jos et pidä muutoksista, voit palauttaa aiemmat asetuksesi.</translation>
+<translation id="6447842834002726250">Evästeet</translation>
+<translation id="6498249116389603658">K&amp;aikki valitsemasi kielet</translation>
+<translation id="6503077044568424649">Käydyimmät</translation>
+<translation id="6508261954199872201">Sovellus: <ph name="APP_NAME" /></translation>
+<translation id="6518014396551869914">K&amp;opioi kuva</translation>
+<translation id="6550675742724504774">Asetukset</translation>
+<translation id="6639554308659482635">SQLiten käyttämä muisti</translation>
+<translation id="6691936601825168937">S&amp;euraava</translation>
+<translation id="6786747875388722282">Laajennukset</translation>
+<translation id="6787839852456839824">Pikanäppäimet</translation>
+<translation id="6798954102094737107">Laajennus: <ph name="PLUGIN_NAME" /></translation>
+<translation id="6812841287760418429">Säilytä muutokset</translation>
+<translation id="6844537474943985871">Tämä laajennus on ehkä vioittunut. Poista asennus ja asenna uudelleen.</translation>
+<translation id="6863910145616405334">Laajennusta ei löytynyt</translation>
+<translation id="6886871292305414135">Avaa linkki uudessa &amp;välilehdessä</translation>
+<translation id="6900284862687837908">Taustasovellus: <ph name="BACKGROUND_APP_URL" /></translation>
+<translation id="6904344821472985372">Peruuta pääsy tiedostoon</translation>
+<translation id="6974053822202609517">Oikealta vasemmalle</translation>
+<translation id="7013485839273047434">Hanki lisää laajennuksia</translation>
+<translation id="708060913198414444">K&amp;opioi äänen osoite</translation>
+<translation id="7105578512429498960">Asenna <ph name="PLUGIN_NAME" />, jotta sisältö voidaan näyttää.</translation>
+<translation id="7144878232160441200">Yritä uudelleen</translation>
+<translation id="7206693748120342859">Ladataan <ph name="PLUGIN_NAME" />...</translation>
+<translation id="7287143125007575591">Pääsy evätty.</translation>
+<translation id="7309257895202129721">Näytä &amp;painikkeet</translation>
+<translation id="7361297102842600584">Suorita <ph name="PLUGIN_NAME" /> klikkaamalla tätä kakkospainikkeella.</translation>
+<translation id="7401543881546089382">Poista pikakuvake</translation>
+<translation id="7427348830195639090">Taustasivu: <ph name="BACKGROUND_PAGE_URL" /></translation>
+<translation id="7521387064766892559">JavaScript</translation>
+<translation id="7554791636758816595">Uusi välilehti</translation>
+<translation id="7564847347806291057">Lopeta prosessi</translation>
+<translation id="7618337809041914424">&amp;Tulosta kehys…</translation>
+<translation id="7629827748548208700">Välilehti: <ph name="TAB_NAME" /></translation>
+<translation id="7658239707568436148">Peruuta</translation>
+<translation id="7663719505383602579">Vastaanottaja: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="7685049629764448582">JavaScriptin käyttämä muisti</translation>
+<translation id="7704305437604973648">Tehtävä</translation>
+<translation id="7760004034676677601">Onko tämä haluamasi saapumissivu?</translation>
+<translation id="7791543448312431591">Lisää</translation>
+<translation id="7818135753970109980">Uusi teema lisätty (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="782057141565633384">K&amp;opioi videon osoite</translation>
+<translation id="7857949311770343000">Onko tämä haluamasi Uusi välilehti -sivu?</translation>
+<translation id="786073089922909430">Palvelu: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="7903925330883316394">Apuohjelma: <ph name="UTILITY_TYPE" /></translation>
+<translation id="7978412674231730200">Yksityinen avain</translation>
+<translation id="7982789257301363584">Verkko</translation>
+<translation id="7999229196265990314">Luotiin seuraavat tiedostot:
+        
+Laajennus: <ph name="EXTENSION_FILE" />
+Avaintiedosto: <ph name="KEY_FILE" />
+
+Tallenna avaintiedosto suojattuun sijaintiin. Tarvitset sitä, jos haluat luoda uusia laajennusversioita.</translation>
+<translation id="8004582292198964060">Selain</translation>
+<translation id="8037357227543935929">Kysy (oletus)</translation>
+<translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
+<translation id="8188120771410500975">&amp;Tarkista oikeinkirjoitus tekstikentissä</translation>
+<translation id="8261378640211443080">Tätä laajennusta ei löydy kohteesta <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />, ja se on voitu lisätä ilman lupaasi.</translation>
+<translation id="8338952601723052325">Kehittäjän verkkosivusto</translation>
+<translation id="8351419472474436977">Välityspalvelimesi asetuksia hallinnoi tällä hetkellä tämä laajennus, joka voi muokata, haitata tai salakuunnella kaikkia verkkotoimiasi. Jos et tiedä, miksi tämä muutos tehtiin, et luultavasti halua käyttää sitä.</translation>
+<translation id="8357224663288891423">Pikanäppäimet laajennuksille ja sovelluksille</translation>
+<translation id="8463955938112983119"><ph name="PLUGIN_NAME" /> on poistettu käytöstä.</translation>
+<translation id="8465444703385715657"><ph name="PLUGIN_NAME" /> tarvitsee suoritusluvan.</translation>
+<translation id="8546306075665861288">Kuvavälimuisti</translation>
+<translation id="8584280235376696778">Avaa vide&amp;o uudessa välilehdessä</translation>
+<translation id="8615618338313291042">Incognito-sovellus: <ph name="APP_NAME" /></translation>
+<translation id="862750493060684461">CSS-välimuisti</translation>
+<translation id="8664389313780386848">&amp;Näytä sivun lähdekoodi</translation>
+<translation id="8719653885894320876">Laajennuksen <ph name="PLUGIN_NAME" /> lataus epäonnistui.</translation>
+<translation id="873545264931343897">Kun <ph name="PLUGIN_NAME" /> on päivitetty, aktivoi se päivittämällä sivu.</translation>
+<translation id="8763204422633679667">Kun <ph name="PLUGIN_NAME" /> on asennettu, aktivoi se päivittämällä sivu.</translation>
+<translation id="8798099450830957504">Oletus</translation>
+<translation id="8808478386290700967">Web Store</translation>
+<translation id="8859174528519900719">Alakehys: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8899851313684471736">Avaa linkki uudessa &amp;ikkunassa</translation>
+<translation id="8916476537757519021">Incognito-alakehys: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8962083179518285172">Piilota tiedot</translation>
+<translation id="9088234649737575428">Yrityskäytäntö estää laajennuksen <ph name="PLUGIN_NAME" />.</translation>
+<translation id="9101691533782776290">Käynnistä sovellus</translation>
+<translation id="9170848237812810038">K&amp;umoa</translation>
+<translation id="9215293857209265904"><ph name="EXTENSION_NAME" /> lisätty</translation>
+<translation id="9219103736887031265">Kuvat</translation>
+<translation id="93766956588638423">Korjaa laajennus</translation>
+<translation id="994289308992179865">Toista &amp;jatkuvasti</translation>
+<translation id="998747458861718449">&amp;Tarkista</translation>
+</translationbundle>

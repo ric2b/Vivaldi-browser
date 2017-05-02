@@ -1,0 +1,302 @@
+import("//build/config/features.gni")
+import("//vivaldi/gn/config/features.gni")
+
+# ------------------
+# Blink : /media/blink/BUILD.gn
+# ------------------
+
+post_process_target("//media/blink:blink") {
+  sources += [
+    "//vivaldi/platform_media/media/blink/buffered_data_source.cc",
+    "//vivaldi/platform_media/media/blink/buffered_data_source.h",
+    "//vivaldi/platform_media/media/blink/buffered_resource_loader.cc",
+    "//vivaldi/platform_media/media/blink/buffered_resource_loader.h",
+  ]
+}
+
+if (system_proprietary_codecs) {
+
+# ------------------
+# Features : /base/BUILD.gn
+# ------------------
+
+post_process_target("//base:base") {
+  sources += [
+    "//vivaldi/platform_media/base/features/command_line_feature_reader.cc",
+    "//vivaldi/platform_media/base/features/command_line_feature_reader.h",
+    "//vivaldi/platform_media/base/features/feature_checker.cc",
+    "//vivaldi/platform_media/base/features/feature_checker.h",
+    "//vivaldi/platform_media/base/features/feature_checker_factory.cc",
+    "//vivaldi/platform_media/base/features/feature_checker_factory.h",
+    "//vivaldi/platform_media/base/features/feature_reader.h",
+    "//vivaldi/platform_media/base/features/feature_status_override.cc",
+    "//vivaldi/platform_media/base/features/feature_status_override.h",
+    "//vivaldi/platform_media/base/features/features.cc",
+    "//vivaldi/platform_media/base/features/features.h",
+    "//vivaldi/platform_media/base/features/scoped_test_feature_override.cc",
+    "//vivaldi/platform_media/base/features/scoped_test_feature_override.h",
+    "//vivaldi/platform_media/base/features/submodule_features.cc",
+    "//vivaldi/platform_media/base/features/submodule_features.h",
+  ]
+}
+
+# ------------------
+# Content Unittests : /content/test/BUILD.gn
+# ------------------
+
+post_process_target("//content/test:content_unittests") {
+  sources += [
+    "//vivaldi/platform_media/content/common/gpu/media/avf_data_buffer_queue_unittest.mm",
+    "//vivaldi/platform_media/content/common/gpu/media/data_request_handler_unittest.mm",
+    "//vivaldi/platform_media/content/common/gpu/media/ipc_audio_decoder_unittest.cc",
+    "//vivaldi/platform_media/content/common/gpu/media/platform_media_pipeline_integration_test.cc",
+    "//vivaldi/platform_media/content/common/gpu/media/test_pipeline_host.cc",
+    "//vivaldi/platform_media/content/common/gpu/media/test_pipeline_host.h",
+  ]
+
+  if (is_mac) {
+    # VB-24641 dispatch_get_current_queue is deprecated
+    cflags = [ "-Wno-deprecated-declarations" ]
+  }
+
+  deps += [ "//media/test:pipeline_integration_test_base" ]
+}
+
+# ------------------
+# Content Renderer : /content/renderer/BUILD.gn
+# This can be either a source_set or a split_static_library template
+# ------------------
+
+_content_renderer_sources = [
+  "//vivaldi/platform_media/content/renderer/media/ipc_media_pipeline_host_impl.cc",
+  "//vivaldi/platform_media/content/renderer/media/ipc_media_pipeline_host_impl.h",
+]
+
+if (is_component_build)  {
+  post_process_target("//content/renderer:renderer") {
+    sources += _content_renderer_sources
+  }
+} else {
+  post_process_template("//content/renderer:renderer") {
+    sources += _content_renderer_sources
+  }
+}
+
+# ------------------
+# Content Common : /content/common/BUILD.gn
+# ------------------
+
+post_process_target("//content/common:common") {
+  sources += [
+    "//vivaldi/platform_media/content/common/gpu/media/avf_data_buffer_queue.mm",
+    "//vivaldi/platform_media/content/common/gpu/media/avf_data_buffer_queue.h",
+    "//vivaldi/platform_media/content/common/gpu/media/avf_audio_tap.h",
+    "//vivaldi/platform_media/content/common/gpu/media/avf_audio_tap.mm",
+    "//vivaldi/platform_media/content/common/gpu/media/avf_media_decoder.h",
+    "//vivaldi/platform_media/content/common/gpu/media/avf_media_decoder.mm",
+    "//vivaldi/platform_media/content/common/gpu/media/avf_media_pipeline.h",
+    "//vivaldi/platform_media/content/common/gpu/media/avf_media_pipeline.mm",
+    "//vivaldi/platform_media/content/common/gpu/media/avf_media_reader.h",
+    "//vivaldi/platform_media/content/common/gpu/media/avf_media_reader.mm",
+    "//vivaldi/platform_media/content/common/gpu/media/avf_media_reader_runner.h",
+    "//vivaldi/platform_media/content/common/gpu/media/avf_media_reader_runner.mm",
+    "//vivaldi/platform_media/content/common/gpu/media/data_request_handler.h",
+    "//vivaldi/platform_media/content/common/gpu/media/data_request_handler.mm",
+    "//vivaldi/platform_media/content/common/gpu/media/data_source_loader.h",
+    "//vivaldi/platform_media/content/common/gpu/media/data_source_loader.mm",
+    "//vivaldi/platform_media/content/common/gpu/media/ipc_data_source.h",
+    "//vivaldi/platform_media/content/common/gpu/media/ipc_data_source_impl.cc",
+    "//vivaldi/platform_media/content/common/gpu/media/ipc_data_source_impl.h",
+    "//vivaldi/platform_media/content/common/gpu/media/ipc_media_pipeline.cc",
+    "//vivaldi/platform_media/content/common/gpu/media/ipc_media_pipeline.h",
+    "//vivaldi/platform_media/content/common/gpu/media/platform_media_pipeline.h",
+    "//vivaldi/platform_media/content/common/gpu/media/platform_media_pipeline_mac.cc",
+    "//vivaldi/platform_media/content/common/gpu/media/platform_media_pipeline_win.cc",
+    "//vivaldi/platform_media/content/common/gpu/media/propmedia_gpu_channel.cc",
+    "//vivaldi/platform_media/content/common/gpu/media/propmedia_gpu_channel.h",
+    "//vivaldi/platform_media/content/common/gpu/media/propmedia_gpu_channel_manager.cc",
+    "//vivaldi/platform_media/content/common/gpu/media/propmedia_gpu_channel_manager.h",
+    "//vivaldi/platform_media/content/common/media/media_pipeline_messages.h",
+  ]
+
+  deps += [ "//media" ]
+
+  if (is_mac) {
+    sources += [
+      "//vivaldi/platform_media/content/common/gpu/media/at_init.cc",
+      "//vivaldi/platform_media/content/common/gpu/media/at_init.h",
+    ]
+
+    libs += [
+      "AudioToolbox.framework",
+      "AVFoundation.framework",
+      "CoreMedia.framework",
+      "CoreVideo.framework",
+      "MediaToolbox.framework",
+      "VideoToolbox.framework",
+    ]
+
+    # VB-18038 audio doesn't work with -O2
+    configs -= [ "//build/config/compiler:default_optimization" ]
+    configs += [ "//build/config/compiler:optimize_medium" ]
+
+    # VB-24641 dispatch_get_current_queue is deprecated
+    cflags = [ "-Wno-deprecated-declarations" ]
+  }
+
+  if (is_win) {
+    sources += [
+      "//vivaldi/platform_media/content/common/gpu/media/wmf_byte_stream.cc",
+      "//vivaldi/platform_media/content/common/gpu/media/wmf_byte_stream.h",
+      "//vivaldi/platform_media/content/common/gpu/media/wmf_media_pipeline.cc",
+      "//vivaldi/platform_media/content/common/gpu/media/wmf_media_pipeline.h",
+    ]
+
+    libs += [
+      "d3d9.lib",
+      "dxva2.lib",
+      "strmiids.lib",
+      "mf.lib",
+      "mfplat.lib",
+      "mfreadwrite.lib",
+      "mfuuid.lib",
+      "Propsys.lib",
+    ]
+
+    deps += [ "//net" ]  # For GetMimeTypeFromFile
+
+  }
+
+}
+
+# ------------------
+# Filters : /media/BUILD.gn
+# ------------------
+
+post_process_target("//media:media") {
+
+   sources += [
+    "//vivaldi/platform_media/media/filters/ipc_audio_decoder.cc",
+    "//vivaldi/platform_media/media/filters/ipc_audio_decoder.h",
+    "//vivaldi/platform_media/media/filters/ipc_demuxer.cc",
+    "//vivaldi/platform_media/media/filters/ipc_demuxer.h",
+    "//vivaldi/platform_media/media/filters/ipc_demuxer_stream.cc",
+    "//vivaldi/platform_media/media/filters/ipc_demuxer_stream.h",
+    "//vivaldi/platform_media/media/filters/ipc_media_pipeline_host.h",
+    "//vivaldi/platform_media/media/filters/pass_through_audio_decoder.cc",
+    "//vivaldi/platform_media/media/filters/pass_through_audio_decoder.h",
+    "//vivaldi/platform_media/media/filters/pass_through_decoder_impl.cc",
+    "//vivaldi/platform_media/media/filters/pass_through_decoder_impl.h",
+    "//vivaldi/platform_media/media/filters/pass_through_decoder_texture.cc",
+    "//vivaldi/platform_media/media/filters/pass_through_decoder_texture.h",
+    "//vivaldi/platform_media/media/filters/pass_through_video_decoder.cc",
+    "//vivaldi/platform_media/media/filters/pass_through_video_decoder.h",
+    "//vivaldi/platform_media/media/filters/platform_media_pipeline_constants.cc",
+    "//vivaldi/platform_media/media/filters/platform_media_pipeline_constants.h",
+    "//vivaldi/platform_media/media/filters/platform_media_pipeline_types.cc",
+    "//vivaldi/platform_media/media/filters/platform_media_pipeline_types.h",
+    "//vivaldi/platform_media/media/filters/platform_media_pipeline_types_mac.h",
+    "//vivaldi/platform_media/media/filters/platform_media_pipeline_types_mac.mm",
+    "//vivaldi/platform_media/media/filters/protocol_sniffer.cc",
+    "//vivaldi/platform_media/media/filters/protocol_sniffer.h",
+   ]
+
+   deps += [ "//net" ]  # For GetMimeTypeFromFile
+
+   if (is_mac) {
+      sources += [
+       "//vivaldi/platform_media/media/filters/at_aac_helper.cc",
+       "//vivaldi/platform_media/media/filters/at_aac_helper.h",
+       "//vivaldi/platform_media/media/filters/at_audio_decoder.cc",
+       "//vivaldi/platform_media/media/filters/at_audio_decoder.h",
+       "//vivaldi/platform_media/media/filters/at_codec_helper.h",
+       "//vivaldi/platform_media/media/filters/at_mp3_helper.cc",
+       "//vivaldi/platform_media/media/filters/at_mp3_helper.h",
+       "//vivaldi/platform_media/media/filters/core_audio_demuxer.cc",
+       "//vivaldi/platform_media/media/filters/core_audio_demuxer.h",
+       "//vivaldi/platform_media/media/filters/core_audio_demuxer_stream.cc",
+       "//vivaldi/platform_media/media/filters/core_audio_demuxer_stream.h",
+      ]
+   }
+
+   if (is_win) {
+      sources += [
+       "//vivaldi/platform_media/media/filters/wmf_audio_decoder.cc",
+       "//vivaldi/platform_media/media/filters/wmf_audio_decoder.h",
+       "//vivaldi/platform_media/media/filters/wmf_decoder_impl.cc",
+       "//vivaldi/platform_media/media/filters/wmf_decoder_impl.h",
+       "//vivaldi/platform_media/media/filters/wmf_video_decoder.cc",
+       "//vivaldi/platform_media/media/filters/wmf_video_decoder.h",
+      ]
+
+      libs += [
+       "mfuuid.lib",
+       "mfplat.lib",
+      ]
+
+      deps += [
+       "//media/base/win:win",
+      ]
+   }
+
+}
+
+# ------------------
+# Test files
+# ------------------
+
+#vivaldi/platform_media/media/test/data/bear_truncated.mp4
+#vivaldi/platform_media/media/test/data/config_change_audio.mp4
+#vivaldi/platform_media/media/test/data/config_change_video.mp4
+#vivaldi/platform_media/media/test/data/what-does-the-fox-say.mp4
+#vivaldi/platform_media/media/test/data/a440.mp3
+#vivaldi/platform_media/media/test/data/bear-320x240-16x9-aspect.mp4
+#vivaldi/platform_media/media/test/data/bear_corrupt.mp4
+#vivaldi/platform_media/media/test/data/nonzero-start-time.mp4
+
+# ------------------
+# Filters : /media/base/BUILD.gn
+# ------------------
+
+post_process_target("//media/base:base") {
+
+   sources += [
+    "//vivaldi/platform_media/media/base/pipeline_stats.cc",
+    "//vivaldi/platform_media/media/base/pipeline_stats.h",
+    "//vivaldi/platform_media/media/base/platform_mime_util.h",
+   ]
+
+   if (is_mac) {
+    sources += [ "//vivaldi/platform_media/media/base/platform_mime_util_mac.mm" ]
+   }
+
+   if (is_win) {
+    configs += [
+      "//media:media_implementation",
+    ]
+    sources += [
+      "//vivaldi/platform_media/media/base/win/mf_util.cc",
+      "//vivaldi/platform_media/media/base/win/mf_util.h",
+      "//vivaldi/platform_media/media/base/platform_mime_util_win.cc",
+    ]
+    deps += [
+     "//media/base/win:win",
+    ]
+   }
+}
+
+# ------------------
+# Mac : /media/base/mac/BUILD.gn
+# ------------------
+
+if (is_mac) {
+   post_process_target("//media/base/mac:mac") {
+     sources += [
+       "//vivaldi/platform_media/media/base/mac/framework_type_conversions.h",
+       "//vivaldi/platform_media/media/base/mac/framework_type_conversions.mm",
+       "//vivaldi/platform_media/media/base/mac/scoped_audio_queue_ref.h",
+     ]
+   }
+}
+
+}

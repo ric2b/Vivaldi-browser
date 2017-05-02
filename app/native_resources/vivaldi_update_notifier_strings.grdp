@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notes specific strings (included from vivaldi_native_strings.grd). -->
+<grit-part>
+  <message name="IDS_UPDATE_NOTIFIER_UPDATE_VIVALDI" desc="In Title Case: Context menu item that triggers a vivaldi update">
+    &amp;Update Vivaldi
+  </message>
+  <message name="IDS_UPDATE_NOTIFIER_IGNORE_UPDATE" desc="In Title Case: Context menu item that hides the notifier from the notification area">
+    &amp;Ignore Update
+  </message>
+  <message name="IDS_UPDATE_NOTIFIER_STOP_NOTIFYING" desc="In Title Case: Context menu item that closes and unregisters the notifier">
+    &amp;Don't show again
+  </message>
+  <message name="IDS_UPDATE_NOTIFIER_QUIT_MESSAGE_TITLE" desc="Title of the message box that appears when 'Don't show again' is clicked">
+    Disabling notifications
+  </message>
+  <message name="IDS_UPDATE_NOTIFIER_QUIT_MESSAGE_TEXT" desc="Text of the message box that appears when 'Don't show again' is clicked">
+    You will no longer see these notifications. You can enable them again from the vivaldi settings.
+  </message>
+  <message name="IDS_UPDATE_NOTIFICATION_TITLE" desc="Title of the ballon notification shown when a new Vivaldi update becomes available">
+    A new version of Vivaldi is available.
+  </message>
+  <message name="IDS_UPDATE_NOTIFICATION_TEXT" desc="Text of the ballon notification shown when a new Vivaldi update becomes available">
+    Click here to update Vivaldi to version $1.
+  </message>
+
+
+</grit-part>

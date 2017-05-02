@@ -1,0 +1,40 @@
+// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+//
+// Sync protocol datatype extension for bookmarks.
+
+// Update proto_value_conversions{.h,.cc,_unittest.cc} if you change
+// any fields in this file.
+
+syntax = "proto2";
+
+option optimize_for = LITE_RUNTIME;
+
+package sync_pb;
+
+// Corresponds to a single attachment itemt for a notes entry.
+message NotesAttachment {
+  optional string filename = 1;
+  optional string content_type = 2;
+  optional bytes content = 3;
+}
+
+// Properties of bookmark sync objects.
+message NotesSpecifics {
+  enum VivaldiSpecialNotesType {
+    NORMAL = 0;
+    TRASH_NODE = 1;
+  }
+
+  optional string url = 1;
+  optional string subject = 2;
+  optional string content = 3;
+  // Corresponds to Notes_Entry::date_added() and is the internal value from
+  // base::Time.
+  optional int64 creation_time_us = 4;
+  // DEPRECATED: unused field, removed
+  optional NotesAttachment icon_deprecated = 5  [deprecated=true];
+  repeated NotesAttachment attachments = 6;
+  optional VivaldiSpecialNotesType special_node_type = 7;
+}
